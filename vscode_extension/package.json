@@ -1,0 +1,93 @@
+{
+  "name": "stacky-vscode",
+  "displayName": "Stacky — Mantis Pipeline",
+  "description": "Integra el pipeline Stacky directamente en VS Code. Estado del ticket activo, countdown de timeout, blast radius y acciones rapidas.",
+  "version": "1.0.0",
+  "publisher": "stacky",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "stacky.refreshStatus",
+        "title": "Stacky: Actualizar estado del pipeline"
+      },
+      {
+        "command": "stacky.markDevComplete",
+        "title": "Stacky: Marcar DEV completado para ticket activo"
+      },
+      {
+        "command": "stacky.pausePipeline",
+        "title": "Stacky: Pausar pipeline del ticket activo"
+      },
+      {
+        "command": "stacky.openDashboard",
+        "title": "Stacky: Abrir Dashboard"
+      },
+      {
+        "command": "stacky.showTicketContext",
+        "title": "Stacky: Mostrar contexto del archivo actual"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "stacky-sidebar",
+          "title": "Stacky",
+          "icon": "resources/stacky-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "stacky-sidebar": [
+        {
+          "id": "stacky.ticketView",
+          "name": "Ticket Activo"
+        },
+        {
+          "id": "stacky.queueView",
+          "name": "Cola de Tickets"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Stacky",
+      "properties": {
+        "stacky.dashboardUrl": {
+          "type": "string",
+          "default": "http://localhost:5050",
+          "description": "URL del dashboard Stacky"
+        },
+        "stacky.project": {
+          "type": "string",
+          "default": "RIPLEY",
+          "description": "Proyecto activo"
+        },
+        "stacky.pollingInterval": {
+          "type": "number",
+          "default": 30,
+          "description": "Intervalo de polling en segundos"
+        },
+        "stacky.showBlastRadiusDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mostrar advertencias de blast radius en el editor"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.x",
+    "typescript": "^5.3.x",
+    "@vscode/vsce": "^2.x"
+  }
+}

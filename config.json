@@ -1,0 +1,36 @@
+{
+  "runtime": {
+    "production_mode": false,
+    "disable_cli_runner": false
+  },
+  "mantis_url": "https://soporte.ais-int.net/mantis/view_all_bug_page.php",
+  "assigned_user": "Juan Luca Santolíquido",
+  "auth_path": "auth/auth.json",
+  "state_path": "state/seen_tickets.json",
+  "output_dir": "tickets",
+  "timeout_ms": 30000,
+  "pipeline": {
+    "max_rework_cycles": 1
+  },
+  "watcher": {
+    "stuck_auto_launch": false,
+    "stuck_threshold_minutes": 30,
+    "stuck_notify": true
+  },
+  "notifications": {
+    "slack_webhook": "",
+    "teams_webhook": "",
+    "generic_webhook": "",
+    "notify_on": ["pipeline_complete", "error", "stagnation", "stage_complete"]
+  },
+  "selectors": {
+    "table": "#buglist",
+    "rows": "#buglist tbody tr",
+    "id": "td.column-id a",
+    "category": "td.column-category",
+    "severity": "td.column-severity",
+    "status": "td.column-status",
+    "summary": "td.column-summary a",
+    "last_modified": "td.column-last-modified"
+  }
+}

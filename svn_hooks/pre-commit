@@ -1,0 +1,62 @@
+#!/bin/bash
+# pre-commit hook — X-01: CI/CD Stacky + SVN
+#
+# Instalacion: copiar este archivo a <repo>/hooks/pre-commit
+# chmod +x hooks/pre-commit
+#
+# ATENCION: este hook puede BLOQUEAR commits si pre_commit_blocking=true
+# en config.json del proyecto. Desactivar si genera falsos positivos.
+#
+# Variables:
+#   $1 = REPOS   (ruta del repositorio)
+#   $2 = TXN     (transaccion actual, no es la revision todavia)
+
+REPOS="$1"
+TXN="$2"
+
+# URL del dashboard Stacky
+STACKY_URL="${STACKY_URL:-http://localhost:5050}"
+PROJECT="${STACKY_PROJECT:-RIPLEY}"
+
+# Si Stacky no esta corriendo, permitir el commit (no bloquear por falla de herramienta)
+STACKY_RUNNING=$(curl -s -o /dev/null -w "%{http_code}" \
+    --connect-timeout 2 --max-time 3 \
+    "${STACKY_URL}/api/health" 2>/dev/null)
+
+if [ "$STACKY_RUNNING" != "200" ]; then
+    exit 0
+fi
+
+# Obtener archivos del commit pendiente
+AUTHOR=$(svnlook author -t "$TXN" "$REPOS" 2>/dev/null)
+CHANGED=$(svnlook changed -t "$TXN" "$REPOS" 2>/dev/null | awk '{print $2}' | tr '\n' ',' | sed 's/,$//')
+
+PAYLOAD=$(cat <<EOF
+{
+  "author": "$AUTHOR",
+  "files": $(echo "$CHANGED" | python3 -c "import sys,json; parts=[p.strip() for p in sys.stdin.read().split(',') if p.strip()]; print(json.dumps(parts))"),
+  "project": "$PROJECT"
+}
+EOF
+)
+
+RESPONSE=$(curl -s \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -d "$PAYLOAD" \
+    "${STACKY_URL}/api/v1/hooks/pre-commit" \
+    --connect-timeout 3 \
+    --max-time 5 \
+    2>/dev/null)
+
+# Parsear respuesta
+ALLOWED=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('allowed','true'))" 2>/dev/null)
+REASON=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('reason',''))" 2>/dev/null)
+
+if [ "$ALLOWED" = "False" ] || [ "$ALLOWED" = "false" ]; then
+    echo "COMMIT BLOQUEADO POR STACKY:" >&2
+    echo "$REASON" >&2
+    exit 1
+fi
+
+exit 0

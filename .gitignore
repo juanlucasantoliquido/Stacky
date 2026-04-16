@@ -1,0 +1,34 @@
+auth/auth.json
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+
+# Estado runtime — no versionar
+pipeline/state.json
+state/
+active_project.json
+NOTIFICATIONS.json
+
+# Proyectos / tickets scrapeados — contienen datos del cliente
+projects/
+
+# Credenciales y sesiones
+auth/
+
+# Logs
+*.log
+logs/
+test_logs/
+
+# Artefactos de build / temporales
+dist/
+build/
+*.zip
+120/
+
+# VS Code
+.vscode/
+

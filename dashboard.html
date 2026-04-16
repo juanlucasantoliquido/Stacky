@@ -1,0 +1,3498 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stacky — Pipeline Dashboard</title>
+<style>
+  :root {
+    --bg:        #0f1117;
+    --panel:     #1a1d2e;
+    --border:    #2a2d3e;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --accent:    #6366f1;
+    --green:     #22c55e;
+    --yellow:    #eab308;
+    --red:       #ef4444;
+    --blue:      #3b82f6;
+    --orange:    #f97316;
+    --purple:    #a855f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+  /* ── Header ── */
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  header h1 { font-size: 16px; font-weight: 700; letter-spacing: .5px; }
+  header .badge {
+    background: var(--accent);
+    color: #fff;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  header .spacer { flex: 1; }
+  header .last-run { color: var(--muted); font-size: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 6px; border: none;
+    cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: opacity .15s, transform .1s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn:active { transform: scale(.97); }
+  .btn-accent  { background: var(--accent); color: #fff; }
+  .btn-green   { background: var(--green);  color: #fff; }
+  .btn-blue    { background: var(--blue);   color: #fff; }
+  .btn-red     { background: var(--red);    color: #fff; }
+  .btn-yellow  { background: var(--yellow); color: #000; }
+  .btn-purple  { background: var(--purple); color: #fff; }
+  .btn-orange  { background: var(--orange); color: #fff; }
+  .btn-ghost   { background: var(--border); color: var(--text); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── Summary bar ── */
+  .summary {
+    display: flex; gap: 12px; padding: 12px 24px;
+    flex-wrap: wrap;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px; font-size: 12px;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── Pipeline flow legend ── */
+  .flow-legend {
+    padding: 10px 24px;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    font-size: 11px; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .flow-legend .step {
+    display: flex; align-items: center; gap: 4px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 3px 8px;
+  }
+  .arrow { color: var(--muted); }
+
+  /* ── Tickets grid ── */
+  .tickets { padding: 16px 24px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── Ticket card ── */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .card-header .ticket-id {
+    font-family: monospace; font-size: 12px;
+    color: var(--muted); white-space: nowrap;
+  }
+  .card-header .titulo {
+    flex: 1; font-weight: 500; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .card-header .mantis-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    font-weight: 700; white-space: nowrap; letter-spacing: .3px;
+  }
+  /* Colores por estado Mantis */
+  .mb-asignada          { background: #1e3a5f; color: #60a5fa; }
+  .mb-nueva             { background: #422006; color: #fbbf24; }
+  .mb-confirmada        { background: #1c2a1a; color: #4ade80; }
+  .mb-aceptada          { background: #1e2a3a; color: #7dd3fc; }
+  .mb-se_necesitan_mas_datos { background: #3a1a1a; color: #f87171; }
+  .mb-resuelta          { background: #14532d; color: #86efac; }
+  .mb-cerrada           { background: #1a1a2a; color: #64748b; }
+  .mb-default           { background: var(--border); color: var(--muted); }
+  /* Badge asignado */
+  .asignado-badge {
+    display: flex; align-items: center; gap: 4px;
+    background: #0f2a1f; color: #34d399; border: 1px solid #14532d;
+    border-radius: 4px; padding: 1px 8px; font-size: 11px; font-weight: 600;
+    white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .card-header .chevron { color: var(--muted); transition: transform .2s; font-size: 12px; }
+  .card.expanded .chevron { transform: rotate(90deg); }
+
+  /* ── Pipeline flow bar inside card ── */
+  .pipeline-flow {
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 16px 0;
+    overflow-x: auto;
+  }
+  .stage-node {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    min-width: 80px;
+  }
+  .stage-icon {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; border: 2px solid transparent;
+    position: relative;
+  }
+  .stage-icon.done    { background: #14532d; border-color: var(--green); }
+  .stage-icon.active  { background: #1e3a5f; border-color: var(--blue); animation: pulse 1.5s infinite; }
+  .stage-icon.error   { background: #450a0a; border-color: var(--red); }
+  .stage-icon.waiting { background: var(--border); border-color: #3a3d4e; }
+  .stage-icon.skipped { background: var(--border); border-color: transparent; opacity: .4; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,.4); }
+    50%       { box-shadow: 0 0 0 6px rgba(59,130,246,0); }
+  }
+  .stage-label { font-size: 10px; color: var(--muted); text-align: center; line-height: 1.2; }
+  .stage-connector { flex: 1; height: 2px; background: var(--border); min-width: 20px; }
+  .stage-connector.done { background: var(--green); }
+  .stage-connector.active { background: var(--blue); }
+
+  /* ── Card actions ── */
+  .card-actions {
+    display: none; padding: 12px 16px; gap: 8px;
+    flex-wrap: wrap; border-top: 1px solid var(--border); margin-top: 12px;
+  }
+  .card.expanded .card-actions { display: flex; }
+
+  /* ── PM files status ── */
+  .pm-files {
+    display: none; padding: 12px 16px 0;
+    font-size: 12px;
+  }
+  .card.expanded .pm-files { display: block; }
+  .pm-files-title { color: var(--muted); margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .pm-files-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pm-file-chip {
+    display: flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 4px; font-size: 11px;
+    background: var(--border);
+  }
+  .pm-file-chip.ok      { background: #14532d; color: #86efac; }
+  .pm-file-chip.missing { background: #450a0a; color: #fca5a5; }
+  .pm-file-chip.has-ph  { background: #422006; color: #fed7aa; }
+
+  /* ── Summary panel (Dev / Tester) ── */
+  .summary-panel {
+    display: none;
+    margin: 8px 16px 0;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .card.expanded .summary-panel { display: block; }
+  .summary-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 12px;
+    background: #13162a;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--muted);
+  }
+  .summary-panel-header.dev  { color: #a78bfa; border-left: 3px solid #a78bfa; }
+  .summary-panel-header.tester { color: #34d399; border-left: 3px solid #34d399; }
+  .summary-panel-header.tester-rejected { color: var(--red); border-left: 3px solid var(--red); }
+  .summary-panel-body {
+    padding: 10px 14px;
+    background: #0d0f1a;
+    color: var(--text);
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .summary-panel-body h1, .summary-panel-body h2, .summary-panel-body h3 {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: var(--accent); margin: 8px 0 4px; font-size: 12px;
+  }
+  .summary-panel-body table { border-collapse: collapse; width: 100%; margin: 6px 0; }
+  .summary-panel-body th, .summary-panel-body td {
+    border: 1px solid var(--border); padding: 3px 8px; text-align: left; font-size: 11px;
+  }
+  .summary-panel-body th { background: #1a1d2e; }
+  .verdict-aprobado   { color: var(--green);  font-weight: 700; }
+  .verdict-observaciones { color: var(--yellow); font-weight: 700; }
+  .verdict-rechazado  { color: var(--red);    font-weight: 700; }
+
+  /* ── Error detail ── */
+  .error-detail {
+    display: none; padding: 10px 16px;
+    background: #1c0606; border-top: 1px solid #7f1d1d;
+    font-size: 12px; color: #fca5a5; font-family: monospace;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .card.expanded .error-detail.visible { display: block; }
+
+  /* ── Status indicator ── */
+  .status-indicator {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600;
+  }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 16px;
+    font-size: 13px; max-width: 340px;
+    transform: translateY(60px); opacity: 0;
+    transition: all .3s;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { border-color: var(--green); color: var(--green); }
+  #toast.error   { border-color: var(--red);   color: var(--red); }
+  #toast.info    { border-color: var(--blue);  color: var(--blue); }
+
+  /* ── Loading spinner ── */
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    display: none;
+  }
+  .spinner.visible { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Filters ── */
+  .filters {
+    display: flex; gap: 8px; padding: 0 24px 12px;
+    flex-wrap: wrap; align-items: center;
+  }
+  .filter-btn {
+    padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); cursor: pointer;
+    font-size: 12px; transition: all .15s;
+  }
+  .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    .summary { padding: 8px 12px; }
+    .tickets { padding: 8px 12px; }
+    header { padding: 10px 12px; }
+  }
+
+  /* ── Preview modal (markdown full view) ── */
+  #preview-modal {
+    display: none;
+    position: fixed; inset: 0; z-index: 600;
+    background: rgba(0,0,0,.75);
+    align-items: flex-start; justify-content: center;
+    padding: 24px 16px;
+    overflow-y: auto;
+  }
+  #preview-modal.open { display: flex; }
+  .preview-panel {
+    background: #0d101c;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: min(920px, 98vw);
+    min-height: 200px;
+    display: flex; flex-direction: column;
+    box-shadow: 0 16px 60px rgba(0,0,0,.7);
+  }
+  .preview-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    background: #13162a;
+    border-radius: 12px 12px 0 0;
+    position: sticky; top: 0;
+  }
+  .preview-header h3 { flex: 1; font-size: 14px; font-weight: 600; }
+  .preview-body {
+    padding: 24px 28px;
+    color: var(--text);
+    line-height: 1.7;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13.5px;
+  }
+  .preview-body h1 { font-size: 20px; font-weight: 700; color: var(--accent); margin: 18px 0 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .preview-body h2 { font-size: 16px; font-weight: 700; color: #a78bfa; margin: 16px 0 8px; }
+  .preview-body h3 { font-size: 14px; font-weight: 600; color: #60a5fa; margin: 12px 0 6px; }
+  .preview-body h4 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; }
+  .preview-body strong { color: #e2e8f0; }
+  .preview-body code {
+    background: #1a1d2e; border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px;
+    font-family: 'Cascadia Code', Consolas, monospace; font-size: 12px;
+    color: #7dd3fc;
+  }
+  .preview-body pre {
+    background: #131622; border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; overflow-x: auto;
+    margin: 10px 0;
+  }
+  .preview-body pre code {
+    background: none; border: none; padding: 0; font-size: 12.5px;
+    color: #93c5fd;
+  }
+  .preview-body table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 12.5px; }
+  .preview-body th { background: #1a1d2e; font-weight: 600; }
+  .preview-body th, .preview-body td { border: 1px solid var(--border); padding: 6px 12px; text-align: left; }
+  .preview-body tr:nth-child(even) td { background: #0f1219; }
+  .preview-body ul, .preview-body ol { padding-left: 22px; margin: 6px 0; }
+  .preview-body li { margin: 3px 0; }
+  .preview-body hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+  .preview-body blockquote { border-left: 3px solid var(--accent); padding: 4px 12px; margin: 8px 0; color: var(--muted); background: #13162a; border-radius: 0 6px 6px 0; }
+  .preview-verdict-aprobado   { color: var(--green);  font-weight: 800; font-size: 15px; }
+  .preview-verdict-observaciones { color: var(--yellow); font-weight: 800; font-size: 15px; }
+  .preview-verdict-rechazado  { color: var(--red);    font-weight: 800; font-size: 15px; }
+
+  /* ── Correction panel ── */
+  .correction-panel {
+    display: none;
+    margin: 8px 16px 4px;
+    border: 1px solid #2a3550;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .card.expanded .correction-panel { display: block; }
+  .correction-header {
+    padding: 7px 12px;
+    background: #0f1a2e;
+    border-bottom: 1px solid #2a3550;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+    color: #60a5fa;
+  }
+  .correction-body { padding: 10px 12px; background: #0a0e1a; display: flex; flex-direction: column; gap: 8px; }
+  .correction-body textarea {
+    width: 100%; min-height: 80px; resize: vertical;
+    background: #12162a; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 12.5px; padding: 8px 10px; line-height: 1.5;
+    transition: border-color .15s;
+  }
+  .correction-body textarea:focus { outline: none; border-color: var(--accent); }
+  .correction-footer { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* ── Project selector ── */
+  .project-select {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    max-width: 200px;
+  }
+  .project-select:focus { outline: none; border-color: var(--accent); }
+  .project-select option { background: var(--panel); }
+  .project-badge-uninit {
+    font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    background: #422006; color: #fed7aa;
+    white-space: nowrap;
+  }
+
+  /* ── Project selector ── */
+  .project-select {
+    background: var(--panel); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 5px 10px;
+    font-size: 13px; font-weight: 600; cursor: pointer; max-width: 200px;
+  }
+  .project-select:focus { outline: none; border-color: var(--accent); }
+  .project-select option { background: #1a1d2e; }
+
+  /* ── Queue modal ── */
+  #queue-modal {
+    display: none;
+    position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,.6);
+    align-items: center; justify-content: center;
+  }
+  #queue-modal.open { display: flex; }
+  .queue-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px;
+    width: min(520px, 94vw); max-height: 85vh;
+    display: flex; flex-direction: column; gap: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5);
+  }
+  .queue-panel h2 { font-size: 15px; font-weight: 700; }
+  .queue-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+  .queue-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px;
+    cursor: grab;
+    user-select: none;
+    transition: background .15s, border-color .15s;
+  }
+  .queue-item.dragging { opacity: .4; }
+  .queue-item.drag-over { border-color: var(--accent); background: #1e1f33; }
+  .queue-rank {
+    min-width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+  }
+  .queue-tid { font-family: monospace; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .queue-title { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .queue-estado { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .queue-arrows { display: flex; flex-direction: column; gap: 2px; }
+  .queue-arrows button {
+    background: var(--border); border: none; border-radius: 3px;
+    color: var(--text); cursor: pointer; padding: 1px 6px; font-size: 11px;
+    line-height: 1.4;
+  }
+  .queue-arrows button:hover { background: var(--accent); }
+  .queue-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+  /* ── Stage duration badge ── */
+  .stage-dur { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Live timers ── */
+  .live-timer {
+    font-size: 11px;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    color: var(--blue);
+    font-weight: 700;
+    letter-spacing: .5px;
+    margin-top: 2px;
+  }
+  .workflow-live {
+    display: inline-flex; align-items: center;
+    font-size: 12px;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-weight: 700;
+    color: var(--blue);
+    background: #0a1a2e;
+    border: 1px solid #1e3a5f;
+    border-radius: 6px;
+    padding: 2px 10px;
+    white-space: nowrap;
+    min-width: 72px;
+    text-align: center;
+    animation: pulse-border 2s infinite;
+  }
+  @keyframes pulse-border {
+    0%, 100% { border-color: #1e3a5f; }
+    50%       { border-color: #3b82f6; }
+  }
+
+  /* ── Stats modal ── */
+  #stats-modal, #prompts-modal {
+    display: none; position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,.6);
+    align-items: center; justify-content: center;
+  }
+  #stats-modal.open, #prompts-modal.open { display: flex; }
+  .stats-panel, .prompts-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px;
+    width: min(600px, 95vw); max-height: 85vh;
+    display: flex; flex-direction: column; gap: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    overflow: hidden;
+  }
+  .stats-panel h2, .prompts-panel h2 { font-size: 15px; font-weight: 700; }
+  .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; overflow-y: auto; }
+  .stats-table th { color: var(--muted); font-weight: 600; padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  .stats-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-family: monospace; }
+  .stats-table tr:hover td { background: var(--bg); }
+  /* ── Prompts tabs ── */
+  .prompts-tabs { display: flex; gap: 6px; }
+  .prompts-tab {
+    padding: 5px 14px; border-radius: 6px; cursor: pointer;
+    font-size: 13px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--muted);
+    transition: background .15s, color .15s;
+  }
+  .prompts-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .prompts-textarea {
+    flex: 1; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; font-size: 13px; font-family: monospace;
+    resize: none; min-height: 280px; outline: none;
+  }
+  .prompts-textarea:focus { border-color: var(--accent); }
+  .prompts-footer { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* ── Stacky logo ── */
+  .stacky-logo {
+    display: flex; align-items: center; gap: 10px; text-decoration: none;
+  }
+  .stacky-logo svg { flex-shrink: 0; }
+  .stacky-logo-text {
+    font-size: 18px; font-weight: 800; letter-spacing: -.5px;
+    background: linear-gradient(135deg, #818cf8 0%, #6366f1 50%, #a855f7 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .stacky-logo-sub {
+    font-size: 10px; color: var(--muted); font-weight: 400;
+    letter-spacing: .3px; margin-top: -3px;
+    -webkit-text-fill-color: var(--muted);
+  }
+
+  /* ── Deploy modal ── */
+  #deploy-modal {
+    display: none; position: fixed; inset: 0; z-index: 700;
+    background: rgba(0,0,0,.75);
+    align-items: flex-start; justify-content: center;
+    padding: 32px 16px; overflow-y: auto;
+  }
+  #deploy-modal.open { display: flex; }
+  .deploy-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; width: min(780px, 96vw);
+    display: flex; flex-direction: column;
+    box-shadow: 0 12px 48px rgba(0,0,0,.6);
+    overflow: hidden;
+  }
+  .deploy-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; background: #0a0d1a;
+    border-bottom: 1px solid var(--border);
+  }
+  .deploy-header h2 { flex: 1; font-size: 15px; font-weight: 700; }
+  .deploy-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .deploy-section { display: flex; flex-direction: column; gap: 8px; }
+  .deploy-section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .deploy-file-list {
+    display: flex; flex-direction: column; gap: 4px;
+    background: #080b14; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+    max-height: 200px; overflow-y: auto;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 12px; color: #93c5fd;
+  }
+  .deploy-file-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 2px 0; border-bottom: 1px solid #13162a;
+  }
+  .deploy-file-item:last-child { border-bottom: none; }
+  .deploy-file-type {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    font-weight: 700; white-space: nowrap; min-width: 38px; text-align: center;
+  }
+  .deploy-file-type.dll  { background: #1e1a3a; color: #a78bfa; }
+  .deploy-file-type.web  { background: #0a1a2e; color: #60a5fa; }
+  .deploy-file-type.sql  { background: #0f2a1a; color: #34d399; }
+  .deploy-file-type.other { background: #1a1a1a; color: #94a3b8; }
+  .deploy-file-type.exe   { background: #1e1a3a; color: #c4b5fd; }
+
+  /* ── Risk badges ── */
+  .risk-badge {
+    display: inline-block; padding: 1px 7px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; white-space: nowrap;
+  }
+  .risk-high   { background: #450a0a; color: #f87171; }
+  .risk-medium { background: #422006; color: #fbbf24; }
+  .risk-low    { background: #14532d; color: #86efac; }
+
+  /* ── Timeline ── */
+  .ticket-timeline {
+    display: none; padding: 10px 16px 0;
+  }
+  .card.expanded .ticket-timeline { display: block; }
+  .timeline-track {
+    display: flex; gap: 0; align-items: stretch;
+    height: 36px; border-radius: 6px; overflow: hidden;
+    background: var(--border);
+  }
+  .timeline-seg {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #fff;
+    min-width: 4px; position: relative; overflow: hidden;
+    white-space: nowrap; cursor: default;
+    transition: filter .15s;
+  }
+  .timeline-seg:hover { filter: brightness(1.2); }
+  .timeline-seg span { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
+  .tseg-pm     { background: #3b82f6; }
+  .tseg-dev    { background: #a855f7; }
+  .tseg-tester { background: #f97316; }
+  .tseg-wait   { background: #1e293b; }
+  .timeline-labels {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--muted); margin-top: 3px;
+  }
+
+  /* ── Commit modal ── */
+  #commit-modal {
+    display: none; position: fixed; inset: 0; z-index: 800;
+    background: rgba(0,0,0,.75);
+    align-items: center; justify-content: center;
+  }
+  #commit-modal.open { display: flex; }
+  .commit-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; width: min(620px,96vw);
+    box-shadow: 0 12px 48px rgba(0,0,0,.6);
+    overflow: hidden;
+  }
+  .commit-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; background: #0a1020;
+    border-bottom: 1px solid var(--border);
+  }
+  .commit-header h2 { flex: 1; font-size: 15px; font-weight: 700; }
+  .commit-body { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .commit-msg-area {
+    width: 100%; min-height: 90px; resize: vertical;
+    background: #080b14; color: #e2e8f0;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 13px; line-height: 1.6; outline: none;
+  }
+  .commit-msg-area:focus { border-color: var(--accent); }
+  .commit-hint { font-size: 11px; color: var(--muted); }
+  .commit-footer {
+    display: flex; gap: 8px; justify-content: flex-end;
+    padding: 14px 20px; border-top: 1px solid var(--border);
+    background: #0a0d18;
+  }
+  .commit-result {
+    font-size: 12px; font-family: monospace; padding: 8px 12px;
+    border-radius: 6px; background: #080b14; color: #34d399;
+    border: 1px solid #14532d; display: none;
+  }
+  .commit-result.error { color: #f87171; border-color: #7f1d1d; background: #1c0606; }
+
+  /* ── Metrics modal ── */
+  #metrics-modal {
+    display: none; position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,.65);
+    align-items: center; justify-content: center;
+  }
+  #metrics-modal.open { display: flex; }
+  .metrics-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; width: min(860px,97vw); max-height: 88vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5); overflow: hidden;
+  }
+  .metrics-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; background: #0a0d18;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .metrics-header h2 { flex: 1; font-size: 15px; font-weight: 700; }
+  .metrics-body { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+  .metrics-kpi-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .metrics-kpi {
+    flex: 1; min-width: 120px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; text-align: center;
+  }
+  .metrics-kpi .kpi-val { font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1; }
+  .metrics-kpi .kpi-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .metrics-section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--muted); margin-bottom: 8px;
+  }
+  .metrics-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .metrics-table th { color: var(--muted); font-weight: 600; padding: 5px 10px;
+                       text-align: left; border-bottom: 1px solid var(--border); }
+  .metrics-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+  .metrics-table tr:hover td { background: var(--bg); }
+  .metrics-bar { height: 8px; border-radius: 4px; background: var(--accent); min-width: 4px; }
+  .metrics-bar-wrap { background: var(--border); border-radius: 4px; overflow: hidden; height: 8px; width: 100px; display:inline-block; }
+  .trend-up   { color: var(--green);  font-weight: 700; }
+  .trend-down { color: var(--red);    font-weight: 700; }
+  .trend-flat { color: var(--muted);  font-weight: 700; }
+
+  /* ── Telegram config widget ── */
+  .tg-config-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 12px;
+  }
+  .tg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .tg-dot.ok { background: var(--green); }
+
+  /* ── Knowledge base modal ── */
+  #knowledge-modal {
+    display: none; position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,.65);
+    align-items: center; justify-content: center;
+  }
+  #knowledge-modal.open { display: flex; }
+  .knowledge-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; width: min(700px,96vw); max-height: 85vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5); overflow: hidden;
+  }
+  .knowledge-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; background: #0a0d18;
+    border-bottom: 1px solid var(--border);
+  }
+  .knowledge-header h2 { flex: 1; font-size: 15px; font-weight: 700; }
+  .knowledge-body { padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .incident-card {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; font-size: 12px;
+  }
+  .incident-card.resolved { opacity: .5; }
+  .incident-meta { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .deploy-warning-list {
+    background: #1c0e00; border: 1px solid #7c4b00;
+    border-radius: 8px; padding: 8px 12px;
+    font-size: 12px; color: #fbbf24;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    max-height: 120px; overflow-y: auto;
+  }
+  .deploy-footer {
+    display: flex; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--border);
+    background: #0a0d18;
+  }
+  .deploy-empty {
+    text-align: center; color: var(--muted); padding: 24px; font-size: 13px;
+  }
+  .deploy-spinner-wrap {
+    display: flex; align-items: center; justify-content: center;
+    gap: 12px; padding: 32px; color: var(--muted); font-size: 13px;
+  }
+
+  /* ── Gen Prompts modal ── */
+  #gen-prompts-modal {
+    display: none; position: fixed; inset: 0; z-index: 600;
+    background: rgba(0,0,0,.75);
+    align-items: flex-start; justify-content: center;
+    padding: 32px 16px; overflow-y: auto;
+  }
+  #gen-prompts-modal.open { display: flex; }
+  .gen-prompts-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; width: min(760px, 96vw);
+    display: flex; flex-direction: column; gap: 0;
+    box-shadow: 0 12px 48px rgba(0,0,0,.6);
+    overflow: hidden;
+  }
+  .gen-prompts-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; background: #0f1220;
+    border-bottom: 1px solid var(--border);
+  }
+  .gen-prompts-header h2 { flex: 1; font-size: 15px; font-weight: 700; }
+  .gen-prompts-body { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+  .prompt-section { display: flex; flex-direction: column; gap: 8px; }
+  .prompt-section-label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--muted);
+  }
+  .prompt-label-pill {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .prompt-label-pill.dev    { color: #a78bfa; }
+  .prompt-label-pill.tester { color: #34d399; }
+  .prompt-textarea {
+    width: 100%; min-height: 200px; resize: vertical;
+    background: #080b14; color: #cbd5e1;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 12.5px; line-height: 1.7;
+    outline: none; tab-size: 2;
+  }
+  .copy-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 5px;
+    background: var(--border); color: var(--text);
+    border: none; cursor: pointer; font-size: 12px; font-weight: 600;
+    transition: background .15s, color .15s;
+  }
+  .copy-btn:hover { background: var(--accent); color: #fff; }
+  .copy-btn.copied { background: var(--green); color: #fff; }
+  .gen-prompts-footer {
+    display: flex; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--border);
+    background: #0a0d18;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <!-- Stacky logo -->
+  <div class="stacky-logo">
+    <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Base layer — more opaque -->
+      <rect x="2" y="22" width="30" height="8" rx="3" fill="url(#g1)"/>
+      <!-- Middle layer -->
+      <rect x="5" y="13" width="24" height="8" rx="3" fill="url(#g2)"/>
+      <!-- Top layer -->
+      <rect x="9" y="4" width="16" height="8" rx="3" fill="url(#g3)"/>
+      <defs>
+        <linearGradient id="g1" x1="2" y1="22" x2="32" y2="30" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#6366f1"/>
+          <stop offset="100%" stop-color="#4f46e5"/>
+        </linearGradient>
+        <linearGradient id="g2" x1="5" y1="13" x2="29" y2="21" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#818cf8"/>
+          <stop offset="100%" stop-color="#6366f1"/>
+        </linearGradient>
+        <linearGradient id="g3" x1="9" y1="4" x2="25" y2="12" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#c4b5fd"/>
+          <stop offset="100%" stop-color="#a78bfa"/>
+        </linearGradient>
+      </defs>
+    </svg>
+    <div>
+      <div class="stacky-logo-text">Stacky</div>
+      <div class="stacky-logo-sub">Pipeline Dashboard</div>
+    </div>
+  </div>
+  <span class="badge" id="total-badge">—</span>
+  <select id="project-select" class="project-select" onchange="switchProject(this.value)" title="Proyecto activo"></select>
+  <button class="btn btn-ghost" onclick="openNewProjectModal()" title="Inicializar nuevo proyecto" style="padding:5px 10px;font-size:13px">➕</button>
+  <span id="mantis-id-badge" title="Mantis Project ID — necesario para que el scraper navegue al proyecto correcto" style="font-size:11px;color:var(--muted);cursor:pointer;padding:4px 8px;border:1px solid var(--border);border-radius:4px;white-space:nowrap" onclick="editMantisProjectId()">Mantis ID: <strong id="mantis-id-value">—</strong> ✏</span>
+  <div class="spacer"></div>
+  <span class="last-run" id="last-run-text">—</span>
+  <div class="spinner" id="global-spinner"></div>
+  <button class="btn btn-ghost" onclick="refresh()" title="Refrescar">🔄 Refresh</button>
+  <button class="btn btn-ghost" onclick="openStats()" title="Estadísticas de tiempos por etapa">📊 Stats</button>
+  <button class="btn btn-ghost" onclick="openMetrics()" title="Velocity metrics del equipo">📈 Métricas</button>
+  <button class="btn btn-ghost" onclick="openKnowledge()" title="Knowledge base de deploys fallidos">🧠 Knowledge</button>
+  <button class="btn btn-ghost" id="teams-btn" onclick="openTeamsConfig()" title="Configurar notificaciones Teams">💬 Teams</button>
+  <button class="btn btn-ghost" onclick="openPrompts()" title="Editar prompts PM / Dev / QA">📝 Prompts</button>
+  <button id="btn-gen-docs" class="btn btn-ghost" onclick="generateProjectDocs()" title="Generar documentación técnica del proyecto (una sola vez, reutilizable por todos los agentes)">📚 Docs</button>
+  <button class="btn btn-yellow" onclick="openQueue()" title="Cola de prioridad">📅 Cola</button>
+  <button class="btn btn-accent" onclick="runScraper()" title="Ejecutar scraper de Mantis">🕷 Scraper</button>
+  <button class="btn btn-green" onclick="runAll()" title="Ejecutar pipeline en todos los pendientes">▶ Run All</button>
+</header>
+
+<!-- ── Flow legend ── -->
+<div class="flow-legend">
+  <strong style="color:var(--text)">Flujo:</strong>
+  <div class="step">🕷 Scraper</div><span class="arrow">→</span>
+  <div class="step">📋 PM Análisis</div><span class="arrow">→</span>
+  <div class="step">✅ PM OK</div><span class="arrow">→</span>
+  <div class="step">⚙ Dev Impl.</div><span class="arrow">→</span>
+  <div class="step">🧪 Tester QA</div><span class="arrow">→</span>
+  <div class="step">🏁 Completo</div>
+  <div class="spacer"></div>
+  <span style="color:var(--green)">●</span> Done &nbsp;
+  <span style="color:var(--blue)">●</span> Activo &nbsp;
+  <span style="color:var(--yellow)">●</span> Pendiente &nbsp;
+  <span style="color:var(--red)">●</span> Error
+</div>
+
+<!-- ── Summary pills ── -->
+<div class="summary" id="summary-bar"></div>
+
+<!-- ── Filters ── -->
+<div class="filters">
+  <span style="color:var(--muted);font-size:12px">Estado pipeline:</span>
+  <button class="filter-btn active" onclick="setFilter('all', this)">Todos</button>
+  <button class="filter-btn" onclick="setFilter('pendiente', this)">Pendientes</button>
+  <button class="filter-btn" onclick="setFilter('error', this)">Errores</button>
+  <button class="filter-btn" onclick="setFilter('completado', this)">Completados</button>
+</div>
+<div class="filters" id="mantis-filters-bar" style="gap:8px;flex-wrap:wrap">
+  <span style="color:var(--muted);font-size:12px">Estado Mantis:</span>
+  <select id="filter-estado-mantis" onchange="renderTickets()" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px">
+    <option value="">Todos</option>
+  </select>
+  <span style="color:var(--muted);font-size:12px;margin-left:12px">Asignado a:</span>
+  <select id="filter-asignado" onchange="renderTickets()" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px">
+    <option value="">Todos</option>
+  </select>
+</div>
+
+<!-- ── Tickets area ── -->
+<div class="tickets" id="tickets-container">
+  <div style="color:var(--muted);padding:40px;text-align:center">Cargando tickets...</div>
+</div>
+
+<!-- ── Stats modal ── -->
+<div id="stats-modal" onclick="if(event.target.id==='stats-modal')closeStats()">
+  <div class="stats-panel">
+    <h2>📊 Estadísticas de tiempos por etapa</h2>
+    <div style="overflow-y:auto;flex:1">
+      <table class="stats-table" id="stats-table">
+        <thead><tr>
+          <th>Etapa</th><th>Tickets</th><th>Promedio</th><th>Mínimo</th><th>Máximo</th>
+        </tr></thead>
+        <tbody id="stats-body"><tr><td colspan="5" style="color:var(--muted);text-align:center">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeStats()">✕ Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Prompts modal ── -->
+<div id="prompts-modal" onclick="if(event.target.id==='prompts-modal')closePrompts()">
+  <div class="prompts-panel">
+    <h2>📝 Prompts por rol</h2>
+    <div class="prompts-tabs">
+      <div class="prompts-tab active" id="ptab-pm"    onclick="switchPromptTab('pm')">📋 PM</div>
+      <div class="prompts-tab"        id="ptab-dev"   onclick="switchPromptTab('dev')">⚙ Dev</div>
+      <div class="prompts-tab"        id="ptab-tester" onclick="switchPromptTab('tester')">🧪 QA</div>
+    </div>
+    <textarea class="prompts-textarea" id="prompts-textarea" placeholder="Cargando..."></textarea>
+    <div class="prompts-footer">
+      <button class="btn btn-ghost" onclick="closePrompts()">✕ Cancelar</button>
+      <button class="btn btn-green" onclick="savePrompt()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Gen Prompts modal ── -->
+<div id="gen-prompts-modal" onclick="if(event.target.id==='gen-prompts-modal')closeGenPrompts()">
+  <div class="gen-prompts-panel">
+    <div class="gen-prompts-header">
+      <h2 id="gen-prompts-title">📋 Prompts para Dev y QA</h2>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeGenPrompts()">✕</button>
+    </div>
+    <div class="gen-prompts-body">
+      <div class="prompt-section">
+        <div class="prompt-section-label">
+          <span class="prompt-label-pill dev">⚙ Prompt para Developer</span>
+          <button class="copy-btn" id="copy-dev-btn" onclick="copyPrompt('gen-dev-ta','copy-dev-btn')">📋 Copiar</button>
+        </div>
+        <textarea id="gen-dev-ta" class="prompt-textarea" readonly></textarea>
+      </div>
+      <div class="prompt-section">
+        <div class="prompt-section-label">
+          <span class="prompt-label-pill tester">🧪 Prompt para QA</span>
+          <button class="copy-btn" id="copy-qa-btn" onclick="copyPrompt('gen-qa-ta','copy-qa-btn')">📋 Copiar</button>
+        </div>
+        <textarea id="gen-qa-ta" class="prompt-textarea" readonly></textarea>
+      </div>
+    </div>
+    <div class="gen-prompts-footer">
+      <span id="gen-prompts-tareas" style="flex:1;font-size:11px;color:var(--muted)"></span>
+      <button class="btn btn-ghost" onclick="closeGenPrompts()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ── -->
+<div id="toast"></div>
+
+<!-- ── New project modal ── -->
+<div id="new-project-modal" onclick="_npBackdropClick(event)" style="display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.65);align-items:center;justify-content:center">
+  <div class="queue-panel" style="width:min(520px,96vw)">
+    <h2>📁 Inicializar Nuevo Proyecto</h2>
+    <div style="display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:70vh">
+      <label style="font-size:12px;color:var(--muted)">Proyecto SVN detectado en N:\SVN\RS\</label>
+      <select id="np-svn" class="project-select" onchange="prefillWorkspace(this)" style="max-width:100%;width:100%"><option>Cargando...</option></select>
+      <label style="font-size:12px;color:var(--muted)">Nombre para mostrar en el dashboard</label>
+      <input id="np-display" type="text" placeholder="Ej: RS Mobile (RSMOB)" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;width:100%">
+      <label style="font-size:12px;color:var(--muted)">Workspace root (ruta al código fuente del proyecto)</label>
+      <input id="np-workspace" type="text" placeholder="Ej: N:\RSMOBILE  o  N:\SVN\RS\RSMOBILE\trunk" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;width:100%">
+      <details style="font-size:12px">
+        <summary style="cursor:pointer;color:var(--accent);padding:4px 0">🔍 Filtros y Mantis Project ID (opcional)</summary>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+          <p style="font-size:11px;color:var(--muted);margin:0">
+            <strong>Mantis Project ID</strong> — ID numérico que usa el scraper para navegar al proyecto correcto.<br>
+            <em>La forma más fácil: usá el botón de abajo para detectarlo automáticamente.</em>
+          </p>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="np-project-id" type="number" placeholder="Ej: 12  (o detectar →)" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;flex:1">
+            <button id="np-pick-btn" class="btn btn-ghost" onclick="pickMantisProjectForNew()" style="white-space:nowrap;font-size:12px" title="Abre Mantis, seleccionás el proyecto y el ID se completa solo">
+              🎯 Auto-detectar
+            </button>
+          </div>
+          <div id="np-pick-status" style="font-size:11px;color:var(--accent);display:none;padding:4px 0"></div>
+          <p style="font-size:11px;color:var(--muted);margin:0;margin-top:4px">
+            <strong>Filtros de texto</strong> (opcional) — fragmentos de texto adicionales para identificar tickets.
+          </p>
+          <textarea id="np-filters" placeholder="Ej:&#10;RSMOB&#10;RS Mobile" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:12px;min-height:70px;resize:vertical;width:100%"></textarea>
+        </div>
+      </details>
+      <p style="font-size:11px;color:var(--muted);margin:0">Se creará <code style="font-size:10px">projects/{nombre}/</code> con config.json y prompts base (pm.md / dev.md / qa.md) adaptados al proyecto. Podés editarlos después.</p>
+    </div>
+    <div class="queue-footer" style="margin-top:12px">
+      <button class="btn btn-ghost" onclick="closeNewProjectModal()">Cancelar</button>
+      <button class="btn btn-accent" onclick="createProject()">Crear e inicializar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Preview modal (markdown full view) ── -->
+<!-- ── Modal: Nota pre-pipeline ── -->
+<div id="pipeline-note-modal" onclick="if(event.target.id==='pipeline-note-modal')closePipelineNoteModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1100;overflow:auto;padding:40px 24px">
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;max-width:600px;margin:0 auto">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+      <span style="font-weight:700;font-size:15px">📝 Nota de contexto para el PM</span>
+      <span id="pipeline-note-ticket-label" style="color:var(--muted);font-size:13px"></span>
+      <button onclick="closePipelineNoteModal()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px">✕</button>
+    </div>
+    <div style="padding:20px">
+      <p style="color:var(--muted);font-size:13px;margin:0 0 12px">
+        Agregá contexto adicional que el PM debe tener en cuenta al analizar este ticket.<br>
+        Por ejemplo: versión del módulo afectado, ambiente donde reproduce, restricciones de implementación, etc.
+      </p>
+      <textarea id="pipeline-note-text"
+        placeholder="Ejemplo: El error reproduce solo en producción con más de 50 usuarios concurrentes. El módulo afectado fue modificado en la release 4.2 sin documentación..."
+        style="width:100%;min-height:140px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box"></textarea>
+      <div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closePipelineNoteModal()">Cancelar</button>
+        <button class="btn btn-accent" onclick="confirmRunFull()">▶ Iniciar Full Pipeline</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ── Diff SVN modal ── -->
+<div id="diff-modal" onclick="if(event.target.id==='diff-modal')closeDiff()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;overflow:auto;padding:24px">
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;max-width:1100px;margin:0 auto;display:flex;flex-direction:column;max-height:90vh">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">
+      <span style="font-weight:700;font-size:15px">📄 Cambios SVN</span>
+      <span id="diff-modal-subtitle" style="color:var(--muted);font-size:13px"></span>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span style="font-size:11px;color:var(--muted)">Etapa:</span>
+        <button id="diff-tab-pm"     class="btn btn-ghost" style="font-size:11px;padding:2px 10px" onclick="switchDiffTab('pm')">📋 PM</button>
+        <button id="diff-tab-dev"    class="btn btn-ghost" style="font-size:11px;padding:2px 10px" onclick="switchDiffTab('dev')">⚙ Dev</button>
+        <button id="diff-tab-tester" class="btn btn-ghost" style="font-size:11px;padding:2px 10px" onclick="switchDiffTab('tester')">🧪 QA</button>
+        <button class="btn btn-ghost" style="font-size:12px;margin-left:8px" onclick="closeDiff()">✕ Cerrar</button>
+      </div>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden">
+      <!-- Archivos modificados -->
+      <div style="width:260px;border-right:1px solid var(--border);padding:12px;overflow-y:auto;flex-shrink:0">
+        <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Archivos modificados</div>
+        <pre id="diff-files" style="font-size:11px;font-family:monospace;color:var(--text);margin:0;white-space:pre-wrap;word-break:break-all"></pre>
+      </div>
+      <!-- Diff con colores -->
+      <div style="flex:1;overflow:auto;padding:12px 16px">
+        <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Diff completo</div>
+        <pre id="diff-content" style="font-size:12px;font-family:'Consolas','Cascadia Code',monospace;margin:0;white-space:pre;line-height:1.5"></pre>
+      </div>
+    </div>
+    <div style="padding:10px 20px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);flex-shrink:0">
+      Los cambios se capturan automáticamente al terminar cada etapa — solo incluye lo que el agente modificó en esa etapa.
+    </div>
+  </div>
+</div>
+
+<!-- ── Preview modal ── -->
+<div id="preview-modal" onclick="_previewBackdropClick(event)">
+  <div class="preview-panel">
+    <div class="preview-header">
+      <h3 id="preview-title">Vista previa</h3>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="closePreview()">✕ Cerrar</button>
+    </div>
+    <div class="preview-body" id="preview-body"></div>
+  </div>
+</div>
+
+<!-- ── Deploy modal ── -->
+<div id="deploy-modal" onclick="_deployBackdropClick(event)">
+  <div class="deploy-panel">
+    <div class="deploy-header">
+      <svg width="20" height="20" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="22" width="30" height="8" rx="3" fill="#6366f1"/>
+        <rect x="5" y="13" width="24" height="8" rx="3" fill="#818cf8"/>
+        <rect x="9" y="4" width="16" height="8" rx="3" fill="#c4b5fd"/>
+      </svg>
+      <h2 id="deploy-modal-title">📦 Paquete de Despliegue</h2>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeDeploy()">✕</button>
+    </div>
+    <div class="deploy-body" id="deploy-body">
+      <div class="deploy-spinner-wrap">
+        <div class="spinner visible"></div>
+        <span>Generando paquete...</span>
+      </div>
+    </div>
+    <div class="deploy-footer" id="deploy-footer" style="display:none">
+      <span id="deploy-zip-size" style="flex:1;font-size:11px;color:var(--muted);align-self:center"></span>
+      <button class="btn btn-ghost" onclick="closeDeploy()">Cerrar</button>
+      <a id="deploy-download-btn" class="btn btn-green" href="#" download style="text-decoration:none">⬇ Descargar ZIP</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── SVN Commit modal ── -->
+<div id="commit-modal" onclick="_commitBackdropClick(event)">
+  <div class="commit-panel">
+    <div class="commit-header">
+      <span style="font-size:18px">🔖</span>
+      <h2 id="commit-modal-title">SVN Commit</h2>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeCommit()">✕</button>
+    </div>
+    <div class="commit-body">
+      <div class="commit-hint">
+        El mensaje empieza con <strong>#ID</strong> (linkea automáticamente el ticket en Mantis).
+        Editá el texto si querés ajustarlo.
+      </div>
+      <textarea id="commit-msg" class="commit-msg-area" spellcheck="false"></textarea>
+      <div id="commit-result" class="commit-result"></div>
+      <div class="commit-hint" id="commit-status-line" style="color:var(--muted)"></div>
+    </div>
+    <div class="commit-footer">
+      <button class="btn btn-ghost" onclick="closeCommit()">Cancelar</button>
+      <button id="commit-do-btn" class="btn btn-accent" onclick="doCommit()">🔖 Commit</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Metrics modal ── -->
+<div id="metrics-modal" onclick="if(event.target.id==='metrics-modal')closeMetrics()">
+  <div class="metrics-panel">
+    <div class="metrics-header">
+      <h2>📈 Velocity Metrics del Equipo</h2>
+      <select id="metrics-days" onchange="loadMetrics()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px">
+        <option value="7">Últimos 7 días</option>
+        <option value="30" selected>Últimos 30 días</option>
+        <option value="90">Últimos 90 días</option>
+      </select>
+      <button class="btn btn-ghost" onclick="closeMetrics()">✕</button>
+    </div>
+    <div class="metrics-body" id="metrics-body">
+      <div class="deploy-spinner-wrap"><div class="spinner visible"></div><span>Calculando...</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Knowledge Base modal ── -->
+<div id="knowledge-modal" onclick="if(event.target.id==='knowledge-modal')closeKnowledge()">
+  <div class="knowledge-panel">
+    <div class="knowledge-header">
+      <h2>🧠 Knowledge Base — Deploys Fallidos</h2>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer">
+        <input type="checkbox" id="kb-show-resolved" onchange="loadKnowledge()"> Mostrar resueltos
+      </label>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeKnowledge()">✕</button>
+    </div>
+    <div class="knowledge-body" id="knowledge-body">
+      <div class="deploy-spinner-wrap"><div class="spinner visible"></div><span>Cargando...</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Teams Config modal ── -->
+<div id="teams-modal" onclick="if(event.target.id==='teams-modal')closeTeamsConfig()" style="display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.75);align-items:center;justify-content:center">
+  <div class="commit-panel" style="width:min(660px,96vw)">
+    <div class="commit-header" style="background:#0f1a30">
+      <span style="font-size:20px">💬</span>
+      <h2>Notificaciones Microsoft Teams</h2>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeTeamsConfig()">✕</button>
+    </div>
+    <div class="commit-body" style="gap:12px">
+
+      <!-- Tabs modo -->
+      <div style="display:flex;gap:8px;margin-bottom:4px" id="teams-mode-tabs">
+        <button class="filter-btn active" id="tab-webhook" onclick="setTeamsMode('webhook')">🔗 Incoming Webhook</button>
+        <button class="filter-btn" id="tab-pa" onclick="setTeamsMode('powerautomate')">⚡ Power Automate</button>
+      </div>
+
+      <!-- Instrucciones Webhook -->
+      <div id="teams-info-webhook" style="font-size:12px;color:var(--muted);line-height:1.7;background:#080b14;border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <strong style="color:var(--text)">Incoming Webhook</strong> — notifica a un canal de Teams:<br>
+        1. En Teams → canal deseado → <strong>···</strong> → <em>Conectores</em> → <em>Incoming Webhook</em><br>
+        2. Ponerle nombre "Stacky", crear, copiar la URL<br>
+        3. Pegarla abajo y guardar<br>
+        <em style="color:#6366f1">Tip: creá un canal privado "Stacky" solo para vos.</em>
+      </div>
+
+      <!-- Instrucciones Power Automate -->
+      <div id="teams-info-pa" style="display:none;font-size:12px;color:var(--muted);line-height:1.7;background:#080b14;border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <strong style="color:var(--text)">Power Automate</strong> — notifica al chat personal:<br>
+        1. Ir a <a href="https://make.powerautomate.com" target="_blank" style="color:#6366f1">make.powerautomate.com</a> → Crear flujo<br>
+        2. Trigger: <em>"Cuando se recibe una solicitud HTTP"</em><br>
+        3. Acción: <em>"Publicar mensaje en un chat o canal"</em> → Chat → tu usuario<br>
+        4. En el mensaje usar: <code>@{triggerBody()?['body']}</code><br>
+        5. Guardar el flujo → copiar la URL del trigger HTTP → pegar abajo
+      </div>
+
+      <input id="teams-webhook-url" type="text" placeholder="Webhook URL o Power Automate HTTP trigger URL"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:9px 12px;font-size:12px;font-family:monospace">
+      <input type="hidden" id="teams-mode-val" value="webhook">
+
+      <div id="teams-test-result" style="font-size:12px;display:none;padding:6px 2px"></div>
+    </div>
+    <div class="commit-footer">
+      <button class="btn btn-ghost" onclick="closeTeamsConfig()">Cancelar</button>
+      <button class="btn btn-accent" onclick="saveTeamsConfig()">💾 Guardar y probar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Incident Test modal ── -->
+<div id="incident-test-modal" onclick="if(event.target.id==='incident-test-modal')closeIncidentTest()" style="display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.75);align-items:center;justify-content:center;overflow:auto;padding:24px">
+  <div class="commit-panel" style="width:min(720px,97vw);max-height:90vh;overflow-y:auto">
+    <div class="commit-header" style="background:#1a0f30">
+      <span style="font-size:20px">🧪</span>
+      <h2 id="incident-test-title">Checklist de Testeo de Incidencia</h2>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeIncidentTest()">✕</button>
+    </div>
+    <div class="commit-body" style="gap:0">
+      <div id="incident-test-body" style="min-height:120px;display:flex;align-items:center;justify-content:center;color:var(--muted)">
+        Cargando plan de testeo…
+      </div>
+    </div>
+    <div class="commit-footer">
+      <span id="incident-test-progress" style="font-size:12px;color:var(--muted)"></span>
+      <button class="btn btn-ghost" onclick="closeIncidentTest()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Queue modal ── -->
+<div id="queue-modal" onclick="closeQueueOnBackdrop(event)">
+  <div class="queue-panel">
+    <h2>📅 Cola de procesamiento — Arrastrar o usar flechas para reordenar</h2>
+    <div class="queue-list" id="queue-list"></div>
+    <div class="queue-footer">
+      <button class="btn btn-ghost" onclick="closeQueue()">Cerrar</button>
+      <button class="btn btn-accent" onclick="saveQueue()">💾 Guardar orden</button>
+      <button class="btn btn-green" onclick="saveQueueAndRun()">▶ Guardar y ejecutar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+let allTickets = [];
+let currentFilter = 'all';
+let refreshInterval = null;
+let expandedCards = new Set(); // tarjetas expandidas — se preservan entre refreshes
+
+// ── Init ──────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadStages();   // carga stages config antes de renderizar
+  loadProjects();
+  refresh();
+  checkProjectDocsStatus();
+  // Auto-refresh desactivado — usar botón 🔄 Refresh manualmente
+});
+
+// ── API helpers ───────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  return r.json();
+}
+
+// ── Project management ────────────────────────────────────────────────────
+let _activeProjectData = {};
+
+async function loadProjects() {
+  try {
+    const r   = await api('GET', '/api/projects');
+    const sel = document.getElementById('project-select');
+    if (!r.projects || !sel) return;
+    sel.innerHTML = r.projects
+      .filter(p => p.initialized)
+      .map(p => `<option value="${esc(p.name)}" ${p.active ? 'selected' : ''}>${esc(p.display_name)}</option>`)
+      .join('');
+    // Actualizar badge Mantis ID
+    const active = r.projects.find(p => p.active);
+    if (active) {
+      _activeProjectData = active;
+      const badge = document.getElementById('mantis-id-value');
+      if (badge) badge.textContent = active.mantis_project_id ?? '—';
+    }
+  } catch(e) { /* server may not be running yet */ }
+}
+
+// ── Mantis Project ID picker ──────────────────────────────────────────────
+
+let _pickIntervalId = null;
+
+async function _startMantisPickSession(onResult) {
+  /**
+   * Lanza el picker interactivo de Mantis.
+   * onResult(project_id, project_name) cuando el usuario selecciona.
+   * Retorna la función de cancelación.
+   */
+  const r = await api('POST', '/api/pick_mantis_project', {});
+  if (!r.ok) { toast('Error al abrir Mantis: ' + (r.error||''), 'error'); return null; }
+  const sid = r.session_id;
+  const stop = () => { if (_pickIntervalId) { clearInterval(_pickIntervalId); _pickIntervalId = null; } };
+  _pickIntervalId = setInterval(async () => {
+    try {
+      const s = await api('GET', `/api/pick_mantis_project/${sid}`);
+      if (s.status === 'done') {
+        stop();
+        onResult(s.project_id, s.project_name || null);
+      } else if (s.status === 'timeout') {
+        stop();
+        toast('⏱ Sin selección — revisá la consola del servidor para ver el log', 'error');
+        console.warn('[picker] timeout — sin result_file escrito por pick_project.py');
+        onResult(null, null);
+      } else if (s.status === 'error') {
+        stop();
+        const msg = s.error || 'desconocido';
+        toast('❌ Error al abrir Mantis', 'error');
+        console.error('[picker] ERROR COMPLETO:\n', msg);
+        onResult(null, null);
+      }
+    } catch(e) { /* retry next tick */ }
+  }, 800);
+  return stop;
+}
+
+async function pickMantisProjectForNew() {
+  /** Botón "Auto-detectar" dentro del modal de nuevo proyecto */
+  const btn    = document.getElementById('np-pick-btn');
+  const status = document.getElementById('np-pick-status');
+  const input  = document.getElementById('np-project-id');
+  btn.disabled = true;
+  btn.textContent = '⏳ Esperando...';
+  status.style.display = 'block';
+  status.textContent = '🌐 Abrí Mantis — seleccioná el proyecto en el menú desplegable.';
+  toast('🌐 Chromium abierto — seleccioná el proyecto en Mantis', 'info');
+  const stop = await _startMantisPickSession((pid, pname) => {
+    btn.disabled = false;
+    btn.textContent = '🎯 Auto-detectar';
+    if (pid) {
+      input.value = pid;
+      status.textContent = `✅ Detectado: project_id=${pid}${pname ? '  (' + pname + ')' : ''}`;
+      // Pre-fill display name si está vacío
+      const dispInput = document.getElementById('np-display');
+      if (dispInput && !dispInput.value.trim() && pname) dispInput.value = pname;
+      toast(`✅ Proyecto detectado: ${pname || pid}`, 'success');
+    } else {
+      status.textContent = 'Sin selección.';
+    }
+  });
+  if (!stop) {
+    btn.disabled = false;
+    btn.textContent = '🎯 Auto-detectar';
+    status.style.display = 'none';
+  }
+}
+
+async function editMantisProjectId() {
+  /** Click en badge "Mantis ID: X ✏" del header */
+  const current = _activeProjectData.mantis_project_id ?? '';
+  const name    = _activeProjectData.name;
+  if (!name) { toast('No hay proyecto activo', 'error'); return; }
+
+  // Preguntar con dos opciones
+  const choice = window.confirm(
+    `Mantis Project ID para "${_activeProjectData.display_name || name}"\n` +
+    `ID actual: ${current || 'no configurado'}\n\n` +
+    `¿Querés que abra Mantis para detectarlo automáticamente?\n` +
+    `(OK = Auto-detectar  |  Cancelar = Ingresar manualmente)`
+  );
+
+  if (choice) {
+    // Auto-detect
+    const badge = document.getElementById('mantis-id-value');
+    if (badge) badge.textContent = '⏳';
+    toast('🌐 Chromium abierto — seleccioná el proyecto en Mantis', 'info');
+    await _startMantisPickSession(async (pid, pname) => {
+      if (pid) {
+        const r = await api('PATCH', '/api/project_config', { name, mantis_project_id: pid });
+        if (r.ok) {
+          _activeProjectData.mantis_project_id = pid;
+          if (badge) badge.textContent = pid;
+          toast(`✅ Mantis ID aprendido: ${pid}${pname ? ' (' + pname + ')' : ''}`, 'success');
+        }
+      } else {
+        if (badge) badge.textContent = _activeProjectData.mantis_project_id ?? '—';
+      }
+    });
+  } else {
+    // Manual
+    const val = window.prompt(
+      `Mantis Project ID para "${_activeProjectData.display_name || name}".\n` +
+      `ID actual: ${current || 'no configurado'}`,
+      current
+    );
+    if (val === null) return;
+    const pid = val.trim() === '' ? null : parseInt(val.trim(), 10);
+    if (val.trim() !== '' && isNaN(pid)) { toast('El ID debe ser un número entero', 'error'); return; }
+    const r = await api('PATCH', '/api/project_config', { name, mantis_project_id: pid });
+    if (r.ok) {
+      _activeProjectData.mantis_project_id = pid;
+      const badge = document.getElementById('mantis-id-value');
+      if (badge) badge.textContent = pid ?? '—';
+      toast(`✅ Mantis ID actualizado: ${pid ?? 'sin filtro'}`, 'success');
+    } else {
+      toast('Error: ' + (r.error || 'desconocido'), 'error');
+    }
+  }
+}
+
+async function switchProject(name) {
+  if (!name) return;
+  const r = await api('POST', '/api/active_project', { name });
+  if (r.ok) {
+    _summaryCache.clear();
+    expandedCards.clear();
+    toast(`📁 Proyecto: ${r.display_name || name}`, 'success');
+    await loadProjects();   // refresca badge Mantis ID también
+    await refresh();
+  } else {
+    toast('Error: ' + (r.error || 'desconocido'), 'error');
+  }
+}
+
+async function openNewProjectModal() {
+  const modal = document.getElementById('new-project-modal');
+  // Reset fields from previous session
+  ['np-display','np-workspace','np-filters'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  const pidEl = document.getElementById('np-project-id'); if (pidEl) pidEl.value = '';
+  const statusEl = document.getElementById('np-pick-status'); if (statusEl) { statusEl.style.display='none'; statusEl.textContent=''; }
+  const pickBtn = document.getElementById('np-pick-btn'); if (pickBtn) { pickBtn.disabled=false; pickBtn.textContent='🎯 Auto-detectar'; }
+  modal.style.display = 'flex';
+  try {
+    const r   = await api('GET', '/api/projects');
+    const sel = document.getElementById('np-svn');
+    if (r.projects) {
+      const uninit = r.projects.filter(p => !p.initialized);
+      sel.innerHTML = uninit.length
+        ? uninit.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('')
+        : '<option value="">Todos los proyectos SVN ya están inicializados</option>';
+    }
+  } catch(e) {
+    document.getElementById('np-svn').innerHTML = '<option value="">Error al escanear</option>';
+  }
+}
+
+function closeNewProjectModal() {
+  // Cancelar pick si estaba corriendo
+  if (_pickIntervalId) { clearInterval(_pickIntervalId); _pickIntervalId = null; }
+  document.getElementById('new-project-modal').style.display = 'none';
+}
+
+function _npBackdropClick(e) {
+  if (e.target.id === 'new-project-modal') closeNewProjectModal();
+}
+
+async function createProject() {
+  const svn_name        = document.getElementById('np-svn').value.trim();
+  const display_name    = document.getElementById('np-display').value.trim();
+  const workspace_root  = document.getElementById('np-workspace').value.trim();
+  const filters_raw     = document.getElementById('np-filters').value.trim();
+  const pid_raw         = document.getElementById('np-project-id').value.trim();
+  const mantis_filters  = filters_raw ? filters_raw.split('\n').map(s=>s.trim()).filter(Boolean) : [];
+  const mantis_project_id = pid_raw ? parseInt(pid_raw, 10) : null;
+  if (!svn_name) { toast('Seleccioná un proyecto SVN', 'error'); return; }
+  toast(`🔧 Inicializando ${svn_name}...`, 'info');
+  const r = await api('POST', '/api/init_project', {
+    svn_name,
+    display_name: display_name || svn_name,
+    workspace_root,
+    mantis_filters,
+    mantis_project_id,
+  });
+  if (r.ok) {
+    toast(`✅ Proyecto ${r.project.display_name} inicializado`, 'success');
+    closeNewProjectModal();
+    await loadProjects();
+  } else {
+    toast('Error: ' + (r.error || 'desconocido'), 'error');
+  }
+}
+
+// ── Refresh ───────────────────────────────────────────────────────────────
+async function refresh() {
+  setSpinner(true);
+  try {
+    const data = await api('GET', '/api/state');
+    allTickets = data.tickets || [];
+    renderSummary(data);
+    updateMantisFilters();
+    renderTickets();
+    document.getElementById('last-run-text').textContent =
+      data.last_run ? '🕐 ' + fmtDate(data.last_run) : 'Sin ejecuciones';
+    document.getElementById('total-badge').textContent = allTickets.length + ' tickets';
+  } catch(e) {
+    toast('Error conectando al servidor', 'error');
+  } finally {
+    setSpinner(false);
+  }
+}
+
+// ── Summary ───────────────────────────────────────────────────────────────
+function renderSummary(data) {
+  const counts = data.por_estado || {};
+  const pills = [
+    { key: 'pendiente_pm',      label: 'Pendiente PM',   color: '#eab308' },
+    { key: 'pm_en_proceso',     label: 'PM en proceso',  color: '#3b82f6' },
+    { key: 'pm_completado',     label: 'PM OK',          color: '#22c55e' },
+    { key: 'dev_en_proceso',    label: 'Dev en proc.',   color: '#a855f7' },
+    { key: 'dev_completado',    label: 'Dev Completo',   color: '#7c3aed' },
+    { key: 'tester_en_proceso', label: 'QA en proceso',  color: '#f97316' },
+    { key: 'completado',        label: 'Completo',       color: '#16a34a' },
+    { key: 'error_pm',          label: 'Error PM',       color: '#ef4444' },
+    { key: 'error_dev',         label: 'Error Dev',      color: '#dc2626' },
+    { key: 'error_tester',      label: 'Error QA',       color: '#b91c1c' },
+  ];
+  const bar = document.getElementById('summary-bar');
+  bar.innerHTML = pills.map(p => {
+    const n = counts[p.key] || 0;
+    return `<div class="pill">
+      <div class="dot" style="background:${p.color}"></div>
+      <span style="color:${p.color};font-weight:700">${n}</span>
+      <span style="color:var(--muted)">${p.label}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTickets();
+}
+
+function filtered() {
+  let list = allTickets;
+
+  // Filtro pipeline
+  if (currentFilter === 'pendiente')
+    list = list.filter(t => ['pendiente_pm','pm_completado'].includes(t.pipeline_estado));
+  else if (currentFilter === 'error')
+    list = list.filter(t => t.pipeline_estado.startsWith('error'));
+  else if (currentFilter === 'completado')
+    list = list.filter(t => t.pipeline_estado === 'completado');
+
+  // Filtro estado Mantis
+  const estadoSel = (document.getElementById('filter-estado-mantis')?.value || '').trim();
+  if (estadoSel)
+    list = list.filter(t => (t.estado_base || t.estado_mantis || '').toLowerCase() === estadoSel.toLowerCase());
+
+  // Filtro asignado
+  const asignadoSel = (document.getElementById('filter-asignado')?.value || '').trim();
+  if (asignadoSel)
+    list = list.filter(t => (t.asignado || '') === asignadoSel);
+
+  return list;
+}
+
+// Poblar dropdowns de filtros Mantis con valores reales de los tickets
+function updateMantisFilters() {
+  const estados = [...new Set(
+    allTickets.map(t => (t.estado_base || t.estado_mantis || '').trim()).filter(Boolean)
+  )].sort();
+  const asignados = [...new Set(
+    allTickets.map(t => (t.asignado || '').trim()).filter(Boolean)
+  )].sort();
+
+  const selEstado = document.getElementById('filter-estado-mantis');
+  const selAsignado = document.getElementById('filter-asignado');
+  if (!selEstado || !selAsignado) return;
+
+  const prevEstado = selEstado.value;
+  const prevAsignado = selAsignado.value;
+
+  selEstado.innerHTML = '<option value="">Todos</option>' +
+    estados.map(e => `<option value="${e}"${e === prevEstado ? ' selected' : ''}>${e}</option>`).join('');
+  selAsignado.innerHTML = '<option value="">Todos</option>' +
+    asignados.map(a => `<option value="${a}"${a === prevAsignado ? ' selected' : ''}>${a}</option>`).join('');
+}
+
+// ── Render tickets ────────────────────────────────────────────────────────
+function renderTickets() {
+  // Guardar textos de corrección antes de re-renderizar
+  const savedCorrections = {};
+  document.querySelectorAll('[id^="correction-text-"]').forEach(el => {
+    savedCorrections[el.id] = el.value;
+  });
+
+  const list = filtered();
+  const container = document.getElementById('tickets-container');
+  if (!list.length) {
+    container.innerHTML = `<div style="color:var(--muted);padding:40px;text-align:center">Sin tickets para mostrar.</div>`;
+    return;
+  }
+  container.innerHTML = list.map(t => cardHTML(t)).join('');
+  // Restaurar estado expandido — evita que el auto-refresh colapse tarjetas abiertas
+  expandedCards.forEach(tid => {
+    const card = document.getElementById('card-' + tid);
+    if (card) {
+      card.classList.add('expanded');
+      _loadSummariesIfNeeded(tid);
+    }
+  });
+  // Restaurar textos de corrección
+  Object.entries(savedCorrections).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el && val) el.value = val;
+  });
+}
+
+function fmtSeg(seg) {
+  if (!seg || seg <= 0) return '';
+  const m = Math.floor(seg / 60), s = seg % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+// ── Stages config (cargado desde /api/stages al init) ────────────────────
+let _stagesConfig = null;
+const DEFAULT_STAGES = [
+  { id: 'pm',     label: 'PM Análisis', icon: '📋', color: '#3b82f6' },
+  { id: 'dev',    label: 'Dev Impl.',    icon: '⚙',  color: '#a855f7' },
+  { id: 'tester', label: 'QA Tester',    icon: '🧪',  color: '#f97316' },
+];
+
+async function loadStages() {
+  try {
+    const d = await (await fetch('/api/stages')).json();
+    if (d.stages && d.stages.length) _stagesConfig = d.stages;
+  } catch(e) { /* usa DEFAULT_STAGES */ }
+}
+
+// Orden canónico de estados según las etapas configuradas
+function _stateOrder(stages) {
+  const s = ['pendiente_pm'];
+  for (const st of stages) s.push(`${st.id}_en_proceso`, `${st.id}_completado`);
+  s.push('completado');
+  return s;
+}
+
+// ── Flow stages ───────────────────────────────────────────────────────────
+function stageStatusDyn(ticket, nodeId, stages) {
+  const e = ticket.pipeline_estado;
+  if (nodeId === '__start') return (e !== 'pendiente_pm') ? 'done' : 'waiting';
+  if (nodeId === '__done')  return (e === 'completado')   ? 'done' : 'waiting';
+  if (e === `error_${nodeId}`)      return 'error';
+  if (e === `${nodeId}_en_proceso`) return 'active';
+  const order    = _stateOrder(stages);
+  const eIdx     = order.indexOf(e);
+  const doneIdx  = order.indexOf(`${nodeId}_completado`);
+  if (eIdx < 0 || doneIdx < 0) return 'waiting';
+  return eIdx >= doneIdx ? 'done' : 'waiting';
+}
+
+function flowBar(ticket) {
+  const stages = _stagesConfig || DEFAULT_STAGES;
+  const nodes  = [
+    { id: '__start', icon: '🕷',  label: 'Capturado' },
+    ...stages.map(s => ({ id: s.id, icon: s.icon, label: s.label, color: s.color })),
+    { id: '__done',  icon: '🏁',  label: 'Terminado' },
+  ];
+
+  let html = '<div class="pipeline-flow">';
+  nodes.forEach((node, i) => {
+    const st      = stageStatusDyn(ticket, node.id, stages);
+    const isStage = node.id !== '__start' && node.id !== '__done';
+    let durHtml   = '';
+    if (isStage) {
+      const inicioAt = ticket[`${node.id}_inicio_at`];
+      const durSeg   = ticket[`dur_${node.id}_seg`];
+      if (st === 'active' && inicioAt) {
+        durHtml = `<span class="live-timer" data-ts="${inicioAt}">00:00</span>`;
+      } else if (durSeg != null) {
+        durHtml = `<span class="stage-dur">⏱ ${fmtSeg(durSeg)}</span>`;
+      }
+    }
+    const bdrStyle = (st === 'active' && node.color) ? `style="border-color:${node.color}"` : '';
+    html += `<div class="stage-node">
+      <div class="stage-icon ${st}" ${bdrStyle}>${node.icon}</div>
+      <div class="stage-label">${node.label}</div>
+      ${durHtml}
+    </div>`;
+    if (i < nodes.length - 1) {
+      html += `<div class="stage-connector ${st === 'done' ? 'done' : ''}"></div>`;
+    }
+  });
+  html += '</div>';
+  return html;
+}
+
+// ── Timeline ──────────────────────────────────────────────────────────────
+function timelineHTML(ticket) {
+  const ini_pm  = ticket.pm_inicio_at;
+  const fin_pm  = ticket.pm_fin_at;
+  const ini_dev = ticket.dev_inicio_at;
+  const fin_dev = ticket.dev_fin_at;
+  const ini_tst = ticket.tester_inicio_at;
+  const fin_tst = ticket.tester_fin_at;
+
+  // Necesitamos al menos una etapa con timestamps
+  if (!ini_pm && !ini_dev && !ini_tst) return '';
+
+  const segs = [
+    { label: 'PM',  cls: 'tseg-pm',     ini: ini_pm,  fin: fin_pm,  dur: ticket.dur_pm_seg },
+    { label: 'Dev', cls: 'tseg-dev',    ini: ini_dev, fin: fin_dev, dur: ticket.dur_dev_seg },
+    { label: 'QA',  cls: 'tseg-tester', ini: ini_tst, fin: fin_tst, dur: ticket.dur_tester_seg },
+  ].filter(s => s.dur > 0);
+
+  if (!segs.length) return '';
+
+  const total = segs.reduce((a, s) => a + (s.dur || 0), 0);
+  if (total === 0) return '';
+
+  let track = '';
+  for (const s of segs) {
+    const pct = Math.max(4, Math.round((s.dur / total) * 100));
+    const label = s.dur >= 120 ? `${s.label} ${fmtSeg(s.dur)}` : s.label;
+    track += `<div class="timeline-seg ${s.cls}" style="width:${pct}%" title="${s.label}: ${fmtSeg(s.dur)}">
+      <span>${label}</span>
+    </div>`;
+  }
+
+  return `<div class="ticket-timeline">
+    <div class="timeline-track">${track}</div>
+    <div class="timeline-labels">
+      <span>${segs[0]?.ini ? new Date(segs[0].ini).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}) : ''}</span>
+      <span style="color:var(--accent);font-weight:700">Total: ${fmtSeg(total)}</span>
+      <span>${segs[segs.length-1]?.fin ? new Date(segs[segs.length-1].fin).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}) : 'en curso'}</span>
+    </div>
+  </div>`;
+}
+
+// ── Status badge ──────────────────────────────────────────────────────────
+const STATUS_CFG = {
+  pendiente_pm:      { color: '#eab308', icon: '⏳', label: 'Pendiente PM' },
+  pm_en_proceso:     { color: '#3b82f6', icon: '🔄', label: 'PM en proceso' },
+  pm_completado:     { color: '#22c55e', icon: '✅', label: 'PM Completo' },
+  dev_en_proceso:    { color: '#a855f7', icon: '🔄', label: 'Dev en proceso' },
+  dev_completado:    { color: '#7c3aed', icon: '✅', label: 'Dev Completo' },
+  tester_en_proceso: { color: '#f97316', icon: '🔄', label: 'QA en proceso' },
+  tester_completado: { color: '#16a34a', icon: '🧪', label: 'QA Completo' },
+  completado:        { color: '#16a34a', icon: '🏁', label: 'Completado' },
+  error_pm:          { color: '#ef4444', icon: '❌', label: 'Error PM' },
+  error_dev:         { color: '#ef4444', icon: '❌', label: 'Error Dev' },
+  error_tester:      { color: '#ef4444', icon: '❌', label: 'Error QA' },
+  huerfano:          { color: '#f59e0b', icon: '👻', label: 'Sin carpeta' },
+};
+
+function statusBadge(estado) {
+  const c = STATUS_CFG[estado] || { color: '#64748b', icon: '❓', label: estado };
+  return `<span class="status-indicator" style="color:${c.color}">${c.icon} ${c.label}</span>`;
+}
+
+// ── PM Files chips ────────────────────────────────────────────────────────
+function pmFilesHTML(ticket) {
+  if (!ticket.pm_files) return '';
+  const chips = Object.entries(ticket.pm_files).map(([fname, info]) => {
+    let cls = 'ok', icon = '✓';
+    if (!info.exists) { cls = 'missing'; icon = '✗'; }
+    else if (info.placeholder) { cls = 'has-ph'; icon = '⚠'; }
+    return `<span class="pm-file-chip ${cls}">${icon} ${fname}</span>`;
+  }).join('');
+  return `<div class="pm-files">
+    <div class="pm-files-title">Archivos PM</div>
+    <div class="pm-files-grid">${chips}</div>
+  </div>`;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────
+function actionsHTML(ticket) {
+  const tid = ticket.ticket_id;
+  const e   = ticket.pipeline_estado;
+
+  let btns = '';
+
+  // ▶ Play PM — si está pendiente o en error_pm
+  if (['pendiente_pm','error_pm'].includes(e)) {
+    btns += `<button class="btn btn-blue" onclick="runStage('${tid}','pm')">📋 Play PM</button>`;
+  }
+  // ▶ Retry PM
+  if (e === 'pm_en_proceso') {
+    btns += `<button class="btn btn-yellow" onclick="runStage('${tid}','pm')">🔄 Retry PM</button>`;
+  }
+  // ✅ Marcar PM completado manualmente
+  if (['pm_en_proceso','error_pm','pendiente_pm'].includes(e)) {
+    btns += `<button class="btn btn-green" onclick="markState('${tid}','pm_completado')">✅ Marcar PM OK</button>`;
+  }
+  // ▶ Play Dev — si PM está completo o error dev
+  if (['pm_completado','error_dev'].includes(e)) {
+    btns += `<button class="btn btn-purple" onclick="runStage('${tid}','dev')">⚙ Play Dev</button>`;
+  }
+  // ▶ Retry Dev
+  if (e === 'dev_en_proceso') {
+    btns += `<button class="btn btn-yellow" onclick="runStage('${tid}','dev')">🔄 Retry Dev</button>`;
+  }
+  // 🏁 Marcar completo manualmente
+  if (['dev_en_proceso','error_dev','pm_completado'].includes(e)) {
+    btns += `<button class="btn btn-green" onclick="markState('${tid}','completado')">🏁 Marcar Completo</button>`;
+  }
+  // ▶ Play Tester — si dev está completo o error_tester
+  if (['dev_completado','error_tester'].includes(e)) {
+    btns += `<button class="btn btn-orange" onclick="runStage('${tid}','tester')">🧪 Play QA</button>`;
+  }
+  // ▶ Retry Tester
+  if (e === 'tester_en_proceso') {
+    btns += `<button class="btn btn-yellow" onclick="runStage('${tid}','tester')">🔄 Retry QA</button>`;
+  }
+  // 🏁 Marcar completo manualmente desde dev_completado / tester
+  if (['dev_completado','tester_en_proceso','error_tester'].includes(e)) {
+    btns += `<button class="btn btn-green" onclick="markState('${tid}','completado')">🏁 Marcar Completo</button>`;
+  }
+  // ▶ Full pipeline — disponible siempre que no esté completado ni en proceso
+  if (!['completado','pm_en_proceso','dev_en_proceso','tester_en_proceso'].includes(e)) {
+    const autoLabel = ticket.auto_advance ? '▶ Full Pipeline ⟳' : '▶ Full Pipeline';
+    btns += `<button class="btn btn-accent" onclick="runFull('${tid}')" title="Ejecuta todas las etapas en secuencia automática">${autoLabel}</button>`;
+  }
+  // 🔁 Reprocesar + 📣 Publicar en Mantis
+  if (e === 'completado') {
+    btns += `<button class="btn btn-ghost" onclick="reprocess('${tid}')">🔁 Reprocesar</button>`;
+    btns += `<button class="btn btn-blue" onclick="mantisConfirm('${tid}')" title="Publicar nota en Mantis y poner estado Confirmada">📣 Publicar en Mantis</button>`;
+  }
+  // 📦 Generar paquete de despliegue — visible cuando dev completó o más
+  const hasDevWork = ['dev_completado','tester_en_proceso','tester_completado','completado',
+                      'error_tester'].includes(e);
+  if (hasDevWork) {
+    btns += `<button class="btn btn-green" onclick="genDeploy('${tid}')" title="Generar ZIP con DLLs modificadas, archivos web y scripts SQL para desplegar en otro entorno">📦 Gen Deploy</button>`;
+    btns += `<button class="btn btn-ghost" style="border:1px solid #2563eb" onclick="openCommit('${tid}')" title="SVN Commit con mensaje propuesto">🔖 SVN Commit</button>`;
+    btns += `<button class="btn btn-ghost" style="border:1px solid #dc2626;font-size:12px" onclick="reportDeployProblem('${tid}')" title="Reportar problema post-deploy">⚠ Reportar problema</button>`;
+    btns += `<button class="btn btn-ghost" style="border:1px solid #7c3aed;font-size:12px" onclick="openIncidentTest('${tid}')" title="Checklist de testeo de incidencia (negocio + técnico)">🧪 Testear incidencia</button>`;
+  }
+  // 🖥 UI Tester (Playwright) — visible cuando hay algo para testear
+  if (['dev_completado','tester_en_proceso','tester_completado','completado','error_tester'].includes(e)) {
+    btns += `<button class="btn btn-ghost" style="border:1px solid #0d9488;color:#2dd4bf;font-size:12px" onclick="runUITester('${tid}')" title="Lanza agente que simula al usuario con Playwright">🖥 UI Tester</button>`;
+  }
+  // 📸 Capturar diff SVN manualmente — disponible si hay alguna etapa completada
+  if (['pm_completado','dev_completado','tester_completado','completado',
+       'dev_en_proceso','tester_en_proceso','error_dev','error_tester'].includes(e)) {
+    const snapStage = ['completado','tester_completado','error_tester'].includes(e) ? 'tester'
+                    : ['dev_completado','tester_en_proceso','error_tester'].includes(e) ? 'dev' : 'pm';
+    btns += `<button class="btn btn-ghost" style="border:1px solid #374151;font-size:11px" onclick="captureSnapshot('${tid}','${snapStage}')" title="Guardar snapshot SVN actual para visualizar en diff">📸 Capturar Diff</button>`;
+  }
+  // 👻 Huérfano: carpeta eliminada
+  if (e === 'huerfano') {
+    btns += `<button class="btn btn-yellow" onclick="reimportTicket('${tid}')" title="Limpia el state para que el scraper lo vuelva a importar">♻️ Reimportar</button>`;
+  }
+  // ↩ Reset a pendiente — disponible en cualquier estado excepto pendiente_pm
+  if (e !== 'pendiente_pm') {
+    btns += `<button class="btn btn-ghost" onclick="markState('${tid}','pendiente_pm')" title="Reset completo a pendiente_pm">↩ Reset</button>`;
+  }
+  // � Ver cambios SVN — visible cuando hay snapshot de alguna etapa completada
+  const hasPmSnap     = ['pm_completado','dev_en_proceso','dev_completado','tester_en_proceso','tester_completado','completado','error_dev','error_tester'].includes(e);
+  const hasDevSnap    = ['dev_completado','tester_en_proceso','tester_completado','completado','error_tester'].includes(e);
+  const hasTesterSnap = ['tester_completado','completado'].includes(e);
+  if (hasPmSnap || hasDevSnap || hasTesterSnap) {
+    const stages = [
+      hasPmSnap     ? `<a href="#" onclick="event.preventDefault();showDiff('${tid}','pm')">PM</a>`     : null,
+      hasDevSnap    ? `<a href="#" onclick="event.preventDefault();showDiff('${tid}','dev')">Dev</a>`   : null,
+      hasTesterSnap ? `<a href="#" onclick="event.preventDefault();showDiff('${tid}','tester')">QA</a>` : null,
+    ].filter(Boolean).join(' · ');
+    btns += `<button class="btn btn-ghost" style="border:1px solid #374151" onclick="showDiff('${tid}','${hasTesterSnap?'tester':hasDevSnap?'dev':'pm'}')" title="Ver qué archivos modificó cada agente">📄 Ver cambios SVN &nbsp;<span style="font-size:10px;color:var(--muted)">${stages}</span></button>`;
+  }
+  // �📋 Generar prompts Dev + QA — siempre visible
+  btns += `<button class="btn btn-ghost" style="margin-left:auto;border:1px solid var(--border)" onclick="genPrompts('${tid}')">📋 Generar Prompts</button>`;
+
+  return `<div class="card-actions">${btns}</div>`;
+}
+
+function mantisClass(estado) {
+  const map = {
+    asignada: 'mb-asignada', nueva: 'mb-nueva', confirmada: 'mb-confirmada',
+    aceptada: 'mb-aceptada', resuelta: 'mb-resuelta', cerrada: 'mb-cerrada',
+    se_necesitan_mas_datos: 'mb-se_necesitan_mas_datos',
+  };
+  return map[(estado || '').toLowerCase()] || 'mb-default';
+}
+
+// ── Card HTML ─────────────────────────────────────────────────────────────
+function _invokeStatusBadge(ticket) {
+  const inv = ticket.last_invoke;
+  if (!inv) return '';
+  const ok    = inv.ok;
+  const stage = inv.stage || '';
+  const at    = inv.at ? new Date(inv.at).toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'}) : '';
+  if (ok) {
+    return `<span title="Última invocación OK — ${stage} @ ${at}" style="font-size:11px;color:#34d399;background:#0f2a1f;border:1px solid #14532d;border-radius:4px;padding:1px 7px;white-space:nowrap">✓ enviado ${at}</span>`;
+  } else {
+    return `<span title="Última invocación FALLÓ — ${stage} @ ${at}\n${inv.detail||''}" style="font-size:11px;color:#f87171;background:#1c0606;border:1px solid #7f1d1d;border-radius:4px;padding:1px 7px;white-space:nowrap;cursor:pointer" onclick="reinvokeAgent('${ticket.ticket_id}')">⚠ falló — click para reintentar</span>`;
+  }
+}
+
+function cardHTML(ticket) {
+  const tid  = ticket.ticket_id;
+  const e    = ticket.pipeline_estado;
+  const err  = ticket.error;
+  const errClass = err ? 'visible' : '';
+
+  const inProgress    = e.endsWith('_en_proceso');
+  const firstStageId  = (_stagesConfig || DEFAULT_STAGES)[0].id;
+  const workflowStart = ticket[`${firstStageId}_inicio_at`];
+
+  const showDevSummary    = ['dev_completado','tester_en_proceso','tester_completado','completado','error_tester'].includes(e);
+  const showTesterSummary = ['tester_completado','completado'].includes(e);
+
+  return `<div class="card" id="card-${tid}">
+    <div class="card-header" onclick="toggleCard('${tid}')">
+      <span class="ticket-id">#${tid}</span>
+      ${ticket.priority && ticket.priority < 9999 ? `<span title="Prioridad en cola" style="background:#1e3a5f;color:#60a5fa;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:700">🏷 #${ticket.priority}</span>` : ''}
+      <span class="titulo" title="${esc(ticket.titulo)}">${esc(ticket.titulo)}</span>
+      <span class="mantis-badge ${mantisClass(ticket.estado_mantis)}">${esc(ticket.estado_mantis)}</span>
+      ${ticket.asignado ? `<span class="asignado-badge" title="Asignado a: ${esc(ticket.asignado)}">👤 ${esc(ticket.asignado)}</span>` : ''}
+      ${statusBadge(e)}
+      ${inProgress ? _invokeStatusBadge(ticket) : ''}
+      ${inProgress && workflowStart ? `<span class="workflow-live" data-ts="${workflowStart}" title="Tiempo total del workflow">⏱ --:--</span>` : ''}
+      <button class="btn btn-ghost" style="padding:2px 9px;font-size:11px;margin-left:auto;flex-shrink:0" title="Ver detalle del ticket Mantis" onclick="event.stopPropagation();openTicketDetail('${tid}')">📋 Detalle</button>
+      <span class="chevron">▶</span>
+    </div>
+    ${flowBar(ticket)}
+    ${timelineHTML(ticket)}
+    ${pmFilesHTML(ticket)}
+    ${inProgress ? `<div style="padding:6px 16px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:11px;color:var(--muted)">¿El agente no recibió la instrucción?</span>
+      <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border:1px solid var(--yellow);color:var(--yellow)" onclick="event.stopPropagation();reinvokeAgent('${tid}')">🔁 Reinvocar agente</button>
+    </div>` : ''}
+    ${showDevSummary ? `<div class="summary-panel" id="dev-panel-${tid}">
+      <div class="summary-panel-header dev">📝 Dev — Resumen de implementación
+        <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();openPreview('${tid}','dev')">🔍 Ver completo</button>
+      </div>
+      <div class="summary-panel-body" id="dev-summary-${tid}"><span style="color:var(--muted)">Cargando...</span></div>
+    </div>` : ''}
+    ${showTesterSummary ? `<div class="summary-panel" id="tester-panel-${tid}">
+      <div class="summary-panel-header tester" id="tester-header-${tid}">🧪 QA — Resumen de pruebas
+        <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();openPreview('${tid}','tester')">🔍 Ver completo</button>
+      </div>
+      <div class="summary-panel-body" id="tester-summary-${tid}"><span style="color:var(--muted)">Cargando...</span></div>
+    </div>` : ''}
+    ${showTesterSummary || e === 'tester_completado' ? `<div class="correction-panel" id="correction-panel-${tid}">
+      <div class="correction-header">✏️ Enviar corrección al Developer</div>
+      <div class="correction-body">
+        <textarea id="correction-text-${tid}" placeholder="Describí qué debe corregir el Developer. Se enviará junto con el contexto completo de la implementación anterior y el reporte de QA..."></textarea>
+        <div class="correction-footer">
+          <button class="btn btn-ghost" onclick="document.getElementById('correction-text-${tid}').value=''" style="font-size:12px">🗑 Limpiar</button>
+          <button class="btn btn-blue" onclick="sendCorrection('${tid}')" style="font-size:12px">📩 Enviar corrección al Dev</button>
+        </div>
+      </div>
+    </div>` : ''}
+    <div class="error-detail ${errClass}">${err ? esc(err) : ''}</div>
+    ${actionsHTML(ticket)}
+  </div>`;
+}
+
+// ── Toggle card ───────────────────────────────────────────────────────────
+const _summaryCache = new Map();
+
+async function _loadAndRenderSummary(tid, type) {
+  const cacheKey = `${tid}_${type}`;
+  const bodyEl   = document.getElementById(`${type}-summary-${tid}`);
+  if (!bodyEl) return;
+
+  if (_summaryCache.has(cacheKey)) {
+    bodyEl.innerHTML = _summaryCache.get(cacheKey);
+    return;
+  }
+
+  try {
+    const r    = await fetch(`/api/${type}_summary/${tid}`);
+    const data = await r.json();
+    if (data.ok) {
+      const rendered = _renderMarkdown(data.content);
+      _summaryCache.set(cacheKey, rendered);
+      bodyEl.innerHTML = rendered;
+      // Colorear veredicto del tester
+      if (type === 'tester') {
+        _applyVerdictColor(tid, data.content);
+      }
+    } else {
+      bodyEl.innerHTML = `<span style="color:var(--muted)">${esc(data.error || 'No disponible')}</span>`;
+    }
+  } catch(e) {
+    bodyEl.innerHTML = `<span style="color:var(--red)">Error cargando summary</span>`;
+  }
+}
+
+function _applyVerdictColor(tid, content) {
+  const header = document.getElementById(`tester-header-${tid}`);
+  if (!header) return;
+  const upper = content.toUpperCase();
+  if (upper.includes('RECHAZADO'))       { header.classList.add('tester-rejected'); }
+  else if (upper.includes('OBSERVACIONES')) { /* orange ya está en el header */ }
+}
+
+function _renderMarkdown(md) {
+  // Renderizado mínimo de markdown para el panel
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\bAPROBADO\b/g, '<span class="verdict-aprobado">APROBADO</span>')
+    .replace(/\bCON OBSERVACIONES\b/g, '<span class="verdict-observaciones">CON OBSERVACIONES</span>')
+    .replace(/\bRECHAZADO\b/g, '<span class="verdict-rechazado">RECHAZADO</span>')
+    .replace(/\n/g, '<br>');
+}
+
+function _loadSummariesIfNeeded(tid) {
+  const ticket = allTickets.find(t => t.ticket_id === tid);
+  if (!ticket) return;
+  const e = ticket.pipeline_estado;
+  const needsDev    = ['dev_completado','tester_en_proceso','tester_completado','completado','error_tester'].includes(e);
+  const needsTester = ['tester_completado','completado'].includes(e);
+  if (needsDev)    _loadAndRenderSummary(tid, 'dev');
+  if (needsTester) _loadAndRenderSummary(tid, 'tester');
+}
+
+function toggleCard(tid) {
+  const card = document.getElementById('card-' + tid);
+  card.classList.toggle('expanded');
+  if (card.classList.contains('expanded')) {
+    expandedCards.add(tid);
+    _loadSummariesIfNeeded(tid);
+  } else {
+    expandedCards.delete(tid);
+  }
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────
+async function runStage(tid, stage) {
+  toast(`Enviando ${stage.toUpperCase()} para #${tid}...`, 'info');
+  const r = await api('POST', '/api/run_pipeline', { ticket_id: tid, stage });
+  if (r.ok) {
+    toast(`⚙ Agente ${stage.toUpperCase()} invocado para #${tid}`, 'success');
+    setTimeout(refresh, 2000);
+  } else {
+    toast('Error: ' + (r.error || 'desconocido'), 'error');
+  }
+}
+
+async function reinvokeAgent(tid) {
+  toast(`🔁 Reintentando invocar agente para #${tid}...`, 'info');
+  const r = await api('POST', `/api/reinvoke/${tid}`, {});
+  if (r.ok) {
+    toast(`🔁 Agente reinvocado para #${tid} — etapa: ${r.stage}`, 'success');
+    setTimeout(refresh, 3000);
+  } else {
+    toast('No se puede reinvocar: ' + (r.error || '?'), 'error');
+  }
+}
+
+// ── Diff SVN modal ────────────────────────────────────────────────────────────
+let _diffCurrentTicket = null;
+let _diffCurrentStage  = null;
+
+async function showDiff(tid, stage) {
+  _diffCurrentTicket = tid;
+  _diffCurrentStage  = stage;
+  document.getElementById('diff-modal').style.display = 'block';
+  document.getElementById('diff-modal-subtitle').textContent = `#${tid}`;
+  document.getElementById('diff-files').textContent   = 'Cargando...';
+  document.getElementById('diff-content').innerHTML   = 'Cargando...';
+  _updateDiffTabs(stage);
+  await _loadDiff(tid, stage);
+}
+
+async function switchDiffTab(stage) {
+  if (!_diffCurrentTicket) return;
+  _diffCurrentStage = stage;
+  _updateDiffTabs(stage);
+  await _loadDiff(_diffCurrentTicket, stage);
+}
+
+function _updateDiffTabs(activeStage) {
+  ['pm','dev','tester'].forEach(s => {
+    const btn = document.getElementById(`diff-tab-${s}`);
+    if (!btn) return;
+    btn.style.borderColor  = s === activeStage ? 'var(--accent)' : 'transparent';
+    btn.style.color        = s === activeStage ? 'var(--accent)' : '';
+    btn.style.fontWeight   = s === activeStage ? '700' : '';
+  });
+}
+
+async function _loadDiff(tid, stage) {
+  const filesEl   = document.getElementById('diff-files');
+  const contentEl = document.getElementById('diff-content');
+  filesEl.textContent   = 'Cargando...';
+  contentEl.innerHTML   = 'Cargando...';
+  try {
+    const r = await fetch(`/api/diff/${tid}/${stage}`);
+    const d = await r.json();
+    if (!d.ok) {
+      filesEl.textContent = d.error || 'No disponible';
+      contentEl.innerHTML = `<span style="color:var(--muted)">${esc(d.error || 'Sin snapshot — la etapa aún no completó o SVN no está disponible.')}</span>`;
+      return;
+    }
+    // Archivos modificados con colores
+    filesEl.innerHTML = _colorizeStatus(d.files || '(sin cambios)');
+    // Diff con colores rojo/verde
+    contentEl.innerHTML = _colorizeDiff(d.diff || '(sin cambios)');
+    document.getElementById('diff-modal-subtitle').textContent =
+      `#${tid} — ${_stageLabel(stage)} — ${_countDiffLines(d.diff)} líneas`;
+  } catch(err) {
+    filesEl.textContent   = 'Error';
+    contentEl.innerHTML   = `<span style="color:var(--red)">Error cargando diff: ${esc(String(err))}</span>`;
+  }
+}
+
+function closeDiff() {
+  document.getElementById('diff-modal').style.display = 'none';
+  _diffCurrentTicket = null;
+  _diffCurrentStage  = null;
+}
+
+function _colorizeStatus(text) {
+  return text.split('\n').map(line => {
+    if (!line) return '<br>';
+    const ch = line[0];
+    const color = ch === 'M' ? '#60a5fa'  // azul — modificado
+                : ch === 'A' ? '#34d399'  // verde — agregado
+                : ch === 'D' ? '#f87171'  // rojo — eliminado
+                : ch === '?' ? '#9ca3af'  // gris — no versionado
+                : 'var(--text)';
+    return `<span style="color:${color}">${esc(line)}</span>`;
+  }).join('\n');
+}
+
+function _colorizeDiff(text) {
+  return text.split('\n').map(line => {
+    if (line.startsWith('+') && !line.startsWith('+++'))
+      return `<span style="color:#34d399;background:#0a2a1a;display:block">${esc(line)}</span>`;
+    if (line.startsWith('-') && !line.startsWith('---'))
+      return `<span style="color:#f87171;background:#2a0a0a;display:block">${esc(line)}</span>`;
+    if (line.startsWith('@@'))
+      return `<span style="color:#818cf8;display:block">${esc(line)}</span>`;
+    if (line.startsWith('Index:') || line.startsWith('==='))
+      return `<span style="color:#fbbf24;font-weight:700;display:block">${esc(line)}</span>`;
+    return `<span style="display:block;color:var(--text)">${esc(line)}</span>`;
+  }).join('');
+}
+
+function _countDiffLines(text) {
+  return (text || '').split('\n').length.toLocaleString('es-AR');
+}
+
+function _stageLabel(stage) {
+  return stage === 'pm' ? 'PM Análisis' : stage === 'dev' ? 'Dev Implementación' : 'QA Tester';
+}
+
+// ── Nota pre-pipeline ─────────────────────────────────────────────────────
+let _pipelineNoteTicket = null;
+
+async function runFull(tid) {
+  _pipelineNoteTicket = tid;
+  document.getElementById('pipeline-note-ticket-label').textContent = `#${tid}`;
+  // Pre-cargar nota existente si la hay
+  try {
+    const r = await fetch(`/api/pipeline_note/${tid}`);
+    const d = await r.json();
+    document.getElementById('pipeline-note-text').value = d.note || '';
+  } catch(e) {
+    document.getElementById('pipeline-note-text').value = '';
+  }
+  document.getElementById('pipeline-note-modal').style.display = 'block';
+  setTimeout(() => document.getElementById('pipeline-note-text').focus(), 80);
+}
+
+function closePipelineNoteModal() {
+  document.getElementById('pipeline-note-modal').style.display = 'none';
+  _pipelineNoteTicket = null;
+}
+
+async function confirmRunFull() {
+  const tid  = _pipelineNoteTicket;
+  const note = document.getElementById('pipeline-note-text').value.trim();
+  closePipelineNoteModal();
+  if (!tid) return;
+
+  // Guardar nota si la escribieron
+  if (note) {
+    try {
+      await api('POST', `/api/pipeline_note/${tid}`, { note });
+    } catch(e) { /* no bloquear */ }
+  }
+
+  toast(`▶ Full pipeline para #${tid}...`, 'info');
+  const r = await api('POST', '/api/run_pipeline', { ticket_id: tid, reprocess: true });
+  if (r.ok) {
+    toast(`▶ Pipeline completo iniciado para #${tid}`, 'success');
+    setTimeout(refresh, 2000);
+  }
+}
+
+async function reprocess(tid) {
+  toast(`🔁 Reprocesando #${tid}...`, 'info');
+  const r = await api('POST', '/api/run_pipeline', { ticket_id: tid, reprocess: true });
+  if (r.ok) toast(`🔁 Reproceso iniciado para #${tid}`, 'success');
+  setTimeout(refresh, 2000);
+}
+
+async function captureSnapshot(tid, stage) {
+  toast(`📸 Capturando diff SVN (${stage.toUpperCase()}) para #${tid}...`, 'info');
+  try {
+    const r = await api('POST', `/api/capture_snapshot/${tid}/${stage}`, {});
+    if (r.ok) {
+      toast(`✅ Snapshot guardado — ${r.diff_lines || 0} líneas de diff`, 'success');
+    } else {
+      toast(`❌ Error capturando snapshot: ${r.error || 'desconocido'}`, 'error');
+    }
+  } catch(e) {
+    toast(`❌ Error: ${e}`, 'error');
+  }
+}
+
+async function runUITester(tid) {
+  const appUrl = prompt(`🖥 UI Tester — Ticket #${tid}\n\nURL de la aplicación (dejá vacío para usar la URL por defecto):`);
+  if (appUrl === null) return; // cancelado
+  const notes = prompt('Instrucciones adicionales para el UI Tester (opcional, Enter para omitir):') || '';
+  toast(`🖥 Lanzando UI Tester para #${tid}...`, 'info');
+  try {
+    const r = await api('POST', `/api/run_ui_tester/${tid}`, { app_url: appUrl, notes });
+    if (r.ok) {
+      toast(`✅ UI Tester lanzado — agente: ${r.agent}`, 'success');
+    } else {
+      toast(`❌ Error: ${r.error || 'desconocido'}`, 'error');
+    }
+  } catch(e) {
+    toast(`❌ Error: ${e}`, 'error');
+  }
+}
+
+async function mantisConfirm(tid) {
+  toast(`📣 Publicando #${tid} en Mantis...`, 'info');
+  const r = await api('POST', `/api/mantis_confirm/${tid}`, {});
+  if (r.ok) {
+    toast(`✅ #${tid} — nota "Stacky: ..." enviada a Mantis`, 'success');
+  } else {
+    toast(`❌ Error: ${r.error || 'desconocido'}`, 'error');
+  }
+}
+
+async function reimportTicket(tid) {
+  toast(`♻️ Limpiando state de #${tid}...`, 'info');
+  const r = await api('POST', `/api/reimport/${tid}`, {});
+  if (r.ok) {
+    toast(`✅ #${tid} listo para reimportar. Ejecutá el scraper para traerlo de Mantis.`, 'success');
+    setTimeout(refresh, 1500);
+  } else {
+    toast(`❌ Error: ${r.error || 'desconocido'}`, 'error');
+  }
+}
+
+async function markState(tid, estado) {
+  const r = await api('POST', '/api/set_state', { ticket_id: tid, estado });
+  if (r.ok) {
+    toast(`✅ #${tid} → ${estado}`, 'success');
+    await refresh();
+  }
+}
+
+async function runAll() {
+  toast('▶ Ejecutando pipeline en todos los tickets de asignada...', 'info');
+  const r = await api('POST', '/api/run_pipeline', {});
+  if (r.ok) {
+    toast('▶ Pipeline iniciado', 'success');
+    setTimeout(refresh, 2000);
+  }
+}
+
+async function runScraper() {
+  toast('🕷 Ejecutando scraper de Mantis...', 'info');
+  const r = await api('POST', '/api/run_scraper', {});
+  if (r.ok) {
+    toast('🕷 Scraper iniciado — refrescando en 15s...', 'info');
+    setTimeout(refresh, 15000);
+  }
+}
+
+// ── Project Docs ──────────────────────────────────────────────────────────
+async function checkProjectDocsStatus() {
+  try {
+    const r = await fetch('/api/project_docs_status');
+    const d = await r.json();
+    const btn = document.getElementById('btn-gen-docs');
+    if (!btn) return;
+    if (d.exists) {
+      btn.title = `📚 PROJECT_DOCS.md generado el ${d.generated_at} (hace ${d.age_days} días) — click para regenerar`;
+      btn.style.borderColor = 'var(--green)';
+      btn.style.color       = 'var(--green)';
+    } else {
+      btn.title = 'Generar documentación técnica del proyecto (una sola vez, reutilizable por todos los agentes)';
+      btn.style.borderColor = '';
+      btn.style.color       = '';
+    }
+  } catch (_) {}
+}
+
+async function generateProjectDocs() {
+  const btn = document.getElementById('btn-gen-docs');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Docs'; }
+  toast('📚 Enviando prompt al agente documentador...', 'info');
+  try {
+    const r = await api('POST', '/api/generate_project_docs', {});
+    if (r.ok) {
+      toast(`📚 Documentación en proceso — agente: ${r.agent}`, 'success');
+      // Polling cada 10s hasta que aparezca el archivo (máx 10 min)
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        const s = await (await fetch('/api/project_docs_status')).json();
+        if (s.exists) {
+          clearInterval(poll);
+          toast(`✅ PROJECT_DOCS.md generado (${s.generated_at})`, 'success');
+          checkProjectDocsStatus();
+        } else if (attempts >= 60) {
+          clearInterval(poll);
+          toast('⚠️ El agente todavía no terminó — revisá Copilot Chat', 'warn');
+        }
+      }, 10000);
+    } else {
+      toast('❌ Error al iniciar generación de docs', 'error');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📚 Docs'; }
+  }
+}
+
+// ── Queue (cola de prioridad) ──────────────────────────────────────────────
+let queueOrder     = [];  // ticket_ids en el orden actual del modal
+let dragSrcIndex   = null;
+
+function openQueue() {
+  // Filtrar solo tickets procesables (asignada + no completados)
+  queueOrder = allTickets
+    .filter(t => t.estado_mantis === 'asignada' && !['completado'].includes(t.pipeline_estado))
+    .sort((a, b) => (a.priority || 9999) - (b.priority || 9999))
+    .map(t => t.ticket_id);
+
+  _renderQueueList();
+  document.getElementById('queue-modal').classList.add('open');
+}
+
+function closeQueue() {
+  document.getElementById('queue-modal').classList.remove('open');
+}
+
+function closeQueueOnBackdrop(e) {
+  if (e.target.id === 'queue-modal') closeQueue();
+}
+
+function _renderQueueList() {
+  const list = document.getElementById('queue-list');
+  list.innerHTML = queueOrder.map((tid, i) => {
+    const t = allTickets.find(x => x.ticket_id === tid);
+    const titulo = t ? esc(t.titulo) : tid;
+    const estado = t ? t.pipeline_estado : '—';
+    const cfg    = STATUS_CFG[estado] || { icon: '?', color: '#64748b' };
+    return `<div class="queue-item" id="qi-${tid}"
+              draggable="true"
+              ondragstart="qDragStart(event,${i})"
+              ondragover="qDragOver(event,${i})"
+              ondragleave="qDragLeave(event)"
+              ondrop="qDrop(event,${i})"
+              ondragend="qDragEnd(event)">
+      <div class="queue-rank">${i + 1}</div>
+      <span class="queue-tid">#${tid}</span>
+      <span class="queue-title" title="${titulo}">${titulo}</span>
+      <span class="queue-estado" style="color:${cfg.color}">${cfg.icon} ${estado}</span>
+      <div class="queue-arrows">
+        <button onclick="qMoveUp(${i})" ${i === 0 ? 'disabled' : ''}>▲</button>
+        <button onclick="qMoveDown(${i})" ${i === queueOrder.length - 1 ? 'disabled' : ''}>▼</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function qMoveUp(i) {
+  if (i === 0) return;
+  [queueOrder[i - 1], queueOrder[i]] = [queueOrder[i], queueOrder[i - 1]];
+  _renderQueueList();
+}
+
+function qMoveDown(i) {
+  if (i >= queueOrder.length - 1) return;
+  [queueOrder[i], queueOrder[i + 1]] = [queueOrder[i + 1], queueOrder[i]];
+  _renderQueueList();
+}
+
+// Drag & drop
+function qDragStart(e, i) {
+  dragSrcIndex = i;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => {
+    const el = document.getElementById('qi-' + queueOrder[i]);
+    if (el) el.classList.add('dragging');
+  }, 0);
+}
+
+function qDragOver(e, i) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('drag-over'));
+  const el = document.getElementById('qi-' + queueOrder[i]);
+  if (el) el.classList.add('drag-over');
+}
+
+function qDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function qDrop(e, i) {
+  e.preventDefault();
+  if (dragSrcIndex === null || dragSrcIndex === i) return;
+  const moved = queueOrder.splice(dragSrcIndex, 1)[0];
+  queueOrder.splice(i, 0, moved);
+  dragSrcIndex = null;
+  _renderQueueList();
+}
+
+function qDragEnd(e) {
+  dragSrcIndex = null;
+  document.querySelectorAll('.queue-item').forEach(el => {
+    el.classList.remove('dragging', 'drag-over');
+  });
+}
+
+async function saveQueue() {
+  const r = await api('POST', '/api/set_priority', { order: queueOrder });
+  if (r.ok) {
+    toast(`✅ Orden guardado (${r.reordenados} tickets)`, 'success');
+    await refresh();
+  } else {
+    toast('Error guardando orden: ' + (r.error || '?'), 'error');
+  }
+}
+
+async function saveQueueAndRun() {
+  await saveQueue();
+  closeQueue();
+  // Procesar el primero en la cola que esté pendiente
+  const first = allTickets
+    .filter(t => t.estado_mantis === 'asignada' && ['pendiente_pm','pm_completado','error_pm'].includes(t.pipeline_estado))
+    .sort((a,b) => (a.priority||9999) - (b.priority||9999))[0];
+  if (!first) {
+    toast('No hay tickets pendientes para ejecutar', 'info');
+    return;
+  }
+  toast(`▶ Ejecutando pipeline para #${first.ticket_id}...`, 'info');
+  const r = await api('POST', '/api/run_pipeline', { ticket_id: first.ticket_id });
+  if (r.ok) {
+    toast(`▶ Pipeline iniciado para #${first.ticket_id}`, 'success');
+    setTimeout(refresh, 2000);
+  }
+}
+
+// ── Deploy Package ─────────────────────────────────────────────────────────
+let _deployCurrentZip = null;
+let _deployCurrentTid = null;
+
+async function genDeploy(tid) {
+  _deployCurrentTid = tid;
+  _deployCurrentZip = null;
+  const modal  = document.getElementById('deploy-modal');
+  const body   = document.getElementById('deploy-body');
+  const footer = document.getElementById('deploy-footer');
+  const title  = document.getElementById('deploy-modal-title');
+
+  title.textContent = `📦 Paquete de Despliegue — #${tid}`;
+  body.innerHTML = `<div class="deploy-spinner-wrap"><div class="spinner visible"></div><span>Analizando cambios SVN y generando paquete...</span></div>`;
+  footer.style.display = 'none';
+  modal.classList.add('open');
+
+  try {
+    // Lanzar las 3 llamadas en paralelo: gen_deploy + diff_analysis + deploy_history
+    const [r, diffR, histR] = await Promise.all([
+      api('POST', `/api/gen_deploy/${tid}`, {}),
+      api('GET',  `/api/diff_analysis/${tid}`).catch(() => null),
+      api('GET',  `/api/deploy_history/${tid}`).catch(() => null),
+    ]);
+
+    if (!r.ok) {
+      body.innerHTML = `<div class="deploy-empty" style="color:var(--red)">❌ ${esc(r.error || 'Error desconocido')}</div>`;
+      return;
+    }
+
+    _deployCurrentZip = r.zip_name;
+
+    // Construir body con todas las secciones
+    let bodyHTML = _buildDeployBody(r);
+
+    // Diff assistant
+    if (diffR && diffR.ok) {
+      const assistHTML = _buildDiffAssistantHTML(diffR);
+      if (assistHTML) bodyHTML += assistHTML;
+    }
+
+    // Historial de deploys anteriores
+    if (histR && histR.ok && histR.deploys && histR.deploys.length > 0) {
+      bodyHTML += `<div class="deploy-section">
+        <div class="deploy-section-title">📋 Deploys anteriores (${histR.deploys.length})</div>
+        <div class="deploy-file-list">`;
+      for (const d of histR.deploys) {
+        const ts = d.ts ? new Date(d.ts).toLocaleString('es-AR', {dateStyle:'short',timeStyle:'short'}) : '';
+        const typeLabel = d.type === 'rollback' ? '↩ ROLLBACK' : '📦 DEPLOY';
+        const sizeStr   = d.size_kb != null ? ` · ${d.size_kb} KB` : '';
+        const existsStyle = d.exists ? '' : 'opacity:.4;text-decoration:line-through';
+        bodyHTML += `<div class="deploy-file-item" style="${existsStyle}">
+          <span class="deploy-file-type ${d.type === 'rollback' ? 'other' : 'web'}">${typeLabel}</span>
+          <span style="flex:1">${esc(d.name)}</span>
+          <span style="font-size:10px;color:var(--muted)">${ts}${sizeStr}</span>
+          ${d.exists ? `<a href="/api/download_deploy/${tid}/${encodeURIComponent(d.name)}" download class="btn btn-ghost" style="font-size:10px;padding:1px 8px">⬇</a>` : ''}
+        </div>`;
+      }
+      bodyHTML += `</div></div>`;
+    }
+
+    // Rollback disponible?
+    if (r.rollback_zip_name) {
+      bodyHTML += `<div class="deploy-section">
+        <div class="deploy-section-title" style="color:#34d399">↩ Rollback disponible</div>
+        <div style="font-size:12px;padding:8px 12px;background:#080b14;border:1px solid #14532d;border-radius:8px;color:#34d399">
+          Paquete de rollback generado con los binarios de la revisión anterior.<br>
+          <a href="/api/download_deploy/${tid}/${encodeURIComponent(r.rollback_zip_name)}" download
+             style="color:#34d399;font-weight:700">⬇ Descargar ROLLBACK ZIP</a>
+        </div>
+      </div>`;
+    }
+
+    body.innerHTML = bodyHTML;
+    footer.style.display = 'flex';
+
+    const dlBtn = document.getElementById('deploy-download-btn');
+    if (dlBtn) {
+      dlBtn.href = `/api/download_deploy/${tid}/${encodeURIComponent(r.zip_name)}`;
+      dlBtn.setAttribute('download', r.zip_name);
+    }
+    const sizeEl = document.getElementById('deploy-zip-size');
+    if (sizeEl) sizeEl.textContent = `ZIP: ${esc(r.zip_name)}`;
+  } catch(e) {
+    body.innerHTML = `<div class="deploy-empty" style="color:var(--red)">❌ Error de red: ${esc(String(e))}</div>`;
+  }
+}
+
+function _buildDeployBody(r) {
+  const files    = r.files    || [];
+  const excluded = r.excluded || [];
+  const warnings = r.warnings || [];
+
+  const byType = {};
+  for (const f of files) {
+    const t = f.type || 'other';
+    (byType[t] = byType[t] || []).push(f);
+  }
+
+  let html = '';
+
+  // DLLs y EXEs
+  const binFiles = [...(byType.dll || []), ...(byType.exe || [])];
+  if (binFiles.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title">
+        <span style="color:#a78bfa">🔷</span> Binarios compilados (${binFiles.length})
+      </div>
+      <div class="deploy-file-list">`;
+    for (const f of binFiles) {
+      const label = f.type === 'exe' ? 'EXE' : 'DLL';
+      html += `<div class="deploy-file-item">
+        <span class="deploy-file-type dll">${label}</span>
+        <span>${esc(f.arc)}</span>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Web files
+  if (byType.web && byType.web.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title">
+        <span style="color:#60a5fa">🌐</span> Archivos web (${byType.web.length})
+      </div>
+      <div class="deploy-file-list">`;
+    for (const f of byType.web) {
+      html += `<div class="deploy-file-item">
+        <span class="deploy-file-type web">WEB</span>
+        <span>${esc(f.arc)}</span>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // SQL scripts
+  if (byType.sql && byType.sql.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title">
+        <span style="color:#34d399">🗄</span> Scripts SQL (${byType.sql.length}) — revisar antes de ejecutar
+      </div>
+      <div class="deploy-file-list">`;
+    for (const f of byType.sql) {
+      html += `<div class="deploy-file-item">
+        <span class="deploy-file-type sql">SQL</span>
+        <span>${esc(f.arc)}</span>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Otros
+  if (byType.other && byType.other.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title">
+        <span style="color:#94a3b8">📄</span> Otros archivos (${byType.other.length})
+      </div>
+      <div class="deploy-file-list">`;
+    for (const f of byType.other) {
+      html += `<div class="deploy-file-item">
+        <span class="deploy-file-type other">FILE</span>
+        <span>${esc(f.arc)}</span>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Sin archivos
+  if (!files.length) {
+    html += `<div class="deploy-empty">⚠️ No se encontraron archivos para incluir en el paquete.</div>`;
+  }
+
+  // Excluidos
+  if (excluded.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title" style="color:var(--yellow)">⚠ Archivos no encontrados (${excluded.length})</div>
+      <div class="deploy-warning-list">`;
+    for (const f of excluded) {
+      html += `${esc(f.source)} — ${esc(f.reason)}\n`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Warnings
+  if (warnings.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title" style="color:var(--muted)">ℹ Advertencias</div>
+      <div class="deploy-warning-list" style="color:var(--muted);border-color:var(--border)">`;
+    for (const w of warnings) {
+      html += `${esc(w)}\n`;
+    }
+    html += `</div></div>`;
+  }
+
+  return html || `<div class="deploy-empty">Paquete generado sin contenido.</div>`;
+}
+
+function closeDeploy() {
+  document.getElementById('deploy-modal').classList.remove('open');
+}
+
+function _deployBackdropClick(e) {
+  if (e.target.id === 'deploy-modal') closeDeploy();
+}
+
+// ── SVN Commit ─────────────────────────────────────────────────────────────
+let _commitTid = null;
+
+async function openCommit(tid) {
+  _commitTid = tid;
+  const modal    = document.getElementById('commit-modal');
+  const msgArea  = document.getElementById('commit-msg');
+  const resultEl = document.getElementById('commit-result');
+  const statusEl = document.getElementById('commit-status-line');
+  const doBtn    = document.getElementById('commit-do-btn');
+  document.getElementById('commit-modal-title').textContent = `SVN Commit — #${tid}`;
+  msgArea.value = 'Cargando mensaje sugerido...';
+  resultEl.style.display = 'none';
+  statusEl.textContent = '';
+  doBtn.disabled = true;
+  modal.classList.add('open');
+
+  try {
+    const r = await api('GET', `/api/svn_commit_message/${tid}`);
+    msgArea.value = r.ok ? r.message : `#${tid} `;
+    doBtn.disabled = false;
+  } catch(e) {
+    msgArea.value = `#${tid} `;
+    doBtn.disabled = false;
+  }
+}
+
+async function doCommit() {
+  if (!_commitTid) return;
+  const msgArea  = document.getElementById('commit-msg');
+  const resultEl = document.getElementById('commit-result');
+  const doBtn    = document.getElementById('commit-do-btn');
+  const msg      = msgArea.value.trim();
+  if (!msg) { toast('El mensaje no puede estar vacío', 'error'); return; }
+
+  doBtn.disabled = true;
+  doBtn.textContent = '⏳ Commiteando...';
+  resultEl.style.display = 'none';
+
+  try {
+    const r = await api('POST', `/api/svn_commit/${_commitTid}`, { message: msg });
+    resultEl.style.display = 'block';
+    if (r.ok) {
+      resultEl.className = 'commit-result';
+      resultEl.textContent = `✅ Commit OK — Revisión ${r.revision || '?'}`;
+      doBtn.textContent = '✅ Commiteado';
+      toast(`SVN Commit OK — r${r.revision || '?'}`, 'success');
+    } else {
+      resultEl.className = 'commit-result error';
+      resultEl.textContent = `❌ ${r.error || 'Error desconocido'}`;
+      doBtn.disabled = false;
+      doBtn.textContent = '🔖 Commit';
+    }
+  } catch(e) {
+    resultEl.style.display = 'block';
+    resultEl.className = 'commit-result error';
+    resultEl.textContent = `❌ Error de red: ${e}`;
+    doBtn.disabled = false;
+    doBtn.textContent = '🔖 Commit';
+  }
+}
+
+function closeCommit() {
+  document.getElementById('commit-modal').classList.remove('open');
+  document.getElementById('commit-do-btn').textContent = '🔖 Commit';
+  document.getElementById('commit-do-btn').disabled = false;
+}
+
+function _commitBackdropClick(e) {
+  if (e.target.id === 'commit-modal') closeCommit();
+}
+
+// ── Diff Assistant (dentro del deploy modal) ───────────────────────────────
+async function loadDiffAnalysis(tid) {
+  try {
+    const r = await api('GET', `/api/diff_analysis/${tid}`);
+    if (!r.ok) return '';
+    return _buildDiffAssistantHTML(r);
+  } catch(e) {
+    return '';
+  }
+}
+
+function _buildDiffAssistantHTML(r) {
+  let html = '';
+
+  // Resumen
+  if (r.summary) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title">🔍 Análisis de impacto</div>
+      <div style="font-size:12px;color:var(--text);padding:8px 12px;background:#080b14;border:1px solid var(--border);border-radius:8px">${esc(r.summary)}</div>
+    </div>`;
+  }
+
+  // Riesgos
+  if (r.risks && r.risks.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title">⚠ Puntos de riesgo (${r.risks.length})</div>
+      <div style="display:flex;flex-direction:column;gap:6px">`;
+    for (const risk of r.risks) {
+      const cls = `risk-${risk.level}`;
+      html += `<div style="padding:8px 12px;background:#080b14;border:1px solid var(--border);border-radius:6px;font-size:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span class="risk-badge ${cls}">${risk.level.toUpperCase()}</span>
+          <span>${esc(risk.message)}</span>
+        </div>
+        <div style="color:var(--muted);font-size:11px;padding-left:4px">👉 ${esc(risk.test_hint)}</div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Checklist
+  if (r.checklist && r.checklist.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title">✅ Checklist de verificación</div>
+      <div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;background:#080b14;border:1px solid var(--border);border-radius:8px">`;
+    for (const item of r.checklist) {
+      html += `<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px">
+        <input type="checkbox" style="margin-top:2px;flex-shrink:0">
+        <span>${esc(item)}</span>
+      </label>`;
+    }
+    html += `</div></div>`;
+  }
+
+  return html;
+}
+
+// ── Report Deploy Problem ──────────────────────────────────────────────────
+async function reportDeployProblem(tid) {
+  const desc = window.prompt(
+    `Describí el problema que ocurrió al deployar el ticket #${tid}:\n` +
+    `(ej: "Se rompió el login de usuarios", "Error 500 en la pantalla X")`
+  );
+  if (!desc || !desc.trim()) return;
+
+  const severity = window.prompt(
+    'Severidad: low / medium / high / critical', 'medium'
+  ) || 'medium';
+
+  const r = await api('POST', '/api/deploy_incident', {
+    ticket_id:      tid,
+    description:    desc.trim(),
+    files_deployed: [],
+    severity:       severity.trim(),
+  });
+  if (r.ok) {
+    toast(`⚠ Incidente registrado — ID: ${r.incident?.id || '?'}`, 'info');
+  } else {
+    toast('Error al registrar: ' + (r.error || ''), 'error');
+  }
+}
+
+// ── Incident Test modal ───────────────────────────────────────────────────
+let _incidentTestChecks = {};  // { checkId: bool }
+
+async function openIncidentTest(tid) {
+  _incidentTestChecks = {};
+  const modal = document.getElementById('incident-test-modal');
+  document.getElementById('incident-test-title').textContent = `🧪 Testeo de incidencia — Ticket #${tid}`;
+  document.getElementById('incident-test-body').innerHTML =
+    `<div class="deploy-spinner-wrap"><div class="spinner visible"></div><span>Cargando plan de testeo…</span></div>`;
+  document.getElementById('incident-test-progress').textContent = '';
+  modal.style.display = 'flex';
+
+  try {
+    const r = await api('GET', `/api/incident_test_plan/${tid}`);
+    document.getElementById('incident-test-body').innerHTML = _buildIncidentTestHTML(r, tid);
+    _updateIncidentProgress();
+  } catch(e) {
+    document.getElementById('incident-test-body').innerHTML =
+      `<div style="color:var(--red);padding:16px">❌ Error: ${esc(String(e))}</div>`;
+  }
+}
+
+function closeIncidentTest() {
+  document.getElementById('incident-test-modal').style.display = 'none';
+}
+
+function _buildIncidentTestHTML(r, tid) {
+  if (!r.ok) return `<div style="color:var(--red);padding:16px">❌ ${esc(r.error||'Error desconocido')}</div>`;
+
+  let html = '';
+
+  // Contexto del ticket
+  if (r.context) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title" style="color:#a78bfa">📋 Contexto</div>
+      <div style="background:#080b14;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.7;color:var(--muted)">
+        ${esc(r.context).replace(/\n/g,'<br>')}
+      </div>
+    </div>`;
+  }
+
+  // Tests de negocio
+  if (r.business_tests && r.business_tests.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title" style="color:#22c55e">🏢 Tests de Negocio</div>
+      <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:#080b14;border:1px solid var(--border);border-radius:8px">`;
+    for (const t of r.business_tests) {
+      const cid = `biz-${tid}-${t.id}`;
+      html += `<div style="border-bottom:1px solid #1a1f2e;padding-bottom:8px;margin-bottom:2px">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text)">
+          <input type="checkbox" id="${cid}" onchange="_updateIncidentProgress()" style="margin-top:2px;flex-shrink:0">
+          <span><span style="color:#6366f1;font-size:11px">[${t.id}]</span> ${esc(t.title)}</span>
+        </label>`;
+      if (t.steps && t.steps.length) {
+        html += `<ol style="margin:4px 0 0 28px;padding:0;font-size:11px;color:var(--muted);line-height:1.7">`;
+        for (const s of t.steps) html += `<li>${esc(s)}</li>`;
+        html += `</ol>`;
+      }
+      if (t.expected) {
+        html += `<div style="margin:4px 0 0 28px;font-size:11px;color:#22c55e">✔ Esperado: ${esc(t.expected)}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Tests técnicos
+  if (r.technical_tests && r.technical_tests.length) {
+    html += `<div class="deploy-section">
+      <div class="deploy-section-title" style="color:#38bdf8">⚙️ Tests Técnicos</div>
+      <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:#080b14;border:1px solid var(--border);border-radius:8px">`;
+    for (const t of r.technical_tests) {
+      const cid = `tec-${tid}-${t.id}`;
+      html += `<div style="border-bottom:1px solid #1a1f2e;padding-bottom:8px;margin-bottom:2px">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text)">
+          <input type="checkbox" id="${cid}" onchange="_updateIncidentProgress()" style="margin-top:2px;flex-shrink:0">
+          <span><span style="color:#38bdf8;font-size:11px">[${t.id}]</span> ${esc(t.title)}</span>
+        </label>`;
+      if (t.steps && t.steps.length) {
+        html += `<ol style="margin:4px 0 0 28px;padding:0;font-size:11px;color:var(--muted);line-height:1.7">`;
+        for (const s of t.steps) html += `<li>${esc(s)}</li>`;
+        html += `</ol>`;
+      }
+      if (t.expected) {
+        html += `<div style="margin:4px 0 0 28px;font-size:11px;color:#38bdf8">✔ Esperado: ${esc(t.expected)}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  return html || `<div style="padding:24px;color:var(--muted);text-align:center">No hay tests disponibles para este ticket.</div>`;
+}
+
+function _updateIncidentProgress() {
+  const all = document.querySelectorAll('#incident-test-body input[type=checkbox]');
+  const done = [...all].filter(c => c.checked).length;
+  const total = all.length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  const el = document.getElementById('incident-test-progress');
+  if (el) {
+    el.textContent = total ? `${done}/${total} completados (${pct}%)` : '';
+    el.style.color = pct === 100 ? '#22c55e' : 'var(--muted)';
+  }
+}
+
+// ── Metrics modal ─────────────────────────────────────────────────────────
+function openMetrics() {
+  document.getElementById('metrics-modal').classList.add('open');
+  loadMetrics();
+}
+function closeMetrics() {
+  document.getElementById('metrics-modal').classList.remove('open');
+}
+
+async function loadMetrics() {
+  const days = document.getElementById('metrics-days').value || 30;
+  const body = document.getElementById('metrics-body');
+  body.innerHTML = `<div class="deploy-spinner-wrap"><div class="spinner visible"></div><span>Calculando métricas...</span></div>`;
+  try {
+    const r = await api('GET', `/api/metrics?days=${days}`);
+    if (!r.ok) { body.innerHTML = `<div class="deploy-empty" style="color:var(--red)">❌ ${esc(r.error||'')}</div>`; return; }
+    body.innerHTML = _buildMetricsHTML(r);
+  } catch(e) {
+    body.innerHTML = `<div class="deploy-empty" style="color:var(--red)">❌ ${esc(String(e))}</div>`;
+  }
+}
+
+function _buildMetricsHTML(m) {
+  const trendIcon = m.trend === 'up' ? '↑' : m.trend === 'down' ? '↓' : '→';
+  const trendCls  = m.trend === 'up' ? 'trend-up' : m.trend === 'down' ? 'trend-down' : 'trend-flat';
+  const trendTxt  = m.trend_pct != null ? ` ${m.trend_pct > 0 ? '+' : ''}${m.trend_pct}%` : '';
+
+  let html = `<div class="metrics-kpi-row">
+    <div class="metrics-kpi"><div class="kpi-val">${m.total}</div><div class="kpi-label">Tickets procesados</div></div>
+    <div class="metrics-kpi"><div class="kpi-val">${m.completados}</div><div class="kpi-label">Completados</div></div>
+    <div class="metrics-kpi"><div class="kpi-val" style="color:var(--yellow)">${m.rework_rate_pct}%</div><div class="kpi-label">Tasa rework</div></div>
+    <div class="metrics-kpi"><div class="kpi-val ${trendCls}">${trendIcon}${trendTxt}</div><div class="kpi-label">Esta semana vs anterior</div></div>
+  </div>`;
+
+  // Tiempos promedio
+  const stages = [
+    { label: 'PM Análisis', val: m.dur_pm_min,    unit: 'min', color: '#3b82f6' },
+    { label: 'Dev Impl.',   val: m.dur_dev_min,   unit: 'min', color: '#a855f7' },
+    { label: 'QA Tester',  val: m.dur_tester_min, unit: 'min', color: '#f97316' },
+    { label: 'Total',      val: m.dur_total_hrs != null ? m.dur_total_hrs * 60 : null, unit: 'min', color: '#22c55e' },
+  ];
+  const maxDur = Math.max(...stages.map(s => s.val || 0), 1);
+  html += `<div>
+    <div class="metrics-section-title">⏱ Tiempo promedio por etapa</div>
+    <div style="display:flex;flex-direction:column;gap:8px">`;
+  for (const s of stages) {
+    const barW = s.val != null ? Math.round((s.val / maxDur) * 180) : 0;
+    const valStr = s.val != null ? (s.val >= 60 ? `${(s.val/60).toFixed(1)}h` : `${Math.round(s.val)}min`) : '—';
+    html += `<div style="display:flex;align-items:center;gap:10px;font-size:12px">
+      <span style="min-width:90px;color:var(--muted)">${s.label}</span>
+      <div class="metrics-bar-wrap"><div class="metrics-bar" style="width:${barW}px;background:${s.color}"></div></div>
+      <span style="font-weight:700;color:${s.color}">${valStr}</span>
+    </div>`;
+  }
+  html += `</div></div>`;
+
+  // Leaderboard
+  if (m.leaderboard && m.leaderboard.length) {
+    html += `<div>
+      <div class="metrics-section-title">🏆 Leaderboard de velocidad</div>
+      <table class="metrics-table">
+        <thead><tr><th>#</th><th>Desarrollador</th><th>Completados</th><th>Rework</th><th>Tiempo prom.</th></tr></thead>
+        <tbody>`;
+    m.leaderboard.forEach((row, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+      const avgH = row.avg_hours != null ? `${row.avg_hours}h` : '—';
+      html += `<tr>
+        <td>${medal}</td>
+        <td>${esc(row.dev)}</td>
+        <td style="font-weight:700;color:var(--green)">${row.completados}</td>
+        <td style="color:${row.rework > 0 ? 'var(--yellow)' : 'var(--muted)'}">${row.rework}</td>
+        <td style="font-family:monospace">${avgH}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  // Por semana
+  if (m.by_week && Object.keys(m.by_week).length > 1) {
+    const weeks  = Object.entries(m.by_week);
+    const maxWk  = Math.max(...weeks.map(([,v]) => v), 1);
+    html += `<div>
+      <div class="metrics-section-title">📅 Tickets por semana</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:60px;padding-top:8px">`;
+    for (const [wk, count] of weeks) {
+      const h = Math.max(4, Math.round((count / maxWk) * 52));
+      html += `<div title="${wk}: ${count} tickets" style="flex:1;background:var(--accent);border-radius:2px 2px 0 0;height:${h}px;opacity:.8;cursor:default"></div>`;
+    }
+    html += `</div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px">
+        <span>${weeks[0]?.[0]||''}</span><span>${weeks[weeks.length-1]?.[0]||''}</span>
+      </div>
+    </div>`;
+  }
+
+  return html;
+}
+
+// ── Knowledge Base ─────────────────────────────────────────────────────────
+function openKnowledge() {
+  document.getElementById('knowledge-modal').classList.add('open');
+  loadKnowledge();
+}
+function closeKnowledge() {
+  document.getElementById('knowledge-modal').classList.remove('open');
+}
+
+async function loadKnowledge() {
+  const showResolved = document.getElementById('kb-show-resolved')?.checked;
+  const body = document.getElementById('knowledge-body');
+  body.innerHTML = `<div class="deploy-spinner-wrap"><div class="spinner visible"></div><span>Cargando...</span></div>`;
+  try {
+    const r = await api('GET', `/api/incidents${showResolved ? '?resolved=true' : ''}`);
+    if (!r.ok) { body.innerHTML = `<div class="deploy-empty">Sin datos</div>`; return; }
+    const incidents = r.incidents || [];
+    if (!incidents.length) {
+      body.innerHTML = `<div class="deploy-empty">🎉 Sin incidentes registrados — ¡todo está funcionando!</div>`;
+      return;
+    }
+    body.innerHTML = incidents.map(inc => {
+      const sev = inc.severity || 'medium';
+      const cls  = `risk-${sev}`;
+      const res  = inc.resolved ? ' resolved' : '';
+      return `<div class="incident-card${res}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="risk-badge ${cls}">${sev.toUpperCase()}</span>
+          <span style="font-weight:600">${esc(inc.id)}</span>
+          <span style="color:var(--muted);font-size:11px">Ticket #${esc(inc.ticket_id)}</span>
+          ${inc.resolved ? '<span style="color:var(--green);font-size:11px">✓ Resuelto</span>' : ''}
+          <span style="margin-left:auto;font-size:11px;color:var(--muted)">${inc.ts ? new Date(inc.ts).toLocaleDateString('es-AR') : ''}</span>
+        </div>
+        <div style="margin-top:6px;font-size:12px">${esc(inc.description)}</div>
+        ${!inc.resolved ? `<div style="margin-top:6px"><button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="resolveIncident('${inc.id}')">✓ Marcar resuelto</button></div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    body.innerHTML = `<div class="deploy-empty" style="color:var(--red)">Error: ${esc(String(e))}</div>`;
+  }
+}
+
+async function resolveIncident(id) {
+  const note = window.prompt('Nota de resolución (opcional):') || '';
+  const r = await fetch(`/api/incidents/${id}/resolve`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ resolution_note: note }),
+  }).then(r => r.json()).catch(() => ({ok: false}));
+  loadKnowledge();
+}
+
+// ── Teams config ───────────────────────────────────────────────────────────
+function setTeamsMode(mode) {
+  document.getElementById('teams-mode-val').value = mode;
+  document.getElementById('teams-info-webhook').style.display = mode === 'webhook' ? 'block' : 'none';
+  document.getElementById('teams-info-pa').style.display      = mode === 'powerautomate' ? 'block' : 'none';
+  document.getElementById('tab-webhook').classList.toggle('active', mode === 'webhook');
+  document.getElementById('tab-pa').classList.toggle('active',      mode === 'powerautomate');
+}
+
+async function openTeamsConfig() {
+  const modal = document.getElementById('teams-modal');
+  const r = await api('GET', '/api/teams/config').catch(() => ({configured: false}));
+  if (r.configured) {
+    const btn = document.getElementById('teams-btn');
+    if (btn) { btn.style.color = 'var(--green)'; btn.title = '💬 Teams configurado ✓'; }
+  }
+  modal.style.display = 'flex';
+}
+
+function closeTeamsConfig() {
+  document.getElementById('teams-modal').style.display = 'none';
+}
+
+async function saveTeamsConfig() {
+  const url    = document.getElementById('teams-webhook-url').value.trim();
+  const mode   = document.getElementById('teams-mode-val').value;
+  const resEl  = document.getElementById('teams-test-result');
+  if (!url) { toast('Ingresá la URL del webhook', 'error'); return; }
+
+  resEl.style.display = 'block';
+  resEl.style.color   = 'var(--muted)';
+  resEl.textContent   = '⏳ Guardando y enviando mensaje de prueba...';
+
+  const r = await api('POST', '/api/teams/config', { webhook_url: url, mode });
+  if (r.ok) {
+    resEl.textContent = r.test_sent
+      ? '✅ ¡Mensaje enviado! Revisá tu Teams.'
+      : `⚠ Guardado, pero el mensaje de prueba falló: ${r.test_error || ''}`;
+    resEl.style.color = r.test_sent ? 'var(--green)' : 'var(--yellow)';
+    const btn = document.getElementById('teams-btn');
+    if (btn) { btn.style.color = 'var(--green)'; btn.title = '💬 Teams configurado ✓'; }
+    toast('✅ Teams configurado', 'success');
+  } else {
+    resEl.textContent = `❌ Error: ${r.error || 'desconocido'}`;
+    resEl.style.color = 'var(--red)';
+  }
+}
+
+// Inicializar botón Teams al cargar
+(async () => {
+  try {
+    const r = await api('GET', '/api/teams/config');
+    if (r.configured) {
+      const btn = document.getElementById('teams-btn');
+      if (btn) { btn.style.color = 'var(--green)'; btn.title = '💬 Teams configurado ✓'; }
+    }
+  } catch(e) {}
+})();
+
+// ── Gen Prompts ────────────────────────────────────────────────────────────
+async function genPrompts(tid) {
+  const modal = document.getElementById('gen-prompts-modal');
+  modal.classList.add('open');
+  document.getElementById('gen-prompts-title').textContent = `📋 Prompts — Ticket #${tid}`;
+  document.getElementById('gen-dev-ta').value = 'Cargando...';
+  document.getElementById('gen-qa-ta').value  = 'Cargando...';
+  document.getElementById('gen-prompts-tareas').textContent = '';
+  try {
+    const r = await fetch(`/api/gen_prompts/${tid}`);
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('gen-prompts-title').textContent = `📋 Prompts — #${tid} ${d.titulo || ''}`;
+      document.getElementById('gen-dev-ta').value = d.dev_prompt || '';
+      document.getElementById('gen-qa-ta').value  = d.qa_prompt  || '';
+      if (d.tareas && d.tareas.length) {
+        document.getElementById('gen-prompts-tareas').textContent =
+          `Tareas detectadas: ${d.tareas.join(', ')}`;
+      }
+    } else {
+      document.getElementById('gen-dev-ta').value = 'Error: ' + (d.error || '?');
+      document.getElementById('gen-qa-ta').value  = '';
+    }
+  } catch(e) {
+    document.getElementById('gen-dev-ta').value = 'Error de red: ' + e;
+    document.getElementById('gen-qa-ta').value  = '';
+  }
+}
+
+function closeGenPrompts() {
+  document.getElementById('gen-prompts-modal').classList.remove('open');
+}
+
+function copyPrompt(taId, btnId) {
+  const ta  = document.getElementById(taId);
+  const btn = document.getElementById(btnId);
+  if (!ta || !ta.value) return;
+  navigator.clipboard.writeText(ta.value).then(() => {
+    btn.classList.add('copied');
+    btn.textContent = '✓ Copiado';
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '📋 Copiar'; }, 2000);
+  }).catch(() => {
+    // fallback
+    ta.select();
+    document.execCommand('copy');
+    btn.textContent = '✓ Copiado';
+    setTimeout(() => { btn.innerHTML = '📋 Copiar'; }, 2000);
+  });
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────
+async function openStats() {
+  document.getElementById('stats-modal').classList.add('open');
+  const r = await fetch('/api/stats');
+  const data = await r.json();
+  const tbody = document.getElementById('stats-body');
+
+  function fmt(seg) {
+    if (seg == null) return '—';
+    const m = Math.floor(seg / 60), s = Math.round(seg % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+
+  const rows = [
+    { label: '📋 PM Análisis', key: 'pm' },
+    { label: '⚙ Dev Impl.',   key: 'dev' },
+    { label: '🧪 QA Tester',  key: 'tester' },
+  ];
+  tbody.innerHTML = rows.map(row => {
+    const d = (data[row.key] || {});
+    return `<tr>
+      <td>${row.label}</td>
+      <td>${d.count ?? '—'}</td>
+      <td>${fmt(d.avg)}</td>
+      <td>${fmt(d.min)}</td>
+      <td>${fmt(d.max)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function closeStats() {
+  document.getElementById('stats-modal').classList.remove('open');
+}
+
+// ── Prompts ───────────────────────────────────────────────────────────────
+let _currentPromptRole = 'pm';
+
+async function openPrompts() {
+  document.getElementById('prompts-modal').classList.add('open');
+  await _loadPrompt('pm');
+}
+
+function closePrompts() {
+  document.getElementById('prompts-modal').classList.remove('open');
+}
+
+async function switchPromptTab(role) {
+  _currentPromptRole = role;
+  ['pm','dev','tester'].forEach(r => {
+    document.getElementById('ptab-' + r).classList.toggle('active', r === role);
+  });
+  await _loadPrompt(role);
+}
+
+async function _loadPrompt(role) {
+  const ta = document.getElementById('prompts-textarea');
+  ta.value = 'Cargando...';
+  ta.disabled = true;
+  try {
+    const r = await fetch(`/api/prompts/${role}`);
+    const d = await r.json();
+    ta.value = d.content || '';
+  } catch(e) {
+    ta.value = 'Error cargando prompt';
+  } finally {
+    ta.disabled = false;
+  }
+}
+
+async function savePrompt() {
+  const content = document.getElementById('prompts-textarea').value;
+  const r = await api('POST', `/api/prompts/${_currentPromptRole}`, { content });
+  if (r.ok) {
+    toast(`✅ Prompt ${_currentPromptRole.toUpperCase()} guardado`, 'success');
+  } else {
+    toast('Error guardando: ' + (r.error || '?'), 'error');
+  }
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('es-AR', { day:'2-digit', month:'2-digit',
+      hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  } catch { return iso; }
+}
+
+function setSpinner(on) {
+  document.getElementById('global-spinner').classList.toggle('visible', on);
+}
+
+let toastTimer = null;
+// ── Markdown preview modal ──────────────────────────────────────────────
+function _renderMarkdownFull(md) {
+  // Renderer completo para el modal de preview
+  let html = md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Fenced code blocks
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+    `<pre><code class="lang-${lang}">${code.trim()}</code></pre>`);
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Headers
+  html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+  // Bold + italic
+  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Tables
+  html = html.replace(/^(\|.+\|\n)(\|[-| :]+\|\n)((\|.+\|\n)*)/gm, (match, header, sep, rows) => {
+    const ths = header.trim().split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+    const trs = rows.trim().split('\n').filter(r => r.trim()).map(row => {
+      const tds = row.split('|').filter(c => c.trim() !== undefined && row.includes('|')).slice(1, -1)
+        .map(c => `<td>${c.trim()}</td>`).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>\n`;
+  });
+
+  // HR
+  html = html.replace(/^---+$/gm, '<hr>');
+
+  // Lists
+  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
+
+  // Blockquote
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+
+  // Veredictos
+  html = html.replace(/\bAPROBADO\b/g, '<span class="preview-verdict-aprobado">✅ APROBADO</span>');
+  html = html.replace(/\bCON OBSERVACIONES\b/g, '<span class="preview-verdict-observaciones">⚠️ CON OBSERVACIONES</span>');
+  html = html.replace(/\bRECHAZADO\b/g, '<span class="preview-verdict-rechazado">❌ RECHAZADO</span>');
+
+  // Line breaks — solo para párrafos (no dentro de tags)
+  html = html.replace(/\n{2,}/g, '</p><p>');
+  html = html.replace(/\n/g, '<br>');
+  html = `<p>${html}</p>`;
+
+  // Limpiar párrafos vacíos o que solo contienen HTML tags
+  html = html.replace(/<p>(<h[1-4]>|<\/h[1-4]>|<table|<\/table>|<pre|<\/pre>|<ul>|<\/ul>|<hr>|<blockquote)/g, '$1');
+  html = html.replace(/(<\/h[1-4]>|<\/table>|<\/pre>|<\/ul>|<hr>|<\/blockquote>)<\/p>/g, '$1');
+  html = html.replace(/<p><br><\/p>/g, '');
+  html = html.replace(/<p><\/p>/g, '');
+
+  return html;
+}
+
+async function openTicketDetail(tid) {
+  const modal = document.getElementById('preview-modal');
+  const body  = document.getElementById('preview-body');
+  const title = document.getElementById('preview-title');
+  const ticket = allTickets.find(t => t.ticket_id === tid);
+  title.textContent = `📋 Detalle Mantis — #${tid}${ticket ? ' ' + ticket.titulo : ''}`;
+  body.innerHTML = '<span style="color:var(--muted)">Cargando...</span>';
+  modal.classList.add('open');
+
+  const cacheKey = `${tid}_inc`;
+  if (_summaryCache.has(cacheKey + '_raw')) {
+    body.innerHTML = _renderMarkdownFull(_summaryCache.get(cacheKey + '_raw'));
+    return;
+  }
+  try {
+    const r    = await fetch(`/api/ticket_detail/${tid}`);
+    const data = await r.json();
+    if (data.ok) {
+      _summaryCache.set(cacheKey + '_raw', data.content);
+      body.innerHTML = _renderMarkdownFull(data.content);
+    } else {
+      body.innerHTML = `<span style="color:var(--muted)">${esc(data.error || 'No disponible')}</span>`;
+    }
+  } catch(e) {
+    body.innerHTML = `<span style="color:var(--red)">Error cargando detalle</span>`;
+  }
+}
+
+async function openPreview(tid, type) {  const titles = { dev: '📝 Dev — Resumen de implementación', tester: '🧪 QA — Resumen de pruebas' };
+  const modal  = document.getElementById('preview-modal');
+  const body   = document.getElementById('preview-body');
+  const title  = document.getElementById('preview-title');
+  const ticket = allTickets.find(t => t.ticket_id === tid);
+  title.textContent = `${titles[type] || type} — #${tid} ${ticket ? ticket.titulo : ''}`;
+  body.innerHTML = '<span style="color:var(--muted)">Cargando...</span>';
+  modal.classList.add('open');
+
+  // Intentar desde caché primero
+  const cacheKey = `${tid}_${type}`;
+  if (_summaryCache.has(cacheKey + '_raw')) {
+    body.innerHTML = _renderMarkdownFull(_summaryCache.get(cacheKey + '_raw'));
+    return;
+  }
+
+  try {
+    const r    = await fetch(`/api/${type}_summary/${tid}`);
+    const data = await r.json();
+    if (data.ok) {
+      _summaryCache.set(cacheKey + '_raw', data.content);
+      body.innerHTML = _renderMarkdownFull(data.content);
+    } else {
+      body.innerHTML = `<span style="color:var(--muted)">${esc(data.error || 'No disponible')}</span>`;
+    }
+  } catch(e) {
+    body.innerHTML = `<span style="color:var(--red)">Error cargando preview</span>`;
+  }
+}
+
+function closePreview() {
+  document.getElementById('preview-modal').classList.remove('open');
+}
+
+function _previewBackdropClick(e) {
+  if (e.target.id === 'preview-modal') closePreview();
+}
+
+// Cerrar preview con Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closePreview();
+    closeQueue();
+  }
+});
+
+// ── Correction ────────────────────────────────────────────────────────────
+async function sendCorrection(tid) {
+  const textarea = document.getElementById(`correction-text-${tid}`);
+  const text = (textarea ? textarea.value : '').trim();
+  if (!text) {
+    toast('Escribí la corrección antes de enviar', 'error');
+    return;
+  }
+  toast(`📩 Enviando corrección para #${tid}...`, 'info');
+  const r = await api('POST', '/api/send_correction', { ticket_id: tid, correction: text });
+  if (r.ok) {
+    toast(`✅ Corrección enviada al Developer para #${tid}`, 'success');
+    if (textarea) textarea.value = '';
+    // Invalida sumarios en caché para que recarguen
+    _summaryCache.delete(`${tid}_dev`);
+    _summaryCache.delete(`${tid}_dev_raw`);
+    _summaryCache.delete(`${tid}_tester`);
+    _summaryCache.delete(`${tid}_tester_raw`);
+    setTimeout(refresh, 2000);
+  } else {
+    toast('Error: ' + (r.error || 'desconocido'), 'error');
+  }
+}
+
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+}
+
+// ── Live timers ───────────────────────────────────────────────────────────
+function fmtElapsed(ms) {
+  if (ms < 0) ms = 0;
+  const s  = Math.floor(ms / 1000);
+  const h  = Math.floor(s / 3600);
+  const m  = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  if (h) return `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+}
+
+function _tickTimers() {
+  const now = Date.now();
+  document.querySelectorAll('.live-timer[data-ts]').forEach(el => {
+    el.textContent = fmtElapsed(now - new Date(el.dataset.ts).getTime());
+  });
+  document.querySelectorAll('.workflow-live[data-ts]').forEach(el => {
+    el.textContent = '⏱ ' + fmtElapsed(now - new Date(el.dataset.ts).getTime());
+  });
+}
+setInterval(_tickTimers, 1000);
+</script>
+</body>
+</html>

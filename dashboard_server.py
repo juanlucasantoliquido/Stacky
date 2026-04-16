@@ -10,6 +10,7 @@ Uso:
 
 import json
 import os
+import re
 import subprocess
 import threading
 import sys
@@ -529,12 +530,35 @@ def api_run_pipeline():
 
                 # Determinar etapa de inicio según estado actual del ticket
                 est = st["tickets"][ticket_id].get("estado", "pendiente_pm")
+
+                # ── Leer flag de sub-agentes ──────────────────────────────
+                _use_sub = False
+                try:
+                    import json as _jcfg2
+                    _cfg2 = _jcfg2.load(open(os.path.join(BASE_DIR, "config.json"),
+                                             encoding="utf-8"))
+                    _use_sub = _cfg2.get("pipeline", {}).get("use_sub_agents", False)
+                except Exception:
+                    pass
+
                 if est in ("pendiente_pm", "error_pm"):
-                    first_stage = "pm"
+                    first_stage = "pm_inv" if _use_sub else "pm"
+                elif est == "pm_inv_completado":
+                    first_stage = "pm_arq"
+                elif est == "pm_arq_completado":
+                    first_stage = "pm_plan"
                 elif est in ("pm_completado", "error_dev"):
-                    first_stage = "dev"
+                    first_stage = "dev_loc" if _use_sub else "dev"
+                elif est == "dev_loc_completado":
+                    first_stage = "dev_impl"
+                elif est == "dev_impl_completado":
+                    first_stage = "dev_doc"
                 elif est in ("dev_completado", "error_tester"):
-                    first_stage = "tester"
+                    first_stage = "qa_rev" if _use_sub else "tester"
+                elif est == "qa_rev_completado":
+                    first_stage = "qa_exec"
+                elif est == "qa_exec_completado":
+                    first_stage = "qa_arb"
                 elif est.endswith("_en_proceso"):
                     # Ya hay un agente corriendo — no relanzar para evitar duplicados.
                     # El watcher detectará el flag de completado y avanzará solo.
@@ -728,6 +752,213 @@ def _invoke_stage(ticket_id: str, stage: str):
                 save_state(rt["state_path"], state)
                 return
             print(f"[TESTER] Agente invocado para {ticket_id} — watcher esperando TESTER_COMPLETADO.md")
+
+        elif stage == "pm_inv":
+            from prompt_builder import build_pm_inv_prompt as _build
+            agent = agents.get("pm", "PM-TL STack 3")
+            set_ticket_state(state, ticket_id, "pm_inv_en_proceso", folder=folder)
+            state.setdefault("tickets", {}).setdefault(ticket_id, {})["pm_inv_inicio_at"] = datetime.now().isoformat()
+            state["tickets"][ticket_id]["auto_advance"] = True
+            save_state(rt["state_path"], state)
+            print(f"[PM-INV] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
+            prompt = _build(folder, ticket_id, rt["workspace_root"])
+            print(f"[PM-INV] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
+            _ilog.bridge_call(agent, len(prompt))
+            ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
+                              workspace_root=rt["workspace_root"], new_conversation=True)
+            _ilog.bridge_result(ok)
+            _record_invoke(ok, f"Agente: {agent}")
+            if not ok:
+                try: os.remove(en_curso_flag)
+                except Exception: pass
+                mark_error(state, ticket_id, "pm", "No se pudo invocar PM-Investigador vía Bridge")
+                save_state(rt["state_path"], state)
+                return
+            print(f"[PM-INV] Agente invocado para {ticket_id} — esperando INV_COMPLETADO.flag")
+
+        elif stage == "pm_arq":
+            from prompt_builder import build_pm_arq_prompt as _build
+            agent = agents.get("pm", "PM-TL STack 3")
+            set_ticket_state(state, ticket_id, "pm_arq_en_proceso", folder=folder)
+            state.setdefault("tickets", {}).setdefault(ticket_id, {})["pm_arq_inicio_at"] = datetime.now().isoformat()
+            state["tickets"][ticket_id]["auto_advance"] = True
+            save_state(rt["state_path"], state)
+            print(f"[PM-ARQ] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
+            prompt = _build(folder, ticket_id, rt["workspace_root"])
+            print(f"[PM-ARQ] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
+            _ilog.bridge_call(agent, len(prompt))
+            ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
+                              workspace_root=rt["workspace_root"], new_conversation=False)
+            _ilog.bridge_result(ok)
+            _record_invoke(ok, f"Agente: {agent}")
+            if not ok:
+                try: os.remove(en_curso_flag)
+                except Exception: pass
+                mark_error(state, ticket_id, "pm", "No se pudo invocar PM-Arquitecto vía Bridge")
+                save_state(rt["state_path"], state)
+                return
+            print(f"[PM-ARQ] Agente invocado para {ticket_id} — esperando ARQ_COMPLETADO.flag")
+
+        elif stage == "pm_plan":
+            from prompt_builder import build_pm_plan_prompt as _build
+            agent = agents.get("pm", "PM-TL STack 3")
+            set_ticket_state(state, ticket_id, "pm_plan_en_proceso", folder=folder)
+            state.setdefault("tickets", {}).setdefault(ticket_id, {})["pm_plan_inicio_at"] = datetime.now().isoformat()
+            state["tickets"][ticket_id]["auto_advance"] = True
+            save_state(rt["state_path"], state)
+            print(f"[PM-PLAN] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
+            prompt = _build(folder, ticket_id, rt["workspace_root"])
+            print(f"[PM-PLAN] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
+            _ilog.bridge_call(agent, len(prompt))
+            ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
+                              workspace_root=rt["workspace_root"], new_conversation=False)
+            _ilog.bridge_result(ok)
+            _record_invoke(ok, f"Agente: {agent}")
+            if not ok:
+                try: os.remove(en_curso_flag)
+                except Exception: pass
+                mark_error(state, ticket_id, "pm", "No se pudo invocar PM-Planificador vía Bridge")
+                save_state(rt["state_path"], state)
+                return
+            print(f"[PM-PLAN] Agente invocado para {ticket_id} — esperando PM_COMPLETADO.flag")
+
+        elif stage == "dev_loc":
+            from prompt_builder import build_dev_loc_prompt as _build
+            agent = agents.get("dev", "DevStack3")
+            set_ticket_state(state, ticket_id, "dev_loc_en_proceso", folder=folder)
+            state.setdefault("tickets", {}).setdefault(ticket_id, {})["dev_loc_inicio_at"] = datetime.now().isoformat()
+            state["tickets"][ticket_id]["auto_advance"] = True
+            save_state(rt["state_path"], state)
+            print(f"[DEV-LOC] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
+            prompt = _build(folder, ticket_id, rt["workspace_root"])
+            print(f"[DEV-LOC] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
+            _ilog.bridge_call(agent, len(prompt))
+            ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
+                              workspace_root=rt["workspace_root"], new_conversation=True)
+            _ilog.bridge_result(ok)
+            _record_invoke(ok, f"Agente: {agent}")
+            if not ok:
+                try: os.remove(en_curso_flag)
+                except Exception: pass
+                mark_error(state, ticket_id, "dev", "No se pudo invocar DEV-Localizador vía Bridge")
+                save_state(rt["state_path"], state)
+                return
+            print(f"[DEV-LOC] Agente invocado para {ticket_id} — esperando LOC_COMPLETADO.flag")
+
+        elif stage == "dev_impl":
+            from prompt_builder import build_dev_impl_prompt as _build
+            agent = agents.get("dev", "DevStack3")
+            set_ticket_state(state, ticket_id, "dev_impl_en_proceso", folder=folder)
+            state.setdefault("tickets", {}).setdefault(ticket_id, {})["dev_impl_inicio_at"] = datetime.now().isoformat()
+            state["tickets"][ticket_id]["auto_advance"] = True
+            save_state(rt["state_path"], state)
+            print(f"[DEV-IMPL] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
+            prompt = _build(folder, ticket_id, rt["workspace_root"])
+            print(f"[DEV-IMPL] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
+            _ilog.bridge_call(agent, len(prompt))
+            ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
+                              workspace_root=rt["workspace_root"], new_conversation=False)
+            _ilog.bridge_result(ok)
+            _record_invoke(ok, f"Agente: {agent}")
+            if not ok:
+                try: os.remove(en_curso_flag)
+                except Exception: pass
+                mark_error(state, ticket_id, "dev", "No se pudo invocar DEV-Implementador vía Bridge")
+                save_state(rt["state_path"], state)
+                return
+            print(f"[DEV-IMPL] Agente invocado para {ticket_id} — esperando IMPL_COMPLETADO.flag")
+
+        elif stage == "dev_doc":
+            from prompt_builder import build_dev_doc_prompt as _build
+            agent = agents.get("dev", "DevStack3")
+            set_ticket_state(state, ticket_id, "dev_doc_en_proceso", folder=folder)
+            state.setdefault("tickets", {}).setdefault(ticket_id, {})["dev_doc_inicio_at"] = datetime.now().isoformat()
+            state["tickets"][ticket_id]["auto_advance"] = True
+            save_state(rt["state_path"], state)
+            print(f"[DEV-DOC] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
+            prompt = _build(folder, ticket_id, rt["workspace_root"])
+            print(f"[DEV-DOC] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
+            _ilog.bridge_call(agent, len(prompt))
+            ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
+                              workspace_root=rt["workspace_root"], new_conversation=False)
+            _ilog.bridge_result(ok)
+            _record_invoke(ok, f"Agente: {agent}")
+            if not ok:
+                try: os.remove(en_curso_flag)
+                except Exception: pass
+                mark_error(state, ticket_id, "dev", "No se pudo invocar DEV-Documentador vía Bridge")
+                save_state(rt["state_path"], state)
+                return
+            print(f"[DEV-DOC] Agente invocado para {ticket_id} — esperando DEV_COMPLETADO.md")
+
+        elif stage == "qa_rev":
+            from prompt_builder import build_qa_rev_prompt as _build
+            agent = agents.get("tester", "QA")
+            set_ticket_state(state, ticket_id, "qa_rev_en_proceso", folder=folder)
+            state.setdefault("tickets", {}).setdefault(ticket_id, {})["qa_rev_inicio_at"] = datetime.now().isoformat()
+            state["tickets"][ticket_id]["auto_advance"] = True
+            save_state(rt["state_path"], state)
+            print(f"[QA-REV] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
+            prompt = _build(folder, ticket_id, rt["workspace_root"])
+            print(f"[QA-REV] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
+            _ilog.bridge_call(agent, len(prompt))
+            ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
+                              workspace_root=rt["workspace_root"], new_conversation=True)
+            _ilog.bridge_result(ok)
+            _record_invoke(ok, f"Agente: {agent}")
+            if not ok:
+                try: os.remove(en_curso_flag)
+                except Exception: pass
+                mark_error(state, ticket_id, "tester", "No se pudo invocar QA-Revisor vía Bridge")
+                save_state(rt["state_path"], state)
+                return
+            print(f"[QA-REV] Agente invocado para {ticket_id} — esperando REVIEW_COMPLETADO.flag")
+
+        elif stage == "qa_exec":
+            from prompt_builder import build_qa_exec_prompt as _build
+            agent = agents.get("tester", "QA")
+            set_ticket_state(state, ticket_id, "qa_exec_en_proceso", folder=folder)
+            state.setdefault("tickets", {}).setdefault(ticket_id, {})["qa_exec_inicio_at"] = datetime.now().isoformat()
+            state["tickets"][ticket_id]["auto_advance"] = True
+            save_state(rt["state_path"], state)
+            print(f"[QA-EXEC] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
+            prompt = _build(folder, ticket_id, rt["workspace_root"])
+            print(f"[QA-EXEC] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
+            _ilog.bridge_call(agent, len(prompt))
+            ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
+                              workspace_root=rt["workspace_root"], new_conversation=False)
+            _ilog.bridge_result(ok)
+            _record_invoke(ok, f"Agente: {agent}")
+            if not ok:
+                try: os.remove(en_curso_flag)
+                except Exception: pass
+                mark_error(state, ticket_id, "tester", "No se pudo invocar QA-Ejecutor vía Bridge")
+                save_state(rt["state_path"], state)
+                return
+            print(f"[QA-EXEC] Agente invocado para {ticket_id} — esperando TEST_COMPLETADO.flag")
+
+        elif stage == "qa_arb":
+            from prompt_builder import build_qa_arb_prompt as _build
+            agent = agents.get("tester", "QA")
+            set_ticket_state(state, ticket_id, "qa_arb_en_proceso", folder=folder)
+            state.setdefault("tickets", {}).setdefault(ticket_id, {})["qa_arb_inicio_at"] = datetime.now().isoformat()
+            state["tickets"][ticket_id]["auto_advance"] = True
+            save_state(rt["state_path"], state)
+            print(f"[QA-ARB] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
+            prompt = _build(folder, ticket_id, rt["workspace_root"])
+            print(f"[QA-ARB] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
+            _ilog.bridge_call(agent, len(prompt))
+            ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
+                              workspace_root=rt["workspace_root"], new_conversation=False)
+            _ilog.bridge_result(ok)
+            _record_invoke(ok, f"Agente: {agent}")
+            if not ok:
+                try: os.remove(en_curso_flag)
+                except Exception: pass
+                mark_error(state, ticket_id, "tester", "No se pudo invocar QA-Árbitro vía Bridge")
+                save_state(rt["state_path"], state)
+                return
+            print(f"[QA-ARB] Agente invocado para {ticket_id} — esperando TESTER_COMPLETADO.md")
 
         else:
             try:
@@ -941,17 +1172,44 @@ def api_download_deploy(ticket_id: str, zip_name: str):
 @app.route("/api/mantis_confirm/<ticket_id>", methods=["POST"])
 def api_mantis_confirm(ticket_id: str):
     """
-    [DESHABILITADO] La nota de análisis PM en Mantis fue desactivada.
-    Solo se registra nota de resolución cuando el desarrollo finaliza
-    (update_ticket_on_mantis se llama al completar el pipeline).
+    Publica una nota en el ticket Mantis con el estado actual del pipeline.
+    Body (opcional): { "resolve": true }  → cambia el estado a 'resuelta'
     """
-    return jsonify({
-        "ok": False,
-        "error": (
-            "Nota de análisis PM en Mantis deshabilitada. "
-            "Solo se publica la nota de resolución final cuando el desarrollo culmina."
-        ),
-    }), 410
+    from pipeline_state import load_state
+    rt     = _get_runtime()
+    folder = _find_ticket_folder(ticket_id, rt["tickets_base"])
+    if not folder:
+        return jsonify({"ok": False, "error": f"Ticket {ticket_id} no encontrado"}), 404
+
+    data          = request.get_json(force=True, silent=True) or {}
+    resolve_state = bool(data.get("resolve", False))
+
+    mantis_url = rt.get("mantis_url", "")
+    auth_path  = os.path.join(BASE_DIR, "auth", "auth.json")
+
+    if not mantis_url:
+        return jsonify({"ok": False,
+                        "error": "mantis_url no configurado en el proyecto activo"}), 400
+
+    state = load_state(rt["state_path"])
+    est   = state.get("tickets", {}).get(ticket_id, {}).get("estado", "")
+
+    def _run_update():
+        try:
+            from mantis_updater import update_ticket_on_mantis, confirm_ticket_on_mantis
+            if est in ("pm_completado", "pm_en_proceso"):
+                ok = confirm_ticket_on_mantis(ticket_id, folder, mantis_url, auth_path)
+            else:
+                ok = update_ticket_on_mantis(ticket_id, folder, mantis_url, auth_path,
+                                             resolve_status=resolve_state)
+            print(f"[MANTIS] Nota publicada para #{ticket_id}: {ok}", flush=True)
+        except Exception as e:
+            print(f"[MANTIS] Error publicando nota para #{ticket_id}: {e}",
+                  file=sys.stderr, flush=True)
+
+    threading.Thread(target=_run_update, daemon=True).start()
+    return jsonify({"ok": True, "ticket_id": ticket_id, "estado": est,
+                    "msg": "Publicando nota en Mantis en segundo plano..."})
 
 
 @app.route("/api/reinvoke/<ticket_id>", methods=["POST"])
@@ -1819,8 +2077,15 @@ def api_diff(ticket_id: str, stage: str):
     """
     Retorna el diff SVN guardado al completar una etapa.
     Si no existe el snapshot guardado, intenta generar el diff on-the-fly desde SVN.
-    stage: pm | dev | tester
+    stage: pm | dev | tester  (también acepta sub-stages: pm_inv, dev_impl, qa_arb, etc.)
     """
+    # Normalizar sub-stages al stage padre para buscar el snapshot correcto
+    _STAGE_NORMALIZE = {
+        "pm_inv": "pm", "pm_arq": "pm", "pm_plan": "pm",
+        "dev_loc": "dev", "dev_impl": "dev", "dev_doc": "dev",
+        "qa_rev": "tester", "qa_exec": "tester", "qa_arb": "tester",
+    }
+    stage = _STAGE_NORMALIZE.get(stage, stage)
     if stage not in ("pm", "dev", "tester"):
         return jsonify({"ok": False, "error": "stage inválido"}), 400
 
@@ -1842,19 +2107,45 @@ def api_diff(ticket_id: str, stage: str):
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
 
-    # Fallback: generar diff on-the-fly desde SVN
+    # Fallback 2: SVN_CHANGES.md escrito por el agente DEV (FASE 3)
+    svn_changes_file = os.path.join(folder, "SVN_CHANGES.md")
+    if os.path.exists(svn_changes_file):
+        try:
+            svn_md = open(svn_changes_file, encoding="utf-8").read()
+            # Separar sección de svn status y la parte del diff si existe
+            diff_section  = ""
+            files_section = ""
+            in_diff = False
+            files_lines = []
+            for line in svn_md.splitlines():
+                if re.match(r'^[MADC?!]\s+', line):
+                    files_lines.append(line)
+                if line.startswith("Index: ") or line.startswith("---") or in_diff:
+                    in_diff = True
+                    diff_section += line + "\n"
+            files_section = "\n".join(files_lines) if files_lines else svn_md[:800]
+            if files_section or diff_section:
+                return jsonify({"ok": True, "stage": stage,
+                                "diff":  diff_section or svn_md,
+                                "files": files_section,
+                                "source": "svn_changes_md",
+                                "warning": "Leyendo SVN_CHANGES.md generado por el agente DEV"})
+        except Exception:
+            pass
+
+    # Fallback 3: generar diff on-the-fly desde SVN
     try:
         workspace = rt.get("workspace_root", "")
         diff  = _svn_diff(workspace)
         files_lines = _svn_changed_files(workspace)
         files = "\n".join(files_lines)
         if not diff.strip() and not files:
-            return jsonify({"ok": False,
+            return jsonify({"ok": False, "can_capture": True,
                             "error": "No hay snapshot guardado y SVN no reporta cambios pendientes"}), 404
         return jsonify({"ok": True, "stage": stage, "diff": diff, "files": files,
                         "source": "live", "warning": "Snapshot no encontrado — mostrando diff SVN actual (workspace completo)"})
     except Exception as e:
-        return jsonify({"ok": False,
+        return jsonify({"ok": False, "can_capture": True,
                         "error": f"No hay snapshot para {stage} y falló diff on-the-fly: {e}"}), 404
 
 
@@ -2029,6 +2320,117 @@ _WATCHER_STAGES = [
         "next_stage":      None,
         "is_final":        True,
     },
+    # ── Sub-agentes PM ────────────────────────────────────────────────────────
+    {
+        "estado":          "pm_inv_en_proceso",
+        "stage":           "pm_inv",
+        "ok_sentinel":     "INV_COMPLETADO.flag",
+        "ok_fallback":     None,
+        "err_flag":        "PM_ERROR.flag",
+        "completado_state":"pm_inv_completado",
+        "fin_key":         "pm_inv_fin_at",
+        "inicio_key":      "pm_inv_inicio_at",
+        "next_stage":      "pm_arq",
+        "is_final":        False,
+    },
+    {
+        "estado":          "pm_arq_en_proceso",
+        "stage":           "pm_arq",
+        "ok_sentinel":     "ARQ_COMPLETADO.flag",
+        "ok_fallback":     None,
+        "err_flag":        "PM_ERROR.flag",
+        "completado_state":"pm_arq_completado",
+        "fin_key":         "pm_arq_fin_at",
+        "inicio_key":      "pm_arq_inicio_at",
+        "next_stage":      "pm_plan",
+        "is_final":        False,
+    },
+    {
+        "estado":          "pm_plan_en_proceso",
+        "stage":           "pm_plan",
+        "ok_sentinel":     "PM_COMPLETADO.flag",
+        "ok_fallback":     None,
+        "err_flag":        "PM_ERROR.flag",
+        "completado_state":"pm_completado",
+        "fin_key":         "pm_fin_at",
+        "inicio_key":      "pm_plan_inicio_at",
+        "next_stage":      "dev_loc",
+        "is_final":        False,
+    },
+    # ── Sub-agentes DEV ───────────────────────────────────────────────────────
+    {
+        "estado":          "dev_loc_en_proceso",
+        "stage":           "dev_loc",
+        "ok_sentinel":     "LOC_COMPLETADO.flag",
+        "ok_fallback":     None,
+        "err_flag":        "DEV_ERROR.flag",
+        "completado_state":"dev_loc_completado",
+        "fin_key":         "dev_loc_fin_at",
+        "inicio_key":      "dev_loc_inicio_at",
+        "next_stage":      "dev_impl",
+        "is_final":        False,
+    },
+    {
+        "estado":          "dev_impl_en_proceso",
+        "stage":           "dev_impl",
+        "ok_sentinel":     "IMPL_COMPLETADO.flag",
+        "ok_fallback":     None,
+        "err_flag":        "DEV_ERROR.flag",
+        "completado_state":"dev_impl_completado",
+        "fin_key":         "dev_impl_fin_at",
+        "inicio_key":      "dev_impl_inicio_at",
+        "next_stage":      "dev_doc",
+        "is_final":        False,
+    },
+    {
+        "estado":          "dev_doc_en_proceso",
+        "stage":           "dev_doc",
+        "ok_sentinel":     "DEV_COMPLETADO.md",
+        "ok_fallback":     None,
+        "err_flag":        "DEV_ERROR.flag",
+        "completado_state":"dev_completado",
+        "fin_key":         "dev_fin_at",
+        "inicio_key":      "dev_doc_inicio_at",
+        "next_stage":      "qa_rev",
+        "is_final":        False,
+    },
+    # ── Sub-agentes QA ────────────────────────────────────────────────────────
+    {
+        "estado":          "qa_rev_en_proceso",
+        "stage":           "qa_rev",
+        "ok_sentinel":     "REVIEW_COMPLETADO.flag",
+        "ok_fallback":     None,
+        "err_flag":        "TESTER_ERROR.flag",
+        "completado_state":"qa_rev_completado",
+        "fin_key":         "qa_rev_fin_at",
+        "inicio_key":      "qa_rev_inicio_at",
+        "next_stage":      "qa_exec",
+        "is_final":        False,
+    },
+    {
+        "estado":          "qa_exec_en_proceso",
+        "stage":           "qa_exec",
+        "ok_sentinel":     "TEST_COMPLETADO.flag",
+        "ok_fallback":     None,
+        "err_flag":        "TESTER_ERROR.flag",
+        "completado_state":"qa_exec_completado",
+        "fin_key":         "qa_exec_fin_at",
+        "inicio_key":      "qa_exec_inicio_at",
+        "next_stage":      "qa_arb",
+        "is_final":        False,
+    },
+    {
+        "estado":          "qa_arb_en_proceso",
+        "stage":           "qa_arb",
+        "ok_sentinel":     "TESTER_COMPLETADO.md",
+        "ok_fallback":     None,
+        "err_flag":        "TESTER_ERROR.flag",
+        "completado_state":"tester_completado",
+        "fin_key":         "tester_fin_at",
+        "inicio_key":      "qa_arb_inicio_at",
+        "next_stage":      None,
+        "is_final":        True,
+    },
 ]
 
 # Set rápido para el pre-filtro del watcher
@@ -2143,8 +2545,18 @@ def _stage_transition_watcher():
                     # SEQ-03: Stuck detection — solo notifica, NO lanza automáticamente
                     # (eliminado auto-launch para evitar invocaciones duplicadas RC2/RC5)
                     _STUCK_COMPLETADO = {
-                        "pm_completado":  "dev",
-                        "dev_completado": "tester",
+                        # Pipeline clásico
+                        "pm_completado":      "dev",
+                        "dev_completado":     "tester",
+                        # Sub-agentes PM
+                        "pm_inv_completado":  "pm_arq",
+                        "pm_arq_completado":  "pm_plan",
+                        # Sub-agentes DEV
+                        "dev_loc_completado": "dev_impl",
+                        "dev_impl_completado":"dev_doc",
+                        # Sub-agentes QA
+                        "qa_rev_completado":  "qa_exec",
+                        "qa_exec_completado": "qa_arb",
                     }
                     # Leer config para ver si stuck_auto_launch está habilitado
                     _stuck_auto_launch = False

@@ -668,45 +668,104 @@ def update_ticket_on_mantis(ticket_id: str, ticket_folder: str,
 # ── Internals ─────────────────────────────────────────────────────────────────
 
 def _build_note(ticket_folder: str, ticket_id: str) -> str:
-    """Construye el texto de la nota a publicar en Mantis."""
+    """Construye el texto de la nota a publicar en Mantis con información completa del ticket."""
     tester_path  = os.path.join(ticket_folder, "TESTER_COMPLETADO.md")
     commit_path  = os.path.join(ticket_folder, "COMMIT_MESSAGE.txt")
     arq_path     = os.path.join(ticket_folder, "ARQUITECTURA_SOLUCION.md")
+    dev_path     = os.path.join(ticket_folder, "DEV_COMPLETADO.md")
+    analisis_path = os.path.join(ticket_folder, "ANALISIS_TECNICO.md")
 
-    if not os.path.exists(tester_path):
-        return ""
+    # Aceptar nota aunque no haya QA completado — publicar con lo disponible
+    tester_content = ""
+    if os.path.exists(tester_path):
+        tester_content = Path(tester_path).read_text(encoding="utf-8", errors="replace")
+        if "APROBADO" not in tester_content.upper():
+            return ""  # QA explícitamente rechazó — no publicar
 
-    tester = Path(tester_path).read_text(encoding="utf-8", errors="replace")
-    if "APROBADO" not in tester.upper():
-        return ""
-
+    titulo = _extract_ticket_titulo(ticket_folder, ticket_id)
     lines = [
-        "✅ **Fix implementado y verificado por QA automatizado (Stacky)**",
+        f"✅ **Fix implementado — Ticket #{ticket_id}: {titulo}**",
         "",
         f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "",
     ]
 
-    # Extracto del análisis QA
-    qa_summary = _extract_section(tester, ["veredicto", "resultado", "resumen", "aprobado"])
-    if qa_summary:
-        lines += ["**Veredicto QA:**", qa_summary[:400], ""]
+    # ── Causa raíz / problema ──────────────────────────────────────────────
+    analisis_text = ""
+    if os.path.exists(analisis_path):
+        analisis_text = Path(analisis_path).read_text(encoding="utf-8", errors="replace")
+    causa = _extract_section(analisis_text, ["causa raíz", "causa-raiz", "problema identificado",
+                                             "diagnóstico", "descripción del problema"])
+    if not causa and analisis_text:
+        # Fallback: primer párrafo no vacío del análisis
+        for line in analisis_text.splitlines():
+            s = line.strip()
+            if len(s) > 40 and not s.startswith("#") and not s.startswith("|"):
+                causa = s
+                break
+    if causa:
+        lines += ["**Problema:**", causa[:500], ""]
 
-    # Commit message
+    # ── Solución implementada ─────────────────────────────────────────────
+    arq_text = ""
+    if os.path.exists(arq_path):
+        arq_text = Path(arq_path).read_text(encoding="utf-8", errors="replace")
+    solucion = _extract_section(arq_text, ["solución", "descripción de la solución",
+                                           "cambios realizados", "implementación"])
+    if solucion:
+        lines += ["**Solución:**", solucion[:500], ""]
+
+    # ── Archivos modificados (DEV_COMPLETADO.md es la fuente más confiable) ─
+    archivos = []
+    dev_text = ""
+    if os.path.exists(dev_path):
+        dev_text = Path(dev_path).read_text(encoding="utf-8", errors="replace")
+        # Buscar sección de archivos modificados
+        files_section = _extract_section(dev_text, ["archivos modificados", "archivos cambiados",
+                                                      "cambios", "files changed"])
+        file_pat = re.compile(r'`?([^`\s]+\.(?:cs|vb|aspx\.cs|aspx|ascx|sql|config))`?',
+                              re.IGNORECASE)
+        source = files_section or dev_text
+        for m in file_pat.finditer(source):
+            fname = m.group(1).replace("\\", "/")
+            short = fname.split("/")[-1]
+            if short and short not in archivos:
+                archivos.append(short)
+            if len(archivos) >= 7:
+                break
+
+    # Fallback: ARQUITECTURA_SOLUCION.md
+    if not archivos and arq_text:
+        file_pat2 = re.compile(r'`([^`]+\.(?:cs|vb|aspx\.cs|aspx|sql))`', re.IGNORECASE)
+        for m in file_pat2.finditer(arq_text):
+            fname = m.group(1).split("/")[-1].split("\\")[-1]
+            if fname and fname not in archivos:
+                archivos.append(fname)
+            if len(archivos) >= 7:
+                break
+
+    if archivos:
+        lines += [f"**Archivos modificados ({len(archivos)}):** {', '.join(archivos)}", ""]
+
+    # ── Veredicto QA ──────────────────────────────────────────────────────
+    if tester_content:
+        qa_summary = _extract_section(tester_content, ["veredicto", "resultado final",
+                                                         "conclusión", "aprobado"])
+        if qa_summary:
+            lines += ["**Veredicto QA (Stacky):**", qa_summary[:350], ""]
+    elif os.path.exists(dev_path) and dev_text:
+        # Sin QA — mostrar resumen del developer
+        dev_summary = _extract_section(dev_text, ["resumen", "cambios", "completado", "implementado"])
+        if dev_summary:
+            lines += ["**Cambios del Developer:**", dev_summary[:300], ""]
+
+    # ── Commit message ────────────────────────────────────────────────────
     if os.path.exists(commit_path):
         commit = Path(commit_path).read_text(encoding="utf-8", errors="replace")
         first_line = next((l.strip() for l in commit.splitlines() if l.strip()
                            and not l.startswith("#")), "")
         if first_line:
             lines += [f"**Commit:** `{first_line}`", ""]
-
-    # Archivos principales modificados
-    if os.path.exists(arq_path):
-        arq_content = Path(arq_path).read_text(encoding="utf-8", errors="replace")
-        files = re.findall(r'[\w/\\]+\.(?:cs|aspx\.cs|aspx|sql)', arq_content, re.IGNORECASE)
-        files = list(dict.fromkeys(f.replace("\\", "/") for f in files))[:5]
-        if files:
-            lines += ["**Archivos modificados:**", ", ".join(files), ""]
 
     lines.append("_Nota generada automáticamente por Stacky Pipeline._")
     return "\n".join(lines)

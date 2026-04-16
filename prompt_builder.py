@@ -204,26 +204,66 @@ def build_pm_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> 
 {_prewarming}
 {_subsystem_line}Carpeta del ticket: {rel_folder}/
 {docs_note}{nota_pm_block}
-El archivo con el contenido del ticket es: INC-{ticket_id}.md
-Los archivos a completar con análisis técnico real son:
-  - INCIDENTE.md
-  - ANALISIS_TECNICO.md
-  - ARQUITECTURA_SOLUCION.md
-  - TAREAS_DESARROLLO.md
-  - QUERIES_ANALISIS.sql
-  - NOTAS_IMPLEMENTACION.md
+Trabajá en 3 fases secuenciales. Completá cada fase antes de pasar a la siguiente.
 
-Instrucciones:
-1. Leé INC-{ticket_id}.md para entender el problema completamente
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FASE 1 — INVESTIGAR (sub-agente Investigador)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Objetivo: encontrar la CAUSA RAÍZ. NO diseñes soluciones todavía.
+
+1. Leé INC-{ticket_id}.md para entender el síntoma exacto
 2. Si existe PROJECT_DOCS.md, leélo primero para orientarte — ya tiene el mapa del proyecto
-3. Investigá el código fuente y la BD Oracle del proyecto para entender el impacto completo
-4. Completá todos los archivos usando la herramienta editFiles para escribirlos en disco
-5. Reemplazá TODOS los placeholders "_A completar por PM_" con análisis técnico real
-6. No dejes ningún placeholder sin completar
-7. Las tareas en TAREAS_DESARROLLO.md deben ser directamente ejecutables por DevStack3 sin preguntas adicionales
-8. Guardá todos los archivos antes de terminar
-9. IMPORTANTE — cuando hayas terminado de guardar todos los archivos, creá el archivo {rel_folder}/PM_COMPLETADO.flag con el texto 'ok'. Este archivo es la señal que usa el pipeline para saber que el análisis está completo y puede continuar al siguiente paso
-10. Si encontrás un bloqueante que impide completar el análisis, creá {rel_folder}/PM_ERROR.flag con la descripción del problema"""
+3. Buscá en el código fuente el componente exacto que falla (clase/método/SP/query)
+4. Ejecutá queries Oracle para entender el estado de los datos involucrados
+5. Escribí ANALISIS_TECNICO.md con:
+   - **Síntoma**: qué reporta el usuario (verbatim del ticket)
+   - **Causa raíz**: clase/método/SP específico + por qué falla exactamente
+   - **Evidencia**: resultados de queries ejecutadas
+   - **Archivos afectados**: rutas completas relativas al workspace
+   - **Tablas BD involucradas**: columnas relevantes y datos de ejemplo
+6. Escribí QUERIES_ANALISIS.sql con todas las queries ejecutadas
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FASE 2 — DISEÑAR (sub-agente Arquitecto)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Objetivo: diseñar la solución basada en lo que encontraste en la Fase 1.
+
+1. Basándote en ANALISIS_TECNICO.md, diseñá el enfoque de solución
+2. Escribí ARQUITECTURA_SOLUCION.md con:
+   - Enfoque elegido y justificación (por qué esta solución y no otra)
+   - Componentes a modificar con descripción del cambio esperado
+   - Cambios de BD necesarios: DDL/DML si aplica
+   - Impacto en otros módulos (blast radius)
+   - Estrategia de rollback si hay riesgo
+3. Escribí NOTAS_IMPLEMENTACION.md con:
+   - Convenciones obligatorias (RIDIOMA para mensajes, Oracle DAL sin EF, Log.Error/Log.Info)
+   - Gotchas y trampas del módulo afectado
+   - Orden de ejecución recomendado (BD primero si hay cambios de schema)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FASE 3 — PLANIFICAR (sub-agente Planificador)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Objetivo: convertir la arquitectura en tareas ejecutables por DEV.
+
+1. Escribí TAREAS_DESARROLLO.md con checklist de tareas directamente ejecutables:
+   - Formato: `- [ ] <Tarea>` para cada item
+   - Cada tarea indica: archivo exacto + cambio exacto + convención aplicable
+   - Tareas de BD primero (RIDIOMA, DDL, DML) con el SQL exacto si es corto
+   - Criterios de aceptación verificables que QA usará
+   - Reemplazá TODOS los placeholders "_A completar por PM_"
+2. Completá INCIDENTE.md si tiene placeholders
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINALIZACIÓN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Cuando las 3 fases estén completas y TODOS los archivos guardados:
+- Creá {rel_folder}/PM_COMPLETADO.flag con el texto 'ok'
+
+Si encontrás un bloqueante insalvable en cualquier fase:
+- Creá {rel_folder}/PM_ERROR.flag con la descripción del problema
+- No crees PM_COMPLETADO.flag
+
+No preguntes — ejecutá las 3 fases directamente."""
 
 
 def build_dev_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
@@ -234,17 +274,53 @@ def build_dev_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) ->
 
 Carpeta de trabajo: {rel_folder}/
 
-Instrucciones:
+Trabajá en 3 fases secuenciales. Completá cada fase antes de pasar a la siguiente.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FASE 1 — LOCALIZAR (sub-agente Localizador)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Objetivo: encontrar exactamente QUÉ archivos y líneas tocar. NO escribas código todavía.
+
 1. Leé en este orden: INCIDENTE.md → ANALISIS_TECNICO.md → ARQUITECTURA_SOLUCION.md → NOTAS_IMPLEMENTACION.md → TAREAS_DESARROLLO.md
-2. Los archivos de código a modificar están indicados en TAREAS_DESARROLLO.md y también en el contexto de código abajo
-3. Ejecutá TODAS las tareas en estado PENDIENTE del archivo TAREAS_DESARROLLO.md
-4. Implementá los cambios de código respetando las convenciones del proyecto RIPLEY (RIDIOMA, Oracle DAL, Logging)
-5. Al finalizar TODA la implementación, creá el archivo DEV_COMPLETADO.md en {rel_folder}/ con:
-   - Lista de archivos modificados (rutas relativas al workspace)
-   - Resumen de cambios realizados por tarea
-   - Observaciones o pendientes si los hay
-6. Si encontrás un bloqueante que impide la implementación, creá {rel_folder}/DEV_ERROR.flag con la descripción
-7. No preguntes — ejecutá basándote en los archivos de la carpeta
+2. Para cada tarea de TAREAS_DESARROLLO.md, navegá el código y ubicá:
+   - Archivo exacto (ruta completa)
+   - Número de línea o rango
+   - Snippet del código actual (3 líneas de contexto)
+3. Escribí BUG_LOCALIZATION.md con esa información por tarea, incluyendo el orden de ejecución recomendado
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FASE 2 — IMPLEMENTAR (sub-agente Implementador)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Objetivo: ejecutar todos los cambios de código.
+
+1. Seguí el orden de BUG_LOCALIZATION.md
+2. Modificá únicamente los archivos y líneas listados
+3. Respetá siempre: RIDIOMA para mensajes al usuario, Oracle DAL sin Entity Framework, Log.Error en catch y Log.Info en operaciones importantes
+4. Ejecutá los cambios de BD si los hay (RIDIOMA inserts, DDL)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FASE 3 — DOCUMENTAR (sub-agente Documentador)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Objetivo: documentar los cambios para QA.
+
+1. Creá DEV_COMPLETADO.md en {rel_folder}/ con:
+   ## Archivos modificados
+   - <ruta relativa al workspace>
+   ## Resumen de cambios por tarea
+   ### Tarea N: <título>
+   <qué se hizo exactamente>
+   ## Cambios en BD
+   <DDL/DML ejecutados, o "Ninguno">
+   ## Observaciones
+   <pendientes o riesgos; o "Sin observaciones">
+2. Creá SVN_CHANGES.md con un resumen de cambios para el commit message
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINALIZACIÓN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DEV_COMPLETADO.md es la señal del pipeline — crealo solo cuando las 3 fases estén completas.
+Si encontrás un bloqueante: creá {rel_folder}/DEV_ERROR.flag con diagnóstico detallado.
+No preguntes — ejecutá las 3 fases directamente.
 {code_context}"""
 
 
@@ -272,33 +348,66 @@ def build_tester_prompt(ticket_folder: str, ticket_id: str, workspace_root: str)
 
 Carpeta de trabajo: {rel_folder}/
 
-Instrucciones:
-1. Leé TAREAS_DESARROLLO.md para entender qué se implementó y cuáles son los criterios de aceptación
-2. Revisá DEV_COMPLETADO.md para ver qué archivos fueron modificados y qué cambios se realizaron
-3. Revisá los archivos de código modificados por el DEV
-4. Ejecutá las siguientes verificaciones:
-   a) Comportamiento funcional: los cambios resuelven el problema descripto en INCIDENTE.md
-   b) Casos edge y negativos: qué pasa con entradas inválidas, valores límite, casos vacíos
-   c) Regresión: verificá que la funcionalidad existente no se rompió
-   d) RIDIOMA: los mensajes al usuario usan constantes de RIDIOMA correctamente
-   e) Logging: los logs de error e info están presentes donde corresponde
-   f) Queries de validación: ejecutá las queries de QUERIES_ANALISIS.sql y verificá los datos
-5. Emitir veredicto final: APROBADO / CON OBSERVACIONES / RECHAZADO
-6. Al terminar, creá TESTER_COMPLETADO.md en {rel_folder}/ con el siguiente formato:
-   ## Veredicto: [APROBADO / CON OBSERVACIONES / RECHAZADO]
-   ## Resumen ejecutivo
-   (2-3 líneas sobre qué se probó y el resultado)
-   ## Casos de prueba
-   | Caso | Tipo | Resultado | Evidencia |
-   |------|------|-----------|----------|
-   (tabla con todos los casos probados)
-   ## Observaciones y riesgos
-   (lista de hallazgos, riesgos o pendientes)
-   ## Queries de validación ejecutadas
-   (resultados de las queries relevantes)
-7. Si encontrás un error crítico que imposibilita el testing, creá {rel_folder}/TESTER_ERROR.flag con la descripción
-8. No preguntes — ejecutá directamente
-{svn_section}"""
+Trabajá en 3 fases secuenciales. Completá cada fase antes de pasar a la siguiente.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FASE 1 — CODE REVIEW (sub-agente Revisor)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Objetivo: revisión estática del código. NO ejecutes pruebas funcionales todavía.
+
+1. Leé DEV_COMPLETADO.md para ver qué archivos cambió DEV
+2. Revisá cada archivo modificado y auditá:
+   - RIDIOMA: ¿todos los mensajes usan constantes de RIDIOMA (sin texto hardcodeado)?
+   - Logging: ¿hay Log.Error en catch y Log.Info en operaciones importantes?
+   - Null safety: ¿hay NullReferenceException potenciales sin guard?
+   - Oracle DAL: ¿se usa el patrón correcto (sin Entity Framework, SQL directo via DAL)?
+   - Criterios PM: ¿todas las tareas de TAREAS_DESARROLLO.md están implementadas?
+3. Escribí CODE_REVIEW.md con:
+   - Resultado: SIN ISSUES / CON ADVERTENCIAS / CON BLOQUEANTES
+   - Tabla de issues: # | Severidad (BLOQUEANTE/ADVERTENCIA/SUGERENCIA) | Archivo | Línea | Descripción | Corrección
+   - Checklist de convenciones con [x] o [ ]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FASE 2 — PRUEBAS FUNCIONALES (sub-agente Ejecutor)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Objetivo: ejecutar casos de prueba funcionales.
+
+1. Leé TAREAS_DESARROLLO.md para obtener los criterios de aceptación
+2. Ejecutá y documentá:
+   - Caso feliz: el escenario principal del ticket funciona correctamente
+   - Casos edge: entrada vacía, valores límite, datos nulos, usuario sin permisos
+   - Regresión directa: funcionalidad del mismo módulo que NO cambió sigue igual
+   - Validación BD: ejecutá queries de QUERIES_ANALISIS.sql y verificá datos
+3. Escribí TEST_RESULTS.md con tabla:
+   | # | Caso | Tipo | Pasos | Esperado | Real | Estado (PASS/FAIL) |
+{svn_section}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FASE 3 — VEREDICTO (sub-agente Árbitro)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Objetivo: consolidar CODE_REVIEW.md + TEST_RESULTS.md y emitir el veredicto final.
+
+Criterios:
+- APROBADO: sin issues BLOQUEANTES + todos los casos felices PASS
+- CON OBSERVACIONES: hay ADVERTENCIAS pero el caso feliz pasa
+- RECHAZADO: hay BLOQUEANTES O casos felices FAIL
+
+Creá TESTER_COMPLETADO.md con:
+## Veredicto: [APROBADO / CON OBSERVACIONES / RECHAZADO]
+## Resumen ejecutivo
+(2-3 líneas: qué se probó, resultado general)
+## Issues bloqueantes
+(items BLOQUEANTE del review + casos FAIL; o "Ninguno")
+## Observaciones no bloqueantes
+(advertencias y sugerencias; o "Ninguna")
+## Recomendaciones para el próximo ciclo
+(si RECHAZADO: qué exactamente debe corregir DEV; o "N/A")
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINALIZACIÓN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TESTER_COMPLETADO.md es la señal del pipeline — crealo solo cuando las 3 fases estén completas.
+Si hay un error crítico que imposibilita el testing: creá {rel_folder}/TESTER_ERROR.flag con la descripción.
+No preguntes — ejecutá las 3 fases directamente."""
 
 
 _STAGE_LABELS = {"pm": "Análisis PM", "dev": "Implementación Dev", "tester": "QA Testing", "doc": "Documentación"}
@@ -845,3 +954,424 @@ Usá **Playwright** (o la herramienta de automatización disponible) para:
 - Si el elemento UI no existe o la URL da error, reportalo como bloqueante
 - No modifiques código fuente — solo ejecutás pruebas
 - Si Playwright no puede usarse (entorno headless no disponible), indicá los pasos manuales detallados que el QA debe ejecutar"""
+
+
+# ── Sub-agentes especializados por etapa ──────────────────────────────────────
+# PM:  Investigador → Arquitecto → Planificador
+# DEV: Localizador  → Implementador → Documentador
+# QA:  Revisor      → Ejecutor      → Árbitro
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def build_pm_inv_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
+    """Sub-agente PM-Investigador: busca la causa raíz, no diseña soluciones."""
+    rel_folder   = _to_workspace_relative(ticket_folder, workspace_root)
+    code_context = _inject_code_context(ticket_folder, ticket_id, workspace_root)
+
+    docs_path = _find_project_docs(ticket_folder)
+    docs_note = (
+        f"\n**Contexto del proyecto:** Leé `{_to_workspace_relative(docs_path, workspace_root)}` "
+        f"antes de investigar el código.\n"
+        if docs_path else
+        "\n**Nota:** No hay PROJECT_DOCS.md — investigá el código directamente.\n"
+    )
+
+    return f"""PM-Investigador — Ticket #{ticket_id}
+
+Tu ÚNICA tarea: INVESTIGAR la causa raíz. NO diseñes soluciones ni escribas tareas.
+
+Carpeta del ticket: {rel_folder}/
+{docs_note}
+1. Leé INC-{ticket_id}.md para entender el síntoma exacto
+2. Buscá en el código fuente el componente que falla (clase/método/SP)
+3. Ejecutá queries Oracle para entender el estado de los datos
+4. Documentá QUÉ está mal, EN QUÉ archivo/línea y POR QUÉ
+
+**Tu output obligatorio:**
+
+`ANALISIS_TECNICO.md` con secciones:
+- **Síntoma**: qué reporta el usuario (verbatim del ticket)
+- **Causa raíz**: clase/método/SP específico + por qué falla
+- **Evidencia**: queries ejecutadas y sus resultados relevantes
+- **Archivos afectados**: rutas completas relativas al workspace
+- **Tablas BD involucradas**: con columnas relevantes y datos de ejemplo
+
+`QUERIES_ANALISIS.sql` con todas las queries que ejecutaste para llegar a la causa raíz.
+
+**Al terminar:** creá `{rel_folder}/INV_COMPLETADO.flag` con el texto `ok`.
+**Si hay un bloqueante real:** creá `{rel_folder}/PM_ERROR.flag` con el diagnóstico.
+
+No diseñes la solución — solo investigá y documentá evidencia.
+{code_context}"""
+
+
+def build_pm_arq_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
+    """Sub-agente PM-Arquitecto: diseña la solución basada en el análisis del Investigador."""
+    rel_folder  = _to_workspace_relative(ticket_folder, workspace_root)
+    analisis    = _read_file_safe(os.path.join(ticket_folder, "ANALISIS_TECNICO.md"), max_chars=3500)
+    queries_sql = _read_file_safe(os.path.join(ticket_folder, "QUERIES_ANALISIS.sql"), max_chars=1500)
+
+    return f"""PM-Arquitecto — Ticket #{ticket_id}
+
+El Investigador ya identificó la causa raíz. Tu tarea: DISEÑAR LA SOLUCIÓN.
+
+Carpeta del ticket: {rel_folder}/
+
+## Análisis del Investigador:
+{analisis or "(leer ANALISIS_TECNICO.md)"}
+
+## Queries de evidencia:
+{queries_sql or "(leer QUERIES_ANALISIS.sql)"}
+
+---
+
+Diseñá la solución y escribí:
+
+**ARQUITECTURA_SOLUCION.md** con:
+- Enfoque elegido y justificación (por qué esta solución y no otra)
+- Componentes a modificar con descripción del cambio esperado
+- Cambios de BD necesarios: DDL/DML con orden de ejecución
+- Impacto en otros módulos (blast radius): qué puede romperse
+- Estrategia de rollback si la solución tiene riesgo
+
+**NOTAS_IMPLEMENTACION.md** con:
+- Convenciones obligatorias a respetar (RIDIOMA, Oracle DAL sin EF, Logging)
+- Gotchas y trampas conocidas del módulo afectado
+- Orden de ejecución recomendado para DEV (BD primero, luego código)
+- Dependencias entre tareas (si A depende de B)
+
+NO escribas tareas granulares con checklist — eso lo hace el Planificador.
+
+**Al terminar:** creá `{rel_folder}/ARQ_COMPLETADO.flag` con el texto `ok`.
+**Si la arquitectura es inviable:** creá `{rel_folder}/PM_ERROR.flag` con el diagnóstico."""
+
+
+def build_pm_plan_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
+    """Sub-agente PM-Planificador: convierte la arquitectura en tareas ejecutables por DEV."""
+    rel_folder = _to_workspace_relative(ticket_folder, workspace_root)
+    arq        = _read_file_safe(os.path.join(ticket_folder, "ARQUITECTURA_SOLUCION.md"), max_chars=3500)
+    notas      = _read_file_safe(os.path.join(ticket_folder, "NOTAS_IMPLEMENTACION.md"), max_chars=2000)
+    inc_file   = _read_file_safe(os.path.join(ticket_folder, f"INC-{ticket_id}.md"), max_chars=1500)
+
+    return f"""PM-Planificador — Ticket #{ticket_id}
+
+La arquitectura ya está definida. Tu tarea: escribir TAREAS EJECUTABLES para DEV y completar INCIDENTE.md.
+
+Carpeta del ticket: {rel_folder}/
+
+## Arquitectura del Arquitecto:
+{arq or "(leer ARQUITECTURA_SOLUCION.md)"}
+
+## Notas de implementación:
+{notas or "(leer NOTAS_IMPLEMENTACION.md)"}
+
+---
+
+**TAREAS_DESARROLLO.md** — cada tarea debe ser directamente ejecutable por DEV sin preguntas:
+- Formato checklist: `- [ ] <Tarea>`
+- Para cada tarea: qué archivo modificar + qué cambio exacto + referencia a convención aplicable
+- Incluir las tareas de BD primero (RIDIOMA, DDL, DML) con el SQL exacto si es corto
+- Incluir criterios de aceptación verificables que QA usará para aprobar/rechazar
+
+**INCIDENTE.md** (completar si tiene placeholders):
+- Descripción breve del incidente (para el lector técnico)
+- Impacto en el negocio / usuarios afectados
+- Módulos involucrados
+
+## Ticket original (para contexto):
+{inc_file or "(leer INC-" + ticket_id + ".md)"}
+
+**Al terminar:** creá `{rel_folder}/PM_COMPLETADO.flag` con el texto `ok`.
+Este flag es la señal del pipeline completo de PM — no lo crees hasta haber guardado todos los archivos.
+**Si hay un bloqueante:** creá `{rel_folder}/PM_ERROR.flag`."""
+
+
+def build_dev_loc_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
+    """Sub-agente DEV-Localizador: encuentra exactamente qué archivos y líneas tocar."""
+    rel_folder = _to_workspace_relative(ticket_folder, workspace_root)
+    tareas     = _read_file_safe(os.path.join(ticket_folder, "TAREAS_DESARROLLO.md"), max_chars=3000)
+    analisis   = _read_file_safe(os.path.join(ticket_folder, "ANALISIS_TECNICO.md"), max_chars=2000)
+    arq        = _read_file_safe(os.path.join(ticket_folder, "ARQUITECTURA_SOLUCION.md"), max_chars=2000)
+
+    return f"""DEV-Localizador — Ticket #{ticket_id}
+
+Tu ÚNICA tarea: LOCALIZAR exactamente qué archivos y líneas hay que tocar. No escribas código todavía.
+
+Carpeta del ticket: {rel_folder}/
+
+## Tareas a implementar:
+{tareas or "(leer TAREAS_DESARROLLO.md)"}
+
+## Análisis técnico del PM:
+{analisis or "(leer ANALISIS_TECNICO.md)"}
+
+## Arquitectura propuesta:
+{arq or "(leer ARQUITECTURA_SOLUCION.md)"}
+
+---
+
+Navegá el código fuente y producí **BUG_LOCALIZATION.md** con exactamente:
+
+### Por cada tarea de TAREAS_DESARROLLO.md:
+
+```
+## Tarea N: <título de la tarea>
+- **Archivo**: <ruta completa relativa al workspace>
+- **Línea(s)**: <número de línea o rango>
+- **Código actual** (snippet con 3 líneas de contexto arriba y abajo):
+  ````
+  <código actual>
+  ````
+- **Cambio requerido**: <descripción precisa del cambio>
+- **Dependencias**: <si esta tarea debe ir después de otra, indicar cuál>
+```
+
+Al final de BUG_LOCALIZATION.md, agregá:
+```
+## Orden de ejecución recomendado
+1. <tarea> — motivo
+2. ...
+```
+
+**Al terminar:** creá `{rel_folder}/LOC_COMPLETADO.flag` con el texto `ok`.
+Si un archivo no existe o el análisis PM está equivocado, documentalo con `[ERROR]` en BUG_LOCALIZATION.md y terminá igual (el Implementador necesita saberlo).
+NO modifiques código todavía."""
+
+
+def build_dev_impl_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
+    """Sub-agente DEV-Implementador: ejecuta cambios con localización exacta."""
+    rel_folder   = _to_workspace_relative(ticket_folder, workspace_root)
+    tareas       = _read_file_safe(os.path.join(ticket_folder, "TAREAS_DESARROLLO.md"), max_chars=2500)
+    localizacion = _read_file_safe(os.path.join(ticket_folder, "BUG_LOCALIZATION.md"), max_chars=5000)
+    notas        = _read_file_safe(os.path.join(ticket_folder, "NOTAS_IMPLEMENTACION.md"), max_chars=1500)
+
+    return f"""DEV-Implementador — Ticket #{ticket_id}
+
+El Localizador ya identificó exactamente qué tocar. Tu tarea: IMPLEMENTAR LOS CAMBIOS.
+
+Carpeta del ticket: {rel_folder}/
+
+## Localización exacta de los cambios:
+{localizacion or "(leer BUG_LOCALIZATION.md — OBLIGATORIO antes de tocar código)"}
+
+## Tareas:
+{tareas or "(leer TAREAS_DESARROLLO.md)"}
+
+## Convenciones obligatorias:
+{notas or "(leer NOTAS_IMPLEMENTACION.md)"}
+
+---
+
+Instrucciones estrictas:
+1. Seguí el **orden de ejecución** indicado en BUG_LOCALIZATION.md
+2. Modificá ÚNICAMENTE los archivos y líneas listados — no refactorices lo que no corresponde
+3. Respetar siempre: RIDIOMA para mensajes, Oracle DAL sin EF, Log.Error/Log.Info donde aplica
+4. Si un item de BUG_LOCALIZATION.md tiene `[ERROR]`, documentalo en IMPL_BLOCKERS.md y continuá con el resto
+
+**Al terminar TODOS los cambios:** creá `{rel_folder}/IMPL_COMPLETADO.flag` con el texto `ok`.
+**Si hay un bloqueante crítico** que impide la implementación: creá `{rel_folder}/DEV_ERROR.flag` con diagnóstico detallado.
+No preguntes — ejecutá."""
+
+
+def build_dev_doc_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
+    """Sub-agente DEV-Documentador: documenta los cambios para QA."""
+    rel_folder   = _to_workspace_relative(ticket_folder, workspace_root)
+    localizacion = _read_file_safe(os.path.join(ticket_folder, "BUG_LOCALIZATION.md"), max_chars=3000)
+    tareas       = _read_file_safe(os.path.join(ticket_folder, "TAREAS_DESARROLLO.md"), max_chars=2000)
+    blockers     = _read_file_safe(os.path.join(ticket_folder, "IMPL_BLOCKERS.md"), max_chars=1000)
+
+    blockers_section = f"\n## Bloqueantes durante implementación:\n{blockers}\n" if blockers else ""
+
+    return f"""DEV-Documentador — Ticket #{ticket_id}
+
+La implementación está completa. Tu tarea: DOCUMENTAR los cambios para que QA pueda verificarlos.
+
+Carpeta del ticket: {rel_folder}/
+
+## Localización usada:
+{localizacion or "(leer BUG_LOCALIZATION.md)"}
+
+## Tareas ejecutadas:
+{tareas or "(leer TAREAS_DESARROLLO.md)"}
+{blockers_section}
+
+---
+
+Revisá los archivos que BUG_LOCALIZATION.md indica como modificados y creá:
+
+**DEV_COMPLETADO.md** con:
+```markdown
+## Archivos modificados
+- <ruta relativa al workspace>
+- ...
+
+## Resumen de cambios por tarea
+### Tarea 1: <título>
+<qué se hizo exactamente>
+...
+
+## Cambios en BD
+<DDL/DML ejecutados, o "Ninguno" si no aplica>
+
+## Observaciones
+<pendientes, riesgos identificados, o "Sin observaciones">
+```
+
+**SVN_CHANGES.md** con un resumen de qué líneas cambiaron y por qué (para el commit message).
+
+DEV_COMPLETADO.md es el **flag de completado del pipeline DEV** — el watcher lo detecta al crearse.
+Guardá los dos archivos y terminás."""
+
+
+def build_qa_rev_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
+    """Sub-agente QA-Revisor: code review estático sin pruebas funcionales."""
+    rel_folder     = _to_workspace_relative(ticket_folder, workspace_root)
+    dev_completado = _read_file_safe(os.path.join(ticket_folder, "DEV_COMPLETADO.md"), max_chars=3000)
+    tareas         = _read_file_safe(os.path.join(ticket_folder, "TAREAS_DESARROLLO.md"), max_chars=2000)
+    notas          = _read_file_safe(os.path.join(ticket_folder, "NOTAS_IMPLEMENTACION.md"), max_chars=1500)
+
+    return f"""QA-Revisor — Ticket #{ticket_id}
+
+El DEV terminó la implementación. Tu tarea: CODE REVIEW ESTÁTICO. NO ejecutes pruebas funcionales todavía.
+
+Carpeta del ticket: {rel_folder}/
+
+## Lo que hizo DEV:
+{dev_completado or "(leer DEV_COMPLETADO.md)"}
+
+## Criterios de aceptación:
+{tareas or "(leer TAREAS_DESARROLLO.md)"}
+
+## Convenciones del proyecto:
+{notas or "(leer NOTAS_IMPLEMENTACION.md)"}
+
+---
+
+Revisá cada archivo listado en DEV_COMPLETADO.md y auditá:
+
+1. **RIDIOMA**: ¿todos los mensajes visibles al usuario usan constantes de RIDIOMA (no texto hardcodeado)?
+2. **Logging**: ¿hay `Log.Error` en los catch y `Log.Info` en operaciones importantes?
+3. **Null safety**: ¿hay potenciales NullReferenceException sin guard?
+4. **Oracle DAL**: ¿se usa el patrón correcto (sin Entity Framework, SQL directo vía DAL)?
+5. **Blast radius**: ¿los cambios pueden romper funcionalidad fuera del scope del ticket?
+6. **Criterios PM**: ¿las tareas de TAREAS_DESARROLLO.md están todas implementadas?
+
+Producí **CODE_REVIEW.md** con:
+```markdown
+## Resultado: [SIN ISSUES / CON ADVERTENCIAS / CON BLOQUEANTES]
+
+## Issues encontrados
+| # | Severidad | Archivo | Línea | Descripción | Corrección sugerida |
+|---|-----------|---------|-------|-------------|---------------------|
+| 1 | BLOQUEANTE / ADVERTENCIA / SUGERENCIA | ... | ... | ... | ... |
+
+## Checklist de convenciones
+- [x/o] RIDIOMA: ...
+- [x/o] Logging: ...
+- [x/o] Null safety: ...
+- [x/o] Oracle DAL: ...
+- [x/o] Criterios PM cubiertos: ...
+```
+
+Si no hay issues: escribí "Sin observaciones — code review OK" en la sección de issues.
+
+**Al terminar:** creá `{rel_folder}/REVIEW_COMPLETADO.flag` con el texto `ok`.
+Solo reportás — no modificás código."""
+
+
+def build_qa_exec_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
+    """Sub-agente QA-Ejecutor: corre casos de prueba funcionales."""
+    rel_folder   = _to_workspace_relative(ticket_folder, workspace_root)
+    tareas       = _read_file_safe(os.path.join(ticket_folder, "TAREAS_DESARROLLO.md"), max_chars=2500)
+    code_review  = _read_file_safe(os.path.join(ticket_folder, "CODE_REVIEW.md"), max_chars=2000)
+    queries      = _read_file_safe(os.path.join(ticket_folder, "QUERIES_ANALISIS.sql"), max_chars=2000)
+    incidente    = _read_file_safe(os.path.join(ticket_folder, "INCIDENTE.md"), max_chars=1000)
+
+    queries_section = f"\n## Queries de validación:\n```sql\n{queries}\n```\n" if queries else ""
+
+    return f"""QA-Ejecutor — Ticket #{ticket_id}
+
+El code review estático está listo. Tu tarea: EJECUTAR PRUEBAS FUNCIONALES.
+
+Carpeta del ticket: {rel_folder}/
+
+## Problema original:
+{incidente or "(leer INCIDENTE.md)"}
+
+## Criterios de aceptación:
+{tareas or "(leer TAREAS_DESARROLLO.md)"}
+
+## Hallazgos del code review (tener en cuenta):
+{code_review or "(leer CODE_REVIEW.md)"}
+{queries_section}
+
+---
+
+Ejecutá estas pruebas y documentá cada una:
+
+1. **Caso feliz**: el escenario principal del ticket ahora funciona correctamente
+2. **Casos edge**: entrada vacía, valores límite, datos nulos, usuario sin permisos
+3. **Regresión directa**: funcionalidad en el mismo módulo que NO estás cambiando sigue igual
+4. **Validación de BD**: ejecutá las queries de QUERIES_ANALISIS.sql y verificá que los datos son correctos
+
+Producí **TEST_RESULTS.md** con tabla de resultados:
+```markdown
+## Resumen: N casos / N pasaron / N fallaron
+
+| # | Caso | Tipo | Pasos | Esperado | Real | Estado |
+|---|------|------|-------|----------|------|--------|
+| 1 | ... | Feliz/Edge/Regresión/BD | ... | ... | ... | PASS/FAIL |
+```
+
+**Al terminar:** creá `{rel_folder}/TEST_COMPLETADO.flag` con el texto `ok`.
+Solo ejecutás pruebas — NO modificás código."""
+
+
+def build_qa_arb_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
+    """Sub-agente QA-Árbitro: emite el veredicto final consolidando review + tests."""
+    rel_folder   = _to_workspace_relative(ticket_folder, workspace_root)
+    code_review  = _read_file_safe(os.path.join(ticket_folder, "CODE_REVIEW.md"), max_chars=2500)
+    test_results = _read_file_safe(os.path.join(ticket_folder, "TEST_RESULTS.md"), max_chars=2500)
+    incidente    = _read_file_safe(os.path.join(ticket_folder, "INCIDENTE.md"), max_chars=800)
+
+    return f"""QA-Árbitro — Ticket #{ticket_id}
+
+Tenés tanto el code review como los resultados de pruebas. Tu tarea: EMITIR EL VEREDICTO FINAL.
+
+Carpeta del ticket: {rel_folder}/
+
+## Code Review:
+{code_review or "(leer CODE_REVIEW.md)"}
+
+## Resultados de pruebas:
+{test_results or "(leer TEST_RESULTS.md)"}
+
+## Problema original:
+{incidente or "(leer INCIDENTE.md)"}
+
+---
+
+Criterios de veredicto:
+- **APROBADO**: sin issues BLOQUEANTES + todos los casos felices PASS
+- **CON OBSERVACIONES**: hay ADVERTENCIAS pero el caso feliz pasa — se puede deployar con nota
+- **RECHAZADO**: hay issues BLOQUEANTES O casos felices FAIL
+
+Creá **TESTER_COMPLETADO.md** con:
+```markdown
+## Veredicto: [APROBADO / CON OBSERVACIONES / RECHAZADO]
+
+## Resumen ejecutivo
+<2-3 líneas: qué se probó, resultado general, confianza>
+
+## Issues bloqueantes
+<items BLOQUEANTE del code review + casos FAIL de tests; o "Ninguno">
+
+## Observaciones no bloqueantes
+<advertencias y sugerencias; o "Ninguna">
+
+## Recomendaciones para el próximo ciclo
+<si fue RECHAZADO: qué exactamente debe corregir DEV; o "N/A">
+```
+
+**TESTER_COMPLETADO.md es el flag de completado del pipeline QA** — el watcher lo detecta al crearse.
+No modifiques código — solo emitís el veredicto."""

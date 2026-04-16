@@ -282,23 +282,45 @@ class DeployPackager:
     def _parse_dev_completado(self, content: str) -> list:
         """
         Extrae rutas de archivos mencionadas en DEV_COMPLETADO.md.
-        Busca líneas con extensiones de código o web conocidas.
+        Busca líneas que contengan extensiones de código o web conocidas.
+        Soporta formatos:
+          - `ruta/archivo.cs`
+          - - ruta/archivo.cs
+          - | ruta/archivo.cs |
+          - C:\ruta\absoluta\archivo.cs
         """
         found = []
-        # Patrón: cualquier ruta con extensión conocida (absoluta o relativa)
+        _EXT = r"(?:cs|vb|aspx|ascx|asmx|master|ashx|js|css|config|xml|html|htm|resx|json)"
+
+        # Patrón 1: captura rutas con extensión directamente (evita capturar el prefijo)
         pattern = re.compile(
-            r"(?:^|[\s\`\*\-\|])([A-Za-z]:[\\\/][^\s\`\*\|\]]+|[\\\/\w][^\s\`\*\|\]]*)"
-            r"(?:\.(?:cs|vb|aspx|ascx|asmx|master|ashx|js|css|config|xml|html|htm|resx|json))"
-            r"\b",
+            r"[\s\|\-\*\`]+((?:[A-Za-z]:[\\/]|(?:[\w][\w\-\.]*[\\/])+)[^\s\`\*\|\]\)>]+\." + _EXT + r")\b",
             re.IGNORECASE | re.MULTILINE,
         )
         for m in pattern.finditer(content):
-            raw = m.group(0).strip().strip("`*-| ")
-            # Normalizar: quitar workspace_root si está absoluto
+            raw = m.group(1).strip().strip("`*-| ")
             raw = raw.replace("\\", "/")
+            # Quitar workspace_root absoluto si aparece
+            try:
+                ws = str(self.workspace_root).replace("\\", "/").rstrip("/") + "/"
+                if raw.startswith(ws):
+                    raw = raw[len(ws):]
+            except Exception:
+                pass
             if raw:
                 found.append(raw)
-        return found
+
+        # Patrón 2: backtick-quoted  `ruta/archivo.ext`
+        pattern2 = re.compile(
+            r"`([^`]+\." + _EXT + r")`",
+            re.IGNORECASE,
+        )
+        for m in pattern2.finditer(content):
+            raw = m.group(1).strip().replace("\\", "/")
+            if raw:
+                found.append(raw)
+
+        return list(dict.fromkeys(found))  # deduplicar preservando orden
 
     def _parse_svn_changes(self, content: str) -> list:
         """

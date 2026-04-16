@@ -27,6 +27,18 @@ ESTADOS_VALIDOS = [
     "dba_en_proceso", "dba_completado", "error_dba",
     # Y-05: Tech Lead Reviewer
     "tl_review_en_proceso", "tl_aprobado", "tl_rechazado",
+    # Sub-agentes PM (3 en cadena secuencial)
+    "pm_inv_en_proceso", "pm_inv_completado",
+    "pm_arq_en_proceso", "pm_arq_completado",
+    "pm_plan_en_proceso",
+    # Sub-agentes DEV (3 en cadena secuencial)
+    "dev_loc_en_proceso", "dev_loc_completado",
+    "dev_impl_en_proceso", "dev_impl_completado",
+    "dev_doc_en_proceso",
+    # Sub-agentes QA (3 en cadena secuencial)
+    "qa_rev_en_proceso", "qa_rev_completado",
+    "qa_exec_en_proceso", "qa_exec_completado",
+    "qa_arb_en_proceso",
 ]
 
 # ── mtime-cache para load_state ──────────────────────────────────────────────
@@ -232,6 +244,15 @@ _VALID_AUTO_ADVANCE_TRANSITIONS: dict = {
     "tester_completado":     "completado",
     "qa_rework":             "dev_rework_en_proceso",      # M-01
     "dev_rework_completado": "tester_en_proceso",          # M-01
+    # Sub-agentes PM
+    "pm_inv_completado":     "pm_arq_en_proceso",
+    "pm_arq_completado":     "pm_plan_en_proceso",
+    # Sub-agentes DEV
+    "dev_loc_completado":    "dev_impl_en_proceso",
+    "dev_impl_completado":   "dev_doc_en_proceso",
+    # Sub-agentes QA
+    "qa_rev_completado":     "qa_exec_en_proceso",
+    "qa_exec_completado":    "qa_arb_en_proceso",
 }
 
 

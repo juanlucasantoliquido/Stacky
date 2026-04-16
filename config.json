@@ -10,7 +10,8 @@
   "output_dir": "tickets",
   "timeout_ms": 30000,
   "pipeline": {
-    "max_rework_cycles": 1
+    "max_rework_cycles": 1,
+    "use_sub_agents": false
   },
   "watcher": {
     "stuck_auto_launch": false,

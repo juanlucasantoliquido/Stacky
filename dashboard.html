@@ -2119,7 +2119,10 @@ async function _loadDiff(tid, stage) {
     const d = await r.json();
     if (!d.ok) {
       filesEl.textContent = d.error || 'No disponible';
-      contentEl.innerHTML = `<span style="color:var(--muted)">${esc(d.error || 'Sin snapshot — la etapa aún no completó o SVN no está disponible.')}</span>`;
+      const capBtn = d.can_capture
+        ? `<br><br><button class="btn btn-ghost" style="font-size:12px;margin-top:8px" onclick="captureSnapshot('${tid}','${stage}')">📸 Capturar snapshot ahora</button>`
+        : '';
+      contentEl.innerHTML = `<span style="color:var(--muted)">${esc(d.error || 'Sin snapshot — la etapa aún no completó o SVN no está disponible.')}</span>${capBtn}`;
       return;
     }
     // Archivos modificados con colores
@@ -2138,6 +2141,24 @@ function closeDiff() {
   document.getElementById('diff-modal').style.display = 'none';
   _diffCurrentTicket = null;
   _diffCurrentStage  = null;
+}
+
+async function captureSnapshot(tid, stage) {
+  const filesEl   = document.getElementById('diff-files');
+  const contentEl = document.getElementById('diff-content');
+  filesEl.textContent = 'Capturando snapshot...';
+  contentEl.innerHTML = '<span style="color:var(--muted)">Ejecutando svn diff...</span>';
+  try {
+    const r = await fetch(`/api/capture_snapshot/${tid}/${stage}`, {method:'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      await _loadDiff(tid, stage);  // recargar el diff
+    } else {
+      contentEl.innerHTML = `<span style="color:var(--red)">Error capturando: ${esc(d.error || 'desconocido')}</span>`;
+    }
+  } catch(err) {
+    contentEl.innerHTML = `<span style="color:var(--red)">Error: ${esc(String(err))}</span>`;
+  }
 }
 
 function _colorizeStatus(text) {

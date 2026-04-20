@@ -388,8 +388,23 @@ class MantisScraperDaemon:
                 # Lanzar la siguiente etapa inmediatamente
                 next_stage_map = {"pm_completado": "dev", "dev_completado": "tester",
                                   "tester_completado": None}
-                next_stage = next_stage_map.get(new_state)
+                next_stage    = next_stage_map.get(new_state)
+                _lock_blocked = False
                 if next_stage:
+                    # ── Guardia watcher: evita disparar si ya hay lock activo ──
+                    try:
+                        from pipeline_lock import is_locked as _watcher_is_locked
+                        if _watcher_is_locked(ticket_id, next_stage):
+                            self._log(
+                                f"[WATCHER] {ticket_id}/{next_stage} — lock activo, "
+                                f"otra instancia ya está ejecutando esta etapa",
+                                level="warning",
+                            )
+                            _lock_blocked = True
+                    except ImportError:
+                        pass
+
+                if next_stage and not _lock_blocked:
                     # Marcar como en_proceso ANTES de lanzar el thread para que
                     # _pipeline_cycle no lo relance en el siguiente ciclo.
                     try:
@@ -411,7 +426,7 @@ class MantisScraperDaemon:
                         daemon=True,
                         name=f"watcher-{ticket_id}-{next_stage}",
                     ).start()
-                else:
+                elif new_state == "tester_completado":
                     # Pipeline completo
                     self._notifier.notify_ticket_completed(ticket_id)
                     # N-06: extraer y guardar patrón de solución
@@ -650,6 +665,19 @@ class MantisScraperDaemon:
                 except Exception:
                     pass
 
+            # ── Guardia secundaria: lock activo → skip (la primaria está en _launch_stage)
+            try:
+                from pipeline_lock import is_locked as _is_locked
+                if _is_locked(tid, stage):
+                    self._log(
+                        f"[PIPELINE] {tid}/{stage} — lock activo detectado en ciclo, "
+                        f"esperando a que termine la instancia en curso",
+                        level="debug",
+                    )
+                    continue
+            except ImportError:
+                pass
+
             # Lanzar etapa en thread para no bloquear el loop
             self._log(f"[PIPELINE] {tid} → lanzando etapa '{stage}'")
             ps.set_ticket_state(state, tid, f"{stage}_en_proceso",
@@ -743,6 +771,30 @@ class MantisScraperDaemon:
     def _launch_stage(self, ticket_id: str, stage: str, folder: str,
                       retry_num: int = 0, error_context: str = None):
         """Invoca el agente para una etapa (fire-and-forget, sin UI fallback)."""
+        # ── LOCK: evita ejecuciones paralelas del mismo stage+ticket ────────────
+        # Protege contra: daemon + watcher, dos ciclos solapados, dashboard + daemon.
+        # File-based → funciona incluso entre procesos distintos.
+        try:
+            from pipeline_lock import acquire_lock, release_lock
+        except ImportError:
+            acquire_lock = release_lock = None
+
+        _lock_run_id = None
+        if acquire_lock:
+            _lock_run_id = acquire_lock(ticket_id, stage)
+            if _lock_run_id is None:
+                # Otro thread/proceso ya tiene este stage corriendo → skip
+                self._log(
+                    f"[LOCK] {ticket_id}/{stage} ya en ejecución (lock activo) — "
+                    f"invocación duplicada ignorada",
+                    level="warning",
+                )
+                if _slog:
+                    _slog.info(ticket_id, "lock",
+                               f"Stage {stage} tiene lock activo — duplicado evitado")
+                return
+        # ── FIN LOCK ─────────────────────────────────────────────────────────────
+
         if _slog:
             _slog.stage_start(ticket_id, stage, retry=retry_num)
         try:
@@ -947,6 +999,10 @@ class MantisScraperDaemon:
                 ps.save_state(self._state_path, state)
             except Exception:
                 pass
+        finally:
+            # Liberar el lock siempre — tanto en éxito como en error/excepción
+            if release_lock and _lock_run_id:
+                release_lock(ticket_id, stage, _lock_run_id)
 
     # ── Verificación de sesión ────────────────────────────────────────────
 
@@ -1051,6 +1107,17 @@ class MantisScraperDaemon:
 
         except Exception as e:
             self._log(f"[CLEANUP] Error: {e}", level="error")
+
+        # ── Limpieza de lock files zombie ────────────────────────────────────
+        try:
+            from pipeline_lock import cleanup_zombie_locks
+            cleaned = cleanup_zombie_locks()
+            if cleaned:
+                self._log(f"[CLEANUP] {cleaned} lock(s) zombie eliminados")
+        except ImportError:
+            pass
+        except Exception as lck_err:
+            self._log(f"[CLEANUP] Error limpiando locks: {lck_err}", level="debug")
 
     # ── Utilidades ─────────────────────────────────────────────────────────
 

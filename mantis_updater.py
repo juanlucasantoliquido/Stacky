@@ -667,12 +667,40 @@ def update_ticket_on_mantis(ticket_id: str, ticket_folder: str,
 
 # ── Internals ─────────────────────────────────────────────────────────────────
 
+def _smart_truncate(text: str, max_len: int) -> str:
+    """Corta el texto en el último punto o salto de línea antes de max_len para no truncar a mitad de frase."""
+    if len(text) <= max_len:
+        return text
+    chunk = text[:max_len]
+    # Buscar el último fin de oración o párrafo
+    for sep in ('\n', '. ', '! ', '? '):
+        pos = chunk.rfind(sep)
+        if pos > max_len // 2:
+            return chunk[:pos + len(sep)].strip()
+    return chunk.strip()
+
+
+def _strip_task_codes(text: str) -> str:
+    """Elimina referencias a códigos de tarea internos (T001, T002, etc.) del texto."""
+    # Quitar frases como "(T002 marcado como `LISTO_PARA_DBA`)"
+    text = re.sub(r'\([^)]*\bT\d{3,4}\b[^)]*\)', '', text)
+    # Quitar referencias inline como "de T001, T003 y T004"
+    text = re.sub(r'(?:de\s+|de\s+los?)\s*T\d{3,4}(?:\s*[,y]\s*T\d{3,4})*', '', text, flags=re.IGNORECASE)
+    # Quitar T001 sueltos restantes
+    text = re.sub(r'\bT\d{3,4}\b', '', text)
+    # Limpiar espacios dobles y comas/conjunciones sueltas que quedaron
+    text = re.sub(r'[ \t]{2,}', ' ', text)
+    text = re.sub(r',\s*,', ',', text)
+    text = re.sub(r'\by\s*\.', '.', text)
+    return text.strip()
+
+
 def _build_note(ticket_folder: str, ticket_id: str) -> str:
     """Construye el texto de la nota a publicar en Mantis con información completa del ticket."""
-    tester_path  = os.path.join(ticket_folder, "TESTER_COMPLETADO.md")
-    commit_path  = os.path.join(ticket_folder, "COMMIT_MESSAGE.txt")
-    arq_path     = os.path.join(ticket_folder, "ARQUITECTURA_SOLUCION.md")
-    dev_path     = os.path.join(ticket_folder, "DEV_COMPLETADO.md")
+    tester_path   = os.path.join(ticket_folder, "TESTER_COMPLETADO.md")
+    commit_path   = os.path.join(ticket_folder, "COMMIT_MESSAGE.txt")
+    arq_path      = os.path.join(ticket_folder, "ARQUITECTURA_SOLUCION.md")
+    dev_path      = os.path.join(ticket_folder, "DEV_COMPLETADO.md")
     analisis_path = os.path.join(ticket_folder, "ANALISIS_TECNICO.md")
 
     # Aceptar nota aunque no haya QA completado — publicar con lo disponible
@@ -690,12 +718,24 @@ def _build_note(ticket_folder: str, ticket_id: str) -> str:
         "",
     ]
 
-    # ── Causa raíz / problema ──────────────────────────────────────────────
+    # ── Cargar archivos fuente ─────────────────────────────────────────────
     analisis_text = ""
     if os.path.exists(analisis_path):
         analisis_text = Path(analisis_path).read_text(encoding="utf-8", errors="replace")
-    causa = _extract_section(analisis_text, ["causa raíz", "causa-raiz", "problema identificado",
-                                             "diagnóstico", "descripción del problema"])
+
+    arq_text = ""
+    if os.path.exists(arq_path):
+        arq_text = Path(arq_path).read_text(encoding="utf-8", errors="replace")
+
+    dev_text = ""
+    if os.path.exists(dev_path):
+        dev_text = Path(dev_path).read_text(encoding="utf-8", errors="replace")
+
+    # ── Causa raíz / problema ──────────────────────────────────────────────
+    causa = _extract_section(analisis_text, [
+        "causa raíz", "causa-raiz", "problema técnico",
+        "problema identificado", "diagnóstico", "descripción del problema",
+    ])
     if not causa and analisis_text:
         # Fallback: primer párrafo no vacío del análisis
         for line in analisis_text.splitlines():
@@ -704,23 +744,32 @@ def _build_note(ticket_folder: str, ticket_id: str) -> str:
                 causa = s
                 break
     if causa:
-        lines += ["**Problema:**", causa[:500], ""]
+        lines += ["**Problema:**", _smart_truncate(causa, 550), ""]
 
     # ── Solución implementada ─────────────────────────────────────────────
-    arq_text = ""
-    if os.path.exists(arq_path):
-        arq_text = Path(arq_path).read_text(encoding="utf-8", errors="replace")
-    solucion = _extract_section(arq_text, ["solución", "descripción de la solución",
-                                           "cambios realizados", "implementación"])
+    # 1er intento: ARQUITECTURA_SOLUCION.md — distintos encabezados posibles
+    solucion = _extract_section(arq_text, [
+        "solución", "descripción de la solución",
+        "cambios realizados", "cambios requeridos",
+        "estrategia general", "implementación", "enfoque",
+        "decisiones de diseño",
+    ])
+    # 2do intento: DEV_COMPLETADO.md — "Resumen de cambios realizados" es la fuente más directa
+    if not solucion and dev_text:
+        solucion = _extract_section(dev_text, [
+            "resumen de cambios realizados", "resumen",
+            "cambios realizados", "cambios",
+        ])
+        if solucion:
+            # Convertir lista Markdown a texto corrido limpio
+            solucion = re.sub(r'^[-*]\s+', '', solucion, flags=re.MULTILINE)
+            solucion = re.sub(r'\n{2,}', '\n', solucion).strip()
     if solucion:
-        lines += ["**Solución:**", solucion[:500], ""]
+        lines += ["**Solución:**", _smart_truncate(solucion, 650), ""]
 
     # ── Archivos modificados (DEV_COMPLETADO.md es la fuente más confiable) ─
     archivos = []
-    dev_text = ""
-    if os.path.exists(dev_path):
-        dev_text = Path(dev_path).read_text(encoding="utf-8", errors="replace")
-        # Buscar sección de archivos modificados
+    if dev_text:
         files_section = _extract_section(dev_text, ["archivos modificados", "archivos cambiados",
                                                       "cambios", "files changed"])
         file_pat = re.compile(r'`?([^`\s]+\.(?:cs|vb|aspx\.cs|aspx|ascx|sql|config))`?',
@@ -747,17 +796,27 @@ def _build_note(ticket_folder: str, ticket_id: str) -> str:
     if archivos:
         lines += [f"**Archivos modificados ({len(archivos)}):** {', '.join(archivos)}", ""]
 
-    # ── Veredicto QA ──────────────────────────────────────────────────────
+    # ── Resultado QA ──────────────────────────────────────────────────────
     if tester_content:
-        qa_summary = _extract_section(tester_content, ["veredicto", "resultado final",
-                                                         "conclusión", "aprobado"])
+        # Preferir "Resumen Ejecutivo" o "Veredicto Detallado" — no tienen desglose de tareas
+        qa_summary = _extract_section(tester_content, [
+            "resumen ejecutivo",
+            "veredicto detallado",
+            "veredicto",
+            "resultado final",
+            "conclusión",
+        ])
+        if not qa_summary:
+            qa_summary = _extract_section(tester_content, ["aprobado"])
         if qa_summary:
-            lines += ["**Veredicto QA (Stacky):**", qa_summary[:350], ""]
-    elif os.path.exists(dev_path) and dev_text:
+            # Eliminar referencias a códigos de tarea internos (T001, T002, etc.)
+            qa_summary = _strip_task_codes(qa_summary)
+            lines += ["**Resultado QA:**", _smart_truncate(qa_summary, 550), ""]
+    elif dev_text:
         # Sin QA — mostrar resumen del developer
         dev_summary = _extract_section(dev_text, ["resumen", "cambios", "completado", "implementado"])
         if dev_summary:
-            lines += ["**Cambios del Developer:**", dev_summary[:300], ""]
+            lines += ["**Cambios del Developer:**", _smart_truncate(dev_summary, 450), ""]
 
     # ── Commit message ────────────────────────────────────────────────────
     if os.path.exists(commit_path):

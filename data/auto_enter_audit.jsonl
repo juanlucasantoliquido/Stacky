@@ -507,3 +507,299 @@
 {"ts":"2026-04-21T18:36:58.952Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":507,"dry_run":true}
 {"ts":"2026-04-21T18:37:08.959Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":508,"dry_run":true}
 {"ts":"2026-04-21T18:37:18.971Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":509,"dry_run":true}
+{"ts":"2026-04-21T18:37:28.982Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":510,"dry_run":true}
+{"ts":"2026-04-21T18:37:38.989Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":511,"dry_run":true}
+{"ts":"2026-04-21T18:37:49.003Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":512,"dry_run":true}
+{"ts":"2026-04-21T18:37:59.020Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":513,"dry_run":true}
+{"ts":"2026-04-21T18:38:09.037Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":514,"dry_run":true}
+{"ts":"2026-04-21T18:38:19.056Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":515,"dry_run":true}
+{"ts":"2026-04-21T18:38:29.070Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":516,"dry_run":true}
+{"ts":"2026-04-21T18:38:39.087Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":517,"dry_run":true}
+{"ts":"2026-04-21T18:38:49.097Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":518,"dry_run":true}
+{"ts":"2026-04-21T18:38:59.115Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":519,"dry_run":true}
+{"ts":"2026-04-21T18:39:09.123Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":520,"dry_run":true}
+{"ts":"2026-04-21T18:39:19.129Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":521,"dry_run":true}
+{"ts":"2026-04-21T18:39:29.149Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":522,"dry_run":true}
+{"ts":"2026-04-21T18:39:39.156Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":523,"dry_run":true}
+{"ts":"2026-04-21T18:39:49.172Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":524,"dry_run":true}
+{"ts":"2026-04-21T18:39:59.189Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":525,"dry_run":true}
+{"ts":"2026-04-21T18:40:09.195Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":526,"dry_run":true}
+{"ts":"2026-04-21T18:40:19.212Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":527,"dry_run":true}
+{"ts":"2026-04-21T18:40:29.222Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":528,"dry_run":true}
+{"ts":"2026-04-21T18:40:39.233Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":529,"dry_run":true}
+{"ts":"2026-04-21T18:40:49.244Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":530,"dry_run":true}
+{"ts":"2026-04-21T18:40:59.262Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":531,"dry_run":true}
+{"ts":"2026-04-21T18:41:09.280Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":532,"dry_run":true}
+{"ts":"2026-04-21T18:41:19.302Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":533,"dry_run":true}
+{"ts":"2026-04-21T18:41:29.321Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":534,"dry_run":true}
+{"ts":"2026-04-21T18:41:39.329Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":535,"dry_run":true}
+{"ts":"2026-04-21T18:41:49.348Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":536,"dry_run":true}
+{"ts":"2026-04-21T18:41:59.363Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":537,"dry_run":true}
+{"ts":"2026-04-21T18:42:09.380Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":538,"dry_run":true}
+{"ts":"2026-04-21T18:42:19.402Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":539,"dry_run":true}
+{"ts":"2026-04-21T18:42:29.409Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":540,"dry_run":true}
+{"ts":"2026-04-21T18:42:39.417Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":541,"dry_run":true}
+{"ts":"2026-04-21T18:42:49.426Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":542,"dry_run":true}
+{"ts":"2026-04-21T18:42:59.438Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":543,"dry_run":true}
+{"ts":"2026-04-21T18:43:09.447Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":544,"dry_run":true}
+{"ts":"2026-04-21T18:43:19.463Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":545,"dry_run":true}
+{"ts":"2026-04-21T18:43:29.482Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":546,"dry_run":true}
+{"ts":"2026-04-21T18:43:39.498Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":547,"dry_run":true}
+{"ts":"2026-04-21T18:43:49.504Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":548,"dry_run":true}
+{"ts":"2026-04-21T18:43:59.523Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":549,"dry_run":true}
+{"ts":"2026-04-21T18:44:09.541Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":550,"dry_run":true}
+{"ts":"2026-04-21T18:44:19.553Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":551,"dry_run":true}
+{"ts":"2026-04-21T18:44:29.564Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":552,"dry_run":true}
+{"ts":"2026-04-21T18:44:39.575Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":553,"dry_run":true}
+{"ts":"2026-04-21T18:44:49.595Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":554,"dry_run":true}
+{"ts":"2026-04-21T18:44:59.611Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":555,"dry_run":true}
+{"ts":"2026-04-21T18:45:09.632Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":556,"dry_run":true}
+{"ts":"2026-04-21T18:45:19.641Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":557,"dry_run":true}
+{"ts":"2026-04-21T18:45:29.657Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":558,"dry_run":true}
+{"ts":"2026-04-21T18:45:39.675Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":559,"dry_run":true}
+{"ts":"2026-04-21T18:45:49.697Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":560,"dry_run":true}
+{"ts":"2026-04-21T18:45:59.705Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":561,"dry_run":true}
+{"ts":"2026-04-21T18:46:09.727Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":562,"dry_run":true}
+{"ts":"2026-04-21T18:46:19.739Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":563,"dry_run":true}
+{"ts":"2026-04-21T18:46:29.750Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":564,"dry_run":true}
+{"ts":"2026-04-21T18:46:39.761Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":565,"dry_run":true}
+{"ts":"2026-04-21T18:46:49.767Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":566,"dry_run":true}
+{"ts":"2026-04-21T18:46:59.779Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":567,"dry_run":true}
+{"ts":"2026-04-21T18:47:09.796Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":568,"dry_run":true}
+{"ts":"2026-04-21T18:47:19.810Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":569,"dry_run":true}
+{"ts":"2026-04-21T18:47:29.821Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":570,"dry_run":true}
+{"ts":"2026-04-21T18:47:39.830Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":571,"dry_run":true}
+{"ts":"2026-04-21T18:47:49.845Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":572,"dry_run":true}
+{"ts":"2026-04-21T18:47:59.861Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":573,"dry_run":true}
+{"ts":"2026-04-21T18:48:09.875Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":574,"dry_run":true}
+{"ts":"2026-04-21T18:48:19.901Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":575,"dry_run":true}
+{"ts":"2026-04-21T18:48:29.918Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":576,"dry_run":true}
+{"ts":"2026-04-21T18:48:39.928Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":577,"dry_run":true}
+{"ts":"2026-04-21T18:48:49.938Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":578,"dry_run":true}
+{"ts":"2026-04-21T18:48:59.952Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":579,"dry_run":true}
+{"ts":"2026-04-21T18:49:09.963Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":580,"dry_run":true}
+{"ts":"2026-04-21T18:49:19.979Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":581,"dry_run":true}
+{"ts":"2026-04-21T18:49:29.988Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":582,"dry_run":true}
+{"ts":"2026-04-21T18:49:39.994Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":583,"dry_run":true}
+{"ts":"2026-04-21T18:49:50.006Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":584,"dry_run":true}
+{"ts":"2026-04-21T18:50:00.025Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":585,"dry_run":true}
+{"ts":"2026-04-21T18:50:10.037Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":586,"dry_run":true}
+{"ts":"2026-04-21T18:50:20.051Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":587,"dry_run":true}
+{"ts":"2026-04-21T18:50:30.070Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":588,"dry_run":true}
+{"ts":"2026-04-21T18:50:40.090Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":589,"dry_run":true}
+{"ts":"2026-04-21T18:50:50.100Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":590,"dry_run":true}
+{"ts":"2026-04-21T18:51:00.114Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":591,"dry_run":true}
+{"ts":"2026-04-21T18:51:10.129Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":592,"dry_run":true}
+{"ts":"2026-04-21T18:51:20.138Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Work items - Boards - Google Chrome","elapsed_ms":0,"total_ok_running":593,"dry_run":true}
+{"ts":"2026-04-21T18:51:30.150Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Work items - Boards - Google Chrome","elapsed_ms":0,"total_ok_running":594,"dry_run":true}
+{"ts":"2026-04-21T18:51:40.166Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Task 55 [DB] IN_PAGO - Agregar 8 campos (espejo de RPAGOS #33) - Google Chrome","elapsed_ms":0,"total_ok_running":595,"dry_run":true}
+{"ts":"2026-04-21T18:51:50.181Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Task 55 [DB] IN_PAGO - Agregar 8 campos (espejo de RPAGOS #33) - Google Chrome","elapsed_ms":0,"total_ok_running":596,"dry_run":true}
+{"ts":"2026-04-21T18:52:00.186Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Task 25 [DB] RCLIE - Agregar 12 campos nuevos (demograficos, laborales, riesgo) - Google Chrome","elapsed_ms":0,"total_ok_running":597,"dry_run":true}
+{"ts":"2026-04-21T18:52:10.192Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Task 25 [DB] RCLIE - Agregar 12 campos nuevos (demograficos, laborales, riesgo) - Google Chrome","elapsed_ms":0,"total_ok_running":598,"dry_run":true}
+{"ts":"2026-04-21T18:52:20.207Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Task 25 [DB] RCLIE - Agregar 12 campos nuevos (demograficos, laborales, riesgo) - Google Chrome","elapsed_ms":0,"total_ok_running":599,"dry_run":true}
+{"ts":"2026-04-21T18:52:30.219Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Task 39: AgendaWeb - Resumen Actividad: agregar contador 'Total Compromisos a vencer' - Boards - Google Chrome","elapsed_ms":0,"total_ok_running":600,"dry_run":true}
+{"ts":"2026-04-21T18:52:40.238Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Task 39 AgendaWeb - Resumen Actividad: agregar contador 'Total Compromisos a vencer' - Google Chrome","elapsed_ms":0,"total_ok_running":601,"dry_run":true}
+{"ts":"2026-04-21T18:52:50.256Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Task 49 [DB] IN_TELE - Agregar 5 campos (espejo de RTELE #27) - Google Chrome","elapsed_ms":0,"total_ok_running":602,"dry_run":true}
+{"ts":"2026-04-21T18:53:00.275Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Task 49 [DB] IN_TELE - Agregar 5 campos (espejo de RTELE #27) - Google Chrome","elapsed_ms":0,"total_ok_running":603,"dry_run":true}
+{"ts":"2026-04-21T18:53:10.279Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Work items - Boards - Google Chrome","elapsed_ms":0,"total_ok_running":604,"dry_run":true}
+{"ts":"2026-04-21T18:53:20.286Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Stacky — Pipeline Dashboard - Google Chrome","elapsed_ms":0,"total_ok_running":605,"dry_run":true}
+{"ts":"2026-04-21T18:53:30.297Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Stacky — Pipeline Dashboard - Google Chrome","elapsed_ms":0,"total_ok_running":606,"dry_run":true}
+{"ts":"2026-04-21T18:53:40.311Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Work items - Boards - Google Chrome","elapsed_ms":0,"total_ok_running":607,"dry_run":true}
+{"ts":"2026-04-21T18:53:50.318Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Stacky — Pipeline Dashboard - Google Chrome","elapsed_ms":0,"total_ok_running":608,"dry_run":true}
+{"ts":"2026-04-21T18:54:00.329Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Stacky — Pipeline Dashboard - Google Chrome","elapsed_ms":0,"total_ok_running":609,"dry_run":true}
+{"ts":"2026-04-21T18:54:10.340Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Dashboard Pipeline RIPLEY","elapsed_ms":0,"total_ok_running":610,"dry_run":true}
+{"ts":"2026-04-21T18:54:20.354Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Dashboard Pipeline RIPLEY","elapsed_ms":0,"total_ok_running":611,"dry_run":true}
+{"ts":"2026-04-21T18:54:30.361Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Dashboard Pipeline RIPLEY","elapsed_ms":0,"total_ok_running":612,"dry_run":true}
+{"ts":"2026-04-21T18:54:40.379Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":613,"dry_run":true}
+{"ts":"2026-04-21T18:54:50.398Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":614,"dry_run":true}
+{"ts":"2026-04-21T18:55:00.404Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Dashboard Pipeline RIPLEY","elapsed_ms":0,"total_ok_running":615,"dry_run":true}
+{"ts":"2026-04-21T18:55:10.442Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Stacky — Pipeline Dashboard - Google Chrome","elapsed_ms":0,"total_ok_running":616,"dry_run":true}
+{"ts":"2026-04-21T18:55:20.459Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":617,"dry_run":true}
+{"ts":"2026-04-21T18:55:30.475Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":618,"dry_run":true}
+{"ts":"2026-04-21T18:55:40.659Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":619,"dry_run":true}
+{"ts":"2026-04-21T18:55:50.707Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Work items - Boards - Google Chrome","elapsed_ms":0,"total_ok_running":620,"dry_run":true}
+{"ts":"2026-04-21T18:56:02.681Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Work items - Boards - Google Chrome","elapsed_ms":0,"total_ok_running":621,"dry_run":true}
+{"ts":"2026-04-21T18:56:13.164Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":622,"dry_run":true}
+{"ts":"2026-04-21T18:56:23.424Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":623,"dry_run":true}
+{"ts":"2026-04-21T18:56:33.520Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Google Keep - Google Chrome","elapsed_ms":0,"total_ok_running":624,"dry_run":true}
+{"ts":"2026-04-21T18:56:43.737Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Google Keep - Google Chrome","elapsed_ms":0,"total_ok_running":625,"dry_run":true}
+{"ts":"2026-04-21T18:56:53.800Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Google Keep - Google Chrome","elapsed_ms":0,"total_ok_running":626,"dry_run":true}
+{"ts":"2026-04-21T18:57:03.950Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Google Keep - Google Chrome","elapsed_ms":0,"total_ok_running":627,"dry_run":true}
+{"ts":"2026-04-21T18:57:14.014Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":628,"dry_run":true}
+{"ts":"2026-04-21T18:57:24.105Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":629,"dry_run":true}
+{"ts":"2026-04-21T18:57:34.312Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":630,"dry_run":true}
+{"ts":"2026-04-21T18:57:45.912Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Dashboard Pipeline RIPLEY","elapsed_ms":0,"total_ok_running":631,"dry_run":true}
+{"ts":"2026-04-21T18:57:56.222Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":632,"dry_run":true}
+{"ts":"2026-04-21T18:58:06.382Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":633,"dry_run":true}
+{"ts":"2026-04-21T18:58:16.468Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":634,"dry_run":true}
+{"ts":"2026-04-21T18:58:26.581Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":635,"dry_run":true}
+{"ts":"2026-04-21T18:58:36.615Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":636,"dry_run":true}
+{"ts":"2026-04-21T18:58:46.709Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":637,"dry_run":true}
+{"ts":"2026-04-21T18:58:56.836Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":638,"dry_run":true}
+{"ts":"2026-04-21T18:59:07.008Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":639,"dry_run":true}
+{"ts":"2026-04-21T18:59:17.046Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":640,"dry_run":true}
+{"ts":"2026-04-21T18:59:27.049Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":641,"dry_run":true}
+{"ts":"2026-04-21T18:59:37.059Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":642,"dry_run":true}
+{"ts":"2026-04-21T18:59:47.071Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":643,"dry_run":true}
+{"ts":"2026-04-21T18:59:57.083Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":644,"dry_run":true}
+{"ts":"2026-04-21T19:00:07.096Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":645,"dry_run":true}
+{"ts":"2026-04-21T19:00:17.112Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":646,"dry_run":true}
+{"ts":"2026-04-21T19:00:27.121Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":647,"dry_run":true}
+{"ts":"2026-04-21T19:00:37.135Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":648,"dry_run":true}
+{"ts":"2026-04-21T19:00:47.141Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":649,"dry_run":true}
+{"ts":"2026-04-21T19:00:57.147Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":650,"dry_run":true}
+{"ts":"2026-04-21T19:01:07.158Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":651,"dry_run":true}
+{"ts":"2026-04-21T19:01:17.171Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":652,"dry_run":true}
+{"ts":"2026-04-21T19:01:27.185Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":653,"dry_run":true}
+{"ts":"2026-04-21T19:01:37.214Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":654,"dry_run":true}
+{"ts":"2026-04-21T19:01:47.230Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":655,"dry_run":true}
+{"ts":"2026-04-21T19:01:57.242Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":656,"dry_run":true}
+{"ts":"2026-04-21T19:02:07.259Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":657,"dry_run":true}
+{"ts":"2026-04-21T19:02:17.270Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":658,"dry_run":true}
+{"ts":"2026-04-21T19:02:27.282Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":659,"dry_run":true}
+{"ts":"2026-04-21T19:02:37.294Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":660,"dry_run":true}
+{"ts":"2026-04-21T19:02:47.311Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":661,"dry_run":true}
+{"ts":"2026-04-21T19:02:57.322Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":662,"dry_run":true}
+{"ts":"2026-04-21T19:03:07.337Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":663,"dry_run":true}
+{"ts":"2026-04-21T19:03:17.347Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":664,"dry_run":true}
+{"ts":"2026-04-21T19:03:27.361Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":665,"dry_run":true}
+{"ts":"2026-04-21T19:03:37.376Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":666,"dry_run":true}
+{"ts":"2026-04-21T19:03:47.393Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":667,"dry_run":true}
+{"ts":"2026-04-21T19:03:57.404Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":668,"dry_run":true}
+{"ts":"2026-04-21T19:04:07.416Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":669,"dry_run":true}
+{"ts":"2026-04-21T19:04:17.432Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":670,"dry_run":true}
+{"ts":"2026-04-21T19:04:27.442Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":671,"dry_run":true}
+{"ts":"2026-04-21T19:04:37.457Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":672,"dry_run":true}
+{"ts":"2026-04-21T19:04:47.468Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":673,"dry_run":true}
+{"ts":"2026-04-21T19:04:57.481Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":674,"dry_run":true}
+{"ts":"2026-04-21T19:05:07.497Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":675,"dry_run":true}
+{"ts":"2026-04-21T19:05:17.515Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":676,"dry_run":true}
+{"ts":"2026-04-21T19:05:27.525Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Esther Sandoval | Microsoft Teams","elapsed_ms":0,"total_ok_running":677,"dry_run":true}
+{"ts":"2026-04-21T19:05:37.532Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Esther Sandoval | Microsoft Teams","elapsed_ms":0,"total_ok_running":678,"dry_run":true}
+{"ts":"2026-04-21T19:05:47.551Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Esther Sandoval | Microsoft Teams","elapsed_ms":0,"total_ok_running":679,"dry_run":true}
+{"ts":"2026-04-21T19:05:57.563Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Esther Sandoval | Microsoft Teams","elapsed_ms":0,"total_ok_running":680,"dry_run":true}
+{"ts":"2026-04-21T19:06:07.569Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Esther Sandoval | Microsoft Teams","elapsed_ms":0,"total_ok_running":681,"dry_run":true}
+{"ts":"2026-04-21T19:06:17.582Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Esther Sandoval | Microsoft Teams","elapsed_ms":0,"total_ok_running":682,"dry_run":true}
+{"ts":"2026-04-21T19:06:27.590Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Esther Sandoval | Microsoft Teams","elapsed_ms":0,"total_ok_running":683,"dry_run":true}
+{"ts":"2026-04-21T19:06:37.598Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Esther Sandoval | Microsoft Teams","elapsed_ms":0,"total_ok_running":684,"dry_run":true}
+{"ts":"2026-04-21T19:06:47.604Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Esther Sandoval | Microsoft Teams","elapsed_ms":0,"total_ok_running":685,"dry_run":true}
+{"ts":"2026-04-21T19:06:57.609Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":686,"dry_run":true}
+{"ts":"2026-04-21T19:07:07.623Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":687,"dry_run":true}
+{"ts":"2026-04-21T19:07:17.637Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":688,"dry_run":true}
+{"ts":"2026-04-21T19:07:27.653Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":689,"dry_run":true}
+{"ts":"2026-04-21T19:07:37.664Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":690,"dry_run":true}
+{"ts":"2026-04-21T19:07:47.675Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":691,"dry_run":true}
+{"ts":"2026-04-21T19:07:57.677Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":692,"dry_run":true}
+{"ts":"2026-04-21T19:08:07.693Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":693,"dry_run":true}
+{"ts":"2026-04-21T19:08:17.698Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":694,"dry_run":true}
+{"ts":"2026-04-21T19:08:27.705Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":695,"dry_run":true}
+{"ts":"2026-04-21T19:08:37.707Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":696,"dry_run":true}
+{"ts":"2026-04-21T19:08:47.727Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":697,"dry_run":true}
+{"ts":"2026-04-21T19:08:57.736Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":698,"dry_run":true}
+{"ts":"2026-04-21T19:09:07.752Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":699,"dry_run":true}
+{"ts":"2026-04-21T19:09:17.763Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":700,"dry_run":true}
+{"ts":"2026-04-21T19:09:27.777Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":701,"dry_run":true}
+{"ts":"2026-04-21T19:09:37.789Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":702,"dry_run":true}
+{"ts":"2026-04-21T19:09:47.802Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":703,"dry_run":true}
+{"ts":"2026-04-21T19:09:57.820Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":704,"dry_run":true}
+{"ts":"2026-04-21T19:10:07.831Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":705,"dry_run":true}
+{"ts":"2026-04-21T19:10:17.844Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":706,"dry_run":true}
+{"ts":"2026-04-21T19:10:27.853Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":707,"dry_run":true}
+{"ts":"2026-04-21T19:10:37.863Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":708,"dry_run":true}
+{"ts":"2026-04-21T19:10:47.880Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":709,"dry_run":true}
+{"ts":"2026-04-21T19:10:57.900Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":710,"dry_run":true}
+{"ts":"2026-04-21T19:11:07.906Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":711,"dry_run":true}
+{"ts":"2026-04-21T19:11:17.920Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":712,"dry_run":true}
+{"ts":"2026-04-21T19:11:27.941Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":713,"dry_run":true}
+{"ts":"2026-04-21T19:11:37.946Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":714,"dry_run":true}
+{"ts":"2026-04-21T19:11:47.964Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":715,"dry_run":true}
+{"ts":"2026-04-21T19:11:57.981Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":716,"dry_run":true}
+{"ts":"2026-04-21T19:12:07.993Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":717,"dry_run":true}
+{"ts":"2026-04-21T19:12:18.003Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":718,"dry_run":true}
+{"ts":"2026-04-21T19:12:28.020Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":719,"dry_run":true}
+{"ts":"2026-04-21T19:12:38.033Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":720,"dry_run":true}
+{"ts":"2026-04-21T19:12:48.044Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":721,"dry_run":true}
+{"ts":"2026-04-21T19:12:58.054Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":722,"dry_run":true}
+{"ts":"2026-04-21T19:13:08.070Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":723,"dry_run":true}
+{"ts":"2026-04-21T19:13:18.081Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":724,"dry_run":true}
+{"ts":"2026-04-21T19:13:28.093Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":725,"dry_run":true}
+{"ts":"2026-04-21T19:13:38.107Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":726,"dry_run":true}
+{"ts":"2026-04-21T19:13:48.123Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":727,"dry_run":true}
+{"ts":"2026-04-21T19:13:58.133Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":728,"dry_run":true}
+{"ts":"2026-04-21T19:14:08.150Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":729,"dry_run":true}
+{"ts":"2026-04-21T19:14:18.162Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":730,"dry_run":true}
+{"ts":"2026-04-21T19:14:28.173Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":731,"dry_run":true}
+{"ts":"2026-04-21T19:14:38.189Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":732,"dry_run":true}
+{"ts":"2026-04-21T19:14:48.201Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":733,"dry_run":true}
+{"ts":"2026-04-21T19:14:58.215Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":734,"dry_run":true}
+{"ts":"2026-04-21T19:15:08.360Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":735,"dry_run":true}
+{"ts":"2026-04-21T19:15:18.382Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Seguimiento interno Ripley | Microsoft Teams","elapsed_ms":0,"total_ok_running":736,"dry_run":true}
+{"ts":"2026-04-21T19:15:28.436Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":737,"dry_run":true}
+{"ts":"2026-04-21T19:15:38.454Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":738,"dry_run":true}
+{"ts":"2026-04-21T19:15:48.464Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":739,"dry_run":true}
+{"ts":"2026-04-21T19:15:58.478Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Microsoft Teams","elapsed_ms":0,"total_ok_running":740,"dry_run":true}
+{"ts":"2026-04-21T19:16:08.490Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":741,"dry_run":true}
+{"ts":"2026-04-21T19:16:18.507Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":742,"dry_run":true}
+{"ts":"2026-04-21T19:16:28.524Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":743,"dry_run":true}
+{"ts":"2026-04-21T19:16:38.530Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":744,"dry_run":true}
+{"ts":"2026-04-21T19:16:48.545Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":745,"dry_run":true}
+{"ts":"2026-04-21T19:16:58.556Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Solución1 - Microsoft SQL Server Management Studio","elapsed_ms":0,"total_ok_running":746,"dry_run":true}
+{"ts":"2026-04-21T19:17:08.569Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Solución1 - Microsoft SQL Server Management Studio","elapsed_ms":0,"total_ok_running":747,"dry_run":true}
+{"ts":"2026-04-21T19:17:18.575Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Propiedades del servidor: aisbddev02.cloud.ais-int.net","elapsed_ms":0,"total_ok_running":748,"dry_run":true}
+{"ts":"2026-04-21T19:17:28.589Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Solución1 - Microsoft SQL Server Management Studio","elapsed_ms":0,"total_ok_running":749,"dry_run":true}
+{"ts":"2026-04-21T19:17:38.600Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Solución1 - Microsoft SQL Server Management Studio","elapsed_ms":0,"total_ok_running":750,"dry_run":true}
+{"ts":"2026-04-21T19:17:48.610Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Solución1 - Microsoft SQL Server Management Studio","elapsed_ms":0,"total_ok_running":751,"dry_run":true}
+{"ts":"2026-04-21T19:17:58.621Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"ChatGPT - Google Chrome","elapsed_ms":0,"total_ok_running":752,"dry_run":true}
+{"ts":"2026-04-21T19:18:08.630Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"ChatGPT - Google Chrome","elapsed_ms":0,"total_ok_running":753,"dry_run":true}
+{"ts":"2026-04-21T19:18:18.640Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Significado de esto - Google Chrome","elapsed_ms":0,"total_ok_running":754,"dry_run":true}
+{"ts":"2026-04-21T19:18:28.649Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Significado de esto - Google Chrome","elapsed_ms":0,"total_ok_running":755,"dry_run":true}
+{"ts":"2026-04-21T19:18:38.666Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Significado de error SQL - Google Chrome","elapsed_ms":0,"total_ok_running":756,"dry_run":true}
+{"ts":"2026-04-21T19:18:48.685Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":757,"dry_run":true}
+{"ts":"2026-04-21T19:18:58.697Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":758,"dry_run":true}
+{"ts":"2026-04-21T19:19:08.706Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":759,"dry_run":true}
+{"ts":"2026-04-21T19:19:18.719Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":760,"dry_run":true}
+{"ts":"2026-04-21T19:19:28.730Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":761,"dry_run":true}
+{"ts":"2026-04-21T19:19:38.740Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Solución1 - Microsoft SQL Server Management Studio","elapsed_ms":0,"total_ok_running":762,"dry_run":true}
+{"ts":"2026-04-21T19:19:48.755Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":763,"dry_run":true}
+{"ts":"2026-04-21T19:19:58.765Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":764,"dry_run":true}
+{"ts":"2026-04-21T19:20:08.780Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":765,"dry_run":true}
+{"ts":"2026-04-21T19:20:18.795Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":766,"dry_run":true}
+{"ts":"2026-04-21T19:20:28.810Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":767,"dry_run":true}
+{"ts":"2026-04-21T19:20:38.814Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":768,"dry_run":true}
+{"ts":"2026-04-21T19:20:48.822Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":769,"dry_run":true}
+{"ts":"2026-04-21T19:20:58.829Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":770,"dry_run":true}
+{"ts":"2026-04-21T19:21:08.927Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":771,"dry_run":true}
+{"ts":"2026-04-21T19:21:19.045Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":772,"dry_run":true}
+{"ts":"2026-04-21T19:21:30.711Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Chat | Eduardo Hernandez Asensio | Microsoft Teams","elapsed_ms":0,"total_ok_running":773,"dry_run":true}
+{"ts":"2026-04-21T19:21:40.821Z","method":"dry_run","ok":true,"reason":"dry_run","elapsed_ms":0,"total_ok_running":774,"dry_run":true}
+{"ts":"2026-04-21T19:21:50.933Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Dashboard Pipeline RIPLEY","elapsed_ms":0,"total_ok_running":775,"dry_run":true}
+{"ts":"2026-04-21T19:22:00.946Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":776,"dry_run":true}
+{"ts":"2026-04-21T19:22:11.016Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":777,"dry_run":true}
+{"ts":"2026-04-21T19:22:21.083Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":778,"dry_run":true}
+{"ts":"2026-04-21T19:22:31.245Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":779,"dry_run":true}
+{"ts":"2026-04-21T19:22:41.285Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":780,"dry_run":true}
+{"ts":"2026-04-21T19:22:52.124Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"trunk - Explorador de archivos","elapsed_ms":0,"total_ok_running":781,"dry_run":true}
+{"ts":"2026-04-21T19:23:02.179Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":782,"dry_run":true}
+{"ts":"2026-04-21T19:23:12.261Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":783,"dry_run":true}
+{"ts":"2026-04-21T19:23:22.390Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":784,"dry_run":true}
+{"ts":"2026-04-21T19:23:32.595Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"BD - Explorador de archivos","elapsed_ms":0,"total_ok_running":785,"dry_run":true}
+{"ts":"2026-04-21T19:23:42.620Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"BD - Explorador de archivos","elapsed_ms":0,"total_ok_running":786,"dry_run":true}
+{"ts":"2026-04-21T19:23:52.638Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"BD - Explorador de archivos","elapsed_ms":0,"total_ok_running":787,"dry_run":true}
+{"ts":"2026-04-21T19:24:02.641Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Significado de error SQL - Google Chrome","elapsed_ms":0,"total_ok_running":788,"dry_run":true}
+{"ts":"2026-04-21T19:24:12.657Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"claude - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":789,"dry_run":true}
+{"ts":"2026-04-21T19:24:22.666Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"● COMMIT_EDITMSG - RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":790,"dry_run":true}
+{"ts":"2026-04-21T19:24:32.674Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Visual Studio Code","elapsed_ms":0,"total_ok_running":791,"dry_run":true}
+{"ts":"2026-04-21T19:24:42.680Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Visual Studio Code","elapsed_ms":0,"total_ok_running":792,"dry_run":true}
+{"ts":"2026-04-21T19:24:52.694Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":793,"dry_run":true}
+{"ts":"2026-04-21T19:25:02.727Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":794,"dry_run":true}
+{"ts":"2026-04-21T19:25:12.737Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":795,"dry_run":true}
+{"ts":"2026-04-21T19:25:22.749Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":796,"dry_run":true}
+{"ts":"2026-04-21T19:25:34.431Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":797,"dry_run":true}
+{"ts":"2026-04-21T19:25:44.438Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":798,"dry_run":true}
+{"ts":"2026-04-21T19:25:54.446Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":799,"dry_run":true}
+{"ts":"2026-04-21T19:26:04.463Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":800,"dry_run":true}
+{"ts":"2026-04-21T19:26:14.467Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":801,"dry_run":true}
+{"ts":"2026-04-21T19:26:24.475Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"Alexis Ortega Nava | Microsoft Teams","elapsed_ms":0,"total_ok_running":802,"dry_run":true}
+{"ts":"2026-04-21T19:26:34.483Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":803,"dry_run":true}
+{"ts":"2026-04-21T19:26:44.494Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":804,"dry_run":true}
+{"ts":"2026-04-21T19:26:54.503Z","method":"dry_run","ok":true,"reason":"dry_run","foreground_title":"RSPacifico - Visual Studio Code","elapsed_ms":0,"total_ok_running":805,"dry_run":true}

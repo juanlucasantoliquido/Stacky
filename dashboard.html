@@ -6910,6 +6910,41 @@ refreshPipelineHealth();
     } catch (_) { /* noop */ }
   };
 
+  // ── Bulk refresh vía /api/tickets/v2 (FASE 4) ─────────────────────────────
+  // Reemplaza el loop N per-ticket por una sola llamada al endpoint unificado.
+  // Si falla (ej. servidor viejo sin v2), degrada al path per-ticket.
+  TM.refreshMetadataBulk = async function () {
+    try {
+      const r = await fetch("/api/tickets/v2?metadata=true", { cache: "no-store" });
+      if (!r.ok) return false;
+      const data = await r.json();
+      if (!data || !data.ok || !Array.isArray(data.tickets)) return false;
+      for (const t of data.tickets) {
+        if (!t || !t.ticket_id) continue;
+        TM.state.metadata.set(String(t.ticket_id), {
+          ticket_id: String(t.ticket_id),
+          color: t.color || null,
+          user_tags: Array.isArray(t.user_tags) ? t.user_tags : [],
+          commits_count: typeof t.commits_count === "number" ? t.commits_count : 0,
+          last_commit_hash: t.last_commit_hash || null,
+          last_commit_at: t.last_commit_at || null,
+          ado_comments_count: typeof t.ado_comments_count === "number" ? t.ado_comments_count : 0,
+          notes_count: typeof t.notes_count === "number" ? t.notes_count : 0,
+          last_note_at: t.last_note_at || null,
+          last_indexed_at: t.last_indexed_at || null,
+          has_commits: !!t.has_commits,
+          has_notes: !!t.has_notes,
+          metadata_stale: !!t.metadata_stale,
+        });
+      }
+      if (data.metadata_status) TM.state.indexer_status = data.metadata_status;
+      return true;
+    } catch (e) {
+      console.warn("[TM] refreshMetadataBulk falló, fallback per-ticket", e);
+      return false;
+    }
+  };
+
   // ── Cálculo de matcheo ─────────────────────────────────────────────────────
   TM.matches = function (ticket) {
     const f = TM.state.filters;
@@ -7067,10 +7102,19 @@ refreshPipelineHealth();
             .map(t => t.ticket_id)
             .filter(tid => !TM.state.metadata.has(tid));
           if (missing.length) {
-            TM.refreshMetadata(missing).then(() => {
-              _injectBadges();
-              TM.apply();
-              _rebuildDropdownOptions();
+            // FASE 4: 1 sola llamada a v2 cubre TODO; fallback a per-ticket si v2 falla.
+            TM.refreshMetadataBulk().then(bulkOk => {
+              if (bulkOk) {
+                _injectBadges();
+                TM.apply();
+                _rebuildDropdownOptions();
+                return;
+              }
+              return TM.refreshMetadata(missing).then(() => {
+                _injectBadges();
+                TM.apply();
+                _rebuildDropdownOptions();
+              });
             });
           } else {
             _injectBadges();

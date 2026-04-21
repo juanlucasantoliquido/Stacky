@@ -138,6 +138,39 @@ _title_cache: dict  = {}    # ticket_id → titulo (títulos nunca cambian post-
 _manual_set_timestamps: dict = {}
 _MANUAL_SET_COOLDOWN_SECONDS: int = 30
 
+# ── FASE 4: handle módulo del indexador de metadata (se publica en __main__) ──
+# Los endpoints v2 leen de aquí para reportar estado del indexador. En tests o
+# cuando el dashboard arranca sin indexador (ej. smoke tests), permanece None y
+# los endpoints degradan gracefully.
+_metadata_indexer = None  # type: "MetadataIndexer | None"
+
+
+def _get_metadata_indexer():
+    """Retorna la instancia módulo-level del indexador de metadata o None."""
+    return _metadata_indexer
+
+
+def _is_metadata_stale(last_indexed_at: "str | None",
+                       threshold_minutes: int = 15) -> bool:
+    """True si last_indexed_at falta o tiene más de threshold_minutes de antigüedad.
+
+    Args:
+        last_indexed_at: ISO-8601 timestamp (con tzinfo). None/"" => stale.
+        threshold_minutes: umbral en minutos. Default 15.
+    """
+    if not last_indexed_at:
+        return True
+    try:
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        last = _dt.fromisoformat(last_indexed_at)
+        # Si viene naive (sin tzinfo), asumir UTC para no crashear al restar.
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=_tz.utc)
+        now = _dt.now(_tz.utc)
+        return (now - last) > _td(minutes=threshold_minutes)
+    except (ValueError, TypeError):
+        return True
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -6341,6 +6374,222 @@ def api_tickets_user_tags_put(ticket_id: str):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── FASE 4: endpoint unificado scan + metadata ───────────────────────────────
+
+# Campos de metadata que v2 agrega sobre el output de _scan_tickets().
+# Centralizados para que la lista stale/has_* y el filtro ?fields queden
+# sincronizados.
+_V2_METADATA_FIELDS: tuple = (
+    "color",
+    "user_tags",
+    "commits_count",
+    "last_commit_hash",
+    "last_commit_at",
+    "ado_comments_count",
+    "notes_count",
+    "last_note_at",
+    "last_indexed_at",
+    "has_commits",
+    "has_notes",
+    "metadata_stale",
+)
+
+
+def _v2_empty_metadata_patch() -> dict:
+    """Patch default cuando no hay metadata para un ticket (v2)."""
+    return {
+        "color": None,
+        "user_tags": [],
+        "commits_count": None,
+        "last_commit_hash": None,
+        "last_commit_at": None,
+        "ado_comments_count": None,
+        "notes_count": None,
+        "last_note_at": None,
+        "last_indexed_at": None,
+        "has_commits": False,
+        "has_notes": False,
+        "metadata_stale": True,
+    }
+
+
+def _v2_metadata_patch_from(meta) -> dict:
+    """Proyecta un TicketMetadata a los campos v2 (dict serializable)."""
+    return {
+        "color": meta.color.hex if meta.color else None,
+        "user_tags": list(meta.user_tags.tags) if meta.user_tags else [],
+        "commits_count": meta.commits_count,
+        "last_commit_hash": meta.last_commit_hash,
+        "last_commit_at": meta.last_commit_at,
+        "ado_comments_count": meta.ado_comments_count,
+        "notes_count": meta.notes_count,
+        "last_note_at": meta.last_note_at,
+        "last_indexed_at": meta.last_indexed_at,
+        "has_commits": (meta.commits_count or 0) > 0,
+        "has_notes": (meta.notes_count or 0) > 0,
+        "metadata_stale": _is_metadata_stale(meta.last_indexed_at),
+    }
+
+
+def _v2_project_matches(requested: "str | None", runtime: dict) -> bool:
+    """True si el filtro ?project= matchea el proyecto activo.
+
+    Comparación case-insensitive contra name y display_name del runtime.
+    """
+    if not requested:
+        return True
+    req = requested.strip().lower()
+    if not req:
+        return True
+    candidates = {
+        str(runtime.get("name") or "").lower(),
+        str(runtime.get("display_name") or "").lower(),
+    }
+    return req in candidates
+
+
+@app.route("/api/tickets/v2", methods=["GET"])
+def api_tickets_v2():
+    """GET /api/tickets/v2 — tickets con metadata integrada.
+
+    Unifica en una sola respuesta:
+      1. `_scan_tickets()` → scan existente (folder, estado, asignado, etc).
+      2. `store.get_all()` → metadata (color, user_tags, commits, notas, etc).
+      3. Indicadores derivados (`has_commits`, `has_notes`, `metadata_stale`).
+
+    Query params (todos opcionales):
+      ?project=<name>       Filtro contra el proyecto activo (_get_runtime).
+                            Si no matchea, retorna lista vacía (no cruza
+                            proyectos — `_scan_tickets` es per-proyecto).
+      ?metadata=true|false  Default `true`. Si `false`, omite el merge de
+                            metadata y devuelve solo el scan (equivalente a
+                            /api/tickets pero bajo el paraguas v2).
+      ?fields=a,b,c         Whitelist de campos a retornar por ticket. Si se
+                            omite, devuelve todos. `ticket_id` siempre se
+                            incluye (requerido por cualquier cliente).
+
+    Response shape:
+        {
+            "ok": true,
+            "tickets": [ {ticket_id, ...scan..., ...metadata...}, ... ],
+            "count": <int>,
+            "metadata_status": {
+                "last_indexed_at": <iso|null>,
+                "indexed_count":  <int>,
+                "indexing_error": <str|null>,
+                "running":        <bool>
+            }
+        }
+
+    Backward compat: `/api/tickets` sigue existiendo intacto. v2 es aditivo.
+    Caching: hereda el caché del scan (3s TTL) + mtime-cache del store.
+    """
+    try:
+        from ticket_metadata_store import get_store
+
+        # ── 1. Parse query params ─────────────────────────────────────────────
+        project_q = request.args.get("project")
+        metadata_q = request.args.get("metadata", "true").strip().lower()
+        include_metadata = metadata_q not in ("false", "0", "no", "off")
+        fields_q = (request.args.get("fields") or "").strip()
+        fields_whitelist: "set[str] | None" = None
+        if fields_q:
+            fields_whitelist = {f.strip() for f in fields_q.split(",") if f.strip()}
+            # ticket_id siempre presente — es la clave de cualquier consumidor.
+            fields_whitelist.add("ticket_id")
+
+        # ── 2. Filtro de proyecto ─────────────────────────────────────────────
+        runtime = _get_runtime()
+        if not _v2_project_matches(project_q, runtime):
+            # Proyecto distinto al activo → no podemos scanear sin cambiar el
+            # proyecto activo global; devolvemos vacío explícitamente.
+            return jsonify({
+                "ok": True,
+                "tickets": [],
+                "count": 0,
+                "metadata_status": _v2_metadata_status(),
+                "project": runtime.get("name"),
+                "filter_mismatch": True,
+            })
+
+        # ── 3. Scan existente (cache 3s) ──────────────────────────────────────
+        tickets_scan = _scan_tickets()
+
+        # ── 4. Metadata del store (cache mtime-based) ─────────────────────────
+        all_metadata: dict = {}
+        if include_metadata:
+            try:
+                store = get_store()
+                all_metadata = store.get_all()
+            except Exception as meta_exc:
+                # Degradación grácil: si el store falla, devolvemos scan sin
+                # metadata y registramos el fallo para debugging.
+                app.logger.warning("tickets/v2: store.get_all() falló: %s", meta_exc)
+                all_metadata = {}
+
+        # ── 5. Merge scan + metadata ──────────────────────────────────────────
+        result_tickets: list = []
+        for scan_entry in tickets_scan:
+            merged = dict(scan_entry)  # copy defensiva
+            if include_metadata:
+                tid = str(scan_entry.get("ticket_id", ""))
+                meta = all_metadata.get(tid) if tid else None
+                if meta is not None:
+                    merged.update(_v2_metadata_patch_from(meta))
+                else:
+                    merged.update(_v2_empty_metadata_patch())
+            # Aplicar whitelist de campos si se pidió
+            if fields_whitelist is not None:
+                merged = {k: v for k, v in merged.items() if k in fields_whitelist}
+            result_tickets.append(merged)
+
+        # ── 6. Respuesta ──────────────────────────────────────────────────────
+        return jsonify({
+            "ok": True,
+            "tickets": result_tickets,
+            "count": len(result_tickets),
+            "metadata_status": _v2_metadata_status(fallback_count=len(all_metadata)),
+            "project": runtime.get("name"),
+        })
+    except Exception as e:
+        app.logger.exception("tickets/v2 falló")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _v2_metadata_status(fallback_count: int = 0) -> dict:
+    """Construye el bloque metadata_status desde el indexador módulo-level.
+
+    Si el indexador no está arrancado (tests, smoke runs, fallo startup),
+    devuelve campos en null/0 sin crashear.
+
+    Args:
+        fallback_count: cantidad a reportar si el indexer no publica
+            indexed_count — típicamente ``len(store.get_all())``.
+    """
+    idx = _get_metadata_indexer()
+    if idx is None:
+        return {
+            "last_indexed_at": None,
+            "indexed_count": fallback_count,
+            "indexing_error": None,
+            "running": False,
+        }
+    try:
+        return {
+            "last_indexed_at": idx.last_index_at,
+            "indexed_count": idx.indexed_count or fallback_count,
+            "indexing_error": idx.indexing_error,
+            "running": bool(idx.is_running),
+        }
+    except Exception as e:
+        return {
+            "last_indexed_at": None,
+            "indexed_count": fallback_count,
+            "indexing_error": f"status_error: {e}",
+            "running": False,
+        }
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print(" Stacky — Pipeline Dashboard — http://localhost:5050")
@@ -6385,6 +6634,8 @@ if __name__ == "__main__":
         from ticket_metadata_indexer import MetadataIndexer
         _metadata_indexer = MetadataIndexer(period_sec=300, force_git_only=False)
         _metadata_indexer.start()
+        # Publicar en slot módulo-level para que /api/tickets/v2 pueda leer estado.
+        globals()["_metadata_indexer"] = _metadata_indexer
         print(
             f"[STARTUP] metadata-indexer iniciado | "
             f"period={_metadata_indexer.period_sec}s | "

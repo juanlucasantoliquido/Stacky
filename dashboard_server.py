@@ -6194,6 +6194,98 @@ def api_estimation_model_get():
     return jsonify(model or {"trained": False})
 
 
+# ── Webhook ADO: invalidación selectiva de metadata ──────────────────────────
+
+import hashlib
+import hmac
+
+_ADO_WEBHOOK_SECRET = os.environ.get("STACKY_ADO_WEBHOOK_SECRET", "dev-webhook-secret")
+
+
+def _validate_webhook_signature(body: bytes, signature: str) -> bool:
+    """Valida HMAC-SHA256 del payload contra secreto configurado."""
+    if not signature or not signature.startswith("sha256="):
+        return False
+
+    expected = "sha256=" + hmac.new(
+        _ADO_WEBHOOK_SECRET.encode(),
+        body,
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(signature, expected)
+
+
+def _extract_work_item_id_from_ado_payload(payload: dict) -> int or None:
+    """Extrae work_item_id del payload de ADO."""
+    try:
+        resource = payload.get("resource") or {}
+        wi_id = resource.get("id") or resource.get("workItemId")
+        if wi_id:
+            return int(wi_id)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+@app.route("/api/webhooks/ado", methods=["POST"])
+def webhook_ado():
+    """POST /api/webhooks/ado — webhook desde ADO Service Hooks.
+
+    Invalida cache ADO comments + dispara reindexación bajo demanda.
+    """
+    try:
+        # 1. Leer body antes de parsear JSON (para validar signature)
+        body = request.get_data()
+        signature = request.headers.get("X-ADO-Webhook-Signature", "")
+        if not _validate_webhook_signature(body, signature):
+            return jsonify({"ok": False, "error": "invalid signature"}), 401
+
+        # 2. Parsear payload
+        payload = request.json or {}
+        event_type = payload.get("eventType", "")
+
+        # 3. Extraer work_item_id
+        work_item_id = _extract_work_item_id_from_ado_payload(payload)
+        if not work_item_id:
+            return jsonify({
+                "ok": False,
+                "error": "no work_item_id en payload",
+                "event_type": event_type
+            }), 400
+
+        ticket_id = str(work_item_id)
+
+        # 4. Invalidar cache ADO comments para ese ticket
+        global _metadata_indexer
+        if _metadata_indexer is not None:
+            _metadata_indexer._ado_cache.invalidate(ticket_id)
+
+        # 5. Disparar indexación bajo demanda
+        indexing_triggered = False
+        if _metadata_indexer is not None:
+            try:
+                _metadata_indexer.index_now(force_refresh_ado=True)
+                indexing_triggered = True
+            except Exception as e:
+                logger.warning("indexer.index_now falló en webhook: %s", e)
+
+        # 6. Respuesta (202 Accepted porque indexación es async)
+        return jsonify({
+            "ok": True,
+            "webhook_type": event_type,
+            "work_item_id": work_item_id,
+            "ticket_id": ticket_id,
+            "action": "invalidated_ado_cache + triggered_index_now",
+            "indexing_triggered": indexing_triggered,
+            "detail": f"Reindexing metadata for ticket {ticket_id}"
+        }), 202
+
+    except Exception as e:
+        logger.error("webhook_ado error: %s", e, exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ── Endpoints de metadata de tickets (color, user_tags, commits, notas) ──────
 
 @app.route("/api/tickets/<ticket_id>/metadata", methods=["GET"])
@@ -6302,7 +6394,7 @@ def api_tickets_color_patch(ticket_id: str):
 def api_tickets_user_tags_post(ticket_id: str):
     """POST /api/tickets/<id>/user_tags — agregar un tag."""
     try:
-        from ticket_metadata_store import get_store
+        from ticket_metadata_store import get_store, TicketMetadataError
         from pydantic import ValidationError as PydanticError
         data = request.json or {}
         tag = data.get("tag", "").strip()
@@ -6319,7 +6411,7 @@ def api_tickets_user_tags_post(ticket_id: str):
             "user_tags": meta.user_tags.tags if meta and meta.user_tags else [],
             "updated_at": meta.updated_at if meta else None,
         })
-    except (ValueError, PydanticError) as e:
+    except (ValueError, PydanticError, TicketMetadataError) as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -6351,7 +6443,7 @@ def api_tickets_user_tags_delete(ticket_id: str, tag: str):
 def api_tickets_user_tags_put(ticket_id: str):
     """PUT /api/tickets/<id>/user_tags — reemplazar lista completa de tags."""
     try:
-        from ticket_metadata_store import get_store
+        from ticket_metadata_store import get_store, TicketMetadataError
         from pydantic import ValidationError as PydanticError
         data = request.json or {}
         tags = data.get("tags", [])
@@ -6368,7 +6460,7 @@ def api_tickets_user_tags_put(ticket_id: str):
             "user_tags": meta.user_tags.tags if meta and meta.user_tags else [],
             "updated_at": meta.updated_at if meta else None,
         })
-    except (ValueError, PydanticError) as e:
+    except (ValueError, PydanticError, TicketMetadataError) as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

@@ -24,7 +24,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.prompt_tracker")
+logger = logging.getLogger("stacky.prompt_tracker")
 
 _MAX_RECORDS = 2000
 
@@ -202,7 +202,7 @@ class PromptTracker:
             "has_patterns":   "Patrones de solución" in prompt_text,
             "has_schema":     "Schema Oracle" in prompt_text,
             "has_memory":     "Memoria del Proyecto" in prompt_text,
-            "has_svn":        "SVN_CHANGES" in prompt_text,
+            "has_changes":  "GIT_CHANGES" in prompt_text,
             "has_blast":      "BLAST_RADIUS" in prompt_text,
             "section_count":  len(re.findall(r'^##', prompt_text, re.MULTILINE)),
         }

@@ -2,7 +2,7 @@
 dashboard_server.py — Servidor Flask para el dashboard visual del pipeline.
 
 Uso:
-    cd tools/mantis_scraper
+    cd Tools/Stacky
     pip install flask
     python dashboard_server.py
     # Abrir http://localhost:5050
@@ -17,13 +17,95 @@ import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 # SEQ-02: Lock por ticket — evita invocaciones concurrentes del mismo ticket
 # dentro del mismo proceso (complementa el EN_CURSO flag en disco)
 import collections as _collections
 _ticket_invoke_locks: dict = _collections.defaultdict(lambda: __import__('threading').Lock())
 _ticket_locks_rlock = __import__('threading').Lock()
+
+# ── Gate global de ticket activo ─────────────────────────────────────────────
+# Política: un único ticket puede estar procesándose a la vez. Cualquier otro
+# intento de invocar PM/DEV/TESTER desde el reconciliador, el watcher, el Rally
+# o un auto-advance es rechazado mientras haya un ticket "en vuelo".
+# El gate se libera cuando el ticket activo llega a un estado terminal:
+#   completado, bloqueo_humano, pm_revision, error_*, qa_rework
+# (todos los que no auto-avanzan y requieren intervención/fin).
+_active_ticket_id = None            # type: "str | None"
+_active_ticket_since = None         # type: "float | None"  (monotonic)
+_active_ticket_lock = __import__('threading').RLock()
+# Safety net: libera por timeout si un ticket queda colgado sin cerrar.
+_ACTIVE_TICKET_TIMEOUT_MIN = 180
+_ACTIVE_TICKET_TERMINAL_STATES = frozenset((
+    "completado", "bloqueo_humano", "pm_revision", "qa_rework",
+))
+
+
+def _is_terminal_gate_state(estado: str) -> bool:
+    """Estados que liberan el gate global (pipeline pausado o finalizado)."""
+    if not estado:
+        return False
+    if estado in _ACTIVE_TICKET_TERMINAL_STATES:
+        return True
+    return estado.startswith("error_")
+
+
+def _try_claim_active_ticket(ticket_id: str) -> bool:
+    """
+    Toma el gate global para ticket_id. Devuelve:
+      True  — si el gate estaba libre (claim nuevo) o ya era del mismo ticket (renovación).
+      False — si otro ticket está activo.
+    El mismo ticket puede re-claim entre stages (pm → dev → tester).
+    """
+    global _active_ticket_id, _active_ticket_since
+    with _active_ticket_lock:
+        now_mono = _time.monotonic()
+        # Safety: liberación por timeout
+        if (_active_ticket_id is not None
+                and _active_ticket_since is not None
+                and (now_mono - _active_ticket_since) > (_ACTIVE_TICKET_TIMEOUT_MIN * 60)):
+            print(f"[GATE] Timeout — liberando ticket #{_active_ticket_id} "
+                  f"tras {_ACTIVE_TICKET_TIMEOUT_MIN} min sin cerrar",
+                  file=sys.stderr, flush=True)
+            _active_ticket_id = None
+            _active_ticket_since = None
+        if _active_ticket_id is None:
+            _active_ticket_id = ticket_id
+            _active_ticket_since = now_mono
+            print(f"[GATE] #{ticket_id} toma el gate (pipeline serial activo)",
+                  flush=True)
+            return True
+        if _active_ticket_id == ticket_id:
+            # Renovar: mismo ticket avanzando a la siguiente etapa.
+            _active_ticket_since = now_mono
+            return True
+        return False
+
+
+def _release_active_ticket(ticket_id: str, reason: str = "") -> bool:
+    """Libera el gate si ticket_id es el dueño. Devuelve True si liberó."""
+    global _active_ticket_id, _active_ticket_since
+    with _active_ticket_lock:
+        if _active_ticket_id == ticket_id:
+            _active_ticket_id = None
+            _active_ticket_since = None
+            print(f"[GATE] #{ticket_id} liberado — {reason or 'sin detalle'}",
+                  flush=True)
+            return True
+        return False
+
+
+def _get_active_ticket():
+    """Devuelve el ticket_id activo o None si el gate está libre."""
+    with _active_ticket_lock:
+        return _active_ticket_id
+
+
+def _maybe_release_if_terminal(ticket_id: str, estado: str) -> None:
+    """Si ticket_id está activo y estado es terminal → libera."""
+    if _is_terminal_gate_state(estado) and _get_active_ticket() == ticket_id:
+        _release_active_ticket(ticket_id, f"estado terminal: {estado}")
 
 # ── Rutas base ────────────────────────────────────────────────────────────────
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
@@ -71,16 +153,6 @@ def _get_runtime() -> dict:
         cfg  = get_project_config(name)
         if cfg:
             paths = get_project_paths(name)
-            # Leer mantis_url y auth_path desde config.json global
-            _global_cfg_path = os.path.join(BASE_DIR, "config.json")
-            try:
-                import json as _json
-                _gcfg = _json.loads(open(_global_cfg_path, encoding="utf-8").read())
-                _mantis_url = _gcfg.get("mantis_url", "")
-                _auth_rel   = _gcfg.get("auth_path", "auth/auth.json")
-            except Exception:
-                _mantis_url = ""
-                _auth_rel   = "auth/auth.json"
             result = {
                 "name":           name,
                 "display_name":   cfg.get("display_name", name),
@@ -91,8 +163,6 @@ def _get_runtime() -> dict:
                 "agents":         cfg.get("agents", {"pm": "PM-TL STack 3",
                                                      "dev": "DevStack3",
                                                      "tester": "QA"}),
-                "mantis_url":     _mantis_url,
-                "auth_path":      os.path.join(BASE_DIR, _auth_rel),
             }
             _runtime_cache["data"] = result
             _runtime_cache["ts"]   = now
@@ -106,8 +176,6 @@ def _get_runtime() -> dict:
         "tickets_base":   TICKETS_BASE,
         "state_path":     STATE_PATH,
         "agents":         {"pm": "PM-TL STack 3", "dev": "DevStack3", "tester": "QA"},
-        "mantis_url":     "",
-        "auth_path":      os.path.join(BASE_DIR, "auth", "auth.json"),
     }
     _runtime_cache["data"] = fallback
     _runtime_cache["ts"]   = now
@@ -149,6 +217,28 @@ def _save_pipeline_state(state: dict):
     _scan_cache["ts"] = 0.0
 
 
+# A4: helper para anexar el bloque heartbeat al prompt antes de invocar al agente.
+# Mapea cada (sub-)agente a la etapa padre (PM/DEV/TESTER) — todos los sub-agentes
+# de PM comparten el mismo archivo PM_HEARTBEAT.txt. Best-effort: si el helper no
+# está disponible (instalación parcial), devuelve el prompt sin modificar.
+_STAGE_TO_HEARTBEAT_LABEL = {
+    "pm": "PM", "pm_inv": "PM", "pm_arq": "PM", "pm_plan": "PM",
+    "dev": "DEV", "dev_loc": "DEV", "dev_impl": "DEV", "dev_doc": "DEV",
+    "tester": "TESTER", "qa_rev": "TESTER", "qa_exec": "TESTER", "qa_arb": "TESTER",
+}
+
+
+def _with_heartbeat(prompt: str, stage_or_subagent: str) -> str:
+    label = _STAGE_TO_HEARTBEAT_LABEL.get(stage_or_subagent)
+    if not label:
+        return prompt
+    try:
+        from prompt_builder import heartbeat_tail
+        return prompt + heartbeat_tail(label)
+    except Exception:
+        return prompt
+
+
 def _has_placeholders(folder: str) -> bool:
     for fname in PM_FILES:
         fpath = os.path.join(folder, fname)
@@ -169,6 +259,27 @@ def _dev_completed(folder: str) -> bool:
 
 def _tester_completed(folder: str) -> bool:
     return os.path.exists(os.path.join(folder, "TESTER_COMPLETADO.md"))
+
+
+def _read_tester_verdict(folder: str) -> str | None:
+    """Lee TESTER_COMPLETADO.md y extrae el veredicto buscando el NEGATIVO primero.
+
+    El orden importa: si el archivo contiene 'RECHAZADO' y también 'APROBADO'
+    (por ejemplo en una sección de "Criterios aprobados"), debe ganar RECHAZADO.
+    Devuelve 'APROBADO' | 'CON OBSERVACIONES' | 'RECHAZADO' | None si no aplica.
+    """
+    path = os.path.join(folder, "TESTER_COMPLETADO.md")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            content = f.read().upper()
+    except Exception:
+        return None
+    for v in ("RECHAZADO", "CON OBSERVACIONES", "APROBADO"):
+        if v in content:
+            return v
+    return None
 
 
 def _find_ticket_folder(ticket_id: str, tickets_base: str = None) -> str | None:
@@ -198,6 +309,27 @@ def _pm_files_status(folder: str) -> dict:
                 pass
         result[fname] = {"exists": exists, "placeholder": placeholder}
     return result
+
+
+_SQL_TRANSFORM_RE = None
+
+def _has_sql_transforms(folder: str) -> bool:
+    """Retorna True si QUERIES_ANALISIS.sql contiene DDL/DML de transformación de datos."""
+    global _SQL_TRANSFORM_RE
+    import re
+    if _SQL_TRANSFORM_RE is None:
+        _SQL_TRANSFORM_RE = re.compile(
+            r'\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE|MERGE|RENAME|UPSERT)\b',
+            re.IGNORECASE,
+        )
+    fpath = os.path.join(folder, "QUERIES_ANALISIS.sql")
+    if not os.path.exists(fpath):
+        return False
+    try:
+        content = open(fpath, encoding="utf-8").read()
+        return bool(_SQL_TRANSFORM_RE.search(content))
+    except Exception:
+        return False
 
 
 def _calc_duration(pip_entry: dict, ini_key: str, fin_key: str):
@@ -292,7 +424,7 @@ def _scan_tickets() -> list:
             tickets.append({
                 "ticket_id":        ticket_id,
                 "titulo":           titulo,
-                "estado_mantis":    estado_dir,
+                "estado_tracker":    estado_dir,
                 "asignado":         pip_entry.get("asignado", ""),
                 "estado_base":      pip_entry.get("estado_base", estado_dir),
                 "pipeline_estado":  pip_estado,
@@ -319,6 +451,15 @@ def _scan_tickets() -> list:
                 "dur_tester_seg":        _calc_duration(pip_entry, "tester_inicio_at", "tester_fin_at"),
                 "tester_completado":  _tester_completed(ticket_folder),
                 "priority":           pip_entry.get("priority", 9999),
+                "last_qa_verdict":    pip_entry.get("last_qa_verdict"),
+                "rework_count":       pip_entry.get("rework_count", 0),
+                "qa_findings":        pip_entry.get("qa_findings", []),
+                "tester_verdict":     _read_tester_verdict(ticket_folder),
+                "last_unstick":       pip_entry.get("last_unstick"),
+                "has_sql_transforms": _has_sql_transforms(ticket_folder),
+                "last_invoke":        pip_entry.get("last_invoke"),
+                "paused":             os.path.exists(os.path.join(ticket_folder, "PAUSED.flag")),
+                "paused_at":          pip_entry.get("paused_at"),
             })
 
     _scan_cache.update(data=tickets, ts=now, state_mtime=state_mtime)
@@ -361,7 +502,7 @@ def api_tester_summary(ticket_id):
 
 @app.route("/api/ticket_detail/<ticket_id>")
 def api_ticket_detail(ticket_id):
-    """Retorna el contenido de INC-{id}.md (detalle completo del ticket Mantis)."""
+    """Retorna el contenido de INC-{id}.md (detalle completo del ticket)."""
     folder = _find_ticket_folder(ticket_id)
     if not folder:
         return jsonify({"ok": False, "error": "Ticket no encontrado"}), 404
@@ -480,7 +621,14 @@ def api_set_priority():
     state = _load_pipeline_state()
 
     if "order" in data:
-        # Reordenamiento masivo desde drag-and-drop del dashboard
+        # Reordenamiento masivo desde drag-and-drop del dashboard.
+        # Resetea a 9999 los tickets que ANTES estaban en el Rally pero quedaron
+        # afuera de la nueva orden, para que no se mantengan fantasmas entre sesiones.
+        order_set = {str(t) for t in data["order"]}
+        for tid, entry in state.get("tickets", {}).items():
+            p = entry.get("priority")
+            if isinstance(p, int) and p < 9999 and str(tid) not in order_set:
+                entry["priority"] = 9999
         for i, tid in enumerate(data["order"], 1):
             if tid not in state["tickets"]:
                 state["tickets"][tid] = {}
@@ -498,6 +646,47 @@ def api_set_priority():
     state["tickets"][ticket_id]["priority"] = int(priority)
     _save_pipeline_state(state)
     return jsonify({"ok": True, "ticket_id": ticket_id, "priority": int(priority)})
+
+
+# ── Rally play/pause ─────────────────────────────────────────────────────────
+# El Rally nunca arranca solo. Requiere POST /api/rally/start para avanzar,
+# y se apaga solo cuando se vacía la cola (ver _rally_launch_next).
+
+@app.route("/api/rally/status", methods=["GET"])
+def api_rally_status():
+    state = _load_pipeline_state()
+    pending = sum(
+        1 for t in state.get("tickets", {}).values()
+        if isinstance(t.get("priority"), int) and t["priority"] < 9999
+        and not t.get("estado", "").endswith("_en_proceso")
+    )
+    return jsonify({
+        "ok":       True,
+        "running":  bool(state.get("rally_running", False)),
+        "pending":  pending,
+    })
+
+
+@app.route("/api/rally/start", methods=["POST"])
+def api_rally_start():
+    """Activa el flag rally_running y lanza el próximo ticket elegible."""
+    state = _load_pipeline_state()
+    state["rally_running"] = True
+    _save_pipeline_state(state)
+    threading.Thread(
+        target=_rally_launch_next, args=("api/rally/start",),
+        daemon=True, name="rally-start",
+    ).start()
+    return jsonify({"ok": True, "running": True})
+
+
+@app.route("/api/rally/stop", methods=["POST"])
+def api_rally_stop():
+    """Pausa el Rally: los tickets siguen en cola pero no avanzan solos."""
+    state = _load_pipeline_state()
+    state["rally_running"] = False
+    _save_pipeline_state(state)
+    return jsonify({"ok": True, "running": False})
 
 
 @app.route("/api/run_pipeline", methods=["POST"])
@@ -585,12 +774,16 @@ def api_run_pipeline():
     return jsonify({"ok": True, "iniciado": True, "ticket_id": ticket_id, "stage": stage_only})
 
 
-def _invoke_stage(ticket_id: str, stage: str):
+def _invoke_stage(ticket_id: str, stage: str, force: bool = False):
     """
     Invoca el agente para una etapa.
     Después de invocar, lanza un thread de fondo que espera el flag de
     completado y avanza automáticamente a la siguiente etapa (PM→DEV→TESTER).
     Registra el resultado en state["tickets"][id]["last_invoke"].
+
+    Si force=True, salta los guardias de PAUSED.flag / EN_CURSO / lock de
+    threading / gate global, limpiando todos los cerrojos antes de invocar.
+    Útil para "Force Reinvoke" desde el dashboard cuando el pipeline está atascado.
     """
     from copilot_bridge import invoke_agent
     from pipeline_state import load_state, save_state, set_ticket_state, mark_error
@@ -614,6 +807,34 @@ def _invoke_stage(ticket_id: str, stage: str):
         _record_invoke(False, "Carpeta no encontrada")
         return
 
+    # ── PAUSED flag: respeta pausa manual (salvo force=True) ──────────────
+    paused_flag = os.path.join(folder, "PAUSED.flag")
+    if os.path.exists(paused_flag) and not force:
+        print(f"[{stage.upper()}-INVOKE] {ticket_id}: PAUSED.flag presente — invocación diferida",
+              file=sys.stderr, flush=True)
+        _record_invoke(False, "Pipeline pausado (PAUSED.flag)")
+        return
+
+    # ── force=True: limpieza proactiva de todos los cerrojos del ticket ───
+    # Esto permite que un "Force Reinvoke" desde el dashboard destrabe el pipeline
+    # aunque haya EN_CURSO, INVOKE_LOCK.pid, locks de stage o el gate tomado.
+    if force:
+        try:
+            from pipeline_lock import clear_all_locks as _clear_all_locks
+            _clear_all_locks(ticket_id, folder)
+        except Exception as _e:
+            print(f"[{stage.upper()}-INVOKE] {ticket_id}: clear_all_locks falló: {_e}",
+                  file=sys.stderr, flush=True)
+        try:
+            with _ticket_locks_rlock:
+                _ticket_invoke_locks.pop(ticket_id, None)
+        except Exception:
+            pass
+        try:
+            _release_active_ticket(ticket_id, "force reinvoke")
+        except Exception:
+            pass
+
     agents = rt.get("agents", {})
 
     # SEQ-02: Lock en memoria por ticket (primera línea de defensa intra-proceso)
@@ -624,25 +845,57 @@ def _invoke_stage(ticket_id: str, stage: str):
         return
     try:
         # ── EN_CURSO flag: evita invocaciones duplicadas del mismo agente ──────────
-        # Se crea al inicio de la invocación y se elimina cuando:
+        # Chequear ANTES de reclamar el gate global. Si el flag existe y es fresco,
+        # otro thread ya está corriendo y no debemos tocar el gate (si lo tomáramos
+        # y retornáramos, dejaríamos el gate sujeto sin agente ejecutando — gate leak).
+        # Si el flag es muy viejo (> stale_after_min), lo tratamos como huérfano:
+        # limpiamos el flag y seguimos con la invocación normal.
+        # Se elimina cuando:
         #   - invoke_agent falla (retorno False)
         #   - El watcher detecta el flag de COMPLETADO o ERROR
         en_curso_flag = os.path.join(folder, f"{stage.upper()}_AGENTE_EN_CURSO.flag")
-        # SEQ-11: Logger de correlación para diagnóstico
         from pipeline_invoker import InvokeLogger as _InvokeLogger
         _ilog = _InvokeLogger(ticket_id, stage)
         _ilog.start()
         if os.path.exists(en_curso_flag):
-            print(f"[{stage.upper()}-INVOKE] {ticket_id}: AGENTE_EN_CURSO.flag activo"
-                  f" — invocación duplicada ignorada", file=sys.stderr, flush=True)
-            _ilog.en_curso_exists(en_curso_flag)
+            try:
+                _flag_age_min = (_time.time() - os.path.getmtime(en_curso_flag)) / 60.0
+            except Exception:
+                _flag_age_min = 0.0
+            _STALE_FLAG_MIN = 30.0  # igual criterio que stale_after_min del reconciliador
+            if _flag_age_min < _STALE_FLAG_MIN:
+                print(f"[{stage.upper()}-INVOKE] {ticket_id}: AGENTE_EN_CURSO.flag activo"
+                      f" (hace {_flag_age_min:.1f} min) — invocación duplicada ignorada",
+                      file=sys.stderr, flush=True)
+                _ilog.en_curso_exists(en_curso_flag)
+                return
+            # Flag huérfano → limpiar y seguir
+            print(f"[{stage.upper()}-INVOKE] {ticket_id}: AGENTE_EN_CURSO.flag huérfano "
+                  f"(hace {_flag_age_min:.1f} min) — limpiando y reintentando",
+                  file=sys.stderr, flush=True)
+            try:
+                os.remove(en_curso_flag)
+            except Exception:
+                pass
+
+        # ── Gate global: pipeline serial ──────────────────────────────────────────
+        # Rechaza la invocación si hay otro ticket activo. El reconciliador lo
+        # reintentará en su próximo tick cuando el gate quede libre.
+        if not _try_claim_active_ticket(ticket_id):
+            _other = _get_active_ticket()
+            print(f"[{stage.upper()}-INVOKE] {ticket_id}: gate global ocupado por "
+                  f"#{_other} — rechazando (reintentará el reconciliador)",
+                  file=sys.stderr, flush=True)
             return
+
         try:
             with open(en_curso_flag, "x") as _ecf:
                 _ecf.write(datetime.now().isoformat())
         except FileExistsError:
+            # Otro thread creó el flag entre nuestro check y aquí.
             print(f"[{stage.upper()}-INVOKE] {ticket_id}: AGENTE_EN_CURSO.flag (race condition)"
-                  f" — ignorando", file=sys.stderr, flush=True)
+                  f" — liberando gate e ignorando", file=sys.stderr, flush=True)
+            _release_active_ticket(ticket_id, "race EN_CURSO")
             return
         _ilog.en_curso_created(en_curso_flag)
 
@@ -683,6 +936,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[PM] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[PM] Prompt listo ({len(prompt)} chars) — invocando agente '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -712,6 +966,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[DEV] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[DEV] Prompt listo ({len(prompt)} chars) — invocando agente '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -737,6 +992,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[TESTER] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[TESTER] Prompt listo ({len(prompt)} chars) — invocando agente '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -762,6 +1018,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[PM-INV] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[PM-INV] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -785,6 +1042,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[PM-ARQ] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[PM-ARQ] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -808,6 +1066,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[PM-PLAN] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[PM-PLAN] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -831,6 +1090,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[DEV-LOC] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[DEV-LOC] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -854,6 +1114,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[DEV-IMPL] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[DEV-IMPL] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -877,6 +1138,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[DEV-DOC] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[DEV-DOC] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -900,6 +1162,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[QA-REV] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[QA-REV] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -923,6 +1186,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[QA-EXEC] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[QA-EXEC] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -946,6 +1210,7 @@ def _invoke_stage(ticket_id: str, stage: str):
             save_state(rt["state_path"], state)
             print(f"[QA-ARB] Construyendo prompt para {ticket_id}...", file=sys.stderr, flush=True)
             prompt = _build(folder, ticket_id, rt["workspace_root"])
+            prompt = _with_heartbeat(prompt, stage)
             print(f"[QA-ARB] Prompt listo ({len(prompt)} chars) — invocando '{agent}'...", file=sys.stderr, flush=True)
             _ilog.bridge_call(agent, len(prompt))
             ok = invoke_agent(prompt, agent_name=agent, project_name=rt["name"],
@@ -982,122 +1247,370 @@ def _run_tester_only(ticket_id: str):
     _invoke_stage(ticket_id, "tester")
 
 
-@app.route("/api/reimport/<ticket_id>", methods=["POST"])
-def api_reimport(ticket_id: str):
-    """
-    Resetea completamente el pipeline de un ticket:
-      - Borra el entry de pipeline/state.json
-      - Borra de seen_tickets.json para que el scraper vuelva a importarlo
-      - Elimina TODOS los flags y sentinelas del filesystem del ticket
-        (PM_COMPLETADO, DEV_COMPLETADO, TESTER_COMPLETADO, *_ERROR, *_EN_CURSO)
-    """
-    import json as _json
-    rt = _get_runtime()
+# ── RESET COMPLETO (B1) ───────────────────────────────────────────────────────
+# Listas centralizadas de artefactos a limpiar — declaradas a nivel de módulo
+# para que otros componentes (tests, daemon) puedan reusarlas sin duplicar.
 
-    # Buscar carpeta del ticket ANTES de limpiar state.json
+RESET_FLAGS_TO_DELETE = [
+    # Flags de completado / sentinelas
+    "PM_COMPLETADO.flag", "DEV_COMPLETADO.md", "TESTER_COMPLETADO.md", "DOC_COMPLETADO.flag",
+    # Flags de error
+    "PM_ERROR.flag", "DEV_ERROR.flag", "TESTER_ERROR.flag", "DOC_ERROR.flag",
+    # Flags de agente en curso
+    "PM_AGENTE_EN_CURSO.flag", "DEV_AGENTE_EN_CURSO.flag",
+    "TESTER_AGENTE_EN_CURSO.flag", "DOC_AGENTE_EN_CURSO.flag",
+    # Heartbeats (A4)
+    "PM_HEARTBEAT.txt", "DEV_HEARTBEAT.txt", "TESTER_HEARTBEAT.txt", "DOC_HEARTBEAT.txt",
+]
+
+RESET_ANALYSIS_FILES = [
+    # PM
+    "INCIDENTE.md", "ANALISIS_TECNICO.md", "ARQUITECTURA_SOLUCION.md",
+    "TAREAS_DESARROLLO.md", "NOTAS_IMPLEMENTACION.md", "QUERIES_ANALISIS.sql",
+    # DEV
+    "BUG_LOCALIZATION.md", "DB_SOLUTION.sql", "GIT_CHANGES.md", "SVN_CHANGES.md",
+    "COMMIT_MESSAGE.txt", "DEV_SHADOW_PLAN.md",
+    # QA
+    "CODE_REVIEW.md", "TEST_RESULTS.md", "MANTIS_UPDATE.json",
+    "TESTER_COMPLETADO.md.prev",
+]
+
+
+def _parse_files_txt(files_txt_path: str) -> list[str]:
+    """Parsea snapshots/{stage}_files.txt → lista de paths relativos al workspace.
+    Cada línea de datos tiene formato `<status>  <path>` (estilo git status -s)."""
+    paths = []
+    try:
+        with open(files_txt_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line or line.startswith("#") or line.strip() == "(sin cambios)":
+                    continue
+                parts = line.split(None, 1)
+                paths.append(parts[1].strip() if len(parts) == 2 else parts[0].strip())
+    except Exception:
+        pass
+    return paths
+
+
+def _reset_ticket(ticket_id: str, mode: str = "soft", force: bool = False) -> dict:
+    """Reset comprehensivo de un ticket.
+
+    Modos:
+      - "soft" (default): limpia todos los artefactos generados por Stacky
+        (state.json, seen_tickets, flags, análisis, snapshots, locks, ZIPs,
+        caches en memoria). NO toca el workspace.
+      - "hard": además ejecuta `git checkout -- <archivo>` sobre cada archivo
+        listado en snapshots/{stage}_files.txt para revertir los cambios del
+        workspace. Destructivo: si dos tickets tocaron los mismos archivos
+        se pierden todos los cambios.
+
+    Devuelve dict con detalle exacto de lo limpiado/fallado (best-effort:
+    cada paso en su propio try/except para no abortar los siguientes).
+    """
+    import glob as _glob
+    import shutil as _shutil
+
+    rt     = _get_runtime()
     folder = _find_ticket_folder(ticket_id, rt["tickets_base"])
 
-    # 1. Borrar de pipeline/state.json
+    result: dict = {
+        "ok":                  True,
+        "ticket_id":           ticket_id,
+        "mode":                mode,
+        "force":               bool(force),
+        "removed_pipeline":    False,
+        "removed_seen":        False,
+        "files_removed":       [],
+        "snapshots_removed":   False,
+        "locks_released":      [],
+        "deploy_zips_removed": [],
+        "files_reverted":      [],
+        "revert_failed":       [],
+        "caches_cleared":      [],
+        "errors":              [],
+    }
+
+    # 1) Entry de pipeline/state.json
     try:
         from pipeline_state import load_state, save_state
         state = load_state(rt["state_path"])
-        removed_pipeline = ticket_id in state.get("tickets", {})
-        state.get("tickets", {}).pop(ticket_id, None)
+        if ticket_id in state.get("tickets", {}):
+            del state["tickets"][ticket_id]
+            result["removed_pipeline"] = True
         save_state(rt["state_path"], state)
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Error limpiando state.json: {e}"}), 500
+        result["errors"].append(f"state.json: {e}")
 
-    # 2. Borrar de seen_tickets.json global (para que el scraper lo vuelva a importar)
+    # 2) Entry de seen_tickets.json (para que el scraper lo re-importe)
     seen_path = os.path.join(BASE_DIR, "state", "seen_tickets.json")
-    removed_seen = False
     try:
         if os.path.exists(seen_path):
             with open(seen_path, encoding="utf-8") as f:
-                seen = _json.load(f)
+                seen = json.load(f)
             if ticket_id in seen.get("tickets", {}):
                 del seen["tickets"][ticket_id]
-                removed_seen = True
-            with open(seen_path, "w", encoding="utf-8") as f:
-                _json.dump(seen, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass  # No es bloqueante si falla
+                result["removed_seen"] = True
+                with open(seen_path, "w", encoding="utf-8") as f:
+                    json.dump(seen, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        result["errors"].append(f"seen_tickets.json: {e}")
 
-    # 3. Eliminar flags y sentinelas del filesystem del ticket
-    flags_deleted = []
-    flags_to_delete = [
-        # Flags de completado / sentinelas
-        "PM_COMPLETADO.flag",
-        "DEV_COMPLETADO.md",
-        "TESTER_COMPLETADO.md",
-        "DOC_COMPLETADO.flag",
-        # Flags de error
-        "PM_ERROR.flag",
-        "DEV_ERROR.flag",
-        "TESTER_ERROR.flag",
-        "DOC_ERROR.flag",
-        # Flags de agente en curso (anti-duplicados)
-        "PM_AGENTE_EN_CURSO.flag",
-        "DEV_AGENTE_EN_CURSO.flag",
-        "TESTER_AGENTE_EN_CURSO.flag",
-        "DOC_AGENTE_EN_CURSO.flag",
-    ]
-    if folder and os.path.isdir(folder):
-        for fname in flags_to_delete:
-            fpath = os.path.join(folder, fname)
-            if os.path.exists(fpath):
-                try:
-                    os.remove(fpath)
-                    flags_deleted.append(fname)
-                except Exception as e:
-                    print(f"[REIMPORT] No se pudo borrar {fname}: {e}", file=sys.stderr)
-        # También borrar backups de error (*.flag.N.bak)
-        import glob as _glob
-        for bak in _glob.glob(os.path.join(folder, "*.flag*.bak")) + \
-                   _glob.glob(os.path.join(folder, "*.md*.bak")):
+    # 3) Hard mode: revertir workspace ANTES de borrar la carpeta del ticket.
+    # Estrategia "Opción A": por cada archivo listado en snapshots/*_files.txt:
+    #   a. Borrar el archivo local (si existe).
+    #   b. `git checkout HEAD -- <relpath>` para traer la versión commiteada.
+    # Esto recupera cambios aunque el git checkout simple falle por staging, CRLF
+    # o locks de otras herramientas. Si el archivo no existe en HEAD, el paso (b)
+    # falla y queda borrado — que es el comportamiento correcto para archivos que
+    # el ticket creó nuevos.
+    if mode == "hard" and folder:
+        snap_dir = os.path.join(folder, "snapshots")
+        files_to_revert: set = set()
+        if os.path.isdir(snap_dir):
+            for files_txt in _glob.glob(os.path.join(snap_dir, "*_files.txt")):
+                files_to_revert.update(_parse_files_txt(files_txt))
+        workspace_root = rt["workspace_root"]
+        for relpath in sorted(files_to_revert):
+            abs_path = os.path.join(workspace_root, relpath)
+            # (a) borrar local
             try:
-                os.remove(bak)
-                flags_deleted.append(os.path.basename(bak))
+                if os.path.exists(abs_path):
+                    os.remove(abs_path)
+            except Exception as e:
+                result["revert_failed"].append({"file": relpath, "error": f"rm: {e}"})
+                continue
+            # (b) restaurar desde HEAD
+            try:
+                r = subprocess.run(
+                    ["git", "checkout", "HEAD", "--", relpath],
+                    cwd=workspace_root,
+                    capture_output=True, text=True, timeout=30,
+                )
+                if r.returncode == 0:
+                    result["files_reverted"].append(relpath)
+                else:
+                    # Archivo probablemente nuevo en el ticket (no existe en HEAD).
+                    # Queda borrado — comportamiento esperado.
+                    stderr = (r.stderr or "").strip()
+                    if "did not match any file" in stderr or "pathspec" in stderr:
+                        result["files_reverted"].append(f"{relpath} (new → deleted)")
+                    else:
+                        result["revert_failed"].append({"file": relpath, "stderr": stderr})
+            except Exception as e:
+                result["revert_failed"].append({"file": relpath, "error": f"git: {e}"})
+
+    # 4) Filesystem del ticket
+    # - Soft: limpia flags, análisis, backups, ZIPs, snapshots/ (conserva INCIDENTE.md)
+    # - Hard: wipe completo de la carpeta del ticket (se re-importará desde ADO)
+    if folder and os.path.isdir(folder):
+        if mode == "hard":
+            try:
+                _shutil.rmtree(folder)
+                result["files_removed"].append(f"<folder>/{os.path.basename(folder)}")
+                result["snapshots_removed"] = True
+                result["folder_wiped"] = True
+            except Exception as e:
+                result["errors"].append(f"rmtree folder: {e}")
+        else:
+            for fname in RESET_FLAGS_TO_DELETE + RESET_ANALYSIS_FILES:
+                fpath = os.path.join(folder, fname)
+                if os.path.exists(fpath):
+                    try:
+                        os.remove(fpath)
+                        result["files_removed"].append(fname)
+                    except Exception as e:
+                        result["errors"].append(f"{fname}: {e}")
+            for pattern in ("*.bak", "*.flag*.bak", "*.md*.bak", "*.prev", "*.tmp"):
+                for bak in _glob.glob(os.path.join(folder, pattern)):
+                    try:
+                        os.remove(bak)
+                        result["files_removed"].append(os.path.basename(bak))
+                    except Exception:
+                        pass
+            for zip_path in (_glob.glob(os.path.join(folder, "*_deploy.zip")) +
+                             _glob.glob(os.path.join(folder, "deploy_*.zip"))):
+                try:
+                    os.remove(zip_path)
+                    result["deploy_zips_removed"].append(os.path.basename(zip_path))
+                except Exception as e:
+                    result["errors"].append(f"zip {os.path.basename(zip_path)}: {e}")
+            snap_dir = os.path.join(folder, "snapshots")
+            if os.path.isdir(snap_dir):
+                try:
+                    _shutil.rmtree(snap_dir)
+                    result["snapshots_removed"] = True
+                except Exception as e:
+                    result["errors"].append(f"snapshots/: {e}")
+
+    # 5) Lock files file-based en Tools/Stacky/locks/
+    try:
+        from pipeline_lock import release_lock
+        locks_dir = os.path.join(BASE_DIR, "locks")
+        if os.path.isdir(locks_dir):
+            prefix = f"{ticket_id}_"
+            for lock_file in _glob.glob(os.path.join(locks_dir, f"{prefix}*.lock")):
+                stage_name = os.path.basename(lock_file)[len(prefix):-len(".lock")]
+                try:
+                    release_lock(ticket_id, stage_name)
+                except Exception:
+                    pass
+                if os.path.exists(lock_file):
+                    try:
+                        os.remove(lock_file)
+                    except Exception as e:
+                        result["errors"].append(f"lock {os.path.basename(lock_file)}: {e}")
+                        continue
+                result["locks_released"].append(os.path.basename(lock_file))
+    except Exception as e:
+        result["errors"].append(f"locks: {e}")
+
+    # 5b) INVOKE_LOCK.pid (pipeline_invoker inter-process lockfile) — clear_all_locks
+    # también re-limpia los lock files por si el paso 5 dejó alguno (best-effort).
+    try:
+        from pipeline_lock import clear_all_locks as _clear_all_locks
+        clr = _clear_all_locks(ticket_id, folder)
+        if clr.get("invoke_lock_pid"):
+            result["locks_released"].append("INVOKE_LOCK.pid")
+    except Exception as e:
+        result["errors"].append(f"clear_all_locks: {e}")
+
+    # 5c) Gate global de pipeline serial: si este ticket lo tenía tomado, liberarlo.
+    try:
+        if _release_active_ticket(ticket_id, f"reset {mode}"):
+            result["caches_cleared"].append("active_ticket_gate")
+    except Exception as e:
+        result["errors"].append(f"gate_global: {e}")
+
+    # 6) Caches en memoria del proceso dashboard
+    try:
+        with _ticket_locks_rlock:
+            _ticket_invoke_locks.pop(ticket_id, None)
+        result["caches_cleared"].append("_ticket_invoke_locks")
+    except Exception as e:
+        result["errors"].append(f"_ticket_invoke_locks: {e}")
+    try:
+        _invalidate_runtime_cache()
+        _scan_cache["data"]  = None
+        _scan_cache["ts"]    = 0.0
+        _state_cache["mtime"] = 0.0
+        _title_cache.pop(ticket_id, None)
+        result["caches_cleared"].append("dashboard_caches")
+    except Exception as e:
+        result["errors"].append(f"dashboard_caches: {e}")
+
+    # Queue en memoria de agent_queue (slots activos + cola pendiente)
+    try:
+        from agent_queue import get_agent_queue
+        q = get_agent_queue()
+        for stage_key in ("pm", "dev", "tester"):
+            if ticket_id in q._active.get(stage_key, []):
+                q._active[stage_key].remove(ticket_id)
+            q._queue[stage_key] = [it for it in q._queue.get(stage_key, [])
+                                   if getattr(it, "ticket_id", None) != ticket_id]
+        result["caches_cleared"].append("agent_queue")
+    except Exception as e:
+        result["errors"].append(f"agent_queue: {e}")
+
+    # 7b) Hard mode: disparar re-sync desde Azure para re-importar el ticket.
+    # Corre en background — el usuario ya tiene la respuesta HTTP y el sync puede
+    # tardar varios segundos.
+    if mode == "hard":
+        def _resync_after_hard(_proj=rt.get("name"), _tid=ticket_id):
+            try:
+                from issue_provider.sync import sync_tickets
+                sync_tickets(_proj)
+                print(f"[RESET-HARD] {_tid}: re-sync Azure finalizado",
+                      file=sys.stderr, flush=True)
+            except Exception as _e:
+                print(f"[RESET-HARD] {_tid}: re-sync Azure falló: {_e}",
+                      file=sys.stderr, flush=True)
+        threading.Thread(target=_resync_after_hard, daemon=True,
+                         name=f"reset-resync-{ticket_id}").start()
+        result["resync_triggered"] = True
+
+    # 7) Auditoría append-only
+    try:
+        audit_path = os.path.join(BASE_DIR, "state", "reset_audit.log")
+        os.makedirs(os.path.dirname(audit_path), exist_ok=True)
+        with open(audit_path, "a", encoding="utf-8") as f:
+            entry = {
+                "ts":                   datetime.now().isoformat(),
+                "ticket_id":            ticket_id,
+                "mode":                 mode,
+                "force":                bool(force),
+                "removed_pipeline":     result["removed_pipeline"],
+                "removed_seen":         result["removed_seen"],
+                "files_removed_count":  len(result["files_removed"]),
+                "snapshots_removed":    result["snapshots_removed"],
+                "locks_released_count": len(result["locks_released"]),
+                "deploy_zips_count":    len(result["deploy_zips_removed"]),
+                "files_reverted_count": len(result["files_reverted"]),
+                "revert_failed_count":  len(result["revert_failed"]),
+                "errors_count":         len(result["errors"]),
+            }
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        result["errors"].append(f"audit: {e}")
+
+    if result["errors"] or result["revert_failed"]:
+        result["partial_success"] = True
+
+    summary = (f"reset {mode}: {len(result['files_removed'])} archivos, "
+               f"{len(result['locks_released'])} locks, "
+               f"{len(result['files_reverted'])} reverts, "
+               f"{len(result['errors'])} errores")
+    result["msg"] = summary
+    return result
+
+
+@app.route("/api/reset/<ticket_id>", methods=["POST"])
+def api_reset(ticket_id: str):
+    """Endpoint canónico de reset. Acepta ?mode=soft|hard (default soft).
+
+    Query params:
+      - force=1: marca el reset como forzado en el audit log. El reset en sí
+        ya libera el gate global y limpia locks aunque el ticket esté en
+        *_en_proceso, pero con force=1 queda trazado como "reset durante
+        ejecución" para diagnóstico.
+    """
+    mode  = request.args.get("mode", "soft").lower()
+    force = request.args.get("force", "").lower() in ("1", "true", "yes")
+    if mode not in ("soft", "hard"):
+        return jsonify({"ok": False, "error": f"mode inválido: {mode} (usar soft|hard)"}), 400
+    return jsonify(_reset_ticket(ticket_id, mode, force=force))
+
+
+@app.route("/api/reimport/<ticket_id>", methods=["POST"])
+def api_reimport(ticket_id: str):
+    """Alias retrocompat de /api/reset/<id>?mode=soft.
+    El botón "Reimportar" del dashboard sigue funcionando sin cambios."""
+    return jsonify(_reset_ticket(ticket_id, "soft"))
+
+
+@app.route("/api/reset_preview/<ticket_id>", methods=["GET"])
+def api_reset_preview(ticket_id: str):
+    """Preview de archivos que Reset Hard revertiría (unión de snapshots/*_files.txt).
+    Permite mostrar al usuario qué se va a tocar antes de confirmar."""
+    import glob as _glob
+    folder = _find_ticket_folder(ticket_id)
+    if not folder:
+        return jsonify({"ok": False, "error": "ticket folder no encontrado", "files": []}), 404
+    snap_dir = os.path.join(folder, "snapshots")
+    files: set = set()
+    stages_found: list = []
+    if os.path.isdir(snap_dir):
+        for files_txt in _glob.glob(os.path.join(snap_dir, "*_files.txt")):
+            stages_found.append(os.path.basename(files_txt))
+            try:
+                files.update(_parse_files_txt(files_txt))
             except Exception:
                 pass
-
-    # SEQ-05: Borrar también los artefactos de análisis generados por agentes
-    # para evitar que PM re-analice sobre contenido de runs anteriores
-    ANALYSIS_FILES = [
-        "INCIDENTE.md",
-        "ANALISIS_TECNICO.md",
-        "ARQUITECTURA_SOLUCION.md",
-        "TAREAS_DESARROLLO.md",
-        "NOTAS_IMPLEMENTACION.md",
-        "QUERIES_ANALISIS.sql",
-        "BUG_LOCALIZATION.md",
-        "DB_SOLUTION.sql",
-        "SVN_CHANGES.md",
-        "COMMIT_MESSAGE.txt",
-        "DEV_SHADOW_PLAN.md",
-        "TESTER_COMPLETADO.md.prev",
-    ]
-    mode = request.args.get("mode", "full")  # ?mode=flags_only para no borrar análisis
-    if mode != "flags_only" and folder and os.path.isdir(folder):
-        for fname in ANALYSIS_FILES:
-            fpath = os.path.join(folder, fname)
-            if os.path.exists(fpath):
-                try:
-                    os.remove(fpath)
-                    flags_deleted.append(fname)
-                except Exception as e:
-                    print(f"[REIMPORT] No se pudo borrar análisis {fname}: {e}", file=sys.stderr)
-
-    _invalidate_runtime_cache()
-    _scan_cache["data"] = None
-
     return jsonify({
-        "ok":               True,
-        "ticket_id":        ticket_id,
-        "removed_pipeline": removed_pipeline,
-        "removed_seen":     removed_seen,
-        "flags_deleted":    flags_deleted,
-        "mode":             mode,
-        "msg":              "Ticket reseteado. Flags eliminados. El próximo scrape lo volverá a importar.",
+        "ok": True,
+        "ticket_id": ticket_id,
+        "files": sorted(files),
+        "snapshots": sorted(stages_found),
     })
 
 
@@ -1107,7 +1620,7 @@ def api_gen_deploy(ticket_id: str):
     Genera un paquete ZIP de despliegue para el ticket:
       - Solo las DLLs modificadas (inferidas desde los .cs/.vb cambiados)
       - Archivos web modificados (.aspx, .ascx, .js, .css, etc.)
-      - Scripts SQL encontrados en comentarios Mantis y QUERIES_ANALISIS.sql
+      - Scripts SQL encontrados en QUERIES_ANALISIS.sql
       - README_DEPLOY.md con instrucciones
 
     Retorna: { ok, zip_name, zip_path, files, sql_scripts, warnings }
@@ -1169,10 +1682,10 @@ def api_download_deploy(ticket_id: str, zip_name: str):
                      mimetype="application/zip")
 
 
-@app.route("/api/mantis_confirm/<ticket_id>", methods=["POST"])
-def api_mantis_confirm(ticket_id: str):
+@app.route("/api/tracker_confirm/<ticket_id>", methods=["POST"])
+def api_tracker_confirm(ticket_id: str):
     """
-    Publica una nota en el ticket Mantis con el estado actual del pipeline.
+    Publica una nota en el tracker con el estado actual del pipeline.
     Body (opcional): { "resolve": true }  → cambia el estado a 'resuelta'
     """
     from pipeline_state import load_state
@@ -1184,32 +1697,142 @@ def api_mantis_confirm(ticket_id: str):
     data          = request.get_json(force=True, silent=True) or {}
     resolve_state = bool(data.get("resolve", False))
 
-    mantis_url = rt.get("mantis_url", "")
-    auth_path  = os.path.join(BASE_DIR, "auth", "auth.json")
+    # Resolución unificada: el IssueProvider activo decide cómo publicar.
+    try:
+        from issue_provider import get_provider, CommentKind, load_tracker_config
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"issue_provider indisponible: {e}"}), 500
 
-    if not mantis_url:
+    tracker_cfg = load_tracker_config(rt.get("name"))
+    if not tracker_cfg:
         return jsonify({"ok": False,
-                        "error": "mantis_url no configurado en el proyecto activo"}), 400
+                        "error": "issue_tracker no configurado para el proyecto activo"}), 400
 
     state = load_state(rt["state_path"])
     est   = state.get("tickets", {}).get(ticket_id, {}).get("estado", "")
 
     def _run_update():
         try:
-            from mantis_updater import update_ticket_on_mantis, confirm_ticket_on_mantis
-            if est in ("pm_completado", "pm_en_proceso"):
-                ok = confirm_ticket_on_mantis(ticket_id, folder, mantis_url, auth_path)
-            else:
-                ok = update_ticket_on_mantis(ticket_id, folder, mantis_url, auth_path,
-                                             resolve_status=resolve_state)
-            print(f"[MANTIS] Nota publicada para #{ticket_id}: {ok}", flush=True)
+            provider = get_provider(rt.get("name"), override_config=tracker_cfg)
+            kind = (CommentKind.PM_CONFIRM
+                    if est in ("pm_completado", "pm_en_proceso")
+                    else CommentKind.QA_RESOLUTION)
+            from daemon import _build_resolution_note
+            note = _build_resolution_note(folder, ticket_id)
+            ok   = provider.add_comment(ticket_id, note, kind=kind, is_html=True)
+            if ok and resolve_state and kind == CommentKind.QA_RESOLUTION:
+                provider.transition_state(ticket_id, "Resolved")
+            print(f"[TRACKER:{provider.name}] Nota publicada para #{ticket_id}: {ok}",
+                  flush=True)
         except Exception as e:
-            print(f"[MANTIS] Error publicando nota para #{ticket_id}: {e}",
+            print(f"[TRACKER] Error publicando nota para #{ticket_id}: {e}",
                   file=sys.stderr, flush=True)
 
     threading.Thread(target=_run_update, daemon=True).start()
     return jsonify({"ok": True, "ticket_id": ticket_id, "estado": est,
-                    "msg": "Publicando nota en Mantis en segundo plano..."})
+                    "msg": "Publicando nota en el issue tracker en segundo plano..."})
+
+
+@app.route("/api/ado/<ticket_id>/mark-doing", methods=["POST"])
+def api_ado_mark_doing(ticket_id: str):
+    """
+    Marca el Work Item ADO como 'Active' (equivalente a 'Doing' en la
+    terminología del usuario). Body opcional: {"target_state": "Active"} para
+    forzar otro estado nativo.
+
+    Nota sobre el estado: en el proyecto Strategist_Pacifico el estado nativo
+    real para "trabajo en curso" es ``Active`` (ver ado_reporter._ADO_STATE_MAP
+    y ado_query_provider). Los aliases ``Doing`` / ``In Progress`` existen en
+    el ``state_mapping`` como defensa para otros templates de ADO. Esta ruta
+    intenta ``Active`` primero y cae a los aliases si el workflow del proyecto
+    no lo acepta — equivalente al patrón ya usado por AzureDevOpsProvider.close().
+
+    La llamada a ADO corre en thread daemon: respondemos optimistamente al UI
+    y el dashboard refresca a los ~2s. Emite ``ado_state_changed`` al bus de
+    eventos y publica una notificación (NOTIFICATIONS.json) para trazabilidad.
+    """
+    try:
+        from issue_provider import get_provider, load_tracker_config
+    except Exception as e:
+        return jsonify({"ok": False,
+                        "error": f"issue_provider indisponible: {e}"}), 500
+
+    rt = _get_runtime()
+    tracker_cfg = load_tracker_config(rt.get("name"))
+    if not tracker_cfg:
+        return jsonify({"ok": False,
+                        "error": "issue_tracker no configurado para el proyecto activo"}), 400
+
+    body = request.get_json(silent=True) or {}
+    requested = (body.get("target_state") or "").strip()
+    # Orden: pedido explícito > Active (nativo del proyecto) > aliases de otros templates.
+    candidates = [requested] if requested else []
+    for st in ("Active", "Doing", "In Progress"):
+        if st not in candidates:
+            candidates.append(st)
+
+    def _run_transition():
+        try:
+            provider = get_provider(rt.get("name"), override_config=tracker_cfg)
+            applied = None
+            last_err = None
+            for target in candidates:
+                try:
+                    if provider.transition_state(ticket_id, target):
+                        applied = target
+                        break
+                except Exception as e:
+                    last_err = e
+            if not applied:
+                detail = f"falló la transición a los estados {candidates}"
+                if last_err:
+                    detail += f" — último error: {last_err}"
+                print(f"[ADO] mark-doing #{ticket_id}: {detail}",
+                      file=sys.stderr, flush=True)
+                try:
+                    from notifier import notify as _notify
+                    _notify(f"ADO → Doing falló para #{ticket_id}",
+                            detail, level="error", ticket_id=ticket_id)
+                except Exception:
+                    pass
+                try:
+                    from pipeline_events import emit as _emit
+                    _emit(kind="ado_state_change_failed",
+                          ticket_id=ticket_id,
+                          project=rt.get("name"),
+                          detail=detail[:400])
+                except Exception:
+                    pass
+                return
+
+            # Éxito — evento + notificación.
+            try:
+                from pipeline_events import emit as _emit
+                _emit(kind="ado_state_changed",
+                      ticket_id=ticket_id,
+                      project=rt.get("name"),
+                      detail=f"to={applied} source=dashboard_mark_doing")
+            except Exception:
+                pass
+            try:
+                from notifier import notify as _notify
+                _notify(f"▶ #{ticket_id} marcado {applied} en ADO",
+                        "Transición disparada desde el dashboard.",
+                        level="info", ticket_id=ticket_id)
+            except Exception:
+                pass
+            print(f"[ADO] mark-doing #{ticket_id} → {applied}", flush=True)
+        except Exception as e:
+            print(f"[ADO] mark-doing #{ticket_id} error inesperado: {e}",
+                  file=sys.stderr, flush=True)
+
+    threading.Thread(target=_run_transition, daemon=True).start()
+    return jsonify({
+        "ok": True,
+        "ticket_id": ticket_id,
+        "candidates": candidates,
+        "msg": "Transición a Active/Doing en curso en ADO (respuesta en segundo plano)...",
+    })
 
 
 @app.route("/api/reinvoke/<ticket_id>", methods=["POST"])
@@ -1218,11 +1841,18 @@ def api_reinvoke(ticket_id: str):
     Reintenta la invocación del agente para el estado actual del ticket,
     SIN cambiar el estado del pipeline (no hace reset a pendiente).
     Útil cuando VS Code se abrió pero el chat no recibió el prompt.
+
+    Query params:
+      - force=1: limpia todos los cerrojos antes de reinvocar (EN_CURSO,
+        INVOKE_LOCK.pid, lock files de stage, threading.Lock, gate global,
+        PAUSED.flag). Úselo cuando el botón normal da "invocación duplicada".
     """
     from pipeline_state import load_state
     rt    = _get_runtime()
     state = load_state(rt["state_path"])
     est   = state.get("tickets", {}).get(ticket_id, {}).get("estado", "")
+
+    force = request.args.get("force", "").lower() in ("1", "true", "yes")
 
     stage_map = {
         "pm_en_proceso":     "pm",
@@ -1230,14 +1860,565 @@ def api_reinvoke(ticket_id: str):
         "tester_en_proceso": "tester",
     }
     stage = stage_map.get(est)
+    # En modo force, también aceptamos estados de error para reinvocar
+    if not stage and force:
+        stage_err_map = {
+            "error_pm": "pm", "error_dev": "dev", "error_tester": "tester",
+        }
+        stage = stage_err_map.get(est)
     if not stage:
         return jsonify({"ok": False,
-                        "error": f"El ticket está en '{est}' — solo se puede reinvocar en *_en_proceso"}), 400
+                        "error": f"El ticket está en '{est}' — solo se puede reinvocar en *_en_proceso "
+                                 f"(o error_* con force=1)"}), 400
 
-    t = threading.Thread(target=_invoke_stage, args=(ticket_id, stage), daemon=True)
+    # force=1: borrar PAUSED.flag si existe para no bloquear la invocación
+    if force:
+        folder = _find_ticket_folder(ticket_id, rt["tickets_base"])
+        if folder:
+            paused = os.path.join(folder, "PAUSED.flag")
+            if os.path.exists(paused):
+                try:
+                    os.remove(paused)
+                except Exception:
+                    pass
+
+    t = threading.Thread(target=_invoke_stage, args=(ticket_id, stage),
+                         kwargs={"force": force}, daemon=True)
     t.start()
     return jsonify({"ok": True, "ticket_id": ticket_id, "stage": stage,
-                    "msg": f"Reintentando invocar agente para etapa {stage}"})
+                    "force": force,
+                    "msg": (f"Force-reinvocación de etapa {stage} "
+                            f"(cerrojos limpiados)") if force else
+                           f"Reintentando invocar agente para etapa {stage}"})
+
+
+# ── CANCEL / PAUSE / RESUME (control de agentes en curso) ─────────────────────
+
+@app.route("/api/cancel/<ticket_id>", methods=["POST"])
+def api_cancel(ticket_id: str):
+    """
+    Cancela la invocación en curso de un ticket:
+      1. Limpia todos los cerrojos (EN_CURSO, INVOKE_LOCK.pid, lock files, gate global)
+      2. Marca el estado del ticket como error_{stage}
+      3. NO reinvoca — el ticket queda disponible para intervención manual
+
+    LIMITACIÓN FÍSICA: el agente ya invocado sigue corriendo dentro de VS Code
+    porque no se guarda su PID. Sus outputs (flag COMPLETADO, etc.) serán ignorados
+    porque el lock ya no le pertenece; pero el chat de VS Code no se cierra.
+    """
+    from pipeline_state import load_state, save_state, mark_error
+    rt     = _get_runtime()
+    state  = load_state(rt["state_path"])
+    est    = state.get("tickets", {}).get(ticket_id, {}).get("estado", "")
+    folder = _find_ticket_folder(ticket_id, rt["tickets_base"])
+
+    stage_map = {
+        "pm_en_proceso":     "pm",
+        "dev_en_proceso":    "dev",
+        "tester_en_proceso": "tester",
+    }
+    stage = stage_map.get(est)
+
+    cleared = {}
+    try:
+        from pipeline_lock import clear_all_locks as _clear_all_locks
+        cleared = _clear_all_locks(ticket_id, folder)
+    except Exception as e:
+        cleared = {"errors": [str(e)]}
+
+    try:
+        with _ticket_locks_rlock:
+            _ticket_invoke_locks.pop(ticket_id, None)
+    except Exception:
+        pass
+
+    gate_released = False
+    try:
+        gate_released = _release_active_ticket(ticket_id, "cancel via API")
+    except Exception:
+        pass
+
+    # Marcar error_{stage} solo si estaba en un *_en_proceso conocido
+    if stage:
+        try:
+            mark_error(state, ticket_id, stage, "Cancelado manualmente desde dashboard")
+            save_state(rt["state_path"], state)
+        except Exception as e:
+            print(f"[CANCEL] {ticket_id}: no se pudo marcar error_{stage}: {e}",
+                  file=sys.stderr, flush=True)
+
+    return jsonify({
+        "ok":              True,
+        "ticket_id":       ticket_id,
+        "previous_estado": est,
+        "stage":           stage,
+        "cleared":         cleared,
+        "gate_released":   gate_released,
+        "msg":             (f"Cancelado — estado: error_{stage}" if stage
+                            else "Cerrojos limpiados (no había *_en_proceso)"),
+        "note":            ("El agente en VS Code puede seguir corriendo — "
+                            "sus outputs serán ignorados."),
+    })
+
+
+@app.route("/api/pause/<ticket_id>", methods=["POST"])
+def api_pause(ticket_id: str):
+    """
+    Pausa el auto-avance del pipeline para este ticket.
+    Crea PAUSED.flag en la carpeta del ticket; el reconciliador y _invoke_stage
+    respetan este flag y no lanzan nuevas etapas hasta que se resuma.
+    También setea auto_advance=False como defensa redundante.
+
+    El agente ya invocado NO se detiene — solo se impiden nuevas invocaciones.
+    """
+    from pipeline_state import load_state, save_state
+    rt     = _get_runtime()
+    folder = _find_ticket_folder(ticket_id, rt["tickets_base"])
+    if not folder:
+        return jsonify({"ok": False, "error": f"Carpeta no encontrada para {ticket_id}"}), 404
+
+    flag_path = os.path.join(folder, "PAUSED.flag")
+    try:
+        with open(flag_path, "w", encoding="utf-8") as f:
+            f.write(f"{datetime.now().isoformat()}\npid={os.getpid()}\n")
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"No se pudo crear PAUSED.flag: {e}"}), 500
+
+    try:
+        state = load_state(rt["state_path"])
+        state.setdefault("tickets", {}).setdefault(ticket_id, {})["auto_advance"] = False
+        state["tickets"][ticket_id]["paused_at"] = datetime.now().isoformat()
+        save_state(rt["state_path"], state)
+    except Exception as e:
+        print(f"[PAUSE] {ticket_id}: no se pudo actualizar auto_advance: {e}",
+              file=sys.stderr, flush=True)
+
+    return jsonify({"ok": True, "ticket_id": ticket_id, "paused": True,
+                    "flag": os.path.basename(flag_path),
+                    "msg": "Pipeline pausado. El agente actual sigue; no se invocarán nuevos."})
+
+
+@app.route("/api/resume/<ticket_id>", methods=["POST"])
+def api_resume(ticket_id: str):
+    """
+    Reanuda el pipeline: borra PAUSED.flag y re-activa auto_advance.
+    El watcher/reconciliador retomará automáticamente el curso normal.
+    """
+    from pipeline_state import load_state, save_state
+    rt     = _get_runtime()
+    folder = _find_ticket_folder(ticket_id, rt["tickets_base"])
+    if not folder:
+        return jsonify({"ok": False, "error": f"Carpeta no encontrada para {ticket_id}"}), 404
+
+    flag_path = os.path.join(folder, "PAUSED.flag")
+    removed = False
+    if os.path.exists(flag_path):
+        try:
+            os.remove(flag_path)
+            removed = True
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"No se pudo borrar PAUSED.flag: {e}"}), 500
+
+    try:
+        state = load_state(rt["state_path"])
+        entry = state.setdefault("tickets", {}).setdefault(ticket_id, {})
+        entry["auto_advance"] = True
+        entry.pop("paused_at", None)
+        save_state(rt["state_path"], state)
+    except Exception as e:
+        print(f"[RESUME] {ticket_id}: no se pudo actualizar auto_advance: {e}",
+              file=sys.stderr, flush=True)
+
+    return jsonify({"ok": True, "ticket_id": ticket_id, "paused": False,
+                    "flag_removed": removed,
+                    "msg": "Pipeline reanudado. El watcher retomará el avance automático."})
+
+
+@app.route("/api/pipeline/health", methods=["GET"])
+def api_pipeline_health():
+    """
+    Devuelve el diagnóstico de salud del pipeline ticket-por-ticket.
+
+    Para cada ticket activo reporta:
+      - estado almacenado en state.json
+      - estado real derivado del folder
+      - coherencia, sugerencias de reconciliación
+      - stale (ticket atascado sin progreso)
+      - timeline de las últimas N transiciones (si existen)
+
+    El frontend usa esto para pintar badges de advertencia y ofrecer
+    botones de "reanudar" en tickets divergentes.
+    """
+    from pipeline_reconciler import reconcile_ticket_entry
+    from pipeline_state import load_state
+
+    rt = _get_runtime()
+    try:
+        state = load_state(rt["state_path"])
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    results = []
+    for tid, entry in (state.get("tickets", {}) or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        # Saltar entradas sin folder (solo prioridad del Rally)
+        est = entry.get("estado", "")
+        if not est and not entry.get("folder"):
+            continue
+        folder = entry.get("folder") or _find_ticket_folder(tid, rt["tickets_base"])
+        if not folder or not os.path.isdir(folder):
+            continue
+
+        try:
+            res = reconcile_ticket_entry(tid, folder, entry, debounce_seconds=0)
+        except Exception as e:
+            results.append({
+                "ticket_id": tid,
+                "error":     f"reconcile_error: {e}",
+            })
+            continue
+
+        transitions = entry.get("transitions") or []
+        # Últimas 5 para la UI (compacto)
+        recent_trans = transitions[-5:] if transitions else []
+
+        results.append({
+            "ticket_id":       tid,
+            "stored_estado":   res.stored_estado,
+            "derived_estado":  res.derived.estado if res.derived else None,
+            "next_stage":      res.derived.next_stage if res.derived else None,
+            "evidence":        res.derived.evidence if res.derived else [],
+            "coherent":        res.coherent,
+            "needs_sync":      res.needs_sync,
+            "synthetic_state": res.synthetic_state,
+            "launch_stage":    res.launch_stage,
+            "is_stale":        res.is_stale,
+            "stale_reason":    res.stale_reason,
+            "warnings":        res.warnings,
+            "qa_verdict":      res.derived.qa_verdict if res.derived else None,
+            "transitions":     recent_trans,
+        })
+
+    return jsonify({
+        "ok":      True,
+        "tickets": results,
+        "count":   len(results),
+    })
+
+
+@app.route("/api/pipeline/reconcile/<ticket_id>", methods=["POST"])
+def api_pipeline_reconcile_now(ticket_id: str):
+    """
+    Fuerza reconciliación inmediata de un ticket (salta cooldown).
+
+    Usa el mismo motor que el loop periódico, pero ejecuta ya. Útil cuando
+    el usuario ve una divergencia en la UI y quiere corregirla al instante
+    sin esperar el próximo tick del reconciliador.
+    """
+    from pipeline_reconciler import reconcile_ticket_entry
+    from pipeline_state import load_state, save_state, _load_cache as _plc
+
+    _plc["mtime"] = 0.0
+    rt    = _get_runtime()
+    state = load_state(rt["state_path"])
+    entry = state.get("tickets", {}).get(ticket_id)
+    if not entry:
+        return jsonify({"ok": False, "error": f"Ticket {ticket_id} no encontrado"}), 404
+    folder = entry.get("folder") or _find_ticket_folder(ticket_id, rt["tickets_base"])
+    if not folder or not os.path.isdir(folder):
+        return jsonify({"ok": False, "error": "Folder inexistente"}), 404
+
+    res = reconcile_ticket_entry(ticket_id, folder, entry, debounce_seconds=0)
+
+    actions = []
+    if res.needs_sync and res.synthetic_state:
+        prev_estado = entry.get("estado", "")
+        entry["estado"] = res.synthetic_state
+        entry[f"{res.synthetic_state}_at"] = datetime.now().isoformat()
+        if prev_estado == "completado":
+            entry.pop("completado_at", None)
+        transitions = entry.setdefault("transitions", [])
+        transitions.append({
+            "at":   datetime.now().isoformat(),
+            "from": prev_estado,
+            "to":   res.synthetic_state,
+            "by":   "manual_reconcile",
+            "evidence": res.derived.evidence if res.derived else [],
+        })
+        if len(transitions) > 50:
+            entry["transitions"] = transitions[-50:]
+        save_state(rt["state_path"], state)
+        actions.append(f"state synced: {prev_estado} → {res.synthetic_state}")
+        _RECONCILER_PER_TICKET[ticket_id] = _time.monotonic()
+
+    if res.launch_stage:
+        entry["auto_advance"] = True
+        save_state(rt["state_path"], state)
+        threading.Thread(
+            target=_invoke_stage, args=(ticket_id, res.launch_stage),
+            daemon=True, name=f"manual-reconcile-{ticket_id}",
+        ).start()
+        actions.append(f"launched stage: {res.launch_stage}")
+
+    return jsonify({
+        "ok":       True,
+        "actions":  actions,
+        "coherent": res.coherent,
+        "derived":  res.derived.estado if res.derived else None,
+        "evidence": res.derived.evidence if res.derived else [],
+        "is_stale": res.is_stale,
+        "msg":      ("Reconciliación aplicada" if actions
+                     else "Ya estaba coherente — nada que hacer"),
+    })
+
+
+# ── Agent customization (per-project, per-agent) ──────────────────────────────
+
+@app.route("/api/agent_config/<agent>", methods=["GET", "POST"])
+def api_agent_config(agent: str):
+    """
+    GET:  Retorna la config actual del agente para el proyecto activo.
+    POST: Persiste una nueva config. Body JSON con campos de AgentConfig.
+    """
+    try:
+        from agent_config import (
+            load_agent_config, save_agent_config,
+            from_dict, to_dict, KNOWN_AGENTS, VALID_STRICTNESS,
+        )
+        from project_manager import get_active_project, get_project_paths
+    except ImportError as e:
+        return jsonify({"ok": False, "error": f"Módulo no disponible: {e}"}), 500
+
+    if agent not in KNOWN_AGENTS:
+        return jsonify({
+            "ok": False,
+            "error": f"Agente desconocido: {agent}. Válidos: {list(KNOWN_AGENTS)}",
+        }), 400
+
+    project_name = get_active_project()
+    project_root = get_project_paths(project_name)["base"]
+
+    if request.method == "GET":
+        cfg = load_agent_config(project_root, agent)
+        return jsonify({
+            "ok":            True,
+            "agent":         agent,
+            "project":       project_name,
+            "config":        to_dict(cfg),
+            "valid_strictness": list(VALID_STRICTNESS),
+        })
+
+    data = request.json or {}
+    try:
+        cfg = from_dict(data)
+        if cfg.strictness not in VALID_STRICTNESS:
+            return jsonify({
+                "ok": False,
+                "error": f"strictness debe ser uno de {list(VALID_STRICTNESS)}",
+            }), 400
+        path = save_agent_config(project_root, agent, cfg)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Error guardando: {e}"}), 500
+
+    return jsonify({
+        "ok":      True,
+        "agent":   agent,
+        "project": project_name,
+        "path":    path,
+        "config":  to_dict(cfg),
+        "msg":     "Configuración guardada. Aplicará en la próxima invocación del agente.",
+    })
+
+
+@app.route("/api/agent_config", methods=["GET"])
+def api_agent_config_all():
+    """Lista todas las configs de agentes para el proyecto activo."""
+    try:
+        from agent_config import load_agent_config, to_dict, KNOWN_AGENTS
+        from project_manager import get_active_project, get_project_paths
+    except ImportError as e:
+        return jsonify({"ok": False, "error": f"Módulo no disponible: {e}"}), 500
+
+    project_name = get_active_project()
+    project_root = get_project_paths(project_name)["base"]
+
+    configs = {}
+    for ag in KNOWN_AGENTS:
+        cfg = load_agent_config(project_root, ag)
+        configs[ag] = to_dict(cfg)
+    return jsonify({"ok": True, "project": project_name, "configs": configs})
+
+
+@app.route("/api/unstick/<ticket_id>", methods=["POST"])
+def api_unstick(ticket_id: str):
+    """
+    Invoca al agente DESATASCADOR para un ticket frenado.
+
+    El agente recibe el estado actual + inventario de archivos + motivo y tiene
+    autoridad para crear/borrar flags, completar archivos a medias y decidir la
+    próxima etapa válida. Útil cuando el pipeline se queda colgado por:
+      - Flag de completado no creado pese a que el trabajo está hecho
+      - Archivos con placeholders o vacíos
+      - Flags EN_CURSO / ERROR huérfanos
+      - stagnation_detected tras rechazos repetidos
+    """
+    from copilot_bridge import invoke_agent
+    from pipeline_state import load_state
+    from prompt_builder import build_unstuck_prompt
+
+    data   = request.json or {}
+    reason = (data.get("reason") or "").strip()
+
+    rt     = _get_runtime()
+    state  = load_state(rt["state_path"])
+    entry  = state.get("tickets", {}).get(ticket_id, {}) or {}
+    est    = entry.get("estado", "")
+
+    folder = _find_ticket_folder(ticket_id, rt["tickets_base"])
+    if not folder:
+        return jsonify({"ok": False, "error": f"Carpeta no encontrada para {ticket_id}"}), 404
+
+    # Inferir motivo si no vino del frontend
+    if not reason:
+        last_err = entry.get("error") or ""
+        last_inv = entry.get("last_invoke") or {}
+        hints = []
+        if est.endswith("_en_proceso"):
+            hints.append(f"Sigue en '{est}' — probable flag de completado no creado")
+        if est.startswith("error_"):
+            hints.append(f"Estado de error: {est}")
+        if est == "stagnation_detected":
+            hints.append(f"Stagnation tras {entry.get('rework_count', 0)} reworks — "
+                         f"último veredicto: {entry.get('last_qa_verdict', '?')}")
+        if last_err:
+            hints.append(f"error registrado: {last_err}")
+        if last_inv.get("ok") is False:
+            hints.append(f"última invocación falló: {last_inv.get('detail', '')}")
+        reason = " · ".join(hints) or "Usuario solicitó desatasco manual sin detalle"
+
+    prompt = build_unstuck_prompt(folder, ticket_id, rt["workspace_root"],
+                                   current_state=est or "desconocido",
+                                   reason=reason)
+
+    # Usar el agente PM como ejecutor del desatasco (tiene el scope más amplio)
+    pm_agent = rt.get("agents", {}).get("pm")
+
+    def _do_unstick():
+        try:
+            ok = invoke_agent(prompt, agent_name=pm_agent,
+                              project_name=rt.get("name", ""),
+                              workspace_root=rt["workspace_root"],
+                              new_conversation=True)
+            s2 = load_state(rt["state_path"])
+            s2.setdefault("tickets", {}).setdefault(ticket_id, {})["last_unstick"] = {
+                "at":     datetime.now().isoformat(),
+                "ok":     bool(ok),
+                "reason": reason,
+                "from_state": est,
+            }
+            from pipeline_state import save_state as _save
+            _save(rt["state_path"], s2)
+        except Exception as e:
+            print(f"[UNSTICK] Error para {ticket_id}: {e}", file=sys.stderr, flush=True)
+            return
+
+        # Tras el desatasco, delegamos al reconciliador centralizado:
+        # deriva el estado desde los archivos del folder, sincroniza state.json
+        # y lanza la etapa que corresponda. Una sola fuente de verdad.
+        def _relaunch_after_unstick():
+            import time as _t
+            _t.sleep(4.0)
+            try:
+                from pipeline_reconciler import reconcile_ticket_entry
+                from pipeline_state import _load_cache as _plc
+                _plc["mtime"] = 0.0
+                s3 = load_state(rt["state_path"])
+                entry3 = s3.get("tickets", {}).get(ticket_id, {}) or {}
+
+                if not folder:
+                    print(f"[UNSTICK] {ticket_id}: folder ausente — no relanzo",
+                          flush=True)
+                    return
+
+                # Debounce=0 — recién invocamos el desatascador y ya esperamos 4s.
+                # Queremos relanzar inmediatamente si hay divergencia.
+                res = reconcile_ticket_entry(
+                    ticket_id, folder, entry3, debounce_seconds=0,
+                )
+
+                if not res.derived:
+                    print(f"[UNSTICK] {ticket_id}: sin derivación posible", flush=True)
+                    return
+
+                # Si hay bloqueo humano, no reintentar
+                if res.derived.estado == "bloqueo_humano":
+                    print(f"[UNSTICK] {ticket_id}: BLOQUEO_HUMANO.flag presente — "
+                          f"no relanzo pipeline", flush=True)
+                    _push_notification(
+                        f"🛑 Ticket #{ticket_id} requiere intervención",
+                        "El desatascador marcó BLOQUEO_HUMANO — revisar manualmente",
+                        "warning",
+                    )
+                    return
+
+                if res.coherent and not res.launch_stage:
+                    print(f"[UNSTICK] {ticket_id}: estado ya coherente "
+                          f"({res.stored_estado}) — nada que lanzar", flush=True)
+                    return
+
+                # Sincronizar state.json si diverge
+                if res.needs_sync and res.synthetic_state:
+                    prev_estado = entry3.get("estado", "")
+                    s3.setdefault("tickets", {}).setdefault(ticket_id, {})
+                    s3["tickets"][ticket_id]["estado"] = res.synthetic_state
+                    s3["tickets"][ticket_id][f"{res.synthetic_state}_at"] = \
+                        datetime.now().isoformat()
+                    if prev_estado == "completado":
+                        s3["tickets"][ticket_id].pop("completado_at", None)
+                    # Timeline
+                    transitions = s3["tickets"][ticket_id].setdefault("transitions", [])
+                    transitions.append({
+                        "at":   datetime.now().isoformat(),
+                        "from": prev_estado,
+                        "to":   res.synthetic_state,
+                        "by":   "unstick",
+                        "evidence": res.derived.evidence,
+                    })
+                    if len(transitions) > 50:
+                        s3["tickets"][ticket_id]["transitions"] = transitions[-50:]
+                    s3["tickets"][ticket_id]["auto_advance"] = True
+                    _save(rt["state_path"], s3)
+
+                if res.launch_stage:
+                    print(f"[UNSTICK] {ticket_id}: post-desatasco → "
+                          f"{res.launch_stage.upper()} "
+                          f"(evidencia: {', '.join(res.derived.evidence)})",
+                          flush=True)
+                    _push_notification(
+                        f"🚑 Post-desatasco #{ticket_id}",
+                        f"Relanzando {res.launch_stage.upper()} — "
+                        f"{', '.join(res.derived.evidence)}",
+                        "info",
+                    )
+                    _invoke_stage(ticket_id, res.launch_stage)
+                else:
+                    print(f"[UNSTICK] {ticket_id}: sincronizado a "
+                          f"{res.synthetic_state}, sin etapa que lanzar",
+                          flush=True)
+            except Exception as _re:
+                print(f"[UNSTICK] Error relanzando post-desatasco: {_re}",
+                      file=sys.stderr, flush=True)
+
+        threading.Thread(target=_relaunch_after_unstick, daemon=True,
+                         name=f"unstick-relaunch-{ticket_id}").start()
+
+    threading.Thread(target=_do_unstick, daemon=True).start()
+    return jsonify({"ok": True, "ticket_id": ticket_id,
+                    "from_state": est, "reason": reason,
+                    "msg": "Agente desatascador invocado — escribirá DESATASCO_COMPLETADO.md al terminar"})
 
 
 @app.route("/api/send_correction", methods=["POST"])
@@ -1362,36 +2543,23 @@ que deben corregirse. Tu tarea es leer el contexto anterior y aplicar las correc
 
 @app.route("/api/projects")
 def api_projects():
-    """Lista todos los proyectos inicializados + escaneo de SVN."""
-    from project_manager import get_all_projects, scan_svn_projects, get_active_project
+    """Lista todos los proyectos inicializados."""
+    from project_manager import get_all_projects, get_active_project
     projects    = get_all_projects()
     active_name = get_active_project()
-    svn_all     = scan_svn_projects()   # ahora retorna list[dict]
-    initialized = {p["name"] for p in projects}
 
     result = []
     for p in projects:
+        tracker = p.get("issue_tracker") or {}
         result.append({
             "name":              p["name"],
             "display_name":      p["display_name"],
             "workspace_root":    p.get("workspace_root", ""),
-            "mantis_filters":    p.get("mantis_filters", []),
-            "mantis_project_id": p.get("mantis_project_id"),
+            "organization":      tracker.get("organization", ""),
+            "ado_project":       tracker.get("project", ""),
             "active":            p["name"] == active_name,
             "initialized":       True,
         })
-    # Proyectos SVN aun no inicializados
-    for svn in svn_all:
-        if svn["name"].upper() not in initialized:
-            result.append({
-                "name":           svn["name"].upper(),
-                "display_name":   svn["name"],
-                "workspace_root": svn["path"],
-                "mantis_filters": [],
-                "active":         False,
-                "initialized":    False,
-                "has_trunk":      svn["has_trunk"],
-            })
     return jsonify({"ok": True, "projects": result, "active": active_name})
 
 
@@ -1415,40 +2583,41 @@ def api_active_project():
     return jsonify({"ok": True, "active": name, "display_name": cfg.get("display_name", name)})
 
 
-@app.route("/api/scan_svn")
-def api_scan_svn():
-    from project_manager import scan_svn_projects
-    return jsonify({"ok": True, "projects": scan_svn_projects()})
-
-
 @app.route("/api/init_project", methods=["POST"])
 def api_init_project():
     """
     Inicializa un nuevo proyecto.
-    Body: { "svn_name": "RSMOBILE", "display_name": "RS Mobile",
-            "workspace_root": "N:/RSMOBILE/trunk",   (opcional, auto-detectado si no se envía)
-            "mantis_filters": ["Mobile", "RSMOB"] }  (opcional)
+    Body: { "name": "RSMOBILE", "display_name": "RS Mobile",
+            "workspace_root": "N:/RSMOBILE/trunk",
+            "organization": "UbimiaPacifico",
+            "ado_project": "Strategist_Pacifico",
+            "area_path": "Strategist_Pacifico\\AgendaWeb" }
     """
-    from project_manager import initialize_project
-    data              = request.json or {}
-    svn_name          = data.get("svn_name", "").strip()
-    display_name      = data.get("display_name", "").strip()
-    workspace_root    = data.get("workspace_root", "").strip()
-    mantis_filters    = data.get("mantis_filters", [])
-    mantis_project_id = data.get("mantis_project_id")
-    if mantis_project_id is not None:
-        try:
-            mantis_project_id = int(mantis_project_id)
-        except (ValueError, TypeError):
-            mantis_project_id = None
-    if isinstance(mantis_filters, str):
-        mantis_filters = [f.strip() for f in mantis_filters.splitlines() if f.strip()]
-    if not svn_name:
-        return jsonify({"ok": False, "error": "svn_name requerido"}), 400
+    from project_manager import initialize_ado_project
+    data           = request.json or {}
+    name           = data.get("name", "").strip()
+    display_name   = data.get("display_name", "").strip()
+    workspace_root = data.get("workspace_root", "").strip()
+    organization   = data.get("organization", "").strip()
+    ado_project    = data.get("ado_project", "").strip()
+    area_path      = data.get("area_path", "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "name requerido"}), 400
+    if not workspace_root:
+        return jsonify({"ok": False, "error": "workspace_root requerido"}), 400
+    if not organization:
+        return jsonify({"ok": False, "error": "organization requerido (ej: UbimiaPacifico)"}), 400
+    if not ado_project:
+        return jsonify({"ok": False, "error": "ado_project requerido (ej: Strategist_Pacifico)"}), 400
     try:
-        cfg = initialize_project(svn_name, display_name or svn_name, mantis_filters,
-                                 workspace_root=workspace_root,
-                                 mantis_project_id=mantis_project_id)
+        cfg = initialize_ado_project(
+            name=name,
+            display_name=display_name or name,
+            workspace_root=workspace_root,
+            organization=organization,
+            ado_project=ado_project,
+            area_path=area_path,
+        )
         return jsonify({"ok": True, "project": cfg})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -1661,8 +2830,18 @@ def api_gen_prompts(ticket_id):
 
     # ── Prompt Dev ─────────────────────────────────────────────────────────
     tareas_txt = "\n".join(f"  - {t}" for t in tareas) if tareas else "  - Ver TAREAS_DESARROLLO.md"
+    _ticket_header_dev = (
+        f"═══════════════════════════════════════════════════\n"
+        f"🎫 TICKET #{ticket_id} — {titulo}\n"
+        f"   Etapa: ⚙ Dev — Implementación\n"
+        f"═══════════════════════════════════════════════════\n\n"
+        f"⚠️ **PRIMER PASO OBLIGATORIO:** Renombrá esta conversación a:\n"
+        f"   `#{ticket_id} — DEV`\n"
+        f"   (click en el título del chat → editá el nombre)\n\n"
+    )
     dev_prompt = (
-        f"Actuá como **{agente_dev}**.\n\n"
+        _ticket_header_dev
+        + f"Actuá como **{agente_dev}**.\n\n"
         f"**Ticket #{ticket_id} — {titulo}**\n\n"
         f"Carpeta de trabajo: `{rel_folder}/`\n\n"
         f"Lee en orden:\n"
@@ -1683,8 +2862,18 @@ def api_gen_prompts(ticket_id):
     )
 
     # ── Prompt QA ──────────────────────────────────────────────────────────
+    _ticket_header_qa = (
+        f"═══════════════════════════════════════════════════\n"
+        f"🎫 TICKET #{ticket_id} — {titulo}\n"
+        f"   Etapa: 🧪 QA — Pruebas\n"
+        f"═══════════════════════════════════════════════════\n\n"
+        f"⚠️ **PRIMER PASO OBLIGATORIO:** Renombrá esta conversación a:\n"
+        f"   `#{ticket_id} — QA`\n"
+        f"   (click en el título del chat → editá el nombre)\n\n"
+    )
     qa_prompt = (
-        f"Actuá como **{agente_tester}**.\n\n"
+        _ticket_header_qa
+        + f"Actuá como **{agente_tester}**.\n\n"
         f"**QA — Ticket #{ticket_id} — {titulo}**\n\n"
         f"El Dev implementó las tareas en: `{rel_folder}/`\n\n"
         f"Pasos:\n"
@@ -1765,25 +2954,17 @@ def api_project_docs_status():
 
 @app.route("/api/run_scraper", methods=["POST"])
 def api_run_scraper():
-    """Dispara el scraper de Mantis en background, pasando el proyecto activo."""
+    """Dispara la sincronización de tickets en background, pasando el proyecto activo."""
     rt = _get_runtime()
     project_name = rt.get("name")
 
     def _run():
         import subprocess, traceback
         try:
-            cmd = [sys.executable, "-u", os.path.join(BASE_DIR, "mantis_scraper.py")]
-            if project_name:
-                cmd += ["--project", project_name]
-            env = os.environ.copy()
-            env["PYTHONIOENCODING"] = "utf-8"
-            env["PYTHONUNBUFFERED"] = "1"
-            # Sin PIPE: el subproceso hereda stdout/stderr del servidor directamente,
-            # así el output aparece en la consola sin buffering intermedio.
-            proc = subprocess.Popen(cmd, cwd=BASE_DIR, env=env)
-            proc.wait()
+            from issue_provider.sync import sync_tickets
+            sync_tickets(project_name)
         except Exception:
-            print(f"[SCRAPER] ERROR EN THREAD:\n{traceback.format_exc()}", flush=True)
+            print(f"[SYNC] ERROR EN THREAD:\n{traceback.format_exc()}", flush=True)
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"ok": True, "iniciado": True, "project": project_name})
@@ -1803,128 +2984,10 @@ def api_patch_project_config():
         return jsonify({"ok": False, "error": f"Proyecto '{name}' no encontrado"}), 404
     cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
     # Solo actualizamos campos permitidos
-    if "mantis_project_id" in data:
-        mid = data["mantis_project_id"]
-        cfg["mantis_project_id"] = int(mid) if mid not in (None, "", "null") else None
     if "display_name" in data:
         cfg["display_name"] = data["display_name"]
-    if "mantis_filters" in data:
-        cfg["mantis_filters"] = data["mantis_filters"]
     cfg_path.write_text(_json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     return jsonify({"ok": True, "config": cfg})
-
-
-# ── Mantis Project Picker (interactive browser) ───────────────────────────────
-_pick_sessions: dict = {}  # session_id → {"status": "waiting"|"done"|"error", ...}
-
-
-@app.route("/api/pick_mantis_project", methods=["POST"])
-def api_pick_mantis_project_start():
-    """
-    Lanza pick_project.py en una ventana nueva de Windows (start /WAIT).
-    Chromium corre en un proceso con acceso al desktop interactivo.
-    El resultado se intercambia via archivo temporal JSON.
-    """
-    session_id = uuid.uuid4().hex[:10]
-    _pick_sessions[session_id] = {"status": "waiting", "project_id": None, "project_name": None}
-
-    def _run():
-        import time as _time
-        import subprocess
-        import tempfile
-        import traceback
-
-        try:
-            with open(os.path.join(BASE_DIR, "config.json"), encoding="utf-8") as _f:
-                cfg = json.load(_f)
-
-            auth_path = os.path.join(BASE_DIR, cfg["auth_path"])
-            if not os.path.exists(auth_path):
-                _pick_sessions[session_id] = {
-                    "status": "error",
-                    "error": f"auth.json no encontrado: {auth_path}. Ejecutar capture_session.py primero.",
-                }
-                return
-
-            mantis_url  = cfg["mantis_url"]
-            pick_script = os.path.join(BASE_DIR, "pick_project.py")
-            result_file = os.path.join(tempfile.gettempdir(), f"pick_result_{session_id}.json")
-
-            # Limpiar residuo de sesión anterior
-            try:
-                os.unlink(result_file)
-            except OSError:
-                pass
-
-            proc = subprocess.Popen(
-                [sys.executable, pick_script, auth_path, mantis_url, result_file, "120"],
-                cwd=BASE_DIR,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                close_fds=True,
-            )
-
-            print(f"[PICK] PID={proc.pid}  result={result_file}", flush=True)
-
-            deadline = _time.time() + 145
-            data = None
-            while _time.time() < deadline:
-                _time.sleep(0.8)
-                proc_done = proc.poll() is not None
-                if not os.path.isfile(result_file):
-                    if proc_done:
-                        break
-                    continue
-                try:
-                    raw = open(result_file, "r", encoding="utf-8").read().strip()
-                    if not raw:
-                        if proc_done:
-                            break
-                        continue
-                    data = json.loads(raw)
-                    print(f"[PICK] resultado={data}", flush=True)
-                    break
-                except Exception as read_ex:
-                    print(f"[PICK] lectura parcial: {read_ex}", flush=True)
-                    if proc_done:
-                        break
-                    continue
-
-            try:
-                os.unlink(result_file)
-            except OSError:
-                pass
-
-            if data is None:
-                print(f"[PICK] timeout sin resultado", flush=True)
-                _pick_sessions[session_id] = {"status": "timeout", "project_id": None, "project_name": None}
-            elif data.get("error") and not data.get("project_id"):
-                _pick_sessions[session_id] = {"status": "error", "error": data["error"]}
-            elif data.get("project_id"):
-                _pick_sessions[session_id] = {"status": "done",
-                                               "project_id": data["project_id"],
-                                               "project_name": data.get("project_name")}
-            else:
-                _pick_sessions[session_id] = {"status": "timeout", "project_id": None, "project_name": None}
-
-        except Exception:
-            tb = traceback.format_exc()
-            print(f"[PICK] EXCEPCIÓN:\n{tb}", flush=True)
-            _pick_sessions[session_id] = {"status": "error", "error": tb}
-
-    threading.Thread(target=_run, daemon=True).start()
-    return jsonify({"ok": True, "session_id": session_id})
-
-
-@app.route("/api/pick_mantis_project/<session_id>", methods=["GET"])
-def api_pick_mantis_project_poll(session_id):
-    """Consulta el resultado de una sesión de pick."""
-    result = _pick_sessions.get(session_id)
-    if result is None:
-        return jsonify({"ok": False, "error": "Sesión no encontrada"}), 404
-    return jsonify({"ok": True, **result})
 
 
 @app.route("/")
@@ -1932,39 +2995,38 @@ def index():
     return send_from_directory(BASE_DIR, "dashboard.html")
 
 
-# ── SVN diff utilities ────────────────────────────────────────────────────────
+# ── Git diff utilities ────────────────────────────────────────────────────────
 
-def _svn_changed_files(workspace_root: str) -> list:
+def _git_changed_files(workspace_root: str) -> list:
     """
     Retorna lista de strings con los archivos modificados/agregados/eliminados
-    respecto al repositorio SVN (svn status).
-    Formato: ["M  OnLine/Negocio/Comun/coMens.cs", "A  BD/nueva_tabla.sql", ...]
+    respecto al repositorio Git (git status --porcelain).
     """
     try:
         r = subprocess.run(
-            ["svn", "status"],
+            ["git", "status", "--porcelain"],
             cwd=workspace_root,
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=15
         )
-        lines = [l for l in r.stdout.splitlines() if l.strip() and l[0] in "MARD?!"]
+        lines = [l for l in r.stdout.splitlines() if l.strip()]
         return lines
     except FileNotFoundError:
-        return ["[SVN no disponible en PATH]"]
+        return ["[Git no disponible en PATH]"]
     except subprocess.TimeoutExpired:
-        return ["[svn status timeout]"]
+        return ["[git status timeout]"]
     except Exception as e:
-        return [f"[Error svn status: {e}]"]
+        return [f"[Error git status: {e}]"]
 
 
-def _svn_diff(workspace_root: str) -> str:
+def _git_diff(workspace_root: str) -> str:
     """
-    Retorna el diff completo de todos los cambios no commiteados (svn diff).
-    Puede ser largo — se limita a 500KB para evitar archivos enormes.
+    Retorna el diff completo de todos los cambios no commiteados (git diff + staged).
+    Se limita a 500KB.
     """
     try:
         r = subprocess.run(
-            ["svn", "diff"],
+            ["git", "diff", "HEAD"],
             cwd=workspace_root,
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=30
@@ -1975,16 +3037,16 @@ def _svn_diff(workspace_root: str) -> str:
             diff = diff[:MAX] + "\n\n[... diff truncado a 500KB ...]"
         return diff
     except FileNotFoundError:
-        return "[SVN no disponible en PATH]"
+        return "[Git no disponible en PATH]"
     except subprocess.TimeoutExpired:
-        return "[svn diff timeout]"
+        return "[git diff timeout]"
     except Exception as e:
-        return f"[Error svn diff: {e}]"
+        return f"[Error git diff: {e}]"
 
 
-def _save_svn_snapshot(folder: str, stage: str, workspace_root: str) -> None:
+def _save_git_snapshot(folder: str, stage: str, workspace_root: str) -> None:
     """
-    Guarda snapshot SVN al completar una etapa:
+    Guarda snapshot Git al completar una etapa:
       {folder}/snapshots/{stage}_files.txt  → lista de archivos modificados
       {folder}/snapshots/{stage}_diff.patch → diff completo
     """
@@ -1992,23 +3054,23 @@ def _save_svn_snapshot(folder: str, stage: str, workspace_root: str) -> None:
         snap_dir = os.path.join(folder, "snapshots")
         os.makedirs(snap_dir, exist_ok=True)
 
-        files = _svn_changed_files(workspace_root)
-        diff  = _svn_diff(workspace_root)
+        files = _git_changed_files(workspace_root)
+        diff  = _git_diff(workspace_root)
 
         with open(os.path.join(snap_dir, f"{stage}_files.txt"), "w", encoding="utf-8") as f:
-            f.write(f"# SVN status al completar etapa: {stage}\n")
+            f.write(f"# Git status al completar etapa: {stage}\n")
             f.write(f"# Fecha: {datetime.now().isoformat()}\n")
             f.write(f"# Workspace: {workspace_root}\n\n")
             f.write("\n".join(files) if files else "(sin cambios)\n")
 
         with open(os.path.join(snap_dir, f"{stage}_diff.patch"), "w", encoding="utf-8") as f:
-            f.write(f"# SVN diff al completar etapa: {stage}\n")
+            f.write(f"# Git diff al completar etapa: {stage}\n")
             f.write(f"# Fecha: {datetime.now().isoformat()}\n\n")
             f.write(diff if diff.strip() else "(sin cambios)\n")
 
-        print(f"[SVN] Snapshot guardado — {stage}: {len(files)} archivos modificados")
+        print(f"[GIT] Snapshot guardado — {stage}: {len(files)} archivos modificados")
     except Exception as e:
-        print(f"[SVN] Error guardando snapshot de {stage}: {e}", file=sys.stderr)
+        print(f"[GIT] Error guardando snapshot de {stage}: {e}", file=sys.stderr)
 
 
 @app.route("/api/errors")
@@ -2075,8 +3137,8 @@ def api_notifications_mark_read():
 @app.route("/api/diff/<ticket_id>/<stage>")
 def api_diff(ticket_id: str, stage: str):
     """
-    Retorna el diff SVN guardado al completar una etapa.
-    Si no existe el snapshot guardado, intenta generar el diff on-the-fly desde SVN.
+    Retorna el diff Git guardado al completar una etapa.
+    Si no existe el snapshot guardado, intenta generar el diff on-the-fly desde Git.
     stage: pm | dev | tester  (también acepta sub-stages: pm_inv, dev_impl, qa_arb, etc.)
     """
     # Normalizar sub-stages al stage padre para buscar el snapshot correcto
@@ -2107,43 +3169,43 @@ def api_diff(ticket_id: str, stage: str):
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
 
-    # Fallback 2: SVN_CHANGES.md escrito por el agente DEV (FASE 3)
-    svn_changes_file = os.path.join(folder, "SVN_CHANGES.md")
-    if os.path.exists(svn_changes_file):
+    # Fallback 2: GIT_CHANGES.md escrito por el agente DEV (FASE 3)
+    git_changes_file = os.path.join(folder, "GIT_CHANGES.md")
+    if os.path.exists(git_changes_file):
         try:
-            svn_md = open(svn_changes_file, encoding="utf-8").read()
-            # Separar sección de svn status y la parte del diff si existe
+            git_md = open(git_changes_file, encoding="utf-8").read()
+            # Separar sección de git status y la parte del diff si existe
             diff_section  = ""
             files_section = ""
             in_diff = False
             files_lines = []
-            for line in svn_md.splitlines():
+            for line in git_md.splitlines():
                 if re.match(r'^[MADC?!]\s+', line):
                     files_lines.append(line)
                 if line.startswith("Index: ") or line.startswith("---") or in_diff:
                     in_diff = True
                     diff_section += line + "\n"
-            files_section = "\n".join(files_lines) if files_lines else svn_md[:800]
+            files_section = "\n".join(files_lines) if files_lines else git_md[:800]
             if files_section or diff_section:
                 return jsonify({"ok": True, "stage": stage,
-                                "diff":  diff_section or svn_md,
+                                "diff":  diff_section or git_md,
                                 "files": files_section,
-                                "source": "svn_changes_md",
-                                "warning": "Leyendo SVN_CHANGES.md generado por el agente DEV"})
+                                "source": "git_changes_md",
+                                "warning": "Leyendo GIT_CHANGES.md generado por el agente DEV"})
         except Exception:
             pass
 
-    # Fallback 3: generar diff on-the-fly desde SVN
+    # Fallback 3: generar diff on-the-fly desde Git
     try:
         workspace = rt.get("workspace_root", "")
-        diff  = _svn_diff(workspace)
-        files_lines = _svn_changed_files(workspace)
+        diff  = _git_diff(workspace)
+        files_lines = _git_changed_files(workspace)
         files = "\n".join(files_lines)
         if not diff.strip() and not files:
             return jsonify({"ok": False, "can_capture": True,
-                            "error": "No hay snapshot guardado y SVN no reporta cambios pendientes"}), 404
+                            "error": "No hay snapshot guardado y Git no reporta cambios pendientes"}), 404
         return jsonify({"ok": True, "stage": stage, "diff": diff, "files": files,
-                        "source": "live", "warning": "Snapshot no encontrado — mostrando diff SVN actual (workspace completo)"})
+                        "source": "live", "warning": "Snapshot no encontrado — mostrando diff Git actual (workspace completo)"})
     except Exception as e:
         return jsonify({"ok": False, "can_capture": True,
                         "error": f"No hay snapshot para {stage} y falló diff on-the-fly: {e}"}), 404
@@ -2152,7 +3214,7 @@ def api_diff(ticket_id: str, stage: str):
 @app.route("/api/capture_snapshot/<ticket_id>/<stage>", methods=["POST"])
 def api_capture_snapshot(ticket_id: str, stage: str):
     """
-    Genera y guarda manualmente el snapshot SVN para una etapa.
+    Genera y guarda manualmente el snapshot Git para una etapa.
     Útil cuando el agente completó pero el watcher no guardó el snapshot automáticamente.
     """
     if stage not in ("pm", "dev", "tester"):
@@ -2164,7 +3226,7 @@ def api_capture_snapshot(ticket_id: str, stage: str):
         return jsonify({"ok": False, "error": "Ticket no encontrado"}), 404
 
     try:
-        _save_svn_snapshot(folder, stage, rt["workspace_root"])
+        _save_git_snapshot(folder, stage, rt["workspace_root"])
         snap_dir  = os.path.join(folder, "snapshots")
         diff_file = os.path.join(snap_dir, f"{stage}_diff.patch")
         lines = 0
@@ -2438,6 +3500,110 @@ _EN_PROCESO_STATES = frozenset(s["estado"] for s in _WATCHER_STAGES)
 # Lookup rápido estado → stage_def
 _STAGE_BY_ESTADO   = {s["estado"]: s for s in _WATCHER_STAGES}
 
+# Estados en los que un ticket del Rally es elegible para arrancar
+_RALLY_START_STATES = frozenset((
+    "pendiente_pm",
+    "pm_completado", "dba_completado", "tl_aprobado", "tl_rechazado",
+    "dev_completado",
+    "tester_completado",
+    "error_pm", "error_dev", "error_tester", "error_dba", "error_doc",
+    "qa_rework", "dev_rework_completado",
+    "pm_revision", "pm_revision_completado",
+))
+
+
+def _rally_launch_next(triggered_by: str = "") -> str | None:
+    """
+    Arranca el siguiente ticket del Rally cuando uno termina.
+
+    Gateado por el flag `rally_running` en state.json: si está en False,
+    el Rally NO avanza automáticamente aunque haya tickets encolados.
+    El flag se activa con POST /api/rally/start y se desactiva al vaciar la cola.
+
+    Busca tickets con `priority < 9999` en estados procesables (no en *_en_proceso),
+    los ordena por prioridad (menor = primero) y lanza la etapa que corresponda.
+    Respeta los slots del agent_queue si está disponible.
+
+    Devuelve el ticket_id lanzado, o None si no había nadie esperando.
+    """
+    from pipeline_state import load_state, save_state
+    try:
+        rt    = _get_runtime()
+        state = load_state(rt["state_path"])
+    except Exception as e:
+        print(f"[RALLY] No se pudo cargar state: {e}", file=sys.stderr, flush=True)
+        return None
+
+    if not state.get("rally_running", False):
+        print(f"[RALLY] {triggered_by} — Rally pausado (rally_running=false), "
+              f"no se lanza próximo ticket", flush=True)
+        return None
+
+    stage_map = {
+        "pendiente_pm":            "pm",
+        "error_pm":                "pm",
+        "pm_completado":           "dev",
+        "dba_completado":          "dev",
+        "tl_aprobado":             "dev",
+        "tl_rechazado":            "pm",
+        "error_dev":               "dev",
+        "dev_completado":          "tester",
+        "dev_rework_completado":   "tester",
+        "error_tester":            "tester",
+        "tester_completado":       "doc",
+        "qa_rework":               "dev",
+        "pm_revision":             "pm",
+        "pm_revision_completado":  "dev",
+        "error_dba":               "dba",
+        "error_doc":               "doc",
+    }
+
+    candidates = []
+    for tid, entry in state.get("tickets", {}).items():
+        est = entry.get("estado", "")
+        if est not in _RALLY_START_STATES:
+            continue
+        # Saltar los que ya están corriendo alguna etapa
+        if est.endswith("_en_proceso"):
+            continue
+        priority = entry.get("priority")
+        if priority is None or priority >= 9999:
+            continue
+        next_stage = stage_map.get(est)
+        if not next_stage:
+            continue
+        candidates.append((int(priority), tid, next_stage, est))
+
+    if not candidates:
+        print(f"[RALLY] {triggered_by} — no hay próximo ticket en el Rally", flush=True)
+        # Cola vacía → apagar el flag para que el próximo ticket que se agregue
+        # no arranque solo. El usuario debe volver a apretar play explícitamente.
+        if state.get("rally_running"):
+            state["rally_running"] = False
+            try:
+                save_state(rt["state_path"], state)
+                print("[RALLY] Cola vacía → rally_running=false", flush=True)
+                _push_notification("🏁 Rally finalizado",
+                                   "Cola vacía — Rally pausado automáticamente", "info")
+            except Exception as _e:
+                print(f"[RALLY] No se pudo persistir rally_running=false: {_e}",
+                      file=sys.stderr, flush=True)
+        return None
+
+    candidates.sort(key=lambda x: x[0])
+    _, tid, next_stage, est = candidates[0]
+
+    print(f"[RALLY] {triggered_by} → lanzando #{tid} "
+          f"(estado={est}, etapa={next_stage})", flush=True)
+    _push_notification(
+        f"🏁 Rally — arrancando #{tid}",
+        f"Ticket anterior finalizó. Lanzando etapa {next_stage.upper()}",
+        "info",
+    )
+    threading.Thread(target=_invoke_stage, args=(tid, next_stage),
+                     daemon=True, name=f"rally-next-{tid}").start()
+    return tid
+
 
 def _stage_transition_watcher():
     """
@@ -2500,6 +3666,7 @@ def _stage_transition_watcher():
                                 pass
                             mark_error(rec_state, tid, sdef["stage"], reason)
                             print(f"[RECOVERY] {tid}: {sdef['stage'].upper()}_ERROR — corregido en recovery scan")
+                            _release_active_ticket(tid, f"recovery error_{sdef['stage']}")
                             rec_changed = True
                             continue
 
@@ -2521,23 +3688,35 @@ def _stage_transition_watcher():
                             if sdef["is_final"]:
                                 set_ticket_state(rec_state, tid, "completado")
                                 entry.pop("auto_advance", None)
+                                entry["priority"] = 9999   # saca del Rally
+                                _release_active_ticket(tid, "pipeline completado (recovery)")
                                 _push_notification(f"Ticket #{tid} completado (recovery)",
                                                    "Pipeline finalizado — detectado en recovery scan", "info")
+                                threading.Thread(
+                                    target=_rally_launch_next,
+                                    args=(f"recovery #{tid} completado",),
+                                    daemon=True, name=f"rally-kick-{tid}",
+                                ).start()
                             else:
                                 set_ticket_state(rec_state, tid, sdef["completado_state"])
-                            _save_svn_snapshot(folder, sdef["stage"], rt["workspace_root"])
+                            _save_git_snapshot(folder, sdef["stage"], rt["workspace_root"])
                             rec_changed = True
 
                             if not sdef["is_final"] and sdef["next_stage"]:
-                                # Asegurar auto_advance para que el ciclo normal lo lance
-                                rec_state["tickets"][tid]["auto_advance"] = True
-                                save_state(sp, rec_state)
-                                rec_changed = False
-                                print(f"[RECOVERY] {tid}: auto_advance → lanzando {sdef['next_stage'].upper()}")
-                                _push_notification(f"Ticket #{tid} — {sdef['stage'].upper()} completado (recovery)",
-                                                   f"Avanzando a {sdef['next_stage'].upper()}", "info")
-                                threading.Thread(target=_invoke_stage,
-                                                 args=(tid, sdef["next_stage"]), daemon=True).start()
+                                # PAUSED.flag: no sobrescribir auto_advance ni lanzar siguiente etapa
+                                _paused = os.path.exists(os.path.join(folder, "PAUSED.flag"))
+                                if _paused:
+                                    print(f"[RECOVERY] {tid}: PAUSED.flag presente — no se lanza {sdef['next_stage'].upper()}")
+                                else:
+                                    # Asegurar auto_advance para que el ciclo normal lo lance
+                                    rec_state["tickets"][tid]["auto_advance"] = True
+                                    save_state(sp, rec_state)
+                                    rec_changed = False
+                                    print(f"[RECOVERY] {tid}: auto_advance → lanzando {sdef['next_stage'].upper()}")
+                                    _push_notification(f"Ticket #{tid} — {sdef['stage'].upper()} completado (recovery)",
+                                                       f"Avanzando a {sdef['next_stage'].upper()}", "info")
+                                    threading.Thread(target=_invoke_stage,
+                                                     args=(tid, sdef["next_stage"]), daemon=True).start()
 
                     if rec_changed:
                         save_state(sp, rec_state)
@@ -2623,6 +3802,13 @@ def _stage_transition_watcher():
             changed = False
             tconf   = _get_timeout_config()
 
+            # Release oportunista del gate global: si el ticket activo quedó
+            # en estado terminal, libera para que otro ticket pueda arrancar.
+            _active_tid = _get_active_ticket()
+            if _active_tid:
+                _active_est = state.get("tickets", {}).get(_active_tid, {}).get("estado", "")
+                _maybe_release_if_terminal(_active_tid, _active_est)
+
             # Pre-filtrar: solo iterar tickets en *_en_proceso (usualmente 0-2)
             in_process = [
                 (tid, entry) for tid, entry in state.get("tickets", {}).items()
@@ -2663,6 +3849,7 @@ def _stage_transition_watcher():
                         pass
                     mark_error(state, tid, stage, reason)
                     print(f"[WATCHER] {tid}: {stage.upper()}_ERROR detectado")
+                    _release_active_ticket(tid, f"error_{stage}")
                     changed = True
                     continue
 
@@ -2680,18 +3867,64 @@ def _stage_transition_watcher():
                             os.remove(_en_curso)
                     except Exception:
                         pass
+                    # ── Bifurcación por veredicto QA ────────────────────────────────
+                    # Política actual (pedido del usuario):
+                    #   APROBADO          → completado (sigue con el próximo ticket)
+                    #   CON OBSERVACIONES → se acepta como OK; las observaciones quedan
+                    #                       registradas en TESTER_COMPLETADO.md pero no
+                    #                       bloquean el pipeline. Va directo a completado.
+                    #   RECHAZADO         → bifurca a pm_revision (requiere replanteo).
+                    # Sin este check, RECHAZADO quedaba enmascarado como "completado"
+                    # porque tester está marcado is_final=True.
+                    if stage == "tester":
+                        try:
+                            from pipeline_runner import _parse_qa_verdict
+                            _verdict, _findings = _parse_qa_verdict(folder)
+                        except Exception:
+                            _verdict, _findings = "DESCONOCIDO", []
+                        entry["last_qa_verdict"] = _verdict
+                        entry["qa_findings"]     = _findings
+                        if _verdict == "RECHAZADO":
+                            set_ticket_state(state, tid, "pm_revision")
+                            entry.pop("auto_advance", None)
+                            _push_notification(
+                                f"⛔ Ticket #{tid} — QA RECHAZADO",
+                                f"Bifurcación: pm_revision "
+                                f"({len(_findings)} finding{'s' if len(_findings)!=1 else ''})",
+                                "error",
+                            )
+                            print(f"[WATCHER] {tid}: QA RECHAZADO → pm_revision")
+                            _release_active_ticket(tid, "pm_revision (QA rechazó)")
+                            changed = True
+                            continue
+                        if _verdict == "CON OBSERVACIONES":
+                            print(f"[WATCHER] {tid}: QA CON OBSERVACIONES → aceptado como OK "
+                                  f"({len(_findings)} observacion{'es' if len(_findings)!=1 else ''})")
                     if sdef["is_final"]:
                         set_ticket_state(state, tid, "completado")
                         entry.pop("auto_advance", None)
+                        entry["priority"] = 9999   # saca del Rally
+                        _release_active_ticket(tid, "pipeline completado")
                         _push_notification(f"Ticket #{tid} completado",
                                            "Pipeline PM→Dev→QA finalizado exitosamente", "info")
+                        threading.Thread(
+                            target=_rally_launch_next,
+                            args=(f"watcher #{tid} completado",),
+                            daemon=True, name=f"rally-kick-{tid}",
+                        ).start()
                     else:
                         set_ticket_state(state, tid, sdef["completado_state"])
-                    _save_svn_snapshot(folder, stage, rt["workspace_root"])
+                    _save_git_snapshot(folder, stage, rt["workspace_root"])
                     print(f"[WATCHER] {tid}: {stage.upper()} completado automaticamente")
                     changed = True
 
                     if not sdef["is_final"] and entry.get("auto_advance") and sdef["next_stage"]:
+                        # PAUSED.flag: detener auto-avance
+                        if os.path.exists(os.path.join(folder, "PAUSED.flag")):
+                            print(f"[WATCHER] {tid}: PAUSED.flag presente — no se avanza a {sdef['next_stage'].upper()}")
+                            save_state(rt["state_path"], state)
+                            changed = False
+                            continue
                         save_state(rt["state_path"], state)
                         changed = False
                         print(f"[WATCHER] {tid}: auto_advance → invocando {sdef['next_stage'].upper()}")
@@ -2705,6 +3938,15 @@ def _stage_transition_watcher():
                 if is_stage_timed_out(state, tid, stage, tconf[stage]):
                     retries = get_retry_count(state, tid, stage)
                     if retries < tconf["max_retries"]:
+                        # Respetar el gate global: si otro ticket tiene el gate,
+                        # este ticket no puede correr aunque el timer haya expirado.
+                        # No reseteamos inicio_key ni contamos reintento: volverá a
+                        # intentarse en el próximo tick cuando el gate esté libre.
+                        _gate_owner = _get_active_ticket()
+                        if _gate_owner and _gate_owner != tid:
+                            print(f"[WATCHER] {tid}: timeout {stage.upper()} pero gate "
+                                  f"ocupado por #{_gate_owner} — posponiendo reintento")
+                            continue
                         print(f"[WATCHER] {tid}: {stage.upper()} timeout ({tconf[stage]}min)"
                               f" — reintento {retries+1}/{tconf['max_retries']}")
                         entry[sdef["inicio_key"]] = datetime.now().isoformat()
@@ -2712,11 +3954,15 @@ def _stage_transition_watcher():
                         changed = False
                         threading.Thread(target=_invoke_stage,
                                          args=(tid, stage), daemon=True).start()
+                        # Budget 1 por tick: si disparamos un reintento, no
+                        # arrancamos otro en la misma iteración.
+                        break
                     else:
                         reason = f"Timeout después de {tconf[stage]} min — {retries} reintentos agotados"
                         mark_error(state, tid, stage, reason)
                         _push_notification(f"Acción requerida — #{tid}", reason, "error")
                         print(f"[WATCHER] {tid}: {stage.upper()} timeout agotado → error")
+                        _release_active_ticket(tid, f"timeout {stage}")
                         changed = True
 
             if changed:
@@ -2761,6 +4007,125 @@ def api_v1_tickets():
     # Ordenar por prioridad
     tickets.sort(key=lambda x: x["priority"])
     return jsonify({"tickets": tickets, "count": len(tickets)})
+
+
+@app.route("/api/v1/sessions", methods=["GET"])
+def api_v1_sessions():
+    """Estado de las sesiones de chat concurrentes."""
+    try:
+        from chat_session_manager import get_session_manager
+        mgr = get_session_manager()
+        return jsonify(mgr.status())
+    except ImportError:
+        return jsonify({"error": "chat_session_manager not available"}), 501
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Auto Enter Daemon ─────────────────────────────────────────────────────────
+
+@app.route("/api/auto_enter/status", methods=["GET"])
+def api_auto_enter_status():
+    """Estado actual del daemon Ctrl+Enter."""
+    try:
+        from auto_enter_daemon import get_auto_enter_daemon
+        return jsonify(get_auto_enter_daemon().status())
+    except ImportError:
+        return jsonify({"error": "auto_enter_daemon not available"}), 501
+
+
+@app.route("/api/auto_enter/enable", methods=["POST"])
+def api_auto_enter_enable():
+    """Activa el daemon. Body opcional: {"interval_seconds": 15}"""
+    try:
+        from auto_enter_daemon import get_auto_enter_daemon
+        data = {}
+        if request.is_json and request.data:
+            try:
+                data = request.get_json(silent=True) or {}
+            except Exception:
+                data = {}
+        interval = int(data.get("interval_seconds", 15))
+        if interval <= 0:
+            return jsonify({"ok": False, "error": "interval_seconds debe ser > 0"}), 400
+        daemon = get_auto_enter_daemon()
+        daemon.start(interval_seconds=interval)
+        return jsonify({"ok": True, "enabled": True, "interval_seconds": daemon.interval})
+    except ImportError:
+        return jsonify({"ok": False, "error": "auto_enter_daemon not available"}), 501
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/auto_enter/disable", methods=["POST"])
+def api_auto_enter_disable():
+    """Desactiva el daemon."""
+    try:
+        from auto_enter_daemon import get_auto_enter_daemon
+        get_auto_enter_daemon().stop()
+        return jsonify({"ok": True, "enabled": False})
+    except ImportError:
+        return jsonify({"ok": False, "error": "auto_enter_daemon not available"}), 501
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/auto_enter/configure", methods=["POST"])
+def api_auto_enter_configure():
+    """Cambia el intervalo sin detener el daemon. Body: {"interval_seconds": N}"""
+    try:
+        from auto_enter_daemon import get_auto_enter_daemon
+        data = request.get_json(silent=True) or {}
+        interval = int(data.get("interval_seconds", 0))
+        if interval <= 0:
+            return jsonify({"ok": False, "error": "interval_seconds requerido y > 0"}), 400
+        daemon = get_auto_enter_daemon()
+        daemon.configure(interval_seconds=interval)
+        return jsonify({"ok": True, "interval_seconds": daemon.interval, "enabled": daemon.enabled})
+    except ImportError:
+        return jsonify({"ok": False, "error": "auto_enter_daemon not available"}), 501
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/auto_enter/health", methods=["GET"])
+def api_auto_enter_health():
+    """Health extendido: thread_alive, bridge_up, dry_run, stalled, panic."""
+    try:
+        from auto_enter_daemon import get_auto_enter_daemon
+        return jsonify(get_auto_enter_daemon().health())
+    except ImportError:
+        return jsonify({"error": "auto_enter_daemon not available"}), 501
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auto_enter/panic", methods=["POST"])
+def api_auto_enter_panic():
+    """Kill-switch: desactiva el daemon y marca panic_active=True."""
+    try:
+        from auto_enter_daemon import get_auto_enter_daemon
+        data = request.get_json(silent=True) or {}
+        reason = (data.get("reason") or "manual").strip() or "manual"
+        return jsonify(get_auto_enter_daemon().trigger_panic(reason=reason))
+    except ImportError:
+        return jsonify({"ok": False, "error": "auto_enter_daemon not available"}), 501
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/auto_enter/panic/reset", methods=["POST"])
+def api_auto_enter_panic_reset():
+    """Limpia el panic_active y restaura el estado previo del daemon."""
+    try:
+        from auto_enter_daemon import get_auto_enter_daemon
+        return jsonify(get_auto_enter_daemon().reset_panic())
+    except ImportError:
+        return jsonify({"ok": False, "error": "auto_enter_daemon not available"}), 501
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/v1/tickets/<ticket_id>", methods=["GET"])
@@ -3247,46 +4612,129 @@ def api_v1_rollback(ticket_id):
         return jsonify({"error": "rollback_assistant no disponible"}), 503
 
 
-# ── SVN Commit ────────────────────────────────────────────────────────────────
+# ── Git Commit ────────────────────────────────────────────────────────────────
 
-@app.route("/api/svn_commit_message/<ticket_id>", methods=["GET"])
-def api_svn_commit_message(ticket_id: str):
+@app.route("/api/git_commit_message/<ticket_id>", methods=["GET"])
+def api_git_commit_message(ticket_id: str):
     """Genera un mensaje de commit propuesto para el ticket."""
     folder = _find_ticket_folder(ticket_id)
     if not folder:
         return jsonify({"ok": False, "error": "Ticket no encontrado"}), 404
     try:
-        from svn_ops import build_commit_message
-        msg = build_commit_message(ticket_id, folder)
+        from commit_generator import generate_commit_message
+        rt = _get_runtime()
+        msg_path = generate_commit_message(folder, ticket_id, rt.get("name", ""))
+        if not msg_path:
+            return jsonify({
+                "ok": False,
+                "error": "No se pudo generar el mensaje (faltan INC-*.md o DEV_COMPLETADO.md)",
+            }), 500
+        from pathlib import Path as _Path
+        msg = _Path(msg_path).read_text(encoding="utf-8")
         return jsonify({"ok": True, "message": msg, "ticket_id": ticket_id})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@app.route("/api/svn_commit/<ticket_id>", methods=["POST"])
-def api_svn_commit(ticket_id: str):
+@app.route("/api/git_status", methods=["GET"])
+def api_git_status():
+    """Devuelve la lista de archivos modificados/untracked en el workspace.
+
+    Query params:
+      ?ticket=<id>  → incluye `ticket_files` con los paths que el ticket
+                      declara haber modificado (extraídos de DEV_COMPLETADO.md
+                      y GIT_CHANGES.md), para pre-tildar solo esos en la UI.
     """
-    Ejecuta svn commit con el mensaje dado.
-    Body: { "message": "#12345 Fix en la validación de compromiso de pago" }
+    rt = _get_runtime()
+    ticket_id = request.args.get("ticket", "").strip()
+    try:
+        from scm_provider.factory import get_scm
+        scm = get_scm(project_name=rt["name"], workspace=rt["workspace_root"])
+        changes = scm.status(rt["workspace_root"])
+
+        # Cross-match: para cada archivo de git status, chequear si aparece
+        # mencionado en los docs del ticket (DEV_COMPLETADO.md, GIT_CHANGES.md,
+        # TAREAS_DESARROLLO.md). Matching robusto: busca el basename y/o el
+        # sufijo del path en el texto — no requiere regex frágiles.
+        ticket_files: list[str] = []
+        if ticket_id:
+            folder = _find_ticket_folder(ticket_id)
+            if folder:
+                try:
+                    from commit_generator import _read_safe
+                    blob = " ".join([
+                        _read_safe(folder, "DEV_COMPLETADO.md",    10000),
+                        _read_safe(folder, "GIT_CHANGES.md",       10000),
+                        _read_safe(folder, "TAREAS_DESARROLLO.md",  5000),
+                    ]).lower().replace("\\", "/")
+                    if blob.strip():
+                        for c in changes:
+                            p = c.path.replace("\\", "/").lower()
+                            basename = p.rsplit("/", 1)[-1]
+                            # Match por basename siempre que no sea trivial,
+                            # o por path suficientemente específico.
+                            if len(basename) < 4:
+                                continue
+                            # Excluir paths obviamente ajenos al ticket
+                            if any(skip in p for skip in ("stacky/", "tools/")):
+                                continue
+                            if basename in blob or p in blob:
+                                ticket_files.append(c.path)
+                except Exception:
+                    ticket_files = []
+
+        return jsonify({
+            "ok":           True,
+            "files":        [{"path": c.path, "status": c.status} for c in changes],
+            "ticket_files": ticket_files,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/git_commit/<ticket_id>", methods=["POST"])
+def api_git_commit(ticket_id: str):
+    """
+    Ejecuta git commit con el mensaje dado sobre los archivos seleccionados.
+    Body: {
+        "message": "#12345 Fix en la validación de compromiso de pago",
+        "files":   ["path/a.cs", "path/b.sql"]   # opcional — si se omite, falla
+    }
     """
     data    = request.json or {}
     message = data.get("message", "").strip()
+    files   = data.get("files") or []
     if not message:
         return jsonify({"ok": False, "error": "message requerido"}), 400
+    if not files:
+        return jsonify({
+            "ok": False,
+            "error": "Seleccioná al menos un archivo para commitear",
+        }), 400
 
     rt = _get_runtime()
     try:
-        from svn_ops import commit
-        result = commit(rt["workspace_root"], message)
+        from scm_provider.factory import get_scm
+        scm = get_scm(project_name=rt["name"], workspace=rt["workspace_root"])
+        commit_result = scm.commit(
+            rt["workspace_root"], message, files=files, work_item_id=ticket_id,
+        )
+        result = {
+            "ok":       commit_result.ok,
+            "revision": commit_result.revision,
+            "message":  commit_result.message,
+            "files":    commit_result.files,
+            "error":    commit_result.error,
+        }
 
         # Si el commit fue ok, notificar por Teams
-        if result.get("ok"):
+        if commit_result.ok:
             def _notify():
                 try:
                     folder = _find_ticket_folder(ticket_id)
                     titulo = _get_ticket_title(folder, ticket_id) if folder else f"Ticket #{ticket_id}"
                     from teams_notifier import notify_commit
-                    notify_commit(ticket_id, titulo, result.get("revision", "?"), message)
+                    notify_commit(ticket_id, titulo, commit_result.revision or "?", message)
                 except Exception:
                     pass
             threading.Thread(target=_notify, daemon=True).start()
@@ -3301,7 +4749,7 @@ def api_svn_commit(ticket_id: str):
 @app.route("/api/diff_analysis/<ticket_id>", methods=["GET"])
 def api_diff_analysis(ticket_id: str):
     """
-    Analiza el diff SVN del ticket y retorna:
+    Analiza el diff Git del ticket y retorna:
       layers, risks, checklist, sql_order, summary
     """
     folder = _find_ticket_folder(ticket_id)
@@ -3589,7 +5037,7 @@ def _detect_batch_context(folder: str, dev_summary: str = "") -> dict:
     # Leer todos los archivos de texto del folder
     all_text = dev_summary
     for fname in ["INCIDENTE.md", "DEV_COMPLETADO.md", "TESTER_COMPLETADO.md",
-                  "PM_COMPLETADO.md", "SVN_CHANGES.md"]:
+                  "PM_COMPLETADO.md", "GIT_CHANGES.md"]:
         fpath = os.path.join(folder, fname)
         if os.path.exists(fpath):
             try:
@@ -3696,7 +5144,7 @@ def _build_business_tests(folder: str, ticket_id: str,
         "steps":    ["Reproducir el escenario original del ticket end-to-end",
                      "Confirmar que el comportamiento incorrecto ya no ocurre",
                      "Confirmar que el comportamiento correcto está presente"],
-        "expected": "El ticket funciona según lo especificado en Mantis",
+        "expected": "El ticket funciona según lo especificado",
         "type":     "business",
     })
 
@@ -3996,6 +5444,903 @@ def _teams_notify_watcher():
         time.sleep(30)
 
 
+# ── Reconciliador del pipeline (fuente de verdad canónica) ────────────────────
+#
+# Arregla la clase de bugs "state.json dice X, folder dice Y, nadie avanza":
+# cada 45s inspecciona el folder de cada ticket no-terminal, deriva el estado
+# real desde los archivos (flags, .md) y sincroniza state.json + lanza la
+# etapa que falte si hay divergencia. También detecta tickets "stale" (en
+# *_en_proceso sin progreso ni AGENTE_EN_CURSO) y emite warning al usuario.
+#
+# Ver pipeline_reconciler.py para la lógica pura y los tests unitarios.
+
+# Cooldown: no reconciliar el mismo ticket más seguido que esto (evita ruido
+# post-invocación cuando los flags están escribiéndose).
+_RECONCILER_INTERVAL    = 45
+_RECONCILER_PER_TICKET  = {}   # ticket_id → monotonic timestamp del último kick
+_RECONCILER_COOLDOWN    = 120  # segundos
+
+
+def _pipeline_reconciler_loop():
+    """
+    Hilo background — corre el reconciliador cada _RECONCILER_INTERVAL segundos.
+
+    Para cada ticket en state.json:
+      1. Deriva el estado real desde los archivos del folder.
+      2. Si diverge con state.json → sincroniza + dispara la etapa que toque.
+      3. Si está stale (en *_en_proceso sin progreso) → emite notificación.
+    """
+    from pipeline_reconciler import reconcile_ticket_entry
+    from pipeline_state import load_state, save_state
+    import time
+
+    # Esperar un poco al arranque para que el watcher principal se asiente
+    time.sleep(15)
+
+    # Budget por tick: máximo de tickets que pueden lanzarse por ciclo.
+    # Con el gate global=serial strict, mantenerlo en 1 previene cualquier
+    # ráfaga aunque el gate se hubiera liberado entre tickets del mismo tick.
+    _LAUNCH_BUDGET_PER_TICK = 1
+
+    while True:
+        time.sleep(_RECONCILER_INTERVAL)
+        try:
+            rt = _get_runtime()
+            sp = rt["state_path"]
+            # Forzar re-lectura
+            try:
+                from pipeline_state import _load_cache as _plc
+                _plc["mtime"] = 0.0
+            except Exception:
+                pass
+            state = load_state(sp)
+            changed = False
+            now_mono = time.monotonic()
+
+            # Release oportunista: si el ticket activo quedó en estado terminal
+            # (completado / error_* / bloqueo_humano / pm_revision / qa_rework),
+            # libera el gate antes de iterar. Los watchers ya suelen liberarlo,
+            # esto es el catch-all.
+            _active = _get_active_ticket()
+            if _active:
+                _active_entry = state.get("tickets", {}).get(_active, {})
+                _maybe_release_if_terminal(_active, _active_entry.get("estado", ""))
+
+            launched_this_tick = 0
+
+            for tid, entry in list(state.get("tickets", {}).items()):
+                # Cooldown por ticket — evita que un ticket "flapeante" se
+                # kickee cada tick
+                last_kick = _RECONCILER_PER_TICKET.get(tid, 0)
+                if now_mono - last_kick < _RECONCILER_COOLDOWN:
+                    continue
+
+                folder = entry.get("folder") or _find_ticket_folder(tid, rt["tickets_base"])
+                if not folder or not os.path.isdir(folder):
+                    continue
+
+                # También saltar si el watcher normal recién hizo algo (cooldown
+                # por set_state manual) — evita pisadas.
+                if _manual_set_timestamps.get(tid, 0) and \
+                   (_time.time() - _manual_set_timestamps[tid]) < 60:
+                    continue
+
+                res = reconcile_ticket_entry(tid, folder, entry)
+
+                if res.is_stale and res.stale_reason:
+                    # Notificar stale solo una vez cada cooldown window
+                    _RECONCILER_PER_TICKET[tid] = now_mono
+                    print(f"[RECONCILE] {tid} STALE: {res.stale_reason}",
+                          file=sys.stderr, flush=True)
+                    _push_notification(
+                        f"⚠️ Ticket #{tid} atascado",
+                        res.stale_reason + " — clic en 'Desatascar' o 'Ejecutar'",
+                        "warning",
+                    )
+                    # No avanzamos automáticamente ante stale — es señal de
+                    # que algo no está funcionando bien y el usuario debe ver.
+                    continue
+
+                if res.coherent:
+                    continue
+
+                # Divergencia real — sincronizar
+                if res.needs_sync and res.synthetic_state:
+                    # Pre-check gate y budget ANTES de mutar state: si no vamos
+                    # a lanzar, igual sincronizamos el estado (coherencia), pero
+                    # marcamos el lanzamiento como "pospuesto".
+                    will_launch = bool(res.launch_stage)
+                    postpone_reason = None
+                    if will_launch:
+                        _active_now = _get_active_ticket()
+                        if _active_now and _active_now != tid:
+                            will_launch = False
+                            postpone_reason = f"gate global ocupado por #{_active_now}"
+                        elif launched_this_tick >= _LAUNCH_BUDGET_PER_TICK:
+                            will_launch = False
+                            postpone_reason = (
+                                f"budget del tick agotado ({_LAUNCH_BUDGET_PER_TICK})"
+                            )
+
+                    print(f"[RECONCILE] {tid}: {res.stored_estado} → "
+                          f"{res.synthetic_state} (derivado desde folder: "
+                          f"{', '.join(res.derived.evidence) if res.derived else '?'})",
+                          flush=True)
+                    prev_estado = entry.get("estado", "")
+                    entry["estado"] = res.synthetic_state
+                    entry[f"{res.synthetic_state}_at"] = datetime.now().isoformat()
+                    if prev_estado == "completado":
+                        entry.pop("completado_at", None)
+                    # Auditoría: registrar transición
+                    transitions = entry.setdefault("transitions", [])
+                    transitions.append({
+                        "at":   datetime.now().isoformat(),
+                        "from": prev_estado,
+                        "to":   res.synthetic_state,
+                        "by":   "reconciler",
+                        "evidence": res.derived.evidence if res.derived else [],
+                    })
+                    # Cap el historial de transiciones
+                    if len(transitions) > 50:
+                        entry["transitions"] = transitions[-50:]
+                    changed = True
+
+                    if res.launch_stage and not will_launch:
+                        print(f"[RECONCILE] {tid}: postergando lanzamiento de "
+                              f"{res.launch_stage.upper()} — {postpone_reason}",
+                              flush=True)
+                        continue
+
+                    # Lanzar etapa si el plan lo indica
+                    if will_launch:
+                        entry["auto_advance"] = True
+                        save_state(sp, state)
+                        changed = False
+                        _RECONCILER_PER_TICKET[tid] = now_mono
+                        launched_this_tick += 1
+                        _push_notification(
+                            f"🔧 Reconciliador — #{tid}",
+                            f"Divergencia detectada → lanzando "
+                            f"{res.launch_stage.upper()}",
+                            "info",
+                        )
+                        threading.Thread(
+                            target=_invoke_stage, args=(tid, res.launch_stage),
+                            daemon=True, name=f"reconcile-{tid}",
+                        ).start()
+
+            if changed:
+                save_state(sp, state)
+        except Exception as e:
+            print(f"[RECONCILE] Error en loop: {e}", file=sys.stderr, flush=True)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# F1-F4 — scoring + observabilidad (endpoints aditivos)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Expone 12 endpoints nuevos para el frontend de estimación y observabilidad:
+#   - /api/scoring/<ticket_id>              (GET)
+#   - /api/scoring/<ticket_id>/recompute    (POST)
+#   - /api/scoring/<ticket_id>/actual       (POST)
+#   - /api/scoring/history                  (GET)
+#   - /api/scoring/calibration              (GET)
+#   - /api/scoring/calibration/apply        (POST)
+#   - /api/events/stream                    (GET, SSE)
+#   - /api/events                           (GET)
+#   - /api/errors/ticket/<ticket_id>        (GET)
+#   - /api/pipeline/performance             (GET)
+#   - /api/config/scoring                   (GET)
+#   - /api/config/scoring                   (PATCH)
+#
+# Todos los imports viven dentro de los handlers para garantizar que si
+# algún módulo (ticket_scoring, estimation_store, pipeline_events, sse_bus)
+# no está disponible, el resto del servidor sigue funcionando y el endpoint
+# responde con 503 + diagnóstico claro.
+
+def _scoring_compute_for_ticket(ticket_id: str, project: str | None = None):
+    """
+    Helper canónico: calcula scoring de un ticket, persiste el estimate y
+    emite evento ``estimation_recorded``. Retorna ``(scoring, None)`` o
+    ``(None, error_message)``.
+    """
+    rt = _get_runtime()
+    project = project or rt["name"]
+    folder = _find_ticket_folder(ticket_id, rt["tickets_base"])
+    if not folder:
+        return None, "ticket_folder_not_found"
+    try:
+        from ticket_scoring import compute_scoring, read_incident_content
+        from estimation_store import record_estimate, load_calibration
+    except Exception as e:
+        return None, f"scoring_module_missing: {e}"
+    content = read_incident_content(folder, ticket_id=ticket_id)
+    if not content:
+        return None, "incidente_no_encontrado"
+    try:
+        calibration = load_calibration()
+    except Exception:
+        calibration = {}
+    scoring = compute_scoring(content, project=project, global_calibration=calibration)
+    try:
+        record_estimate(ticket_id, scoring, project=project)
+    except Exception as e:
+        print(f"[SCORING] record_estimate falló para #{ticket_id}: {e}",
+              file=sys.stderr, flush=True)
+    # Emit best-effort — no debe romper el endpoint
+    try:
+        from pipeline_events import emit as _emit_event
+        _emit_event(
+            kind="estimation_recorded",
+            ticket_id=ticket_id,
+            project=project,
+            detail=f"score={scoring.score} est={scoring.estimated_minutes}min",
+        )
+    except Exception:
+        pass
+    return scoring, None
+
+
+@app.route("/api/scoring/<ticket_id>", methods=["GET"])
+def api_scoring_get(ticket_id):
+    """
+    GET → retorna la entry de estimación del ticket.
+    Si no existe, la calcula y persiste en el momento (lazy create).
+    Además: si el ticket ya está en ``completado``, intenta cerrar la entry
+    con los ``actual_minutes`` derivados de state.json.
+    """
+    try:
+        from estimation_store import get_entry, maybe_close_from_state
+    except Exception as e:
+        return jsonify({"error": f"estimation_store indisponible: {e}"}), 503
+
+    entry = get_entry(ticket_id)
+    if entry is None:
+        scoring, err = _scoring_compute_for_ticket(ticket_id)
+        if err:
+            return jsonify({"error": err}), 404
+        entry = get_entry(ticket_id)
+
+    # Auto-close lazy si el ticket está completado y la entry aún no tiene actuals
+    try:
+        state = _load_pipeline_state()
+        state_entry = (state.get("tickets") or {}).get(ticket_id, {})
+        if state_entry and entry and entry.get("actual_minutes") is None:
+            if maybe_close_from_state(ticket_id, state_entry):
+                entry = get_entry(ticket_id)
+    except Exception as e:
+        print(f"[SCORING] maybe_close_from_state #{ticket_id}: {e}",
+              file=sys.stderr, flush=True)
+
+    return jsonify(entry or {})
+
+
+@app.route("/api/scoring/<ticket_id>/recompute", methods=["POST"])
+def api_scoring_recompute(ticket_id):
+    """POST → fuerza el recálculo y retorna la entry actualizada."""
+    project = (request.get_json(silent=True) or {}).get("project") or None
+    scoring, err = _scoring_compute_for_ticket(ticket_id, project=project)
+    if err:
+        return jsonify({"error": err}), 404
+    try:
+        from estimation_store import get_entry
+        return jsonify(get_entry(ticket_id) or {})
+    except Exception as e:
+        return jsonify({"error": f"estimation_store indisponible: {e}"}), 503
+
+
+@app.route("/api/scoring/<ticket_id>/actual", methods=["POST"])
+def api_scoring_actual(ticket_id):
+    """
+    POST body: ``{actual_minutes, per_stage, corrections_sent, rework_cycles,
+    first_attempt_approved}``. Registra los valores reales del ticket.
+    """
+    try:
+        from estimation_store import record_actual
+    except Exception as e:
+        return jsonify({"error": f"estimation_store indisponible: {e}"}), 503
+    body = request.get_json(silent=True) or {}
+    updated = record_actual(
+        ticket_id,
+        actual_minutes=body.get("actual_minutes"),
+        per_stage_actual=body.get("per_stage") or body.get("per_stage_actual"),
+        rework_cycles=body.get("rework_cycles"),
+        corrections_sent=body.get("corrections_sent"),
+        first_attempt_approved=body.get("first_attempt_approved"),
+    )
+    if updated is None:
+        return jsonify({"error": "entry no encontrada; llamá primero a /api/scoring/<id>"}), 404
+    return jsonify(updated)
+
+
+@app.route("/api/scoring/history", methods=["GET"])
+def api_scoring_history():
+    """GET ?project=&days= → lista de entries (estimación + realidad)."""
+    try:
+        from estimation_store import list_entries
+    except Exception as e:
+        return jsonify({"error": f"estimation_store indisponible: {e}"}), 503
+    project = request.args.get("project") or None
+    days_arg = request.args.get("days")
+    days = int(days_arg) if days_arg and days_arg.isdigit() else None
+    closed_only = request.args.get("closed_only", "").lower() in ("1", "true", "yes")
+    entries = list_entries(project=project, days=days, closed_only=closed_only)
+    return jsonify({
+        "project": project,
+        "days":    days,
+        "count":   len(entries),
+        "entries": entries,
+    })
+
+
+@app.route("/api/scoring/calibration", methods=["GET"])
+def api_scoring_calibration():
+    """GET → devuelve el bloque ``calibration`` del estimation store + sugerencia."""
+    try:
+        from estimation_store import load_calibration, suggest_delta_calibration, compute_accuracy
+    except Exception as e:
+        return jsonify({"error": f"estimation_store indisponible: {e}"}), 503
+    project = request.args.get("project") or None
+    days_arg = request.args.get("days")
+    days = int(days_arg) if days_arg and days_arg.isdigit() else 90
+    try:
+        min_samples_arg = request.args.get("min_samples")
+        min_samples = int(min_samples_arg) if min_samples_arg and min_samples_arg.isdigit() else 20
+    except Exception:
+        min_samples = 20
+    try:
+        suggestion = suggest_delta_calibration(
+            min_samples=min_samples, project=project, days=days,
+        )
+    except Exception as e:
+        suggestion = {"error": str(e)}
+    try:
+        accuracy = compute_accuracy(days=days, project=project)
+    except Exception as e:
+        accuracy = {"error": str(e)}
+    return jsonify({
+        "calibration": load_calibration(),
+        "suggestion":  suggestion,
+        "accuracy":    accuracy,
+        "project":     project,
+        "days":        days,
+    })
+
+
+@app.route("/api/scoring/calibration/apply", methods=["POST"])
+def api_scoring_calibration_apply():
+    """
+    POST body: ``{scope: "global"|"project", project?}``. Aplica la delta
+    sugerida (desde ``suggest_delta_calibration``) al store.
+    """
+    try:
+        from estimation_store import apply_calibration, suggest_delta_calibration
+    except Exception as e:
+        return jsonify({"error": f"estimation_store indisponible: {e}"}), 503
+    body = request.get_json(silent=True) or {}
+    scope = (body.get("scope") or "global").lower()
+    project = body.get("project") or None
+
+    if scope == "global":
+        sug = suggest_delta_calibration()
+        delta = sug.get("suggested_delta_pct")
+        if delta is None:
+            return jsonify({"error": "sin suggestion disponible", "suggestion": sug}), 400
+        result = apply_calibration(global_delta_pct=float(delta))
+        return jsonify({"applied": "global", "delta_pct": float(delta),
+                        "calibration": result})
+
+    if scope == "project":
+        if not project:
+            return jsonify({"error": "project requerido para scope=project"}), 400
+        sug = suggest_delta_calibration(project=project)
+        delta = sug.get("suggested_delta_pct")
+        if delta is None:
+            return jsonify({"error": "sin suggestion disponible para project",
+                            "suggestion": sug}), 400
+        result = apply_calibration(project_deltas={project: float(delta)})
+        return jsonify({"applied": "project", "project": project,
+                        "delta_pct": float(delta), "calibration": result})
+
+    return jsonify({"error": f"scope desconocido: {scope}"}), 400
+
+
+@app.route("/api/events/stream", methods=["GET"])
+def api_events_stream():
+    """
+    SSE stream de eventos del pipeline. Query opcional:
+      ?ticket=<id>    — filtra por ticket_id
+      ?kind=<kind>    — filtra por kind
+    Header opcional: Last-Event-ID para replay tras reconexión.
+    """
+    try:
+        from sse_bus import event_stream
+    except Exception as e:
+        return jsonify({"error": f"sse_bus indisponible: {e}"}), 503
+    last_event_id = request.headers.get("Last-Event-ID")
+    ticket = request.args.get("ticket") or None
+    kind_filter = request.args.get("kind") or None
+    return Response(
+        event_stream(
+            last_event_id=last_event_id,
+            ticket_id=ticket,
+            kind_filter=kind_filter,
+        ),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control":         "no-cache",
+            "X-Accel-Buffering":     "no",
+            "Connection":            "keep-alive",
+        },
+    )
+
+
+@app.route("/api/events", methods=["GET"])
+def api_events_list():
+    """GET ?ticket=&since=&limit=&kind= → lee del JSONL."""
+    try:
+        from pipeline_events import read_events
+    except Exception as e:
+        return jsonify({"error": f"pipeline_events indisponible: {e}"}), 503
+    ticket = request.args.get("ticket") or None
+    kind = request.args.get("kind") or None
+    since_raw = request.args.get("since") or None
+    since = None
+    if since_raw:
+        try:
+            since = datetime.fromisoformat(since_raw.replace("Z", "+00:00"))
+        except Exception:
+            since = None
+    try:
+        limit = int(request.args.get("limit") or 500)
+    except Exception:
+        limit = 500
+    events = read_events(ticket_id=ticket, kind=kind, since=since, limit=limit)
+    return jsonify({"count": len(events), "events": events})
+
+
+@app.route("/api/errors/ticket/<ticket_id>", methods=["GET"])
+def api_errors_for_ticket(ticket_id):
+    """Eventos ``action_error`` para un ticket (últimos N días)."""
+    try:
+        from pipeline_events import read_events
+    except Exception as e:
+        return jsonify({"error": f"pipeline_events indisponible: {e}"}), 503
+    try:
+        limit = int(request.args.get("limit") or 50)
+    except Exception:
+        limit = 50
+    events = read_events(ticket_id=ticket_id, kind="action_error", limit=limit)
+    return jsonify({"ticket_id": ticket_id, "count": len(events), "events": events})
+
+
+@app.route("/api/pipeline/performance", methods=["GET"])
+def api_pipeline_performance():
+    """
+    Métricas agregadas PM/DEV/QA: tiempo, reintentos, correcciones, 1er intento OK.
+    Combina state.json + pipeline_events.jsonl.
+    """
+    try:
+        from metrics_collector import get_metrics_collector
+    except Exception as e:
+        return jsonify({"error": f"metrics_collector indisponible: {e}"}), 503
+    rt = _get_runtime()
+    project = request.args.get("project") or rt["name"]
+    try:
+        days = int(request.args.get("days") or 7)
+    except Exception:
+        days = 7
+    try:
+        mc = get_metrics_collector(project)
+        fn = getattr(mc, "get_pipeline_performance_metrics", None)
+        if fn is None:
+            return jsonify({"error": "metrics_collector.get_pipeline_performance_metrics no disponible"}), 503
+        return jsonify(fn(days=days, project=project))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/config/scoring", methods=["GET"])
+def api_config_scoring_get():
+    """GET ?project=  → devuelve config de scoring resuelta (global + proyecto)."""
+    try:
+        from ticket_scoring import load_scoring_config
+    except Exception as e:
+        return jsonify({"error": f"ticket_scoring indisponible: {e}"}), 503
+    project = request.args.get("project") or _get_runtime()["name"]
+    cfg = load_scoring_config(project)
+    return jsonify({"project": project, "config": cfg})
+
+
+@app.route("/api/config/scoring", methods=["PATCH"])
+def api_config_scoring_patch():
+    """
+    PATCH body: merge parcial sobre ``scoring_defaults`` (global, en config.json)
+    o ``scoring`` (por proyecto, en projects/<NAME>/config.json si ?project=).
+    """
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "body debe ser objeto JSON"}), 400
+    project = request.args.get("project") or None
+
+    # Path del archivo a actualizar
+    if project:
+        cfg_path = os.path.join(BASE_DIR, "projects", project, "config.json")
+        key = "scoring"
+    else:
+        cfg_path = os.path.join(BASE_DIR, "config.json")
+        key = "scoring_defaults"
+
+    if not os.path.exists(cfg_path):
+        return jsonify({"error": f"config no encontrada: {cfg_path}"}), 404
+
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        return jsonify({"error": f"no se pudo leer config: {e}"}), 500
+
+    # Deep merge sobre data[key]
+    def _deep_merge(dst: dict, src: dict) -> None:
+        for k, v in (src or {}).items():
+            if isinstance(v, dict) and isinstance(dst.get(k), dict):
+                _deep_merge(dst[k], v)
+            else:
+                dst[k] = v
+
+    current = data.setdefault(key, {})
+    _deep_merge(current, body)
+
+    # Escritura atómica
+    tmp = cfg_path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, cfg_path)
+    except Exception as e:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        return jsonify({"error": f"no se pudo guardar config: {e}"}), 500
+
+    return jsonify({"updated": key, "project": project, "config": data.get(key)})
+
+
+# ── Endpoints de QA actions + valid transitions ──────────────────────────────
+
+@app.route("/api/pipeline/valid_transitions", methods=["GET"])
+def api_pipeline_valid_transitions():
+    """
+    Devuelve la tabla `_VALID_AUTO_ADVANCE_TRANSITIONS` (fuente de verdad de
+    transiciones auto-avanzables). El dashboard la consume para decidir qué
+    botones mostrar contextualmente.
+    """
+    try:
+        from pipeline_state import _VALID_AUTO_ADVANCE_TRANSITIONS
+    except Exception as e:
+        return jsonify({"error": f"pipeline_state indisponible: {e}"}), 503
+    return jsonify({"transitions": dict(_VALID_AUTO_ADVANCE_TRANSITIONS)})
+
+
+# Acciones manuales de QA post-rechazo. Cada entry declara:
+#   - valid_from: estados desde los cuales se puede ejecutar
+#   - to_state:   estado destino
+#   - releases_gate: si debe liberar el gate global del ticket activo
+_QA_ACTION_MAP = {
+    "reenviar_pm": {
+        "valid_from":     frozenset((
+            "tester_completado", "stagnation_detected",
+            "pm_revision", "qa_rework",
+        )),
+        "to_state":       "pm_revision_en_proceso",
+        "releases_gate":  False,
+    },
+    "volver_dev": {
+        "valid_from":     frozenset((
+            "tester_completado", "stagnation_detected",
+            "pm_revision", "qa_rework",
+        )),
+        # qa_rework es el hop intermedio que _VALID_AUTO_ADVANCE_TRANSITIONS
+        # usa para avanzar a dev_rework_en_proceso.
+        "to_state":       "qa_rework",
+        "releases_gate":  False,
+    },
+}
+
+
+@app.route("/api/tickets/<ticket_id>/qa_action", methods=["POST"])
+def api_tickets_qa_action(ticket_id: str):
+    """
+    Ejecuta una acción manual del usuario sobre un ticket QA-rechazado.
+    Body: ``{"action": "reenviar_pm" | "volver_dev"}``.
+
+    Valida contra ``_QA_ACTION_MAP`` (qué estados permiten qué acción) y ejecuta
+    la transición usando ``set_ticket_state``. No dispara invocación de agente
+    (eso lo maneja el watcher cuando vea el nuevo estado) — acá solo movemos
+    el estado, para mantener la lógica de este endpoint simple y predecible.
+    """
+    from pipeline_state import load_state, save_state, set_ticket_state
+
+    body = request.get_json(silent=True) or {}
+    action = str(body.get("action") or "").strip()
+    if not action:
+        return jsonify({"ok": False, "error": "missing 'action'"}), 400
+    action_cfg = _QA_ACTION_MAP.get(action)
+    if not action_cfg:
+        return jsonify({"ok": False, "error": f"acción desconocida: {action}",
+                        "valid_actions": list(_QA_ACTION_MAP.keys())}), 400
+
+    rt    = _get_runtime()
+    state = load_state(rt["state_path"])
+    entry = (state.get("tickets") or {}).get(ticket_id)
+    if entry is None:
+        return jsonify({"ok": False, "error": f"ticket no existe: {ticket_id}"}), 404
+
+    current = entry.get("estado", "")
+    if current not in action_cfg["valid_from"]:
+        return jsonify({
+            "ok":            False,
+            "error":         f"transición inválida: desde '{current}' no se "
+                             f"puede aplicar '{action}'",
+            "current_state": current,
+            "valid_from":    sorted(action_cfg["valid_from"]),
+        }), 400
+
+    to_state = action_cfg["to_state"]
+    try:
+        set_ticket_state(state, ticket_id, to_state,
+                         qa_action=action, qa_action_by="dashboard-user",
+                         qa_action_from=current)
+        # Si la acción libera el gate (no es el caso actual, pero contemplado),
+        # lo soltamos explícitamente.
+        if action_cfg.get("releases_gate"):
+            try:
+                _release_active_ticket(ticket_id, reason=f"qa_action={action}")
+            except Exception:
+                pass
+        save_state(rt["state_path"], state)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"no se pudo aplicar: {e}"}), 500
+
+    # Log + evento best-effort
+    try:
+        from pipeline_events import emit as _emit
+        _emit(
+            kind="state_transition",
+            ticket_id=ticket_id,
+            project=rt.get("name"),
+            action="qa_action",
+            detail=f"{current} -> {to_state} ({action})",
+        )
+    except Exception:
+        pass
+
+    return jsonify({
+        "ok":         True,
+        "ticket_id":  ticket_id,
+        "action":     action,
+        "from_state": current,
+        "to_state":   to_state,
+    })
+
+
+# ── Endpoint: re-entrenamiento manual del modelo de estimación ───────────────
+
+@app.route("/api/estimation_model/retrain", methods=["POST"])
+def api_estimation_model_retrain():
+    """
+    Dispara el entrenamiento manual de la regresión lineal que estima minutos
+    reales a partir de los factores de scoring. Devuelve las stats del modelo.
+    """
+    try:
+        from estimation_model import train_model
+    except Exception as e:
+        return jsonify({"error": f"estimation_model indisponible: {e}"}), 503
+    try:
+        stats = train_model()
+    except Exception as e:
+        return jsonify({"error": f"train_model falló: {e}"}), 500
+    if stats is None:
+        return jsonify({
+            "ok":       False,
+            "trained":  False,
+            "reason":   "insuficientes samples o fallo silencioso — ver logs",
+        })
+    return jsonify({"ok": True, "trained": True, "stats": stats})
+
+
+@app.route("/api/estimation_model", methods=["GET"])
+def api_estimation_model_get():
+    """Devuelve el estado del modelo entrenado (si existe)."""
+    try:
+        from estimation_model import load_model
+    except Exception as e:
+        return jsonify({"error": f"estimation_model indisponible: {e}"}), 503
+    model = load_model()
+    return jsonify(model or {"trained": False})
+
+
+# ── Endpoints de metadata de tickets (color, user_tags, commits, notas) ──────
+
+@app.route("/api/tickets/<ticket_id>/metadata", methods=["GET"])
+def api_tickets_metadata(ticket_id: str):
+    """GET /api/tickets/<id>/metadata — retorna metadata del ticket."""
+    try:
+        from ticket_metadata_store import get_store
+        store = get_store()
+        meta = store.get(ticket_id)
+        if meta is None:
+            return jsonify({"ok": False, "error": f"ticket {ticket_id} sin metadata"}), 404
+        return jsonify({
+            "ok": True,
+            "ticket_id": ticket_id,
+            "color": meta.color.hex if meta.color else None,
+            "user_tags": meta.user_tags.tags if meta.user_tags else [],
+            "commits_count": meta.commits_count or 0,
+            "last_commit_hash": meta.last_commit_hash,
+            "last_commit_at": meta.last_commit_at,
+            "ado_comments_count": meta.ado_comments_count or 0,
+            "notes_count": meta.notes_count or 0,
+            "last_note_at": meta.last_note_at,
+            "last_indexed_at": meta.last_indexed_at,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/tickets/metadata/summary", methods=["GET"])
+def api_tickets_metadata_summary():
+    """GET /api/tickets/metadata/summary — agregados de metadata por estado/tag/asignado."""
+    try:
+        from ticket_metadata_store import get_store
+        store = get_store()
+        all_meta = store.get_all()
+
+        # Parsing de query params para grouping
+        group_by = request.args.get("group_by", "").split(",")
+        group_by = [g.strip() for g in group_by if g.strip()]
+
+        summary = {
+            "total": len(all_meta),
+            "con_color": sum(1 for m in all_meta.values() if m.color),
+            "sin_color": sum(1 for m in all_meta.values() if not m.color),
+            "con_commits": sum(1 for m in all_meta.values() if m.commits_count and m.commits_count > 0),
+            "sin_commits": sum(1 for m in all_meta.values() if not m.commits_count or m.commits_count == 0),
+            "con_notas": sum(1 for m in all_meta.values() if m.notes_count and m.notes_count > 0),
+            "sin_notas": sum(1 for m in all_meta.values() if not m.notes_count or m.notes_count == 0),
+        }
+
+        # Agregados por grupo si se pidieron
+        if "user_tags" in group_by:
+            summary["per_user_tag"] = {}
+            for meta in all_meta.values():
+                tags_list = meta.user_tags.tags if meta.user_tags else []
+                for tag in tags_list:
+                    if tag not in summary["per_user_tag"]:
+                        summary["per_user_tag"][tag] = {"count": 0, "tickets": []}
+                    summary["per_user_tag"][tag]["count"] += 1
+                    summary["per_user_tag"][tag]["tickets"].append(meta.ticket_id)
+
+        if "color" in group_by:
+            summary["per_color"] = {}
+            for meta in all_meta.values():
+                color = meta.color.hex if meta.color else "sin_color"
+                if color not in summary["per_color"]:
+                    summary["per_color"][color] = {"count": 0, "tickets": []}
+                summary["per_color"][color]["count"] += 1
+                summary["per_color"][color]["tickets"].append(meta.ticket_id)
+
+        return jsonify({"ok": True, **summary})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/tickets/<ticket_id>/color", methods=["PATCH"])
+def api_tickets_color_patch(ticket_id: str):
+    """PATCH /api/tickets/<id>/color — set/clear color del ticket."""
+    try:
+        from ticket_metadata_store import get_store
+        data = request.json or {}
+        color = data.get("color")
+
+        store = get_store()
+        if color is None:
+            store.clear_color(ticket_id)
+            color_result = None
+        else:
+            if not isinstance(color, str) or not color.startswith("#") or len(color) != 7:
+                return jsonify({"ok": False, "error": "color debe ser #rrggbb"}), 400
+            store.set_color(ticket_id, color.lower())
+            color_result = color.lower()
+
+        meta = store.get(ticket_id)
+        return jsonify({
+            "ok": True,
+            "ticket_id": ticket_id,
+            "color": color_result if color_result else (meta.color.hex if meta.color else None),
+            "updated_at": meta.updated_at if meta else None,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/tickets/<ticket_id>/user_tags", methods=["POST"])
+def api_tickets_user_tags_post(ticket_id: str):
+    """POST /api/tickets/<id>/user_tags — agregar un tag."""
+    try:
+        from ticket_metadata_store import get_store
+        from pydantic import ValidationError as PydanticError
+        data = request.json or {}
+        tag = data.get("tag", "").strip()
+
+        if not tag:
+            return jsonify({"ok": False, "error": "tag requerido"}), 400
+
+        store = get_store()
+        store.add_user_tag(ticket_id, tag)
+        meta = store.get(ticket_id)
+        return jsonify({
+            "ok": True,
+            "ticket_id": ticket_id,
+            "user_tags": meta.user_tags.tags if meta and meta.user_tags else [],
+            "updated_at": meta.updated_at if meta else None,
+        })
+    except (ValueError, PydanticError) as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/tickets/<ticket_id>/user_tags/<tag>", methods=["DELETE"])
+def api_tickets_user_tags_delete(ticket_id: str, tag: str):
+    """DELETE /api/tickets/<id>/user_tags/<tag> — remover un tag."""
+    try:
+        from ticket_metadata_store import get_store
+        store = get_store()
+        meta = store.get(ticket_id)
+        if meta is None or (meta.user_tags and tag not in meta.user_tags.tags):
+            return jsonify({"ok": False, "error": f"tag '{tag}' no existe"}), 404
+
+        store.remove_user_tag(ticket_id, tag)
+        meta = store.get(ticket_id)
+        return jsonify({
+            "ok": True,
+            "ticket_id": ticket_id,
+            "user_tags": meta.user_tags.tags if meta and meta.user_tags else [],
+            "updated_at": meta.updated_at if meta else None,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/tickets/<ticket_id>/user_tags", methods=["PUT"])
+def api_tickets_user_tags_put(ticket_id: str):
+    """PUT /api/tickets/<id>/user_tags — reemplazar lista completa de tags."""
+    try:
+        from ticket_metadata_store import get_store
+        from pydantic import ValidationError as PydanticError
+        data = request.json or {}
+        tags = data.get("tags", [])
+
+        if not isinstance(tags, list):
+            return jsonify({"ok": False, "error": "tags debe ser lista"}), 400
+
+        store = get_store()
+        store.set_user_tags(ticket_id, tags)
+        meta = store.get(ticket_id)
+        return jsonify({
+            "ok": True,
+            "ticket_id": ticket_id,
+            "user_tags": meta.user_tags.tags if meta and meta.user_tags else [],
+            "updated_at": meta.updated_at if meta else None,
+        })
+    except (ValueError, PydanticError) as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print(" Stacky — Pipeline Dashboard — http://localhost:5050")
@@ -4008,11 +6353,44 @@ if __name__ == "__main__":
     _transition_thread.start()
     print("[STARTUP] stage-transition-watcher iniciado")
 
+    # ── Reconciliador: garantiza que folder y state.json no diverjan ─────────
+    _reconciler_thread = threading.Thread(
+        target=_pipeline_reconciler_loop, daemon=True, name="pipeline-reconciler"
+    )
+    _reconciler_thread.start()
+    print("[STARTUP] pipeline-reconciler iniciado")
+
     # ── Watcher secundario: notificaciones Teams ──────────────────────────────
     _teams_thread = threading.Thread(
         target=_teams_notify_watcher, daemon=True, name="teams-notify-watcher"
     )
     _teams_thread.start()
     print("[STARTUP] teams-notify-watcher iniciado")
+
+    # ── Auto Enter Daemon: Ctrl+Enter periódico en VS Code ────────────────────
+    try:
+        from auto_enter_daemon import get_auto_enter_daemon
+        _auto_enter = get_auto_enter_daemon()
+        # load_state() ya fue llamado por get_auto_enter_daemon() — arranca
+        # solo si fue guardado como habilitado en la sesión anterior.
+        print(
+            f"[STARTUP] auto-enter-daemon cargado | "
+            f"enabled={_auto_enter.enabled} | intervalo={_auto_enter.interval}s"
+        )
+    except Exception as _ae_err:
+        print(f"[STARTUP] auto-enter-daemon no disponible: {_ae_err}")
+
+    # ── Metadata Indexer: indexación background de commits, notas, etc ────────
+    try:
+        from ticket_metadata_indexer import MetadataIndexer
+        _metadata_indexer = MetadataIndexer(period_sec=300, force_git_only=False)
+        _metadata_indexer.start()
+        print(
+            f"[STARTUP] metadata-indexer iniciado | "
+            f"period={_metadata_indexer.period_sec}s | "
+            f"running={_metadata_indexer.is_running}"
+        )
+    except Exception as _mi_err:
+        print(f"[STARTUP] metadata-indexer no disponible: {_mi_err}")
 
     app.run(host="0.0.0.0", port=5050, debug=False, use_reloader=False)

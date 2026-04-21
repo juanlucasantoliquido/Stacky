@@ -99,6 +99,199 @@
     transition: border-color .2s;
   }
   .card:hover { border-color: var(--accent); }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     CARD EN ESTADO CRÍTICO — RECHAZADO / stagnation_detected.
+     Objetivo: imposible pasar por alto. Fondo rojo, borde pulsante,
+     banner gigante, ribbon diagonal y animación de entrada.
+     ───────────────────────────────────────────────────────────────────────── */
+  @keyframes rejected-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(239, 68, 68, .45), 0 0 24px rgba(239, 68, 68, .35); }
+    50%      { box-shadow: 0 0 0 4px rgba(239, 68, 68, .75), 0 0 42px rgba(239, 68, 68, .65); }
+  }
+  @keyframes rejected-shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-1px); }
+    20%, 40%, 60%, 80%      { transform: translateX(1px); }
+  }
+  @keyframes rejected-flash {
+    0%, 100% { background: var(--red); }
+    50%      { background: #b91c1c; }
+  }
+
+  .card.rejected {
+    position: relative;
+    background: linear-gradient(135deg, #2a0f12 0%, #450a0a 100%);
+    border: 2px solid var(--red);
+    animation: rejected-pulse 1.8s ease-in-out infinite;
+  }
+  .card.rejected:hover { border-color: #fca5a5; }
+
+  .card.rejected .card-header,
+  .card.rejected .summary-panel,
+  .card.rejected .summary-panel-header,
+  .card.rejected .summary-panel-body,
+  .card.rejected .pm-files,
+  .card.rejected .correction-panel,
+  .card.rejected .timeline {
+    background: transparent;
+    color: #fecaca;
+  }
+  .card.rejected .titulo,
+  .card.rejected .ticket-id { color: #fee2e2; }
+  .card.rejected .stage-icon.done,
+  .card.rejected .stage-icon.active,
+  .card.rejected .stage-icon.waiting {
+    border-color: var(--red);
+    background: #450a0a;
+    color: #fecaca;
+  }
+  .card.rejected .stage-connector { background: #7f1d1d; }
+  .card.rejected .stage-connector.done { background: #7f1d1d; }
+  .card.rejected .stage-connector.active { background: var(--red); }
+  .card.rejected .stage-label { color: #fca5a5; }
+
+  /* Override status badge — si el veredicto real es RECHAZADO, forzar rojo */
+  .card.rejected .status-indicator {
+    color: #fff !important;
+    background: var(--red);
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-weight: 800;
+    animation: rejected-flash 1s ease-in-out infinite;
+  }
+
+  /* Ribbon diagonal "RECHAZADO" en la esquina superior derecha */
+  .rejected-ribbon {
+    position: absolute;
+    top: 14px; right: -42px;
+    transform: rotate(35deg);
+    background: #fff;
+    color: var(--red);
+    font-weight: 900;
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 3px 48px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* Banner superior — grande, con icono de alerta animado */
+  .rejected-banner {
+    background: var(--red);
+    color: #fff;
+    font-weight: 800;
+    font-size: 14px;
+    letter-spacing: 1px;
+    padding: 10px 18px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 2px solid #fff;
+    text-transform: uppercase;
+    animation: rejected-flash 1.5s ease-in-out infinite;
+  }
+  .rejected-banner .alert-icon {
+    font-size: 22px;
+    animation: rejected-shake 0.6s ease-in-out infinite;
+    display: inline-block;
+  }
+  .rejected-banner .findings-count {
+    background: #fff; color: var(--red);
+    border-radius: 999px; padding: 2px 12px; font-size: 12px;
+    font-weight: 900; letter-spacing: .5px;
+  }
+  .rejected-banner .rework-meta {
+    font-size: 11px; font-weight: 600; opacity: .9;
+    background: rgba(0,0,0,.25); padding: 2px 8px; border-radius: 4px;
+  }
+  .rejected-banner .spacer { flex: 1; }
+  .rejected-banner .action-cta {
+    background: #fff; color: var(--red);
+    border: none; border-radius: 4px;
+    padding: 4px 12px; font-weight: 800; font-size: 12px;
+    cursor: pointer; letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+  .rejected-banner .action-cta:hover { background: #fee2e2; }
+  .rejected-banner .action-cta.alt {
+    background: #fee2e2; color: #7f1d1d;
+  }
+  .rejected-banner .action-cta.alt:hover { background: #fecaca; }
+
+  /* Bloque inferior con detalle del rechazo (findings + contexto) */
+  .rejected-detail {
+    background: #450a0a;
+    color: #fecaca;
+    border-bottom: 2px solid var(--red);
+    padding: 10px 18px 12px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .rejected-detail .rd-meta {
+    font-size: 11px;
+    color: #fca5a5;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  .rejected-detail ul.rd-list {
+    list-style: disc; padding-left: 22px; margin: 4px 0 0;
+  }
+  .rejected-detail ul.rd-list li { margin: 2px 0; }
+  .rejected-detail details summary {
+    cursor: pointer; color: #fecaca; font-weight: 700;
+    padding: 2px 0;
+  }
+  .rejected-detail details summary:hover { color: #fff; }
+  .rejected-detail .rd-fallback-tag {
+    display: inline-block;
+    background: #7f1d1d; color: #fff;
+    border-radius: 3px; padding: 0 5px;
+    font-size: 10px; font-weight: 700; letter-spacing: .3px;
+    margin-right: 4px;
+  }
+
+  /* CON OBSERVACIONES — pasa como OK pero dejamos un aviso ambar discreto */
+  .card.observations {
+    border-left: 3px solid var(--yellow);
+  }
+  .observations-banner {
+    background: rgba(234, 179, 8, .15);
+    color: #fde68a;
+    font-size: 12px;
+    padding: 6px 16px;
+    border-bottom: 1px solid rgba(234, 179, 8, .35);
+    font-weight: 500;
+  }
+
+  /* ── EN PROCESO (working now) ── */
+  @keyframes working-glow {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(34,197,94,.35), 0 0 14px rgba(34,197,94,.12); }
+    50%       { box-shadow: 0 0 0 2px rgba(34,197,94,.60), 0 0 28px rgba(34,197,94,.25); }
+  }
+  .card.working-now {
+    border-left: 4px solid var(--green);
+    animation: working-glow 2.2s ease-in-out infinite;
+  }
+  .card.working-now:hover { border-color: #4ade80; }
+  .working-now-banner {
+    background: linear-gradient(90deg, #052e16 0%, #14532d 100%);
+    border-bottom: 1px solid #16a34a;
+    padding: 7px 16px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; font-weight: 800; color: #4ade80;
+    letter-spacing: .8px; text-transform: uppercase;
+  }
+  @keyframes blink-arrow {
+    0%, 100% { opacity: 1; } 50% { opacity: .3; }
+  }
+  .working-now-banner .wn-arrow { animation: blink-arrow 1s ease-in-out infinite; font-size: 14px; }
+  .working-now-banner .wn-timer { font-weight: 400; color: #86efac; margin-left: auto; font-size: 11px; }
+  /* badge de deploy/commit descargado */
+  .badge-deploy-done { background:#0f2a1a;border:1px solid #16a34a;color:#4ade80;border-radius:4px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap; }
+  .badge-commit-done { background:#0a1628;border:1px solid #1d4ed8;color:#60a5fa;border-radius:4px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap; }
+  /* badge SQL transforms */
+  .badge-sql-alert    { background:#422006;border:1px solid #ea580c;color:#fb923c;border-radius:4px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap;cursor:help; }
   .card-header {
     display: flex; align-items: center; gap: 12px;
     padding: 12px 16px;
@@ -113,11 +306,11 @@
     flex: 1; font-weight: 500; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis;
   }
-  .card-header .mantis-badge {
+  .card-header .tracker-badge {
     font-size: 10px; padding: 2px 8px; border-radius: 4px;
     font-weight: 700; white-space: nowrap; letter-spacing: .3px;
   }
-  /* Colores por estado Mantis */
+  /* Colores por estado del tracker */
   .mb-asignada          { background: #1e3a5f; color: #60a5fa; }
   .mb-nueva             { background: #422006; color: #fbbf24; }
   .mb-confirmada        { background: #1c2a1a; color: #4ade80; }
@@ -147,10 +340,10 @@
     min-width: 80px;
   }
   .stage-icon {
-    width: 32px; height: 32px; border-radius: 50%;
+    width: 40px; height: 40px; border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
     font-size: 14px; border: 2px solid transparent;
-    position: relative;
+    position: relative; overflow: hidden;
   }
   .stage-icon.done    { background: #14532d; border-color: var(--green); }
   .stage-icon.active  { background: #1e3a5f; border-color: var(--blue); animation: pulse 1.5s infinite; }
@@ -161,6 +354,123 @@
     0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,.4); }
     50%       { box-shadow: 0 0 0 6px rgba(59,130,246,0); }
   }
+
+  /* ── Pixel art avatares por agente ────────────────────────────────────── */
+  .agent-sprite {
+    width: 36px; height: 36px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    shape-rendering: crispEdges;
+    display: block;
+  }
+  /* frame cycling: dos frames por sprite, animación step para look pixel */
+  .agent-sprite .f2 { visibility: hidden; }
+  .agent-sprite.working .f1 { animation: sprite-cycle-a .7s steps(1) infinite; }
+  .agent-sprite.working .f2 { animation: sprite-cycle-b .7s steps(1) infinite; }
+  @keyframes sprite-cycle-a {
+    0%, 49%  { visibility: visible; }
+    50%,100% { visibility: hidden;  }
+  }
+  @keyframes sprite-cycle-b {
+    0%, 49%  { visibility: hidden;  }
+    50%,100% { visibility: visible; }
+  }
+  /* idle: solo frame 1 visible, quieto, desaturado al 80% — "descansando" */
+  .agent-sprite.idle .f1 { visibility: visible; }
+  .agent-sprite.idle { filter: saturate(.55) brightness(.9); opacity: .85; }
+  .agent-sprite.error  { filter: hue-rotate(-20deg) saturate(1.3); }
+
+  /* Fondo específico según estado del icono contenedor */
+  .stage-icon.active  .agent-sprite { filter: drop-shadow(0 0 3px rgba(99,102,241,.8)); }
+  .stage-icon.done    .agent-sprite { filter: saturate(.55) brightness(.9); opacity: .85; }
+
+  /* ── Desatasco: overlay en loop mientras está desatascando ──────────── */
+  .card.unstucking {
+    border-color: #f59e0b !important;
+    animation: unstuck-glow 1.5s ease-in-out infinite;
+  }
+  @keyframes unstuck-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+    50%       { box-shadow: 0 0 0 6px rgba(245,158,11,.25); }
+  }
+  .unstuck-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    background: linear-gradient(90deg, #78350f, #f59e0b, #78350f);
+    background-size: 200% 100%;
+    animation: unstuck-band 2s linear infinite;
+    color: #fff; font-weight: 700; font-size: 11px;
+    border: 2px solid #fbbf24;
+  }
+  @keyframes unstuck-band {
+    0%   { background-position:   0% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .unstuck-badge .plumber {
+    width: 22px; height: 22px; image-rendering: pixelated;
+  }
+  .unstuck-badge .plumber .arm {
+    transform-origin: 11px 10px;
+    animation: plumber-swing .55s steps(3) infinite;
+  }
+  @keyframes plumber-swing {
+    0%   { transform: rotate(-35deg); }
+    33%  { transform: rotate(  5deg); }
+    66%  { transform: rotate(-20deg); }
+    100% { transform: rotate(-35deg); }
+  }
+  .unstuck-badge .plumber .spark {
+    animation: plumber-spark .55s steps(2) infinite;
+  }
+  @keyframes plumber-spark {
+    0%, 49%  { opacity: 0; }
+    50%,100% { opacity: 1; }
+  }
+  /* ── Health badge: divergencia / stale del reconciliador ─────────────── */
+  .health-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 4px;
+    font-size: 11px; font-weight: 800; letter-spacing: .4px;
+    cursor: pointer; user-select: none;
+    transition: transform .12s ease;
+  }
+  .health-badge:hover { transform: translateY(-1px); }
+  .health-badge.divergent {
+    background: #7c2d12; color: #fde68a;
+    border: 1px solid #f59e0b;
+    animation: health-pulse-amber 2.2s ease-in-out infinite;
+  }
+  .health-badge.stale {
+    background: #7f1d1d; color: #fecaca;
+    border: 1px solid #ef4444;
+    animation: health-pulse-red 1.6s ease-in-out infinite;
+  }
+  @keyframes health-pulse-amber {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+    50%       { box-shadow: 0 0 0 4px rgba(245,158,11,.35); }
+  }
+  @keyframes health-pulse-red {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+    50%       { box-shadow: 0 0 0 4px rgba(239,68,68,.4); }
+  }
+  .card.divergent { border-color: #f59e0b !important; }
+  .card.stale-pipeline { border-color: #ef4444 !important; }
+
+  /* ── Timeline de transiciones (popover) ──────────────────────────────── */
+  .pipeline-timeline {
+    margin: 6px 16px 0; padding: 8px 10px;
+    background: #0f172a; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 11px; color: var(--muted);
+  }
+  .pipeline-timeline .tl-row {
+    display: flex; gap: 8px; align-items: center; padding: 2px 0;
+  }
+  .pipeline-timeline .tl-ts { color: #64748b; min-width: 84px; font-family: monospace; }
+  .pipeline-timeline .tl-by {
+    background: #1e293b; padding: 1px 6px; border-radius: 3px;
+    color: #94a3b8; font-size: 10px; font-weight: 700;
+  }
+
   .stage-label { font-size: 10px; color: var(--muted); text-align: center; line-height: 1.2; }
   .stage-connector { flex: 1; height: 2px; background: var(--border); min-width: 20px; }
   .stage-connector.done { background: var(--green); }
@@ -419,14 +729,16 @@
   .project-select:focus { outline: none; border-color: var(--accent); }
   .project-select option { background: #1a1d2e; }
 
-  /* ── Queue modal ── */
+  /* ── Queue modal (two-panel) ── */
   #queue-modal {
     display: none;
     position: fixed; inset: 0; z-index: 500;
-    background: rgba(0,0,0,.6);
+    background: rgba(0,0,0,.65);
     align-items: center; justify-content: center;
+    padding: 16px;
   }
   #queue-modal.open { display: flex; }
+  /* .queue-panel sigue usándose por new-project-modal — no cambiar */
   .queue-panel {
     background: var(--panel); border: 1px solid var(--border);
     border-radius: 12px; padding: 20px 24px;
@@ -435,34 +747,84 @@
     box-shadow: 0 8px 40px rgba(0,0,0,.5);
   }
   .queue-panel h2 { font-size: 15px; font-weight: 700; }
-  .queue-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+  /* Diálogo de dos paneles */
+  .queue-dialog {
+    display: flex; flex-direction: row; gap: 0;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+    width: min(1100px, 97vw); max-height: 88vh;
+    box-shadow: 0 8px 40px rgba(0,0,0,.55);
+  }
+  .queue-pane {
+    flex: 1; display: flex; flex-direction: column; gap: 8px;
+    padding: 18px 18px 14px; min-width: 0; overflow: hidden;
+  }
+  #queue-active-pane { border-left: 1px solid var(--border); }
+  .queue-pane-header { display: flex; align-items: center; justify-content: space-between; }
+  .queue-pane-header h2 { font-size: 14px; font-weight: 700; margin: 0; }
+  .queue-pane-count {
+    background: var(--accent); color: #fff;
+    border-radius: 20px; padding: 1px 9px; font-size: 12px; font-weight: 700;
+  }
+  #queue-pool-search {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 10px; font-size: 12px; color: var(--text); outline: none;
+    width: 100%; box-sizing: border-box;
+  }
+  #queue-pool-search:focus { border-color: var(--accent); }
+  .queue-divider {
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 6px; font-size: 22px; color: var(--muted); user-select: none;
+    flex-shrink: 0;
+  }
+  .queue-list {
+    flex: 1; display: flex; flex-direction: column; gap: 5px;
+    overflow-y: auto; min-height: 60px;
+  }
+  .queue-drop-zone {
+    border: 2px dashed transparent; border-radius: 8px; padding: 4px;
+    transition: border-color .2s, background .2s;
+  }
+  .queue-drop-zone.drag-target, #queue-pool-list.drag-target {
+    border: 2px dashed var(--accent) !important; background: rgba(99,102,241,.08);
+  }
+  #queue-pool-list { border: 2px dashed transparent; border-radius: 8px; padding: 4px; transition: border-color .2s, background .2s; }
+  .queue-empty-hint {
+    color: var(--muted); font-size: 13px; text-align: center;
+    padding: 28px 0; pointer-events: none; user-select: none;
+  }
   .queue-item {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 8px;
     background: var(--bg); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px 12px;
-    cursor: grab;
-    user-select: none;
+    border-radius: 8px; padding: 7px 10px;
+    cursor: grab; user-select: none;
     transition: background .15s, border-color .15s;
   }
-  .queue-item.dragging { opacity: .4; }
+  .queue-item:hover { border-color: var(--accent); }
+  .queue-item.dragging { opacity: .35; }
   .queue-item.drag-over { border-color: var(--accent); background: #1e1f33; }
   .queue-rank {
-    min-width: 24px; height: 24px; border-radius: 50%;
+    min-width: 22px; height: 22px; border-radius: 50%;
     background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700;
+    font-size: 10px; font-weight: 700; flex-shrink: 0;
   }
-  .queue-tid { font-family: monospace; font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .queue-title { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .queue-estado { font-size: 11px; color: var(--muted); white-space: nowrap; }
-  .queue-arrows { display: flex; flex-direction: column; gap: 2px; }
+  .queue-tid { font-family: monospace; font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+  .queue-title { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .queue-estado { font-size: 10px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+  .queue-arrows { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
   .queue-arrows button {
     background: var(--border); border: none; border-radius: 3px;
-    color: var(--text); cursor: pointer; padding: 1px 6px; font-size: 11px;
-    line-height: 1.4;
+    color: var(--text); cursor: pointer; padding: 0 5px; font-size: 10px; line-height: 1.5;
   }
   .queue-arrows button:hover { background: var(--accent); }
-  .queue-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .queue-item-action {
+    background: none; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--muted); cursor: pointer; padding: 1px 7px; font-size: 13px; flex-shrink: 0;
+  }
+  .queue-item-action:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .queue-item-action.remove:hover { background: #ef4444; border-color: #ef4444; }
+  .queue-footer { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; flex-wrap: wrap; }
 
   /* ── Stage duration badge ── */
   .stage-dur { font-size: 10px; color: var(--muted); margin-top: 2px; }
@@ -497,12 +859,12 @@
   }
 
   /* ── Stats modal ── */
-  #stats-modal, #prompts-modal {
+  #stats-modal, #prompts-modal, #agent-config-modal {
     display: none; position: fixed; inset: 0; z-index: 500;
     background: rgba(0,0,0,.6);
     align-items: center; justify-content: center;
   }
-  #stats-modal.open, #prompts-modal.open { display: flex; }
+  #stats-modal.open, #prompts-modal.open, #agent-config-modal.open { display: flex; }
   .stats-panel, .prompts-panel {
     background: var(--panel); border: 1px solid var(--border);
     border-radius: 12px; padding: 20px 24px;
@@ -533,6 +895,115 @@
   }
   .prompts-textarea:focus { border-color: var(--accent); }
   .prompts-footer { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* ── Agent config modal ── */
+  .agent-config-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px;
+    width: min(760px, 96vw); max-height: 90vh;
+    display: flex; flex-direction: column; gap: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.55);
+    overflow: hidden;
+  }
+  .agent-config-panel h2 { font-size: 15px; font-weight: 700; margin: 0; }
+  .agent-config-panel .subtitle {
+    font-size: 12px; color: var(--muted); margin-top: -8px;
+  }
+  .agent-config-body {
+    flex: 1; overflow-y: auto; padding-right: 4px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .agent-config-section {
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; background: var(--bg);
+  }
+  .agent-config-section h3 {
+    font-size: 12px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .5px;
+    margin: 0 0 10px 0;
+  }
+  .agent-config-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; }
+  .agent-config-row label { min-width: 150px; color: var(--muted); }
+  .agent-config-row input[type="text"],
+  .agent-config-row textarea {
+    flex: 1; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 13px; font-family: inherit; outline: none;
+  }
+  .agent-config-row textarea { min-height: 70px; resize: vertical; font-family: monospace; }
+  .agent-config-row input:focus, .agent-config-row textarea:focus { border-color: var(--accent); }
+  .strictness-group { display: flex; gap: 6px; }
+  .strictness-btn {
+    padding: 4px 14px; border-radius: 6px; cursor: pointer;
+    font-size: 12px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--muted);
+    transition: all .12s;
+  }
+  .strictness-btn:hover { color: var(--text); }
+  .strictness-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .strictness-btn.active[data-level="permissive"] { background: #16a34a; border-color: #16a34a; }
+  .strictness-btn.active[data-level="strict"]     { background: #dc2626; border-color: #dc2626; }
+  .chip-list {
+    flex: 1; display: flex; flex-wrap: wrap; gap: 6px;
+    align-items: center; min-height: 34px;
+    padding: 4px 8px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--panel);
+  }
+  .chip {
+    background: var(--accent); color: #fff;
+    padding: 2px 8px; border-radius: 10px; font-size: 11px;
+    font-family: monospace; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip .chip-x { cursor: pointer; opacity: .8; }
+  .chip .chip-x:hover { opacity: 1; }
+  .chip-input {
+    flex: 1; min-width: 80px;
+    background: transparent; border: none; outline: none;
+    color: var(--text); font-size: 12px;
+  }
+  .chip-block { background: #dc2626 !important; }
+  .chip-advisory { background: #f59e0b !important; }
+  .test-picker {
+    display: flex; flex-direction: column; gap: 4px;
+    width: 100%; margin-top: 6px;
+  }
+  .test-picker-row {
+    display: flex; gap: 6px; align-items: center;
+  }
+  .test-picker-select {
+    flex: 1; padding: 5px 8px; border-radius: 6px;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); font-size: 12px;
+  }
+  .test-picker-add {
+    padding: 5px 12px; border-radius: 6px; cursor: pointer;
+    background: var(--accent); color: #fff; border: none;
+    font-size: 12px;
+  }
+  .test-picker-add:disabled { opacity: .5; cursor: not-allowed; }
+  .test-picker-desc {
+    color: var(--muted); font-size: 11px; font-style: italic;
+    padding: 0 4px; min-height: 14px;
+  }
+  .agent-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .agent-tab {
+    padding: 5px 14px; border-radius: 6px 6px 0 0; cursor: pointer;
+    font-size: 13px; border: 1px solid transparent;
+    background: transparent; color: var(--muted);
+    transition: background .12s, color .12s;
+  }
+  .agent-tab:hover { color: var(--text); }
+  .agent-tab.active {
+    background: var(--panel); color: var(--text);
+    border-color: var(--border); border-bottom-color: var(--panel);
+    margin-bottom: -1px;
+  }
+  .agent-tab.disabled-ind::after { content: " ⊘"; color: #dc2626; }
+  .agent-toggle-row {
+    display: flex; align-items: center; gap: 8px; font-size: 13px;
+    padding: 4px 0;
+  }
+  .agent-toggle-row input[type="checkbox"] { accent-color: var(--accent); }
 
   /* ── Stacky logo ── */
   .stacky-logo {
@@ -835,6 +1306,167 @@
     padding: 14px 20px; border-top: 1px solid var(--border);
     background: #0a0d18;
   }
+
+  /* ════════════════════════════════════════════════════════════════════════
+     F1-F4 — Observabilidad + Scoring
+     Prefijos de clase: .sl- (Stacky Loader), .scoring-*, .error-banner-*
+     Todo aditivo — no pisa ningún selector existente.
+     ════════════════════════════════════════════════════════════════════════ */
+
+  /* Overlay pixel-art bottom-right con sprite animado */
+  #stacky-loader {
+    position: fixed; right: 18px; bottom: 18px; z-index: 9999;
+    display: none; /* se muestra al recibir action_started */
+    min-width: 280px; max-width: 360px;
+    background: radial-gradient(circle at 30% 30%, #1e2a4a 0%, #0a0d18 90%);
+    border: 1px solid #2a4570;
+    border-radius: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    color: #cbd5e1;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  #stacky-loader.sl-visible { display: block; animation: sl-fadein 0.2s ease-out; }
+  @keyframes sl-fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .sl-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .sl-sprite {
+    width: 24px; height: 24px; flex-shrink: 0;
+    background: linear-gradient(45deg, #3b82f6 0%, #60a5fa 50%, #3b82f6 100%);
+    border-radius: 4px;
+    image-rendering: pixelated;
+    animation: sl-pulse 1s steps(2) infinite;
+  }
+  @keyframes sl-pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.08); opacity: 0.75; } 100% { transform: scale(1); opacity: 1; } }
+  .sl-title { font-weight: 600; color: #e2e8f0; font-size: 13px; flex: 1; }
+  .sl-ticket { color: #60a5fa; font-size: 11px; font-weight: 600; }
+  .sl-phase  { color: #94a3b8; font-size: 11px; margin-bottom: 6px; }
+  .sl-bar    { width: 100%; height: 6px; background: #1a2340; border-radius: 3px; overflow: hidden; }
+  .sl-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+  .sl-detail { margin-top: 6px; color: #94a3b8; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+  .sl-pct { font-weight: 600; color: #60a5fa; }
+  .sl-close {
+    position: absolute; top: 6px; right: 8px;
+    background: transparent; border: none; color: #64748b;
+    cursor: pointer; font-size: 14px;
+  }
+  .sl-close:hover { color: #e2e8f0; }
+
+  /* Barra de scoring en cada card de ticket */
+  .scoring-bar {
+    display: flex; align-items: center; gap: 8px;
+    margin: 6px 0; padding: 4px 8px;
+    background: rgba(59,130,246,0.06);
+    border-left: 3px solid #3b82f6;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #cbd5e1;
+  }
+  .scoring-bar-badge {
+    display: inline-block; min-width: 28px; text-align: center;
+    background: #1e3a5f; color: #60a5fa;
+    padding: 2px 6px; border-radius: 3px;
+    font-weight: 700; font-size: 11px;
+  }
+  .scoring-bar-badge.simple   { background: #14532d; color: #86efac; }
+  .scoring-bar-badge.medio    { background: #713f12; color: #fcd34d; }
+  .scoring-bar-badge.complejo { background: #7f1d1d; color: #fca5a5; }
+  .scoring-bar-est { color: #94a3b8; font-size: 11px; }
+  .scoring-bar-delta { color: #64748b; font-size: 10px; margin-left: auto; }
+
+  /* Franja de error arriba de cada card */
+  .error-banner-top {
+    display: block;
+    margin: 4px 0;
+    padding: 6px 10px;
+    background: rgba(239,68,68,0.1);
+    border-left: 3px solid #ef4444;
+    border-radius: 3px;
+    color: #fca5a5;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .error-banner-top .error-banner-kind {
+    display: inline-block;
+    background: #7f1d1d; color: #fca5a5;
+    padding: 1px 6px; border-radius: 3px;
+    font-weight: 700; font-size: 10px; margin-right: 6px;
+    text-transform: uppercase;
+  }
+
+  /* Modal Estimaciones */
+  #sl-modal {
+    display: none;
+    position: fixed; inset: 0; z-index: 9998;
+    background: rgba(5,8,16,0.82);
+    align-items: center; justify-content: center;
+  }
+  #sl-modal.sl-visible { display: flex; }
+  #sl-modal .sl-modal-box {
+    background: #0a0d18;
+    border: 1px solid #2a4570;
+    border-radius: 10px;
+    width: 95%; max-width: 1100px;
+    max-height: 86vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  }
+  #sl-modal .sl-modal-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid #1e293b;
+    background: #0d1220;
+    border-radius: 10px 10px 0 0;
+  }
+  #sl-modal .sl-modal-title { font-size: 15px; color: #e2e8f0; font-weight: 600; flex: 1; }
+  #sl-modal .sl-tabs { display: flex; gap: 4px; padding: 8px 18px 0; border-bottom: 1px solid #1e293b; }
+  #sl-modal .sl-tab {
+    padding: 8px 14px; background: transparent; border: none;
+    color: #64748b; cursor: pointer; font-size: 12px; font-weight: 500;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  #sl-modal .sl-tab:hover { color: #cbd5e1; }
+  #sl-modal .sl-tab.sl-active { color: #60a5fa; border-bottom-color: #3b82f6; }
+  #sl-modal .sl-pane { display: none; padding: 16px 18px; overflow-y: auto; color: #cbd5e1; font-size: 12px; }
+  #sl-modal .sl-pane.sl-active { display: block; }
+  #sl-modal table.sl-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  #sl-modal table.sl-table th, #sl-modal table.sl-table td { padding: 6px 8px; border-bottom: 1px solid #1e293b; text-align: left; }
+  #sl-modal table.sl-table th { color: #94a3b8; font-weight: 600; background: #0d1220; position: sticky; top: 0; }
+  #sl-modal table.sl-table tr:hover td { background: rgba(59,130,246,0.04); }
+  #sl-modal .sl-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  #sl-modal .sl-kpi {
+    background: #0d1220; border: 1px solid #1e293b; border-radius: 6px;
+    padding: 10px 12px;
+  }
+  #sl-modal .sl-kpi-label { font-size: 11px; color: #64748b; margin-bottom: 4px; }
+  #sl-modal .sl-kpi-value { font-size: 18px; font-weight: 700; color: #e2e8f0; }
+  #sl-modal .sl-kpi-value.good { color: #86efac; }
+  #sl-modal .sl-kpi-value.warn { color: #fcd34d; }
+  #sl-modal .sl-kpi-value.bad  { color: #fca5a5; }
+  #sl-modal .sl-btn {
+    background: #1e3a5f; color: #cbd5e1; border: 1px solid #2a4570;
+    padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px;
+  }
+  #sl-modal .sl-btn:hover { background: #2a4570; color: #e2e8f0; }
+  #sl-modal .sl-btn.sl-primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+  #sl-modal .sl-btn.sl-primary:hover { background: #60a5fa; }
+  #sl-modal .sl-modal-close {
+    background: transparent; border: none; color: #64748b;
+    font-size: 18px; cursor: pointer;
+  }
+  #sl-modal .sl-modal-close:hover { color: #e2e8f0; }
+  #sl-modal .sl-form-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+  #sl-modal .sl-form-row label { min-width: 160px; color: #94a3b8; font-size: 11px; }
+  #sl-modal .sl-form-row input[type="number"], #sl-modal .sl-form-row input[type="text"] {
+    background: #0d1220; border: 1px solid #1e293b; color: #e2e8f0;
+    padding: 5px 8px; border-radius: 4px; font-size: 12px; width: 100px;
+  }
 </style>
 </head>
 <body>
@@ -873,7 +1505,6 @@
   <span class="badge" id="total-badge">—</span>
   <select id="project-select" class="project-select" onchange="switchProject(this.value)" title="Proyecto activo"></select>
   <button class="btn btn-ghost" onclick="openNewProjectModal()" title="Inicializar nuevo proyecto" style="padding:5px 10px;font-size:13px">➕</button>
-  <span id="mantis-id-badge" title="Mantis Project ID — necesario para que el scraper navegue al proyecto correcto" style="font-size:11px;color:var(--muted);cursor:pointer;padding:4px 8px;border:1px solid var(--border);border-radius:4px;white-space:nowrap" onclick="editMantisProjectId()">Mantis ID: <strong id="mantis-id-value">—</strong> ✏</span>
   <div class="spacer"></div>
   <span class="last-run" id="last-run-text">—</span>
   <div class="spinner" id="global-spinner"></div>
@@ -882,17 +1513,20 @@
   <button class="btn btn-ghost" onclick="openMetrics()" title="Velocity metrics del equipo">📈 Métricas</button>
   <button class="btn btn-ghost" onclick="openKnowledge()" title="Knowledge base de deploys fallidos">🧠 Knowledge</button>
   <button class="btn btn-ghost" id="teams-btn" onclick="openTeamsConfig()" title="Configurar notificaciones Teams">💬 Teams</button>
+  <button class="btn btn-ghost" id="auto-enter-btn" onclick="openAutoEnter()" title="Ctrl+Enter automático en VS Code">⌨ Auto Enter</button>
   <button class="btn btn-ghost" onclick="openPrompts()" title="Editar prompts PM / Dev / QA">📝 Prompts</button>
+  <button class="btn btn-ghost" onclick="openAgentConfig()" title="Personalizar comportamiento de cada agente (strictness, tests, instrucciones extra)">⚙️ Agentes</button>
   <button id="btn-gen-docs" class="btn btn-ghost" onclick="generateProjectDocs()" title="Generar documentación técnica del proyecto (una sola vez, reutilizable por todos los agentes)">📚 Docs</button>
-  <button class="btn btn-yellow" onclick="openQueue()" title="Cola de prioridad">📅 Cola</button>
-  <button class="btn btn-accent" onclick="runScraper()" title="Ejecutar scraper de Mantis">🕷 Scraper</button>
+  <button class="btn btn-ghost" onclick="SL.openEstimations()" title="Estimaciones y calibración del scoring (F2)">🎯 Estimaciones</button>
+  <button class="btn btn-yellow" onclick="openQueue()" title="Rally — grid de largada de tickets">🏁 Rally</button>
+  <button class="btn btn-accent" onclick="runScraper()" title="Sincronizar tickets">🔄 Sync</button>
   <button class="btn btn-green" onclick="runAll()" title="Ejecutar pipeline en todos los pendientes">▶ Run All</button>
 </header>
 
 <!-- ── Flow legend ── -->
 <div class="flow-legend">
   <strong style="color:var(--text)">Flujo:</strong>
-  <div class="step">🕷 Scraper</div><span class="arrow">→</span>
+  <div class="step">🔄 Sync</div><span class="arrow">→</span>
   <div class="step">📋 PM Análisis</div><span class="arrow">→</span>
   <div class="step">✅ PM OK</div><span class="arrow">→</span>
   <div class="step">⚙ Dev Impl.</div><span class="arrow">→</span>
@@ -916,9 +1550,9 @@
   <button class="filter-btn" onclick="setFilter('error', this)">Errores</button>
   <button class="filter-btn" onclick="setFilter('completado', this)">Completados</button>
 </div>
-<div class="filters" id="mantis-filters-bar" style="gap:8px;flex-wrap:wrap">
-  <span style="color:var(--muted);font-size:12px">Estado Mantis:</span>
-  <select id="filter-estado-mantis" onchange="renderTickets()" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px">
+<div class="filters" id="tracker-filters-bar" style="gap:8px;flex-wrap:wrap">
+  <span style="color:var(--muted);font-size:12px">Estado:</span>
+  <select id="filter-estado-tracker" onchange="renderTickets()" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px">
     <option value="">Todos</option>
   </select>
   <span style="color:var(--muted);font-size:12px;margin-left:12px">Asignado a:</span>
@@ -967,12 +1601,132 @@
   </div>
 </div>
 
+<!-- ── Agent config modal ── -->
+<div id="agent-config-modal" onclick="if(event.target.id==='agent-config-modal')closeAgentConfig()">
+  <div class="agent-config-panel">
+    <h2>⚙️ Personalización de agentes</h2>
+    <div class="subtitle" id="ac-subtitle">Configuración por-proyecto. Se aplica en la próxima invocación del agente.</div>
+    <div class="agent-tabs">
+      <div class="agent-tab active" id="atab-pm"     onclick="switchAgentTab('pm')">📋 PM</div>
+      <div class="agent-tab"        id="atab-dev"    onclick="switchAgentTab('dev')">⚙ Dev</div>
+      <div class="agent-tab"        id="atab-tester" onclick="switchAgentTab('tester')">🧪 QA Tester</div>
+      <div class="agent-tab"        id="atab-doc"    onclick="switchAgentTab('doc')">📚 Doc</div>
+    </div>
+    <div class="agent-config-body" id="ac-body">
+      <div class="agent-config-section">
+        <h3>General</h3>
+        <div class="agent-toggle-row">
+          <input type="checkbox" id="ac-enabled">
+          <label for="ac-enabled">Agente habilitado — si se desmarca, se saltea este paso del pipeline</label>
+        </div>
+        <div class="agent-config-row" style="margin-top:10px">
+          <label>Strictness</label>
+          <div class="strictness-group">
+            <div class="strictness-btn" data-level="permissive" onclick="setStrictness('permissive')">Permissive</div>
+            <div class="strictness-btn" data-level="normal"     onclick="setStrictness('normal')">Normal</div>
+            <div class="strictness-btn" data-level="strict"     onclick="setStrictness('strict')">Strict</div>
+          </div>
+        </div>
+        <div class="agent-config-row" style="align-items:flex-start">
+          <label style="padding-top:6px">Instrucciones extra</label>
+          <textarea id="ac-extra" placeholder="Ej: Ignorá warnings de CSS. Priorizá performance sobre legibilidad."></textarea>
+        </div>
+        <div class="agent-config-row" style="align-items:flex-start">
+          <label style="padding-top:6px">Notas internas</label>
+          <textarea id="ac-notes" placeholder="Notas para vos — no se inyectan al prompt."></textarea>
+        </div>
+      </div>
+
+      <div class="agent-config-section" id="ac-tester-block" style="display:none">
+        <h3>🧪 Scope QA Tester</h3>
+        <div class="agent-config-row" style="align-items:flex-start">
+          <label style="padding-top:4px">Tests permitidos</label>
+          <div style="flex:1">
+            <div class="chip-list" id="chips-allowed"></div>
+            <div class="test-picker">
+              <div class="test-picker-row">
+                <select class="test-picker-select" id="picker-allowed"></select>
+                <button type="button" class="test-picker-add" id="picker-allowed-add" onclick="addTestFromPicker('allowed')">Agregar</button>
+              </div>
+              <div class="test-picker-desc" id="picker-allowed-desc"></div>
+            </div>
+          </div>
+        </div>
+        <div class="agent-config-row" style="align-items:flex-start">
+          <label style="padding-top:4px">Tests prohibidos</label>
+          <div style="flex:1">
+            <div class="chip-list" id="chips-forbidden"></div>
+            <div class="test-picker">
+              <div class="test-picker-row">
+                <select class="test-picker-select" id="picker-forbidden"></select>
+                <button type="button" class="test-picker-add" id="picker-forbidden-add" onclick="addTestFromPicker('forbidden')">Agregar</button>
+              </div>
+              <div class="test-picker-desc" id="picker-forbidden-desc"></div>
+            </div>
+          </div>
+        </div>
+        <div class="agent-config-row" style="align-items:flex-start">
+          <label style="padding-top:4px">Criterios bloqueantes</label>
+          <div class="chip-list" id="chips-blocker">
+            <input class="chip-input" placeholder="Ej: compile_error, runtime_crash">
+          </div>
+        </div>
+        <div class="agent-config-row" style="align-items:flex-start">
+          <label style="padding-top:4px">Criterios advisory</label>
+          <div class="chip-list" id="chips-advisory">
+            <input class="chip-input" placeholder="Ej: style_issue, typo, best_practice">
+          </div>
+        </div>
+        <div class="agent-toggle-row">
+          <input type="checkbox" id="ac-autoappr">
+          <label for="ac-autoappr">CON OBSERVACIONES equivale a aprobado (no para PM)</label>
+        </div>
+      </div>
+
+      <div class="agent-config-section" id="ac-pm-block" style="display:none">
+        <h3>📋 Alcance PM</h3>
+        <div class="agent-toggle-row">
+          <input type="checkbox" id="ac-skip-queries">
+          <label for="ac-skip-queries">Saltear QUERIES_ANALISIS.sql (cuando ya tenés las queries)</label>
+        </div>
+        <div class="agent-toggle-row">
+          <input type="checkbox" id="ac-require-analysis">
+          <label for="ac-require-analysis">Exigir análisis técnico completo (incluso en tickets triviales)</label>
+        </div>
+      </div>
+
+      <div class="agent-config-section" id="ac-dev-block" style="display:none">
+        <h3>⚙ Alcance Dev</h3>
+        <div class="agent-toggle-row">
+          <input type="checkbox" id="ac-require-tests">
+          <label for="ac-require-tests">Exigir tests unitarios para código nuevo</label>
+        </div>
+        <div class="agent-toggle-row">
+          <input type="checkbox" id="ac-require-commit">
+          <label for="ac-require-commit">Generar COMMIT_MESSAGE.txt descriptivo</label>
+        </div>
+      </div>
+    </div>
+    <div class="prompts-footer">
+      <span id="ac-status" style="flex:1;font-size:12px;color:var(--muted)"></span>
+      <button class="btn btn-ghost" onclick="resetAgentConfig()" title="Restaurar defaults para este agente">↺ Default</button>
+      <button class="btn btn-ghost" onclick="closeAgentConfig()">✕ Cerrar</button>
+      <button class="btn btn-green" onclick="saveAgentConfig()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Gen Prompts modal ── -->
 <div id="gen-prompts-modal" onclick="if(event.target.id==='gen-prompts-modal')closeGenPrompts()">
   <div class="gen-prompts-panel">
     <div class="gen-prompts-header">
       <h2 id="gen-prompts-title">📋 Prompts para Dev y QA</h2>
       <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeGenPrompts()">✕</button>
+    </div>
+    <div id="gen-prompts-ticket-banner" style="display:none;background:linear-gradient(90deg,#1a1d2e,#0f1117);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:12px">
+      <span style="font-family:monospace;font-size:18px;font-weight:800;color:#6366f1" id="gen-prompts-tid-label"></span>
+      <span style="flex:1;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="gen-prompts-titulo-label"></span>
+      <span style="font-size:11px;background:#1e1a3a;border:1px solid #4f46e5;color:#a5b4fc;border-radius:4px;padding:2px 10px">Renombrá el chat → <strong>#TID — ETAPA</strong></span>
     </div>
     <div class="gen-prompts-body">
       <div class="prompt-section">
@@ -1002,29 +1756,35 @@
 
 <!-- ── New project modal ── -->
 <div id="new-project-modal" onclick="_npBackdropClick(event)" style="display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.65);align-items:center;justify-content:center">
-  <div class="queue-panel" style="width:min(520px,96vw)">
+  <div class="queue-panel" style="width:min(560px,96vw)">
     <h2>📁 Inicializar Nuevo Proyecto</h2>
     <div style="display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:70vh">
-      <label style="font-size:12px;color:var(--muted)">Proyecto SVN detectado en N:\SVN\RS\</label>
-      <select id="np-svn" class="project-select" onchange="prefillWorkspace(this)" style="max-width:100%;width:100%"><option>Cargando...</option></select>
+
+      <label style="font-size:12px;color:var(--muted)">Nombre interno del proyecto (se usa como ID, en mayúsculas)</label>
+      <input id="np-name" type="text" placeholder="Ej: RSPACIFICO, RSMOBILE" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;width:100%">
+
       <label style="font-size:12px;color:var(--muted)">Nombre para mostrar en el dashboard</label>
-      <input id="np-display" type="text" placeholder="Ej: RS Mobile (RSMOB)" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;width:100%">
+      <input id="np-display" type="text" placeholder="Ej: RS Pacífico" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;width:100%">
+
       <label style="font-size:12px;color:var(--muted)">Workspace root (ruta al código fuente del proyecto)</label>
-      <input id="np-workspace" type="text" placeholder="Ej: N:\RSMOBILE  o  N:\SVN\RS\RSMOBILE\trunk" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;width:100%">
+      <input id="np-workspace" type="text" placeholder="Ej: N:\GIT\RS\RSPacifico\trunk" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;width:100%">
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:4px 0">
+      <span style="font-size:13px;font-weight:600;color:var(--text)">🔗 Azure DevOps</span>
+
+      <label style="font-size:12px;color:var(--muted)">Organización ADO</label>
+      <input id="np-org" type="text" placeholder="Ej: UbimiaPacifico" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;width:100%">
+
+      <label style="font-size:12px;color:var(--muted)">Proyecto ADO</label>
+      <input id="np-ado-project" type="text" placeholder="Ej: Strategist_Pacifico" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;width:100%">
+
       <details style="font-size:12px">
-        <summary style="cursor:pointer;color:var(--accent);padding:4px 0">🔍 Filtros y Mantis Project ID (opcional)</summary>
+        <summary style="cursor:pointer;color:var(--accent);padding:4px 0">🔍 Opciones avanzadas</summary>
         <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
           <p style="font-size:11px;color:var(--muted);margin:0">
-            <strong>Mantis Project ID</strong> — ID numérico que usa el scraper para navegar al proyecto correcto.<br>
-            <em>La forma más fácil: usá el botón de abajo para detectarlo automáticamente.</em>
+            <strong>Area Path</strong> (opcional) — filtrar tickets por area path.
           </p>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input id="np-project-id" type="number" placeholder="Ej: 12  (o detectar →)" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;flex:1">
-            <button id="np-pick-btn" class="btn btn-ghost" onclick="pickMantisProjectForNew()" style="white-space:nowrap;font-size:12px" title="Abre Mantis, seleccionás el proyecto y el ID se completa solo">
-              🎯 Auto-detectar
-            </button>
-          </div>
-          <div id="np-pick-status" style="font-size:11px;color:var(--accent);display:none;padding:4px 0"></div>
+          <input id="np-area-path" type="text" placeholder="Ej: Strategist_Pacifico\AgendaWeb" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;width:100%">
           <p style="font-size:11px;color:var(--muted);margin:0;margin-top:4px">
             <strong>Filtros de texto</strong> (opcional) — fragmentos de texto adicionales para identificar tickets.
           </p>
@@ -1064,11 +1824,11 @@
     </div>
   </div>
 </div>
-<!-- ── Diff SVN modal ── -->
+<!-- ── Diff modal ── -->
 <div id="diff-modal" onclick="if(event.target.id==='diff-modal')closeDiff()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;overflow:auto;padding:24px">
   <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;max-width:1100px;margin:0 auto;display:flex;flex-direction:column;max-height:90vh">
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">
-      <span style="font-weight:700;font-size:15px">📄 Cambios SVN</span>
+      <span style="font-weight:700;font-size:15px">📄 Cambios Git</span>
       <span id="diff-modal-subtitle" style="color:var(--muted);font-size:13px"></span>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
         <span style="font-size:11px;color:var(--muted)">Etapa:</span>
@@ -1133,20 +1893,24 @@
   </div>
 </div>
 
-<!-- ── SVN Commit modal ── -->
+<!-- ── Git Commit modal ── -->
 <div id="commit-modal" onclick="_commitBackdropClick(event)">
   <div class="commit-panel">
     <div class="commit-header">
       <span style="font-size:18px">🔖</span>
-      <h2 id="commit-modal-title">SVN Commit</h2>
+      <h2 id="commit-modal-title">Git Commit</h2>
       <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeCommit()">✕</button>
     </div>
     <div class="commit-body">
       <div class="commit-hint">
-        El mensaje empieza con <strong>#ID</strong> (linkea automáticamente el ticket en Mantis).
+        El mensaje empieza con <strong>#ID</strong> (linkea automáticamente el ticket).
         Editá el texto si querés ajustarlo.
       </div>
       <textarea id="commit-msg" class="commit-msg-area" spellcheck="false"></textarea>
+      <div class="commit-hint">
+        <strong>Archivos a incluir</strong> — destildá los que no correspondan al ticket:
+      </div>
+      <div id="commit-files" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:#080b14;font-family:'Cascadia Code',Consolas,monospace;font-size:12px"></div>
       <div id="commit-result" class="commit-result"></div>
       <div class="commit-hint" id="commit-status-line" style="color:var(--muted)"></div>
     </div>
@@ -1187,6 +1951,68 @@
     </div>
     <div class="knowledge-body" id="knowledge-body">
       <div class="deploy-spinner-wrap"><div class="spinner visible"></div><span>Cargando...</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Auto Enter modal ── -->
+<div id="auto-enter-modal" onclick="if(event.target.id==='auto-enter-modal')closeAutoEnter()" style="display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.75);align-items:center;justify-content:center">
+  <div class="commit-panel" style="width:min(520px,96vw)">
+    <div class="commit-header" style="background:#0a1628">
+      <span style="font-size:20px">⌨</span>
+      <h2>Auto Enter — Ctrl+Enter automático</h2>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeAutoEnter()">✕</button>
+    </div>
+    <div class="commit-body" style="gap:14px">
+
+      <!-- Estado + toggle -->
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#080b14;border:1px solid var(--border);border-radius:8px;padding:14px 18px">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Estado del daemon</div>
+          <div id="ae-status-text" style="font-size:12px;color:var(--muted);margin-top:3px">Cargando…</div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <span id="ae-toggle-label" style="font-size:12px;color:var(--muted)">OFF</span>
+          <div id="ae-toggle-wrap" onclick="toggleAutoEnter()" style="position:relative;width:44px;height:24px;background:#2d2d4e;border-radius:12px;cursor:pointer;transition:background .2s">
+            <div id="ae-toggle-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:left .2s"></div>
+          </div>
+        </label>
+      </div>
+
+      <!-- Intervalo -->
+      <div style="background:#080b14;border:1px solid var(--border);border-radius:8px;padding:14px 18px">
+        <div style="font-size:13px;color:var(--text);margin-bottom:10px;font-weight:600">Intervalo de ejecución</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <input id="ae-interval" type="number" min="1" max="3600" value="15"
+            style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:14px;text-align:center"
+            onkeydown="if(event.key==='Enter')applyAeInterval()">
+          <span style="color:var(--muted);font-size:13px">segundos</span>
+          <button class="btn btn-accent" style="padding:6px 16px;font-size:12px" onclick="applyAeInterval()">Aplicar</button>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="filter-btn" onclick="setAePreset(5)">5s</button>
+          <button class="filter-btn" onclick="setAePreset(10)">10s</button>
+          <button class="filter-btn" onclick="setAePreset(15)">15s</button>
+          <button class="filter-btn" onclick="setAePreset(30)">30s</button>
+          <button class="filter-btn" onclick="setAePreset(60)">1min</button>
+        </div>
+      </div>
+
+      <!-- Log de pulsaciones recientes -->
+      <div style="background:#080b14;border:1px solid var(--border);border-radius:8px;padding:14px 18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="font-size:13px;color:var(--text);font-weight:600">Últimas pulsaciones</div>
+          <div id="ae-total-badge" style="font-size:11px;background:#1a1d2e;border:1px solid var(--border);border-radius:12px;padding:2px 10px;color:var(--accent)">total: 0</div>
+        </div>
+        <div id="ae-press-log" style="max-height:160px;overflow-y:auto;font-size:11px;font-family:monospace;color:var(--muted);display:flex;flex-direction:column;gap:3px">
+          <div style="color:var(--muted);text-align:center;padding:16px">Sin pulsaciones todavía</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="commit-footer">
+      <button class="btn btn-ghost" onclick="closeAutoEnter()">Cerrar</button>
+      <button class="btn btn-accent" onclick="refreshAeStatus()">🔄 Actualizar</button>
     </div>
   </div>
 </div>
@@ -1259,16 +2085,49 @@
   </div>
 </div>
 
-<!-- ── Queue modal ── -->
+<!-- ── Queue modal (two-panel) ── -->
 <div id="queue-modal" onclick="closeQueueOnBackdrop(event)">
-  <div class="queue-panel">
-    <h2>📅 Cola de procesamiento — Arrastrar o usar flechas para reordenar</h2>
-    <div class="queue-list" id="queue-list"></div>
-    <div class="queue-footer">
-      <button class="btn btn-ghost" onclick="closeQueue()">Cerrar</button>
-      <button class="btn btn-accent" onclick="saveQueue()">💾 Guardar orden</button>
-      <button class="btn btn-green" onclick="saveQueueAndRun()">▶ Guardar y ejecutar</button>
+  <div class="queue-dialog">
+
+    <!-- Panel izquierdo: todas las incidencias no completadas -->
+    <div class="queue-pane" id="queue-pool-pane">
+      <div class="queue-pane-header">
+        <h2>📋 Incidencias no completadas</h2>
+        <span class="queue-pane-count" id="pool-count">0</span>
+      </div>
+      <input type="text" id="queue-pool-search" placeholder="Buscar por ID o título…" oninput="_renderQueuePanels()">
+      <div class="queue-list" id="queue-pool-list"
+           ondragover="poolZoneDragOver(event)"
+           ondrop="poolZoneDrop(event)"
+           ondragleave="poolZoneDragLeave(event)">
+      </div>
     </div>
+
+    <!-- Divisor central -->
+    <div class="queue-divider">→</div>
+
+    <!-- Panel derecho: cola de procesamiento -->
+    <div class="queue-pane" id="queue-active-pane">
+      <div class="queue-pane-header">
+        <h2>🏁 Rally — grid de largada</h2>
+        <span class="queue-pane-count" id="active-count">0</span>
+      </div>
+      <div class="queue-list queue-drop-zone" id="queue-list"
+           ondragover="qZoneDragOver(event)"
+           ondrop="qZoneDrop(event)"
+           ondragleave="qZoneDragLeave(event)">
+        <div class="queue-empty-hint" id="queue-empty-hint">⬅ Arrastrá tickets al Rally o usá el botón ＋</div>
+      </div>
+      <div class="queue-footer">
+        <span id="rally-status-pill" style="font-size:12px;color:var(--muted);margin-right:auto"></span>
+        <button class="btn btn-ghost" onclick="closeQueue()">Cerrar</button>
+        <button class="btn btn-ghost" onclick="clearQueue()" title="Quitar todos del Rally">🗑 Vaciar Rally</button>
+        <button class="btn btn-ghost" id="rally-pause-btn" onclick="pauseRally()" title="Pausar el Rally — los tickets siguen en cola pero no avanzan solos" style="display:none">⏸ Pausar Rally</button>
+        <button class="btn btn-accent" onclick="saveQueue()">💾 Guardar orden</button>
+        <button class="btn btn-green" onclick="saveQueueAndRun()">▶ Guardar y ejecutar</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1308,135 +2167,12 @@ async function loadProjects() {
       .filter(p => p.initialized)
       .map(p => `<option value="${esc(p.name)}" ${p.active ? 'selected' : ''}>${esc(p.display_name)}</option>`)
       .join('');
-    // Actualizar badge Mantis ID
+    // Actualizar badge del proyecto
     const active = r.projects.find(p => p.active);
     if (active) {
       _activeProjectData = active;
-      const badge = document.getElementById('mantis-id-value');
-      if (badge) badge.textContent = active.mantis_project_id ?? '—';
     }
   } catch(e) { /* server may not be running yet */ }
-}
-
-// ── Mantis Project ID picker ──────────────────────────────────────────────
-
-let _pickIntervalId = null;
-
-async function _startMantisPickSession(onResult) {
-  /**
-   * Lanza el picker interactivo de Mantis.
-   * onResult(project_id, project_name) cuando el usuario selecciona.
-   * Retorna la función de cancelación.
-   */
-  const r = await api('POST', '/api/pick_mantis_project', {});
-  if (!r.ok) { toast('Error al abrir Mantis: ' + (r.error||''), 'error'); return null; }
-  const sid = r.session_id;
-  const stop = () => { if (_pickIntervalId) { clearInterval(_pickIntervalId); _pickIntervalId = null; } };
-  _pickIntervalId = setInterval(async () => {
-    try {
-      const s = await api('GET', `/api/pick_mantis_project/${sid}`);
-      if (s.status === 'done') {
-        stop();
-        onResult(s.project_id, s.project_name || null);
-      } else if (s.status === 'timeout') {
-        stop();
-        toast('⏱ Sin selección — revisá la consola del servidor para ver el log', 'error');
-        console.warn('[picker] timeout — sin result_file escrito por pick_project.py');
-        onResult(null, null);
-      } else if (s.status === 'error') {
-        stop();
-        const msg = s.error || 'desconocido';
-        toast('❌ Error al abrir Mantis', 'error');
-        console.error('[picker] ERROR COMPLETO:\n', msg);
-        onResult(null, null);
-      }
-    } catch(e) { /* retry next tick */ }
-  }, 800);
-  return stop;
-}
-
-async function pickMantisProjectForNew() {
-  /** Botón "Auto-detectar" dentro del modal de nuevo proyecto */
-  const btn    = document.getElementById('np-pick-btn');
-  const status = document.getElementById('np-pick-status');
-  const input  = document.getElementById('np-project-id');
-  btn.disabled = true;
-  btn.textContent = '⏳ Esperando...';
-  status.style.display = 'block';
-  status.textContent = '🌐 Abrí Mantis — seleccioná el proyecto en el menú desplegable.';
-  toast('🌐 Chromium abierto — seleccioná el proyecto en Mantis', 'info');
-  const stop = await _startMantisPickSession((pid, pname) => {
-    btn.disabled = false;
-    btn.textContent = '🎯 Auto-detectar';
-    if (pid) {
-      input.value = pid;
-      status.textContent = `✅ Detectado: project_id=${pid}${pname ? '  (' + pname + ')' : ''}`;
-      // Pre-fill display name si está vacío
-      const dispInput = document.getElementById('np-display');
-      if (dispInput && !dispInput.value.trim() && pname) dispInput.value = pname;
-      toast(`✅ Proyecto detectado: ${pname || pid}`, 'success');
-    } else {
-      status.textContent = 'Sin selección.';
-    }
-  });
-  if (!stop) {
-    btn.disabled = false;
-    btn.textContent = '🎯 Auto-detectar';
-    status.style.display = 'none';
-  }
-}
-
-async function editMantisProjectId() {
-  /** Click en badge "Mantis ID: X ✏" del header */
-  const current = _activeProjectData.mantis_project_id ?? '';
-  const name    = _activeProjectData.name;
-  if (!name) { toast('No hay proyecto activo', 'error'); return; }
-
-  // Preguntar con dos opciones
-  const choice = window.confirm(
-    `Mantis Project ID para "${_activeProjectData.display_name || name}"\n` +
-    `ID actual: ${current || 'no configurado'}\n\n` +
-    `¿Querés que abra Mantis para detectarlo automáticamente?\n` +
-    `(OK = Auto-detectar  |  Cancelar = Ingresar manualmente)`
-  );
-
-  if (choice) {
-    // Auto-detect
-    const badge = document.getElementById('mantis-id-value');
-    if (badge) badge.textContent = '⏳';
-    toast('🌐 Chromium abierto — seleccioná el proyecto en Mantis', 'info');
-    await _startMantisPickSession(async (pid, pname) => {
-      if (pid) {
-        const r = await api('PATCH', '/api/project_config', { name, mantis_project_id: pid });
-        if (r.ok) {
-          _activeProjectData.mantis_project_id = pid;
-          if (badge) badge.textContent = pid;
-          toast(`✅ Mantis ID aprendido: ${pid}${pname ? ' (' + pname + ')' : ''}`, 'success');
-        }
-      } else {
-        if (badge) badge.textContent = _activeProjectData.mantis_project_id ?? '—';
-      }
-    });
-  } else {
-    // Manual
-    const val = window.prompt(
-      `Mantis Project ID para "${_activeProjectData.display_name || name}".\n` +
-      `ID actual: ${current || 'no configurado'}`,
-      current
-    );
-    if (val === null) return;
-    const pid = val.trim() === '' ? null : parseInt(val.trim(), 10);
-    if (val.trim() !== '' && isNaN(pid)) { toast('El ID debe ser un número entero', 'error'); return; }
-    const r = await api('PATCH', '/api/project_config', { name, mantis_project_id: pid });
-    if (r.ok) {
-      _activeProjectData.mantis_project_id = pid;
-      const badge = document.getElementById('mantis-id-value');
-      if (badge) badge.textContent = pid ?? '—';
-      toast(`✅ Mantis ID actualizado: ${pid ?? 'sin filtro'}`, 'success');
-    } else {
-      toast('Error: ' + (r.error || 'desconocido'), 'error');
-    }
-  }
 }
 
 async function switchProject(name) {
@@ -1446,7 +2182,7 @@ async function switchProject(name) {
     _summaryCache.clear();
     expandedCards.clear();
     toast(`📁 Proyecto: ${r.display_name || name}`, 'success');
-    await loadProjects();   // refresca badge Mantis ID también
+    await loadProjects();
     await refresh();
   } else {
     toast('Error: ' + (r.error || 'desconocido'), 'error');
@@ -1456,28 +2192,12 @@ async function switchProject(name) {
 async function openNewProjectModal() {
   const modal = document.getElementById('new-project-modal');
   // Reset fields from previous session
-  ['np-display','np-workspace','np-filters'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
-  const pidEl = document.getElementById('np-project-id'); if (pidEl) pidEl.value = '';
-  const statusEl = document.getElementById('np-pick-status'); if (statusEl) { statusEl.style.display='none'; statusEl.textContent=''; }
-  const pickBtn = document.getElementById('np-pick-btn'); if (pickBtn) { pickBtn.disabled=false; pickBtn.textContent='🎯 Auto-detectar'; }
+  ['np-name','np-display','np-workspace','np-org','np-ado-project','np-filters'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  const areaEl = document.getElementById('np-area-path'); if (areaEl) areaEl.value = '';
   modal.style.display = 'flex';
-  try {
-    const r   = await api('GET', '/api/projects');
-    const sel = document.getElementById('np-svn');
-    if (r.projects) {
-      const uninit = r.projects.filter(p => !p.initialized);
-      sel.innerHTML = uninit.length
-        ? uninit.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('')
-        : '<option value="">Todos los proyectos SVN ya están inicializados</option>';
-    }
-  } catch(e) {
-    document.getElementById('np-svn').innerHTML = '<option value="">Error al escanear</option>';
-  }
 }
 
 function closeNewProjectModal() {
-  // Cancelar pick si estaba corriendo
-  if (_pickIntervalId) { clearInterval(_pickIntervalId); _pickIntervalId = null; }
   document.getElementById('new-project-modal').style.display = 'none';
 }
 
@@ -1486,28 +2206,110 @@ function _npBackdropClick(e) {
 }
 
 async function createProject() {
-  const svn_name        = document.getElementById('np-svn').value.trim();
+  const name            = document.getElementById('np-name').value.trim();
   const display_name    = document.getElementById('np-display').value.trim();
   const workspace_root  = document.getElementById('np-workspace').value.trim();
-  const filters_raw     = document.getElementById('np-filters').value.trim();
-  const pid_raw         = document.getElementById('np-project-id').value.trim();
-  const mantis_filters  = filters_raw ? filters_raw.split('\n').map(s=>s.trim()).filter(Boolean) : [];
-  const mantis_project_id = pid_raw ? parseInt(pid_raw, 10) : null;
-  if (!svn_name) { toast('Seleccioná un proyecto SVN', 'error'); return; }
-  toast(`🔧 Inicializando ${svn_name}...`, 'info');
-  const r = await api('POST', '/api/init_project', {
-    svn_name,
-    display_name: display_name || svn_name,
-    workspace_root,
-    mantis_filters,
-    mantis_project_id,
-  });
+  const organization    = document.getElementById('np-org').value.trim();
+  const ado_project     = document.getElementById('np-ado-project').value.trim();
+  const area_path       = (document.getElementById('np-area-path')?.value || '').trim();
+  if (!name) { toast('Ingresá un nombre de proyecto', 'error'); return; }
+  if (!workspace_root) { toast('Ingresá el workspace root', 'error'); return; }
+  if (!organization) { toast('Ingresá la organización de Azure DevOps', 'error'); return; }
+  if (!ado_project) { toast('Ingresá el proyecto de Azure DevOps', 'error'); return; }
+  toast(`🔧 Inicializando ${name}...`, 'info');
+  const body = { name, display_name: display_name || name, workspace_root, organization, ado_project };
+  if (area_path) body.area_path = area_path;
+  const r = await api('POST', '/api/init_project', body);
   if (r.ok) {
     toast(`✅ Proyecto ${r.project.display_name} inicializado`, 'success');
     closeNewProjectModal();
     await loadProjects();
   } else {
     toast('Error: ' + (r.error || 'desconocido'), 'error');
+  }
+}
+
+// ── Pipeline Health (reconciliador) ───────────────────────────────────────
+// Mapa ticket_id → último reporte de /api/pipeline/health.
+// Se usa para pintar el badge de divergencia/stale en la card y para decidir
+// si mostrar el botón "Reanudar".
+let pipelineHealth = {};
+let lastHealthFetch = 0;
+
+async function refreshPipelineHealth(silent = true) {
+  try {
+    const r = await fetch('/api/pipeline/health', { cache: 'no-store' });
+    if (!r.ok) return;
+    const data = await r.json();
+    const next = {};
+    let divergentChanged = false;
+    for (const t of (data.tickets || [])) {
+      next[t.ticket_id] = t;
+      const prev = pipelineHealth[t.ticket_id];
+      if (!prev || prev.coherent !== t.coherent || prev.is_stale !== t.is_stale
+               || prev.derived_estado !== t.derived_estado) {
+        divergentChanged = true;
+      }
+    }
+    pipelineHealth = next;
+    lastHealthFetch = Date.now();
+    // Si hay cambios visibles, re-render (no force-fetch de tickets)
+    if (divergentChanged && typeof renderTickets === 'function' && allTickets && allTickets.length) {
+      renderTickets();
+    }
+  } catch (e) {
+    if (!silent) console.warn('refreshPipelineHealth error', e);
+  }
+}
+
+function healthFor(tid) {
+  return pipelineHealth[tid] || null;
+}
+
+function isTicketDivergent(tid) {
+  const h = healthFor(tid);
+  return !!(h && h.coherent === false);
+}
+
+function isTicketStale(tid) {
+  const h = healthFor(tid);
+  return !!(h && h.is_stale === true);
+}
+
+function healthBadgeHTML(tid) {
+  const h = healthFor(tid);
+  if (!h) return '';
+  if (h.is_stale) {
+    return `<span class="health-badge stale" title="Ticket atascado: ${esc(h.stale_reason || '')} — clic para reconciliar"
+              onclick="event.stopPropagation();reconcileTicketNow('${tid}')">
+              ⚠️ ATASCADO
+            </span>`;
+  }
+  if (h.coherent === false) {
+    const ev = (h.evidence || []).slice(0, 3).join(', ');
+    const tooltip = `state.json dice '${h.stored_estado}' pero folder dice '${h.derived_estado}' (${ev})`;
+    return `<span class="health-badge divergent" title="${esc(tooltip)} — clic para reconciliar"
+              onclick="event.stopPropagation();reconcileTicketNow('${tid}')">
+              🔧 DIVERGENTE → ${esc(h.launch_stage || h.derived_estado || '?').toUpperCase()}
+            </span>`;
+  }
+  return '';
+}
+
+async function reconcileTicketNow(tid) {
+  try {
+    toast(`🔧 Reconciliando #${tid}…`, 'info');
+    const r = await fetch('/api/pipeline/reconcile/' + tid, { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      toast('Error reconciliando: ' + (data.error || r.status), 'error');
+      return;
+    }
+    toast(`✅ ${data.msg || 'Reconciliado'}${data.actions && data.actions.length ? ' — ' + data.actions.join(' · ') : ''}`, 'success');
+    await refreshPipelineHealth(false);
+    if (typeof refresh === 'function') refresh();
+  } catch (e) {
+    toast('Error reconciliando: ' + e.message, 'error');
   }
 }
 
@@ -1518,7 +2320,7 @@ async function refresh() {
     const data = await api('GET', '/api/state');
     allTickets = data.tickets || [];
     renderSummary(data);
-    updateMantisFilters();
+    updateTrackerFilters();
     renderTickets();
     document.getElementById('last-run-text').textContent =
       data.last_run ? '🕐 ' + fmtDate(data.last_run) : 'Sin ejecuciones';
@@ -1546,7 +2348,20 @@ function renderSummary(data) {
     { key: 'error_tester',      label: 'Error QA',       color: '#b91c1c' },
   ];
   const bar = document.getElementById('summary-bar');
-  bar.innerHTML = pills.map(p => {
+  // Contador de rechazados — usa el veredicto real del archivo o del state
+  const rejectedTickets = (allTickets || []).filter(t =>
+    t.tester_verdict === 'RECHAZADO' ||
+    t.last_qa_verdict === 'RECHAZADO' ||
+    t.pipeline_estado === 'stagnation_detected'
+  );
+  const rejectedPill = rejectedTickets.length > 0
+    ? `<div class="pill" style="background:var(--red);border-color:#fff;color:#fff;cursor:pointer;animation:rejected-flash 1.5s ease-in-out infinite" onclick="scrollToFirstRejected()" title="Ir al primero">
+         <span style="font-size:16px">⛔</span>
+         <span style="font-weight:900;font-size:16px">${rejectedTickets.length}</span>
+         <span style="font-weight:700;letter-spacing:.5px">RECHAZADO${rejectedTickets.length === 1 ? '' : 'S'} — REQUIERE ACCIÓN</span>
+       </div>`
+    : '';
+  bar.innerHTML = rejectedPill + pills.map(p => {
     const n = counts[p.key] || 0;
     return `<div class="pill">
       <div class="dot" style="background:${p.color}"></div>
@@ -1554,6 +2369,21 @@ function renderSummary(data) {
       <span style="color:var(--muted)">${p.label}</span>
     </div>`;
   }).join('');
+}
+
+function scrollToFirstRejected() {
+  const first = (allTickets || []).find(t =>
+    t.tester_verdict === 'RECHAZADO' ||
+    t.last_qa_verdict === 'RECHAZADO' ||
+    t.pipeline_estado === 'stagnation_detected'
+  );
+  if (!first) return;
+  const el = document.getElementById(`card-${first.ticket_id}`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.style.outline = '4px solid #fff';
+    setTimeout(() => { el.style.outline = ''; }, 1500);
+  }
 }
 
 // ── Filter ────────────────────────────────────────────────────────────────
@@ -1575,10 +2405,10 @@ function filtered() {
   else if (currentFilter === 'completado')
     list = list.filter(t => t.pipeline_estado === 'completado');
 
-  // Filtro estado Mantis
-  const estadoSel = (document.getElementById('filter-estado-mantis')?.value || '').trim();
+  // Filtro estado tracker
+  const estadoSel = (document.getElementById('filter-estado-tracker')?.value || '').trim();
   if (estadoSel)
-    list = list.filter(t => (t.estado_base || t.estado_mantis || '').toLowerCase() === estadoSel.toLowerCase());
+    list = list.filter(t => (t.estado_base || t.estado_tracker || '').toLowerCase() === estadoSel.toLowerCase());
 
   // Filtro asignado
   const asignadoSel = (document.getElementById('filter-asignado')?.value || '').trim();
@@ -1588,16 +2418,16 @@ function filtered() {
   return list;
 }
 
-// Poblar dropdowns de filtros Mantis con valores reales de los tickets
-function updateMantisFilters() {
+// Poblar dropdowns de filtros con valores reales de los tickets
+function updateTrackerFilters() {
   const estados = [...new Set(
-    allTickets.map(t => (t.estado_base || t.estado_mantis || '').trim()).filter(Boolean)
+    allTickets.map(t => (t.estado_base || t.estado_tracker || '').trim()).filter(Boolean)
   )].sort();
   const asignados = [...new Set(
     allTickets.map(t => (t.asignado || '').trim()).filter(Boolean)
   )].sort();
 
-  const selEstado = document.getElementById('filter-estado-mantis');
+  const selEstado = document.getElementById('filter-estado-tracker');
   const selAsignado = document.getElementById('filter-asignado');
   if (!selEstado || !selAsignado) return;
 
@@ -1654,6 +2484,318 @@ const DEFAULT_STAGES = [
   { id: 'tester', label: 'QA Tester',    icon: '🧪',  color: '#f97316' },
 ];
 
+// ── Pixel-art sprites por agente ─────────────────────────────────────────
+// Cada sprite es 12x12. Legend de colores en .pal y matriz de chars en .f1/.f2
+// ('.' = transparente). Se renderiza como SVG con dos <g> (frame 1 y 2).
+const AGENT_SPRITES = {
+  // PM: manager con corbata + carpeta; frame 1 apunta a papel, frame 2 cabeza abajo escribiendo
+  pm: {
+    pal: { s:'#f5d4a5', h:'#1e293b', t:'#3b82f6', c:'#fbbf24', p:'#fff', k:'#0f172a', a:'#1e40af' },
+    f1: [
+      "....hhhh....",
+      "...hssssh...",
+      "...skkskk...",
+      "...ssssss...",
+      "....ssss....",
+      "...tttttt...",
+      "..ttacccc...",
+      "..taapppp...",
+      "..taapcpp...",
+      "..taapppp...",
+      "...tt..tt...",
+      "...kk..kk...",
+    ],
+    f2: [
+      "....hhhh....",
+      "...hssssh...",
+      "...sssssk...",
+      "....ssssk...",
+      "....ssss....",
+      "...tttttt...",
+      "..tttcccc...",
+      "..ttacppp...",
+      "..tta.ppcp..",
+      "..tta.pppp..",
+      "...tt..tt...",
+      "...kk..kk...",
+    ],
+  },
+  // Dev: programador con hoodie + teclado; manos tecleando
+  dev: {
+    pal: { s:'#f5d4a5', h:'#a855f7', k:'#0f172a', b:'#64748b', w:'#fff', a:'#c084fc' },
+    f1: [
+      "....hhhh....",
+      "...hssssh...",
+      "...skkskk...",
+      "...ssssss...",
+      "...hhhhhh...",
+      "..hhhhhhh...",
+      "..hhshhhsh..",
+      "..hssssssh..",
+      ".bbbbbbbbb..",
+      ".bwwbwwbwb..",
+      ".bbbbbbbbb..",
+      "...hh..hh...",
+    ],
+    f2: [
+      "....hhhh....",
+      "...hssssh...",
+      "...skkskk...",
+      "...ssssss...",
+      "...hhhhhh...",
+      "..hhhhhhh...",
+      "..hshhhshh..",
+      "..hsshhssh..",
+      ".bbbbbbbbb..",
+      ".bwbwwbwwb..",
+      ".bbbbbbbbb..",
+      "...hh..hh...",
+    ],
+  },
+  // Tester/QA: persona con lupa escaneando
+  tester: {
+    pal: { s:'#f5d4a5', h:'#0f172a', c:'#f97316', g:'#e2e8f0', r:'#94a3b8', k:'#0f172a' },
+    f1: [
+      "....hhhh....",
+      "...hssssh...",
+      "...skkskk...",
+      "...ssssss...",
+      "....ssss....",
+      "...cccccc..g",
+      "..sccccccsg.",
+      "..scccccc...",
+      "...cc..cc...",
+      "...cc..cc...",
+      "...kk..kk...",
+      "............",
+    ],
+    f2: [
+      "....hhhh....",
+      "...hssssh...",
+      "...skkskk...",
+      "...ssssss...",
+      "....ssss....",
+      "g..cccccc...",
+      ".gsccccccs..",
+      "..scccccc...",
+      "...cc..cc...",
+      "...cc..cc...",
+      "...kk..kk...",
+      "............",
+    ],
+  },
+  // DBA: persona con cilindro de base de datos pulsando
+  dba: {
+    pal: { s:'#f5d4a5', h:'#0f172a', c:'#6366f1', d:'#22c55e', e:'#86efac', k:'#0f172a', l:'#334155' },
+    f1: [
+      "....hhhh..dd",
+      "...hssssh.dd",
+      "...skkskk.ll",
+      "...ssssss.dd",
+      "....ssss..ll",
+      "...cccccc.dd",
+      "..cccccccc..",
+      "..cccccccc..",
+      "..cc....cc..",
+      "...cc..cc...",
+      "...cc..cc...",
+      "...kk..kk...",
+    ],
+    f2: [
+      "....hhhh..ee",
+      "...hssssh.ee",
+      "...skkskk.ll",
+      "...ssssss.ee",
+      "....ssss..ll",
+      "...cccccc.ee",
+      "..cccccccc..",
+      "..cccccccc..",
+      "..cc....cc..",
+      "...cc..cc...",
+      "...cc..cc...",
+      "...kk..kk...",
+    ],
+  },
+  // TL: persona con sello de aprobación; sello arriba / sello golpeando
+  tl: {
+    pal: { s:'#f5d4a5', h:'#0f172a', c:'#16a34a', r:'#ef4444', w:'#fff', k:'#0f172a', x:'#fbbf24' },
+    f1: [
+      "....hhhh....",
+      "...hssssh...",
+      "...skkskk...",
+      "...ssssss.r.",
+      "....ssss..r.",
+      "...cccccc.r.",
+      "..ccscccccr.",
+      "..csscccccc.",
+      "..cc....cc..",
+      "...cc..cc...",
+      "...cc..cc...",
+      "...kk..kk...",
+    ],
+    f2: [
+      "....hhhh....",
+      "...hssssh...",
+      "...skkskk...",
+      "...ssssss...",
+      "....ssss....",
+      "...ccccccr..",
+      "..ccscccccr.",
+      "..cssccccrr.",
+      "..cc....cc..",
+      "...cc..ccxx.",
+      "...cc..cc...",
+      "...kk..kk...",
+    ],
+  },
+  // Doc: persona con scroll/pergamino abriéndose
+  doc: {
+    pal: { s:'#f5d4a5', h:'#0f172a', c:'#e11d48', p:'#fef3c7', t:'#b45309', k:'#0f172a' },
+    f1: [
+      "....hhhh....",
+      "...hssssh...",
+      "...skkskk...",
+      "...ssssss...",
+      "....ssss....",
+      "...cccccc...",
+      "..cccccccc..",
+      "..cctppptc..",
+      "..cctppptc..",
+      "...cc..cc...",
+      "...cc..cc...",
+      "...kk..kk...",
+    ],
+    f2: [
+      "....hhhh....",
+      "...hssssh...",
+      "...skkskk...",
+      "...ssssss...",
+      "....ssss....",
+      "...cccccc...",
+      "..cccccccc..",
+      "..tppppppt..",
+      "..tptttppt..",
+      "...cc..cc...",
+      "...cc..cc...",
+      "...kk..kk...",
+    ],
+  },
+  // Plumber/Desatascador: con llave inglesa golpeando caño + chispas
+  plumber: {
+    pal: { s:'#f5d4a5', h:'#b91c1c', o:'#1d4ed8', w:'#cbd5e1', p:'#737373', x:'#fbbf24', k:'#0f172a' },
+    f1: [
+      "....hhhh...w",
+      "...hssssh.ww",
+      "...skkskk.w.",
+      "...ssssss.w.",
+      "....ssss.ww.",
+      "...oooooo.w.",
+      "..oooooooow.",
+      "..oooooooow.",
+      "..oo....oo..",
+      "...oo..oo...",
+      "...pp..pp...",
+      "...pp..pp...",
+    ],
+    f2: [
+      "....hhhh....",
+      "...hssssh..x",
+      "...skkskkwx.",
+      "...ssssssw..",
+      "....ssssw...",
+      "...ooooow...",
+      "..oooooow...",
+      "..oooooow...",
+      "..oo....oo..",
+      "...oo..oo...",
+      "...pppppp...",
+      "...pppppp...",
+    ],
+  },
+};
+// Alias: sub-etapas comparten sprite
+AGENT_SPRITES.pm_inv = AGENT_SPRITES.pm_arq = AGENT_SPRITES.pm_plan = AGENT_SPRITES.pm;
+AGENT_SPRITES.dev_loc = AGENT_SPRITES.dev_impl = AGENT_SPRITES.dev_doc = AGENT_SPRITES.dev;
+AGENT_SPRITES.qa_rev = AGENT_SPRITES.qa_exec = AGENT_SPRITES.qa_arb = AGENT_SPRITES.tester;
+AGENT_SPRITES.qa = AGENT_SPRITES.tester;
+
+function _spriteFrameRects(frameRows, palette) {
+  // Cada char representa un pixel de 2x2 en el viewBox 24x24 (12x12 × 2)
+  let rects = '';
+  for (let y = 0; y < frameRows.length; y++) {
+    const row = frameRows[y];
+    for (let x = 0; x < row.length; x++) {
+      const c = row[x];
+      if (c === '.' || c === ' ') continue;
+      const color = palette[c];
+      if (!color) continue;
+      rects += `<rect x="${x*2}" y="${y*2}" width="2" height="2" fill="${color}"/>`;
+    }
+  }
+  return rects;
+}
+
+// Cachea el HTML por (agentId, state) para no re-generar cientos de veces por refresh
+const _spriteCache = {};
+
+function agentSpriteSVG(agentId, state /* 'working' | 'idle' | 'error' | null */) {
+  const spr = AGENT_SPRITES[agentId];
+  if (!spr) return ''; // sin pixel art definido → sin sprite
+  const cssState = state === 'working' ? 'working'
+                 : state === 'error'   ? 'error'
+                 : 'idle';
+  const key = agentId + '|' + cssState;
+  if (_spriteCache[key]) return _spriteCache[key];
+  const f1 = _spriteFrameRects(spr.f1, spr.pal);
+  const f2 = _spriteFrameRects(spr.f2, spr.pal);
+  const html =
+    `<svg class="agent-sprite ${cssState}" viewBox="0 0 24 24" aria-hidden="true">` +
+      `<g class="f1">${f1}</g>` +
+      `<g class="f2">${f2}</g>` +
+    `</svg>`;
+  _spriteCache[key] = html;
+  return html;
+}
+
+// Detecta si el desatascador está corriendo sobre un ticket (últimos N min)
+function isUnstucking(ticket) {
+  const lu = ticket.last_unstick;
+  if (!lu || !lu.at) return false;
+  if (ticket.pipeline_estado === 'completado') return false;
+  const delta = (Date.now() - Date.parse(lu.at)) / 1000;
+  // Consideramos "desatascando" los primeros 8 min desde la invocación,
+  // o hasta que aparezca DESATASCO_COMPLETADO.md (back-end puede limpiar lu.at)
+  return delta >= 0 && delta < 480;
+}
+
+function unstuckBadgeHTML() {
+  // Pequeño pixel art del plumber en el badge, con brazo en animación de golpe
+  return `<span class="unstuck-badge" title="Desatascador trabajando — esperá que destrabe el ticket">
+    <svg class="plumber" viewBox="0 0 22 22" aria-hidden="true">
+      <!-- cuerpo -->
+      <rect x="7" y="3" width="7" height="4" fill="#b91c1c"/>
+      <rect x="6" y="7" width="9" height="2" fill="#f5d4a5"/>
+      <rect x="5" y="9" width="11" height="6" fill="#1d4ed8"/>
+      <rect x="6" y="15" width="3" height="4" fill="#0f172a"/>
+      <rect x="12" y="15" width="3" height="4" fill="#0f172a"/>
+      <!-- brazo + llave (animado) -->
+      <g class="arm">
+        <rect x="10" y="8" width="3" height="5" fill="#f5d4a5"/>
+        <rect x="9"  y="12" width="5" height="3" fill="#cbd5e1"/>
+        <rect x="9"  y="11" width="1" height="5" fill="#cbd5e1"/>
+        <rect x="13" y="11" width="1" height="5" fill="#cbd5e1"/>
+      </g>
+      <!-- chispa del golpe -->
+      <g class="spark">
+        <rect x="15" y="14" width="2" height="2" fill="#fbbf24"/>
+        <rect x="17" y="12" width="1" height="1" fill="#fbbf24"/>
+        <rect x="14" y="16" width="1" height="1" fill="#fbbf24"/>
+      </g>
+    </svg>
+    <span>🚑 DESATASCANDO</span>
+  </span>`;
+}
+
 async function loadStages() {
   try {
     const d = await (await fetch('/api/stages')).json();
@@ -1706,8 +2848,17 @@ function flowBar(ticket) {
       }
     }
     const bdrStyle = (st === 'active' && node.color) ? `style="border-color:${node.color}"` : '';
+    // Sprite pixel art por agente (solo para stages reales, no __start/__done)
+    let iconInner = node.icon;
+    if (isStage && AGENT_SPRITES[node.id]) {
+      const spriteState = st === 'active' ? 'working'
+                        : st === 'error'  ? 'error'
+                        : st === 'done'   ? 'idle'
+                        : null;
+      if (spriteState) iconInner = agentSpriteSVG(node.id, spriteState);
+    }
     html += `<div class="stage-node">
-      <div class="stage-icon ${st}" ${bdrStyle}>${node.icon}</div>
+      <div class="stage-icon ${st}" ${bdrStyle}>${iconInner}</div>
       <div class="stage-label">${node.label}</div>
       ${durHtml}
     </div>`;
@@ -1774,6 +2925,7 @@ const STATUS_CFG = {
   error_pm:          { color: '#ef4444', icon: '❌', label: 'Error PM' },
   error_dev:         { color: '#ef4444', icon: '❌', label: 'Error Dev' },
   error_tester:      { color: '#ef4444', icon: '❌', label: 'Error QA' },
+  stagnation_detected: { color: '#ef4444', icon: '⛔', label: 'Stagnation — requiere intervención' },
   huerfano:          { color: '#f59e0b', icon: '👻', label: 'Sin carpeta' },
 };
 
@@ -1803,6 +2955,14 @@ function actionsHTML(ticket) {
   const e   = ticket.pipeline_estado;
 
   let btns = '';
+
+  // ▶ Marcar Doing en ADO — solo mientras el Work Item no esté ya aceptado/resuelto/cerrado.
+  // El endpoint aplica "Active" (estado nativo real del proyecto Strategist_Pacifico)
+  // con fallback a "Doing" / "In Progress" por compatibilidad con otros templates.
+  const trackerSt = (ticket.estado_tracker || '').toLowerCase();
+  if (['asignada','nueva','confirmada','se_necesitan_mas_datos'].includes(trackerSt)) {
+    btns += `<button class="btn btn-blue" onclick="markDoingAdo('${tid}')" title="Marca el Work Item ADO como Active (Doing)">▶ Marcar Doing ADO</button>`;
+  }
 
   // ▶ Play PM — si está pendiente o en error_pm
   if (['pendiente_pm','error_pm'].includes(e)) {
@@ -1845,17 +3005,17 @@ function actionsHTML(ticket) {
     const autoLabel = ticket.auto_advance ? '▶ Full Pipeline ⟳' : '▶ Full Pipeline';
     btns += `<button class="btn btn-accent" onclick="runFull('${tid}')" title="Ejecuta todas las etapas en secuencia automática">${autoLabel}</button>`;
   }
-  // 🔁 Reprocesar + 📣 Publicar en Mantis
+  // 🔁 Reprocesar + 📣 Publicar
   if (e === 'completado') {
     btns += `<button class="btn btn-ghost" onclick="reprocess('${tid}')">🔁 Reprocesar</button>`;
-    btns += `<button class="btn btn-blue" onclick="mantisConfirm('${tid}')" title="Publicar nota en Mantis y poner estado Confirmada">📣 Publicar en Mantis</button>`;
+    btns += `<button class="btn btn-blue" onclick="trackerConfirm('${tid}')" title="Publicar nota en el tracker">📣 Publicar</button>`;
   }
   // 📦 Generar paquete de despliegue — visible cuando dev completó o más
   const hasDevWork = ['dev_completado','tester_en_proceso','tester_completado','completado',
                       'error_tester'].includes(e);
   if (hasDevWork) {
     btns += `<button class="btn btn-green" onclick="genDeploy('${tid}')" title="Generar ZIP con DLLs modificadas, archivos web y scripts SQL para desplegar en otro entorno">📦 Gen Deploy</button>`;
-    btns += `<button class="btn btn-ghost" style="border:1px solid #2563eb" onclick="openCommit('${tid}')" title="SVN Commit con mensaje propuesto">🔖 SVN Commit</button>`;
+    btns += `<button class="btn btn-ghost" style="border:1px solid #2563eb" onclick="openCommit('${tid}')" title="Git Commit con mensaje propuesto">🔖 Git Commit</button>`;
     btns += `<button class="btn btn-ghost" style="border:1px solid #dc2626;font-size:12px" onclick="reportDeployProblem('${tid}')" title="Reportar problema post-deploy">⚠ Reportar problema</button>`;
     btns += `<button class="btn btn-ghost" style="border:1px solid #7c3aed;font-size:12px" onclick="openIncidentTest('${tid}')" title="Checklist de testeo de incidencia (negocio + técnico)">🧪 Testear incidencia</button>`;
   }
@@ -1863,22 +3023,23 @@ function actionsHTML(ticket) {
   if (['dev_completado','tester_en_proceso','tester_completado','completado','error_tester'].includes(e)) {
     btns += `<button class="btn btn-ghost" style="border:1px solid #0d9488;color:#2dd4bf;font-size:12px" onclick="runUITester('${tid}')" title="Lanza agente que simula al usuario con Playwright">🖥 UI Tester</button>`;
   }
-  // 📸 Capturar diff SVN manualmente — disponible si hay alguna etapa completada
+  // 📸 Capturar Diff Git manualmente — disponible si hay alguna etapa completada
   if (['pm_completado','dev_completado','tester_completado','completado',
        'dev_en_proceso','tester_en_proceso','error_dev','error_tester'].includes(e)) {
     const snapStage = ['completado','tester_completado','error_tester'].includes(e) ? 'tester'
                     : ['dev_completado','tester_en_proceso','error_tester'].includes(e) ? 'dev' : 'pm';
-    btns += `<button class="btn btn-ghost" style="border:1px solid #374151;font-size:11px" onclick="captureSnapshot('${tid}','${snapStage}')" title="Guardar snapshot SVN actual para visualizar en diff">📸 Capturar Diff</button>`;
+    btns += `<button class="btn btn-ghost" style="border:1px solid #374151;font-size:11px" onclick="captureSnapshot('${tid}','${snapStage}')" title="Guardar snapshot Git actual para visualizar en diff">📸 Capturar Diff</button>`;
   }
   // 👻 Huérfano: carpeta eliminada
   if (e === 'huerfano') {
     btns += `<button class="btn btn-yellow" onclick="reimportTicket('${tid}')" title="Limpia el state para que el scraper lo vuelva a importar">♻️ Reimportar</button>`;
   }
-  // ↩ Reset a pendiente — disponible en cualquier estado excepto pendiente_pm
+  // ↩ Reset Soft / Hard — disponible en cualquier estado excepto pendiente_pm
   if (e !== 'pendiente_pm') {
-    btns += `<button class="btn btn-ghost" onclick="markState('${tid}','pendiente_pm')" title="Reset completo a pendiente_pm">↩ Reset</button>`;
+    btns += `<button class="btn btn-ghost" onclick="resetTicketSoft('${tid}')" title="Reset Soft: borra artefactos del ticket (flags, análisis, snapshots, locks, caches) pero NO toca el workspace de código">↩ Reset Soft</button>`;
+    btns += `<button class="btn btn-ghost" style="border:1px solid #b91c1c;color:#fca5a5" onclick="resetTicketHard('${tid}')" title="Reset Hard: además del soft, revierte los archivos del workspace modificados por el ticket usando git checkout (DESTRUCTIVO)">⚠ Reset Hard</button>`;
   }
-  // � Ver cambios SVN — visible cuando hay snapshot de alguna etapa completada
+  // � Ver Cambios Git — visible cuando hay snapshot de alguna etapa completada
   const hasPmSnap     = ['pm_completado','dev_en_proceso','dev_completado','tester_en_proceso','tester_completado','completado','error_dev','error_tester'].includes(e);
   const hasDevSnap    = ['dev_completado','tester_en_proceso','tester_completado','completado','error_tester'].includes(e);
   const hasTesterSnap = ['tester_completado','completado'].includes(e);
@@ -1888,7 +3049,7 @@ function actionsHTML(ticket) {
       hasDevSnap    ? `<a href="#" onclick="event.preventDefault();showDiff('${tid}','dev')">Dev</a>`   : null,
       hasTesterSnap ? `<a href="#" onclick="event.preventDefault();showDiff('${tid}','tester')">QA</a>` : null,
     ].filter(Boolean).join(' · ');
-    btns += `<button class="btn btn-ghost" style="border:1px solid #374151" onclick="showDiff('${tid}','${hasTesterSnap?'tester':hasDevSnap?'dev':'pm'}')" title="Ver qué archivos modificó cada agente">📄 Ver cambios SVN &nbsp;<span style="font-size:10px;color:var(--muted)">${stages}</span></button>`;
+    btns += `<button class="btn btn-ghost" style="border:1px solid #374151" onclick="showDiff('${tid}','${hasTesterSnap?'tester':hasDevSnap?'dev':'pm'}')" title="Ver qué archivos modificó cada agente">📄 Ver Cambios Git &nbsp;<span style="font-size:10px;color:var(--muted)">${stages}</span></button>`;
   }
   // �📋 Generar prompts Dev + QA — siempre visible
   btns += `<button class="btn btn-ghost" style="margin-left:auto;border:1px solid var(--border)" onclick="genPrompts('${tid}')">📋 Generar Prompts</button>`;
@@ -1896,7 +3057,7 @@ function actionsHTML(ticket) {
   return `<div class="card-actions">${btns}</div>`;
 }
 
-function mantisClass(estado) {
+function trackerStatusClass(estado) {
   const map = {
     asignada: 'mb-asignada', nueva: 'mb-nueva', confirmada: 'mb-confirmada',
     aceptada: 'mb-aceptada', resuelta: 'mb-resuelta', cerrada: 'mb-cerrada',
@@ -1930,19 +3091,90 @@ function cardHTML(ticket) {
   const workflowStart = ticket[`${firstStageId}_inicio_at`];
 
   const showDevSummary    = ['dev_completado','tester_en_proceso','tester_completado','completado','error_tester'].includes(e);
-  const showTesterSummary = ['tester_completado','completado'].includes(e);
+  // Ampliamos la condición para incluir los estados post-rechazo en los que
+  // el usuario todavía debe ver el motivo del rechazo antes de decidir la acción.
+  const isRejectedByVerdict = (ticket.tester_verdict === 'RECHAZADO'
+                             || ticket.last_qa_verdict === 'RECHAZADO');
+  const showTesterSummary = ['tester_completado','completado'].includes(e)
+                          || (isRejectedByVerdict
+                              && ['pm_revision','pm_revision_en_proceso',
+                                  'stagnation_detected','qa_rework',
+                                  'dev_rework_en_proceso'].includes(e));
 
-  return `<div class="card" id="card-${tid}">
+  // Detección de rechazo: chequea el veredicto REAL del archivo TESTER_COMPLETADO.md
+  // además del state, así tickets que el watcher marcó erróneamente como "completado"
+  // pero cuyo archivo dice RECHAZADO también se muestran en rojo.
+  const isRejected = isRejectedByVerdict
+                  || e === 'stagnation_detected';
+  // CON OBSERVACIONES ahora se considera OK (el pipeline sigue a completado),
+  // pero igual se muestra un indicador ambar para que el analista vea que hubo issues.
+  const hasObservations = !isRejected && (
+                  ticket.tester_verdict === 'CON OBSERVACIONES'
+               || ticket.last_qa_verdict === 'CON OBSERVACIONES');
+  const unstucking = isUnstucking(ticket);
+  const divergent  = isTicketDivergent(tid);
+  const stalePipe  = isTicketStale(tid);
+  const cardCls    = (isRejected ? 'card rejected'
+                   : hasObservations ? 'card observations'
+                   : inProgress ? 'card working-now'
+                   : 'card') + (unstucking ? ' unstucking' : '')
+                   + (stalePipe ? ' stale-pipeline' : (divergent ? ' divergent' : ''));
+  const findingsCount = (ticket.qa_findings || []).length;
+  let bannerTitle = 'QA RECHAZADO';
+  if (e === 'stagnation_detected') bannerTitle = 'STAGNATION — INTERVENCIÓN MANUAL';
+  else if (ticket.tester_verdict === 'RECHAZADO' && e === 'completado')
+    bannerTitle = 'RECHAZADO PERO MARCADO COMO COMPLETADO — REVISAR';
+  let banner = '';
+  if (isRejected) {
+    // Botones contextuales según transiciones válidas (cacheadas en _qaTransitions)
+    const qaBtns = _buildQaActionButtons(tid, e);
+    banner = `<div class="rejected-banner">
+         <span class="alert-icon">⛔</span>
+         <span>${bannerTitle}</span>
+         ${findingsCount ? `<span class="findings-count">${findingsCount} finding${findingsCount === 1 ? '' : 's'}</span>` : ''}
+         ${(ticket.rework_count || 0) > 0 ? `<span class="rework-meta">rework #${ticket.rework_count}</span>` : ''}
+         <span class="spacer"></span>
+         ${qaBtns}
+         <button class="action-cta" onclick="event.stopPropagation();unstickTicket('${tid}')" title="Invocar al agente Desatascador">🚑 DESATASCAR</button>
+       </div>${_rejectedDetailHTML(ticket, tid, e)}`;
+  } else if (hasObservations) {
+    banner = `<div class="observations-banner">
+         <span>📝 QA aprobó con ${findingsCount || 'algunas'} observación${findingsCount === 1 ? '' : 'es'} — pipeline continuó normalmente</span>
+       </div>`;
+  } else if (inProgress) {
+    const stage = e.replace('_en_proceso', '').toUpperCase();
+    banner = `<div class="working-now-banner">
+         <span class="wn-arrow">▶</span>
+         <span>EN PROCESO — ${stage}</span>
+         ${workflowStart ? `<span class="wn-timer workflow-live" data-ts="${workflowStart}">⏱ --:--</span>` : ''}
+       </div>`;
+  }
+  const ribbon = isRejected ? `<div class="rejected-ribbon">RECHAZADO</div>` : '';
+
+  // Deploy/commit done — persistidos en localStorage
+  const _deployDoneTs = getDeployDone(tid);
+  const _commitDoneTs = getCommitDone(tid);
+  const _deployDoneLbl = _deployDoneTs ? new Date(_deployDoneTs).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}) : '';
+  const _commitDoneLbl = _commitDoneTs ? new Date(_commitDoneTs).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}) : '';
+
+  return `<div class="${cardCls}" id="card-${tid}" data-ticket-id="${tid}">
+    ${ribbon}
+    ${banner}
     <div class="card-header" onclick="toggleCard('${tid}')">
       <span class="ticket-id">#${tid}</span>
-      ${ticket.priority && ticket.priority < 9999 ? `<span title="Prioridad en cola" style="background:#1e3a5f;color:#60a5fa;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:700">🏷 #${ticket.priority}</span>` : ''}
+      ${ticket.priority && ticket.priority < 9999 ? `<span title="Posición en Rally" style="background:#1e3a5f;color:#60a5fa;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:700">🏁 P${ticket.priority}</span>` : ''}
+      ${unstucking ? unstuckBadgeHTML() : ''}
+      ${healthBadgeHTML(tid)}
       <span class="titulo" title="${esc(ticket.titulo)}">${esc(ticket.titulo)}</span>
-      <span class="mantis-badge ${mantisClass(ticket.estado_mantis)}">${esc(ticket.estado_mantis)}</span>
+      <span class="tracker-badge ${trackerStatusClass(ticket.estado_tracker)}">${esc(ticket.estado_tracker)}</span>
       ${ticket.asignado ? `<span class="asignado-badge" title="Asignado a: ${esc(ticket.asignado)}">👤 ${esc(ticket.asignado)}</span>` : ''}
-      ${statusBadge(e)}
+      ${isRejected ? `<span class="status-indicator">⛔ RECHAZADO</span>` : statusBadge(e)}
       ${inProgress ? _invokeStatusBadge(ticket) : ''}
       ${inProgress && workflowStart ? `<span class="workflow-live" data-ts="${workflowStart}" title="Tiempo total del workflow">⏱ --:--</span>` : ''}
-      <button class="btn btn-ghost" style="padding:2px 9px;font-size:11px;margin-left:auto;flex-shrink:0" title="Ver detalle del ticket Mantis" onclick="event.stopPropagation();openTicketDetail('${tid}')">📋 Detalle</button>
+      ${ticket.has_sql_transforms ? `<span class="badge-sql-alert" title="⚠ Tiene scripts SQL de transformación (INSERT/UPDATE/DELETE/ALTER/CREATE/DROP). Ejecutar antes o después del deploy según corresponda.">⚠ SQL DDL/DML</span>` : ''}
+      ${_deployDoneTs ? `<span class="badge-deploy-done" title="Deploy descargado: ${_deployDoneLbl}">📦 DEPLOY ✓</span>` : ''}
+      ${_commitDoneTs ? `<span class="badge-commit-done" title="Commiteado: ${_commitDoneLbl}">🔖 COMMIT ✓</span>` : ''}
+      <button class="btn btn-ghost" style="padding:2px 9px;font-size:11px;margin-left:auto;flex-shrink:0" title="Ver detalle del ticket" onclick="event.stopPropagation();openTicketDetail('${tid}')">📋 Detalle</button>
       <span class="chevron">▶</span>
     </div>
     ${flowBar(ticket)}
@@ -1950,7 +3182,19 @@ function cardHTML(ticket) {
     ${pmFilesHTML(ticket)}
     ${inProgress ? `<div style="padding:6px 16px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <span style="font-size:11px;color:var(--muted)">¿El agente no recibió la instrucción?</span>
-      <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border:1px solid var(--yellow);color:var(--yellow)" onclick="event.stopPropagation();reinvokeAgent('${tid}')">🔁 Reinvocar agente</button>
+      <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border:1px solid var(--yellow);color:var(--yellow)" onclick="event.stopPropagation();reinvokeAgent('${tid}')" title="Reintenta invocar al agente respetando los cerrojos actuales">🔁 Reinvocar agente</button>
+      <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border:1px solid #f59e0b;color:#fbbf24;font-weight:600" onclick="event.stopPropagation();forceReinvokeAgent('${tid}')" title="Force Reinvoke: limpia TODOS los cerrojos (EN_CURSO, locks, gate global) y reinvoca. Úselo si 'Reinvocar' da 'invocación duplicada'.">⚡ Force Reinvoke</button>
+      ${ticket.paused
+        ? `<button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border:1px solid #16a34a;color:#4ade80;font-weight:600" onclick="event.stopPropagation();resumeAgent('${tid}')" title="Reanudar: borra PAUSED.flag y vuelve al auto-avance">▶ Reanudar</button>`
+        : `<button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border:1px solid #64748b;color:#cbd5e1" onclick="event.stopPropagation();pauseAgent('${tid}')" title="Pausa el auto-avance. El agente actual sigue pero no se invocan nuevas etapas.">⏸ Pausar</button>`}
+      <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border:1px solid #ea580c;color:#fb923c" onclick="event.stopPropagation();cancelAgent('${tid}')" title="Cancelar: limpia cerrojos y marca error_{stage}. No mata al agente en VS Code, pero sus outputs se ignorarán.">✖ Cancelar</button>
+      <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border:1px solid #b91c1c;color:#fca5a5;font-weight:600" onclick="event.stopPropagation();hardResetDuringRun('${tid}')" title="Reset Hard DURANTE ejecución: limpia cerrojos + git checkout workspace + wipe + re-sync. Irrevocable si hay cambios no commiteados.">⚠ Hard Reset</button>
+      <button class="btn btn-red" style="font-size:11px;padding:2px 10px" onclick="event.stopPropagation();unstickTicket('${tid}')" title="Invoca al agente Desatascador: revisa el estado, los archivos y los flags, y destraba el pipeline">🚑 Desatascar</button>
+      ${ticket.paused ? `<span style="font-size:11px;color:#fbbf24;background:#1f1a0a;border:1px solid #854d0e;border-radius:4px;padding:1px 7px">⏸ PAUSADO</span>` : ''}
+    </div>` : ''}
+    ${(isRejected || (err && !inProgress)) ? `<div style="padding:6px 16px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-red" style="font-size:12px;padding:3px 12px;font-weight:700" onclick="event.stopPropagation();unstickTicket('${tid}')" title="Invoca al agente Desatascador para destrabar el ticket">🚑 Desatascar ticket</button>
+      <span style="font-size:11px;color:var(--muted)">El agente revisará la carpeta, creará/borrará flags y completará archivos a medias.</span>
     </div>` : ''}
     ${showDevSummary ? `<div class="summary-panel" id="dev-panel-${tid}">
       <div class="summary-panel-header dev">📝 Dev — Resumen de implementación
@@ -2077,7 +3321,254 @@ async function reinvokeAgent(tid) {
   }
 }
 
-// ── Diff SVN modal ────────────────────────────────────────────────────────────
+// ── Force Reinvoke: limpia todos los cerrojos y reinvoca ──────────────────
+async function forceReinvokeAgent(tid) {
+  const msg = `⚡ FORCE REINVOKE de #${tid}\n\n`
+    + `Se limpiarán TODOS los cerrojos antes de reinvocar:\n`
+    + `  • Flags AGENTE_EN_CURSO (todos los stages)\n`
+    + `  • Lock files (locks/${tid}_*.lock)\n`
+    + `  • INVOKE_LOCK.pid (mutex inter-proceso)\n`
+    + `  • threading.Lock del ticket (intra-proceso)\n`
+    + `  • Gate global de pipeline serial\n`
+    + `  • PAUSED.flag (si existía)\n\n`
+    + `NOTA: si había un agente corriendo en VS Code, NO se detiene — seguirá `
+    + `ejecutando pero sus outputs serán ignorados. Puede quedar abierto un chat huérfano.\n\n`
+    + `¿Continuar?`;
+  if (!confirm(msg)) return;
+  toast(`⚡ Force Reinvoke de #${tid}...`, 'info');
+  const r = await api('POST', `/api/reinvoke/${tid}?force=1`, {});
+  if (r.ok) {
+    toast(`⚡ Force Reinvoke OK — etapa: ${r.stage}`, 'success');
+    setTimeout(refresh, 3000);
+  } else {
+    toast(`❌ Error: ${r.error || '?'}`, 'error');
+  }
+}
+
+// ── Cancel: limpia cerrojos y marca error_{stage} ─────────────────────────
+async function cancelAgent(tid) {
+  const msg = `✖ CANCELAR #${tid}\n\n`
+    + `Se hará:\n`
+    + `  • Limpieza de todos los cerrojos (EN_CURSO, lock files, gate)\n`
+    + `  • Marcar estado como error_{stage}\n`
+    + `  • NO reinvocar (el ticket queda para intervención manual)\n\n`
+    + `LIMITACIÓN: el agente en VS Code sigue corriendo — sus outputs se ignorarán. `
+    + `El chat de VS Code puede quedar abierto; ciérrelo manualmente si hace falta.\n\n`
+    + `¿Continuar?`;
+  if (!confirm(msg)) return;
+  toast(`✖ Cancelando #${tid}...`, 'info');
+  const r = await api('POST', `/api/cancel/${tid}`, {});
+  if (r.ok) {
+    const g = r.gate_released ? ' + gate liberado' : '';
+    toast(`✖ #${tid} cancelado — ${r.msg}${g}`, 'success');
+    setTimeout(refresh, 1500);
+  } else {
+    toast(`❌ Error: ${r.error || '?'}`, 'error');
+  }
+}
+
+// ── Pause: detiene auto-avance (crea PAUSED.flag) ─────────────────────────
+async function pauseAgent(tid) {
+  toast(`⏸ Pausando auto-avance de #${tid}...`, 'info');
+  const r = await api('POST', `/api/pause/${tid}`, {});
+  if (r.ok) {
+    toast(`⏸ #${tid} pausado — el agente actual sigue, pero no se invocan nuevas etapas`, 'success');
+    setTimeout(refresh, 1000);
+  } else {
+    toast(`❌ Error: ${r.error || '?'}`, 'error');
+  }
+}
+
+// ── Resume: borra PAUSED.flag y re-activa auto_advance ────────────────────
+async function resumeAgent(tid) {
+  toast(`▶ Reanudando #${tid}...`, 'info');
+  const r = await api('POST', `/api/resume/${tid}`, {});
+  if (r.ok) {
+    toast(`▶ #${tid} reanudado — el watcher retomará el avance`, 'success');
+    setTimeout(refresh, 1000);
+  } else {
+    toast(`❌ Error: ${r.error || '?'}`, 'error');
+  }
+}
+
+// ── Hard Reset durante ejecución ──────────────────────────────────────────
+async function hardResetDuringRun(tid) {
+  // Preview igual que Reset Hard normal
+  let preview = null;
+  try { preview = await api('GET', `/api/reset_preview/${tid}`, null); } catch(e) {}
+  let fileList = '(no disponible)';
+  if (preview && preview.ok && Array.isArray(preview.files)) {
+    if (preview.files.length === 0) {
+      fileList = '(ningún archivo registrado en snapshots)';
+    } else {
+      fileList = preview.files.slice(0, 30).map(f => `  • ${f}`).join('\n');
+      if (preview.files.length > 30) fileList += `\n  … y ${preview.files.length - 30} más`;
+    }
+  }
+  const msg = `⚠ HARD RESET DURANTE EJECUCIÓN de #${tid}\n\n`
+    + `El ticket está EN PROCESO. Se hará:\n`
+    + `  • Limpieza de TODOS los cerrojos (EN_CURSO, lock files, gate global)\n`
+    + `  • git checkout HEAD sobre los archivos del workspace listados\n`
+    + `  • Wipe completo de la carpeta del ticket\n`
+    + `  • Re-sync desde Azure para re-importar\n\n`
+    + `Archivos del workspace que se revertirán:\n${fileList}\n\n`
+    + `El agente en VS Code puede seguir corriendo — sus outputs se perderán.\n`
+    + `ESTO NO SE PUEDE DESHACER si los cambios no están commiteados.\n\n`
+    + `¿Continuar?`;
+  if (!confirm(msg)) { toast('Hard Reset cancelado', 'info'); return; }
+  toast(`⚠ Hard Reset forzado de #${tid} en curso...`, 'info');
+  const r = await api('POST', `/api/reset/${tid}?mode=hard&force=1`, {});
+  if (r.ok) {
+    toast(`✅ #${tid} hard reset OK — ${_formatResetSummary(r)}`, 'success');
+    setTimeout(refresh, 1500);
+  } else if (r.partial_success) {
+    toast(`⚠️ #${tid} hard reset parcial — ${_formatResetSummary(r)}`, 'warning');
+    setTimeout(refresh, 1500);
+  } else {
+    toast(`❌ Error: ${r.error || '?'}`, 'error');
+  }
+}
+
+// ── QA rejection: acciones contextuales ──────────────────────────────────
+// Cache de transiciones válidas (poblado vía /api/pipeline/valid_transitions al boot).
+// Si el fetch falla, fallback a este map hardcoded (debe reflejar
+// pipeline_state._VALID_AUTO_ADVANCE_TRANSITIONS).
+let _qaTransitions = {
+  'pm_completado':         'dev_en_proceso',
+  'dev_completado':        'tester_en_proceso',
+  'tester_completado':     'completado',
+  'qa_rework':             'dev_rework_en_proceso',
+  'dev_rework_completado': 'tester_en_proceso',
+  'pm_inv_completado':     'pm_arq_en_proceso',
+  'pm_arq_completado':     'pm_plan_en_proceso',
+  'dev_loc_completado':    'dev_impl_en_proceso',
+  'dev_impl_completado':   'dev_doc_en_proceso',
+  'qa_rev_completado':     'qa_exec_en_proceso',
+  'qa_exec_completado':    'qa_arb_en_proceso',
+};
+(async () => {
+  try {
+    const r = await fetch('/api/pipeline/valid_transitions');
+    if (r.ok) {
+      const d = await r.json();
+      if (d && d.transitions) _qaTransitions = d.transitions;
+    }
+  } catch (_) { /* fallback ya aplicado */ }
+})();
+
+// Acciones QA especiales (no están en la tabla de auto-advance porque son
+// decisiones del humano, no transiciones automáticas). Tienen estado-origen
+// implícito en el backend (tester_completado / stagnation_detected).
+const _QA_MANUAL_ACTIONS = {
+  reenviar_pm: {
+    label: '📝 Reenviar al PM para replanteo',
+    title: 'Escala al PM para re-analizar el requerimiento',
+    valid_from: ['tester_completado','stagnation_detected','pm_revision','qa_rework'],
+  },
+  volver_dev: {
+    label: '↩️ Volver a DEV (rework)',
+    title: 'Vuelve al developer con los findings del QA (sin pasar por PM)',
+    valid_from: ['tester_completado','stagnation_detected','pm_revision','qa_rework'],
+  },
+};
+
+function _buildQaActionButtons(tid, currentEstado) {
+  let html = '';
+  for (const [action, meta] of Object.entries(_QA_MANUAL_ACTIONS)) {
+    if (!meta.valid_from.includes(currentEstado)) continue;
+    html += `<button class="action-cta alt" title="${esc(meta.title)}" ` +
+            `onclick="event.stopPropagation();qaAction('${tid}','${action}')">` +
+            `${meta.label}</button>`;
+  }
+  return html;
+}
+
+function _rejectedDetailHTML(ticket, tid, currentEstado) {
+  const findings = Array.isArray(ticket.qa_findings) ? ticket.qa_findings : [];
+  if (!findings.length && !ticket.last_qa_verdict) return '';
+
+  const iter = ticket.rework_count ? `iteración #${(ticket.rework_count | 0) + 1}` : 'primera iteración';
+  const testerTs = ticket.tester_completado_at || ticket.tester_fin_at;
+  const relTs = testerTs ? `hace ${_relativeTime(testerTs)}` : '';
+  const stageLbl = currentEstado ? currentEstado.replace(/_/g, ' ') : '';
+
+  // Renderizar findings (si son muchos, envolver en <details>).
+  let findingsHTML = '';
+  if (findings.length) {
+    const liItems = findings.map(f => {
+      const fallback = (typeof f === 'string' && f.startsWith('[Motivo capturado sin formato de lista]'));
+      const txt = fallback
+        ? f.replace('[Motivo capturado sin formato de lista]', '').trim()
+        : f;
+      return `<li>${fallback ? '<span class="rd-fallback-tag">sin formato</span>' : ''}${esc(String(txt))}</li>`;
+    }).join('');
+    if (findings.length <= 3) {
+      findingsHTML = `<ul class="rd-list">${liItems}</ul>`;
+    } else {
+      findingsHTML = `<details open><summary>${findings.length} findings (clic para colapsar)</summary>` +
+                     `<ul class="rd-list">${liItems}</ul></details>`;
+    }
+  }
+
+  const metaBits = [];
+  if (stageLbl) metaBits.push(`<span>Etapa: <b>${esc(stageLbl)}</b></span>`);
+  if (relTs)    metaBits.push(`<span>QA: ${esc(relTs)}</span>`);
+  metaBits.push(`<span>${esc(iter)}</span>`);
+
+  return `<div class="rejected-detail">
+    <div class="rd-meta">${metaBits.join('')}</div>
+    ${findingsHTML || '<span style="color:#fca5a5">Sin findings estructurados — revisar TESTER_COMPLETADO.md</span>'}
+  </div>`;
+}
+
+function _relativeTime(iso) {
+  try {
+    const now = Date.now();
+    const then = new Date(iso).getTime();
+    if (!then) return '';
+    const diffSec = Math.max(0, Math.floor((now - then) / 1000));
+    if (diffSec < 60)    return `${diffSec} s`;
+    if (diffSec < 3600)  return `${Math.floor(diffSec/60)} min`;
+    if (diffSec < 86400) return `${Math.floor(diffSec/3600)} h`;
+    return `${Math.floor(diffSec/86400)} d`;
+  } catch (_) { return ''; }
+}
+
+async function qaAction(tid, action) {
+  const labels = {
+    reenviar_pm: 'Reenviar al PM para replanteo',
+    volver_dev:  'Volver a DEV (rework)',
+  };
+  if (!confirm(`¿Confirmás: ${labels[action] || action} para #${tid}?`)) return;
+  toast(`Enviando acción "${action}" a #${tid}…`, 'info');
+  const r = await api('POST', `/api/tickets/${encodeURIComponent(tid)}/qa_action`, { action });
+  if (r && r.ok) {
+    toast(`OK: transición → ${r.to_state || '?'}`, 'success');
+    setTimeout(refresh, 1200);
+  } else {
+    toast(`No se pudo aplicar: ${(r && r.error) || 'error desconocido'}`, 'error');
+  }
+}
+
+async function unstickTicket(tid) {
+  const reason = prompt(`🚑 Desatascar #${tid}\n\n` +
+                        `Describí brevemente qué pasó (opcional — dejalo vacío y el servidor infiere).\n` +
+                        `El agente Desatascador va a revisar la carpeta, crear/borrar flags,\n` +
+                        `completar archivos a medias y decidir la próxima etapa.`,
+                        '');
+  if (reason === null) return;  // usuario canceló
+  toast(`🚑 Invocando Desatascador para #${tid}...`, 'info');
+  const r = await api('POST', `/api/unstick/${tid}`, { reason: reason || '' });
+  if (r.ok) {
+    toast(`🚑 Desatascador invocado — estado previo: ${r.from_state}. ` +
+          `Creará DESATASCO_COMPLETADO.md al terminar.`, 'success');
+    setTimeout(refresh, 4000);
+  } else {
+    toast('No se pudo invocar al Desatascador: ' + (r.error || '?'), 'error');
+  }
+}
+
+// ── Diff modal ────────────────────────────────────────────────────────────
 let _diffCurrentTicket = null;
 let _diffCurrentStage  = null;
 
@@ -2122,7 +3613,7 @@ async function _loadDiff(tid, stage) {
       const capBtn = d.can_capture
         ? `<br><br><button class="btn btn-ghost" style="font-size:12px;margin-top:8px" onclick="captureSnapshot('${tid}','${stage}')">📸 Capturar snapshot ahora</button>`
         : '';
-      contentEl.innerHTML = `<span style="color:var(--muted)">${esc(d.error || 'Sin snapshot — la etapa aún no completó o SVN no está disponible.')}</span>${capBtn}`;
+      contentEl.innerHTML = `<span style="color:var(--muted)">${esc(d.error || 'Sin snapshot — la etapa aún no completó o Git no está disponible.')}</span>${capBtn}`;
       return;
     }
     // Archivos modificados con colores
@@ -2147,7 +3638,7 @@ async function captureSnapshot(tid, stage) {
   const filesEl   = document.getElementById('diff-files');
   const contentEl = document.getElementById('diff-content');
   filesEl.textContent = 'Capturando snapshot...';
-  contentEl.innerHTML = '<span style="color:var(--muted)">Ejecutando svn diff...</span>';
+  contentEl.innerHTML = '<span style="color:var(--muted)">Ejecutando git diff...</span>';
   try {
     const r = await fetch(`/api/capture_snapshot/${tid}/${stage}`, {method:'POST'});
     const d = await r.json();
@@ -2248,7 +3739,7 @@ async function reprocess(tid) {
 }
 
 async function captureSnapshot(tid, stage) {
-  toast(`📸 Capturando diff SVN (${stage.toUpperCase()}) para #${tid}...`, 'info');
+  toast(`📸 Capturando diff Git (${stage.toUpperCase()}) para #${tid}...`, 'info');
   try {
     const r = await api('POST', `/api/capture_snapshot/${tid}/${stage}`, {});
     if (r.ok) {
@@ -2278,21 +3769,103 @@ async function runUITester(tid) {
   }
 }
 
-async function mantisConfirm(tid) {
-  toast(`📣 Publicando #${tid} en Mantis...`, 'info');
-  const r = await api('POST', `/api/mantis_confirm/${tid}`, {});
+async function trackerConfirm(tid) {
+  toast(`📣 Publicando nota en el tracker...`, 'info');
+  const r = await api('POST', `/api/tracker_confirm/${tid}`, {});
   if (r.ok) {
-    toast(`✅ #${tid} — nota "Stacky: ..." enviada a Mantis`, 'success');
+    toast(`✅ #${tid} — nota enviada al tracker`, 'success');
+  } else {
+    toast(`❌ Error: ${r.error || 'desconocido'}`, 'error');
+  }
+}
+
+// ▶ Marcar Work Item ADO como Active/Doing desde el dashboard.
+// El endpoint corre la transición en thread daemon; refrescamos a los 2s
+// para que el próximo sync del tracker muestre el nuevo estado_tracker.
+async function markDoingAdo(tid) {
+  toast(`▶ Marcando #${tid} como Doing en ADO...`, 'info');
+  const r = await api('POST', `/api/ado/${tid}/mark-doing`, {});
+  if (r.ok) {
+    toast(`✅ #${tid} — transición a Doing enviada`, 'success');
+    setTimeout(refresh, 2000);
   } else {
     toast(`❌ Error: ${r.error || 'desconocido'}`, 'error');
   }
 }
 
 async function reimportTicket(tid) {
-  toast(`♻️ Limpiando state de #${tid}...`, 'info');
-  const r = await api('POST', `/api/reimport/${tid}`, {});
+  // Retrocompat: alias de Reset Soft.
+  return resetTicketSoft(tid);
+}
+
+function _formatResetSummary(r) {
+  const fr = (r.files_removed || []).length;
+  const fv = (r.files_reverted || []).length;
+  const lr = (r.locks_released || []).length;
+  const cc = (r.caches_cleared || []).length;
+  const er = (r.errors || []).length;
+  const parts = [];
+  if (fr) parts.push(`${fr} archivos borrados`);
+  if (fv) parts.push(`${fv} archivos revertidos`);
+  if (lr) parts.push(`${lr} locks liberados`);
+  if (cc) parts.push(`${cc} caches limpiadas`);
+  if (er) parts.push(`${er} errores`);
+  return parts.join(' · ') || 'sin cambios';
+}
+
+async function resetTicketSoft(tid) {
+  if (!confirm(`Reset SOFT de #${tid}\n\nSe borrarán artefactos del ticket:\n• Flags (PM/DEV/TESTER, errores, en_curso, heartbeats)\n• Análisis PM/DEV/QA generados\n• Snapshots (diffs y listas de archivos)\n• Lock files\n• Caches en memoria + entry de state.json\n\nNO toca el workspace de código.\n¿Continuar?`)) return;
+  toast(`♻️ Reset Soft de #${tid}...`, 'info');
+  const r = await api('POST', `/api/reset/${tid}?mode=soft`, {});
   if (r.ok) {
-    toast(`✅ #${tid} listo para reimportar. Ejecutá el scraper para traerlo de Mantis.`, 'success');
+    toast(`✅ #${tid} reset soft OK — ${_formatResetSummary(r)}`, 'success');
+    setTimeout(refresh, 1500);
+  } else if (r.partial_success) {
+    toast(`⚠️ #${tid} reset parcial — ${_formatResetSummary(r)}`, 'warning');
+    setTimeout(refresh, 1500);
+  } else {
+    toast(`❌ Error: ${r.error || 'desconocido'}`, 'error');
+  }
+}
+
+async function resetTicketHard(tid) {
+  // Pedimos preview de archivos a revertir (los que figuren en snapshots/*_files.txt).
+  toast(`🔍 Calculando archivos a revertir para #${tid}...`, 'info');
+  let preview = null;
+  try {
+    preview = await api('GET', `/api/reset_preview/${tid}`, null);
+  } catch (e) { preview = null; }
+
+  let fileList = '(no disponible — se calculará durante el reset)';
+  if (preview && preview.ok && Array.isArray(preview.files)) {
+    if (preview.files.length === 0) {
+      fileList = '(ningún archivo registrado en snapshots)';
+    } else {
+      fileList = preview.files.slice(0, 30).map(f => `  • ${f}`).join('\n');
+      if (preview.files.length > 30) fileList += `\n  … y ${preview.files.length - 30} más`;
+    }
+  }
+
+  const msg = `⚠ RESET HARD de #${tid} — ACCIÓN DESTRUCTIVA\n\n`
+    + `Se ejecutará:\n`
+    + `• Borrar cada archivo del workspace listado en snapshots + git checkout HEAD\n`
+    + `• Wipe completo de la carpeta del ticket\n`
+    + `• Re-sync desde Azure para re-importar\n\n`
+    + `Archivos del workspace que se revertirán:\n${fileList}\n\n`
+    + `Esto NO se puede deshacer si los cambios no estaban commiteados.\n\n`
+    + `¿Continuar?`;
+  if (!confirm(msg)) {
+    toast('Reset Hard cancelado', 'info');
+    return;
+  }
+
+  toast(`⚠ Reset Hard de #${tid} en curso...`, 'info');
+  const r = await api('POST', `/api/reset/${tid}?mode=hard`, {});
+  if (r.ok) {
+    toast(`✅ #${tid} reset hard OK — ${_formatResetSummary(r)}`, 'success');
+    setTimeout(refresh, 1500);
+  } else if (r.partial_success) {
+    toast(`⚠️ #${tid} reset hard parcial — ${_formatResetSummary(r)}`, 'warning');
     setTimeout(refresh, 1500);
   } else {
     toast(`❌ Error: ${r.error || 'desconocido'}`, 'error');
@@ -2317,10 +3890,10 @@ async function runAll() {
 }
 
 async function runScraper() {
-  toast('🕷 Ejecutando scraper de Mantis...', 'info');
+  toast('🕷 Sincronizando tickets...', 'info');
   const r = await api('POST', '/api/run_scraper', {});
   if (r.ok) {
-    toast('🕷 Scraper iniciado — refrescando en 15s...', 'info');
+    toast('🔄 Sync iniciado — refrescando en 15s...', 'info');
     setTimeout(refresh, 15000);
   }
 }
@@ -2374,19 +3947,61 @@ async function generateProjectDocs() {
   }
 }
 
-// ── Queue (cola de prioridad) ──────────────────────────────────────────────
-let queueOrder     = [];  // ticket_ids en el orden actual del modal
-let dragSrcIndex   = null;
+// ── Queue — dos paneles con drag & drop ────────────────────────────────────
+// Encodamos el panel de origen directamente en dataTransfer para no depender
+// de la variable _dragSrc en los drop handlers (evita bugs de timing).
+//   queueOrder : ticket_ids en la cola (panel derecho), en orden
+//   _dragSrc   : solo para feedback visual (highlight), NO para lógica de drop
+
+let queueOrder = [];
+let _dragSrc   = null;  // solo visual: { panel:'pool'|'queue', index }
+
+// DT keys
+const _DT_PANEL  = 'text/x-panel';   // 'pool' | 'queue'
+const _DT_TID    = 'text/x-tid';     // ticket_id
+
+const _QUEUE_EXCLUDE_ESTADOS = new Set(['completado', 'cerrado', 'descartado']);
 
 function openQueue() {
-  // Filtrar solo tickets procesables (asignada + no completados)
-  queueOrder = allTickets
-    .filter(t => t.estado_mantis === 'asignada' && !['completado'].includes(t.pipeline_estado))
-    .sort((a, b) => (a.priority || 9999) - (b.priority || 9999))
+  // Tickets ya en cola = los que tienen priority < 9999 (9999 = fuera del Rally)
+  const saved = allTickets
+    .filter(t => !_QUEUE_EXCLUDE_ESTADOS.has(t.pipeline_estado)
+                 && typeof t.priority === 'number' && t.priority < 9999)
+    .sort((a, b) => a.priority - b.priority)
     .map(t => t.ticket_id);
 
-  _renderQueueList();
+  queueOrder = saved.slice();   // copia; el usuario puede editar libremente
+
+  document.getElementById('queue-pool-search').value = '';
+  _renderQueuePanels();
+  refreshRallyStatus();
   document.getElementById('queue-modal').classList.add('open');
+}
+
+async function refreshRallyStatus() {
+  try {
+    const r = await api('GET', '/api/rally/status');
+    const pill = document.getElementById('rally-status-pill');
+    const btn  = document.getElementById('rally-pause-btn');
+    if (!pill || !btn) return;
+    if (r.running) {
+      pill.textContent = `▶ Corriendo · ${r.pending} pendientes`;
+      pill.style.color = 'var(--green)';
+      btn.style.display = 'inline-flex';
+    } else {
+      pill.textContent = `⏸ Pausado · ${r.pending} en cola`;
+      pill.style.color = 'var(--muted)';
+      btn.style.display = 'none';
+    }
+  } catch(_e) { /* silent */ }
+}
+
+async function pauseRally() {
+  const r = await api('POST', '/api/rally/stop');
+  if (r.ok) {
+    toast('⏸ Rally pausado', 'info');
+    refreshRallyStatus();
+  }
 }
 
 function closeQueue() {
@@ -2397,81 +4012,261 @@ function closeQueueOnBackdrop(e) {
   if (e.target.id === 'queue-modal') closeQueue();
 }
 
-function _renderQueueList() {
-  const list = document.getElementById('queue-list');
-  list.innerHTML = queueOrder.map((tid, i) => {
-    const t = allTickets.find(x => x.ticket_id === tid);
-    const titulo = t ? esc(t.titulo) : tid;
-    const estado = t ? t.pipeline_estado : '—';
-    const cfg    = STATUS_CFG[estado] || { icon: '?', color: '#64748b' };
-    return `<div class="queue-item" id="qi-${tid}"
-              draggable="true"
-              ondragstart="qDragStart(event,${i})"
-              ondragover="qDragOver(event,${i})"
-              ondragleave="qDragLeave(event)"
-              ondrop="qDrop(event,${i})"
-              ondragend="qDragEnd(event)">
-      <div class="queue-rank">${i + 1}</div>
+function clearQueue() {
+  queueOrder = [];
+  _renderQueuePanels();
+}
+
+function _getPoolTickets() {
+  const search  = (document.getElementById('queue-pool-search')?.value || '').toLowerCase().trim();
+  const inQueue = new Set(queueOrder.map(String));
+  return allTickets
+    .filter(t => {
+      if (_QUEUE_EXCLUDE_ESTADOS.has(t.pipeline_estado)) return false;
+      if (inQueue.has(String(t.ticket_id))) return false;
+      if (search) {
+        const hay = (t.ticket_id + ' ' + (t.titulo || '')).toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const ord = { 'pendiente_pm': 0, 'pm_completado': 1, 'dev_completado': 2,
+                    'error_pm': 3, 'error_dev': 4, 'error_tester': 5 };
+      const sa = ord[a.pipeline_estado] ?? 9;
+      const sb = ord[b.pipeline_estado] ?? 9;
+      if (sa !== sb) return sa - sb;
+      return String(a.ticket_id).localeCompare(String(b.ticket_id));
+    });
+}
+
+function _renderQueuePanels() {
+  const poolTickets = _getPoolTickets();
+  _renderPoolList(poolTickets);
+  _renderActiveList();
+  document.getElementById('pool-count').textContent   = poolTickets.length;
+  document.getElementById('active-count').textContent = queueOrder.length;
+}
+
+function _renderPoolList(tickets) {
+  const list = document.getElementById('queue-pool-list');
+  if (!list) return;
+  if (!tickets.length) {
+    list.innerHTML = '<div class="queue-empty-hint">No hay incidencias fuera de la cola</div>';
+    return;
+  }
+  list.innerHTML = tickets.map((t, i) => {
+    const tid    = String(t.ticket_id);
+    const titulo = esc(t.titulo || '—');
+    const cfg    = STATUS_CFG[t.pipeline_estado] || { icon: '?', color: '#64748b' };
+    return `<div class="queue-item" id="qp-${tid}"
+               draggable="true"
+               ondragstart="_poolDragStart(event,${i})"
+               ondragend="_cleanDrag()">
       <span class="queue-tid">#${tid}</span>
       <span class="queue-title" title="${titulo}">${titulo}</span>
-      <span class="queue-estado" style="color:${cfg.color}">${cfg.icon} ${estado}</span>
-      <div class="queue-arrows">
-        <button onclick="qMoveUp(${i})" ${i === 0 ? 'disabled' : ''}>▲</button>
-        <button onclick="qMoveDown(${i})" ${i === queueOrder.length - 1 ? 'disabled' : ''}>▼</button>
-      </div>
+      <span class="queue-estado" style="color:${cfg.color}">${cfg.icon} ${esc(t.pipeline_estado)}</span>
+      <button class="queue-item-action" title="Agregar a la cola"
+              onmousedown="event.stopPropagation()"
+              onclick="event.stopPropagation();_addToQueue('${tid}')">＋</button>
     </div>`;
   }).join('');
 }
 
-function qMoveUp(i) {
+function _renderActiveList() {
+  const list = document.getElementById('queue-list');
+  if (!list) return;
+  if (queueOrder.length === 0) {
+    list.innerHTML = '<div class="queue-empty-hint">⬅ Arrastrá incidencias aquí o usá el botón ＋</div>';
+    list.classList.remove('drag-target');
+    return;
+  }
+  list.innerHTML = queueOrder.map((tid, i) => {
+    tid = String(tid);
+    const t      = allTickets.find(x => String(x.ticket_id) === tid);
+    const titulo = t ? esc(t.titulo || '—') : tid;
+    const estado = t ? t.pipeline_estado : '—';
+    const cfg    = STATUS_CFG[estado] || { icon: '?', color: '#64748b' };
+    return `<div class="queue-item" id="qi-${tid}"
+               draggable="true"
+               ondragstart="_queueDragStart(event,${i})"
+               ondragover="_queueItemDragOver(event,${i})"
+               ondragleave="_queueItemDragLeave(event)"
+               ondrop="_queueItemDrop(event,${i})"
+               ondragend="_cleanDrag()">
+      <div class="queue-rank">${i + 1}</div>
+      <span class="queue-tid">#${tid}</span>
+      <span class="queue-title" title="${titulo}">${titulo}</span>
+      <span class="queue-estado" style="color:${cfg.color}">${cfg.icon} ${esc(estado)}</span>
+      <div class="queue-arrows">
+        <button onmousedown="event.stopPropagation()"
+                onclick="event.stopPropagation();_qMoveUp(${i})" ${i === 0 ? 'disabled' : ''}>▲</button>
+        <button onmousedown="event.stopPropagation()"
+                onclick="event.stopPropagation();_qMoveDown(${i})" ${i === queueOrder.length - 1 ? 'disabled' : ''}>▼</button>
+      </div>
+      <button class="queue-item-action remove" title="Quitar de la cola"
+              onmousedown="event.stopPropagation()"
+              onclick="event.stopPropagation();_removeFromQueue('${tid}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ── Acciones de botones ────────────────────────────────────────────────────
+
+function _addToQueue(tid) {
+  tid = String(tid);
+  if (!queueOrder.map(String).includes(tid)) {
+    queueOrder.push(tid);
+    _renderQueuePanels();
+  }
+}
+
+function _removeFromQueue(tid) {
+  tid = String(tid);
+  queueOrder = queueOrder.filter(id => String(id) !== tid);
+  _renderQueuePanels();
+}
+
+function _qMoveUp(i) {
   if (i === 0) return;
   [queueOrder[i - 1], queueOrder[i]] = [queueOrder[i], queueOrder[i - 1]];
-  _renderQueueList();
+  _renderQueuePanels();
 }
 
-function qMoveDown(i) {
+function _qMoveDown(i) {
   if (i >= queueOrder.length - 1) return;
   [queueOrder[i], queueOrder[i + 1]] = [queueOrder[i + 1], queueOrder[i]];
-  _renderQueueList();
+  _renderQueuePanels();
 }
 
-// Drag & drop
-function qDragStart(e, i) {
-  dragSrcIndex = i;
+function _cleanDrag() {
+  _dragSrc = null;
+  document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('dragging', 'drag-over'));
+  document.getElementById('queue-list')?.classList.remove('drag-target');
+  document.getElementById('queue-pool-list')?.classList.remove('drag-target');
+}
+
+// ── Drag desde pool (izquierda → derecha) ────────────────────────────────
+
+function _poolDragStart(e, i) {
+  const tickets = _getPoolTickets();
+  const tid     = String(tickets[i]?.ticket_id ?? '');
+  _dragSrc = { panel: 'pool', tid };
   e.dataTransfer.effectAllowed = 'move';
-  setTimeout(() => {
-    const el = document.getElementById('qi-' + queueOrder[i]);
-    if (el) el.classList.add('dragging');
-  }, 0);
+  e.dataTransfer.setData(_DT_PANEL, 'pool');
+  e.dataTransfer.setData(_DT_TID,   tid);
+  // fallback para compatibilidad con navegadores que solo leen text/plain
+  e.dataTransfer.setData('text/plain', tid);
+  setTimeout(() => document.getElementById('qp-' + tid)?.classList.add('dragging'), 0);
 }
 
-function qDragOver(e, i) {
+// ── Zona drop del panel derecho (cola) ────────────────────────────────────
+
+function qZoneDragOver(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('drag-over'));
-  const el = document.getElementById('qi-' + queueOrder[i]);
-  if (el) el.classList.add('drag-over');
+  document.getElementById('queue-list')?.classList.add('drag-target');
 }
 
-function qDragLeave(e) {
+function qZoneDragLeave(e) {
+  const zone = document.getElementById('queue-list');
+  if (zone && !zone.contains(e.relatedTarget)) zone.classList.remove('drag-target');
+}
+
+function qZoneDrop(e) {
+  e.preventDefault();
+  document.getElementById('queue-list')?.classList.remove('drag-target');
+  const panel = e.dataTransfer.getData(_DT_PANEL) || (_dragSrc?.panel);
+  const tid   = e.dataTransfer.getData(_DT_TID)   || e.dataTransfer.getData('text/plain');
+  if (panel === 'pool' && tid && !queueOrder.map(String).includes(String(tid))) {
+    queueOrder.push(String(tid));
+    _renderQueuePanels();
+  }
+  _cleanDrag();
+}
+
+// ── Drag dentro del panel derecho (reordenar) ─────────────────────────────
+
+function _queueDragStart(e, i) {
+  const tid = String(queueOrder[i]);
+  _dragSrc  = { panel: 'queue', index: i, tid };
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData(_DT_PANEL, 'queue');
+  e.dataTransfer.setData(_DT_TID,   tid);
+  e.dataTransfer.setData('text/plain', tid);
+  setTimeout(() => document.getElementById('qi-' + tid)?.classList.add('dragging'), 0);
+}
+
+function _queueItemDragOver(e, i) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  // visual: highlight solo al reordenar dentro de la cola
+  const panel = _dragSrc?.panel;
+  if (panel === 'queue') {
+    document.querySelectorAll('#queue-list .queue-item').forEach(el => el.classList.remove('drag-over'));
+    document.getElementById('qi-' + queueOrder[i])?.classList.add('drag-over');
+  } else if (panel === 'pool') {
+    // arrastrar desde pool sobre un ítem de la cola — mostrar zona
+    document.getElementById('queue-list')?.classList.add('drag-target');
+  }
+}
+
+function _queueItemDragLeave(e) {
   e.currentTarget.classList.remove('drag-over');
 }
 
-function qDrop(e, i) {
+function _queueItemDrop(e, i) {
   e.preventDefault();
-  if (dragSrcIndex === null || dragSrcIndex === i) return;
-  const moved = queueOrder.splice(dragSrcIndex, 1)[0];
-  queueOrder.splice(i, 0, moved);
-  dragSrcIndex = null;
-  _renderQueueList();
+  e.stopPropagation();
+  const panel = e.dataTransfer.getData(_DT_PANEL) || (_dragSrc?.panel);
+  const tid   = e.dataTransfer.getData(_DT_TID)   || e.dataTransfer.getData('text/plain');
+  if (!tid) { _cleanDrag(); return; }
+
+  if (panel === 'queue') {
+    // reordenar: sacar de src e insertar en i
+    const src = queueOrder.map(String).indexOf(String(tid));
+    if (src !== -1 && src !== i) {
+      queueOrder.splice(src, 1);
+      queueOrder.splice(i, 0, String(tid));
+      _renderQueuePanels();
+    }
+  } else if (panel === 'pool') {
+    // insertar desde pool en posición específica
+    if (!queueOrder.map(String).includes(String(tid))) {
+      queueOrder.splice(i, 0, String(tid));
+      _renderQueuePanels();
+    }
+  }
+  _cleanDrag();
 }
 
-function qDragEnd(e) {
-  dragSrcIndex = null;
-  document.querySelectorAll('.queue-item').forEach(el => {
-    el.classList.remove('dragging', 'drag-over');
-  });
+// ── Zona drop del panel izquierdo (cola → pool: quitar de cola) ───────────
+
+function poolZoneDragOver(e) {
+  // Aceptar drops de cualquier origen; en el drop filtramos por panel
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.getElementById('queue-pool-list')?.classList.add('drag-target');
 }
+
+function poolZoneDragLeave(e) {
+  const zone = document.getElementById('queue-pool-list');
+  if (zone && !zone.contains(e.relatedTarget)) zone.classList.remove('drag-target');
+}
+
+function poolZoneDrop(e) {
+  e.preventDefault();
+  document.getElementById('queue-pool-list')?.classList.remove('drag-target');
+  const panel = e.dataTransfer.getData(_DT_PANEL) || (_dragSrc?.panel);
+  const tid   = e.dataTransfer.getData(_DT_TID)   || e.dataTransfer.getData('text/plain');
+  if (panel === 'queue' && tid) {
+    _removeFromQueue(String(tid));
+  }
+  _cleanDrag();
+}
+
+// ── Guardar / ejecutar ────────────────────────────────────────────────────
 
 async function saveQueue() {
   const r = await api('POST', '/api/set_priority', { order: queueOrder });
@@ -2485,20 +4280,18 @@ async function saveQueue() {
 
 async function saveQueueAndRun() {
   await saveQueue();
-  closeQueue();
-  // Procesar el primero en la cola que esté pendiente
-  const first = allTickets
-    .filter(t => t.estado_mantis === 'asignada' && ['pendiente_pm','pm_completado','error_pm'].includes(t.pipeline_estado))
-    .sort((a,b) => (a.priority||9999) - (b.priority||9999))[0];
-  if (!first) {
-    toast('No hay tickets pendientes para ejecutar', 'info');
+  if (!queueOrder.length) {
+    toast('Agregá tickets al Rally antes de arrancar', 'info');
     return;
   }
-  toast(`▶ Ejecutando pipeline para #${first.ticket_id}...`, 'info');
-  const r = await api('POST', '/api/run_pipeline', { ticket_id: first.ticket_id });
+  closeQueue();
+  toast(`▶ Iniciando Rally (${queueOrder.length} tickets)...`, 'info');
+  const r = await api('POST', '/api/rally/start');
   if (r.ok) {
-    toast(`▶ Pipeline iniciado para #${first.ticket_id}`, 'success');
+    toast('🏁 Rally arrancado — encadena la cola completa', 'success');
     setTimeout(refresh, 2000);
+  } else {
+    toast('Error arrancando Rally: ' + (r.error || '?'), 'error');
   }
 }
 
@@ -2515,7 +4308,7 @@ async function genDeploy(tid) {
   const title  = document.getElementById('deploy-modal-title');
 
   title.textContent = `📦 Paquete de Despliegue — #${tid}`;
-  body.innerHTML = `<div class="deploy-spinner-wrap"><div class="spinner visible"></div><span>Analizando cambios SVN y generando paquete...</span></div>`;
+  body.innerHTML = `<div class="deploy-spinner-wrap"><div class="spinner visible"></div><span>Analizando Cambios Git y generando paquete...</span></div>`;
   footer.style.display = 'none';
   modal.classList.add('open');
 
@@ -2582,6 +4375,8 @@ async function genDeploy(tid) {
     if (dlBtn) {
       dlBtn.href = `/api/download_deploy/${tid}/${encodeURIComponent(r.zip_name)}`;
       dlBtn.setAttribute('download', r.zip_name);
+      // Marcar como descargado cuando el usuario hace click
+      dlBtn.onclick = () => { markDeployDone(tid); renderTickets(); };
     }
     const sizeEl = document.getElementById('deploy-zip-size');
     if (sizeEl) sizeEl.textContent = `ZIP: ${esc(r.zip_name)}`;
@@ -2707,31 +4502,67 @@ function _deployBackdropClick(e) {
   if (e.target.id === 'deploy-modal') closeDeploy();
 }
 
-// ── SVN Commit ─────────────────────────────────────────────────────────────
+// ── Git Commit ─────────────────────────────────────────────────────────────
 let _commitTid = null;
 
 async function openCommit(tid) {
   _commitTid = tid;
   const modal    = document.getElementById('commit-modal');
   const msgArea  = document.getElementById('commit-msg');
+  const filesEl  = document.getElementById('commit-files');
   const resultEl = document.getElementById('commit-result');
   const statusEl = document.getElementById('commit-status-line');
   const doBtn    = document.getElementById('commit-do-btn');
-  document.getElementById('commit-modal-title').textContent = `SVN Commit — #${tid}`;
+  document.getElementById('commit-modal-title').textContent = `Git Commit — #${tid}`;
   msgArea.value = 'Cargando mensaje sugerido...';
+  filesEl.innerHTML = '<span style="color:var(--muted)">Cargando archivos modificados...</span>';
   resultEl.style.display = 'none';
   statusEl.textContent = '';
   doBtn.disabled = true;
   modal.classList.add('open');
 
-  try {
-    const r = await api('GET', `/api/svn_commit_message/${tid}`);
-    msgArea.value = r.ok ? r.message : `#${tid} `;
-    doBtn.disabled = false;
-  } catch(e) {
-    msgArea.value = `#${tid} `;
-    doBtn.disabled = false;
+  // Carga paralela de mensaje sugerido + git status (con ticket_files)
+  const [msgR, statR] = await Promise.all([
+    api('GET', `/api/git_commit_message/${tid}`).catch(() => ({ok:false})),
+    api('GET', `/api/git_status?ticket=${encodeURIComponent(tid)}`).catch(() => ({ok:false, files:[], ticket_files:[]})),
+  ]);
+
+  msgArea.value = msgR.ok ? msgR.message : `#${tid} `;
+
+  if (statR.ok && statR.files && statR.files.length) {
+    // Normaliza paths para matchear entre git status (posix) y ticket_files.
+    const _norm = p => String(p).replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+    const tf = new Set((statR.ticket_files || []).map(_norm));
+    const hasTicketList = tf.size > 0;
+
+    filesEl.innerHTML = statR.files.map(f => {
+      const np      = _norm(f.path);
+      // Match exacto o por sufijo (el ticket puede listar rutas relativas al subtree).
+      const inTicket = hasTicketList && (
+        tf.has(np) ||
+        [...tf].some(t => np.endsWith('/' + t) || t.endsWith('/' + np))
+      );
+      // Si hay lista del ticket: tildar solo los que matcheen.
+      // Si NO hay lista: tildar todo (fallback del comportamiento anterior).
+      const checked = hasTicketList ? (inTicket ? 'checked' : '') : 'checked';
+      const mark    = inTicket ? '🎯' : '  ';
+      return `<label style="display:flex;align-items:center;gap:8px;padding:3px 2px;cursor:pointer">
+        <input type="checkbox" class="commit-file-cb" data-path="${esc(f.path)}" ${checked}>
+        <span title="${inTicket ? 'Declarado en el ticket' : 'No declarado en el ticket'}">${mark}</span>
+        <span style="color:#64748b;width:24px;text-align:center">${esc(f.status)}</span>
+        <span style="flex:1;word-break:break-all;${inTicket ? '' : 'color:#94a3b8'}">${esc(f.path)}</span>
+      </label>`;
+    }).join('');
+
+    const ticketMatches = Array.from(document.querySelectorAll('.commit-file-cb:checked')).length;
+    statusEl.textContent = hasTicketList
+      ? `${ticketMatches} de ${statR.files.length} archivo(s) declarados en el ticket (🎯 = match).`
+      : `${statR.files.length} archivo(s) con cambios. Sin lista de archivos en el ticket — revisá manualmente.`;
+  } else {
+    filesEl.innerHTML = '<span style="color:var(--red)">No hay archivos con cambios en el workspace.</span>';
+    statusEl.textContent = 'Nada para commitear.';
   }
+  doBtn.disabled = false;
 }
 
 async function doCommit() {
@@ -2742,18 +4573,27 @@ async function doCommit() {
   const msg      = msgArea.value.trim();
   if (!msg) { toast('El mensaje no puede estar vacío', 'error'); return; }
 
+  const files = Array.from(document.querySelectorAll('.commit-file-cb:checked'))
+    .map(cb => cb.dataset.path);
+  if (!files.length) {
+    toast('Seleccioná al menos un archivo para commitear', 'error');
+    return;
+  }
+
   doBtn.disabled = true;
   doBtn.textContent = '⏳ Commiteando...';
   resultEl.style.display = 'none';
 
   try {
-    const r = await api('POST', `/api/svn_commit/${_commitTid}`, { message: msg });
+    const r = await api('POST', `/api/git_commit/${_commitTid}`, { message: msg, files });
     resultEl.style.display = 'block';
     if (r.ok) {
       resultEl.className = 'commit-result';
       resultEl.textContent = `✅ Commit OK — Revisión ${r.revision || '?'}`;
       doBtn.textContent = '✅ Commiteado';
-      toast(`SVN Commit OK — r${r.revision || '?'}`, 'success');
+      toast(`Git Commit OK — ${r.revision || '?'}`, 'success');
+      markCommitDone(_commitTid);
+      renderTickets();
     } else {
       resultEl.className = 'commit-result error';
       resultEl.textContent = `❌ ${r.error || 'Error desconocido'}`;
@@ -3126,6 +4966,144 @@ function setTeamsMode(mode) {
   document.getElementById('tab-pa').classList.toggle('active',      mode === 'powerautomate');
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Deploy / Commit done tracking (localStorage)
+// ═══════════════════════════════════════════════════════════════
+function markDeployDone(tid) {
+  localStorage.setItem(`stacky_deploy_done_${tid}`, new Date().toISOString());
+}
+function markCommitDone(tid) {
+  localStorage.setItem(`stacky_commit_done_${tid}`, new Date().toISOString());
+}
+function getDeployDone(tid) {
+  return localStorage.getItem(`stacky_deploy_done_${tid}`);
+}
+function getCommitDone(tid) {
+  return localStorage.getItem(`stacky_commit_done_${tid}`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Auto Enter daemon
+// ═══════════════════════════════════════════════════════════════
+let _aeEnabled = false;
+let _aeRefreshTimer = null;
+
+async function openAutoEnter() {
+  document.getElementById('auto-enter-modal').style.display = 'flex';
+  await refreshAeStatus();
+}
+
+function closeAutoEnter() {
+  document.getElementById('auto-enter-modal').style.display = 'none';
+  if (_aeRefreshTimer) { clearInterval(_aeRefreshTimer); _aeRefreshTimer = null; }
+}
+
+async function refreshAeStatus() {
+  try {
+    const s = await api('GET', '/api/auto_enter/status');
+    _aeEnabled = s.enabled;
+    _updateAeUI(s);
+  } catch (e) {
+    document.getElementById('ae-status-text').textContent = 'Error al conectar con el daemon';
+  }
+}
+
+function _updateAeUI(s) {
+  const enabled = !!s.enabled;
+  _aeEnabled = enabled;
+
+  // toggle visual
+  const wrap  = document.getElementById('ae-toggle-wrap');
+  const thumb = document.getElementById('ae-toggle-thumb');
+  const label = document.getElementById('ae-toggle-label');
+  const btn   = document.getElementById('auto-enter-btn');
+  if (enabled) {
+    wrap.style.background  = 'var(--green)';
+    thumb.style.left       = '23px';
+    label.textContent      = 'ON';
+    label.style.color      = 'var(--green)';
+    if (btn) { btn.style.color = 'var(--green)'; btn.title = '⌨ Auto Enter activo'; }
+  } else {
+    wrap.style.background  = '#2d2d4e';
+    thumb.style.left       = '3px';
+    label.textContent      = 'OFF';
+    label.style.color      = 'var(--muted)';
+    if (btn) { btn.style.color = ''; btn.title = '⌨ Auto Enter automático en VS Code'; }
+  }
+
+  // status text
+  const statusEl = document.getElementById('ae-status-text');
+  if (enabled) {
+    statusEl.textContent = `Activo — presiona Ctrl+Enter cada ${s.interval_seconds}s | bridge port :${s.bridge_port}`;
+    statusEl.style.color = 'var(--green)';
+  } else {
+    statusEl.textContent = 'Inactivo';
+    statusEl.style.color = 'var(--muted)';
+  }
+
+  // intervalo
+  const intEl = document.getElementById('ae-interval');
+  if (intEl && s.interval_seconds) intEl.value = s.interval_seconds;
+
+  // total badge
+  document.getElementById('ae-total-badge').textContent = `total: ${s.total_presses ?? 0}`;
+
+  // log de pulsaciones
+  const logEl = document.getElementById('ae-press-log');
+  const entries = (s.recent_presses || []).slice().reverse(); // más reciente primero
+  if (!entries.length) {
+    logEl.innerHTML = '<div style="color:var(--muted);text-align:center;padding:16px">Sin pulsaciones todavía</div>';
+  } else {
+    logEl.innerHTML = entries.map(e => {
+      const color = e.success ? 'var(--green)' : 'var(--red)';
+      const icon  = e.success ? '✓' : '✗';
+      return `<div style="display:flex;gap:8px;align-items:center">
+        <span style="color:${color};font-weight:bold">${icon}</span>
+        <span style="color:var(--muted)">${e.timestamp}</span>
+        <span style="color:var(--text)">${e.method}</span>
+        <span style="color:var(--accent)">#${e.total_ok}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function toggleAutoEnter() {
+  if (_aeEnabled) {
+    const r = await api('POST', '/api/auto_enter/disable');
+    if (r.ok) { toast('Auto Enter desactivado', 'info'); await refreshAeStatus(); }
+    else toast(r.error || 'Error', 'error');
+  } else {
+    const interval = parseInt(document.getElementById('ae-interval').value) || 15;
+    const r = await api('POST', '/api/auto_enter/enable', { interval_seconds: interval });
+    if (r.ok) { toast(`Auto Enter activado — cada ${r.interval_seconds}s`, 'success'); await refreshAeStatus(); }
+    else toast(r.error || 'Error', 'error');
+  }
+}
+
+async function applyAeInterval() {
+  const interval = parseInt(document.getElementById('ae-interval').value);
+  if (!interval || interval < 1) { toast('Intervalo inválido (mín. 1s)', 'error'); return; }
+
+  if (_aeEnabled) {
+    // Si está activo, reconfigurar en caliente
+    const r = await api('POST', '/api/auto_enter/configure', { interval_seconds: interval });
+    if (r.ok) { toast(`Intervalo actualizado a ${r.interval_seconds}s`, 'success'); await refreshAeStatus(); }
+    else toast(r.error || 'Error', 'error');
+  } else {
+    // Si no está activo, activar con el intervalo nuevo
+    const r = await api('POST', '/api/auto_enter/enable', { interval_seconds: interval });
+    if (r.ok) { toast(`Auto Enter activado — cada ${r.interval_seconds}s`, 'success'); await refreshAeStatus(); }
+    else toast(r.error || 'Error', 'error');
+  }
+}
+
+function setAePreset(secs) {
+  document.getElementById('ae-interval').value = secs;
+  // si está activo, aplicar de inmediato
+  if (_aeEnabled) applyAeInterval();
+}
+
+// ═══════════════════════════════════════════════════════════════
 async function openTeamsConfig() {
   const modal = document.getElementById('teams-modal');
   const r = await api('GET', '/api/teams/config').catch(() => ({configured: false}));
@@ -3184,11 +5162,17 @@ async function genPrompts(tid) {
   document.getElementById('gen-dev-ta').value = 'Cargando...';
   document.getElementById('gen-qa-ta').value  = 'Cargando...';
   document.getElementById('gen-prompts-tareas').textContent = '';
+  // Mostrar banner de ticket inmediatamente
+  const banner = document.getElementById('gen-prompts-ticket-banner');
+  if (banner) { banner.style.display = 'flex'; }
+  document.getElementById('gen-prompts-tid-label').textContent = `#${tid}`;
+  document.getElementById('gen-prompts-titulo-label').textContent = '';
   try {
     const r = await fetch(`/api/gen_prompts/${tid}`);
     const d = await r.json();
     if (d.ok) {
       document.getElementById('gen-prompts-title').textContent = `📋 Prompts — #${tid} ${d.titulo || ''}`;
+      document.getElementById('gen-prompts-titulo-label').textContent = d.titulo || '';
       document.getElementById('gen-dev-ta').value = d.dev_prompt || '';
       document.getElementById('gen-qa-ta').value  = d.qa_prompt  || '';
       if (d.tareas && d.tareas.length) {
@@ -3305,6 +5289,282 @@ async function savePrompt() {
   }
 }
 
+// ── Agent config modal ───────────────────────────────────────────────────
+let _currentAgent = 'tester';
+let _acConfig     = null;  // dict actual en edición
+
+// Catálogo de tests disponibles para los dropdowns de "Tests permitidos /
+// prohibidos". La key es la que se guarda en la config (y se inyecta al prompt
+// del tester); el label es lo que ve el usuario y desc es la ayuda contextual.
+const TEST_CATALOG = [
+  { key: '*',                    label: 'Todos los tests',           desc: 'Permitir cualquier tipo de test — el tester decide según el ticket.' },
+  { key: 'api_smoke',            label: 'Smoke de API',              desc: 'Prueba rápida de los endpoints clave para detectar caídas evidentes.' },
+  { key: 'batch_execution',      label: 'Ejecución batch',           desc: 'Compila y corre el proceso batch con datos mock y compara el output.' },
+  { key: 'concurrency_safety',   label: 'Concurrencia',              desc: 'Busca condiciones de carrera, locks y problemas al ejecutar en paralelo.' },
+  { key: 'config_flag',          label: 'Flags de configuración',    desc: 'Combina distintos valores de feature flags y valida cada rama.' },
+  { key: 'cross_module_flow',    label: 'Flujo entre módulos',       desc: 'Recorre un flujo end-to-end que toca varios módulos del negocio.' },
+  { key: 'ddl_execution',        label: 'DDL / Esquema',             desc: 'Aplica y valida cambios de schema (tablas, vistas, índices).' },
+  { key: 'error_path',           label: 'Caminos de error',          desc: 'Fuerza fallos provocados para chequear el manejo de errores.' },
+  { key: 'fiscal_boundary',      label: 'Fronteras fiscales',        desc: 'Casos límite de cierres, impuestos y topes fiscales.' },
+  { key: 'historical_record',    label: 'Registros históricos',      desc: 'Valida la inserción y preservación de datos históricos.' },
+  { key: 'idempotency',          label: 'Idempotencia',              desc: 'Reejecuta la operación y verifica que el resultado no cambie.' },
+  { key: 'integration_contract', label: 'Contrato de integración',   desc: 'Chequea que la interfaz entre sistemas respete el contrato pactado.' },
+  { key: 'multi_moneda',         label: 'Multi-moneda',              desc: 'Escenarios con varias monedas, tipos de cambio y conversiones.' },
+  { key: 'negative_input',       label: 'Inputs negativos',          desc: 'Entradas inválidas, vacías o con caracteres raros — el sistema no debe caerse.' },
+  { key: 'notification_event',   label: 'Eventos y notificaciones',  desc: 'Confirma que los eventos/notificaciones se disparan cuando corresponden.' },
+  { key: 'performance_baseline', label: 'Performance / baseline',    desc: 'Compara tiempos contra una línea base para detectar regresiones.' },
+  { key: 'visual_regression',    label: 'Regresión visual',          desc: 'Compara capturas de pantalla contra la versión anterior.' },
+  { key: 'volume_stress',        label: 'Volumen / stress',          desc: 'Corre el proceso con alto volumen para ver cómo escala.' },
+];
+
+function _testMetaFor(key) {
+  return TEST_CATALOG.find(t => t.key === key) || { key, label: key, desc: '' };
+}
+
+async function openAgentConfig() {
+  document.getElementById('agent-config-modal').classList.add('open');
+  // Default: abrir en Tester — es la más pedida
+  switchAgentTab('tester');
+}
+
+function closeAgentConfig() {
+  document.getElementById('agent-config-modal').classList.remove('open');
+}
+
+async function switchAgentTab(agent) {
+  _currentAgent = agent;
+  document.querySelectorAll('.agent-tab').forEach(t => t.classList.remove('active'));
+  const tab = document.getElementById(`atab-${agent}`);
+  if (tab) tab.classList.add('active');
+  // Toggle bloques específicos
+  document.getElementById('ac-tester-block').style.display = agent === 'tester' ? '' : 'none';
+  document.getElementById('ac-pm-block'    ).style.display = agent === 'pm'     ? '' : 'none';
+  document.getElementById('ac-dev-block'   ).style.display = agent === 'dev'    ? '' : 'none';
+  // Cargar config
+  setAcStatus('Cargando...');
+  const r = await api('GET', `/api/agent_config/${agent}`);
+  if (!r.ok) {
+    setAcStatus('Error: ' + (r.error || '?'));
+    return;
+  }
+  _acConfig = r.config;
+  _acRenderConfigIntoUI(_acConfig);
+  setAcStatus(`Proyecto: ${r.project}`);
+}
+
+function _acRenderConfigIntoUI(c) {
+  document.getElementById('ac-enabled').checked = !!c.enabled;
+  document.getElementById('ac-extra').value = c.extra_instructions || '';
+  document.getElementById('ac-notes').value = c.notes || '';
+  setStrictness(c.strictness || 'normal', /*noDirty=*/true);
+  // Tester-specific
+  _renderTestChips('chips-allowed',   'allowed',   c.allowed_tests   || []);
+  _renderTestChips('chips-forbidden', 'forbidden', c.forbidden_tests || []);
+  _renderChips('chips-blocker',   c.blocker_criteria  || [], 'chip-block');
+  _renderChips('chips-advisory',  c.advisory_criteria || [], 'chip-advisory');
+  document.getElementById('ac-autoappr').checked = !!c.auto_approve_with_observations;
+  // PM
+  document.getElementById('ac-skip-queries').checked    = !!c.skip_queries;
+  document.getElementById('ac-require-analysis').checked = c.require_analysis !== false;
+  // Dev
+  document.getElementById('ac-require-tests').checked  = !!c.require_tests;
+  document.getElementById('ac-require-commit').checked = c.require_commit_msg !== false;
+  // Indicador visual si está deshabilitado
+  const tab = document.getElementById(`atab-${_currentAgent}`);
+  if (tab) tab.classList.toggle('disabled-ind', !c.enabled);
+}
+
+function setStrictness(level, noDirty) {
+  document.querySelectorAll('.strictness-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.level === level);
+  });
+  if (_acConfig) _acConfig.strictness = level;
+}
+
+function _renderChips(containerId, items, extraCls) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+  const input = root.querySelector('.chip-input');
+  // Limpiar chips existentes (no el input)
+  Array.from(root.querySelectorAll('.chip')).forEach(c => c.remove());
+  for (const it of items) {
+    const chip = document.createElement('span');
+    chip.className = 'chip' + (extraCls ? ' ' + extraCls : '');
+    chip.innerHTML = `${esc(it)} <span class="chip-x" title="Quitar">✕</span>`;
+    chip.querySelector('.chip-x').onclick = () => {
+      chip.remove();
+      _acPullChipsIntoConfig();
+    };
+    root.insertBefore(chip, input);
+  }
+  // Bind Enter
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const val = input.value.trim().replace(/,$/, '');
+      if (!val) return;
+      const chip = document.createElement('span');
+      chip.className = 'chip' + (extraCls ? ' ' + extraCls : '');
+      chip.innerHTML = `${esc(val)} <span class="chip-x" title="Quitar">✕</span>`;
+      chip.querySelector('.chip-x').onclick = () => { chip.remove(); _acPullChipsIntoConfig(); };
+      root.insertBefore(chip, input);
+      input.value = '';
+      _acPullChipsIntoConfig();
+    } else if (e.key === 'Backspace' && !input.value) {
+      const chips = root.querySelectorAll('.chip');
+      if (chips.length) {
+        chips[chips.length - 1].remove();
+        _acPullChipsIntoConfig();
+      }
+    }
+  };
+}
+
+function _renderTestChips(containerId, pickerKind, items) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+  root.innerHTML = '';
+  for (const key of items) {
+    root.appendChild(_buildTestChip(key, containerId, pickerKind));
+  }
+  _refreshPickerOptions(pickerKind);
+}
+
+function _buildTestChip(key, containerId, pickerKind) {
+  const meta = _testMetaFor(key);
+  const chip = document.createElement('span');
+  chip.className = 'chip';
+  chip.dataset.key = key;
+  chip.title = meta.desc || '';
+  chip.innerHTML = `${esc(meta.label)} <span class="chip-x" title="Quitar">✕</span>`;
+  chip.querySelector('.chip-x').onclick = () => {
+    chip.remove();
+    _acPullChipsIntoConfig();
+    _refreshPickerOptions(pickerKind);
+  };
+  return chip;
+}
+
+function _refreshPickerOptions(pickerKind) {
+  const sel = document.getElementById(`picker-${pickerKind}`);
+  const descEl = document.getElementById(`picker-${pickerKind}-desc`);
+  const addBtn = document.getElementById(`picker-${pickerKind}-add`);
+  if (!sel) return;
+  const containerId = pickerKind === 'allowed' ? 'chips-allowed' : 'chips-forbidden';
+  const used = new Set(_acChipsOf(containerId));
+  const available = TEST_CATALOG.filter(t => !used.has(t.key));
+  sel.innerHTML = '';
+  if (!available.length) {
+    const opt = document.createElement('option');
+    opt.textContent = '— No quedan tests para agregar —';
+    opt.disabled = true;
+    sel.appendChild(opt);
+    if (addBtn) addBtn.disabled = true;
+    if (descEl) descEl.textContent = '';
+    return;
+  }
+  for (const t of available) {
+    const opt = document.createElement('option');
+    opt.value = t.key;
+    opt.textContent = t.label;
+    opt.title = t.desc;
+    sel.appendChild(opt);
+  }
+  if (addBtn) addBtn.disabled = false;
+  // Live description
+  const updateDesc = () => {
+    const meta = _testMetaFor(sel.value);
+    if (descEl) descEl.textContent = meta.desc || '';
+  };
+  sel.onchange = updateDesc;
+  updateDesc();
+}
+
+function addTestFromPicker(pickerKind) {
+  const sel = document.getElementById(`picker-${pickerKind}`);
+  if (!sel || !sel.value) return;
+  const key = sel.value;
+  const containerId = pickerKind === 'allowed' ? 'chips-allowed' : 'chips-forbidden';
+  const root = document.getElementById(containerId);
+  if (_acChipsOf(containerId).includes(key)) return;
+  root.appendChild(_buildTestChip(key, containerId, pickerKind));
+  _acPullChipsIntoConfig();
+  _refreshPickerOptions(pickerKind);
+}
+
+function _acChipsOf(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return [];
+  // Test-picker chips store the key in dataset.key; free-text chips store it as text.
+  return Array.from(root.querySelectorAll('.chip'))
+    .map(c => c.dataset.key || (c.firstChild && c.firstChild.textContent.trim()))
+    .filter(Boolean);
+}
+
+function _acPullChipsIntoConfig() {
+  if (!_acConfig) return;
+  _acConfig.allowed_tests     = _acChipsOf('chips-allowed');
+  _acConfig.forbidden_tests   = _acChipsOf('chips-forbidden');
+  _acConfig.blocker_criteria  = _acChipsOf('chips-blocker');
+  _acConfig.advisory_criteria = _acChipsOf('chips-advisory');
+}
+
+function _acPullAllIntoConfig() {
+  if (!_acConfig) _acConfig = {};
+  _acConfig.enabled            = document.getElementById('ac-enabled').checked;
+  _acConfig.extra_instructions = document.getElementById('ac-extra').value;
+  _acConfig.notes              = document.getElementById('ac-notes').value;
+  _acPullChipsIntoConfig();
+  _acConfig.auto_approve_with_observations = document.getElementById('ac-autoappr').checked;
+  _acConfig.skip_queries       = document.getElementById('ac-skip-queries').checked;
+  _acConfig.require_analysis   = document.getElementById('ac-require-analysis').checked;
+  _acConfig.require_tests      = document.getElementById('ac-require-tests').checked;
+  _acConfig.require_commit_msg = document.getElementById('ac-require-commit').checked;
+  // strictness ya se setea en setStrictness()
+}
+
+async function saveAgentConfig() {
+  _acPullAllIntoConfig();
+  setAcStatus('Guardando...');
+  const r = await api('POST', `/api/agent_config/${_currentAgent}`, _acConfig);
+  if (r.ok) {
+    toast(`✅ Config de ${_currentAgent.toUpperCase()} guardada`, 'success');
+    setAcStatus(r.msg || 'Guardado.');
+    // Refresh UI for enabled indicator
+    const tab = document.getElementById(`atab-${_currentAgent}`);
+    if (tab) tab.classList.toggle('disabled-ind', !_acConfig.enabled);
+  } else {
+    toast('Error: ' + (r.error || '?'), 'error');
+    setAcStatus('Error al guardar: ' + (r.error || '?'));
+  }
+}
+
+function resetAgentConfig() {
+  if (!confirm(`¿Restaurar valores default para ${_currentAgent.toUpperCase()}? No se guarda hasta apretar "Guardar".`)) return;
+  _acConfig = {
+    enabled: true,
+    strictness: 'normal',
+    extra_instructions: '',
+    notes: '',
+    allowed_tests: ['*'],
+    forbidden_tests: [],
+    blocker_criteria: ['compile_error', 'runtime_crash', 'data_corruption', 'security_breach'],
+    advisory_criteria: ['style_issue', 'typo', 'best_practice', 'minor_ui_glitch'],
+    auto_approve_with_observations: true,
+    skip_queries: false,
+    require_analysis: true,
+    require_tests: false,
+    require_commit_msg: true,
+  };
+  _acRenderConfigIntoUI(_acConfig);
+  setAcStatus('Default cargado (no guardado todavía)');
+}
+
+function setAcStatus(msg) {
+  const el = document.getElementById('ac-status');
+  if (el) el.textContent = msg;
+}
+
 // ── Utils ─────────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -3392,7 +5652,7 @@ async function openTicketDetail(tid) {
   const body  = document.getElementById('preview-body');
   const title = document.getElementById('preview-title');
   const ticket = allTickets.find(t => t.ticket_id === tid);
-  title.textContent = `📋 Detalle Mantis — #${tid}${ticket ? ' ' + ticket.titulo : ''}`;
+  title.textContent = `📋 Detalle — #${tid}${ticket ? ' ' + ticket.titulo : ''}`;
   body.innerHTML = '<span style="color:var(--muted)">Cargando...</span>';
   modal.classList.add('open');
 
@@ -3514,6 +5774,618 @@ function _tickTimers() {
   });
 }
 setInterval(_tickTimers, 1000);
+
+// Polling del reconciliador: cada 20 s actualiza el mapa de salud del pipeline.
+// Si aparece una divergencia o un stale, la card correspondiente se pinta
+// sola en el próximo render.
+setInterval(refreshPipelineHealth, 20000);
+refreshPipelineHealth();
+</script>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- F1-F4 — Observabilidad + Scoring: overlay, modal y JS aditivo            -->
+<!-- Prefijos: #stacky-loader, #sl-modal, .sl-*, .scoring-*                   -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+
+<!-- Overlay bottom-right con sprite animado y barra de progreso -->
+<div id="stacky-loader" role="status" aria-live="polite">
+  <button class="sl-close" onclick="SL.hideLoader()" aria-label="Cerrar">×</button>
+  <div class="sl-header">
+    <div class="sl-sprite"></div>
+    <div class="sl-title" id="sl-title">Agente en ejecución</div>
+    <div class="sl-ticket" id="sl-ticket">—</div>
+  </div>
+  <div class="sl-phase" id="sl-phase">Fase: —</div>
+  <div class="sl-bar"><div class="sl-bar-fill" id="sl-bar-fill"></div></div>
+  <div class="sl-detail"><span class="sl-pct" id="sl-pct">0%</span> <span id="sl-detail">conectando…</span></div>
+</div>
+
+<!-- Modal Estimaciones (tabs Resumen / Por ticket / Calibración / Config / Performance) -->
+<div id="sl-modal" role="dialog" aria-modal="true">
+  <div class="sl-modal-box">
+    <div class="sl-modal-header">
+      <span style="font-size:18px">🎯</span>
+      <div class="sl-modal-title">Estimaciones y Calibración</div>
+      <button class="sl-modal-close" onclick="SL.closeEstimations()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="sl-tabs">
+      <button class="sl-tab sl-active" data-pane="resumen"     onclick="SL.switchTab('resumen')">📊 Resumen</button>
+      <button class="sl-tab"            data-pane="tickets"    onclick="SL.switchTab('tickets')">📋 Por ticket</button>
+      <button class="sl-tab"            data-pane="calibracion" onclick="SL.switchTab('calibracion')">⚙ Calibración</button>
+      <button class="sl-tab"            data-pane="config"     onclick="SL.switchTab('config')">🎚 Config delta</button>
+      <button class="sl-tab"            data-pane="performance" onclick="SL.switchTab('performance')">⚡ Performance</button>
+    </div>
+    <div class="sl-pane sl-active" id="sl-pane-resumen">
+      <div class="sl-kpi-grid" id="sl-kpi-grid">
+        <div class="sl-kpi"><div class="sl-kpi-label">Cargando…</div></div>
+      </div>
+      <div id="sl-resumen-detail"></div>
+    </div>
+    <div class="sl-pane" id="sl-pane-tickets">
+      <div id="sl-tickets-table">Cargando…</div>
+    </div>
+    <div class="sl-pane" id="sl-pane-calibracion">
+      <div id="sl-calib-content">Cargando…</div>
+    </div>
+    <div class="sl-pane" id="sl-pane-config">
+      <div id="sl-config-content">Cargando…</div>
+    </div>
+    <div class="sl-pane" id="sl-pane-performance">
+      <div id="sl-perf-content">Cargando…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ────────────────────────────────────────────────────────────────────────────
+ * F1-F4 — Observabilidad + Scoring
+ * Namespace: window.SL
+ * Características:
+ *   - EventSource a /api/events/stream (con fallback a polling /api/events).
+ *   - Overlay bottom-right reacciona a action_started/progress/done/error.
+ *   - Scoring bars inyectadas en cards (.card) con fetch a /api/scoring/<id>.
+ *   - Modal Estimaciones con 5 tabs (Resumen, Por ticket, Calibración, Config, Performance).
+ * Principios:
+ *   - No pisa funciones existentes del dashboard (Rally, Sync, drag-drop, etc.).
+ *   - Todos los fetch con try/catch — si falla un endpoint, degradación grácil.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+(function () {
+  "use strict";
+
+  const SL = {};
+  let _es = null;                // EventSource
+  let _pollTimer = null;         // fallback polling
+  let _lastPollTs = null;
+  let _scoringCache = new Map(); // ticket_id → entry
+  let _scoringInflight = new Set();
+  let _overlayHideTimer = null;
+
+  // ─── Overlay (Stacky Loader) ─────────────────────────────────────────────
+  SL.showLoader = function (opts) {
+    const el = document.getElementById("stacky-loader");
+    if (!el) return;
+    if (opts && opts.title)  document.getElementById("sl-title").textContent  = opts.title;
+    if (opts && opts.ticket) document.getElementById("sl-ticket").textContent = opts.ticket;
+    if (opts && opts.phase)  document.getElementById("sl-phase").textContent  = "Fase: " + opts.phase;
+    el.classList.add("sl-visible");
+  };
+  SL.updateLoader = function (pct, detail) {
+    if (typeof pct === "number") {
+      const clamped = Math.max(0, Math.min(100, pct));
+      document.getElementById("sl-bar-fill").style.width = clamped + "%";
+      document.getElementById("sl-pct").textContent = clamped + "%";
+    }
+    if (detail !== undefined && detail !== null) {
+      document.getElementById("sl-detail").textContent = String(detail);
+    }
+  };
+  SL.hideLoader = function () {
+    const el = document.getElementById("stacky-loader");
+    if (el) el.classList.remove("sl-visible");
+  };
+
+  // ─── SSE → Overlay ───────────────────────────────────────────────────────
+  function _handleEvent(ev) {
+    if (!ev || !ev.kind) return;
+    const tid = ev.ticket_id || "—";
+    const phase = ev.phase || "—";
+    const action = ev.action || "";
+    const pct = (typeof ev.pct === "number") ? ev.pct : null;
+    const detail = ev.detail || ev.subaction || "";
+
+    if (ev.kind === "action_started") {
+      SL.showLoader({ title: action || "Agente en ejecución", ticket: "#" + tid, phase: phase });
+      SL.updateLoader(0, detail || "iniciando…");
+      if (_overlayHideTimer) { clearTimeout(_overlayHideTimer); _overlayHideTimer = null; }
+    } else if (ev.kind === "action_progress") {
+      SL.updateLoader(pct !== null ? pct : undefined, detail);
+    } else if (ev.kind === "action_done") {
+      SL.updateLoader(100, "✓ " + (detail || "completado"));
+      if (_overlayHideTimer) clearTimeout(_overlayHideTimer);
+      _overlayHideTimer = setTimeout(SL.hideLoader, 2500);
+    } else if (ev.kind === "action_error") {
+      SL.updateLoader(100, "✗ " + (ev.user_friendly || ev.message || "error"));
+      if (_overlayHideTimer) clearTimeout(_overlayHideTimer);
+      _overlayHideTimer = setTimeout(SL.hideLoader, 5000);
+      // Refrescar banner de error de la card
+      if (tid && tid !== "—") _refreshErrorBanner(tid);
+    } else if (ev.kind === "estimation_recorded" || ev.kind === "estimation_actualized") {
+      if (tid && tid !== "—") _scoringCache.delete(tid);
+    }
+  }
+
+  // ─── Conexión: SSE con fallback a polling ─────────────────────────────────
+  function _connectSSE() {
+    try {
+      if (typeof EventSource === "undefined") { _startPolling(); return; }
+      _es = new EventSource("/api/events/stream");
+      _es.onmessage = function (m) {
+        try { _handleEvent(JSON.parse(m.data)); } catch (_) { /* noop */ }
+      };
+      // Eventos con nombre específico
+      ["action_started", "action_progress", "action_done", "action_error",
+       "estimation_recorded", "estimation_actualized"].forEach(k => {
+        _es.addEventListener(k, function (m) {
+          try { _handleEvent(JSON.parse(m.data)); } catch (_) { /* noop */ }
+        });
+      });
+      _es.onerror = function () {
+        // Si el browser cierra el canal, caemos a polling y reintentamos SSE en 30s
+        try { _es.close(); } catch (_) {}
+        _es = null;
+        _startPolling();
+        setTimeout(_connectSSE, 30000);
+      };
+    } catch (_) {
+      _startPolling();
+    }
+  }
+
+  function _startPolling() {
+    if (_pollTimer) return;
+    _lastPollTs = _lastPollTs || new Date(Date.now() - 60000).toISOString();
+    _pollTimer = setInterval(async () => {
+      try {
+        const url = "/api/events?since=" + encodeURIComponent(_lastPollTs) + "&limit=100";
+        const r = await fetch(url);
+        if (!r.ok) return;
+        const data = await r.json();
+        (data.events || []).forEach(_handleEvent);
+        if (data.events && data.events.length) {
+          _lastPollTs = data.events[data.events.length - 1].ts || _lastPollTs;
+        }
+      } catch (_) { /* noop */ }
+    }, 4000);
+  }
+
+  // ─── Scoring bars en cards ────────────────────────────────────────────────
+  SL.injectScoringBars = function () {
+    document.querySelectorAll(".card[data-ticket-id]").forEach(card => {
+      const tid = card.getAttribute("data-ticket-id");
+      if (!tid) return;
+      let bar = card.querySelector(".scoring-bar");
+      if (!bar) {
+        bar = document.createElement("div");
+        bar.className = "scoring-bar";
+        bar.innerHTML = '<span class="scoring-bar-badge">…</span>' +
+                        '<span class="scoring-bar-est">Scoreando…</span>' +
+                        '<span class="scoring-bar-delta"></span>';
+        // Insertar al principio de la card (después del header)
+        const firstChild = card.firstElementChild;
+        if (firstChild && firstChild.nextSibling) {
+          card.insertBefore(bar, firstChild.nextSibling);
+        } else {
+          card.appendChild(bar);
+        }
+      }
+      _loadScoringFor(tid, bar);
+    });
+  };
+
+  async function _loadScoringFor(tid, bar) {
+    if (!tid || _scoringInflight.has(tid)) return;
+    const cached = _scoringCache.get(tid);
+    if (cached) { _renderScoringBar(bar, cached); return; }
+    _scoringInflight.add(tid);
+    try {
+      const r = await fetch("/api/scoring/" + encodeURIComponent(tid));
+      if (!r.ok) { _renderScoringBar(bar, null); return; }
+      const entry = await r.json();
+      _scoringCache.set(tid, entry);
+      _renderScoringBar(bar, entry);
+    } catch (_) {
+      _renderScoringBar(bar, null);
+    } finally {
+      _scoringInflight.delete(tid);
+    }
+  }
+
+  function _renderScoringBar(bar, entry) {
+    if (!bar) return;
+    if (!entry || !entry.score) {
+      bar.innerHTML = '<span class="scoring-bar-badge">?</span>' +
+                      '<span class="scoring-bar-est">sin scoring</span>';
+      return;
+    }
+    const complexity = entry.complexity || "medio";
+    const est = entry.estimated_minutes || 0;
+    const actual = entry.actual_minutes;
+    const dev = entry.deviation_pct;
+    const devLabel = (dev !== null && dev !== undefined)
+      ? ((dev > 0 ? "+" : "") + Number(dev).toFixed(0) + "%")
+      : "";
+    const method = entry.estimation_method || 'heuristic';
+    const methodBadge = method === 'regression'
+      ? '<span title="Estimado por modelo de regresión lineal entrenado (Fase 2)" style="background:#065f46;color:#6ee7b7;border-radius:3px;padding:0 5px;font-size:10px;font-weight:700">📈 ML</span>'
+      : '<span title="Estimado por heurística multivariable (Fase 1)" style="background:#1e3a8a;color:#93c5fd;border-radius:3px;padding:0 5px;font-size:10px;font-weight:700">🧮 H</span>';
+    bar.innerHTML =
+      '<span class="scoring-bar-badge ' + complexity + '">' + entry.score + '</span>' +
+      '<span class="scoring-bar-est">Est: <b>' + est + 'min</b>' +
+        (actual ? ' · Real: <b>' + actual + 'min</b> ' + devLabel : '') +
+      '</span>' +
+      methodBadge +
+      '<span class="scoring-bar-delta">Δ ' + (entry.delta_pct_applied || 0) + '% (' + (entry.delta_source || "?") + ')</span>';
+  }
+
+  // ─── Banner de error por ticket ──────────────────────────────────────────
+  async function _refreshErrorBanner(tid) {
+    const card = document.querySelector('.card[data-ticket-id="' + CSS.escape(tid) + '"]');
+    if (!card) return;
+    try {
+      const r = await fetch("/api/errors/ticket/" + encodeURIComponent(tid) + "?limit=3");
+      if (!r.ok) return;
+      const data = await r.json();
+      let banner = card.querySelector(".error-banner-top");
+      if (!data.events || !data.events.length) {
+        if (banner) banner.remove();
+        return;
+      }
+      const last = data.events[data.events.length - 1];
+      const kind = (last.error_kind || "error").toLowerCase();
+      const msg = last.user_friendly || last.message || "error";
+      if (!banner) {
+        banner = document.createElement("div");
+        banner.className = "error-banner-top";
+        const firstChild = card.firstElementChild;
+        if (firstChild && firstChild.nextSibling) {
+          card.insertBefore(banner, firstChild.nextSibling);
+        } else {
+          card.appendChild(banner);
+        }
+      }
+      banner.innerHTML = '<span class="error-banner-kind">' + kind + '</span>' + _esc(msg);
+    } catch (_) { /* noop */ }
+  }
+
+  function _esc(s) {
+    return String(s || "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+    })[c]);
+  }
+
+  // ─── Modal Estimaciones ───────────────────────────────────────────────────
+  SL.openEstimations = function () {
+    const m = document.getElementById("sl-modal");
+    if (!m) return;
+    m.classList.add("sl-visible");
+    SL.switchTab("resumen");
+  };
+  SL.closeEstimations = function () {
+    const m = document.getElementById("sl-modal");
+    if (m) m.classList.remove("sl-visible");
+  };
+  SL.switchTab = function (pane) {
+    document.querySelectorAll("#sl-modal .sl-tab").forEach(t => {
+      t.classList.toggle("sl-active", t.getAttribute("data-pane") === pane);
+    });
+    document.querySelectorAll("#sl-modal .sl-pane").forEach(p => {
+      p.classList.toggle("sl-active", p.id === "sl-pane-" + pane);
+    });
+    if      (pane === "resumen")     _loadResumen();
+    else if (pane === "tickets")     _loadTickets();
+    else if (pane === "calibracion") _loadCalib();
+    else if (pane === "config")      _loadConfig();
+    else if (pane === "performance") _loadPerformance();
+  };
+
+  async function _loadResumen() {
+    const grid = document.getElementById("sl-kpi-grid");
+    const detail = document.getElementById("sl-resumen-detail");
+    grid.innerHTML = '<div class="sl-kpi"><div class="sl-kpi-label">Cargando…</div></div>';
+    try {
+      const r = await fetch("/api/scoring/calibration?days=90");
+      const data = await r.json();
+      const acc = data.accuracy || {};
+      const cal = data.calibration || {};
+      const within20 = acc.within_20pct != null ? (acc.within_20pct * 100).toFixed(0) + "%" : "—";
+      const mad = acc.mean_abs_deviation_pct != null ? acc.mean_abs_deviation_pct + "%" : "—";
+      const samples = acc.samples || 0;
+      const globalDelta = (cal.global_suggested_delta_pct != null ? cal.global_suggested_delta_pct : 0) + "%";
+      grid.innerHTML = [
+        _kpi("Tickets cerrados (90d)", samples, samples >= 20 ? "good" : "warn"),
+        _kpi("Precisión ±20%",        within20, (acc.within_20pct >= 0.7) ? "good" : (acc.within_20pct >= 0.5 ? "warn" : "bad")),
+        _kpi("Desvío absoluto medio", mad,     (acc.mean_abs_deviation_pct <= 20) ? "good" : "warn"),
+        _kpi("Delta global aplicado", globalDelta, "good"),
+      ].join("");
+      detail.innerHTML = "<pre style='color:#94a3b8;font-size:11px'>" +
+        _esc(JSON.stringify(data.suggestion || {}, null, 2)) + "</pre>";
+    } catch (e) {
+      grid.innerHTML = '<div class="sl-kpi"><div class="sl-kpi-label">Error cargando resumen</div></div>';
+      detail.textContent = String(e);
+    }
+  }
+
+  function _kpi(label, value, tone) {
+    return '<div class="sl-kpi"><div class="sl-kpi-label">' + _esc(label) + '</div>' +
+           '<div class="sl-kpi-value ' + (tone || "") + '">' + _esc(value) + '</div></div>';
+  }
+
+  async function _loadTickets() {
+    const box = document.getElementById("sl-tickets-table");
+    box.innerHTML = "Cargando…";
+    try {
+      const r = await fetch("/api/scoring/history?days=60");
+      const data = await r.json();
+      const entries = data.entries || [];
+      if (!entries.length) { box.innerHTML = "<i>Sin tickets con scoring aún.</i>"; return; }
+      const rows = entries.slice(0, 200).map(e => {
+        const dev = (e.deviation_pct != null) ? Number(e.deviation_pct).toFixed(0) + "%" : "—";
+        return "<tr>" +
+          "<td>#" + _esc(e.ticket_id) + "</td>" +
+          "<td>" + _esc(e.complexity || "—") + "</td>" +
+          "<td>" + (e.score || "—") + "</td>" +
+          "<td>" + (e.estimated_minutes || "—") + "</td>" +
+          "<td>" + (e.actual_minutes != null ? e.actual_minutes : "—") + "</td>" +
+          "<td>" + dev + "</td>" +
+          "<td>" + (e.delta_pct_applied || 0) + "% (" + _esc(e.delta_source || "-") + ")</td>" +
+          "<td>" + (e.rework_cycles || 0) + "</td>" +
+          "<td>" + _esc((e.closed_at || "—").toString().substring(0, 16)) + "</td>" +
+        "</tr>";
+      }).join("");
+      box.innerHTML =
+        "<table class='sl-table'><thead><tr>" +
+        "<th>Ticket</th><th>Complejidad</th><th>Score</th><th>Est (min)</th>" +
+        "<th>Real (min)</th><th>Desvío</th><th>Delta</th><th>Rework</th><th>Cierre</th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table>";
+    } catch (e) {
+      box.innerHTML = "Error: " + _esc(e.message || e);
+    }
+  }
+
+  async function _loadCalib() {
+    const box = document.getElementById("sl-calib-content");
+    box.innerHTML = "Cargando…";
+    try {
+      const r = await fetch("/api/scoring/calibration");
+      const data = await r.json();
+      const s = data.suggestion || {};
+      box.innerHTML =
+        "<div style='margin-bottom:12px'>" +
+          "<b>Sugerencia global</b><br>" +
+          "<pre style='color:#94a3b8;font-size:11px'>" + _esc(JSON.stringify(s, null, 2)) + "</pre>" +
+          "<button class='sl-btn sl-primary' onclick=\"SL.applyCalibration('global')\" " +
+            (s.suggested_delta_pct == null ? "disabled" : "") + ">Aplicar global</button>" +
+        "</div>" +
+        "<div>" +
+          "<b>Calibración actual</b>" +
+          "<pre style='color:#94a3b8;font-size:11px'>" + _esc(JSON.stringify(data.calibration || {}, null, 2)) + "</pre>" +
+        "</div>";
+    } catch (e) {
+      box.innerHTML = "Error: " + _esc(e.message || e);
+    }
+  }
+
+  SL.applyCalibration = async function (scope, project) {
+    try {
+      const body = { scope: scope };
+      if (project) body.project = project;
+      const r = await fetch("/api/scoring/calibration/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (!r.ok) { alert("Error: " + (data.error || r.status)); return; }
+      alert("Calibración aplicada: " + scope + " delta=" + (data.delta_pct || "?") + "%");
+      _loadCalib();
+    } catch (e) { alert("Error: " + e); }
+  };
+
+  async function _loadConfig() {
+    const box = document.getElementById("sl-config-content");
+    box.innerHTML = "Cargando…";
+    try {
+      const r = await fetch("/api/config/scoring");
+      const data = await r.json();
+      const cfg = data.config || {};
+      const weights = cfg.weights || {};
+      const dist = cfg.stage_distribution || {};
+      const mults = cfg.multipliers || {};
+      // Defaults para los multiplicadores (deben coincidir con ticket_scoring.DEFAULT_SCORING_CONFIG)
+      const MULT_DEFAULTS = {
+        complexity_min:         0.5,
+        complexity_range:       1.5,
+        max_uncertainty_boost:  0.5,
+        functional_risk_boost:  0.3,
+        external_dep_boost:     0.3,
+        files_affected_boost:   0.3,
+      };
+      const wRows = Object.keys(weights).map(k =>
+        '<div class="sl-form-row"><label>' + _esc(k) + '</label>' +
+        '<input type="number" step="1" min="0" max="100" value="' + Number(weights[k]) + '" data-w="' + _esc(k) + '"></div>'
+      ).join("");
+      const dRows = Object.keys(dist).map(k =>
+        '<div class="sl-form-row"><label>dist ' + _esc(k) + '</label>' +
+        '<input type="number" step="0.05" min="0" max="1" value="' + Number(dist[k]) + '" data-d="' + _esc(k) + '"></div>'
+      ).join("");
+      const mRows = Object.keys(MULT_DEFAULTS).map(k => {
+        const v = (mults[k] != null) ? Number(mults[k]) : MULT_DEFAULTS[k];
+        return '<div class="sl-form-row"><label title="Multiplicador heurístico F1">' + _esc(k) + '</label>' +
+               '<input type="number" step="0.05" min="0" max="5" value="' + v +
+               '" data-m="' + _esc(k) + '"></div>';
+      }).join("");
+      const baseMin = (cfg.base_minutes != null) ? Number(cfg.base_minutes) : 25;
+
+      // Estado del modelo de regresión (Fase 2)
+      let modelBadge = '<span style="color:#94a3b8">—</span>';
+      try {
+        const rm = await fetch("/api/estimation_model");
+        if (rm.ok) {
+          const md = await rm.json();
+          if (md && md.trained_at) {
+            modelBadge = '<span style="color:#86efac">✓ entrenado · n=' + (md.n_samples || '?') +
+                         ' · rmse=' + (md.rmse != null ? md.rmse : '?') + '</span>';
+          } else {
+            modelBadge = '<span style="color:#fbbf24">no entrenado (fallback heurística)</span>';
+          }
+        }
+      } catch (_) { /* noop */ }
+
+      box.innerHTML =
+        '<div class="sl-form-row"><label>base_minutes</label>' +
+          '<input type="number" step="1" min="1" max="480" id="sl-cfg-base-min" value="' + baseMin + '"></div>' +
+        '<div class="sl-form-row"><label>delta_pct_default</label>' +
+          '<input type="number" step="1" id="sl-cfg-delta" value="' + Number(cfg.delta_pct_default || 0) + '"></div>' +
+        '<hr style="border-color:#1e293b">' +
+        '<div><b>Pesos (0-100)</b></div>' + wRows +
+        '<hr style="border-color:#1e293b">' +
+        '<div><b>Distribución por etapa (0..1)</b></div>' + dRows +
+        '<hr style="border-color:#1e293b">' +
+        '<div><b>Multiplicadores heurísticos (Fase 1)</b>' +
+          '<div style="font-size:11px;color:#94a3b8;margin-top:2px">' +
+            'Fórmula: est = base × module × (0.5+score/100×1.5) × (1+unc×k_unc) × (1+fr×k_fr) × (1+ext×k_ext) × (1+files×k_files) × (1+delta)' +
+          '</div></div>' + mRows +
+        '<hr style="border-color:#1e293b">' +
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+          '<b>Modelo de regresión (Fase 2):</b> ' + modelBadge +
+          '<button class="sl-btn" onclick="SL.retrainModel()">🔄 Re-entrenar ahora</button>' +
+        '</div>' +
+        '<hr style="border-color:#1e293b">' +
+        '<button class="sl-btn sl-primary" onclick="SL.saveConfigDelta()">Guardar</button> ' +
+        '<span id="sl-cfg-msg" style="color:#86efac;margin-left:10px"></span>';
+    } catch (e) {
+      box.innerHTML = "Error: " + _esc(e.message || e);
+    }
+  }
+
+  SL.saveConfigDelta = async function () {
+    const root = document.getElementById("sl-config-content");
+    if (!root) return;
+    const weights = {};
+    root.querySelectorAll("input[data-w]").forEach(i => {
+      weights[i.getAttribute("data-w")] = Number(i.value) || 0;
+    });
+    const dist = {};
+    root.querySelectorAll("input[data-d]").forEach(i => {
+      dist[i.getAttribute("data-d")] = Number(i.value) || 0;
+    });
+    const mults = {};
+    root.querySelectorAll("input[data-m]").forEach(i => {
+      mults[i.getAttribute("data-m")] = Number(i.value);
+    });
+    const delta = Number((document.getElementById("sl-cfg-delta") || {}).value) || 0;
+    const baseMin = Number((document.getElementById("sl-cfg-base-min") || {}).value) || 25;
+    const body = {
+      delta_pct_default:   delta,
+      base_minutes:        baseMin,
+      weights:             weights,
+      stage_distribution:  dist,
+      multipliers:         mults,
+    };
+    try {
+      const r = await fetch("/api/config/scoring", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      const msg = document.getElementById("sl-cfg-msg");
+      if (r.ok) {
+        if (msg) { msg.style.color = "#86efac"; msg.textContent = "✓ Guardado"; }
+      } else {
+        if (msg) { msg.style.color = "#fca5a5"; msg.textContent = "Error: " + (data.error || r.status); }
+      }
+    } catch (e) {
+      const msg = document.getElementById("sl-cfg-msg");
+      if (msg) { msg.style.color = "#fca5a5"; msg.textContent = "Error: " + e; }
+    }
+  };
+
+  SL.retrainModel = async function () {
+    const msg = document.getElementById("sl-cfg-msg");
+    try {
+      if (msg) { msg.style.color = "#94a3b8"; msg.textContent = "Entrenando…"; }
+      const r = await fetch("/api/estimation_model/retrain", { method: "POST" });
+      const data = await r.json();
+      if (r.ok && data.ok && data.trained) {
+        if (msg) {
+          msg.style.color = "#86efac";
+          msg.textContent = "✓ Modelo entrenado (n=" + (data.stats && data.stats.n_samples) +
+                            ", rmse=" + (data.stats && data.stats.rmse) + ")";
+        }
+        // Recargar el pane para refrescar el badge
+        _loadConfig();
+      } else if (r.ok && data.trained === false) {
+        if (msg) { msg.style.color = "#fbbf24"; msg.textContent = "Sin samples suficientes — " + (data.reason || ""); }
+      } else {
+        if (msg) { msg.style.color = "#fca5a5"; msg.textContent = "Error: " + (data.error || r.status); }
+      }
+    } catch (e) {
+      if (msg) { msg.style.color = "#fca5a5"; msg.textContent = "Error: " + e; }
+    }
+  };
+
+  async function _loadPerformance() {
+    const box = document.getElementById("sl-perf-content");
+    box.innerHTML = "Cargando…";
+    try {
+      const r = await fetch("/api/pipeline/performance?days=7");
+      const data = await r.json();
+      if (data.error) { box.innerHTML = "Error: " + _esc(data.error); return; }
+      const retries = data.retries_by_stage || {};
+      box.innerHTML =
+        '<div class="sl-kpi-grid">' +
+          _kpi("Tiempo PM (min avg)",     data.tiempo_pm_min  != null ? data.tiempo_pm_min  : "—", "good") +
+          _kpi("Tiempo DEV (min avg)",    data.tiempo_dev_min != null ? data.tiempo_dev_min : "—", "good") +
+          _kpi("Tiempo QA (min avg)",     data.tiempo_qa_min  != null ? data.tiempo_qa_min  : "—", "good") +
+          _kpi("Total horas",             data.total_hrs || 0, "good") +
+          _kpi("Aprobados 1er intento",   (data.first_attempt_approved_pct || 0) + "%",
+               data.first_attempt_approved_pct >= 70 ? "good" : "warn") +
+          _kpi("Correcciones enviadas",   data.corrections_sent || 0, "warn") +
+          _kpi("Retries PM",              retries.pm || 0, "warn") +
+          _kpi("Retries DEV",             retries.dev || 0, "warn") +
+          _kpi("Retries QA",              retries.tester || 0, "warn") +
+        '</div>' +
+        '<pre style="color:#94a3b8;font-size:11px">' + _esc(JSON.stringify(data, null, 2)) + '</pre>';
+    } catch (e) {
+      box.innerHTML = "Error: " + _esc(e.message || e);
+    }
+  }
+
+  // ─── Init ────────────────────────────────────────────────────────────────
+  function _init() {
+    _connectSSE();
+    // Inyectar scoring bars periódicamente (cuando se renderizan cards nuevas)
+    SL.injectScoringBars();
+    setInterval(SL.injectScoringBars, 8000);
+    // Escape cierra el modal
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        const m = document.getElementById("sl-modal");
+        if (m && m.classList.contains("sl-visible")) SL.closeEstimations();
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", _init);
+  } else {
+    _init();
+  }
+
+  window.SL = SL;
+})();
 </script>
 </body>
 </html>

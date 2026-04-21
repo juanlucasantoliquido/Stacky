@@ -23,7 +23,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.deliberator")
+logger = logging.getLogger("stacky.deliberator")
 
 
 class MultiAgentDeliberator:

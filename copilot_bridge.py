@@ -4,7 +4,7 @@ copilot_bridge.py — Automatización de UI para interactuar con Copilot Chat en
 Estrategia (en orden de prioridad):
 
 1. VS Code Bridge HTTP (localhost:5051) — PREFERIDO
-   La micro-extensión RIPLEY Bridge expone un servidor HTTP dentro de VS Code.
+   La micro-extensión Stacky Bridge expone un servidor HTTP dentro de VS Code.
    El invoke se hace vía POST /invoke — no hay UI automation, no hay timing,
    no hay problema de foco de ventana. 100% confiable.
 
@@ -17,7 +17,7 @@ Para instalar la extensión (una sola vez):
     npm install
     npx tsc -p ./
     npx vsce package --no-dependencies
-    code --install-extension ripley-vscode-bridge-1.0.0.vsix
+    code --install-extension stacky-vscode-bridge-1.0.0.vsix
 
 Dependencias para el fallback:
     pip install pywinauto pyautogui pyperclip
@@ -31,7 +31,7 @@ from pathlib import Path
 
 # Carpeta donde VS Code guarda los archivos .agent.md del usuario
 VSCODE_PROMPTS_DIR = Path(os.environ.get('APPDATA', '')) / 'Code' / 'User' / 'prompts'
-# Carpeta de proyectos del mantis_scraper
+# Carpeta de proyectos de Stacky
 PROJECTS_DIR = Path(__file__).parent / 'projects'
 
 # Lock global que serializa TODA la sección de UI automation.
@@ -44,6 +44,44 @@ BRIDGE_PORT = 5051
 BRIDGE_URL  = f"http://127.0.0.1:{BRIDGE_PORT}"
 
 logger = logging.getLogger(__name__)
+
+
+# ── F1-F4: emisión de progreso al bus de eventos (fire-and-forget) ──────────
+# Defensive imports: si los módulos de observabilidad no están disponibles,
+# _emit_progress se vuelve no-op.
+try:
+    from action_tracker import current_execution_id as _current_execution_id
+    from pipeline_events import emit as _emit_event
+    _HAS_EVENTS = True
+except Exception:
+    _current_execution_id = lambda: None  # type: ignore[assignment]
+    _emit_event = None
+    _HAS_EVENTS = False
+
+
+def _emit_progress(action: str, pct: int, subaction: str = "",
+                   detail: str = "") -> None:
+    """
+    Emite un ``action_progress`` correlacionado con la ActionContext activa.
+    No hace nada si no hay contexto de ejecución activo o si los módulos
+    de observabilidad no están disponibles. Nunca propaga errores.
+    """
+    if not _HAS_EVENTS or _emit_event is None:
+        return
+    try:
+        exec_id = _current_execution_id()
+        if not exec_id:
+            return
+        _emit_event(
+            kind="action_progress",
+            execution_id=exec_id,
+            action=action,
+            subaction=subaction or None,
+            pct=pct,
+            detail=detail or None,
+        )
+    except Exception as e:
+        logger.debug("_emit_progress falló: %s", e)
 
 
 def _check_deps():
@@ -430,9 +468,12 @@ def _ensure_vscode_workspace(workspace_root: str, max_wait: int = 5) -> bool:
 
 
 def _try_bridge(prompt: str, agent_name: str = None, workspace_root: str = None,
-                new_conversation: bool = False) -> bool:
+                new_conversation: bool = False, bridge_port: int = None) -> bool:
     """
-    Intenta invocar el agente vía la micro-extensión HTTP (localhost:5051).
+    Intenta invocar el agente vía la micro-extensión HTTP.
+
+    Si bridge_port está especificado, usa ese puerto en vez del global (5051).
+    Esto permite enviar a sesiones aisladas (multi-ticket concurrente).
 
     Si workspace_root está especificado:
     - Llama primero a _ensure_vscode_workspace() para garantizar que VS Code
@@ -445,14 +486,25 @@ def _try_bridge(prompt: str, agent_name: str = None, workspace_root: str = None,
     import urllib.request
     import json as _json
 
-    # Si se conoce el workspace, garantizarlo antes de invocar
-    if workspace_root:
+    port = bridge_port or BRIDGE_PORT
+    url_base = f"http://127.0.0.1:{port}"
+
+    # Cuando se usa un puerto de sesión (bridge_port != None), el ChatSessionManager
+    # ya se encargó de abrir VS Code con el workspace correcto y esperar al bridge.
+    # NO llamar a _ensure_vscode_workspace() que abriría una instancia genérica.
+    if bridge_port:
+        # Sesión aislada: solo verificar que el bridge responda
+        if not _bridge_health(bridge_port=port):
+            logger.debug("[Bridge HTTP] Sesión :%d no disponible", port)
+            return False
+    elif workspace_root:
+        # Modo legacy (sin sesión): abrir VS Code genérico con workspace
         if not _ensure_vscode_workspace(workspace_root):
             return False
     else:
         # Sin workspace conocido: intentar directamente si el bridge ya está activo
-        if not _bridge_health():
-            logger.debug("[Bridge HTTP] Puerto %d no disponible — usando fallback UI", BRIDGE_PORT)
+        if not _bridge_health(bridge_port=port):
+            logger.debug("[Bridge HTTP] Puerto %d no disponible — usando fallback UI", port)
             return False
 
     try:
@@ -464,7 +516,7 @@ def _try_bridge(prompt: str, agent_name: str = None, workspace_root: str = None,
         }).encode("utf-8")
 
         req = urllib.request.Request(
-            f"{BRIDGE_URL}/invoke",
+            f"{url_base}/invoke",
             data    = payload,
             headers = {"Content-Type": "application/json"},
             method  = "POST",
@@ -481,19 +533,20 @@ def _try_bridge(prompt: str, agent_name: str = None, workspace_root: str = None,
                 logger.warning("[Bridge HTTP] Extensión respondió ok=False: %s", body.get("error"))
                 return False
     except OSError:
-        logger.debug("[Bridge HTTP] Puerto %d no disponible — usando fallback UI", BRIDGE_PORT)
+        logger.debug("[Bridge HTTP] Puerto %d no disponible — usando fallback UI", port)
         return False
     except Exception as e:
         logger.warning("[Bridge HTTP] Error inesperado: %s — usando fallback UI", e)
         return False
 
 
-def _bridge_health() -> bool:
+def _bridge_health(bridge_port: int = None) -> bool:
     """Retorna True si la extensión está activa y respondiendo."""
     try:
         import urllib.request
         import json as _json
-        req = urllib.request.Request(f"{BRIDGE_URL}/health", method="GET")
+        url = f"http://127.0.0.1:{bridge_port or BRIDGE_PORT}/health"
+        req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=3) as resp:
             body = _json.loads(resp.read().decode("utf-8"))
             return bool(body.get("ok"))
@@ -504,7 +557,8 @@ def _bridge_health() -> bool:
 def _try_bridge_with_retry(prompt: str, agent_name: str = None,
                            workspace_root: str = None,
                            new_conversation: bool = False,
-                           retries: int = 3, delay: float = 5.0) -> bool:
+                           retries: int = 3, delay: float = 5.0,
+                           bridge_port: int = None) -> bool:
     """
     Intenta el bridge HTTP con reintentos para dar tiempo a que VS Code
     cargue la extensión si recién fue abierto.
@@ -512,7 +566,8 @@ def _try_bridge_with_retry(prompt: str, agent_name: str = None,
     """
     for attempt in range(1, retries + 1):
         if _try_bridge(prompt, agent_name, workspace_root=workspace_root,
-                       new_conversation=new_conversation):
+                       new_conversation=new_conversation,
+                       bridge_port=bridge_port):
             return True
         if attempt < retries:
             logger.debug("[Bridge HTTP] Intento %d/%d fallido — esperando %.0fs...",
@@ -523,12 +578,14 @@ def _try_bridge_with_retry(prompt: str, agent_name: str = None,
 
 def invoke_agent(prompt: str, agent_name: str = None, project_name: str = None,
                  workspace_root: str = None, allow_ui_fallback: bool = False,
-                 new_conversation: bool = False) -> bool:
+                 new_conversation: bool = False, bridge_port: int = None) -> bool:
     """
     Secuencia completa: construye el prompt final y lo envía al agente.
 
     Estrategia:
-    1. VS Code Bridge HTTP (localhost:5051) — ÚNICO MÉTODO SOPORTADO.
+    1. VS Code Bridge HTTP — ÚNICO MÉTODO SOPORTADO.
+       - Si bridge_port está especificado, usa ese puerto (sesión aislada).
+       - Si no, usa el puerto global (5051).
        - Abre VS Code con el workspace correcto si no está abierto.
        - Espera al bridge HTTP y luego invoca vía POST /invoke.
        - Sin UI automation, sin problemas de foco. 100% confiable.
@@ -540,6 +597,9 @@ def invoke_agent(prompt: str, agent_name: str = None, project_name: str = None,
                            abre con ese workspace antes de invocar.
         allow_ui_fallback: Si False, retorna False sin intentar UI automation
                            cuando el bridge no está disponible.
+        bridge_port:       Puerto del bridge de la sesión aislada. Si None, usa
+                           el puerto global (5051). Esto es la clave para
+                           ejecución concurrente sin cruce de chats.
     """
     final_prompt = prompt
     if agent_name:
@@ -565,14 +625,19 @@ def invoke_agent(prompt: str, agent_name: str = None, project_name: str = None,
 
     # ── Intento 1: Bridge HTTP (con reintentos y apertura garantizada) ────────
     # Si el bridge claramente no está activo, skip directo a UI automation
-    if _bridge_health():
+    _port = bridge_port or BRIDGE_PORT
+    _emit_progress("invoke_agent", 30, "bridge_probe", f"port={_port}")
+    if _bridge_health(bridge_port=_port):
+        _emit_progress("invoke_agent", 50, "bridge_ok", f"port={_port}")
         if _try_bridge_with_retry(final_prompt, agent_name, workspace_root=workspace_root,
                                   new_conversation=new_conversation,
-                                  retries=2, delay=3.0):
+                                  retries=2, delay=3.0,
+                                  bridge_port=_port):
+            _emit_progress("invoke_agent", 95, "bridge_sent")
             return True
         print("[Bridge] HTTP bridge activo pero falló al enviar — probando UI automation", flush=True)
     else:
-        print(f"[Bridge] Puerto {BRIDGE_PORT} no disponible — yendo directo a UI automation", flush=True)
+        print(f"[Bridge] Puerto {_port} no disponible — yendo directo a UI automation", flush=True)
 
     # ── Intento 2: UI Automation fallback ─────────────────────────────────────
     if not allow_ui_fallback:
@@ -580,6 +645,7 @@ def invoke_agent(prompt: str, agent_name: str = None, project_name: str = None,
         logger.warning("[Bridge HTTP] No disponible y UI fallback desactivado — retornando False")
         return False
 
+    _emit_progress("invoke_agent", 40, "ui_fallback_start")
     print(f"[UI] Iniciando UI automation → agente: {agent_name or '(sin agente)'}", flush=True)
     logger.info("Bridge HTTP no disponible — usando UI automation (fallback)")
     _check_deps()
@@ -619,6 +685,8 @@ def invoke_agent(prompt: str, agent_name: str = None, project_name: str = None,
             clear_chat()
 
         time.sleep(1.2)
+        _emit_progress("invoke_agent", 80, "ui_sending_prompt",
+                       f"{len(final_prompt)} chars")
         print(f"[UI] Enviando prompt ({len(final_prompt)} chars)...", flush=True)
         result = send_prompt(final_prompt, win=win, edits=edits)
         print(f"[UI] Prompt {'enviado OK' if result else 'FALLÓ'}", flush=True)

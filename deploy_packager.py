@@ -3,7 +3,7 @@ deploy_packager.py — Generador de paquetes de despliegue por ticket.
 
 Para cada ticket, analiza:
   - DEV_COMPLETADO.md   → lista de archivos fuente modificados
-  - SVN_CHANGES.md      → svn status + diff de los cambios
+  - GIT_CHANGES.md      → git status + diff de los cambios
   - INC-{id}.md         → comentarios/notas con SQL embebido
   - QUERIES_ANALISIS.sql → consultas SQL del PM
 
@@ -64,12 +64,12 @@ class DeployPackager:
         """
         warnings = []
 
-        # 1. Obtener archivos modificados — svn diff como fuente primaria
+        # 1. Obtener archivos modificados — git diff como fuente primaria
         modified = self._get_modified_files(warnings)
         if not modified:
             return {
                 "ok":         False,
-                "error":      "No se encontraron archivos modificados. Verificar que SVN tenga cambios locales.",
+                "error":      "No se encontraron archivos modificados. Verificar que Git tenga cambios locales.",
                 "warnings":   warnings,
             }
 
@@ -181,12 +181,13 @@ class DeployPackager:
                              timestamp: str, warnings: list):
         """
         Genera un ZIP de rollback con los binarios en su estado PREVIO al cambio
-        (usando svn export -r BASE para obtener la versión commiteada anterior).
+        (usando git show HEAD:path para obtener la versión anterior).
         """
         try:
-            from svn_ops import export_prev_revision
+            from scm_provider.factory import get_scm_provider
+            scm = get_scm_provider()
         except ImportError:
-            warnings.append("svn_ops no disponible — rollback no generado")
+            warnings.append("scm_provider no disponible — rollback no generado")
             return None, None
 
         rollback_name = f"ROLLBACK_{self.ticket_id}_{timestamp}.zip"
@@ -244,31 +245,33 @@ class DeployPackager:
     def _get_modified_files(self, warnings: list) -> list:
         """
         Obtiene la lista de archivos modificados. Orden de prioridad:
-        1. svn diff --summarize en tiempo real (fuente de verdad exacta)
-        2. SVN_CHANGES.md snapshot (si hay, capturado por el agente)
+        1. git diff --name-status (fuente de verdad exacta)
+        2. GIT_CHANGES.md snapshot (si hay, capturado por el agente)
         3. DEV_COMPLETADO.md (parse de texto — menos preciso)
         """
         files = set()
 
-        # 1. svn diff --summarize — fuente de verdad
+        # 1. git diff --name-status — fuente de verdad
         try:
-            from svn_ops import diff_summarize, status as svn_status
-            svn_files = diff_summarize(str(self.workspace_root))
-            if not svn_files:
-                # Fallback: svn status (incluye no versionados)
-                svn_files = svn_status(str(self.workspace_root))
-            for entry in svn_files:
-                if entry["status"] != "D":  # no incluir archivos borrados
-                    files.add(entry["path"])
+            result = subprocess.run(
+                ["git", "diff", "--name-status", "HEAD"],
+                cwd=str(self.workspace_root),
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=15
+            )
+            for line in result.stdout.splitlines():
+                parts = line.split(None, 1)
+                if len(parts) == 2 and parts[0] != "D":
+                    files.add(parts[1])
         except Exception as e:
-            warnings.append(f"svn diff --summarize no disponible: {e}")
+            warnings.append(f"git diff --name-status no disponible: {e}")
 
-        # 2. SVN_CHANGES.md — snapshot capturado post-dev
+        # 2. GIT_CHANGES.md — snapshot capturado post-dev
         if not files:
-            svn_md = self.ticket_folder / "SVN_CHANGES.md"
-            if svn_md.exists():
-                files.update(self._parse_svn_changes(
-                    svn_md.read_text(encoding="utf-8", errors="ignore")))
+            git_md = self.ticket_folder / "GIT_CHANGES.md"
+            if git_md.exists():
+                files.update(self._parse_git_changes(
+                    git_md.read_text(encoding="utf-8", errors="ignore")))
 
         # 3. DEV_COMPLETADO.md — parse de texto como último recurso
         if not files:
@@ -322,13 +325,13 @@ class DeployPackager:
 
         return list(dict.fromkeys(found))  # deduplicar preservando orden
 
-    def _parse_svn_changes(self, content: str) -> list:
+    def _parse_git_changes(self, content: str) -> list:
         """
-        Extrae rutas del svn status en SVN_CHANGES.md.
+        Extrae rutas del git status en GIT_CHANGES.md.
         Formato: 'M      path/to/file.cs'  o  '?      path/to/file.cs'
         """
         found = []
-        # Líneas de svn status: letra de estado + espacios + ruta
+        # Líneas de git status: letra de estado + espacios + ruta
         pattern = re.compile(r"^[MADC?!]+\s+(.+)$", re.MULTILINE)
         for m in pattern.finditer(content):
             raw = m.group(1).strip().replace("\\", "/")
@@ -337,11 +340,11 @@ class DeployPackager:
         return found
 
     def _svn_status_live(self, warnings: list) -> list:
-        """Ejecuta svn status en workspace_root y retorna archivos modificados."""
+        """Ejecuta git status en workspace_root y retorna archivos modificados."""
         try:
             import subprocess
             result = subprocess.run(
-                ["svn", "status", str(self.workspace_root)],
+                ["git", "status", "--porcelain", str(self.workspace_root)],
                 capture_output=True, text=True, timeout=30,
                 encoding="utf-8", errors="replace",
             )
@@ -353,7 +356,7 @@ class DeployPackager:
                         found.append(path)
             return found
         except Exception as e:
-            warnings.append(f"No se pudo ejecutar svn status: {e}")
+            warnings.append(f"No se pudo ejecutar git status: {e}")
             return []
 
     # ── Resolución de DLLs ───────────────────────────────────────────────────
@@ -530,7 +533,7 @@ class DeployPackager:
             if content and not _only_comments(content):
                 blocks.append((f"QUERIES_ANALISIS_{self.ticket_id}", content))
 
-        # INC-{id}.md — buscar bloques SQL en comentarios del ticket (Mantis notes)
+        # INC-{id}.md — buscar bloques SQL en comentarios del ticket
         inc_md = self.ticket_folder / f"INC-{self.ticket_id}.md"
         if inc_md.exists():
             content = inc_md.read_text(encoding="utf-8", errors="ignore")
@@ -637,7 +640,7 @@ class DeployPackager:
             "3. **Scripts SQL** → ejecutar en Oracle con sqlplus en el orden numerado.",
             "4. Reiniciar el pool de aplicación si se reemplazaron DLLs.",
             "",
-            "_Generado por Stacky — Pipeline de tickets Mantis_",
+            "_Generado por Stacky — Pipeline de tickets Stacky_",
         ]
         return "\n".join(lines)
 

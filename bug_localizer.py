@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("mantis.bug_localizer")
+logger = logging.getLogger("stacky.bug_localizer")
 
 BASE_DIR = Path(__file__).parent
 

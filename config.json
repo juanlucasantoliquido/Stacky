@@ -3,12 +3,34 @@
     "production_mode": false,
     "disable_cli_runner": false
   },
-  "mantis_url": "https://soporte.ais-int.net/mantis/view_all_bug_page.php",
-  "assigned_user": "Juan Luca Santolíquido",
-  "auth_path": "auth/auth.json",
+
+  "issue_tracker": {
+    "__doc__": "Backend de tickets activo. Override por proyecto en projects/<NAME>/config.json.issue_tracker",
+    "type": "azure_devops",
+    "organization": "UbimiaPacifico",
+    "project": "Strategist_Pacifico",
+    "api_version": "7.1",
+    "auto_resolve": false,
+    "auth_file": "auth/ado_auth.json",
+    "state_mapping": {
+      "New": "asignada",
+      "To Do": "asignada",
+      "Proposed": "asignada",
+      "Active": "aceptada",
+      "In Progress": "aceptada",
+      "Doing": "aceptada",
+      "Committed": "aceptada",
+      "Resolved": "resuelta",
+      "Done": "completada",
+      "Closed": "completada",
+      "Removed": "archivada"
+    },
+    "wiql": "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.State] NOT IN ('Closed', 'Done', 'Removed', 'Completed') ORDER BY [System.ChangedDate] DESC"
+  },
+
+  "assigned_user": "Juan Luca Santol\u00edquido",
   "state_path": "state/seen_tickets.json",
   "output_dir": "tickets",
-  "timeout_ms": 30000,
   "pipeline": {
     "max_rework_cycles": 1,
     "use_sub_agents": false
@@ -24,14 +46,46 @@
     "generic_webhook": "",
     "notify_on": ["pipeline_complete", "error", "stagnation", "stage_complete"]
   },
-  "selectors": {
-    "table": "#buglist",
-    "rows": "#buglist tbody tr",
-    "id": "td.column-id a",
-    "category": "td.column-category",
-    "severity": "td.column-severity",
-    "status": "td.column-status",
-    "summary": "td.column-summary a",
-    "last_modified": "td.column-last-modified"
+  "concurrency": {
+    "__doc__": "Aislamiento de chats para ejecución concurrente. Cada sesión es un VS Code con bridge en un puerto distinto. max_sessions=1 desactiva concurrencia (comportamiento original).",
+    "max_sessions": 3,
+    "base_port": 5051,
+    "session_timeout_minutes": 120
+  },
+  "auto_approve": {
+    "__doc__": "Fase 1 hardening del AutoEnterDaemon. mode: advisory|blocking|off. dry_run: si True, nunca manda keypress real (solo loguea). dry_run_expires_at: ISO8601 UTC — después de esa fecha el watchdog emite auto_enter_dry_run_expired.",
+    "mode": "advisory",
+    "dry_run": true,
+    "dry_run_expires_at": "2026-04-23T12:00:00Z"
+  },
+
+  "scoring_defaults": {
+    "__doc__": "F2 — Scoring de tickets: pesos por factor (suma 100), distribución por etapa, delta por defecto, multiplicadores de la heurística (Fase 1) y thresholds de calibración.",
+    "delta_pct_default": 20.0,
+    "base_minutes": 25,
+    "weights": {
+      "tech_complexity": 25,
+      "uncertainty":     20,
+      "impact":          15,
+      "files_affected":  15,
+      "functional_risk": 15,
+      "external_dep":    10
+    },
+    "stage_distribution": {
+      "pm":     0.25,
+      "dev":    0.50,
+      "tester": 0.25
+    },
+    "multipliers": {
+      "__doc__": "Coeficientes de la estimación heurística Fase 1. Ver ticket_scoring.compute_scoring para la fórmula completa.",
+      "complexity_min":         0.5,
+      "complexity_range":       1.5,
+      "max_uncertainty_boost":  0.5,
+      "functional_risk_boost":  0.3,
+      "external_dep_boost":     0.3,
+      "files_affected_boost":   0.3
+    },
+    "auto_calibrate": false,
+    "min_samples_for_calibration": 20
   }
 }

@@ -11,7 +11,7 @@ import logging
 import os
 import re
 
-logger = logging.getLogger("mantis.dba_agent")
+logger = logging.getLogger("stacky.dba_agent")
 
 # Señales que indican un ticket con alta carga Oracle
 _DB_KEYWORDS = [

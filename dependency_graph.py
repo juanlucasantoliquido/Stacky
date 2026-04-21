@@ -23,7 +23,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.dependency_graph")
+logger = logging.getLogger("stacky.dependency_graph")
 
 
 class DependencyGraph:
@@ -134,7 +134,7 @@ class DependencyGraph:
     @staticmethod
     def _extract_files(ticket_folder: str) -> list[str]:
         files: set[str] = set()
-        for fname in ["ARQUITECTURA_SOLUCION.md", "DEV_COMPLETADO.md", "SVN_CHANGES.md"]:
+        for fname in ["ARQUITECTURA_SOLUCION.md", "DEV_COMPLETADO.md", "GIT_CHANGES.md"]:
             fpath = os.path.join(ticket_folder, fname)
             if not os.path.exists(fpath):
                 continue
@@ -143,7 +143,7 @@ class DependencyGraph:
                 for m in re.finditer(r'([\w/\\.\-]+\.(?:cs|aspx\.cs|aspx|sql|vb))',
                                      content, re.IGNORECASE):
                     f = m.group(1).replace("\\", "/")
-                    if "mantis" not in f.lower():
+                    if "stacky" not in f.lower():
                         files.add(os.path.basename(f).lower())
             except Exception:
                 pass

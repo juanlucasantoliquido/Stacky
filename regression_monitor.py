@@ -1,8 +1,8 @@
 """
 regression_monitor.py — E-07: Monitor de Regresiones Post-Commit.
 
-Después de un commit SVN exitoso, monitorea indicadores de regresión:
-  - Nuevos tickets en Mantis sobre los mismos módulos
+Después de un commit Git exitoso, monitorea indicadores de regresión:
+  - Nuevos tickets sobre los mismos módulos
   - Errores en archivos de log del servidor (si están accesibles)
   - Cambios en métricas de build del proyecto
 
@@ -23,7 +23,7 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
-logger = logging.getLogger("mantis.regression_monitor")
+logger = logging.getLogger("stacky.regression_monitor")
 
 _CHECK_WINDOW_HOURS = 48  # ventana de monitoreo post-commit
 _REGRESSION_THRESHOLD = 2  # tickets nuevos en mismo módulo = posible regresión

@@ -27,9 +27,9 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.codebase_indexer")
+logger = logging.getLogger("stacky.codebase_indexer")
 
-_SKIP_DIRS  = {"bin", "obj", ".vs", ".git", ".svn", "packages", "node_modules"}
+_SKIP_DIRS  = {"bin", "obj", ".vs", ".git", "packages", "node_modules"}
 _CODE_EXTS  = {".cs", ".aspx.cs", ".aspx", ".sql", ".vb"}
 _MAX_FILES  = 5000
 _MAX_CONTENT_PER_FILE = 6000

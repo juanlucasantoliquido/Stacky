@@ -1,14 +1,12 @@
 """
-daemon.py — Orquestador siempre activo del Mantis Scraper.
+daemon.py — Orquestador siempre activo de Stacky.
 
-Reemplaza el modelo de "ejecutar dos scripts manualmente" con un proceso
-continuo que:
-  1. Scrapea Mantis cada N minutos para detectar tickets nuevos
+Proceso continuo que:
+  1. Sincroniza tickets cada N minutos para detectar tickets nuevos
   2. Detecta automáticamente tickets en estado "asignada" y lanza el pipeline
   3. Monitorea timeouts por etapa y reintenta o marca error
-  4. Verifica la sesión SSO y notifica cuando necesita renovación
-  5. Archiva tickets completados más de N días atrás
-  6. Envía notificaciones de escritorio en eventos clave
+  4. Archiva tickets completados más de N días atrás
+  5. Envía notificaciones de escritorio en eventos clave
 
 Uso:
     python daemon.py --project RIPLEY --interval 15
@@ -39,7 +37,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # ── Logger del módulo ─────────────────────────────────────────────────────────
-logger = logging.getLogger("mantis.daemon")
+logger = logging.getLogger("stacky.daemon")
 
 try:
     from stacky_log import slog as _slog
@@ -53,7 +51,7 @@ def _setup_logging(verbose: bool = False, log_file: str = None) -> None:
     - Consola: INFO (o DEBUG si verbose)
     - Archivo: DEBUG siempre, rotación a 5MB × 3 backups
     """
-    root = logging.getLogger("mantis")
+    root = logging.getLogger("stacky")
     root.setLevel(logging.DEBUG)
 
     fmt = logging.Formatter(
@@ -110,9 +108,9 @@ def _load_project_daemon_config(project_name: str) -> dict:
 
 # ── Clase principal ───────────────────────────────────────────────────────────
 
-class MantisScraperDaemon:
+class StackyDaemon:
     """
-    Daemon siempre activo que orquesta scraping y pipeline automáticamente.
+    Daemon siempre activo que orquesta sync y pipeline automáticamente.
     """
 
     def __init__(self, project_name: str, scrape_interval_minutes: int = None,
@@ -146,30 +144,11 @@ class MantisScraperDaemon:
         self._auth_path     = os.path.join(BASE_DIR, "auth", "auth.json")
 
         try:
-            from project_manager import get_project_config
-            pcfg = get_project_config(project_name) or {}
-            self._mantis_url = pcfg.get("mantis_url", "")
-            if not self._mantis_url:
-                # Fallback al config.json global
-                with open(os.path.join(BASE_DIR, "config.json"), encoding="utf-8") as f:
-                    gcfg = json.load(f)
-                self._mantis_url = gcfg.get("mantis_url", "")
+            pass
         except Exception:
-            self._mantis_url = ""
+            pass
 
-        self._renewal_in_progress = False
         self._last_cleanup_date   = None
-
-        # N-05: Monitor de escaladas
-        try:
-            from mantis_change_monitor import MantisChangeMonitor
-            self._change_monitor = MantisChangeMonitor(
-                tickets_base=self._tickets_base,
-                state_path=self._state_path,
-                notifier=None,  # se inyecta después de crear el notifier
-            )
-        except ImportError:
-            self._change_monitor = None
 
         # Pre-importar módulos usados frecuentemente (evita re-import en cada ciclo)
         from notifier import Notifier
@@ -178,9 +157,7 @@ class MantisScraperDaemon:
                                      is_stage_timed_out, get_retry_count)
         from ticket_detector import get_processable_tickets
 
-        self._notifier = Notifier(app_name=f"Mantis Scraper — {project_name}")
-        if self._change_monitor:
-            self._change_monitor._notifier = self._notifier
+        self._notifier = Notifier(app_name=f"Stacky — {project_name}")
 
         # N-08: Métricas de calidad
         try:
@@ -211,14 +188,18 @@ class MantisScraperDaemon:
         except ImportError:
             self._schema_injector = None
 
-        # M-06: Agent queue (pipeline lanes)
+        # M-06: Agent queue (pipeline lanes) + zombie sweeper
         slots = self._project_cfg.get("agent_slots", {})
+        queue_cfg = self._project_cfg.get("agent_queue", {})
         try:
             from agent_queue import get_agent_queue
             self._agent_queue = get_agent_queue(
                 slots_pm=slots.get("pm", 1),
                 slots_dev=slots.get("dev", 1),
                 slots_tester=slots.get("tester", 1),
+                state_path=self._state_path,
+                zombie_sweep_interval=float(queue_cfg.get("zombie_sweep_interval", 60.0)),
+                max_zombie_retries=int(queue_cfg.get("max_zombie_retries", 3)),
             )
         except ImportError:
             self._agent_queue = None
@@ -299,12 +280,31 @@ class MantisScraperDaemon:
                   f"{self._cfg['timeout_dev_minutes']}/"
                   f"{self._cfg['timeout_tester_minutes']} min")
 
+        # Chat Session Manager — aislamiento de chats para concurrencia
+        try:
+            from chat_session_manager import get_session_manager
+            global_cfg_path = os.path.join(BASE_DIR, "config.json")
+            global_cfg = {}
+            if os.path.exists(global_cfg_path):
+                global_cfg = json.loads(Path(global_cfg_path).read_text(encoding="utf-8"))
+            self._session_mgr = get_session_manager(global_cfg)
+            self._log(f"[SESSION] Chat sessions habilitadas: "
+                      f"{self._session_mgr._max_sessions} sesiones en puertos "
+                      f"{self._session_mgr._base_port}-"
+                      f"{self._session_mgr._base_port + self._session_mgr._max_sessions - 1}")
+        except ImportError:
+            self._session_mgr = None
+
     # ── Loop principal ────────────────────────────────────────────────────
 
     def run(self):
         """Loop principal — no termina hasta Ctrl+C o señal de parada."""
         self._log("Daemon iniciado. Ctrl+C para detener.")
         interval_sec = self._cfg["scrape_interval_minutes"] * 60
+
+        # A2: crash recovery — detectar tickets en estados *_en_proceso huérfanos
+        # del proceso anterior (PID muerto o heartbeat stale) y moverlos a error_*.
+        self._recover_crashed_tickets()
 
         # Iniciar watcher de filesystem (avance inmediato al detectar flags)
         watcher = self._start_watcher()
@@ -314,7 +314,6 @@ class MantisScraperDaemon:
                 cycle_start = time.time()
                 try:
                     if not self.pipeline_only:
-                        self._session_check()
                         self._scrape_cycle()
 
                     if self._cfg["auto_pipeline"] and not self.scrape_only:
@@ -341,6 +340,98 @@ class MantisScraperDaemon:
         finally:
             if watcher:
                 watcher.stop()
+
+    def _recover_crashed_tickets(self) -> None:
+        """A2: barrido de arranque — pasa a error_{stage} cualquier ticket en
+        estado *_en_proceso cuyo proceso ya no exista o cuyo heartbeat esté stale.
+
+        También invoca cleanup_zombie_locks() para liberar lock files huérfanos.
+        Best-effort: cualquier error se logea y no aborta el arranque.
+        """
+        try:
+            from pipeline_state import load_state, save_state, mark_error, is_invoke_still_valid
+        except ImportError:
+            self._log("[RECOVER] pipeline_state no disponible — skip", level="warning")
+            return
+
+        try:
+            state = load_state(self._state_path)
+        except Exception as e:
+            self._log(f"[RECOVER] No se pudo cargar state: {e}", level="warning")
+            return
+
+        recovered = 0
+        # Heartbeat stale: > 5 min sin actualización
+        HEARTBEAT_STALE_SEC = 5 * 60
+        now_ts = time.time()
+
+        for ticket_id, entry in list(state.get("tickets", {}).items()):
+            est = entry.get("estado", "")
+            if not est.endswith("_en_proceso"):
+                continue
+            stage = est[: -len("_en_proceso")]
+
+            # Razón inicial: ninguna (todavía no decidimos si recuperar).
+            reason = None
+
+            # 1) Proceso muerto o TTL expirado (reusa lógica existente SEQ-09)
+            if not is_invoke_still_valid(entry):
+                pid     = entry.get("invoking_pid", "?")
+                reason  = f"crash_recovery: pid {pid} muerto o TTL expirado"
+            else:
+                # 2) Heartbeat stale (A4): el archivo {STAGE}_HEARTBEAT.txt no se actualiza
+                folder = entry.get("folder")
+                if folder and os.path.isdir(folder):
+                    base_stage = stage.split("_")[0].upper()  # pm/dev/tester (no sub-agentes)
+                    hb_path = os.path.join(folder, f"{base_stage}_HEARTBEAT.txt")
+                    if os.path.exists(hb_path):
+                        try:
+                            age_sec = now_ts - os.path.getmtime(hb_path)
+                            if age_sec > HEARTBEAT_STALE_SEC:
+                                reason = (f"crash_recovery: heartbeat stale "
+                                          f"({int(age_sec)}s > {HEARTBEAT_STALE_SEC}s)")
+                        except OSError:
+                            pass
+
+            if reason is None:
+                continue
+
+            # Determinar el stage padre (pm/dev/tester) para mark_error
+            base = stage if stage in ("pm", "dev", "tester", "doc", "dba") else stage.split("_")[0]
+            try:
+                mark_error(state, ticket_id, base, reason)
+                recovered += 1
+                self._log(f"[RECOVER] {ticket_id}: {est} → error_{base} ({reason})",
+                          level="warning")
+                # Liberar lock file de la etapa si existe
+                try:
+                    from pipeline_lock import release_lock as _rel
+                    _rel(ticket_id, stage)
+                except Exception:
+                    pass
+            except Exception as me:
+                self._log(f"[RECOVER] No se pudo marcar error_{base} para {ticket_id}: {me}",
+                          level="error")
+
+        if recovered:
+            try:
+                save_state(self._state_path, state)
+            except Exception as se:
+                self._log(f"[RECOVER] No se pudo guardar state tras recovery: {se}", level="error")
+            self._log(f"[RECOVER] {recovered} ticket(s) recuperado(s) tras crash previo")
+        else:
+            self._log("[RECOVER] Sin tickets huérfanos — arranque limpio")
+
+        # Limpieza de lock files file-based zombie
+        try:
+            from pipeline_lock import cleanup_zombie_locks
+            cleaned = cleanup_zombie_locks()
+            if cleaned:
+                self._log(f"[RECOVER] {cleaned} lock(s) zombie eliminados al arrancar")
+        except ImportError:
+            pass
+        except Exception as ce:
+            self._log(f"[RECOVER] Error limpiando locks zombie: {ce}", level="warning")
 
     def _start_watcher(self):
         """Inicia el PipelineWatcher para avance inmediato sin esperar el ciclo."""
@@ -388,8 +479,23 @@ class MantisScraperDaemon:
                 # Lanzar la siguiente etapa inmediatamente
                 next_stage_map = {"pm_completado": "dev", "dev_completado": "tester",
                                   "tester_completado": None}
-                next_stage = next_stage_map.get(new_state)
+                next_stage    = next_stage_map.get(new_state)
+                _lock_blocked = False
                 if next_stage:
+                    # ── Guardia watcher: evita disparar si ya hay lock activo ──
+                    try:
+                        from pipeline_lock import is_locked as _watcher_is_locked
+                        if _watcher_is_locked(ticket_id, next_stage):
+                            self._log(
+                                f"[WATCHER] {ticket_id}/{next_stage} — lock activo, "
+                                f"otra instancia ya está ejecutando esta etapa",
+                                level="warning",
+                            )
+                            _lock_blocked = True
+                    except ImportError:
+                        pass
+
+                if next_stage and not _lock_blocked:
                     # Marcar como en_proceso ANTES de lanzar el thread para que
                     # _pipeline_cycle no lo relance en el siguiente ciclo.
                     try:
@@ -411,9 +517,25 @@ class MantisScraperDaemon:
                         daemon=True,
                         name=f"watcher-{ticket_id}-{next_stage}",
                     ).start()
-                else:
-                    # Pipeline completo
+                elif new_state == "tester_completado":
+                    # Pipeline completo — liberar sesión de chat
+                    if self._session_mgr:
+                        self._session_mgr.release(ticket_id)
+                        self._log(
+                            f"[SESSION] Sesión liberada para ticket #{ticket_id} "
+                            f"(pipeline completado)")
                     self._notifier.notify_ticket_completed(ticket_id)
+                    # Rally: arrancar el próximo ticket encolado con prioridad
+                    try:
+                        from dashboard_server import _rally_launch_next
+                        threading.Thread(
+                            target=_rally_launch_next,
+                            args=(f"daemon #{ticket_id} tester_completado",),
+                            daemon=True, name=f"rally-kick-{ticket_id}",
+                        ).start()
+                    except Exception as _re:
+                        self._log(f"[RALLY] No se pudo kick next: {_re}",
+                                  level="debug")
                     # N-06: extraer y guardar patrón de solución
                     try:
                         from pattern_extractor import extract_and_store_pattern
@@ -453,21 +575,29 @@ class MantisScraperDaemon:
                             daemon=True,
                             name=f"regression-{ticket_id}",
                         ).start()
-                    # E-02: Actualizar Mantis con nota de resolución
-                    if self._mantis_url:
-                        try:
-                            from mantis_updater import update_ticket_on_mantis
-                            resolve = self._cfg.get("mantis_auto_resolve", False)
-                            threading.Thread(
-                                target=update_ticket_on_mantis,
-                                args=(ticket_id, folder, self._mantis_url,
-                                      self._auth_path),
-                                kwargs={"resolve_status": resolve},
-                                daemon=True,
-                                name=f"mantis-upd-{ticket_id}",
-                            ).start()
-                        except ImportError:
-                            pass
+                    # E-02: Actualizar tracker con nota de resolución.
+                    # Unificado via issue_provider — cada backend sabe cómo publicar.
+                    try:
+                        from issue_provider import get_provider, CommentKind
+                        provider = get_provider(self.project_name)
+                        resolve  = self._cfg.get("auto_resolve", False)
+                        def _publish_qa_note():
+                            note = _build_resolution_note(folder, ticket_id)
+                            if note:
+                                provider.add_comment(
+                                    ticket_id, note,
+                                    kind=CommentKind.QA_RESOLUTION,
+                                    is_html=True,
+                                )
+                            if resolve:
+                                provider.transition_state(ticket_id, "Resolved")
+                        threading.Thread(
+                            target=_publish_qa_note, daemon=True,
+                            name=f"tracker-upd-{ticket_id}",
+                        ).start()
+                    except Exception as _e:
+                        self._log(f"[TRACKER] No se pudo publicar nota QA: {_e}",
+                                  level="warning")
 
             def _on_error(ticket_id, error_stage, reason, folder):
                 self._log(f"[WATCHER] {ticket_id}: error en {error_stage}: {reason[:80]}",
@@ -492,40 +622,26 @@ class MantisScraperDaemon:
     # ── Ciclo de scraping ─────────────────────────────────────────────────
 
     def _scrape_cycle(self):
-        """Ejecuta el scraper de Mantis y registra tickets nuevos."""
+        """Ejecuta la sincronización de tickets del tracker activo."""
         self._log("--- Inicio ciclo de scraping ---")
         if self.dry_run:
             self._log("[DRY-RUN] Scraping omitido — modo simulación activo")
             return
         try:
-            from mantis_scraper import run_scraper
-            from session_manager import SessionExpiredError
-            run_scraper(project_name=self.project_name)
+            from issue_provider import load_tracker_config, sync_tickets
+            tracker_cfg  = load_tracker_config(self.project_name)
+            tracker_kind = (tracker_cfg.get("type") or "").lower()
+            summary = sync_tickets(project_name=self.project_name)
+            self._log(
+                f"[SYNC {tracker_kind}] "
+                f"fetched={summary['fetched']} new={summary['new']} "
+                f"updated={summary['updated']} moved={summary['moved']} "
+                f"errors={len(summary['errors'])}"
+            )
         except Exception as exc:
-            # SessionExpiredError ya fue manejada en _session_check
             err_msg = str(exc)
-            if "SessionExpiredError" in type(exc).__name__ or "sesión" in err_msg.lower():
-                self._log(f"[SCRAPE] Sesión expirada: {exc}", level="warning")
-                self._notifier.notify_session_expiring(self.project_name)
-            else:
-                self._log(f"[SCRAPE] Error: {exc}", level="error")
-                raise
-
-        # N-05: Detectar escaladas en tickets activos después de cada scraping
-        if self._change_monitor:
-            try:
-                events = self._change_monitor.check_for_escalations(self.project_name)
-                for ev in events:
-                    self._log(f"[ESCALATION] Ticket #{ev.ticket_id} escalado — {ev.reason}",
-                              level="warning")
-                    self._notifier.send(
-                        title=f"Escalada detectada — Ticket #{ev.ticket_id}",
-                        message=f"{ev.reason} → prioridad {ev.new_priority}",
-                        level="warning",
-                        ticket_id=ev.ticket_id,
-                    )
-            except Exception as e:
-                self._log(f"[ESCALATION] Error en monitor: {e}", level="debug")
+            self._log(f"[SCRAPE] Error: {exc}", level="error")
+            raise
 
     # ── Ciclo de pipeline ─────────────────────────────────────────────────
 
@@ -650,6 +766,19 @@ class MantisScraperDaemon:
                 except Exception:
                     pass
 
+            # ── Guardia secundaria: lock activo → skip (la primaria está en _launch_stage)
+            try:
+                from pipeline_lock import is_locked as _is_locked
+                if _is_locked(tid, stage):
+                    self._log(
+                        f"[PIPELINE] {tid}/{stage} — lock activo detectado en ciclo, "
+                        f"esperando a que termine la instancia en curso",
+                        level="debug",
+                    )
+                    continue
+            except ImportError:
+                pass
+
             # Lanzar etapa en thread para no bloquear el loop
             self._log(f"[PIPELINE] {tid} → lanzando etapa '{stage}'")
             ps.set_ticket_state(state, tid, f"{stage}_en_proceso",
@@ -689,6 +818,10 @@ class MantisScraperDaemon:
             ps.save_state(self._state_path, state)
             self._notifier.notify_action_needed(ticket_id, reason)
             self._log(f"[PIPELINE] {ticket_id} → {err_stage} agotó reintentos", level="warning")
+            # Liberar sesión de chat — el ticket no puede avanzar
+            if self._session_mgr:
+                self._session_mgr.release(ticket_id)
+                self._log(f"[SESSION] Sesión liberada para ticket #{ticket_id} (reintentos agotados)")
             return
 
         self._log(f"[PIPELINE] {ticket_id} → lanzando fix de {err_stage} "
@@ -743,8 +876,61 @@ class MantisScraperDaemon:
     def _launch_stage(self, ticket_id: str, stage: str, folder: str,
                       retry_num: int = 0, error_context: str = None):
         """Invoca el agente para una etapa (fire-and-forget, sin UI fallback)."""
+        # ── LOCK: evita ejecuciones paralelas del mismo stage+ticket ────────────
+        # Protege contra: daemon + watcher, dos ciclos solapados, dashboard + daemon.
+        # File-based → funciona incluso entre procesos distintos.
+        try:
+            from pipeline_lock import acquire_lock, release_lock
+        except ImportError:
+            acquire_lock = release_lock = None
+
+        _lock_run_id = None
+        if acquire_lock:
+            _lock_run_id = acquire_lock(ticket_id, stage)
+            if _lock_run_id is None:
+                # Otro thread/proceso ya tiene este stage corriendo → skip
+                self._log(
+                    f"[LOCK] {ticket_id}/{stage} ya en ejecución (lock activo) — "
+                    f"invocación duplicada ignorada",
+                    level="warning",
+                )
+                if _slog:
+                    _slog.info(ticket_id, "lock",
+                               f"Stage {stage} tiene lock activo — duplicado evitado")
+                return
+        # ── FIN LOCK ─────────────────────────────────────────────────────────────
+
         if _slog:
             _slog.stage_start(ticket_id, stage, retry=retry_num)
+
+        # ── SESSION: adquirir sesión aislada para este ticket ────────────────
+        _session_port = None
+        _session = None
+        if self._session_mgr:
+            _session = self._session_mgr.acquire(ticket_id, stage=stage, timeout=600)
+            if _session:
+                _session_port = _session.port
+                self._log(
+                    f"[SESSION] Ticket #{ticket_id}/{stage} → sesión {_session.session_id} "
+                    f"(:{_session.port})")
+                # Asegurar que la instancia de VS Code de esta sesión está corriendo
+                # en la carpeta del proyecto con el bridge en el puerto correcto.
+                if not _session.health_check():
+                    ws_ok = _session._ensure_workspace(self._ws_root)
+                    if not ws_ok:
+                        self._log(
+                            f"[SESSION] No se pudo abrir VS Code (sesión {_session.session_id}) "
+                            f"en {self._ws_root} — abortando {stage} para #{ticket_id}",
+                            level="error")
+                        if release_lock and _lock_run_id:
+                            release_lock(ticket_id, stage, _lock_run_id)
+                        return
+            else:
+                self._log(
+                    f"[SESSION] Timeout esperando sesión para #{ticket_id}/{stage} "
+                    f"— usando puerto default", level="warning")
+        # ── FIN SESSION ──────────────────────────────────────────────────────
+
         try:
             from copilot_bridge import invoke_agent
             from prompt_builder import (build_pm_prompt, build_dev_prompt,
@@ -900,7 +1086,8 @@ class MantisScraperDaemon:
                               project_name=self.project_name,
                               workspace_root=self._ws_root,
                               allow_ui_fallback=False,
-                              new_conversation=(stage == "pm"))
+                              new_conversation=(stage == "pm"),
+                              bridge_port=_session_port)
 
             if _slog:
                 _slog.invoke_result(ticket_id, stage, ok,
@@ -947,34 +1134,15 @@ class MantisScraperDaemon:
                 ps.save_state(self._state_path, state)
             except Exception:
                 pass
-
-    # ── Verificación de sesión ────────────────────────────────────────────
-
-    def _session_check(self):
-        """Verifica la sesión SSO y dispara renovación si es necesaria."""
-        if self._renewal_in_progress:
-            return
-        if not self._mantis_url:
-            return
-
-        try:
-            from session_manager import SessionManager
-            sm = SessionManager(self._auth_path, self._mantis_url)
-            if sm.needs_renewal(max_age_hours=self._cfg["session_max_age_hours"]):
-                self._log("[SESSION] Sesión necesita renovación", level="warning")
-                self._renewal_in_progress = True
-                self._notifier.notify_session_expiring(self.project_name)
-
-                def _on_complete(success: bool):
-                    self._renewal_in_progress = False
-                    if success:
-                        self._log("[SESSION] Renovación completada")
-                    else:
-                        self._log("[SESSION] Renovación falló — scraping pausado", level="error")
-
-                sm.prompt_renewal_async(on_complete=_on_complete)
-        except Exception as e:
-            self._log(f"[SESSION] Error verificando sesión: {e}", level="warning")
+        finally:
+            # Liberar el lock siempre — tanto en éxito como en error/excepción
+            if release_lock and _lock_run_id:
+                release_lock(ticket_id, stage, _lock_run_id)
+            # Actualizar last_used en la sesión (no liberar — el ticket puede
+            # tener más stages pendientes; la sesión se libera al completar
+            # el pipeline completo o por timeout)
+            if _session:
+                _session.last_used = time.time()
 
     # ── Ciclo de limpieza ─────────────────────────────────────────────────
 
@@ -1052,6 +1220,17 @@ class MantisScraperDaemon:
         except Exception as e:
             self._log(f"[CLEANUP] Error: {e}", level="error")
 
+        # ── Limpieza de lock files zombie ────────────────────────────────────
+        try:
+            from pipeline_lock import cleanup_zombie_locks
+            cleaned = cleanup_zombie_locks()
+            if cleaned:
+                self._log(f"[CLEANUP] {cleaned} lock(s) zombie eliminados")
+        except ImportError:
+            pass
+        except Exception as lck_err:
+            self._log(f"[CLEANUP] Error limpiando locks: {lck_err}", level="debug")
+
     # ── Utilidades ─────────────────────────────────────────────────────────
 
     def _log(self, msg: str, level: str = "info") -> None:
@@ -1083,7 +1262,7 @@ def _list_projects():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Mantis Scraper Daemon — orquestador automático de tickets",
+        description="Stacky Daemon — orquestador automático de tickets",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Ejemplos:
@@ -1137,7 +1316,7 @@ Ejemplos:
         logger.info("MODO DRY-RUN — no se lanzarán agentes ni se scrapeará")
         logger.info("=" * 55)
 
-    daemon = MantisScraperDaemon(
+    daemon = StackyDaemon(
         project_name=project_name,
         scrape_interval_minutes=args.interval,
         auto_pipeline=not args.no_auto_pipeline,
@@ -1147,6 +1326,65 @@ Ejemplos:
         dry_run=args.dry_run,
     )
     daemon.run()
+
+
+def _build_resolution_note(folder, ticket_id: str) -> str:
+    """
+    Arma el HTML de la nota post-QA que se publica en el tracker.
+
+    Lee (best-effort) los archivos que ya generó la pipeline:
+      - TESTER_COMPLETADO.md → veredicto
+      - DEV_COMPLETADO.md    → resumen de cambios
+      - commit info (si existe COMMIT_INFO.md)
+    Si ninguno está disponible, devuelve un aviso mínimo.
+    """
+    from pathlib import Path as _P
+    parts = []
+    try:
+        tc = _P(folder) / "TESTER_COMPLETADO.md"
+        if tc.exists():
+            parts.append("<h3>Resultado QA</h3>")
+            parts.append(_md_to_html_mini(tc.read_text(encoding="utf-8", errors="replace")))
+    except Exception:
+        pass
+    try:
+        dc = _P(folder) / "DEV_COMPLETADO.md"
+        if dc.exists():
+            parts.append("<h3>Cambios del Developer</h3>")
+            parts.append(_md_to_html_mini(dc.read_text(encoding="utf-8", errors="replace")))
+    except Exception:
+        pass
+    try:
+        ci = _P(folder) / "COMMIT_INFO.md"
+        if ci.exists():
+            parts.append("<h3>Commit</h3>")
+            parts.append(_md_to_html_mini(ci.read_text(encoding="utf-8", errors="replace")))
+    except Exception:
+        pass
+    if not parts:
+        return (
+            "<p>Pipeline Stacky completó el ticket #" + str(ticket_id) +
+            ". No se encontraron artefactos de QA/Dev para adjuntar.</p>"
+        )
+    parts.insert(0, f"<p><b>Pipeline Stacky — ticket #{ticket_id}</b></p>")
+    return "\n".join(parts)
+
+
+def _md_to_html_mini(md: str) -> str:
+    """Render Markdown → HTML muy liviano (sin dependencias)."""
+    import re as _re, html as _html
+    if not md:
+        return ""
+    s = _html.escape(md)
+    s = _re.sub(r"(?m)^### (.+)$", r"<h3>\1</h3>", s)
+    s = _re.sub(r"(?m)^## (.+)$",  r"<h3>\1</h3>", s)
+    s = _re.sub(r"(?m)^# (.+)$",   r"<h2>\1</h2>", s)
+    s = _re.sub(r"\*\*(.+?)\*\*",  r"<b>\1</b>", s)
+    s = _re.sub(r"`([^`]+)`",      r"<code>\1</code>", s)
+    s = _re.sub(r"(?m)^- (.+)$",   r"<li>\1</li>", s)
+    s = _re.sub(r"(<li>.+</li>\n?)+", lambda m: "<ul>" + m.group(0) + "</ul>", s)
+    s = s.replace("\n\n", "<br/><br/>").replace("\n", "<br/>")
+    return s
 
 
 if __name__ == "__main__":

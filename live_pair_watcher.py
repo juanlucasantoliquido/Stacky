@@ -8,7 +8,7 @@ del dashboard via Server-Sent Events (SSE).
 Flujo:
   1. Watcher de sistema de archivos (watchdog) detecta archivos abiertos/modificados.
   2. Busca en el pipeline state si algun ticket activo referencia ese archivo
-     (en ARQUITECTURA_SOLUCION.md o SVN_CHANGES.md).
+     (en ARQUITECTURA_SOLUCION.md o GIT_CHANGES.md).
   3. Si hay match, emite un evento SSE al dashboard con el contexto relevante:
      - Analisis PM del ticket
      - Advertencias de Blast Radius para ese archivo
@@ -33,7 +33,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-logger = logging.getLogger("mantis.live_pair")
+logger = logging.getLogger("stacky.live_pair")
 
 BASE_DIR = Path(__file__).parent
 
@@ -189,7 +189,7 @@ class LivePairWatcher:
             stage = info.get("stage", "")
             if stage in ("pm_en_proceso", "dev_en_proceso", "tester_en_proceso",
                          "pm_completado", "dev_completado"):
-                # Leer archivos relevantes de ARQUITECTURA_SOLUCION.md y SVN_CHANGES.md
+                # Leer archivos relevantes de ARQUITECTURA_SOLUCION.md y GIT_CHANGES.md
                 ticket_folder = self._find_ticket_folder(ticket_id)
                 if ticket_folder:
                     files = self._extract_relevant_files(ticket_folder)
@@ -211,9 +211,9 @@ class LivePairWatcher:
         return None
 
     def _extract_relevant_files(self, ticket_folder: Path) -> list:
-        """Extrae rutas de archivos mencionadas en ARQUITECTURA_SOLUCION.md y SVN_CHANGES.md."""
+        """Extrae rutas de archivos mencionadas en ARQUITECTURA_SOLUCION.md y GIT_CHANGES.md."""
         files = set()
-        for fname in ("ARQUITECTURA_SOLUCION.md", "SVN_CHANGES.md", "DEV_COMPLETADO.md"):
+        for fname in ("ARQUITECTURA_SOLUCION.md", "GIT_CHANGES.md", "DEV_COMPLETADO.md"):
             fpath = ticket_folder / fname
             if fpath.exists():
                 content = fpath.read_text(encoding="utf-8", errors="ignore")

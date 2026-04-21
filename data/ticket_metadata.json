@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "tickets": {
+    "12347": {
+      "ticket_id": "12347",
+      "color": null,
+      "user_tags": {
+        "tags": []
+      },
+      "commits_count": 1,
+      "last_commit_hash": "c7a5d0da2a8fbbba66a310c91f026836a16face9",
+      "last_commit_at": "2026-04-21T18:59:24+00:00",
+      "ado_comments_count": 0,
+      "notes_count": 0,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:24.978619+00:00"
+    },
+    "00124": {
+      "ticket_id": "00124",
+      "color": null,
+      "user_tags": {
+        "tags": []
+      },
+      "commits_count": 1,
+      "last_commit_hash": "c7a5d0da2a8fbbba66a310c91f026836a16face9",
+      "last_commit_at": "2026-04-21T18:59:24+00:00",
+      "ado_comments_count": 0,
+      "notes_count": 0,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:24.978619+00:00"
+    },
+    "00123": {
+      "ticket_id": "00123",
+      "color": null,
+      "user_tags": {
+        "tags": []
+      },
+      "commits_count": 1,
+      "last_commit_hash": "2732be91b47d260e254043c2fb24c4967a757f18",
+      "last_commit_at": "2026-04-21T18:59:23+00:00",
+      "ado_comments_count": 0,
+      "notes_count": 0,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:24.978619+00:00"
+    },
+    "12346": {
+      "ticket_id": "12346",
+      "color": null,
+      "user_tags": {
+        "tags": []
+      },
+      "commits_count": 1,
+      "last_commit_hash": "fb928596ba4b74e9fc81521bc54cb82bc5adc979",
+      "last_commit_at": "2026-04-21T18:59:23+00:00",
+      "ado_comments_count": 0,
+      "notes_count": 0,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:24.978619+00:00"
+    },
+    "12345": {
+      "ticket_id": "12345",
+      "color": null,
+      "user_tags": {
+        "tags": []
+      },
+      "commits_count": 1,
+      "last_commit_hash": "aab4eab1d0aa2d93cf4d6a9ed41b50c581f9a289",
+      "last_commit_at": "2026-04-21T18:59:23+00:00",
+      "ado_comments_count": 0,
+      "notes_count": 0,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:24.978619+00:00"
+    },
+    "123456": {
+      "ticket_id": "123456",
+      "color": {
+        "hex": "#ff0100"
+      },
+      "user_tags": {
+        "tags": [
+          "new1",
+          "new2"
+        ]
+      },
+      "commits_count": null,
+      "last_commit_hash": null,
+      "last_commit_at": null,
+      "ado_comments_count": null,
+      "notes_count": null,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:14.480250+00:00"
+    },
+    "123": {
+      "ticket_id": "123",
+      "color": {
+        "hex": "#ff0000"
+      },
+      "user_tags": {
+        "tags": [
+          "urgente",
+          "refactor"
+        ]
+      },
+      "commits_count": null,
+      "last_commit_hash": null,
+      "last_commit_at": null,
+      "ado_comments_count": null,
+      "notes_count": null,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:08.781895+00:00"
+    },
+    "124": {
+      "ticket_id": "124",
+      "color": {
+        "hex": "#00ff00"
+      },
+      "user_tags": {
+        "tags": [
+          "refactor",
+          "db",
+          "urgente"
+        ]
+      },
+      "commits_count": null,
+      "last_commit_hash": null,
+      "last_commit_at": null,
+      "ado_comments_count": null,
+      "notes_count": null,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:08.781895+00:00"
+    },
+    "111111": {
+      "ticket_id": "111111",
+      "color": null,
+      "user_tags": {
+        "tags": [
+          "urgente"
+        ]
+      },
+      "commits_count": null,
+      "last_commit_hash": null,
+      "last_commit_at": null,
+      "ado_comments_count": null,
+      "notes_count": null,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:08.697361+00:00"
+    },
+    "222222": {
+      "ticket_id": "222222",
+      "color": null,
+      "user_tags": {
+        "tags": [
+          "refactor"
+        ]
+      },
+      "commits_count": null,
+      "last_commit_hash": null,
+      "last_commit_at": null,
+      "ado_comments_count": null,
+      "notes_count": null,
+      "last_note_at": null,
+      "last_indexed_at": null,
+      "updated_at": "2026-04-21T18:59:08.733421+00:00"
+    }
+  }
+}

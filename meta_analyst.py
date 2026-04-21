@@ -24,7 +24,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
-logger = logging.getLogger("mantis.meta_analyst")
+logger = logging.getLogger("stacky.meta_analyst")
 
 _ANALYSIS_WINDOW_DAYS = 30
 _MIN_TICKETS_FOR_ANALYSIS = 5

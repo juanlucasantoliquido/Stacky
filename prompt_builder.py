@@ -1,5 +1,5 @@
 """
-prompt_builder.py — Construye prompts para los agentes PM-TLStack2 y DevStack2.
+prompt_builder.py — Construye prompts para los agentes PM-TLStack 1 PACIFICO y DevStack3.
 
 Funciones disponibles:
   build_pm_prompt       — análisis inicial de un ticket
@@ -16,6 +16,205 @@ try:
 except ImportError:
     _build_ctx = None
 
+# G-02: Pitfall Registry integration
+try:
+    from pitfall_registry import PitfallRegistry
+    _pitfall_registry = PitfallRegistry()
+except ImportError:
+    _pitfall_registry = None
+
+# Q-01: Semantic Anchor Injection
+try:
+    from semantic_anchor_injector import SemanticAnchorInjector
+    _anchor_injector = SemanticAnchorInjector()
+except ImportError:
+    _anchor_injector = None
+
+# Q-02: Pre-flight Handoff Score PM → DEV
+try:
+    from handoff_scorer import HandoffScorer, HandoffScore
+    _handoff_scorer = HandoffScorer()
+except ImportError:
+    _handoff_scorer = None
+    HandoffScore = None
+
+# X-01: Self-Improving Prompt Engine
+try:
+    from self_improving_engine import get_engine as _get_self_improving_engine
+except ImportError:
+    _get_self_improving_engine = None
+
+# Agent customization (strictness, extra instructions, allowed tests)
+try:
+    from agent_config import load_agent_config as _load_agent_config
+    from agent_config import build_prompt_injection as _build_agent_injection
+except ImportError:
+    _load_agent_config = None
+    _build_agent_injection = None
+
+
+# A4: heartbeat block — se anexa a cada prompt para que el agente toque el
+# archivo {STAGE}_HEARTBEAT.txt periódicamente. El zombie sweeper y el crash
+# recovery del daemon usan el mtime de ese archivo (umbral: 5 min) como señal
+# de vida más confiable que el PID del proceso invocador.
+def heartbeat_tail(stage_upper: str) -> str:
+    """Bloque heartbeat para anexar al final de cada prompt de agente.
+
+    `stage_upper` debe ser PM/DEV/TESTER (un solo archivo por etapa padre,
+    compartido por los 3 sub-agentes que la componen). El agente lo crea
+    dentro de la carpeta del ticket que ya conoce por instrucciones previas.
+    """
+    return f"""
+
+---
+🫀 **Heartbeat obligatorio (control anti-zombie)**
+
+Cada vez que ejecutes una tool call de larga duración (Bash, Edit, Write,
+Grep masivo, lectura de archivos grandes), INMEDIATAMENTE DESPUÉS sobreescribí
+el archivo `{stage_upper}_HEARTBEAT.txt` dentro de la carpeta del ticket con:
+  - El timestamp ISO actual en la primera línea.
+  - Una línea breve describiendo el paso que acabás de completar.
+
+Ejemplo de contenido:
+```
+2026-04-19T14:32:10
+analizando ANALISIS_TECNICO.md
+```
+
+Si este archivo no se actualiza durante más de **5 minutos**, el sweeper
+del pipeline considerará al ticket como zombie y lo marcará en error. NO te
+saltees esta instrucción incluso si la etapa es corta — la primera escritura
+debe ocurrir antes de la primera tool call de carga.
+"""
+
+
+def _ticket_header(ticket_id: str, stage: str, titulo: str = "") -> str:
+    """
+    Cabecera estándar que aparece al principio de TODOS los prompts de agente.
+    Incluye instrucción de renombrar la conversación para que sea fácil de
+    identificar en el panel de chats.
+    """
+    stage_labels = {
+        "pm":     "📋 PM — Análisis y planificación",
+        "dev":    "⚙ Dev — Implementación",
+        "tester": "🧪 QA — Pruebas",
+    }
+    label = stage_labels.get(stage, stage.upper())
+    titulo_line = f" · {titulo}" if titulo else ""
+    return (
+        f"═══════════════════════════════════════════════════\n"
+        f"🎫 TICKET #{ticket_id}{titulo_line}\n"
+        f"   Etapa: {label}\n"
+        f"═══════════════════════════════════════════════════\n\n"
+        f"⚠️ **PRIMER PASO OBLIGATORIO:** Renombrá esta conversación a:\n"
+        f"   `#{ticket_id} — {stage.upper()}`\n"
+        f"   (en VS Code Copilot Chat: click en el título del chat → editá el nombre)\n\n"
+    )
+
+
+def _apply_agent_config(agent: str, prompt: str) -> str:
+    """
+    Apendea al prompt las instrucciones configuradas por el usuario para este
+    agente del proyecto activo. No-op si el módulo agent_config no está
+    disponible o si no hay config personalizada.
+    """
+    if _load_agent_config is None or _build_agent_injection is None:
+        return prompt
+    try:
+        from project_manager import get_active_project
+        project_name = get_active_project()
+    except Exception:
+        return prompt
+    if not project_name:
+        return prompt
+    stacky_base = os.path.dirname(os.path.abspath(__file__))
+    try:
+        cfg = _load_agent_config(stacky_base, agent, project_name=project_name)
+        injection = _build_agent_injection(agent, cfg)
+    except Exception:
+        return prompt
+    if not injection:
+        return prompt
+    return prompt + injection
+
+
+def _build_golden_examples_section(ticket_folder: str, stage: str,
+                                    top_k: int = 2) -> str:
+    """X-01: Inyecta ejemplos de tickets similares con QA APROBADO al primer intento."""
+    if _get_self_improving_engine is None:
+        return ""
+    try:
+        engine   = _get_self_improving_engine()
+        examples = engine.get_similar_examples(ticket_folder, stage, top_k=top_k)
+    except Exception:
+        return ""
+    if not examples:
+        return ""
+    body = "\n\n".join(examples)
+    return (
+        "## Ejemplos de tickets similares exitosos\n\n"
+        + body
+        + "\n\n---\n\n"
+    )
+
+
+def _build_handoff_score_section(ticket_folder: str) -> str:
+    """Q-02: Prepend handoff score block to DEV prompt."""
+    if _handoff_scorer is None:
+        return ""
+    try:
+        result = _handoff_scorer.score_pm_to_dev(ticket_folder)
+    except Exception:
+        return ""
+    missing = ", ".join(result.missing_signals) if result.missing_signals else "ninguna"
+    lines = [
+        f"## Handoff Score del análisis PM: {result.score}/100",
+        f"**Señales faltantes:** {missing}",
+    ]
+    if result.score < 60:
+        lines.append("⚠️ El análisis PM está incompleto — investigá más antes de codificar.")
+    return "\n".join(lines) + "\n"
+
+
+def _collect_anchor_files(ticket_folder: str, ticket_id: str,
+                           workspace_root: str) -> list:
+    """Q-01: Recolecta la lista de archivos relevantes para anclas semánticas."""
+    rels: list = []
+    seen: set = set()
+    try:
+        from code_context import (
+            extract_files_from_architecture as _from_arch,
+            find_relevant_files as _from_heuristic,
+        )
+        for f in _from_arch(ticket_folder, workspace_root):
+            if f.get("exists") and f.get("rel_path") and f["rel_path"] not in seen:
+                seen.add(f["rel_path"])
+                rels.append(f["rel_path"])
+        for f in _from_heuristic(ticket_folder, ticket_id, workspace_root):
+            if f.get("rel_path") and f["rel_path"] not in seen:
+                seen.add(f["rel_path"])
+                rels.append(f["rel_path"])
+    except Exception:
+        pass
+    return rels
+
+
+def _build_semantic_anchors_section(ticket_folder: str, ticket_id: str,
+                                     workspace_root: str) -> str:
+    """Q-01: Genera la sección de anclas semánticas con código real, o '' si no hay."""
+    if _anchor_injector is None:
+        return ""
+    try:
+        file_list = _collect_anchor_files(ticket_folder, ticket_id, workspace_root)
+        if not file_list:
+            return ""
+        anchors = _anchor_injector.build_anchors(file_list, workspace_root)
+        if not anchors:
+            return ""
+        return "## Anclas semánticas (código real)\n\n" + anchors + "\n\n---\n\n"
+    except Exception:
+        return ""
+
 
 def _inject_code_context(ticket_folder: str, ticket_id: str,
                           workspace_root: str) -> str:
@@ -26,6 +225,33 @@ def _inject_code_context(ticket_folder: str, ticket_id: str,
     if _build_ctx is None:
         return ""
     return _build_ctx(ticket_folder, ticket_id, workspace_root)
+
+
+def _inject_pitfall_warnings(ticket_folder: str) -> str:
+    """G-02: Inyecta advertencias de pitfalls conocidos en el prompt DEV."""
+    if _pitfall_registry is None:
+        return ""
+    import re
+    files = []
+    for md_name in ("ARQUITECTURA_SOLUCION.md", "TAREAS_DESARROLLO.md"):
+        md_path = os.path.join(ticket_folder, md_name)
+        if os.path.exists(md_path):
+            with open(md_path, encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            files.extend(re.findall(
+                r'[\w/\\]+\.(?:cs|aspx|sql|vb|config)\b', content, re.IGNORECASE
+            ))
+    if not files:
+        return ""
+    warnings = _pitfall_registry.get_warnings_for_files(files)
+    if not warnings:
+        return ""
+    section = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    section += "⚠️ PITFALLS CONOCIDOS (errores recurrentes)\n"
+    section += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    for w in warnings[:5]:
+        section += f"- {w}\n"
+    return section
 
 
 def _read_file_safe(path: str, max_chars: int = 2000) -> str:
@@ -200,8 +426,14 @@ def build_pm_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> 
     # Y-02: Pre-warming — inyectar contexto ya disponible al inicio del prompt
     _prewarming = build_pm_prewarming_section(ticket_folder, ticket_id, workspace_root)
 
-    return f"""Analizá y completá la incidencia del ticket #{ticket_id}.
-{_prewarming}
+    # Q-01: Semantic Anchor Injection — inyectar fragmentos reales de código
+    _semantic_anchors = _build_semantic_anchors_section(ticket_folder, ticket_id, workspace_root)
+
+    # X-01: Golden Examples — ejemplos de tickets similares exitosos (primera pasada QA)
+    _golden_examples = _build_golden_examples_section(ticket_folder, "pm", top_k=2)
+
+    _pm_prompt = _ticket_header(ticket_id, "pm") + f"""Analizá y completá la incidencia del ticket #{ticket_id}.
+{_semantic_anchors}{_golden_examples}{_prewarming}
 {_subsystem_line}Carpeta del ticket: {rel_folder}/
 {docs_note}{nota_pm_block}
 Trabajá en 3 fases secuenciales. Completá cada fase antes de pasar a la siguiente.
@@ -264,14 +496,24 @@ Si encontrás un bloqueante insalvable en cualquier fase:
 - No crees PM_COMPLETADO.flag
 
 No preguntes — ejecutá las 3 fases directamente."""
+    return _apply_agent_config("pm", _pm_prompt)
 
 
 def build_dev_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
     rel_folder   = _to_workspace_relative(ticket_folder, workspace_root)
     code_context = _inject_code_context(ticket_folder, ticket_id, workspace_root)
 
-    return f"""Implementá la incidencia del ticket #{ticket_id}.
+    # Q-02: Pre-flight Handoff Score — prepend score del análisis PM
+    _handoff_block = _build_handoff_score_section(ticket_folder)
 
+    # Q-01: Semantic Anchor Injection — inyectar fragmentos reales de código
+    _semantic_anchors = _build_semantic_anchors_section(ticket_folder, ticket_id, workspace_root)
+
+    # X-01: Golden Examples — ejemplos de tickets similares exitosos (primera pasada QA)
+    _golden_examples = _build_golden_examples_section(ticket_folder, "dev", top_k=2)
+
+    _dev_prompt = _ticket_header(ticket_id, "dev") + f"""{_handoff_block}Implementá la incidencia del ticket #{ticket_id}.
+{_semantic_anchors}{_golden_examples}
 Carpeta de trabajo: {rel_folder}/
 
 Trabajá en 3 fases secuenciales. Completá cada fase antes de pasar a la siguiente.
@@ -313,7 +555,7 @@ Objetivo: documentar los cambios para QA.
    <DDL/DML ejecutados, o "Ninguno">
    ## Observaciones
    <pendientes o riesgos; o "Sin observaciones">
-2. Creá SVN_CHANGES.md con un resumen de cambios para el commit message
+2. Creá GIT_CHANGES.md con un resumen de cambios para el commit message
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FINALIZACIÓN
@@ -321,86 +563,139 @@ FINALIZACIÓN
 DEV_COMPLETADO.md es la señal del pipeline — crealo solo cuando las 3 fases estén completas.
 Si encontrás un bloqueante: creá {rel_folder}/DEV_ERROR.flag con diagnóstico detallado.
 No preguntes — ejecutá las 3 fases directamente.
-{code_context}"""
+{code_context}{_inject_pitfall_warnings(ticket_folder)}"""
+    return _apply_agent_config("dev", _dev_prompt)
 
 
 def build_tester_prompt(ticket_folder: str, ticket_id: str, workspace_root: str) -> str:
     rel_folder = _to_workspace_relative(ticket_folder, workspace_root)
 
-    # Inyectar SVN_CHANGES.md si existe (generado por svn_reporter post-DEV)
-    svn_changes_path = os.path.join(ticket_folder, "SVN_CHANGES.md")
-    svn_section = ""
-    if os.path.exists(svn_changes_path):
-        svn_content = _read_file_safe(svn_changes_path, max_chars=4000)
-        if svn_content:
-            svn_section = f"""
+    # ── Inyectar GIT_CHANGES.md / DEV_COMPLETADO.md ──────────────────────────
+    git_changes_path = os.path.join(ticket_folder, "GIT_CHANGES.md")
+    dev_completado_path = os.path.join(ticket_folder, "DEV_COMPLETADO.md")
+
+    git_section = ""
+    if os.path.exists(git_changes_path):
+        git_content = _read_file_safe(git_changes_path, max_chars=4000)
+        if git_content:
+            git_section = f"\n\n---\n## Cambios declarados por DEV (GIT_CHANGES.md)\n\n{git_content}\n\n---\n"
+
+    dev_completado_section = ""
+    if os.path.exists(dev_completado_path):
+        dev_content = _read_file_safe(dev_completado_path, max_chars=5000)
+        if dev_content:
+            dev_completado_section = f"\n\n---\n## DEV_COMPLETADO.md — archivos modificados y resumen\n\n{dev_content}\n\n---\n"
+
+    # ── Extraer criterios de aceptación de TAREAS_DESARROLLO.md ──────────────
+    acceptance_criteria_section = ""
+    tareas_path = os.path.join(ticket_folder, "TAREAS_DESARROLLO.md")
+    if os.path.exists(tareas_path):
+        tareas_content = _read_file_safe(tareas_path, max_chars=6000)
+        if tareas_content:
+            acceptance_criteria_section = f"""
 
 ---
 
-## Cambios SVN realizados por DEV (auto-generado)
+## Criterios de aceptación (de TAREAS_DESARROLLO.md)
 
-{svn_content}
+Los siguientes criterios fueron definidos por PM. Tu tarea es verificar CADA uno con evidencia:
+
+{tareas_content}
 
 ---
 """
 
-    return f"""Realizá pruebas exhaustivas de la implementación del ticket #{ticket_id}.
+    # ── Extraer archivos modificados de DEV_COMPLETADO.md para checklist ─────
+    modified_files_hint = ""
+    if os.path.exists(dev_completado_path):
+        dev_content_raw = _read_file_safe(dev_completado_path, max_chars=3000)
+        if dev_content_raw:
+            import re as _re
+            found = _re.findall(
+                r'\b[\w/\\]+\.(?:cs|aspx|aspx\.cs|sql|vb|config)\b',
+                dev_content_raw, _re.IGNORECASE
+            )
+            unique_files = list(dict.fromkeys(found))  # dedup preservando orden
+            if unique_files:
+                files_list = "\n".join(f"  - {f}" for f in unique_files[:20])
+                modified_files_hint = f"""
+
+## Archivos a auditar (extraídos de DEV_COMPLETADO.md)
+
+Los siguientes archivos fueron modificados por DEV. Tu CODE_REVIEW.md **debe cubrir cada uno**:
+
+{files_list}
+
+Si alguno no existe en el workspace, reportalo como BLOQUEANTE.
+"""
+
+    git_section = ""
+    if os.path.exists(git_changes_path):
+        git_content = _read_file_safe(git_changes_path, max_chars=4000)
+        if git_content:
+            git_section = f"\n\n---\n## Cambios de código (GIT_CHANGES.md)\n\n{git_content}\n\n---\n"
+
+    _tester_prompt = _ticket_header(ticket_id, "tester") + f"""Realizá pruebas exhaustivas de la implementación del ticket #{ticket_id}.
 
 Carpeta de trabajo: {rel_folder}/
 
-Trabajá en 3 fases secuenciales. Completá cada fase antes de pasar a la siguiente.
+TU HIPÓTESIS DE PARTIDA: esta implementación tiene al menos un defecto. Tu trabajo es encontrarlo o refutarlo con evidencia concreta. Aprobás cuando los hechos te lo demuestran — no antes.
+
+Para CADA verificación, pegá el fragmento de código o resultado de query como evidencia. Una verificación sin evidencia cuenta como FAIL.
+{dev_completado_section}{git_section}{acceptance_criteria_section}{modified_files_hint}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FASE 1 — CODE REVIEW (sub-agente Revisor)
+FASE 1 — CODE REVIEW con evidencia obligatoria (sub-agente Revisor)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Objetivo: revisión estática del código. NO ejecutes pruebas funcionales todavía.
 
-1. Leé DEV_COMPLETADO.md para ver qué archivos cambió DEV
-2. Revisá cada archivo modificado y auditá:
-   - RIDIOMA: ¿todos los mensajes usan constantes de RIDIOMA (sin texto hardcodeado)?
-   - Logging: ¿hay Log.Error en catch y Log.Info en operaciones importantes?
-   - Null safety: ¿hay NullReferenceException potenciales sin guard?
-   - Oracle DAL: ¿se usa el patrón correcto (sin Entity Framework, SQL directo via DAL)?
-   - Criterios PM: ¿todas las tareas de TAREAS_DESARROLLO.md están implementadas?
-3. Escribí CODE_REVIEW.md con:
-   - Resultado: SIN ISSUES / CON ADVERTENCIAS / CON BLOQUEANTES
-   - Tabla de issues: # | Severidad (BLOQUEANTE/ADVERTENCIA/SUGERENCIA) | Archivo | Línea | Descripción | Corrección
-   - Checklist de convenciones con [x] o [ ]
+1. Para cada archivo modificado listado arriba, auditá las 10 reglas del proyecto (R1-R10).
+2. Para cada regla, respondé con `[PASS]`, `[FAIL]` o `[N/A - motivo]` + pegá el fragmento de código auditado.
+3. Buscá activamente las señales de alerta: catch vacíos, conversiones de input sin validación, SQL con concatenación de variables, acceso a Rows[0] sin verificar Count, ToString() sobre null potencial, UPDATE sin WHERE.
+
+Escribí CODE_REVIEW.md con:
+  - Resultado global: SIN ISSUES / CON ADVERTENCIAS / CON BLOQUEANTES
+  - Por cada archivo auditado: tabla de reglas con [PASS]/[FAIL]/[N/A] + fragmento de evidencia
+  - Lista de issues: # | Severidad | Archivo | Línea | Descripción exacta | Corrección requerida
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FASE 2 — PRUEBAS FUNCIONALES (sub-agente Ejecutor)
+FASE 2 — PRUEBAS FUNCIONALES con evidencia (sub-agente Ejecutor)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Objetivo: ejecutar casos de prueba funcionales.
+Objetivo: verificar que CADA criterio de aceptación listado en TAREAS_DESARROLLO.md se cumple.
 
-1. Leé TAREAS_DESARROLLO.md para obtener los criterios de aceptación
-2. Ejecutá y documentá:
-   - Caso feliz: el escenario principal del ticket funciona correctamente
-   - Casos edge: entrada vacía, valores límite, datos nulos, usuario sin permisos
-   - Regresión directa: funcionalidad del mismo módulo que NO cambió sigue igual
-   - Validación BD: ejecutá queries de QUERIES_ANALISIS.sql y verificá datos
-3. Escribí TEST_RESULTS.md con tabla:
-   | # | Caso | Tipo | Pasos | Esperado | Real | Estado (PASS/FAIL) |
-{svn_section}
+1. Para cada criterio de aceptación, diseñá el caso de prueba correspondiente.
+2. Para cambios en Dalc/BD: ejecutá las queries de validación y pegá el resultado.
+3. Probá siempre el escenario nulo/vacío y el escenario límite.
+
+Escribí TEST_RESULTS.md con tabla:
+| # | Criterio verificado | Input/Escenario | Resultado esperado | Evidencia real (código/query/output) | PASS/FAIL |
+
+Para cambios DDL, la evidencia DEBE incluir el resultado de:
+SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE
+FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'TABLA' AND COLUMN_NAME IN ('campos nuevos')
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FASE 3 — VEREDICTO (sub-agente Árbitro)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Objetivo: consolidar CODE_REVIEW.md + TEST_RESULTS.md y emitir el veredicto final.
+Objetivo: consolidar CODE_REVIEW.md + TEST_RESULTS.md y emitir veredicto.
 
-Criterios:
-- APROBADO: sin issues BLOQUEANTES + todos los casos felices PASS
-- CON OBSERVACIONES: hay ADVERTENCIAS pero el caso feliz pasa
-- RECHAZADO: hay BLOQUEANTES O casos felices FAIL
+Criterios estrictos:
+- APROBADO: cero BLOQUEANTES + TODOS los casos felices PASS + evidencia completa en cada check
+- CON OBSERVACIONES: cero BLOQUEANTES + ADVERTENCIAS presentes + caso feliz PASS + evidencia completa
+- RECHAZADO: ≥1 BLOQUEANTE, O ≥1 caso feliz FAIL, O evidencia faltante en check crítico
 
 Creá TESTER_COMPLETADO.md con:
 ## Veredicto: [APROBADO / CON OBSERVACIONES / RECHAZADO]
 ## Resumen ejecutivo
-(2-3 líneas: qué se probó, resultado general)
+(qué se probó, cuántos checks pasaron, cuántos fallaron)
 ## Issues bloqueantes
-(items BLOQUEANTE del review + casos FAIL; o "Ninguno")
+(lista numerada de BLOQUEANTES del CODE_REVIEW + casos FAIL de TEST_RESULTS; o "Ninguno")
 ## Observaciones no bloqueantes
-(advertencias y sugerencias; o "Ninguna")
-## Recomendaciones para el próximo ciclo
-(si RECHAZADO: qué exactamente debe corregir DEV; o "N/A")
+(lista de ADVERTENCIAS; o "Ninguna")
+## Criterios de aceptación verificados
+(lista de los criterios de TAREAS_DESARROLLO.md con [VERIFICADO PASS] o [VERIFICADO FAIL])
+## Recomendaciones para DEV (si RECHAZADO o CON OBSERVACIONES)
+(qué exactamente debe corregir, con referencia a archivo y línea cuando sea posible)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FINALIZACIÓN
@@ -408,6 +703,7 @@ FINALIZACIÓN
 TESTER_COMPLETADO.md es la señal del pipeline — crealo solo cuando las 3 fases estén completas.
 Si hay un error crítico que imposibilita el testing: creá {rel_folder}/TESTER_ERROR.flag con la descripción.
 No preguntes — ejecutá las 3 fases directamente."""
+    return _apply_agent_config("tester", _tester_prompt)
 
 
 _STAGE_LABELS = {"pm": "Análisis PM", "dev": "Implementación Dev", "tester": "QA Testing", "doc": "Documentación"}
@@ -445,7 +741,7 @@ def build_doc_agent_prompt(ticket_folder: str, ticket_id: str, workspace_root: s
         f"> ℹ️ No existe KNOWLEDGE_BASE.md — crealo desde cero con la estructura indicada.\n"
     )
 
-    return f"""Documentá el ticket #{ticket_id} en la base de conocimiento del proyecto.
+    _doc_prompt = f"""Documentá el ticket #{ticket_id} en la base de conocimiento del proyecto.
 
 Carpeta del ticket: {rel_folder}/
 Archivo de knowledge base: {kb_rel}
@@ -530,6 +826,7 @@ Si hay un bloqueante real que impide documentar, creá:
 `{rel_folder}/DOC_ERROR.flag` con la descripción del problema
 
 **Importante:** No preguntes — leé, clasificá, escribí y señalizá."""
+    return _apply_agent_config("doc", _doc_prompt)
 
 
 def build_retry_prompt(ticket_folder: str, ticket_id: str, workspace_root: str,
@@ -623,7 +920,7 @@ def build_rework_prompt(ticket_folder: str, ticket_id: str, workspace_root: str,
     # Leer lo que DEV ya implementó
     dev_summary = _read_file_safe(os.path.join(ticket_folder, "DEV_COMPLETADO.md"),
                                   max_chars=2000)
-    svn_changes = _read_file_safe(os.path.join(ticket_folder, "SVN_CHANGES.md"),
+    git_changes = _read_file_safe(os.path.join(ticket_folder, "GIT_CHANGES.md"),
                                   max_chars=1500)
 
     # Formatear findings de QA
@@ -650,8 +947,8 @@ Carpeta de trabajo: {rel_folder}/
 Tu implementación anterior:
 {dev_summary}
 
-Archivos que modificaste (SVN):
-{svn_changes or '(ver DEV_COMPLETADO.md)'}
+Archivos que modificaste:
+{git_changes or '(ver DEV_COMPLETADO.md)'}
 
 ---
 
@@ -1217,7 +1514,7 @@ Revisá los archivos que BUG_LOCALIZATION.md indica como modificados y creá:
 <pendientes, riesgos identificados, o "Sin observaciones">
 ```
 
-**SVN_CHANGES.md** con un resumen de qué líneas cambiaron y por qué (para el commit message).
+**GIT_CHANGES.md** con un resumen de qué líneas cambiaron y por qué (para el commit message).
 
 DEV_COMPLETADO.md es el **flag de completado del pipeline DEV** — el watcher lo detecta al crearse.
 Guardá los dos archivos y terminás."""
@@ -1375,3 +1672,123 @@ Creá **TESTER_COMPLETADO.md** con:
 
 **TESTER_COMPLETADO.md es el flag de completado del pipeline QA** — el watcher lo detecta al crearse.
 No modifiques código — solo emitís el veredicto."""
+
+
+def build_unstuck_prompt(ticket_folder: str, ticket_id: str, workspace_root: str,
+                          current_state: str, reason: str = "") -> str:
+    """
+    Prompt del agente DESATASCADOR.
+
+    Se invoca cuando el pipeline quedó frenado y el usuario apretó "🚑 Desatascar"
+    en el dashboard. El agente tiene autoridad plena para:
+      - Crear los flags de completado faltantes ({PM|DEV|TESTER|DOC}_COMPLETADO.*)
+      - Borrar/renombrar flags de error o en-curso obsoletos
+      - Completar archivos incompletos o vacíos que debieron dejar las etapas previas
+      - Decidir la siguiente etapa válida del pipeline
+
+    Recibe el estado actual, el listado de archivos de la carpeta y el motivo del
+    atasco (si se pudo inferir), y responde con acciones concretas que destraben
+    el flujo.
+    """
+    rel_folder = _to_workspace_relative(ticket_folder, workspace_root)
+
+    # Inventario de archivos del ticket — el agente decide qué falta / está incompleto
+    file_inventory = []
+    try:
+        for fname in sorted(os.listdir(ticket_folder)):
+            fpath = os.path.join(ticket_folder, fname)
+            if os.path.isfile(fpath):
+                size = os.path.getsize(fpath)
+                marker = " (vacío)" if size == 0 else f" ({size} bytes)"
+                file_inventory.append(f"  - {fname}{marker}")
+    except Exception:
+        file_inventory.append("  (no se pudo listar la carpeta)")
+    inventory_str = "\n".join(file_inventory) if file_inventory else "  (carpeta vacía)"
+
+    reason_block = f"\n## Motivo reportado del atasco:\n{reason}\n" if reason else ""
+
+    return f"""AGENTE DESATASCADOR — Ticket #{ticket_id}
+
+El pipeline Stacky quedó frenado en el estado `{current_state}`. Tu trabajo es
+**dejar el pipeline avanzando solo**, sin pedir nada al usuario. Si la solución
+pasa por que trabaje otro agente (DEV, PM, QA), tenés que poner el ticket en el
+estado que dispara a ese agente — no explicar el problema y cortar.
+
+Tenés autoridad plena dentro de {rel_folder}/ para:
+  1. CREAR flags de completado faltantes
+  2. BORRAR o renombrar flags de error / en-curso obsoletos (*.flag.prev está OK)
+  3. COMPLETAR archivos vacíos o con placeholders que alguna etapa dejó a medias
+  4. CAMBIAR el estado del ticket en state.json para re-lanzar la etapa correcta
+     (vía el flag correspondiente — NO edites state.json directamente)
+{reason_block}
+## Estado actual en state.json
+- estado: `{current_state}`
+- carpeta: {rel_folder}/
+
+## Inventario actual de la carpeta
+{inventory_str}
+
+## Convenciones del pipeline (flags que el watcher mira)
+
+| Etapa  | Flag de OK              | Flag de error        | Siguiente etapa |
+|--------|-------------------------|----------------------|-----------------|
+| pm     | PM_COMPLETADO.flag      | PM_ERROR.flag        | dev             |
+| dev    | DEV_COMPLETADO.md       | DEV_ERROR.flag       | tester          |
+| tester | TESTER_COMPLETADO.md    | TESTER_ERROR.flag    | doc (o rework)  |
+| doc    | DOC_COMPLETADO.flag     | DOC_ERROR.flag       | completado      |
+| dba    | DB_READY.flag           | —                    | dev             |
+| tl     | TL_APPROVED.flag        | TL_REJECTED.md       | dev / pm        |
+
+El watcher también reconoce el sufijo `_en_proceso` en el estado — si ve por ejemplo
+`dev_en_proceso` pero no hay ningún thread vivo esperándolo, re-registra el watcher.
+Por eso alcanza con dejar el flag correcto para que el pipeline avance.
+
+## Protocolo de decisión (seguilo en orden)
+
+1. **Mirá el inventario de archivos.** ¿Qué flag de OK debería existir dado el
+   estado `{current_state}` y no está?
+2. **Abrí los archivos que sí existen** y verificá que no estén vacíos ni con
+   placeholders estilo `<TODO>`, `TBD`, `pendiente`. Si están incompletos y no
+   hay un COMPLETADO flag, terminá de completarlos ANTES de crear el flag.
+3. **Si hay un flag de ERROR** (*.flag sin contrapartida OK), evaluá si el
+   error ya está resuelto en el contenido de los archivos. Si sí, renombralo a
+   `*.flag.resolved` para que el watcher no lo vuelva a leer, y creá el flag OK.
+4. **Si hay un `*_AGENTE_EN_CURSO.flag` huérfano** (sin proceso vivo invocando),
+   borralo — bloquea re-invocaciones.
+5. **Si el estado es `completado` pero `TESTER_COMPLETADO.md` dice RECHAZADO o
+   CON OBSERVACIONES** → el ticket NO está realmente terminado. Renombrá
+   `TESTER_COMPLETADO.md` a `.prev`, borrá `DEV_COMPLETADO.md` si aplica y creá
+   `DEV_ERROR.flag` con el detalle de los FAIL de QA para que el daemon lance
+   un rework automáticamente. NO aceptes `completado` con FAIL.
+6. **Si el ticket está en `stagnation_detected` o `error_*`**, relanzá la etapa
+   que corresponde creando/renombrando el flag adecuado. El daemon va a volver
+   a invocar al agente al próximo ciclo.
+7. **Escribí `DESATASCO_COMPLETADO.md` al final** describiendo:
+   - Qué encontraste (archivos faltantes, incompletos, flags inconsistentes)
+   - Qué acciones tomaste (crear flag X, borrar Y, completar Z)
+   - Cuál es la próxima etapa esperada y qué agente la va a tomar
+   - Si NO pudiste desatascar, por qué — pero solo si literalmente es imposible
+     (ej: archivo binario .docx que requiere abrir Word). En ese caso tenés que
+     además crear `BLOQUEO_HUMANO.flag` con el texto exacto del bloqueo y
+     **aun así** dejar el pipeline en un estado coherente (no `completado` si
+     QA rechazó).
+
+## Reglas duras
+
+- NO le pidas al usuario que haga nada. El usuario pidió destrabar; si hay
+  trabajo técnico que puede hacer otro agente, dispará ese agente mediante el
+  flag correspondiente — no describas lo que debería hacerse, hacelo o dispará
+  al agente que lo va a hacer.
+- NO cierres con "requiere intervención humana" salvo bloqueo físico real
+  (archivo binario, credencial humana, acceso manual a app externa). En ese
+  caso creá `BLOQUEO_HUMANO.flag` — no alcanza con explicarlo en el md.
+- NO modifiques código de la aplicación fuera de {rel_folder}/
+- NO borres archivos que tengan contenido real (solo flags / sentinels)
+- NO toques state.json directamente — el watcher lo actualiza al ver el flag
+- NO inventes evidencia de QA — si DEV no terminó, no crees TESTER_COMPLETADO.md
+
+Ejecutá las acciones directamente, sin preguntar. El flag de tu propio trabajo es
+`DESATASCO_COMPLETADO.md`. Si dejaste el pipeline disparando otra etapa,
+indicalo explícitamente en el md — el dashboard va a relanzar automáticamente.
+"""
+

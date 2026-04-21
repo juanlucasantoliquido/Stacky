@@ -68,13 +68,93 @@ def load_state(state_path: str) -> dict:
         return data
 
 
+def _acquire_file_lock(lock_path: str, timeout_sec: float = 10.0):
+    """A5: lock cross-process para serializar escrituras al state.json.
+    En Windows usa msvcrt.locking (bloqueo cooperativo del SO sobre el archivo).
+    Devuelve el file handle (a cerrar por el caller); None si no se pudo adquirir."""
+    import time as _time
+    deadline = _time.monotonic() + timeout_sec
+    last_exc = None
+    while _time.monotonic() < deadline:
+        try:
+            fh = open(lock_path, "a+b")
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return fh
+            except OSError as e:
+                last_exc = e
+                fh.close()
+                _time.sleep(0.05)
+        except Exception as e:
+            last_exc = e
+            _time.sleep(0.05)
+    import logging as _logging
+    _logging.getLogger("stacky.state").warning(
+        "[A5] _acquire_file_lock timeout sobre %s: %s", lock_path, last_exc,
+    )
+    return None
+
+
+def _release_file_lock(fh) -> None:
+    if fh is None:
+        return
+    try:
+        if os.name == "nt":
+            import msvcrt
+            try:
+                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        else:
+            import fcntl
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+    finally:
+        try:
+            fh.close()
+        except Exception:
+            pass
+
+
 def save_state(state_path: str, state: dict) -> None:
     """Guarda el estado con timestamp actualizado. Invalida cache.
-    Thread-safe: lock exclusivo durante escritura + actualización de cache."""
+
+    Thread-safe (lock intra-proceso) + cross-process safe (file lock + escritura
+    atómica via temp+rename). Si el file lock no se adquiere a tiempo, se procede
+    igualmente para no bloquear el daemon — la escritura sigue siendo atómica
+    por temp+rename, así que el peor caso es un write perdido (no corrupción).
+    """
     with _state_lock:
         state["last_run"] = datetime.now().isoformat()
-        with open(state_path, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2, ensure_ascii=False)
+        os.makedirs(os.path.dirname(state_path), exist_ok=True)
+
+        lock_path = state_path + ".writelock"
+        fh_lock   = _acquire_file_lock(lock_path, timeout_sec=10.0)
+        try:
+            tmp_path = state_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except OSError:
+                    pass
+            os.replace(tmp_path, state_path)
+        finally:
+            _release_file_lock(fh_lock)
+            try:
+                if os.path.exists(lock_path):
+                    os.remove(lock_path)
+            except Exception:
+                pass
+
         # Invalidar cache para que el próximo load_state re-lea
         _load_cache["mtime"] = 0.0
 
@@ -84,25 +164,122 @@ def get_ticket_state(state: dict, ticket_id: str) -> str:
     return state.get("tickets", {}).get(ticket_id, {}).get("estado", "pendiente_pm")
 
 
+# A1: nombres canónicos de sub-agentes que componen cada stage padre
+SUBAGENT_NAMES = {
+    "pm_inv", "pm_arq", "pm_plan",
+    "dev_loc", "dev_impl", "dev_doc",
+    "qa_rev", "qa_exec", "qa_arb",
+}
+
+
 def set_ticket_state(state: dict, ticket_id: str, new_state: str, **kwargs) -> None:
-    """Actualiza el estado de un ticket."""
+    """Actualiza el estado de un ticket.
+
+    Timing estructurado (consumido por stacky_metrics y ado_reporter):
+      - `{stage}_started_at`  al entrar a `{stage}_en_proceso`
+      - `{stage}_ended_at`    y `{stage}_duration_sec` al entrar a `{stage}_completado`
+        o `error_{stage}`
+    El timestamp legacy `{new_state}_at` se mantiene por retrocompatibilidad.
+
+    A1 — tracking de sub-agentes: si la transición involucra a un sub-agente
+    (pm_inv, pm_arq, pm_plan, dev_loc, ...), se actualizan automáticamente:
+      - `current_subagent`        : nombre del sub-agente activo (o None al terminar)
+      - `subagent_started_at`     : ISO timestamp de inicio
+      - `subagent_history`        : lista de {name, started_at, ended_at, status, reason}
+    """
     if ticket_id not in state["tickets"]:
         state["tickets"][ticket_id] = {}
 
     entry = state["tickets"][ticket_id]
     entry["estado"] = new_state
-    entry[f"{new_state}_at"] = datetime.now().isoformat()
+    now_iso = datetime.now().isoformat()
+    entry[f"{new_state}_at"] = now_iso
 
-    # Si es un estado de "en proceso", registrar metadata del proceso invocador
     if new_state.endswith("_en_proceso"):
+        stage = new_state[: -len("_en_proceso")]
+        entry[f"{stage}_started_at"] = now_iso
+        # Iteración DEV→QA: marca el inicio en el primer DEV / dev_rework
+        if stage in ("dev", "dev_rework") and "iteration_started_at" not in entry:
+            entry["iteration_started_at"] = now_iso
+
+        # A1: si es sub-agente, abrir un slot en subagent_history
+        if stage in SUBAGENT_NAMES:
+            entry["current_subagent"]    = stage
+            entry["subagent_started_at"] = now_iso
+            entry.setdefault("subagent_history", []).append({
+                "name":       stage,
+                "started_at": now_iso,
+                "ended_at":   None,
+                "status":     "running",
+                "reason":     None,
+            })
+
         import os as _os
         entry["invoking_pid"]       = _os.getpid()
-        entry["invoke_started_at"]  = datetime.now().isoformat()
+        entry["invoke_started_at"]  = now_iso
         entry["invoke_ttl_minutes"] = kwargs.pop("invoke_ttl_minutes", 120)
         entry["invoke_host"]        = _socket.gethostname()
+    elif new_state.endswith("_completado") or new_state.startswith("error_"):
+        if new_state.endswith("_completado"):
+            stage = new_state[: -len("_completado")]
+        else:
+            stage = new_state[len("error_"):]
+        entry[f"{stage}_ended_at"] = now_iso
+        started = entry.get(f"{stage}_started_at")
+        if started:
+            try:
+                dur = (datetime.fromisoformat(now_iso) - datetime.fromisoformat(started)).total_seconds()
+                entry[f"{stage}_duration_sec"] = round(dur, 1)
+            except Exception:
+                pass
+
+        # A1: cerrar el slot abierto del sub-agente
+        if stage in SUBAGENT_NAMES:
+            status = "ok" if new_state.endswith("_completado") else "error"
+            history = entry.setdefault("subagent_history", [])
+            for record in reversed(history):
+                if record.get("name") == stage and record.get("status") == "running":
+                    record["ended_at"] = now_iso
+                    record["status"]   = status
+                    record["reason"]   = kwargs.get("reason") or entry.get("error")
+                    break
+            entry["current_subagent"]    = None
+            entry["subagent_started_at"] = None
 
     for key, value in kwargs.items():
         entry[key] = value
+
+
+def record_iteration_end(state: dict, ticket_id: str, qa_verdict: str,
+                         findings: list = None, duration_sec: float = None) -> int:
+    """Cierra una iteración DEV→QA y la añade a `iteration_history`.
+
+    Devuelve el número de iteración registrado.
+    Mantiene también los contadores agregados `iterations` y `rework_count`.
+    """
+    entry = state.setdefault("tickets", {}).setdefault(ticket_id, {})
+    iter_started = entry.pop("iteration_started_at", None)
+    now_iso = datetime.now().isoformat()
+    if duration_sec is None and iter_started:
+        try:
+            duration_sec = (datetime.fromisoformat(now_iso)
+                            - datetime.fromisoformat(iter_started)).total_seconds()
+        except Exception:
+            duration_sec = None
+
+    history = entry.setdefault("iteration_history", [])
+    iter_num = len(history) + 1
+    history.append({
+        "iteration":      iter_num,
+        "started_at":     iter_started,
+        "ended_at":       now_iso,
+        "duration_sec":   round(duration_sec, 1) if duration_sec is not None else None,
+        "qa_verdict":     qa_verdict,
+        "findings_count": len(findings or []),
+    })
+    entry["iterations"]   = iter_num
+    entry["rework_count"] = max(0, iter_num - 1)
+    return iter_num
 
 
 def is_invoke_still_valid(entry: dict) -> bool:
@@ -168,7 +345,7 @@ def get_ticket_priority(state: dict, ticket_id: str) -> int:
     """
     Retorna la prioridad del ticket.
     Respeta prioridad manual si fue asignada explícitamente,
-    sino usa auto_priority calculado desde la gravedad de Mantis.
+    sino usa auto_priority calculado desde la gravedad del ticket.
     Sin ninguna = 9999 (al final de la cola).
     """
     entry = state.get("tickets", {}).get(ticket_id, {})
@@ -273,7 +450,7 @@ def set_auto_advance(state: dict, ticket_id: str, target_state: str,
 
         if expected_current and current != expected_current:
             import logging as _logging
-            _logging.getLogger("mantis.state").warning(
+            _logging.getLogger("stacky.state").warning(
                 "[SEQ-10] set_auto_advance rechazado para %s: "
                 "estado actual '%s' no es coherente con avanzar hacia '%s' "
                 "(se esperaba '%s')",

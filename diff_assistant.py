@@ -1,13 +1,13 @@
 """
 diff_assistant.py — Analizador de diffs para Stacky.
 
-Dado un diff SVN, genera:
+Dado un diff Git, genera:
   - checklist de testing (qué verificar manualmente antes de deployar)
   - puntos de riesgo detectados (capas tocadas, patrones peligrosos)
   - orden sugerido de ejecución de scripts SQL
   - resumen de impacto (qué módulos se modificaron)
 
-No usa LLMs — análisis estático basado en patrones del codebase RIPLEY.
+No usa LLMs — análisis estático basado en patrones del codebase RS Standard / Pacífico.
 """
 
 import re
@@ -72,7 +72,7 @@ RISK_PATTERNS = [
         "message":     "Uso de caché — un restart limpiará el caché automáticamente",
         "test_hint":   "Si el bug era de caché desactualizado, verificar que el comportamiento sea correcto post-restart",
     },
-    # Redioma (RIPLEY-específico)
+    # Redioma (RS-específico)
     {
         "pattern":     r"RIDIOMA|GetMensaje|GetMensajeById",
         "level":       "medium",
@@ -102,7 +102,7 @@ RISK_PATTERNS = [
     },
 ]
 
-# ── Capas de la arquitectura RIPLEY ──────────────────────────────────────────
+# ── Capas de la arquitectura RS Standard ─────────────────────────────────────
 
 LAYER_PATTERNS = {
     "UI (ASPX / Frontend)":     r"\.aspx$|\.ascx$|\.master$|\.css$|\.js$",
@@ -117,7 +117,7 @@ LAYER_PATTERNS = {
 
 
 class DiffAssistant:
-    """Analiza un diff SVN y genera recomendaciones de testing y puntos de riesgo."""
+    """Analiza un diff Git y genera recomendaciones de testing y puntos de riesgo."""
 
     def __init__(self, diff_text: str, modified_files: list[str]):
         self.diff_text      = diff_text or ""
@@ -273,14 +273,26 @@ def analyze_ticket(ticket_folder: str, workspace_root: str) -> dict:
     modified_files = []
 
     try:
-        from svn_ops import diff_full, diff_summarize
-        diff_text      = diff_full(workspace_root)
-        modified_files = [e["path"] for e in diff_summarize(workspace_root)]
+        import subprocess
+        r = subprocess.run(
+            ["git", "diff", "HEAD"],
+            cwd=workspace_root,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30
+        )
+        diff_text = r.stdout
+        r2 = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            cwd=workspace_root,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=15
+        )
+        modified_files = [l.strip() for l in r2.stdout.splitlines() if l.strip()]
     except Exception:
-        # Fallback: leer SVN_CHANGES.md
-        svn_md = Path(ticket_folder) / "SVN_CHANGES.md"
-        if svn_md.exists():
-            content = svn_md.read_text(encoding="utf-8", errors="ignore")
+        # Fallback: leer GIT_CHANGES.md
+        changes_md = Path(ticket_folder) / "GIT_CHANGES.md"
+        if changes_md.exists():
+            content = changes_md.read_text(encoding="utf-8", errors="ignore")
             diff_text = content
             import re as _re
             for line in content.splitlines():

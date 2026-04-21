@@ -2,18 +2,15 @@
 project_manager.py — Gestión multi-proyecto para el Pipeline Dashboard.
 
 Cada proyecto vive en:
-  tools/mantis_scraper/projects/{NOMBRE}/
+  tools/stacky/projects/{NOMBRE}/
     config.json       ← configuración del cliente/proyecto
     prompts/
       pm.md           ← prompt base PM adaptado al proyecto
       dev.md          ← prompt base Dev adaptado al proyecto
       qa.md           ← prompt base QA adaptado al proyecto
-    tickets/          ← tickets scrapeados (ruta configurable en config.json)
+    tickets/          ← tickets sincronizados (ruta configurable en config.json)
     pipeline/
       state.json      ← estado del pipeline (ruta configurable en config.json)
-
-El proyecto RIPLEY apunta a la carpeta tickets/ existente para
-preservar compatibilidad con los tickets ya capturados.
 """
 
 import json
@@ -23,33 +20,6 @@ from pathlib import Path
 BASE_DIR     = Path(__file__).parent
 PROJECTS_DIR = BASE_DIR / "projects"
 ACTIVE_FILE  = BASE_DIR / "active_project.json"
-SVN_ROOT     = Path("N:/SVN/RS")
-
-
-# ── Escaneo de repositorios SVN ───────────────────────────────────────────────
-
-def scan_svn_projects() -> list[dict]:
-    """
-    Escanea N:/SVN/RS buscando proyectos.
-    Retorna todos los subdirectorios, indicando si tienen subcarpeta trunk/.
-    """
-    if not SVN_ROOT.exists():
-        return []
-    result = []
-    try:
-        for entry in sorted(SVN_ROOT.iterdir()):
-            if not entry.is_dir():
-                continue
-            has_trunk = (entry / "trunk").is_dir()
-            ws = str(entry / "trunk") if has_trunk else str(entry)
-            result.append({
-                "name":    entry.name,
-                "path":    ws,
-                "has_trunk": has_trunk,
-            })
-    except PermissionError:
-        pass
-    return result
 
 
 # ── CRUD de proyectos ─────────────────────────────────────────────────────────
@@ -135,39 +105,48 @@ def get_prompt(project_name: str, role: str) -> str:
 # ── Inicialización de proyectos ───────────────────────────────────────────────
 
 def initialize_project(
-    svn_name: str,
+    name: str,
     display_name: str = "",
-    mantis_filters: list = None,
     tickets_dir: str = "",
     state_path: str = "",
     workspace_root: str = "",
-    mantis_project_id: int = None,
+    issue_tracker: dict | None = None,
+    scm: dict | None = None,
 ) -> dict:
     """
     Crea la estructura de carpetas y archivos para un nuevo proyecto.
-    workspace_root: ruta al workspace del proyecto. Si no se indica, se infiere
-                   como N:/SVN/RS/{svn_name}/trunk (o sin /trunk si no existe).
-    mantis_project_id: ID numérico del proyecto en Mantis (ver URL al navegar el proyecto).
+
+    workspace_root: ruta al workspace del proyecto.
+    issue_tracker: bloque de configuración del tracker. Ver issue_provider.factory.
+    scm: bloque { "type": "git", ... }. Si no se indica, se autodetecta
+         por la presencia de .git en el workspace.
     """
-    name = svn_name.upper()
-    # Resolver workspace_root
-    if workspace_root:
-        ws = workspace_root.replace("\\", "/")
-    else:
-        candidate_trunk = SVN_ROOT / svn_name / "trunk"
-        ws = str(candidate_trunk) if candidate_trunk.is_dir() else str(SVN_ROOT / svn_name)
+    name = name.upper()
+    ws = workspace_root.replace("\\", "/") if workspace_root else ""
     base = PROJECTS_DIR / name
 
     (base / "prompts").mkdir(parents=True, exist_ok=True)
     (base / "tickets").mkdir(parents=True, exist_ok=True)
     (base / "pipeline").mkdir(parents=True, exist_ok=True)
+    (base / "state").mkdir(parents=True, exist_ok=True)
+
+    if issue_tracker is None:
+        issue_tracker = {"type": "azure_devops"}
+
+    # Resolución de SCM — explicit > autodetect
+    if scm is None:
+        ws_path = Path(ws) if ws else Path(".")
+        if (ws_path / ".git").exists():
+            scm = {"type": "git"}
+        else:
+            scm = {"type": "git"}  # default
 
     config = {
         "name":             name,
         "display_name":     display_name or name,
         "workspace_root":   ws,
-        "mantis_filters":   mantis_filters or [],
-        "mantis_project_id": mantis_project_id,
+        "issue_tracker":    issue_tracker,
+        "scm":              scm,
         "agents": {
             "pm":     "PM-TL STack 3",
             "dev":    "DevStack3",
@@ -180,6 +159,59 @@ def initialize_project(
 
     _generate_prompts(base / "prompts", config)
     return config
+
+
+def initialize_ado_project(
+    name: str,
+    organization: str,
+    ado_project: str,
+    workspace_root: str,
+    display_name: str = "",
+    area_path: str = "",
+    wiql: str = "",
+    state_mapping: dict | None = None,
+    auth_file: str = "auth/ado_auth.json",
+    scm_type: str = "git",
+    agents: dict | None = None,
+) -> dict:
+    """
+    Helper de alto nivel para dar de alta un proyecto Azure DevOps.
+
+    Ejemplo:
+        initialize_ado_project(
+            name="RSPACIFICO",
+            organization="UbimiaPacifico",
+            ado_project="Strategist_Pacifico",
+            workspace_root="N:/GIT/RS/RSPacifico/trunk",
+            area_path="Strategist_Pacifico\\\\AgendaWeb",
+        )
+    """
+    tracker = {
+        "type":         "azure_devops",
+        "organization": organization,
+        "project":      ado_project,
+        "auth_file":    auth_file,
+    }
+    if area_path:
+        tracker["area_path"] = area_path
+    if wiql:
+        tracker["wiql"] = wiql
+    if state_mapping:
+        tracker["state_mapping"] = state_mapping
+
+    cfg = initialize_project(
+        name=name,
+        display_name=display_name or name,
+        workspace_root=workspace_root,
+        issue_tracker=tracker,
+        scm={"type": scm_type},
+    )
+    if agents:
+        cfg["agents"] = agents
+        (PROJECTS_DIR / cfg["name"] / "config.json").write_text(
+            json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+    return cfg
 
 
 # ── Generación de prompts ─────────────────────────────────────────────────────
@@ -219,7 +251,7 @@ def _pm_prompt(name: str, display: str, ws: str) -> str:
 
 ## Carpeta de trabajo del ticket
 
-`tools/mantis_scraper/projects/{name}/tickets/{{estado}}/{{ticket_id}}/`
+`tools/stacky/projects/{name}/tickets/{{estado}}/{{ticket_id}}/`
 
 Contiene `INC-{{ticket_id}}.md` con los datos crudos del ticket + los 6 archivos de análisis
 generados como placeholder por el scraper que debés completar.
@@ -228,7 +260,7 @@ generados como placeholder por el scraper que debés completar.
 
 1. Leé `INC-{{ticket_id}}.md` completamente — descripción, pasos, historial, adjuntos
 2. Completá los 6 archivos SIN dejar placeholders:
-   - `INCIDENTE.md` — severidad, categoría, impacto, URL Mantis
+   - `INCIDENTE.md` — severidad, categoría, impacto, URL tracker
    - `ANALISIS_TECNICO.md` — causa raíz, componentes, flujo actual vs. esperado
    - `ARQUITECTURA_SOLUCION.md` — qué cambiar exactamente y dónde
    - `TAREAS_DESARROLLO.md` — tareas con criterios de aceptación verificables, estado PENDIENTE
@@ -276,7 +308,7 @@ def _dev_prompt(name: str, display: str, ws: str) -> str:
 
 ## Carpeta de trabajo
 
-`tools/mantis_scraper/projects/{name}/tickets/{{estado}}/{{ticket_id}}/`
+`tools/stacky/projects/{name}/tickets/{{estado}}/{{ticket_id}}/`
 
 ## Arranque obligatorio
 
@@ -366,7 +398,7 @@ def _qa_prompt(name: str, display: str, ws: str) -> str:
 
 ## Carpeta de trabajo
 
-`tools/mantis_scraper/projects/{name}/tickets/{{estado}}/{{ticket_id}}/`
+`tools/stacky/projects/{name}/tickets/{{estado}}/{{ticket_id}}/`
 
 ## Arranque obligatorio
 

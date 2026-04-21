@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("mantis.test_generator")
+logger = logging.getLogger("stacky.test_generator")
 
 BASE_DIR = Path(__file__).parent
 
@@ -62,13 +62,13 @@ class TestGenerator:
         arquitectura  = self._read_file(folder / "ARQUITECTURA_SOLUCION.md")
         tareas        = self._read_file(folder / "TAREAS_DESARROLLO.md")
         dev_completado = self._read_file(folder / "DEV_COMPLETADO.md")
-        svn_changes   = self._read_file(folder / "SVN_CHANGES.md")
+        git_changes   = self._read_file(folder / "GIT_CHANGES.md")
 
         # Detectar framework de tests del proyecto
         framework = self._detect_test_framework()
 
         # Extraer archivos modificados
-        modified_files = self._extract_modified_files(dev_completado, svn_changes)
+        modified_files = self._extract_modified_files(dev_completado, git_changes)
 
         logger.info("[X-04] Generando tests para ticket %s (framework: %s)", ticket_id, framework)
 
@@ -325,10 +325,10 @@ Como parte de tu revision QA, verifica que los tests generados:
                     pass
         return "MSTest"  # default para proyectos .NET legacy
 
-    def _extract_modified_files(self, dev_completado: str, svn_changes: str) -> list:
-        """Extrae archivos modificados de DEV_COMPLETADO.md y SVN_CHANGES.md."""
+    def _extract_modified_files(self, dev_completado: str, git_changes: str) -> list:
+        """Extrae archivos modificados de DEV_COMPLETADO.md y GIT_CHANGES.md."""
         files = set()
-        combined = (dev_completado or "") + "\n" + (svn_changes or "")
+        combined = (dev_completado or "") + "\n" + (git_changes or "")
         for match in re.finditer(r"[\w.\-/\\]+\.(?:cs|aspx|vb|aspx\.cs)", combined):
             files.add(match.group(0).replace("\\", "/"))
         return list(files)[:10]

@@ -24,7 +24,7 @@ _TEXT_EXTENSIONS = {".cs", ".sql", ".js", ".aspx", ".config", ".md", ".json"}
 
 # ── Directorios a ignorar siempre ─────────────────────────────────────────────
 _IGNORE_DIRS = {
-    "bin", "obj", "node_modules", ".git", ".svn", "__pycache__",
+    "bin", "obj", "node_modules", ".git", "__pycache__",
     "packages", "TestResults", "migrations", "archivado",
 }
 
@@ -62,7 +62,7 @@ def _extract_keywords(text: str) -> list[str]:
         "string", "object", "class", "void", "return", "true", "false", "null",
         "select", "from", "where", "inner", "join", "group", "order", "left",
         "right", "insert", "update", "delete", "create", "table", "index",
-        "completar", "placeholder", "ticket", "mantis", "error", "descripcion",
+        "completar", "placeholder", "ticket", "error", "descripcion",
         "incidente", "analisis", "tecnico", "arquitectura", "solucion", "tareas",
         "notas", "implementacion", "queries", "pendiente", "generado", "fecha",
     }
@@ -256,7 +256,7 @@ def extract_files_from_architecture(ticket_folder: str,
 
     # Patrones para detectar rutas de archivo en el texto
     path_patterns = [
-        # Rutas absolutas Windows: N:\SVN\...
+        # Rutas absolutas Windows: N:\GIT\...
         r'[A-Z]:\\[^\s`\'"<>|\n]+\.(?:cs|aspx|aspx\.cs|vb|sql|config|js|html)',
         # Rutas relativas con carpetas: folder/subfolder/File.cs
         r'(?:[\w\-]+/)+[\w\-]+\.(?:cs|aspx|vb|sql|config|js)',
@@ -312,6 +312,32 @@ def extract_files_from_architecture(ticket_folder: str,
     return found[:12]  # máximo 12 archivos de arquitectura
 
 
+def _enrich_arch_file(entry: dict) -> None:
+    """
+    Completa un arch_file con los campos que format_code_context espera
+    (line_num, hits, snippet) leyendo las primeras líneas del archivo.
+    Mutación in-place. Si el archivo no existe o no se puede leer,
+    rellena con defaults seguros.
+    """
+    entry.setdefault("line_num", 1)
+    entry.setdefault("hits", 0)
+    entry.setdefault("snippet", "")
+
+    abs_path = entry.get("abs_path")
+    if not abs_path or not entry.get("exists"):
+        return
+    try:
+        with open(abs_path, encoding="utf-8", errors="replace") as fh:
+            first_lines = []
+            for i, line in enumerate(fh):
+                if i >= _SNIPPET_LINES:
+                    break
+                first_lines.append(line)
+        entry["snippet"] = "".join(first_lines).rstrip()
+    except Exception:
+        pass
+
+
 def build_code_context_section(ticket_folder: str, ticket_id: str,
                                 workspace_root: str) -> str:
     """
@@ -334,6 +360,9 @@ def build_code_context_section(ticket_folder: str, ticket_id: str,
         # Evitar duplicados por rel_path
         seen_paths = {f["rel_path"] for f in arch_files if f.get("exists")}
         combined   = [f for f in arch_files if f.get("exists")]
+        # arch_files no traen line_num/hits/snippet — enriquecer antes de formatear
+        for f in combined:
+            _enrich_arch_file(f)
         for f in heuristic_files:
             if f["rel_path"] not in seen_paths:
                 combined.append(f)
@@ -354,7 +383,7 @@ def build_code_context_section(ticket_folder: str, ticket_id: str,
         return format_code_context(combined)
     except Exception as e:
         import logging
-        logging.getLogger("mantis.code_context").warning(
+        logging.getLogger("stacky.code_context").warning(
             "Error buscando contexto de código para %s: %s", ticket_id, e
         )
         return ""

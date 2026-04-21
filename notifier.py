@@ -1,5 +1,5 @@
 """
-notifier.py — Sistema de notificaciones para el Mantis Scraper daemon.
+notifier.py — Sistema de notificaciones para el Stacky daemon.
 
 Envía notificaciones Windows toast cuando los tickets avanzan en el pipeline
 o cuando se requiere intervención manual.
@@ -131,7 +131,7 @@ class Notifier:
         notifier.notify_action_needed("0027698", "Timeout en DEV — revisar VS Code")
     """
 
-    def __init__(self, app_name: str = "Mantis Scraper"):
+    def __init__(self, app_name: str = "Stacky"):
         self.app_name    = app_name
         self._toast      = None
         self._file_cache = None  # lazy-loaded desde NOTIFICATIONS.json
@@ -200,7 +200,7 @@ class Notifier:
     def notify_session_expiring(self, project: str = "") -> None:
         """La sesión SSO está por expirar."""
         self.send(
-            title="Sesión Mantis necesita renovación",
+            title="Sesión del tracker necesita renovación",
             message=f"Ejecutar capture_session.py{' para ' + project if project else ''}",
             level="warning",
         )

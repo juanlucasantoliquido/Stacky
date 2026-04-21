@@ -2,7 +2,7 @@
 stacky_log.py — Sistema de logging centralizado para Stacky Pipeline.
 
 Crea/rota automáticamente el archivo de log en:
-    tools/mantis_scraper/logs/stacky_pipeline_YYYY-MM-DD.log
+    Tools/Stacky/logs/stacky_pipeline_YYYY-MM-DD.log
 
 Uso desde cualquier módulo:
     from stacky_log import slog
@@ -25,6 +25,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -160,13 +161,13 @@ class _StackyLogger:
                  ticket_id, stage.upper(), via, status)
 
     def svn_event(self, ticket_id: str, event: str, detail: str = "") -> None:
-        """Evento SVN (commit, diff, error)."""
-        _log.info("[#%-7s] [SVN    ] %s%s", ticket_id, event,
+        """Evento SCM (commit, diff, error)."""
+        _log.info("[#%-7s] [SCM    ] %s%s", ticket_id, event,
                   f": {detail}" if detail else "")
 
-    def mantis_event(self, ticket_id: str, event: str, detail: str = "") -> None:
-        """Evento en Mantis (nota publicada, estado cambiado, error)."""
-        _log.info("[#%-7s] [MANTIS ] %s%s", ticket_id, event,
+    def tracker_event(self, ticket_id: str, event: str, detail: str = "") -> None:
+        """Evento en el tracker (nota publicada, estado cambiado, error)."""
+        _log.info("[#%-7s] [TRACKER] %s%s", ticket_id, event,
                   f": {detail}" if detail else "")
 
     def daemon_cycle(self, project: str, tickets_found: int,
@@ -179,6 +180,50 @@ class _StackyLogger:
         """Línea separadora para marcar inicio/fin de una sesión en el log."""
         txt = f" {label} " if label else ""
         _log.info("─" * 30 + txt + "─" * 30)
+
+    # ── F1-F4: acción estructurada + error clasificado ──────────────────────
+
+    def action(self, exec_id: str, ticket_id: str, action: str,
+               phase: str = "", detail: str = "",
+               pct: int | None = None) -> None:
+        """
+        Log estructurado de una acción del pipeline. Correlacionado por
+        ``exec_id`` (corto de 8 chars en la línea). Usado por ``action_tracker``.
+        """
+        pct_str = f" ({pct}%)" if pct is not None else ""
+        phase_str = (phase or "").strip() or "-"
+        _log.info(
+            "[#%-7s] [ACTION ] [%s] %s/%s%s %s",
+            ticket_id or "-",
+            (exec_id or "")[:8],
+            phase_str,
+            action,
+            pct_str,
+            detail,
+        )
+
+    def error_classified(self, exec_id: str, ticket_id: str, action: str,
+                         kind: str, exc: BaseException,
+                         user_friendly: str = "") -> None:
+        """
+        Log de error clasificado (auth/network/technical/functional/data/user).
+        A INFO/ERROR imprime mensaje corto; a DEBUG vuelca el stack completo.
+        """
+        _log.error(
+            "[#%-7s] [ERROR  ] [%s] %s (%s): %s | UF: %s",
+            ticket_id or "-",
+            (exec_id or "")[:8],
+            action,
+            kind,
+            exc,
+            user_friendly,
+        )
+        _log.debug(
+            "[#%-7s] [ERROR  ] [%s] stack:\n%s",
+            ticket_id or "-",
+            (exec_id or "")[:8],
+            traceback.format_exc(),
+        )
 
     # ── Utilidades ─────────────────────────────────────────────────────────
 

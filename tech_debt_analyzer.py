@@ -30,7 +30,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("mantis.tech_debt")
+logger = logging.getLogger("stacky.tech_debt")
 
 BASE_DIR = Path(__file__).parent
 
@@ -320,7 +320,7 @@ class TechDebtAnalyzer:
 
     def _extract_files_from_folder(self, folder: Path) -> list:
         files = set()
-        for fname in ("SVN_CHANGES.md", "ARQUITECTURA_SOLUCION.md"):
+        for fname in ("GIT_CHANGES.md", "ARQUITECTURA_SOLUCION.md"):
             fpath = folder / fname
             if fpath.exists():
                 content = fpath.read_text(encoding="utf-8", errors="ignore")

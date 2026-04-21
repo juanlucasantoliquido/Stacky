@@ -27,7 +27,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.pre_filter")
+logger = logging.getLogger("stacky.pre_filter")
 
 # ── Configuración ─────────────────────────────────────────────────────────────
 

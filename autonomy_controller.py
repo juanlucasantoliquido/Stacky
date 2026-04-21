@@ -5,7 +5,7 @@ Permite a Stacky operar en distintos niveles de autonomía:
   - MANUAL:  Solo notifica — el humano decide cada etapa
   - GUIDED:  Lanza PM automáticamente, pide aprobación antes de DEV y QA
   - AUTO:    Pipeline completo sin intervención humana
-  - SAFE:    AUTO pero requiere aprobación antes de commit SVN
+  - SAFE:    AUTO pero requiere aprobación antes de git push
 
 Los approval gates se configuran por proyecto y se pueden sobrescribir
 por ticket individual.
@@ -26,7 +26,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
-logger = logging.getLogger("mantis.autonomy")
+logger = logging.getLogger("stacky.autonomy")
 
 
 class AutonomyLevel(str, Enum):

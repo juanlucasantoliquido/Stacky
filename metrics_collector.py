@@ -24,7 +24,7 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
-logger = logging.getLogger("mantis.metrics")
+logger = logging.getLogger("stacky.metrics")
 
 _STAGES = ("pm", "dev", "tester")
 
@@ -235,6 +235,120 @@ class MetricsCollector:
             "avg_resolution_h":  round(avg_duration_h, 1),
             "roi_hours_saved":   round(roi_hours_saved, 1),
             "generated_at":      datetime.now().isoformat(),
+        }
+
+    def get_pipeline_performance_metrics(self, days: int = 7,
+                                         project: str | None = None) -> dict:
+        """
+        F4 — Métricas agregadas de performance del pipeline:
+          - Tiempo por fase (PM/DEV/QA) — min y total horas.
+          - Reintentos por stage (fallos + rework).
+          - Correcciones enviadas (errores funcionales detectados en QA).
+          - Porcentaje de tickets aprobados al primer intento.
+
+        Combina:
+          1. ``metrics.json`` (this collector's events) → durations/reintentos/rework.
+          2. ``pipeline/state.json`` → conteo canónico de tickets completados.
+          3. ``pipeline_events.jsonl`` (opcional) → action_error por ticket y
+             correcciones enviadas (si los eventos están presentes).
+
+        Retorna un dict con keys consistentes para el endpoint ``/api/pipeline/performance``.
+        """
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+
+        # ── 1. Eventos propios del collector ───────────────────────────────
+        with self._lock:
+            events = [e for e in self._data.get("events", [])
+                      if e.get("ts", "") >= cutoff]
+
+        per_stage_durations: dict[str, list[float]] = {s: [] for s in _STAGES}
+        retries_by_stage:    dict[str, int]          = {s: 0 for s in _STAGES}
+        rework_tickets:      set[str]                = set()
+
+        for ev in events:
+            stage = ev.get("stage")
+            if stage not in _STAGES:
+                continue
+            dur = ev.get("duration_sec")
+            if isinstance(dur, (int, float)):
+                per_stage_durations[stage].append(float(dur))
+            # Retry = evento no exitoso o retry_num > 0
+            if (not ev.get("success")) or int(ev.get("retry_num", 0) or 0) > 0:
+                retries_by_stage[stage] += 1
+            if ev.get("rework"):
+                rework_tickets.add(str(ev.get("ticket_id") or ""))
+
+        def _avg_min(vals: list[float]) -> float | None:
+            if not vals:
+                return None
+            return round(sum(vals) / len(vals) / 60.0, 2)
+
+        tiempo_pm_min  = _avg_min(per_stage_durations["pm"])
+        tiempo_dev_min = _avg_min(per_stage_durations["dev"])
+        tiempo_qa_min  = _avg_min(per_stage_durations["tester"])
+
+        total_sec = (sum(per_stage_durations["pm"])
+                     + sum(per_stage_durations["dev"])
+                     + sum(per_stage_durations["tester"]))
+        total_hrs = round(total_sec / 3600.0, 2) if total_sec else 0.0
+
+        # ── 2. first_attempt_approved: por ticket, mirando metrics.json  ───
+        tickets_seen:        set[str] = set()
+        tickets_first_ok:    int      = 0
+        for ev in events:
+            tid = str(ev.get("ticket_id") or "")
+            if not tid or tid in tickets_seen:
+                continue
+            # Consideramos "primer intento aprobado" si:
+            #   - no tiene rework en ninguna etapa
+            #   - tester finaliza success=True
+            t_events = [e for e in events if str(e.get("ticket_id")) == tid]
+            had_rework = any(e.get("rework") for e in t_events)
+            tester_evs = [e for e in t_events if e.get("stage") == "tester"]
+            if tester_evs and not had_rework and any(e.get("success") for e in tester_evs):
+                tickets_first_ok += 1
+            tickets_seen.add(tid)
+
+        first_attempt_approved_pct = (
+            round(100.0 * tickets_first_ok / len(tickets_seen), 1)
+            if tickets_seen else 0.0
+        )
+
+        # ── 3. Correcciones enviadas (desde pipeline_events.jsonl) ─────────
+        corrections_sent = 0
+        errors_by_ticket: dict[str, int] = {}
+        try:
+            from pipeline_events import read_events as _read_events
+            since_dt = datetime.now() - timedelta(days=days)
+            # Tomamos action_error en scope QA/tester (correcciones) + los errores totales
+            ev_errors = _read_events(kind="action_error", since=since_dt, limit=5000)
+            for e in ev_errors:
+                tid = str(e.get("ticket_id") or "")
+                if not tid:
+                    continue
+                errors_by_ticket[tid] = errors_by_ticket.get(tid, 0) + 1
+                # Criterio: los errores en fase tester cuentan como corrección enviada
+                if (e.get("phase") or "").lower() == "tester":
+                    corrections_sent += 1
+        except Exception as e:
+            logger.debug("[METRICS] lectura pipeline_events falló: %s", e)
+
+        return {
+            "project":         project or self._project,
+            "window_days":     days,
+            "generated_at":    datetime.now().isoformat(),
+            "tiempo_pm_min":   tiempo_pm_min,
+            "tiempo_dev_min":  tiempo_dev_min,
+            "tiempo_qa_min":   tiempo_qa_min,
+            "total_hrs":       total_hrs,
+            "retries_by_stage": retries_by_stage,
+            "corrections_sent": corrections_sent,
+            "errors_by_ticket_top": dict(sorted(
+                errors_by_ticket.items(), key=lambda kv: kv[1], reverse=True,
+            )[:10]),
+            "rework_tickets":  len(rework_tickets),
+            "first_attempt_approved_pct": first_attempt_approved_pct,
+            "tickets_seen":    len(tickets_seen),
         }
 
     # ── Internals ─────────────────────────────────────────────────────────

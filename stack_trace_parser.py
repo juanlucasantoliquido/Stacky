@@ -1,7 +1,7 @@
 """
 stack_trace_parser.py — S-01: Parser de Stack Traces .NET → Archivo/Método exacto.
 
-Extrae informacion estructurada de stack traces .NET pegados en tickets Mantis:
+Extrae informacion estructurada de stack traces .NET pegados en tickets:
   - Archivo exacto (con ruta relativa al trunk)
   - Nombre del método y firma
   - Numero de linea

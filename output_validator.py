@@ -53,8 +53,9 @@ _PM_OPTIONAL_FILES = {
 # Mínimo de líneas en DEV_COMPLETADO.md
 _DEV_COMPLETADO_MIN_LINES = 5
 
-# Mínimo de casos en TESTER_COMPLETADO.md
-_QA_MIN_LINES = 10
+# Mínimo de líneas en TESTER_COMPLETADO.md
+# 10 líneas era trivialmente fácil de cumplir. 20 requiere estructura real.
+_QA_MIN_LINES = 20
 
 # Veredictos válidos en el reporte QA
 _QA_VERDICTS = ["APROBADO", "CON OBSERVACIONES", "RECHAZADO"]
@@ -121,7 +122,7 @@ def write_error_flag_if_invalid(result: ValidationResult,
             fh.write(result.issues_str())
     except Exception as e:
         import logging
-        logging.getLogger("mantis.validator").error(
+        logging.getLogger("stacky.validator").error(
             "No se pudo escribir %s: %s", flag_path, e
         )
     return True
@@ -206,6 +207,11 @@ def _validate_pm(ticket_folder: str, ticket_id: str) -> ValidationResult:
                 "ARQUITECTURA_SOLUCION.md: no menciona archivos específicos del codebase"
             )
 
+        # G-05: PM Path Sanity Check — detectar rutas fantasma
+        ws_root = _find_workspace_root(ticket_folder)
+        if ws_root:
+            issues.extend(_check_path_sanity(ticket_folder, ws_root))
+
     return ValidationResult(
         ok=len(issues) == 0,
         stage="pm",
@@ -269,7 +275,7 @@ def _validate_dev(ticket_folder: str, ticket_id: str) -> ValidationResult:
 
 
 def _validate_tester(ticket_folder: str, ticket_id: str) -> ValidationResult:
-    """Valida que QA generó TESTER_COMPLETADO.md con veredicto explícito."""
+    """Valida que QA generó TESTER_COMPLETADO.md con veredicto, evidencia y archivos secundarios."""
     issues   = []
     warnings = []
 
@@ -282,13 +288,14 @@ def _validate_tester(ticket_folder: str, ticket_id: str) -> ValidationResult:
     content = Path(tester_path).read_text(encoding="utf-8", errors="replace")
     lines   = [l for l in content.splitlines() if l.strip()]
 
+    # ── 1. Longitud mínima ────────────────────────────────────────────────────
     if len(lines) < _QA_MIN_LINES:
         issues.append(
             f"TESTER_COMPLETADO.md: muy pocas líneas ({len(lines)} de "
-            f"{_QA_MIN_LINES} mínimas)"
+            f"{_QA_MIN_LINES} mínimas) — indica testing superficial"
         )
 
-    # Debe tener veredicto explícito
+    # ── 2. Veredicto explícito ────────────────────────────────────────────────
     has_verdict = any(v in content.upper() for v in _QA_VERDICTS)
     if not has_verdict:
         issues.append(
@@ -296,27 +303,166 @@ def _validate_tester(ticket_folder: str, ticket_id: str) -> ValidationResult:
             "(APROBADO / CON OBSERVACIONES / RECHAZADO)"
         )
 
-    # Detectar si el veredicto es aprobado (para feedback loop M-01)
+    # ── 3. CODE_REVIEW.md debe existir ───────────────────────────────────────
+    code_review_path = os.path.join(ticket_folder, "CODE_REVIEW.md")
+    if not os.path.exists(code_review_path):
+        issues.append(
+            "CODE_REVIEW.md: archivo no encontrado — QA debe completar la Fase 1 (code review)"
+        )
+    else:
+        cr_content = Path(code_review_path).read_text(encoding="utf-8", errors="replace")
+        cr_lines   = [l for l in cr_content.splitlines() if l.strip()]
+        if len(cr_lines) < 8:
+            issues.append("CODE_REVIEW.md: muy pocas líneas — revisión insuficiente")
+        # Debe tener al menos un [PASS] o [FAIL] (evidencia de checks binarios)
+        if not re.search(r'\[(PASS|FAIL|N/A)', cr_content, re.IGNORECASE):
+            issues.append(
+                "CODE_REVIEW.md: no contiene ningún check con [PASS]/[FAIL]/[N/A] — "
+                "revisión sin evidencia binaria"
+            )
+
+    # ── 4. TEST_RESULTS.md debe existir ──────────────────────────────────────
+    test_results_path = os.path.join(ticket_folder, "TEST_RESULTS.md")
+    if not os.path.exists(test_results_path):
+        issues.append(
+            "TEST_RESULTS.md: archivo no encontrado — QA debe completar la Fase 2 (pruebas funcionales)"
+        )
+    else:
+        tr_content = Path(test_results_path).read_text(encoding="utf-8", errors="replace")
+        tr_lines   = [l for l in tr_content.splitlines() if l.strip()]
+        if len(tr_lines) < 5:
+            issues.append("TEST_RESULTS.md: muy pocas líneas — pruebas insuficientes")
+        # Debe tener al menos un PASS o FAIL explícito
+        if not re.search(r'\b(PASS|FAIL)\b', tr_content, re.IGNORECASE):
+            issues.append(
+                "TEST_RESULTS.md: no contiene ningún resultado PASS/FAIL — "
+                "pruebas sin veredicto por caso"
+            )
+
+    # ── 5. Evidencia mínima en TESTER_COMPLETADO.md ───────────────────────────
+    # Detectar si el tester apenas escribió texto libre sin estructura
+    has_section_headers = content.count("##") >= 3
+    if not has_section_headers:
+        warnings.append(
+            "TESTER_COMPLETADO.md: tiene menos de 3 secciones (##) — "
+            "estructura incompleta (esperado: Veredicto, Issues, Observaciones, Criterios)"
+        )
+
+    # Detectar aprobación genérica sin criterios (el patrón más común de falsa aprobación)
+    _GENERIC_APPROVAL_PATTERNS = [
+        "el código es correcto",
+        "todo está bien",
+        "implementación correcta",
+        "no se encontraron problemas",
+        "cumple con los requisitos",
+        "aprobado sin observaciones",
+    ]
+    content_lower = content.lower()
+    for pattern in _GENERIC_APPROVAL_PATTERNS:
+        if pattern in content_lower and len(lines) < 25:
+            warnings.append(
+                f"TESTER_COMPLETADO.md: contiene frase genérica de aprobación ('{pattern}') "
+                "con poco contenido — revisá que el testing fue exhaustivo"
+            )
+            break
+
+    # ── 6. Si hay RECHAZADO/CON OBSERVACIONES, debe haber findings ───────────
+    verdict = _extract_verdict(content)
+    has_issues_qa = verdict in ("CON OBSERVACIONES", "RECHAZADO")
+    qa_findings = _extract_qa_findings(content) if has_issues_qa else []
+
+    if has_issues_qa and not qa_findings:
+        issues.append(
+            f"TESTER_COMPLETADO.md: veredicto '{verdict}' pero no se encontraron "
+            "findings específicos — debe listar los issues concretos para que DEV corrija"
+        )
+
+    # ── 7. Criterios de aceptación deben estar verificados ───────────────────
+    # Si TAREAS_DESARROLLO.md existe, el reporte debería referenciar los criterios
+    tareas_path = os.path.join(ticket_folder, "TAREAS_DESARROLLO.md")
+    if os.path.exists(tareas_path):
+        if "criterio" not in content_lower and "verificado" not in content_lower and "aceptación" not in content_lower:
+            warnings.append(
+                "TESTER_COMPLETADO.md: no menciona criterios de aceptación — "
+                "debería listar qué criterios de TAREAS_DESARROLLO.md fueron verificados"
+            )
+
     result = ValidationResult(
         ok=len(issues) == 0,
         stage="tester",
         issues=issues,
         warnings=warnings,
     )
-    # Agregar metadata del veredicto al resultado
-    result.verdict        = _extract_verdict(content)
-    result.has_issues_qa  = result.verdict in ("CON OBSERVACIONES", "RECHAZADO")
-    result.qa_findings    = _extract_qa_findings(content) if result.has_issues_qa else []
+    result.verdict        = verdict
+    result.has_issues_qa  = has_issues_qa
+    result.qa_findings    = qa_findings
 
     return result
 
 
 # ── Helpers internos ──────────────────────────────────────────────────────────
 
+_SKIP_DIRS = {"bin", "obj", "node_modules", ".git", ".vs", "packages"}
+
+
+def _check_path_sanity(ticket_folder: str, workspace_root: str) -> list[str]:
+    """Detecta rutas fantasma mencionadas en ARQUITECTURA_SOLUCION.md."""
+    issues: list[str] = []
+    arq_file = Path(ticket_folder) / "ARQUITECTURA_SOLUCION.md"
+    if not arq_file.exists():
+        return issues
+
+    workspace = Path(workspace_root)
+    if not workspace.exists():
+        return issues
+
+    content = arq_file.read_text(encoding="utf-8", errors="replace")
+    path_pattern = re.compile(r"[\w./\\]+\.(?:cs|aspx|vb|sql|js|ts)\b", re.IGNORECASE)
+    mentioned_paths = path_pattern.findall(content)
+
+    for rel_path in set(mentioned_paths):
+        normalized = rel_path.replace("\\", "/")
+        if "/" not in normalized:
+            continue
+        target_name = Path(normalized).name
+        found = False
+        for candidate in workspace.rglob(target_name):
+            if any(part in _SKIP_DIRS for part in candidate.parts):
+                continue
+            found = True
+            break
+        if not found:
+            issues.append(
+                f"PATH FANTASMA: '{normalized}' mencionado en ARQUITECTURA_SOLUCION.md "
+                f"no existe en el workspace. DEV necesita la ruta correcta."
+            )
+            if len(issues) >= 10:
+                break
+    return issues
+
+
+def _find_workspace_root(ticket_folder: str) -> str | None:
+    """Walk up from ticket_folder to find the workspace root (contains trunk/)."""
+    current = os.path.abspath(ticket_folder)
+    for _ in range(10):
+        if os.path.isdir(os.path.join(current, "trunk")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return None
+
+
 def _extract_verdict(content: str) -> str:
-    """Extrae el veredicto de TESTER_COMPLETADO.md."""
+    """Extrae el veredicto de TESTER_COMPLETADO.md.
+
+    Orden importa: chequeamos los veredictos negativos ANTES que APROBADO.
+    Si el reporte contiene "RECHAZADO" pero también menciona "APROBADO" en otra
+    sección (p.ej. "Criterios aprobados: 2/5"), debe prevalecer el negativo.
+    """
     upper = content.upper()
-    for v in _QA_VERDICTS:
+    for v in ("RECHAZADO", "CON OBSERVACIONES", "APROBADO"):
         if v in upper:
             return v
     return "DESCONOCIDO"
@@ -326,6 +472,14 @@ def _extract_qa_findings(content: str) -> list[str]:
     """
     Extrae lista de issues/observaciones de TESTER_COMPLETADO.md.
     Busca secciones de observaciones, rechazos o issues.
+
+    Fallback (cuando el agente QA no respeta el formato de lista):
+      1) Intenta capturar el primer párrafo de texto no vacío que aparezca
+         después del marcador de veredicto RECHAZADO.
+      2) Si aun así no encuentra texto, devuelve un finding sentinel que
+         indica que QA marcó RECHAZADO pero no documentó el motivo.
+    El fallback se activa SOLO si el veredicto del reporte es RECHAZADO —
+    así evitamos ruido en CON OBSERVACIONES / APROBADO sin findings.
     """
     findings = []
     in_section = False
@@ -343,4 +497,53 @@ def _extract_qa_findings(content: str) -> list[str]:
         if in_section and stripped.startswith(("-", "*", "•")) and len(stripped) > 3:
             findings.append(stripped.lstrip("-*• ").strip())
 
-    return findings[:10]  # máximo 10 findings para no saturar el prompt de rework
+    if findings:
+        return findings[:10]  # máximo 10 findings para no saturar el prompt de rework
+
+    # ── Fallback: solo si el reporte es RECHAZADO ─────────────────────────────
+    upper = (content or "").upper()
+    is_rechazado = ("RECHAZADO" in upper and "APROBADO" not in upper.split("RECHAZADO")[0][-200:])
+    # Heurística simple: RECHAZADO presente y no inmediatamente precedido por "APROBADO"
+    # (evita capturar "veredicto APROBADO: no RECHAZADO" como rechazo).
+    if "RECHAZADO" not in upper:
+        return []
+
+    # Busco el primer párrafo textual (no heading, no lista vacía) que aparezca
+    # después del primer "RECHAZADO" del documento.
+    idx_rech = upper.find("RECHAZADO")
+    tail = content[idx_rech:] if idx_rech >= 0 else content
+    # Saltar la misma línea donde aparece RECHAZADO.
+    lines = tail.splitlines()
+    paragraph_lines: list[str] = []
+    capturing = False
+    for line in lines[1:]:
+        s = line.strip()
+        if not s:
+            if paragraph_lines:
+                break  # cerramos al primer blank tras haber capturado algo
+            continue
+        # Ignorar headings, líneas de código-fence, bullets vacíos.
+        if s.startswith("#") or s.startswith("```"):
+            if paragraph_lines:
+                break
+            continue
+        # Limpiar prefijos comunes pero mantener el contenido.
+        cleaned = s.lstrip("-*• ").strip()
+        if not cleaned:
+            continue
+        paragraph_lines.append(cleaned)
+        capturing = True
+        if len(paragraph_lines) >= 4:
+            break  # suficiente contexto
+
+    if paragraph_lines:
+        text = " ".join(paragraph_lines).strip()
+        # Limitar longitud para no explotar prompts posteriores.
+        if len(text) > 800:
+            text = text[:797] + "..."
+        return [f"[Motivo capturado sin formato de lista] {text}"]
+
+    return [
+        "QA marcó RECHAZADO pero no documentó el motivo — revisar "
+        "TESTER_COMPLETADO.md manualmente"
+    ]

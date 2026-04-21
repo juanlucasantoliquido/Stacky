@@ -50,6 +50,9 @@ let _pollingTimer: ReturnType<typeof setInterval> | undefined;
 let _pipelineStatus: PipelineStatus | null = null;
 let _activeTicket: TicketStatus | null = null;
 let _blastDecorationType: vscode.TextEditorDecorationType;
+let _bridgeServer: http.Server | undefined;
+let _bridgeStartedAt: number = 0;
+const _EXTENSION_VERSION = '1.1.0';
 
 // ── Activacion ────────────────────────────────────────────────────────────────
 
@@ -107,12 +110,250 @@ export function activate(context: vscode.ExtensionContext) {
     // Iniciar polling
     _startPolling(ticketProvider, queueProvider);
     _refresh();
+
+    // Iniciar keypress bridge (para auto_enter_daemon.py)
+    _startKeypressBridge();
 }
 
 export function deactivate() {
     if (_pollingTimer) {
         clearInterval(_pollingTimer);
     }
+    if (_bridgeServer) {
+        _bridgeServer.close();
+        _bridgeServer = undefined;
+    }
+}
+
+// ── Keypress bridge (para auto_enter_daemon.py) ───────────────────────────────
+
+function _startKeypressBridge() {
+    const port = vscode.workspace.getConfiguration('stacky').get<number>('bridgePort') ?? 5051;
+    if (!port || port <= 0) {
+        console.log('[Stacky] Keypress bridge desactivado (bridgePort=0)');
+        return;
+    }
+
+    _bridgeServer = http.createServer((req, res) => {
+        const method = req.method || '';
+        const url    = req.url || '';
+
+        // Defense-in-depth: aunque el listen() bindea a 127.0.0.1, rechazamos
+        // explícitamente cualquier conexión que no venga de loopback.
+        const remoteAddr = req.socket.remoteAddress ?? '';
+        if (!_isLocalhost(remoteAddr)) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'Solo se aceptan conexiones locales' }));
+            return;
+        }
+
+        // CORS para el dashboard en localhost:5050
+        res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5050');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        if (method === 'OPTIONS') {
+            res.writeHead(204); res.end(); return;
+        }
+
+        // GET /health — liveness probe usado por copilot_bridge.py y watchdog
+        if (method === 'GET' && url === '/health') {
+            const copilotExt = vscode.extensions.getExtension('GitHub.copilot-chat');
+            const copilotVersion = copilotExt?.packageJSON?.version ?? null;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok:                 true,
+                version:            _EXTENSION_VERSION,
+                copilotChatVersion: copilotVersion,
+                uptimeSeconds:      Math.round((Date.now() - _bridgeStartedAt) / 1000),
+            }));
+            return;
+        }
+
+        // Endpoints que consumen body JSON
+        if (method !== 'POST') {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'not found' }));
+            return;
+        }
+
+        // POST /approve — reservado para Fase 2 (aprobación selectiva de prompts)
+        if (url === '/approve') {
+            res.writeHead(501, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok:    false,
+                error: 'reserved for Fase 2 — use /submit for now',
+            }));
+            return;
+        }
+
+        const isKeypress = url === '/keypress';
+        const isSubmit   = url === '/submit';
+        const isInvoke   = url === '/invoke';
+        if (!isKeypress && !isSubmit && !isInvoke) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'not found' }));
+            return;
+        }
+
+        let body = '';
+        req.on('data', (chunk: Buffer) => { body += chunk.toString('utf8'); });
+        req.on('end', async () => {
+            try {
+                const payload = body ? JSON.parse(body) : {};
+                let ok = false;
+
+                if (isSubmit) {
+                    // /submit → Ctrl+Enter vía comando chat submit (reusa la misma
+                    // cadena de candidatos que /keypress ctrl+enter)
+                    ok = await _executeBridgeRequest({ key: 'ctrl+enter' });
+                } else if (isInvoke) {
+                    // /invoke — inyecta el prompt en Copilot Chat y dispara submit.
+                    // Portado de la extensión ripley-vscode-bridge (v1.0.0).
+                    await _handleInvoke(payload, res);
+                    return;
+                } else {
+                    ok = await _executeBridgeRequest(payload);
+                }
+
+                res.writeHead(ok ? 200 : 500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok }));
+            } catch (e) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: String(e) }));
+            }
+        });
+    });
+
+    _bridgeServer.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE') {
+            console.log(`[Stacky] Puerto ${port} ocupado — probablemente otra instancia ya lo tiene`);
+        } else {
+            console.error('[Stacky] Bridge error:', err);
+        }
+        _bridgeServer = undefined;
+    });
+
+    // Bind solo a loopback por seguridad
+    _bridgeServer.listen(port, '127.0.0.1', () => {
+        _bridgeStartedAt = Date.now();
+        console.log(`[Stacky] Bridge escuchando en 127.0.0.1:${port} (v${_EXTENSION_VERSION})`);
+    });
+}
+
+async function _executeBridgeRequest(payload: { key?: string; command?: string }): Promise<boolean> {
+    // Escape hatch: comando directo por nombre
+    if (payload.command) {
+        try {
+            await vscode.commands.executeCommand(payload.command);
+            return true;
+        } catch (_e) {
+            return false;
+        }
+    }
+
+    const key = (payload.key || '').toLowerCase().replace(/\s+/g, '');
+    // Mapeo de combinaciones de teclas a comandos probables.
+    // Se prueban en orden; el primero que resuelva sin excepción gana.
+    const KEY_MAP: Record<string, string[]> = {
+        'ctrl+enter': [
+            'workbench.action.chat.submit',
+            'workbench.action.chat.acceptInput',
+            'github.copilot.chat.acceptInput',
+        ],
+    };
+    const candidates = KEY_MAP[key];
+    if (!candidates) return false;
+
+    for (const cmd of candidates) {
+        try {
+            await vscode.commands.executeCommand(cmd);
+            return true;
+        } catch (_e) {
+            // Probar el siguiente
+        }
+    }
+    return false;
+}
+
+// ── /invoke: inyección de prompt + submit ────────────────────────────────────
+
+async function _handleInvoke(
+    body: Record<string, unknown>,
+    res:  http.ServerResponse,
+): Promise<void> {
+    const prompt          = (body['prompt'] as string | undefined) ?? '';
+    const agent           = (body['agent']  as string | undefined) ?? '';
+    const newConversation = Boolean(body['new_conversation']);
+
+    if (!prompt) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'prompt es requerido' }));
+        return;
+    }
+
+    try {
+        if (newConversation) {
+            const freshChatCommands = [
+                'workbench.action.chat.newChat',
+                'workbench.action.chat.clear',
+                'vscode.editorChat.start',
+            ];
+            for (const cmd of freshChatCommands) {
+                try {
+                    await vscode.commands.executeCommand(cmd);
+                    console.log(`[Stacky] Fresh chat command OK: ${cmd}`);
+                    break;
+                } catch (_err) {
+                    console.log(`[Stacky] Fresh chat command unavailable: ${cmd}`);
+                }
+            }
+            await _sleep(1800);
+            try {
+                await vscode.commands.executeCommand('workbench.action.chat.open');
+            } catch (_err) { /* ignorar si ya está abierto */ }
+            await _sleep(700);
+            await vscode.env.clipboard.writeText(prompt);
+            await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+        } else {
+            try {
+                await vscode.commands.executeCommand('workbench.action.chat.open', { query: prompt });
+            } catch {
+                await vscode.commands.executeCommand('workbench.action.chat.open');
+                await _sleep(800);
+                await vscode.env.clipboard.writeText(prompt);
+                await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+            }
+        }
+
+        await _sleep(1200);
+
+        // fire-and-forget: no bloquear la respuesta HTTP esperando a la IA
+        vscode.commands.executeCommand('workbench.action.chat.submit').then(
+            () => console.log(`[Stacky] /invoke chat.submit OK — chars: ${prompt.length}`),
+            (err: unknown) => console.error('[Stacky] /invoke chat.submit error:', err),
+        );
+
+        console.log(`[Stacky] /invoke enviado — agente: ${agent || '(sin agente)'}, chars: ${prompt.length}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, chars: prompt.length, agent }));
+
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[Stacky] Error en /invoke: ${msg}`);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: msg }));
+    }
+}
+
+function _isLocalhost(addr: string): boolean {
+    return addr === '127.0.0.1'
+        || addr === '::1'
+        || addr === '::ffff:127.0.0.1'
+        || addr === 'localhost';
+}
+
+function _sleep(ms: number): Promise<void> {
+    return new Promise(r => setTimeout(r, ms));
 }
 
 // ── Polling ───────────────────────────────────────────────────────────────────

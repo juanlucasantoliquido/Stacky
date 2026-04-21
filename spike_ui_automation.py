@@ -4,7 +4,7 @@ spike_ui_automation.py — Test de UI automation sobre VS Code + Copilot Chat
 Ejecutar con VS Code abierto y Copilot Chat visible.
 
 Uso:
-    cd tools/mantis_scraper
+    cd Tools/Stacky
     python spike_ui_automation.py
 
 Valida:

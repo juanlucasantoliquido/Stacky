@@ -11,7 +11,7 @@ ya esta listo. El developer empieza directo en DEV.
 Caracteristicas:
   - Selecciona candidatos por priority score + posicion en cola
   - Cache con TTL configurable (default: 2h)
-  - Invalidacion automatica si el ticket recibe notas nuevas en Mantis
+  - Invalidacion automatica si el ticket recibe notas nuevas en el tracker
   - Compatible con el daemon existente (se activa via config)
 
 Uso:
@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("mantis.speculative")
+logger = logging.getLogger("stacky.speculative")
 
 BASE_DIR = Path(__file__).parent
 

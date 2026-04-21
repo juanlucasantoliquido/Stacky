@@ -22,7 +22,7 @@ import os
 import threading
 import time
 
-logger = logging.getLogger("mantis.watcher")
+logger = logging.getLogger("stacky.watcher")
 
 try:
     from stacky_log import slog as _slog
@@ -41,13 +41,39 @@ except ImportError:
     _VALIDATOR_AVAILABLE = False
     logger.debug("output_validator no disponible — validación de output deshabilitada")
 
-# Intentar importar el SVN reporter
-try:
-    from svn_reporter import generate_svn_report
-    _SVN_REPORTER_AVAILABLE = True
-except ImportError:
-    _SVN_REPORTER_AVAILABLE = False
-    logger.debug("svn_reporter no disponible")
+# Git changes reporter
+_GIT_REPORTER_AVAILABLE = False
+
+def _generate_git_changes(workspace_root: str, ticket_folder: str) -> None:
+    """Generate GIT_CHANGES.md with git status + diff summary."""
+    import subprocess, os
+    try:
+        r = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=workspace_root,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=15
+        )
+        status = r.stdout
+        r2 = subprocess.run(
+            ["git", "diff", "--stat", "HEAD"],
+            cwd=workspace_root,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30
+        )
+        diff_stat = r2.stdout
+        out_path = os.path.join(ticket_folder, "GIT_CHANGES.md")
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write("# Git Changes\n\n## Status\n```\n")
+            f.write(status or "(sin cambios)\n")
+            f.write("```\n\n## Diff Summary\n```\n")
+            f.write(diff_stat or "(sin diff)\n")
+            f.write("```\n")
+        logger.info("[GIT] GIT_CHANGES.md generado en %s", ticket_folder)
+    except Exception as e:
+        logger.warning("[GIT] Error generando GIT_CHANGES.md: %s", e)
+
+_GIT_REPORTER_AVAILABLE = True
 
 # Intentar importar el generador de commit messages
 try:
@@ -56,6 +82,31 @@ try:
 except ImportError:
     _COMMIT_GEN_AVAILABLE = False
     logger.debug("commit_generator no disponible")
+
+# G-01: Build Gate — ejecutar tests post-DEV antes de invocar QA
+try:
+    from test_runner import run_post_dev_tests
+    _TEST_RUNNER_AVAILABLE = True
+except ImportError:
+    _TEST_RUNNER_AVAILABLE = False
+    logger.debug("test_runner no disponible — build gate deshabilitado")
+
+# Q-09: Production Readiness Gate — pre-close post-QA
+try:
+    from production_readiness_gate import ProductionReadinessGate, ReadinessReport
+    _READINESS_GATE_AVAILABLE = True
+except ImportError:
+    _READINESS_GATE_AVAILABLE = False
+    logger.debug("production_readiness_gate no disponible — readiness gate deshabilitado")
+
+# X-01: Self-Improving Prompt Engine
+try:
+    from self_improving_engine import get_engine as _get_self_improving_engine
+    _SELF_IMPROVING_AVAILABLE = True
+except ImportError:
+    _SELF_IMPROVING_AVAILABLE = False
+    _get_self_improving_engine = None
+    logger.debug("self_improving_engine no disponible")
 
 # ── Mapping flag → (stage_completado, siguiente_estado) ──────────────────────
 _FLAG_TRANSITIONS = {
@@ -288,38 +339,97 @@ class PipelineWatcher:
                     _sl(ticket_id, "valid", f"Excepción al validar {stage_done}: {ve}", "warning")
             # ── Fin validación ───────────────────────────────────────────────
 
-            # ── M-01: Feedback loop QA → DEV (Rework) ───────────────────────
+            # ── G-01: Build Gate — ejecutar tests post-DEV antes de QA ───────
+            if stage_done == "dev" and _TEST_RUNNER_AVAILABLE:
+                try:
+                    ws_root = self._get_workspace_root()
+                    if ws_root:
+                        logger.info("[BUILD-GATE] Ejecutando tests post-DEV para %s...", ticket_id)
+                        test_result = run_post_dev_tests(folder, ticket_id, ws_root)
+                        if test_result is not None:
+                            if not test_result.success:
+                                err_reason = (
+                                    f"Build Gate falló:\n"
+                                    f"  Build: {'OK' if test_result.build_ok else 'FAILED'}\n"
+                                    f"  Tests: {test_result.tests_passed}/{test_result.tests_run} passed\n"
+                                )
+                                if test_result.build_errors:
+                                    err_reason += "  Build errors:\n" + "\n".join(
+                                        f"    - {e}" for e in test_result.build_errors[:5]
+                                    )
+                                if test_result.test_errors:
+                                    err_reason += "\n  Test errors:\n" + "\n".join(
+                                        f"    - {e}" for e in test_result.test_errors[:5]
+                                    )
+                                logger.error("[BuildGate] Build fallido — QA no invocado. Ticket: %s", ticket_id)
+                                _sl(ticket_id, "build-gate", err_reason, "warning")
+                                # Write DEV_ERROR.flag to block QA
+                                err_flag = os.path.join(folder, "DEV_ERROR.flag")
+                                with open(err_flag, "w", encoding="utf-8") as ef:
+                                    ef.write(err_reason)
+                                if self._on_error:
+                                    self._on_error(ticket_id, "dev", err_reason, folder)
+                                return  # Do NOT advance to QA
+                            else:
+                                logger.info(
+                                    "[BUILD-GATE] %s PASÓ — build OK, %d/%d tests passed",
+                                    ticket_id, test_result.tests_passed, test_result.tests_run
+                                )
+                except Exception as bge:
+                    logger.warning("[BUILD-GATE] Error ejecutando build gate: %s", bge)
+                    _sl(ticket_id, "build-gate", f"Excepción: {bge}", "warning")
+            # ── Fin Build Gate ───────────────────────────────────────────────
+
+            # ── Static Analysis Tests post-DEV (E-05 + F-01 + E-13) ─────────
+            if stage_done == "dev":
+                try:
+                    from evidence_collector import EvidenceCollector, TestCase
+                    collector = EvidenceCollector()
+
+                    # F-01: Idempotency check
+                    try:
+                        from idempotency_tester import IdempotencyTester
+                        idem_cases = IdempotencyTester().check_for_idempotency_risks(folder)
+                        if idem_cases:
+                            collector.add_section("Idempotency Analysis", idem_cases)
+                    except ImportError:
+                        pass
+
+                    # E-13: Rollback verification
+                    try:
+                        from rollback_verifier import RollbackVerifier
+                        rb_cases = RollbackVerifier().verify(folder)
+                        if rb_cases:
+                            collector.add_section("Rollback Verification", rb_cases)
+                    except ImportError:
+                        pass
+
+                    if collector.total_cases > 0:
+                        collector.build_report(folder)
+                        logger.info(
+                            "[STATIC-TESTS] %s: %d/%d casos pasaron",
+                            ticket_id, collector.total_passed, collector.total_cases
+                        )
+                except Exception as ste:
+                    logger.warning("[STATIC-TESTS] Error: %s", ste)
+            # ── Fin Static Analysis ──────────────────────────────────────────
+
+            # ── M-01/Y-01: Feedback loop QA → (DEV rework | PM revision) ────
+            # Delega el routing de veredicto a pipeline_runner._auto_advance.
+            # Este watcher solo deja pasar el control si verdict = APROBADO.
             if stage_done == "tester" and _VALIDATOR_AVAILABLE:
                 try:
                     from output_validator import validate_stage_output
                     qa_val = validate_stage_output("tester", folder, ticket_id)
-                    if (qa_val.ok
-                            and hasattr(qa_val, "has_issues_qa")
-                            and qa_val.has_issues_qa):
-                        # QA reportó observaciones — verificar si ya hicimos rework
-                        rework_count = self._get_rework_count(ticket_id)
-                        max_rework   = 1  # máximo 1 ciclo de rework
-                        if rework_count < max_rework:
-                            logger.info(
-                                "[REWORK] %s: QA reportó issues — lanzando rework DEV "
-                                "(ciclo %d/%d)", ticket_id, rework_count + 1, max_rework
-                            )
-                            self._advance_state(ticket_id, "qa_rework", folder)
-                            threading.Thread(
-                                target=self._launch_rework,
-                                args=(ticket_id, folder, qa_val.qa_findings,
-                                      rework_count + 1),
-                                daemon=True,
-                                name=f"rework-{ticket_id}",
-                            ).start()
-                            return  # no avanzar a on_advance todavía
-                        else:
-                            logger.info(
-                                "[REWORK] %s: QA tiene issues pero max rework alcanzado "
-                                "— marcando completado con observaciones", ticket_id
-                            )
+                    verdict = getattr(qa_val, "verdict", None)
+                    if verdict in ("CON OBSERVACIONES", "RECHAZADO"):
+                        logger.info(
+                            "[REWORK] %s: QA verdict=%s — routing lo maneja _auto_advance",
+                            ticket_id, verdict
+                        )
+                        return
                 except Exception as re:
-                    logger.warning("[REWORK] Error en feedback loop: %s", re)
+                    logger.warning("[REWORK] Error inspeccionando veredicto QA: %s", re)
             # ── Fin feedback loop ─────────────────────────────────────────────
 
             # ── Commit message post-QA aprobado ─────────────────────────────
@@ -332,26 +442,122 @@ class PipelineWatcher:
                     logger.warning("[COMMIT] Error generando commit message: %s", ce)
             # ── Fin commit message ───────────────────────────────────────────
 
-            # ── SVN report post-DEV ──────────────────────────────────────────
-            if stage_done == "dev" and _SVN_REPORTER_AVAILABLE:
+            # ── Git changes report post-DEV ──────────────────────────────────────────
+            if stage_done == "dev" and _GIT_REPORTER_AVAILABLE:
                 try:
                     ws_root = self._get_workspace_root()
                     if ws_root:
                         threading.Thread(
-                            target=generate_svn_report,
+                            target=_generate_git_changes,
                             args=(ws_root, folder),
                             daemon=True,
-                            name=f"svn-report-{ticket_id}",
+                            name=f"git-report-{ticket_id}",
                         ).start()
-                        logger.info("[SVN] Generando SVN_CHANGES.md para %s", ticket_id)
+                        logger.info("[GIT] Generando GIT_CHANGES.md para %s", ticket_id)
                 except Exception as se:
-                    logger.warning("[SVN] Error lanzando svn_reporter: %s", se)
-            # ── Fin SVN report ───────────────────────────────────────────────
+                    logger.warning("[GIT] Error generando changes report: %s", se)
+            # ── Fin Git report ───────────────────────────────────────────────
+
+            # ── Q-09: Production Readiness Gate — pre-close post-QA ─────────
+            readiness_blocked = False
+            if stage_done == "tester" and _READINESS_GATE_AVAILABLE:
+                try:
+                    try:
+                        wid_int = int(ticket_id)
+                    except (TypeError, ValueError):
+                        wid_int = 0
+                    gate   = ProductionReadinessGate()
+                    report = gate.evaluate(folder, wid_int)
+                    if not report.ready:
+                        readiness_blocked = True
+                        logger.warning(
+                            "[READINESS] %s: %d blockers — no se marcará Resolved",
+                            ticket_id, len(report.blockers)
+                        )
+                        for b in report.blockers:
+                            logger.warning("[READINESS]   - %s", b)
+                            _sl(ticket_id, "readiness", f"Blocker: {b}", "warning")
+                        try:
+                            out_path = os.path.join(folder, "READINESS_BLOCKED.md")
+                            with open(out_path, "w", encoding="utf-8") as f:
+                                f.write(f"# Readiness Gate Blocked — Ticket {ticket_id}\n\n")
+                                f.write("QA aprobó, pero el Production Readiness Gate "
+                                        "detectó los siguientes bloqueantes:\n\n")
+                                for b in report.blockers:
+                                    f.write(f"- {b}\n")
+                                f.write("\n## Detalle de checks\n\n")
+                                for cid, result in report.check_results.items():
+                                    desc = gate.CHECKS.get(cid, cid)
+                                    if result is True:
+                                        mark = "OK"
+                                    elif result is False:
+                                        mark = "FAIL"
+                                    else:
+                                        mark = "UNKNOWN"
+                                    f.write(f"- [{mark}] {cid}: {desc}\n")
+                        except Exception as we:
+                            logger.warning("[READINESS] No se pudo escribir READINESS_BLOCKED.md: %s", we)
+                    else:
+                        logger.info("[READINESS] %s: todos los checks OK — procediendo a Resolved",
+                                    ticket_id)
+                except Exception as ge:
+                    logger.warning("[READINESS] Error evaluando gate: %s", ge)
+            # ── Fin Readiness Gate ───────────────────────────────────────────
+
+            # ── X-01: Self-Improving Prompt Engine ──────────────────────────
+            # Registrar como "golden example" solo si: QA APROBADO + primer intento
+            if (stage_done == "tester"
+                    and _SELF_IMPROVING_AVAILABLE
+                    and not readiness_blocked):
+                try:
+                    self._maybe_record_golden_success(ticket_id, folder)
+                except Exception as se:
+                    logger.warning("[GOLDEN] Error registrando success: %s", se)
+            # ── Fin Self-Improving Engine ────────────────────────────────────
+
+            # ── A3: Postflight validation ────────────────────────────────────
+            # Antes de marcar *_completado, validar que los outputs esperados
+            # existen y son útiles. Si fallan → error_{stage} y NO avanzar.
+            if new_state.endswith("_completado") and stage_done in ("pm", "dev", "tester"):
+                try:
+                    from postflight_validator import validate_stage_outputs
+                    pf = validate_stage_outputs(folder, stage_done)
+                    if not pf.ok:
+                        logger.warning(
+                            "[POSTFLIGHT] %s/%s falló validación: %s — marcando error_%s",
+                            ticket_id, stage_done, pf.reason, stage_done,
+                        )
+                        try:
+                            from pipeline_state import load_state, save_state, mark_error
+                            _st = load_state(self._state_path)
+                            mark_error(_st, ticket_id, stage_done,
+                                       f"postflight: {pf.reason}")
+                            save_state(self._state_path, _st)
+                        except Exception as me:
+                            logger.error("[POSTFLIGHT] No se pudo marcar error_%s: %s",
+                                         stage_done, me)
+                        if self._on_error:
+                            try:
+                                self._on_error(ticket_id, stage_done, pf.reason, folder)
+                            except Exception as oe:
+                                logger.debug("[POSTFLIGHT] on_error callback falló: %s", oe)
+                        return
+                except ImportError:
+                    logger.debug("postflight_validator no disponible — skipping")
+                except Exception as pe:
+                    logger.warning("[POSTFLIGHT] error inesperado para %s/%s: %s — "
+                                   "permitiendo transición por seguridad",
+                                   ticket_id, stage_done, pe)
+            # ── Fin Postflight ───────────────────────────────────────────────
 
             # Actualizar pipeline_state
             self._advance_state(ticket_id, new_state, folder)
             if _slog:
                 _slog.transition(ticket_id, f"{stage_done}_en_proceso", new_state, source="watcher")
+            if readiness_blocked:
+                logger.info("[READINESS] %s: on_advance omitido (QA approved pending readiness)",
+                            ticket_id)
+                return
             if self._on_advance:
                 self._on_advance(ticket_id, stage_done, new_state, folder)
 
@@ -364,6 +570,44 @@ class PipelineWatcher:
             return entry.get("rework_count", 0)
         except Exception:
             return 0
+
+    def _maybe_record_golden_success(self, ticket_id: str, folder: str) -> None:
+        """X-01: Si QA aprobó al primer intento, guardar ticket como golden example."""
+        if _get_self_improving_engine is None:
+            return
+        # Sólo primer intento (sin reworks)
+        if self._get_rework_count(ticket_id) > 0:
+            return
+        # Verificar veredicto APROBADO en TESTER_COMPLETADO.md
+        tester_path = os.path.join(folder, "TESTER_COMPLETADO.md")
+        if not os.path.isfile(tester_path):
+            return
+        try:
+            with open(tester_path, encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        except Exception:
+            return
+        if "APROBADO" not in content.upper():
+            return
+        # "APROBADO" no debe estar contenido en "RECHAZADO"/"CON OBSERVACIONES"
+        upper = content.upper()
+        if "CON OBSERVACIONES" in upper or "RECHAZADO" in upper:
+            # Verificar que el veredicto efectivo sea APROBADO puro
+            import re as _re
+            m = _re.search(r"veredicto[^\n:]*[:\-]\s*(\w[\w ]*)", content, _re.IGNORECASE)
+            if m and "APROBADO" not in m.group(1).upper():
+                return
+
+        engine = _get_self_improving_engine()
+
+        # Intentar recuperar los prompts usados desde prompt_tracker (solo hashes)
+        # prompt_tracker.py almacena hashes, no el texto completo — usamos ""
+        # como fallback y dejamos que el prompt_snapshot quede vacío.
+        for stage in ("pm", "dev", "tester"):
+            try:
+                engine.record_success(folder, stage, "")
+            except Exception as e:
+                logger.debug("[GOLDEN] record_success(%s) falló: %s", stage, e)
 
     def _launch_rework(self, ticket_id: str, folder: str,
                        qa_findings: list[str], rework_num: int) -> None:

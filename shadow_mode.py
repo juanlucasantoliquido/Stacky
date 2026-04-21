@@ -22,7 +22,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.shadow_mode")
+logger = logging.getLogger("stacky.shadow_mode")
 
 _SHADOW_FLAG_FILENAME = "shadow_mode.flag"
 _SHADOW_CONFIG_KEY    = "shadow_mode"
@@ -31,7 +31,7 @@ _SHADOW_CONFIG_KEY    = "shadow_mode"
 class ShadowMode:
     """
     Gestiona el modo shadow del pipeline Stacky.
-    El flag persiste en el directorio base de mantis_scraper.
+    El flag persiste en el directorio base de Stacky.
     """
 
     def __init__(self, project_name: str = ""):

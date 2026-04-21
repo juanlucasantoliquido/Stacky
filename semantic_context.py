@@ -24,12 +24,12 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-logger = logging.getLogger("mantis.semantic_context")
+logger = logging.getLogger("stacky.semantic_context")
 
 _MAX_METHOD_LINES = 60
 _MAX_METHODS_PER_FILE = 5
 _MAX_FILES = 8
-_SKIP_DIRS = {"bin", "obj", ".vs", ".git", ".svn", "packages"}
+_SKIP_DIRS = {"bin", "obj", ".vs", ".git", "packages"}
 
 
 @dataclass

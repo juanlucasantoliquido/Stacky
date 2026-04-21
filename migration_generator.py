@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("mantis.migrations")
+logger = logging.getLogger("stacky.migrations")
 
 BASE_DIR = Path(__file__).parent
 

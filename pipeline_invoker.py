@@ -24,7 +24,7 @@ import threading
 import time
 import uuid
 
-logger = logging.getLogger("mantis.invoker")
+logger = logging.getLogger("stacky.invoker")
 
 
 class InvokeLogger:

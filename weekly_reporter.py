@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("mantis.weekly_reporter")
+logger = logging.getLogger("stacky.weekly_reporter")
 
 BASE_DIR = Path(__file__).parent
 

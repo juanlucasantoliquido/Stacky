@@ -23,7 +23,7 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
-logger = logging.getLogger("mantis.oracle_schema")
+logger = logging.getLogger("stacky.oracle_schema")
 
 # TTL del cache de schema (en horas)
 _CACHE_TTL_HOURS = 4

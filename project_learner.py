@@ -27,7 +27,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.project_learner")
+logger = logging.getLogger("stacky.project_learner")
 
 _SKIP_DIRS = {"bin", "obj", "packages", ".vs", ".git", ".svn",
               "node_modules", "TestResults", "temp", "tmp"}

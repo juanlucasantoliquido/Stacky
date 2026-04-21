@@ -10,7 +10,7 @@ import logging
 import os
 from datetime import datetime
 
-logger = logging.getLogger("mantis.correction_memory")
+logger = logging.getLogger("stacky.correction_memory")
 
 
 class CorrectionMemory:
@@ -39,13 +39,19 @@ class CorrectionMemory:
         except Exception as e:
             logger.warning("CorrectionMemory: error guardando: %s", e)
 
-    def add_cycle(self, cycle_num: int, issues: list, qa_verdict: str = "") -> None:
-        """Registra los issues de un ciclo de rework."""
+    def add_cycle(self, cycle_num: int, issues: list, qa_verdict: str = "",
+                  duration_sec: float = None) -> None:
+        """Registra los issues de un ciclo de rework.
+
+        `duration_sec` es la duración real del ciclo DEV→QA (se propaga al reporter
+        ADO y al dashboard de métricas).
+        """
         cycle = {
-            "cycle_num":  cycle_num,
-            "issues":     issues,
-            "qa_verdict": qa_verdict,
-            "ts":         datetime.now().isoformat(),
+            "cycle_num":    cycle_num,
+            "issues":       issues,
+            "qa_verdict":   qa_verdict,
+            "duration_sec": round(duration_sec, 1) if duration_sec is not None else None,
+            "ts":           datetime.now().isoformat(),
         }
         self._data["cycles"].append(cycle)
         self._save()

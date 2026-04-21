@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("mantis.orchestrator")
+logger = logging.getLogger("stacky.orchestrator")
 
 BASE_DIR = Path(__file__).parent
 
@@ -350,7 +350,7 @@ class Orchestrator:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def _discover_projects() -> list:
-    """Descubre proyectos configurados en tools/mantis_scraper/projects/."""
+    """Descubre proyectos configurados en Tools/Stacky/projects/."""
     projects_dir = BASE_DIR / "projects"
     if not projects_dir.exists():
         return []

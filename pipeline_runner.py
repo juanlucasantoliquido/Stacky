@@ -28,6 +28,83 @@ from dba_agent import is_dba_required, get_dba_agent_name
 from tech_lead_reviewer import is_tl_review_required, get_tl_agent_name
 from copilot_bridge import invoke_agent
 
+# Import defensivo: import de stacky_log por side-effect (configura logging)
+try:
+    import stacky_log  # noqa: F401
+except Exception:
+    pass
+
+# F1-F4: wrappers de tracking de acciones. Defensive imports para permitir que
+# pipeline_runner funcione aún si los módulos de observabilidad no están
+# disponibles (degradación grácil).
+try:
+    from action_tracker import ActionContext as _ActionContext
+    from pipeline_events import emit as _emit_event
+    _HAS_ACTION_TRACKER = True
+except Exception:
+    _ActionContext = None
+    _emit_event = None
+    _HAS_ACTION_TRACKER = False
+
+# Mapping de stage del pipeline a phase canónica de PipelineEvent.
+# phase ∈ {"pm","dev","tester","dba","tl","deploy","sync","other"}
+_STAGE_TO_PHASE = {
+    "pm":           "pm",
+    "pm_revision":  "pm",
+    "dev":          "dev",
+    "dev_rework":   "dev",
+    "tester":       "tester",
+    "doc":          "other",
+    "dba":          "dba",
+    "tl":           "tl",
+}
+
+
+def _invoke_with_tracking(prompt, *, agent_name, project_name,
+                          new_conversation=False, ticket_id, ticket_folder, stage):
+    """
+    Envuelve ``invoke_agent(...)`` en una ``ActionContext`` para emitir eventos
+    de progreso/éxito/error. Si el tracker no está disponible o la construcción
+    del contexto falla, cae al invoke directo sin romper el flujo.
+    """
+    if not _HAS_ACTION_TRACKER or _ActionContext is None:
+        return invoke_agent(
+            prompt, agent_name=agent_name, project_name=project_name,
+            new_conversation=new_conversation,
+        )
+    phase = _STAGE_TO_PHASE.get(stage, "other")
+    try:
+        ctx = _ActionContext(
+            action=f"invoke_{stage}",
+            ticket_id=ticket_id,
+            project=project_name or None,
+            phase=phase,
+            ticket_folder=ticket_folder,
+            correlation={"agent": agent_name or "", "stage": stage},
+        )
+    except Exception:
+        return invoke_agent(
+            prompt, agent_name=agent_name, project_name=project_name,
+            new_conversation=new_conversation,
+        )
+    with ctx:
+        try:
+            ctx.progress(25, subaction="prompt_built")
+        except Exception:
+            pass
+        ok = invoke_agent(
+            prompt, agent_name=agent_name, project_name=project_name,
+            new_conversation=new_conversation,
+        )
+        try:
+            if ok:
+                ctx.progress(90, subaction="invoke_sent")
+            else:
+                ctx.error(RuntimeError("invoke_agent returned False"))
+        except Exception:
+            pass
+        return ok
+
 # ── Configuración ─────────────────────────────────────────────────────────────
 
 WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -41,7 +118,7 @@ POLL_INTERVAL  = 5     # segundos entre checks
 PLACEHOLDER    = "_A completar por PM_"
 
 # Nombres de agentes/modos en VS Code Copilot Chat
-PM_AGENT     = "PM-TL STack 3"
+PM_AGENT     = "PM-TLStack 1 PACIFICO"
 DEV_AGENT    = "DevStack3"
 TESTER_AGENT = "QA"
 DOC_AGENT    = "DocStack"
@@ -98,28 +175,36 @@ def _has_placeholders(folder: str) -> bool:
 
 # ── M-01: Helpers de rework QA→DEV ──────────────────────────────────────────
 
-def _parse_qa_issues(folder: str) -> tuple:
+def _parse_qa_verdict(folder: str) -> tuple[str, list]:
     """
-    M-01: Parsea TESTER_COMPLETADO.md y detecta si QA reportó issues.
-    Retorna (has_issues: bool, findings: list[str]).
+    Parsea TESTER_COMPLETADO.md y devuelve el veredicto estructurado.
+    Retorna (verdict, findings). verdict ∈ {"APROBADO", "CON OBSERVACIONES", "RECHAZADO", "DESCONOCIDO"}.
     """
     try:
         from output_validator import validate_stage_output
         val = validate_stage_output("tester", folder, "")
-        return getattr(val, "has_issues_qa", False), getattr(val, "qa_findings", [])
+        verdict = getattr(val, "verdict", "DESCONOCIDO") or "DESCONOCIDO"
+        findings = getattr(val, "qa_findings", []) or []
+        return verdict, findings
     except Exception:
         pass
-    # Fallback: parseo básico cuando output_validator no está disponible
     tester_file = os.path.join(folder, "TESTER_COMPLETADO.md")
     if not os.path.exists(tester_file):
-        return False, []
+        return "DESCONOCIDO", []
     try:
-        content = open(tester_file, encoding="utf-8").read()
-        has_issues = ("CON OBSERVACIONES" in content.upper()
-                      or "RECHAZADO" in content.upper())
-        return has_issues, []
+        content = open(tester_file, encoding="utf-8").read().upper()
+        for v in ("CON OBSERVACIONES", "RECHAZADO", "APROBADO"):
+            if v in content:
+                return v, []
+        return "DESCONOCIDO", []
     except Exception:
-        return False, []
+        return "DESCONOCIDO", []
+
+
+def _parse_qa_issues(folder: str) -> tuple:
+    """Backwards-compatible wrapper. Devuelve (has_issues, findings)."""
+    verdict, findings = _parse_qa_verdict(folder)
+    return verdict in ("CON OBSERVACIONES", "RECHAZADO"), findings
 
 
 def _wait_for_pm_completion(folder: str) -> bool:
@@ -501,93 +586,114 @@ def _auto_advance(tid: str, folder: str, current_stage: str,
     fresh_state = load_state(state_path)
     pip_est = fresh_state.get("tickets", {}).get(tid, {}).get("estado", "")
 
-    # ── Y-01/M-01: Para tester, verificar veredicto de QA ANTES de marcar completado ──
+    # ── Y-01/M-01: Veredicto QA bifurca el flujo ─────────────────────────────
+    # APROBADO          → continúa al auto-advance normal (doc)
+    # CON OBSERVACIONES → se acepta como OK (observaciones quedan anotadas en el
+    #                     reporte pero no bloquean el pipeline). Continúa al doc
+    #                     como si fuera APROBADO y arranca el siguiente ticket.
+    # RECHAZADO         → pm_revision inmediato (replanteo de fondo)
     if current_stage == "tester" and ok:
-        has_issues, qa_findings = _parse_qa_issues(folder)
-        if has_issues:
-            # Registrar en correction_memory
+        verdict, qa_findings = _parse_qa_verdict(folder)
+        # Guardar el veredicto en el state aun cuando sea OBSERVACIONES/APROBADO,
+        # para que el dashboard pueda mostrarlo (banner amarillo para OBS, etc.)
+        if verdict in ("APROBADO", "CON OBSERVACIONES"):
+            try:
+                fresh_state.setdefault("tickets", {}).setdefault(tid, {})["last_qa_verdict"] = verdict
+                fresh_state["tickets"][tid]["qa_findings"] = qa_findings
+                save_state(state_path, fresh_state)
+            except Exception:
+                pass
+            if verdict == "CON OBSERVACIONES":
+                log.info("[Y-01] #%s: QA CON OBSERVACIONES → aceptado como OK (no rework)", tid)
+        if verdict == "RECHAZADO":
+            # Duración real del ciclo DEV→QA para métricas de iteración
+            iter_started_iso = fresh_state.get("tickets", {}).get(tid, {}).get("iteration_started_at")
+            duration_sec = None
+            if iter_started_iso:
+                try:
+                    duration_sec = (datetime.now() - datetime.fromisoformat(iter_started_iso)).total_seconds()
+                except Exception:
+                    duration_sec = None
+
             try:
                 from correction_memory import CorrectionMemory
                 cm = CorrectionMemory(folder)
                 cycle_num = cm.get_cycle_count() + 1
-                cm.add_cycle(cycle_num, qa_findings, qa_verdict="CON_OBSERVACIONES")
+                cm.add_cycle(cycle_num, qa_findings, qa_verdict=verdict, duration_sec=duration_sec)
 
-                # Verificar stagnation: si 3 ciclos sin mejora → detener loop
                 if cm.check_stagnation():
-                    log.warning(
-                        "[Y-01] #%s: STAGNATION detectada tras %d ciclos — "
-                        "marcando stagnation_detected y notificando", tid, cycle_num
-                    )
+                    log.warning("[Y-01] #%s: STAGNATION tras %d ciclos — intervención manual", tid, cycle_num)
                     state_to_update = load_state(state_path)
                     set_ticket_state(state_to_update, tid, "stagnation_detected", folder=folder)
                     save_state(state_path, state_to_update)
-                    # Notificar al operador
                     try:
                         from notifier import notify
                         notify(f"⚠️ Ticket #{tid} — STAGNATION",
-                               f"Sin progreso en {cycle_num} ciclos. Requiere intervención manual.",
+                               f"Sin progreso en {cycle_num} ciclos (último: {verdict}). Requiere intervención manual.",
                                level="error", ticket_id=tid)
                     except Exception:
                         pass
-                    return  # Detener el auto-advance
+                    return
 
                 accumulated_issues = cm.get_all_issues()
                 efficiency = cm.get_efficiency_score()
-                log.info(
-                    "[Y-01] #%s: QA ciclo %d — issues acumulados: %d, efficiency: %.0f%%",
-                    tid, cycle_num, len(accumulated_issues), efficiency * 100
-                )
+                log.info("[Y-01] #%s: QA verdict=%s ciclo %d — issues acum: %d, efficiency: %.0f%%",
+                         tid, verdict, cycle_num, len(accumulated_issues), efficiency * 100)
             except Exception as cm_err:
                 log.warning("[Y-01] Error CorrectionMemory para #%s: %s", tid, cm_err)
                 accumulated_issues = qa_findings
-                cycle_num = fresh_state.get("tickets", {}).get(tid, {}).get("rework_count", 0) + 1
 
-            # Leer max_rework_cycles de config
+            # Registrar iteración cerrada (timing + contador) en state
             try:
-                import json as _json_cfg
+                from pipeline_state import record_iteration_end
+                record_iteration_end(fresh_state, tid, qa_verdict=verdict,
+                                     findings=qa_findings, duration_sec=duration_sec)
+            except Exception as ier:
+                log.warning("[Y-01] record_iteration_end falló para #%s: %s", tid, ier)
+
+            # Límite de reintentos (salvaguarda adicional a check_stagnation)
+            try:
                 _cfg = _json_cfg.load(open(os.path.join(os.path.dirname(__file__), "config.json"),
                                            encoding="utf-8"))
                 max_rework = int(_cfg.get("pipeline", {}).get("max_rework_cycles", 999))
             except Exception:
-                max_rework = 999  # Y-01: sin límite por defecto (infinito hasta stagnation)
+                max_rework = 999
 
             rework_count = fresh_state.get("tickets", {}).get(tid, {}).get("rework_count", 0)
-            if rework_count < max_rework:
-                # Decidir si hacer rework DEV o revisión PM
-                # Cada 2 reworks de DEV, escalar a PM revision
-                if rework_count > 0 and rework_count % 2 == 0:
-                    # Escalar a PM revision cada 2 ciclos DEV
-                    log.info(
-                        "[Y-01] #%s: Escalando a PM revision tras %d ciclos DEV",
-                        tid, rework_count
-                    )
-                    fresh_state.setdefault("tickets", {}).setdefault(tid, {})[
-                        "accumulated_issues"] = accumulated_issues
-                    fresh_state["tickets"][tid]["qa_findings"] = qa_findings
-                    set_ticket_state(fresh_state, tid, "pm_revision", folder=folder)
-                    save_state(state_path, fresh_state)
-                    next_t = {"ticket_id": tid, "folder": folder,
-                              "pipeline_estado": "pm_revision"}
-                    try:
-                        process_ticket(next_t, load_state(state_path),
-                                       state_path=state_path, workspace_root=workspace_root,
-                                       agents=agents, project_name=project_name)
-                    except Exception as e:
-                        log.error("[Y-01] Error lanzando PM revision para #%s: %s", tid, e)
-                else:
-                    # Rework DEV normal
-                    fresh_state.setdefault("tickets", {}).setdefault(tid, {})["qa_findings"] = qa_findings
-                    set_ticket_state(fresh_state, tid, "qa_rework", folder=folder)
-                    save_state(state_path, fresh_state)
-                    next_t = {"ticket_id": tid, "folder": folder,
-                              "pipeline_estado": "qa_rework"}
-                    try:
-                        process_ticket(next_t, load_state(state_path),
-                                       state_path=state_path, workspace_root=workspace_root,
-                                       agents=agents, project_name=project_name)
-                    except Exception as e:
-                        log.error("[Y-01] Error lanzando rework para #%s: %s", tid, e)
-                return  # no avanzar al doc stage todavía
+            if rework_count >= max_rework:
+                log.error("[Y-01] #%s: max_rework_cycles (%d) alcanzado tras veredicto %s — "
+                          "marcando stagnation_detected y notificando",
+                          tid, max_rework, verdict)
+                fresh_state.setdefault("tickets", {}).setdefault(tid, {})["qa_findings"] = qa_findings
+                fresh_state["tickets"][tid]["last_qa_verdict"] = verdict
+                set_ticket_state(fresh_state, tid, "stagnation_detected", folder=folder)
+                save_state(state_path, fresh_state)
+                try:
+                    from notifier import notify
+                    notify(f"⛔ Ticket #{tid} — max_rework_cycles ({max_rework}) alcanzado",
+                           f"Último veredicto QA: {verdict}. Requiere intervención manual.",
+                           level="error", ticket_id=tid)
+                except Exception:
+                    pass
+                return
+
+            fresh_state.setdefault("tickets", {}).setdefault(tid, {})["qa_findings"] = qa_findings
+            fresh_state["tickets"][tid]["accumulated_issues"] = accumulated_issues
+            fresh_state["tickets"][tid]["last_qa_verdict"] = verdict
+
+            log.info("[Y-01] #%s: QA RECHAZADO → escalando a PM revision (replanteo de fondo)", tid)
+            set_ticket_state(fresh_state, tid, "pm_revision", folder=folder)
+            save_state(state_path, fresh_state)
+            next_state = "pm_revision"
+
+            next_t = {"ticket_id": tid, "folder": folder, "pipeline_estado": next_state}
+            try:
+                process_ticket(next_t, load_state(state_path),
+                               state_path=state_path, workspace_root=workspace_root,
+                               agents=agents, project_name=project_name)
+            except Exception as e:
+                log.error("[Y-01] Error lanzando '%s' para #%s: %s", next_state, tid, e)
+            return
     # ── Fin check rework ───────────────────────────────────────────────────────
 
     # ── Y-05: Para TL, determinar el next_state según flag generado ───────────
@@ -728,8 +834,11 @@ def process_ticket(ticket: dict, state: dict,
         set_ticket_state(state, tid, "pm_en_proceso", folder=folder)
         _save()
         prompt = build_pm_prompt(folder, tid, _workspace_root)
-        if not invoke_agent(prompt, agent_name=_pm_agent, project_name=_project_name,
-                            new_conversation=True):
+        if not _invoke_with_tracking(prompt, agent_name=_pm_agent,
+                                     project_name=_project_name,
+                                     new_conversation=True,
+                                     ticket_id=tid, ticket_folder=folder,
+                                     stage="pm"):
             mark_error(state, tid, "pm", "No se pudo invocar al agente vía UI")
             _save()
             log.error("[PM] Error invocando agente para %s", tid)
@@ -741,7 +850,10 @@ def process_ticket(ticket: dict, state: dict,
         set_ticket_state(state, tid, "dev_en_proceso")
         _save()
         prompt = build_dev_prompt(folder, tid, _workspace_root)
-        if not invoke_agent(prompt, agent_name=_dev_agent, project_name=_project_name):
+        if not _invoke_with_tracking(prompt, agent_name=_dev_agent,
+                                     project_name=_project_name,
+                                     ticket_id=tid, ticket_folder=folder,
+                                     stage="dev"):
             mark_error(state, tid, "dev", "No se pudo invocar al agente vía UI")
             _save()
             log.error("[DEV] Error invocando agente para %s", tid)
@@ -753,7 +865,10 @@ def process_ticket(ticket: dict, state: dict,
         set_ticket_state(state, tid, "tester_en_proceso")
         _save()
         prompt = build_tester_prompt(folder, tid, _workspace_root)
-        if not invoke_agent(prompt, agent_name=_tester_agent, project_name=_project_name):
+        if not _invoke_with_tracking(prompt, agent_name=_tester_agent,
+                                     project_name=_project_name,
+                                     ticket_id=tid, ticket_folder=folder,
+                                     stage="tester"):
             mark_error(state, tid, "tester", "No se pudo invocar al agente vía UI")
             _save()
             log.error("[TESTER] Error invocando agente para %s", tid)
@@ -766,7 +881,10 @@ def process_ticket(ticket: dict, state: dict,
         _save()
         kb_path = _resolve_kb_path(folder)
         prompt = build_doc_agent_prompt(folder, tid, _workspace_root, kb_path)
-        if not invoke_agent(prompt, agent_name=_doc_agent, project_name=_project_name):
+        if not _invoke_with_tracking(prompt, agent_name=_doc_agent,
+                                     project_name=_project_name,
+                                     ticket_id=tid, ticket_folder=folder,
+                                     stage="doc"):
             mark_error(state, tid, "doc", "No se pudo invocar al agente vía UI")
             _save()
             log.error("[DOC] Error invocando agente para %s", tid)
@@ -788,8 +906,11 @@ def process_ticket(ticket: dict, state: dict,
             os.rename(pm_flag, pm_flag + ".prev")
         prompt = build_pm_revision_prompt(folder, tid, _workspace_root,
                                           accumulated, cycle_num)
-        if not invoke_agent(prompt, agent_name=_pm_agent, project_name=_project_name,
-                            new_conversation=True):
+        if not _invoke_with_tracking(prompt, agent_name=_pm_agent,
+                                     project_name=_project_name,
+                                     new_conversation=True,
+                                     ticket_id=tid, ticket_folder=folder,
+                                     stage="pm_revision"):
             mark_error(state, tid, "pm", "No se pudo invocar PM revision vía UI")
             _save()
             log.error("[PM_REVISION] Error invocando PM revision para %s", tid)
@@ -811,7 +932,10 @@ def process_ticket(ticket: dict, state: dict,
         if os.path.exists(tester_flag):
             os.rename(tester_flag, tester_flag + ".prev")
         prompt = build_rework_prompt(folder, tid, _workspace_root, qa_findings, rework_count)
-        if not invoke_agent(prompt, agent_name=_dev_agent, project_name=_project_name):
+        if not _invoke_with_tracking(prompt, agent_name=_dev_agent,
+                                     project_name=_project_name,
+                                     ticket_id=tid, ticket_folder=folder,
+                                     stage="dev_rework"):
             mark_error(state, tid, "dev", "No se pudo invocar al agente DEV para rework vía UI")
             _save()
             log.error("[DEV_REWORK] Error invocando agente de rework para %s", tid)
@@ -827,7 +951,10 @@ def process_ticket(ticket: dict, state: dict,
         set_ticket_state(state, tid, "dba_en_proceso", folder=folder)
         _save()
         prompt = _build_dba(folder, tid, _workspace_root)
-        if not invoke_agent(prompt, agent_name=_dba_agent, project_name=_project_name):
+        if not _invoke_with_tracking(prompt, agent_name=_dba_agent,
+                                     project_name=_project_name,
+                                     ticket_id=tid, ticket_folder=folder,
+                                     stage="dba"):
             mark_error(state, tid, "dba", "No se pudo invocar al agente DBA vía UI")
             _save()
             log.error("[DBA] Error invocando agente DBA para %s", tid)
@@ -842,8 +969,11 @@ def process_ticket(ticket: dict, state: dict,
         set_ticket_state(state, tid, "tl_review_en_proceso", folder=folder)
         _save()
         prompt = _build_tl(folder, tid, _workspace_root)
-        if not invoke_agent(prompt, agent_name=_tl_agent, project_name=_project_name,
-                            new_conversation=False):
+        if not _invoke_with_tracking(prompt, agent_name=_tl_agent,
+                                     project_name=_project_name,
+                                     new_conversation=False,
+                                     ticket_id=tid, ticket_folder=folder,
+                                     stage="tl"):
             mark_error(state, tid, "tl", "No se pudo invocar al agente TL vía UI")
             _save()
             log.error("[TL] Error invocando agente TL para %s", tid)
@@ -892,7 +1022,7 @@ def run_pipeline(target_ticket: str = None, force_reprocess: list = None,
     _project_name   = project_name   or ""
 
     from ticket_detector import ESTADO_PROCESABLE
-    log.info("Pipeline iniciado — procesando solo estado Mantis: '%s'", ESTADO_PROCESABLE)
+    log.info("Pipeline iniciado — procesando solo estado del tracker: '%s'", ESTADO_PROCESABLE)
     log.info("tickets_base = %s", _tickets_base)
     log.info("state_path   = %s", _state_path)
 
@@ -903,7 +1033,7 @@ def run_pipeline(target_ticket: str = None, force_reprocess: list = None,
     if target_ticket:
         tickets = [t for t in tickets if t["ticket_id"] == target_ticket]
         if not tickets:
-            log.warning("Ticket %s no encontrado o no elegible (estado Mantis != '%s' o ya procesado)",
+            log.warning("Ticket %s no encontrado o no elegible (estado del tracker != '%s' o ya procesado)",
                         target_ticket, ESTADO_PROCESABLE)
             return
 

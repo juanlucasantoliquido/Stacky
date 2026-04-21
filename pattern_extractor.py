@@ -20,7 +20,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.pattern_extractor")
+logger = logging.getLogger("stacky.pattern_extractor")
 
 # ── Tipos de patrón ───────────────────────────────────────────────────────────
 _PATTERN_TYPES = {
@@ -211,7 +211,7 @@ def _extract_modified_files(dev_content: str) -> list[str]:
     files = []
     for m in pat.finditer(dev_content):
         f = m.group(0).replace("\\", "/")
-        if f not in files and "mantis" not in f.lower():
+        if f not in files and "stacky" not in f.lower():
             files.append(f)
     return files[:6]
 

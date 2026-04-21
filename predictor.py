@@ -27,7 +27,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.predictor")
+logger = logging.getLogger("stacky.predictor")
 
 _MIN_TRAINING_SAMPLES = 10
 

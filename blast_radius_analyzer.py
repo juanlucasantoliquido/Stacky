@@ -24,11 +24,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.blast_radius")
+logger = logging.getLogger("stacky.blast_radius")
 
 # Extensiones de código fuente a analizar
 _CODE_EXTS = {".cs", ".aspx", ".aspx.cs", ".vb", ".sql"}
-_SKIP_DIRS  = {"bin", "obj", "node_modules", ".git", ".svn", "packages",
+_SKIP_DIRS  = {"bin", "obj", "node_modules", ".git", "packages",
                ".vs", "TestResults"}
 
 # Cap de archivos a indexar para evitar explosión en repos grandes
@@ -191,7 +191,7 @@ def _build_workspace_index(workspace_root: str) -> dict[str, str]:
 def _get_ticket_files_set(ticket_folder: str) -> set[str]:
     """Retorna set de nombres de archivo mencionados en el ticket."""
     files: set[str] = set()
-    for fname in ["ARQUITECTURA_SOLUCION.md", "DEV_COMPLETADO.md", "SVN_CHANGES.md"]:
+    for fname in ["ARQUITECTURA_SOLUCION.md", "DEV_COMPLETADO.md", "GIT_CHANGES.md"]:
         fpath = os.path.join(ticket_folder, fname)
         if not os.path.exists(fpath):
             continue

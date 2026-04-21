@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.test_runner")
+logger = logging.getLogger("stacky.test_runner")
 
 _TIMEOUT_BUILD_SEC = 120
 _TIMEOUT_TEST_SEC  = 180

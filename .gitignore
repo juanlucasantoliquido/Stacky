@@ -1,4 +1,5 @@
 auth/auth.json
+auth/ado_auth.json
 __pycache__/
 *.pyc
 *.pyo

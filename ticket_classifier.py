@@ -23,7 +23,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-logger = logging.getLogger("mantis.classifier")
+logger = logging.getLogger("stacky.classifier")
 
 # ── Señales de complejidad ────────────────────────────────────────────────────
 
@@ -184,7 +184,7 @@ def classify_ticket(ticket_folder: str, ticket_id: str) -> TicketScore:
     if attachment_count >= 3:
         signals.append(f"{attachment_count} adjuntos mencionados")
 
-    # Severidad desde Mantis
+    # Severidad del ticket
     if re.search(r'bloqueante|bloquea producción', content_lower):
         score += 5; signals.append("severidad bloqueante")
     elif re.search(r'crítica?|critical', content_lower):

@@ -1,5 +1,5 @@
 """
-session_manager.py — Gestión y validación de la sesión SSO de Mantis.
+session_manager.py — Gestión y validación de la sesión SSO del tracker.
 
 Permite detectar sesiones expiradas antes de que el scraper falle,
 y ofrece mecanismos de renovación headless (reutilizando cookies) o
@@ -15,7 +15,7 @@ from datetime import datetime
 
 
 class SessionExpiredError(Exception):
-    """Se lanza cuando la sesión de Mantis está expirada y no se pudo renovar."""
+    """Se lanza cuando la sesión del tracker está expirada y no se pudo renovar."""
 
 
 # ── Cache de validación ──────────────────────────────────────────────────────
@@ -26,19 +26,19 @@ _VALIDATION_TTL   = 300.0  # 5 minutos — si validamos hace menos de 5min, reus
 
 class SessionManager:
     """
-    Verifica y renueva la sesión SSO de MantisBT.
+    Verifica y renueva la sesión SSO del tracker.
 
     Uso típico (en run_scraper o daemon):
 
-        sm = SessionManager(auth_path, mantis_url)
+        sm = SessionManager(auth_path, tracker_url)
         if sm.needs_renewal():
             if not sm.renew_session_headless():
                 sm.prompt_renewal()   # bloquea hasta que el usuario renueve
     """
 
-    def __init__(self, auth_path: str, mantis_url: str, timeout_ms: int = 30000):
+    def __init__(self, auth_path: str, tracker_url: str, timeout_ms: int = 30000):
         self.auth_path   = auth_path
-        self.mantis_url  = mantis_url
+        self.tracker_url  = tracker_url
         self.timeout_ms  = timeout_ms
         self._base_dir   = os.path.dirname(os.path.abspath(__file__))
 
@@ -55,7 +55,7 @@ class SessionManager:
         """
         Verificación ligera via HTTP GET con cookies de auth.json.
         Mucho más rápido que lanzar Playwright: ~200ms vs ~5s.
-        Retorna True si Mantis responde con HTML que contiene #buglist,
+        Retorna True si tracker responde con HTML que contiene #buglist,
         False si redirige al login.
         """
         try:
@@ -74,10 +74,10 @@ class SessionManager:
             cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
 
             req = urllib.request.Request(
-                self.mantis_url,
+                self.tracker_url,
                 headers={
                     "Cookie": cookie_str,
-                    "User-Agent": "MantisScraperSessionCheck/1.0",
+                    "User-Agent": "StackySessionCheck/1.0",
                 },
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
@@ -108,7 +108,7 @@ class SessionManager:
                 browser = p.chromium.launch(headless=True)
                 ctx     = browser.new_context(storage_state=self.auth_path)
                 page    = ctx.new_page()
-                page.goto(self.mantis_url, timeout=self.timeout_ms)
+                page.goto(self.tracker_url, timeout=self.timeout_ms)
                 try:
                     page.wait_for_selector("#buglist", timeout=8000)
                     valid = True
@@ -203,7 +203,7 @@ class SessionManager:
         mtime_before = os.path.getmtime(self.auth_path) if os.path.exists(self.auth_path) else 0
 
         print("=" * 60)
-        print("[SESSION] La sesión de Mantis necesita renovación.")
+        print("[SESSION] La sesión necesita renovación.")
         print("[SESSION] Abriendo navegador para completar el login SSO...")
         print("[SESSION] Esperando hasta que el login sea completado...")
         print("=" * 60)

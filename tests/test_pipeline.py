@@ -1,5 +1,5 @@
 """
-test_pipeline.py — Unit tests para el pipeline de Mantis Scraper.
+test_pipeline.py — Unit tests para el pipeline de Stacky.
 
 Cubre:
   - pipeline_state: load/save/set/mark_error/priority
@@ -8,7 +8,7 @@ Cubre:
   - api_run_pipeline: determinación de first_stage por estado
 
 Ejecutar:
-    cd tools/mantis_scraper
+    cd Tools/Stacky
     python -m pytest tests/ -v
 """
 

@@ -8,7 +8,7 @@ Si rechaza, vuelve a PM directamente (evita ciclo costoso DEV+QA fallido).
 import logging
 import os
 
-logger = logging.getLogger("mantis.tech_lead")
+logger = logging.getLogger("stacky.tech_lead")
 
 _COMPLEXITY_THRESHOLD = 12  # score de ticket_classifier para activar TL review
 

@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.batch_processor")
+logger = logging.getLogger("stacky.batch_processor")
 
 _MIN_GROUP_SIZE = 2  # mínimo tickets para agrupar
 _MAX_GROUP_SIZE = 5  # máximo tickets por batch

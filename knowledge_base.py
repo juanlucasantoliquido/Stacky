@@ -23,9 +23,9 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.knowledge_base")
+logger = logging.getLogger("stacky.knowledge_base")
 
-# Directorio del índice dentro de mantis_scraper/knowledge/{project}/
+# Directorio del índice dentro de Stacky/knowledge/{project}/
 _INDEX_FILENAME = "kb_index.json"
 
 

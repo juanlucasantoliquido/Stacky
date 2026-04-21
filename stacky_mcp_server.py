@@ -31,7 +31,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("mantis.mcp")
+logger = logging.getLogger("stacky.mcp")
 
 BASE_DIR = Path(__file__).parent
 
@@ -42,7 +42,7 @@ def _get_tool_definitions() -> list:
         {
             "name": "get_ticket_status",
             "description": (
-                "Obtiene el estado actual de un ticket Mantis en el pipeline Stacky. "
+                "Obtiene el estado actual de un ticket en el pipeline Stacky. "
                 "Incluye etapa, tiempo transcurrido, timeout y ultimo evento."
             ),
             "inputSchema": {
@@ -160,6 +160,91 @@ def _get_tool_definitions() -> list:
                         "description": "Filtrar memoria por keyword (opcional)",
                     },
                 },
+            },
+        },
+        # ── ADO Tools (S-04) ─────────────────────────────────────────────────
+        {
+            "name": "get_ado_work_item",
+            "description": (
+                "Obtiene un work item de Azure DevOps por su ID. "
+                "Retorna titulo, estado, asignado, descripcion y campos clave."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "work_item_id": {"type": "integer", "description": "ID del work item en ADO"},
+                    "project":      {"type": "string", "description": "Proyecto ADO (default: config)"},
+                },
+                "required": ["work_item_id"],
+            },
+        },
+        {
+            "name": "list_my_ado_work_items",
+            "description": (
+                "Lista los work items asignados al usuario actual en ADO. "
+                "Filtra por estado y tipo opcionalmente."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string"},
+                    "state":   {
+                        "type": "string",
+                        "description": "Filtrar por estado: Active, New, Resolved, etc.",
+                    },
+                    "work_item_type": {
+                        "type": "string",
+                        "description": "Filtrar por tipo: Bug, Task, User Story, etc.",
+                    },
+                    "top": {"type": "integer", "default": 20},
+                },
+            },
+        },
+        {
+            "name": "add_ado_comment",
+            "description": (
+                "Agrega un comentario a un work item en Azure DevOps."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "work_item_id": {"type": "integer", "description": "ID del work item"},
+                    "comment":      {"type": "string", "description": "Texto del comentario"},
+                    "project":      {"type": "string"},
+                },
+                "required": ["work_item_id", "comment"],
+            },
+        },
+        {
+            "name": "get_stacky_pipeline_status_for_ado",
+            "description": (
+                "Retorna el estado del pipeline Stacky para un work item ADO especifico. "
+                "Combina estado interno del pipeline con datos de ADO."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "work_item_id": {"type": "integer", "description": "ID del work item ADO"},
+                    "project":      {"type": "string"},
+                },
+                "required": ["work_item_id"],
+            },
+        },
+        {
+            "name": "search_ado_work_items",
+            "description": (
+                "Busca work items en Azure DevOps usando texto libre. "
+                "Retorna items que coincidan en titulo o descripcion."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query":   {"type": "string", "description": "Texto de busqueda"},
+                    "project": {"type": "string"},
+                    "state":   {"type": "string", "description": "Filtrar por estado (opcional)"},
+                    "top":     {"type": "integer", "default": 10},
+                },
+                "required": ["query"],
             },
         },
     ]
@@ -356,6 +441,191 @@ def _handle_get_agent_memory(args: dict) -> dict:
     return result
 
 
+# ── ADO Tool Handlers (S-04) ─────────────────────────────────────────────────
+
+def _get_ado_enricher():
+    """Lazy-load ADO enricher to avoid import errors when ADO is not configured."""
+    from ado_enricher import _get_ado_client
+    return _get_ado_client()
+
+
+def _handle_get_ado_work_item(args: dict) -> dict:
+    wi_id   = args.get("work_item_id")
+    project = args.get("project", _detect_default_project())
+
+    if not wi_id:
+        return {"error": "work_item_id es requerido"}
+
+    try:
+        client = _get_ado_enricher()
+        wi = client.get_work_item(int(wi_id))
+        if not wi:
+            return {"error": f"Work item {wi_id} no encontrado"}
+
+        fields = wi.fields if hasattr(wi, "fields") else wi
+        return {
+            "id":          wi_id,
+            "title":       fields.get("System.Title", ""),
+            "state":       fields.get("System.State", ""),
+            "assigned_to": fields.get("System.AssignedTo", {}).get("displayName", "") if isinstance(fields.get("System.AssignedTo"), dict) else str(fields.get("System.AssignedTo", "")),
+            "work_item_type": fields.get("System.WorkItemType", ""),
+            "area_path":   fields.get("System.AreaPath", ""),
+            "iteration":   fields.get("System.IterationPath", ""),
+            "description": (fields.get("System.Description", "") or "")[:2000],
+            "created_date": str(fields.get("System.CreatedDate", "")),
+            "changed_date": str(fields.get("System.ChangedDate", "")),
+            "priority":    fields.get("Microsoft.VSTS.Common.Priority", ""),
+        }
+    except Exception as exc:
+        return {"error": str(exc), "work_item_id": wi_id}
+
+
+def _handle_list_my_ado_work_items(args: dict) -> dict:
+    project = args.get("project", _detect_default_project())
+    state   = args.get("state", "")
+    wi_type = args.get("work_item_type", "")
+    top     = int(args.get("top", 20))
+
+    try:
+        client = _get_ado_enricher()
+
+        # Build WIQL query
+        conditions = ["[System.AssignedTo] = @Me"]
+        if state:
+            conditions.append(f"[System.State] = '{state}'")
+        if wi_type:
+            conditions.append(f"[System.WorkItemType] = '{wi_type}'")
+
+        wiql = (
+            "SELECT [System.Id], [System.Title], [System.State], "
+            "[System.WorkItemType], [System.AssignedTo] "
+            "FROM WorkItems WHERE " + " AND ".join(conditions) +
+            " ORDER BY [System.ChangedDate] DESC"
+        )
+
+        from azure.devops.v7_1.work_item_tracking.models import Wiql
+        query = Wiql(query=wiql)
+        result = client.query_by_wiql(query, top=top)
+
+        items = []
+        if result.work_items:
+            ids = [wi.id for wi in result.work_items[:top]]
+            if ids:
+                work_items = client.get_work_items(ids)
+                for wi in work_items:
+                    f = wi.fields
+                    items.append({
+                        "id":    wi.id,
+                        "title": f.get("System.Title", ""),
+                        "state": f.get("System.State", ""),
+                        "type":  f.get("System.WorkItemType", ""),
+                    })
+
+        return {"project": project, "count": len(items), "items": items}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _handle_add_ado_comment(args: dict) -> dict:
+    wi_id   = args.get("work_item_id")
+    comment = args.get("comment", "")
+    project = args.get("project", _detect_default_project())
+
+    if not wi_id or not comment:
+        return {"error": "work_item_id y comment son requeridos"}
+
+    try:
+        from ado_reporter import ADOReporter
+        reporter = ADOReporter()
+        reporter.add_comment(int(wi_id), comment)
+        return {"success": True, "work_item_id": wi_id}
+    except Exception as exc:
+        return {"error": str(exc), "work_item_id": wi_id}
+
+
+def _handle_get_stacky_pipeline_status_for_ado(args: dict) -> dict:
+    wi_id   = args.get("work_item_id")
+    project = args.get("project", _detect_default_project())
+
+    if not wi_id:
+        return {"error": "work_item_id es requerido"}
+
+    # Get pipeline state
+    pipeline_info = _handle_get_ticket_status({
+        "ticket_id": str(wi_id),
+        "project": project,
+    })
+
+    # Get ADO state
+    ado_info = _handle_get_ado_work_item({
+        "work_item_id": wi_id,
+        "project": project,
+    })
+
+    return {
+        "work_item_id": wi_id,
+        "pipeline":     pipeline_info,
+        "ado":          {
+            "title": ado_info.get("title", ""),
+            "state": ado_info.get("state", ""),
+            "assigned_to": ado_info.get("assigned_to", ""),
+        } if "error" not in ado_info else {"error": ado_info["error"]},
+    }
+
+
+def _handle_search_ado_work_items(args: dict) -> dict:
+    query   = args.get("query", "")
+    project = args.get("project", _detect_default_project())
+    state   = args.get("state", "")
+    top     = int(args.get("top", 10))
+
+    if not query:
+        return {"error": "query es requerido"}
+
+    try:
+        client = _get_ado_enricher()
+
+        # Sanitize query for WIQL (escape single quotes)
+        safe_query = query.replace("'", "''")
+
+        conditions = [
+            f"([System.Title] CONTAINS '{safe_query}' "
+            f"OR [System.Description] CONTAINS '{safe_query}')"
+        ]
+        if state:
+            safe_state = state.replace("'", "''")
+            conditions.append(f"[System.State] = '{safe_state}'")
+
+        wiql = (
+            "SELECT [System.Id], [System.Title], [System.State], "
+            "[System.WorkItemType] FROM WorkItems WHERE " +
+            " AND ".join(conditions) +
+            " ORDER BY [System.ChangedDate] DESC"
+        )
+
+        from azure.devops.v7_1.work_item_tracking.models import Wiql
+        q = Wiql(query=wiql)
+        result = client.query_by_wiql(q, top=top)
+
+        items = []
+        if result.work_items:
+            ids = [wi.id for wi in result.work_items[:top]]
+            if ids:
+                work_items = client.get_work_items(ids)
+                for wi in work_items:
+                    f = wi.fields
+                    items.append({
+                        "id":    wi.id,
+                        "title": f.get("System.Title", ""),
+                        "state": f.get("System.State", ""),
+                        "type":  f.get("System.WorkItemType", ""),
+                    })
+
+        return {"query": query, "count": len(items), "items": items}
+    except Exception as exc:
+        return {"error": str(exc), "query": query}
+
+
 # ── Dispatcher de herramientas ────────────────────────────────────────────────
 
 _TOOL_HANDLERS = {
@@ -366,6 +636,12 @@ _TOOL_HANDLERS = {
     "get_tech_debt":       _handle_get_tech_debt,
     "get_blast_radius":    _handle_get_blast_radius,
     "get_agent_memory":    _handle_get_agent_memory,
+    # ADO tools (S-04)
+    "get_ado_work_item":                _handle_get_ado_work_item,
+    "list_my_ado_work_items":           _handle_list_my_ado_work_items,
+    "add_ado_comment":                  _handle_add_ado_comment,
+    "get_stacky_pipeline_status_for_ado": _handle_get_stacky_pipeline_status_for_ado,
+    "search_ado_work_items":            _handle_search_ado_work_items,
 }
 
 

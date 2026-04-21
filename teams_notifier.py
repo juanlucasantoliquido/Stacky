@@ -224,7 +224,7 @@ def notify_deploy_generated(ticket_id: str, titulo: str, zip_name: str,
 def notify_commit(ticket_id: str, titulo: str,
                   revision: str, message: str) -> dict:
     return send(
-        title=f"🔖 Stacky — SVN Commit #{ticket_id}",
+        title=f"🔖 Stacky — Git Commit #{ticket_id}",
         body=f"{titulo[:120]}",
         color="3B82F6",
         facts=[

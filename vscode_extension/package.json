@@ -1,8 +1,8 @@
 {
   "name": "stacky-vscode",
-  "displayName": "Stacky — Mantis Pipeline",
+  "displayName": "Stacky — Ticket Pipeline",
   "description": "Integra el pipeline Stacky directamente en VS Code. Estado del ticket activo, countdown de timeout, blast radius y acciones rapidas.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "stacky",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
@@ -74,6 +74,11 @@
           "type": "boolean",
           "default": true,
           "description": "Mostrar advertencias de blast radius en el editor"
+        },
+        "stacky.bridgePort": {
+          "type": "number",
+          "default": 5051,
+          "description": "Puerto local del keypress bridge (usado por auto_enter_daemon). 0 para desactivar."
         }
       }
     }

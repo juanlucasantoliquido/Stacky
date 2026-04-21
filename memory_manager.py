@@ -26,7 +26,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("mantis.memory")
+logger = logging.getLogger("stacky.memory")
 
 # Categorías de memoria
 _CATEGORIES = {

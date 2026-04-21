@@ -1,7 +1,7 @@
 """
-hook_validator.py — X-01: Validador para hooks SVN del pipeline CI/CD.
+hook_validator.py — X-01: Validador para hooks Git del pipeline CI/CD.
 
-Provee la logica de validacion que los hooks SVN (pre-commit, post-commit)
+Provee la logica de validacion que los hooks Git (pre-commit, post-commit)
 llaman via HTTP al endpoint del dashboard Stacky.
 
 Flujo:
@@ -15,7 +15,7 @@ Flujo:
     - Configurable por proyecto (puede estar desactivado)
 
 Los scripts de hook reales estan en svn_hooks/post-commit y svn_hooks/pre-commit.
-Se instalan copiandolos al directorio hooks/ del repo SVN en el servidor.
+Se instalan copiandolos al directorio .git/hooks/ del repo.
 
 Uso:
     from hook_validator import HookValidator
@@ -31,14 +31,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("mantis.hook_validator")
+logger = logging.getLogger("stacky.hook_validator")
 
 BASE_DIR = Path(__file__).parent
 
 
 class HookValidator:
     """
-    Valida commits SVN contra el pipeline Stacky.
+    Valida commits Git contra el pipeline Stacky.
     """
 
     def __init__(self, project_name: str):
@@ -214,7 +214,7 @@ class HookValidator:
 
     def _extract_files_from_folder(self, folder: Path) -> list:
         files = set()
-        for fname in ("SVN_CHANGES.md", "DEV_COMPLETADO.md"):
+        for fname in ("GIT_CHANGES.md", "DEV_COMPLETADO.md"):
             fpath = folder / fname
             if fpath.exists():
                 content = fpath.read_text(encoding="utf-8", errors="ignore")
@@ -248,7 +248,7 @@ class HookValidator:
                 else "sin ticket Stacky"
             )
             notify(
-                title=f"[Stacky] Commit SVN r{commit_data['revision']}",
+                title=f"[Stacky] Commit Git r{commit_data['revision']}",
                 message=(
                     f"Autor: {commit_data['author']} — "
                     f"Tickets: {tickets_str} — "

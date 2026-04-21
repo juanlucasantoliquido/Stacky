@@ -1,12 +1,11 @@
 """
-commit_generator.py — Generación automática de mensajes de commit SVN post-QA.
+commit_generator.py — Generación automática de mensajes de commit Git post-QA.
 
 Analiza DEV_COMPLETADO.md, TESTER_COMPLETADO.md y los archivos PM del ticket
-para construir un mensaje de commit SVN siguiendo las convenciones del proyecto
-(tipo de cambio, referencia al ticket Mantis, archivos modificados, veredicto QA).
+para construir un mensaje de commit Git siguiendo las convenciones del proyecto
+(tipo de cambio, referencia al work item ADO, archivos modificados, veredicto QA).
 
 El mensaje se guarda en COMMIT_MESSAGE.txt en la carpeta del ticket.
-El developer solo tiene que copiarlo (o se puede usar directamente con svn commit -F).
 
 Uso:
     from commit_generator import generate_commit_message
@@ -55,7 +54,7 @@ def generate_commit_message(ticket_folder: str, ticket_id: str,
     incidente       = _read_safe(ticket_folder, "INCIDENTE.md",              2000)
     dev_completado  = _read_safe(ticket_folder, "DEV_COMPLETADO.md",         3000)
     tester_result   = _read_safe(ticket_folder, "TESTER_COMPLETADO.md",      2000)
-    svn_changes     = _read_safe(ticket_folder, "SVN_CHANGES.md",            3000)
+    git_changes     = _read_safe(ticket_folder, "GIT_CHANGES.md",            3000)
     tareas          = _read_safe(ticket_folder, "TAREAS_DESARROLLO.md",      2000)
 
     if not inc_content and not dev_completado:
@@ -65,7 +64,7 @@ def generate_commit_message(ticket_folder: str, ticket_id: str,
     title       = _extract_title(inc_content)
     severity    = _extract_severity(inc_content or incidente)
     change_type = _infer_change_type(inc_content + " " + incidente + " " + tareas)
-    files       = _extract_modified_files(dev_completado, svn_changes)
+    files       = _extract_modified_files(dev_completado, git_changes)
     qa_verdict  = _extract_verdict(tester_result)
     summary     = _extract_dev_summary(dev_completado)
     proj_tag    = project_name.upper() if project_name else "PROJ"
@@ -96,19 +95,17 @@ def generate_commit_message(ticket_folder: str, ticket_id: str,
 
     # Metadata
     metadata = []
-    metadata.append(f"Ref: MantisBT #{ticket_id}")
     if qa_verdict:
         metadata.append(f"QA: {qa_verdict}")
     if severity:
         metadata.append(f"Severidad: {severity}")
     metadata.append(f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    lines.append(" | ".join(metadata))
+    if metadata:
+        lines.append(" | ".join(metadata))
 
-    # Footer para svn commit -F
+    # Trailer Git — Azure DevOps lo detecta y linkea al work item
     lines.append("")
-    lines.append("─" * 60)
-    lines.append("Uso: svn commit -F COMMIT_MESSAGE.txt [archivos...]")
-    lines.append("O copiar el texto encima de la línea para commit manual")
+    lines.append(f"AB#{ticket_id}")
 
     message = "\n".join(lines)
 
@@ -118,7 +115,7 @@ def generate_commit_message(ticket_folder: str, ticket_id: str,
         return output_path
     except Exception as e:
         import logging
-        logging.getLogger("mantis.commit_gen").error(
+        logging.getLogger("stacky.commit_gen").error(
             "No se pudo escribir COMMIT_MESSAGE.txt: %s", e
         )
         return None
@@ -184,21 +181,26 @@ def _infer_change_type(content: str) -> str:
     return best if scores[best] > 0 else "BUG"
 
 
-def _extract_modified_files(dev_completado: str, svn_changes: str) -> list[str]:
-    """Extrae lista de archivos modificados de DEV_COMPLETADO.md o SVN_CHANGES.md."""
+def _extract_modified_files(dev_completado: str, git_changes: str) -> list[str]:
+    """Extrae lista de archivos modificados de DEV_COMPLETADO.md o GIT_CHANGES.md.
+
+    Acepta segmentos con puntos (ej: `AIS.PR.UI.Web.Controls`). No acepta
+    espacios en segmentos para evitar matches de prosa; paths con espacios
+    (ej: `1 - Inicializacion BD`) se ignoran aquí — el cross-match del
+    endpoint `/api/git_status` los captura contra `git status`.
+    """
     files = set()
-    # Buscar rutas de archivos en ambos documentos
     pat = re.compile(
-        r'(?:[\w\-]+[/\\])+[\w\-]+\.(?:cs|aspx|aspx\.cs|vb|sql|config|js)',
+        r'(?:[\w][\w\-.]*[/\\])+[\w][\w\-.]*'
+        r'\.(?:aspx\.cs|cs|aspx|vb|sql|config|js|xml|cshtml|ascx|css|ts|tsx|py)',
         re.IGNORECASE
     )
-    for source in [dev_completado, svn_changes]:
+    for source in [dev_completado, git_changes]:
         for m in pat.finditer(source):
-            path = m.group(0).replace("\\", "/")
-            # Filtrar paths del sistema de tickets
-            if "mantis_scraper" not in path.lower() and "tools/" not in path.lower():
+            path = m.group(0).replace("\\", "/").strip()
+            if "stacky" not in path.lower() and "tools/" not in path.lower():
                 files.add(path)
-    return sorted(files)[:15]
+    return sorted(files)[:30]
 
 
 def _extract_verdict(tester_content: str) -> str:

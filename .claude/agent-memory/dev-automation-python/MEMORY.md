@@ -1,0 +1,3 @@
+- [Stacky tech stack](project_stacky_stack.md) — Pipeline de agentes PM/DEV/QA en VS Code Copilot, orquestación por flags en disco.
+- [Patron defensive imports F1-F4](feedback_defensive_imports.md) — Los módulos de observabilidad se integran via try/except.
+- [Observability contracts](reference_observability_contracts.md) — Firmas estables de estimation_store / pipeline_events / ticket_scoring.

@@ -6,7 +6,7 @@ un documento de referencia que todos los demás agentes (PM, Dev, QA) pueden lee
 en lugar de explorar el codebase desde cero en cada ticket.
 
 El archivo se guarda en:
-    tools/mantis_scraper/projects/{PROJECT}/PROJECT_DOCS.md
+    Tools/Stacky/projects/{PROJECT}/PROJECT_DOCS.md
 
 Uso:
     from project_documenter import build_doc_prompt, get_project_docs_path
@@ -31,7 +31,7 @@ def build_doc_prompt(project_name: str, workspace_root: str, docs_output_path: s
 
     Args:
         project_name:     Nombre del proyecto (ej. "RSMOBILENET")
-        workspace_root:   Raíz del workspace a documentar (ej. "N:/SVN/RS/RSMOBILENET")
+        workspace_root:   Raíz del workspace a documentar (ej. "N:/GIT/RS/RSPacifico")
         docs_output_path: Ruta absoluta donde guardar PROJECT_DOCS.md
     """
     # Ruta relativa para mostrar en el prompt

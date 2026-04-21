@@ -1467,6 +1467,228 @@
     background: #0d1220; border: 1px solid #1e293b; color: #e2e8f0;
     padding: 5px 8px; border-radius: 4px; font-size: 12px; width: 100px;
   }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     FASE 3 — Ticket Metadata UI (prefijo .tm-)
+     Aislado del resto del dashboard para evitar colisiones.
+     ════════════════════════════════════════════════════════════════════════ */
+  .tm-toolbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 10px 24px; border-bottom: 1px solid var(--border);
+    background: #141728;
+  }
+  .tm-toolbar-label { color: var(--muted); font-size: 12px; margin-right: 4px; }
+  .tm-dropdown { position: relative; display: inline-block; }
+  .tm-dd-btn {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 10px; font-size: 12px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 28px;
+  }
+  .tm-dd-btn:hover { border-color: var(--accent); }
+  .tm-dd-btn.tm-active { border-color: var(--accent); background: #1e2236; }
+  .tm-dd-count {
+    background: var(--accent); color: #fff;
+    border-radius: 999px; padding: 0 6px;
+    font-size: 10px; font-weight: 700; line-height: 16px;
+  }
+  .tm-dd-panel {
+    position: absolute; top: 100%; left: 0; margin-top: 4px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px;
+    min-width: 240px; max-width: 320px; max-height: 340px;
+    overflow-y: auto; z-index: 200;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+    display: none;
+  }
+  .tm-dd-panel.tm-open { display: block; }
+  .tm-dd-search {
+    width: 100%; background: #0d1220;
+    border: 1px solid var(--border); color: var(--text);
+    padding: 5px 8px; border-radius: 4px;
+    font-size: 12px; margin-bottom: 6px;
+  }
+  .tm-dd-list { display: flex; flex-direction: column; gap: 2px; }
+  .tm-dd-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 6px; border-radius: 4px;
+    font-size: 12px; cursor: pointer;
+  }
+  .tm-dd-item:hover { background: #1a1d2e; }
+  .tm-dd-item input[type="checkbox"] { margin: 0; accent-color: var(--accent); }
+  .tm-dd-item .tm-chip-color {
+    width: 12px; height: 12px; border-radius: 3px;
+    border: 1px solid var(--border); flex-shrink: 0;
+  }
+  .tm-dd-item .tm-item-count {
+    margin-left: auto; color: var(--muted);
+    font-size: 11px; font-variant-numeric: tabular-nums;
+  }
+  .tm-dd-empty { color: var(--muted); font-size: 11px; text-align: center; padding: 12px; }
+  .tm-counter {
+    color: var(--muted); font-size: 12px; margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .tm-counter strong { color: var(--text); }
+
+  /* ── Badges en card ── */
+  .tm-accent-bar {
+    height: 4px; width: 100%;
+    background: transparent;
+    transition: background .2s;
+  }
+  .tm-badges {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    padding: 4px 16px 0; font-size: 11px;
+  }
+  .tm-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #0d1220; border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 7px;
+    color: var(--muted); cursor: default;
+  }
+  .tm-badge.tm-active { color: var(--text); }
+  .tm-badge.tm-notes.tm-active { color: var(--blue); border-color: #1e3a5f; }
+  .tm-badge.tm-commits.tm-active { color: var(--green); border-color: #14532d; }
+  .tm-badge.tm-tag {
+    background: #1e2236; color: #c4b5fd;
+    border-color: #3b2f5c; cursor: pointer;
+  }
+  .tm-badge.tm-tag:hover { border-color: var(--accent); }
+  .tm-badge-edit {
+    background: var(--border); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 9px; font-size: 11px;
+    cursor: pointer; margin-left: auto;
+  }
+  .tm-badge-edit:hover { background: var(--accent); color: #fff; }
+
+  /* ── Modales ── */
+  .tm-modal-bg {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0, 0, 0, .65); z-index: 1000;
+    align-items: center; justify-content: center;
+  }
+  .tm-modal-bg.tm-open { display: flex; }
+  .tm-modal {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px;
+    min-width: 420px; max-width: 680px;
+    max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, .5);
+  }
+  .tm-modal h3 {
+    margin-bottom: 12px; font-size: 15px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tm-modal h3 .tm-modal-ticket-id { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .tm-modal-section { margin-bottom: 14px; }
+  .tm-modal-section-label {
+    color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .6px;
+    margin-bottom: 6px;
+  }
+  .tm-modal select, .tm-modal input[type="text"] {
+    width: 100%; background: #0d1220;
+    border: 1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: 6px; font-size: 13px;
+  }
+  .tm-palette { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tm-swatch {
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 2px solid transparent; cursor: pointer;
+    transition: transform .1s;
+  }
+  .tm-swatch:hover { transform: scale(1.08); }
+  .tm-swatch.tm-selected { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
+  .tm-swatch-clear {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: repeating-linear-gradient(45deg, #2a2d3e 0 6px, #1a1d2e 6px 12px);
+    border: 2px solid transparent; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 14px;
+  }
+  .tm-swatch-clear.tm-selected { border-color: var(--text); }
+  .tm-color-picker-wrap {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-left: 8px; color: var(--muted); font-size: 11px;
+  }
+  .tm-color-picker-wrap input[type="color"] {
+    width: 32px; height: 28px; border: 1px solid var(--border);
+    background: transparent; cursor: pointer; border-radius: 6px;
+  }
+  .tm-modal-preview {
+    background: #0d1220; border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px; margin-top: 6px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .tm-modal-preview-bar { width: 4px; height: 22px; border-radius: 2px; background: transparent; }
+  .tm-modal-preview-label { font-size: 12px; color: var(--muted); }
+  .tm-modal-actions {
+    display: flex; gap: 8px; justify-content: flex-end;
+    margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Tag chips dentro modal ── */
+  .tm-tag-input-row { display: flex; gap: 6px; position: relative; }
+  .tm-tag-input-row input { flex: 1; }
+  .tm-tag-autocomplete {
+    position: absolute; top: 100%; left: 0; right: 60px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 6px; max-height: 160px; overflow-y: auto;
+    z-index: 10; display: none; margin-top: 2px;
+  }
+  .tm-tag-autocomplete.tm-open { display: block; }
+  .tm-tag-autocomplete-item { padding: 5px 10px; font-size: 12px; cursor: pointer; }
+  .tm-tag-autocomplete-item:hover, .tm-tag-autocomplete-item.tm-focused { background: #1a1d2e; }
+  .tm-tag-chips {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-top: 8px; min-height: 28px;
+  }
+  .tm-tag-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #1e2236; color: #c4b5fd;
+    border: 1px solid #3b2f5c; border-radius: 999px;
+    padding: 2px 8px; font-size: 11px;
+  }
+  .tm-tag-chip button {
+    background: none; border: none; color: inherit;
+    cursor: pointer; padding: 0; font-size: 13px; line-height: 1;
+  }
+  .tm-tag-chip button:hover { color: var(--red); }
+  .tm-validation-err { color: var(--red); font-size: 11px; margin-top: 4px; min-height: 14px; }
+
+  /* ── Modal Resumen ── */
+  .tm-summary-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px; margin-top: 6px;
+  }
+  .tm-summary-table th, .tm-summary-table td {
+    padding: 5px 8px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .tm-summary-table th { color: var(--muted); font-weight: 500; }
+  .tm-summary-table td.tm-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tm-bar {
+    width: 100%; height: 10px; background: #0d1220;
+    border-radius: 999px; overflow: hidden; margin-top: 2px;
+  }
+  .tm-bar-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), #818cf8);
+    border-radius: 999px; transition: width .3s;
+  }
+  .tm-summary-stat-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px; margin-bottom: 12px;
+  }
+  .tm-summary-stat {
+    background: #0d1220; border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px;
+  }
+  .tm-summary-stat-v { font-size: 18px; font-weight: 700; color: var(--text); }
+  .tm-summary-stat-k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 </style>
 </head>
 <body>
@@ -1561,9 +1783,142 @@
   </select>
 </div>
 
+<!-- ── FASE 3 — Toolbar de filtros de metadata ── -->
+<div class="tm-toolbar" id="tm-toolbar">
+  <span class="tm-toolbar-label">Metadata:</span>
+  <div class="tm-dropdown" data-tm-dd="estados">
+    <button class="tm-dd-btn" onclick="TM.toggleDD('estados')">🔍 Estado <span class="tm-dd-count" id="tm-dd-count-estados" style="display:none">0</span> <span style="color:var(--muted)">▼</span></button>
+    <div class="tm-dd-panel" id="tm-dd-panel-estados">
+      <input type="text" class="tm-dd-search" placeholder="Buscar estado…" oninput="TM.filterDD('estados', this.value)">
+      <div class="tm-dd-list" id="tm-dd-list-estados"></div>
+    </div>
+  </div>
+  <div class="tm-dropdown" data-tm-dd="user_tags">
+    <button class="tm-dd-btn" onclick="TM.toggleDD('user_tags')">🏷 Tags <span class="tm-dd-count" id="tm-dd-count-user_tags" style="display:none">0</span> <span style="color:var(--muted)">▼</span></button>
+    <div class="tm-dd-panel" id="tm-dd-panel-user_tags">
+      <input type="text" class="tm-dd-search" placeholder="Buscar tag…" oninput="TM.filterDD('user_tags', this.value)">
+      <div class="tm-dd-list" id="tm-dd-list-user_tags"></div>
+    </div>
+  </div>
+  <div class="tm-dropdown" data-tm-dd="asignados">
+    <button class="tm-dd-btn" onclick="TM.toggleDD('asignados')">👤 Asignado <span class="tm-dd-count" id="tm-dd-count-asignados" style="display:none">0</span> <span style="color:var(--muted)">▼</span></button>
+    <div class="tm-dd-panel" id="tm-dd-panel-asignados">
+      <input type="text" class="tm-dd-search" placeholder="Buscar asignado…" oninput="TM.filterDD('asignados', this.value)">
+      <div class="tm-dd-list" id="tm-dd-list-asignados"></div>
+    </div>
+  </div>
+  <div class="tm-dropdown" data-tm-dd="colors">
+    <button class="tm-dd-btn" onclick="TM.toggleDD('colors')">🎨 Color <span class="tm-dd-count" id="tm-dd-count-colors" style="display:none">0</span> <span style="color:var(--muted)">▼</span></button>
+    <div class="tm-dd-panel" id="tm-dd-panel-colors">
+      <div class="tm-dd-list" id="tm-dd-list-colors"></div>
+    </div>
+  </div>
+  <button class="tm-dd-btn" onclick="TM.clearFilters()" title="Limpiar todos los filtros de metadata">🧹 Limpiar</button>
+  <button class="tm-dd-btn" onclick="TM.openSummary()" title="Resumen y exportación">📊 Resumen</button>
+  <span class="tm-counter" id="tm-counter">Mostrando <strong>0</strong> / <strong>0</strong> tickets</span>
+</div>
+
 <!-- ── Tickets area ── -->
 <div class="tickets" id="tickets-container">
   <div style="color:var(--muted);padding:40px;text-align:center">Cargando tickets...</div>
+</div>
+
+<!-- ── FASE 3 — Modal Editar Estado + Color ── -->
+<div class="tm-modal-bg" id="tm-modal-state">
+  <div class="tm-modal">
+    <h3>🎨 Editar Estado y Color <span class="tm-modal-ticket-id" id="tm-state-ticket-id">#—</span></h3>
+
+    <div class="tm-modal-section">
+      <div class="tm-modal-section-label">Estado del pipeline</div>
+      <select id="tm-state-select"></select>
+      <label style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;color:var(--muted);font-size:11px;cursor:pointer">
+        <input type="checkbox" id="tm-state-show-internal" onchange="TM.renderStateOptions()">
+        Mostrar estados internos (pm_inv_*, dev_loc_*, errores intermedios)
+      </label>
+    </div>
+
+    <div class="tm-modal-section">
+      <div class="tm-modal-section-label">Color del ticket</div>
+      <div class="tm-palette" id="tm-palette"></div>
+      <div class="tm-color-picker-wrap">
+        <span>Picker libre:</span>
+        <input type="color" id="tm-color-picker" onchange="TM.onColorPickerChange(this.value)">
+      </div>
+      <div class="tm-modal-preview">
+        <div class="tm-modal-preview-bar" id="tm-preview-bar"></div>
+        <span class="tm-modal-preview-label" id="tm-preview-label">Sin color</span>
+      </div>
+    </div>
+
+    <div class="tm-validation-err" id="tm-state-err"></div>
+
+    <div class="tm-modal-actions">
+      <button class="btn btn-ghost" onclick="TM.closeStateModal()">Cancelar</button>
+      <button class="btn btn-accent" onclick="TM.saveStateAndColor()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FASE 3 — Modal Gestionar Tags ── -->
+<div class="tm-modal-bg" id="tm-modal-tags">
+  <div class="tm-modal">
+    <h3>🏷 Gestionar Tags <span class="tm-modal-ticket-id" id="tm-tags-ticket-id">#—</span></h3>
+
+    <div class="tm-modal-section">
+      <div class="tm-modal-section-label">Agregar tag</div>
+      <div class="tm-tag-input-row">
+        <input type="text" id="tm-tag-input" placeholder="ej: hotfix, sprint, regresión…"
+               oninput="TM.onTagInput(this.value)"
+               onkeydown="TM.onTagKey(event)"
+               maxlength="32" autocomplete="off">
+        <button class="btn btn-accent" onclick="TM.addTagFromInput()" style="padding:6px 14px">+ Añadir</button>
+        <div class="tm-tag-autocomplete" id="tm-tag-autocomplete"></div>
+      </div>
+      <div class="tm-validation-err" id="tm-tag-err"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        Permitidos: a-z, á-ú, 0-9, <code>_</code>, <code>-</code>. Máx 32 chars. Máx <strong>20</strong> tags por ticket.
+      </div>
+    </div>
+
+    <div class="tm-modal-section">
+      <div class="tm-modal-section-label">Tags actuales (<span id="tm-tag-count">0</span>/20)</div>
+      <div class="tm-tag-chips" id="tm-tag-chips"></div>
+    </div>
+
+    <div class="tm-modal-actions">
+      <button class="btn btn-ghost" onclick="TM.closeTagsModal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FASE 3 — Modal Resumen ── -->
+<div class="tm-modal-bg" id="tm-modal-summary">
+  <div class="tm-modal" style="min-width:620px">
+    <h3>📊 Resumen de Metadata</h3>
+
+    <div class="tm-summary-stat-grid" id="tm-summary-counters"></div>
+
+    <div class="tm-modal-section">
+      <div class="tm-modal-section-label">Por estado (filtro aplicado)</div>
+      <table class="tm-summary-table" id="tm-summary-estados"></table>
+    </div>
+
+    <div class="tm-modal-section">
+      <div class="tm-modal-section-label">Por asignado</div>
+      <table class="tm-summary-table" id="tm-summary-asignados"></table>
+    </div>
+
+    <div class="tm-modal-section">
+      <div class="tm-modal-section-label">Por tag de usuario</div>
+      <table class="tm-summary-table" id="tm-summary-tags"></table>
+    </div>
+
+    <div class="tm-modal-actions">
+      <button class="btn btn-ghost" onclick="TM.exportSummary('json')">⬇ JSON</button>
+      <button class="btn btn-ghost" onclick="TM.exportSummary('csv')">⬇ CSV</button>
+      <button class="btn btn-accent" onclick="TM.closeSummary()">Cerrar</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── Stats modal ── -->
@@ -6385,6 +6740,981 @@ refreshPipelineHealth();
   }
 
   window.SL = SL;
+})();
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * FASE 3 — Ticket Metadata UI (TM)
+ * Namespace: window.TM
+ * - Toolbar de filtros client-side con persistencia en localStorage.
+ * - Modales: Editar Estado+Color, Gestionar Tags, Resumen.
+ * - Monkey-patch de renderTickets() para inyectar badges sin tocar cardHTML.
+ * - Integración SSE: refresca metadata de un ticket al recibir
+ *   "metadata_changed" / "metadata_indexed".
+ * Principio: aditivo. Si algo falla, degrada sin romper el dashboard base.
+ * ──────────────────────────────────────────────────────────────────────────── */
+(function () {
+  "use strict";
+
+  const TM = {};
+  const LS_KEY = "stacky.filters.v1";
+
+  // ── Estado interno ──────────────────────────────────────────────────────────
+  TM.state = {
+    filters: {
+      estados:   new Set(),
+      asignados: new Set(),
+      user_tags: new Set(),
+      colors:    new Set(),
+    },
+    // ticket_id → { color, user_tags[], commits_count, last_commit_hash,
+    //               last_commit_at, notes_count, last_note_at, ... }
+    metadata:  new Map(),
+    // Ticket actualmente siendo editado en modales
+    editingTicket: null,
+    // Color seleccionado (temporal, dentro del modal)
+    editingColor: null,
+    // DD search text per facet
+    ddSearch:  { estados: "", asignados: "", user_tags: "", colors: "" },
+  };
+
+  // ── Paleta de 8 colores por defecto ────────────────────────────────────────
+  const DEFAULT_PALETTE = [
+    "#ef4444", "#f97316", "#eab308", "#22c55e",
+    "#3b82f6", "#a855f7", "#ec4899", "#6b7280",
+  ];
+
+  // ── Estados "principales" vs "internos" ────────────────────────────────────
+  const MAIN_STATES = [
+    "pendiente_pm",
+    "pm_en_proceso",
+    "pm_completado",
+    "dev_en_proceso",
+    "dev_completado",
+    "tester_en_proceso",
+    "tester_completado",
+    "completado",
+    "error_pm",
+    "error_dev",
+    "error_tester",
+  ];
+  const INTERNAL_STATES = [
+    "pm_revision",
+    "pm_revision_en_proceso",
+    "dev_rework",
+    "dev_rework_en_proceso",
+    "qa_rework",
+    "stagnation_detected",
+    "huerfano",
+    "pm_inv_queued",
+    "pm_inv_inflight",
+    "dev_loc_queued",
+    "dev_loc_inflight",
+  ];
+
+  // ── HTML escape helper local (no colisionar con esc() global) ──────────────
+  function _esc(s) {
+    if (s === null || s === undefined) return "";
+    return String(s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  // ── Persistencia localStorage ──────────────────────────────────────────────
+  function _saveFilters() {
+    try {
+      const payload = {
+        estados:   Array.from(TM.state.filters.estados),
+        asignados: Array.from(TM.state.filters.asignados),
+        user_tags: Array.from(TM.state.filters.user_tags),
+        colors:    Array.from(TM.state.filters.colors),
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify(payload));
+    } catch (e) { console.warn("[TM] no se pudo persistir filtros", e); }
+  }
+  function _loadFilters() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return;
+      const p = JSON.parse(raw);
+      ["estados", "asignados", "user_tags", "colors"].forEach(k => {
+        if (Array.isArray(p[k])) TM.state.filters[k] = new Set(p[k]);
+      });
+    } catch (e) { console.warn("[TM] filtros corruptos en localStorage, ignorando"); }
+  }
+
+  // ── Fetch helpers ──────────────────────────────────────────────────────────
+  async function _fetchJson(url, opts) {
+    const r = await fetch(url, opts || {});
+    if (!r.ok) {
+      const txt = await r.text().catch(() => "");
+      throw new Error("HTTP " + r.status + ": " + (txt || r.statusText));
+    }
+    return r.json();
+  }
+
+  // ── Carga bulk de metadata (por-ticket, paralelizado) ──────────────────────
+  // Nota: no existe endpoint bulk en backend, pero GET /api/tickets/<id>/metadata
+  // es económico (devuelve 404 si no hay metadata, lo tratamos como vacío).
+  TM.refreshMetadata = async function (ticketIds) {
+    if (!Array.isArray(ticketIds) || !ticketIds.length) return;
+    const tasks = ticketIds.map(async (tid) => {
+      try {
+        const r = await fetch("/api/tickets/" + encodeURIComponent(tid) + "/metadata");
+        if (r.status === 404) {
+          TM.state.metadata.set(tid, { ticket_id: tid });
+          return;
+        }
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data && data.ok) {
+          TM.state.metadata.set(tid, {
+            ticket_id: tid,
+            color: data.color || null,
+            user_tags: data.user_tags || [],
+            commits_count: data.commits_count || 0,
+            last_commit_hash: data.last_commit_hash || null,
+            last_commit_at: data.last_commit_at || null,
+            notes_count: data.notes_count || 0,
+            last_note_at: data.last_note_at || null,
+            last_indexed_at: data.last_indexed_at || null,
+          });
+        }
+      } catch (_) { /* degradación grácil */ }
+    });
+    // Limitar concurrencia a 10 (evitar flood del server)
+    const chunks = [];
+    for (let i = 0; i < tasks.length; i += 10) chunks.push(tasks.slice(i, i + 10));
+    for (const c of chunks) await Promise.all(c);
+  };
+
+  TM.refreshOne = async function (tid) {
+    try {
+      const r = await fetch("/api/tickets/" + encodeURIComponent(tid) + "/metadata");
+      if (r.status === 404) { TM.state.metadata.set(tid, { ticket_id: tid }); return; }
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data && data.ok) {
+        TM.state.metadata.set(tid, {
+          ticket_id: tid,
+          color: data.color || null,
+          user_tags: data.user_tags || [],
+          commits_count: data.commits_count || 0,
+          last_commit_hash: data.last_commit_hash || null,
+          last_commit_at: data.last_commit_at || null,
+          notes_count: data.notes_count || 0,
+          last_note_at: data.last_note_at || null,
+          last_indexed_at: data.last_indexed_at || null,
+        });
+      }
+    } catch (_) { /* noop */ }
+  };
+
+  // ── Cálculo de matcheo ─────────────────────────────────────────────────────
+  TM.matches = function (ticket) {
+    const f = TM.state.filters;
+    const meta = TM.state.metadata.get(ticket.ticket_id) || {};
+
+    if (f.estados.size > 0 && !f.estados.has(ticket.pipeline_estado)) return false;
+    if (f.asignados.size > 0 && !f.asignados.has(ticket.asignado || "")) return false;
+
+    if (f.colors.size > 0) {
+      const c = meta.color || "__none__";
+      if (!f.colors.has(c)) return false;
+    }
+    if (f.user_tags.size > 0) {
+      const tags = meta.user_tags || [];
+      // "AND" entre tags seleccionados? Optamos por OR (más flexible para explorar).
+      let hit = false;
+      for (const t of f.user_tags) { if (tags.indexOf(t) !== -1) { hit = true; break; } }
+      if (!hit) return false;
+    }
+    return true;
+  };
+
+  // ── Apply: filtra el DOM actual (cards ya renderizadas) ────────────────────
+  TM.apply = function () {
+    const container = document.getElementById("tickets-container");
+    if (!container || typeof allTickets === "undefined") return;
+
+    let total = 0, shown = 0;
+    for (const t of allTickets) {
+      total++;
+      const card = document.getElementById("card-" + t.ticket_id);
+      if (!card) continue;
+      const ok = TM.matches(t);
+      card.style.display = ok ? "" : "none";
+      if (ok) shown++;
+    }
+    // Counter
+    const counter = document.getElementById("tm-counter");
+    if (counter) counter.innerHTML = "Mostrando <strong>" + shown + "</strong> / <strong>" + total + "</strong> tickets";
+
+    // Badges de filtros activos
+    _updateFilterCounts();
+
+    // Persistir
+    _saveFilters();
+  };
+
+  function _updateFilterCounts() {
+    ["estados", "asignados", "user_tags", "colors"].forEach(k => {
+      const el = document.getElementById("tm-dd-count-" + k);
+      if (!el) return;
+      const n = TM.state.filters[k].size;
+      if (n > 0) { el.style.display = ""; el.textContent = String(n); }
+      else el.style.display = "none";
+
+      const btn = el.closest(".tm-dd-btn");
+      if (btn) {
+        if (n > 0) btn.classList.add("tm-active");
+        else btn.classList.remove("tm-active");
+      }
+    });
+  }
+
+  // ── Inyección de badges en cards (post-render) ─────────────────────────────
+  function _injectBadges() {
+    if (typeof allTickets === "undefined") return;
+    for (const t of allTickets) {
+      const card = document.getElementById("card-" + t.ticket_id);
+      if (!card) continue;
+      if (card.querySelector(".tm-accent-bar")) continue; // ya inyectado
+
+      const meta = TM.state.metadata.get(t.ticket_id) || {};
+      const color = meta.color || "transparent";
+
+      // Accent bar (4px) al principio del card
+      const bar = document.createElement("div");
+      bar.className = "tm-accent-bar";
+      bar.style.background = meta.color || "transparent";
+      card.insertBefore(bar, card.firstChild);
+
+      // Badges row — insertada después del card-header
+      const header = card.querySelector(".card-header");
+      if (!header) continue;
+      const badges = _buildBadgesRow(t, meta);
+      header.insertAdjacentElement("afterend", badges);
+    }
+  }
+
+  function _buildBadgesRow(ticket, meta) {
+    const wrap = document.createElement("div");
+    wrap.className = "tm-badges";
+    wrap.setAttribute("data-tm-badges-for", ticket.ticket_id);
+
+    const parts = [];
+
+    // Asignado (re-mostrar aquí para que los filtros visuales tengan sentido)
+    if (ticket.asignado) {
+      parts.push('<span class="tm-badge tm-active">👤 ' + _esc(ticket.asignado) + "</span>");
+    }
+
+    // Tags
+    const tags = meta.user_tags || [];
+    tags.slice(0, 6).forEach(tag => {
+      parts.push('<span class="tm-badge tm-tag" onclick="event.stopPropagation();TM.toggleTagFilter(\'' +
+                 _esc(tag).replace(/'/g, "\\'") + '\')" title="Click para filtrar por este tag">🏷 ' + _esc(tag) + "</span>");
+    });
+    if (tags.length > 6) {
+      parts.push('<span class="tm-badge">+' + (tags.length - 6) + "</span>");
+    }
+
+    // Notes
+    const notesCount = meta.notes_count || 0;
+    parts.push('<span class="tm-badge tm-notes' + (notesCount > 0 ? " tm-active" : "") +
+               '" title="' + (meta.last_note_at ? "Última nota: " + _esc(meta.last_note_at) : "Sin notas") +
+               '">💬 ' + notesCount + " nota" + (notesCount === 1 ? "" : "s") + "</span>");
+
+    // Commits
+    const commitsCount = meta.commits_count || 0;
+    const commitTitle = commitsCount > 0
+      ? ("Último commit: " + _esc(meta.last_commit_hash || "?").slice(0, 10) +
+         (meta.last_commit_at ? " · " + _esc(meta.last_commit_at) : ""))
+      : "Sin commits";
+    parts.push('<span class="tm-badge tm-commits' + (commitsCount > 0 ? " tm-active" : "") +
+               '" title="' + commitTitle + '">🔗 ' + commitsCount + " commit" + (commitsCount === 1 ? "" : "s") + "</span>");
+
+    // Botón Editar (estado + color)
+    parts.push('<button class="tm-badge-edit" onclick="event.stopPropagation();TM.openStateModal(\'' +
+               _esc(ticket.ticket_id).replace(/'/g, "\\'") +
+               '\')" title="Editar estado / color">▶ Estado/Color</button>');
+
+    // Botón Tags
+    parts.push('<button class="tm-badge-edit" onclick="event.stopPropagation();TM.openTagsModal(\'' +
+               _esc(ticket.ticket_id).replace(/'/g, "\\'") +
+               '\')" title="Gestionar tags">🏷 Tags</button>');
+
+    wrap.innerHTML = parts.join("");
+    return wrap;
+  }
+
+  // ── Monkey-patch de renderTickets ──────────────────────────────────────────
+  function _patchRenderTickets() {
+    if (typeof window.renderTickets !== "function") {
+      // Si aún no existe, reintentar en 500ms (depende del orden de carga)
+      setTimeout(_patchRenderTickets, 500);
+      return;
+    }
+    if (window.renderTickets.__tm_patched) return;
+    const orig = window.renderTickets;
+    window.renderTickets = function () {
+      const res = orig.apply(this, arguments);
+      try {
+        // Enriquecer metadata para tickets nuevos (que aún no tengan entry)
+        if (typeof allTickets !== "undefined" && allTickets.length) {
+          const missing = allTickets
+            .map(t => t.ticket_id)
+            .filter(tid => !TM.state.metadata.has(tid));
+          if (missing.length) {
+            TM.refreshMetadata(missing).then(() => {
+              _injectBadges();
+              TM.apply();
+              _rebuildDropdownOptions();
+            });
+          } else {
+            _injectBadges();
+            TM.apply();
+          }
+        }
+      } catch (e) { console.warn("[TM] post-render hook falló", e); }
+      return res;
+    };
+    window.renderTickets.__tm_patched = true;
+  }
+
+  // ── Dropdowns de filtros ───────────────────────────────────────────────────
+  TM.toggleDD = function (facet) {
+    const panel = document.getElementById("tm-dd-panel-" + facet);
+    if (!panel) return;
+    const isOpen = panel.classList.contains("tm-open");
+    // Cerrar todos
+    document.querySelectorAll(".tm-dd-panel").forEach(p => p.classList.remove("tm-open"));
+    if (!isOpen) {
+      _rebuildDropdownOptions();
+      panel.classList.add("tm-open");
+    }
+  };
+  TM.filterDD = function (facet, query) {
+    TM.state.ddSearch[facet] = (query || "").toLowerCase().trim();
+    _rebuildDropdownOptions();
+  };
+  TM.toggleFilter = function (facet, value) {
+    const set = TM.state.filters[facet];
+    if (set.has(value)) set.delete(value);
+    else set.add(value);
+    TM.apply();
+    _rebuildDropdownOptions();
+  };
+  TM.toggleTagFilter = function (tag) {
+    TM.toggleFilter("user_tags", tag);
+  };
+  TM.clearFilters = function () {
+    TM.state.filters.estados.clear();
+    TM.state.filters.asignados.clear();
+    TM.state.filters.user_tags.clear();
+    TM.state.filters.colors.clear();
+    TM.apply();
+    _rebuildDropdownOptions();
+  };
+
+  function _rebuildDropdownOptions() {
+    if (typeof allTickets === "undefined") return;
+
+    // Counts por facet
+    const counts = {
+      estados: new Map(),
+      asignados: new Map(),
+      user_tags: new Map(),
+      colors: new Map(),
+    };
+    for (const t of allTickets) {
+      counts.estados.set(t.pipeline_estado, (counts.estados.get(t.pipeline_estado) || 0) + 1);
+      const a = t.asignado || "(sin asignar)";
+      counts.asignados.set(a, (counts.asignados.get(a) || 0) + 1);
+      const meta = TM.state.metadata.get(t.ticket_id) || {};
+      const c = meta.color || "__none__";
+      counts.colors.set(c, (counts.colors.get(c) || 0) + 1);
+      (meta.user_tags || []).forEach(tag => {
+        counts.user_tags.set(tag, (counts.user_tags.get(tag) || 0) + 1);
+      });
+    }
+
+    _renderDDList("estados", counts.estados, { searchable: true });
+    _renderDDList("asignados", counts.asignados, { searchable: true, treatEmptyAs: "(sin asignar)" });
+    _renderDDList("user_tags", counts.user_tags, { searchable: true });
+    _renderDDList("colors", counts.colors, { searchable: false, isColor: true });
+
+    _updateFilterCounts();
+  }
+
+  function _renderDDList(facet, countMap, opts) {
+    const list = document.getElementById("tm-dd-list-" + facet);
+    if (!list) return;
+    const search = TM.state.ddSearch[facet] || "";
+    const entries = Array.from(countMap.entries())
+      .filter(([k, _]) => {
+        if (!search) return true;
+        return String(k).toLowerCase().indexOf(search) !== -1;
+      })
+      .sort((a, b) => {
+        // valores filtrados primero
+        const aSel = TM.state.filters[facet].has(a[0]) ? 0 : 1;
+        const bSel = TM.state.filters[facet].has(b[0]) ? 0 : 1;
+        if (aSel !== bSel) return aSel - bSel;
+        return b[1] - a[1]; // luego por count desc
+      });
+
+    if (!entries.length) {
+      list.innerHTML = '<div class="tm-dd-empty">Sin opciones</div>';
+      return;
+    }
+
+    list.innerHTML = entries.map(([val, n]) => {
+      const checked = TM.state.filters[facet].has(val);
+      const id = "tm-dd-" + facet + "-" + btoa(unescape(encodeURIComponent(String(val)))).replace(/=/g, "");
+      let visual = "";
+      if (opts.isColor) {
+        if (val === "__none__") {
+          visual = '<span class="tm-chip-color" style="background:repeating-linear-gradient(45deg,#2a2d3e 0 4px,#1a1d2e 4px 8px)"></span><span>Sin color</span>';
+        } else {
+          visual = '<span class="tm-chip-color" style="background:' + _esc(val) + '"></span><span style="font-family:monospace;font-size:11px">' + _esc(val) + "</span>";
+        }
+      } else {
+        visual = "<span>" + _esc(val) + "</span>";
+      }
+      return '<label class="tm-dd-item" for="' + id + '">' +
+             '<input type="checkbox" id="' + id + '"' + (checked ? " checked" : "") +
+             ' onchange="TM.toggleFilter(\'' + facet + '\', ' + JSON.stringify(String(val)).replace(/"/g, "&quot;") + ')">' +
+             visual +
+             '<span class="tm-item-count">' + n + "</span>" +
+             "</label>";
+    }).join("");
+  }
+
+  // Cerrar dropdowns al click fuera
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".tm-dropdown")) {
+      document.querySelectorAll(".tm-dd-panel").forEach(p => p.classList.remove("tm-open"));
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Modal: Editar Estado + Color
+  // ══════════════════════════════════════════════════════════════════════════
+  TM.openStateModal = function (tid) {
+    TM.state.editingTicket = tid;
+    const meta = TM.state.metadata.get(tid) || {};
+    TM.state.editingColor = meta.color || null;
+
+    document.getElementById("tm-state-ticket-id").textContent = "#" + tid;
+    document.getElementById("tm-state-err").textContent = "";
+    document.getElementById("tm-state-show-internal").checked = false;
+
+    TM.renderStateOptions();
+
+    // Seleccionar el estado actual del ticket
+    const ticket = (typeof allTickets !== "undefined") ? allTickets.find(x => x.ticket_id === tid) : null;
+    if (ticket) {
+      const sel = document.getElementById("tm-state-select");
+      if (sel) sel.value = ticket.pipeline_estado;
+    }
+
+    _renderPalette();
+    _renderStatePreview();
+    document.getElementById("tm-modal-state").classList.add("tm-open");
+  };
+
+  TM.closeStateModal = function () {
+    document.getElementById("tm-modal-state").classList.remove("tm-open");
+    TM.state.editingTicket = null;
+  };
+
+  TM.renderStateOptions = function () {
+    const sel = document.getElementById("tm-state-select");
+    if (!sel) return;
+    const showInternal = document.getElementById("tm-state-show-internal").checked;
+    const prev = sel.value;
+    const list = showInternal ? MAIN_STATES.concat(INTERNAL_STATES) : MAIN_STATES;
+    sel.innerHTML = list.map(s => '<option value="' + _esc(s) + '">' + _esc(s) + "</option>").join("");
+    if (prev && list.indexOf(prev) !== -1) sel.value = prev;
+  };
+
+  function _renderPalette() {
+    const wrap = document.getElementById("tm-palette");
+    if (!wrap) return;
+    const current = (TM.state.editingColor || "").toLowerCase();
+    const swatches = DEFAULT_PALETTE.map(c => {
+      const cls = (c.toLowerCase() === current) ? "tm-swatch tm-selected" : "tm-swatch";
+      return '<div class="' + cls + '" style="background:' + c + '" title="' + c +
+             '" onclick="TM.selectSwatch(\'' + c + '\')"></div>';
+    }).join("");
+    const clearCls = !TM.state.editingColor ? "tm-swatch-clear tm-selected" : "tm-swatch-clear";
+    wrap.innerHTML = swatches +
+      '<div class="' + clearCls + '" title="Sin color" onclick="TM.selectSwatch(null)">✕</div>';
+
+    const picker = document.getElementById("tm-color-picker");
+    if (picker && TM.state.editingColor) picker.value = TM.state.editingColor;
+  }
+
+  TM.selectSwatch = function (color) {
+    TM.state.editingColor = color;
+    _renderPalette();
+    _renderStatePreview();
+  };
+
+  TM.onColorPickerChange = function (hex) {
+    TM.state.editingColor = (hex || "").toLowerCase();
+    _renderPalette();
+    _renderStatePreview();
+  };
+
+  function _renderStatePreview() {
+    const bar = document.getElementById("tm-preview-bar");
+    const label = document.getElementById("tm-preview-label");
+    if (bar) bar.style.background = TM.state.editingColor || "transparent";
+    if (label) label.textContent = TM.state.editingColor || "Sin color";
+    // Preview en la card (aplicar inmediatamente al accent-bar)
+    const tid = TM.state.editingTicket;
+    if (tid) {
+      const card = document.getElementById("card-" + tid);
+      if (card) {
+        const ab = card.querySelector(".tm-accent-bar");
+        if (ab) ab.style.background = TM.state.editingColor || "transparent";
+      }
+    }
+  }
+
+  TM.saveStateAndColor = async function () {
+    const tid = TM.state.editingTicket;
+    if (!tid) return;
+    const sel = document.getElementById("tm-state-select");
+    const estado = sel ? sel.value : null;
+    const errBox = document.getElementById("tm-state-err");
+    errBox.textContent = "";
+
+    const calls = [];
+
+    // Estado: sólo POST si cambió vs pipeline_estado actual
+    const ticket = (typeof allTickets !== "undefined") ? allTickets.find(x => x.ticket_id === tid) : null;
+    if (estado && ticket && estado !== ticket.pipeline_estado) {
+      calls.push(fetch("/api/set_state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket_id: tid, estado: estado })
+      }).then(r => r.json()));
+    }
+
+    // Color
+    calls.push(fetch("/api/tickets/" + encodeURIComponent(tid) + "/color", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ color: TM.state.editingColor })
+    }).then(r => r.json()));
+
+    try {
+      const results = await Promise.all(calls);
+      const fails = results.filter(r => r && r.ok === false);
+      if (fails.length) {
+        errBox.textContent = "Error: " + fails.map(f => f.error || "?").join(" · ");
+        return;
+      }
+      // Refrescar metadata local + UI
+      await TM.refreshOne(tid);
+      _updateCardBadges(tid);
+      TM.apply();
+      // Pedir refresh del ticket a nivel pipeline (para el estado)
+      if (typeof window.refresh === "function") window.refresh();
+      TM.closeStateModal();
+    } catch (e) {
+      errBox.textContent = "Fallo red: " + (e.message || e);
+    }
+  };
+
+  function _updateCardBadges(tid) {
+    const card = document.getElementById("card-" + tid);
+    if (!card) return;
+    // Actualizar accent bar
+    const meta = TM.state.metadata.get(tid) || {};
+    const ab = card.querySelector(".tm-accent-bar");
+    if (ab) ab.style.background = meta.color || "transparent";
+    // Re-inyectar badges row
+    const oldRow = card.querySelector(".tm-badges");
+    if (oldRow) oldRow.remove();
+    const header = card.querySelector(".card-header");
+    if (header) {
+      const ticket = (typeof allTickets !== "undefined") ? allTickets.find(x => x.ticket_id === tid) : null;
+      if (ticket) header.insertAdjacentElement("afterend", _buildBadgesRow(ticket, meta));
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Modal: Gestionar Tags
+  // ══════════════════════════════════════════════════════════════════════════
+  const TAG_RE = /^[a-záéíóúñ0-9_\-]+$/i;
+  const MAX_TAG_LEN = 32;
+  const MAX_TAGS = 20;
+
+  TM.openTagsModal = function (tid) {
+    TM.state.editingTicket = tid;
+    document.getElementById("tm-tags-ticket-id").textContent = "#" + tid;
+    document.getElementById("tm-tag-input").value = "";
+    document.getElementById("tm-tag-err").textContent = "";
+    _renderTagChips();
+    document.getElementById("tm-modal-tags").classList.add("tm-open");
+    document.getElementById("tm-tag-input").focus();
+  };
+
+  TM.closeTagsModal = function () {
+    document.getElementById("tm-modal-tags").classList.remove("tm-open");
+    _hideTagAutocomplete();
+    TM.state.editingTicket = null;
+  };
+
+  function _currentTagList() {
+    const tid = TM.state.editingTicket;
+    if (!tid) return [];
+    const meta = TM.state.metadata.get(tid) || {};
+    return meta.user_tags || [];
+  }
+
+  function _renderTagChips() {
+    const wrap = document.getElementById("tm-tag-chips");
+    const count = document.getElementById("tm-tag-count");
+    if (!wrap) return;
+    const tags = _currentTagList();
+    count.textContent = String(tags.length);
+    if (!tags.length) {
+      wrap.innerHTML = '<span style="color:var(--muted);font-size:11px">(sin tags)</span>';
+      return;
+    }
+    wrap.innerHTML = tags.map(t =>
+      '<span class="tm-tag-chip">🏷 ' + _esc(t) +
+      ' <button onclick="TM.removeTag(' + JSON.stringify(t).replace(/"/g, "&quot;") +
+      ')" title="Remover tag">×</button></span>'
+    ).join("");
+  }
+
+  function _validateTag(raw) {
+    const t = (raw || "").trim().toLowerCase();
+    if (!t) return { ok: false, err: "tag vacío" };
+    if (t.length > MAX_TAG_LEN) return { ok: false, err: "máx " + MAX_TAG_LEN + " chars" };
+    if (!TAG_RE.test(t)) return { ok: false, err: "chars permitidos: a-z, á-ú, 0-9, _, -" };
+    const current = _currentTagList();
+    if (current.indexOf(t) !== -1) return { ok: false, err: "tag ya existe" };
+    if (current.length >= MAX_TAGS) return { ok: false, err: "máx " + MAX_TAGS + " tags" };
+    return { ok: true, tag: t };
+  }
+
+  TM.onTagInput = function (val) {
+    const errBox = document.getElementById("tm-tag-err");
+    errBox.textContent = "";
+    const query = (val || "").toLowerCase().trim();
+    if (!query) { _hideTagAutocomplete(); return; }
+    // Autocomplete: mostrar tags existentes en OTROS tickets que matcheen
+    const all = new Map();
+    TM.state.metadata.forEach(m => {
+      (m.user_tags || []).forEach(tag => {
+        if (tag.indexOf(query) === 0) all.set(tag, (all.get(tag) || 0) + 1);
+      });
+    });
+    const current = new Set(_currentTagList());
+    const options = Array.from(all.entries())
+      .filter(([t, _]) => !current.has(t))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+
+    const box = document.getElementById("tm-tag-autocomplete");
+    if (!options.length) { _hideTagAutocomplete(); return; }
+    box.innerHTML = options.map(([t, n]) =>
+      '<div class="tm-tag-autocomplete-item" onclick="TM.pickAutocomplete(' +
+      JSON.stringify(t).replace(/"/g, "&quot;") + ')">' + _esc(t) +
+      ' <span style="color:var(--muted);float:right">' + n + "</span></div>"
+    ).join("");
+    box.classList.add("tm-open");
+  };
+
+  TM.pickAutocomplete = function (tag) {
+    document.getElementById("tm-tag-input").value = tag;
+    _hideTagAutocomplete();
+    TM.addTagFromInput();
+  };
+
+  function _hideTagAutocomplete() {
+    const box = document.getElementById("tm-tag-autocomplete");
+    if (box) box.classList.remove("tm-open");
+  }
+
+  TM.onTagKey = function (ev) {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      TM.addTagFromInput();
+    } else if (ev.key === "Escape") {
+      _hideTagAutocomplete();
+    }
+  };
+
+  TM.addTagFromInput = async function () {
+    const tid = TM.state.editingTicket;
+    if (!tid) return;
+    const input = document.getElementById("tm-tag-input");
+    const errBox = document.getElementById("tm-tag-err");
+    const v = _validateTag(input.value);
+    if (!v.ok) { errBox.textContent = v.err; return; }
+    errBox.textContent = "";
+
+    try {
+      const r = await fetch("/api/tickets/" + encodeURIComponent(tid) + "/user_tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag: v.tag }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) {
+        errBox.textContent = "Error: " + (data.error || r.statusText);
+        return;
+      }
+      // Actualizar cache local con la lista devuelta por el server
+      const meta = TM.state.metadata.get(tid) || { ticket_id: tid };
+      meta.user_tags = data.user_tags || [];
+      TM.state.metadata.set(tid, meta);
+      input.value = "";
+      _hideTagAutocomplete();
+      _renderTagChips();
+      _updateCardBadges(tid);
+      _rebuildDropdownOptions();
+    } catch (e) {
+      errBox.textContent = "Fallo red: " + (e.message || e);
+    }
+  };
+
+  TM.removeTag = async function (tag) {
+    const tid = TM.state.editingTicket;
+    if (!tid) return;
+    const errBox = document.getElementById("tm-tag-err");
+    try {
+      const r = await fetch("/api/tickets/" + encodeURIComponent(tid) + "/user_tags/" +
+                            encodeURIComponent(tag), { method: "DELETE" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) {
+        errBox.textContent = "Error: " + (data.error || r.statusText);
+        return;
+      }
+      const meta = TM.state.metadata.get(tid) || { ticket_id: tid };
+      meta.user_tags = data.user_tags || [];
+      TM.state.metadata.set(tid, meta);
+      _renderTagChips();
+      _updateCardBadges(tid);
+      _rebuildDropdownOptions();
+    } catch (e) {
+      errBox.textContent = "Fallo red: " + (e.message || e);
+    }
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Modal: Resumen
+  // ══════════════════════════════════════════════════════════════════════════
+  TM.openSummary = function () {
+    _buildSummary();
+    document.getElementById("tm-modal-summary").classList.add("tm-open");
+  };
+  TM.closeSummary = function () {
+    document.getElementById("tm-modal-summary").classList.remove("tm-open");
+  };
+
+  function _buildSummary() {
+    if (typeof allTickets === "undefined") return;
+    const filtered = allTickets.filter(t => TM.matches(t));
+    const total = filtered.length;
+
+    // Counters
+    let withColor = 0, withoutColor = 0, withCommits = 0, withoutCommits = 0;
+    let withNotes = 0, withoutNotes = 0, withTags = 0;
+    const byEstado = new Map(), byAsignado = new Map(), byTag = new Map();
+
+    for (const t of filtered) {
+      const m = TM.state.metadata.get(t.ticket_id) || {};
+      if (m.color) withColor++; else withoutColor++;
+      if ((m.commits_count || 0) > 0) withCommits++; else withoutCommits++;
+      if ((m.notes_count || 0) > 0) withNotes++; else withoutNotes++;
+      if ((m.user_tags || []).length) withTags++;
+
+      byEstado.set(t.pipeline_estado, (byEstado.get(t.pipeline_estado) || 0) + 1);
+      const a = t.asignado || "(sin asignar)";
+      byAsignado.set(a, (byAsignado.get(a) || 0) + 1);
+      (m.user_tags || []).forEach(tag => byTag.set(tag, (byTag.get(tag) || 0) + 1));
+    }
+
+    // Counters grid
+    const counters = [
+      { k: "Total", v: total },
+      { k: "Con color", v: withColor },
+      { k: "Sin color", v: withoutColor },
+      { k: "Con commits", v: withCommits },
+      { k: "Sin commits", v: withoutCommits },
+      { k: "Con notas", v: withNotes },
+      { k: "Sin notas", v: withoutNotes },
+      { k: "Con tags", v: withTags },
+    ];
+    document.getElementById("tm-summary-counters").innerHTML = counters.map(c =>
+      '<div class="tm-summary-stat">' +
+      '<div class="tm-summary-stat-v">' + c.v + "</div>" +
+      '<div class="tm-summary-stat-k">' + c.k + "</div>" +
+      "</div>").join("");
+
+    _renderSummaryTable("tm-summary-estados", "Estado", byEstado, total);
+    _renderSummaryTable("tm-summary-asignados", "Asignado", byAsignado, total);
+    _renderSummaryTable("tm-summary-tags", "Tag", byTag, total);
+
+    // Guardar último snapshot para export
+    TM._lastSummary = { total, counters, byEstado, byAsignado, byTag, filtered };
+  }
+
+  function _renderSummaryTable(elId, headerLabel, map, total) {
+    const table = document.getElementById(elId);
+    if (!table) return;
+    if (!map.size) {
+      table.innerHTML = '<thead><tr><th>' + _esc(headerLabel) + '</th><th>Count</th><th>%</th><th>Bar</th></tr></thead>' +
+                       '<tbody><tr><td colspan="4" style="color:var(--muted);text-align:center">Sin datos</td></tr></tbody>';
+      return;
+    }
+    const rows = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+    table.innerHTML =
+      '<thead><tr><th>' + _esc(headerLabel) + '</th><th class="tm-num">Count</th><th class="tm-num">%</th><th style="min-width:140px">Bar</th></tr></thead>' +
+      '<tbody>' + rows.map(([k, n]) => {
+        const pct = total > 0 ? ((n / total) * 100) : 0;
+        return '<tr>' +
+               '<td>' + _esc(k) + '</td>' +
+               '<td class="tm-num">' + n + '</td>' +
+               '<td class="tm-num">' + pct.toFixed(1) + '%</td>' +
+               '<td><div class="tm-bar"><div class="tm-bar-fill" style="width:' + pct.toFixed(2) + '%"></div></div></td>' +
+               '</tr>';
+      }).join("") + '</tbody>';
+  }
+
+  TM.exportSummary = function (fmt) {
+    const s = TM._lastSummary;
+    if (!s) return;
+    const plain = {
+      generated_at: new Date().toISOString(),
+      filters: {
+        estados:   Array.from(TM.state.filters.estados),
+        asignados: Array.from(TM.state.filters.asignados),
+        user_tags: Array.from(TM.state.filters.user_tags),
+        colors:    Array.from(TM.state.filters.colors),
+      },
+      total: s.total,
+      counters: s.counters.reduce((o, c) => { o[c.k] = c.v; return o; }, {}),
+      per_estado:   Object.fromEntries(s.byEstado),
+      per_asignado: Object.fromEntries(s.byAsignado),
+      per_tag:      Object.fromEntries(s.byTag),
+    };
+    let blob, name;
+    if (fmt === "csv") {
+      const lines = ["bucket,key,count,pct"];
+      const push = (bucket, map) => {
+        const t = s.total || 0;
+        for (const [k, n] of map.entries()) {
+          const p = t > 0 ? ((n / t) * 100).toFixed(2) : "0";
+          lines.push([bucket, '"' + String(k).replace(/"/g, '""') + '"', n, p].join(","));
+        }
+      };
+      push("estado", s.byEstado); push("asignado", s.byAsignado); push("tag", s.byTag);
+      blob = new Blob([lines.join("\n")], { type: "text/csv" });
+      name = "stacky-metadata-summary.csv";
+    } else {
+      blob = new Blob([JSON.stringify(plain, null, 2)], { type: "application/json" });
+      name = "stacky-metadata-summary.json";
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 500);
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SSE: metadata_changed / metadata_indexed
+  // ══════════════════════════════════════════════════════════════════════════
+  TM.onMetadataEvent = async function (ev) {
+    try {
+      if (!ev) return;
+      const tid = ev.ticket_id;
+      if (!tid) {
+        // Evento sin ticket_id — refrescar todos los conocidos
+        if (typeof allTickets !== "undefined") {
+          await TM.refreshMetadata(allTickets.map(t => t.ticket_id));
+          allTickets.forEach(t => _updateCardBadges(t.ticket_id));
+          _rebuildDropdownOptions();
+          TM.apply();
+        }
+        return;
+      }
+      await TM.refreshOne(tid);
+      _updateCardBadges(tid);
+      _rebuildDropdownOptions();
+      TM.apply();
+    } catch (e) { console.warn("[TM] onMetadataEvent fallo", e); }
+  };
+
+  function _subscribeSSE() {
+    // Usar el mismo EventSource que SL si está disponible; si no, abrir uno propio.
+    // Como SL no expone _es públicamente, creamos un canal dedicado.
+    if (typeof EventSource === "undefined") return;
+    try {
+      const es = new EventSource("/api/events/stream");
+      const handler = (m) => {
+        try {
+          const ev = JSON.parse(m.data);
+          if (ev && (ev.kind === "metadata_changed" || ev.kind === "metadata_indexed"
+                     || ev.kind === "ticket_metadata_changed")) {
+            TM.onMetadataEvent(ev);
+          }
+        } catch (_) { /* noop */ }
+      };
+      es.onmessage = handler;
+      ["metadata_changed", "metadata_indexed", "ticket_metadata_changed"].forEach(k => {
+        es.addEventListener(k, handler);
+      });
+      es.onerror = function () {
+        try { es.close(); } catch (_) {}
+        // Retry en 30s (alineado con SL)
+        setTimeout(_subscribeSSE, 30000);
+      };
+    } catch (_) { /* noop */ }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Init
+  // ══════════════════════════════════════════════════════════════════════════
+  function _init() {
+    _loadFilters();
+    _patchRenderTickets();
+    _subscribeSSE();
+
+    // Kick inicial: cuando allTickets esté listo, cargar metadata y aplicar filtros.
+    const initialKick = setInterval(() => {
+      if (typeof allTickets !== "undefined" && allTickets && allTickets.length) {
+        clearInterval(initialKick);
+        const ids = allTickets.map(t => t.ticket_id);
+        TM.refreshMetadata(ids).then(() => {
+          _injectBadges();
+          _rebuildDropdownOptions();
+          TM.apply();
+        });
+      }
+    }, 700);
+    // Safety timeout: aún si allTickets nunca se puebla, abortar polling
+    setTimeout(() => clearInterval(initialKick), 30000);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", _init);
+  } else {
+    _init();
+  }
+
+  window.TM = TM;
 })();
 </script>
 </body>

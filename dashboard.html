@@ -64,14 +64,33 @@
   /* ── Summary bar ── */
   .summary {
     display: flex; gap: 12px; padding: 12px 24px;
-    flex-wrap: wrap;
+    flex-wrap: wrap; align-items: center;
   }
   .pill {
     display: flex; align-items: center; gap: 6px;
     background: var(--panel); border: 1px solid var(--border);
     border-radius: 8px; padding: 6px 12px; font-size: 12px;
+    cursor: pointer; user-select: none;
+    transition: border-color .15s, background .15s, opacity .15s;
   }
+  .pill:hover { border-color: var(--muted); background: #1e2040; }
+  .pill.active { background: #1e2236; box-shadow: 0 0 0 1px var(--accent); }
+  .pill.todos-pill { border-style: dashed; }
+  .pill.todos-pill.active { background: #1a1d2e; border-color: var(--accent); border-style: solid; }
   .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  /* ── Dev/QA summary quick-buttons ── */
+  .summary-quick-btns {
+    display: flex; gap: 8px; padding: 0 16px 6px; flex-wrap: wrap; align-items: center;
+  }
+  .summary-quick-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 14px; border-radius: 6px; border: none;
+    cursor: pointer; font-size: 12px; font-weight: 600;
+    transition: opacity .15s, transform .1s;
+  }
+  .summary-quick-btn:hover { opacity: .85; transform: scale(.98); }
+  .summary-quick-btn.dev    { background: #160e2e; border: 1px solid #7c3aed; color: #a78bfa; }
+  .summary-quick-btn.tester { background: #0d1f12; border: 1px solid #16a34a; color: #34d399; }
 
   /* ── Pipeline flow legend ── */
   .flow-legend {
@@ -1738,6 +1757,7 @@
   <button class="btn btn-ghost" id="auto-enter-btn" onclick="openAutoEnter()" title="Ctrl+Enter automático en VS Code">⌨ Auto Enter</button>
   <button class="btn btn-ghost" onclick="openPrompts()" title="Editar prompts PM / Dev / QA">📝 Prompts</button>
   <button class="btn btn-ghost" onclick="openAgentConfig()" title="Personalizar comportamiento de cada agente (strictness, tests, instrucciones extra)">⚙️ Agentes</button>
+  <button class="btn btn-ghost" onclick="openTicketCompletionConfig()" title="Configurar qué pasa al finalizar un ticket (commit, transición ADO, nota)">⚙️ Ticket Finish</button>
   <button id="btn-gen-docs" class="btn btn-ghost" onclick="generateProjectDocs()" title="Generar documentación técnica del proyecto (una sola vez, reutilizable por todos los agentes)">📚 Docs</button>
   <button class="btn btn-ghost" onclick="SL.openEstimations()" title="Estimaciones y calibración del scoring (F2)">🎯 Estimaciones</button>
   <button class="btn btn-yellow" onclick="openQueue()" title="Rally — grid de largada de tickets">🏁 Rally</button>
@@ -2182,9 +2202,13 @@
 <!-- ── Diff modal ── -->
 <div id="diff-modal" onclick="if(event.target.id==='diff-modal')closeDiff()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;overflow:auto;padding:24px">
   <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;max-width:1100px;margin:0 auto;display:flex;flex-direction:column;max-height:90vh">
-    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap">
       <span style="font-weight:700;font-size:15px">📄 Cambios Git</span>
       <span id="diff-modal-subtitle" style="color:var(--muted);font-size:13px"></span>
+      <!-- ADO metadata: estado + notas -->
+      <span id="diff-ado-state" style="display:none;font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid var(--border)"></span>
+      <a id="diff-ado-notes" href="#" target="_blank" rel="noopener" style="display:none;font-size:11px;color:var(--muted);text-decoration:none" title="Abrir en ADO">📝 <span id="diff-ado-notes-count">0</span> notas</a>
+      <span id="diff-source-badge" style="display:none;font-size:10px;padding:1px 6px;border-radius:8px;background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.3)"></span>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
         <span style="font-size:11px;color:var(--muted)">Etapa:</span>
         <button id="diff-tab-pm"     class="btn btn-ghost" style="font-size:11px;padding:2px 10px" onclick="switchDiffTab('pm')">📋 PM</button>
@@ -2420,6 +2444,86 @@
   </div>
 </div>
 
+<!-- ── Ticket Completion Config modal ── -->
+<div id="tcc-modal" onclick="if(event.target.id==='tcc-modal')closeTicketCompletionConfig()" style="display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.75);align-items:center;justify-content:center;overflow:auto;padding:24px">
+  <div class="commit-panel" style="width:min(720px,97vw);max-height:92vh;overflow-y:auto">
+    <div class="commit-header" style="background:#0f1a30">
+      <span style="font-size:20px">⚙️</span>
+      <h2>Config al finalizar un ticket</h2>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="closeTicketCompletionConfig()">✕</button>
+    </div>
+    <div class="commit-body" style="gap:14px">
+
+      <div style="font-size:12px;color:var(--muted);line-height:1.7;background:#080b14;border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        Estos flags deciden qué pasa cuando hacés <strong style="color:var(--text)">📄 Ver Cambios Git → Commit</strong> en un ticket.
+        Cada paso es independiente. Los cambios se guardan en la config del proyecto activo.
+        <div id="tcc-project-hint" style="margin-top:6px;color:var(--muted)"></div>
+      </div>
+
+      <!-- Auto commit -->
+      <div style="background:#080b14;border:1px solid var(--border);border-radius:8px;padding:12px 14px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="tcc-auto-commit" style="width:16px;height:16px;cursor:pointer">
+          <span style="font-weight:600;color:var(--text)">📝 Auto commit al finalizar</span>
+        </label>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;margin-left:26px">
+          Si está off, el botón "Commit" del modal "Ver Cambios Git" no ejecutará el git commit (útil para solo publicar nota / transicionar estado).
+        </div>
+      </div>
+
+      <!-- Auto transition state -->
+      <div style="background:#080b14;border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="tcc-auto-transition" style="width:16px;height:16px;cursor:pointer" onchange="_tccUpdateTransitionUI()">
+          <span style="font-weight:600;color:var(--text)">🔄 Cambiar estado ADO al finalizar</span>
+        </label>
+        <div style="margin-left:26px;display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:11px;color:var(--muted)">Estado destino</label>
+          <input type="text" id="tcc-target-state" placeholder="Ej: Doing, Resolved, Done, Closed"
+            style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;font-family:monospace">
+          <div id="tcc-target-warn" style="font-size:11px;color:var(--yellow);display:none">
+            ⚠ "Doing" suele significar "en curso", no "finalizado". Considerá <strong>Resolved</strong>, <strong>Done</strong> o <strong>Closed</strong>.
+          </div>
+          <div id="tcc-target-err" style="font-size:11px;color:var(--red);display:none">
+            ❌ Si auto-transition está activo, el estado destino no puede quedar vacío.
+          </div>
+        </div>
+      </div>
+
+      <!-- Auto post note -->
+      <div style="background:#080b14;border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="tcc-auto-note" style="width:16px;height:16px;cursor:pointer" onchange="_tccUpdateNoteUI()">
+          <span style="font-weight:600;color:var(--text)">📝 Publicar nota en ADO al finalizar</span>
+        </label>
+        <div style="margin-left:26px;display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:11px;color:var(--muted)">
+            Template de la nota &nbsp;
+            <span style="color:#6366f1">Placeholders disponibles: <code>{ticket_id}</code> <code>{branch}</code> <code>{files_count}</code></span>
+          </label>
+          <textarea id="tcc-note-template" rows="5"
+            placeholder="Ej: Ticket #{ticket_id} completado en rama {branch} ({files_count} archivos modificados)."
+            style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:12px;font-family:monospace;resize:vertical"></textarea>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="tcc-note-html" style="width:14px;height:14px;cursor:pointer">
+            Enviar como HTML (permite formato enriquecido)
+          </label>
+          <div id="tcc-note-err" style="font-size:11px;color:var(--red);display:none">
+            ❌ Si auto-note está activo, el template no puede quedar vacío.
+          </div>
+        </div>
+      </div>
+
+      <div id="tcc-result" style="font-size:12px;display:none;padding:6px 2px"></div>
+
+    </div>
+    <div class="commit-footer">
+      <button class="btn btn-ghost" onclick="closeTicketCompletionConfig()">Cancelar</button>
+      <button class="btn btn-accent" onclick="saveTicketCompletionConfig()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Incident Test modal ── -->
 <div id="incident-test-modal" onclick="if(event.target.id==='incident-test-modal')closeIncidentTest()" style="display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.75);align-items:center;justify-content:center;overflow:auto;padding:24px">
   <div class="commit-panel" style="width:min(720px,97vw);max-height:90vh;overflow-y:auto">
@@ -2490,6 +2594,8 @@
 // ── State ─────────────────────────────────────────────────────────────────
 let allTickets = [];
 let currentFilter = 'all';
+let _summaryStateFilter = null;  // filtro por estado de pipeline desde las pills del summary
+let _lastSummaryData = {};        // cache para re-renderizar summary sin re-fetch
 let refreshInterval = null;
 let expandedCards = new Set(); // tarjetas expandidas — se preservan entre refreshes
 
@@ -2689,6 +2795,7 @@ async function refresh() {
 
 // ── Summary ───────────────────────────────────────────────────────────────
 function renderSummary(data) {
+  _lastSummaryData = data;  // cache para re-render
   const counts = data.por_estado || {};
   const pills = [
     { key: 'pendiente_pm',      label: 'Pendiente PM',   color: '#eab308' },
@@ -2709,21 +2816,43 @@ function renderSummary(data) {
     t.last_qa_verdict === 'RECHAZADO' ||
     t.pipeline_estado === 'stagnation_detected'
   );
+  const _rejPillActive = _summaryStateFilter === '__rechazados__';
   const rejectedPill = rejectedTickets.length > 0
-    ? `<div class="pill" style="background:var(--red);border-color:#fff;color:#fff;cursor:pointer;animation:rejected-flash 1.5s ease-in-out infinite" onclick="scrollToFirstRejected()" title="Ir al primero">
+    ? `<div class="pill${_rejPillActive ? ' active' : ''}" style="background:var(--red);border-color:${_rejPillActive ? '#fff' : 'transparent'};color:#fff;cursor:pointer;${_rejPillActive ? '' : 'animation:rejected-flash 1.5s ease-in-out infinite'}" onclick="setSummaryFilter('__rechazados__')" title="${_rejPillActive ? 'Click para quitar filtro' : 'Filtrar: solo rechazados'}">
          <span style="font-size:16px">⛔</span>
          <span style="font-weight:900;font-size:16px">${rejectedTickets.length}</span>
-         <span style="font-weight:700;letter-spacing:.5px">RECHAZADO${rejectedTickets.length === 1 ? '' : 'S'} — REQUIERE ACCIÓN</span>
+         <span style="font-weight:700;letter-spacing:.5px">RECHAZADO${rejectedTickets.length === 1 ? '' : 'S'}${_rejPillActive ? ' ✕' : ' — REQUIERE ACCIÓN'}</span>
        </div>`
     : '';
-  bar.innerHTML = rejectedPill + pills.map(p => {
+  const todosActive = _summaryStateFilter === null;
+  const todosCount  = allTickets.length;
+  const todosPill = `<div class="pill todos-pill${todosActive ? ' active' : ''}" onclick="setSummaryFilter(null)" title="Mostrar todos">
+    <div class="dot" style="background:var(--muted)"></div>
+    <span style="font-weight:700;color:${todosActive ? 'var(--text)' : 'var(--muted)'}">${todosCount}</span>
+    <span style="color:var(--muted)">TODOS</span>
+  </div>`;
+  bar.innerHTML = rejectedPill + todosPill + pills.map(p => {
     const n = counts[p.key] || 0;
-    return `<div class="pill">
+    const isActive = _summaryStateFilter === p.key;
+    return `<div class="pill${isActive ? ' active' : ''}" onclick="setSummaryFilter('${p.key}')" title="Filtrar por: ${p.label}" style="${n === 0 ? 'opacity:.45' : ''};${isActive ? 'border-color:' + p.color : ''}">
       <div class="dot" style="background:${p.color}"></div>
       <span style="color:${p.color};font-weight:700">${n}</span>
       <span style="color:var(--muted)">${p.label}</span>
     </div>`;
   }).join('');
+}
+
+function setSummaryFilter(key) {
+  _summaryStateFilter = (_summaryStateFilter === key) ? null : key;
+  // Si se activa el filtro por estado de pill, resetea el filtro general
+  if (_summaryStateFilter !== null) {
+    currentFilter = 'all';
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    const allBtn = document.querySelector('.filter-btn');
+    if (allBtn) allBtn.classList.add('active');
+  }
+  renderSummary(_lastSummaryData);
+  renderTickets();
 }
 
 function scrollToFirstRejected() {
@@ -2744,15 +2873,31 @@ function scrollToFirstRejected() {
 // ── Filter ────────────────────────────────────────────────────────────────
 function setFilter(f, btn) {
   currentFilter = f;
+  _summaryStateFilter = null;  // limpiar filtro de pill al usar los botones generales
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  renderSummary(_lastSummaryData);  // re-render para quitar active de pills
   renderTickets();
 }
 
 function filtered() {
   let list = allTickets;
 
-  // Filtro pipeline
+  // Filtro por pill del summary bar (tiene prioridad sobre filtro general)
+  if (_summaryStateFilter !== null) {
+    if (_summaryStateFilter === '__rechazados__') {
+      list = list.filter(t =>
+        t.tester_verdict === 'RECHAZADO' ||
+        t.last_qa_verdict === 'RECHAZADO' ||
+        t.pipeline_estado === 'stagnation_detected'
+      );
+    } else {
+      list = list.filter(t => t.pipeline_estado === _summaryStateFilter);
+    }
+    return list;
+  }
+
+  // Filtro pipeline general
   if (currentFilter === 'pendiente')
     list = list.filter(t => ['pendiente_pm','pm_completado'].includes(t.pipeline_estado));
   else if (currentFilter === 'error')
@@ -2769,6 +2914,22 @@ function filtered() {
   const asignadoSel = (document.getElementById('filter-asignado')?.value || '').trim();
   if (asignadoSel)
     list = list.filter(t => (t.asignado || '') === asignadoSel);
+
+  // Orden: en_proceso primero, luego completados (más recientes arriba), resto al final
+  list = list.slice().sort((a, b) => {
+    const aInP = (a.pipeline_estado || '').endsWith('_en_proceso');
+    const bInP = (b.pipeline_estado || '').endsWith('_en_proceso');
+    if (aInP !== bInP) return aInP ? -1 : 1;
+    const aComp = a.pipeline_estado === 'completado';
+    const bComp = b.pipeline_estado === 'completado';
+    if (aComp && bComp) {
+      const aTs = a.completado_at ? new Date(a.completado_at).getTime() : 0;
+      const bTs = b.completado_at ? new Date(b.completado_at).getTime() : 0;
+      return bTs - aTs;  // más reciente primero
+    }
+    if (aComp !== bComp) return aComp ? -1 : 1;  // completados antes que los demás
+    return 0;
+  });
 
   return list;
 }
@@ -3482,15 +3643,27 @@ function cardHTML(ticket) {
   let banner = '';
   if (isRejected) {
     // Botones contextuales según transiciones válidas (cacheadas en _qaTransitions)
-    const qaBtns = _buildQaActionButtons(tid, e);
-    banner = `<div class="rejected-banner">
+    const qaBtns = inProgress ? '' : _buildQaActionButtons(tid, e);
+    // Si está en ejecución (rework / pm_revision_en_proceso / dev_rework_en_proceso)
+    // mostrar primero el banner EN EJECUCION y luego el historial de rechazo.
+    const stageInProgress = inProgress ? e.replace('_en_proceso', '').toUpperCase() : '';
+    const enEjecucionBanner = inProgress
+      ? `<div class="working-now-banner">
+           <span class="wn-arrow">▶</span>
+           <span>EN EJECUCION — ${stageInProgress}</span>
+           ${workflowStart ? `<span class="wn-timer workflow-live" data-ts="${workflowStart}">⏱ --:--</span>` : ''}
+         </div>`
+      : '';
+    banner = enEjecucionBanner +
+      `<div class="rejected-banner">
          <span class="alert-icon">⛔</span>
          <span>${bannerTitle}</span>
          ${findingsCount ? `<span class="findings-count">${findingsCount} finding${findingsCount === 1 ? '' : 's'}</span>` : ''}
          ${(ticket.rework_count || 0) > 0 ? `<span class="rework-meta">rework #${ticket.rework_count}</span>` : ''}
          <span class="spacer"></span>
          ${qaBtns}
-         <button class="action-cta" onclick="event.stopPropagation();unstickTicket('${tid}')" title="Invocar al agente Desatascador">🚑 DESATASCAR</button>
+         ${inProgress ? '' : `<button class="action-cta" onclick="event.stopPropagation();unstickTicket('${tid}')" title="Invocar al agente Desatascador">🚑 DESATASCAR</button>`}
+         ${inProgress ? '' : `<button class="action-cta" style="background:#14532d;border:1px solid #16a34a;color:#4ade80" onclick="event.stopPropagation();if(confirm('¿Marcar #${tid} como COMPLETADO aunque fue rechazado por QA?'))markState('${tid}','completado')" title="Forzar completado — omite el veredicto QA">✅ MARCAR OK</button>`}
        </div>${_rejectedDetailHTML(ticket, tid, e)}`;
   } else if (hasObservations) {
     banner = `<div class="observations-banner">
@@ -3529,6 +3702,7 @@ function cardHTML(ticket) {
       ${ticket.has_sql_transforms ? `<span class="badge-sql-alert" title="⚠ Tiene scripts SQL de transformación (INSERT/UPDATE/DELETE/ALTER/CREATE/DROP). Ejecutar antes o después del deploy según corresponda.">⚠ SQL DDL/DML</span>` : ''}
       ${_deployDoneTs ? `<span class="badge-deploy-done" title="Deploy descargado: ${_deployDoneLbl}">📦 DEPLOY ✓</span>` : ''}
       ${_commitDoneTs ? `<span class="badge-commit-done" title="Commiteado: ${_commitDoneLbl}">🔖 COMMIT ✓</span>` : ''}
+      ${e === 'completado' && ticket.completado_at ? `<span style="font-size:11px;color:#4ade80;background:#0a1f12;border:1px solid #14532d;border-radius:4px;padding:1px 8px;white-space:nowrap" title="Completado el ${new Date(ticket.completado_at).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'medium'})}">✅ ${new Date(ticket.completado_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>` : ''}
       <button class="btn btn-ghost" style="padding:2px 9px;font-size:11px;margin-left:auto;flex-shrink:0" title="Ver detalle del ticket" onclick="event.stopPropagation();openTicketDetail('${tid}')">📋 Detalle</button>
       <span class="chevron">▶</span>
     </div>
@@ -3551,17 +3725,10 @@ function cardHTML(ticket) {
       <button class="btn btn-red" style="font-size:12px;padding:3px 12px;font-weight:700" onclick="event.stopPropagation();unstickTicket('${tid}')" title="Invoca al agente Desatascador para destrabar el ticket">🚑 Desatascar ticket</button>
       <span style="font-size:11px;color:var(--muted)">El agente revisará la carpeta, creará/borrará flags y completará archivos a medias.</span>
     </div>` : ''}
-    ${showDevSummary ? `<div class="summary-panel" id="dev-panel-${tid}">
-      <div class="summary-panel-header dev">📝 Dev — Resumen de implementación
-        <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();openPreview('${tid}','dev')">🔍 Ver completo</button>
-      </div>
-      <div class="summary-panel-body" id="dev-summary-${tid}"><span style="color:var(--muted)">Cargando...</span></div>
-    </div>` : ''}
-    ${showTesterSummary ? `<div class="summary-panel" id="tester-panel-${tid}">
-      <div class="summary-panel-header tester" id="tester-header-${tid}">🧪 QA — Resumen de pruebas
-        <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();openPreview('${tid}','tester')">🔍 Ver completo</button>
-      </div>
-      <div class="summary-panel-body" id="tester-summary-${tid}"><span style="color:var(--muted)">Cargando...</span></div>
+    ${(showDevSummary || showTesterSummary) ? `
+    <div class="summary-quick-btns">
+      ${showDevSummary ? `<button class="summary-quick-btn dev" onclick="event.stopPropagation();openPreview('${tid}','dev')" title="Ver resumen completo de implementación del Developer">📝 Resumen Dev</button>` : ''}
+      ${showTesterSummary ? `<button class="summary-quick-btn tester" onclick="event.stopPropagation();openPreview('${tid}','tester')" title="Ver resumen completo de QA">🧪 Resumen QA</button>` : ''}
     </div>` : ''}
     ${showTesterSummary || e === 'tester_completado' ? `<div class="correction-panel" id="correction-panel-${tid}">
       <div class="correction-header">✏️ Enviar corrección al Developer</div>
@@ -3934,6 +4101,13 @@ async function showDiff(tid, stage) {
   document.getElementById('diff-modal-subtitle').textContent = `#${tid}`;
   document.getElementById('diff-files').textContent   = 'Cargando...';
   document.getElementById('diff-content').innerHTML   = 'Cargando...';
+  // Reset badges ADO antes de cargar
+  const adoStateEl  = document.getElementById('diff-ado-state');
+  const adoNotesEl  = document.getElementById('diff-ado-notes');
+  const srcBadge    = document.getElementById('diff-source-badge');
+  if (adoStateEl) adoStateEl.style.display = 'none';
+  if (adoNotesEl) adoNotesEl.style.display = 'none';
+  if (srcBadge)   srcBadge.style.display   = 'none';
   _updateDiffTabs(stage);
   await _loadDiff(tid, stage);
 }
@@ -3963,6 +4137,8 @@ async function _loadDiff(tid, stage) {
   try {
     const r = await fetch(`/api/diff/${tid}/${stage}`);
     const d = await r.json();
+    // Poblar badges ADO aunque d.ok sea false — el enrichment ADO sigue siendo útil.
+    _renderDiffAdoBadges(d);
     if (!d.ok) {
       filesEl.textContent = d.error || 'No disponible';
       const capBtn = d.can_capture
@@ -3975,11 +4151,71 @@ async function _loadDiff(tid, stage) {
     filesEl.innerHTML = _colorizeStatus(d.files || '(sin cambios)');
     // Diff con colores rojo/verde
     contentEl.innerHTML = _colorizeDiff(d.diff || '(sin cambios)');
+    // Warning sobre la fuente (ej. working-tree mezclado)
+    if (d.warning) {
+      const warn = document.createElement('div');
+      warn.style.cssText = 'font-size:11px;color:#fbbf24;background:rgba(251,191,36,.08);padding:6px 10px;border-radius:6px;margin-bottom:10px';
+      warn.textContent = '⚠ ' + d.warning;
+      contentEl.prepend(warn);
+    }
     document.getElementById('diff-modal-subtitle').textContent =
       `#${tid} — ${_stageLabel(stage)} — ${_countDiffLines(d.diff)} líneas`;
   } catch(err) {
     filesEl.textContent   = 'Error';
     contentEl.innerHTML   = `<span style="color:var(--red)">Error cargando diff: ${esc(String(err))}</span>`;
+  }
+}
+
+// Dibuja el badge de estado ADO, contador de notas y la fuente del diff.
+function _renderDiffAdoBadges(d) {
+  const stateEl   = document.getElementById('diff-ado-state');
+  const notesEl   = document.getElementById('diff-ado-notes');
+  const notesCnt  = document.getElementById('diff-ado-notes-count');
+  const srcBadge  = document.getElementById('diff-source-badge');
+  if (stateEl) {
+    if (d && d.ado_state) {
+      const norm = (d.ado_state_normalized || '').toLowerCase();
+      const bg   = norm === 'completada' ? 'rgba(52,211,153,.12)'
+                 : norm === 'resuelta'   ? 'rgba(96,165,250,.12)'
+                 : norm === 'aceptada'   ? 'rgba(251,191,36,.12)'
+                 : 'rgba(156,163,175,.12)';
+      const fg   = norm === 'completada' ? '#34d399'
+                 : norm === 'resuelta'   ? '#60a5fa'
+                 : norm === 'aceptada'   ? '#fbbf24'
+                 : '#9ca3af';
+      stateEl.style.background = bg;
+      stateEl.style.color      = fg;
+      stateEl.textContent = 'ADO: ' + d.ado_state;
+      stateEl.style.display = 'inline-block';
+    } else {
+      stateEl.style.display = 'none';
+    }
+  }
+  if (notesEl && notesCnt) {
+    const n = d && (d.ado_comments_count || 0);
+    if (n > 0) {
+      notesCnt.textContent = n;
+      if (d.ado_url) notesEl.href = d.ado_url;
+      // tooltip: preview de las primeras 3 notas
+      if (d.ado_comments_preview && d.ado_comments_preview.length) {
+        const tip = d.ado_comments_preview
+          .map(c => `${c.author || '?'} (${(c.created_at || '').slice(0,10)}): ${c.body || ''}`)
+          .join('\n\n');
+        notesEl.title = tip;
+      }
+      notesEl.style.display = 'inline-block';
+    } else {
+      notesEl.style.display = 'none';
+    }
+  }
+  if (srcBadge) {
+    const src = d && d.source;
+    if (src && src !== 'snapshot') {
+      srcBadge.textContent = 'fuente: ' + src;
+      srcBadge.style.display = 'inline-block';
+    } else {
+      srcBadge.style.display = 'none';
+    }
   }
 }
 
@@ -5509,6 +5745,159 @@ async function saveTeamsConfig() {
   } catch(e) {}
 })();
 
+// ══════════════════════════════════════════════════════════════════
+// Ticket Completion Config modal (auto commit / transition / post-note)
+// ══════════════════════════════════════════════════════════════════
+async function openTicketCompletionConfig() {
+  const modal = document.getElementById('tcc-modal');
+  modal.style.display = 'flex';
+
+  // Reset UI mientras carga
+  _tccSetResult('', null);
+  document.getElementById('tcc-target-err').style.display = 'none';
+  document.getElementById('tcc-note-err').style.display   = 'none';
+  document.getElementById('tcc-project-hint').textContent = 'Cargando config...';
+
+  try {
+    const r = await api('GET', '/api/ticket_completion/config');
+    if (!r || !r.ok) {
+      _tccSetResult(`No se pudo cargar la config: ${r && r.error ? r.error : 'respuesta inválida'}`, 'error');
+      return;
+    }
+    const c = r.config || {};
+    const ac = c.auto_commit           || {};
+    const at = c.auto_transition_state || {};
+    const an = c.auto_post_note        || {};
+
+    document.getElementById('tcc-auto-commit').checked     = !!ac.enabled;
+    document.getElementById('tcc-auto-transition').checked = !!at.enabled;
+    document.getElementById('tcc-target-state').value      = at.target_state || '';
+    document.getElementById('tcc-auto-note').checked       = !!an.enabled;
+    document.getElementById('tcc-note-template').value     = an.note_template || '';
+    document.getElementById('tcc-note-html').checked       = !!an.is_html;
+
+    const proj = r.project ? `Proyecto activo: <strong style="color:var(--text)">${esc(r.project)}</strong>` : 'Sin proyecto activo';
+    const fpath = r.project_file ? `<br><span style="font-family:monospace">${esc(r.project_file)}</span>` : '';
+    document.getElementById('tcc-project-hint').innerHTML = proj + fpath;
+
+    _tccUpdateTransitionUI();
+    _tccUpdateNoteUI();
+  } catch (e) {
+    _tccSetResult(`Error de red: ${e}`, 'error');
+  }
+}
+
+function closeTicketCompletionConfig() {
+  document.getElementById('tcc-modal').style.display = 'none';
+}
+
+function _tccSetResult(msg, kind) {
+  const el = document.getElementById('tcc-result');
+  if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.style.display = 'block';
+  el.textContent   = msg;
+  el.style.color   = kind === 'success' ? 'var(--green)'
+                    : kind === 'error'   ? 'var(--red)'
+                    : 'var(--muted)';
+}
+
+// Muestra/oculta el warning de "Doing" y valida el input
+function _tccUpdateTransitionUI() {
+  const on    = document.getElementById('tcc-auto-transition').checked;
+  const input = document.getElementById('tcc-target-state');
+  const warn  = document.getElementById('tcc-target-warn');
+  input.disabled = !on;
+  input.style.opacity = on ? '1' : '0.5';
+
+  const val = (input.value || '').trim().toLowerCase();
+  warn.style.display = (on && val === 'doing') ? 'block' : 'none';
+
+  // limpiar error mientras el usuario edita
+  document.getElementById('tcc-target-err').style.display = 'none';
+}
+
+function _tccUpdateNoteUI() {
+  const on = document.getElementById('tcc-auto-note').checked;
+  const ta = document.getElementById('tcc-note-template');
+  const ih = document.getElementById('tcc-note-html');
+  ta.disabled = !on;
+  ih.disabled = !on;
+  ta.style.opacity = on ? '1' : '0.5';
+  document.getElementById('tcc-note-err').style.display = 'none';
+}
+
+async function saveTicketCompletionConfig() {
+  const acOn = document.getElementById('tcc-auto-commit').checked;
+  const atOn = document.getElementById('tcc-auto-transition').checked;
+  const anOn = document.getElementById('tcc-auto-note').checked;
+  const target  = document.getElementById('tcc-target-state').value.trim();
+  const tplRaw  = document.getElementById('tcc-note-template').value;
+  const tplTrim = tplRaw.trim();
+  const isHtml  = document.getElementById('tcc-note-html').checked;
+
+  // Validación cliente
+  let hasError = false;
+  if (atOn && !target) {
+    document.getElementById('tcc-target-err').style.display = 'block';
+    hasError = true;
+  }
+  if (anOn && !tplTrim) {
+    document.getElementById('tcc-note-err').style.display = 'block';
+    hasError = true;
+  }
+  if (hasError) {
+    _tccSetResult('Revisá los campos marcados en rojo.', 'error');
+    return;
+  }
+
+  const payload = {
+    auto_commit:           { enabled: acOn },
+    auto_transition_state: { enabled: atOn, target_state: target },
+    auto_post_note:        { enabled: anOn, note_template: tplRaw, is_html: isHtml }
+  };
+
+  _tccSetResult('⏳ Guardando...', 'info');
+  try {
+    const r = await api('POST', '/api/ticket_completion/config', payload);
+    if (r && r.ok) {
+      _tccSetResult(`✅ Config guardada en ${r.saved_to || 'proyecto'}`, 'success');
+      toast('✅ Config de ticket completion guardada', 'success');
+      // Refrescar los checkboxes con lo efectivamente guardado (merge server-side)
+      if (r.config) {
+        const ac = r.config.auto_commit           || {};
+        const at = r.config.auto_transition_state || {};
+        const an = r.config.auto_post_note        || {};
+        document.getElementById('tcc-auto-commit').checked     = !!ac.enabled;
+        document.getElementById('tcc-auto-transition').checked = !!at.enabled;
+        document.getElementById('tcc-target-state').value      = at.target_state || '';
+        document.getElementById('tcc-auto-note').checked       = !!an.enabled;
+        document.getElementById('tcc-note-template').value     = an.note_template || '';
+        document.getElementById('tcc-note-html').checked       = !!an.is_html;
+        _tccUpdateTransitionUI();
+        _tccUpdateNoteUI();
+      }
+    } else {
+      const err = (r && r.error) || 'respuesta inválida';
+      _tccSetResult(`❌ Error: ${err}`, 'error');
+      toast('❌ No se pudo guardar la config', 'error');
+    }
+  } catch (e) {
+    _tccSetResult(`❌ Error de red: ${e}`, 'error');
+    toast('❌ Error de red al guardar', 'error');
+  }
+}
+
+// Listener live para el warning de "Doing" mientras el usuario tipea.
+// Se engancha una vez en el primer openTicketCompletionConfig.
+(function _tccHookLiveValidation(){
+  const input = document.getElementById('tcc-target-state');
+  if (input) input.addEventListener('input', _tccUpdateTransitionUI);
+  const note = document.getElementById('tcc-note-template');
+  if (note) note.addEventListener('input', () => {
+    document.getElementById('tcc-note-err').style.display = 'none';
+  });
+})();
+
 // ── Gen Prompts ────────────────────────────────────────────────────────────
 async function genPrompts(tid) {
   const modal = document.getElementById('gen-prompts-modal');
@@ -6615,6 +7004,7 @@ refreshPipelineHealth();
         '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
           '<b>Modelo de regresión (Fase 2):</b> ' + modelBadge +
           '<button class="sl-btn" onclick="SL.retrainModel()">🔄 Re-entrenar ahora</button>' +
+          '<button class="sl-btn sl-primary" onclick="SL.rescoreAll()" title="Re-calcula el scoring de todos los tickets que aún usan heurística, adoptando el modelo ML ya entrenado">📈 Migrar a ML</button>' +
         '</div>' +
         '<hr style="border-color:#1e293b">' +
         '<button class="sl-btn sl-primary" onclick="SL.saveConfigDelta()">Guardar</button> ' +
@@ -6679,12 +7069,34 @@ refreshPipelineHealth();
           msg.textContent = "✓ Modelo entrenado (n=" + (data.stats && data.stats.n_samples) +
                             ", rmse=" + (data.stats && data.stats.rmse) + ")";
         }
-        // Recargar el pane para refrescar el badge
         _loadConfig();
       } else if (r.ok && data.trained === false) {
         if (msg) { msg.style.color = "#fbbf24"; msg.textContent = "Sin samples suficientes — " + (data.reason || ""); }
       } else {
         if (msg) { msg.style.color = "#fca5a5"; msg.textContent = "Error: " + (data.error || r.status); }
+      }
+    } catch (e) {
+      if (msg) { msg.style.color = "#fca5a5"; msg.textContent = "Error: " + e; }
+    }
+  };
+
+  SL.rescoreAll = async function () {
+    const msg = document.getElementById("sl-cfg-msg");
+    try {
+      if (msg) { msg.style.color = "#94a3b8"; msg.textContent = "Migrando tickets a ML…"; }
+      const r = await fetch("/api/estimation_model/rescore_all", { method: "POST" });
+      const data = await r.json();
+      if (r.ok && data.ok) {
+        if (msg) {
+          msg.style.color = "#6ee7b7";
+          msg.textContent = "✓ " + data.rescored + " tickets migrados a 📈 ML" +
+                            (data.failed > 0 ? " · " + data.failed + " fallidos" : "");
+        }
+        // Invalida caché de scoring para que los cards se refresquen
+        if (typeof SL._scoringCache !== 'undefined') SL._scoringCache = {};
+        if (typeof refresh === 'function') refresh();
+      } else {
+        if (msg) { msg.style.color = "#fca5a5"; msg.textContent = "Error: " + (data.error || data.reason || r.status); }
       }
     } catch (e) {
       if (msg) { msg.style.color = "#fca5a5"; msg.textContent = "Error: " + e; }
@@ -7060,6 +7472,12 @@ refreshPipelineHealth();
     parts.push('<span class="tm-badge tm-notes' + (notesCount > 0 ? " tm-active" : "") +
                '" title="' + (meta.last_note_at ? "Última nota: " + _esc(meta.last_note_at) : "Sin notas") +
                '">💬 ' + notesCount + " nota" + (notesCount === 1 ? "" : "s") + "</span>");
+
+    // ADO comments count — viene del indexer de metadata
+    const adoNotes = meta.ado_comments_count || 0;
+    if (adoNotes > 0) {
+      parts.push('<span class="tm-badge tm-active" style="color:#60a5fa;border-color:#1e3a5f" title="' + adoNotes + ' nota' + (adoNotes === 1 ? '' : 's') + ' en ADO">📋 ' + adoNotes + " ADO</span>");
+    }
 
     // Commits
     const commitsCount = meta.commits_count || 0;

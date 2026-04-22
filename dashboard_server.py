@@ -487,7 +487,7 @@ def _scan_tickets() -> list:
                 "last_qa_verdict":    pip_entry.get("last_qa_verdict"),
                 "rework_count":       pip_entry.get("rework_count", 0),
                 "qa_findings":        pip_entry.get("qa_findings", []),
-                "tester_verdict":     _read_tester_verdict(ticket_folder),
+                "tester_verdict":     None if pip_entry.get("qa_verdict_override") else _read_tester_verdict(ticket_folder),
                 "last_unstick":       pip_entry.get("last_unstick"),
                 "has_sql_transforms": _has_sql_transforms(ticket_folder),
                 "last_invoke":        pip_entry.get("last_invoke"),
@@ -614,6 +614,14 @@ def api_set_state():
         # Limpiar error si se está reintentando
         if new_state in ("pm_completado", "dev_completado"):
             entry.pop("error", None)
+        # Si vuelve atrás desde completado (re-proceso), limpiar el override
+        if new_state != "completado":
+            entry.pop("qa_verdict_override", None)
+        # Cuando se fuerza completado manualmente desde un estado rechazado,
+        # guardar override para suprimir el veredicto QA en el dashboard.
+        if new_state == "completado":
+            entry["qa_verdict_override"] = "APROBADO"
+            entry["last_qa_verdict"] = None
         # SEQ-06: set_state manual NUNCA activa auto_advance
         # (auto_advance=True solo se activa vía transiciones automáticas del watcher)
         entry["auto_advance"] = False
@@ -3167,12 +3175,82 @@ def api_notifications_mark_read():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── Cache ADO details (60s) ───────────────────────────────────────────────────
+_ado_detail_cache: dict = {}    # ticket_id → {"data": dict, "ts": float}
+_ADO_DETAIL_TTL = 60.0
+
+
+def _fetch_ado_enrichment(ticket_id: str, rt: dict) -> dict:
+    """Retorna un dict con info del ticket en ADO para enriquecer el modal de diff.
+
+    Campos: ado_state, ado_state_normalized, ado_url, ado_comments_count,
+    ado_comments_preview. Si ADO falla/no está configurado, retorna {}.
+    Cachea 60s por ticket_id para no martillar la API en cada apertura del modal.
+    """
+    now = _time.monotonic()
+    cached = _ado_detail_cache.get(ticket_id)
+    if cached and (now - cached["ts"]) < _ADO_DETAIL_TTL:
+        return cached["data"]
+
+    result: dict = {}
+    try:
+        from issue_provider import get_provider, load_tracker_config
+        tracker_cfg = load_tracker_config(rt.get("name"))
+        if not tracker_cfg:
+            return {}
+        provider = get_provider(rt.get("name"), override_config=tracker_cfg)
+        detail   = provider.fetch_ticket_detail(ticket_id)
+    except Exception as e:
+        print(f"[ADO] fetch_ticket_detail({ticket_id}) falló: {e}",
+              file=sys.stderr, flush=True)
+        return {}
+
+    try:
+        comments = list(detail.comments or [])
+        # Sanitizar HTML básico: eliminar tags para el preview, mantener texto.
+        def _strip(body: str) -> str:
+            if not body:
+                return ""
+            txt = re.sub(r"<[^>]+>", " ", body)
+            txt = re.sub(r"\s+", " ", txt).strip()
+            return txt[:240]
+        preview = []
+        for c in comments[:3]:
+            preview.append({
+                "id":         c.id,
+                "author":     c.author,
+                "created_at": c.created_at,
+                "body":       _strip(c.body),
+            })
+        result = {
+            "ado_state":            detail.ticket.state_raw or "",
+            "ado_state_normalized": detail.ticket.state_normalized or "",
+            "ado_url":              detail.ticket.url or "",
+            "ado_comments_count":   len(comments),
+            "ado_comments_preview": preview,
+        }
+    except Exception as e:
+        print(f"[ADO] enrichment({ticket_id}) parse falló: {e}",
+              file=sys.stderr, flush=True)
+        return {}
+
+    _ado_detail_cache[ticket_id] = {"data": result, "ts": now}
+    return result
+
+
 @app.route("/api/diff/<ticket_id>/<stage>")
 def api_diff(ticket_id: str, stage: str):
     """
-    Retorna el diff Git guardado al completar una etapa.
-    Si no existe el snapshot guardado, intenta generar el diff on-the-fly desde Git.
-    stage: pm | dev | tester  (también acepta sub-stages: pm_inv, dev_impl, qa_arb, etc.)
+    Retorna el diff Git de un ticket.
+
+    Orden de resolución:
+      1. Snapshot guardado al completar una etapa (``snapshots/<stage>_diff.patch``)
+      2. ``GIT_CHANGES.md`` escrito por el agente DEV
+      3. ``ticket_changes_resolver`` — commits por ``AB#<id>``, luego rama
+         feature del ticket, luego working-tree (marcado).
+
+    Además, enriquece la respuesta con metadata de ADO (estado, notas) cuando
+    está configurado.
     """
     # Normalizar sub-stages al stage padre para buscar el snapshot correcto
     _STAGE_NORMALIZE = {
@@ -3189,6 +3267,9 @@ def api_diff(ticket_id: str, stage: str):
     if not folder:
         return jsonify({"ok": False, "error": "ticket no encontrado"}), 404
 
+    # Enrichment ADO (no bloqueante ante fallo — dict vacío si no está disponible).
+    ado_info = _fetch_ado_enrichment(ticket_id, rt)
+
     snap_dir   = os.path.join(folder, "snapshots")
     diff_file  = os.path.join(snap_dir, f"{stage}_diff.patch")
     files_file = os.path.join(snap_dir, f"{stage}_files.txt")
@@ -3197,8 +3278,10 @@ def api_diff(ticket_id: str, stage: str):
         try:
             diff  = open(diff_file,  encoding="utf-8").read()
             files = open(files_file, encoding="utf-8").read() if os.path.exists(files_file) else ""
-            return jsonify({"ok": True, "stage": stage, "diff": diff, "files": files,
-                            "source": "snapshot"})
+            payload = {"ok": True, "stage": stage, "diff": diff, "files": files,
+                       "source": "snapshot"}
+            payload.update(ado_info)
+            return jsonify(payload)
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -3220,28 +3303,47 @@ def api_diff(ticket_id: str, stage: str):
                     diff_section += line + "\n"
             files_section = "\n".join(files_lines) if files_lines else git_md[:800]
             if files_section or diff_section:
-                return jsonify({"ok": True, "stage": stage,
-                                "diff":  diff_section or git_md,
-                                "files": files_section,
-                                "source": "git_changes_md",
-                                "warning": "Leyendo GIT_CHANGES.md generado por el agente DEV"})
+                payload = {"ok": True, "stage": stage,
+                           "diff":  diff_section or git_md,
+                           "files": files_section,
+                           "source": "git_changes_md",
+                           "warning": "Leyendo GIT_CHANGES.md generado por el agente DEV"}
+                payload.update(ado_info)
+                return jsonify(payload)
         except Exception:
             pass
 
-    # Fallback 3: generar diff on-the-fly desde Git
+    # Fallback 3: resolver por ticket (commits AB# → rama → working-tree marcado)
     try:
+        from ticket_changes_resolver import resolve_ticket_changes
         workspace = rt.get("workspace_root", "")
-        diff  = _git_diff(workspace)
-        files_lines = _git_changed_files(workspace)
-        files = "\n".join(files_lines)
+        resolved  = resolve_ticket_changes(ticket_id, workspace)
+        files     = resolved.to_dict()["files"]
+        diff      = resolved.diff
+
         if not diff.strip() and not files:
-            return jsonify({"ok": False, "can_capture": True,
-                            "error": "No hay snapshot guardado y Git no reporta cambios pendientes"}), 404
-        return jsonify({"ok": True, "stage": stage, "diff": diff, "files": files,
-                        "source": "live", "warning": "Snapshot no encontrado — mostrando diff Git actual (workspace completo)"})
+            payload = {"ok": False, "can_capture": True,
+                       "error": "No hay snapshot guardado ni cambios Git atribuibles al ticket"}
+            payload.update(ado_info)
+            return jsonify(payload), 404
+
+        payload = {
+            "ok":      True,
+            "stage":   stage,
+            "diff":    diff,
+            "files":   files,
+            "source":  resolved.source,
+            "commits": resolved.commits,
+            "branch":  resolved.branch,
+            "warning": resolved.warning,
+        }
+        payload.update(ado_info)
+        return jsonify(payload)
     except Exception as e:
-        return jsonify({"ok": False, "can_capture": True,
-                        "error": f"No hay snapshot para {stage} y falló diff on-the-fly: {e}"}), 404
+        payload = {"ok": False, "can_capture": True,
+                   "error": f"No hay snapshot para {stage} y el resolver falló: {e}"}
+        payload.update(ado_info)
+        return jsonify(payload), 404
 
 
 @app.route("/api/capture_snapshot/<ticket_id>/<stage>", methods=["POST"])
@@ -4728,10 +4830,19 @@ def api_git_status():
 @app.route("/api/git_commit/<ticket_id>", methods=["POST"])
 def api_git_commit(ticket_id: str):
     """
-    Ejecuta git commit con el mensaje dado sobre los archivos seleccionados.
+    Finaliza un ticket: ejecuta el flujo ``ticket_completion_flow``, que según
+    la config (``ticket_completion`` en config.json global o del proyecto):
+      1. Hace git commit con los archivos seleccionados (trailer ``AB#<id>``
+         insertado por ``GitProvider.commit``).
+      2. Transiciona el estado ADO al ``target_state`` configurado.
+      3. Publica una nota/comentario en ADO usando el template configurado.
+
+    Cada paso tiene su propio flag ``enabled`` — todos son independientes.
+    Los pasos ADO corren en thread daemon (no bloquean el response del UI).
+
     Body: {
         "message": "#12345 Fix en la validación de compromiso de pago",
-        "files":   ["path/a.cs", "path/b.sql"]   # opcional — si se omite, falla
+        "files":   ["path/a.cs", "path/b.sql"]
     }
     """
     data    = request.json or {}
@@ -4747,32 +4858,101 @@ def api_git_commit(ticket_id: str):
 
     rt = _get_runtime()
     try:
-        from scm_provider.factory import get_scm
-        scm = get_scm(project_name=rt["name"], workspace=rt["workspace_root"])
-        commit_result = scm.commit(
-            rt["workspace_root"], message, files=files, work_item_id=ticket_id,
+        from ticket_completion_flow import run_completion_flow
+        flow_result = run_completion_flow(
+            ticket_id=ticket_id,
+            workspace=rt["workspace_root"],
+            message=message,
+            files=files,
+            project_name=rt.get("name"),
+            run_ado_async=True,
         )
-        result = {
-            "ok":       commit_result.ok,
-            "revision": commit_result.revision,
-            "message":  commit_result.message,
-            "files":    commit_result.files,
-            "error":    commit_result.error,
-        }
 
-        # Si el commit fue ok, notificar por Teams
-        if commit_result.ok:
+        # Teams notifier — sólo si el commit efectivo se hizo.
+        if flow_result.ok and flow_result.revision:
             def _notify():
                 try:
                     folder = _find_ticket_folder(ticket_id)
                     titulo = _get_ticket_title(folder, ticket_id) if folder else f"Ticket #{ticket_id}"
                     from teams_notifier import notify_commit
-                    notify_commit(ticket_id, titulo, commit_result.revision or "?", message)
+                    notify_commit(ticket_id, titulo, flow_result.revision or "?", message)
                 except Exception:
                     pass
             threading.Thread(target=_notify, daemon=True).start()
 
-        return jsonify(result)
+        # Respuesta en el mismo shape que antes + metadata de los pasos.
+        payload = {
+            "ok":           flow_result.ok,
+            "revision":     flow_result.revision,
+            "message":      message,
+            "files":        flow_result.files,
+            "error":        flow_result.error,
+            "completion":   flow_result.to_dict(),
+        }
+        return jsonify(payload)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ticket_completion/config", methods=["GET", "POST"])
+def api_ticket_completion_config():
+    """
+    GET: Devuelve la config efectiva (``ticket_completion``) y el path donde se
+         persiste (config global o del proyecto).
+    POST: Actualiza la sección ``ticket_completion`` en projects/<active>/
+          config.json (el override por proyecto). Espera un JSON con la
+          estructura completa del bloque ``ticket_completion`` o sub-claves.
+          Body ejemplo:
+            {
+              "auto_transition_state": {"enabled": true, "target_state": "Doing"},
+              "auto_post_note":        {"enabled": true, "note_template": "..."},
+              "auto_commit":           {"enabled": true}
+            }
+    """
+    try:
+        from ticket_completion_config import load_completion_config
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"ticket_completion_config indisponible: {e}"}), 500
+
+    rt = _get_runtime()
+    project_name = rt.get("name") or ""
+    proj_cfg_path = os.path.join(
+        BASE_DIR, "projects", project_name, "config.json"
+    )
+
+    if request.method == "GET":
+        cfg = load_completion_config(project_name)
+        return jsonify({
+            "ok":            True,
+            "config":        cfg.to_dict(),
+            "project":       project_name,
+            "project_file":  proj_cfg_path,
+            "global_file":   os.path.join(BASE_DIR, "config.json"),
+        })
+
+    # POST
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "error": "body debe ser un objeto JSON"}), 400
+    if not os.path.exists(proj_cfg_path):
+        return jsonify({"ok": False,
+                        "error": f"No existe {proj_cfg_path}"}), 404
+    try:
+        with open(proj_cfg_path, encoding="utf-8") as f:
+            proj_cfg = json.load(f)
+        existing = proj_cfg.get("ticket_completion") or {}
+        for key in ("auto_transition_state", "auto_post_note", "auto_commit"):
+            if key in body and isinstance(body[key], dict):
+                merged = dict(existing.get(key) or {})
+                merged.update(body[key])
+                existing[key] = merged
+        proj_cfg["ticket_completion"] = existing
+        with open(proj_cfg_path, "w", encoding="utf-8") as f:
+            json.dump(proj_cfg, f, indent=2, ensure_ascii=False)
+        _invalidate_runtime_cache()
+        cfg = load_completion_config(project_name)
+        return jsonify({"ok": True, "config": cfg.to_dict(),
+                        "saved_to": proj_cfg_path})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -6181,6 +6361,46 @@ def api_estimation_model_retrain():
             "reason":   "insuficientes samples o fallo silencioso — ver logs",
         })
     return jsonify({"ok": True, "trained": True, "stats": stats})
+
+
+@app.route("/api/estimation_model/rescore_all", methods=["POST"])
+def api_estimation_model_rescore_all():
+    """
+    Re-calcula el scoring de todos los tickets cuya entry tiene
+    estimation_method != 'regression' (o está vacío) y un modelo de
+    regresión ya está entrenado. Útil tras el primer entrenamiento para
+    que los tickets históricos adopten el método ML.
+    """
+    try:
+        from estimation_model import load_model
+        from estimation_store import list_entries
+    except Exception as e:
+        return jsonify({"error": f"módulos indisponibles: {e}"}), 503
+
+    model = load_model()
+    if not model:
+        return jsonify({"ok": False, "reason": "modelo no entrenado aún"}), 400
+
+    entries = list_entries() or []
+    to_rescore = [
+        e["ticket_id"] for e in entries
+        if e.get("estimation_method") != "regression"
+    ]
+
+    done, failed = [], []
+    for tid in to_rescore:
+        scoring, err = _scoring_compute_for_ticket(tid)
+        if err:
+            failed.append({"ticket_id": tid, "error": err})
+        else:
+            done.append(tid)
+
+    return jsonify({
+        "ok":      True,
+        "rescored": len(done),
+        "failed":   len(failed),
+        "details":  failed,
+    })
 
 
 @app.route("/api/estimation_model", methods=["GET"])

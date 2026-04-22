@@ -3,7 +3,6 @@
     "production_mode": false,
     "disable_cli_runner": false
   },
-
   "issue_tracker": {
     "__doc__": "Backend de tickets activo. Override por proyecto en projects/<NAME>/config.json.issue_tracker",
     "type": "azure_devops",
@@ -27,8 +26,7 @@
     },
     "wiql": "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.State] NOT IN ('Closed', 'Done', 'Removed', 'Completed') ORDER BY [System.ChangedDate] DESC"
   },
-
-  "assigned_user": "Juan Luca Santol\u00edquido",
+  "assigned_user": "Juan Luca Santolíquido",
   "state_path": "state/seen_tickets.json",
   "output_dir": "tickets",
   "pipeline": {
@@ -44,7 +42,12 @@
     "slack_webhook": "",
     "teams_webhook": "",
     "generic_webhook": "",
-    "notify_on": ["pipeline_complete", "error", "stagnation", "stage_complete"]
+    "notify_on": [
+      "pipeline_complete",
+      "error",
+      "stagnation",
+      "stage_complete"
+    ]
   },
   "concurrency": {
     "__doc__": "Aislamiento de chats para ejecución concurrente. Cada sesión es un VS Code con bridge en un puerto distinto. max_sessions=1 desactiva concurrencia (comportamiento original).",
@@ -58,32 +61,46 @@
     "dry_run": true,
     "dry_run_expires_at": "2026-04-23T12:00:00Z"
   },
-
+  "ticket_completion": {
+    "__doc__": "Flujo de finalización de ticket disparado desde /api/git_commit. Cada paso tiene su propio flag enabled — son independientes. Override por proyecto en projects/<NAME>/config.json.ticket_completion. Placeholders en note_template: {ticket_id} {branch} {files_count} {revision} {commit_msg}.",
+    "auto_commit": {
+      "enabled": true
+    },
+    "auto_transition_state": {
+      "enabled": false,
+      "target_state": "Doing"
+    },
+    "auto_post_note": {
+      "enabled": false,
+      "note_template": "Ticket completado via Stacky.\nArchivos modificados: {files_count}\nRama: {branch}\nCommit: {revision}\nMensaje: {commit_msg}",
+      "is_html": false
+    }
+  },
   "scoring_defaults": {
     "__doc__": "F2 — Scoring de tickets: pesos por factor (suma 100), distribución por etapa, delta por defecto, multiplicadores de la heurística (Fase 1) y thresholds de calibración.",
-    "delta_pct_default": 20.0,
+    "delta_pct_default": 15,
     "base_minutes": 25,
     "weights": {
       "tech_complexity": 25,
-      "uncertainty":     20,
-      "impact":          15,
-      "files_affected":  15,
+      "uncertainty": 20,
+      "impact": 15,
+      "files_affected": 15,
       "functional_risk": 15,
-      "external_dep":    10
+      "external_dep": 10
     },
     "stage_distribution": {
-      "pm":     0.25,
-      "dev":    0.50,
+      "pm": 0.25,
+      "dev": 0.5,
       "tester": 0.25
     },
     "multipliers": {
       "__doc__": "Coeficientes de la estimación heurística Fase 1. Ver ticket_scoring.compute_scoring para la fórmula completa.",
-      "complexity_min":         0.5,
-      "complexity_range":       1.5,
-      "max_uncertainty_boost":  0.5,
-      "functional_risk_boost":  0.3,
-      "external_dep_boost":     0.3,
-      "files_affected_boost":   0.3
+      "complexity_min": 0.5,
+      "complexity_range": 1.5,
+      "max_uncertainty_boost": 0.5,
+      "functional_risk_boost": 0.3,
+      "external_dep_boost": 0.3,
+      "files_affected_boost": 0.3
     },
     "auto_calibrate": false,
     "min_samples_for_calibration": 20

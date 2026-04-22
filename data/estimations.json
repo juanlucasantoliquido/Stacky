@@ -4,34 +4,37 @@
     {
       "ticket_id": "25",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:11.930293+00:00",
+      "created_at": "2026-04-22T01:21:06.938662+00:00",
       "closed_at": "2026-04-20T18:32:42.558138",
-      "score": 51,
+      "score": 61,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
         "impact": 30,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 45,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 7.2
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 6.4
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -44,34 +47,37 @@
     {
       "ticket_id": "26",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:11.942852+00:00",
+      "created_at": "2026-04-22T01:21:06.927246+00:00",
       "closed_at": "2026-04-20T23:02:27.507465",
-      "score": 51,
+      "score": 61,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
         "impact": 30,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 45,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 36.3
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 6.2
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -84,12 +90,12 @@
     {
       "ticket_id": "27",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:11.950367+00:00",
+      "created_at": "2026-04-22T01:21:06.916374+00:00",
       "closed_at": "2026-04-20T19:19:44.117861",
-      "score": 51,
+      "score": 58,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
         "impact": 30,
         "files_affected": 20,
@@ -98,20 +104,21 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 6.3
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 3.3
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -124,12 +131,12 @@
     {
       "ticket_id": "28",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:11.959394+00:00",
+      "created_at": "2026-04-22T01:21:06.905333+00:00",
       "closed_at": "2026-04-21T00:23:50.643223",
-      "score": 58,
-      "complexity": "medio",
+      "score": 66,
+      "complexity": "complejo",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
         "impact": 80,
         "files_affected": 20,
@@ -138,20 +145,21 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": 9.0
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 10,
           "actual": 4.9
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
@@ -164,12 +172,12 @@
     {
       "ticket_id": "29",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:11.967557+00:00",
+      "created_at": "2026-04-22T01:21:06.893541+00:00",
       "closed_at": null,
-      "score": 55,
+      "score": 47,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 80,
         "files_affected": 20,
@@ -178,20 +186,21 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 22,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 6,
           "actual": null
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 11,
           "actual": null
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 6,
           "actual": null
         }
       },
@@ -204,34 +213,35 @@
     {
       "ticket_id": "30",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.013747+00:00",
+      "created_at": "2026-04-22T01:21:06.882738+00:00",
       "closed_at": "2026-04-21T00:41:45.054549",
-      "score": 51,
-      "complexity": "medio",
+      "score": 70,
+      "complexity": "complejo",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
-        "impact": 30,
+        "impact": 80,
         "files_affected": 20,
-        "functional_risk": 45,
+        "functional_risk": 75,
         "external_dep": 70
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 6.2
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 5.9
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -244,12 +254,12 @@
     {
       "ticket_id": "32",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.051696+00:00",
-      "closed_at": null,
-      "score": 51,
+      "created_at": "2026-04-22T01:21:06.870282+00:00",
+      "closed_at": "2026-04-21T18:48:39.744771",
+      "score": 44,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
         "files_affected": 20,
@@ -258,60 +268,64 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 4,
+          "actual": 5.9
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 9,
+          "actual": 3.1
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 9.0,
+      "deviation_pct": -77.5,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "31",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.057703+00:00",
+      "created_at": "2026-04-22T01:21:06.861068+00:00",
       "closed_at": null,
-      "score": 51,
+      "score": 53,
       "complexity": "medio",
       "factors": {
         "tech_complexity": 55,
         "uncertainty": 80,
         "impact": 30,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 45,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": null
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -324,52 +338,55 @@
     {
       "ticket_id": "33",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.063254+00:00",
-      "closed_at": null,
-      "score": 51,
+      "created_at": "2026-04-22T01:21:06.850662+00:00",
+      "closed_at": "2026-04-21T18:34:30.711419",
+      "score": 46,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 45,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 4,
+          "actual": 8.7
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 9,
+          "actual": 8.4
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 17.1,
+      "deviation_pct": -57.25,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": true
     },
     {
       "ticket_id": "34",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.070255+00:00",
-      "closed_at": null,
-      "score": 47,
+      "created_at": "2026-04-22T01:21:06.841088+00:00",
+      "closed_at": "2026-04-21T18:12:12.176462",
+      "score": 40,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
         "files_affected": 20,
@@ -378,38 +395,39 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 5,
+          "actual": 9.5
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 10,
+          "actual": 4.1
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 13.6,
+      "deviation_pct": -66.0,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "35",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.076367+00:00",
-      "closed_at": null,
-      "score": 47,
+      "created_at": "2026-04-22T01:21:06.830510+00:00",
+      "closed_at": "2026-04-21T17:51:46.217529",
+      "score": 40,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
         "files_affected": 20,
@@ -418,78 +436,82 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 5,
+          "actual": 8.5
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 10,
+          "actual": 6.7
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 15.2,
+      "deviation_pct": -62.0,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "36",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.111495+00:00",
-      "closed_at": null,
-      "score": 47,
+      "created_at": "2026-04-22T01:21:06.822328+00:00",
+      "closed_at": "2026-04-21T21:41:58.946059",
+      "score": 42,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 20,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 5,
+          "actual": 8.5
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 10,
+          "actual": 7.4
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 15.9,
+      "deviation_pct": -60.25,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": true
     },
     {
       "ticket_id": "37",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.118497+00:00",
+      "created_at": "2026-04-22T01:21:06.811910+00:00",
       "closed_at": null,
-      "score": 47,
+      "score": 40,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
         "files_affected": 20,
@@ -498,20 +520,21 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 10,
           "actual": null
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
@@ -524,34 +547,37 @@
     {
       "ticket_id": "38",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.125011+00:00",
+      "created_at": "2026-04-22T01:21:06.801111+00:00",
       "closed_at": null,
-      "score": 47,
+      "score": 42,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 20,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 10,
           "actual": null
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
@@ -564,12 +590,12 @@
     {
       "ticket_id": "39",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.133531+00:00",
+      "created_at": "2026-04-22T01:21:06.787856+00:00",
       "closed_at": "2026-04-20T18:14:09.396595",
-      "score": 58,
-      "complexity": "medio",
+      "score": 66,
+      "complexity": "complejo",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
         "impact": 80,
         "files_affected": 20,
@@ -578,20 +604,21 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": 11.4
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 10,
           "actual": 3.9
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
@@ -604,8 +631,8 @@
     {
       "ticket_id": "40",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.141787+00:00",
-      "closed_at": null,
+      "created_at": "2026-04-22T01:21:06.777314+00:00",
+      "closed_at": "2026-04-21T22:39:18.874653",
       "score": 58,
       "complexity": "medio",
       "factors": {
@@ -618,60 +645,65 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 17,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 4,
+          "actual": 42.6
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 8,
+          "actual": 0.2
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 42.8,
+      "deviation_pct": 151.76,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "41",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.179593+00:00",
+      "created_at": "2026-04-22T01:21:06.767075+00:00",
       "closed_at": "2026-04-21T01:02:59.389690",
-      "score": 50,
-      "complexity": "medio",
+      "score": 76,
+      "complexity": "complejo",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
-        "impact": 50,
-        "files_affected": 20,
-        "functional_risk": 20,
+        "impact": 80,
+        "files_affected": 55,
+        "functional_risk": 75,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla",
+        "batch"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 11.0
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 4.9
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -684,34 +716,37 @@
     {
       "ticket_id": "42",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.190472+00:00",
+      "created_at": "2026-04-22T01:21:06.757471+00:00",
       "closed_at": "2026-04-21T00:02:56.555072",
-      "score": 55,
+      "score": 64,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
         "impact": 80,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 20,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 22,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 6,
           "actual": 11.4
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 11,
           "actual": 7.2
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 6,
           "actual": null
         }
       },
@@ -724,74 +759,80 @@
     {
       "ticket_id": "43",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.196416+00:00",
-      "closed_at": null,
-      "score": 50,
+      "created_at": "2026-04-22T01:21:06.746652+00:00",
+      "closed_at": "2026-04-21T17:30:20.062571",
+      "score": 52,
       "complexity": "medio",
       "factors": {
         "tech_complexity": 55,
         "uncertainty": 80,
         "impact": 50,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 20,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 21,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 5,
+          "actual": 26.0
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 10,
+          "actual": 9.7
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 35.7,
+      "deviation_pct": -10.75,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "44",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.203436+00:00",
+      "created_at": "2026-04-22T01:21:06.739065+00:00",
       "closed_at": "2026-04-21T12:23:47.432857",
-      "score": 50,
-      "complexity": "medio",
+      "score": 68,
+      "complexity": "complejo",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
-        "impact": 50,
-        "files_affected": 20,
-        "functional_risk": 20,
+        "impact": 80,
+        "files_affected": 35,
+        "functional_risk": 45,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": 11.7
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 10,
           "actual": 8.9
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
@@ -804,34 +845,37 @@
     {
       "ticket_id": "45",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.226240+00:00",
+      "created_at": "2026-04-22T01:21:06.728640+00:00",
       "closed_at": "2026-04-20T20:15:56.702487",
-      "score": 50,
+      "score": 65,
       "complexity": "medio",
       "factors": {
         "tech_complexity": 55,
         "uncertainty": 80,
-        "impact": 50,
-        "files_affected": 20,
-        "functional_risk": 20,
+        "impact": 80,
+        "files_affected": 35,
+        "functional_risk": 75,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 11.7
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 3.5
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -844,74 +888,80 @@
     {
       "ticket_id": "47",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.272004+00:00",
-      "closed_at": null,
-      "score": 47,
+      "created_at": "2026-04-22T01:21:06.720422+00:00",
+      "closed_at": "2026-04-21T19:25:51.553519",
+      "score": 42,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 20,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 5,
+          "actual": 6.4
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 10,
+          "actual": 4.2
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 10.6,
+      "deviation_pct": -73.5,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": true
     },
     {
       "ticket_id": "48",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.279003+00:00",
+      "created_at": "2026-04-22T01:21:06.711145+00:00",
       "closed_at": "2026-04-21T13:07:13.880596",
-      "score": 47,
-      "complexity": "medio",
+      "score": 73,
+      "complexity": "complejo",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
-        "impact": 30,
-        "files_affected": 20,
-        "functional_risk": 20,
+        "impact": 80,
+        "files_affected": 35,
+        "functional_risk": 75,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 6.0
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 4.5
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -924,34 +974,35 @@
     {
       "ticket_id": "49",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.287514+00:00",
+      "created_at": "2026-04-22T01:21:06.700246+00:00",
       "closed_at": "2026-04-21T12:48:11.670951",
-      "score": 47,
-      "complexity": "medio",
+      "score": 70,
+      "complexity": "complejo",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
-        "impact": 30,
+        "impact": 80,
         "files_affected": 20,
-        "functional_risk": 20,
+        "functional_risk": 75,
         "external_dep": 70
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 10.7
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 5.7
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -964,34 +1015,37 @@
     {
       "ticket_id": "46",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.293067+00:00",
+      "created_at": "2026-04-22T01:21:06.691130+00:00",
       "closed_at": "2026-04-20T20:42:00.147430",
-      "score": 54,
-      "complexity": "medio",
+      "score": 73,
+      "complexity": "complejo",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
-        "impact": 50,
-        "files_affected": 20,
-        "functional_risk": 45,
+        "impact": 80,
+        "files_affected": 35,
+        "functional_risk": 75,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 10.5
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 5.2
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -1004,12 +1058,12 @@
     {
       "ticket_id": "50",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.331746+00:00",
-      "closed_at": null,
-      "score": 47,
+      "created_at": "2026-04-22T01:21:06.679575+00:00",
+      "closed_at": "2026-04-21T16:31:05.512882",
+      "score": 40,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
         "files_affected": 20,
@@ -1018,33 +1072,34 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 5,
+          "actual": 6.0
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 10,
+          "actual": 5.5
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 11.5,
+      "deviation_pct": -71.25,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "51",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.356811+00:00",
+      "created_at": "2026-04-22T01:21:06.671847+00:00",
       "closed_at": null,
       "score": 47,
       "complexity": "medio",
@@ -1058,20 +1113,21 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 10,
           "actual": null
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
@@ -1084,12 +1140,12 @@
     {
       "ticket_id": "52",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.370407+00:00",
-      "closed_at": null,
-      "score": 47,
+      "created_at": "2026-04-22T01:21:06.663380+00:00",
+      "closed_at": "2026-04-21T15:34:10.714749",
+      "score": 40,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
         "files_affected": 20,
@@ -1098,60 +1154,64 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 5,
+          "actual": 5.2
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 10,
+          "actual": 6.7
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 11.9,
+      "deviation_pct": -70.25,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "53",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.380660+00:00",
+      "created_at": "2026-04-22T01:21:06.653708+00:00",
       "closed_at": null,
-      "score": 47,
+      "score": 42,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
-        "files_affected": 20,
+        "files_affected": 35,
         "functional_risk": 20,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 10,
           "actual": null
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
@@ -1164,12 +1224,12 @@
     {
       "ticket_id": "54",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.395251+00:00",
-      "closed_at": null,
-      "score": 47,
+      "created_at": "2026-04-22T01:21:06.643651+00:00",
+      "closed_at": "2026-04-21T15:16:44.821204",
+      "score": 40,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 25,
         "uncertainty": 80,
         "impact": 30,
         "files_affected": 20,
@@ -1178,60 +1238,64 @@
       },
       "modules_detected": [],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 20,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
-          "actual": null
+          "estimated": 5,
+          "actual": 19.3
         },
         "dev": {
-          "estimated": 20,
-          "actual": null
+          "estimated": 10,
+          "actual": 7.6
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 26.9,
+      "deviation_pct": -32.75,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "55",
       "project": "RSPACIFICO",
-      "created_at": "2026-04-21T04:05:12.442688+00:00",
+      "created_at": "2026-04-22T01:21:06.630771+00:00",
       "closed_at": "2026-04-21T13:40:37.925076",
-      "score": 47,
+      "score": 61,
       "complexity": "medio",
       "factors": {
-        "tech_complexity": 55,
+        "tech_complexity": 85,
         "uncertainty": 80,
         "impact": 30,
-        "files_affected": 20,
-        "functional_risk": 20,
+        "files_affected": 35,
+        "functional_risk": 45,
         "external_dep": 70
       },
-      "modules_detected": [],
+      "modules_detected": [
+        "tabla"
+      ],
       "similar_tickets_count": 0,
-      "estimated_minutes": 40,
+      "estimated_minutes": 18,
       "delta_pct_applied": 15.0,
       "delta_source": "global",
+      "estimation_method": "regression",
       "per_stage": {
         "pm": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": 18.5
         },
         "dev": {
-          "estimated": 20,
+          "estimated": 9,
           "actual": 7.2
         },
         "tester": {
-          "estimated": 10,
+          "estimated": 4,
           "actual": null
         }
       },
@@ -1243,8 +1307,8 @@
     }
   ],
   "calibration": {
-    "last_computed_at": null,
-    "global_suggested_delta_pct": 0.0,
+    "last_computed_at": "2026-04-22T00:50:50.680361+00:00",
+    "global_suggested_delta_pct": -56.99,
     "by_project": {}
   }
 }

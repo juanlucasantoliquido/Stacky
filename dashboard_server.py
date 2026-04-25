@@ -3036,6 +3036,11 @@ def index():
     return send_from_directory(BASE_DIR, "dashboard.html")
 
 
+@app.route("/logo-stacky.png")
+def logo_stacky():
+    return send_from_directory(BASE_DIR, "Logo Stacky.png")
+
+
 # ── Git diff utilities ────────────────────────────────────────────────────────
 
 def _git_changed_files(workspace_root: str) -> list:

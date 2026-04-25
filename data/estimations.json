@@ -507,7 +507,7 @@
       "ticket_id": "37",
       "project": "RSPACIFICO",
       "created_at": "2026-04-22T01:21:06.811910+00:00",
-      "closed_at": null,
+      "closed_at": "2026-04-21T23:10:50.115718",
       "score": 40,
       "complexity": "medio",
       "factors": {
@@ -527,22 +527,22 @@
       "per_stage": {
         "pm": {
           "estimated": 5,
-          "actual": null
+          "actual": 10.9
         },
         "dev": {
           "estimated": 10,
-          "actual": null
+          "actual": 8.7
         },
         "tester": {
           "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 19.6,
+      "deviation_pct": -2.0,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "38",
@@ -1182,7 +1182,7 @@
       "ticket_id": "53",
       "project": "RSPACIFICO",
       "created_at": "2026-04-22T01:21:06.653708+00:00",
-      "closed_at": null,
+      "closed_at": "2026-04-21T23:37:53.975829",
       "score": 42,
       "complexity": "medio",
       "factors": {
@@ -1204,22 +1204,22 @@
       "per_stage": {
         "pm": {
           "estimated": 5,
-          "actual": null
+          "actual": 10.4
         },
         "dev": {
           "estimated": 10,
-          "actual": null
+          "actual": 6.9
         },
         "tester": {
           "estimated": 5,
           "actual": null
         }
       },
-      "actual_minutes": null,
-      "deviation_pct": null,
+      "actual_minutes": 17.3,
+      "deviation_pct": -13.5,
       "rework_cycles": 0,
       "corrections_sent": 0,
-      "first_attempt_approved": null
+      "first_attempt_approved": false
     },
     {
       "ticket_id": "54",

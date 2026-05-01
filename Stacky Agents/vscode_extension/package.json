@@ -1,0 +1,83 @@
+{
+  "name": "stacky-agents",
+  "displayName": "Stacky Agents",
+  "description": "Run Stacky Agents directly from VS Code",
+  "version": "0.3.2",
+  "publisher": "ubimia",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other", "AI"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "stackyAgents.runAgent",
+        "title": "Stacky: Run agent on current ticket",
+        "category": "Stacky Agents"
+      },
+      {
+        "command": "stackyAgents.openWorkbench",
+        "title": "Stacky: Open Workbench",
+        "category": "Stacky Agents"
+      },
+      {
+        "command": "stackyAgents.includeFile",
+        "title": "Stacky: Include this file as context",
+        "category": "Stacky Agents"
+      },
+      {
+        "command": "stackyAgents.includeSelection",
+        "title": "Stacky: Include selection as context",
+        "category": "Stacky Agents"
+      },
+      {
+        "command": "stackyAgents.setActiveTicket",
+        "title": "Stacky: Set active ticket",
+        "category": "Stacky Agents"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "stackyAgents.includeFile",
+          "when": "editorTextFocus",
+          "group": "stacky"
+        },
+        {
+          "command": "stackyAgents.includeSelection",
+          "when": "editorHasSelection",
+          "group": "stacky"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Stacky Agents",
+      "properties": {
+        "stackyAgents.apiBase": {
+          "type": "string",
+          "default": "http://localhost:5050",
+          "description": "Base URL of the Stacky Agents backend"
+        },
+        "stackyAgents.userEmail": {
+          "type": "string",
+          "default": "dev@local",
+          "description": "Email for X-User-Email header"
+        },
+        "stackyAgents.bridgePort": {
+          "type": "number",
+          "default": 5052,
+          "description": "Puerto del bridge HTTP local (0 = desactivado). Permite que el backend Python inyecte prompts directamente en Copilot Chat."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.6.2"
+  }
+}

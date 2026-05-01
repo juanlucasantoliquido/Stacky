@@ -1,0 +1,42 @@
+.box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 11px;
+}
+
+.label {
+  color: var(--text-muted);
+}
+
+.btn {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+}
+
+.btn:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.prob {
+  color: var(--text-muted);
+  margin-left: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.btn:hover .prob {
+  color: rgba(255, 255, 255, 0.85);
+}

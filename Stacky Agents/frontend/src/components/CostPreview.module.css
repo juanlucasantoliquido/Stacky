@@ -1,0 +1,31 @@
+.box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.cached {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.tokens {
+  color: var(--text-primary);
+}
+.cost {
+  color: var(--accent);
+  font-weight: 600;
+}
+.latency {
+  color: var(--text-muted);
+}
+.dot {
+  color: var(--border);
+}

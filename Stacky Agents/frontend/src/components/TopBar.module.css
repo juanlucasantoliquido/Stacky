@@ -1,0 +1,44 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 20px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: -0.1px;
+}
+
+.logo {
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.project {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.project strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}

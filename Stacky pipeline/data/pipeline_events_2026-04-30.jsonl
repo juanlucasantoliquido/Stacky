@@ -1,0 +1,4 @@
+{"ts":"2026-04-30T13:33:15.479388Z","execution_id":"40a55033-2032-40d1-9754-86f42bd4da30","kind":"notification","action":"auto_enter_dry_run_expired","message":"dry_run_expires_at alcanzado — definir transición a modo real","correlation":{}}
+{"ts":"2026-04-30T13:33:34.468203Z","execution_id":"6fe77fe6-6338-4624-ba3c-5204e500b357","kind":"notification","action":"auto_enter_dry_run_expired","message":"dry_run_expires_at alcanzado — definir transición a modo real","correlation":{}}
+{"ts":"2026-04-30T14:03:37.261044Z","execution_id":"dffca412-8b05-4438-8d20-1333f5dbb9e3","kind":"notification","action":"auto_enter_dry_run_expired","message":"dry_run_expires_at alcanzado — definir transición a modo real","correlation":{}}
+{"ts":"2026-04-30T14:34:00.430395Z","execution_id":"d7132ac4-d90b-45fb-b72a-225d4f0860fe","kind":"notification","action":"auto_enter_dry_run_expired","message":"dry_run_expires_at alcanzado — definir transición a modo real","correlation":{}}

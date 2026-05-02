@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ui_map.schema.json",
+  "title": "UIMap",
+  "description": "Output de ui_map_builder.py — mapa de elementos accesibles de una pantalla del Agenda Web",
+  "type": "object",
+  "required": ["ok", "screen", "hash", "captured_at", "url", "elements", "warnings", "meta"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "screen": {
+      "type": "string",
+      "description": "Nombre de la pantalla, ej: FrmAgenda.aspx",
+      "minLength": 1
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]+$",
+      "description": "SHA-256 del DOM capturado; permite detectar cambios"
+    },
+    "captured_at": {
+      "type": "string",
+      "description": "Timestamp ISO 8601 de la captura"
+    },
+    "url": {
+      "type": "string",
+      "description": "URL completa de la pantalla en el momento de la captura"
+    },
+    "elements": {
+      "type": "array",
+      "description": "Elementos accesibles encontrados en el DOM",
+      "items": { "$ref": "#/definitions/UIElement" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Advertencias sobre elementos con robustness baja u otros problemas"
+    },
+    "meta": {
+      "type": "object",
+      "required": ["tool", "version"],
+      "additionalProperties": true,
+      "properties": {
+        "tool": { "type": "string", "const": "ui_map_builder" },
+        "version": { "type": "string" },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "definitions": {
+    "UIElement": {
+      "type": "object",
+      "required": ["kind", "role", "asp_id", "selector_recommended", "robustness", "alias_semantic"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["input", "select", "button", "table", "div", "span", "a", "checkbox", "radio", "textarea", "label", "grid", "panel", "other"]
+        },
+        "role": { "type": "string" },
+        "label": { "type": ["string", "null"] },
+        "asp_id": { "type": ["string", "null"] },
+        "data_testid": { "type": ["string", "null"] },
+        "text": { "type": ["string", "null"] },
+        "selector_recommended": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Selector Playwright recomendado por selector_discovery.py"
+        },
+        "robustness": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        },
+        "alias_semantic": {
+          "type": "string",
+          "pattern": "^(select|input|btn|grid|panel|msg|link|table|checkbox|radio|text)_[a-zA-Z0-9_]+$",
+          "description": "Alias legible para usar en los tests, ej: btn_buscar"
+        },
+        "fallback_selectors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Selectores alternativos ordenados por robustez"
+        },
+        "position": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" }
+          }
+        },
+        "warning": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "if": { "properties": { "ok": { "const": false } } },
+  "then": {
+    "required": ["ok", "error"],
+    "properties": {
+      "error": {
+        "type": "string",
+        "enum": [
+          "missing_env_var",
+          "playwright_not_installed",
+          "login_failed",
+          "screen_not_loaded",
+          "playwright_crash",
+          "no_elements_found"
+        ]
+      },
+      "message": { "type": "string" }
+    }
+  }
+}

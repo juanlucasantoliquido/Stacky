@@ -1,0 +1,106 @@
+<!-- stacky-qa-uat:run id="{{ run_id }}" hash="{{ comment_hash }}" -->
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 13px; color: #1a1a1a;">
+
+<h2 style="margin: 0 0 8px; font-size: 16px; color: #0078d4; border-bottom: 2px solid #0078d4; padding-bottom: 6px;">
+  🤖 Dossier UAT — ADO-{{ ticket_id }}
+  &nbsp;
+  {% if verdict == 'PASS' %}
+  <span style="background: #107c10; color: #fff; border-radius: 4px; padding: 2px 10px; font-size: 13px;">✅ PASS</span>
+  {% elif verdict == 'FAIL' %}
+  <span style="background: #a4262c; color: #fff; border-radius: 4px; padding: 2px 10px; font-size: 13px;">❌ FAIL</span>
+  {% elif verdict == 'BLOCKED' %}
+  <span style="background: #c19c00; color: #fff; border-radius: 4px; padding: 2px 10px; font-size: 13px;">⚠️ BLOCKED</span>
+  {% elif verdict == 'MIXED' %}
+  <span style="background: #7a4100; color: #fff; border-radius: 4px; padding: 2px 10px; font-size: 13px;">🔶 MIXED</span>
+  {% endif %}
+</h2>
+
+<p style="margin: 4px 0 12px; color: #555; font-size: 12px;">
+  Run: <code>{{ run_id }}</code> &nbsp;|&nbsp;
+  Fecha: {{ generated_at }} &nbsp;|&nbsp;
+  Agente: {{ context.agent_version }} &nbsp;|&nbsp;
+  Commit: <code>{{ context.build_commit | default('N/A') }}</code>
+</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resumen ejecutivo</h3>
+<p style="margin: 0 0 12px; line-height: 1.5;">{{ executive_summary }}</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resultados por escenario</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 12px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Título</th>
+      <th style="text-align: center; padding: 6px 10px; border: 1px solid #ddd;">Estado</th>
+      <th style="text-align: right; padding: 6px 10px; border: 1px solid #ddd;">Duración</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in scenarios %}
+    <tr style="background: {% if loop.index % 2 == 0 %}#fafafa{% else %}#fff{% endif %};">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>{{ s.scenario_id }}</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">{{ s.titulo }}</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        {% if s.status == 'pass' %}
+        <span style="color: #107c10; font-weight: bold;">✅ PASS</span>
+        {% elif s.status == 'fail' %}
+        <span style="color: #a4262c; font-weight: bold;">❌ FAIL</span>
+        {% elif s.status == 'blocked' %}
+        <span style="color: #c19c00; font-weight: bold;">⚠️ BLOCKED</span>
+        {% else %}
+        <span style="color: #888;">⏭️ SKIPPED</span>
+        {% endif %}
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">{{ s.duration_ms | default(0) }} ms</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if failures %}
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #a4262c;">Fallas detectadas</h3>
+{% for f in failures %}
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">{{ f.scenario_id }} — {{ f.titulo }}</strong><br/>
+  <span style="font-size: 12px;">{{ f.message }}</span>
+  {% if f.expected is defined and f.actual is defined %}
+  <table style="margin-top: 6px; font-size: 11px; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 2px 8px; background: #f3f2f1; border: 1px solid #ddd;"><strong>Esperado</strong></td>
+      <td style="padding: 2px 8px; border: 1px solid #ddd; font-family: monospace;">{{ f.expected }}</td>
+    </tr>
+    <tr>
+      <td style="padding: 2px 8px; background: #f3f2f1; border: 1px solid #ddd;"><strong>Actual</strong></td>
+      <td style="padding: 2px 8px; border: 1px solid #ddd; font-family: monospace;">{{ f.actual }}</td>
+    </tr>
+  </table>
+  {% endif %}
+  {% if f.trace_path %}<div style="margin-top: 4px; font-size: 11px; color: #555;">Trace: <code>{{ f.trace_path }}</code></div>{% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{% if recommendation_for_human_qa %}
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Recomendaciones para el QA humano</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  {% for rec in recommendation_for_human_qa %}
+  <li>{{ rec }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if next_steps %}
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Próximos pasos</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  {% for step in next_steps %}
+  <li>{{ step }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<p style="margin: 16px 0 0; padding: 8px 12px; background: #f3f9ff; border: 1px solid #cce0f5; border-radius: 4px; font-size: 11px; color: #444; line-height: 1.5;">
+  <strong>ℹ️ Postura del agente</strong>: Este comentario fue publicado automáticamente por Stacky Agents — QA UAT Pipeline.
+  El agente <strong>no cambió el estado del ticket</strong>. Mover a "QA Done", "Cerrado" u otro estado es una decisión exclusivamente humana.
+</p>
+
+</div>

@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "runner_output.schema.json",
+  "title": "RunnerOutput",
+  "description": "Output de uat_test_runner.py — resultado de ejecución de los .spec.ts contra el Agenda Web",
+  "type": "object",
+  "required": ["ok", "ticket_id", "total", "pass", "fail", "blocked", "runs", "meta"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "ticket_id": { "type": "integer", "minimum": 1 },
+    "total": { "type": "integer", "minimum": 0 },
+    "pass": { "type": "integer", "minimum": 0 },
+    "fail": { "type": "integer", "minimum": 0 },
+    "blocked": { "type": "integer", "minimum": 0 },
+    "runs": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/ScenarioRun" }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["tool", "version"],
+      "additionalProperties": true,
+      "properties": {
+        "tool": { "type": "string", "const": "uat_test_runner" },
+        "version": { "type": "string" },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "definitions": {
+    "ScenarioRun": {
+      "type": "object",
+      "required": ["scenario_id", "spec_file", "status", "duration_ms"],
+      "additionalProperties": false,
+      "properties": {
+        "scenario_id": { "type": "string" },
+        "spec_file": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "blocked"]
+        },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "trace": { "type": ["string", "null"] },
+            "video": { "type": ["string", "null"] },
+            "screenshots": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "console_log": { "type": ["string", "null"] },
+            "network_log": { "type": ["string", "null"] }
+          }
+        },
+        "assertion_failures": {
+          "type": "array",
+          "description": "Presente y no vacío cuando status == fail",
+          "items": {
+            "type": "object",
+            "required": ["message"],
+            "additionalProperties": false,
+            "properties": {
+              "message": { "type": "string" },
+              "expected": { "type": "string" },
+              "actual": { "type": "string" }
+            }
+          }
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["RUNTIME_ERROR", "BROWSER_CRASH", "TIMEOUT", "LOGIN_FAILED"],
+          "description": "Presente cuando status == blocked"
+        },
+        "raw_stdout": { "type": "string" },
+        "raw_stderr": { "type": "string" }
+      }
+    }
+  },
+  "if": { "properties": { "ok": { "const": false } } },
+  "then": {
+    "required": ["ok", "error"],
+    "properties": {
+      "error": {
+        "type": "string",
+        "enum": [
+          "no_tests_found",
+          "playwright_not_available",
+          "browser_launch_failed",
+          "runner_timeout",
+          "evidence_dir_write_failed"
+        ]
+      },
+      "message": { "type": "string" }
+    }
+  }
+}

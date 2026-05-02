@@ -1,0 +1,134 @@
+# Dossier UAT — ADO-{{ ticket_id }}: {{ ticket_title }}
+
+> **Run ID**: `{{ run_id }}`  
+> **Fecha**: {{ generated_at }}  
+> **Agente**: {{ context.agent_version }}  
+> **Entorno**: {{ context.environment }}  
+> **Commit build**: `{{ context.build_commit | default('N/A') }}`  
+> **Generado por**: `uat_dossier_builder.py` — No editar manualmente.
+
+---
+
+## Veredicto global
+
+{% if verdict == 'PASS' %}
+**✅ PASS** — Todos los escenarios ejecutables pasaron.
+{% elif verdict == 'FAIL' %}
+**❌ FAIL** — Al menos un escenario falló.
+{% elif verdict == 'BLOCKED' %}
+**⚠️ BLOCKED** — Todos los escenarios no-PASS fueron bloqueados por causas externas (no hay falla real del producto).
+{% elif verdict == 'MIXED' %}
+**🔶 MIXED** — Hay escenarios FAIL y BLOCKED simultáneos. Revisión humana requerida.
+{% endif %}
+
+---
+
+## Resumen ejecutivo
+
+{{ executive_summary }}
+
+---
+
+## Resultados por escenario
+
+| Escenario | Título | Estado | Duración |
+|---|---|---|---|
+{% for s in scenarios %}
+| `{{ s.scenario_id }}` | {{ s.titulo }} | {% if s.status == 'pass' %}✅ PASS{% elif s.status == 'fail' %}❌ FAIL{% elif s.status == 'blocked' %}⚠️ BLOCKED{% else %}⏭️ SKIPPED{% endif %} | {{ s.duration_ms | default(0) }} ms |
+{% endfor %}
+
+---
+
+{% if failures %}
+## Fallas detectadas
+
+{% for f in failures %}
+### ❌ {{ f.scenario_id }} — {{ f.titulo }}
+
+**Mensaje**: {{ f.message }}
+
+{% if f.expected is defined and f.actual is defined %}
+| | Valor |
+|---|---|
+| **Esperado** | `{{ f.expected }}` |
+| **Actual** | `{{ f.actual }}` |
+{% endif %}
+
+{% if f.trace_path %}
+**Trace Playwright**: `{{ f.trace_path }}`
+{% endif %}
+{% if f.screenshot_path %}
+**Screenshot**: `{{ f.screenshot_path }}`
+{% endif %}
+
+---
+
+{% endfor %}
+{% endif %}
+
+---
+
+## Evidencia por escenario
+
+{% for s in scenarios %}
+### {{ s.scenario_id }} — {{ s.titulo }}
+
+**Estado**: {% if s.status == 'pass' %}✅ PASS{% elif s.status == 'fail' %}❌ FAIL{% elif s.status == 'blocked' %}⚠️ BLOCKED ({{ s.reason | default('N/A') }}){% else %}⏭️ SKIPPED{% endif %}
+
+{% if s.artifacts %}
+**Artefactos**:
+{% if s.artifacts.trace %}- Trace: `{{ s.artifacts.trace }}`{% endif %}
+{% if s.artifacts.video %}- Video: `{{ s.artifacts.video }}`{% endif %}
+{% if s.artifacts.screenshots %}
+- Screenshots:
+{% for ss in s.artifacts.screenshots %}
+  - `{{ ss }}`
+{% endfor %}
+{% endif %}
+{% if s.artifacts.console_log %}- Console log: `{{ s.artifacts.console_log }}`{% endif %}
+{% if s.artifacts.network_log %}- Network log: `{{ s.artifacts.network_log }}`{% endif %}
+{% endif %}
+
+{% if s.assertion_failures %}
+**Assertions fallidas**:
+{% for af in s.assertion_failures %}
+- `{{ af.message }}`{% if af.expected %} — Esperado: `{{ af.expected }}` | Actual: `{{ af.actual }}`{% endif %}
+{% endfor %}
+{% endif %}
+
+---
+
+{% endfor %}
+
+## Recomendaciones para el QA humano
+
+{% if recommendation_for_human_qa %}
+{% for rec in recommendation_for_human_qa %}
+- {{ rec }}
+{% endfor %}
+{% else %}
+_Sin recomendaciones adicionales._
+{% endif %}
+
+---
+
+## Próximos pasos
+
+{% if next_steps %}
+{% for step in next_steps %}
+- {{ step }}
+{% endfor %}
+{% else %}
+_Sin próximos pasos pendientes._
+{% endif %}
+
+---
+
+## Postura del agente
+
+> **El agente NO cambió el estado del ticket en ADO.** Solo publicó este dossier como comentario de evidencia.  
+> El cambio de estado (a "QA Done", "Cerrado", etc.) es una decisión exclusivamente humana.
+
+---
+
+_Generado por Stacky Agents — QA UAT Pipeline v{{ context.agent_version }} — Run `{{ run_id }}`_

@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "id": 70,
+  "title": "RF-003 Validación del comportamiento de combinación de filtros",
+  "state": "Done",
+  "type": "Task",
+  "work_item": {
+    "id": 70,
+    "title": "RF-003 Validación del comportamiento de combinación de filtros",
+    "state": "Done",
+    "type": "Task",
+    "url": "https://dev.azure.com/testorg/testproject/_workitems/edit/70",
+    "description": "<p>El ticket 70 describe la validación del comportamiento de combinación de filtros en el módulo Agenda Web.</p>",
+    "relations": []
+  }
+}

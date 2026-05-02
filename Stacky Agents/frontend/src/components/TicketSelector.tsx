@@ -9,7 +9,7 @@ import styles from "./TicketSelector.module.css";
 export default function TicketSelector() {
   const [search, setSearch] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
-  const { activeTicketId, setActiveTicket, runningExecutionId } = useWorkbench();
+  const { activeTicketId, setActiveTicket } = useWorkbench();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -75,7 +75,6 @@ export default function TicketSelector() {
             key={t.id}
             ticket={t}
             active={t.id === activeTicketId}
-            running={runningExecutionId != null && t.id === activeTicketId}
             onSelect={() => setActiveTicket(t.id)}
           />
         ))}
@@ -87,22 +86,19 @@ export default function TicketSelector() {
 function Row({
   ticket,
   active,
-  running,
   onSelect,
 }: {
   ticket: Ticket;
   active: boolean;
-  running: boolean;
   onSelect: () => void;
 }) {
   return (
     <button
-      className={`${styles.row} ${active ? styles.active : ""} ${running ? styles.running : ""}`}
+      className={`${styles.row} ${active ? styles.active : ""}`}
       onClick={onSelect}
     >
       <div className={styles.rowHead}>
         <span className={styles.adoId}>ADO-{ticket.ado_id}</span>
-        {running && <span className={styles.runningBadge} title="Agente procesando">⏳</span>}
         <span className={styles.state}>{ticket.ado_state ?? "—"}</span>
       </div>
       <div className={styles.rowTitle}>{ticket.title}</div>

@@ -88,21 +88,6 @@
   border-left-color: var(--accent);
 }
 
-@keyframes ticket-pulse {
-  0%, 100% { border-left-color: var(--warn); }
-  50%       { border-left-color: color-mix(in srgb, var(--warn) 40%, transparent); }
-}
-
-.running {
-  border-left-color: var(--warn) !important;
-  animation: ticket-pulse 1.4s ease-in-out infinite;
-}
-
-.runningBadge {
-  font-size: 12px;
-  line-height: 1;
-}
-
 .rowHead {
   display: flex;
   justify-content: space-between;

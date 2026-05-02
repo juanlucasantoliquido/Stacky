@@ -153,9 +153,7 @@ export const Executions = {
   approve: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/approve`),
   discard: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/discard`),
   publish: (id: number, target: "comment" | "task" = "comment") =>
-    api.post<{ ok: boolean; ado_url: string; comment_id?: number; stubbed?: boolean; published_at?: string }>(`/api/executions/${id}/publish-to-ado`, { target }),
-  rollbackAdo: (id: number) =>
-    api.post<{ ok: boolean; stubbed?: boolean; rolled_back_comment_id?: number; rolled_back_at?: string }>(`/api/executions/${id}/rollback-ado`),
+    api.post<{ ok: true; ado_url: string }>(`/api/executions/${id}/publish-to-ado`, { target }),
   diff: (a: number, b: number) =>
     api.get<{ left: AgentExecution; right: AgentExecution }>(
       `/api/executions/${a}/diff/${b}`

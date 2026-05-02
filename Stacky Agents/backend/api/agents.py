@@ -195,6 +195,8 @@ def open_chat():
       - agentId: nombre del agente .agent.md (VS Code 1.99+)
     """
     import requests as req_lib
+    from db import session_scope
+    from models import Ticket
 
     payload = request.get_json(force=True, silent=True) or {}
     ticket_id = payload.get("ticket_id")
@@ -205,10 +207,38 @@ def open_chat():
     if not ticket_id:
         abort(400, "ticket_id is required")
 
-    # Construir el mensaje de contexto con los bloques
+    # Buscar el ticket en la DB para armar un encabezado completo
     import prompt_builder
+    ticket_header_parts: list[str] = []
+    with session_scope() as _s:
+        ticket = _s.query(Ticket).filter_by(id=int(ticket_id)).first()
+        if ticket is None:
+            # Intentar buscar por ado_id en caso de que se haya pasado el ADO id
+            ticket = _s.query(Ticket).filter_by(ado_id=int(ticket_id)).first()
+
+    if ticket:
+        ado_label = f"ADO-{ticket.ado_id}" if ticket.ado_id else f"Ticket #{ticket_id}"
+        header = f"# {ado_label} — {ticket.title}"
+        meta_parts: list[str] = []
+        if ticket.ado_state:
+            meta_parts.append(f"Estado: **{ticket.ado_state}**")
+        if ticket.priority is not None:
+            meta_parts.append(f"Prioridad: **{ticket.priority}**")
+        if ticket.ado_url:
+            meta_parts.append(f"[Ver en Azure DevOps]({ticket.ado_url})")
+        ticket_header_parts.append(header)
+        if meta_parts:
+            ticket_header_parts.append(" | ".join(meta_parts))
+        if ticket.description and ticket.description.strip():
+            ticket_header_parts.append(f"\n## Descripción del ticket\n{ticket.description.strip()}")
+    else:
+        ticket_header_parts.append(f"# Ticket #{ticket_id}")
+
     context_text = prompt_builder.render_blocks(context_blocks)
-    message = f"# Ticket #{ticket_id}\n\n{context_text}" if context_text else f"# Ticket #{ticket_id}"
+    if context_text:
+        ticket_header_parts.append(f"\n## Contexto adicional\n{context_text}")
+
+    message = "\n\n".join(ticket_header_parts)
 
     # agent_name = filename sin la extensión .agent.md (ej: "TechnicalAnalyst")
     agent_name = vscode_agent_filename

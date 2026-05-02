@@ -1,0 +1,1565 @@
+{
+  "version": 2,
+  "batch_root": "C:\\desarrollo\\GIT\\RS\\RSPacifico\\trunk\\Batch",
+  "processes": {
+    "IncDemaJudi": {
+      "name": "IncDemaJudi",
+      "main_class": "IncDemaJudi",
+      "cs_hash": "75501c540581ad6b",
+      "xml_hash": "791be78733648c17",
+      "sub_processes": [
+        {
+          "name": "GENERARDEMANDAS",
+          "constant_value": 1,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncDemaJudi",
+          "biz_class": "Demanda",
+          "dalc_class": "DemandaDalc",
+          "methods": [
+            {
+              "name": "ProcesoGenerarDemandas",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ActivarDesactivarDemanda",
+              "return_type": "bool",
+              "params": [
+                "sNumeroDemanda",
+                "Estado"
+              ]
+            },
+            {
+              "name": "GenerarDemandaObligacion",
+              "return_type": "bool",
+              "params": [
+                "numeroDemanda",
+                "CodObligacion",
+                "CodLote"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Inchost": {
+      "name": "Inchost",
+      "main_class": "Inchost",
+      "cs_hash": "6c639e1b6852d9bb",
+      "xml_hash": "db7dbd060e70af41",
+      "sub_processes": [
+        {
+          "name": "ALTACONV",
+          "constant_value": 1,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Convenios",
+          "dalc_class": "ConveniosDalc",
+          "methods": [
+            {
+              "name": "ProcesoConvenios",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ObtengoRegionBD",
+              "return_type": "bool",
+              "params": [
+                "convenio"
+              ]
+            },
+            {
+              "name": "InsertoConvenio",
+              "return_type": "bool",
+              "params": [
+                "convenio"
+              ]
+            },
+            {
+              "name": "ProcesaEstConvP",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "PAGOS",
+          "constant_value": 2,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Pagos",
+          "dalc_class": "PagosDalc",
+          "methods": [
+            {
+              "name": "ProcesoPagos",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "CruzarPagos",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "DEUDA",
+          "constant_value": 3,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Deudas",
+          "dalc_class": "DeudasDalc",
+          "methods": [
+            {
+              "name": "ProcesoDeudas",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "CLIENTES",
+          "constant_value": 4,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Clientes",
+          "dalc_class": "ClientesDalc",
+          "methods": [
+            {
+              "name": "ProcesoClientes",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoDocumentosClie",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoAtributosClientes",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "DIRECCIONES",
+          "constant_value": 5,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Direcciones",
+          "dalc_class": "DireccionesDalc",
+          "methods": [
+            {
+              "name": "ProcesoDirecciones",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "TELEFONOS",
+          "constant_value": 6,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Telefonos",
+          "dalc_class": "TelefonosDalc",
+          "methods": [
+            {
+              "name": "ProcesoTelefonos",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "MAILS",
+          "constant_value": 7,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Mails",
+          "dalc_class": "MailsDalc",
+          "methods": [
+            {
+              "name": "ProcesoMails",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoUnitario",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "RELACIONES",
+          "constant_value": 9,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Relaciones",
+          "dalc_class": "RelacionesDalc",
+          "methods": [
+            {
+              "name": "ProcesoRelaciones",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "PASIVO",
+          "constant_value": 10,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Pasivo",
+          "dalc_class": "PasivoDalc",
+          "methods": [
+            {
+              "name": "ProcesoPasivo",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "TARJETAS",
+          "constant_value": 11,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Tarjetas",
+          "dalc_class": "TarjetasDalc",
+          "methods": [
+            {
+              "name": "ProcesoTarjetas",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "CTACTE",
+          "constant_value": 12,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "CtaCte",
+          "dalc_class": "CtaCteDalc",
+          "methods": [
+            {
+              "name": "ProcesoCtaCte",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "PRESTAMOS",
+          "constant_value": 13,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Prestamos",
+          "dalc_class": "PrestamosDalc",
+          "methods": [
+            {
+              "name": "ProcesaCambio",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "CUOTAS",
+          "constant_value": 14,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Cuotas",
+          "dalc_class": "CuotasDalc",
+          "methods": [
+            {
+              "name": "ProcesoCuotas",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "GARANTIAS",
+          "constant_value": 15,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Garantias",
+          "dalc_class": "GarantiasDalc",
+          "methods": [
+            {
+              "name": "ProcesoGarantias",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "OBLIGACIONES",
+          "constant_value": 16,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Obligaciones",
+          "dalc_class": "ObligacionesDalc",
+          "methods": [
+            {
+              "name": "ProcesoObligaciones",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "TratarObligacionLista",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "TrataObligacion",
+              "return_type": "bool",
+              "params": [
+                "Obligacion"
+              ]
+            },
+            {
+              "name": "TratoBajaObligacionRHISTO",
+              "return_type": "bool",
+              "params": [
+                "Obligacion",
+                "sCliente"
+              ]
+            },
+            {
+              "name": "ProcesoAtributos",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ObligacionesNoActualizadas",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "TratoModificacionObligacion",
+              "return_type": "bool",
+              "params": [
+                "Obligacion"
+              ]
+            },
+            {
+              "name": "TratoModificacionObligacionRHISTO",
+              "return_type": "bool",
+              "params": [
+                "Obligacion",
+                "nProcesoDefault"
+              ]
+            },
+            {
+              "name": "TratoAltaObligacion",
+              "return_type": "bool",
+              "params": [
+                "Obligacion"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "SCORING",
+          "constant_value": 17,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Scoring",
+          "dalc_class": "ScoringDalc",
+          "methods": [
+            {
+              "name": "ProcesoScoring",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "CHQSPROTESTADOS",
+          "constant_value": 18,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "ChequesProtestados",
+          "dalc_class": "ChequesProtestadosDalc",
+          "methods": [
+            {
+              "name": "ProcesoChequeProtestado",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "TratarChequeProtestadoLista",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "TrataChequeProtestado",
+              "return_type": "bool",
+              "params": [
+                "Cliente"
+              ]
+            },
+            {
+              "name": "ProcesosChequesProtestados",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "ACTUALIZACIONCONV",
+          "constant_value": 19,
+          "subproc_type": "const_int",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        },
+        {
+          "name": "LOTES",
+          "constant_value": 20,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Lotes",
+          "dalc_class": "LotesDalc",
+          "methods": [
+            {
+              "name": "ProcesoLotes",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "TratarListaLotes",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "AsignarEstrategias",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "ESTRATEGIAS",
+          "constant_value": 21,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusMotor",
+          "biz_class": "Motor",
+          "dalc_class": "MotorDalc",
+          "methods": [
+            {
+              "name": "ProcesaMotorPrejudicial",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHiloMotorPrejudicial",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "ProcesoSelectorEstrategias",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoSelectorEstrategiasDefault",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoSelectorEstrategiasConGMR",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "DebugarMotor",
+              "return_type": "object",
+              "params": [
+                "lote",
+                "fechaProceso",
+                "xmlRsCore",
+                "pathDlls"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ESTRATEGIASPREJUDICIAL",
+          "constant_value": 25,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusMotor",
+          "biz_class": "Motor",
+          "dalc_class": "MotorDalc",
+          "methods": [
+            {
+              "name": "ProcesaMotorPrejudicial",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHiloMotorPrejudicial",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "ProcesoSelectorEstrategias",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoSelectorEstrategiasDefault",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoSelectorEstrategiasConGMR",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "DebugarMotor",
+              "return_type": "object",
+              "params": [
+                "lote",
+                "fechaProceso",
+                "xmlRsCore",
+                "pathDlls"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ESTADISTICAS",
+          "constant_value": 22,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Estadisticas",
+          "dalc_class": "EstadisticasDalc",
+          "methods": [
+            {
+              "name": "ProcesoEstadisticas",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "HISTORICO",
+          "constant_value": 23,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Historicos",
+          "dalc_class": "HistoricosDalc",
+          "methods": [
+            {
+              "name": "ProcesoHistoricos",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoDepuracion",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "GeneraHistoricoSalida",
+              "return_type": "bool",
+              "params": [
+                "BDObligacion",
+                "Historico"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "DEPURADOR",
+          "constant_value": 24,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusInchost",
+          "biz_class": "Historicos",
+          "dalc_class": "HistoricosDalc",
+          "methods": [
+            {
+              "name": "ProcesoHistoricos",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoDepuracion",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "GeneraHistoricoSalida",
+              "return_type": "bool",
+              "params": [
+                "BDObligacion",
+                "Historico"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "nAsigEstratDefault",
+          "constant_value": 1,
+          "subproc_type": "global_flag",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        }
+      ]
+    },
+    "IncJudi": {
+      "name": "IncJudi",
+      "main_class": "IncJudi",
+      "cs_hash": "e1e0c65cd9ece0da",
+      "xml_hash": "1ec753a149a871ac",
+      "sub_processes": [
+        {
+          "name": "CLIENTES",
+          "constant_value": 1,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Actualizacion",
+          "dalc_class": "ActualizacionDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "OBLIGACIONES",
+          "constant_value": 2,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Actualizacion",
+          "dalc_class": "ActualizacionDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "DEUDA",
+          "constant_value": 3,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Actualizacion",
+          "dalc_class": "ActualizacionDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "PRESTAMOS",
+          "constant_value": 4,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Actualizacion",
+          "dalc_class": "ActualizacionDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "TARJETAS",
+          "constant_value": 5,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Actualizacion",
+          "dalc_class": "ActualizacionDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "CUOTAS",
+          "constant_value": 6,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Actualizacion",
+          "dalc_class": "ActualizacionDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "PASIVO",
+          "constant_value": 7,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Actualizacion",
+          "dalc_class": "ActualizacionDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "SCORING",
+          "constant_value": 8,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Actualizacion",
+          "dalc_class": "ActualizacionDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "CTACTE",
+          "constant_value": 9,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Actualizacion",
+          "dalc_class": "ActualizacionDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "PAGOS",
+          "constant_value": 10,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusIncJudi",
+          "biz_class": "Pagos",
+          "dalc_class": "PagosDalc",
+          "methods": [
+            {
+              "name": "AbrirCursorAbogadoExterno",
+              "return_type": "AISDataReader",
+              "params": []
+            },
+            {
+              "name": "FetchOperAbogadoExterno",
+              "return_type": "bool",
+              "params": [
+                "DrP",
+                "operAbogadoExterno"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Motor": {
+      "name": "Motor",
+      "main_class": "MotorRS",
+      "cs_hash": "157a77962e44acca",
+      "xml_hash": "62d906d900ed85ac",
+      "sub_processes": [
+        {
+          "name": "nEjecutaMotor",
+          "constant_value": 1,
+          "subproc_type": "global_flag",
+          "biz_namespace": "BusMotor",
+          "biz_class": "Motor",
+          "dalc_class": "MotorDalc",
+          "methods": [
+            {
+              "name": "ProcesaMotorPrejudicial",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHiloMotorPrejudicial",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "ProcesoSelectorEstrategias",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoSelectorEstrategiasDefault",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "ProcesoSelectorEstrategiasConGMR",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "DebugarMotor",
+              "return_type": "object",
+              "params": [
+                "lote",
+                "fechaProceso",
+                "xmlRsCore",
+                "pathDlls"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "nEjecutaAgenda",
+          "constant_value": 1,
+          "subproc_type": "global_flag",
+          "biz_namespace": "BusRecomendacion",
+          "biz_class": "Recomendaciones",
+          "dalc_class": "RecomendacionesDalc",
+          "methods": [
+            {
+              "name": "ResolverRecomendaciones",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        }
+      ]
+    },
+    "MotorJ": {
+      "name": "MotorJ",
+      "main_class": "MotorJRS",
+      "cs_hash": "0d57d0bbda012442",
+      "xml_hash": "f482ab22fcd722df",
+      "sub_processes": [
+        {
+          "name": "nEjecutaMotor",
+          "constant_value": 1,
+          "subproc_type": "global_flag",
+          "biz_namespace": "BusMotorJ",
+          "biz_class": "MotorJ",
+          "dalc_class": "MotorJDalc",
+          "methods": [
+            {
+              "name": "ProcesaMotorJudicial",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHiloMotorJudicial",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "nEjecutaAgenda",
+          "constant_value": 1,
+          "subproc_type": "global_flag",
+          "biz_namespace": "BusRecomendacion",
+          "biz_class": "RecomendacionesJ",
+          "dalc_class": "RecomendacionesJDalc",
+          "methods": [
+            {
+              "name": "ResolverRecomendaciones",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        }
+      ]
+    },
+    "Mul2Bane": {
+      "name": "Mul2Bane",
+      "main_class": "Mul2Bane",
+      "cs_hash": "76ab7a766c349a5c",
+      "xml_hash": "23f6e235769308c5",
+      "sub_processes": [
+        {
+          "name": "DECRYPT",
+          "constant_value": 1,
+          "subproc_type": "enum",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        },
+        {
+          "name": "DESCOMPRIME",
+          "constant_value": 2,
+          "subproc_type": "enum",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        },
+        {
+          "name": "CARGA_IN",
+          "constant_value": 3,
+          "subproc_type": "enum",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        },
+        {
+          "name": "ALGORITMO",
+          "constant_value": 4,
+          "subproc_type": "enum",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        },
+        {
+          "name": "MUEVE_FICHEROS",
+          "constant_value": 5,
+          "subproc_type": "enum",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        }
+      ]
+    },
+    "RSAES256": {
+      "name": "RSAES256",
+      "main_class": "AES256",
+      "cs_hash": "ffa2a58106c06bbf",
+      "xml_hash": "7e3c76e436b93bee",
+      "sub_processes": [
+        {
+          "name": "ENCRYPT",
+          "constant_value": 1,
+          "subproc_type": "const_int",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        },
+        {
+          "name": "DECRYPT",
+          "constant_value": 2,
+          "subproc_type": "const_int",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        }
+      ]
+    },
+    "RSAgExtIN": {
+      "name": "RSAgExtIN",
+      "main_class": "AgExtIN",
+      "cs_hash": "6d8da5e1746c117c",
+      "xml_hash": "68d3a4f88fbd65f1",
+      "sub_processes": [
+        {
+          "name": "DECRYPT",
+          "constant_value": 1,
+          "subproc_type": "enum",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        },
+        {
+          "name": "GESTIONES",
+          "constant_value": 2,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSAgExtIN",
+          "biz_class": "Retro",
+          "dalc_class": "RetroDalc",
+          "methods": [
+            {
+              "name": "RetroalimentarGestiones",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarDomicilios",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarTelefonos",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarMails",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "DOMICILIOS",
+          "constant_value": 3,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSAgExtIN",
+          "biz_class": "Retro",
+          "dalc_class": "RetroDalc",
+          "methods": [
+            {
+              "name": "RetroalimentarGestiones",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarDomicilios",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarTelefonos",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarMails",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "TELEFONOS",
+          "constant_value": 4,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSAgExtIN",
+          "biz_class": "Retro",
+          "dalc_class": "RetroDalc",
+          "methods": [
+            {
+              "name": "RetroalimentarGestiones",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarDomicilios",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarTelefonos",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarMails",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "MAILS",
+          "constant_value": 5,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSAgExtIN",
+          "biz_class": "Retro",
+          "dalc_class": "RetroDalc",
+          "methods": [
+            {
+              "name": "RetroalimentarGestiones",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarDomicilios",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarTelefonos",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "RetroalimentarMails",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        }
+      ]
+    },
+    "RSAgExtOUT": {
+      "name": "RSAgExtOUT",
+      "main_class": "AgExtOut",
+      "cs_hash": "997920126bc245df",
+      "xml_hash": "2c42e23bda267853",
+      "sub_processes": [
+        {
+          "name": "AGEXTOUT",
+          "constant_value": 1,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSAgExtOUT",
+          "biz_class": "AgExternas",
+          "dalc_class": "AgExternasDalc",
+          "methods": [
+            {
+              "name": "GenerarInformacionEmpresasExternas",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "FuncionArranqueHilo",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            },
+            {
+              "name": "TratarLista",
+              "return_type": "void",
+              "params": [
+                "obj"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ENCRYPT",
+          "constant_value": 2,
+          "subproc_type": "enum",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        }
+      ]
+    },
+    "RsExtrae": {
+      "name": "RsExtrae",
+      "main_class": "ExtraeDatos",
+      "cs_hash": "6ff4dee666b5d80b",
+      "xml_hash": "79aa46b812a28fb5",
+      "sub_processes": [
+        {
+          "name": "EXTRAE",
+          "constant_value": 1,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSExtrae",
+          "biz_class": "Extrae",
+          "dalc_class": "ExtraeDalc",
+          "methods": [
+            {
+              "name": "ExtraeGenerico",
+              "return_type": "bool",
+              "params": [
+                "vFormArch"
+              ]
+            },
+            {
+              "name": "ExtraeJuicioIniciado",
+              "return_type": "bool",
+              "params": [
+                "vFormArch"
+              ]
+            },
+            {
+              "name": "ExtraeRecomEstudio",
+              "return_type": "bool",
+              "params": [
+                "vFormArch"
+              ]
+            },
+            {
+              "name": "ExtraArchivoGCItauUruguay",
+              "return_type": "bool",
+              "params": [
+                "vFormArch"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ENCRYPT",
+          "constant_value": 2,
+          "subproc_type": "enum",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        }
+      ]
+    },
+    "RSNovMasivas": {
+      "name": "RSNovMasivas",
+      "main_class": "NovMasivas",
+      "cs_hash": "6c869e30fecf8c77",
+      "xml_hash": "",
+      "sub_processes": [
+        {
+          "name": "NOVEDADES",
+          "constant_value": 1,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusRSNovMasivas",
+          "biz_class": "Novedades",
+          "dalc_class": "NovedadesDalc",
+          "methods": [
+            {
+              "name": "ResolverNovedadesMasivas",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        }
+      ]
+    },
+    "RSProcIN": {
+      "name": "RSProcIN",
+      "main_class": "ProcIn",
+      "cs_hash": "24b896261f77f8bb",
+      "xml_hash": "763f21daa059796f",
+      "sub_processes": [
+        {
+          "name": "RESCAMPTEL",
+          "constant_value": 1,
+          "subproc_type": "const_int",
+          "biz_namespace": "BusRSProcIN",
+          "biz_class": "Retro",
+          "dalc_class": "RetroDalc",
+          "methods": [
+            {
+              "name": "RetroalimentarCampaniaTelef",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        }
+      ]
+    },
+    "RSProcOUT": {
+      "name": "RSProcOUT",
+      "main_class": "ProcOut",
+      "cs_hash": "76f335b73d6384e2",
+      "xml_hash": "a1cebe990a20966f",
+      "sub_processes": [
+        {
+          "name": "CARTAS",
+          "constant_value": 1,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSProcOUT",
+          "biz_class": "Cartas",
+          "dalc_class": "CartasDalc",
+          "methods": [
+            {
+              "name": "GenerarInformacionCartas",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "GenerarInformacionVisitas",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "GenerarFicheroVisitas",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "VISITAS",
+          "constant_value": 2,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSProcOUT",
+          "biz_class": "Cartas",
+          "dalc_class": "CartasDalc",
+          "methods": [
+            {
+              "name": "GenerarInformacionCartas",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "GenerarInformacionVisitas",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "GenerarFicheroVisitas",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "GENDIA",
+          "constant_value": 3,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSProcOUT",
+          "biz_class": "Gendia",
+          "dalc_class": "GendiaDalc",
+          "methods": [
+            {
+              "name": "GenerarCampaniaTelefonica",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "EncontrarDomicilio",
+              "return_type": "string[]",
+              "params": [
+                "sCodigo"
+              ]
+            },
+            {
+              "name": "GenerarArchivoCampaniaTelefonica",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "GenerarArchivo",
+              "return_type": "bool",
+              "params": [
+                "dsTabla"
+              ]
+            },
+            {
+              "name": "CrearStreamWriter",
+              "return_type": "StreamWriter",
+              "params": [
+                "sNombreArchivo"
+              ]
+            },
+            {
+              "name": "BorrarArchivosCampania",
+              "return_type": "bool",
+              "params": [
+                "sNombreArchivo"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ESTADODEMANDA",
+          "constant_value": 4,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSProcOUT",
+          "biz_class": "Demanda",
+          "dalc_class": "DemandaDalc",
+          "methods": [
+            {
+              "name": "GenerarFicheroEstadoActivacionDemanda",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "GenerarFicheroBusquedaPagare",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "BUSQUEDAPAGARE",
+          "constant_value": 5,
+          "subproc_type": "enum",
+          "biz_namespace": "BusRSProcOUT",
+          "biz_class": "Demanda",
+          "dalc_class": "DemandaDalc",
+          "methods": [
+            {
+              "name": "GenerarFicheroEstadoActivacionDemanda",
+              "return_type": "bool",
+              "params": []
+            },
+            {
+              "name": "GenerarFicheroBusquedaPagare",
+              "return_type": "bool",
+              "params": []
+            }
+          ]
+        },
+        {
+          "name": "ENCRYPT",
+          "constant_value": 6,
+          "subproc_type": "enum",
+          "biz_namespace": "",
+          "biz_class": "",
+          "dalc_class": "Dalc",
+          "methods": []
+        }
+      ]
+    }
+  }
+}

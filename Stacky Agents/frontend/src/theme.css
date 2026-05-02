@@ -33,10 +33,16 @@
   /* Typography */
   --font-sans:  "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono:  "JetBrains Mono", Consolas, "Liberation Mono", monospace;
+  --font-pixel: "Press Start 2P", monospace;
 
   /* Geometry */
   --radius:    6px;
   --radius-sm: 4px;
+
+  /* ─── Team / Employee Card tokens ──────── */
+  --card-radius:  10px;
+  --card-shadow:  0 2px 12px rgba(0,0,0,0.35);
+  --avatar-border: 8px;
 }
 
 /* ─── Reset ───────────────────────────────────────────────────── */

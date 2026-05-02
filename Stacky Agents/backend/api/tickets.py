@@ -110,3 +110,37 @@ def get_glossary(ticket_id: int):
             abort(404)
         block = glossary.build_glossary_block([t.title or "", t.description or ""])
         return jsonify(block)
+
+
+@bp.get("/<int:ticket_id>/comments")
+def get_comments(ticket_id: int):
+    """Devuelve los comentarios/notas del ticket desde Azure DevOps (on-demand).
+
+    Busca el ticket en BD para obtener su ado_id, luego llama a AdoClient.fetch_comments.
+    Retorna: { "comments": [{ "author", "date", "text" }] }
+    """
+    from services.ado_client import AdoClient, AdoApiError, AdoConfigError
+    from services.ado_sync import _html_to_text
+
+    with session_scope() as session:
+        t = session.get(Ticket, ticket_id)
+        if t is None:
+            abort(404)
+        ado_id = t.ado_id
+
+    try:
+        client = AdoClient()
+    except AdoConfigError as e:
+        return jsonify({"comments": [], "error": str(e)}), 200
+
+    raw = client.fetch_comments(ado_id)
+    comments = [
+        {
+            "author": c["author"],
+            "date": c["date"],
+            "text": _html_to_text(c["text"]),
+        }
+        for c in raw
+        if c.get("text")
+    ]
+    return jsonify({"comments": comments})

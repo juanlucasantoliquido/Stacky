@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges">
+  <!-- analyst-1: Functional Analyst with ponytail -->
+  <rect x="24" y="8" width="16" height="16" fill="#f5c5a3"/>
+  <!-- hair red ponytail -->
+  <rect x="22" y="4" width="20" height="8" fill="#c0392b"/>
+  <rect x="20" y="8" width="4" height="8" fill="#c0392b"/>
+  <rect x="40" y="8" width="4" height="14" fill="#c0392b"/>
+  <rect x="42" y="20" width="6" height="10" fill="#c0392b"/>
+  <!-- eyes -->
+  <rect x="27" y="14" width="4" height="4" fill="#2c3e50"/>
+  <rect x="33" y="14" width="4" height="4" fill="#2c3e50"/>
+  <!-- eyelashes -->
+  <rect x="27" y="13" width="4" height="1" fill="#1a1a2e"/>
+  <rect x="33" y="13" width="4" height="1" fill="#1a1a2e"/>
+  <!-- mouth -->
+  <rect x="28" y="20" width="8" height="2" fill="#e74c3c"/>
+  <!-- blouse purple -->
+  <rect x="18" y="24" width="28" height="20" fill="#a371f7"/>
+  <rect x="10" y="24" width="10" height="16" fill="#a371f7"/>
+  <rect x="44" y="24" width="10" height="16" fill="#a371f7"/>
+  <!-- collar detail -->
+  <rect x="28" y="24" width="8" height="4" fill="#8e44ad"/>
+  <!-- hands -->
+  <rect x="10" y="40" width="8" height="6" fill="#f5c5a3"/>
+  <rect x="46" y="40" width="8" height="6" fill="#f5c5a3"/>
+  <!-- skirt -->
+  <rect x="18" y="44" width="28" height="14" fill="#8e44ad"/>
+  <!-- shoes -->
+  <rect x="20" y="56" width="10" height="6" fill="#c0392b"/>
+  <rect x="34" y="56" width="10" height="6" fill="#c0392b"/>
+  <!-- clipboard -->
+  <rect x="44" y="30" width="10" height="14" fill="#f0e0c0"/>
+  <rect x="45" y="31" width="8" height="12" fill="#fff8e7"/>
+  <rect x="46" y="33" width="6" height="1" fill="#999"/>
+  <rect x="46" y="35" width="6" height="1" fill="#999"/>
+  <rect x="46" y="37" width="4" height="1" fill="#999"/>
+</svg>

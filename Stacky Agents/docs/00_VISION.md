@@ -65,10 +65,48 @@ Stacky Pipeline necesitaría 4 estados ADO y un campo de "última pasada" para r
 
 ---
 
+## La pantalla de inicio: el equipo
+
+La pregunta que define la UX de entrada es: **¿Cómo hace el humano para saber qué agente usar?**
+
+La respuesta del paradigma anterior ("lista de cards con nombre técnico") requería que el operador conociera de memoria para qué sirve cada agente. Eso funcionaba para técnicos, pero no para analistas ni gente de negocio.
+
+**La nueva respuesta: los agentes son empleados con cara y rol.**
+
+La app abre en una **Team Screen** — un grid de tarjetas tipo equipo de trabajo. Cada tarjeta muestra:
+- Avatar pixel art (personalizable: galería de 15-20 personajes IT o imagen propia pixelada)
+- Nombre / apodo del agente (ej: "Carlos — Analista Técnico")
+- Rol y especialidad
+- Badge de tipo de agente
+
+El operador arma **su equipo** desde todos los agentes `.agent.md` disponibles en la carpeta de VS Code. No ve todos los agentes del sistema — solo los que eligió poner en su equipo. Eso reduce la carga cognitiva de "¿cuál de los 20 uso?".
+
+### Flujo principal desde la Team Screen
+
+```
+Team Screen
+└─ click en empleado (ej: "Carlos — Technical")
+   └─ modal "¿Qué ticket querés trabajar?"
+      └─ buscar y seleccionar ticket ADO
+         └─ click OK
+            └─ se abre VS Code Copilot Chat con @agente + contexto del ticket
+               └─ la conversación ocurre en el chat nativo de VS Code
+```
+
+**El bridge:** la extensión VS Code ya expone `POST localhost:5052/open-chat`. La app lo llama con `{ agent_name, message }`. El mensaje pre-cargado incluye el número y título del ticket.
+
+### Flujo avanzado: Workbench
+
+Para operadores que necesitan editar contexto, ver logs SSE, comparar ejecuciones o usar Agent Packs, el Workbench clásico sigue disponible como vista secundaria desde un botón en la Team Screen. No se elimina — se complementa.
+
+---
+
 ## Product north — qué somos / qué NO somos
 
 ### Somos
-- Un **workbench** para operadores técnicos / funcionales.
+- Un **equipo visual** de agentes-empleados configurables con avatares.
+- Un **workbench** para operadores técnicos / funcionales (flujo avanzado).
+- Un **puente inteligente** entre tickets ADO y VS Code Copilot Chat.
 - Una **interfaz humana** sobre los agentes que ya existen en Stacky.
 - Un **registro auditado** de qué se le pidió a cada agente y qué respondió.
 

@@ -13,11 +13,80 @@
 
 .title {
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.5px;
   color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ---- Running pill in header ---- */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+.runningPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--warn);
+  border-radius: 99px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.runningDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--warn);
+  border-radius: 50%;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+/* ---- Running card highlight ---- */
+@keyframes border-glow {
+  0%, 100% { border-left-color: var(--warn); box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 0%, transparent); }
+  50%       { border-left-color: var(--warn); box-shadow: 0 0 6px 2px color-mix(in srgb, var(--warn) 35%, transparent); }
+}
+
+.runningCard {
+  border-left-color: var(--warn) !important;
+  animation: border-glow 1.4s ease-in-out infinite;
+}
+
+/* ---- Spinner mini inside icon slot ---- */
+@keyframes spin-mini {
+  to { transform: rotate(360deg); }
+}
+
+.spinnerMini {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  border-top-color: var(--warn);
+  border-radius: 50%;
+  animation: spin-mini 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+.workingLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--warn);
+  margin-left: auto;
+  letter-spacing: 0.3px;
   text-transform: uppercase;
 }
 

@@ -9,7 +9,7 @@ import card from "./AgentCard.module.css";
 import styles from "./AgentSelector.module.css";
 
 export default function AgentSelector() {
-  const { vsCodeAgent, setVsCodeAgent } = useWorkbench();
+  const { vsCodeAgent, setVsCodeAgent, runningExecutionId } = useWorkbench();
   const {
     data: vscode,
     isLoading,
@@ -23,11 +23,20 @@ export default function AgentSelector() {
   });
 
   const list = vscode ?? [];
+  const isRunning = runningExecutionId != null;
 
   return (
     <section className={styles.section}>
       <div className={styles.header}>
-        <h3 className={styles.title}>AGENTES</h3>
+        <h3 className={styles.title}>
+          AGENTES
+          {isRunning && (
+            <span className={styles.runningPill} title="Agente trabajando…">
+              <span className={styles.runningDot} />
+              trabajando
+            </span>
+          )}
+        </h3>
         <button
           type="button"
           className={styles.refresh}
@@ -57,6 +66,7 @@ export default function AgentSelector() {
             key={a.filename}
             agent={a}
             selected={vsCodeAgent?.filename === a.filename}
+            running={isRunning && vsCodeAgent?.filename === a.filename}
             onSelect={() => setVsCodeAgent(a)}
           />
         ))}
@@ -68,10 +78,12 @@ export default function AgentSelector() {
 function VsCodeAgentRow({
   agent,
   selected,
+  running,
   onSelect,
 }: {
   agent: VsCodeAgent;
   selected: boolean;
+  running: boolean;
   onSelect: () => void;
 }) {
   const desc =
@@ -82,15 +94,16 @@ function VsCodeAgentRow({
 
   return (
     <button
-      className={`${card.card} ${selected ? card.selected : ""}`}
+      className={`${card.card} ${selected ? card.selected : ""} ${running ? styles.runningCard : ""}`}
       onClick={onSelect}
       title={agent.description}
       style={style}
       data-agent="custom"
     >
       <div className={card.head}>
-        <span className={card.icon}>✦</span>
+        <span className={card.icon}>{running ? <span className={styles.spinnerMini} /> : "✦"}</span>
         <span className={card.name}>{agent.name}</span>
+        {running && <span className={styles.workingLabel}>procesando…</span>}
       </div>
       {desc && <div className={card.desc}>{desc}</div>}
     </button>

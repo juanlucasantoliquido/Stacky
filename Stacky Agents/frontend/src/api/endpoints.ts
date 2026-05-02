@@ -28,6 +28,7 @@ export const Tickets = {
   byId: (id: number) => api.get<Ticket & { executions: AgentExecution[] }>(`/api/tickets/${id}`),
   fingerprint: (id: number) => api.get<TicketFingerprint>(`/api/tickets/${id}/fingerprint`),  // N3
   glossary: (id: number) => api.get<ContextBlock | null>(`/api/tickets/${id}/glossary`),  // FA-09
+  comments: (id: number) => api.get<{ comments: { author: string; date: string; text: string }[] }>(`/api/tickets/${id}/comments`),
   sync: () => api.post<TicketSyncResult>("/api/tickets/sync"),
   syncStatus: () => api.get<{ last_synced_at: string | null }>("/api/tickets/sync/status"),
 };
@@ -152,7 +153,9 @@ export const Executions = {
   approve: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/approve`),
   discard: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/discard`),
   publish: (id: number, target: "comment" | "task" = "comment") =>
-    api.post<{ ok: true; ado_url: string }>(`/api/executions/${id}/publish-to-ado`, { target }),
+    api.post<{ ok: boolean; ado_url: string; comment_id?: number; stubbed?: boolean; published_at?: string }>(`/api/executions/${id}/publish-to-ado`, { target }),
+  rollbackAdo: (id: number) =>
+    api.post<{ ok: boolean; stubbed?: boolean; rolled_back_comment_id?: number; rolled_back_at?: string }>(`/api/executions/${id}/rollback-ado`),
   diff: (a: number, b: number) =>
     api.get<{ left: AgentExecution; right: AgentExecution }>(
       `/api/executions/${a}/diff/${b}`

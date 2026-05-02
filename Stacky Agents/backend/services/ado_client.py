@@ -165,3 +165,100 @@ class AdoClient:
 
     def work_item_url(self, ado_id: int) -> str:
         return f"{self._base_proj}/_workitems/edit/{ado_id}"
+
+    def fetch_comments(self, ado_id: int, top: int = 20) -> list[dict]:
+        """Devuelve los últimos `top` comentarios de un work item.
+
+        Retorna lista de dicts con keys: author, date, text (HTML ya limpiado).
+        Si el ADO project no soporta la API preview, devuelve lista vacía.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}/comments"
+            f"?api-version=7.1-preview.3&$top={top}&order=desc"
+        )
+        try:
+            data = self._request("GET", url)
+        except AdoApiError as e:
+            logger.warning("fetch_comments(%s) falló: %s", ado_id, e)
+            return []
+        comments = data.get("comments") or []
+        out: list[dict] = []
+        for c in comments:
+            text_html = (c.get("text") or "").strip()
+            if not text_html:
+                continue
+            revised_by = c.get("revisedBy") or c.get("createdBy") or {}
+            author = revised_by.get("displayName") or revised_by.get("uniqueName") or "?"
+            date = (c.get("revisedDate") or c.get("createdDate") or "")[:10]
+            out.append({"author": author, "date": date, "text": text_html})
+        return out
+
+    def publish_comment(self, ado_id: int, body_html: str) -> dict:
+        """Publica un comentario en un work item.
+
+        Retorna dict con keys: comment_id, ado_url.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}/comments"
+            f"?api-version=7.1-preview.3"
+        )
+        result = self._request("POST", url, {"text": body_html})
+        comment_id: int = result.get("id") or result.get("commentId") or 0
+        return {
+            "comment_id": comment_id,
+            "ado_url": self.work_item_url(ado_id),
+        }
+
+    def delete_comment(self, ado_id: int, comment_id: int) -> None:
+        """Elimina un comentario previamente publicado en un work item.
+
+        Lanza AdoApiError si el comentario no existe o fue borrado ya.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}/comments/{comment_id}"
+            f"?api-version=7.1-preview.3"
+        )
+        self._request("DELETE", url)
+
+    def update_work_item_state(self, ado_id: int, new_state: str) -> dict:
+        """Actualiza el estado de un work item.
+
+        Retorna el work item actualizado con id y state.
+        Documentación ADO: PATCH /workitems/{id} con content-type application/json-patch+json
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}"
+            f"?api-version={_API_VERSION}"
+        )
+        patch_body = [
+            {"op": "add", "path": "/fields/System.State", "value": new_state}
+        ]
+        data = json.dumps(patch_body).encode("utf-8")
+        headers = {
+            "Authorization": self._auth,
+            "Content-Type": "application/json-patch+json",
+            "Accept": "application/json",
+        }
+        req = urllib.request.Request(url, data=data, headers=headers, method="PATCH")
+        try:
+            with urllib.request.urlopen(req, timeout=_TIMEOUT_SEC) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                result = json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                pass
+            raise AdoApiError(
+                f"ADO PATCH workitems/{ado_id} → {e.code}: {detail}"
+            ) from e
+        except urllib.error.URLError as e:
+            raise AdoApiError(
+                f"ADO network error PATCH workitems/{ado_id}: {e.reason}"
+            ) from e
+        fields = result.get("fields") or {}
+        return {
+            "id": ado_id,
+            "state": fields.get("System.State"),
+        }

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Executions } from "../api/endpoints";
@@ -14,6 +14,7 @@ import styles from "./OutputPanel.module.css";
 export default function OutputPanel() {
   const { activeExecutionId, runningExecutionId, setRunningExecution } = useWorkbench();
   const qc = useQueryClient();
+  const [rollbackConfirm, setRollbackConfirm] = useState(false);
 
   const stream = useExecutionStream(runningExecutionId);
 
@@ -49,7 +50,20 @@ export default function OutputPanel() {
   });
   const publish = useMutation({
     mutationFn: (id: number) => Executions.publish(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["execution", activeExecutionId] });
+    },
   });
+  const rollback = useMutation({
+    mutationFn: (id: number) => Executions.rollbackAdo(id),
+    onSuccess: () => {
+      setRollbackConfirm(false);
+      qc.invalidateQueries({ queryKey: ["execution", activeExecutionId] });
+    },
+  });
+
+  const isPublished = !!(execution?.metadata?.ado_published_at);
+  const isRolledBack = !!(execution?.metadata?.ado_rollback_at);
 
   if (!activeExecutionId && runningExecutionId == null) {
     return (
@@ -85,6 +99,16 @@ export default function OutputPanel() {
           {!!execution.metadata?.from_cache && (
             <span title="Output servido desde cache" style={{ color: "var(--success)" }}>
               🔁 cached
+            </span>
+          )}
+          {isPublished && !isRolledBack && (
+            <span title="Publicado en ADO" style={{ color: "var(--success)", fontSize: 11 }}>
+              ✓ ADO
+            </span>
+          )}
+          {isRolledBack && (
+            <span title="Rollback ejecutado" style={{ color: "var(--warn)", fontSize: 11 }}>
+              ↩ revertido
             </span>
           )}
           {(() => {
@@ -134,9 +158,10 @@ export default function OutputPanel() {
           <button
             className={styles.secondary}
             onClick={() => publish.mutate(execution.id)}
-            disabled={publish.isPending}
+            disabled={publish.isPending || isPublished}
+            title={isPublished ? "Ya publicado en ADO" : "Publicar en ADO"}
           >
-            Send to ADO
+            {publish.isPending ? "Publicando…" : isPublished ? "✓ Publicado" : "Send to ADO"}
           </button>
           <button
             className={styles.secondary}
@@ -147,6 +172,45 @@ export default function OutputPanel() {
           </button>
         </footer>
       )}
+
+      {/* Rollback ADO: aparece cuando se publicó y no se hizo rollback aún */}
+      {isPublished && !isRolledBack && (
+        <div className={styles.rollbackBar}>
+          {!rollbackConfirm ? (
+            <button
+              className={styles.rollbackBtn}
+              onClick={() => setRollbackConfirm(true)}
+              title="Eliminar el comentario publicado en ADO"
+            >
+              ↩ Rollback ADO
+            </button>
+          ) : (
+            <span className={styles.rollbackConfirm}>
+              <span>¿Eliminar comentario de ADO?</span>
+              <button
+                className={styles.rollbackBtnDanger}
+                onClick={() => rollback.mutate(execution.id)}
+                disabled={rollback.isPending}
+              >
+                {rollback.isPending ? "Borrando…" : "Sí, eliminar"}
+              </button>
+              <button
+                className={styles.secondary}
+                onClick={() => setRollbackConfirm(false)}
+                disabled={rollback.isPending}
+              >
+                Cancelar
+              </button>
+            </span>
+          )}
+          {rollback.isError && (
+            <span style={{ color: "var(--error)", fontSize: 11, marginLeft: 8 }}>
+              Error al hacer rollback
+            </span>
+          )}
+        </div>
+      )}
+
       {execution.status === "completed" && execution.output && (
         <OutputTools
           executionId={execution.id}

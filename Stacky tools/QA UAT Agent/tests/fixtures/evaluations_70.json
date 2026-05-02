@@ -1,0 +1,63 @@
+{
+  "ok": true,
+  "ticket_id": 70,
+  "evaluations": [
+    {
+      "scenario_id": "P01",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "expected": "0",
+          "actual": "5",
+          "status": "pass",
+          "evidence_ref": "evidence/70/P01/assertions_P01.json"
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "invisible",
+          "target": "msg_lista_vacia",
+          "expected": null,
+          "actual": false,
+          "status": "pass",
+          "evidence_ref": "evidence/70/P01/assertions_P01.json"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P04",
+      "status": "fail",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "msg_lista_vacia",
+          "expected": null,
+          "actual": true,
+          "status": "pass",
+          "evidence_ref": "evidence/70/P04/assertions_P04.json"
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "equals",
+          "target": "msg_lista_vacia",
+          "expected": "No hay lotes agendados",
+          "actual": "",
+          "status": "fail",
+          "evidence_ref": "evidence/70/P04/assertions_P04.json"
+        },
+        {
+          "oracle_id": 2,
+          "tipo": "count_eq",
+          "target": "grid_agenda_aut",
+          "expected": "0",
+          "actual": "0",
+          "status": "pass",
+          "evidence_ref": "evidence/70/P04/assertions_P04.json"
+        }
+      ]
+    }
+  ]
+}

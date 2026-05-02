@@ -42,8 +42,11 @@ _STAGE_NAMES = [
     "reader",
     "ui_map",
     "compiler",
+    "preconditions",
     "generator",
     "runner",
+    "evaluator",
+    "failure_analyzer",
     "dossier",
     "publisher",
 ]
@@ -191,6 +194,39 @@ def run(
         if not compiler_result.get("ok"):
             return _build_output(ticket_id, stages, compiler_result, started)
 
+    # ── Stage 3b: precondition_checker ──────────────────────────────────────
+    stage = "preconditions"
+    if stage in skip_stages:
+        stages[stage] = {"ok": True, "skipped": True}
+    else:
+        from uat_precondition_checker import run as preconditions_run
+        _log_stage(stage)
+        prec_result = preconditions_run(
+            scenarios_path=evidence_dir / "scenarios.json",
+            verbose=verbose,
+        )
+        if prec_result.get("ok"):
+            stages[stage] = _summarise_preconditions(prec_result)
+        else:
+            # DB unavailable is non-fatal (warn + continue)
+            if prec_result.get("error") in ("db_credentials_missing", "db_unreachable"):
+                logger.warning(
+                    "Precondition check skipped (%s): %s",
+                    prec_result.get("error"),
+                    prec_result.get("message"),
+                )
+                stages[stage] = {
+                    "ok": True, "skipped": True,
+                    "reason": prec_result.get("error"),
+                }
+            else:
+                stages[stage] = {
+                    "ok": False, "skipped": False,
+                    "error": prec_result.get("error"),
+                    "message": prec_result.get("message"),
+                }
+                return _build_output(ticket_id, stages, prec_result, started)
+
     # ── Stage 4: generator ───────────────────────────────────────────────────
     stage = "generator"
     tests_dir = evidence_dir / "tests"
@@ -225,6 +261,10 @@ def run(
             logger.warning("All scenarios are blocked (missing selectors). Skipping runner.")
             stages["runner"] = {"ok": True, "skipped": True,
                                 "reason": "all_scenarios_blocked"}
+            stages["evaluator"] = {"ok": True, "skipped": True,
+                                   "reason": "all_scenarios_blocked"}
+            stages["failure_analyzer"] = {"ok": True, "skipped": True,
+                                          "reason": "all_scenarios_blocked"}
             # Build synthetic runner output
             runner_result = _synthetic_runner_output(ticket_id, gen_specs)
             _persist_json(evidence_dir / "runner_output.json", runner_result)
@@ -263,6 +303,53 @@ def run(
         if not runner_result.get("ok"):
             return _build_output(ticket_id, stages, runner_result, started)
         _persist_json(evidence_dir / "runner_output.json", runner_result)
+
+    # ── Stage 6: assertion_evaluator ─────────────────────────────────────────
+    stage = "evaluator"
+    if stage in skip_stages:
+        stages[stage] = {"ok": True, "skipped": True}
+        eval_file = evidence_dir / "evaluations.json"
+        if not eval_file.is_file():
+            # Evaluations optional — continue without them
+            evaluations_result = None
+        else:
+            evaluations_result = json.loads(eval_file.read_text(encoding="utf-8"))
+    else:
+        from uat_assertion_evaluator import run as evaluator_run
+        _log_stage(stage)
+        evaluations_result = evaluator_run(
+            scenarios_path=evidence_dir / "scenarios.json",
+            runner_output_path=evidence_dir / "runner_output.json",
+            verbose=verbose,
+        )
+        stages[stage] = _summarise_evaluator(evaluations_result)
+        if not evaluations_result.get("ok"):
+            return _build_output(ticket_id, stages, evaluations_result, started)
+
+    # ── Stage 7: failure_analyzer ─────────────────────────────────────────────
+    stage = "failure_analyzer"
+    # Only run if there are failures to analyze
+    has_failures = bool(
+        evaluations_result
+        and any(
+            e.get("status") == "fail"
+            for e in (evaluations_result.get("evaluations") or [])
+        )
+    )
+    if stage in skip_stages or not has_failures:
+        stages[stage] = {"ok": True, "skipped": True}
+    else:
+        from uat_failure_analyzer import run as analyzer_run
+        _log_stage(stage)
+        evals_path = evidence_dir / "evaluations.json"
+        analyzer_result = analyzer_run(
+            evaluations_path=evals_path,
+            runner_output_path=evidence_dir / "runner_output.json",
+            verbose=verbose,
+        )
+        stages[stage] = _summarise_failure_analyzer(analyzer_result)
+        if not analyzer_result.get("ok"):
+            return _build_output(ticket_id, stages, analyzer_result, started)
 
     return _run_dossier_and_publisher(
         ticket_id=ticket_id,
@@ -464,6 +551,49 @@ def _summarise_dossier(r: dict) -> dict:
         base["verdict"] = r.get("verdict")
         base["paths"] = r.get("paths")
         base["run_id"] = r.get("run_id")
+    else:
+        base["error"] = r.get("error")
+        base["message"] = r.get("message")
+    return base
+
+
+def _summarise_preconditions(r: dict) -> dict:
+    base = {"ok": r.get("ok", False), "skipped": False}
+    if r.get("ok"):
+        summary = r.get("summary", {})
+        base["total"] = summary.get("total", 0)
+        base["ok_count"] = summary.get("ok", 0)
+        base["blocked"] = summary.get("blocked", 0)
+    else:
+        base["error"] = r.get("error")
+        base["message"] = r.get("message")
+    return base
+
+
+def _summarise_evaluator(r: dict) -> dict:
+    base = {"ok": r.get("ok", False), "skipped": False}
+    if r.get("ok"):
+        evals = r.get("evaluations") or []
+        base["pass"] = sum(1 for e in evals if e.get("status") == "pass")
+        base["fail"] = sum(1 for e in evals if e.get("status") == "fail")
+        base["blocked"] = sum(1 for e in evals if e.get("status") == "blocked")
+        base["review"] = sum(1 for e in evals if e.get("status") == "review")
+    else:
+        base["error"] = r.get("error")
+        base["message"] = r.get("message")
+    return base
+
+
+def _summarise_failure_analyzer(r: dict) -> dict:
+    base = {"ok": r.get("ok", False), "skipped": False}
+    if r.get("ok"):
+        analyses = r.get("analyses") or []
+        base["analyzed"] = len(analyses)
+        categories: dict = {}
+        for a in analyses:
+            cat = a.get("category", "unknown")
+            categories[cat] = categories.get(cat, 0) + 1
+        base["categories"] = categories
     else:
         base["error"] = r.get("error")
         base["message"] = r.get("message")

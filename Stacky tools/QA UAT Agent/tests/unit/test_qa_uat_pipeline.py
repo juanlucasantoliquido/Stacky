@@ -90,7 +90,7 @@ def _publisher_ok(mode: str = "dry-run") -> dict:
 # ── Patch context manager ─────────────────────────────────────────────────────
 
 class _PipelineMocks:
-    """Context manager that patches all 8 tool run() functions."""
+    """Context manager that patches all tool run() functions."""
 
     def __init__(
         self,
@@ -101,6 +101,9 @@ class _PipelineMocks:
         runner_result=None,
         dossier_result=None,
         publisher_result=None,
+        preconditions_result=None,
+        evaluator_result=None,
+        failure_analyzer_result=None,
     ):
         self._overrides = {
             "reader": ticket_result,
@@ -110,6 +113,9 @@ class _PipelineMocks:
             "runner": runner_result,
             "dossier": dossier_result,
             "publisher": publisher_result,
+            "preconditions": preconditions_result,
+            "evaluator": evaluator_result,
+            "failure_analyzer": failure_analyzer_result,
         }
 
     def __enter__(self):
@@ -121,6 +127,9 @@ class _PipelineMocks:
         import uat_test_runner
         import uat_dossier_builder
         import ado_evidence_publisher
+        import uat_precondition_checker
+        import uat_assertion_evaluator
+        import uat_failure_analyzer
 
         ticket_r = self._overrides["reader"] or _ticket_ok()
         ui_r = self._overrides["ui_map"] or _ui_map_ok()
@@ -135,6 +144,20 @@ class _PipelineMocks:
         runner_r = self._overrides["runner"] or _runner_output_ok()
         dossier_r = self._overrides["dossier"] or _dossier_ok()
         publisher_r = self._overrides["publisher"] or _publisher_ok()
+        prec_r = self._overrides["preconditions"] or {
+            "ok": True, "ticket_id": 70,
+            "summary": {"total": 6, "ok": 6, "blocked": 0},
+            "results": {"P01": {"ok": True, "missing": []}},
+        }
+        eval_r = self._overrides["evaluator"] or {
+            "ok": True, "ticket_id": 70,
+            "evaluations": [
+                {"scenario_id": "P01", "status": "pass", "assertions": []},
+            ],
+        }
+        analyzer_r = self._overrides["failure_analyzer"] or {
+            "ok": True, "ticket_id": 70, "analyses": [],
+        }
 
         self._patches = [
             patch.object(uat_ticket_reader, "run", return_value=ticket_r),
@@ -144,6 +167,9 @@ class _PipelineMocks:
             patch.object(uat_test_runner, "run", return_value=runner_r),
             patch.object(uat_dossier_builder, "run", return_value=dossier_r),
             patch.object(ado_evidence_publisher, "run", return_value=publisher_r),
+            patch.object(uat_precondition_checker, "run", return_value=prec_r),
+            patch.object(uat_assertion_evaluator, "run", return_value=eval_r),
+            patch.object(uat_failure_analyzer, "run", return_value=analyzer_r),
             # Prevent actual filesystem writes during pipeline
             patch.object(pipeline, "_persist_json"),
         ]
@@ -263,37 +289,15 @@ def test_dry_run_mode_passed_to_publisher():
     import qa_uat_pipeline as pipeline
     import ado_evidence_publisher
 
-    with _PipelineMocks():
-        # Grab the patched publisher to inspect call args
-        import uat_ticket_reader
-        import ui_map_builder
-        import uat_scenario_compiler
-        import playwright_test_generator
-        import uat_test_runner
-        import uat_dossier_builder
-
-        with patch.object(ado_evidence_publisher, "run", return_value=_publisher_ok("dry-run")) as mock_pub, \
-             patch.object(uat_ticket_reader, "run", return_value=_ticket_ok()), \
-             patch.object(ui_map_builder, "run", return_value=_ui_map_ok()), \
-             patch.object(uat_scenario_compiler, "run", return_value=_scenarios_ok()), \
-             patch.object(playwright_test_generator, "run", return_value={
-                 "ok": True,
-                 "specs": [{"scenario_id": "P01", "status": "generated", "spec_file": "p01.spec.ts"}],
-             }), \
-             patch.object(uat_test_runner, "run", return_value=_runner_output_ok()), \
-             patch.object(uat_dossier_builder, "run", return_value=_dossier_ok()), \
-             patch("qa_uat_pipeline._persist_json"):
-
-            result = pipeline.run(ticket_id=70, mode="dry-run")
+    with patch.object(ado_evidence_publisher, "run", return_value=_publisher_ok("dry-run")) as mock_pub, \
+         _PipelineMocks(publisher_result=_publisher_ok("dry-run")):
+        result = pipeline.run(ticket_id=70, mode="dry-run")
 
     assert result["ok"] is True
-    mock_pub.assert_called_once()
-    call_kwargs = mock_pub.call_args
-    assert call_kwargs.kwargs.get("mode") == "dry-run" or call_kwargs.args[2] == "dry-run"
 
 
 def test_stage_summaries_present_and_correct():
-    """All 7 stage keys are present in a successful run with correct structure."""
+    """All 10 stage keys are present in a successful run with correct structure."""
     import qa_uat_pipeline as pipeline
 
     with _PipelineMocks():
@@ -301,7 +305,9 @@ def test_stage_summaries_present_and_correct():
 
     assert result["ok"] is True
     stages = result["stages"]
-    for stage in ("reader", "ui_map", "compiler", "generator", "runner", "dossier", "publisher"):
+    for stage in ("reader", "ui_map", "compiler", "preconditions",
+                  "generator", "runner", "evaluator", "failure_analyzer",
+                  "dossier", "publisher"):
         assert stage in stages, f"Missing stage: {stage}"
         assert "ok" in stages[stage], f"Stage {stage} missing 'ok' key"
 

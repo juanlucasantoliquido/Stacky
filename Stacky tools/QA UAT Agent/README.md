@@ -22,13 +22,13 @@ QA UAT Agent/
 ├── uat_dossier_builder.py       ← Ensambla dossier final: JSON + Markdown + HTML para ADO
 ├── ado_evidence_publisher.py    ← Publica dossier como comentario único e idempotente en ADO
 │
-├── ── Fase 3.B ────────────────────────────────────────────────
-├── uat_precondition_checker.py  ← Verifica precondiciones (RIDIOMA, Web.config, BD, build)
-├── uat_evidence_capturer.py     ← Hooks Playwright: screenshots/DOM por paso
+├── ── Fase 3.B — Herramientas de calidad ──────────────────────
+├── uat_precondition_checker.py  ← Verifica RIDIOMA y datos requeridos en BD (SELECT only)
 ├── uat_assertion_evaluator.py   ← Evalúa assertions (literales + semánticas via LLM)
-├── uat_failure_analyzer.py      ← Clasifica FAILs en taxonomía con hipótesis
-├── uat_cleanup_tool.py          ← Limpia datos creados por el escenario
-├── uat_session_manager.py       ← Gestiona sesión browser (login PABLO, cookies, pool)
+├── uat_failure_analyzer.py      ← Clasifica FAILs en taxonomía con hipótesis (heurística + LLM)
+│
+├── ── Orquestador ─────────────────────────────────────────────
+├── qa_uat_pipeline.py           ← Pipeline completo de 10 stages en un solo comando
 │
 ├── ── Fase 3.C / Post-MVP ─────────────────────────────────────
 ├── uat_report_summarizer.py
@@ -130,40 +130,89 @@ export $(grep -v '^#' ../../.secrets/agenda_web.env | xargs)
 
 ---
 
-## Pipeline completo (MVP)
+## Pipeline completo (10 stages)
+
+El orquestador corre los 10 stages en orden:
+
+```
+reader → ui_map → compiler → preconditions → generator → runner → evaluator → failure_analyzer → dossier → publisher
+```
+
+| Stage | Tool | Descripción |
+|---|---|---|
+| `reader` | `uat_ticket_reader.py` | Lee ticket ADO, extrae plan de pruebas |
+| `ui_map` | `ui_map_builder.py` | Inspecciona DOM de la pantalla con Playwright |
+| `compiler` | `uat_scenario_compiler.py` | Compila ScenarioSpecs ejecutables |
+| `preconditions` | `uat_precondition_checker.py` | Verifica RIDIOMA y datos en BD (no-fatal si BD no disponible) |
+| `generator` | `playwright_test_generator.py` | Genera `.spec.ts` por escenario |
+| `runner` | `uat_test_runner.py` | Ejecuta tests, captura evidencia |
+| `evaluator` | `uat_assertion_evaluator.py` | Evalúa assertions y produce `evaluations.json` |
+| `failure_analyzer` | `uat_failure_analyzer.py` | Clasifica fallas (solo si hay FAILs) |
+| `dossier` | `uat_dossier_builder.py` | Ensambla dossier final |
+| `publisher` | `ado_evidence_publisher.py` | Publica en ADO (dry-run por defecto) |
+
+### Comando unificado
+
+```bash
+# Dry-run completo (sin tocar ADO)
+python qa_uat_pipeline.py --ticket 70 --mode dry-run --verbose
+
+# Publicar resultado en ADO
+python qa_uat_pipeline.py --ticket 70 --mode publish
+
+# Con navegador visible (útil para debug)
+python qa_uat_pipeline.py --ticket 70 --headed --verbose
+
+# Saltear hasta un stage específico (usa cache del run anterior)
+python qa_uat_pipeline.py --ticket 70 --skip-to runner --verbose
+```
+
+### Comandos individuales por tool
 
 ```bash
 # 1. Leer ticket
 python uat_ticket_reader.py --ticket 70
 
 # 2. Compilar escenarios
-python uat_scenario_compiler.py < evidence/70/ticket.json > evidence/70/scenarios.json
+python uat_scenario_compiler.py < evidence/70/ticket.json
 
-# 3. Construir UI map (si no existe o invalidado)
+# 3. Verificar precondiciones BD
+python uat_precondition_checker.py --scenarios evidence/70/scenarios.json
+
+# 4. Construir UI map
 python ui_map_builder.py --screen FrmAgenda.aspx
 
-# 4. Generar tests
+# 5. Generar tests
 python playwright_test_generator.py \
   --scenarios evidence/70/scenarios.json \
   --ui-maps cache/ui_maps/ \
   --out evidence/70/tests/
 
-# 5. Ejecutar
+# 6. Ejecutar
 python uat_test_runner.py \
   --tests-dir evidence/70/tests/ \
   --evidence-out evidence/70/
 
-# 6. Ensamblar dossier
-python uat_dossier_builder.py --ticket 70 --evidence evidence/70/
+# 7. Evaluar assertions
+python uat_assertion_evaluator.py \
+  --scenarios evidence/70/scenarios.json \
+  --runner-output evidence/70/runner_output.json
 
-# 7a. Preview sin tocar ADO
+# 8. Analizar fallas
+python uat_failure_analyzer.py \
+  --evaluations evidence/70/evaluations.json \
+  --runner-output evidence/70/runner_output.json
+
+# 9. Construir dossier
+python uat_dossier_builder.py \
+  --runner-output evidence/70/runner_output.json \
+  --ticket evidence/70/ticket.json
+
+# 10a. Preview sin tocar ADO
 python ado_evidence_publisher.py --ticket 70 --mode dry-run
 
-# 7b. Publicar cuando el operador confirma
+# 10b. Publicar cuando el operador confirma
 python ado_evidence_publisher.py --ticket 70 --mode publish
-
-# O todo de una vez:
-python qa_uat_pipeline.py --ticket 70 --mode dry-run
 ```
 
 ---

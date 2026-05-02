@@ -197,6 +197,31 @@ export const Packs = {
   abandon: (id: number) => api.delete<{ ok: true }>(`/api/packs/runs/${id}`),
 };
 
+// QA UAT Pipeline
+export interface QaUatRunStatus {
+  ok: boolean;
+  execution_id: string;
+  status: "queued" | "running" | "completed" | "error";
+  pipeline_result?: {
+    ok: boolean;
+    ticket_id: number;
+    verdict?: "PASS" | "FAIL" | "BLOCKED" | "MIXED";
+    elapsed_s?: number;
+    stages?: Record<string, { ok: boolean; skipped?: boolean; [k: string]: unknown }>;
+  };
+  error?: string;
+}
+
+export const QaUat = {
+  run: (ticketId: number, mode: "dry-run" | "publish" = "dry-run") =>
+    api.post<{ ok: boolean; execution_id: string; status: string }>(
+      "/api/qa-uat/run",
+      { ticket_id: ticketId, mode }
+    ),
+  status: (executionId: string) =>
+    api.get<QaUatRunStatus>(`/api/qa-uat/run/${executionId}`),
+};
+
 // FA-13
 export const Decisions = {
   list: () =>

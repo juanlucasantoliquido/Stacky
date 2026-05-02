@@ -6,6 +6,7 @@ import { useExecutionStream } from "../hooks/useExecutionStream";
 import { useWorkbench } from "../store/workbench";
 import ConfidenceBadge from "./ConfidenceBadge";
 import ContractBadge from "./ContractBadge";
+import DossierPanel from "./DossierPanel";
 import NextAgentSuggestion from "./NextAgentSuggestion";
 import OutputTools from "./OutputTools";
 import StructuredOutput from "./StructuredOutput";
@@ -78,6 +79,7 @@ export default function OutputPanel() {
   if (!execution) return null;
 
   return (
+    <>
     <section className={styles.section}>
       <header className={styles.head}>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -160,5 +162,10 @@ export default function OutputPanel() {
         </div>
       )}
     </section>
+    {/* QA UAT dossier — only shown for qa agent executions with pipeline metadata */}
+    {execution.agent_type === "qa" && (
+      <DossierPanel execution={execution} />
+    )}
+  </>
   );
 }

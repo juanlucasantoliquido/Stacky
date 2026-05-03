@@ -37,7 +37,32 @@ logger = logging.getLogger("stacky.qa_uat.pipeline")
 
 _TOOL_VERSION = "1.0.0"
 _TOOL_ROOT = Path(__file__).parent  # NOT resolved — avoid symlink/junction issues on Windows
-_DEFAULT_ADO_PATH = _TOOL_ROOT.parent.parent / "ADO Manager" / "ado.py"
+
+
+def _resolve_sibling_tool(tool_dir_name: str, entrypoint: str) -> Path:
+    """
+    Resolve the path to a sibling tool inside the same `Stacky tools/` parent.
+
+    `qa_uat_pipeline.py` lives in `Stacky tools/QA UAT Agent/`, so its sibling
+    `ADO Manager/ado.py` is at `_TOOL_ROOT.parent / "ADO Manager" / "ado.py"`.
+
+    This helper walks upward from this file looking for the `Stacky tools`
+    container directory, then descends into the requested sibling. This is
+    robust against moves of the `QA UAT Agent` folder within `Stacky tools/`.
+    Falls back to a 1-up sibling lookup if the marker is not found.
+    """
+    here = Path(__file__).resolve()
+    for ancestor in here.parents:
+        if ancestor.name == "Stacky tools":
+            candidate = ancestor / tool_dir_name / entrypoint
+            if candidate.is_file():
+                return candidate
+            return candidate  # return even if missing, so error is informative
+    # Fallback: assume sibling-of-QA-UAT-Agent layout
+    return Path(__file__).parent.parent / tool_dir_name / entrypoint
+
+
+_DEFAULT_ADO_PATH = _resolve_sibling_tool("ADO Manager", "ado.py")
 
 _STAGE_NAMES = [
     "reader",

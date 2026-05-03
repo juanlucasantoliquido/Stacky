@@ -43,7 +43,24 @@ _MARKER_RE = re.compile(
     re.IGNORECASE,
 )
 _AUDIT_DIR = Path(__file__).resolve().parent / "audit"
-_DEFAULT_ADO_PATH = Path(__file__).resolve().parent.parent.parent / "ADO Manager" / "ado.py"
+
+
+def _resolve_sibling_tool(tool_dir_name: str, entrypoint: str) -> Path:
+    """Locate a sibling tool by walking up to the `Stacky tools` container.
+
+    See qa_uat_pipeline._resolve_sibling_tool for full rationale. Required
+    because this file used to compute `parent.parent.parent / "ADO Manager"`,
+    which lands one level too high (Stacky/, not Stacky tools/) and breaks
+    any invocation outside ADO Manager's working dir.
+    """
+    here = Path(__file__).resolve()
+    for ancestor in here.parents:
+        if ancestor.name == "Stacky tools":
+            return ancestor / tool_dir_name / entrypoint
+    return Path(__file__).resolve().parent.parent / tool_dir_name / entrypoint
+
+
+_DEFAULT_ADO_PATH = _resolve_sibling_tool("ADO Manager", "ado.py")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -185,6 +202,16 @@ def run(
 
 # ── ADO interaction ────────────────────────────────────────────────────────────
 
+def _ado_subprocess_env() -> dict:
+    """
+    Force UTF-8 IO for the ado.py child process. Without this, Windows
+    cp1252 stdout fails on tickets containing non-ASCII chars (e.g. arrow
+    glyphs in comments) with: 'charmap' codec can't encode character.
+    """
+    import os
+    return {**os.environ, "PYTHONIOENCODING": "utf-8"}
+
+
 def _get_existing_comment(ticket_id: int, ado_path: Path) -> Optional[dict]:
     """
     Call `python ado.py comments <id>` and scan for stacky-qa-uat marker.
@@ -195,13 +222,18 @@ def _get_existing_comment(ticket_id: int, ado_path: Path) -> Optional[dict]:
             [sys.executable, str(ado_path), "comments", str(ticket_id)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
+            env=_ado_subprocess_env(),
         )
         if proc.returncode != 0:
             logger.warning("ado.py comments returned exit %d: %s", proc.returncode, proc.stderr[:200])
             return None
         data = json.loads(proc.stdout)
-        comments = data.get("comments", [])
+        # ADO Manager returns the list under "result" (current contract);
+        # fall back to "comments" for backward compatibility.
+        comments = data.get("result") or data.get("comments") or []
         for comment in comments:
             text = comment.get("text", "")
             m = _MARKER_RE.search(text)
@@ -224,7 +256,10 @@ def _post_comment(ticket_id: int, html_content: str, ado_path: Path) -> dict:
              "--html", "--text", html_content],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
+            env=_ado_subprocess_env(),
         )
         if proc.returncode != 0:
             try:

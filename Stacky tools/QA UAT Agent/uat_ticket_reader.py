@@ -26,7 +26,21 @@ logger = logging.getLogger("stacky.qa_uat.ticket_reader")
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 _TOOL_VERSION = "1.0.0"
-_DEFAULT_ADO_PATH = Path(__file__).resolve().parent.parent.parent / "ADO Manager" / "ado.py"
+
+
+def _resolve_sibling_tool(tool_dir_name: str, entrypoint: str) -> Path:
+    """Locate a sibling tool by walking up to the `Stacky tools` container.
+
+    See qa_uat_pipeline._resolve_sibling_tool for full rationale.
+    """
+    here = Path(__file__).resolve()
+    for ancestor in here.parents:
+        if ancestor.name == "Stacky tools":
+            return ancestor / tool_dir_name / entrypoint
+    return Path(__file__).resolve().parent.parent / tool_dir_name / entrypoint
+
+
+_DEFAULT_ADO_PATH = _resolve_sibling_tool("ADO Manager", "ado.py")
 
 # Keywords to classify comment roles (fallback regex)
 _ROLE_KEYWORDS: dict[str, list[str]] = {
@@ -121,7 +135,8 @@ def run(
     if not ticket_data.get("ok"):
         return _err("ado_error", ticket_data.get("message", str(ticket_data)))
 
-    wi = ticket_data.get("work_item") or ticket_data.get("item") or {}
+    wi = (ticket_data.get("work_item") or ticket_data.get("item")
+          or ticket_data.get("result") or {})
     if not wi:
         # ticket_data might be the work item directly
         if ticket_data.get("id"):
@@ -133,7 +148,9 @@ def run(
     if not comments_data.get("ok"):
         return _err("ado_error", comments_data.get("message", str(comments_data)))
 
-    raw_comments = comments_data.get("comments") or []
+    raw_comments = (comments_data.get("comments")
+                    or comments_data.get("result")
+                    or [])
 
     # Classify comments
     classified = _classify_comments(raw_comments, verbose=verbose)
@@ -200,11 +217,14 @@ def run(
 
 def _ado_run(ado_path: Path, args: list) -> dict:
     """Invoke ado.py via subprocess and return parsed JSON output."""
+    import os
     cmd = [sys.executable, str(ado_path)] + args
     logger.debug("ado cmd: %s", " ".join(cmd))
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=30, check=False
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30, check=False, env=env
         )
     except subprocess.TimeoutExpired:
         return {"ok": False, "message": "ADO Manager timed out"}

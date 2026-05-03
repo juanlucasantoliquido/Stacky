@@ -29,7 +29,11 @@ from typing import Optional
 logger = logging.getLogger("stacky.qa_uat.test_runner")
 
 _TOOL_VERSION = "1.0.0"
-_DEFAULT_TIMEOUT_MS = 30_000
+# Default per-test timeout in ms.
+# 90s acomoda: login ASP.NET WebForms (~10-25s) + 2-3 navegaciones a FrmAgenda
+# (~5-15s c/u) + steps + screenshots. El default anterior de 30s reventaba
+# escenarios que de otro modo eran PASS (ej: P01/P05 ticket 70).
+_DEFAULT_TIMEOUT_MS = 90_000
 
 # Assertion failure patterns in Playwright output
 _ASSERTION_FAILURE_RE = re.compile(
@@ -149,10 +153,20 @@ def _run_single_spec(
     env = {**os.environ, "STACKY_QA_UAT_HEADLESS": headless_flag}
 
     # Build playwright CLI command
-    config_path = Path(__file__).resolve().parent / "playwright.config.ts"
+    import sys as _sys
+    # Use the actual file location (not resolved symlink) to avoid junction issues on Windows
+    tool_dir = Path(__file__).parent
+    config_path = tool_dir / "playwright.config.ts"
+    # Make spec path relative to tool_dir so Playwright doesn't resolve via symlink.
+    # Use forward slashes — Playwright treats the arg as a regex/glob and backslashes break it.
+    try:
+        spec_rel = spec_file.relative_to(tool_dir)
+        spec_arg = str(spec_rel).replace("\\", "/")
+    except ValueError:
+        spec_arg = str(spec_file).replace("\\", "/")
     cmd = [
         "npx", "playwright", "test",
-        str(spec_file),
+        spec_arg,
         "--reporter=json",
         f"--timeout={timeout_ms}",
     ]
@@ -161,14 +175,19 @@ def _run_single_spec(
 
     logger.debug("Running: %s", " ".join(cmd))
 
+    # On Windows, .cmd/.ps1 files require shell=True (subprocess can't exec them directly)
+    use_shell = _sys.platform == "win32"
+    cmd_arg = subprocess.list2cmdline(cmd) if use_shell else cmd
+
     try:
         proc = subprocess.run(
-            cmd,
+            cmd_arg,
             capture_output=True,
             text=True,
             env=env,
             timeout=timeout_ms * 5 // 1000 + 60,  # global timeout = 5x individual + 60s overhead
-            cwd=str(Path(__file__).resolve().parent),
+            cwd=str(tool_dir),
+            shell=use_shell,
         )
     except subprocess.TimeoutExpired:
         duration = int((time.time() - started) * 1000)
@@ -220,8 +239,8 @@ def _run_single_spec(
         "status": status,
         "duration_ms": duration,
         "artifacts": artifacts,
-        "raw_stdout": stdout[:2000],
-        "raw_stderr": stderr[:1000],
+        "raw_stdout": stdout[:50000],
+        "raw_stderr": stderr[:5000],
     }
     if status == "fail" and assertion_failures:
         result["assertion_failures"] = assertion_failures
@@ -234,9 +253,13 @@ def _run_single_spec(
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _check_node_available() -> bool:
+    import sys as _sys
+    # On Windows, use shell=True so cmd.exe can resolve npx.cmd/.ps1
+    use_shell = _sys.platform == "win32"
     for cmd in (["node", "--version"], ["npx", "--version"]):
         try:
-            r = subprocess.run(cmd, capture_output=True, timeout=10, check=False)
+            cmd_arg = subprocess.list2cmdline(cmd) if use_shell else cmd
+            r = subprocess.run(cmd_arg, capture_output=True, timeout=10, check=False, shell=use_shell)
             if r.returncode == 0:
                 return True
         except (FileNotFoundError, OSError):

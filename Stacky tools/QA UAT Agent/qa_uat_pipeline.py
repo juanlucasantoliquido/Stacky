@@ -14,7 +14,8 @@ Options:
     --ticket         ADO work item ID (required)
     --mode           dry-run (default) or publish — controls ado_evidence_publisher
     --headed         Run Playwright in headed mode (shows browser)
-    --timeout-ms     Playwright per-step timeout in ms (default: 30000)
+    --timeout-ms     Playwright per-test timeout in ms (default: 90000).
+                     Cubre login ASP.NET + 2-3 navegaciones + steps + screenshots.
     --skip-to        Skip all stages before: reader|ui_map|compiler|generator|runner|dossier|publisher
     --ado-path       Path to ado.py (default: ../ADO Manager/ado.py)
     --verbose        Debug logging to stderr
@@ -35,7 +36,7 @@ from typing import Optional
 logger = logging.getLogger("stacky.qa_uat.pipeline")
 
 _TOOL_VERSION = "1.0.0"
-_TOOL_ROOT = Path(__file__).resolve().parent
+_TOOL_ROOT = Path(__file__).parent  # NOT resolved — avoid symlink/junction issues on Windows
 _DEFAULT_ADO_PATH = _TOOL_ROOT.parent.parent / "ADO Manager" / "ado.py"
 
 _STAGE_NAMES = [
@@ -84,7 +85,7 @@ def run(
     ticket_id: int,
     mode: str = "dry-run",
     headed: bool = False,
-    timeout_ms: int = 30_000,
+    timeout_ms: int = 90_000,
     skip_to: Optional[str] = None,
     ado_path: Optional[Path] = None,
     verbose: bool = False,
@@ -535,10 +536,10 @@ def _summarise_generator(r: dict) -> dict:
 def _summarise_runner(r: dict) -> dict:
     base = {"ok": r.get("ok", False), "skipped": False}
     if r.get("ok"):
-        base["pass"] = r.get("pass_count", 0)
-        base["fail"] = r.get("fail_count", 0)
-        base["blocked"] = r.get("blocked_count", 0)
-        base["total"] = r.get("total_count", 0)
+        base["pass"] = r.get("pass", r.get("pass_count", 0))
+        base["fail"] = r.get("fail", r.get("fail_count", 0))
+        base["blocked"] = r.get("blocked", r.get("blocked_count", 0))
+        base["total"] = r.get("total", r.get("total_count", 0))
     else:
         base["error"] = r.get("error")
         base["message"] = r.get("message")
@@ -626,8 +627,9 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--headed", action="store_true",
                    help="Run Playwright in headed mode (shows browser window).")
-    p.add_argument("--timeout-ms", type=int, default=30_000,
-                   help="Playwright per-step timeout in ms (default: 30000).")
+    p.add_argument("--timeout-ms", type=int, default=90_000,
+                   help="Playwright per-test timeout in ms (default: 90000). "
+                        "Cubre login ASP.NET + nav + steps + screenshots.")
     p.add_argument(
         "--skip-to",
         choices=_STAGE_NAMES,

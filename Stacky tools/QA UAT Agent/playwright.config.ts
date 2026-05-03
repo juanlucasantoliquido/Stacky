@@ -54,6 +54,11 @@ export default defineConfig({
     },
   ],
 
-  // Timeout global por test (puede sobreescribirse con --timeout-ms en uat_test_runner.py)
-  timeout: 30_000,
+  // Timeout global por test (puede sobreescribirse con --timeout-ms en uat_test_runner.py).
+  // 90s elegido para acomodar: login ASP.NET WebForms (~10-25s) + 2-3 navegaciones a
+  // FrmAgenda.aspx (~5-15s c/u) + acciones encadenadas + screenshots por paso.
+  // El budget anterior de 30s reventaba en P01/P05 por carrera login + nav, no por
+  // bug de producto. Para tests donde el escenario es realmente lento, pasar
+  // --timeout-ms en CLI (uat_test_runner / qa_uat_pipeline).
+  timeout: 90_000,
 });

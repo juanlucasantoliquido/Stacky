@@ -34,7 +34,7 @@ python uat_test_runner.py \
   --tests-dir evidence/70/tests/ \
   --evidence-out evidence/70/ \
   [--headed] \
-  [--timeout-ms 30000] \
+  [--timeout-ms 90000] \
   [--verbose]
 ```
 
@@ -43,7 +43,7 @@ python uat_test_runner.py \
 | `--tests-dir <dir>` | str | Carpeta con los `.spec.ts` a ejecutar |
 | `--evidence-out <dir>` | str | Carpeta raíz de evidencia; se crean subcarpetas por escenario |
 | `--headed` | flag | Ejecutar en modo headed (default: según `STACKY_QA_UAT_HEADLESS` env) |
-| `--timeout-ms <n>` | int | Timeout por test en ms; default `30000` |
+| `--timeout-ms <n>` | int | Timeout por test en ms; default `90000` (cubre login ASP.NET + nav + steps) |
 | `--verbose` | flag | Pasar `--reporter=list` a Playwright + logs a stderr |
 
 ### Env vars heredadas por los tests

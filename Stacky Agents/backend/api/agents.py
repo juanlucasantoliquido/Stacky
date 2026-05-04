@@ -6,7 +6,15 @@ import agent_runner
 import agents
 import contract_validator
 from config import config
-from services import cost_estimator, delta_prompt, llm_router, next_agent, output_cache, vscode_agents
+from services import (
+    agent_history,
+    cost_estimator,
+    delta_prompt,
+    llm_router,
+    next_agent,
+    output_cache,
+    vscode_agents,
+)
 from ._helpers import current_user
 
 logger = logging.getLogger("stacky_agents.api.agents")
@@ -24,6 +32,63 @@ def list_vscode_agents():
     """Devuelve los .agent.md del directorio de prompts de VS Code (GitHub Copilot)."""
     found = vscode_agents.list_agents(config.VSCODE_PROMPTS_DIR)
     return jsonify([a.to_dict() for a in found])
+
+
+@bp.get("/vscode/<path:filename>/history")
+def vscode_agent_history(filename: str):
+    """Historial de tickets asociados a un agente VS Code (.agent.md).
+
+    Mapea `filename` → `agent_type` legado mediante heurística (mismo criterio
+    que el frontend usa en EmployeeCard) y devuelve los tickets que tuvieron
+    ejecuciones de ese tipo, agrupados por ticket con la última ejecución de
+    cada uno.
+
+    Query params
+    ------------
+    limit : int (default 50) — máximo de tickets a devolver.
+
+    Forma del payload
+    -----------------
+        {
+          "agent_filename": "DevPacifico.agent.md",
+          "inferred_agent_type": "developer",
+          "mapping_note": "...",
+          "tickets": [
+            {
+              "ticket_id": int, "ado_id": int, "title": str, "project": str|None,
+              "ado_state": str|None, "ado_url": str|None,
+              "last_execution_id": int, "last_execution_status": str,
+              "last_execution_verdict": str|None,
+              "last_execution_started_at": iso|None,
+              "last_execution_completed_at": iso|None,
+              "last_execution_duration_ms": int|None,
+              "executions_count": int
+            },
+            ...
+          ],
+          "total_executions": int
+        }
+
+    Devuelve `tickets: []` (con `mapping_note`) si el agente no mapea a un
+    `agent_type` conocido o si no hay ejecuciones registradas.
+
+    Respeta el flujo humano-en-el-loop: read-only, no modifica nada y no
+    dispara ejecuciones.
+    """
+    from db import session_scope
+
+    safe = (filename or "").strip()
+    # Mismo guard que `vscode_agents.get_agent_by_filename`: evita path traversal.
+    if not safe or not safe.lower().endswith(".agent.md") or "/" in safe or "\\" in safe:
+        abort(400, "filename inválido (esperado: '<nombre>.agent.md')")
+
+    limit = request.args.get("limit", default=50, type=int)
+    if limit <= 0 or limit > 500:
+        limit = 50
+
+    with session_scope() as session:
+        result = agent_history.history_for_filename(session, filename=safe, limit=limit)
+        return jsonify(result)
 
 
 @bp.post("/run")

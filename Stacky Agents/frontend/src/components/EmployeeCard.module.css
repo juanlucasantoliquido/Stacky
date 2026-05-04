@@ -124,3 +124,21 @@
 }
 .assignBtn:hover { background: var(--accent-hot); transform: scale(1.02); }
 .assignBtn:active { transform: scale(0.98); }
+
+/* ─── Secondary history button ────────────── */
+.historyBtn {
+  margin-top: 4px;
+  width: 100%;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.historyBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

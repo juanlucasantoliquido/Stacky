@@ -7,11 +7,7 @@ import TeamManageDrawer from "../components/TeamManageDrawer";
 import EmployeeEditDrawer from "../components/EmployeeEditDrawer";
 import styles from "./TeamScreen.module.css";
 
-interface TeamScreenProps {
-  onGoToWorkbench: () => void;
-}
-
-export default function TeamScreen({ onGoToWorkbench }: TeamScreenProps) {
+export default function TeamScreen() {
   const [allAgents, setAllAgents] = useState<VsCodeAgent[]>([]);
   const [pinned, setPinned] = useState<string[]>(getPinnedAgents());
   const [manageOpen, setManageOpen] = useState(false);
@@ -47,9 +43,6 @@ export default function TeamScreen({ onGoToWorkbench }: TeamScreenProps) {
         <div className={styles.headerActions}>
           <button className={styles.addBtn} onClick={() => setManageOpen(true)}>
             + Agregar empleado
-          </button>
-          <button className={styles.workbenchBtn} onClick={onGoToWorkbench}>
-            Ir al Workbench →
           </button>
         </div>
       </header>

@@ -1,0 +1,218 @@
+﻿<h2>🔬 ANÁLISIS TÉCNICO — ADO-116</h2>
+<blockquote>
+<strong>Generado por:</strong> Analista Técnico Agéntico<br>
+<strong>Fecha:</strong> 2026-05-04<br>
+<strong>Documentación consultada:</strong> 00_INDICE_MAESTRO, 03_CAPA_DATOS_RSDALC, 07_BASE_DATOS, 10_AGENDAWEB_PAGINAS, ONLINE/INDEX, 02-acceso-pantalla-principal, 05-compromisos-pago, 08-alertas, 19-reportes-operativos
+</blockquote>
+<hr>
+
+<h2>0. RESUMEN RÁPIDO</h2>
+<h3>🎯 Qué debe desarrollar el Developer</h3>
+<p>Agregar en la barra superior de <strong>Resumen de Actividad</strong> un nuevo contador: <strong>Promesas a Vencer en 7 días</strong>, contando promesas vigentes (unidad: promesa, no lote) de lotes asignados al usuario. Implementar en el flujo existente de resumen sin crear pantalla nueva.</p>
+
+<h3>🧪 Cómo probar (paso a paso)</h3>
+<ol>
+<li>Ingresar con usuario Pacifico y abrir home de Agenda.</li>
+<li>Verificar que se visualiza el nuevo contador en la barra resumen.</li>
+<li>Validar que el valor coincide con la query SQL de control para ese usuario.</li>
+<li>Ingresar con usuario no Pacifico y verificar que el contador no aparece.</li>
+<li>Refrescar página y verificar recálculo del contador.</li>
+</ol>
+<hr>
+
+<h2>1. TRADUCCIÓN FUNCIONAL → TÉCNICA</h2>
+<h3>Requerimiento funcional (resumen)</h3>
+<p>Mostrar en pantalla principal un indicador con promesas vigentes cuyo vencimiento esté entre hoy y hoy+6 días, acotado a cartera del usuario y visible solo para instancia Pacifico.</p>
+
+<h3>Solución técnica propuesta</h3>
+<p>Extender el dataset de resumen de agenda con una tabla adicional de conteo (<code>PROMESASVENCER7</code>) y renderizar ese valor en la barra del control de menú superior, con validación de visibilidad por mandante Pacifico.</p>
+
+<h3>Flujo actual (hoy)</h3>
+<ol>
+<li>MasterForm renderiza <code>AISMenu</code>.</li>
+<li><code>AISMenu.LlenarDatosAgendaPersonal()</code> llama a <code>RSFac.Agenda.Resumen()</code>.</li>
+<li><code>RSFac</code> delega a <code>RSBus.Agenda.Resumen()</code>.</li>
+<li><code>RSBus</code> delega a <code>RSDalc.Agenda.Resumen()</code>/<code>ResumenPool()</code>.</li>
+<li>Se devuelven 4 tablas: pendientes hoy, pendientes otros días, realizadas hoy, lotes asignados.</li>
+</ol>
+
+<h3>Flujo propuesto (después)</h3>
+<ol>
+<li>(sin cambio) Se obtiene resumen como hoy.</li>
+<li><strong>[CAMBIO]</strong> En DAL agregar tabla <code>PROMESASVENCER7</code> con COUNT de promesas vigentes en ventana [hoy, hoy+6].</li>
+<li><strong>[CAMBIO]</strong> En <code>AISMenu</code> leer esa tabla y renderizar nuevo bloque.</li>
+<li><strong>[CAMBIO]</strong> Mostrar bloque solo para usuarios asociados a mandante Pacifico (<code>RMANDANTE.MACOD='0010'</code>).</li>
+</ol>
+<hr>
+
+<h2>2. ALCANCE DE CAMBIOS</h2>
+
+<h3>Cambios en código — nivel método</h3>
+
+<h4>trunk/OnLine/Negocio/RSDalc/Agenda.cs — Capa: RSDalc</h4>
+<p><strong>Clase:</strong> <code>Agenda</code><br>
+<strong>Método:</strong> <code>Resumen(string CodUsuario)</code><br>
+<strong>Tipo de cambio:</strong> Modificar lógica</p>
+<ul>
+<li><strong>Antes:</strong> retorna tablas PENDIENTESHOY, PENDIENTESOTROSDIAS, REALIZADASHOY, LOTESASIG.</li>
+<li><strong>Después:</strong> agregar merge de <code>PROMESASVENCER7</code> con conteo de <code>RCPAGO</code> para lotes del usuario.</li>
+<li><strong>Razón:</strong> centralizar cálculo del indicador en el mismo flujo de resumen.</li>
+<li><strong>PRE:</strong> <code>CodUsuario</code> válido y conexión activa.</li>
+<li><strong>POST:</strong> dataset contiene <code>PROMESASVENCER7.CANTIDAD</code>.</li>
+<li><strong>THROWS:</strong> <code>N/A</code> (manejo por <code>Errores</code>).</li>
+</ul>
+
+<h4>trunk/OnLine/Negocio/RSDalc/Agenda.cs — Capa: RSDalc</h4>
+<p><strong>Clase:</strong> <code>Agenda</code><br>
+<strong>Método:</strong> <code>ResumenPool(string CodUsuario)</code><br>
+<strong>Tipo de cambio:</strong> Modificar lógica</p>
+<ul>
+<li><strong>Antes:</strong> resumen para modo Pool sin promesas.</li>
+<li><strong>Después:</strong> agregar <code>PROMESASVENCER7</code> respetando criterio pool.</li>
+<li><strong>Razón:</strong> mantener consistencia de indicador en ambos modos.</li>
+<li><strong>PRE:</strong> mismo contrato que <code>Resumen</code>.</li>
+<li><strong>POST:</strong> tabla adicional incorporada en dataset.</li>
+<li><strong>THROWS:</strong> <code>N/A</code>.</li>
+</ul>
+
+<h4>trunk/OnLine/AIS.PR.UI.Web.Controls/AISMenu.cs — Capa: AgendaWeb/UI Control</h4>
+<p><strong>Clase:</strong> <code>AISMenu</code><br>
+<strong>Método:</strong> <code>LlenarDatosAgendaPersonal(RSModel.Usuario usuario, RSFac.Agenda agenda, HtmlTextWriter writer)</code><br>
+<strong>Tipo de cambio:</strong> Modificar render + validación de visibilidad</p>
+<ul>
+<li><strong>Antes:</strong> renderiza contadores fijos.</li>
+<li><strong>Después:</strong> renderiza bloque <code>Promesas a Vencer en 7 días</code> leyendo <code>PROMESASVENCER7</code>.</li>
+<li><strong>Razón:</strong> incorporar indicador en la misma barra de actividad.</li>
+<li><strong>PRE:</strong> dataset incluye tabla; si no, fallback a 0.</li>
+<li><strong>POST:</strong> bloque visible solo si usuario pertenece a Pacifico.</li>
+<li><strong>THROWS:</strong> <code>N/A</code>.</li>
+</ul>
+
+<h4>trunk/OnLine/AIS.PR.UI.Web.Controls/AISMenu.cs — Capa: AgendaWeb/UI Control</h4>
+<p><strong>Clase:</strong> <code>AISMenu</code><br>
+<strong>Método sugerido:</strong> <code>EsInstanciaPacifico(string codUsuario)</code><br>
+<strong>Tipo de cambio:</strong> Nuevo método</p>
+<ul>
+<li><strong>Antes:</strong> no hay check de instancia para barra resumen.</li>
+<li><strong>Después:</strong> validar pertenencia por <code>RUSUPERF + RPERFEMP + RMANDANTE</code> con <code>PEEMPRESA='0010'</code>.</li>
+<li><strong>Razón:</strong> cumplir CA-08 sin hardcode frágil.</li>
+<li><strong>PRE:</strong> usuario en sesión.</li>
+<li><strong>POST:</strong> bool de visibilidad confiable.</li>
+<li><strong>THROWS:</strong> <code>N/A</code>.</li>
+</ul>
+
+<h3>Cambios en base de datos</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tipo</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Objeto</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Descripción</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Sin DDL/DML</td><td style="border:1px solid #ccc;padding:6px"><code>RCPAGO, RLOTE, RUSUPERF, RPERFEMP, RMANDANTE</code></td><td style="border:1px solid #ccc;padding:6px">Solo consultas SELECT para cálculo y validación de visibilidad.</td></tr>
+</table>
+
+<h3>RIDIOMA — Mensajes nuevos (si aplica)</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">IDTEXTO sugerido</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Español</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Portugués</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">9302</td><td style="border:1px solid #ccc;padding:6px">Promesas a Vencer en 7 días:</td><td style="border:1px solid #ccc;padding:6px">Promessas a vencer em 7 dias:</td></tr>
+</table>
+<p><strong>Verificación BD:</strong> MAX(IDTEXTO) actual en RIDIOMA = <strong>9301</strong>.</p>
+
+<h3>Archivos afectados — resumen</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Archivo</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Capa</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tipo de cambio</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSDalc/Agenda.cs</code></td><td style="border:1px solid #ccc;padding:6px">RSDalc</td><td style="border:1px solid #ccc;padding:6px">Modificar <code>Resumen()</code> y <code>ResumenPool()</code></td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AIS.PR.UI.Web.Controls/AISMenu.cs</code></td><td style="border:1px solid #ccc;padding:6px">AgendaWeb/UI</td><td style="border:1px solid #ccc;padding:6px">Render nuevo contador + validación Pacifico</td></tr>
+</table>
+<hr>
+
+<h2>2B. SPEC TÉCNICA (SDD)</h2>
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Spec ID</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">CA-REF</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Método</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">PRE</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">POST</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">THROWS</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Test(s)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-01</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-01,02,03,04,05,06,07,09</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>Agenda.Resumen()</code> / <code>Agenda.ResumenPool()</code></td>
+    <td style="border:1px solid #ccc;padding:6px">Usuario válido, conexión activa</td>
+    <td style="border:1px solid #ccc;padding:6px">Retorna <code>PROMESASVENCER7.CANTIDAD</code> con ventana [hoy,hoy+6]</td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-001..TU-004</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-02</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-08</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>AISMenu.LlenarDatosAgendaPersonal()</code></td>
+    <td style="border:1px solid #ccc;padding:6px">Session con <code>logUsuario</code></td>
+    <td style="border:1px solid #ccc;padding:6px">Contador visible solo para Pacifico</td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-005</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-03</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-10</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>Agenda.Resumen()</code></td>
+    <td style="border:1px solid #ccc;padding:6px">Criterio de vigencia único</td>
+    <td style="border:1px solid #ccc;padding:6px">Consistencia de lógica con promesas activas del sistema</td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-006</td>
+  </tr>
+</table>
+<hr>
+
+<h2>3. PLAN DE PRUEBAS TÉCNICO</h2>
+<h3>Pruebas funcionales enriquecidas con datos reales</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">#</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Caso</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Datos candidatos</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Resultado esperado</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P01</td><td style="border:1px solid #ccc;padding:6px">Conteo ventana 7 días</td><td style="border:1px solid #ccc;padding:6px">Query dinámica por usuario sobre RCPAGO/RLOTE/RUSUPERF</td><td style="border:1px solid #ccc;padding:6px">UI = COUNT query</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P02</td><td style="border:1px solid #ccc;padding:6px">Unidad promesa (no lote)</td><td style="border:1px solid #ccc;padding:6px">Lote 10003269210997120010 con múltiples promesas</td><td style="border:1px solid #ccc;padding:6px">Cuenta promesas individuales</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P03</td><td style="border:1px solid #ccc;padding:6px">Aislamiento por usuario</td><td style="border:1px solid #ccc;padding:6px">Usuarios SANCHEZRO/PABLO con perfiles distintos</td><td style="border:1px solid #ccc;padding:6px">No mezcla lotes ajenos</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P04</td><td style="border:1px solid #ccc;padding:6px">Visibilidad Pacifico</td><td style="border:1px solid #ccc;padding:6px">Usuario PACIFICO (perfil 361) vs usuario no 0010</td><td style="border:1px solid #ccc;padding:6px">Solo Pacifico ve el contador</td></tr>
+</table>
+
+<h3>Queries de soporte (solo SELECT)</h3>
+<pre><code>-- Q1: Conteo esperado por usuario en ventana 7 días
+SELECT COUNT(*)
+FROM RCPAGO cp
+JOIN RLOTE lo ON lo.LOCOD = cp.CPLOTE
+JOIN RUSUPERF up ON up.UPID = lo.LOPERFIL AND up.UPFECBAJA IS NULL
+WHERE up.UPUSUARIO = @Usuario
+  AND cp.CPHISTORICO = '0'
+  AND cp.CPFECVEN BETWEEN CONVERT(varchar(8), GETDATE(), 112)
+                      AND CONVERT(varchar(8), DATEADD(day, 6, GETDATE()), 112)
+  AND ISNULL(cp.CPCANPAG,0) &lt; ISNULL(cp.CPCANCOM,0);
+
+-- Q2: Usuario pertenece a Pacifico
+SELECT up.UPUSUARIO, up.UPID
+FROM RUSUPERF up
+JOIN RPERFEMP pe ON pe.PEIDPERF = up.UPID
+WHERE up.UPUSUARIO = @Usuario
+  AND up.UPFECBAJA IS NULL
+  AND pe.PEEMPRESA = '0010';</code></pre>
+<hr>
+
+<h2>4. TESTS UNITARIOS OBLIGATORIOS</h2>
+<ul>
+<li><strong>TU-001:</strong> ventana [hoy,hoy+6] incluye límites.</li>
+<li><strong>TU-002:</strong> excluye promesas vencidas (&lt; hoy).</li>
+<li><strong>TU-003:</strong> cuenta promesas, no lotes.</li>
+<li><strong>TU-004:</strong> filtra por lotes del usuario.</li>
+<li><strong>TU-005:</strong> visibilidad solo Pacifico.</li>
+<li><strong>TU-006:</strong> valor 0 visible (no ocultar bloque).</li>
+</ul>
+<hr>
+
+<h2>5. NOTAS PARA EL DESARROLLADOR</h2>
+<ul>
+<li>Mantener patrón actual de capas: AISMenu → RSFac → RSBus → RSDalc.</li>
+<li>No romper modo Pool ni ResumenJudicial.</li>
+<li>Mantener compatibilidad SQLServer/Oracle en sintaxis de fecha.</li>
+<li>Sin cambios DDL/DML; solo lecturas.</li>
+</ul>
+
+<hr>
+<p><strong>Próximo paso:</strong> Desarrollador toma el ticket e implementa según este análisis.<br>
+<strong>Regla:</strong> Los tests unitarios definidos deben pasar al 100%.</p>

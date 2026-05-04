@@ -4,9 +4,18 @@
   "evaluations": [
     {
       "scenario_id": "P02",
-      "status": "blocked",
-      "reason": "RUNTIME_ERROR",
-      "assertions": []
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_gt",
+          "target": "table_agenda_usu",
+          "expected": 0,
+          "actual": 1,
+          "status": "pass",
+          "evidence_ref": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\65\\P02\\assertions_P02.json"
+        }
+      ]
     },
     {
       "scenario_id": "P03",
@@ -25,15 +34,33 @@
     },
     {
       "scenario_id": "P04",
-      "status": "blocked",
-      "reason": "RUNTIME_ERROR",
-      "assertions": []
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_gt",
+          "target": "table_agenda_usu",
+          "expected": 0,
+          "actual": 1,
+          "status": "pass",
+          "evidence_ref": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\65\\P04\\assertions_P04.json"
+        }
+      ]
     },
     {
       "scenario_id": "P05",
-      "status": "blocked",
-      "reason": "RUNTIME_ERROR",
-      "assertions": []
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_gt",
+          "target": "table_agenda_usu",
+          "expected": 0,
+          "actual": 1,
+          "status": "pass",
+          "evidence_ref": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\65\\P05\\assertions_P05.json"
+        }
+      ]
     }
   ]
 }

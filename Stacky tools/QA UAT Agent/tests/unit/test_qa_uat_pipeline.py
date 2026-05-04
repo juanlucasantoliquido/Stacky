@@ -334,3 +334,41 @@ def test_elapsed_s_is_positive():
 
     assert isinstance(result.get("elapsed_s"), float)
     assert result["elapsed_s"] >= 0
+
+
+# ── Fase 1 — Agenda-expert refactor: shared screen catalogue ─────────────────
+
+
+def test_extract_screens_uses_shared_catalogue():
+    """`qa_uat_pipeline._extract_screens` MUST honour `agenda_screens.
+    SUPPORTED_SCREENS` instead of a private hardcoded set. This is a guard
+    against re-introducing the duplicated literal that Fase 1 removed.
+    """
+    import qa_uat_pipeline as pipeline
+
+    ticket_result = {
+        "plan_pruebas": [
+            {"title": "Test on FrmAgenda.aspx", "description": "filtros"},
+            {"title": "Detalle", "description": "FrmDetalleLote.aspx"},
+        ]
+    }
+    found = pipeline._extract_screens(ticket_result)
+    assert "FrmAgenda.aspx" in found
+    assert "FrmDetalleLote.aspx" in found
+
+
+def test_extract_screens_ignores_unsupported_mentions():
+    """Unsupported screen names mentioned in plan_pruebas must NOT bleed into
+    the pipeline's screen list — only screens in the shared catalogue qualify.
+    """
+    import qa_uat_pipeline as pipeline
+
+    ticket_result = {
+        "plan_pruebas": [
+            {"title": "Pantalla nueva FrmReportes.aspx", "description": ""},
+            {"title": "FrmAgenda.aspx", "description": ""},
+        ]
+    }
+    found = pipeline._extract_screens(ticket_result)
+    assert found == ["FrmAgenda.aspx"]
+    assert "FrmReportes.aspx" not in found

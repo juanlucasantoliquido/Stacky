@@ -21,20 +21,28 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.scenario_compiler")
 
+# v1.2.0 — Fase 1 Agenda-expert refactor. The hardcoded `_SUPPORTED_SCREENS`
+# frozenset and the hardcoded filter-keyword list inside
+# `_postprocess_compiled_spec` were duplicated across multiple modules;
+# both now read from `agenda_screens` + `agenda_glossary` so adding a new
+# screen / domain term is a one-file change. Behaviour preserved.
+#
 # v1.1.0 — accepts the enriched UI map (kind, input_type, is_decorative,
 # class_list, accessible_name) and forwards a structured hint catalog to the
 # LLM so it stops choosing decorative layout labels (input-field-label) as
 # runtime-message oracles. Adds a post-LLM validator that reroutes scenarios
 # whose oracles target decorative elements to out_of_scope.
-_TOOL_VERSION = "1.1.0"
+_TOOL_VERSION = "1.2.0"
 
-# Screens supported in MVP (from SPEC §6)
-_SUPPORTED_SCREENS = frozenset({
-    "FrmAgenda.aspx",
-    "FrmDetalleLote.aspx",
-    "FrmGestion.aspx",
-    "Login.aspx",
-})
+# Screens supported in MVP — single source of truth in `agenda_screens.py`.
+# Re-exported under the legacy `_SUPPORTED_SCREENS` name so existing
+# in-module references and any downstream consumer that imported it keep
+# working without modification.
+from agenda_screens import SUPPORTED_SCREENS as _SUPPORTED_SCREENS
+
+# Domain glossary lookup — used both to enrich the LLM system prompt and to
+# drive the heuristic filter-scenario detector in `_postprocess_compiled_spec`.
+import agenda_glossary
 
 # Actions supported in ScenarioSpec
 _SUPPORTED_ACTIONS = frozenset({
@@ -297,6 +305,20 @@ def _compile_via_llm(
                 "msg_lista_vacia, input_fecha_desde."
             )
 
+        # Inject Agenda domain glossary so the LLM understands business terms
+        # (lote, póliza, RUC, débito automático…) without relying on training
+        # priors. Falls back to "" when no glossary is loaded — caller is
+        # robust to an empty block.
+        try:
+            glossary_block = agenda_glossary.domain_terms_for_prompt(
+                # We don't know the screen yet at this layer (the LLM picks
+                # `pantalla` itself), so emit the full catalogue.
+                screen=None,
+            )
+        except Exception as exc:  # noqa: BLE001 — never block compile on prompt build
+            logger.debug("Glossary prompt build failed, continuing without: %s", exc)
+            glossary_block = ""
+
         system_prompt = f"""You are a QA automation engineer converting test plan items to structured test specs.
 Given a test case description, extract a structured ScenarioSpec JSON.
 Respond ONLY with valid JSON, no explanations.
@@ -316,7 +338,8 @@ Oracle selection rules (HARD CONSTRAINTS — violating them will cause the scena
 
 {alias_instruction}
 pasos must have at least 1 item. oraculos must have at least 1 item.
-"""
+
+{glossary_block}"""
         user_prompt = (
             f"Test case {pid}: {desc}\n"
             f"Test data: {datos or 'none'}\n"
@@ -514,18 +537,46 @@ def _postprocess_compiled_spec(spec: dict, desc: str, esperado: str) -> dict:
 
     Current production issue: LLM maps filter execution to `link_btnnext`
     (Avanzar) instead of the filter action button (`link_c_btnok` / Filtrar).
+
+    Filter-keyword detection and the misroute mapping read from
+    `agenda_glossary` so the catalogue can grow without code changes. If the
+    glossary load fails (corrupt JSON, missing file) we fall back to a
+    minimal hardcoded set that preserves the previous behaviour.
     """
     pantalla = str(spec.get("pantalla", ""))
     if pantalla != "FrmAgenda.aspx":
         return spec
 
-    lower_ctx = f"{desc} {esperado}".lower()
-    is_filter_scenario = any(
-        token in lower_ctx
-        for token in (
+    # Pull the screen-specific keyword set + filter input aliases + misroute
+    # map from the glossary. `glossary_for_screen` returns a benign empty
+    # view when the screen is not catalogued, which is the safe default.
+    screen_glossary = agenda_glossary.glossary_for_screen("FrmAgenda.aspx")
+    filter_keywords = screen_glossary.get("filter_keywords") or []
+    if not filter_keywords:
+        # Hard fallback — keep the legacy literal list so a glossary load
+        # failure never silently disables the post-processor.
+        filter_keywords = [
             "filtro", "buscar", "búsqueda", "debito", "débito",
             "corredor", "nombre de cliente", "ruc", "campos",
-        )
+        ]
+
+    filter_input_aliases = set(
+        screen_glossary.get("filter_input_aliases") or [
+            "select_debito_auto", "input_corredor",
+            "input_nombre_cliente", "input_ruc",
+        ]
+    )
+    filter_action_button = (
+        screen_glossary.get("filter_action_button") or "link_c_btnok"
+    )
+    common_misroutes = (
+        screen_glossary.get("common_misroutes")
+        or {"link_btnnext": "link_c_btnok"}
+    )
+
+    lower_ctx = f"{desc} {esperado}".lower()
+    is_filter_scenario = any(
+        str(token).lower() in lower_ctx for token in filter_keywords
     )
     if not is_filter_scenario:
         return spec
@@ -539,15 +590,15 @@ def _postprocess_compiled_spec(spec: dict, desc: str, esperado: str) -> dict:
         accion = str(s.get("accion", ""))
         target = str(s.get("target", ""))
 
-        if accion in {"fill", "select"} and target in {
-            "select_debito_auto", "input_corredor", "input_nombre_cliente", "input_ruc"
-        }:
+        if accion in {"fill", "select"} and target in filter_input_aliases:
             has_filter_input = True
 
-        if accion == "click" and target == "link_btnnext":
-            s["target"] = "link_c_btnok"
+        if accion == "click" and target in common_misroutes:
+            # Rewrite well-known LLM mis-mappings (e.g. link_btnnext → the
+            # filter button alias). The glossary owns the correction map.
+            s["target"] = common_misroutes[target]
             has_filter_click = True
-        elif accion == "click" and target == "link_c_btnok":
+        elif accion == "click" and target == filter_action_button:
             has_filter_click = True
 
         pasos.append(s)
@@ -555,7 +606,11 @@ def _postprocess_compiled_spec(spec: dict, desc: str, esperado: str) -> dict:
     # If the scenario edits filters but never clicks the filter action button,
     # append it explicitly.
     if has_filter_input and not has_filter_click:
-        pasos.append({"accion": "click", "target": "link_c_btnok", "valor": None})
+        pasos.append({
+            "accion": "click",
+            "target": filter_action_button,
+            "valor": None,
+        })
 
     spec["pasos"] = pasos
     return spec

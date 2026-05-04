@@ -283,3 +283,79 @@ def test_build_ui_elements_hint_marks_decorative():
     decorative_line = [l for l in hint.splitlines() if l.startswith("DECORATIVE")][0]
     assert "msg_lista_vacia" not in decorative_line
     assert "btn_buscar" not in decorative_line
+
+
+# ── Fase 1 — Agenda-expert refactor (shared catalogue + glossary) ────────────
+
+
+def test_supported_screens_re_export_matches_agenda_screens():
+    """Confirms `_SUPPORTED_SCREENS` is now a re-export of the shared
+    catalogue. If someone reverts the import to a local literal this test
+    catches it.
+    """
+    import uat_scenario_compiler
+    from agenda_screens import SUPPORTED_SCREENS
+
+    assert uat_scenario_compiler._SUPPORTED_SCREENS is SUPPORTED_SCREENS
+
+
+def test_postprocess_filter_keywords_use_glossary():
+    """Regression guard for the F1.4 refactor: the post-processor must
+    detect a filter scenario using a keyword that lives ONLY in the glossary
+    JSON (e.g. 'agendados') and not in the legacy hardcoded list. Proves
+    the glossary pipeline is wired in.
+
+    This also covers the misroute correction (link_btnnext → link_c_btnok)
+    so the test fails if either piece regresses.
+    """
+    import uat_scenario_compiler
+
+    spec = {
+        "pantalla": "FrmAgenda.aspx",
+        "pasos": [
+            {"accion": "fill", "target": "input_corredor", "valor": "ACME"},
+            # The LLM mis-mapping this refactor exists to fix:
+            {"accion": "click", "target": "link_btnnext", "valor": None},
+        ],
+        "oraculos": [],
+    }
+    # 'agendados' is in the glossary domain_terms aliases but NOT in the
+    # legacy hardcoded list — proving the keyword merge works.
+    fixed = uat_scenario_compiler._postprocess_compiled_spec(
+        spec, desc="Buscar agendados del usuario", esperado="Lista visible",
+    )
+    targets = [step["target"] for step in fixed["pasos"]]
+    assert "link_c_btnok" in targets
+    assert "link_btnnext" not in targets
+
+
+def test_compile_via_llm_injects_glossary_into_system_prompt():
+    """The system prompt sent to the LLM must include the DOMAIN GLOSSARY
+    block so the model has business context. We capture the call and assert
+    the prompt body.
+    """
+    import uat_scenario_compiler
+
+    captured = {}
+
+    def _fake_call(model, system, user, max_tokens):
+        captured["system"] = system
+        return {
+            "text": json.dumps({
+                "pantalla": "FrmAgenda.aspx",
+                "precondiciones": [],
+                "pasos": [{"accion": "click", "target": "btn_buscar", "valor": None}],
+                "oraculos": [{"tipo": "visible", "target": "msg_x", "valor": None}],
+                "datos_requeridos": [],
+            }),
+            "model": "mock",
+            "duration_ms": 0,
+        }
+
+    with patch("llm_client.call_llm", side_effect=_fake_call):
+        uat_scenario_compiler.run(ticket_json=_ticket_70_json())
+
+    assert "system" in captured, "LLM was not invoked"
+    assert "DOMAIN GLOSSARY" in captured["system"], (
+        "System prompt missing glossary block — Fase 1 injection regressed"
+    )

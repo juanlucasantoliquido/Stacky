@@ -479,15 +479,19 @@ def _extract_screens(ticket_result: dict) -> list:
     """
     Derive the list of screens referenced in plan_pruebas.
     Falls back to ['FrmAgenda.aspx'] if none found.
+
+    Pre-Fase-1 the supported-screen set was duplicated here. It now reads
+    from the shared catalogue in `agenda_screens.SUPPORTED_SCREENS` so
+    extending the MVP with a new screen is a one-file change.
     """
-    _supported = {
-        "FrmAgenda.aspx", "FrmDetalleLote.aspx", "FrmGestion.aspx", "Login.aspx"
-    }
+    from agenda_screens import SUPPORTED_SCREENS
+
     found = set()
     for item in ticket_result.get("plan_pruebas") or []:
         title_text = (item.get("title") or "") + " " + (item.get("description") or "")
-        for screen in _supported:
-            if screen.lower() in title_text.lower():
+        lower = title_text.lower()
+        for screen in SUPPORTED_SCREENS:
+            if screen.lower() in lower:
                 found.add(screen)
     return sorted(found) if found else ["FrmAgenda.aspx"]
 

@@ -13,10 +13,15 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Variables opcionales:
  *   STACKY_QA_UAT_HEADLESS — 1=headless (default), 0=headed
+ *   STACKY_QA_UAT_SLOW_MO  — milisegundos de pausa entre acciones (default: 0).
+ *                            El runner lo setea en 500 cuando se corre con --headed
+ *                            para que el operador pueda ver paso a paso lo que hace
+ *                            Playwright en el navegador.
  */
 
 const headless = process.env.STACKY_QA_UAT_HEADLESS !== '0';
 const baseURL = process.env.AGENDA_WEB_BASE_URL ?? 'http://localhost/AgendaWeb/';
+const slowMo = parseInt(process.env.STACKY_QA_UAT_SLOW_MO ?? '0', 10);
 
 export default defineConfig({
   testDir: './evidence',
@@ -37,6 +42,12 @@ export default defineConfig({
   use: {
     baseURL,
     headless,
+    // slowMo aplica una pausa entre cada acción de Playwright (click, fill, etc).
+    // Cero por defecto (CI / headless). En modo headed, el runner setea la env
+    // var en 500ms para que el operador siga visualmente cada paso.
+    launchOptions: {
+      slowMo,
+    },
     // Capturar evidencia siempre — sin importar el resultado
     trace: 'retain-on-failure',
     video: 'retain-on-failure',

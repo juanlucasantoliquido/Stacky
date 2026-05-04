@@ -180,6 +180,19 @@ def run(
             })
             continue
 
+        spec = _postprocess_compiled_spec(spec, desc, esperado)
+
+        # Guard against placeholders leaking from LLM output (e.g.
+        # "<expected_count>") which later produce invalid TypeScript tests.
+        serialized_spec = json.dumps(spec, ensure_ascii=False)
+        if _PLACEHOLDER_RE.search(serialized_spec) or re.search(r'<[^>]+>', serialized_spec):
+            out_of_scope.append({
+                "id": pid,
+                "razon": "PLACEHOLDER_DETECTED",
+                "descripcion": desc,
+            })
+            continue
+
         # Filter by scope
         if scope_screen and spec["pantalla"] != scope_screen:
             continue
@@ -494,6 +507,58 @@ def _compile_via_heuristic(
         "datos_requeridos": datos_requeridos,
         "origen": {"ticket_section": "plan_pruebas", "item_id": pid},
     }
+
+
+def _postprocess_compiled_spec(spec: dict, desc: str, esperado: str) -> dict:
+    """Fix common LLM mis-mappings for Agenda filter scenarios.
+
+    Current production issue: LLM maps filter execution to `link_btnnext`
+    (Avanzar) instead of the filter action button (`link_c_btnok` / Filtrar).
+    """
+    pantalla = str(spec.get("pantalla", ""))
+    if pantalla != "FrmAgenda.aspx":
+        return spec
+
+    lower_ctx = f"{desc} {esperado}".lower()
+    is_filter_scenario = any(
+        token in lower_ctx
+        for token in (
+            "filtro", "buscar", "búsqueda", "debito", "débito",
+            "corredor", "nombre de cliente", "ruc", "campos",
+        )
+    )
+    if not is_filter_scenario:
+        return spec
+
+    pasos = []
+    has_filter_input = False
+    has_filter_click = False
+
+    for step in spec.get("pasos", []):
+        s = dict(step)
+        accion = str(s.get("accion", ""))
+        target = str(s.get("target", ""))
+
+        if accion in {"fill", "select"} and target in {
+            "select_debito_auto", "input_corredor", "input_nombre_cliente", "input_ruc"
+        }:
+            has_filter_input = True
+
+        if accion == "click" and target == "link_btnnext":
+            s["target"] = "link_c_btnok"
+            has_filter_click = True
+        elif accion == "click" and target == "link_c_btnok":
+            has_filter_click = True
+
+        pasos.append(s)
+
+    # If the scenario edits filters but never clicks the filter action button,
+    # append it explicitly.
+    if has_filter_input and not has_filter_click:
+        pasos.append({"accion": "click", "target": "link_c_btnok", "valor": None})
+
+    spec["pasos"] = pasos
+    return spec
 
 
 def _extract_value(datos: str, key: str) -> Optional[str]:

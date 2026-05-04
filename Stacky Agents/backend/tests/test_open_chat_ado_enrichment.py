@@ -331,3 +331,107 @@ def test_open_chat_works_when_ado_unavailable(client):
     # No deben aparecer secciones ADO
     assert "## Comentarios ADO" not in msg
     assert "## Adjuntos" not in msg
+
+
+# ── /open-chat — códigos de error granulares (contrato con el frontend) ─────
+#
+# El frontend (`AgentLaunchModal.tsx`) discrimina por status code para mostrar
+# mensajes específicos al operador:
+#   - 503 → "extensión VS Code no está activa" (banner + retry)
+#   - 504 → "bridge tardó demasiado" (banner técnico)
+#   - 502 → "VS Code respondió con error" (banner técnico)
+#   - 400 → ticket_id faltante
+# Estos tests blindan ese contrato para que no se degrade silenciosamente.
+
+
+def _seed_ticket(ado_id: int = 7777, title: str = "test") -> int:
+    """Helper: crea un ticket mínimo y devuelve su PK."""
+    from db import session_scope
+    from models import Ticket
+
+    with session_scope() as session:
+        t = Ticket(
+            ado_id=ado_id,
+            project="RSPacifico",
+            title=title,
+            ado_state="Active",
+            description="x",
+        )
+        session.add(t)
+        session.flush()
+        return t.id
+
+
+def test_open_chat_returns_503_when_bridge_unreachable(client):
+    """Bridge no responde (extensión VS Code apagada) → 503 con detalle claro."""
+    import requests as req_lib
+
+    ticket_id = _seed_ticket(ado_id=7771)
+
+    def _raise_conn(url, json=None, timeout=None):
+        raise req_lib.exceptions.ConnectionError("connection refused")
+
+    with patch(
+        "services.ado_client.AdoClient",
+        side_effect=RuntimeError("ADO disabled"),
+    ), patch("requests.post", side_effect=_raise_conn):
+        r = client.post(
+            "/api/agents/open-chat",
+            json={"ticket_id": ticket_id, "context_blocks": [], "vscode_agent_filename": "X.agent.md"},
+        )
+
+    assert r.status_code == 503
+    # El detail debe mencionar al bridge para que el frontend lo discrimine
+    body = r.get_data(as_text=True).lower()
+    assert "bridge" in body or "extensi" in body
+
+
+def test_open_chat_returns_504_when_bridge_times_out(client):
+    """Bridge timeout → 504. El frontend muestra mensaje específico (no 'apagado')."""
+    import requests as req_lib
+
+    ticket_id = _seed_ticket(ado_id=7772)
+
+    def _raise_timeout(url, json=None, timeout=None):
+        raise req_lib.exceptions.Timeout("read timed out")
+
+    with patch(
+        "services.ado_client.AdoClient",
+        side_effect=RuntimeError("ADO disabled"),
+    ), patch("requests.post", side_effect=_raise_timeout):
+        r = client.post(
+            "/api/agents/open-chat",
+            json={"ticket_id": ticket_id, "context_blocks": [], "vscode_agent_filename": "X.agent.md"},
+        )
+
+    assert r.status_code == 504
+
+
+def test_open_chat_returns_502_on_other_request_exceptions(client):
+    """Bridge respondió pero con error HTTP/red → 502 con mensaje del exc."""
+    import requests as req_lib
+
+    ticket_id = _seed_ticket(ado_id=7773)
+
+    def _raise_other(url, json=None, timeout=None):
+        raise req_lib.exceptions.RequestException("bridge replied 500")
+
+    with patch(
+        "services.ado_client.AdoClient",
+        side_effect=RuntimeError("ADO disabled"),
+    ), patch("requests.post", side_effect=_raise_other):
+        r = client.post(
+            "/api/agents/open-chat",
+            json={"ticket_id": ticket_id, "context_blocks": [], "vscode_agent_filename": "X.agent.md"},
+        )
+
+    assert r.status_code == 502
+
+
+def test_open_chat_returns_400_when_ticket_id_missing(client):
+    """Payload sin ticket_id → 400. Defensa básica."""
+    r = client.post(
+        "/api/agents/open-chat",
+        json={"context_blocks": [], "vscode_agent_filename": "X.agent.md"},
+    )
+    assert r.status_code == 400

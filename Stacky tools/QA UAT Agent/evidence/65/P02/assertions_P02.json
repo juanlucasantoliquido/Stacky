@@ -1,0 +1,15 @@
+{
+  "scenario_id": "P02",
+  "assertions": [
+    {
+      "oracle_id": 0,
+      "target": "table_agenda_usu",
+      "tipo": "count_gt",
+      "expected": 0,
+      "count": 1,
+      "visible": true,
+      "actual_text": "CLIENTE\tLOTE\tFECHA\tHORA\tRECOMENDACIÓN\tNIVEL MORA\tPRIMA\tMONEDA\nMONTEZUMA GARRIDO NATALIA\t4127924112345393\t20/03/2026\t10:00:00\tOECA - Cerrar Cuenta y Enviar Carpeta Recup Act\tCiclo 9\t48882,83\tUS.D",
+      "state": "enabled"
+    }
+  ]
+}

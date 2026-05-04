@@ -167,7 +167,23 @@
   border-color: var(--accent);
 }
 
-/* ─── Error ───────────────────────────────── */
+/* ─── Warning (bridge probe inicial) ────────── */
+/* Usado cuando el health-check inicial detectó que la extensión no está activa.
+   No bloquea: el operador puede preparar la asignación mientras levanta VS Code. */
+.warning {
+  background: rgba(210,153,34,0.12);
+  border: 1px solid rgba(210,153,34,0.45);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+/* ─── Error (post-launch) ──────────────────── */
 .error {
   background: rgba(248,81,73,0.12);
   border: 1px solid var(--danger);
@@ -175,7 +191,38 @@
   color: var(--danger);
   font-size: 12px;
   padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
+
+.errorDetail {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.errorDetail summary { cursor: pointer; }
+.errorDetail pre {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-muted);
+}
+
+.retryBtn {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.retryBtn:hover { background: rgba(255,255,255,0.05); }
 
 /* ─── Actions ─────────────────────────────── */
 .actions {

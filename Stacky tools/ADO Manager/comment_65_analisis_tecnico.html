@@ -1,0 +1,512 @@
+﻿<h2>✅ ANÁLISIS TÉCNICO — ADO-65 — RF-001 — 4 Nuevos Filtros de Agenda</h2>
+<blockquote>
+  <strong>Generado por:</strong> Analista Técnico Agéntico &nbsp;|&nbsp;
+  <strong>Fecha:</strong> 2026-05-04 &nbsp;|&nbsp;
+  <strong>Estado asignado:</strong> <span style="color:green;"><strong>To Do</strong></span>
+</blockquote>
+<hr>
+
+<h2>0. RESUMEN RÁPIDO</h2>
+
+<h3>🎯 Qué debe desarrollar el Developer</h3>
+<p>Agregar 4 nuevos controles de filtro en <code>FrmAgenda.aspx</code> (1 lista + 3 texto libre). Extender la firma de <code>Consultar()</code> y <code>Siguiente()</code> en las tres capas (RSFac → RSBus → RSDalc) con 4 parámetros nuevos. En RSDalc, agregar las condiciones SQL usando <code>cFormat.StToBD(valor.ToUpper(), cFormat.TipoLike.Contiene)</code> para los campos texto, y lógica NULL-aware para Débito Automático. Completar con inserts en RCONTROLES y RIDIOMA.</p>
+
+<h3>🧪 Cómo probar (paso a paso)</h3>
+<ol>
+  <li>Abrir <code>FrmAgenda.aspx</code> — verificar que aparecen los 4 nuevos controles en la 3ª fila del filtro.</li>
+  <li>Seleccionar <strong>Débito Automático = Sí</strong> → Buscar → resultado esperado: 0 filas (todos los registros son NULL en dev = "No").</li>
+  <li>Seleccionar <strong>Débito Automático = No</strong> → Buscar → resultado esperado: todos los lotes agendados.</li>
+  <li>Escribir un texto en <strong>Corredor</strong> (ej: parte de un valor existente en <code>OGCORREDOR</code>) → Buscar → solo lotes cuyo corredor contiene ese texto (insensible a mayúsculas).</li>
+  <li>Escribir un nombre parcial en <strong>Nombre de Cliente</strong> (ej: "garcia") → Buscar → lotes cuyos clientes contienen ese texto en <code>CLNOMBRE</code> o <code>CLAPELLIDO1</code>.</li>
+  <li>Escribir un número parcial en <strong>RUC</strong> (ej: "20") → Buscar → lotes cuyo <code>CLNUMDOC</code> contiene ese valor.</li>
+  <li>Dejar todos los 4 campos vacíos → Buscar → mismo resultado que antes del desarrollo (sin restricción adicional).</li>
+  <li>Combinar filtros (ej: NivelMora=C1 + NombreCliente="lopez") → Buscar → AND lógico correcto entre todos los criterios.</li>
+</ol>
+<hr>
+
+<h2>1. TRADUCCIÓN FUNCIONAL → TÉCNICA</h2>
+
+<h3>Requerimiento funcional (resumen)</h3>
+<p>Agregar 4 campos de filtro en la Búsqueda Avanzada de la Agenda Personal: Débito Automático (lista), Corredor (texto libre), Nombre de Cliente (texto libre) y RUC (texto libre). Cada campo vacío no restringe la búsqueda. Todos operan en AND con los 7 filtros estándar y entre sí.</p>
+
+<h3>Solución técnica propuesta</h3>
+<p>Los 4 campos son opcionales. Las condiciones SQL se agregan únicamente cuando el campo tiene valor, respetando el patrón existente del método <code>Consultar()</code>. ROBLG y RCLIE ya participan en el FROM de ambas queries — no se requiere JOIN adicional. Para los campos texto se usa <code>cFormat.StToBD(valor.ToUpper(), cFormat.TipoLike.Contiene)</code> que produce <code>'%VALOR%'</code> — válido en SQL Server y Oracle sin bifurcación de motor.</p>
+
+<h3>Flujo actual (HOY)</h3>
+<ol>
+  <li>El usuario abre <code>FrmAgenda.aspx</code> con 2 filas de filtro (8 controles estándar).</li>
+  <li>Al hacer clic en Buscar → <code>FiltrarGrilla()</code> → <code>RSFac.Agenda.Consultar(CodUsuario, Desde, Hasta, Empresa, Perfil, Recomendacion, Region, NivelMora, TipoCliente, ModoPool)</code> — 9+1 parámetros.</li>
+  <li>RSFac → RSBus → RSDalc con la misma firma. RSDalc ejecuta 2 queries (AGENDAAUT con AGFNTREC=-1, AGENDAUSU con AGFNTREC&gt;0).</li>
+</ol>
+
+<h3>Flujo propuesto (DESPUÉS)</h3>
+<ol>
+  <li>(sin cambio) El usuario abre <code>FrmAgenda.aspx</code> — ahora con 3 filas de filtro (11 controles + 2 estándar que ya no tienen fila).</li>
+  <li><strong>[CAMBIO]</strong> Al hacer clic en Buscar → <code>FiltrarGrilla()</code> → <code>RSFac.Agenda.Consultar(..., DebitoAuto, Corredor, NombreCliente, RUC, ModoPool)</code> — 13+1 parámetros.</li>
+  <li>RSFac → RSBus → RSDalc con firma extendida. RSDalc agrega las 4 condiciones SQL opcionales en ambas queries.</li>
+</ol>
+<hr>
+
+<h2>2. ALCANCE DE CAMBIOS</h2>
+
+<h3>Cambios en código — nivel de MÉTODO</h3>
+
+<h4>FrmAgenda.aspx — Capa: AgendaWeb</h4>
+<p>Agregar 3ª fila de controles dentro del <code>&lt;ais:AISPanel&gt;</code>, antes del <code>&lt;div class="row"&gt;</code> del botón Buscar:</p>
+<pre><code>&lt;!-- ADO-65 | 2026-05-04 | 4 nuevos filtros de Agenda Personal --&gt;
+&lt;div class="row"&gt;
+    &lt;ais:AISCatalogo ID="ddlDebitoAuto" runat="server" DataEntrySize="S3" LabelText="lblDebitoAuto" /&gt;
+    &lt;ais:AISBusinessField ID="abfCorredor" FieldDataType="Text" runat="server" LabelText="Corredor:" DataEntrySize="S3" /&gt;
+    &lt;ais:AISBusinessField ID="abfNombreCliente" FieldDataType="Text" runat="server" LabelText="Nombre de Cliente:" DataEntrySize="S3" /&gt;
+    &lt;ais:AISBusinessField ID="abfRUC" FieldDataType="Text" runat="server" LabelText="RUC:" DataEntrySize="S3" /&gt;
+&lt;/div&gt;</code></pre>
+
+<h4>FrmAgenda.aspx.cs — Capa: AgendaWeb (code-behind)</h4>
+<p><strong>Clase:</strong> <code>FrmAgenda</code></p>
+
+<p><strong>LlenarDDL(string usuario)</strong> — línea ~193 (después de carga de ddlTipoCliente):</p>
+<ul>
+  <li><strong>Antes:</strong> termina con carga de <code>ddlRegion</code>.</li>
+  <li><strong>Después:</strong> agregar carga del catálogo estático de Débito Automático.
+    <pre><code>// ADO-65 | 2026-05-04 | Catálogo Débito Automático (lista estática S/N)
+DataTable dtDebitoAuto = tablas.DebitoAutomatico();
+this.ddlDebitoAuto.CatalogData = dtDebitoAuto;
+this.ddlDebitoAuto.EmptyItem = Idm.Texto(coMens.m2007, "Todos");
+this.ddlDebitoAuto.SelectedValue = "0";</code></pre>
+  </li>
+  <li><strong>PRE:</strong> <code>tablas</code> instanciada. <strong>POST:</strong> <code>ddlDebitoAuto</code> cargado con ítems S/N + empty "Todos". <strong>THROWS:</strong> N/A.</li>
+</ul>
+
+<p><strong>FiltrarGrilla()</strong> — línea ~130:</p>
+<ul>
+  <li><strong>Antes:</strong> <code>agenda.Consultar(usuario.CodUsuario, ..., this.ddlTipoCliente.SelectedValue.Trim(), bModoPool)</code> — 9+1 params.</li>
+  <li><strong>Después:</strong>
+    <pre><code>Ds = agenda.Consultar(usuario.CodUsuario,
+    this.abfDesde.Value.ToString(), this.abfHasta.Value.ToString(),
+    this.ddlEmpresa.SelectedValue.Trim(), this.ddlPerfil.SelectedValue.Trim(),
+    this.ddlRecomendacion.SelectedValue.Trim(), this.ddlRegion.SelectedValue.Trim(),
+    this.ddlNivelMora.SelectedValue.Trim(), this.ddlTipoCliente.SelectedValue.Trim(),
+    // ADO-65 | 2026-05-04
+    this.ddlDebitoAuto.SelectedValue.Trim(),
+    this.abfCorredor.Value.ToString().Trim(),
+    this.abfNombreCliente.Value.ToString().Trim(),
+    this.abfRUC.Value.ToString().Trim(),
+    bModoPool);</code></pre>
+  </li>
+  <li><strong>PRE:</strong> controles de filtro enlazados. <strong>POST:</strong> <code>Session["FormData"]</code> actualizado. <strong>THROWS:</strong> N/A (catch existente mantiene comportamiento).</li>
+</ul>
+
+<p><strong>btnAvanzar_Click() y GridAgendaXxx_SelectedIndexChanged()</strong>:</p>
+<ul>
+  <li>Actualizar llamada a <code>agenda.Siguiente()</code> con los 4 nuevos parámetros antes de <code>Saltear</code>.</li>
+  <li>Agregar los 4 parámetros nomeados al final de la URL de redirección a <code>FrmDetalleClie.aspx</code> (antes de <code>&amp;Saltear=0</code>):
+    <pre><code>+ "&amp;DebitoAuto="      + this.ddlDebitoAuto.SelectedValue.Trim()
++ "&amp;Corredor="        + Server.UrlEncode(this.abfCorredor.Value.ToString().Trim())
++ "&amp;NombreCliente="   + Server.UrlEncode(this.abfNombreCliente.Value.ToString().Trim())
++ "&amp;RUC="             + Server.UrlEncode(this.abfRUC.Value.ToString().Trim())
++ "&amp;Saltear=0"</code></pre>
+    <em>Server.UrlEncode() para campos texto con espacios o caracteres especiales.</em>
+  </li>
+</ul>
+
+<h4>RSFac/Agenda.cs — Capa: RSFac</h4>
+<p><strong>Clase:</strong> <code>RSFac.Agenda</code></p>
+<p><strong>Consultar() y Siguiente()</strong> — extender firma agregando <code>string DebitoAuto, string Corredor, string NombreCliente, string RUC</code> antes del parámetro final. Propagar los 4 valores en la llamada a RSBus.Agenda.</p>
+<ul>
+  <li><strong>PRE:</strong> params recibidos desde code-behind, pueden ser "" o "0". <strong>POST:</strong> retorna DataSet con resultados filtrados. <strong>THROWS:</strong> N/A.</li>
+</ul>
+
+<h4>RSBus/Agenda.cs — Capa: RSBus</h4>
+<p><strong>Clase:</strong> <code>RSBus.Agenda</code></p>
+<p>Ídem RSFac — actualizar firmas y propagar hacia RSDalc.Agenda.</p>
+
+<h4>RSDalc/Agenda.cs — Capa: RSDalc</h4>
+<p><strong>Clase:</strong> <code>RSDalc.Agenda</code></p>
+<p><strong>Consultar()</strong> — línea ~35. Actualizar firma. Agregar las 4 condiciones SQL en <strong>ambas</strong> queries (sSql → AGENDAAUT y sSql2 → AGENDAUSU), después del bloque de TipoCliente:</p>
+<pre><code>// ADO-65 | 2026-05-04 | Filtro Débito Automático — NULL tratado como "No"
+if (DebitoAuto != "0" &amp;&amp; DebitoAuto != "")
+{
+    if (DebitoAuto == "N")
+        sSql.Append($@" AND (OGTIENEDEBITOAUTO = 'N' OR OGTIENEDEBITOAUTO IS NULL) ");
+    else  // "S"
+        sSql.Append($@" AND OGTIENEDEBITOAUTO = 'S' ");
+}
+
+// ADO-65 | 2026-05-04 | Filtro Corredor — texto libre, insensible mayúsculas
+// cFormat.StToBD con TipoLike.Contiene produce '%VALOR%', escapa comillas — válido SQL Server y Oracle
+if (!string.IsNullOrWhiteSpace(Corredor))
+    sSql.Append($@" AND UPPER(OGCORREDOR) LIKE {cFormat.StToBD(Corredor.ToUpper(), cFormat.TipoLike.Contiene)} ");
+
+// ADO-65 | 2026-05-04 | Filtro Nombre de Cliente — texto libre, insensible mayúsculas
+if (!string.IsNullOrWhiteSpace(NombreCliente))
+{
+    string sNombreFiltro = cFormat.StToBD(NombreCliente.ToUpper(), cFormat.TipoLike.Contiene);
+    sSql.Append($@" AND (UPPER(CLNOMBRE) LIKE {sNombreFiltro} OR UPPER(CLAPELLIDO1) LIKE {sNombreFiltro}) ");
+}
+
+// ADO-65 | 2026-05-04 | Filtro RUC — texto libre (LIKE parcial sobre CLNUMDOC)
+if (!string.IsNullOrWhiteSpace(RUC))
+    sSql.Append($@" AND CLNUMDOC LIKE {cFormat.StToBD(RUC, cFormat.TipoLike.Contiene)} ");</code></pre>
+<p>⚠️ Las mismas 4 condiciones deben replicarse en <code>sSql2</code> (AGENDAUSU). Usar <code>sSql2.Append($@"...")</code> con idéntica lógica.</p>
+
+<p><strong>Siguiente()</strong> — línea ~473. Actualizar firma y agregar las mismas 4 condiciones. Siguiente() usa <code>sSql.Append($@"...")</code> — aplicar el mismo patrón.</p>
+<ul>
+  <li><strong>PRE:</strong> params provienen de la URL de redirección (URL-decoded). <strong>POST:</strong> retorna LOCOD del siguiente lote o "". <strong>THROWS:</strong> N/A.</li>
+</ul>
+
+<h4>RSFac/Tablas.cs — Capa: RSFac</h4>
+<p><strong>Clase:</strong> <code>RSFac.Tablas</code></p>
+<p>Agregar método <code>DebitoAutomatico()</code> — lista estática sin consulta a BD:</p>
+<pre><code>// ADO-65 | 2026-05-04 | Catálogo estático Débito Automático
+public DataTable DebitoAutomatico()
+{
+    DataTable dt = new DataTable("DEBITOAUTO");
+    dt.Columns.Add("CODIGO",      typeof(string));
+    dt.Columns.Add("DESCRIPCION", typeof(string));
+    dt.Rows.Add("S", "Sí");
+    dt.Rows.Add("N", "No");
+    return dt;
+}</code></pre>
+<ul>
+  <li><strong>PRE:</strong> ninguna. <strong>POST:</strong> DataTable con 2 filas S/N + columnas CODIGO y DESCRIPCION. <strong>THROWS:</strong> N/A.</li>
+</ul>
+
+<h4>coMens.cs — Capa: Comun</h4>
+<p>Agregar después de <code>m9296</code> (línea ~269):</p>
+<pre><code>// ADO-65 | 2026-05-04 | Labels 4 nuevos filtros de Agenda
+public const int m9297 = 9297; // Débito Automático
+public const int m9298 = 9298; // Corredor
+public const int m9299 = 9299; // Nombre de Cliente
+public const int m9300 = 9300; // RUC</code></pre>
+
+<h4>FrmDetalleClie.aspx.cs — Capa: AgendaWeb (code-behind)</h4>
+<p>La función de navegación al siguiente lote (línea ~2133) lee QueryString por índice numérico (frágil ante la adición de nuevos parámetros). Migrar a lectura por nombre de clave y agregar los 4 nuevos parámetros:</p>
+<pre><code>// ADO-65 | 2026-05-04 | Migración a QueryString por clave nomeada + 4 nuevos filtros
+if (Request.QueryString.Count &gt; 0)
+{
+    Desde         = Request.QueryString["Desde"]         ?? "";
+    Hasta         = Request.QueryString["Hasta"]         ?? "";
+    Empresa       = Request.QueryString["Empresa"]       ?? "";
+    Perfil        = Request.QueryString["Perfil"]        ?? "";
+    Recomendacion = Request.QueryString["Recomendacion"] ?? "";
+    Region        = Request.QueryString["Region"]        ?? "";
+    NivelMora     = Request.QueryString["NivelMora"]     ?? "";
+    TipoCliente   = Request.QueryString["TipoCliente"]   ?? "";
+    // ADO-65 | 2026-05-04
+    string DebitoAuto    = Request.QueryString["DebitoAuto"]    ?? "0";
+    string Corredor      = Request.QueryString["Corredor"]      ?? "";
+    string NombreCliente = Request.QueryString["NombreCliente"] ?? "";
+    string RUC           = Request.QueryString["RUC"]           ?? "";
+    Saltear = Convert.ToInt16(Request.QueryString["Saltear"] ?? "0");
+}</code></pre>
+<p>Actualizar la llamada a <code>agenda.Siguiente()</code> y la URL de redirección con los 4 nuevos parámetros nomeados.</p>
+
+<h3>Cambios en base de datos</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tipo</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Objeto</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Descripción</th>
+  </tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Columna existente</td><td style="border:1px solid #ccc;padding:6px"><code>ROBLG.OGTIENEDEBITOAUTO</code></td><td style="border:1px solid #ccc;padding:6px">VARCHAR(6), verificada ✅. Sin DDL nuevo.</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Columna existente</td><td style="border:1px solid #ccc;padding:6px"><code>ROBLG.OGCORREDOR</code></td><td style="border:1px solid #ccc;padding:6px">VARCHAR(20), verificada ✅. Sin script en repo — ALTER aplicado manualmente en BD. Sin DDL nuevo.</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Insert RCONTROLES</td><td style="border:1px solid #ccc;padding:6px"><code>AgendaWeb.FORMAGENDA</code></td><td style="border:1px solid #ccc;padding:6px">5 nuevas entradas: ddlDebitoAuto, lblDebitoAuto, abfCorredor, abfNombreCliente, abfRUC</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Insert RIDIOMA</td><td style="border:1px solid #ccc;padding:6px">IDTEXTO 9297–9300</td><td style="border:1px solid #ccc;padding:6px">12 registros — ESP/ENG/POR × 4 campos</td></tr>
+</table>
+
+<h3>RIDIOMA — Mensajes nuevos</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">IDTEXTO</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Español</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Inglés</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Portugués</th>
+  </tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">9297</td><td style="border:1px solid #ccc;padding:6px">Débito Automático</td><td style="border:1px solid #ccc;padding:6px">Automatic Debit</td><td style="border:1px solid #ccc;padding:6px">Débito Automático</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">9298</td><td style="border:1px solid #ccc;padding:6px">Corredor</td><td style="border:1px solid #ccc;padding:6px">Broker</td><td style="border:1px solid #ccc;padding:6px">Corretor</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">9299</td><td style="border:1px solid #ccc;padding:6px">Nombre de Cliente</td><td style="border:1px solid #ccc;padding:6px">Client Name</td><td style="border:1px solid #ccc;padding:6px">Nome do Cliente</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">9300</td><td style="border:1px solid #ccc;padding:6px">RUC</td><td style="border:1px solid #ccc;padding:6px">RUC</td><td style="border:1px solid #ccc;padding:6px">RUC</td></tr>
+</table>
+<p><em>MAX IDTEXTO verificado en BD dev = 9296 (usado por ADO-70). Próximos disponibles: 9297–9300.</em></p>
+
+<h3>Scripts BD a agregar</h3>
+<pre><code>-- ADO-65 | 2026-05-04 | Inserts RCONTROLES
+insert into RCONTROLES (ICFORM, ICCONTROL, ICTEXTO) values ('AgendaWeb.FORMAGENDA','ddlDebitoAuto',9297);
+insert into RCONTROLES (ICFORM, ICCONTROL, ICTEXTO) values ('AgendaWeb.FORMAGENDA','lblDebitoAuto',9297);
+insert into RCONTROLES (ICFORM, ICCONTROL, ICTEXTO) values ('AgendaWeb.FORMAGENDA','abfCorredor',9298);
+insert into RCONTROLES (ICFORM, ICCONTROL, ICTEXTO) values ('AgendaWeb.FORMAGENDA','abfNombreCliente',9299);
+insert into RCONTROLES (ICFORM, ICCONTROL, ICTEXTO) values ('AgendaWeb.FORMAGENDA','abfRUC',9300);
+
+-- ADO-65 | 2026-05-04 | Inserts RIDIOMA
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('ESP',9297,'D' + char(233) + 'bito Autom' + char(225) + 'tico');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('ENG',9297,'Automatic Debit');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('POR',9297,'D' + char(233) + 'bito Autom' + char(225) + 'tico');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('ESP',9298,'Corredor');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('ENG',9298,'Broker');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('POR',9298,'Corretor');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('ESP',9299,'Nombre de Cliente');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('ENG',9299,'Client Name');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('POR',9299,'Nome do Cliente');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('ESP',9300,'RUC');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('ENG',9300,'RUC');
+insert into RIDIOMA (IDIDIOMA, IDTEXTO, IDDESCRIPCION) values ('POR',9300,'RUC');</code></pre>
+
+<h3>Archivos afectados — resumen</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">#</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Archivo</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Capa</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tipo de cambio</th>
+  </tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">1</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmAgenda.aspx</code></td><td style="border:1px solid #ccc;padding:6px">AgendaWeb</td><td style="border:1px solid #ccc;padding:6px">Agregar 3ª fila con 4 controles</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">2</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmAgenda.aspx.cs</code></td><td style="border:1px solid #ccc;padding:6px">AgendaWeb</td><td style="border:1px solid #ccc;padding:6px">LlenarDDL + FiltrarGrilla + Avanzar + Grid redirects</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">3</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSFac/Agenda.cs</code></td><td style="border:1px solid #ccc;padding:6px">RSFac</td><td style="border:1px solid #ccc;padding:6px">Firmas Consultar() + Siguiente()</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">4</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSBus/Agenda.cs</code></td><td style="border:1px solid #ccc;padding:6px">RSBus</td><td style="border:1px solid #ccc;padding:6px">Firmas Consultar() + Siguiente()</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">5</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSDalc/Agenda.cs</code></td><td style="border:1px solid #ccc;padding:6px">RSDalc</td><td style="border:1px solid #ccc;padding:6px">SQL ×2 queries Consultar + Siguiente — cFormat.TipoLike.Contiene</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">6</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSFac/Tablas.cs</code></td><td style="border:1px solid #ccc;padding:6px">RSFac</td><td style="border:1px solid #ccc;padding:6px">Nuevo método DebitoAutomatico()</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">7</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/Comun/coMens.cs</code></td><td style="border:1px solid #ccc;padding:6px">Comun</td><td style="border:1px solid #ccc;padding:6px">Constantes m9297–m9300</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">8</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmDetalleClie.aspx.cs</code></td><td style="border:1px solid #ccc;padding:6px">AgendaWeb</td><td style="border:1px solid #ccc;padding:6px">QueryString índice → clave nomeada + 4 params Siguiente + redirect</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">9</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/BD/1 - Inicializacion BD/600804 - Inserts RCONTROLES.sql</code></td><td style="border:1px solid #ccc;padding:6px">BD</td><td style="border:1px solid #ccc;padding:6px">5 nuevos inserts</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">10</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/BD/1 - Inicializacion BD/600804 - Inserts RIDIOMA.sql</code></td><td style="border:1px solid #ccc;padding:6px">BD</td><td style="border:1px solid #ccc;padding:6px">12 nuevos inserts (9297–9300 × ESP/ENG/POR)</td></tr>
+</table>
+<hr>
+
+<h2>2B. SPEC TÉCNICA (SDD)</h2>
+<blockquote>Contratos formales. El Developer debe verificar que su implementación satisface <strong>cada contrato</strong> antes de dar el desarrollo por completado.</blockquote>
+
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Spec ID</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">CA-REF</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Método</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">PRE</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">POST</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">THROWS</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tests</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-01</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-02</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Agenda.Consultar(..., DebitoAuto="S", ...)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">DebitoAuto="S"</td>
+    <td style="border:1px solid #ccc;padding:6px">SQL incluye <code>AND OGTIENEDEBITOAUTO = 'S'</code></td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-001, TU-002</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-02</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-02</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Agenda.Consultar(..., DebitoAuto="N", ...)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">DebitoAuto="N"</td>
+    <td style="border:1px solid #ccc;padding:6px">SQL incluye <code>AND (OGTIENEDEBITOAUTO = 'N' OR OGTIENEDEBITOAUTO IS NULL)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-003</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-03</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-03</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Agenda.Consultar(..., Corredor="ABC", ...)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">Corredor no vacío</td>
+    <td style="border:1px solid #ccc;padding:6px">SQL incluye <code>AND UPPER(OGCORREDOR) LIKE '%ABC%'</code> (via TipoLike.Contiene)</td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-004, TU-005</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-04</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-04</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Agenda.Consultar(..., NombreCliente="garcia", ...)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">NombreCliente no vacío</td>
+    <td style="border:1px solid #ccc;padding:6px">SQL incluye <code>AND (UPPER(CLNOMBRE) LIKE '%GARCIA%' OR UPPER(CLAPELLIDO1) LIKE '%GARCIA%')</code></td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-006, TU-007</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-05</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-05</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Agenda.Consultar(..., RUC="20", ...)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">RUC no vacío</td>
+    <td style="border:1px solid #ccc;padding:6px">SQL incluye <code>AND CLNUMDOC LIKE '%20%'</code></td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-008</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-06</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-07</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Agenda.Consultar(..., "", "", "", "0", ...)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">Todos los 4 params en blanco/0</td>
+    <td style="border:1px solid #ccc;padding:6px">SQL idéntico al pre-ADO-65 (sin condiciones adicionales)</td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-009</td>
+  </tr>
+</table>
+<hr>
+
+<h2>3. PLAN DE PRUEBAS TÉCNICO</h2>
+
+<h3>Pruebas funcionales con datos reales</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">#</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Caso de prueba</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Datos de BD candidatos</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Resultado esperado</th>
+  </tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P01</td><td style="border:1px solid #ccc;padding:6px">Débito Automático = Sí</td><td style="border:1px solid #ccc;padding:6px">ROBLG: todos NULL en dev → 0 filas con 'S'</td><td style="border:1px solid #ccc;padding:6px">0 resultados (correcto — no hay débitos activos en dev)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P02</td><td style="border:1px solid #ccc;padding:6px">Débito Automático = No</td><td style="border:1px solid #ccc;padding:6px">ROBLG: 441.256 con NULL → incluidos como "No"</td><td style="border:1px solid #ccc;padding:6px">Todos los lotes agendados</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P03</td><td style="border:1px solid #ccc;padding:6px">Corredor = valor parcial</td><td style="border:1px solid #ccc;padding:6px"><code>SELECT DISTINCT TOP 5 OGCORREDOR FROM ROBLG WHERE OGCORREDOR IS NOT NULL</code></td><td style="border:1px solid #ccc;padding:6px">Solo lotes con corredor que contiene el texto</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P04</td><td style="border:1px solid #ccc;padding:6px">Nombre de Cliente = texto parcial</td><td style="border:1px solid #ccc;padding:6px"><code>SELECT TOP 1 CLNOMBRE FROM RCLIE WHERE CLNOMBRE IS NOT NULL ORDER BY 1</code></td><td style="border:1px solid #ccc;padding:6px">Lotes agendados cuyo titular contiene el texto</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P05</td><td style="border:1px solid #ccc;padding:6px">RUC = parcial "20"</td><td style="border:1px solid #ccc;padding:6px"><code>SELECT TOP 1 CLNUMDOC FROM RCLIE WHERE CLNUMDOC LIKE '20%'</code></td><td style="border:1px solid #ccc;padding:6px">Lotes agendados cuyos clientes tienen CLNUMDOC que contiene "20"</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P06</td><td style="border:1px solid #ccc;padding:6px">Todos los campos nuevos vacíos</td><td style="border:1px solid #ccc;padding:6px">—</td><td style="border:1px solid #ccc;padding:6px">Conteo idéntico al antes del desarrollo</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P07</td><td style="border:1px solid #ccc;padding:6px">AND lógico — NivelMora + NombreCliente</td><td style="border:1px solid #ccc;padding:6px">NivelMora="C1", NombreCliente="a"</td><td style="border:1px solid #ccc;padding:6px">Intersección correcta entre ambos filtros</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P08</td><td style="border:1px solid #ccc;padding:6px">Botón Avanzar con Corredor activo</td><td style="border:1px solid #ccc;padding:6px">—</td><td style="border:1px solid #ccc;padding:6px">FrmDetalleClie navega respetando el filtro de Corredor</td></tr>
+</table>
+
+<h3>Queries de verificación post-implementación</h3>
+<pre><code>-- Verificar que condición LIKE se genera correctamente
+-- (ejecutar en profiler o traza mientras se busca con NombreCliente="garcia")
+-- Resultado esperado: AND UPPER(CLNOMBRE) LIKE '%GARCIA%' OR UPPER(CLAPELLIDO1) LIKE '%GARCIA%'
+
+-- Datos para P03
+SELECT DISTINCT TOP 5 OGCORREDOR FROM ROBLG WHERE OGCORREDOR IS NOT NULL ORDER BY OGCORREDOR;
+
+-- Datos para P04/P05
+SELECT TOP 5 CLNUMDOC, CLNOMBRE, CLAPELLIDO1 FROM RCLIE
+WHERE CLNOMBRE IS NOT NULL ORDER BY CLNOMBRE;</code></pre>
+<hr>
+
+<h2>4. TESTS UNITARIOS OBLIGATORIOS</h2>
+<blockquote>
+  ⚠️ <strong>OBLIGATORIO:</strong> Todos los tests deben pasar al 100% antes de dar por completado el desarrollo.
+</blockquote>
+
+<h4>TU-001: DebitoAuto_S_agrega_condicion_exacta</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(..., DebitoAuto: "S", ...)</code></li>
+  <li><strong>CA-REF:</strong> CA-02</li>
+  <li><strong>DADO:</strong> DebitoAuto="S", resto de filtros en blanco/0</li>
+  <li><strong>CUANDO:</strong> se genera el SQL de AGENDAAUT</li>
+  <li><strong>ENTONCES:</strong> el string SQL contiene <code>AND OGTIENEDEBITOAUTO = 'S'</code> y NO contiene IS NULL</li>
+</ul>
+
+<h4>TU-002: DebitoAuto_0_no_agrega_condicion</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(..., DebitoAuto: "0", ...)</code></li>
+  <li><strong>CA-REF:</strong> CA-07</li>
+  <li><strong>DADO:</strong> DebitoAuto="0"</li>
+  <li><strong>CUANDO:</strong> se genera el SQL</li>
+  <li><strong>ENTONCES:</strong> el string SQL NO contiene OGTIENEDEBITOAUTO</li>
+</ul>
+
+<h4>TU-003: DebitoAuto_N_incluye_null</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(..., DebitoAuto: "N", ...)</code></li>
+  <li><strong>CA-REF:</strong> CA-02</li>
+  <li><strong>DADO:</strong> DebitoAuto="N"</li>
+  <li><strong>CUANDO:</strong> se genera el SQL</li>
+  <li><strong>ENTONCES:</strong> SQL contiene <code>AND (OGTIENEDEBITOAUTO = 'N' OR OGTIENEDEBITOAUTO IS NULL)</code></li>
+</ul>
+
+<h4>TU-004: Corredor_genera_like_contiene_uppercase</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(..., Corredor: "abc", ...)</code></li>
+  <li><strong>CA-REF:</strong> CA-03</li>
+  <li><strong>DADO:</strong> Corredor="abc" (minúsculas)</li>
+  <li><strong>CUANDO:</strong> se genera el SQL</li>
+  <li><strong>ENTONCES:</strong> SQL contiene <code>AND UPPER(OGCORREDOR) LIKE '%ABC%'</code> (convertido a mayúsculas por .ToUpper() en C#)</li>
+</ul>
+
+<h4>TU-005: Corredor_vacio_no_agrega_condicion</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(..., Corredor: "", ...)</code></li>
+  <li><strong>CA-REF:</strong> CA-07</li>
+  <li><strong>DADO:</strong> Corredor=""</li>
+  <li><strong>CUANDO:</strong> se genera el SQL</li>
+  <li><strong>ENTONCES:</strong> SQL NO contiene OGCORREDOR</li>
+</ul>
+
+<h4>TU-006: NombreCliente_busca_en_nombre_y_apellido</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(..., NombreCliente: "garcia", ...)</code></li>
+  <li><strong>CA-REF:</strong> CA-04</li>
+  <li><strong>DADO:</strong> NombreCliente="garcia"</li>
+  <li><strong>CUANDO:</strong> se genera el SQL</li>
+  <li><strong>ENTONCES:</strong> SQL contiene <code>AND (UPPER(CLNOMBRE) LIKE '%GARCIA%' OR UPPER(CLAPELLIDO1) LIKE '%GARCIA%')</code></li>
+</ul>
+
+<h4>TU-007: NombreCliente_con_comilla_simple_escapada</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(..., NombreCliente: "O'Brien", ...)</code></li>
+  <li><strong>CA-REF:</strong> CA-04 (caso de borde — SQL injection)</li>
+  <li><strong>DADO:</strong> NombreCliente="O'Brien" (contiene comilla simple)</li>
+  <li><strong>CUANDO:</strong> se genera el SQL</li>
+  <li><strong>ENTONCES:</strong> SQL contiene <code>'%O''BRIEN%'</code> (comilla escapada por cFormat.StToBD) — no hay SQL injection</li>
+</ul>
+
+<h4>TU-008: RUC_genera_like_parcial</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(..., RUC: "20123", ...)</code></li>
+  <li><strong>CA-REF:</strong> CA-05</li>
+  <li><strong>DADO:</strong> RUC="20123"</li>
+  <li><strong>CUANDO:</strong> se genera el SQL</li>
+  <li><strong>ENTONCES:</strong> SQL contiene <code>AND CLNUMDOC LIKE '%20123%'</code></li>
+</ul>
+
+<h4>TU-009: Todos_vacios_SQL_identico_a_pre_ADO65</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(..., DebitoAuto: "0", Corredor: "", NombreCliente: "", RUC: "")</code></li>
+  <li><strong>CA-REF:</strong> CA-07</li>
+  <li><strong>DADO:</strong> los 4 nuevos params en estado "vacío"</li>
+  <li><strong>CUANDO:</strong> se genera el SQL</li>
+  <li><strong>ENTONCES:</strong> el string SQL generado NO contiene ninguna de las columnas: OGTIENEDEBITOAUTO, OGCORREDOR, CLNUMDOC (y la condición de CLNOMBRE ya existía en el SELECT)</li>
+</ul>
+
+<h3>Resumen de cobertura requerida</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Clase</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Método</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tests</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Escenarios</th>
+  </tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Agenda</code></td><td style="border:1px solid #ccc;padding:6px"><code>Consultar()</code></td><td style="border:1px solid #ccc;padding:6px">TU-001–TU-009</td><td style="border:1px solid #ccc;padding:6px">S/N/0 DebitoAuto, LIKE Corredor/Nombre/RUC, vacios, escape SQL injection</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>RSFac.Tablas</code></td><td style="border:1px solid #ccc;padding:6px"><code>DebitoAutomatico()</code></td><td style="border:1px solid #ccc;padding:6px">TU-010</td><td style="border:1px solid #ccc;padding:6px">Retorna DataTable con filas S="Sí" y N="No"</td></tr>
+</table>
+<hr>
+
+<h2>5. NOTAS PARA EL DESARROLLADOR</h2>
+
+<h3>Convención SQL del proyecto</h3>
+<p>Para condiciones WHERE en métodos que usan <code>StringBuilder</code> (como <code>Consultar()</code> y <code>Siguiente()</code> en <code>RSDalc/Agenda.cs</code>), usar <code>sSql.Append($@"...")</code> — interpolación de cadenas verbatim. Para LIKE "contiene" insensible a mayúsculas: <code>cFormat.StToBD(valor.ToUpper(), cFormat.TipoLike.Contiene)</code> produce <code>'%VALOR%'</code> y escapa comillas simples internamente (protección SQL injection).</p>
+<p><strong>NO usar</strong> concatenación SQL Server-específica del tipo <code>LIKE '%' + UPPER({0}) + '%'</code>.</p>
+
+<p>Patrón completo para condición opcional con LIKE:</p>
+<pre><code>if (!string.IsNullOrWhiteSpace(Campo))
+    sSql.Append($@" AND UPPER(COLUMNA) LIKE {cFormat.StToBD(Campo.ToUpper(), cFormat.TipoLike.Contiene)} ");</code></pre>
+
+<p>Referencias en el codebase:</p>
+<ul>
+  <li><code>RSDalc/Cliente.cs ~567:</code> <code>sSql.AppendFormat(" AND CLNUMDOC LIKE{0} ", cFormat.StToBD(Documento, cFormat.TipoLike.Contiene))</code></li>
+  <li><code>RSDalc/Usuario.cs ~132:</code> <code>sSql += $@" CONVERT(VARCHAR, CAST(UFFECBAJA AS DATE), 103) FECHABAJAUSUARIO, "</code> (patrón <code>+=</code> en variables string, no StringBuilder)</li>
+</ul>
+
+<h3>Precauciones</h3>
+<ul>
+  <li>Las condiciones SQL nuevas deben replicarse en <strong>ambas</strong> queries de <code>Consultar()</code> (<code>sSql</code> → AGENDAAUT y <code>sSql2</code> → AGENDAUSU). Es fácil olvidar una.</li>
+  <li><code>Siguiente()</code> en RSDalc usa concatenación directa (<code>'" + value + "'"</code>) para los filtros existentes — mantener consistencia con ese estilo para los 4 nuevos en ese método.</li>
+  <li><code>OGCORREDOR</code> existe en BD dev (VARCHAR(20)) pero no tiene script ALTER en el repo. El Developer no necesita agregar DDL, pero debe documentar esta deuda técnica en un comentario de código.</li>
+  <li>No modificar la lógica de ordenamiento (ORDER BY LODEUDA * RCAMBIO) ni los campos del SELECT — el ticket solo agrega condiciones WHERE.</li>
+</ul>
+
+<hr>
+<p><strong>Próximo paso:</strong> Desarrollador toma este ticket e implementa siguiendo este análisis.<br>
+<strong>Regla:</strong> Todos los tests unitarios TU-001 a TU-010 deben pasar al 100%.</p>

@@ -52,7 +52,11 @@
               "items": { "type": "string" }
             },
             "console_log": { "type": ["string", "null"] },
-            "network_log": { "type": ["string", "null"] }
+            "network_log": { "type": ["string", "null"] },
+            "error_context": {
+              "type": ["string", "null"],
+              "description": "Path to error-context.md harvested from Playwright (test failure context). Added in runner v1.1.0."
+            }
           }
         },
         "assertion_failures": {

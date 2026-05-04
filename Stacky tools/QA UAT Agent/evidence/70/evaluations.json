@@ -1,0 +1,96 @@
+{
+  "ok": true,
+  "ticket_id": 70,
+  "evaluations": [
+    {
+      "scenario_id": "P01",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "invisible",
+          "target": "panel_c_lblagendausu",
+          "expected": null,
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P01/assertions_P01.json"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P04",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "panel_dialogfinsesion",
+          "expected": "No hay lotes agendados que cumplan los criterios seleccionados",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P04/assertions_P04.json"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P05",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "select_empresa",
+          "expected": "Todos",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P05/assertions_P05.json"
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "visible",
+          "target": "select_nivel_de_mora",
+          "expected": "Todas",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P05/assertions_P05.json"
+        },
+        {
+          "oracle_id": 2,
+          "tipo": "visible",
+          "target": "select_perfil",
+          "expected": "Todos",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P05/assertions_P05.json"
+        },
+        {
+          "oracle_id": 3,
+          "tipo": "visible",
+          "target": "select_recomendaci_n",
+          "expected": "Todas",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P05/assertions_P05.json"
+        },
+        {
+          "oracle_id": 4,
+          "tipo": "visible",
+          "target": "select_regi_n",
+          "expected": "Todas",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P05/assertions_P05.json"
+        },
+        {
+          "oracle_id": 5,
+          "tipo": "visible",
+          "target": "select_tipo_de_cliente",
+          "expected": "Todos",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P05/assertions_P05.json"
+        }
+      ]
+    }
+  ]
+}

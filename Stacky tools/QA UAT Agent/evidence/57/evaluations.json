@@ -1,0 +1,147 @@
+{
+  "ok": true,
+  "ticket_id": 57,
+  "evaluations": [
+    {
+      "scenario_id": "P01",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "grid_c_gridagendaaut",
+          "expected": "Prima=1355030.88",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P01/assertions_P01.json"
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "visible",
+          "target": "grid_c_gridagendaaut",
+          "expected": "Moneda=US.D",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P01/assertions_P01.json"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P02",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "equals",
+          "target": "grid_c_gridagendaaut",
+          "expected": "1011240108601559",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P02/assertions_P02.json"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P03",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "grid_c_gridagendaaut",
+          "expected": "22,843,820",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P03/assertions_P03.json"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P04",
+      "status": "blocked",
+      "reason": "scenario_definition_not_found",
+      "assertions": []
+    },
+    {
+      "scenario_id": "P05",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "panel_gvc_gridagendaaut_div",
+          "expected": null,
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P05/assertions_P05.json"
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "page_contains_text",
+          "target": "panel_gvc_gridagendaaut_div",
+          "expected": "ISNULL/NVL aplica tasa=1",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P05/assertions_P05.json"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P06",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "grid_c_gridagendaaut",
+          "expected": "false",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P06/assertions_P06.json"
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "visible",
+          "target": "grid_c_gridagendausu",
+          "expected": "false",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P06/assertions_P06.json"
+        },
+        {
+          "oracle_id": 2,
+          "tipo": "invisible",
+          "target": "link_btnnext",
+          "expected": null,
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P06/assertions_P06.json"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P07",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "page_contains_text",
+          "target": "panel_loader_general",
+          "expected": "LODEUDA",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P07/assertions_P07.json"
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "page_contains_text",
+          "target": "panel_loader_general",
+          "expected": "OGMONEDA",
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P07/assertions_P07.json"
+        }
+      ]
+    }
+  ]
+}

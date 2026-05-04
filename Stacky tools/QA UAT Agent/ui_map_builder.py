@@ -24,16 +24,39 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.ui_map_builder")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "1.1.0"
+# Bump = added input_type, class_list, accessible_name, is_decorative
+# fields per element (M1 — UI map enriquecido). Backwards-compatible:
+# downstream tools tolerate the absence of these fields.
+_SCHEMA_VERSION = "ui_map/1.1"
 _CACHE_DIR = Path(__file__).resolve().parent / "cache" / "ui_maps"
 _ALIAS_PATTERN_RE_STR = r"^(select|input|btn|grid|panel|msg|link|table|checkbox|radio|text)_[a-zA-Z0-9_]+$"
 _SUPPORTED_KINDS = ("input", "select", "button", "table", "div", "span", "a",
                     "checkbox", "radio", "textarea", "label", "grid", "panel", "other")
 
-# Login selectors for Agenda Web
-_LOGIN_USER_SEL = "#txtUsuario"
-_LOGIN_PASS_SEL = "#txtPassword"
-_LOGIN_BTN_SEL = "#btnIngresar"
+# CSS class fragments that mark a node as PURE LAYOUT/DECORATION (a section
+# heading, column label, page title, breadcrumb…). These elements are NEVER
+# valid targets for runtime-message oracles like `visible/invisible`. The
+# scenario_compiler uses `is_decorative=true` to route oracles away from them.
+# IMPORTANT: substring match (case-insensitive). Materialize/AIS labels are the
+# main source — `input-field-label` is the title of a Materialize column, not
+# a runtime message.
+_DECORATIVE_CLASS_HINTS = (
+    "input-field-label",
+    "col-form-label",
+    "page-title",
+    "section-title",
+    "breadcrumb",
+    "card-title",
+    "navbar-brand",
+    "panel-heading",
+)
+
+# Login selectors for Agenda Web (FrmLogin.aspx rendered by AIS controls)
+_LOGIN_URL_SUFFIX = "/FrmLogin.aspx"
+_LOGIN_USER_SEL = "#c_abfUsuario"
+_LOGIN_PASS_SEL = "#c_abfContrasena"
+_LOGIN_BTN_SEL = "#c_btnOk"
 _LOGIN_SUCCESS_INDICATOR = "FrmAgenda.aspx"
 
 
@@ -70,13 +93,22 @@ def run(screen: str, rebuild: bool = False, verbose: bool = False) -> dict:
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = _CACHE_DIR / f"{screen}.json"
 
-    # Check cache (only if not rebuilding)
+    # Check cache (only if not rebuilding).
+    # Cache is invalidated when the UI map schema version changes — older
+    # caches lack input_type / is_decorative / class_list and would mislead
+    # downstream tools.
     if not rebuild and cache_file.is_file():
         try:
             cached = json.loads(cache_file.read_text(encoding="utf-8"))
-            if cached.get("ok") and cached.get("hash"):
+            cached_schema = cached.get("schema_version", "ui_map/1.0")
+            if cached.get("ok") and cached.get("hash") and cached_schema == _SCHEMA_VERSION:
                 logger.debug("cache hit for %s (hash=%s)", screen, cached["hash"])
                 return cached
+            if cached_schema != _SCHEMA_VERSION:
+                logger.info(
+                    "UI map schema bump for %s (cached=%s, current=%s) — rebuilding",
+                    screen, cached_schema, _SCHEMA_VERSION,
+                )
         except Exception as exc:
             logger.warning("cache corrupt for %s, rebuilding: %s", screen, exc)
 
@@ -101,13 +133,12 @@ def run(screen: str, rebuild: bool = False, verbose: bool = False) -> dict:
 
             # Login
             try:
-                login_url = base_url.rstrip("/") + "/Login.aspx"
-                page.goto(login_url, timeout=15000)
-                page.wait_for_load_state("networkidle", timeout=10000)
-                page.fill(_LOGIN_USER_SEL, user)
+                login_url = base_url.rstrip("/") + _LOGIN_URL_SUFFIX
+                page.goto(login_url, timeout=20000, wait_until="load")
+                page.fill(_LOGIN_USER_SEL, user, timeout=10000)
                 page.fill(_LOGIN_PASS_SEL, password)
                 page.click(_LOGIN_BTN_SEL)
-                page.wait_for_load_state("networkidle", timeout=10000)
+                page.wait_for_load_state("load", timeout=20000)
             except PwTimeout:
                 browser.close()
                 return _err("login_failed", f"Timeout during login at {login_url}")
@@ -116,14 +147,14 @@ def run(screen: str, rebuild: bool = False, verbose: bool = False) -> dict:
                 return _err("login_failed", f"Login failed: {exc}")
 
             # Check login success (look for redirect or new page)
-            if "Login" in page.url and "error" in page.content().lower():
+            if "FrmLogin" in page.url or "Login" in page.url:
                 browser.close()
-                return _err("login_failed", "Login failed: credentials rejected")
+                return _err("login_failed", f"Login failed: still on login page at {page.url}")
 
             # Navigate to target screen
             try:
-                page.goto(url, timeout=15000)
-                page.wait_for_load_state("networkidle", timeout=10000)
+                page.goto(url, timeout=20000, wait_until="load")
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
             except PwTimeout:
                 browser.close()
                 return _err("screen_not_loaded", f"Timeout loading {url}")
@@ -168,6 +199,7 @@ def run(screen: str, rebuild: bool = False, verbose: bool = False) -> dict:
 
     result: dict = {
         "ok": True,
+        "schema_version": _SCHEMA_VERSION,
         "screen": screen,
         "hash": dom_hash,
         "captured_at": _now_iso(),
@@ -209,22 +241,44 @@ def _extract_elements(page, verbose: bool = False) -> list:
             if (!el || seen.has(el)) return;
             seen.add(el);
             const id = el.id || null;
+            // Native HTML5 input type — needed by playwright_test_generator
+            // to decide value formatting (date → YYYY-MM-DD, time → HH:MM, etc).
+            const inputType = (el.tagName === 'INPUT')
+                ? (el.getAttribute('type') || 'text').toLowerCase()
+                : null;
             const label = el.getAttribute('aria-label') ||
                           el.getAttribute('placeholder') ||
                           (() => {
                               const lbl = el.labels && el.labels[0];
                               return lbl ? lbl.textContent.trim() : null;
                           })() || null;
+            // Accessible name from accessibility tree (more reliable than label
+            // for buttons/links rendered with aria-labelledby).
+            const accessibleName = (() => {
+                if (el.getAttribute('aria-labelledby')) {
+                    const refIds = el.getAttribute('aria-labelledby').split(/\\s+/);
+                    return refIds.map(rid => {
+                        const r = document.getElementById(rid);
+                        return r ? r.textContent.trim() : '';
+                    }).filter(Boolean).join(' ') || null;
+                }
+                return null;
+            })();
             const role = el.getAttribute('role') || el.tagName.toLowerCase();
             const testid = el.getAttribute('data-testid') || null;
             const txt = el.value || el.textContent.trim().substring(0, 50) || null;
             const rect = el.getBoundingClientRect();
+            // Class list (cap to 16 entries to keep the UI map JSON compact).
+            const classList = Array.from(el.classList || []).slice(0, 16);
             results.push({
                 kind: kind,
                 role: role,
                 label: label,
+                accessible_name: accessibleName,
                 asp_id: id,
+                input_type: inputType,
                 data_testid: testid,
+                class_list: classList,
                 text: (kind === 'button' || kind === 'a') ? txt : null,
                 position: {x: Math.round(rect.left), y: Math.round(rect.top)}
             });
@@ -250,12 +304,28 @@ def _extract_elements(page, verbose: bool = False) -> list:
         if not isinstance(el, dict):
             continue
         sel_result = discover_selector(el)
+        class_list = el.get("class_list") or []
+        if not isinstance(class_list, list):
+            class_list = []
         element = {
             "kind": el.get("kind", "other"),
             "role": str(el.get("role") or ""),
             "label": el.get("label"),
+            "accessible_name": el.get("accessible_name"),
             "asp_id": el.get("asp_id"),
+            # Native HTML5 input type (text|date|time|month|number|color|email…)
+            # or None for non-input elements. Consumed by the test generator to
+            # transform fill values (e.g. dd/MM/yyyy → YYYY-MM-DD).
+            "input_type": el.get("input_type"),
             "data_testid": el.get("data_testid"),
+            "class_list": class_list,
+            # is_decorative: true when CSS classes mark this node as a layout
+            # heading / column label / page title and not a runtime message.
+            # Compiler MUST NOT use these as targets of visible/invisible/equals
+            # oracles for runtime messages (otherwise we get false FAILs like
+            # P01 ticket 70: oracle hit `<div class="input-field-label">…
+            # Agendados por Usuario</div>` which is permanent layout text).
+            "is_decorative": _is_decorative(el.get("kind"), class_list),
             "selector_recommended": sel_result["selector"],
             "robustness": sel_result["robustness"],
             "alias_semantic": _default_alias(el),  # placeholder, overwritten by LLM
@@ -266,6 +336,22 @@ def _extract_elements(page, verbose: bool = False) -> list:
         elements.append(element)
 
     return elements
+
+
+def _is_decorative(kind: Optional[str], class_list: list) -> bool:
+    """Return True if the CSS class list marks this element as pure layout
+    decoration (section header, column label, page title…), making it an
+    INVALID target for runtime message oracles.
+
+    Only div / span / label nodes can be decorative; form controls (input,
+    select, button…) and tables are always functional.
+    """
+    if kind not in ("div", "span", "label", "other", None):
+        return False
+    if not class_list:
+        return False
+    blob = " ".join(str(c) for c in class_list).lower()
+    return any(hint in blob for hint in _DECORATIVE_CLASS_HINTS)
 
 
 def _default_alias(el: dict) -> str:
@@ -316,7 +402,7 @@ def _add_semantic_aliases(elements: list, verbose: bool = False) -> list:
             "Return ONLY a JSON array: [{\"asp_id\": \"...\", \"alias_semantic\": \"...\"}, ...]"
         )
         result = call_llm(
-            model="gpt-4.1-mini",
+            model="gpt-4o-mini",
             system=system_prompt,
             user=f"Elements:\n{snippet}",
             max_tokens=512,

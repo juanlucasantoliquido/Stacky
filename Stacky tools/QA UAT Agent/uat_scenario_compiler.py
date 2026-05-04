@@ -21,7 +21,12 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.scenario_compiler")
 
-_TOOL_VERSION = "1.0.0"
+# v1.1.0 — accepts the enriched UI map (kind, input_type, is_decorative,
+# class_list, accessible_name) and forwards a structured hint catalog to the
+# LLM so it stops choosing decorative layout labels (input-field-label) as
+# runtime-message oracles. Adds a post-LLM validator that reroutes scenarios
+# whose oracles target decorative elements to out_of_scope.
+_TOOL_VERSION = "1.1.0"
 
 # Screens supported in MVP (from SPEC §6)
 _SUPPORTED_SCREENS = frozenset({
@@ -107,9 +112,21 @@ def main() -> None:
 def run(
     ticket_json: dict,
     scope_screen: Optional[str] = None,
+    ui_aliases: Optional[list] = None,
+    ui_elements: Optional[list] = None,
     verbose: bool = False,
 ) -> dict:
-    """Core logic — callable from tests without subprocess."""
+    """Core logic — callable from tests without subprocess.
+
+    `ui_elements`: optional list of element dicts from the UI map (schema 1.1+):
+    [{"alias_semantic", "kind", "role", "input_type", "is_decorative",
+      "label", "class_list"}, ...]. When provided, the compiler hands this
+    structured catalog to the LLM and runs a post-validation pass that
+    reroutes scenarios whose oracles target decorative elements
+    (input-field-label, page-title, etc) to `out_of_scope_items` with
+    `razon=ORACLE_TARGETS_DECORATIVE_LAYOUT`. Without it, falls back to
+    pre-1.1 behaviour (alias-only hints, no decorative validation).
+    """
     started = time.time()
 
     if not isinstance(ticket_json, dict) or not ticket_json.get("ok"):
@@ -151,7 +168,10 @@ def run(
             continue
 
         # Try to compile the scenario
-        spec = _compile_scenario(pid, desc, datos, esperado, ticket_id, verbose=verbose)
+        spec = _compile_scenario(
+            pid, desc, datos, esperado, ticket_id,
+            ui_aliases=ui_aliases, ui_elements=ui_elements, verbose=verbose,
+        )
         if spec is None:
             out_of_scope.append({
                 "id": pid,
@@ -172,6 +192,21 @@ def run(
                 "descripcion": desc,
             })
             continue
+
+        # Decorative-target validation (M2): reject scenarios whose oracles
+        # point at layout labels. Without this guard the LLM frequently
+        # picks `panel_*_label` divs as targets for `visible/invisible`
+        # which is a class of false-FAIL.
+        if ui_elements:
+            decorative_violation = _find_decorative_oracle_targets(spec, ui_elements)
+            if decorative_violation:
+                out_of_scope.append({
+                    "id": pid,
+                    "razon": "ORACLE_TARGETS_DECORATIVE_LAYOUT",
+                    "descripcion": desc,
+                    "details": decorative_violation,
+                })
+                continue
 
         scenarios.append(spec)
 
@@ -201,14 +236,18 @@ def run(
 
 def _compile_scenario(
     pid: str, desc: str, datos: str, esperado: str,
-    ticket_id: int, verbose: bool = False,
+    ticket_id: int, ui_aliases: Optional[list] = None,
+    ui_elements: Optional[list] = None, verbose: bool = False,
 ) -> Optional[dict]:
     """
     Compile a single P0N item into a ScenarioSpec.
     Tries LLM first, falls back to heuristics.
     """
     # Try LLM compilation
-    spec = _compile_via_llm(pid, desc, datos, esperado, ticket_id, verbose=verbose)
+    spec = _compile_via_llm(
+        pid, desc, datos, esperado, ticket_id,
+        ui_aliases=ui_aliases, ui_elements=ui_elements, verbose=verbose,
+    )
     if spec:
         return spec
 
@@ -218,24 +257,51 @@ def _compile_scenario(
 
 def _compile_via_llm(
     pid: str, desc: str, datos: str, esperado: str,
-    ticket_id: int, verbose: bool = False,
+    ticket_id: int, ui_aliases: Optional[list] = None,
+    ui_elements: Optional[list] = None, verbose: bool = False,
 ) -> Optional[dict]:
-    """Attempt to compile via LLM (gpt-4.1-mini). Return None on failure."""
+    """Attempt to compile via LLM. Return None on failure."""
     try:
         from llm_client import call_llm, LLMError
 
-        system_prompt = """You are a QA automation engineer converting test plan items to structured test specs.
+        # Build alias hint catalog. With ui_elements (UI map ≥1.1) we ship
+        # structured per-alias metadata so the LLM picks oracles that match
+        # the kind/role of each target. Without it, fall back to the legacy
+        # alias-only list.
+        if ui_elements:
+            alias_instruction = _build_ui_elements_hint(ui_elements)
+        elif ui_aliases:
+            alias_list = ", ".join(sorted(ui_aliases))
+            alias_instruction = (
+                f"\nIMPORTANT: You MUST use ONLY these exact alias names from the UI map (do not invent new ones):\n"
+                f"{alias_list}\n"
+                "If the test step requires an element not in this list, use the closest available alias "
+                "or omit the step and mark it in precondiciones as 'SELECTOR_NOT_FOUND'."
+            )
+        else:
+            alias_instruction = (
+                "\nUse semantic alias names like: btn_buscar, select_empresa, grid_agenda_aut, "
+                "msg_lista_vacia, input_fecha_desde."
+            )
+
+        system_prompt = f"""You are a QA automation engineer converting test plan items to structured test specs.
 Given a test case description, extract a structured ScenarioSpec JSON.
 Respond ONLY with valid JSON, no explanations.
 
 The JSON must have:
 - "pantalla": one of ["FrmAgenda.aspx","FrmDetalleLote.aspx","FrmGestion.aspx","Login.aspx"]
 - "precondiciones": list of strings
-- "pasos": list of {"accion": "<navigate|click|fill|select|wait_networkidle|wait_visible>", "target": "<alias>", "valor": <str|null>}
-- "oraculos": list of {"tipo": "<equals|contains_literal|count_gt|count_eq|visible|invisible|state>", "target": "<alias>", "valor": <str|null>}
-- "datos_requeridos": list of {"tabla": "<str>", "filtro": "<str>"}
+- "pasos": list of {{"accion": "<navigate|click|fill|select|wait_networkidle|wait_visible>", "target": "<alias>", "valor": <str|null>}}
+- "oraculos": list of {{"tipo": "<equals|contains_literal|count_gt|count_eq|visible|invisible|state|page_contains_text|page_not_contains_text|select_value_is>", "target": "<alias>", "valor": <str|null>}}
+- "datos_requeridos": list of {{"tabla": "<str>", "filtro": "<str>"}}
 
-Use semantic alias names like: btn_buscar, select_empresa, grid_agenda_aut, msg_lista_vacia, input_fecha_desde.
+Oracle selection rules (HARD CONSTRAINTS — violating them will cause the scenario to be rejected):
+- For checking the value selected in a <select>, use tipo='select_value_is' with target=<select_alias> and valor='<expected option text/value>'. NEVER use tipo='visible' on a select to mean 'value=Todos'.
+- For asserting a runtime message text appears or disappears, prefer tipo='page_contains_text' / 'page_not_contains_text' with valor=<exact message>. Use 'visible'/'invisible' on a specific alias ONLY when you have a stable, NON-decorative element id for that message (e.g. msg_lista_vacia, msg_validacion).
+- NEVER target an element marked is_decorative=true (a layout label, page title, section heading) for visible/invisible/equals/contains_literal — these elements are permanent layout text, not runtime messages, and will trivially pass or trivially fail regardless of product state.
+- For grid/result-count oracles use count_gt or count_eq with the grid alias; do NOT use visible on the grid for "should have results".
+
+{alias_instruction}
 pasos must have at least 1 item. oraculos must have at least 1 item.
 """
         user_prompt = (
@@ -244,7 +310,7 @@ pasos must have at least 1 item. oraculos must have at least 1 item.
             f"Expected: {esperado or 'not specified'}"
         )
         result = call_llm(
-            model="gpt-4.1-mini",
+            model="gpt-4o-mini",
             system=system_prompt,
             user=user_prompt,
             max_tokens=512,
@@ -278,6 +344,92 @@ pasos must have at least 1 item. oraculos must have at least 1 item.
     except Exception as exc:
         logger.debug("LLM compile failed for %s: %s", pid, exc)
         return None
+
+
+# Oracle types that the M2 validator considers "anchored on a specific UI
+# element" — these are the ones that, when targeted at a decorative layout
+# label, produce false-FAIL or false-PASS verdicts.
+_ANCHORED_ORACLE_TYPES = frozenset({
+    "visible", "invisible", "equals", "contains_literal", "contains_semantic",
+})
+
+
+def _build_ui_elements_hint(ui_elements: list) -> str:
+    """Build a structured per-alias hint block for the LLM system prompt.
+
+    Each line declares: alias, kind, role, input_type, is_decorative, label.
+    The LLM uses this to pick oracle types that match each target's nature
+    (e.g. select_value_is for selects, page_contains_text instead of
+    visible-on-decorative-label).
+
+    Returned string includes the hard whitelist instruction and an
+    enumerated list of aliases tagged decorative so the LLM can avoid them.
+    """
+    lines: list = []
+    decorative_aliases: list = []
+    for el in ui_elements:
+        alias = el.get("alias_semantic")
+        if not alias:
+            continue
+        kind = el.get("kind") or "?"
+        role = el.get("role") or ""
+        itype = el.get("input_type") or ""
+        is_dec = bool(el.get("is_decorative"))
+        label = (el.get("label") or el.get("accessible_name") or "")[:40]
+        line = (
+            f"- {alias}: kind={kind}"
+            + (f" role={role}" if role else "")
+            + (f" input_type={itype}" if itype else "")
+            + (" is_decorative=true" if is_dec else "")
+            + (f" label={label!r}" if label else "")
+        )
+        lines.append(line)
+        if is_dec:
+            decorative_aliases.append(alias)
+    catalog = "\n".join(lines)
+    out = (
+        "\nUI MAP CATALOG (USE ONLY THESE aliases, do not invent new ones):\n"
+        f"{catalog}\n"
+    )
+    if decorative_aliases:
+        out += (
+            "\nDECORATIVE LAYOUT ELEMENTS (NEVER use as oracle target for "
+            "visible/invisible/equals/contains_literal — these are permanent "
+            "layout titles, not runtime messages): "
+            + ", ".join(sorted(decorative_aliases))
+            + ".\n"
+        )
+    return out
+
+
+def _find_decorative_oracle_targets(spec: dict, ui_elements: list) -> Optional[dict]:
+    """Return details if any oracle in `spec` targets a decorative element
+    using an anchored oracle type, else None.
+
+    Format:
+      {"oracle_index": 0, "target": "panel_x", "tipo": "invisible",
+       "alias_kind": "div"}
+    """
+    decorative_aliases: dict = {}
+    for el in ui_elements:
+        alias = el.get("alias_semantic")
+        if alias and el.get("is_decorative"):
+            decorative_aliases[alias] = el
+    if not decorative_aliases:
+        return None
+    for idx, oracle in enumerate(spec.get("oraculos") or []):
+        target = oracle.get("target", "")
+        tipo = oracle.get("tipo", "")
+        if tipo in _ANCHORED_ORACLE_TYPES and target in decorative_aliases:
+            el = decorative_aliases[target]
+            return {
+                "oracle_index": idx,
+                "target": target,
+                "tipo": tipo,
+                "alias_kind": el.get("kind"),
+                "label": el.get("label"),
+            }
+    return None
 
 
 def _compile_via_heuristic(

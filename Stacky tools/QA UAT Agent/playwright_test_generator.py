@@ -27,7 +27,18 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.test_generator")
 
-_TOOL_VERSION = "1.0.0"
+# v1.1.0 — adds:
+#  - HTML5 input type-aware value formatting (date → YYYY-MM-DD, etc).
+#    Closes the class of bugs where scenarios carry "19000101" / "01/01/2026"
+#    and Playwright's `fill()` fails on `<input type="date">` after 10s of
+#    visibility retries.
+#  - Per-spec `oraculos` constant injected into the template so the
+#    `test.afterEach` hook can write `assertions_<sid>.json` (consumed by
+#    uat_assertion_evaluator).
+#  - Skip steps whose value cannot be formatted for the input type — the
+#    scenario is reclassified `blocked` with a structured reason instead of
+#    letting the test runner report a false product defect.
+_TOOL_VERSION = "1.1.0"
 _DEFAULT_TEMPLATE = Path(__file__).resolve().parent / "templates" / "playwright_test.spec.ts.j2"
 
 
@@ -124,6 +135,9 @@ def run(
 
         # Build alias → selector mapping
         selector_map = _build_selector_map(ui_map_data)
+        # Build alias → input_type mapping (M1+M3): needed to format scenario
+        # fill values (e.g. "01/01/2026" → "2026-01-01" for <input type=date>).
+        input_type_map = _build_input_type_map(ui_map_data)
 
         # Validate all targets exist in UI map
         missing_selectors = _find_missing_selectors(scenario, selector_map)
@@ -134,6 +148,25 @@ def run(
                 "status": "blocked",
                 "reason": "SELECTOR_NOT_FOUND",
                 "missing": missing_selectors,
+            })
+            continue
+
+        # Format fill/select values according to the target input's HTML5 type.
+        # If a value cannot be parsed (e.g. "abc" for type=date), refuse the
+        # scenario instead of generating a spec that will fail at runtime —
+        # that would be charged against the product, not the test pipeline.
+        formatted_pasos, format_error = _format_scenario_values(
+            scenario.get("pasos", []),
+            input_type_map,
+        )
+        if format_error:
+            blocked_count += 1
+            results.append({
+                "scenario_id": sid,
+                "status": "blocked",
+                "reason": format_error["reason"],
+                "missing": [],
+                "details": format_error,
             })
             continue
 
@@ -149,7 +182,7 @@ def run(
                 titulo=scenario.get("titulo", ""),
                 pantalla=pantalla,
                 precondiciones=scenario.get("precondiciones", []),
-                pasos=scenario.get("pasos", []),
+                pasos=formatted_pasos,
                 oraculos=scenario.get("oraculos", []),
                 datos_requeridos=scenario.get("datos_requeridos", []),
                 ui_map=selector_map,
@@ -193,30 +226,118 @@ def run(
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _build_selector_map(ui_map_data: dict) -> dict:
-    """Build alias_semantic → selector_recommended mapping from UI map."""
+    """Build alias_semantic → CSS selector mapping from UI map.
+
+    Priority:
+    1. selector_recommended if it's a simple CSS selector (#id or .class) — no quotes issues
+    2. First #id selector from fallback_selectors
+    3. First CSS selector ([attr], .class) from fallback_selectors
+    4. selector_recommended as-is (may be a Playwright locator expression)
+    """
     mapping: dict = {}
     for el in ui_map_data.get("elements", []):
         alias = el.get("alias_semantic")
-        selector = el.get("selector_recommended")
+        fallbacks = el.get("fallback_selectors") or []
+        rec = el.get("selector_recommended", "")
+
+        # 1. Prefer #id or .class from selector_recommended (simplest, no quote issues)
+        if rec and (rec.startswith("#") or rec.startswith(".")):
+            selector = rec
+        else:
+            # 2. Try #id from fallbacks
+            id_sel = next((s for s in fallbacks if s.startswith("#")), None)
+            # 3. Try any CSS selector from fallbacks
+            css_sel = id_sel or next(
+                (s for s in fallbacks if s.startswith("[") or s.startswith(".")),
+                None,
+            )
+            selector = css_sel or rec
+
         if alias and selector:
             mapping[alias] = selector
     return mapping
 
 
+def _build_input_type_map(ui_map_data: dict) -> dict:
+    """Build alias_semantic → input_type (HTML5) mapping from the UI map.
+
+    Returns empty mapping when the UI map predates schema 1.1 (no
+    `input_type` field). In that case, the value formatter falls back to
+    identity — preserving the legacy behaviour.
+    """
+    mapping: dict = {}
+    for el in ui_map_data.get("elements", []):
+        alias = el.get("alias_semantic")
+        itype = el.get("input_type")
+        if alias and itype:
+            mapping[alias] = itype
+    return mapping
+
+
+def _format_scenario_values(pasos: list, input_type_map: dict) -> tuple:
+    """Apply input_value_formatter to each `fill`/`select` step's value.
+
+    Returns (formatted_pasos, error_dict_or_None). Error_dict is set when any
+    step's value is unparseable for its target input_type — caller MUST
+    short-circuit and mark the scenario blocked. We never silently fall
+    through to Playwright runtime, since "fill date with bad format" surfaces
+    as a misleading product failure.
+    """
+    from input_value_formatter import format_value
+
+    formatted: list = []
+    for step in pasos:
+        accion = step.get("accion", "")
+        target = step.get("target", "")
+        valor = step.get("valor")
+        # Only `fill` is type-sensitive (Playwright's selectOption accepts the
+        # raw string). Identity passthrough for everything else preserves
+        # backwards compat.
+        if accion == "fill" and target in input_type_map:
+            itype = input_type_map[target]
+            new_val, err = format_value(itype, valor)
+            if err is not None:
+                return [], {
+                    "reason": err,
+                    "step": step,
+                    "input_type": itype,
+                    "raw_value": valor,
+                }
+            new_step = dict(step)
+            new_step["valor"] = new_val
+            new_step["input_type"] = itype  # surfaced for telemetry
+            formatted.append(new_step)
+        else:
+            formatted.append(step)
+    return formatted, None
+
+
+# Actions whose target does not need to be in the selector_map
+_SELECTOR_FREE_ACTIONS = {"navigate", "expand_collapsible", "wait_networkidle"}
+# Oracle types whose target does not need to be in the selector_map
+_SELECTOR_FREE_ORACLE_TYPES = {"page_contains_text", "page_not_contains_text"}
+# Pseudo-targets that are resolved at runtime (whole-page assertions)
+_PSEUDO_TARGETS = {"body", "page", ""}
+
+
 def _find_missing_selectors(scenario: dict, selector_map: dict) -> list:
     """Return list of targets in the scenario not found in selector_map."""
     missing = []
-    all_targets = (
-        [s.get("target", "") for s in scenario.get("pasos", [])]
-        + [o.get("target", "") for o in scenario.get("oraculos", [])]
-    )
-    # navigate targets are screen names, not selectors
-    navigate_targets = {
-        s.get("target", "") for s in scenario.get("pasos", [])
-        if s.get("accion") == "navigate"
-    }
-    for target in all_targets:
-        if target in navigate_targets:
+    for step in scenario.get("pasos", []):
+        accion = step.get("accion", "")
+        target = step.get("target", "")
+        if accion in _SELECTOR_FREE_ACTIONS:
+            continue
+        if target in _PSEUDO_TARGETS:
+            continue
+        if target and target not in selector_map:
+            missing.append(target)
+    for oracle in scenario.get("oraculos", []):
+        tipo = oracle.get("tipo", "")
+        target = oracle.get("target", "")
+        if tipo in _SELECTOR_FREE_ORACLE_TYPES:
+            continue
+        if target in _PSEUDO_TARGETS:
             continue
         if target and target not in selector_map:
             missing.append(target)

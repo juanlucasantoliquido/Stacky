@@ -56,7 +56,7 @@ const http = __importStar(require("http"));
 const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
 const TICKET_KEY = "stackyAgents.activeTicket";
-const EXTENSION_VERSION = "0.3.2";
+const EXTENSION_VERSION = "0.3.4";
 let statusBar;
 let _bridgeServer;
 let _bridgeStartedAt = 0;
@@ -255,59 +255,68 @@ async function _handleOpenChat(body, res) {
     }
     // Prefix the agent mention so any VS Code version picks it up
     const query = agentName ? `@${agentName} ${message}` : message;
-    try {
-        // Always start a fresh conversation
-        const freshChatCommands = [
-            "workbench.action.chat.newChat",
-            "workbench.action.chat.clear",
-            "vscode.editorChat.start",
-        ];
-        for (const cmd of freshChatCommands) {
+    // Respond immediately — VS Code commands can hang indefinitely on some versions.
+    // The actual chat-open flow runs fire-and-forget in the background.
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, chars: query.length, agent: agentName }));
+    // Background: open VS Code Copilot Chat with the full context
+    (async () => {
+        try {
+            // Always start a fresh conversation.
+            // Wrap each command with a 3 s timeout so a hanging promise doesn't block the flow.
+            const freshChatCommands = [
+                "workbench.action.chat.newChat",
+                "workbench.action.chat.clear",
+                "vscode.editorChat.start",
+            ];
+            for (const cmd of freshChatCommands) {
+                try {
+                    await Promise.race([
+                        vscode.commands.executeCommand(cmd),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error(`timeout: ${cmd}`)), 3000)
+                        ),
+                    ]);
+                    console.log(`[Stacky] /open-chat new chat OK: ${cmd}`);
+                    break;
+                }
+                catch {
+                    // try next
+                }
+            }
+            await _sleep(1800);
+            // Write full content to clipboard FIRST.
+            // workbench.action.chat.open({ query }) truncates at the first newline,
+            // so we open the chat without a query and paste the full content instead.
+            await vscode.env.clipboard.writeText(query);
+            // Open chat panel (no query → input is empty and focused)
             try {
-                await vscode.commands.executeCommand(cmd);
-                console.log(`[Stacky] /open-chat new chat OK: ${cmd}`);
-                break;
+                await vscode.commands.executeCommand("workbench.action.chat.open");
             }
-            catch {
-                // try next
+            catch (e) {
+                console.warn(`[Stacky] /open-chat: workbench.action.chat.open falló: ${e}`);
             }
+            await _sleep(1000);
+            // Paste the full multi-line content into the focused chat input
+            try {
+                await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
+            }
+            catch (e) {
+                console.warn(`[Stacky] /open-chat: paste falló: ${e}. El contenido sigue en el clipboard.`);
+            }
+            await _sleep(800);
+            // fire-and-forget submit — same strategy as Stacky Pipeline
+            vscode.commands.executeCommand("workbench.action.chat.submit").then(() => console.log(`[Stacky] /open-chat submit OK — agente=${agentName || "(none)"}, chars:${query.length}`), (err) => console.error("[Stacky] /open-chat submit error:", err));
+            if (model) {
+                vscode.window.showInformationMessage(`Stacky → Seleccioná el modelo "${model}" en el chat de Copilot.`);
+            }
+            console.log(`[Stacky] /open-chat OK: agente=${agentName || "(none)"}, modelo=${model || "(none)"}, msg:${message.length}c`);
         }
-        await _sleep(1800);
-        // Write full content to clipboard FIRST.
-        // workbench.action.chat.open({ query }) truncates at the first newline,
-        // so we open the chat without a query and paste the full content instead.
-        await vscode.env.clipboard.writeText(query);
-        // Open chat panel (no query → input is empty and focused)
-        try {
-            await vscode.commands.executeCommand("workbench.action.chat.open");
+        catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[Stacky] Error en /open-chat background: ${msg}`);
         }
-        catch (e) {
-            console.warn(`[Stacky] /open-chat: workbench.action.chat.open falló: ${e}`);
-        }
-        await _sleep(1000);
-        // Paste the full multi-line content into the focused chat input
-        try {
-            await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
-        }
-        catch (e) {
-            console.warn(`[Stacky] /open-chat: paste falló: ${e}. El contenido sigue en el clipboard.`);
-        }
-        await _sleep(800);
-        // fire-and-forget submit — same strategy as Stacky Pipeline
-        vscode.commands.executeCommand("workbench.action.chat.submit").then(() => console.log(`[Stacky] /open-chat submit OK — agente=${agentName || "(none)"}, chars:${query.length}`), (err) => console.error("[Stacky] /open-chat submit error:", err));
-        if (model) {
-            vscode.window.showInformationMessage(`Stacky → Seleccioná el modelo "${model}" en el chat de Copilot.`);
-        }
-        console.log(`[Stacky] /open-chat OK: agente=${agentName || "(none)"}, modelo=${model || "(none)"}, msg:${message.length}c`);
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, chars: query.length, agent: agentName }));
-    }
-    catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[Stacky] Error en /open-chat: ${msg}`);
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: msg }));
-    }
+    })();
 }
 function _startBridgeServer() {
     const port = vscode.workspace.getConfiguration("stackyAgents").get("bridgePort") ?? 5052;

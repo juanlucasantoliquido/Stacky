@@ -45,7 +45,13 @@ for /f "delims=" %%G in ('where gh 2^>nul') do (
     if not defined GH_EXE set "GH_EXE=%%G"
 )
 if not defined GH_EXE (
-    if exist "C:\Program Files\GitHub CLI\gh.exe" set "GH_EXE=C:\Program Files\GitHub CLI\gh.exe"
+    if exist "%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe" set "GH_EXE=%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe"
+)
+if not defined GH_EXE (
+    if exist "%ProgramFiles%\GitHub CLI\gh.exe" set "GH_EXE=%ProgramFiles%\GitHub CLI\gh.exe"
+)
+if not defined GH_EXE (
+    if exist "%ProgramFiles(x86)%\GitHub CLI\gh.exe" set "GH_EXE=%ProgramFiles(x86)%\GitHub CLI\gh.exe"
 )
 if defined GH_EXE (
     "%GH_EXE%" auth token >nul 2>&1

@@ -109,20 +109,25 @@ def _run_in_background(
             project = ticket.project if ticket else None
             ticket_ado_id = ticket.ado_id if ticket else None
 
-        # ADO context enrichment — para agentes technical y developer inyecta
-        # comentarios y adjuntos del ticket desde Azure DevOps.
+        # ADO context enrichment — inyecta automáticamente comentarios y
+        # adjuntos del ticket desde Azure DevOps al contexto que se envía al
+        # chat de Copilot. Por defecto aplica a todos los agentes registrados;
+        # configurable vía env ADO_CONTEXT_ENRICH_AGENTS.
+        ado_enrich_stats: dict | None = None
         if ticket_ado_id is not None:
             try:
                 from services import ado_context
-                raw_blocks = ado_context.enrich(
+                raw_blocks, ado_enrich_stats = ado_context.enrich(
                     ticket_id=ticket_id,
                     agent_type=agent_type,
                     existing_blocks=raw_blocks or [],
                     ado_id=ticket_ado_id,
                     log=log,
+                    return_stats=True,
                 )
             except Exception as _exc_ado:
                 log("warn", f"ado_context enrich falló (continuando sin enrichment): {_exc_ado}")
+                ado_enrich_stats = {"error": str(_exc_ado)}
 
         # FA-37 — PII masking ANTES de cualquier procesamiento (cache, prompt, etc.)
         masked_blocks, mask_map = pii_masker.mask_blocks(raw_blocks)
@@ -144,6 +149,8 @@ def _run_in_background(
                 md["from_cache"] = True
                 md["cache_key"] = cached["cache_key"]
                 md["pii_masked"] = bool(mask_map)
+                if ado_enrich_stats is not None:
+                    md["ado_context"] = ado_enrich_stats
                 row.metadata_dict = md
                 row.contract_result = cached.get("contract_result")
                 row.status = "completed"
@@ -236,6 +243,8 @@ def _run_in_background(
             md["confidence"] = conf.to_dict()
             md["routing_reason"] = decision.reason
             md["pii_masked"] = bool(mask_map)
+            if ado_enrich_stats is not None:
+                md["ado_context"] = ado_enrich_stats
             row.metadata_dict = md
             row.contract_result = cv_result.to_dict()
             row.status = "completed"

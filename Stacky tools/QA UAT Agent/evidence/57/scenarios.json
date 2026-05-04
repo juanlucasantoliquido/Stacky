@@ -1,0 +1,290 @@
+{
+  "ok": true,
+  "ticket_id": 57,
+  "compiled": 6,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": 57,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Agenda con lotes USD - columna Prima visible",
+      "precondiciones": [
+        "SELECTOR_NOT_FOUND"
+      ],
+      "pasos": [
+        {
+          "accion": "wait_visible",
+          "target": "panel_c_updagenda",
+          "valor": null
+        },
+        {
+          "accion": "fill",
+          "target": "input_desde",
+          "valor": "1011240108601559"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridagendaaut",
+          "valor": "Prima=1355030.88"
+        },
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridagendaaut",
+          "valor": "Moneda=US.D"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "Agenda",
+          "filtro": "LODEUDA=1355030.88 AND OGMONEDA='US.D'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      }
+    },
+    {
+      "scenario_id": "P02",
+      "ticket_id": 57,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Ordenamiento DESC - mayor primero",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "wait_visible",
+          "target": "panel_c_updagenda",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_ddlacciones",
+          "valor": null
+        },
+        {
+          "accion": "select",
+          "target": "select_empresa",
+          "valor": "1011240108601559"
+        },
+        {
+          "accion": "click",
+          "target": "link_btnnext",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "equals",
+          "target": "grid_c_gridagendaaut",
+          "valor": "1011240108601559"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      }
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 57,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Conversion USD a local para sort",
+      "precondiciones": [
+        "SELECTOR_NOT_FOUND"
+      ],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_desde",
+          "valor": "1355030.88"
+        },
+        {
+          "accion": "fill",
+          "target": "input_hasta",
+          "valor": "16.86"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        },
+        {
+          "accion": "wait_networkidle",
+          "target": "panel_loader_general",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_btnnext",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridagendaaut",
+          "valor": "22,843,820"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RCAMBIO",
+          "filtro": "Tasa US.D=16.86"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      }
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 57,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "OGMONEDA sin entry en RCAMBIO - fallback",
+      "precondiciones": [
+        "SELECTOR_NOT_FOUND"
+      ],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_desde",
+          "valor": "2023-01-01"
+        },
+        {
+          "accion": "fill",
+          "target": "input_hasta",
+          "valor": "2023-12-31"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "panel_gvc_gridagendaaut_div",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "panel_gvc_gridagendaaut_div",
+          "valor": null
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "panel_gvc_gridagendaaut_div",
+          "valor": "ISNULL/NVL aplica tasa=1"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "Lotes",
+          "filtro": "OGMONEDA='INEXISTENTE'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      }
+    },
+    {
+      "scenario_id": "P06",
+      "ticket_id": 57,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Agenda vacia",
+      "precondiciones": [
+        "Usuario sin lotes agendados activos"
+      ],
+      "pasos": [
+        {
+          "accion": "wait_visible",
+          "target": "grid_c_gridagendaaut",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "grid_c_gridagendausu",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridagendaaut",
+          "valor": "false"
+        },
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridagendausu",
+          "valor": "false"
+        },
+        {
+          "tipo": "invisible",
+          "target": "link_btnnext",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P06"
+      }
+    },
+    {
+      "scenario_id": "P07",
+      "ticket_id": 57,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Exportar Excel incluye columnas nuevas",
+      "precondiciones": [
+        "SELECTOR_NOT_FOUND"
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btnexportexcelagusu",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "panel_loader_general",
+          "valor": "LODEUDA"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "panel_loader_general",
+          "valor": "OGMONEDA"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "Registros",
+          "filtro": "P01"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P07"
+      }
+    }
+  ],
+  "out_of_scope_items": [],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.0.0",
+    "duration_ms": 33187
+  }
+}

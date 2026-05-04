@@ -9,7 +9,7 @@ Usage:
     from llm_client import call_llm, LLMError
 
     result = call_llm(
-        model="gpt-4.1-mini",   # gpt-4.1-mini for fast/parsing, gpt-4.1 for analysis
+        model="gpt-5-mini",   # gpt-5-mini for fast/parsing, gpt-5 for analysis
         system="You are a QA analyst.",
         user="Classify this comment: ...",
         max_tokens=256,

@@ -1,0 +1,227 @@
+<h2>🚫 BLOQUEANTE TÉCNICO — ADO-65</h2>
+<blockquote>
+  <strong>Generado por:</strong> Analista Técnico Agéntico<br>
+  <strong>Fecha:</strong> 2026-05-03<br>
+  <strong>Estado asignado:</strong> <span style="color:red"><strong>BLOCKED</strong></span><br>
+  <strong>Documentación consultada:</strong> 00_INDICE_MAESTRO.md · 10_AGENDAWEB_PAGINAS.md · funcional/03-agenda-personal-navegacion.md · commit ADO-106
+</blockquote>
+<hr>
+
+<h2>¿Por qué está bloqueado este ticket?</h2>
+<p>Durante el análisis técnico del ticket <strong>ADO-65 — RF-001 Validación de campos del Filtro de Agenda en la instalación Pacífico</strong>, la investigación del código fuente reveló una <strong>contradicción crítica</strong> entre lo que describe el análisis funcional y el estado real del sistema: los 4 campos adicionales de Pacífico <strong>no existen como controles de filtro en ninguna capa del código</strong>.</p>
+<hr>
+
+<h2>BLOQUEANTES DETECTADOS</h2>
+
+<h3>🔴 Bloqueante 1 — Scope incorrecto: los 4 filtros adicionales NO están implementados en el sistema</h3>
+<p><strong>Descripción:</strong><br>
+El análisis funcional afirma que <em>"los cuatro campos adicionales ya están desplegados y operativos en la instalación de Pacífico"</em> y que <em>"el trabajo requerido es de documentación y validación, sin necesidad de nuevo desarrollo de software"</em>.<br><br>
+La investigación técnica exhaustiva del código fuente contradice esto:</p>
+<ul>
+  <li><code>trunk/OnLine/AgendaWeb/FrmAgenda.aspx</code> — solo contiene <strong>7 controles estándar</strong> (Desde, Hasta, Empresa, Perfil, Región, Recomendación, Nivel de Mora, Tipo de Cliente). <strong>No hay controles para Débito Automático, Corredor, Nombre de Cliente ni RUC.</strong></li>
+  <li><code>trunk/OnLine/AgendaWeb/FrmAgenda.aspx.cs</code> — el método <code>FiltrarGrilla()</code> solo pasa <strong>7 parámetros</strong> a <code>agenda.Consultar()</code>.</li>
+  <li><code>trunk/OnLine/Negocio/RSDalc/Agenda.cs</code> — el método <code>Consultar()</code> solo acepta 7 filtros y las queries SQL de <code>AGENDAAUT</code> y <code>AGENDAUSU</code> no incluyen condiciones para esos 4 campos.</li>
+  <li>Se verificaron también los 4 branches del repositorio (Materialize, NetCore, PoCRSCPM, Test): <strong>ninguno tiene los 4 campos adicionales.</strong></li>
+</ul>
+
+<p><strong>¿Por qué bloquea?</strong><br>
+El developer no puede "documentar campos existentes" si esos campos no están implementados. El trabajo real es <strong>desarrollo de software</strong> (agregar 4 nuevos filtros a la pantalla, code-behind, BLL y DAL). Esto contradice la clasificación "CUBRE — Con configuración" del análisis funcional.</p>
+
+<p><strong>Acción requerida del Analista Funcional:</strong></p>
+<blockquote>
+  Confirmar cuál es el escenario real:
+  <ol>
+    <li><strong>Escenario A</strong>: Los 4 campos SÍ existen en el entorno de producción de Pacífico pero el código de esa personalización no está en el repositorio git. En ese caso: proporcionar el código fuente de esa versión de producción (FrmAgenda.aspx + Agenda.cs).</li>
+    <li><strong>Escenario B</strong>: Los 4 campos NO existen en producción y la información del análisis funcional era incorrecta. En ese caso: reclasificar el ticket de "CUBRE — Con configuración" a "GAP — Requiere desarrollo" y confirmar que el developer debe implementar los 4 nuevos filtros.</li>
+  </ol>
+</blockquote>
+<hr>
+
+<h3>🔴 Bloqueante 2 — Valores posibles de <code>OGTIENEDEBITOAUTO</code> (campo Débito Automático)</h3>
+<p><strong>Descripción:</strong><br>
+La columna <code>ROBLG.OGTIENEDEBITOAUTO</code> existe en la base de datos (ya existía antes del commit ADO-106 del 2026-04-30). Sin embargo, no se pudo determinar qué valores acepta ni su tipo de control en UI.</p>
+
+<p><strong>¿Por qué bloquea?</strong><br>
+Para implementar el filtro correctamente, el developer necesita saber si <code>OGTIENEDEBITOAUTO</code> es:
+<ul>
+  <li>Un campo booleano/checkbox → valores: <code>'S'/'N'</code>, <code>'1'/'0'</code>, o <code>'SI'/'NO'</code></li>
+  <li>Un dropdown con más de 2 valores → ¿cuál es el catálogo en RTABL?</li>
+</ul>
+Sin esta definición, el developer implementaría un control de tipo incorrecto.</p>
+
+<p><strong>Acción requerida del Analista Funcional:</strong></p>
+<blockquote>
+  Confirmar los valores posibles de <code>ROBLG.OGTIENEDEBITOAUTO</code>. ¿Es un campo binario Sí/No? ¿Cuáles son los valores exactos almacenados en producción?
+</blockquote>
+<hr>
+
+<h3>🔴 Bloqueante 3 — Catálogo/origen del campo Corredor (<code>OGCORREDOR</code>)</h3>
+<p><strong>Descripción:</strong><br>
+La columna <code>ROBLG.OGCORREDOR varchar(20)</code> fue agregada al código en el commit ADO-106 (2026-04-30). Es un campo de texto libre sin FK visible a <code>RTABL</code> ni otra tabla de catálogos.</p>
+
+<p><strong>¿Por qué bloquea?</strong><br>
+Para implementar el filtro correctamente, el developer necesita saber:
+<ul>
+  <li>¿Es un texto libre donde se busca por LIKE? → ejemplo: "BRK001", "GENERALI"</li>
+  <li>¿Es un código que se vincula a una tabla catálogo? → ¿a qué tabla? ¿RTABL TBNUME=?</li>
+  <li>¿El filtro en UI es un dropdown (lista de valores distintos de ROBLG) o un TextBox?</li>
+</ul>
+Sin esta definición, el developer no puede construir correctamente el control ni la query de filtro.</p>
+
+<p><strong>Acción requerida del Analista Funcional:</strong></p>
+<blockquote>
+  Confirmar el origen de los valores del campo Corredor. ¿Viene de una tabla maestra? ¿O son códigos libres del cliente Pacífico? Proveer ejemplos de valores reales si es posible (ej: "BRK001 – RIMAC", "BRK002 – LA POSITIVA").
+</blockquote>
+<hr>
+
+<h2>Contexto técnico relevado hasta ahora</h2>
+<p>Se completó la investigación de los 7 campos estándar y la infraestructura de BD. Lo siguiente está confirmado y documentado:</p>
+
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Elemento</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Detalle</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Sistema afectado</td><td style="border:1px solid #ccc;padding:6px">OnLine — FrmAgenda.aspx (Agenda Personal)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Página ASPX</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmAgenda.aspx</code></td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Code-behind</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmAgenda.aspx.cs</code> — método clave: <code>FiltrarGrilla()</code></td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Capa Facade</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSFac/Agenda.cs</code> — <code>RSFac.Agenda.Consultar()</code></td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Capa Negocio</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSBus/Agenda.cs</code> — <code>RSBus.Agenda.Consultar()</code></td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Capa Datos</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSDalc/Agenda.cs</code> — <code>RSDalc.Agenda.Consultar()</code></td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Tablas involucradas</td><td style="border:1px solid #ccc;padding:6px"><code>RAGEN</code>, <code>RLOTE</code>, <code>RCLIE</code>, <code>ROBLG</code>, <code>RDEUDA</code>, <code>RUSUPERF</code>, <code>RTABL</code>, <code>RTABLIDM</code>, <code>RTARS</code>, <code>RTARSIDM</code></td></tr>
+</table>
+
+<h3>Inventario confirmado — 7 campos estándar actuales</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">#</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Campo filtro (UI)</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Control</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Parámetro DAL</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Columna BD</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tabla</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Comportamiento vacío</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">1</td>
+    <td style="border:1px solid #ccc;padding:6px">Fecha Desde</td>
+    <td style="border:1px solid #ccc;padding:6px">AISBusinessField (Date) — <code>abfDesde</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>string Desde</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>AGFECREC &gt;= Desde</code></td>
+    <td style="border:1px solid #ccc;padding:6px">RAGEN</td>
+    <td style="border:1px solid #ccc;padding:6px">Sin restricción de fecha inferior</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">2</td>
+    <td style="border:1px solid #ccc;padding:6px">Fecha Hasta</td>
+    <td style="border:1px solid #ccc;padding:6px">AISBusinessField (Date) — <code>abfHasta</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>string Hasta</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>AGFECREC &lt;= Hasta</code></td>
+    <td style="border:1px solid #ccc;padding:6px">RAGEN</td>
+    <td style="border:1px solid #ccc;padding:6px">Default: fecha del día (<code>GETDATE()</code>)</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">3</td>
+    <td style="border:1px solid #ccc;padding:6px">Empresa</td>
+    <td style="border:1px solid #ccc;padding:6px">AISCatalogo — <code>ddlEmpresa</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>string Empresa</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>OGEMPRESA = Empresa</code></td>
+    <td style="border:1px solid #ccc;padding:6px">ROBLG</td>
+    <td style="border:1px solid #ccc;padding:6px">Sin filtro (todas las empresas)</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">4</td>
+    <td style="border:1px solid #ccc;padding:6px">Perfil</td>
+    <td style="border:1px solid #ccc;padding:6px">AISCatalogo — <code>ddlPerfil</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>string Perfil</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>UPID = Perfil</code></td>
+    <td style="border:1px solid #ccc;padding:6px">RUSUPERF</td>
+    <td style="border:1px solid #ccc;padding:6px">Sin filtro (todos los perfiles)</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">5</td>
+    <td style="border:1px solid #ccc;padding:6px">Región</td>
+    <td style="border:1px solid #ccc;padding:6px">AISCatalogo — <code>ddlRegion</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>string Region</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>OGREGION = Region</code></td>
+    <td style="border:1px solid #ccc;padding:6px">ROBLG</td>
+    <td style="border:1px solid #ccc;padding:6px">Sin filtro (todas las regiones)</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">6</td>
+    <td style="border:1px solid #ccc;padding:6px">Recomendación (TAR)</td>
+    <td style="border:1px solid #ccc;padding:6px">AISCatalogo — <code>ddlRecomendacion</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>string Recomendacion</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>ACCOD = Recomendacion</code></td>
+    <td style="border:1px solid #ccc;padding:6px">RTARS</td>
+    <td style="border:1px solid #ccc;padding:6px">Sin filtro (todas las recomendaciones)</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">7</td>
+    <td style="border:1px solid #ccc;padding:6px">Nivel de Mora</td>
+    <td style="border:1px solid #ccc;padding:6px">AISCatalogo — <code>ddlNivelMora</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>string NivelMora</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>LONMORA = NivelMora</code></td>
+    <td style="border:1px solid #ccc;padding:6px">RLOTE</td>
+    <td style="border:1px solid #ccc;padding:6px">Sin filtro (todos los niveles)</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">8</td>
+    <td style="border:1px solid #ccc;padding:6px">Tipo de Cliente</td>
+    <td style="border:1px solid #ccc;padding:6px">AISCatalogo — <code>ddlTipoCliente</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>string TipoCliente</code></td>
+    <td style="border:1px solid #ccc;padding:6px"><code>CLTIPOCLIE = TipoCliente</code></td>
+    <td style="border:1px solid #ccc;padding:6px">RCLIE</td>
+    <td style="border:1px solid #ccc;padding:6px">Sin filtro (todos los tipos)</td>
+  </tr>
+</table>
+
+<h3>Columnas de BD ya disponibles para los 4 campos adicionales (si se decide implementar)</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Campo Pacífico</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Columna BD</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tabla</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tipo</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Estado</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">Débito Automático</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>OGTIENEDEBITOAUTO</code></td>
+    <td style="border:1px solid #ccc;padding:6px">ROBLG</td>
+    <td style="border:1px solid #ccc;padding:6px">desconocido (existía antes de ADO-106)</td>
+    <td style="border:1px solid #ccc;padding:6px"><span style="color:green">Existe en BD</span> — valores desconocidos ← <strong>BLOQUEANTE 2</strong></td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">Corredor</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>OGCORREDOR</code></td>
+    <td style="border:1px solid #ccc;padding:6px">ROBLG</td>
+    <td style="border:1px solid #ccc;padding:6px">varchar(20) — agregado por ADO-106</td>
+    <td style="border:1px solid #ccc;padding:6px"><span style="color:green">Existe en BD</span> — catálogo desconocido ← <strong>BLOQUEANTE 3</strong></td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">Nombre de Cliente</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>CLAPELLIDO1 + CLAPELLIDO2 + CLNOMBRE</code></td>
+    <td style="border:1px solid #ccc;padding:6px">RCLIE</td>
+    <td style="border:1px solid #ccc;padding:6px">varchar — ya en SELECT de AGENDAAUT/AGENDAUSU</td>
+    <td style="border:1px solid #ccc;padding:6px"><span style="color:green">Existe en BD</span> — implementación clara (TextBox + LIKE)</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">RUC</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>CLNUMDOC</code></td>
+    <td style="border:1px solid #ccc;padding:6px">RCLIE</td>
+    <td style="border:1px solid #ccc;padding:6px">varchar — número de documento del cliente</td>
+    <td style="border:1px solid #ccc;padding:6px"><span style="color:orange">Existe en BD</span> — confirmar si filtrar también por <code>CLTIPDOC = 'X'</code> o solo por <code>CLNUMDOC</code></td>
+  </tr>
+</table>
+<hr>
+
+<h2>¿Qué pasa cuando se resuelva?</h2>
+<ol>
+  <li>Cambiar el estado del ticket de <strong>Blocked</strong> → <strong>Technical review</strong></li>
+  <li>El Analista Técnico retomará el análisis con la información completa y publicará el análisis técnico de implementación (alcance de cambios en los 5 archivos afectados + plan de pruebas + tests)</li>
+  <li>El ticket pasará a <strong>To Do</strong> para que el Developer lo tome</li>
+</ol>
+<hr>
+<blockquote>
+  <strong>PARA EL ANALISTA FUNCIONAL:</strong> Este ticket está retenido esperando tu respuesta.<br>
+  Responder en este mismo ticket con la información solicitada arriba (los 3 bloqueantes) para desbloquear el desarrollo.<br><br>
+  En particular, el <strong>Bloqueante 1</strong> es el más crítico: confirmar si esto es desarrollo nuevo (Escenario B) o si existe código de producción fuera del repositorio (Escenario A).
+</blockquote>

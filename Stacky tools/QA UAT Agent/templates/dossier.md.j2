@@ -54,10 +54,10 @@
 | **Actual** | `{{ f.actual }}` |
 {% endif %}
 
-{% if f.trace_path %}
+{% if f.trace_path is defined and f.trace_path %}
 **Trace Playwright**: `{{ f.trace_path }}`
 {% endif %}
-{% if f.screenshot_path %}
+{% if f.screenshot_path is defined and f.screenshot_path %}
 **Screenshot**: `{{ f.screenshot_path }}`
 {% endif %}
 

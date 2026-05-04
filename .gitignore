@@ -1,5 +1,8 @@
 auth/auth.json
 auth/ado_auth.json
+
+# Credenciales y secrets del agente QA UAT (y otros agentes)
+.secrets/*.env
 __pycache__/
 *.pyc
 *.pyo

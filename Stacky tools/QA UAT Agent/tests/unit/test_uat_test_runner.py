@@ -152,3 +152,112 @@ def test_output_validates_against_schema(tmp_path):
         with patch("uat_test_runner._check_node_available", return_value=True):
             result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
     jsonschema.validate(instance=result, schema=schema)
+
+
+# ── M5 — runner harvests Playwright JSON reporter attachments ───────────────
+
+
+def _mock_npx_with_attachments(tmp_results_dir: Path) -> MagicMock:
+    """Build a subprocess.run mock whose stdout mimics Playwright's JSON
+    reporter: one failed test with trace.zip / video.webm / error-context.md
+    attachments pointing at real files under `tmp_results_dir`. Used to
+    assert that the runner copies them into evidence/<sid>/."""
+    trace_path = tmp_results_dir / "trace.zip"
+    video_path = tmp_results_dir / "video.webm"
+    err_ctx_path = tmp_results_dir / "error-context.md"
+    trace_path.write_bytes(b"fake-trace-zip")
+    video_path.write_bytes(b"fake-video-webm")
+    err_ctx_path.write_text("# Error context\nLocator timed out", encoding="utf-8")
+    pw_output = {
+        "suites": [{
+            "specs": [{
+                "tests": [{
+                    "results": [{
+                        "errors": [],
+                        "attachments": [
+                            {"name": "trace", "contentType": "application/zip",
+                             "path": str(trace_path)},
+                            {"name": "video", "contentType": "video/webm",
+                             "path": str(video_path)},
+                            {"name": "error-context", "contentType": "text/markdown",
+                             "path": str(err_ctx_path)},
+                        ],
+                    }],
+                }],
+            }],
+        }],
+    }
+    mock = MagicMock()
+    mock.returncode = 0
+    mock.stdout = json.dumps(pw_output)
+    mock.stderr = ""
+    return mock
+
+
+def test_runner_harvests_trace_and_video_into_evidence_dir(tmp_path):
+    """Pre-1.1 the runner returned trace=null/video=null because it scanned
+    `evidence/<sid>/` by extension while Playwright deposits artefacts under
+    `test-results/<spec>-<project>/`. M5 fixes this by reading the JSON
+    reporter `attachments[]` and copying each file into the evidence dir
+    under canonical names.
+    """
+    import uat_test_runner
+    tests_dir = _make_spec_files(tmp_path, count=1)
+    evidence_out = tmp_path / "70"
+    pw_dir = tmp_path / "test-results-fake"
+    pw_dir.mkdir()
+
+    with patch("subprocess.run", return_value=_mock_npx_with_attachments(pw_dir)):
+        with patch("uat_test_runner._check_node_available", return_value=True):
+            result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
+
+    assert result["ok"] is True
+    run = result["runs"][0]
+    sid = run["scenario_id"]
+
+    # Files should now exist with canonical names inside the scenario dir
+    sdir = evidence_out / sid
+    assert (sdir / "trace.zip").is_file(), "trace.zip not harvested"
+    assert (sdir / "video.webm").is_file(), "video.webm not harvested"
+    assert (sdir / "error-context.md").is_file(), "error-context.md not harvested"
+
+    # Artefacts dict in the runner output should reflect them
+    artifacts = run["artifacts"]
+    assert artifacts["trace"] is not None
+    assert artifacts["trace"].endswith("trace.zip")
+    assert artifacts["video"] is not None
+    assert artifacts["video"].endswith("video.webm")
+    assert artifacts["error_context"] is not None
+    assert artifacts["error_context"].endswith("error-context.md")
+
+
+def test_runner_harvest_skips_missing_attachment_paths(tmp_path):
+    """If Playwright reports an attachment whose path does not exist, the
+    runner must skip it gracefully instead of crashing."""
+    import uat_test_runner
+    tests_dir = _make_spec_files(tmp_path, count=1)
+    evidence_out = tmp_path / "70"
+    pw_output = {
+        "suites": [{
+            "specs": [{
+                "tests": [{
+                    "results": [{
+                        "attachments": [
+                            {"name": "trace", "contentType": "application/zip",
+                             "path": str(tmp_path / "does-not-exist.zip")},
+                        ],
+                    }],
+                }],
+            }],
+        }],
+    }
+    mock = MagicMock()
+    mock.returncode = 0
+    mock.stdout = json.dumps(pw_output)
+    mock.stderr = ""
+    with patch("subprocess.run", return_value=mock):
+        with patch("uat_test_runner._check_node_available", return_value=True):
+            result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
+    assert result["ok"] is True
+    # No trace harvested → trace stays null
+    assert result["runs"][0]["artifacts"]["trace"] is None

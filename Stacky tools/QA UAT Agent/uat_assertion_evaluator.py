@@ -57,6 +57,7 @@ _TOOL_VERSION = "1.0.0"
 _DETERMINISTIC_TYPES = frozenset({
     "equals", "contains_literal", "count_eq", "count_gt",
     "count_lt", "visible", "invisible", "state",
+    "page_contains_text", "page_not_contains_text", "select_value_is",
 })
 
 # Oracle types that may use LLM fallback
@@ -265,6 +266,16 @@ def _evaluate_deterministic(tipo: str, expected, actual) -> str:
         # expected = state name (e.g. "disabled", "enabled", "checked")
         return "pass" if str(actual).lower() == str(expected).lower() else "fail"
 
+    elif tipo in ("page_contains_text", "page_not_contains_text", "select_value_is"):
+        # Playwright validates these natively in the spec.
+        # actual == "__playwright_verified__" when the test PASSED.
+        if actual == "__playwright_verified__":
+            return "pass"
+        # If actual is None (test failed), check assertion_failures — return "fail"
+        if actual is None:
+            return "fail"
+        return "review"
+
     return "review"
 
 
@@ -365,6 +376,9 @@ def _get_actual_value(evidence: dict, target: str, tipo: str, run_result: dict):
             return False
         if tipo in ("count_gt", "count_eq"):
             return "1"  # heuristic: at least 1 row when pass
+        if tipo in ("page_contains_text", "page_not_contains_text", "select_value_is"):
+            # Playwright validated this natively — PASS means assertion held
+            return "__playwright_verified__"
 
     return None
 

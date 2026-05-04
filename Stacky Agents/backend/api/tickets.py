@@ -144,3 +144,27 @@ def get_comments(ticket_id: int):
         if c.get("text")
     ]
     return jsonify({"comments": comments})
+
+
+@bp.get("/<int:ticket_id>/attachments")
+def get_attachments(ticket_id: int):
+    """Devuelve los adjuntos del ticket desde Azure DevOps (on-demand).
+
+    Retorna: { "attachments": [{ "name", "url", "size", "text_content" }] }
+    text_content se incluye solo para archivos de texto <= 64KB.
+    """
+    from services.ado_client import AdoClient, AdoConfigError
+
+    with session_scope() as session:
+        t = session.get(Ticket, ticket_id)
+        if t is None:
+            abort(404)
+        ado_id = t.ado_id
+
+    try:
+        client = AdoClient()
+    except AdoConfigError as e:
+        return jsonify({"attachments": [], "error": str(e)}), 200
+
+    attachments = client.fetch_attachments(ado_id)
+    return jsonify({"attachments": attachments})

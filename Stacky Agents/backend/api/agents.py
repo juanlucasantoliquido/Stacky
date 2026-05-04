@@ -1,3 +1,5 @@
+import logging
+
 from flask import Blueprint, abort, jsonify, request
 
 import agent_runner
@@ -6,6 +8,8 @@ import contract_validator
 from config import config
 from services import cost_estimator, delta_prompt, llm_router, next_agent, output_cache, vscode_agents
 from ._helpers import current_user
+
+logger = logging.getLogger("stacky_agents.api.agents")
 
 bp = Blueprint("agents", __name__, url_prefix="/agents")
 
@@ -210,29 +214,38 @@ def open_chat():
     # Buscar el ticket en la DB para armar un encabezado completo
     import prompt_builder
     ticket_header_parts: list[str] = []
+    ado_id_for_enrich: int | None = None
     with session_scope() as _s:
         ticket = _s.query(Ticket).filter_by(id=int(ticket_id)).first()
         if ticket is None:
             # Intentar buscar por ado_id en caso de que se haya pasado el ADO id
             ticket = _s.query(Ticket).filter_by(ado_id=int(ticket_id)).first()
 
-    if ticket:
-        ado_label = f"ADO-{ticket.ado_id}" if ticket.ado_id else f"Ticket #{ticket_id}"
-        header = f"# {ado_label} — {ticket.title}"
-        meta_parts: list[str] = []
-        if ticket.ado_state:
-            meta_parts.append(f"Estado: **{ticket.ado_state}**")
-        if ticket.priority is not None:
-            meta_parts.append(f"Prioridad: **{ticket.priority}**")
-        if ticket.ado_url:
-            meta_parts.append(f"[Ver en Azure DevOps]({ticket.ado_url})")
-        ticket_header_parts.append(header)
-        if meta_parts:
-            ticket_header_parts.append(" | ".join(meta_parts))
-        if ticket.description and ticket.description.strip():
-            ticket_header_parts.append(f"\n## Descripción del ticket\n{ticket.description.strip()}")
-    else:
-        ticket_header_parts.append(f"# Ticket #{ticket_id}")
+        if ticket:
+            ado_label = f"ADO-{ticket.ado_id}" if ticket.ado_id else f"Ticket #{ticket_id}"
+            header = f"# {ado_label} — {ticket.title}"
+            meta_parts: list[str] = []
+            if ticket.ado_state:
+                meta_parts.append(f"Estado: **{ticket.ado_state}**")
+            if ticket.priority is not None:
+                meta_parts.append(f"Prioridad: **{ticket.priority}**")
+            if ticket.ado_url:
+                meta_parts.append(f"[Ver en Azure DevOps]({ticket.ado_url})")
+            ticket_header_parts.append(header)
+            if meta_parts:
+                ticket_header_parts.append(" | ".join(meta_parts))
+            if ticket.description and ticket.description.strip():
+                ticket_header_parts.append(f"\n## Descripción del ticket\n{ticket.description.strip()}")
+            ado_id_for_enrich = ticket.ado_id
+        else:
+            ticket_header_parts.append(f"# Ticket #{ticket_id}")
+
+    # Enriquecimiento ADO on-demand: comentarios + adjuntos del work item.
+    # Mismo patrón que api/tickets.py — silencia errores para no romper el flujo.
+    if ado_id_for_enrich:
+        ado_sections = _build_ado_enrichment_sections(int(ado_id_for_enrich))
+        if ado_sections:
+            ticket_header_parts.extend(ado_sections)
 
     context_text = prompt_builder.render_blocks(context_blocks)
     if context_text:
@@ -260,4 +273,90 @@ def open_chat():
         abort(504, "VS Code bridge tardó demasiado en responder.")
     except req_lib.exceptions.RequestException as exc:
         abort(502, f"Error contactando VS Code bridge: {exc}")
+
+
+def _build_ado_enrichment_sections(ado_id: int) -> list[str]:
+    """Construye secciones markdown con comentarios + adjuntos del work item ADO.
+
+    Misma lógica que `api/tickets.py` (`get_comments` / `get_attachments`):
+    consulta on-demand al `AdoClient`, sin tocar la BD ni cachear.
+    Silencia errores: si ADO no responde o la config está incompleta, devuelve
+    lista vacía y deja log de warning. El `open_chat` sigue funcionando sin
+    estas secciones.
+
+    Retorna lista de strings markdown listos para insertar en `ticket_header_parts`.
+    Cada string es una sección completa (encabezado `## ...` + cuerpo).
+    """
+    sections: list[str] = []
+
+    # Cliente ADO — si no se puede instanciar (config faltante), salir limpio.
+    try:
+        from services.ado_client import AdoClient
+        from services.ado_sync import _html_to_text
+        client = AdoClient()
+    except Exception as exc:
+        logger.warning("open_chat — AdoClient no disponible para ADO-%s: %s", ado_id, exc)
+        return sections
+
+    # ── Comentarios ──────────────────────────────────────────────────────────
+    try:
+        raw_comments = client.fetch_comments(ado_id, top=30)
+        comments_md: list[str] = []
+        for c in raw_comments:
+            text_html = c.get("text") or ""
+            if not text_html.strip():
+                continue
+            text = _html_to_text(text_html).strip()
+            if not text:
+                continue
+            author = c.get("author") or "?"
+            date = c.get("date") or ""
+            sep = " — " if date else ""
+            comments_md.append(f"### {author}{sep}{date}\n{text}")
+        if comments_md:
+            sections.append("\n## Comentarios ADO\n" + "\n\n".join(comments_md))
+    except Exception as exc:
+        logger.warning("open_chat — fetch_comments(%s) falló: %s", ado_id, exc)
+
+    # ── Adjuntos ─────────────────────────────────────────────────────────────
+    try:
+        attachments = client.fetch_attachments(ado_id)
+        if attachments:
+            attach_lines: list[str] = []
+            text_blocks: list[str] = []
+            for att in attachments:
+                name = att.get("name") or "(sin nombre)"
+                size = int(att.get("size") or 0)
+                url = att.get("url") or ""
+                size_str = _format_attachment_size(size)
+                line_parts = [f"**{name}**", size_str]
+                line = "- " + "  ·  ".join(line_parts)
+                if url:
+                    line += f"\n  {url}"
+                attach_lines.append(line)
+                text_content = att.get("text_content")
+                if text_content and text_content.strip():
+                    text_blocks.append(
+                        f"### Adjunto: {name}\n```\n{text_content.strip()}\n```"
+                    )
+            if attach_lines:
+                body_parts = ["\n".join(attach_lines)]
+                if text_blocks:
+                    body_parts.append("\n\n".join(text_blocks))
+                sections.append("\n## Adjuntos\n" + "\n\n".join(body_parts))
+    except Exception as exc:
+        logger.warning("open_chat — fetch_attachments(%s) falló: %s", ado_id, exc)
+
+    return sections
+
+
+def _format_attachment_size(size: int) -> str:
+    """Formatea bytes en una etiqueta humana (B / KB / MB)."""
+    if not size:
+        return "tamaño desconocido"
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
 

@@ -1,0 +1,222 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-panel);
+  margin-top: 8px;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  background: var(--bg-elev);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.headRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.running {
+  font-size: 10px;
+  color: var(--warn);
+  animation: blink 1.2s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.elapsed {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}
+
+/* ── Verdict badge ──────────────────────────────────────────────────────────── */
+
+.verdict {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  border: 1px solid;
+}
+
+.verdict[data-verdict="PASS"] {
+  color: var(--success);
+  border-color: var(--success);
+  background: rgba(63, 185, 80, 0.10);
+}
+.verdict[data-verdict="FAIL"] {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(248, 81, 73, 0.10);
+}
+.verdict[data-verdict="BLOCKED"] {
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: rgba(139, 148, 158, 0.08);
+}
+.verdict[data-verdict="MIXED"] {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: rgba(210, 153, 34, 0.10);
+}
+
+/* ── Body ────────────────────────────────────────────────────────────────────── */
+
+.body {
+  padding: 12px 14px;
+  overflow: auto;
+  font-size: 12px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.loading,
+.runningMsg {
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.error {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--danger);
+  background: rgba(248, 81, 73, 0.06);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Section ─────────────────────────────────────────────────────────────────── */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sectionToggle {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.sectionToggle:hover .sectionTitle {
+  color: var(--accent-hot);
+}
+
+.sectionTitle {
+  font-size: 10px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.chevron {
+  font-size: 9px;
+  color: var(--text-faint);
+}
+
+/* ── Stage table ─────────────────────────────────────────────────────────────── */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.table th {
+  text-align: left;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 4px 8px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-muted);
+  color: var(--text-primary);
+}
+
+.stageLabel {
+  color: var(--text-muted);
+  min-width: 130px;
+}
+
+.stageDetail {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+/* ── Stage status chips ──────────────────────────────────────────────────────── */
+
+.ok {
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.fail {
+  color: var(--danger);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.skipped {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+/* ── Artifact list ───────────────────────────────────────────────────────────── */
+
+.artifactList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.artifactPath {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-hot);
+  word-break: break-all;
+}

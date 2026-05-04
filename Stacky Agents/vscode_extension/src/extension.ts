@@ -85,14 +85,20 @@ async function ensureTicket(context: vscode.ExtensionContext): Promise<number | 
   return n;
 }
 
-function refreshStatus(context: vscode.ExtensionContext) {
+function refreshStatus(context: vscode.ExtensionContext, runningAgent?: string) {
   const t = context.globalState.get<number>(TICKET_KEY);
-  if (t) {
+  if (runningAgent) {
+    statusBar.text = `$(sync~spin) Stacky: ${runningAgent}…`;
+    statusBar.tooltip = `Ejecutando agente: ${runningAgent}. ADO-${t ?? "?"}`;
+    statusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+  } else if (t) {
     statusBar.text = `$(rocket) Stacky: ADO-${t}`;
     statusBar.tooltip = `Ticket activo: ADO-${t}. Click para cambiar.`;
+    statusBar.backgroundColor = undefined;
   } else {
     statusBar.text = "$(rocket) Stacky: sin ticket";
     statusBar.tooltip = "Click para fijar el ticket activo";
+    statusBar.backgroundColor = undefined;
   }
   statusBar.show();
 }
@@ -260,18 +266,27 @@ async function _handleOpenChat(
     }
     await _sleep(1800);
 
-    // Open chat and inject query
+    // Write full content to clipboard FIRST.
+    // workbench.action.chat.open({ query }) truncates at the first newline,
+    // so we open the chat without a query and paste the full content instead.
+    await vscode.env.clipboard.writeText(query);
+
+    // Open chat panel (no query → input is empty and focused)
     try {
-      await vscode.commands.executeCommand("workbench.action.chat.open", { query });
-    } catch {
-      // Fallback: open chat then paste via clipboard
       await vscode.commands.executeCommand("workbench.action.chat.open");
-      await _sleep(800);
-      await vscode.env.clipboard.writeText(query);
+    } catch (e) {
+      console.warn(`[Stacky] /open-chat: workbench.action.chat.open falló: ${e}`);
+    }
+    await _sleep(1000);
+
+    // Paste the full multi-line content into the focused chat input
+    try {
       await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
+    } catch (e) {
+      console.warn(`[Stacky] /open-chat: paste falló: ${e}. El contenido sigue en el clipboard.`);
     }
 
-    await _sleep(1200);
+    await _sleep(800);
 
     // fire-and-forget submit — same strategy as Stacky Pipeline
     vscode.commands.executeCommand("workbench.action.chat.submit").then(
@@ -444,7 +459,23 @@ export function activate(context: vscode.ExtensionContext) {
           });
         }
 
-        const result = await runAgent(pick.description!, ticketId, contextBlocks);
+        const result = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Stacky — ${pick.label}`,
+            cancellable: false,
+          },
+          async (progress) => {
+            progress.report({ message: `Ticket ADO-${ticketId} — lanzando…` });
+            refreshStatus(context, pick.label);
+            const res = await runAgent(pick.description!, ticketId, contextBlocks);
+            progress.report({ message: `Run #${res.execution_id} iniciado ✓` });
+            return res;
+          },
+        );
+
+        refreshStatus(context);
+
         const action = await vscode.window.showInformationMessage(
           `Run lanzado: exec #${result.execution_id}`,
           "Abrir en browser"
@@ -455,6 +486,7 @@ export function activate(context: vscode.ExtensionContext) {
           );
         }
       } catch (e: any) {
+        refreshStatus(context);
         vscode.window.showErrorMessage(`Stacky run failed: ${e.message}`);
       }
     }),

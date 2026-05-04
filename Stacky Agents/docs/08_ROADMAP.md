@@ -42,7 +42,38 @@ El objetivo de 2026 no es "tener Stacky Agents corriendo" — es **convertir el 
 - Modelo de datos definido y migrable.
 - 5 packs declarados.
 
-**Próximo paso:** validar la UX con 3 operadores internos antes de invertir en integración.
+---
+
+## Fase 0b — UX Redesign: Paradigma Empleados (✅ completada · Mayo 2026)
+
+**Estado:** implementada y verificada (`npm run build` sin errores TypeScript).
+
+### Entregado
+
+| Archivo | Qué hace |
+|---|---|
+| `src/services/preferences.ts` | localStorage wrapper: pinnedAgents, avatars, nicknames, roles |
+| `src/services/avatarGallery.ts` | Metadata 20 avatares + `resolveAvatarSrc()` |
+| `public/avatars/*.svg` | 20 SVGs pixel art (dev, analyst, QA, PM, TL, scrum, DBA, DevOps, data, sec, architect, UX, mobile, robot, ninja, wizard) |
+| `src/components/PixelAvatar.tsx` | Display avatar sm/md/lg, `image-rendering: pixelated`, placeholder con iniciales |
+| `src/components/AvatarPicker.tsx` | Grid galería con tabs por categoría + upload custom (canvas 64×64 nearest-neighbor) |
+| `src/pages/TeamScreen.tsx` | Pantalla principal — grid responsive 3/2/1 col, estado vacío |
+| `src/components/EmployeeCard.tsx` | Card HR-style con badge tipo, kebab menu, botón "Asignar Ticket →" |
+| `src/components/AgentLaunchModal.tsx` | Modal flujo ticket → bridge → VS Code Chat, manejo de error bridge |
+| `src/components/TeamManageDrawer.tsx` | Drawer "Agregar empleado" con inline AvatarPicker |
+| `src/components/EmployeeEditDrawer.tsx` | Drawer "Editar empleado" con confirm de quitar |
+| `src/App.tsx` | View toggle `team \| workbench` |
+| `src/theme.css` | Nuevos tokens: `--card-radius`, `--card-shadow`, `--avatar-border`, `--font-pixel` |
+| `index.html` | Google Fonts Inter 400/500/600/700 + Press Start 2P |
+| `src/components/TopBar.tsx` | Prop `onGoToTeam` → botón "← Equipo" en Workbench |
+
+### Invariantes garantizadas
+- Workbench sigue 100% funcional y accesible desde TeamScreen.
+- Zero cambios al backend ni a la extensión VS Code.
+- Persistencia en localStorage — survives reload, zero backend changes.
+- Bridge existente (`POST localhost:5052/open-chat`) reutilizado sin modificar.
+
+**Próximo paso:** validar la UX con 3 operadores internos antes de invertir en integración backend (Fase 1).
 
 ---
 

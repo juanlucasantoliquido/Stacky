@@ -46,6 +46,9 @@ class AgentConfig:
         "style_issue", "typo", "best_practice", "minor_ui_glitch",
     ])
     auto_approve_with_observations: bool = True
+    # Específico QA — fuerza formato [PASS]/[FAIL]/[N/A] obligatorio en cada hallazgo
+    # (ver Agentes/shared/output_formats.md#evidence-format)
+    evidence_strict:    bool = False
     # Específico PM (ignorados para otros)
     skip_queries:       bool = False
     require_analysis:   bool = True
@@ -54,8 +57,10 @@ class AgentConfig:
     require_commit_msg: bool = True
 
 
-# Agentes soportados — cualquier otro valor se rechaza en el endpoint
-KNOWN_AGENTS = ("pm", "dev", "tester", "doc")
+# Agentes soportados — cualquier otro valor se rechaza en el endpoint.
+# `qa` y `tester` comparten el prompt base `tester.md` y se diferencian por
+# config (strictness + evidence_strict). Ver Agentes/PHASE1_ROADMAP.md §P1.4.
+KNOWN_AGENTS = ("pm", "dev", "tester", "qa", "doc")
 
 # Strictness válidos
 VALID_STRICTNESS = ("strict", "normal", "permissive")
@@ -158,9 +163,10 @@ def build_prompt_injection(agent: str, config: AgentConfig) -> str:
     lines: list[str] = []
     default = AgentConfig()
 
-    # Strictness global — aplica sobre todo a QA, pero ayuda a PM/DEV también
+    # Strictness global — aplica sobre todo a QA, pero ayuda a PM/DEV también.
+    # `qa` y `tester` comparten prompt base, así que ambos usan el bloque tester.
     if config.strictness != default.strictness:
-        if agent == "tester":
+        if agent in ("tester", "qa"):
             lines.append(_tester_strictness_block(config.strictness))
         else:
             lines.append(_generic_strictness_block(config.strictness))
@@ -175,11 +181,15 @@ def build_prompt_injection(agent: str, config: AgentConfig) -> str:
             "de tu rol (seguridad, corrección, integridad de datos)."
         )
 
-    # Específico QA: tests permitidos/prohibidos, criterios de blocker/advisory
-    if agent == "tester":
+    # Específico QA: tests permitidos/prohibidos, criterios de blocker/advisory,
+    # formato de evidencia. Aplica tanto a `tester` (estricto histórico) como
+    # a `qa` (variante permissive).
+    if agent in ("tester", "qa"):
         qa_lines = _tester_qa_block(config)
         if qa_lines:
             lines.append(qa_lines)
+        if config.evidence_strict != default.evidence_strict:
+            lines.append(_evidence_strict_block(config.evidence_strict))
 
     # Específico PM
     if agent == "pm":
@@ -247,6 +257,35 @@ def _tester_strictness_block(level: str) -> str:
         )
     # normal → no hace falta inyectar (es el default)
     return ""
+
+
+def _evidence_strict_block(strict: bool) -> str:
+    """
+    Inyecta la regla de formato de evidencia obligatorio para QA/Tester.
+    Cuando es True, cada hallazgo debe ir prefijado con [PASS]/[FAIL]/[N/A - motivo]
+    + evidencia copiada del código (no opinión).
+    """
+    if strict:
+        return (
+            "## Formato de evidencia: STRICT\n"
+            "Cada verificación de regla y caso de prueba DEBE comenzar con uno "
+            "de estos prefijos:\n"
+            "  - `[PASS]` — la regla/caso se cumple, con evidencia objetiva.\n"
+            "  - `[FAIL]` — la regla/caso falla, con evidencia objetiva.\n"
+            "  - `[N/A - motivo]` — no aplica al ticket; el motivo es obligatorio.\n"
+            "\n"
+            "Cada `[PASS]` o `[FAIL]` DEBE incluir archivo, línea y un fragmento "
+            "del código copiado tal cual (no resumen, no opinión). Si no podés "
+            "obtener evidencia objetiva, el estado es `[FAIL]` — nunca `[N/A]`.\n"
+            "\n"
+            "Detalle completo: Agentes/shared/output_formats.md#evidence-format"
+        )
+    return (
+        "## Formato de evidencia: PERMISSIVE\n"
+        "El formato `[PASS]/[FAIL]/[N/A]` con evidencia copiada es recomendado "
+        "pero no obligatorio. Podés reportar hallazgos en prosa siempre que "
+        "incluyas archivo y línea de cada uno."
+    )
 
 
 def _generic_strictness_block(level: str) -> str:
@@ -332,6 +371,7 @@ def from_dict(data: dict) -> AgentConfig:
     clean = {k: v for k, v in (data or {}).items() if k in known}
     # Coaccionar tipos comunes
     for bool_field in ("enabled", "auto_approve_with_observations",
+                        "evidence_strict",
                         "skip_queries", "require_analysis",
                         "require_tests", "require_commit_msg"):
         if bool_field in clean:

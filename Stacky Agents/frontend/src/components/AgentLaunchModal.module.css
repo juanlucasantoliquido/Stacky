@@ -1,0 +1,210 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius, 10px);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+/* ─── Header ──────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.headerText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agentName {
+  font-family: var(--font-pixel, "Press Start 2P", monospace);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.closeBtn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+.closeBtn:hover { color: var(--text-primary); background: var(--bg-elev); }
+
+/* ─── Search ──────────────────────────────── */
+.searchWrap {
+  position: relative;
+}
+
+.search {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.search:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(56,139,253,0.2);
+}
+
+/* ─── Ticket list ─────────────────────────── */
+.list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+  min-height: 120px;
+  max-height: 240px;
+}
+
+.empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.ticket,
+.ticketActive {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-bottom: 1px solid var(--border-muted);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+  color: var(--text-primary);
+}
+.ticket:last-child,
+.ticketActive:last-child { border-bottom: none; }
+.ticket:hover { background: var(--bg-elev); }
+.ticketActive {
+  background: rgba(56,139,253,0.15);
+  border-left: 3px solid var(--accent);
+}
+
+.ticketId {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-hot);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ticketTitle {
+  flex: 1;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticketState {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* ─── Message input ───────────────────────── */
+.messageInput {
+  width: 100%;
+  resize: vertical;
+  font-size: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  min-height: 52px;
+}
+.messageInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ─── Error ───────────────────────────────── */
+.error {
+  background: rgba(248,81,73,0.12);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: 12px;
+  padding: 10px 12px;
+}
+
+/* ─── Actions ─────────────────────────────── */
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.cancelBtn {
+  padding: 9px 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  font-size: 13px;
+  cursor: pointer;
+}
+.cancelBtn:hover { border-color: var(--text-faint); color: var(--text-primary); }
+
+.launchBtn {
+  padding: 9px 20px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.launchBtn:hover:not(:disabled) { background: var(--accent-hot); }
+.launchBtn:disabled { opacity: 0.55; cursor: not-allowed; }

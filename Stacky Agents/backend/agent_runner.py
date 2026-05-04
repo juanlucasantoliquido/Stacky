@@ -107,6 +107,22 @@ def _run_in_background(
             ticket_id = row.ticket_id
             ticket = session.get(Ticket, ticket_id) if ticket_id else None
             project = ticket.project if ticket else None
+            ticket_ado_id = ticket.ado_id if ticket else None
+
+        # ADO context enrichment — para agentes technical y developer inyecta
+        # comentarios y adjuntos del ticket desde Azure DevOps.
+        if ticket_ado_id is not None:
+            try:
+                from services import ado_context
+                raw_blocks = ado_context.enrich(
+                    ticket_id=ticket_id,
+                    agent_type=agent_type,
+                    existing_blocks=raw_blocks or [],
+                    ado_id=ticket_ado_id,
+                    log=log,
+                )
+            except Exception as _exc_ado:
+                log("warn", f"ado_context enrich falló (continuando sin enrichment): {_exc_ado}")
 
         # FA-37 — PII masking ANTES de cualquier procesamiento (cache, prompt, etc.)
         masked_blocks, mask_map = pii_masker.mask_blocks(raw_blocks)

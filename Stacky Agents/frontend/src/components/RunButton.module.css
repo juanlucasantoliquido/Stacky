@@ -1,4 +1,16 @@
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-bg {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.75; }
+}
+
 .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   background: var(--accent);
   color: #fff;
   border: 1px solid rgba(240, 246, 252, 0.1);
@@ -35,8 +47,27 @@
   background: var(--warn);
   color: #1c1810;
   border-color: rgba(0, 0, 0, 0.15);
+  animation: pulse-bg 1.6s ease-in-out infinite;
+  cursor: default;
 }
 
 .running:hover:not(:disabled) {
   background: #e3b341;
+}
+
+.spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(28, 24, 16, 0.25);
+  border-top-color: #1c1810;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.cancel {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 2px;
 }

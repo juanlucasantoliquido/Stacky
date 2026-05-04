@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dossier.schema.json",
+  "title": "UATDossier",
+  "description": "Output de uat_dossier_builder.py — dossier final del ciclo UAT de un ticket",
+  "type": "object",
+  "required": ["ok", "run_id", "schema_version", "ticket_id", "ticket_title", "screen", "verdict", "executive_summary", "context", "scenarios", "failures", "meta"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F\\-]{36}$",
+      "description": "UUID v4 del run"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "qa-uat-dossier/1.0"
+    },
+    "ticket_id": { "type": "integer", "minimum": 1 },
+    "ticket_title": { "type": "string", "minLength": 1 },
+    "screen": { "type": "string", "minLength": 1 },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "BLOCKED", "MIXED"],
+      "description": "Veredicto global del ticket"
+    },
+    "executive_summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600,
+      "description": "Resumen en lenguaje humano generado por GPT-4.1 (o fallback determinista)"
+    },
+    "context": {
+      "type": "object",
+      "required": ["environment", "agent_version"],
+      "additionalProperties": true,
+      "properties": {
+        "build_commit": { "type": "string" },
+        "environment": { "type": "string" },
+        "agent_version": { "type": "string" },
+        "models_used": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "description": "Resultado por escenario combinando ScenarioSpec + RunResult",
+      "items": { "$ref": "#/definitions/DossierScenario" }
+    },
+    "failures": {
+      "type": "array",
+      "description": "Escenarios con status fail — resumen de fallas para el QA humano",
+      "items": { "$ref": "#/definitions/DossierFailure" }
+    },
+    "recommendation_for_human_qa": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Lista de recomendaciones para el QA humano que revisará el dossier"
+    },
+    "next_steps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Próximos pasos sugeridos (ej: aplicar INSERTs RIDIOMA, revisar falla P04)"
+    },
+    "meta": {
+      "type": "object",
+      "required": ["tool", "version"],
+      "additionalProperties": true,
+      "properties": {
+        "tool": { "type": "string", "const": "uat_dossier_builder" },
+        "version": { "type": "string" },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO8601 timestamp of when the dossier was generated"
+    },
+    "comment_hash": {
+      "type": "string",
+      "description": "SHA-256 hex of ado_comment.html content for idempotence"
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Filesystem paths to generated artifacts"
+    }
+  },
+  "definitions": {
+    "DossierScenario": {
+      "type": "object",
+      "required": ["scenario_id", "titulo", "status"],
+      "additionalProperties": true,
+      "properties": {
+        "scenario_id": { "type": "string" },
+        "titulo": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "blocked", "skipped"]
+        },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "assertion_failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "reason": { "type": "string" }
+      }
+    },
+    "DossierFailure": {
+      "type": "object",
+      "required": ["scenario_id", "titulo", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "scenario_id": { "type": "string" },
+        "titulo": { "type": "string" },
+        "message": { "type": "string" },
+        "expected": { "type": "string" },
+        "actual": { "type": "string" },
+        "trace_path": { "type": "string" },
+        "screenshot_path": { "type": "string" }
+      }
+    }
+  },
+  "if": { "properties": { "ok": { "const": false } } },
+  "then": {
+    "required": ["ok", "error"],
+    "properties": {
+      "error": {
+        "type": "string",
+        "enum": [
+          "missing_artifact",
+          "render_failed",
+          "marker_stripped",
+          "llm_summary_invalid"
+        ]
+      },
+      "message": { "type": "string" }
+    }
+  }
+}

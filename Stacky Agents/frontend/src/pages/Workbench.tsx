@@ -8,12 +8,16 @@ import TicketSelector from "../components/TicketSelector";
 import TopBar from "../components/TopBar";
 import styles from "./Workbench.module.css";
 
-export default function Workbench() {
+interface WorkbenchProps {
+  onGoToTeam?: () => void;
+}
+
+export default function Workbench({ onGoToTeam }: WorkbenchProps) {
   useAutoFillBlocks();
 
   return (
     <div className={styles.app}>
-      <TopBar />
+      <TopBar onGoToTeam={onGoToTeam} />
       <div className={styles.body}>
         <aside className={styles.left}>
           <TicketSelector />

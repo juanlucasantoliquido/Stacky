@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges">
+  <!-- sec-1: Security Engineer with hoodie and shield -->
+  <rect x="24" y="8" width="16" height="16" fill="#f5c5a3"/>
+  <!-- hoodie dark up -->
+  <rect x="18" y="4" width="28" height="14" fill="#1c2a3a"/>
+  <!-- shadow under hood -->
+  <rect x="22" y="10" width="20" height="8" fill="#0d1117" opacity="0.5"/>
+  <!-- eyes glowing green -->
+  <rect x="27" y="14" width="4" height="4" fill="#3fb950"/>
+  <rect x="33" y="14" width="4" height="4" fill="#3fb950"/>
+  <!-- mouth thin -->
+  <rect x="29" y="21" width="6" height="1" fill="#8b949e"/>
+  <!-- hoodie body -->
+  <rect x="18" y="24" width="28" height="20" fill="#1c2a3a"/>
+  <rect x="10" y="24" width="10" height="16" fill="#1c2a3a"/>
+  <rect x="44" y="24" width="10" height="16" fill="#1c2a3a"/>
+  <!-- shield logo on chest -->
+  <rect x="26" y="27" width="12" height="14" fill="#388bfd"/>
+  <rect x="28" y="29" width="8" height="10" fill="#1c4a8a"/>
+  <rect x="30" y="31" width="4" height="6" fill="#3fb950"/>
+  <rect x="29" y="34" width="6" height="2" fill="#3fb950"/>
+  <!-- hands -->
+  <rect x="10" y="40" width="8" height="6" fill="#f5c5a3"/>
+  <rect x="46" y="40" width="8" height="6" fill="#f5c5a3"/>
+  <!-- pants black -->
+  <rect x="20" y="44" width="10" height="14" fill="#0d1117"/>
+  <rect x="34" y="44" width="10" height="14" fill="#0d1117"/>
+  <!-- shoes -->
+  <rect x="18" y="56" width="14" height="6" fill="#1c2a3a"/>
+  <rect x="32" y="56" width="14" height="6" fill="#1c2a3a"/>
+</svg>

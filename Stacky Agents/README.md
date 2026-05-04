@@ -9,12 +9,14 @@
 
 | | Stacky Pipeline (anterior) | **Stacky Agents (este producto)** |
 |---|---|---|
-| Modelo | Pipeline automático PM → Dev → QA | **Workbench manual** de agentes independientes |
-| Disparador | Estados ADO + daemon | **Click humano** sobre un agente |
+| Modelo | Pipeline automático PM → Dev → QA | **Team Screen de empleados + Workbench manual** |
+| Disparador | Estados ADO + daemon | **Click humano sobre un agente/empleado** |
 | Orden de ejecución | Rígido, secuencial | **Cualquier orden, cualquier veces** |
 | Dependencias | Acopladas por estado | **Context chaining opcional** |
-| UX | Cron + dashboard de auditoría | **Editor + Run + Output side-by-side** |
-| Mentalidad | "El sistema decide cuándo correr" | **"El humano decide cuándo correr"** |
+| Pantalla de inicio | Dashboard de auditoría | **Team Screen — los agentes son tus empleados** |
+| Flujo principal | Estado ADO → cron → output | **Empleado → Ticket → VS Code Copilot Chat** |
+| UX | Cron + dashboard de auditoría | **Equipo visual + Editor + Run + VS Code Chat** |
+| Mentalidad | "El sistema decide cuándo correr" | **"El humano elige su equipo y asigna tickets"** |
 
 ---
 
@@ -24,14 +26,24 @@
 
 Stacky Pipeline funciona como una máquina de estados que mueve tickets sola. Eso es eficiente cuando el camino feliz es el 95% del tráfico — pero cuando algo falla, el operador queda fuera del loop y debe leer logs para entender qué decidió la máquina.
 
-**Stacky Agents invierte la dirección de control:**
+**Stacky Agents invierte la dirección de control** y lo hace visible desde la pantalla de inicio:
 
-1. El humano elige el ticket.
-2. El humano elige el agente.
-3. El humano edita el contexto que entra al agente.
-4. El humano lee el output, decide si lo usa, lo edita, lo descarta o lo reencadena al siguiente agente.
+### Team Screen — los agentes como empleados
 
-El sistema no opina sobre el orden. Si querés correr el QA antes que el Dev (para validar la spec contra lo existente), podés. Si querés correr el Functional dos veces con contextos distintos, podés.
+La app arranca en una pantalla tipo "equipo de trabajo": cada agente de VS Code aparece como una **tarjeta de empleado** con avatar pixel art, nombre, rol y especialidad. El operador arma su equipo eligiendo qué agentes quiere ver (de todos los `.agent.md` disponibles en la carpeta de VS Code), les pone apodo y avatar.
+
+**Flujo principal:**
+1. El humano elige su empleado (agente).
+2. El humano asigna un ticket ADO al empleado.
+3. Click OK → se abre **VS Code Copilot Chat** con `@agente` y el contexto del ticket pre-cargado.
+4. La conversación ocurre en el chat nativo de VS Code.
+
+**Flujo avanzado (Workbench):**
+1. El humano elige el agente desde el workbench clásico.
+2. El humano edita el contexto que entra al agente.
+3. El humano lee el output, decide si lo usa, lo edita, lo descarta o lo reencadena al siguiente agente.
+
+El Workbench sigue disponible desde un botón en la Team Screen para workflows complejos (packs, chains, historial detallado). El sistema no opina sobre el orden. Si querés correr el QA antes que el Dev, podés. Si querés correr el Functional dos veces con contextos distintos, podés.
 
 ---
 
@@ -69,11 +81,12 @@ Tools/Stacky Agents/
 │   ├── 01_UX_DESIGN.md                ← wireframes low+high fi, layout, estados
 │   ├── 02_ARCHITECTURE.md             ← frontend + backend + integración
 │   ├── 03_DATA_MODEL.md               ← AgentExecution + relaciones + queries
-│   ├── 04_INTERACTION_FLOWS.md        ← user journeys (run, re-run, chain, pack)
+│   ├── 04_INTERACTION_FLOWS.md        ← user journeys (team screen, run, re-run, chain, pack)
 │   ├── 05_COMPONENTS.md               ← catálogo de componentes UI
 │   ├── 06_MIGRATION_FROM_STACKY.md    ← qué se mantiene, qué se descarta, cómo
 │   ├── 07_AGENT_PACKS.md              ← propuesta diferencial: packs guiados
-│   └── 08_ROADMAP.md                  ← roadmap por fases + features game-changer
+│   ├── 08_ROADMAP.md                  ← roadmap por fases + features game-changer
+│   └── 09_EVOLUTION_V2.md             ← análisis crítico + features estratégicas
 ├── backend/                           ← Flask modular
 │   ├── README.md
 │   ├── requirements.txt
@@ -86,7 +99,7 @@ Tools/Stacky Agents/
 │   ├── copilot_bridge.py              ← stub que invoca al engine real
 │   ├── api/
 │   │   ├── __init__.py
-│   │   ├── agents.py                  ← POST /api/agents/run, GET /api/agents
+│   │   ├── agents.py                  ← POST /api/agents/run, GET /api/agents, GET /api/agents/vscode
 │   │   ├── executions.py              ← GET /api/executions, /api/executions/:id
 │   │   ├── tickets.py                 ← GET /api/tickets
 │   │   └── packs.py                   ← GET /api/packs, POST /api/packs/start
@@ -107,15 +120,28 @@ Tools/Stacky Agents/
     ├── tsconfig.json
     ├── vite.config.ts
     ├── index.html
+    ├── public/
+    │   └── avatars/                   ← SVGs pixel art (trabajadores IT, 15-20 personajes)
     └── src/
         ├── main.tsx
-        ├── App.tsx
-        ├── theme.ts
+        ├── App.tsx                    ← view router: "team" | "workbench"
+        ├── theme.css
         ├── api/client.ts
         ├── hooks/useAgentRun.ts
+        ├── services/
+        │   ├── preferences.ts         ← localStorage: equipo, avatares, apodos, roles
+        │   └── avatarGallery.ts       ← metadata 20 avatares pixel art + resolveAvatarSrc()
         ├── store/workbench.ts
-        ├── pages/Workbench.tsx
+        ├── pages/
+        │   ├── TeamScreen.tsx         ← pantalla principal: grid de empleados-agentes
+        │   └── Workbench.tsx          ← workbench clásico (accesible desde TeamScreen)
         └── components/
+            ├── EmployeeCard.tsx       ← tarjeta de empleado con avatar pixel art
+            ├── AgentLaunchModal.tsx   ← modal: buscar ticket → OK → VS Code Chat
+            ├── TeamManageDrawer.tsx   ← agregar/quitar agentes del equipo
+            ├── EmployeeEditDrawer.tsx ← editar apodo, rol y avatar
+            ├── PixelAvatar.tsx        ← display de avatar (galería o base64 custom)
+            ├── AvatarPicker.tsx       ← selector de avatar: galería + upload con pixelado
             ├── TicketSelector.tsx
             ├── AgentSelector.tsx
             ├── AgentCard.tsx
@@ -152,10 +178,13 @@ El frontend habla al backend por `http://localhost:5050`. El backend persiste en
 
 | Pieza | Estado |
 |---|---|
-| Documentación de diseño (00–08) | **Completa** — incluye roadmap + 52 moats catalogados |
+| Documentación de diseño (00–09) | **Completa** — incluye roadmap + 52 moats catalogados + evolución estratégica V2 |
 | Backend Flask + modelos + endpoints | **Runnable** — copilot_bridge en modo mock |
 | Frontend React + componentes principales | **Runnable** — UI navegable, llamadas reales al backend |
-| Integración real con copilot/VS Code | **Pendiente** — stub apunta al `copilot_bridge.py` de Stacky existente |
+| **Team Screen (pantalla de empleados)** | **En desarrollo** — `TeamScreen.tsx`, `EmployeeCard.tsx`, avatares pixel art |
+| **Agent Launch Modal (→ VS Code Chat)** | **En desarrollo** — bridge `POST localhost:5052/open-chat` ya disponible |
+| **Gestión de equipo + avatares** | **En desarrollo** — `TeamManageDrawer`, `AvatarPicker`, `preferences.ts` |
+| VS Code extension + bridge HTTP (:5052) | **Implementado** — `/open-chat`, `/invoke`, `/models` |
 | SSE de logs en vivo | **Implementado** |
 | Persistencia de history y re-run | **Implementado** |
 | Agent Packs ejecutándose | **Diseñado + endpoint stub** — UI guía paso a paso |
@@ -248,9 +277,9 @@ business · functional · technical · developer · qa · debug (FA-29) · pr_re
 - **Producto / UX** → [docs/00_VISION.md](docs/00_VISION.md), [docs/01_UX_DESIGN.md](docs/01_UX_DESIGN.md), [docs/04_INTERACTION_FLOWS.md](docs/04_INTERACTION_FLOWS.md)
 - **Frontend** → [docs/01_UX_DESIGN.md](docs/01_UX_DESIGN.md), [docs/05_COMPONENTS.md](docs/05_COMPONENTS.md), [frontend/](frontend/)
 - **Backend** → [docs/02_ARCHITECTURE.md](docs/02_ARCHITECTURE.md), [docs/03_DATA_MODEL.md](docs/03_DATA_MODEL.md), [backend/](backend/)
-- **Tech Lead** → [docs/02_ARCHITECTURE.md](docs/02_ARCHITECTURE.md), [docs/06_MIGRATION_FROM_STACKY.md](docs/06_MIGRATION_FROM_STACKY.md), [docs/08_ROADMAP.md](docs/08_ROADMAP.md)
+- **Tech Lead** → [docs/02_ARCHITECTURE.md](docs/02_ARCHITECTURE.md), [docs/06_MIGRATION_FROM_STACKY.md](docs/06_MIGRATION_FROM_STACKY.md), [docs/08_ROADMAP.md](docs/08_ROADMAP.md), [docs/09_EVOLUTION_V2.md](docs/09_EVOLUTION_V2.md)
 - **Equipo Stacky actual** → [docs/06_MIGRATION_FROM_STACKY.md](docs/06_MIGRATION_FROM_STACKY.md), [docs/07_AGENT_PACKS.md](docs/07_AGENT_PACKS.md)
-- **Sponsor / Producto** → [docs/00_VISION.md](docs/00_VISION.md), [docs/08_ROADMAP.md](docs/08_ROADMAP.md)
+- **Sponsor / Producto** → [docs/00_VISION.md](docs/00_VISION.md), [docs/08_ROADMAP.md](docs/08_ROADMAP.md), [docs/09_EVOLUTION_V2.md](docs/09_EVOLUTION_V2.md)
 
 ---
 

@@ -1,0 +1,126 @@
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 16px 16px;
+  border-radius: var(--card-radius, 10px);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  box-shadow: var(--card-shadow, 0 2px 12px rgba(0,0,0,0.35));
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  overflow: visible;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 0 1px var(--agent-color, var(--accent));
+}
+
+/* ─── Type badge ──────────────────────────── */
+.typeBadge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 20px;
+  color: #fff;
+  opacity: 0.9;
+}
+
+/* ─── Kebab menu ──────────────────────────── */
+.menuWrapper {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.kebab {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  line-height: 1;
+}
+.kebab:hover { color: var(--text-primary); background: var(--bg-elev); }
+
+.menu {
+  position: absolute;
+  right: 0;
+  top: 28px;
+  z-index: 50;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  min-width: 180px;
+  overflow: hidden;
+}
+.menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 14px;
+  border: none;
+  border-radius: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: transparent;
+}
+.menu button:hover { background: var(--bg-elev); }
+.menuDanger { color: var(--danger) !important; }
+.menuDanger:hover { background: rgba(248, 81, 73, 0.12) !important; }
+
+/* ─── Avatar ──────────────────────────────── */
+.avatarWrap {
+  margin-top: 20px;
+  border-radius: var(--avatar-border, var(--radius));
+  box-shadow: 0 0 0 3px var(--agent-color, var(--border));
+}
+
+/* ─── Text ────────────────────────────────── */
+.name {
+  font-family: var(--font-pixel, "Press Start 2P", monospace);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 1.4;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.role {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── CTA button ──────────────────────────── */
+.assignBtn {
+  margin-top: 4px;
+  width: 100%;
+  padding: 9px 16px;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.1s;
+}
+.assignBtn:hover { background: var(--accent-hot); transform: scale(1.02); }
+.assignBtn:active { transform: scale(0.98); }

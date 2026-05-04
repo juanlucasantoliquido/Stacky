@@ -1,0 +1,92 @@
+{
+  "ok": true,
+  "screen": "FrmAgenda.aspx",
+  "hash": "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+  "captured_at": "2026-05-02T14:32:00Z",
+  "url": "http://localhost/AgendaWeb/FrmAgenda.aspx",
+  "elements": [
+    {
+      "kind": "select",
+      "role": "combobox",
+      "label": "Empresa",
+      "asp_id": "ddlEmpresa",
+      "data_testid": null,
+      "selector_recommended": "getByLabel('Empresa')",
+      "robustness": "high",
+      "alias_semantic": "select_empresa",
+      "position": {"x": 120, "y": 80}
+    },
+    {
+      "kind": "select",
+      "role": "combobox",
+      "label": "Tipo de Lote",
+      "asp_id": "ddlTipoLote",
+      "data_testid": null,
+      "selector_recommended": "getByLabel('Tipo de Lote')",
+      "robustness": "high",
+      "alias_semantic": "select_tipo_lote",
+      "position": {"x": 240, "y": 80}
+    },
+    {
+      "kind": "input",
+      "role": "textbox",
+      "label": "Fecha Desde",
+      "asp_id": "txtFechaDesde",
+      "data_testid": null,
+      "selector_recommended": "getByLabel('Fecha Desde')",
+      "robustness": "high",
+      "alias_semantic": "input_fecha_desde",
+      "position": {"x": 360, "y": 80}
+    },
+    {
+      "kind": "input",
+      "role": "textbox",
+      "label": "Fecha Hasta",
+      "asp_id": "txtFechaHasta",
+      "data_testid": null,
+      "selector_recommended": "getByLabel('Fecha Hasta')",
+      "robustness": "high",
+      "alias_semantic": "input_fecha_hasta",
+      "position": {"x": 480, "y": 80}
+    },
+    {
+      "kind": "button",
+      "role": "button",
+      "label": "Buscar",
+      "asp_id": "btnOk",
+      "data_testid": null,
+      "selector_recommended": "input[value='Buscar']",
+      "robustness": "medium",
+      "alias_semantic": "btn_buscar",
+      "position": {"x": 600, "y": 80}
+    },
+    {
+      "kind": "table",
+      "role": "grid",
+      "label": null,
+      "asp_id": "gvAgendaAut",
+      "data_testid": null,
+      "selector_recommended": "#gvAgendaAut",
+      "robustness": "medium",
+      "alias_semantic": "grid_agenda_aut",
+      "position": {"x": 0, "y": 200}
+    },
+    {
+      "kind": "div",
+      "role": "status",
+      "label": null,
+      "asp_id": "divMensaje",
+      "data_testid": null,
+      "selector_recommended": "#divMensaje",
+      "robustness": "medium",
+      "alias_semantic": "msg_lista_vacia",
+      "position": {"x": 0, "y": 180}
+    }
+  ],
+  "warnings": [],
+  "meta": {
+    "tool": "ui_map_builder",
+    "version": "1.0.0",
+    "duration_ms": 3200
+  }
+}

@@ -28,6 +28,7 @@ export const Tickets = {
   byId: (id: number) => api.get<Ticket & { executions: AgentExecution[] }>(`/api/tickets/${id}`),
   fingerprint: (id: number) => api.get<TicketFingerprint>(`/api/tickets/${id}/fingerprint`),  // N3
   glossary: (id: number) => api.get<ContextBlock | null>(`/api/tickets/${id}/glossary`),  // FA-09
+  comments: (id: number) => api.get<{ comments: { author: string; date: string; text: string }[] }>(`/api/tickets/${id}/comments`),
   sync: () => api.post<TicketSyncResult>("/api/tickets/sync"),
   syncStatus: () => api.get<{ last_synced_at: string | null }>("/api/tickets/sync/status"),
 };
@@ -194,6 +195,31 @@ export const Packs = {
   pause: (id: number) => api.post<PackRun>(`/api/packs/runs/${id}/pause`),
   resume: (id: number) => api.post<PackRun>(`/api/packs/runs/${id}/resume`),
   abandon: (id: number) => api.delete<{ ok: true }>(`/api/packs/runs/${id}`),
+};
+
+// QA UAT Pipeline
+export interface QaUatRunStatus {
+  ok: boolean;
+  execution_id: string;
+  status: "queued" | "running" | "completed" | "error";
+  pipeline_result?: {
+    ok: boolean;
+    ticket_id: number;
+    verdict?: "PASS" | "FAIL" | "BLOCKED" | "MIXED";
+    elapsed_s?: number;
+    stages?: Record<string, { ok: boolean; skipped?: boolean; [k: string]: unknown }>;
+  };
+  error?: string;
+}
+
+export const QaUat = {
+  run: (ticketId: number, mode: "dry-run" | "publish" = "dry-run") =>
+    api.post<{ ok: boolean; execution_id: string; status: string }>(
+      "/api/qa-uat/run",
+      { ticket_id: ticketId, mode }
+    ),
+  status: (executionId: string) =>
+    api.get<QaUatRunStatus>(`/api/qa-uat/run/${executionId}`),
 };
 
 // FA-13

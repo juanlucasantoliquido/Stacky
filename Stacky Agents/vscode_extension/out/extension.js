@@ -110,15 +110,22 @@ async function ensureTicket(context) {
     refreshStatus(context);
     return n;
 }
-function refreshStatus(context) {
+function refreshStatus(context, runningAgent) {
     const t = context.globalState.get(TICKET_KEY);
-    if (t) {
+    if (runningAgent) {
+        statusBar.text = `$(sync~spin) Stacky: ${runningAgent}…`;
+        statusBar.tooltip = `Ejecutando agente: ${runningAgent}. ADO-${t ?? "?"}`;
+        statusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+    }
+    else if (t) {
         statusBar.text = `$(rocket) Stacky: ADO-${t}`;
         statusBar.tooltip = `Ticket activo: ADO-${t}. Click para cambiar.`;
+        statusBar.backgroundColor = undefined;
     }
     else {
         statusBar.text = "$(rocket) Stacky: sin ticket";
         statusBar.tooltip = "Click para fijar el ticket activo";
+        statusBar.backgroundColor = undefined;
     }
     statusBar.show();
 }
@@ -266,18 +273,26 @@ async function _handleOpenChat(body, res) {
             }
         }
         await _sleep(1800);
-        // Open chat and inject query
+        // Write full content to clipboard FIRST.
+        // workbench.action.chat.open({ query }) truncates at the first newline,
+        // so we open the chat without a query and paste the full content instead.
+        await vscode.env.clipboard.writeText(query);
+        // Open chat panel (no query → input is empty and focused)
         try {
-            await vscode.commands.executeCommand("workbench.action.chat.open", { query });
-        }
-        catch {
-            // Fallback: open chat then paste via clipboard
             await vscode.commands.executeCommand("workbench.action.chat.open");
-            await _sleep(800);
-            await vscode.env.clipboard.writeText(query);
+        }
+        catch (e) {
+            console.warn(`[Stacky] /open-chat: workbench.action.chat.open falló: ${e}`);
+        }
+        await _sleep(1000);
+        // Paste the full multi-line content into the focused chat input
+        try {
             await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
         }
-        await _sleep(1200);
+        catch (e) {
+            console.warn(`[Stacky] /open-chat: paste falló: ${e}. El contenido sigue en el clipboard.`);
+        }
+        await _sleep(800);
         // fire-and-forget submit — same strategy as Stacky Pipeline
         vscode.commands.executeCommand("workbench.action.chat.submit").then(() => console.log(`[Stacky] /open-chat submit OK — agente=${agentName || "(none)"}, chars:${query.length}`), (err) => console.error("[Stacky] /open-chat submit error:", err));
         if (model) {
@@ -426,13 +441,25 @@ function activate(context) {
                     source: { type: "vscode-file", path: editor.document.fileName },
                 });
             }
-            const result = await runAgent(pick.description, ticketId, contextBlocks);
+            const result = await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Stacky — ${pick.label}`,
+                cancellable: false,
+            }, async (progress) => {
+                progress.report({ message: `Ticket ADO-${ticketId} — lanzando…` });
+                refreshStatus(context, pick.label);
+                const res = await runAgent(pick.description, ticketId, contextBlocks);
+                progress.report({ message: `Run #${res.execution_id} iniciado ✓` });
+                return res;
+            });
+            refreshStatus(context);
             const action = await vscode.window.showInformationMessage(`Run lanzado: exec #${result.execution_id}`, "Abrir en browser");
             if (action === "Abrir en browser") {
                 vscode.env.openExternal(vscode.Uri.parse(`http://localhost:5173/?exec=${result.execution_id}`));
             }
         }
         catch (e) {
+            refreshStatus(context);
             vscode.window.showErrorMessage(`Stacky run failed: ${e.message}`);
         }
     }), vscode.commands.registerCommand("stackyAgents.includeFile", async () => {

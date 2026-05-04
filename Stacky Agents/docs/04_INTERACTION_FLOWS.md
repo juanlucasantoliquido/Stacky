@@ -4,7 +4,86 @@
 
 ---
 
-## Flujo 1 — Ejecución única de un agente
+## Flujo 0 — Team Screen: asignar empleado a un ticket → VS Code Chat
+
+**Trigger:** el operador abre la app y quiere trabajar un ticket con un agente específico. Es el flujo por defecto para la mayoría de los usuarios.
+
+```
+1. Abre app → ve Team Screen
+   └─ grid de EmployeeCards con avatares pixel art, nombre y rol
+
+2. Click en "Asignar Ticket →" en la card del empleado deseado (ej: Carlos — Technical)
+   └─ se abre AgentLaunchModal
+
+3. En el modal:
+   a. Campo de búsqueda de ticket (debounce sobre GET /api/tickets)
+   b. Selecciona el ticket de la lista (ADO ID + título + tipo)
+   c. (Opcional) escribe un mensaje inicial en el campo de texto
+
+4. Click "OK → Chat ✦"
+   └─ POST http://localhost:5052/open-chat
+      { agent_name: "TechnicalAnalyst.agent.md",
+        message: "#ADO-1234 RF-008 nuevo flujo de cobros\n<mensaje opcional>" }
+   └─ VS Code Copilot Chat se abre con @TechnicalAnalyst y el contexto del ticket
+
+5. La conversación continúa en VS Code Chat (nativo)
+```
+
+**Edge cases:**
+- Bridge no activo (puerto 5052 no responde): banner rojo en modal "La extensión VS Code no está activa. Iniciá VS Code con la extensión Stacky Agents instalada."
+- Ticket no encontrado: estado vacío en la lista con copy "No se encontraron tickets. Verificá el ID o buscá por título."
+- Equipo vacío: Team Screen muestra estado vacío con CTA "Agregá tu primer empleado".
+
+---
+
+## Flujo 0b — Armar el equipo (primera vez)
+
+**Trigger:** el operador llega por primera vez y el equipo está vacío.
+
+```
+1. Ve Team Screen con estado vacío + botón prominente "+ Agregar empleado"
+
+2. Click "+ Agregar empleado"
+   └─ TeamManageDrawer se abre desde la derecha
+   └─ lista todos los .agent.md disponibles en %APPDATA%/Code/User/prompts
+
+3. Para cada agente que quiere en su equipo:
+   a. Toggle/checkbox del agente
+   b. AvatarPicker se expande inline
+      └─ elige avatar de galería (15-20 personajes pixel art) o sube imagen propia
+         (FileReader → canvas 64×64 → pixelado nearest-neighbor → base64)
+   c. (Opcional) campo "Apodo" (ej: "Carlos") y "Rol" (ej: "Analista Senior")
+   d. Confirmar
+
+4. Cierra drawer
+   └─ Team Screen muestra los agentes agregados como EmployeeCards
+
+Persistencia: preferences.ts en localStorage — survives page reload.
+```
+
+---
+
+## Flujo 0c — Editar un empleado
+
+**Trigger:** el operador quiere cambiar el avatar, apodo o rol de un agente del equipo.
+
+```
+1. En la EmployeeCard, click en menú kebab (⋮) → "Editar"
+   └─ EmployeeEditDrawer se abre
+
+2. Modifica:
+   ├─ Apodo
+   ├─ Rol
+   └─ Avatar (AvatarPicker completo)
+
+3. Click "Guardar"
+   └─ persiste en localStorage
+   └─ card se actualiza en tiempo real
+```
+
+---
+
+## Flujo 1 — Ejecución única de un agente (Workbench)
 
 **Trigger:** el operador llega con un ticket y quiere correr un solo agente.
 

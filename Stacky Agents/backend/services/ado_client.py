@@ -165,3 +165,86 @@ class AdoClient:
 
     def work_item_url(self, ado_id: int) -> str:
         return f"{self._base_proj}/_workitems/edit/{ado_id}"
+
+    def fetch_comments(self, ado_id: int, top: int = 20) -> list[dict]:
+        """Devuelve los últimos `top` comentarios de un work item.
+
+        Retorna lista de dicts con keys: author, date, text (HTML ya limpiado).
+        Si el ADO project no soporta la API preview, devuelve lista vacía.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}/comments"
+            f"?api-version=7.1-preview.3&$top={top}&order=desc"
+        )
+        try:
+            data = self._request("GET", url)
+        except AdoApiError as e:
+            logger.warning("fetch_comments(%s) falló: %s", ado_id, e)
+            return []
+        comments = data.get("comments") or []
+        out: list[dict] = []
+        for c in comments:
+            text_html = (c.get("text") or "").strip()
+            if not text_html:
+                continue
+            revised_by = c.get("revisedBy") or c.get("createdBy") or {}
+            author = revised_by.get("displayName") or revised_by.get("uniqueName") or "?"
+            date = (c.get("revisedDate") or c.get("createdDate") or "")[:10]
+            out.append({"author": author, "date": date, "text": text_html})
+        return out
+
+    def fetch_attachments(self, ado_id: int, max_text_bytes: int = 65_536) -> list[dict]:
+        """Devuelve los adjuntos del work item con metadatos y contenido de texto (si aplica).
+
+        Usa $expand=relations para obtener las relaciones AttachedFile.
+        Para archivos de texto reconocidos (<=max_text_bytes), descarga el contenido.
+
+        Retorna lista de dicts: {name, url, size, text_content (str|None)}.
+        Si el ticket no tiene adjuntos o hay error, devuelve lista vacía.
+        """
+        _TEXT_EXTS = {".txt", ".md", ".html", ".htm", ".xml", ".json", ".csv", ".log", ".cs", ".vb", ".sql", ".py"}
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}"
+            f"?$expand=relations&api-version={_API_VERSION}"
+        )
+        try:
+            data = self._request("GET", url)
+        except AdoApiError as e:
+            logger.warning("fetch_attachments(%s) — GET relations falló: %s", ado_id, e)
+            return []
+
+        relations = data.get("relations") or []
+        out: list[dict] = []
+        for rel in relations:
+            if rel.get("rel") != "AttachedFile":
+                continue
+            attrs = rel.get("attributes") or {}
+            name = attrs.get("name") or ""
+            resource_size = attrs.get("resourceSize") or 0
+            attach_url = rel.get("url") or ""
+            if not attach_url:
+                continue
+
+            text_content: str | None = None
+            ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            if ext in _TEXT_EXTS and resource_size <= max_text_bytes:
+                try:
+                    req = urllib.request.Request(
+                        attach_url,
+                        headers={"Authorization": self._headers()["Authorization"]},
+                        method="GET",
+                    )
+                    with urllib.request.urlopen(req, timeout=_TIMEOUT_SEC) as resp:
+                        raw_bytes = resp.read(max_text_bytes + 1)
+                    if len(raw_bytes) <= max_text_bytes:
+                        text_content = raw_bytes.decode("utf-8", errors="replace")
+                except Exception as e:
+                    logger.debug("fetch_attachments(%s) — no se pudo descargar %s: %s", ado_id, name, e)
+
+            out.append({
+                "name": name,
+                "url": attach_url,
+                "size": resource_size,
+                "text_content": text_content,
+            })
+        return out

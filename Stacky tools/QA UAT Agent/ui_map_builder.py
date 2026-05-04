@@ -1,0 +1,378 @@
+"""
+ui_map_builder.py — Inspect an Agenda Web screen and produce a UI map JSON.
+
+SPEC: SPEC/ui_map_builder.md
+CLI:
+    python ui_map_builder.py --screen FrmAgenda.aspx [--rebuild] [--verbose]
+
+Required env vars: AGENDA_WEB_BASE_URL, AGENDA_WEB_USER, AGENDA_WEB_PASS
+Optional env vars: STACKY_QA_UAT_HEADLESS (default "0" = headed)
+
+Output: JSON to stdout following ui_map.schema.json
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import logging
+import os
+import sys
+import time
+from pathlib import Path
+from typing import Optional
+
+logger = logging.getLogger("stacky.qa_uat.ui_map_builder")
+
+_TOOL_VERSION = "1.0.0"
+_CACHE_DIR = Path(__file__).resolve().parent / "cache" / "ui_maps"
+_ALIAS_PATTERN_RE_STR = r"^(select|input|btn|grid|panel|msg|link|table|checkbox|radio|text)_[a-zA-Z0-9_]+$"
+_SUPPORTED_KINDS = ("input", "select", "button", "table", "div", "span", "a",
+                    "checkbox", "radio", "textarea", "label", "grid", "panel", "other")
+
+# Login selectors for Agenda Web
+_LOGIN_USER_SEL = "#txtUsuario"
+_LOGIN_PASS_SEL = "#txtPassword"
+_LOGIN_BTN_SEL = "#btnIngresar"
+_LOGIN_SUCCESS_INDICATOR = "FrmAgenda.aspx"
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    args = _parse_args()
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stderr,
+                            format="%(levelname)s %(name)s: %(message)s")
+    else:
+        logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
+
+    result = run(screen=args.screen, rebuild=args.rebuild, verbose=args.verbose)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    sys.exit(0 if result.get("ok") else 1)
+
+
+def run(screen: str, rebuild: bool = False, verbose: bool = False) -> dict:
+    """Core logic — callable from tests without subprocess."""
+    started = time.time()
+
+    # Fail-fast on missing env vars (before opening browser)
+    base_url = os.environ.get("AGENDA_WEB_BASE_URL", "").strip()
+    user = os.environ.get("AGENDA_WEB_USER", "").strip()
+    password = os.environ.get("AGENDA_WEB_PASS", "").strip()
+
+    for var, val in [("AGENDA_WEB_BASE_URL", base_url),
+                     ("AGENDA_WEB_USER", user),
+                     ("AGENDA_WEB_PASS", password)]:
+        if not val:
+            return _err("missing_env_var", f"Required env var {var!r} is not set")
+
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_file = _CACHE_DIR / f"{screen}.json"
+
+    # Check cache (only if not rebuilding)
+    if not rebuild and cache_file.is_file():
+        try:
+            cached = json.loads(cache_file.read_text(encoding="utf-8"))
+            if cached.get("ok") and cached.get("hash"):
+                logger.debug("cache hit for %s (hash=%s)", screen, cached["hash"])
+                return cached
+        except Exception as exc:
+            logger.warning("cache corrupt for %s, rebuilding: %s", screen, exc)
+
+    # Playwright inspection
+    try:
+        from playwright.sync_api import sync_playwright, TimeoutError as PwTimeout
+    except ImportError:
+        return _err("playwright_not_installed",
+                    "playwright not installed. Run: pip install playwright && playwright install chromium")
+
+    headless = os.environ.get("STACKY_QA_UAT_HEADLESS", "0") != "0"
+    url = base_url.rstrip("/") + "/" + screen.lstrip("/")
+
+    elements = []
+    dom_content = ""
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=headless)
+            context = browser.new_context()
+            page = context.new_page()
+
+            # Login
+            try:
+                login_url = base_url.rstrip("/") + "/Login.aspx"
+                page.goto(login_url, timeout=15000)
+                page.wait_for_load_state("networkidle", timeout=10000)
+                page.fill(_LOGIN_USER_SEL, user)
+                page.fill(_LOGIN_PASS_SEL, password)
+                page.click(_LOGIN_BTN_SEL)
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except PwTimeout:
+                browser.close()
+                return _err("login_failed", f"Timeout during login at {login_url}")
+            except Exception as exc:
+                browser.close()
+                return _err("login_failed", f"Login failed: {exc}")
+
+            # Check login success (look for redirect or new page)
+            if "Login" in page.url and "error" in page.content().lower():
+                browser.close()
+                return _err("login_failed", "Login failed: credentials rejected")
+
+            # Navigate to target screen
+            try:
+                page.goto(url, timeout=15000)
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except PwTimeout:
+                browser.close()
+                return _err("screen_not_loaded", f"Timeout loading {url}")
+
+            # Capture DOM content for hash
+            dom_content = page.content()
+
+            # Extract elements via accessibility tree + DOM
+            elements = _extract_elements(page, verbose=verbose)
+
+            browser.close()
+    except Exception as exc:
+        msg = str(exc)
+        if "playwright" in msg.lower() or "chromium" in msg.lower():
+            return _err("playwright_crash", f"Playwright error: {msg[:200]}")
+        return _err("playwright_crash", f"Unexpected error: {msg[:200]}")
+
+    if not elements:
+        return _err("no_elements_found", f"No accessible elements found on {screen}")
+
+    # Compute DOM hash
+    dom_hash = "sha256:" + hashlib.sha256(dom_content.encode("utf-8")).hexdigest()
+
+    # Rebuild-check: if hash matches cache, return cache
+    if not rebuild and cache_file.is_file():
+        try:
+            cached = json.loads(cache_file.read_text(encoding="utf-8"))
+            if cached.get("hash") == dom_hash:
+                logger.debug("DOM unchanged for %s, returning cache", screen)
+                return cached
+        except Exception:
+            pass
+
+    # Add semantic aliases via LLM (with fallback)
+    elements = _add_semantic_aliases(elements, verbose=verbose)
+
+    # Build warnings
+    warnings = []
+    low_count = sum(1 for e in elements if e.get("robustness") == "low")
+    if low_count:
+        warnings.append(f"{low_count} elementos con robustness=low: requieren data-testid del dev")
+
+    result: dict = {
+        "ok": True,
+        "screen": screen,
+        "hash": dom_hash,
+        "captured_at": _now_iso(),
+        "url": url,
+        "elements": elements,
+        "warnings": warnings,
+        "meta": {
+            "tool": "ui_map_builder",
+            "version": _TOOL_VERSION,
+            "duration_ms": int((time.time() - started) * 1000),
+        },
+    }
+
+    # Persist cache
+    try:
+        cache_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.debug("UI map cached at %s", cache_file)
+    except Exception as exc:
+        logger.warning("Could not cache UI map: %s", exc)
+
+    return result
+
+
+# ── DOM extraction ─────────────────────────────────────────────────────────────
+
+def _extract_elements(page, verbose: bool = False) -> list:
+    """Extract accessible elements from the page using accessibility tree + DOM queries."""
+    from selector_discovery import discover_selector
+
+    elements = []
+
+    # Query inputs, selects, buttons, tables, divs with IDs
+    js = """
+    () => {
+        const results = [];
+        const seen = new Set();
+
+        function addEl(el, kind) {
+            if (!el || seen.has(el)) return;
+            seen.add(el);
+            const id = el.id || null;
+            const label = el.getAttribute('aria-label') ||
+                          el.getAttribute('placeholder') ||
+                          (() => {
+                              const lbl = el.labels && el.labels[0];
+                              return lbl ? lbl.textContent.trim() : null;
+                          })() || null;
+            const role = el.getAttribute('role') || el.tagName.toLowerCase();
+            const testid = el.getAttribute('data-testid') || null;
+            const txt = el.value || el.textContent.trim().substring(0, 50) || null;
+            const rect = el.getBoundingClientRect();
+            results.push({
+                kind: kind,
+                role: role,
+                label: label,
+                asp_id: id,
+                data_testid: testid,
+                text: (kind === 'button' || kind === 'a') ? txt : null,
+                position: {x: Math.round(rect.left), y: Math.round(rect.top)}
+            });
+        }
+
+        document.querySelectorAll('input:not([type=hidden])').forEach(e => addEl(e, 'input'));
+        document.querySelectorAll('select').forEach(e => addEl(e, 'select'));
+        document.querySelectorAll('input[type=submit], input[type=button], button').forEach(e => addEl(e, 'button'));
+        document.querySelectorAll('table[id]').forEach(e => addEl(e, 'table'));
+        document.querySelectorAll('div[id], span[id]').forEach(e => addEl(e, 'div'));
+        document.querySelectorAll('a[id], a[href]').forEach(e => addEl(e, 'a'));
+
+        return results;
+    }
+    """
+    try:
+        raw_elements = page.evaluate(js)
+    except Exception as exc:
+        logger.warning("JS extraction failed: %s", exc)
+        return []
+
+    for el in raw_elements:
+        if not isinstance(el, dict):
+            continue
+        sel_result = discover_selector(el)
+        element = {
+            "kind": el.get("kind", "other"),
+            "role": str(el.get("role") or ""),
+            "label": el.get("label"),
+            "asp_id": el.get("asp_id"),
+            "data_testid": el.get("data_testid"),
+            "selector_recommended": sel_result["selector"],
+            "robustness": sel_result["robustness"],
+            "alias_semantic": _default_alias(el),  # placeholder, overwritten by LLM
+            "fallback_selectors": sel_result["fallbacks"],
+            "position": el.get("position", {}),
+            "warning": sel_result.get("warning"),
+        }
+        elements.append(element)
+
+    return elements
+
+
+def _default_alias(el: dict) -> str:
+    """Generate a fallback alias from element metadata."""
+    import re
+    kind = el.get("kind") or "input"
+    label = el.get("label") or el.get("asp_id") or ""
+    # Normalize to snake_case
+    slug = re.sub(r'[^a-zA-Z0-9]', '_', label.lower())
+    slug = re.sub(r'_+', '_', slug).strip('_')
+    if not slug:
+        slug = "element"
+
+    # Map kind to prefix
+    prefix_map = {
+        "select": "select",
+        "button": "btn",
+        "table": "grid",
+        "div": "panel",
+        "span": "msg",
+        "a": "link",
+        "input": "input",
+    }
+    prefix = prefix_map.get(kind, "input")
+    alias = f"{prefix}_{slug}"[:50]
+    return alias
+
+
+# ── LLM alias enrichment ───────────────────────────────────────────────────────
+
+def _add_semantic_aliases(elements: list, verbose: bool = False) -> list:
+    """Use LLM to suggest semantic aliases; fallback to default_alias."""
+    import re
+    try:
+        from llm_client import call_llm, LLMError
+        snippet = json.dumps(
+            [{"kind": e["kind"], "role": e["role"], "label": e.get("label"),
+              "asp_id": e.get("asp_id")}
+             for e in elements],
+            ensure_ascii=False,
+        )[:3000]
+
+        system_prompt = (
+            "You are a UI test engineer. Given a list of web page elements, "
+            "assign a semantic alias to each using snake_case with these prefixes: "
+            "select_ input_ btn_ grid_ panel_ msg_ link_ table_ checkbox_ radio_ text_\n"
+            "Rules: use the label or asp_id to create the alias. "
+            "Return ONLY a JSON array: [{\"asp_id\": \"...\", \"alias_semantic\": \"...\"}, ...]"
+        )
+        result = call_llm(
+            model="gpt-4.1-mini",
+            system=system_prompt,
+            user=f"Elements:\n{snippet}",
+            max_tokens=512,
+        )
+        # Parse LLM response
+        raw = result["text"].strip()
+        # Strip markdown code fences if present
+        raw = re.sub(r'^```[a-z]*\n?', '', raw)
+        raw = re.sub(r'\n?```$', '', raw)
+        aliases = json.loads(raw)
+        alias_map: dict = {}
+        ALIAS_RE = re.compile(_ALIAS_PATTERN_RE_STR)
+        for item in aliases:
+            if isinstance(item, dict):
+                asp_id = item.get("asp_id")
+                alias = item.get("alias_semantic", "")
+                if asp_id and ALIAS_RE.match(str(alias)):
+                    alias_map[asp_id] = alias
+
+        for el in elements:
+            asp_id = el.get("asp_id")
+            if asp_id and asp_id in alias_map:
+                el["alias_semantic"] = alias_map[asp_id]
+    except Exception as exc:
+        logger.info("LLM alias enrichment failed, using default aliases: %s", exc)
+        # Ensure all elements have valid aliases via default
+        import re
+        ALIAS_RE = re.compile(_ALIAS_PATTERN_RE_STR)
+        for el in elements:
+            if not el.get("alias_semantic") or not ALIAS_RE.match(el.get("alias_semantic", "")):
+                el["alias_semantic"] = _default_alias(el)
+
+    return elements
+
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+
+def _now_iso() -> str:
+    import datetime
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _err(code: str, message: str) -> dict:
+    return {"ok": False, "error": code, "message": message}
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="ui_map_builder — Inspect Agenda Web screen and produce UI map"
+    )
+    parser.add_argument("--screen", required=True, help="Screen name, e.g. FrmAgenda.aspx")
+    parser.add_argument("--rebuild", action="store_true",
+                        help="Ignore cache and rebuild from scratch")
+    parser.add_argument("--verbose", action="store_true")
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    main()

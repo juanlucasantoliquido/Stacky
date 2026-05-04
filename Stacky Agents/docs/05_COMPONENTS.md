@@ -17,14 +17,31 @@
 ## Árbol de componentes
 
 ```
-<App>
-└── <Workbench>                       ← page principal
-    ├── <TopBar>
+<App>  (view: "team" | "workbench")
+│
+├── <TeamScreen>                       ← PANTALLA PRINCIPAL (default)
+│   │   Props: onGoToWorkbench()
+│   │
+│   ├── <EmployeeCard />*              ← una card por agente en el equipo
+│   │   └── <PixelAvatar />            ← avatar galería o base64, size lg
+│   │   └── <AgentLaunchModal />       ← modal ticket → VS Code Chat
+│   │       └── <PixelAvatar />        ← avatar size sm en header del modal
+│   │
+│   ├── <TeamManageDrawer />           ← drawer lateral: agregar agentes
+│   │   ├── <PixelAvatar />*           ← preview avatar de cada agente
+│   │   └── <AvatarPicker />           ← inline al seleccionar un agente
+│   │
+│   └── <EmployeeEditDrawer />         ← drawer lateral: editar empleado
+│       ├── <PixelAvatar />            ← preview avatar actual (header)
+│       └── <AvatarPicker />           ← selector completo
+│
+└── <Workbench>                        ← flujo avanzado (accesible desde TeamScreen)
+    ├── <TopBar>                        ← botón "← Equipo" cuando onGoToTeam present
     │   ├── <ProjectSelector />
     │   ├── <ThemeToggle />
     │   └── <UserMenu />
     │
-    ├── <PackBanner />                ← visible si hay pack en curso
+    ├── <PackBanner />                 ← visible si hay pack en curso
     │
     ├── <LeftColumn>
     │   ├── <TicketSelector />
@@ -46,7 +63,7 @@
     └── <RightColumn>
         ├── <OutputPanel />
         │   ├── <OutputHeader />
-        │   ├── <OutputBody />        ← markdown renderer
+        │   ├── <OutputBody />         ← markdown renderer
         │   └── <OutputActions />
         ├── <LogsPanel />
         │   └── <LogLine />*
@@ -56,12 +73,280 @@
 
 ---
 
+## Servicios (capa de persistencia)
+
+### `preferences.ts` — `src/services/preferences.ts`
+
+Wrapper de `localStorage` con tipado TypeScript. No depende de React. API pura de funciones.
+
+```ts
+// Agentes en el equipo
+getPinnedAgents(): string[]           // filenames de agentes activos
+addPinnedAgent(filename: string)      // agrega al equipo
+removePinnedAgent(filename: string)   // quita del equipo
+setPinnedAgents(filenames: string[])  // reemplaza el equipo completo
+
+// Avatares: gallery ID (ej: "dev-1") o base64 data-URI
+getAgentAvatar(filename: string): string | null
+setAgentAvatar(filename: string, value: string)
+
+// Apodos y roles
+getAgentNickname(filename: string): string | null
+setAgentNickname(filename: string, nickname: string)
+getAgentRole(filename: string): string | null
+setAgentRole(filename: string, role: string)
+
+clearAllPreferences()  // reset completo (dev/debug)
+```
+
+**Claves localStorage:** `stacky:pinnedAgents`, `stacky:agentAvatars`, `stacky:agentNicknames`, `stacky:agentRoles`.
+
+---
+
+### `avatarGallery.ts` — `src/services/avatarGallery.ts`
+
+Metadata de los 20 avatares pixel art de la galería y resolver de URLs.
+
+```ts
+interface GalleryAvatar {
+  id: string;        // ej: "dev-1"
+  label: string;     // ej: "Dev Hoodie"
+  category: "dev" | "analyst" | "qa" | "pm" | "ops" | "design" | "special";
+  file: string;      // path bajo /avatars/, ej: "/avatars/dev-1.svg"
+}
+
+GALLERY_AVATARS: GalleryAvatar[]  // 20 avatares definidos
+
+/** Devuelve la URL src a partir de gallery ID o base64 data-URI */
+resolveAvatarSrc(value: string | null): string | null
+```
+
+**Avatares disponibles (20):**
+`dev-1` Dev Hoodie · `dev-2` Dev Glasses · `dev-3` Dev Cap · `mobile-1` Mobile Dev · `analyst-1` Analyst Funcional · `analyst-2` Analyst Técnico · `business-1` Business Analyst · `qa-1` QA Engineer · `pm-1` Project Manager · `tl-1` Tech Lead · `scrum-1` Scrum Master · `dba-1` DBA · `devops-1` DevOps · `data-1` Data Engineer · `sec-1` Security Eng · `architect-1` Arquitecto · `ux-1` UX Designer · `robot-1` AI Agent · `ninja-1` Ninja · `wizard-1` Wizard
+
+---
+
 ## Componentes raíz
 
-### `<Workbench>`
-Page principal — layout 3 columnas + topbar.
+### `<App>`
 
-**Props:** ninguna (lee del store).
+Router de vistas con estado simple (`view: "team" | "workbench"`). No usa React Router.
+
+**Estado interno:**
+```ts
+view: "team" | "workbench"  // default: "team"
+```
+
+**Lógica:** renderiza `<TeamScreen>` o `<Workbench>` según `view`. Pasa los callbacks de navegación a cada página.
+
+---
+
+### `<TeamScreen>` — `src/pages/TeamScreen.tsx`
+
+Pantalla principal. Grid de empleados-agentes con header de acciones.
+
+**Props:**
+```ts
+{ onGoToWorkbench: () => void }
+```
+
+**Estado interno:**
+```ts
+allAgents: VsCodeAgent[]      // cargado de GET /api/agents/vscode
+pinned: string[]               // filenames — fuente: preferences.ts
+manageOpen: boolean            // drawer TeamManageDrawer
+editTarget: string | null      // filename abierto en EmployeeEditDrawer
+loading: boolean
+```
+
+**Comportamiento:**
+- Al montar: `GET /api/agents/vscode` para tener los metadatos de todos los agentes.
+- `pinned` viene de `getPinnedAgents()` y se refresca via `refresh()` cada vez que un drawer cierra.
+- `agentByFilename(filename)` cruza la lista de `allAgents` con el filename del equipo.
+- Estado vacío si `pinned.length === 0`: ilustración + CTA "+ Agregar primer agente".
+
+**Grid:** 3 cols ≥1280px · 2 cols 768–1280px · 1 col <768px.
+
+---
+
+### `<EmployeeCard>` — `src/components/EmployeeCard.tsx`
+
+Tarjeta HR-style para un agente del equipo.
+
+**Props:**
+```ts
+{
+  filename: string;
+  agent: VsCodeAgent | undefined;  // puede ser undefined si no se cargó aún
+  onEdit: (filename: string) => void;
+  onRemoved: () => void;
+}
+```
+
+**Estado interno:** `menuOpen: boolean` · `launchOpen: boolean`
+
+**Lógica de display:**
+- `displayName` = `agentNickname ?? agent.name ?? filename sin extensión`
+- `displayRole` = `agentRole ?? primera oración de agent.description`
+- `type` = inferido del filename (contiene "technical", "dev", "qa", etc.)
+- `color` = CSS var de tipo de agente (ej: `var(--agent-technical)`)
+
+**Estructura visual:**
+- Badge tipo de agente (top-left, color del tipo)
+- Menú kebab ⋮ (top-right): "Editar" | "Quitar del equipo"
+- `<PixelAvatar size="lg">` centrado con borde coloreado
+- Nombre (fuente pixel art)
+- Rol (muted, truncado)
+- Botón "Asignar Ticket →" (abre `AgentLaunchModal`)
+
+**CSS Custom Property:** `--agent-color` pasada inline para efecto de borde en hover.
+
+---
+
+### `<AgentLaunchModal>` — `src/components/AgentLaunchModal.tsx`
+
+Modal principal del flujo Team Screen → VS Code Chat.
+
+**Props:**
+```ts
+{
+  agent: VsCodeAgent;
+  avatarValue: string | null;    // gallery ID o base64
+  onClose: () => void;
+}
+```
+
+**Estado interno:**
+```ts
+query: string                  // búsqueda de ticket (debounce 200ms)
+tickets: Ticket[]              // todos los tickets (cargado al montar)
+filtered: Ticket[]             // tickets filtrados por query
+selected: Ticket | null
+message: string                // mensaje opcional
+loading: boolean               // fetch al bridge
+bridgeError: boolean           // true si POST /open-chat falla
+success: boolean               // true 1.2s antes de cerrar
+```
+
+**Flujo:**
+1. Monta → `GET /api/tickets` (una vez).
+2. Query change → debounce 200ms → filtra por `ado_id`, `title`, `project`.
+3. Click "OK" → `POST http://localhost:5052/open-chat` con `{ agent_name, message: "#ADO-{id} {título}\n{mensajeOpcional}" }`.
+4. Éxito → `success=true` → `setTimeout(onClose, 1200)`.
+5. Error → `bridgeError=true` → muestra banner rojo.
+
+**Bridge error copy:** *"La extensión VS Code no está activa. Abrí VS Code con la extensión Stacky para continuar."*
+
+---
+
+### `<TeamManageDrawer>` — `src/components/TeamManageDrawer.tsx`
+
+Drawer lateral derecho para agregar/quitar agentes del equipo.
+
+**Props:**
+```ts
+{
+  allAgents: VsCodeAgent[];   // todos los agentes de VS Code
+  onClose: () => void;
+}
+```
+
+**Estado interno:** `inlineEdit: InlineEdit | null`
+
+```ts
+interface InlineEdit {
+  filename: string;
+  avatar: string | null;
+  nickname: string;
+  role: string;
+}
+```
+
+**Comportamiento:**
+- `isInTeam(filename)` → consulta `getPinnedAgents()`.
+- Click **"+ Agregar"**: abre inline editor con `AvatarPicker` + campos nombre/rol.
+- Click **"Quitar"**: `removePinnedAgent()` inmediato.
+- Click **"✓ Agregar al equipo"**: persiste avatar/nickname/role + `addPinnedAgent()` + cierra inline.
+- Muestra badge "En equipo" en agentes ya agregados.
+
+---
+
+### `<EmployeeEditDrawer>` — `src/components/EmployeeEditDrawer.tsx`
+
+Drawer lateral derecho para editar un agente del equipo.
+
+**Props:**
+```ts
+{
+  filename: string;
+  agent: VsCodeAgent | undefined;
+  onClose: () => void;
+  onRemoved: () => void;
+}
+```
+
+**Estado interno:** `nickname`, `role`, `avatar`, `confirmRemove: boolean`
+
+**Comportamiento:**
+- Pre-carga valores desde `preferences.ts`.
+- "Guardar" → persiste los tres campos y llama `onClose()`.
+- "Quitar del equipo" → doble confirmación en-fila (no modal) → `removePinnedAgent()` → `onRemoved()`.
+
+---
+
+### `<PixelAvatar>` — `src/components/PixelAvatar.tsx`
+
+Componente de display de avatar único.
+
+**Props:**
+```ts
+{
+  value: string | null;    // gallery ID o base64 data-URI
+  size?: "sm" | "md" | "lg";  // 32 / 64 / 96 px (default: "md")
+  name?: string;           // para alt text y placeholder de iniciales
+  className?: string;
+}
+```
+
+**Comportamiento:**
+- Llama a `resolveAvatarSrc(value)` para obtener el `src`.
+- Si `src` es `null` → renderiza placeholder cuadrado con las primeras 2 iniciales del nombre (fuente pixel art).
+- Si `src` presente → `<img>` con `image-rendering: pixelated`.
+
+---
+
+### `<AvatarPicker>` — `src/components/AvatarPicker.tsx`
+
+Selector de avatar con galería + upload custom.
+
+**Props:**
+```ts
+{
+  value: string | null;                       // gallery ID o base64
+  onChange: (avatarIdOrBase64: string) => void;
+}
+```
+
+**Estado interno:** `filter: string` · `preview: string | null` · `uploading: boolean`
+
+**Secciones:**
+1. **Tabs de categoría:** Todos · Dev · Analista · QA · PM/TL · Ops/BD · Diseño · Especial.
+2. **Grid de galería:** avatares filtrados. Click → `onChange(id)`.
+3. **Slot "Custom"** (dashed border): click → `<input type="file">` oculto.
+   - FileReader → `Image` → `canvas 64×64` con `imageSmoothingEnabled = false` → `canvas.toDataURL("image/png")` → `onChange(base64)`.
+4. **Hint** de selección activa.
+
+**Pixelado:** `imageSmoothingEnabled = false` en el canvas → efecto nearest-neighbor independiente del tamaño original.
+
+---
+
+### `<Workbench>` — `src/pages/Workbench.tsx`
+Flujo avanzado — layout 3 columnas + topbar. Accesible desde el botón "Ir al Workbench" en TeamScreen.
+
+**Props:**
+```ts
+{ onGoToTeam?: () => void }
+```
 **Estado:** ninguno propio.
 **Dependencias:** `useWorkbenchStore`, `useTicketsQuery`.
 
@@ -69,7 +354,10 @@ Page principal — layout 3 columnas + topbar.
 
 ### `<TopBar>`
 
-**Props:** ninguna.
+**Props:**
+```ts
+{ onGoToTeam?: () => void }  // si presente → muestra botón "← Equipo"
+```
 **Subcomponentes:**
 - `<ProjectSelector>` — dropdown de proyectos. Default "RSPacifico".
 - `<ThemeToggle>` — light/dark.

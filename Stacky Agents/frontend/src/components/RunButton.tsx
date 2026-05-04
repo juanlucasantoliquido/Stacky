@@ -14,9 +14,11 @@ export default function RunButton({ state, disabled, onClick, onCancel }: Props)
         className={`${styles.btn} ${styles.running}`}
         onClick={onCancel}
         disabled={!onCancel}
-        title="Cancelar"
+        title={onCancel ? "Click para cancelar" : "Procesando…"}
       >
-        Running ▮▮ {onCancel ? "(click to cancel)" : ""}
+        <span className={styles.spinner} aria-hidden="true" />
+        <span>Procesando…</span>
+        {onCancel && <span className={styles.cancel}>✕</span>}
       </button>
     );
   }

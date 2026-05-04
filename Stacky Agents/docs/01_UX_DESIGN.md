@@ -2,21 +2,89 @@
 
 ## Principios visuales
 
-1. **Editor-first** — la pantalla principal NO es un dashboard de monitoreo. Es un editor de contexto + botón Run + panel de output. La metáfora es Postman / Jupyter, no Jenkins.
-2. **Tres zonas estables** — izquierda (qué ticket / qué agente), centro (qué le mando), derecha (qué me devuelve + historial). Esa estructura no cambia entre estados.
-3. **Density over spacing** — el operador es técnico y va a leer mucho texto. Tipografía mono para outputs, sans para chrome, scrollbars siempre visibles.
-4. **Modo oscuro por default**, modo claro disponible. La paleta es plana y de alto contraste — no skeumórfica.
-5. **Loaders informativos, no genéricos** — un agente corriendo muestra qué paso está ejecutando ("leyendo docs funcionales", "consultando BD", "redactando análisis"), no un spinner ciego.
+1. **Team-first** — la pantalla principal ES un dashboard de equipo. La metáfora es "tu equipo de trabajo", no Jenkins ni un editor técnico. El operador ve personas (agentes-empleados), no features.
+2. **Editor-first para flujo avanzado** — el Workbench clásico sigue disponible para operadores que necesitan editar contexto, ver logs SSE, comparar ejecuciones o usar Agent Packs. La metáfora ahí es Postman / Jupyter.
+3. **Tres zonas estables** en el Workbench — izquierda (qué ticket / qué agente), centro (qué le mando), derecha (qué me devuelve + historial). Esa estructura no cambia entre estados.
+4. **Density over spacing** — el operador técnico va a leer mucho texto. Tipografía mono para outputs, sans para chrome, scrollbars siempre visibles.
+5. **Modo oscuro por default**, modo claro disponible. La paleta es plana y de alto contraste — no skeumórfica.
+6. **Loaders informativos, no genéricos** — un agente corriendo muestra qué paso está ejecutando ("leyendo docs funcionales", "consultando BD", "redactando análisis"), no un spinner ciego.
+7. **Avatares pixel art** — los agentes tienen identidad visual propia. Cada empleado tiene un avatar 8-bit/16-bit configurable (galería de 15-20 personajes IT o imagen custom pixelada). `image-rendering: pixelated` en todos los avatares.
 
 ---
 
-## Layout maestro (low fidelity, ASCII)
+## Layout Team Screen (pantalla principal)
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Stacky Agents              ◯ Project: RSPacifico ▼         ⚙  ◐  👤    │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│   Tu Equipo                              [+ Agregar empleado] [Workbench] │
+│   ──────────────────────────────────────────────────────────────────────  │
+│                                                                           │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐                 │
+│  │  [avatar 96]  │  │  [avatar 96]  │  │  [avatar 96]  │                 │
+│  │               │  │               │  │               │                 │
+│  │   Carlos      │  │   María       │  │   Roberto     │                 │
+│  │ Analista Téc. │  │ Dev Senior    │  │   QA Lead     │                 │
+│  │ ● technical   │  │ ● developer   │  │ ● qa          │                 │
+│  │               │  │               │  │               │                 │
+│  │ [Asignar →]   │  │ [Asignar →]   │  │ [Asignar →]   │                 │
+│  │             ⋮ │  │             ⋮ │  │             ⋮ │                 │
+│  └───────────────┘  └───────────────┘  └───────────────┘                 │
+│                                                                           │
+│  ┌───────────────┐  ┌───────────────┐                                    │
+│  │  [avatar 96]  │  │  [avatar 96]  │                                    │
+│  │   Ana         │  │   Diego       │                                    │
+│  │ Funcional     │  │ Negocio       │                                    │
+│  │ ● functional  │  │ ● business    │                                    │
+│  │ [Asignar →]   │  │ [Asignar →]   │                                    │
+│  └───────────────┘  └───────────────┘                                    │
+│                                                                           │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+Grid responsive: 3 cols en desktop ≥1280px, 2 en tablet 768-1280px, 1 en mobile <768px.
+
+---
+
+## Modal: Asignar Ticket (Agent Launch Modal)
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  [avatar 64]  Carlos — Analista Técnico                 ×  │
+│  ─────────────────────────────────────────────────────────  │
+│  ¿Qué ticket querés trabajar?                               │
+│                                                             │
+│  [ Buscar por ID o título...              🔍 ]              │
+│                                                             │
+│  ▣ ADO-1234  "RFC: nuevo flujo de cobros"  Feature         │
+│  □ ADO-1235  "Fix validación formulario"   Bug             │
+│  □ ADO-1236  "Migración schema T_COBROS"   Task            │
+│                                                             │
+│  Mensaje inicial (opcional)                                 │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │ Revisar en especial la sección de reglas de...    │    │
+│  └────────────────────────────────────────────────────┘    │
+│                                                             │
+│                            [ Cancelar ]  [ OK → Chat ✦ ]  │
+└────────────────────────────────────────────────────────────┘
+```
+
+Al click en "OK → Chat ✦":
+- `POST http://localhost:5052/open-chat` con `{ agent_name, message: "#ADO-{id} {título}\n{mensajeOpcional}" }`
+- VS Code Copilot Chat se abre con `@agente` y el contexto del ticket
+- Si el bridge no responde: banner de error "La extensión VS Code no está activa (puerto 5052)"
+
+---
+
+## Layout maestro Workbench (flujo avanzado — accesible desde Team Screen)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │  Stacky Agents              ◯ Project: RSPacifico ▼          ⚙  ?  ◐ Theme   👤 │
+│  ← Equipo                                                                         │
 ├──────────────┬────────────────────────────────────────┬──────────────────────────┤
-│              │                                         │                          │
 │  TICKET      │         INPUT CONTEXT EDITOR            │   OUTPUT                 │
 │  ──────      │  ┌────────────────────────────────┐    │   ──────                 │
 │ [search...]  │  │ # Ticket ADO-1234              │    │  (vacío hasta Run)       │
@@ -53,7 +121,32 @@ En tablet/mobile se colapsan a stack vertical, pero el target principal es deskt
 
 ---
 
-## Estados de pantalla (high level)
+## Estados de pantalla — Team Screen
+
+### Estado T1 — Equipo vacío
+- Grid vacío con ilustración central.
+- Copy: "Tu equipo está vacío — agregá tu primer agente con el botón +".
+- Botón "+ Agregar empleado" prominente.
+
+### Estado T2 — Equipo con empleados
+- Grid de `EmployeeCard` con avatar pixel art, nombre, rol y badge de tipo.
+- Botón "Asignar Ticket →" en cada card.
+- Menú kebab (⋮) por card: Cambiar avatar | Editar nombre/rol | Quitar del equipo.
+
+### Estado T3 — Drawer "Agregar empleado"
+- Lista de todos los `.agent.md` disponibles en VS Code.
+- Cada agente: checkbox/toggle + nombre + descripción + badge si ya está en el equipo.
+- Al marcar uno nuevo: `AvatarPicker` se expande inline + campos de apodo y rol opcionales.
+- Mensaje: "Estos agentes vienen de `%APPDATA%/Code/User/prompts`".
+
+### Estado T4 — Drawer "Editar empleado"
+- Campos: Apodo + Rol.
+- `AvatarPicker` completo (galería + upload).
+- Botones: Guardar | Cancelar | Quitar del equipo (destructivo, rojo).
+
+---
+
+## Estados de pantalla — Workbench (high level)
 
 ### Estado 1 — Empty (sin ticket seleccionado)
 - Centro: hero con copy "Seleccioná un ticket o pegá un ID en la barra superior".
@@ -92,6 +185,28 @@ En tablet/mobile se colapsan a stack vertical, pero el target principal es deskt
 ---
 
 ## Wireframes high fidelity por componente
+
+### EmployeeCard
+
+```
+┌──────────────────────┐
+│                      │             ⋮
+│   ░░░░░░░░░░         │
+│   ░░ avatar ░░       │    (pixel art 96×96)
+│   ░░░░░░░░░░         │
+│                      │
+│   Carlos             │
+│   Analista Técnico   │
+│   ● technical        │
+│                      │
+│  [ Asignar Ticket → ]│
+└──────────────────────┘
+```
+
+- Avatar: SVG pixel art de galería, o imagen custom con `image-rendering: pixelated`.
+- Badge de tipo: colored dot + nombre del tipo de agente.
+- Botón principal: abre `AgentLaunchModal`.
+- Menú ⋮: Cambiar avatar | Editar | Quitar.
 
 ### TicketSelector
 

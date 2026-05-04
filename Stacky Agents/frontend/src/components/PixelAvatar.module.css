@@ -1,0 +1,31 @@
+.img {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: var(--avatar-border, var(--radius));
+  border: 2px solid var(--border);
+  display: block;
+  background: var(--bg-elev);
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--avatar-border, var(--radius));
+  border: 2px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-family: var(--font-pixel, "Press Start 2P", monospace);
+}
+
+.initials {
+  font-size: 0.65em;
+  line-height: 1;
+}
+
+/* sizes */
+.sm  { width: 32px; height: 32px; font-size: 10px; }
+.md  { width: 64px; height: 64px; font-size: 14px; }
+.lg  { width: 96px; height: 96px; font-size: 20px; }

@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "ticket": {
+    "id": 70,
+    "title": "RF-003 Validación del comportamiento de combinación de filtros",
+    "state": "Done",
+    "type": "Task",
+    "url": "https://dev.azure.com/testorg/testproject/_workitems/edit/70"
+  },
+  "description_md": "<p>El ticket 70 describe la validación del comportamiento de combinación de filtros en el módulo Agenda Web.</p>",
+  "comments": [
+    {
+      "id": 1,
+      "author": "jsmith",
+      "date": "2026-04-20T10:00:00Z",
+      "text_md": "<h2>Análisis Técnico</h2><p>P01: Test scenario<br/>Datos: empresa=0001<br/>Esperado: OK</p>",
+      "role": "analisis_tecnico"
+    }
+  ],
+  "analisis_tecnico": "Análisis Técnico\nP01: Test scenario\nDatos: empresa=0001\nEsperado: OK",
+  "plan_pruebas": [
+    {
+      "id": "P01",
+      "descripcion": "Test scenario",
+      "datos": "empresa=0001",
+      "esperado": "OK"
+    }
+  ],
+  "notas_qa": [],
+  "adjuntos": [],
+  "precondiciones_detected": [],
+  "meta": {
+    "tool": "uat_ticket_reader",
+    "version": "1.0.0",
+    "duration_ms": 0
+  }
+}

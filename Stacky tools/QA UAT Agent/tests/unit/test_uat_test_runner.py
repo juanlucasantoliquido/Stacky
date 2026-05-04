@@ -1,4 +1,13 @@
-"""Unit tests for uat_test_runner.py (B6)."""
+"""Unit tests for uat_test_runner.py (B6).
+
+Post v1.2.0 el runner usa `subprocess.Popen` (en lugar de `subprocess.run`)
+para streamear el output de Playwright al terminal en tiempo real, y lee el
+reporte JSON desde `evidence/.playwright-report.json` (lo escribe el reporter
+configurado en playwright.config.ts) en lugar de parsear stdout.
+
+Estos tests mockean Popen y, cuando el caso lo requiere, depositan el JSON
+esperado en el path del reporter antes de invocar el runner.
+"""
 import json
 import os
 import sys
@@ -13,6 +22,13 @@ os.environ.setdefault("STACKY_LLM_BACKEND", "mock")
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
+def _tool_dir() -> Path:
+    """Where uat_test_runner.py lives — same directory the runner uses for cwd
+    and for the JSON reporter file (`evidence/.playwright-report.json`)."""
+    import uat_test_runner
+    return Path(uat_test_runner.__file__).parent
+
+
 def _make_spec_files(tmp_path: Path, count: int = 3) -> Path:
     tests_dir = tmp_path / "70" / "tests"
     tests_dir.mkdir(parents=True)
@@ -24,40 +40,41 @@ def _make_spec_files(tmp_path: Path, count: int = 3) -> Path:
     return tests_dir
 
 
-def _mock_npx_success(stdout_json: dict = None):
-    mock = MagicMock()
-    mock.returncode = 0
-    mock.stdout = json.dumps(stdout_json or {"suites": []})
-    mock.stderr = ""
-    return mock
+def _make_popen_mock(returncode: int = 0, stdout_lines=None) -> MagicMock:
+    """Build a Popen replacement.
+
+    The runner iterates `proc.stdout` line by line printing each one in real
+    time, then calls `proc.wait()`. We mimic that with a list iterator and an
+    explicit `returncode` attribute.
+    """
+    lines = stdout_lines if stdout_lines is not None else ["Running 1 test\n", "  ok\n"]
+    mock_proc = MagicMock()
+    mock_proc.stdout = iter(lines)
+    mock_proc.returncode = returncode
+    mock_proc.wait = MagicMock(return_value=returncode)
+    mock_proc.kill = MagicMock()
+    return mock_proc
 
 
-def _mock_npx_fail_assertion():
-    mock = MagicMock()
-    mock.returncode = 1
-    mock.stdout = json.dumps({
-        "suites": [{
-            "specs": [{
-                "tests": [{
-                    "results": [{
-                        "errors": [{
-                            "message": "Expected: 'No hay lotes agendados'\nReceived: ''"
-                        }]
-                    }]
-                }]
-            }]
-        }]
-    })
-    mock.stderr = ""
-    return mock
+def _write_pw_report(report_payload: dict) -> Path:
+    """Drop a JSON reporter file at the path the runner reads after Popen
+    completes. Returns the path so the test can clean up if needed."""
+    report_path = _tool_dir() / "evidence" / ".playwright-report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report_payload), encoding="utf-8")
+    return report_path
 
 
-def _mock_npx_runtime_error():
-    mock = MagicMock()
-    mock.returncode = 1
-    mock.stdout = ""
-    mock.stderr = "Error: Cannot connect to browser. Is Playwright installed?"
-    return mock
+@pytest.fixture(autouse=True)
+def _cleanup_pw_report():
+    """Ensure no stale reporter file leaks between tests."""
+    yield
+    p = _tool_dir() / "evidence" / ".playwright-report.json"
+    try:
+        if p.is_file():
+            p.unlink()
+    except OSError:
+        pass
 
 
 def test_no_tests_found_returns_error(tmp_path):
@@ -82,7 +99,26 @@ def test_assertion_failure_marks_scenario_fail(tmp_path):
     import uat_test_runner
     tests_dir = _make_spec_files(tmp_path, count=1)
     evidence_out = tmp_path / "70"
-    with patch("subprocess.run", return_value=_mock_npx_fail_assertion()):
+    pw_payload = {
+        "suites": [{
+            "specs": [{
+                "tests": [{
+                    "results": [{
+                        "errors": [{
+                            "message": "Expected: 'No hay lotes agendados'\nReceived: ''"
+                        }]
+                    }]
+                }]
+            }]
+        }]
+    }
+
+    def _popen_side_effect(*args, **kwargs):
+        # Simulate Playwright writing the JSON report file as it runs.
+        _write_pw_report(pw_payload)
+        return _make_popen_mock(returncode=1)
+
+    with patch("subprocess.Popen", side_effect=_popen_side_effect):
         with patch("uat_test_runner._check_node_available", return_value=True):
             result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
     assert result["ok"] is True
@@ -96,7 +132,10 @@ def test_runtime_error_marks_scenario_blocked(tmp_path):
     import uat_test_runner
     tests_dir = _make_spec_files(tmp_path, count=1)
     evidence_out = tmp_path / "70"
-    with patch("subprocess.run", return_value=_mock_npx_runtime_error()):
+    # No JSON report file written → no assertion_failures parsed → runner
+    # falls through to the "Error: ..." heuristic on stdout.
+    err_lines = ["Error: Cannot connect to browser. Is Playwright installed?\n"]
+    with patch("subprocess.Popen", return_value=_make_popen_mock(returncode=1, stdout_lines=err_lines)):
         with patch("uat_test_runner._check_node_available", return_value=True):
             result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
     assert result["ok"] is True
@@ -117,7 +156,11 @@ def test_artifacts_created_for_each_run(tmp_path):
         (scenario_dir / "video.webm").write_bytes(b"fake")
         (scenario_dir / "screenshot.png").write_bytes(b"fake")
 
-    with patch("subprocess.run", return_value=_mock_npx_success()):
+    def _popen_side_effect(*args, **kwargs):
+        _write_pw_report({"suites": []})
+        return _make_popen_mock(returncode=0)
+
+    with patch("subprocess.Popen", side_effect=_popen_side_effect):
         with patch("uat_test_runner._check_node_available", return_value=True):
             result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
 
@@ -130,7 +173,7 @@ def test_evidence_directory_structure_correct(tmp_path):
     import uat_test_runner
     tests_dir = _make_spec_files(tmp_path, count=1)
     evidence_out = tmp_path / "70"
-    with patch("subprocess.run", return_value=_mock_npx_success()):
+    with patch("subprocess.Popen", return_value=_make_popen_mock(returncode=0)):
         with patch("uat_test_runner._check_node_available", return_value=True):
             result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
     # Evidence dir was created
@@ -148,7 +191,7 @@ def test_output_validates_against_schema(tmp_path):
 
     tests_dir = _make_spec_files(tmp_path, count=2)
     evidence_out = tmp_path / "70"
-    with patch("subprocess.run", return_value=_mock_npx_success()):
+    with patch("subprocess.Popen", return_value=_make_popen_mock(returncode=0)):
         with patch("uat_test_runner._check_node_available", return_value=True):
             result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
     jsonschema.validate(instance=result, schema=schema)
@@ -157,18 +200,17 @@ def test_output_validates_against_schema(tmp_path):
 # ── M5 — runner harvests Playwright JSON reporter attachments ───────────────
 
 
-def _mock_npx_with_attachments(tmp_results_dir: Path) -> MagicMock:
-    """Build a subprocess.run mock whose stdout mimics Playwright's JSON
-    reporter: one failed test with trace.zip / video.webm / error-context.md
-    attachments pointing at real files under `tmp_results_dir`. Used to
-    assert that the runner copies them into evidence/<sid>/."""
+def _attachments_payload(tmp_results_dir: Path) -> dict:
+    """Build a Playwright JSON report payload describing attachments that
+    point at real files under `tmp_results_dir`. Used to assert that the
+    runner copies them into evidence/<sid>/ via _harvest_pw_attachments."""
     trace_path = tmp_results_dir / "trace.zip"
     video_path = tmp_results_dir / "video.webm"
     err_ctx_path = tmp_results_dir / "error-context.md"
     trace_path.write_bytes(b"fake-trace-zip")
     video_path.write_bytes(b"fake-video-webm")
     err_ctx_path.write_text("# Error context\nLocator timed out", encoding="utf-8")
-    pw_output = {
+    return {
         "suites": [{
             "specs": [{
                 "tests": [{
@@ -187,11 +229,6 @@ def _mock_npx_with_attachments(tmp_results_dir: Path) -> MagicMock:
             }],
         }],
     }
-    mock = MagicMock()
-    mock.returncode = 0
-    mock.stdout = json.dumps(pw_output)
-    mock.stderr = ""
-    return mock
 
 
 def test_runner_harvests_trace_and_video_into_evidence_dir(tmp_path):
@@ -206,8 +243,13 @@ def test_runner_harvests_trace_and_video_into_evidence_dir(tmp_path):
     evidence_out = tmp_path / "70"
     pw_dir = tmp_path / "test-results-fake"
     pw_dir.mkdir()
+    payload = _attachments_payload(pw_dir)
 
-    with patch("subprocess.run", return_value=_mock_npx_with_attachments(pw_dir)):
+    def _popen_side_effect(*args, **kwargs):
+        _write_pw_report(payload)
+        return _make_popen_mock(returncode=0)
+
+    with patch("subprocess.Popen", side_effect=_popen_side_effect):
         with patch("uat_test_runner._check_node_available", return_value=True):
             result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
 
@@ -237,7 +279,7 @@ def test_runner_harvest_skips_missing_attachment_paths(tmp_path):
     import uat_test_runner
     tests_dir = _make_spec_files(tmp_path, count=1)
     evidence_out = tmp_path / "70"
-    pw_output = {
+    payload = {
         "suites": [{
             "specs": [{
                 "tests": [{
@@ -251,11 +293,12 @@ def test_runner_harvest_skips_missing_attachment_paths(tmp_path):
             }],
         }],
     }
-    mock = MagicMock()
-    mock.returncode = 0
-    mock.stdout = json.dumps(pw_output)
-    mock.stderr = ""
-    with patch("subprocess.run", return_value=mock):
+
+    def _popen_side_effect(*args, **kwargs):
+        _write_pw_report(payload)
+        return _make_popen_mock(returncode=0)
+
+    with patch("subprocess.Popen", side_effect=_popen_side_effect):
         with patch("uat_test_runner._check_node_available", return_value=True):
             result = uat_test_runner.run(tests_dir=tests_dir, evidence_out=evidence_out)
     assert result["ok"] is True

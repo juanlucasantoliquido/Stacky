@@ -22,6 +22,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -98,6 +99,14 @@ def run(
         return _err("template_render_failed", f"Cannot load template: {exc}")
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Ensure deterministic runs: remove stale specs from previous executions.
+    # This prevents duplicate/non-ASCII leftovers from being re-executed.
+    for stale_spec in out_dir.glob("*.spec.ts"):
+        try:
+            stale_spec.unlink()
+        except OSError:
+            logger.warning("Could not remove stale spec: %s", stale_spec)
+
     ticket_id = scenarios_data.get("ticket_id", 0)
 
     results = []
@@ -170,6 +179,20 @@ def run(
             })
             continue
 
+        normalized_oraculos, oracle_error = _validate_oracles(
+            scenario.get("oraculos", []),
+        )
+        if oracle_error:
+            blocked_count += 1
+            results.append({
+                "scenario_id": sid,
+                "status": "blocked",
+                "reason": oracle_error["reason"],
+                "missing": [],
+                "details": oracle_error,
+            })
+            continue
+
         # Render the .spec.ts file
         title_slug = _slugify(scenario.get("titulo", sid))
         filename = f"{sid}_{title_slug}.spec.ts"
@@ -183,7 +206,7 @@ def run(
                 pantalla=pantalla,
                 precondiciones=scenario.get("precondiciones", []),
                 pasos=formatted_pasos,
-                oraculos=scenario.get("oraculos", []),
+                oraculos=normalized_oraculos,
                 datos_requeridos=scenario.get("datos_requeridos", []),
                 ui_map=selector_map,
             )
@@ -312,6 +335,31 @@ def _format_scenario_values(pasos: list, input_type_map: dict) -> tuple:
     return formatted, None
 
 
+def _validate_oracles(oraculos: list) -> tuple:
+    """Validate and normalize oracle values before rendering templates.
+
+    count_* oracles must carry an integer-like value. Placeholder literals
+    (e.g. <expected_count>) would generate invalid TypeScript and should be
+    blocked at generation time.
+    """
+    normalized: list = []
+    for oracle in oraculos:
+        o = dict(oracle)
+        tipo = str(o.get("tipo", "")).strip()
+        if tipo in {"count_gt", "count_eq"}:
+            raw = o.get("valor")
+            try:
+                o["valor"] = int(str(raw).strip())
+            except Exception:
+                return [], {
+                    "reason": "INVALID_ORACLE_VALUE",
+                    "oracle": oracle,
+                    "message": "count_* oracle requires integer valor",
+                }
+        normalized.append(o)
+    return normalized, None
+
+
 # Actions whose target does not need to be in the selector_map
 _SELECTOR_FREE_ACTIONS = {"navigate", "expand_collapsible", "wait_networkidle"}
 # Oracle types whose target does not need to be in the selector_map
@@ -365,6 +413,11 @@ def _check_no_hardcoded_creds(rendered: str, scenario_id: str) -> None:
 
 def _slugify(text: str) -> str:
     """Convert text to a filename-safe slug."""
+    # Normalize Unicode to ASCII (strips accents/diacritics) so that
+    # filenames like "débito_automático_no" don't break Playwright's
+    # test discovery on Windows when the path contains non-ASCII chars.
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r'[^\w\s-]', '', text.lower())
     slug = re.sub(r'[\s_-]+', '_', slug)
     return slug[:50].strip('_')

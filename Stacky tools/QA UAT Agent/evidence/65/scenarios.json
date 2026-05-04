@@ -1,0 +1,164 @@
+{
+  "ok": true,
+  "ticket_id": 65,
+  "compiled": 4,
+  "out_of_scope": 1,
+  "scenarios": [
+    {
+      "scenario_id": "P02",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Debito Automatico = No",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "select",
+          "target": "select_debito_auto",
+          "valor": "No"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "table_agenda_usu",
+          "valor": 0
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "ROBLG",
+          "filtro": "OGTIENEDEBITOAUTO IS NULL"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      }
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Corredor = valor parcial",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_corredor",
+          "valor": "valor parcial"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "table_agenda_usu",
+          "valor": 0
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "ROBLG",
+          "filtro": "OGCORREDOR IS NOT NULL"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      }
+    },
+    {
+      "scenario_id": "P04",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Nombre de Cliente = texto parcial",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_nombre_cliente",
+          "valor": "garcia"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "table_agenda_usu",
+          "valor": 0
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RCLIE",
+          "filtro": "CLNOMBRE IS NOT NULL"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      }
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "RUC = parcial 20",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_ruc",
+          "valor": "20"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "table_agenda_usu",
+          "valor": 0
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RCLIE",
+          "filtro": "CLNUMDOC LIKE '20%'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      }
+    }
+  ],
+  "out_of_scope_items": [
+    {
+      "id": "P06",
+      "razon": "PLACEHOLDER_DETECTED",
+      "descripcion": "Todos los campos nuevos vacios"
+    }
+  ],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.1.0",
+    "duration_ms": 0
+  }
+}

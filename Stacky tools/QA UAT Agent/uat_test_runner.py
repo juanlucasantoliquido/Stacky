@@ -156,6 +156,11 @@ def _run_single_spec(
     headless_flag = os.environ.get("STACKY_QA_UAT_HEADLESS", "1" if not headed else "0")
 
     env = {**os.environ, "STACKY_QA_UAT_HEADLESS": headless_flag}
+    # En modo headed, ralentizamos cada acción 500ms para que el operador
+    # pueda seguir visualmente lo que hace Playwright. La env var la lee
+    # playwright.config.ts y la pasa a launchOptions.slowMo.
+    if headed and "STACKY_QA_UAT_SLOW_MO" not in env:
+        env["STACKY_QA_UAT_SLOW_MO"] = "500"
 
     # Build playwright CLI command
     import sys as _sys
@@ -172,9 +177,15 @@ def _run_single_spec(
     cmd = [
         "npx", "playwright", "test",
         spec_arg,
-        "--reporter=json",
         f"--timeout={timeout_ms}",
     ]
+    # NOTA: NO pasamos --reporter=json acá. El config ya define dos reporters:
+    #   - 'list'  → output legible en stdout en vivo (paso a paso)
+    #   - 'json'  → archivo evidence/.playwright-report.json (lo leemos al final)
+    # Si pasáramos --reporter=json en CLI, Playwright sobreescribiría los del
+    # config y perderíamos el list reporter (el operador no vería nada en vivo).
+    if headed:
+        cmd.append("--headed")
     if config_path.is_file():
         cmd += ["--config", str(config_path)]
 
@@ -184,28 +195,33 @@ def _run_single_spec(
     use_shell = _sys.platform == "win32"
     cmd_arg = subprocess.list2cmdline(cmd) if use_shell else cmd
 
+    # Path donde el JSON reporter del config deja el reporte estructurado.
+    # Lo borramos antes de correr para no leer un reporte stale si Playwright
+    # falla antes de escribirlo.
+    pw_report_path = tool_dir / "evidence" / ".playwright-report.json"
     try:
-        proc = subprocess.run(
+        if pw_report_path.is_file():
+            pw_report_path.unlink()
+    except OSError:
+        pass
+
+    # Streaming en vivo: en lugar de subprocess.run con capture_output, usamos
+    # Popen y leemos stdout línea por línea, imprimiendo al terminal del
+    # operador a medida que Playwright avanza. Stderr se redirige a stdout
+    # para preservar el orden cronológico de los mensajes.
+    captured_lines: list = []
+    timeout_seconds = timeout_ms * 5 // 1000 + 60  # 5x individual + 60s overhead
+    try:
+        proc = subprocess.Popen(
             cmd_arg,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
+            bufsize=1,  # line-buffered
             env=env,
-            timeout=timeout_ms * 5 // 1000 + 60,  # global timeout = 5x individual + 60s overhead
             cwd=str(tool_dir),
             shell=use_shell,
         )
-    except subprocess.TimeoutExpired:
-        duration = int((time.time() - started) * 1000)
-        return {
-            "scenario_id": scenario_id,
-            "spec_file": str(spec_file),
-            "status": "blocked",
-            "reason": "TIMEOUT",
-            "duration_ms": duration,
-            "artifacts": _collect_artifacts(scenario_dir),
-            "raw_stdout": "",
-            "raw_stderr": "Process timed out",
-        }
     except FileNotFoundError:
         return {
             "scenario_id": scenario_id,
@@ -218,13 +234,46 @@ def _run_single_spec(
             "raw_stderr": "npx not found in PATH",
         }
 
-    duration = int((time.time() - started) * 1000)
-    stdout = proc.stdout or ""
-    stderr = proc.stderr or ""
+    # Banner para que el operador identifique en qué escenario está.
+    print(f"\n[uat_test_runner] ▶ {scenario_id} ({spec_file.name})", flush=True)
 
-    # Parse playwright JSON reporter output
-    pw_results = _parse_playwright_json_output(stdout)
-    assertion_failures = _extract_assertion_failures(pw_results, stderr)
+    try:
+        assert proc.stdout is not None  # narrowing para type checkers
+        for line in proc.stdout:
+            print(line, end="", flush=True)
+            captured_lines.append(line)
+        proc.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            pass
+        duration = int((time.time() - started) * 1000)
+        return {
+            "scenario_id": scenario_id,
+            "spec_file": str(spec_file),
+            "status": "blocked",
+            "reason": "TIMEOUT",
+            "duration_ms": duration,
+            "artifacts": _collect_artifacts(scenario_dir),
+            "raw_stdout": "".join(captured_lines)[:50000],
+            "raw_stderr": "Process timed out",
+        }
+
+    duration = int((time.time() - started) * 1000)
+    stdout = "".join(captured_lines)
+    # stderr quedó merged en stdout (stderr=STDOUT), pero conservamos el campo
+    # para no romper el contrato runner_output.schema.json.
+    stderr = ""
+
+    # El parse JSON ya no viene de stdout (ahora muestra el reporter 'list',
+    # legible). Leemos el reporte estructurado del archivo que escribió el
+    # json reporter del config.
+    pw_results = _read_playwright_json_report(pw_report_path)
+    # Mantenemos el parsing de stderr-style desde el stdout combinado como
+    # fallback para extraer mensajes de assertion.
+    assertion_failures = _extract_assertion_failures(pw_results, stdout)
 
     # Harvest attachments produced by Playwright into the evidence dir BEFORE
     # collecting artefacts — otherwise the JSON output reports trace/video
@@ -232,11 +281,12 @@ def _run_single_spec(
     _harvest_pw_attachments(pw_results, scenario_dir)
 
     # Determine status
-    if proc.returncode == 0:
+    returncode = proc.returncode if proc.returncode is not None else 1
+    if returncode == 0:
         status = "pass"
     elif assertion_failures:
         status = "fail"
-    elif proc.returncode != 0 and ("Error:" in stderr or "error:" in stderr.lower()):
+    elif returncode != 0 and ("Error:" in stdout or "error:" in stdout.lower()):
         status = "blocked"
     else:
         status = "fail"  # non-zero exit without assertion msg → treat as fail
@@ -292,7 +342,14 @@ def _extract_ticket_id(tests_dir: Path) -> int:
 
 
 def _parse_playwright_json_output(stdout: str) -> dict:
-    """Try to parse Playwright's JSON reporter output."""
+    """Try to parse Playwright's JSON reporter output from stdout (legacy path).
+
+    Conservado por compatibilidad: tests existentes pueden seguir invocándolo
+    contra una captura de stdout. El runtime actual usa
+    `_read_playwright_json_report` para leer el archivo que escribe el json
+    reporter del config — necesario porque ahora el stdout muestra el reporter
+    `list` (output legible en vivo) en lugar del JSON.
+    """
     try:
         # Playwright JSON reporter outputs the full JSON at end of stdout
         lines = stdout.strip().split("\n")
@@ -303,6 +360,24 @@ def _parse_playwright_json_output(stdout: str) -> dict:
         # Try entire stdout
         return json.loads(stdout)
     except Exception:
+        return {}
+
+
+def _read_playwright_json_report(report_path: Path) -> dict:
+    """Read the JSON report file produced by the `json` reporter in
+    playwright.config.ts (`evidence/.playwright-report.json`).
+
+    Devuelve {} si el archivo no existe o no es JSON válido. Usar esto en
+    lugar de parsear stdout permite que el reporter `list` (output en vivo)
+    coexista con el reporter estructurado.
+    """
+    try:
+        if not report_path.is_file():
+            return {}
+        with report_path.open("r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception as exc:
+        logger.debug("Could not read Playwright JSON report at %s: %s", report_path, exc)
         return {}
 
 

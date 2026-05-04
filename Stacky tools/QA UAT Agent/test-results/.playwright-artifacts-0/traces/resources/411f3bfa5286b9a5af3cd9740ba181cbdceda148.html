@@ -1,0 +1,191 @@
+
+
+<!DOCTYPE html>
+<html lang="es">
+<head><title>
+	Login
+</title><link rel="shortcut icon" href="images/favicon.ico" /><meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no" /><link type="text/css" rel="stylesheet" href="css/select2.css" media="screen,projection" /><link type="text/css" rel="stylesheet" href="/AgendaWeb/css/materialize.css?7" media="screen,projection" /><link type="text/css" rel="stylesheet" href="css/scacsweb.css?7" media="screen,projection" />
+    <script type="text/javascript">
+        let countdownDuration = 30;
+        let intervalId;
+        const mensajeModal = document.getElementById('lblMensajeModal');
+
+        function startCountdown() {
+            intervalId = setInterval(updateCountdown, 1000);
+            btnMantener.addEventListener('click', resetCountdown);
+        }
+
+        function resetCountdown() {
+            clearInterval(intervalId);
+            countdownDuration = 30;
+        }
+
+        function updateCountdown() {
+            countdownDuration--;
+            if (countdownDuration === 0) {
+                clearInterval(intervalId);
+                btnAbandonar.click();
+            }
+            else {
+                lblMensajeModal.textContent = "Se ha detectado un periodo de inactividad, en " + countdownDuration + " segundo(s) se cerrará sesión";
+            }
+        }
+    </script>
+</head>
+<body id="bodyTag" class="fondo">
+    <form method="post" action="./FrmLogin.aspx" id="form1" autocomplete="off">
+<div class="aspNetHidden">
+<input type="hidden" name="__LASTFOCUS" id="__LASTFOCUS" value="" />
+<input type="hidden" name="__EVENTTARGET" id="__EVENTTARGET" value="" />
+<input type="hidden" name="__EVENTARGUMENT" id="__EVENTARGUMENT" value="" />
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="/wEPDwULLTE1MDg1MjMxNjIPZBYCZg9kFgICAw8WAh4FY2xhc3MFBWZvbmRvFgICAQ9kFggCBQ9kFgJmD2QWAgIBDw8WAh4GVGl0dWxvBQlBdGVuY2nDs25kFgJmDw8WBB4MR3JvdXBpbmdUZXh0ZR4HVmlzaWJsZWhkFgJmD2QWAmYPZBYEZg9kFgICAg9kFgJmD2QWAgIDDw8WAh4EVGV4dAV1U2UgaGEgZGV0ZWN0YWRvIHVuIHBlcmlvZG8gZGUgaW5hY3RpdmlkYWQsIGVuIHswfSBzZWd1bm9kcyBzZSBjZXJyYXLDoSBzZXNpw7NuLiDCv0Rlc2VhcyBtYW50ZW5lciBsYSBzZXNpw7NuIGFiaWVydGE/ZGQCAQ9kFgQCAQ8PFgQeB1Rvb2xUaXAFEUFiYW5kb25hciBTZXNpw7NuHwQFEUFiYW5kb25hciBTZXNpw7NuZGQCAw8PFgQfBQUQTWFudGVuZXIgU2VzacOzbh8EBRBNYW50ZW5lciBTZXNpw7NuZGQCBw8PFgIfA2hkZAIJD2QWAmYPZBYMAgEPDxYGHwQFBlZvbHZlch8FBQZWb2x2ZXIfA2hkZAIDDw8WBB8EBQdHdWFyZGFyHwUFB0d1YXJkYXJkZAIFDw8WBB8EBQhBw7FhYWRpch8FBQhBw7FhYWRpcmRkAgcPDxYEHwQFCkRvY3VtZW50b3MfBQUKRG9jdW1lbnRvc2RkAgkPDxYEHwVlHwQFCEFjY2lvbmVzZGQCCw8PFgQfBAUHQXZhbnphch8FBQdBdmFuemFyZGQCCw9kFgICAQ8PFgIfAmVkFgICAQ8PFgIfAmVkFgoCAw8PFgYeCUxhYmVsVGV4dAUHVXN1YXJpbx8FZR4ORW1wdHlWYWx1ZVRleHQFE1VzdWFyaW8gT2JsaWdhdG9yaW8WAh4MYXV0b2NvbXBsZXRlBQNvZmZkAgUPDxYGHwYFC0NvbnRyYXNlw7FhHwVlHwcFF0NvbnRyYXNlw7FhIE9ibGlnYXRvcmlhFgIfCAUDb2ZmZAIHDw8WCB8GBQdEb21pbmlvHgtDYXRhbG9nRGF0YTKZEgABAAAA/////wEAAAAAAAAADAIAAABOU3lzdGVtLkRhdGEsIFZlcnNpb249NC4wLjAuMCwgQ3VsdHVyZT1uZXV0cmFsLCBQdWJsaWNLZXlUb2tlbj1iNzdhNWM1NjE5MzRlMDg5BQEAAAAVU3lzdGVtLkRhdGEuRGF0YVRhYmxlAwAAABlEYXRhVGFibGUuUmVtb3RpbmdWZXJzaW9uCVhtbFNjaGVtYQtYbWxEaWZmR3JhbQMBAQ5TeXN0ZW0uVmVyc2lvbgIAAAAJAwAAAAYEAAAAogw8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJ1dGYtMTYiPz4NCjx4czpzY2hlbWEgeG1sbnM9IiIgeG1sbnM6eHM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDEvWE1MU2NoZW1hIiB4bWxuczptc2RhdGE9InVybjpzY2hlbWFzLW1pY3Jvc29mdC1jb206eG1sLW1zZGF0YSI+DQogIDx4czplbGVtZW50IG5hbWU9IkRPTUlOSU8iIG1zZGF0YTpDYXNlU2Vuc2l0aXZlPSJGYWxzZSIgbXNkYXRhOkxvY2FsZT0iZXMtRVMiPg0KICAgIDx4czpjb21wbGV4VHlwZT4NCiAgICAgIDx4czpzZXF1ZW5jZT4NCiAgICAgICAgPHhzOmVsZW1lbnQgbmFtZT0iQ09ESUdPIiB0eXBlPSJ4czpzdHJpbmciIG1zZGF0YTp0YXJnZXROYW1lc3BhY2U9IiIgbWluT2NjdXJzPSIwIiAvPg0KICAgICAgICA8eHM6ZWxlbWVudCBuYW1lPSJERVNDUklQQ0lPTiIgdHlwZT0ieHM6c3RyaW5nIiBtc2RhdGE6dGFyZ2V0TmFtZXNwYWNlPSIiIG1pbk9jY3Vycz0iMCIgLz4NCiAgICAgICAgPHhzOmVsZW1lbnQgbmFtZT0iVEJBQlJFViIgdHlwZT0ieHM6c3RyaW5nIiBtc2RhdGE6dGFyZ2V0TmFtZXNwYWNlPSIiIG1pbk9jY3Vycz0iMCIgLz4NCiAgICAgICAgPHhzOmVsZW1lbnQgbmFtZT0iVEJBSVMiIHR5cGU9InhzOnN0cmluZyIgbXNkYXRhOnRhcmdldE5hbWVzcGFjZT0iIiBtaW5PY2N1cnM9IjAiIC8+DQogICAgICAgIDx4czplbGVtZW50IG5hbWU9IlRCQUlTMiIgdHlwZT0ieHM6c3RyaW5nIiBtc2RhdGE6dGFyZ2V0TmFtZXNwYWNlPSIiIG1pbk9jY3Vycz0iMCIgLz4NCiAgICAgICAgPHhzOmVsZW1lbnQgbmFtZT0iVEJMSU5LIiB0eXBlPSJ4czpzdHJpbmciIG1zZGF0YTp0YXJnZXROYW1lc3BhY2U9IiIgbWluT2NjdXJzPSIwIiAvPg0KICAgICAgICA8eHM6ZWxlbWVudCBuYW1lPSJUQkJNT0RJRiIgdHlwZT0ieHM6c3RyaW5nIiBtc2RhdGE6dGFyZ2V0TmFtZXNwYWNlPSIiIG1pbk9jY3Vycz0iMCIgLz4NCiAgICAgICAgPHhzOmVsZW1lbnQgbmFtZT0iVEJNVUxUSUVNUFJFU0EiIHR5cGU9InhzOnN0cmluZyIgbXNkYXRhOnRhcmdldE5hbWVzcGFjZT0iIiBtaW5PY2N1cnM9IjAiIC8+DQogICAgICAgIDx4czplbGVtZW50IG5hbWU9IlRCRkVDQkFKQSIgdHlwZT0ieHM6c3RyaW5nIiBtc2RhdGE6dGFyZ2V0TmFtZXNwYWNlPSIiIG1pbk9jY3Vycz0iMCIgLz4NCiAgICAgICAgPHhzOmVsZW1lbnQgbmFtZT0iTU9ESUZJQ0FCTEUiIHR5cGU9InhzOnN0cmluZyIgbXNkYXRhOnRhcmdldE5hbWVzcGFjZT0iIiBtaW5PY2N1cnM9IjAiIC8+DQogICAgICA8L3hzOnNlcXVlbmNlPg0KICAgIDwveHM6Y29tcGxleFR5cGU+DQogIDwveHM6ZWxlbWVudD4NCiAgPHhzOmVsZW1lbnQgbmFtZT0iTmV3RGF0YVNldCIgbXNkYXRhOklzRGF0YVNldD0idHJ1ZSIgbXNkYXRhOk1haW5EYXRhVGFibGU9IkRPTUlOSU8iIG1zZGF0YTpVc2VDdXJyZW50TG9jYWxlPSJ0cnVlIj4NCiAgICA8eHM6Y29tcGxleFR5cGU+DQogICAgICA8eHM6Y2hvaWNlIG1pbk9jY3Vycz0iMCIgbWF4T2NjdXJzPSJ1bmJvdW5kZWQiIC8+DQogICAgPC94czpjb21wbGV4VHlwZT4NCiAgPC94czplbGVtZW50Pg0KPC94czpzY2hlbWE+BgUAAADKAzxkaWZmZ3I6ZGlmZmdyYW0geG1sbnM6bXNkYXRhPSJ1cm46c2NoZW1hcy1taWNyb3NvZnQtY29tOnhtbC1tc2RhdGEiIHhtbG5zOmRpZmZncj0idXJuOnNjaGVtYXMtbWljcm9zb2Z0LWNvbTp4bWwtZGlmZmdyYW0tdjEiPg0KICA8TmV3RGF0YVNldD4NCiAgICA8RE9NSU5JTyBkaWZmZ3I6aWQ9IkRPTUlOSU8xIiBtc2RhdGE6cm93T3JkZXI9IjAiPg0KICAgICAgPENPRElHTz4xPC9DT0RJR08+DQogICAgICA8REVTQ1JJUENJT04+QUlTPC9ERVNDUklQQ0lPTj4NCiAgICA8L0RPTUlOSU8+DQogICAgPERPTUlOSU8gZGlmZmdyOmlkPSJET01JTklPMiIgbXNkYXRhOnJvd09yZGVyPSIxIj4NCiAgICAgIDxDT0RJR08+MjwvQ09ESUdPPg0KICAgICAgPERFU0NSSVBDSU9OPlNDWFQxMjRVUlk8L0RFU0NSSVBDSU9OPg0KICAgIDwvRE9NSU5JTz4NCiAgPC9OZXdEYXRhU2V0Pg0KPC9kaWZmZ3I6ZGlmZmdyYW0+BAMAAAAOU3lzdGVtLlZlcnNpb24EAAAABl9NYWpvcgZfTWlub3IGX0J1aWxkCV9SZXZpc2lvbgAAAAAICAgIAgAAAAAAAAD//////////wseD1Nob3dEZWZhdWx0SXRlbWgfB2VkZAIJD2QWAgIBDw8WAh8EZWRkAgsPDxYEHwQFBkVudHJhch8FBQZFbnRyYXJkZGSUra8X2Ll+o3vBvxDpc5WDqFjZewAQHNbQG6aDn5Rh1A==" />
+</div>
+
+<script type="text/javascript">
+//<![CDATA[
+var theForm = document.forms['form1'];
+if (!theForm) {
+    theForm = document.form1;
+}
+function __doPostBack(eventTarget, eventArgument) {
+    if (!theForm.onsubmit || (theForm.onsubmit() != false)) {
+        theForm.__EVENTTARGET.value = eventTarget;
+        theForm.__EVENTARGUMENT.value = eventArgument;
+        theForm.submit();
+    }
+}
+//]]>
+</script>
+
+
+<script src="/AgendaWeb/WebResource.axd?d=WubdLq8KGB9ni57S3S8wqIL89JY8vejROw60RiXWTCg_FJwx-ZxoZgwBFidA0KFbw8_bGT8-zwcTA3fopTqgSUxuZ73ARfrr3tSl9cig2vs1&amp;t=638883164380000000" type="text/javascript"></script>
+
+
+<script type="text/javascript">
+//<![CDATA[
+var __cultureInfo = {"name":"es-ES","numberFormat":{"CurrencyDecimalDigits":2,"CurrencyDecimalSeparator":",","IsReadOnly":true,"CurrencyGroupSizes":[3],"NumberGroupSizes":[3],"PercentGroupSizes":[3],"CurrencyGroupSeparator":".","CurrencySymbol":"€","NaNSymbol":"NaN","CurrencyNegativePattern":8,"NumberNegativePattern":1,"PercentPositivePattern":0,"PercentNegativePattern":0,"NegativeInfinitySymbol":"-∞","NegativeSign":"-","NumberDecimalDigits":2,"NumberDecimalSeparator":",","NumberGroupSeparator":".","CurrencyPositivePattern":3,"PositiveInfinitySymbol":"∞","PositiveSign":"+","PercentDecimalDigits":2,"PercentDecimalSeparator":",","PercentGroupSeparator":".","PercentSymbol":"%","PerMilleSymbol":"‰","NativeDigits":["0","1","2","3","4","5","6","7","8","9"],"DigitSubstitution":1},"dateTimeFormat":{"AMDesignator":"","Calendar":{"MinSupportedDateTime":"\/Date(-62135586000000)\/","MaxSupportedDateTime":"\/Date(253402300799999)\/","AlgorithmType":1,"CalendarType":1,"Eras":[1],"TwoDigitYearMax":2049,"IsReadOnly":true},"DateSeparator":"/","FirstDayOfWeek":1,"CalendarWeekRule":2,"FullDateTimePattern":"dddd, d\u0027 de \u0027MMMM\u0027 de \u0027yyyy H:mm:ss","LongDatePattern":"dddd, d\u0027 de \u0027MMMM\u0027 de \u0027yyyy","LongTimePattern":"H:mm:ss","MonthDayPattern":"d \u0027de\u0027 MMMM","PMDesignator":"","RFC1123Pattern":"ddd, dd MMM yyyy HH\u0027:\u0027mm\u0027:\u0027ss \u0027GMT\u0027","ShortDatePattern":"dd/MM/yyyy","ShortTimePattern":"H:mm","SortableDateTimePattern":"yyyy\u0027-\u0027MM\u0027-\u0027dd\u0027T\u0027HH\u0027:\u0027mm\u0027:\u0027ss","TimeSeparator":":","UniversalSortableDateTimePattern":"yyyy\u0027-\u0027MM\u0027-\u0027dd HH\u0027:\u0027mm\u0027:\u0027ss\u0027Z\u0027","YearMonthPattern":"MMMM\u0027 de \u0027yyyy","AbbreviatedDayNames":["do.","lu.","ma.","mi.","ju.","vi.","sá."],"ShortestDayNames":["D","L","M","X","J","V","S"],"DayNames":["domingo","lunes","martes","miércoles","jueves","viernes","sábado"],"AbbreviatedMonthNames":["ene.","feb.","mar.","abr.","may.","jun.","jul.","ago.","sep.","oct.","nov.","dic.",""],"MonthNames":["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre",""],"IsReadOnly":true,"NativeCalendarName":"calendario gregoriano","AbbreviatedMonthGenitiveNames":["ene.","feb.","mar.","abr.","may.","jun.","jul.","ago.","sep.","oct.","nov.","dic.",""],"MonthGenitiveNames":["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre",""]},"eras":[1,"d. C.",null,0]};//]]>
+</script>
+
+<script src="/AgendaWeb/ScriptResource.axd?d=fzcIJJx6Dnh0I3dlm-G8gnb9_kXWG9w7Wg8xHOGsiro6ER6FLDd448RXDW8qppxjEHBEMEN1WYnKxv0GIeknluta20ZulOjjDB6begSXgpoRfSxuPe29Ln7EtoZ2nAX6Khoxw9DDx9zR-jQWCcyvtQGfROUBQYXu82BjFk-q9k0i3NvDyauKzGZLn830Rk4Z0&amp;t=74a40145" type="text/javascript"></script>
+<script type="text/javascript">
+//<![CDATA[
+if (typeof(Sys) === 'undefined') throw new Error('Error al cargar el marco de trabajo de cliente ASP.NET Ajax.');
+//]]>
+</script>
+
+<script src="/AgendaWeb/ScriptResource.axd?d=vt6sh7cE0w4fp2keGXL-SwYtXXM65XtXo4l-zauN4pfy9Rc0yq28NBTgYjLel6eIpgKTRSBL61wYxcKsjkjX4BmjRV97ove6TbAUyuZHqwNHwZvNfJj-MD8IFlKBudrRF4i0tvS9jAhPMGe3Pk1Hc7VgbwEMuXGp8YP9Vw7WoBRTKr_PAdhVGth6LhDbBIzQ0&amp;t=74a40145" type="text/javascript"></script>
+<script src="js/jquery.js" type="text/javascript"></script>
+<script src="js/materialize.js" type="text/javascript"></script>
+<script src="js/materialize_fixes/leanModal.js" type="text/javascript"></script>
+<script src="js/select2.js" type="text/javascript"></script>
+<script src="js/i18n/select2/es.js" type="text/javascript"></script>
+<script src="/AgendaWeb/ScriptResource.axd?d=pQy60iG4EfLMp0oSmrnR7tFJ9u_iBAFzH9QYBAwx3E6s-iDgjp6OT4aJ4YWXKWYYrsg4yj0Nn7WZ9mG-amMnLkrnYQe-fWvsdU2T0OdHSK1un6un_ezkH3jryjZHTLwM37CWf5Ri4y-RUOENH1hyY3cIiSmf3fHy1wlCVF49-Rc1&amp;t=1269684f" type="text/javascript"></script>
+<script src="js/Chart.min.js" type="text/javascript"></script>
+<script src="js/funciones.js" type="text/javascript"></script>
+<script src="js/AjaxFileupload.js" type="text/javascript"></script>
+<script src="/AgendaWeb/ScriptResource.axd?d=bLIvD4k0b12CdhNevTRNl4q5IcYnuCdocHjpzvuYjOz0HmJJTmLKy8CMXwRREj0YfSvlMR45jnUuAif3EPc2TzUmrXXgjsGLFzKG1XSggMauMkGRVywbeOJpa1YU_EBNZXOSFD4oaeM0yYFV5i8k5-QD-ZtlxuLGlBtrF8cgcCpsLUvI9qxAtHEF3L1qL9510&amp;t=74a40145" type="text/javascript"></script>
+<script src="/AgendaWeb/WebResource.axd?d=p-_h9wapTOH1KzDym3XXxF3vBqlXs8JLae_fDjMp2KOdbNe6ZQsgeii53B8jGnD8Pnm3vIdFoJ0IyKldZvRGwN2Wr26d_uea-gMfG4OvWeU1&amp;t=638883164380000000" type="text/javascript"></script>
+<div class="aspNetHidden">
+
+	<input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="6A2E294D" />
+</div>
+        <script type="text/javascript">
+//<![CDATA[
+Sys.WebForms.PageRequestManager._initialize('ctl00$ScriptManager1', 'form1', ['tctl00$updTimer','updTimer','tctl00$updFinSesion','updFinSesion','fctl00$updBotones','updBotones'], [], [], 90, 'ctl00');
+//]]>
+</script>
+
+        <div id="updTimer">
+	
+                <span id="TimerSession" style="visibility:hidden;display:none;"></span>
+            
+</div>
+        <div id="updFinSesion">
+	
+                <div id="dialogFinSesion" class="modal" style="width:760px;">
+
+	</div>
+            
+</div>
+        
+        <div class="page">
+            <div id="updBotones">
+	
+                    <div class="row">
+                        <div class="col s3">
+                            
+                        </div>
+                        <div class="col s9 right-align">
+                            
+                            
+                            
+                            
+                            
+                        </div>
+                    </div>
+                
+</div>
+            
+    <div id="c_panLogin" class="row" onkeypress="javascript:return WebForm_FireDefaultButton(event, &#39;c_btnOk&#39;)">
+	
+        <div class="col s6 m6 l4 offset-s5 offset-m5 offset-l4">
+            <div class="row">
+                <div id="c_pnLogin" class="col s8 panelLogin z-depth-1">
+		
+                    <div class="row">
+                        <div class="col s12 center-align">
+                            <i class="material-icons  none medium roundedIcon ">person</i>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="input-field col s12"><i class="material-icons  none medium prefix ">person</i><input name="ctl00$c$abfUsuario" type="text" id="c_abfUsuario" autocomplete="off" /><label for="c_abfUsuario" class="active">Usuario</label> </div>
+                    </div>
+                    <div class="row">
+                        <div class="input-field col s12"><i class="material-icons  none medium prefix ">lock_outline</i><input name="ctl00$c$abfContrasena" type="password" id="c_abfContrasena" autocomplete="off" /><label for="c_abfContrasena">Contrase&#241;a</label> </div>
+                    </div>
+                    <div class="row section">
+                        <div class="aiscatalogo input-field col select2-container-icon s12"><i class="material-icons  none medium prefix ">public</i><label for="c_ddlDominio" class="active">Dominio</label> <select id="c_ddlDominio" name="ctl00$c$ddlDominio" class="col s12 "><option value="1">AIS</option><option value="2">SCXT124URY</option></select><label class="validateLabelCatalog">&nbsp;</label> </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col s12 center-align">
+                            <a id="c_btnOk" class="waves-effect waves-light tooltipped btn" href="javascript:__doPostBack(&#39;ctl00$c$btnOk&#39;,&#39;&#39;)" data-tooltip="Entrar" data-position="bottom">Entrar</a>
+                        </div>
+                    </div>
+                
+	</div>
+            </div>
+        </div>
+    
+</div>
+
+        </div>
+        
+    
+
+<script type="text/javascript">
+//<![CDATA[
+WebForm_AutoFocus('c_abfUsuario');Sys.Application.add_init(function() {
+    $create(Sys.UI._Timer, {"enabled":false,"interval":60000,"uniqueID":"ctl00$TimerSession"}, null, null, $get("TimerSession"));
+});
+//]]>
+</script>
+</form>
+    <div id="loader_general">
+        <div id="loader_general_overlay"></div>
+        <div class="preloader-wrapper big active">
+            <div class="spinner-layer spinner-blue-only">
+                <div class="circle-clipper left">
+                    <div class="circle"></div>
+                </div>
+                <div class="gap-patch">
+                    <div class="circle"></div>
+                </div>
+                <div class="circle-clipper right">
+                    <div class="circle"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

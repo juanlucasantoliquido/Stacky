@@ -1,7 +1,7 @@
 # Dossier UAT — ADO-65: RF-001 — Validación de campos del Filtro de Agenda en la instalación Pacífico
 
-> **Run ID**: `dcda3339-bc5f-495f-8bb0-7bb4e9dc27f8`  
-> **Fecha**: 2026-05-04T19:32:11Z  
+> **Run ID**: `6d007ed4-5e16-4cb0-bf5f-8437c5412787`  
+> **Fecha**: 2026-05-04T19:42:33Z  
 > **Agente**: 1.2.0  
 > **Entorno**: qa  
 > **Commit build**: `N/A`  
@@ -12,7 +12,7 @@
 ## Veredicto global
 
 
-**⚠️ BLOCKED** — Todos los escenarios no-PASS fueron bloqueados por causas externas (no hay falla real del producto).
+**✅ PASS** — Todos los escenarios ejecutables pasaron.
 
 
 ---
@@ -20,7 +20,7 @@
 ## Resumen ejecutivo
 
 Resumen Ejecutivo UAT:  
-El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la instalación Pacífico se encuentra BLOQUEADO. De 4 escenarios evaluados, solo 1 fue aprobado y 3 presentaron incidencias (P02, P04, P05). Las fallas detectadas impiden la validación completa de la funcionalidad, por lo que se requiere atención prioritaria para resolver los problemas antes de continuar con las pruebas.
+La validación de los campos del Filtro de Agenda en la instalación Pacífico (Ticket RF-001) fue completada exitosamente. Se ejecutaron 4 escenarios de prueba, todos aprobados sin incidencias ni bloqueos. No se identificaron defectos. El resultado confirma que la funcionalidad cumple con los requisitos establecidos y está lista para su liberación.
 
 ---
 
@@ -29,68 +29,16 @@ El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la insta
 | Escenario | Título | Estado | Duración |
 |---|---|---|---|
 
-| `P02` | Debito Automatico = No | ⚠️ BLOCKED | 48265 ms |
+| `P02` | Debito Automatico = No | ✅ PASS | 41785 ms |
 
-| `P03` | Corredor = valor parcial | ✅ PASS | 40357 ms |
+| `P03` | Corredor = valor parcial | ✅ PASS | 41997 ms |
 
-| `P04` | Nombre de Cliente = texto parcial | ⚠️ BLOCKED | 51242 ms |
+| `P04` | Nombre de Cliente = texto parcial | ✅ PASS | 36661 ms |
 
-| `P05` | RUC = parcial 20 | ⚠️ BLOCKED | 3371 ms |
-
-
----
-
-
-## Fallas detectadas
-
-
-### ❌ P02 — P02
-
-**Mensaje**: RUNTIME_ERROR
-
-
-
-
-**Trace Playwright**: `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P02\trace.zip`
-
-
-**Screenshot**: `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P02\step_00_setup.png`
+| `P05` | RUC = parcial 20 | ✅ PASS | 37277 ms |
 
 
 ---
-
-
-### ❌ P04 — P04
-
-**Mensaje**: RUNTIME_ERROR
-
-
-
-
-**Trace Playwright**: `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P04\trace.zip`
-
-
-**Screenshot**: `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P04\step_00_setup.png`
-
-
----
-
-
-### ❌ P05 — P05
-
-**Mensaje**: RUNTIME_ERROR
-
-
-
-
-**Trace Playwright**: `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P05\trace.zip`
-
-
-**Screenshot**: `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P05\step_00_setup.png`
-
-
----
-
 
 
 
@@ -101,7 +49,7 @@ El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la insta
 
 ### P02 — Debito Automatico = No
 
-**Estado**: ⚠️ BLOCKED (RUNTIME_ERROR)
+**Estado**: ✅ PASS
 
 
 **Artefactos**:
@@ -111,6 +59,10 @@ El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la insta
 - Screenshots:
 
   - `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P02\step_00_setup.png`
+
+  - `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P02\step_01_after.png`
+
+  - `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P02\step_02_after.png`
 
   - `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P02\step_final_state.png`
 
@@ -153,33 +105,13 @@ El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la insta
 
 
 
-**Assertions fallidas**:
-
-- `Error: P03: pÃ¡gina debe contener "valor parcial"
-
-    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
-
-    Locator: locator('body')
-    Timeout: 5000ms
-    [32m- Expected substring  -   1[39m
-    [31m+ Received string     + 168[39m
-
-    [3` — Esperado: `substring  -   1[39m
-    [31m+` | Actual: `string     + 168[39m
-
-    [32m- valor parcial[39m
-    [31m+[39m
-    [31m+ [43m    [49m[39m
-`
-
-
 
 ---
 
 
 ### P04 — Nombre de Cliente = texto parcial
 
-**Estado**: ⚠️ BLOCKED (RUNTIME_ERROR)
+**Estado**: ✅ PASS
 
 
 **Artefactos**:
@@ -210,7 +142,7 @@ El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la insta
 
 ### P05 — RUC = parcial 20
 
-**Estado**: ⚠️ BLOCKED (RUNTIME_ERROR)
+**Estado**: ✅ PASS
 
 
 **Artefactos**:
@@ -220,6 +152,10 @@ El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la insta
 - Screenshots:
 
   - `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P05\step_00_setup.png`
+
+  - `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P05\step_01_after.png`
+
+  - `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P05\step_02_after.png`
 
   - `N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\65\P05\step_final_state.png`
 
@@ -240,13 +176,7 @@ El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la insta
 
 
 
-- Revise los registros de errores para identificar la causa exacta del error de ejecución.
-
-- Verifique que todas las dependencias y configuraciones necesarias estén correctamente instaladas.
-
-- Ejecute los casos de prueba de forma individual para aislar el problema.
-
-- Consulte con el equipo de desarrollo si persisten los errores después de las verificaciones iniciales.
+- Todos los escenarios pasaron. Proceder con aprobación del QA humano.
 
 
 
@@ -256,9 +186,11 @@ El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la insta
 
 
 
-- Resolver bloqueos de entorno antes de re-ejecutar.
+- Comunicar resultado al Tech Lead y PM.
 
-- Verificar configuración de env vars y base de datos.
+- Adjuntar evidencia al ticket ADO.
+
+- Cerrar sprint item si aplica.
 
 
 
@@ -271,4 +203,4 @@ El ticket RF-001 sobre la validación de campos del Filtro de Agenda en la insta
 
 ---
 
-_Generado por Stacky Agents — QA UAT Pipeline v1.2.0 — Run `dcda3339-bc5f-495f-8bb0-7bb4e9dc27f8`_
+_Generado por Stacky Agents — QA UAT Pipeline v1.2.0 — Run `6d007ed4-5e16-4cb0-bf5f-8437c5412787`_

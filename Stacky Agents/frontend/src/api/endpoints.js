@@ -11,6 +11,7 @@ export const Tickets = {
 export const Agents = {
     list: () => api.get("/api/agents"),
     vsCodeAgents: () => api.get("/api/agents/vscode"),
+    history: (filename, limit = 50) => api.get(`/api/agents/vscode/${encodeURIComponent(filename)}/history?limit=${limit}`),
     run: (payload) => api.post("/api/agents/run", payload),
     cancel: (executionId) => api.post(`/api/agents/cancel/${executionId}`),
     estimate: (payload) => api.post("/api/agents/estimate", payload),
@@ -75,6 +76,10 @@ export const Packs = {
     pause: (id) => api.post(`/api/packs/runs/${id}/pause`),
     resume: (id) => api.post(`/api/packs/runs/${id}/resume`),
     abandon: (id) => api.delete(`/api/packs/runs/${id}`),
+};
+export const QaUat = {
+    run: (ticketId, mode = "dry-run") => api.post("/api/qa-uat/run", { ticket_id: ticketId, mode }),
+    status: (executionId) => api.get(`/api/qa-uat/run/${executionId}`),
 };
 // FA-13
 export const Decisions = {

@@ -67,18 +67,6 @@
 }
 .addBtn:hover { background: var(--accent-hot); }
 
-.workbenchBtn {
-  padding: 8px 16px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  transition: border-color 0.12s, color 0.12s;
-}
-.workbenchBtn:hover { border-color: var(--accent); color: var(--accent); }
-
 /* ─── Main ────────────────────────────────── */
 .main {
   flex: 1;

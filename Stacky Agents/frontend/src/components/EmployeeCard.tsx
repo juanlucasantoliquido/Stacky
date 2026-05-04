@@ -13,6 +13,7 @@ import {
 import { Agents } from "../api/endpoints";
 import PixelAvatar from "./PixelAvatar";
 import AgentLaunchModal from "./AgentLaunchModal";
+import AgentHistoryModal from "./AgentHistoryModal";
 import styles from "./EmployeeCard.module.css";
 
 interface EmployeeCardProps {
@@ -44,6 +45,7 @@ function inferType(filename: string): string {
 export default function EmployeeCard({ filename, agent, onEdit, onRemoved }: EmployeeCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [launchOpen, setLaunchOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const nickname = getAgentNickname(filename);
   const role = getAgentRole(filename);
@@ -72,6 +74,9 @@ export default function EmployeeCard({ filename, agent, onEdit, onRemoved }: Emp
           </button>
           {menuOpen && (
             <div className={styles.menu} onMouseLeave={() => setMenuOpen(false)}>
+              <button onClick={() => { setMenuOpen(false); setHistoryOpen(true); }}>
+                📜 Ver historial de tickets
+              </button>
               <button onClick={() => { setMenuOpen(false); onEdit(filename); }}>
                 ✏️ Editar empleado
               </button>
@@ -98,6 +103,15 @@ export default function EmployeeCard({ filename, agent, onEdit, onRemoved }: Emp
         <button className={styles.assignBtn} onClick={() => setLaunchOpen(true)}>
           Asignar Ticket →
         </button>
+
+        {/* Secondary action: history */}
+        <button
+          className={styles.historyBtn}
+          onClick={() => setHistoryOpen(true)}
+          title="Ver tickets que este agente trabajó"
+        >
+          Ver historial
+        </button>
       </div>
 
       {launchOpen && (
@@ -105,6 +119,15 @@ export default function EmployeeCard({ filename, agent, onEdit, onRemoved }: Emp
           agent={agent ?? { name: displayName, filename, description: displayRole, system_prompt: "" }}
           avatarValue={avatar}
           onClose={() => setLaunchOpen(false)}
+        />
+      )}
+
+      {historyOpen && (
+        <AgentHistoryModal
+          filename={filename}
+          displayName={displayName}
+          avatarValue={avatar}
+          onClose={() => setHistoryOpen(false)}
         />
       )}
     </>

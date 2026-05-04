@@ -33,9 +33,37 @@ export const Tickets = {
   syncStatus: () => api.get<{ last_synced_at: string | null }>("/api/tickets/sync/status"),
 };
 
+export interface AgentHistoryEntry {
+  ticket_id: number;
+  ado_id: number;
+  title: string;
+  project: string | null;
+  ado_state: string | null;
+  ado_url: string | null;
+  last_execution_id: number;
+  last_execution_status: string;
+  last_execution_verdict: string | null;
+  last_execution_started_at: string | null;
+  last_execution_completed_at: string | null;
+  last_execution_duration_ms: number | null;
+  executions_count: number;
+}
+
+export interface AgentHistoryResponse {
+  agent_filename: string;
+  inferred_agent_type: string;
+  mapping_note: string;
+  tickets: AgentHistoryEntry[];
+  total_executions: number;
+}
+
 export const Agents = {
   list: () => api.get<AgentDefinition[]>("/api/agents"),
   vsCodeAgents: () => api.get<VsCodeAgent[]>("/api/agents/vscode"),
+  history: (filename: string, limit = 50) =>
+    api.get<AgentHistoryResponse>(
+      `/api/agents/vscode/${encodeURIComponent(filename)}/history?limit=${limit}`
+    ),
   run: (payload: {
     agent_type: AgentType;
     ticket_id: number;

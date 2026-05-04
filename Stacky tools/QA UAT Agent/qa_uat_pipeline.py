@@ -211,9 +211,30 @@ def run(
     else:
         from uat_scenario_compiler import run as compiler_run
         _log_stage(stage)
+        # Extract UI aliases AND structured element catalogue from cached UI
+        # maps so the compiler can:
+        #  - constrain the LLM to known aliases
+        #  - reject oracles targeting decorative layout elements
+        #  - hint at input_type so the generator can format values
+        ui_aliases: list = []
+        ui_elements: list = []
+        for screen in screens:
+            ui_map_file = _TOOL_ROOT / "cache" / "ui_maps" / f"{screen}.json"
+            if ui_map_file.is_file():
+                try:
+                    ui_data = json.loads(ui_map_file.read_text(encoding="utf-8"))
+                    for el in ui_data.get("elements", []):
+                        alias = el.get("alias_semantic")
+                        if alias:
+                            ui_aliases.append(alias)
+                            ui_elements.append(el)
+                except Exception:
+                    pass
         compiler_result = compiler_run(
             ticket_json=ticket_result,
             scope_screen=screens[0] if len(screens) == 1 else None,
+            ui_aliases=ui_aliases or None,
+            ui_elements=ui_elements or None,
             verbose=verbose,
         )
         stages[stage] = _summarise_compiler(compiler_result)
@@ -281,7 +302,7 @@ def run(
             return _build_output(ticket_id, stages, generator_result, started)
 
         # All scenarios blocked → warn but continue to dossier (skip runner)
-        gen_specs = generator_result.get("specs", [])
+        gen_specs = generator_result.get("results") or generator_result.get("specs", [])
         all_blocked = gen_specs and all(s.get("status") == "blocked" for s in gen_specs)
         if all_blocked:
             logger.warning("All scenarios are blocked (missing selectors). Skipping runner.")
@@ -412,11 +433,17 @@ def _run_dossier_and_publisher(
     runner_output_path = evidence_dir / "runner_output.json"
     ticket_path = evidence_dir / "ticket.json"
 
+    # Pass evaluations.json explicitly so the dossier consolidates the semantic
+    # evaluator status with the raw runner status. Auto-detect would also work
+    # since it lives next to runner_output.json, but being explicit keeps the
+    # contract clear and surfaces missing evaluator output during debugging.
+    evaluations_path = evidence_dir / "evaluations.json"
     dossier_result = dossier_run(
         runner_output_path=runner_output_path,
         ticket_path=ticket_path,
         out_dir=evidence_dir,
         verbose=verbose,
+        evaluations_path=evaluations_path if evaluations_path.is_file() else None,
     )
     stages["dossier"] = _summarise_dossier(dossier_result)
     if not dossier_result.get("ok"):
@@ -548,7 +575,7 @@ def _summarise_compiler(r: dict) -> dict:
 def _summarise_generator(r: dict) -> dict:
     base = {"ok": r.get("ok", False), "skipped": False}
     if r.get("ok"):
-        specs = r.get("specs") or []
+        specs = r.get("results") or r.get("specs") or []
         base["generated"] = sum(1 for s in specs if s.get("status") == "generated")
         base["blocked"] = sum(1 for s in specs if s.get("status") == "blocked")
         base["total"] = len(specs)

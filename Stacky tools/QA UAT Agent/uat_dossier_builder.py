@@ -31,9 +31,39 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.dossier_builder")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "1.2.0"
 _EXEC_SUMMARY_MAX_LEN = 600
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+# Token format used inside ado_comment.html for image src/href placeholders.
+# The publisher swaps {{ATTACH:<scenario>:<filename>}} with the real attachment
+# URL once each PNG has been uploaded to ADO.
+_ATTACH_TOKEN_FMT = "{{{{ATTACH:{scenario}:{filename}}}}}"
+
+# Regex de patrones de fallas TECNICAS del runner Playwright que NO deben
+# imputarse al producto bajo prueba. Si una run trae status=fail con un mensaje
+# que matchea cualquiera de estos, se reclasifica a status=blocked con
+# reason=test_generator_defect, evitando falsos negativos contra el producto.
+# Cada patron va con un motivo legible para el QA humano.
+# Order matters: more specific patterns are listed FIRST so they win over the
+# generic `playwright_action_timeout`. The first match decides the label.
+_TEST_DEFECT_PATTERNS: tuple = (
+    (r"intercepts pointer events",
+     "click_blocked_by_overlay"),
+    (r"locator resolved to .*input-field-label",
+     "oracle_targeted_layout_label_not_runtime_message"),
+    (r"locator resolved to .*<input type=\"date\"",
+     "date_input_format_mismatch"),
+    (r"strict mode violation:.*resolved to \d+ elements",
+     "ambiguous_selector_strict_mode"),
+    (r"element is not visible",
+     "target_not_visible_when_acting"),
+    (r"element is not (?:enabled|editable|stable)",
+     "target_not_interactable_when_acting"),
+    (r"TimeoutError:\s*locator\.(fill|click|press|check|uncheck|selectOption|hover|setInputFiles)\b",
+     "playwright_action_timeout"),
+    (r"locator\.(fill|click|press|check|uncheck|selectOption|hover|setInputFiles):\s*Timeout\b",
+     "playwright_action_timeout"),
+)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -51,6 +81,8 @@ def main() -> None:
         ticket_path=Path(args.ticket),
         out_dir=Path(args.out),
         verbose=args.verbose,
+        scenarios_path=Path(args.scenarios) if args.scenarios else None,
+        evaluations_path=Path(args.evaluations) if args.evaluations else None,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     sys.exit(0 if result.get("ok") else 1)
@@ -61,8 +93,22 @@ def run(
     ticket_path: Path,
     out_dir: Path,
     verbose: bool = False,
+    scenarios_path: Optional[Path] = None,
+    evaluations_path: Optional[Path] = None,
 ) -> dict:
-    """Core logic — callable from tests without subprocess."""
+    """Core logic — callable from tests without subprocess.
+
+    `scenarios_path` is optional; when present, step-level descriptions and
+    attachment tokens are added to each scenario in dossier.scenarios.
+    Defaults to <out_dir>/scenarios.json when found.
+
+    `evaluations_path` is optional; when present, the semantic verdict produced
+    by `uat_assertion_evaluator.py` takes precedence over the raw Playwright
+    runner status. Defaults to <runner_output>.parent / "evaluations.json" when
+    found. This is the primary safeguard against false-negative FAIL verdicts
+    caused by Playwright runtime errors (timeouts, overlays, bad selectors)
+    that are pipeline defects, not product defects.
+    """
     started = time.time()
 
     # Load runner output
@@ -84,9 +130,58 @@ def run(
     ticket_obj = ticket_data.get("ticket") or {}
     ticket_title = ticket_obj.get("title", f"Ticket #{ticket_id}")
 
-    # Compute verdict
+    # Load evaluations.json (optional) — semantic verdict from uat_assertion_evaluator.py
+    if evaluations_path is None:
+        guess = runner_output_path.parent / "evaluations.json"
+        if guess.is_file():
+            evaluations_path = guess
+    evaluations_by_sid: dict = {}
+    if evaluations_path and Path(evaluations_path).is_file():
+        try:
+            ed = json.loads(Path(evaluations_path).read_text(encoding="utf-8"))
+            if ed.get("ok"):
+                evaluations_by_sid = {
+                    e.get("scenario_id"): e for e in (ed.get("evaluations") or [])
+                }
+        except Exception as exc:
+            logger.warning("evaluations.json unreadable, using runner status only: %s", exc)
+            evaluations_by_sid = {}
+
+    # Compute verdict — reclassify each run BEFORE summarizing.
+    # Precedence: (1) semantic evaluator status, (2) test_generator_defect
+    # heuristic on technical failures, (3) raw runner status. This is the
+    # primary safeguard against false-negative FAIL verdicts.
     runs = runner_data.get("runs", [])
+    runs = _apply_consolidated_status(runs, evaluations_by_sid)
     verdict = _compute_verdict(runs)
+
+    # Load scenarios.json (optional) for per-step descriptions
+    if scenarios_path is None:
+        guess = runner_output_path.parent / "scenarios.json"
+        if guess.is_file():
+            scenarios_path = guess
+    scenarios_meta: list = []
+    if scenarios_path and Path(scenarios_path).is_file():
+        try:
+            sd = json.loads(Path(scenarios_path).read_text(encoding="utf-8"))
+            scenarios_meta = sd.get("scenarios") or []
+        except Exception as exc:
+            logger.warning("scenarios.json unreadable, skipping step descriptions: %s", exc)
+            scenarios_meta = []
+
+    # Build per-screenshot step descriptions (deterministic + optional LLM polish)
+    step_descs_by_sid: dict = {}
+    if scenarios_meta:
+        try:
+            from step_descriptor import build_step_descriptions
+            step_descs_by_sid = build_step_descriptions(
+                runner_runs=runs,
+                scenarios=scenarios_meta,
+                use_llm=os.environ.get("STACKY_LLM_BACKEND", "vscode_bridge").lower() != "mock",
+            )
+        except Exception as exc:
+            logger.warning("step_descriptor failed, scenarios will lack step text: %s", exc)
+            step_descs_by_sid = {}
 
     # Generate executive summary via LLM
     executive_summary = _generate_executive_summary(
@@ -110,6 +205,13 @@ def run(
         verbose=verbose,
     )
 
+    # Generate per-scenario narratives (what was attempted) via gpt-4.1-mini
+    scenario_narratives = _generate_scenario_narratives(
+        scenarios_meta=scenarios_meta,
+        runs=runs,
+        verbose=verbose,
+    )
+
     # Compute run ID (UUID v4 format)
     import uuid
     run_id = str(uuid.uuid4())
@@ -126,14 +228,20 @@ def run(
             screen = "FrmGestion.aspx"
             break
 
-    # Build context block (schema-required fields)
+    # Build context block (schema-required fields).
+    # Recompute counts from the consolidated `runs` so they reflect any
+    # reclassification (fail -> blocked) applied above. Without this, the
+    # dossier would show contradictory numbers vs the verdict.
+    pass_count = sum(1 for r in runs if r.get("status") == "pass")
+    fail_count = sum(1 for r in runs if r.get("status") == "fail")
+    blocked_count = sum(1 for r in runs if r.get("status") == "blocked")
     context = {
         "environment": os.environ.get("STACKY_ENV", "qa"),
         "agent_version": _TOOL_VERSION,
-        "total": runner_data.get("total", 0),
-        "pass": runner_data.get("pass", 0),
-        "fail": runner_data.get("fail", 0),
-        "blocked": runner_data.get("blocked", 0),
+        "total": len(runs),
+        "pass": pass_count,
+        "fail": fail_count,
+        "blocked": blocked_count,
     }
 
     # Build dossier JSON (schema-compliant)
@@ -147,7 +255,18 @@ def run(
         "verdict": verdict,
         "executive_summary": executive_summary[:_EXEC_SUMMARY_MAX_LEN],
         "context": context,
-        "scenarios": [_format_scenario_result(r) for r in runs],
+        "scenarios": [
+            _format_scenario_result(
+                r,
+                step_descs=step_descs_by_sid.get(r.get("scenario_id")),
+                scenario_meta=next(
+                    (sm for sm in scenarios_meta
+                     if sm.get("scenario_id") == r.get("scenario_id")),
+                    None,
+                ),
+                narrative=scenario_narratives.get(r.get("scenario_id")),
+            ) for r in runs
+        ],
         "failures": [_format_failure(r) for r in failures],
         "recommendation_for_human_qa": recommendations,
         "next_steps": _next_steps(verdict),
@@ -239,6 +358,117 @@ def _compute_verdict(runs: list) -> str:
     if has_fail:
         return "FAIL"
     return "BLOCKED"
+
+
+def _apply_consolidated_status(runs: list, evaluations_by_sid: dict) -> list:
+    """Reconcile runner status with semantic evaluator status and reclassify
+    technical failures of the test pipeline as `blocked` instead of `fail`.
+
+    This function is the architectural fix for false-negative FAIL verdicts
+    that previously bubbled up from the raw Playwright runner output.
+
+    Precedence rules per scenario:
+      1. If evaluations[sid].status is 'fail'  -> status='fail'  (real product
+         defect, validated by deterministic or semantic oracle).
+      2. If evaluations[sid].status is 'review' -> status='blocked' with
+         reason='evaluator_inconclusive' (the evaluator could not decide;
+         do NOT impute to the product).
+      3. If evaluations[sid].status is 'pass'  -> status='pass'.
+      4. If evaluations[sid].status is 'blocked' -> status='blocked' (keep
+         evaluator reason if any, else fall back to runner reason).
+      5. If no evaluator entry for sid AND runner.status == 'fail', inspect
+         raw_stdout/stderr against `_TEST_DEFECT_PATTERNS`. Any match means the
+         failure is a defect of the test generator/runner pipeline, not the
+         product -> reclassify to status='blocked' with
+         reason='test_generator_defect:<pattern_label>'.
+      6. Otherwise leave runner.status untouched.
+
+    Mutates a copy of each run dict; original list is not modified.
+    """
+    out: list = []
+    for run in runs:
+        new = dict(run)  # shallow copy is enough — we only touch top-level keys
+        sid = new.get("scenario_id", "")
+        original_status = new.get("status", "")
+
+        eval_entry = evaluations_by_sid.get(sid) if evaluations_by_sid else None
+
+        # Rule 1-4: semantic evaluator wins when present.
+        if eval_entry is not None:
+            eval_status = (eval_entry.get("status") or "").lower()
+            if eval_status == "fail":
+                new["status"] = "fail"
+                # Surface assertion mismatch from evaluator if runner did not.
+                if not new.get("assertion_failures"):
+                    afs = []
+                    for a in (eval_entry.get("assertions") or []):
+                        if a.get("status") == "fail":
+                            afs.append({
+                                "message": (
+                                    f"Oracle '{a.get('target','')}' "
+                                    f"(tipo={a.get('tipo','')}) "
+                                    f"expected={a.get('expected')!r} "
+                                    f"actual={a.get('actual')!r}"
+                                )[:300],
+                                "expected": str(a.get("expected"))[:100]
+                                if a.get("expected") is not None else "",
+                                "actual": str(a.get("actual"))[:100]
+                                if a.get("actual") is not None else "",
+                            })
+                    if afs:
+                        new["assertion_failures"] = afs
+            elif eval_status == "pass":
+                new["status"] = "pass"
+            elif eval_status == "review":
+                # Evaluator could not decide -> NOT a product defect.
+                new["status"] = "blocked"
+                new["reason"] = "evaluator_inconclusive"
+                new["reclassified_from"] = original_status
+            elif eval_status == "blocked":
+                new["status"] = "blocked"
+                if not new.get("reason"):
+                    new["reason"] = eval_entry.get("reason") or "blocked_by_evaluator"
+            out.append(new)
+            continue
+
+        # Rule 5: heuristic reclassification of technical runner failures.
+        if original_status == "fail":
+            label = _match_test_defect(new)
+            if label:
+                new["status"] = "blocked"
+                new["reason"] = f"test_generator_defect:{label}"
+                new["reclassified_from"] = "fail"
+
+        # Rule 6: leave as-is.
+        out.append(new)
+    return out
+
+
+def _match_test_defect(run: dict) -> Optional[str]:
+    """Return a label if the run's raw output matches a known test-pipeline
+    defect pattern, else None.
+
+    Inspects raw_stdout, raw_stderr, and assertion_failures[*].message — these
+    are the surfaces where Playwright reports the technical reason a step blew
+    up before the product could even be evaluated.
+    """
+    haystacks: list = []
+    if run.get("raw_stdout"):
+        haystacks.append(run["raw_stdout"])
+    if run.get("raw_stderr"):
+        haystacks.append(run["raw_stderr"])
+    for af in (run.get("assertion_failures") or []):
+        msg = af.get("message") or ""
+        if msg:
+            haystacks.append(msg)
+
+    if not haystacks:
+        return None
+    blob = "\n".join(haystacks)
+    for pattern, label in _TEST_DEFECT_PATTERNS:
+        if re.search(pattern, blob, flags=re.IGNORECASE | re.DOTALL):
+            return label
+    return None
 
 
 # ── LLM narrative ─────────────────────────────────────────────────────────────
@@ -343,15 +573,114 @@ def _generate_recommendations(
 
 # ── Formatting ────────────────────────────────────────────────────────────────
 
-def _format_scenario_result(run: dict) -> dict:
-    return {
-        "scenario_id": run.get("scenario_id"),
-        "titulo": run.get("scenario_id", ""),  # titel comes from scenario_id; full title from scenarios data if available
+def _generate_scenario_narratives(
+    scenarios_meta: list,
+    runs: list,
+    verbose: bool = False,
+) -> dict:
+    """Generate per-scenario 'what was attempted' narrative using gpt-4.1-mini.
+
+    Returns dict {scenario_id: narrative_str}.
+    Each narrative is a 1-2 sentence Spanish explanation of what the scenario
+    tried to verify, generated via LLM with deterministic fallback.
+    """
+    narratives: dict = {}
+    runs_by_id = {r.get("scenario_id"): r for r in runs}
+
+    for sm in scenarios_meta:
+        sid = sm.get("scenario_id", "")
+        run = runs_by_id.get(sid, {})
+        titulo = sm.get("titulo", sid)
+        pasos = sm.get("pasos") or []
+        oraculos = sm.get("oraculos") or []
+        status = run.get("status", "unknown")
+
+        # Deterministic fallback
+        fallback = (
+            f"Se intentó verificar: {titulo}. "
+            f"Se ejecutaron {len(pasos)} paso(s) y se evaluaron "
+            f"{len(oraculos)} condición(es). Resultado: {status.upper()}."
+        )
+
+        try:
+            from llm_client import call_llm, LLMError
+
+            steps_text = "\n".join(
+                f"  {i + 1}. {p.get('accion', '?')} en '{p.get('target', '?')}'" +
+                (f" con valor '{p.get('valor')}'" if p.get("valor") else "")
+                for i, p in enumerate(pasos[:8])
+            )
+            oracles_text = "\n".join(
+                f"  - {o.get('tipo', '?')}: '{o.get('valor', '?')}'" for o in oraculos[:5]
+            )
+            preconditions_text = "; ".join(sm.get("precondiciones") or ["ninguna"])
+
+            prompt = (
+                f"Escenario: {titulo}\n"
+                f"Precondiciones: {preconditions_text}\n"
+                f"Pasos ejecutados:\n{steps_text}\n"
+                f"Condiciones verificadas:\n{oracles_text}\n"
+                f"Resultado: {status.upper()}\n\n"
+                "Escribe en 1-2 oraciones en español qué intentó verificar este escenario "
+                "de prueba automatizado. Sé específico sobre la funcionalidad probada. "
+                "No uses markdown. Tono técnico y conciso."
+            )
+
+            result = call_llm(
+                model="gpt-4o-mini",
+                system=(
+                    "Eres un analista QA técnico. Tu tarea es explicar brevemente "
+                    "qué intentó verificar un escenario de prueba automatizado, "
+                    "basándote en sus pasos y oráculos de verificación."
+                ),
+                user=prompt,
+                max_tokens=150,
+            )
+            narratives[sid] = result["text"].strip()
+        except Exception as exc:
+            logger.debug("LLM narrative failed for %s, using fallback: %s", sid, exc)
+            narratives[sid] = fallback
+
+    return narratives
+
+
+def _format_scenario_result(run: dict, step_descs: list | None = None,
+                            scenario_meta: dict | None = None,
+                            narrative: str | None = None) -> dict:
+    sid = run.get("scenario_id") or ""
+    titulo = (scenario_meta or {}).get("titulo") or sid
+    steps = []
+    for d in (step_descs or []):
+        filename = d.get("screenshot_name") or ""
+        steps.append({
+            "screenshot_name": filename,
+            "screenshot_path": d.get("screenshot"),
+            "step_index": d.get("step_index"),
+            "action": d.get("action"),
+            "target": d.get("target"),
+            "value": d.get("value"),
+            "description": d.get("description"),
+            "description_source": d.get("description_source", "deterministic"),
+            "attachment_token": _ATTACH_TOKEN_FMT.format(scenario=sid, filename=filename),
+        })
+    formatted: dict = {
+        "scenario_id": sid,
+        "titulo": titulo,
         "status": run.get("status"),
         "duration_ms": run.get("duration_ms", 0),
         "artifacts": run.get("artifacts", {}),
         "assertion_failures": run.get("assertion_failures", []),
+        "steps": steps,
+        "attempt_narrative": narrative or "",
     }
+    # Surface the reclassification reason so the dossier and the human QA
+    # can see WHY a runner-fail became a blocked. Both keys are
+    # additionalProperties=true in dossier.schema.json.
+    if run.get("reason"):
+        formatted["reason"] = run["reason"]
+    if run.get("reclassified_from"):
+        formatted["reclassified_from"] = run["reclassified_from"]
+    return formatted
 
 
 def _format_failure(run: dict) -> dict:
@@ -450,6 +779,13 @@ def _parse_args() -> argparse.Namespace:
                         help="Path to runner_output.json")
     parser.add_argument("--ticket", required=True, help="Path to ticket.json")
     parser.add_argument("--out", required=True, help="Output directory")
+    parser.add_argument("--scenarios", default=None, dest="scenarios",
+                        help="Path to scenarios.json (optional, auto-detected next to runner_output.json)")
+    parser.add_argument("--evaluations", default=None, dest="evaluations",
+                        help=("Path to evaluations.json from uat_assertion_evaluator (optional, "
+                              "auto-detected next to runner_output.json). When present, the "
+                              "semantic evaluator status takes precedence over the raw runner "
+                              "status to avoid false-negative FAIL verdicts."))
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
 

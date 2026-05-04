@@ -28,7 +28,12 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.test_runner")
 
-_TOOL_VERSION = "1.0.0"
+# v1.1.0 — harvests Playwright JSON reporter `attachments[]` (trace.zip,
+# video.webm, error-context.md, screenshots) into evidence/<ticket>/<sid>/
+# so the dossier and failure_analyzer have real artefact paths instead of
+# null. Pre-1.1 the runner only scanned evidence/<sid>/ by extension and
+# missed everything Playwright leaves under test-results/.
+_TOOL_VERSION = "1.1.0"
 # Default per-test timeout in ms.
 # 90s acomoda: login ASP.NET WebForms (~10-25s) + 2-3 navegaciones a FrmAgenda
 # (~5-15s c/u) + steps + screenshots. El default anterior de 30s reventaba
@@ -221,6 +226,11 @@ def _run_single_spec(
     pw_results = _parse_playwright_json_output(stdout)
     assertion_failures = _extract_assertion_failures(pw_results, stderr)
 
+    # Harvest attachments produced by Playwright into the evidence dir BEFORE
+    # collecting artefacts — otherwise the JSON output reports trace/video
+    # paths under test-results/ but the dossier has no copies.
+    _harvest_pw_attachments(pw_results, scenario_dir)
+
     # Determine status
     if proc.returncode == 0:
         status = "pass"
@@ -352,6 +362,7 @@ def _collect_artifacts(scenario_dir: Path) -> dict:
         "screenshots": [],
         "console_log": None,
         "network_log": None,
+        "error_context": None,
     }
     if not scenario_dir.is_dir():
         return artifacts
@@ -368,9 +379,84 @@ def _collect_artifacts(scenario_dir: Path) -> dict:
             artifacts["console_log"] = str(f)
         elif name == "network.json":
             artifacts["network_log"] = str(f)
+        elif name == "error-context.md":
+            artifacts["error_context"] = str(f)
 
     artifacts["screenshots"].sort()
     return artifacts
+
+
+# Map of Playwright attachment.name → canonical filename inside scenario_dir.
+# We rename so the dossier links are deterministic regardless of which
+# test-results subfolder Playwright chose.
+_ATTACHMENT_TARGET_NAMES = {
+    "trace": "trace.zip",
+    "video": "video.webm",
+    "error-context": "error-context.md",
+    # `screenshot` here is Playwright's auto-capture-on-failure (separate
+    # from the explicit page.screenshot() calls in the spec). Saved as
+    # test_failure.png so it's distinguishable from step screenshots.
+    "screenshot": "test_failure.png",
+}
+
+
+def _harvest_pw_attachments(pw_results: dict, scenario_dir: Path) -> None:
+    """Copy attachments reported by Playwright's JSON reporter into the
+    scenario evidence directory under canonical names.
+
+    Playwright leaves trace/video/error-context under
+    test-results/<spec>-<project>/, which the original collector never
+    scanned. With this harvest the dossier can link them and the failure
+    analyzer can cite real paths.
+
+    Failures are best-effort: if a path doesn't exist (test passed without
+    tracing, or the attachment was skipped), we just skip it — never raise.
+    """
+    import shutil
+    if not pw_results:
+        return
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+    seen_targets: set = set()
+    for suite in pw_results.get("suites", []):
+        _walk_suite_attachments(suite, scenario_dir, seen_targets, shutil)
+
+
+def _walk_suite_attachments(suite: dict, scenario_dir: Path,
+                             seen_targets: set, shutil_mod) -> None:
+    """Recursively descend Playwright suite tree collecting attachments."""
+    for nested in suite.get("suites", []) or []:
+        _walk_suite_attachments(nested, scenario_dir, seen_targets, shutil_mod)
+    for spec in suite.get("specs", []) or []:
+        for test in spec.get("tests", []) or []:
+            for result in test.get("results", []) or []:
+                for att in result.get("attachments", []) or []:
+                    _harvest_one_attachment(att, scenario_dir, seen_targets, shutil_mod)
+
+
+def _harvest_one_attachment(att: dict, scenario_dir: Path,
+                             seen_targets: set, shutil_mod) -> None:
+    name = att.get("name") or ""
+    src = att.get("path") or ""
+    if not name or not src:
+        return
+    target_name = _ATTACHMENT_TARGET_NAMES.get(name)
+    if not target_name:
+        return
+    # If the same attachment type appears multiple times (multi-retry), keep
+    # the first one — Playwright reports retries in order.
+    if target_name in seen_targets:
+        return
+    src_path = Path(src)
+    if not src_path.is_file():
+        logger.debug("Attachment src missing for %s: %s", name, src)
+        return
+    dst = scenario_dir / target_name
+    try:
+        shutil_mod.copyfile(str(src_path), str(dst))
+        seen_targets.add(target_name)
+        logger.debug("Harvested %s → %s", src, dst)
+    except Exception as exc:
+        logger.warning("Could not harvest attachment %s: %s", src, exc)
 
 
 def _err(code: str, message: str) -> dict:

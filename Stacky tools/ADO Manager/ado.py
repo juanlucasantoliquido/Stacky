@@ -4,14 +4,16 @@ ado.py — Gestor de tickets Azure DevOps via CLI
 Sin servidor, sin dependencias externas — solo Python 3.8+ stdlib.
 
 ACCIONES:
-  list      Lista tickets del proyecto
-  get       Obtiene detalle completo de un ticket
-  create    Crea un nuevo ticket
-  comment   Agrega un comentario (HTML o texto plano)
-  state     Cambia el estado de un ticket
-  comments  Lista los comentarios de un ticket
-  states    Lista los estados disponibles
-  types     Lista los tipos de work item disponibles
+  list            Lista tickets del proyecto
+  get             Obtiene detalle completo de un ticket
+  create          Crea un nuevo ticket
+  comment         Agrega un comentario (HTML o texto plano)
+  delete-comment  Elimina un comentario por id
+  state           Cambia el estado de un ticket
+  comments        Lista los comentarios de un ticket
+  states          Lista los estados disponibles
+  types           Lista los tipos de work item disponibles
+  attach          Sube un archivo y lo enlaza al work item
 
 SALIDA: siempre JSON a stdout
 ERRORES: JSON a stdout con "ok": false  +  exit code 1
@@ -126,6 +128,20 @@ def _plain_to_html(text: str) -> str:
         f"<p>{l if l.strip() else '&nbsp;'}</p>"
         for l in esc.split("\n")
     )
+
+
+def _guess_attachment_content_type(name: str) -> str:
+    """Content-Type para POST /_apis/wit/attachments.
+
+    Azure DevOps SOLO acepta application/octet-stream, application/json y
+    application/json-patch+json para esta ruta (probado contra ADO Cloud
+    en 2026-05). El MIME real del archivo (image/png, etc.) genera HTTP 400
+    'VssRequestContentTypeNotSupportedException', incluso aunque la UI luego
+    renderice el archivo como imagen (eso lo deduce de la extensión, no del
+    Content-Type del upload). El parámetro `name` se conserva por si en el
+    futuro habilitan otros tipos.
+    """
+    return "application/octet-stream"
 
 
 def _ensure_html(content: str, is_html: bool) -> str:
@@ -296,6 +312,111 @@ class AdoClient:
         )
         return [self._comment_dict(c) for c in self._req("GET", url).get("comments") or []]
 
+    def delete_comment(self, wi_id: int, comment_id: int) -> dict:
+        """Eliminar un comentario por id (DELETE /_apis/wit/workitems/{id}/comments/{cid})."""
+        url = (
+            f"{self._proj_url}/_apis/wit/workitems/{wi_id}/comments/{comment_id}"
+            f"?api-version={_API_VER}-preview.3"
+        )
+        # Azure DevOps responde 204 No Content; _req devuelve {} en ese caso.
+        self._req("DELETE", url)
+        return {"deleted": True, "work_item_id": wi_id, "comment_id": comment_id}
+
+    def upload_attachment(
+        self,
+        file_path: Path,
+        upload_name: str = "",
+        upload_type: str = "simple",
+    ) -> dict:
+        """
+        Sube un archivo a /_apis/wit/attachments y devuelve dict con id y url.
+        El archivo se pasa como cuerpo binario; ADO retorna {"id": "...", "url": "..."}.
+        Notas:
+        - upload_type 'simple' es suficiente para archivos < 130 MB (ADO doc).
+        - El attachment NO queda asociado al work item hasta llamar link_attachment.
+        """
+        if not file_path.is_file():
+            raise AdoError(f"Archivo no encontrado: {file_path}")
+        name = upload_name or file_path.name
+        content_type = _guess_attachment_content_type(name)
+        params = {
+            "fileName": name,
+            "uploadType": upload_type,
+            "api-version": _API_VER,
+        }
+        url = (
+            f"{self._proj_url}/_apis/wit/attachments?"
+            + urllib.parse.urlencode(params)
+        )
+        with file_path.open("rb") as f:
+            data = f.read()
+        req = urllib.request.Request(
+            url, data=data, method="POST",
+            headers={
+                "Authorization": self._auth,
+                "Content-Type": content_type,
+                "Accept": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=_TIMEOUT * 4) as r:
+                raw = r.read().decode("utf-8", errors="replace")
+                resp = json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8", errors="replace")[:600]
+            except Exception:
+                pass
+            raise AdoError(
+                f"HTTP {e.code} POST attachment {url}\n{detail}",
+                e.code,
+            ) from e
+        except urllib.error.URLError as e:
+            raise AdoError(f"Error de red subiendo attachment: {e.reason}") from e
+        return {
+            "id": resp.get("id"),
+            "url": resp.get("url"),
+            "fileName": name,
+            "size_bytes": len(data),
+        }
+
+    def link_attachment(
+        self,
+        wi_id: int,
+        attachment_url: str,
+        comment: str = "",
+    ) -> dict:
+        """Asocia un attachment ya subido a un work item via PATCH AttachedFile relation."""
+        if not attachment_url:
+            raise AdoError("attachment_url es obligatorio para link_attachment")
+        ops = [{
+            "op": "add",
+            "path": "/relations/-",
+            "value": {
+                "rel": "AttachedFile",
+                "url": attachment_url,
+                "attributes": {"comment": comment} if comment else {},
+            },
+        }]
+        url = f"{self._proj_url}/_apis/wit/workitems/{wi_id}?api-version={_API_VER}"
+        return self._wi_dict(
+            self._req("PATCH", url, ops, ct="application/json-patch+json")
+        )
+
+    def attach(
+        self,
+        wi_id: int,
+        file_path: Path,
+        upload_name: str = "",
+        comment: str = "",
+    ) -> dict:
+        """Sube + enlaza en un solo paso. Devuelve metadata del attachment."""
+        meta = self.upload_attachment(file_path, upload_name=upload_name)
+        if meta.get("url"):
+            self.link_attachment(wi_id, meta["url"], comment=comment)
+        return {**meta, "work_item_id": wi_id, "linked": True}
+
     def get_states(self) -> list[str]:
         return [
             "New", "Active", "To Do", "In Progress",
@@ -435,8 +556,10 @@ EJEMPLOS:
     p_comment = sub.add_parser("comment", help="Agrega un comentario a un ticket")
     p_comment.add_argument("id",     type=int, metavar="ID",
                            help="ID del work item")
-    p_comment.add_argument("--text", required=True, metavar="TEXTO",
+    p_comment.add_argument("--text", required=False, default=None, metavar="TEXTO",
                            help="Texto del comentario (plano o HTML si usás --html)")
+    p_comment.add_argument("--file", required=False, default=None, metavar="FILE",
+                           help="Path a un archivo con el texto del comentario (alternativa a --text para contenido largo)")
     p_comment.add_argument("--html", action="store_true",
                            help="Indica que --text es HTML")
     _add_creds(p_comment)
@@ -453,6 +576,30 @@ EJEMPLOS:
     p_comments = sub.add_parser("comments", help="Lista los comentarios de un ticket")
     p_comments.add_argument("id", type=int, metavar="ID", help="ID del work item")
     _add_creds(p_comments)
+
+    # ── delete-comment ────────────────────────────────────────────────────────
+    p_delc = sub.add_parser("delete-comment",
+                            help="Elimina un comentario por id")
+    p_delc.add_argument("id",         type=int, metavar="ID",
+                        help="ID del work item")
+    p_delc.add_argument("comment_id", type=int, metavar="COMMENT_ID",
+                        help="ID del comentario a eliminar")
+    _add_creds(p_delc)
+
+    # ── attach ────────────────────────────────────────────────────────────────
+    p_attach = sub.add_parser(
+        "attach",
+        help="Sube un archivo y lo enlaza al work item (relation AttachedFile)",
+    )
+    p_attach.add_argument("id",   type=int, metavar="ID",
+                          help="ID del work item")
+    p_attach.add_argument("file", metavar="FILE",
+                          help="Ruta al archivo a subir")
+    p_attach.add_argument("--name",    default="", metavar="FILENAME",
+                          help="Nombre con el que se sube el archivo (default: basename)")
+    p_attach.add_argument("--comment", default="", metavar="TEXTO",
+                          help="Comentario asociado a la relación AttachedFile")
+    _add_creds(p_attach)
 
     # ── states ────────────────────────────────────────────────────────────────
     p_states = sub.add_parser("states", help="Lista los estados disponibles")
@@ -509,7 +656,15 @@ def main() -> None:
             _ok(action, result)
 
         elif action == "comment":
-            result = client.add_comment(args.id, args.text, is_html=args.html)
+            if args.file:
+                import pathlib
+                text = pathlib.Path(args.file).read_text(encoding="utf-8")
+            elif args.text:
+                text = args.text
+            else:
+                _err(action, "Either --text or --file is required", "args")
+                return
+            result = client.add_comment(args.id, text, is_html=args.html)
             _ok(action, result)
 
         elif action == "state":
@@ -519,6 +674,19 @@ def main() -> None:
         elif action == "comments":
             result = client.list_comments(args.id)
             _ok(action, result, count=len(result))
+
+        elif action == "delete-comment":
+            result = client.delete_comment(args.id, args.comment_id)
+            _ok(action, result)
+
+        elif action == "attach":
+            result = client.attach(
+                wi_id=args.id,
+                file_path=Path(args.file),
+                upload_name=args.name,
+                comment=args.comment,
+            )
+            _ok(action, result)
 
         elif action == "states":
             _ok(action, client.get_states())

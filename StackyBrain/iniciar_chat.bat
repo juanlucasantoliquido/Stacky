@@ -15,8 +15,12 @@ if %ERRORLEVEL%==0 (
 ) else (
     echo  [..] Iniciando Ollama...
     set OLLAMA_ORIGINS=*
-    set OLLAMA_MODELS=N:\GIT\RS\RSPacifico\Tools\Stacky\StackyBrain
-    start "" /B "%LOCALAPPDATA%\Programs\Ollama\ollama.exe" serve
+    set OLLAMA_MODELS=%~dp0
+    set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
+    if not exist "%OLLAMA_EXE%" (
+        where ollama >nul 2>&1 && set "OLLAMA_EXE=ollama"
+    )
+    start "" /B "%OLLAMA_EXE%" serve
     timeout /t 3 /nobreak >nul
     echo  [OK] Ollama iniciado
 )
@@ -27,7 +31,7 @@ if %ERRORLEVEL%==0 (
     echo  [OK] Servidor HTTP ya en puerto 8888
 ) else (
     echo  [..] Iniciando servidor HTTP en puerto 8888...
-    start "" /B python -m http.server 8888 --directory "N:\GIT\RS\RSPacifico\Tools\Stacky\StackyBrain"
+    start "" /B python -m http.server 8888 --directory "%~dp0"
     timeout /t 2 /nobreak >nul
     echo  [OK] Servidor HTTP iniciado
 )

@@ -20,7 +20,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 
 const TICKET_KEY = "stackyAgents.activeTicket";
-const EXTENSION_VERSION = "0.3.2";
+const EXTENSION_VERSION = "0.3.4";
 
 let statusBar: vscode.StatusBarItem;
 let _bridgeServer: http.Server | undefined;
@@ -248,8 +248,16 @@ async function _handleOpenChat(
   // Prefix the agent mention so any VS Code version picks it up
   const query = agentName ? `@${agentName} ${message}` : message;
 
-  try {
-    // Always start a fresh conversation
+  // Respond immediately — VS Code commands can hang indefinitely on some versions.
+  // The actual chat-open flow runs fire-and-forget in the background.
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, chars: query.length, agent: agentName }));
+
+  // Background: open VS Code Copilot Chat with the full context
+  (async () => {
+    try {
+    // Always start a fresh conversation.
+    // Wrap each command with a 3 s timeout so a hanging promise doesn't block the flow.
     const freshChatCommands = [
       "workbench.action.chat.newChat",
       "workbench.action.chat.clear",
@@ -257,7 +265,12 @@ async function _handleOpenChat(
     ];
     for (const cmd of freshChatCommands) {
       try {
-        await vscode.commands.executeCommand(cmd);
+        await Promise.race([
+          vscode.commands.executeCommand(cmd),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error(`timeout: ${cmd}`)), 3000)
+          ),
+        ]);
         console.log(`[Stacky] /open-chat new chat OK: ${cmd}`);
         break;
       } catch {
@@ -301,14 +314,11 @@ async function _handleOpenChat(
     }
 
     console.log(`[Stacky] /open-chat OK: agente=${agentName || "(none)"}, modelo=${model || "(none)"}, msg:${message.length}c`);
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true, chars: query.length, agent: agentName }));
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[Stacky] Error en /open-chat: ${msg}`);
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: false, error: msg }));
-  }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[Stacky] Error en /open-chat background: ${msg}`);
+    }
+  })();
 }
 
 function _startBridgeServer(): void {

@@ -1,0 +1,1351 @@
+{
+  "ok": true,
+  "screen": "FrmAgenda.aspx",
+  "hash": "sha256:28e7c32c7e888703bd9a67574d4af117f7f3d102ea822f2afa37aa92bcff06e6",
+  "captured_at": "2026-05-02T23:22:03Z",
+  "url": "http://localhost:35017/AgendaWeb/FrmAgenda.aspx",
+  "elements": [
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Desde",
+      "asp_id": "c_abfDesde",
+      "data_testid": null,
+      "selector_recommended": "getByRole('input', {name: 'Desde'})",
+      "robustness": "high",
+      "alias_semantic": "input_desde",
+      "fallback_selectors": [
+        "getByLabel('Desde')",
+        "#c_abfDesde",
+        "[id$='c_abfDesde']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Hasta",
+      "asp_id": "c_abfHasta",
+      "data_testid": null,
+      "selector_recommended": "getByRole('input', {name: 'Hasta'})",
+      "robustness": "high",
+      "alias_semantic": "input_hasta",
+      "fallback_selectors": [
+        "getByLabel('Hasta')",
+        "#c_abfHasta",
+        "[id$='c_abfHasta']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Empresa",
+      "asp_id": "c_ddlEmpresa",
+      "data_testid": null,
+      "selector_recommended": "getByRole('select', {name: 'Empresa'})",
+      "robustness": "high",
+      "alias_semantic": "select_empresa",
+      "fallback_selectors": [
+        "getByLabel('Empresa')",
+        "#c_ddlEmpresa",
+        "[id$='c_ddlEmpresa']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Perfil",
+      "asp_id": "c_ddlPerfil",
+      "data_testid": null,
+      "selector_recommended": "getByRole('select', {name: 'Perfil'})",
+      "robustness": "high",
+      "alias_semantic": "select_perfil",
+      "fallback_selectors": [
+        "getByLabel('Perfil')",
+        "#c_ddlPerfil",
+        "[id$='c_ddlPerfil']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Región",
+      "asp_id": "c_ddlRegion",
+      "data_testid": null,
+      "selector_recommended": "getByRole('select', {name: 'Región'})",
+      "robustness": "high",
+      "alias_semantic": "select_regi_n",
+      "fallback_selectors": [
+        "getByLabel('Región')",
+        "#c_ddlRegion",
+        "[id$='c_ddlRegion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Recomendación",
+      "asp_id": "c_ddlRecomendacion",
+      "data_testid": null,
+      "selector_recommended": "getByRole('select', {name: 'Recomendación'})",
+      "robustness": "high",
+      "alias_semantic": "select_recomendaci_n",
+      "fallback_selectors": [
+        "getByLabel('Recomendación')",
+        "#c_ddlRecomendacion",
+        "[id$='c_ddlRecomendacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Nivel de Mora",
+      "asp_id": "c_ddlNivelMora",
+      "data_testid": null,
+      "selector_recommended": "getByRole('select', {name: 'Nivel de Mora'})",
+      "robustness": "high",
+      "alias_semantic": "select_nivel_de_mora",
+      "fallback_selectors": [
+        "getByLabel('Nivel de Mora')",
+        "#c_ddlNivelMora",
+        "[id$='c_ddlNivelMora']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Tipo de Cliente",
+      "asp_id": "c_ddlTipoCliente",
+      "data_testid": null,
+      "selector_recommended": "getByRole('select', {name: 'Tipo de Cliente'})",
+      "robustness": "high",
+      "alias_semantic": "select_tipo_de_cliente",
+      "fallback_selectors": [
+        "getByLabel('Tipo de Cliente')",
+        "#c_ddlTipoCliente",
+        "[id$='c_ddlTipoCliente']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "table",
+      "role": "table",
+      "label": null,
+      "asp_id": "c_GridAgendaUsu",
+      "data_testid": null,
+      "selector_recommended": "#c_GridAgendaUsu",
+      "robustness": "medium",
+      "alias_semantic": "grid_c_gridagendausu",
+      "fallback_selectors": [
+        "[id$='c_GridAgendaUsu']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 266
+      },
+      "warning": null
+    },
+    {
+      "kind": "table",
+      "role": "table",
+      "label": null,
+      "asp_id": "c_GridAgendaAut",
+      "data_testid": null,
+      "selector_recommended": "#c_GridAgendaAut",
+      "robustness": "medium",
+      "alias_semantic": "grid_c_gridagendaaut",
+      "fallback_selectors": [
+        "[id$='c_GridAgendaAut']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 493
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "updTimer",
+      "data_testid": null,
+      "selector_recommended": "#updTimer",
+      "robustness": "medium",
+      "alias_semantic": "panel_updtimer",
+      "fallback_selectors": [
+        "[id$='updTimer']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 100
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "asp_id": "TimerSession",
+      "data_testid": null,
+      "selector_recommended": "#TimerSession",
+      "robustness": "medium",
+      "alias_semantic": "panel_timersession",
+      "fallback_selectors": [
+        "[id$='TimerSession']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "updFinSesion",
+      "data_testid": null,
+      "selector_recommended": "#updFinSesion",
+      "robustness": "medium",
+      "alias_semantic": "panel_updfinsesion",
+      "fallback_selectors": [
+        "[id$='updFinSesion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 100
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "dialogFinSesion",
+      "data_testid": null,
+      "selector_recommended": "#dialogFinSesion",
+      "robustness": "medium",
+      "alias_semantic": "panel_dialogfinsesion",
+      "fallback_selectors": [
+        "[id$='dialogFinSesion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "updBotones",
+      "data_testid": null,
+      "selector_recommended": "#updBotones",
+      "robustness": "medium",
+      "alias_semantic": "panel_updbotones",
+      "fallback_selectors": [
+        "[id$='updBotones']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 100
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "c_updControles",
+      "data_testid": null,
+      "selector_recommended": "#c_updControles",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updcontroles",
+      "fallback_selectors": [
+        "[id$='c_updControles']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "c_pnlBusqueda",
+      "data_testid": null,
+      "selector_recommended": "#c_pnlBusqueda",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_pnlbusqueda",
+      "fallback_selectors": [
+        "[id$='c_pnlBusqueda']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "asp_id": "select2-c_ddlEmpresa-container",
+      "data_testid": null,
+      "selector_recommended": "#select2-c_ddlEmpresa-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_c_ddlempresa_container",
+      "fallback_selectors": [
+        "[id$='select2-c_ddlEmpresa-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "asp_id": "select2-c_ddlPerfil-container",
+      "data_testid": null,
+      "selector_recommended": "#select2-c_ddlPerfil-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_c_ddlperfil_container",
+      "fallback_selectors": [
+        "[id$='select2-c_ddlPerfil-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "asp_id": "select2-c_ddlRegion-container",
+      "data_testid": null,
+      "selector_recommended": "#select2-c_ddlRegion-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_c_ddlregion_container",
+      "fallback_selectors": [
+        "[id$='select2-c_ddlRegion-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "asp_id": "select2-c_ddlRecomendacion-container",
+      "data_testid": null,
+      "selector_recommended": "#select2-c_ddlRecomendacion-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_c_ddlrecomendacion_container",
+      "fallback_selectors": [
+        "[id$='select2-c_ddlRecomendacion-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "asp_id": "select2-c_ddlNivelMora-container",
+      "data_testid": null,
+      "selector_recommended": "#select2-c_ddlNivelMora-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_c_ddlnivelmora_container",
+      "fallback_selectors": [
+        "[id$='select2-c_ddlNivelMora-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "asp_id": "select2-c_ddlTipoCliente-container",
+      "data_testid": null,
+      "selector_recommended": "#select2-c_ddlTipoCliente-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_c_ddltipocliente_container",
+      "fallback_selectors": [
+        "[id$='select2-c_ddlTipoCliente-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "c_updAgenda",
+      "data_testid": null,
+      "selector_recommended": "#c_updAgenda",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updagenda",
+      "fallback_selectors": [
+        "[id$='c_updAgenda']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 214
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "c_lblAgendaUsu",
+      "data_testid": null,
+      "selector_recommended": "#c_lblAgendaUsu",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblagendausu",
+      "fallback_selectors": [
+        "[id$='c_lblAgendaUsu']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 226
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "__gvc_GridAgendaUsu__div",
+      "data_testid": null,
+      "selector_recommended": "#__gvc_GridAgendaUsu__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridagendausu_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridAgendaUsu__div']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 266
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "c_lblAgendaAut",
+      "data_testid": null,
+      "selector_recommended": "#c_lblAgendaAut",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblagendaaut",
+      "fallback_selectors": [
+        "[id$='c_lblAgendaAut']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 463
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "__gvc_GridAgendaAut__div",
+      "data_testid": null,
+      "selector_recommended": "#__gvc_GridAgendaAut__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridagendaaut_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridAgendaAut__div']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 493
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "loader_general",
+      "data_testid": null,
+      "selector_recommended": "#loader_general",
+      "robustness": "medium",
+      "alias_semantic": "panel_loader_general",
+      "fallback_selectors": [
+        "[id$='loader_general']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "asp_id": "loader_general_overlay",
+      "data_testid": null,
+      "selector_recommended": "#loader_general_overlay",
+      "robustness": "medium",
+      "alias_semantic": "panel_loader_general_overlay",
+      "fallback_selectors": [
+        "[id$='loader_general_overlay']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='menu'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='eventAgenda Personal'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 117
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='event_notePooles de Trabajo'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 142
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='searchBusqueda de Clientes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 166
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='date_rangeAgenda de Grupo'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 191
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='switch_accountReasignacion Manual'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardInformes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardCall Center'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardDistribución por Rol y Nivel de Mora'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardDistribución por Tipologia de Clientes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardDistribución por Estados Especiales'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardDistribución por Estrategia'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardotros Reportes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='eventAgenda De Demandas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 287
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='searchBuscar Demandas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 312
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='ruleValidar Gastos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 337
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='confirmation_numberLiquidar Gastos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 362
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='switch_accountReasignar Abogado'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 386
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardInformacion de Demandas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardInformes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='leaderboardInformación de Demandas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='ruleValidar Facturas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 482
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='ruleValidar Notas de Gastos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 507
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='receiptFacturas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 532
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='confirmation_numberNotas de Gastos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 557
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='settingsAdministrador'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -251,
+        "y": 599
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": "ddlAcciones",
+      "data_testid": null,
+      "selector_recommended": "#ddlAcciones",
+      "robustness": "medium",
+      "alias_semantic": "link_ddlacciones",
+      "fallback_selectors": [
+        "[id$='ddlAcciones']",
+        "text='Acciones'"
+      ],
+      "position": {
+        "x": 1034,
+        "y": 110
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Exportar Agendas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Clientes Asignados'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": "btnNext",
+      "data_testid": null,
+      "selector_recommended": "#btnNext",
+      "robustness": "medium",
+      "alias_semantic": "link_btnnext",
+      "fallback_selectors": [
+        "[id$='btnNext']",
+        "text='chevron_rightAvanzar'"
+      ],
+      "position": {
+        "x": 1131,
+        "y": 105
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": "c_btnOk",
+      "data_testid": null,
+      "selector_recommended": "#c_btnOk",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnok",
+      "fallback_selectors": [
+        "[id$='c_btnOk']",
+        "text='searchFiltrar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": "c_btnExportExcelAgUsu",
+      "data_testid": null,
+      "selector_recommended": "#c_btnExportExcelAgUsu",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnexportexcelagusu",
+      "fallback_selectors": [
+        "[id$='c_btnExportExcelAgUsu']",
+        "text='grid_onAgendados por Usuario'"
+      ],
+      "position": {
+        "x": 1210,
+        "y": 220
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Cliente'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 23,
+        "y": 270
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Lote'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 394,
+        "y": 270
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Fecha'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 517,
+        "y": 270
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Hora'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 641,
+        "y": 270
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Recomendación'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 764,
+        "y": 270
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Nivel Mora'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 1135,
+        "y": 270
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Prima'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 1258,
+        "y": 270
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Moneda'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 1382,
+        "y": 270
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Cliente'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 23,
+        "y": 496
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Lote'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 394,
+        "y": 496
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Fecha'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 517,
+        "y": 496
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Hora'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 640,
+        "y": 496
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Recomendación'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 764,
+        "y": 496
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Nivel Mora'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 1134,
+        "y": 496
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Prima'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 1258,
+        "y": 496
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "asp_id": null,
+      "data_testid": null,
+      "selector_recommended": "text='Moneda'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 1381,
+        "y": 496
+      },
+      "warning": null
+    }
+  ],
+  "warnings": [],
+  "meta": {
+    "tool": "ui_map_builder",
+    "version": "1.0.0",
+    "duration_ms": 31215
+  }
+}

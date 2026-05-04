@@ -57,6 +57,78 @@
   </tbody>
 </table>
 
+{% set scenarios_with_steps = scenarios | selectattr('steps') | list %}
+{% set scenarios_with_narrative = scenarios | selectattr('attempt_narrative') | list %}
+{% if scenarios_with_narrative %}
+<h3 style="margin: 16px 0 6px; font-size: 14px; color: #333;">Lo que se intentó verificar</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 14px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd; width: 90px;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Qué se intentó verificar</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in scenarios_with_narrative %}
+    <tr style="background: {% if loop.index % 2 == 0 %}#fafafa{% else %}#fff{% endif %}; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>{{ s.scenario_id }}</code>
+        {% if s.status == 'pass' %}<br/><span style="color: #107c10; font-size: 11px;">✅</span>
+        {% elif s.status == 'fail' %}<br/><span style="color: #a4262c; font-size: 11px;">❌</span>
+        {% elif s.status == 'blocked' %}<br/><span style="color: #c19c00; font-size: 11px;">⚠️</span>
+        {% endif %}
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">{{ s.attempt_narrative }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p style="font-size: 10px; color: #999; margin: -10px 0 14px; text-align: right; font-style: italic;">Narrativas generadas por IA (gpt-4o-mini)</p>
+{% endif %}
+{% if scenarios_with_steps %}
+<h3 style="margin: 16px 0 6px; font-size: 14px; color: #333;">Evidencia por escenario</h3>
+{% for s in scenarios_with_steps %}
+<div style="border: 1px solid #e1e1e1; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; background: #fcfcfc;">
+  <div style="margin-bottom: 8px; font-size: 13px;">
+    <strong><code>{{ s.scenario_id }}</code> — {{ s.titulo }}</strong>
+    {% if s.status == 'pass' %}
+    <span style="margin-left: 8px; color: #107c10;">✅ PASS</span>
+    {% elif s.status == 'fail' %}
+    <span style="margin-left: 8px; color: #a4262c;">❌ FAIL</span>
+    {% elif s.status == 'blocked' %}
+    <span style="margin-left: 8px; color: #c19c00;">⚠️ BLOCKED</span>
+    {% endif %}
+  </div>
+  {% if s.attempt_narrative %}
+  <div style="margin: 0 0 10px; padding: 7px 11px; background: #f0f7ff; border-left: 3px solid #0078d4; border-radius: 0 3px 3px 0; font-size: 12px; color: #1a3a5c; line-height: 1.5;">
+    <strong>📋 Lo que se intentó verificar:</strong> {{ s.attempt_narrative }}
+    <span style="float: right; font-size: 10px; color: #888; font-style: italic;">generado por IA (gpt-4o-mini)</span>
+  </div>
+  {% endif %}
+  {% for step in s.steps %}
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        {% if step.step_index == 'setup' %}Setup
+        {% elif step.step_index == 'final' %}Estado final
+        {% else %}Paso {{ step.step_index }}{% endif %}
+      </strong>
+      {% if step.description_source == 'llm' %}
+      <span style="font-size: 10px; color: #888; margin-left: 6px;">(descripción IA)</span>
+      {% endif %}
+      <br/>
+      <span style="color: #555;">{{ step.description }}</span>
+    </div>
+    <a href="{{ step.attachment_token }}" target="_blank" style="display: inline-block;">
+      <img src="{{ step.attachment_token }}" alt="{{ step.screenshot_name }}"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+{% endif %}
+
 {% if failures %}
 <h3 style="margin: 12px 0 6px; font-size: 14px; color: #a4262c;">Fallas detectadas</h3>
 {% for f in failures %}
@@ -75,7 +147,7 @@
     </tr>
   </table>
   {% endif %}
-  {% if f.trace_path %}<div style="margin-top: 4px; font-size: 11px; color: #555;">Trace: <code>{{ f.trace_path }}</code></div>{% endif %}
+  {% if f.trace_path is defined and f.trace_path %}<div style="margin-top: 4px; font-size: 11px; color: #555;">Trace: <code>{{ f.trace_path }}</code></div>{% endif %}
 </div>
 {% endfor %}
 {% endif %}

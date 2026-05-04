@@ -40,6 +40,9 @@ def test_cache_hit_skips_playwright(monkeypatch, tmp_path):
 
     cached_data = json.loads((FIXTURES / "ui_map_FrmAgenda.json").read_text(encoding="utf-8"))
     cached_data["hash"] = "sha256:abc123"
+    # Schema version match required after ui_map_builder v1.1.0 introduced
+    # cache invalidation on schema bump (M1 — enriched UI map).
+    cached_data["schema_version"] = ui_map_builder._SCHEMA_VERSION
 
     cache_dir = tmp_path / "cache" / "ui_maps"
     cache_dir.mkdir(parents=True)
@@ -83,6 +86,79 @@ def test_alias_semantic_follows_pattern():
     for el in data["elements"]:
         alias = el["alias_semantic"]
         assert pattern.match(alias), f"alias_semantic '{alias}' does not match pattern"
+
+
+# ── M1 — UI map enriquecido (input_type, is_decorative, schema_version) ─────
+
+
+def test_is_decorative_input_field_label():
+    """Materialize column titles must be flagged decorative.
+
+    This is the exact class that broke ticket 70 P01: the LLM compiler picked
+    `<div class="col s10 input-field-label">…Agendados por Usuario</div>` as
+    the target of an `invisible` oracle for "no debe aparecer mensaje de
+    lista vacía". The element is a permanent layout title, never a runtime
+    message, so it always renders visible and the test always FAILs.
+    """
+    import ui_map_builder
+    assert ui_map_builder._is_decorative("div", ["col", "s10", "input-field-label"]) is True
+
+
+def test_is_decorative_page_title():
+    import ui_map_builder
+    assert ui_map_builder._is_decorative("div", ["page-title"]) is True
+    assert ui_map_builder._is_decorative("span", ["section-title", "h2"]) is True
+
+
+def test_is_decorative_form_control_never():
+    """Form controls are never decorative — even if they happen to share a
+    layout class (paranoid)."""
+    import ui_map_builder
+    assert ui_map_builder._is_decorative("input", ["input-field-label"]) is False
+    assert ui_map_builder._is_decorative("select", ["page-title"]) is False
+    assert ui_map_builder._is_decorative("button", ["section-title"]) is False
+
+
+def test_is_decorative_empty_class_list():
+    import ui_map_builder
+    assert ui_map_builder._is_decorative("div", []) is False
+    assert ui_map_builder._is_decorative("div", None) is False
+
+
+def test_is_decorative_unrelated_classes():
+    import ui_map_builder
+    assert ui_map_builder._is_decorative("div", ["card", "panel-body", "user-content"]) is False
+
+
+def test_cache_invalidated_on_schema_version_bump(monkeypatch, tmp_path):
+    """A cache entry without schema_version (or with an older one) must be
+    rebuilt — older caches lack input_type/is_decorative and would silently
+    mislead the compiler.
+    """
+    import ui_map_builder
+    monkeypatch.setenv("AGENDA_WEB_BASE_URL", "http://localhost")
+    monkeypatch.setenv("AGENDA_WEB_USER", "u")
+    monkeypatch.setenv("AGENDA_WEB_PASS", "p")
+
+    legacy = json.loads((FIXTURES / "ui_map_FrmAgenda.json").read_text(encoding="utf-8"))
+    # Explicit OLD schema version → must trigger rebuild.
+    legacy["schema_version"] = "ui_map/1.0"
+    legacy["hash"] = "sha256:legacy"
+
+    cache_dir = tmp_path / "cache" / "ui_maps"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "FrmAgenda.aspx.json").write_text(
+        json.dumps(legacy), encoding="utf-8",
+    )
+
+    with patch.object(ui_map_builder, "_CACHE_DIR", cache_dir):
+        # Force playwright to crash so we can assert it WAS called.
+        with patch("playwright.sync_api.sync_playwright", side_effect=Exception("pw-called")):
+            result = ui_map_builder.run(screen="FrmAgenda.aspx", rebuild=False)
+    assert result["ok"] is False
+    assert "pw-called" in (result.get("message") or "") or result.get("error") in {
+        "playwright_crash", "playwright_not_installed",
+    }
 
 
 def test_low_robustness_elements_in_warnings(monkeypatch, tmp_path):

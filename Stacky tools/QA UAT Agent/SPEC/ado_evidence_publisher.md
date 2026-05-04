@@ -192,7 +192,41 @@ cat audit/2026-05-02.jsonl | python -m json.tool
 - [ ] **Test estático**: escanear todos los archivos `uat_*.py` y `ado_evidence_publisher.py` — ninguno contiene la cadena `ado.py state` o `update_state`
 - [ ] Sin `ado_comment.html` → `{"ok": false, "error": "dossier_not_found"}`
 
-## 11. Tests requeridos
+## 11. Embedding de evidencia visual (v1.1)
+
+A partir de v1.1 el publisher embebe las screenshots como attachments del work
+item, en lugar de dejarlas como paths locales en el comentario.
+
+**Flujo en `--mode publish`:**
+
+1. El HTML producido por `uat_dossier_builder` lleva tokens
+   `{{ATTACH:<scenario_id>:<filename>}}` en cada `<img src>`/`<a href>`.
+2. El publisher recorre los tokens, sube cada screenshot via
+   `python ado.py attach <ticket> <file> --name <upload_name>` y obtiene la URL
+   real del attachment.
+3. Reemplaza cada token por la URL retornada y luego postea el comentario.
+
+**Flags nuevos:**
+
+| Flag | Descripción |
+|---|---|
+| `--no-attach` | Desactiva el embedding (legacy text-only) |
+| `--replace-previous` | Si detecta un comentario previo de Stacky por marker, lo elimina via `ado.py delete-comment` antes de crear el nuevo |
+
+**Errores nuevos:**
+
+| Código | Cuándo |
+|---|---|
+| `attachment_upload_failed` | Todos los uploads fallaron (sin URLs válidas para reemplazar tokens) |
+
+**Descripciones por step:**
+
+`uat_dossier_builder` invoca `step_descriptor.build_step_descriptions(...)` que
+genera, para cada screenshot, un texto en español que explica qué se intentó
+en ese paso. Por defecto usa `gpt-5-mini` vía `llm_client` (VS Code bridge) y
+hace fallback determinístico cuando el LLM no está disponible.
+
+## 12. Tests requeridos
 
 ```
 tests/unit/test_ado_evidence_publisher.py
@@ -206,4 +240,10 @@ test_audit_log_written_on_every_invocation
 test_missing_dossier_returns_error
 test_marker_not_found_returns_error
 test_no_state_subcommand_in_codebase  ← test estático de seguridad
+
+# v1.1
+test_publish_uploads_attachments_and_replaces_tokens
+test_publish_aborts_when_all_uploads_fail
+test_no_attach_flag_preserves_legacy_behavior
+test_replace_previous_deletes_old_comment
 ```

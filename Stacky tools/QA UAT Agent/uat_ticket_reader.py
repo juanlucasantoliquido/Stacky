@@ -72,6 +72,12 @@ _PLAN_ITEM_RE = re.compile(
 )
 _DATOS_RE = re.compile(r'[Dd]atos?[:\s]+([^\n]+)')
 _ESPERADO_RE = re.compile(r'[Ee]sperado?[:\s]+([^\n]+)')
+# Regex to extract plan rows from HTML tables: <td>P01</td><td>desc</td>..
+_HTML_TABLE_PLAN_RE = re.compile(
+    r'<tr[^>]*>\s*<td[^>]*>(P\d{2,3})</td>\s*<td[^>]*>(.*?)</td>\s*'
+    r'(?:<td[^>]*>(.*?)</td>)?\s*(?:<td[^>]*>(.*?)</td>)?',
+    re.IGNORECASE | re.DOTALL,
+)
 
 # Detect precondition types
 _RIDIOMA_RE = re.compile(r'INSERT\s+INTO\s+RIDIOMA', re.IGNORECASE)
@@ -165,8 +171,16 @@ def run(
 
     analisis_text = _html_to_text(tecnico_comment["text_md"])
 
-    # Extract plan de pruebas
+    # Extract plan de pruebas — text regex first, HTML table fallback
     plan_pruebas = _extract_plan_pruebas(analisis_text)
+    if not plan_pruebas:
+        # Plan may be formatted as an HTML table in any analisis_tecnico comment
+        for c in classified:
+            if c["role"] == "analisis_tecnico":
+                plan_pruebas = _extract_plan_from_html_table(c["text_md"])
+                if plan_pruebas:
+                    logger.debug("Plan de pruebas extracted from HTML table in comment %s", c["id"])
+                    break
     if not plan_pruebas:
         return _err("no_test_plan_in_ticket",
                     "Could not extract P01..P0N items from analisis_tecnico comment")
@@ -290,7 +304,7 @@ def _classify_role(text: str, verbose: bool = False) -> str:
             "Respond with ONLY a JSON object: {\"role\": \"<role>\"}. No explanations."
         )
         result = call_llm(
-            model="gpt-4.1-mini",
+            model="gpt-4o-mini",
             system=system_prompt,
             user=f"Comment text:\n{snippet}",
             max_tokens=64,
@@ -337,6 +351,28 @@ def _extract_plan_pruebas(text: str) -> list:
             item["esperado"] = esperado_m.group(1).strip()
         items.append(item)
 
+    return items
+
+
+def _extract_plan_from_html_table(html: str) -> list:
+    """Fallback: extract P01..P0N items from an HTML table where <td>P01</td> is first cell."""
+    items = []
+    seen_ids: set = set()
+    for m in _HTML_TABLE_PLAN_RE.finditer(html):
+        raw_id = m.group(1).strip()
+        pid = f"P{raw_id[1:].zfill(2)}"
+        if pid in seen_ids:
+            continue
+        seen_ids.add(pid)
+        desc = re.sub(r'<[^>]+>', '', m.group(2) or '').strip()
+        datos = re.sub(r'<[^>]+>', '', m.group(3) or '').strip()
+        esperado = re.sub(r'<[^>]+>', '', m.group(4) or '').strip()
+        item: dict = {"id": pid, "descripcion": desc or f"{pid} (sin descripcion)"}
+        if datos:
+            item["datos"] = datos
+        if esperado:
+            item["esperado"] = esperado
+        items.append(item)
     return items
 
 

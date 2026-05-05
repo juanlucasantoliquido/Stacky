@@ -60,10 +60,14 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.nav_learner")
 
-_TOOL_VERSION = "2.0.0"
-# Bump to 2.0.0 = added scan_session() + cache/discovered_selectors.json
-# write path. Backwards-compatible: scan() output unchanged for callers that
-# don't pass --session. Schema of learned_edges.json also unchanged.
+_TOOL_VERSION = "2.1.0"
+# 2.1.0 = Fase 6 confidence scoring. Each ObservedEdge now carries a
+# confidence label ("tentative" | "probable" | "stable") derived from
+# observed_count, plus first_seen / last_seen ISO dates. learned_edges.json
+# schema bumped to "2.0" — extra fields only, no removals, so the existing
+# navigation_graph._merge_learned_edges() reader (which only inspects target
+# + action) keeps working unchanged.
+# 2.0.0 = added scan_session() + cache/discovered_selectors.json write path.
 _TOOL_ROOT = Path(__file__).parent
 _CACHE_DIR = _TOOL_ROOT / "cache"
 _LEARNED_EDGES_PATH = _CACHE_DIR / "learned_edges.json"
@@ -91,6 +95,27 @@ _SCREEN_COMMENT_RE = re.compile(
 
 # ── Result dataclass ─────────────────────────────────────────────────────────
 
+# ── Fase 6: confidence scoring ───────────────────────────────────────────────
+
+# Thresholds — keep in sync with compute_confidence() and graph_promoter.py
+_CONFIDENCE_STABLE_MIN = 5
+_CONFIDENCE_PROBABLE_MIN = 3
+
+
+def compute_confidence(observed_count: int) -> str:
+    """Map observed_count to a confidence bucket.
+
+    >= 5  → "stable"   (candidate for auto-PR to navigation_graph._RAW_GRAPH)
+    >= 3  → "probable" (proposed for human review)
+    else  → "tentative" (used in BFS but with operator warning)
+    """
+    if observed_count >= _CONFIDENCE_STABLE_MIN:
+        return "stable"
+    if observed_count >= _CONFIDENCE_PROBABLE_MIN:
+        return "probable"
+    return "tentative"
+
+
 @dataclass
 class ObservedEdge:
     """A navigation transition extracted from test evidence."""
@@ -102,6 +127,9 @@ class ObservedEdge:
     already_in_graph: bool = False
     in_supported_screens: bool = True  # False = new unknown screen
     status: str = "proposed"  # "confirmed" | "proposed" | "unknown_screen"
+    confidence: str = "tentative"      # Fase 6: "tentative" | "probable" | "stable"
+    first_seen: str = ""               # ISO date "YYYY-MM-DD"
+    last_seen: str = ""                # ISO date "YYYY-MM-DD"
 
     def key(self) -> tuple:
         return (self.source, self.target)
@@ -112,6 +140,9 @@ class ObservedEdge:
             "target": self.target,
             "action": self.action,
             "observed_count": self.observed_count,
+            "confidence": self.confidence,
+            "first_seen": self.first_seen,
+            "last_seen": self.last_seen,
             "evidence_runs": self.evidence_runs,
             "already_in_graph": self.already_in_graph,
             "in_supported_screens": self.in_supported_screens,
@@ -539,8 +570,15 @@ def _write_learned_edges(
     proposed: list[ObservedEdge],
     learned_edges_path: Path,
 ) -> None:
-    """Write/merge proposed edges into learned_edges.json."""
-    # Load existing
+    """Write/merge proposed edges into learned_edges.json.
+
+    Fase 6: each edge entry now also carries ``confidence``, ``first_seen``,
+    ``last_seen``. Confidence is recomputed from the post-merge
+    ``observed_count`` so persisted edges stay self-consistent even after
+    multiple incremental scans.
+    """
+    today_iso = _now_iso()[:10]
+
     existing: dict = {}
     if learned_edges_path.is_file():
         try:
@@ -550,33 +588,38 @@ def _write_learned_edges(
 
     existing_by_source: dict[str, list[dict]] = existing.get("by_source", {})
 
-    # Merge proposed edges
     for edge in proposed:
         src = edge.source
         tgt = edge.target
-        # Check if this exact edge already exists in learned_edges
         existing_edges = existing_by_source.setdefault(src, [])
         existing_entry = next((e for e in existing_edges if e.get("target") == tgt), None)
         if existing_entry:
-            # Update count and evidence_runs
-            existing_entry["observed_count"] = (
-                existing_entry.get("observed_count", 0) + edge.observed_count
-            )
+            new_count = existing_entry.get("observed_count", 0) + edge.observed_count
+            existing_entry["observed_count"] = new_count
+            existing_entry["confidence"] = compute_confidence(new_count)
+            # Preserve first_seen if already present (older runs win); otherwise
+            # backfill it so legacy entries gain the field.
+            existing_entry.setdefault("first_seen", today_iso)
+            existing_entry["last_seen"] = today_iso
             for run in edge.evidence_runs:
                 if run not in existing_entry.get("evidence_runs", []):
                     existing_entry.setdefault("evidence_runs", []).append(run)
         else:
+            edge.confidence = compute_confidence(edge.observed_count)
+            edge.first_seen = today_iso
+            edge.last_seen = today_iso
             existing_edges.append(edge.to_dict())
 
-    # Rebuild output
     output = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "generated_at": _now_iso(),
         "tool_version": _TOOL_VERSION,
         "description": (
             "Edges learned from QA UAT test evidence. "
             "Loaded by navigation_graph.py at import time to extend the static graph. "
-            "Human-reviewed before promotion to navigation_graph._RAW_GRAPH."
+            "Human-reviewed before promotion to navigation_graph._RAW_GRAPH. "
+            "Fase 6: each edge carries a confidence label "
+            "(tentative<3, probable=3-4, stable>=5) plus first_seen/last_seen dates."
         ),
         "by_source": existing_by_source,
         "total_learned": sum(len(v) for v in existing_by_source.values()),
@@ -713,6 +756,30 @@ def main() -> None:
             print('{"message": "No learned_edges.json found. Run --apply first."}')
         sys.exit(0)
 
+    if args.show_stable:
+        # Fase 6: list only edges that have crossed the stable threshold.
+        stable_only: dict[str, list[dict]] = {}
+        if _LEARNED_EDGES_PATH.is_file():
+            try:
+                raw = json.loads(_LEARNED_EDGES_PATH.read_text(encoding="utf-8"))
+            except Exception as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
+                sys.exit(1)
+            for src, edges in (raw.get("by_source") or {}).items():
+                stable = [e for e in edges if e.get("confidence") == "stable"]
+                if stable:
+                    stable_only[src] = stable
+        print(json.dumps(
+            {
+                "ok": True,
+                "stable_count": sum(len(v) for v in stable_only.values()),
+                "by_source": stable_only,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ))
+        sys.exit(0)
+
     if args.clear:
         if _LEARNED_EDGES_PATH.is_file():
             _LEARNED_EDGES_PATH.unlink()
@@ -813,6 +880,8 @@ def _parse_args() -> argparse.Namespace:
                    help="Print a Python code snippet for pasting into navigation_graph._RAW_GRAPH.")
     p.add_argument("--show", action="store_true",
                    help="Print the current contents of cache/learned_edges.json.")
+    p.add_argument("--show-stable", action="store_true",
+                   help="Print only edges with confidence='stable' from learned_edges.json.")
     p.add_argument("--clear", action="store_true",
                    help="Delete cache/learned_edges.json (reset learned state).")
     p.add_argument("--background", action="store_true",

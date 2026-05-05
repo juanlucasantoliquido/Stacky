@@ -43,11 +43,19 @@ from navigation_graph import (
 
 logger = logging.getLogger("stacky.qa_uat.path_planner")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "1.1.0"
+# 1.1.0 = Fase 6 confidence scoring. PlanResult now exposes a per-path
+# confidence label + edge-level breakdown so the agent can warn the operator
+# before executing a path that relies on tentative learned edges.
 
 # Default entry point after login — first screen most users see.
 _DEFAULT_POST_LOGIN = "FrmAgenda.aspx"
 _LOGIN_SCREEN = "FrmLogin.aspx"
+
+
+# Fase 6: ranking used to compute the path-level confidence as the minimum
+# of the per-edge confidences. Higher = more trustworthy.
+_CONFIDENCE_RANK = {"tentative": 0, "probable": 1, "stable": 2}
 
 
 @dataclass
@@ -62,6 +70,12 @@ class PlanResult:
     hops: int = 0                   # number of navigation steps
     edges: list[dict] = field(default_factory=list)  # edge labels along path
     warning: str = ""               # non-empty when a fallback was used
+    # Fase 6 — confidence
+    confidence: str = "stable"      # "stable" | "probable" | "tentative"
+    confidence_breakdown: list[dict] = field(default_factory=list)
+    # each item: {"source": "X.aspx", "target": "Y.aspx",
+    #             "edge_source": "static"|"learned"|"unknown",
+    #             "confidence": "stable"|"probable"|"tentative"}
 
     def to_dict(self) -> dict:
         return {
@@ -74,6 +88,8 @@ class PlanResult:
             "hops": self.hops,
             "edges": self.edges,
             "warning": self.warning,
+            "confidence": self.confidence,
+            "confidence_breakdown": self.confidence_breakdown,
         }
 
 
@@ -107,7 +123,7 @@ def plan(
         path = _prepend_login(
             [effective_entry], assume_logged_in
         )
-        return PlanResult(
+        result = PlanResult(
             ok=True,
             path=path,
             target_screen=effective_entry,
@@ -119,6 +135,7 @@ def plan(
                     f"Using entry screen as both start and target. "
                     f"Add the mapping to navigation_graph.GOAL_ACTION_TARGETS.",
         )
+        return _annotate_confidence(result)
 
     result = plan_from_target(
         target_screen=target,
@@ -147,20 +164,20 @@ def plan_from_target(
     # Trivial case: already there
     if effective_entry == target_screen:
         path = _prepend_login([effective_entry], assume_logged_in)
-        return PlanResult(
+        return _annotate_confidence(PlanResult(
             ok=True,
             path=path,
             target_screen=target_screen,
             entry_screen=effective_entry,
             source="direct",
             hops=0,
-        )
+        ))
 
     # BFS
     bfs_path, bfs_edges = _bfs(effective_entry, target_screen)
     if bfs_path:
         full_path = _prepend_login(bfs_path, assume_logged_in)
-        return PlanResult(
+        return _annotate_confidence(PlanResult(
             ok=True,
             path=full_path,
             target_screen=target_screen,
@@ -168,12 +185,12 @@ def plan_from_target(
             source="graph_bfs",
             hops=len(bfs_path) - 1,
             edges=bfs_edges,
-        )
+        ))
 
     # Fallback: heuristic — try standard hub screens
     fallback_path = _heuristic_path(effective_entry, target_screen)
     full_path = _prepend_login(fallback_path, assume_logged_in)
-    return PlanResult(
+    return _annotate_confidence(PlanResult(
         ok=True,
         path=full_path,
         target_screen=target_screen,
@@ -182,7 +199,92 @@ def plan_from_target(
         hops=len(fallback_path) - 1,
         warning=f"No BFS path found from '{effective_entry}' to '{target_screen}'. "
                 f"Using heuristic fallback. Verify navigation_graph.py has the correct edges.",
-    )
+    ))
+
+
+# ── Confidence scoring (Fase 6) ──────────────────────────────────────────────
+
+def _edge_confidence(
+    src: str,
+    tgt: str,
+    learned_by_source: dict,
+) -> tuple[str, str]:
+    """Resolve (confidence, source_type) for a single (src → tgt) edge.
+
+    The static GRAPH wins: edges curated by hand are always "stable".
+    If the edge only exists in cache/learned_edges.json, its persisted
+    confidence is returned. If neither contains the edge (e.g. the heuristic
+    fallback invented a 2-hop guess), it is treated as "tentative".
+    """
+    # Static graph wins — these edges are curated by hand.
+    static_targets = {e.target for e in get_edges(src)}
+    if tgt in static_targets:
+        return ("stable", "static")
+
+    learned_edges = learned_by_source.get(src) or []
+    for entry in learned_edges:
+        if entry.get("target") == tgt:
+            return (entry.get("confidence", "tentative"), "learned")
+
+    return ("tentative", "unknown")
+
+
+def _score_path(path: list[str]) -> tuple[str, list[dict]]:
+    """Compute path-level confidence + per-edge breakdown.
+
+    The path's confidence is the minimum confidence across its edges:
+    a path with even one tentative edge is itself tentative.
+    """
+    # Lazy import — avoids hard-coupling path_planner to the learner module
+    # (the learner already depends on navigation_graph).
+    try:
+        from navigation_graph_learner import load_learned_edges
+        learned_by_source = load_learned_edges()
+    except Exception as exc:
+        logger.debug("path_planner: learned_edges unavailable (%s); assuming static-only", exc)
+        learned_by_source = {}
+
+    breakdown: list[dict] = []
+    min_rank = _CONFIDENCE_RANK["stable"]
+    min_label = "stable"
+
+    for i in range(1, len(path)):
+        src, tgt = path[i - 1], path[i]
+        conf, edge_src = _edge_confidence(src, tgt, learned_by_source)
+        breakdown.append({
+            "source": src,
+            "target": tgt,
+            "edge_source": edge_src,
+            "confidence": conf,
+        })
+        rank = _CONFIDENCE_RANK.get(conf, 0)
+        if rank < min_rank:
+            min_rank = rank
+            min_label = conf
+
+    if not breakdown:
+        # Trivial 1-screen path (entry == target). Treat as stable.
+        return ("stable", breakdown)
+
+    return (min_label, breakdown)
+
+
+def _annotate_confidence(result: PlanResult) -> PlanResult:
+    """Populate result.confidence + result.confidence_breakdown in place.
+
+    Also augments result.warning when the path includes tentative edges so
+    operators surface a record-a-session prompt.
+    """
+    confidence, breakdown = _score_path(result.path)
+    result.confidence = confidence
+    result.confidence_breakdown = breakdown
+    if confidence == "tentative":
+        suffix = (
+            " Path confidence: tentative — consider recording a demo session "
+            "first with session_recorder.py."
+        )
+        result.warning = (result.warning + suffix).strip() if result.warning else suffix.strip()
+    return result
 
 
 # ── BFS ───────────────────────────────────────────────────────────────────────

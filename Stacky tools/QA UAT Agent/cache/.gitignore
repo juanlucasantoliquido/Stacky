@@ -1,0 +1,6 @@
+# QA UAT Agent — cache directory
+# Cache is regenerated from evidence/ and recorded sessions; do not commit.
+# Exception: ui_maps/ is kept tracked because it serves as a reproducibility
+# baseline for the supported screen catalogue (committed deliberately).
+*.json
+!.gitignore

@@ -1,7 +1,8 @@
 """
 navigation_graph_learner.py — Automatic navigation graph expansion from test evidence.
 
-Fase 4 of the QA UAT Agent free-form improvement plan.
+Fase 4 of the QA UAT Agent free-form improvement plan, extended in Fase 5
+with --session support to consume demo-recorded sessions.
 
 Scans evidence directories produced by the QA UAT pipeline and extracts
 navigation transitions observed during real Playwright test runs. Compares
@@ -15,6 +16,9 @@ observed transitions against the static navigation_graph.GRAPH and emits:
      - proposed edges (new transitions not in static graph)
      - unknown screens (observed in tests but not in SUPPORTED_SCREENS)
 
+  3. (Fase 5 only, when --session is used) cache/discovered_selectors.json —
+     element selectors captured during a recorded session, merged additively.
+
 DESIGN:
 
   Static graph (navigation_graph.py) = hand-curated baseline.
@@ -24,17 +28,20 @@ DESIGN:
   generate a Python snippet you can paste into _RAW_GRAPH manually.
 
 SOURCES (in priority order):
-  1. scenarios.json — compiled scenarios with explicit pantalla/navigation_path
-  2. *.spec.ts files — page.goto() + waitForURL() patterns
-  3. ticket.json — navigation_path field in synthetic tickets (free-form runs)
-  4. intent_spec.json — navigation_path auto-computed by path_planner (free-form)
+  1. session.json (Fase 5) — explicit transitions captured by session_recorder.py
+  2. scenarios.json — compiled scenarios with explicit pantalla/navigation_path
+  3. *.spec.ts files — page.goto() + waitForURL() patterns
+  4. ticket.json — navigation_path field in synthetic tickets (free-form runs)
+  5. intent_spec.json — navigation_path auto-computed by path_planner (free-form)
 
 PUBLIC API:
   scan(evidence_root, apply=False) -> ScanResult
+  scan_session(session_dir, apply=False) -> ScanResult  (Fase 5)
   load_learned_edges() -> dict[str, list[dict]]  — edges indexed by source screen
 
 CLI:
   python navigation_graph_learner.py [--evidence-dir evidence/] [--apply] [--promote] [--background]
+  python navigation_graph_learner.py --session evidence/recordings/<ts>/ [--apply] [--show]
   python navigation_graph_learner.py --show   # show current learned_edges.json
   python navigation_graph_learner.py --clear  # remove learned_edges.json (reset)
 """
@@ -53,10 +60,14 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.nav_learner")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "2.0.0"
+# Bump to 2.0.0 = added scan_session() + cache/discovered_selectors.json
+# write path. Backwards-compatible: scan() output unchanged for callers that
+# don't pass --session. Schema of learned_edges.json also unchanged.
 _TOOL_ROOT = Path(__file__).parent
 _CACHE_DIR = _TOOL_ROOT / "cache"
 _LEARNED_EDGES_PATH = _CACHE_DIR / "learned_edges.json"
+_DISCOVERED_SELECTORS_PATH = _CACHE_DIR / "discovered_selectors.json"
 _EVIDENCE_DIR = _TOOL_ROOT / "evidence"
 
 # ── Patterns for extracting URLs from spec.ts files ──────────────────────────
@@ -260,6 +271,151 @@ def scan(
     )
 
 
+def scan_session(
+    session_dir: Path,
+    apply: bool = False,
+    verbose: bool = True,
+) -> ScanResult:
+    """Scan a single recording produced by session_recorder.py (Fase 5).
+
+    Reads ``<session_dir>/session.json``, converts the explicit transitions
+    into ObservedEdge entries (sharing the same dataclass + persistence path
+    as scan()), and — if apply=True — also merges the recorded
+    ``discovered_selectors`` into ``cache/discovered_selectors.json``.
+
+    Args:
+        session_dir: Directory containing session.json. Typically
+                     ``evidence/recordings/<timestamp>/``.
+        apply:       If True, write proposed edges to learned_edges.json AND
+                     merge discovered_selectors.json. If False, dry-run only.
+        verbose:     Enable DEBUG logging.
+
+    Returns:
+        ScanResult with confirmed/proposed/unknown_screen edges. The
+        ``scanned_runs`` field contains the single session directory name.
+    """
+    started = time.time()
+    session_file = session_dir / "session.json"
+    if not session_file.is_file():
+        logger.error("nav_learner: no session.json in %s", session_dir)
+        return ScanResult(ok=False, elapsed_ms=int((time.time() - started) * 1000))
+
+    try:
+        session_data = json.loads(session_file.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.error("nav_learner: failed to parse %s: %s", session_file, exc)
+        return ScanResult(ok=False, elapsed_ms=int((time.time() - started) * 1000))
+
+    from navigation_graph import GRAPH
+    from agenda_screens import is_supported
+
+    _graph_edges: set[tuple[str, str]] = set()
+    for src, edges in GRAPH.items():
+        for e in edges:
+            _graph_edges.add((src, e.target))
+
+    run_name = session_dir.name
+    observed: dict[tuple, ObservedEdge] = {}
+
+    # Source 1: explicit transitions[] from session.json (preferred — has
+    # trigger selector + label that we want to preserve in the action field).
+    for tr in session_data.get("transitions") or []:
+        src = tr.get("from")
+        tgt = tr.get("to")
+        if not src or not tgt:
+            continue
+        key = (src, tgt)
+        if key in observed:
+            observed[key].observed_count += 1
+            continue
+        in_src = is_supported(src)
+        in_tgt = is_supported(tgt)
+        in_graph = key in _graph_edges
+        status = (
+            "confirmed" if in_graph
+            else "proposed" if (in_src and in_tgt)
+            else "unknown_screen"
+        )
+        action = "observed_navigate"
+        label = (tr.get("trigger_label") or "").strip()
+        if label:
+            # Embed the demo-recorded label so the human reviewer (and the
+            # learned_edges.json reader) sees what the operator clicked.
+            action = f"recorded:{label[:40]}"
+        observed[key] = ObservedEdge(
+            source=src,
+            target=tgt,
+            action=action,
+            observed_count=1,
+            evidence_runs=[run_name],
+            already_in_graph=in_graph,
+            in_supported_screens=(in_src and in_tgt),
+            status=status,
+        )
+
+    # Source 2: navigation_path (covers the case where transitions[] is empty
+    # — e.g. a recording where the operator clicked but framenavigated didn't
+    # fire because the page used pushState).
+    nav_path = session_data.get("navigation_path") or []
+    for i in range(1, len(nav_path)):
+        src, tgt = nav_path[i - 1], nav_path[i]
+        key = (src, tgt)
+        if key in observed:
+            continue
+        in_src = is_supported(src)
+        in_tgt = is_supported(tgt)
+        in_graph = key in _graph_edges
+        status = (
+            "confirmed" if in_graph
+            else "proposed" if (in_src and in_tgt)
+            else "unknown_screen"
+        )
+        observed[key] = ObservedEdge(
+            source=src,
+            target=tgt,
+            action="observed_navigate",
+            observed_count=1,
+            evidence_runs=[run_name],
+            already_in_graph=in_graph,
+            in_supported_screens=(in_src and in_tgt),
+            status=status,
+        )
+
+    confirmed = [e for e in observed.values() if e.status == "confirmed"]
+    proposed = [e for e in observed.values() if e.status == "proposed"]
+    unknown = [e for e in observed.values() if e.status == "unknown_screen"]
+    proposed.sort(key=lambda e: -e.observed_count)
+
+    logger.info(
+        "nav_learner: session %s → confirmed=%d proposed=%d unknown=%d",
+        run_name, len(confirmed), len(proposed), len(unknown),
+    )
+
+    learned_edges_path = ""
+    if apply:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        if proposed:
+            learned_edges_path = str(_LEARNED_EDGES_PATH)
+            _write_learned_edges(proposed, learned_edges_path=_LEARNED_EDGES_PATH)
+            logger.info("nav_learner: wrote %d edges from session to %s", len(proposed), _LEARNED_EDGES_PATH)
+        # Always persist selectors if present — even when no NEW edges, the
+        # operator may have re-demoed a known path to refresh selector hints.
+        sel_map = session_data.get("discovered_selectors") or {}
+        if sel_map:
+            _write_discovered_selectors(sel_map)
+
+    return ScanResult(
+        ok=True,
+        scanned_runs=[run_name],
+        total_transitions_seen=sum(e.observed_count for e in observed.values()),
+        confirmed=confirmed,
+        proposed=proposed,
+        unknown_screens=unknown,
+        learned_edges_path=learned_edges_path,
+        elapsed_ms=int((time.time() - started) * 1000),
+    )
+
+
 def load_learned_edges() -> dict[str, list[dict]]:
     """Load cache/learned_edges.json if it exists.
 
@@ -431,6 +587,51 @@ def _write_learned_edges(
     )
 
 
+def _write_discovered_selectors(by_screen: dict[str, dict[str, str]]) -> None:
+    """Merge session-discovered selectors into cache/discovered_selectors.json.
+
+    Schema:
+      { "schema_version": "1.0",
+        "generated_at": "...",
+        "by_screen": { screen → { element_name → css_selector } } }
+
+    Merge policy: existing selectors win (first-seen-stable). New element keys
+    are added. This guards against a regressing recording where a stable
+    selector gets overwritten by a flakier one.
+    """
+    existing: dict = {}
+    if _DISCOVERED_SELECTORS_PATH.is_file():
+        try:
+            existing = json.loads(_DISCOVERED_SELECTORS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+    existing_by_screen: dict[str, dict[str, str]] = existing.get("by_screen", {})
+    for screen, sel_map in by_screen.items():
+        bucket = existing_by_screen.setdefault(screen, {})
+        for key, sel in sel_map.items():
+            bucket.setdefault(key, sel)
+
+    output = {
+        "schema_version": "1.0",
+        "generated_at": _now_iso(),
+        "tool_version": _TOOL_VERSION,
+        "description": (
+            "Element selectors captured by session_recorder.py during demo "
+            "sessions. Merged additively: first-seen selector wins. Consumed "
+            "by ui_map_builder/playwright_test_generator as a hint cache."
+        ),
+        "by_screen": existing_by_screen,
+    }
+    _DISCOVERED_SELECTORS_PATH.write_text(
+        json.dumps(output, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    logger.info(
+        "nav_learner: discovered selectors merged → %s (%d screens)",
+        _DISCOVERED_SELECTORS_PATH, len(existing_by_screen),
+    )
+
+
 # ── Promote to navigation_graph.py ───────────────────────────────────────────
 
 def promote_to_graph_snippet(proposed: list[ObservedEdge]) -> str:
@@ -505,7 +706,7 @@ def main() -> None:
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    if args.show:
+    if args.show and not args.session:
         if _LEARNED_EDGES_PATH.is_file():
             print(_LEARNED_EDGES_PATH.read_text(encoding="utf-8"))
         else:
@@ -520,13 +721,27 @@ def main() -> None:
             print("No learned_edges.json to clear.")
         sys.exit(0)
 
-    evidence_root = Path(args.evidence_dir) if args.evidence_dir else _EVIDENCE_DIR
-
-    result = scan(
-        evidence_root=evidence_root,
-        apply=args.apply,
-        verbose=not args.background,
-    )
+    if args.session:
+        # Fase 5 path: consume a single recorded session instead of scanning
+        # the whole evidence/ tree. Resolves the 'latest' convenience pointer
+        # written by session_recorder.py if the user passed it.
+        session_dir = Path(args.session)
+        if session_dir.name == "latest" and not session_dir.exists():
+            pointer = session_dir.parent / "latest.txt"
+            if pointer.is_file():
+                session_dir = Path(pointer.read_text(encoding="utf-8").strip())
+        result = scan_session(
+            session_dir=session_dir,
+            apply=args.apply,
+            verbose=not args.background,
+        )
+    else:
+        evidence_root = Path(args.evidence_dir) if args.evidence_dir else _EVIDENCE_DIR
+        result = scan(
+            evidence_root=evidence_root,
+            apply=args.apply,
+            verbose=not args.background,
+        )
 
     if args.promote and result.proposed:
         print("\n# ── PROMOTE SNIPPET ─────────────────────────────────────────────")
@@ -539,7 +754,16 @@ def main() -> None:
     if not args.background:
         _print_summary(result)
 
-    sys.exit(0 if result.ok else 1)
+    # Exit code semantics:
+    #   0  → ok with at least one proposed edge (or confirmed-only scan)
+    #   1  → hard error (could not parse session/evidence)
+    #   2  → ok but no proposed/confirmed edges — soft warning consumed by
+    #        session_recorder.py to surface "session yielded no learning"
+    if not result.ok:
+        sys.exit(1)
+    if not result.proposed and not result.confirmed:
+        sys.exit(2)
+    sys.exit(0)
 
 
 def _print_summary(result: ScanResult) -> None:
@@ -577,6 +801,12 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--evidence-dir", default=None,
                    help="Root directory containing evidence subdirs (default: evidence/).")
+    p.add_argument("--session", default=None,
+                   help=(
+                       "Path to a recorded session directory containing session.json "
+                       "(produced by session_recorder.py). Mutually exclusive with "
+                       "--evidence-dir scan."
+                   ))
     p.add_argument("--apply", action="store_true",
                    help="Write proposed new edges to cache/learned_edges.json.")
     p.add_argument("--promote", action="store_true",

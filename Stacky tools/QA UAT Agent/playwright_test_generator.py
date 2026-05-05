@@ -39,8 +39,14 @@ logger = logging.getLogger("stacky.qa_uat.test_generator")
 #  - Skip steps whose value cannot be formatted for the input type — the
 #    scenario is reclassified `blocked` with a structured reason instead of
 #    letting the test runner report a false product defect.
-_TOOL_VERSION = "1.1.0"
+_TOOL_VERSION = "1.2.0"
+# 1.2.0 = Fase 8 — discovered_selectors fallback. Before marking a scenario
+# BLOCKED for SELECTOR_NOT_FOUND, the generator now checks
+# cache/discovered_selectors.json (produced by session_recorder + learner).
+# Selectors resolved from the cache are tagged with "source":"discovered"
+# in the result so operators can promote them to the static UI map.
 _DEFAULT_TEMPLATE = Path(__file__).resolve().parent / "templates" / "playwright_test.spec.ts.j2"
+_DISCOVERED_SELECTORS_PATH = Path(__file__).resolve().parent / "cache" / "discovered_selectors.json"
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -60,6 +66,10 @@ def main() -> None:
         template_path=Path(args.template) if args.template else None,
         detect_screen_errors=args.detect_screen_errors,
         detect_screen_errors_vision=args.detect_screen_errors_vision,
+        discovered_selectors_path=(
+            None if not args.discovered_selectors or args.discovered_selectors.lower() == "none"
+            else Path(args.discovered_selectors)
+        ),
         verbose=args.verbose,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -73,6 +83,7 @@ def run(
     template_path: Optional[Path] = None,
     detect_screen_errors: bool = False,
     detect_screen_errors_vision: bool = False,
+    discovered_selectors_path: Optional[Path] = None,
     verbose: bool = False,
 ) -> dict:
     """Core logic — callable from tests."""
@@ -128,6 +139,11 @@ def run(
 
     ticket_id = scenarios_data.get("ticket_id", 0)
 
+    # Fase 8 — load discovered_selectors cache once for the whole run.
+    # Override path is injected by tests; production uses the default.
+    _disc_path = discovered_selectors_path or _DISCOVERED_SELECTORS_PATH
+    discovered_by_screen = _load_discovered_selectors(_disc_path)
+
     results = []
     generated_count = 0
     blocked_count = 0
@@ -167,7 +183,14 @@ def run(
         # fill values (e.g. "01/01/2026" → "2026-01-01" for <input type=date>).
         input_type_map = _build_input_type_map(ui_map_data)
 
-        # Validate all targets exist in UI map
+        # Fase 8 — augment selector_map with discovered_selectors for this
+        # screen before missing-selector check. Keeps track of which aliases
+        # were resolved from the cache so the result can flag them.
+        discovered_aliases = _merge_discovered_selectors(
+            selector_map, discovered_by_screen, pantalla
+        )
+
+        # Validate all targets exist in UI map (or discovered cache)
         missing_selectors = _find_missing_selectors(scenario, selector_map)
         if missing_selectors:
             blocked_count += 1
@@ -251,6 +274,7 @@ def run(
             "path": str(spec_path),
             "used_selectors": used_selectors,
             "unresolved_selectors": [],
+            "discovered_selectors_used": discovered_aliases,
         })
         logger.debug("Generated %s", spec_path)
 
@@ -264,6 +288,7 @@ def run(
             "tool": "playwright_test_generator",
             "version": _TOOL_VERSION,
             "duration_ms": int((time.time() - started) * 1000),
+            "discovered_selectors_file": str(_disc_path) if _disc_path.is_file() else None,
         },
     }
 
@@ -445,6 +470,53 @@ def _slugify(text: str) -> str:
     return slug[:50].strip('_')
 
 
+def _load_discovered_selectors(path: Path) -> dict[str, dict[str, str]]:
+    """Load cache/discovered_selectors.json and return by_screen index.
+
+    Returns {} when the file doesn't exist or is malformed — caller treats
+    this as "no cache available" and proceeds with the static UI map only.
+
+    Schema expected:
+        { "by_screen": { "Screen.aspx": { "alias": "css_selector", ... } } }
+    """
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("by_screen") or {}
+    except Exception as exc:
+        logger.warning("playwright_test_generator: cannot load discovered_selectors %s: %s", path, exc)
+        return {}
+
+
+def _merge_discovered_selectors(
+    selector_map: dict,
+    discovered_by_screen: dict[str, dict[str, str]],
+    screen: str,
+) -> list[str]:
+    """Add selectors from the discovered cache into selector_map (in-place).
+
+    Merge policy: discovered entries do NOT overwrite existing UI-map entries
+    (the curated UI map is always more reliable). Only MISSING aliases get
+    filled in.
+
+    Returns the list of alias names that were actually added from the cache
+    so the caller can surface them in the result for operator awareness.
+    """
+    screen_selectors = discovered_by_screen.get(screen) or {}
+    added: list[str] = []
+    for alias, selector in screen_selectors.items():
+        if alias and selector and alias not in selector_map:
+            selector_map[alias] = selector
+            added.append(alias)
+    if added:
+        logger.info(
+            "playwright_test_generator: resolved %d selector(s) from discovered cache for %s: %s",
+            len(added), screen, added,
+        )
+    return added
+
+
 def _err(code: str, message: str) -> dict:
     return {"ok": False, "error": code, "message": message}
 
@@ -472,6 +544,11 @@ def _parse_args() -> argparse.Namespace:
         help="Additionally call a vision-LLM detector via "
              "QA_UAT_VISION_DETECTOR_URL after each step. Implies "
              "--detect-screen-errors.",
+    )
+    parser.add_argument(
+        "--discovered-selectors", default=None, dest="discovered_selectors",
+        help="Path to cache/discovered_selectors.json. Defaults to the cache/ "
+             "directory next to this script. Pass 'none' to disable the lookup.",
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()

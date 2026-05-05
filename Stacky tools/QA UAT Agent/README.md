@@ -37,6 +37,18 @@ QA UAT Agent/
 ├── uat_test_data_finder.py
 ├── uat_action_recorder.py
 │
+├── ── Fases 5–8b: Autonomía agéntica ──────────────────────────
+├── session_recorder.py          ← (v1.2.0) Graba demo sessions (form_fields schema: selector→metadata)
+├── session_to_playbook.py       ← (v1.0.0) Convierte session.json en playbook replay-ready
+├── navigation_graph_learner.py  ← (v2.2.0) Aprende edges + recupera trigger_selector PostBack
+├── path_planner.py              ← Calcula path óptimo por pesos de confianza
+├── graph_promoter.py            ← Promueve edges al grafo activo por umbral de confianza
+├── intent_inferrer.py           ← Infiere intent_spec desde texto libre (LLM)
+│
+├── ── Fase 9–10 ───────────────────────────────────────────────
+├── replan_engine.py
+├── autonomous_explorer.py
+│
 ├── schemas/                     ← JSON schemas para validación de contratos
 │   ├── uat_ticket.schema.json
 │   ├── scenario_spec.schema.json
@@ -383,6 +395,7 @@ El QA UAT Agent incorpora una capa de autonomía progresiva sobre el pipeline ba
 | 6 | Confidence Scoring & Auto-Promotion | `navigation_graph_learner.py`, `path_planner.py`, `graph_promoter.py` | ✅ Completada |
 | 7 | Intent Inference | `intent_inferrer.py` | ✅ Completada |
 | 8 | UI Map Selector Learning | `playwright_test_generator.py` (discovered selectors) | ✅ Completada |
+| 8b | Recording-to-Replay (Learning Loop Cerrado) | `session_to_playbook.py` | ✅ Completada |
 | 9 | Multi-Round Replanning | `replan_engine.py` | ✅ Completada |
 | 10 | Exploración Autónoma | `autonomous_explorer.py`, `agenda_screens.py` (add_discovered_screen) | ✅ Completada |
 
@@ -494,6 +507,97 @@ python playwright_test_generator.py \
 **Schema de `discovered_selectors.json`:** Ver `cache/discovered_selectors.json.schema`
 
 **Nuevo campo en output:** `discovered_selectors_used: []` por escenario generado.
+
+---
+
+### Fase 8b — Recording-to-Replay: Learning Loop Cerrado (`session_to_playbook.py`)
+
+**Problema raíz:** El operador grababa una demo session con `session_recorder.py`, pero el pipeline seguía devolviendo `BLOCKED` en el siguiente run. Nada consumía la grabación. La sesión tenía todos los selectores necesarios (e.g. `#c_251`, `#c_btnAgregarUsuario`, `#c_abfMdCodigo`) pero el generator los ignoraba.
+
+Dos sub-problemas técnicos:
+1. `form_fields` en `session.json` estaba invertido: `{valor_tipeado → selector}`. El selector era inútil como clave — el operador podía tipear cualquier cosa.
+2. `transition.trigger_selector` era `""` para navegaciones PostBack (el evento `mousedown` se dispara pero la página recarga antes de que el buffer JS pueda leerlo).
+
+**Solución — 5 componentes coordinados:**
+
+#### `session_recorder.py` (v1.2.0+)
+- Agrega listener JS para evento `change` (además de `mousedown`) que captura `{selector → {label, last_value, input_type, field_name}}`.
+- Schema correcto: el selector es la clave estable, no el valor tipeado.
+- `merge_form_fields()` persiste el nuevo schema en `session.json`.
+
+#### `navigation_graph_learner.py` (v2.2.0+)
+- `_recover_trigger_from_discovered()`: cuando `trigger_selector == ""` en una transición PostBack, busca en `discovered_selectors[source_screen]` usando keywords de la pantalla destino.
+- Ejemplo: `FrmAdministrador → FrmGestionUsuarios` con trigger vacío → encuentra `navigate_next_administraci_n_de_usuarios = "#c_251"`.
+
+#### `session_to_playbook.py` (nuevo)
+Convierte una `session.json` en un playbook replay-ready en `cache/playbooks/`.
+
+```bash
+python session_to_playbook.py \
+  --session evidence/recordings/20260505_104714/ \
+  [--dry-run] \
+  [--verbose]
+```
+
+**Output:** `cache/playbooks/{goal_slug}.json`
+
+```json
+{
+  "goal_slug": "agregar_usuario_nuevo",
+  "goal_label": "agregar usuario nuevo",
+  "target_screen": "FrmGestionUsuarios.aspx",
+  "navigation_path": ["FrmAdministrador.aspx", "FrmGestionUsuarios.aspx"],
+  "navigation_steps": [
+    {"action": "goto", "screen": "FrmAdministrador.aspx"},
+    {"action": "click", "selector": "#c_251"},
+    {"action": "waitFor", "selector": "#c_btnAgregarUsuario"}
+  ],
+  "action_steps": [
+    {"action": "click", "selector": "#c_btnAgregarUsuario"},
+    {"action": "fill", "selector": "#c_abfMdCodigo", "field": "USUARIO_CODIGO"},
+    {"action": "fill", "selector": "#c_abfMdNombre", "field": "USUARIO_NOMBRE"},
+    {"action": "click", "selector": "#c_btnGuardarUsuario"}
+  ],
+  "parameterizable_fields": {
+    "USUARIO_CODIGO": {"selector": "#c_abfMdCodigo", "required": true, "source": "infer_unique"},
+    "USUARIO_NOMBRE": {"selector": "#c_abfMdNombre", "required": true, "source": "provided"}
+  }
+}
+```
+
+#### `playwright_test_generator.py` (v1.3.0+)
+- Carga todos los playbooks desde `cache/playbooks/` al inicio del run.
+- Antes de buscar selectores en el UI map, intenta `_match_playbook(scenario)`.
+  - Match por `goal_action` → playbook slug (exacto).
+  - Match por `pantalla` → `target_screen` del playbook.
+  - Match por keywords del título del escenario.
+- Si hay match: genera el `.spec.ts` directamente desde el playbook (`_render_from_playbook`). No llega al `SELECTOR_NOT_FOUND` → no BLOCKED.
+- Nuevo campo en resultado: `playbook_used: "agregar_usuario_nuevo"`.
+
+#### `uat_precondition_checker.py` (lazy BD fallback)
+- Cuando `RS_QA_DB_DSN` no está seteado, ya no retorna error `db_credentials_missing`.
+- Retorna `{"ok": true, "skipped": true, "summary": {...}}` con todos los escenarios marcados `skipped_no_dsn`.
+- El pipeline continúa hacia el generator sin bloquearse.
+
+**Flujo completo (Fase 8b):**
+
+```
+# 1. Operador graba demo una sola vez
+python session_recorder.py --goal "agregar usuario nuevo"
+# → evidence/recordings/20260505_104714/session.json
+
+# 2. Convertir grabación a playbook
+python session_to_playbook.py --session evidence/recordings/20260505_104714/
+# → cache/playbooks/agregar_usuario_nuevo.json
+
+# 3. Próxima vez que el pipeline corra, no más BLOCKED
+python qa_uat_pipeline.py --intent-file intent.json
+# → generator: status=generated, playbook_used=agregar_usuario_nuevo
+# → runner: test ejecutado en < 60 segundos
+# → verdict: ✅ PASS o ⚠️ FAIL (nunca BLOCKED por selectores)
+```
+
+**Nota sobre grabaciones anteriores (pre-1.2.0):** Las sesiones grabadas antes de `session_recorder.py` v1.2.0 tienen `form_fields` con schema invertido (`{valor_tipeado → selector}`). `session_to_playbook.py` detecta automáticamente el schema viejo e intenta una conversión best-effort desde `discovered_selectors`. Para grabaciones críticas, se recomienda re-grabar con v1.2.0+.
 
 ---
 

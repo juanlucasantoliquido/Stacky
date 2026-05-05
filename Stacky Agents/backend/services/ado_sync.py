@@ -84,6 +84,12 @@ def sync_tickets(client: AdoClient | None = None) -> dict:
                 priority_int = int(priority) if priority is not None else None
             except (TypeError, ValueError):
                 priority_int = None
+            work_item_type = str(fields.get("System.WorkItemType") or "")
+            parent_ado_id_raw = fields.get("System.Parent")
+            try:
+                parent_ado_id = int(parent_ado_id_raw) if parent_ado_id_raw else None
+            except (TypeError, ValueError):
+                parent_ado_id = None
 
             existing = session.query(Ticket).filter_by(ado_id=ado_id).first()
             if existing is None:
@@ -96,6 +102,8 @@ def sync_tickets(client: AdoClient | None = None) -> dict:
                         ado_state=str(fields.get("System.State") or ""),
                         ado_url=client.work_item_url(ado_id),
                         priority=priority_int,
+                        work_item_type=work_item_type or None,
+                        parent_ado_id=parent_ado_id,
                         last_synced_at=now,
                     )
                 )
@@ -107,6 +115,8 @@ def sync_tickets(client: AdoClient | None = None) -> dict:
                 existing.ado_state = str(fields.get("System.State") or existing.ado_state)
                 existing.ado_url = client.work_item_url(ado_id)
                 existing.priority = priority_int if priority_int is not None else existing.priority
+                existing.work_item_type = work_item_type or existing.work_item_type
+                existing.parent_ado_id = parent_ado_id if parent_ado_id is not None else existing.parent_ado_id
                 existing.last_synced_at = now
                 updated += 1
 
@@ -133,14 +143,8 @@ def _purge_orphans(session, project: str, fetched_ids: Iterable[int]) -> int:
     for t in locals_:
         if t.ado_id in fetched:
             continue
-        has_exec = (
-            session.query(AgentExecution.id)
-            .filter(AgentExecution.ticket_id == t.id)
-            .first()
-            is not None
-        )
-        if has_exec:
-            continue
+        # El ticket ya no existe en ADO (eliminado) → borrar local
+        # independientemente de si tiene ejecuciones asociadas.
         session.delete(t)
         removed += 1
     return removed

@@ -71,6 +71,7 @@ _STAGE_NAMES = [
     "preconditions",
     "generator",
     "runner",
+    "annotator",     # Fase 2 — non-fatal, draws bbox boxes on screenshots
     "evaluator",
     "failure_analyzer",
     "dossier",
@@ -350,6 +351,34 @@ def run(
         if not runner_result.get("ok"):
             return _build_output(ticket_id, stages, runner_result, started)
         _persist_json(evidence_dir / "runner_output.json", runner_result)
+
+    # ── Stage 5b: annotator (non-fatal) ─────────────────────────────────────
+    # Draws bounding-box annotations on evidence screenshots using Pillow.
+    # If Pillow is not installed or the step_bboxes.json files are missing,
+    # this stage is silently skipped — the pipeline is NEVER blocked here.
+    stage = "annotator"
+    if stage not in skip_stages:
+        try:
+            from screenshot_annotator import annotate_evidence_dir
+            _log_stage(stage)
+            annotator_result = annotate_evidence_dir(
+                evidence_dir=evidence_dir,
+                verbose=verbose,
+            )
+            stages[stage] = {
+                "ok": True,
+                "skipped": False,
+                "annotated": annotator_result.get("annotated", 0),
+                "errors": annotator_result.get("errors", []),
+            }
+            logger.debug("Annotator: %d images annotated", annotator_result.get("annotated", 0))
+        except ImportError:
+            stages[stage] = {"ok": True, "skipped": True, "reason": "screenshot_annotator_not_found"}
+        except Exception as exc:
+            logger.warning("Annotator stage failed (non-fatal): %s", exc)
+            stages[stage] = {"ok": True, "skipped": True, "reason": f"annotator_error: {exc}"}
+    else:
+        stages[stage] = {"ok": True, "skipped": True}
 
     # ── Stage 6: assertion_evaluator ─────────────────────────────────────────
     stage = "evaluator"

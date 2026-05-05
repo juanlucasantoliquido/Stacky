@@ -42,7 +42,10 @@ from typing import Any, Optional
 
 logger = logging.getLogger("stacky.qa_uat.intent_parser")
 
-_TOOL_VERSION = "1.1.0"
+_TOOL_VERSION = "1.2.0"
+# 1.2.0 = Fase 7 intent inference fallback: when intent_spec has a
+# navigation_path but no goal_action, intent_inferrer is called to suggest
+# a label. Degrades gracefully when intent_inferrer is unavailable.
 _SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
 _EVIDENCE_DIR = Path(__file__).resolve().parent / "evidence"
 
@@ -55,6 +58,15 @@ try:
 except ImportError:
     _path_planner = None  # type: ignore[assignment]
     _PATH_PLANNER_AVAILABLE = False
+
+# Intent inferrer is a Fase-7 optional dependency. Infers goal_action from
+# navigation_path when the field is absent in intent_spec.json.
+try:
+    import intent_inferrer as _intent_inferrer
+    _INFERRER_AVAILABLE = True
+except ImportError:
+    _intent_inferrer = None  # type: ignore[assignment]
+    _INFERRER_AVAILABLE = False
 
 # Regex matching placeholder tokens like {{LOTE_ID}} or {LOTE_ID} in values.
 _PLACEHOLDER_RE = re.compile(r'\{\{?([A-Z][A-Z0-9_]*)\}?\}')
@@ -165,9 +177,43 @@ def run(
             "intent_parser: navigation_path already present — path planner skipped"
         )
 
+    # ── [Fase 7] Infer goal_action from navigation_path when absent ──────────
+    inferrer_used = False
+    inferrer_suggestion = ""
+    inferrer_confidence = ""
+    if (
+        not intent_spec.get("goal_action")
+        and intent_spec.get("navigation_path")
+        and _INFERRER_AVAILABLE
+    ):
+        try:
+            infer_result = _intent_inferrer.infer_goal_from_path(
+                intent_spec["navigation_path"]
+            )
+            if infer_result.ok and infer_result.goal_action and infer_result.confidence != "unknown":
+                intent_spec["goal_action"] = infer_result.goal_action
+                inferrer_used = True
+                inferrer_suggestion = infer_result.goal_action
+                inferrer_confidence = infer_result.confidence
+                logger.info(
+                    "intent_parser: inferred goal_action=%r (conf=%s) from path %s",
+                    infer_result.goal_action,
+                    infer_result.confidence,
+                    intent_spec["navigation_path"],
+                )
+            else:
+                logger.debug(
+                    "intent_parser: inferrer returned no usable label (conf=%s, raw=%r)",
+                    getattr(infer_result, 'confidence', '?'),
+                    getattr(infer_result, 'raw_response', ''),
+                )
+        except Exception as exc:
+            logger.warning("intent_parser: inferrer failed: %s", exc)
+
     logger.debug(
-        "intent_parser: run_id=%s test_cases=%d resolved=%d pending=%d path_planner=%s",
-        run_id, len(test_cases), len(resolved_data), len(pending), path_planner_used,
+        "intent_parser: run_id=%s test_cases=%d resolved=%d pending=%d path_planner=%s inferrer=%s",
+        run_id, len(test_cases), len(resolved_data), len(pending),
+        path_planner_used, inferrer_used,
     )
 
     return {
@@ -181,6 +227,9 @@ def run(
             "duration_ms": int((time.time() - started) * 1000),
             "path_planner_used": path_planner_used,
             "path_planner_warning": path_planner_warning,
+            "inferrer_used": inferrer_used,
+            "inferrer_suggestion": inferrer_suggestion,
+            "inferrer_confidence": inferrer_confidence,
         },
     }
 

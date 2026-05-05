@@ -50,7 +50,10 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.session_recorder")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "1.1.0"
+# 1.1.0 = Fase 7 — intent_inferrer integration: after a session is recorded,
+# infer_goal_from_path() is called on the navigation_path and the result is
+# stored as "inferred_goal_action" in session.json.
 _SCHEMA_VERSION = "1.0"
 _TOOL_ROOT = Path(__file__).resolve().parent
 _RECORDINGS_DIR = _TOOL_ROOT / "evidence" / "recordings"
@@ -205,6 +208,7 @@ def _build_session_payload(
     discovered_selectors: dict[str, dict[str, str]],
     form_fields: dict[str, dict[str, str]],
     request_log: list[dict],
+    inferred_goal_action: str = "",
 ) -> dict:
     """Assemble the canonical session.json payload (also used by tests)."""
     return {
@@ -212,6 +216,7 @@ def _build_session_payload(
         "tool_version": _TOOL_VERSION,
         "recorded_at": started_at,
         "goal": goal or "",
+        "inferred_goal_action": inferred_goal_action,
         "navigation_path": navigation_path,
         "transitions": transitions,
         "discovered_selectors": discovered_selectors,
@@ -532,6 +537,33 @@ def main() -> None:
     ))
     if payload is None:
         sys.exit(1)
+
+    # [Fase 7] Infer goal_action from the recorded navigation_path when the
+    # operator did not specify --goal or when the goal description is generic.
+    # Stored in session.json as "inferred_goal_action" for downstream use by
+    # navigation_graph_learner and the orchestrator agent.
+    inferred_goal_action = ""
+    nav_path = payload.get("navigation_path") or []
+    if len(nav_path) >= 2:
+        try:
+            from intent_inferrer import infer_goal_from_path
+            infer_result = infer_goal_from_path(nav_path)
+            if infer_result.ok and infer_result.goal_action and infer_result.confidence != "unknown":
+                inferred_goal_action = infer_result.goal_action
+                logger.info(
+                    "recorder: inferred goal_action=%r (conf=%s)",
+                    inferred_goal_action, infer_result.confidence,
+                )
+            else:
+                logger.debug(
+                    "recorder: inferrer returned no usable label (conf=%s)",
+                    getattr(infer_result, 'confidence', '?'),
+                )
+        except Exception as exc:
+            logger.debug("recorder: intent_inferrer not available: %s", exc)
+
+    # Inject inferred_goal_action into the payload before persisting.
+    payload["inferred_goal_action"] = inferred_goal_action
 
     session_file = _write_session(payload)
     print(json.dumps({

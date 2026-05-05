@@ -1,0 +1,262 @@
+{
+  "schema_version": "playbook/1.0",
+  "tool_version": "1.0.0",
+  "goal_slug": "agregar_usuario_nuevo",
+  "goal_label": "agregar usuario nuevo",
+  "recorded_at": "2026-05-05T12:14:41",
+  "session_source": "evidence\\recordings\\20260505_121630\\session.json",
+  "entry_screen": "FrmAdministrador.aspx",
+  "target_screen": "FrmGestionUsuarios.aspx",
+  "navigation_path": [
+    "FrmLogin.aspx",
+    "FrmAdministrador.aspx",
+    "FrmGestionUsuarios.aspx"
+  ],
+  "navigation_steps": [
+    {
+      "action": "goto",
+      "screen": "FrmAdministrador.aspx"
+    },
+    {
+      "action": "waitFor",
+      "selector": "#c_251",
+      "timeout_ms": 10000
+    },
+    {
+      "action": "click",
+      "selector": "#c_251",
+      "label": "Administracion de Usuarios",
+      "wait_after": "load"
+    },
+    {
+      "action": "waitFor",
+      "selector": "#c_tvModOtorgadot41",
+      "timeout_ms": 10000
+    }
+  ],
+  "action_steps": [
+    {
+      "action": "click",
+      "selector": "a[data-tab-index=\"1\"]",
+      "label": "tab Usuarios",
+      "_note": "activate Users tab before interacting"
+    },
+    {
+      "action": "waitFor",
+      "selector": "#c_abfCodigo",
+      "timeout_ms": 15000,
+      "_note": "wait for Usuarios tab content to fully load"
+    },
+    {
+      "action": "fill",
+      "selector": "#c_abfCodigo",
+      "field": "USUARIO_CODIGO",
+      "source": "provided",
+      "valor": "USQA01",
+      "_note": "fill user code in the form panel (required to trigger creation modal)"
+    },
+    {
+      "action": "fill",
+      "selector": "#c_abfNombre",
+      "field": "USUARIO_NOMBRE",
+      "source": "provided",
+      "valor": "QA Test User 01",
+      "_note": "fill user name"
+    },
+    {
+      "action": "fill",
+      "selector": "#c_abfMaxLotes",
+      "field": "USUARIO_MAXLOTES",
+      "source": "provided",
+      "valor": "5",
+      "_note": "fill max lotes"
+    },
+    {
+      "action": "click",
+      "selector": "#c_btnAgregarUsuario",
+      "label": "Agregar",
+      "_note": "click Agregar — opens the confirmation/creation modal",
+      "wait_after": "networkidle"
+    },
+    {
+      "action": "waitFor",
+      "selector": "#c_abfMdCodigo",
+      "timeout_ms": 30000,
+      "_note": "wait for the creation modal form to appear"
+    },
+    {
+      "action": "select",
+      "selector": "#c_ddlMdEmpleador",
+      "field": "USUARIO_EMPLEADOR",
+      "source": "provided",
+      "valor": "0011",
+      "_note": "Select Empleador FIRST — AutoPostBack will fire and would clear text fields filled before"
+    },
+    {
+      "action": "wait",
+      "ms": 1000,
+      "_note": "brief pause before waiting for DOM refresh"
+    },
+    {
+      "action": "waitFor",
+      "selector": "#c_abfMdCodigo",
+      "timeout_ms": 30000,
+      "_note": "wait for modal to fully re-render after Empleador AutoPostBack before filling text fields"
+    },
+    {
+      "action": "fill",
+      "selector": "#c_abfMdCodigo",
+      "field": "USUARIO_CODIGO",
+      "source": "provided",
+      "valor": "USQA01"
+    },
+    {
+      "action": "fill",
+      "selector": "#c_abfMdNombre",
+      "field": "USUARIO_NOMBRE",
+      "source": "provided",
+      "valor": "QA Test User 01"
+    },
+    {
+      "action": "fill",
+      "selector": "#c_abfMdMaxLotes",
+      "field": "USUARIO_MAXLOTES",
+      "source": "provided",
+      "valor": "5"
+    },
+    {
+      "action": "click",
+      "selector": "#c_btnGuardarUsuario",
+      "label": "Guardar",
+      "_note": "save the new user",
+      "wait_after": "networkidle"
+    },
+    {
+      "action": "wait",
+      "ms": 3000,
+      "_note": "wait for grid to refresh after PostBack"
+    }
+  ],
+  "parameterizable_fields": {
+    "ON": {
+      "selector": "#c_chkVerUsuarioBaja",
+      "label": "on",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "1": {
+      "selector": "#c_abfCodigo",
+      "label": "1",
+      "input_type": "text",
+      "required": true,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "22": {
+      "selector": "#c_abfNombre",
+      "label": "22",
+      "input_type": "text",
+      "required": true,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "66": {
+      "selector": "#c_abfTelefono",
+      "label": "66",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "77": {
+      "selector": "#c_abfInterno",
+      "label": "77",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "88": {
+      "selector": "#c_abfMaxLotes",
+      "label": "88",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "1010": {
+      "selector": "#c_abfEmail",
+      "label": "1010",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "PERIODO_DE_VACACIONES": {
+      "selector": "#c_abfEstado",
+      "label": "periodo_de_vacaciones",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "ESPANOL": {
+      "selector": "#c_abfIdioma",
+      "label": "espanol",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "AGENCIA_EXTERNA_1": {
+      "selector": "#c_abfEmpleador",
+      "label": "agencia_externa_1",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "99123123123123123123": {
+      "selector": "#c_abfNumDoc",
+      "label": "99123123123123123123",
+      "input_type": "text",
+      "required": true,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "501_501": {
+      "selector": "#c_abfSuperior",
+      "label": "501_501",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_unique",
+      "default": "QA_{{RUN_ID}}"
+    },
+    "USE": {
+      "selector": "#c_abfMdCodigo",
+      "label": "use",
+      "input_type": "text",
+      "required": true,
+      "source": "provided",
+      "default": "usertest2"
+    },
+    "U": {
+      "selector": "#c_abfMdNombre",
+      "label": "u",
+      "input_type": "text",
+      "required": true,
+      "source": "provided",
+      "default": "usuario test 2"
+    },
+    "5": {
+      "selector": "#c_abfMdMaxLotes",
+      "label": "5",
+      "input_type": "text",
+      "required": false,
+      "source": "infer_numeric",
+      "default": "5000"
+    }
+  }
+}

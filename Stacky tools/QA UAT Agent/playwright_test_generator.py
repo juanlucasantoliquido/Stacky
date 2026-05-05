@@ -525,7 +525,8 @@ def _load_playbooks(playbooks_dir: Path) -> dict[str, dict]:
         return index
     for pb_file in sorted(playbooks_dir.glob("*.json")):
         try:
-            pb = json.loads(pb_file.read_text(encoding="utf-8"))
+            # Use utf-8-sig to handle BOM written by tools like PowerShell
+            pb = json.loads(pb_file.read_text(encoding="utf-8-sig"))
             slug = pb.get("goal_slug", pb_file.stem)
             index["by_slug"][slug] = pb
             screen = pb.get("target_screen", "")
@@ -641,7 +642,7 @@ def _render_from_playbook(
     for i, paso in enumerate(pasos_for_template):
         accion = paso.get("accion", "")
         selector = paso.get("target", "")
-        if accion in ("click", "fill", "wait_visible", "check", "double_click", "hover") and selector:
+        if accion in ("click", "fill", "wait_visible", "check", "check_checkbox", "double_click", "hover", "select") and selector:
             alias = f"pb_step_{i}"
             safe_sel = selector.replace('"', "'")  # a:has-text("X") → a:has-text('X')
             synthetic_ui_map[alias] = safe_sel
@@ -728,8 +729,17 @@ def _playbook_steps_to_pasos(steps: list[dict], resolved_fields: dict[str, str])
             field_key = step.get("field", "")
             val = resolved_fields.get(field_key, step.get("valor", ""))
             pasos.append({"accion": "fill", "target": selector, "valor": val})
+        elif action == "check":
+            pasos.append({"accion": "check_checkbox", "target": selector, "valor": "true"})
+        elif action == "uncheck":
+            pasos.append({"accion": "check_checkbox", "target": selector, "valor": "false"})
         elif action == "waitFor":
-            pasos.append({"accion": "wait_visible", "target": selector, "valor": ""})
+            timeout_ms = step.get("timeout_ms", 10000)
+            pasos.append({"accion": "wait_visible", "target": selector, "valor": "", "timeout_ms": timeout_ms})
+        elif action == "select":
+            field_key = step.get("field", "")
+            val = resolved_fields.get(field_key, step.get("valor", ""))
+            pasos.append({"accion": "select", "target": selector, "valor": val})
         elif action == "wait":
             pasos.append({"accion": "wait_networkidle", "target": "", "valor": ""})
         # skip _note-only steps

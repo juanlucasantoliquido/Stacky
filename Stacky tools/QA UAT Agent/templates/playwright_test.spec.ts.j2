@@ -42,6 +42,18 @@ const ORACLE_PROBES: OracleProbe[] = [
 ];
 const ASSERTIONS_OUT_PATH = 'evidence/{{ ticket_id }}/{{ scenario_id }}/assertions_{{ scenario_id }}.json';
 
+// STEP_BBOXES — accumulates bounding boxes of interacted elements per step.
+// Written by test.afterEach to evidence/<ticket>/<sid>/step_bboxes.json and
+// consumed by screenshot_annotator.py (Fase 2) to draw red boxes on screenshots.
+type StepBboxEntry = {
+  step_index: number;
+  screenshot_path: string;
+  target: string;
+  bbox: { x: number; y: number; width: number; height: number } | null;
+};
+const STEP_BBOXES: StepBboxEntry[] = [];
+const STEP_BBOXES_OUT_PATH = 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_bboxes.json';
+
 test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => {
 
   test.beforeEach(async ({ page }) => {
@@ -126,16 +138,19 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     await page.locator("{{ ui_map[step.target] }}").click({ force: true });
     await page.waitForLoadState('load');
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
     {% elif step.accion == 'fill' %}
     // [STEP {{ '%02d' | format(loop.index) }}] fill {{ step.target }} with "{{ step.valor }}"
     console.log('[STEP {{ '%02d' | format(loop.index) }}] fill {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").fill('{{ step.valor }}', { force: true });;
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
     {% elif step.accion == 'select' %}
     // [STEP {{ '%02d' | format(loop.index) }}] select {{ step.valor }} in {{ step.target }}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] select {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").selectOption('{{ step.valor }}', { force: true });;
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
     {% elif step.accion == 'select_by_index' %}
     // [STEP {{ '%02d' | format(loop.index) }}] select index {{ step.valor }} in {{ step.target }}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] select_by_index {{ step.target }}');
@@ -150,6 +165,54 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     {% elif step.accion == 'wait_visible' %}
     // [STEP {{ '%02d' | format(loop.index) }}] wait visible {{ step.target }}
     await expect(page.locator('{{ ui_map[step.target] }}')).toBeVisible({ timeout: 10000 });
+    {% elif step.accion == 'press_key' %}
+    // [STEP {{ '%02d' | format(loop.index) }}] press key {{ step.valor }} on {{ step.target }}
+    console.log('[STEP {{ '%02d' | format(loop.index) }}] press_key {{ step.valor }}');
+    await page.keyboard.press({{ step.valor | tojson }});
+    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    {% elif step.accion == 'hover' %}
+    // [STEP {{ '%02d' | format(loop.index) }}] hover {{ step.target }}
+    console.log('[STEP {{ '%02d' | format(loop.index) }}] hover {{ step.target }}');
+    await page.locator("{{ ui_map[step.target] }}").hover();
+    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
+    {% elif step.accion == 'double_click' %}
+    // [STEP {{ '%02d' | format(loop.index) }}] double_click {{ step.target }}
+    console.log('[STEP {{ '%02d' | format(loop.index) }}] double_click {{ step.target }}');
+    await page.locator("{{ ui_map[step.target] }}").dblclick({ force: true });
+    await page.waitForLoadState('load');
+    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
+    {% elif step.accion == 'check_checkbox' %}
+    // [STEP {{ '%02d' | format(loop.index) }}] {{ 'check' if step.valor == 'true' else 'uncheck' }} {{ step.target }}
+    console.log('[STEP {{ '%02d' | format(loop.index) }}] check_checkbox {{ step.target }} = {{ step.valor }}');
+    {% if step.valor == 'true' %}
+    await page.locator("{{ ui_map[step.target] }}").check({ force: true });
+    {% else %}
+    await page.locator("{{ ui_map[step.target] }}").uncheck({ force: true });
+    {% endif %}
+    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
+    {% elif step.accion == 'select_radio' %}
+    // [STEP {{ '%02d' | format(loop.index) }}] select radio {{ step.target }} = {{ step.valor }}
+    console.log('[STEP {{ '%02d' | format(loop.index) }}] select_radio {{ step.target }}');
+    await page.locator("{{ ui_map[step.target] }}[value={{ step.valor | tojson }}]").check({ force: true });
+    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}[value={{ step.valor | tojson }}]").boundingBox().catch(() => null) });
+    {% elif step.accion == 'clear' %}
+    // [STEP {{ '%02d' | format(loop.index) }}] clear {{ step.target }}
+    console.log('[STEP {{ '%02d' | format(loop.index) }}] clear {{ step.target }}');
+    await page.locator("{{ ui_map[step.target] }}").clear({ force: true });
+    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    {% elif step.accion == 'wait_for_text' %}
+    // [STEP {{ '%02d' | format(loop.index) }}] wait for text "{{ step.valor }}" in {{ step.target }}
+    console.log('[STEP {{ '%02d' | format(loop.index) }}] wait_for_text {{ step.target }}');
+    await expect(page.locator("{{ ui_map[step.target] }}")).toContainText({{ step.valor | tojson }}, { timeout: 15000 });
+    {% elif step.accion == 'scroll_into_view' %}
+    // [STEP {{ '%02d' | format(loop.index) }}] scroll_into_view {{ step.target }}
+    console.log('[STEP {{ '%02d' | format(loop.index) }}] scroll_into_view {{ step.target }}');
+    await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
     {% endif %}
     {% endfor %}
 
@@ -268,6 +331,18 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
       );
     } catch (e) {
       console.error('[afterEach] could not persist assertions json:', e);
+    }
+
+    // Persist step_bboxes.json for screenshot_annotator.py (Fase 2).
+    // Non-fatal: if this fails the pipeline continues without annotations.
+    if (STEP_BBOXES.length > 0) {
+      try {
+        const bboxOutPath = path.resolve(process.cwd(), STEP_BBOXES_OUT_PATH);
+        fs.mkdirSync(path.dirname(bboxOutPath), { recursive: true });
+        fs.writeFileSync(bboxOutPath, JSON.stringify(STEP_BBOXES, null, 2), 'utf-8');
+      } catch (e) {
+        console.error('[afterEach] could not persist step_bboxes json:', e);
+      }
     }
 
     await page.context().clearCookies();

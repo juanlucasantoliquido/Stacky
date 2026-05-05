@@ -45,8 +45,21 @@ from agenda_screens import SUPPORTED_SCREENS as _SUPPORTED_SCREENS
 import agenda_glossary
 
 # Actions supported in ScenarioSpec
+# v1.2.0 — expanded with 8 new actions to simulate a real QA expert:
+#   press_key, hover, double_click, check_checkbox, select_radio, clear,
+#   wait_for_text, scroll_into_view.
 _SUPPORTED_ACTIONS = frozenset({
-    "navigate", "click", "fill", "select", "wait_networkidle", "wait_visible"
+    # original actions
+    "navigate", "click", "fill", "select", "wait_networkidle", "wait_visible",
+    # new actions (Fase 1 — agenda-expert)
+    "press_key",        # keyboard press: Enter, Tab, Escape, F5, etc.
+    "hover",            # hover over element (reveals tooltips / dropdowns)
+    "double_click",     # double-click (edit-in-place, expand tree nodes)
+    "check_checkbox",   # check/uncheck checkbox; valor="true"|"false"
+    "select_radio",     # select a radio button; valor=option label or value
+    "clear",            # clear field content (dates, combos, text)
+    "wait_for_text",    # wait until element contains text; valor=<text>
+    "scroll_into_view", # scroll element into viewport before interacting
 })
 
 # Placeholder patterns that indicate incomplete scenario
@@ -324,11 +337,21 @@ Given a test case description, extract a structured ScenarioSpec JSON.
 Respond ONLY with valid JSON, no explanations.
 
 The JSON must have:
-- "pantalla": one of ["FrmAgenda.aspx","FrmDetalleLote.aspx","FrmGestion.aspx","Login.aspx"]
+- "pantalla": one of [{", ".join(f'"{s}"' for s in sorted(_SUPPORTED_SCREENS))}]
 - "precondiciones": list of strings
-- "pasos": list of {{"accion": "<navigate|click|fill|select|wait_networkidle|wait_visible>", "target": "<alias>", "valor": <str|null>}}
+- "pasos": list of {{"accion": "<navigate|click|fill|select|wait_networkidle|wait_visible|press_key|hover|double_click|check_checkbox|select_radio|clear|wait_for_text|scroll_into_view>", "target": "<alias>", "valor": <str|null>}}
 - "oraculos": list of {{"tipo": "<equals|contains_literal|count_gt|count_eq|visible|invisible|state|page_contains_text|page_not_contains_text|select_value_is>", "target": "<alias>", "valor": <str|null>}}
 - "datos_requeridos": list of {{"tabla": "<str>", "filtro": "<str>"}}
+
+Action semantics for new actions:
+- press_key: valor = key name (e.g. "Enter", "Tab", "Escape", "F5"). target = focused element alias.
+- hover: valor = null. Hover over element to reveal tooltip or dropdown menu.
+- double_click: valor = null. Double-click for edit-in-place or expand node.
+- check_checkbox: valor = "true" to check, "false" to uncheck.
+- select_radio: valor = option label or value to select.
+- clear: valor = null. Clear the field content.
+- wait_for_text: valor = text string to wait for inside the element.
+- scroll_into_view: valor = null. Scroll element into viewport before interacting.
 
 Oracle selection rules (HARD CONSTRAINTS — violating them will cause the scenario to be rejected):
 - For checking the value selected in a <select>, use tipo='select_value_is' with target=<select_alias> and valor='<expected option text/value>'. NEVER use tipo='visible' on a select to mean 'value=Todos'.

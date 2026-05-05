@@ -19,8 +19,9 @@ PUBLIC API (stable):
   - `extract_from_text(text) -> list[str]`: enumerate canonical screens
     mentioned anywhere in `text`, preserving deterministic order.
 
-The MVP scope is exactly four screens (FrmAgenda, FrmDetalleLote, FrmGestion,
-Login). Any addition MUST be made here and nowhere else.
+The full catalogue is sourced from `branches/NetCore/OnLine/AgendaWeb/` (main
+screens) plus `branches/Materialize/OnLine/AgendaWeb/` (PopUps). Any addition
+MUST be made here and nowhere else.
 """
 from __future__ import annotations
 
@@ -31,11 +32,141 @@ from typing import Iterable
 # Screen filenames as the Agenda Web app serves them. Casing matters because
 # the URL path is built by concatenating the base URL with this exact string
 # (see `ui_map_builder.run` -> `url = base_url + "/" + screen`).
+#
+# Source: branches/NetCore/OnLine/AgendaWeb/ + branches/Materialize/OnLine/AgendaWeb/
+# Maintained here as the single source of truth — do NOT duplicate this list
+# elsewhere (compiler, pipeline, ui_map_builder all import from this module).
 SUPPORTED_SCREENS: "frozenset[str]" = frozenset({
+    # ── Pantallas principales ──────────────────────────────────────────────
     "FrmAgenda.aspx",
     "FrmDetalleLote.aspx",
     "FrmGestion.aspx",
-    "Login.aspx",
+    "FrmLogin.aspx",
+    "Login.aspx",           # alias legacy (mantener para compatibilidad)
+
+    # ── Búsqueda ──────────────────────────────────────────────────────────
+    "FrmBusqueda.aspx",
+    "FrmBusquedaJudicial.aspx",
+
+    # ── Cliente ───────────────────────────────────────────────────────────
+    "FrmDetalleClie.aspx",
+    "FrmDetalleCliente.aspx",
+
+    # ── Administración y configuración ────────────────────────────────────
+    "FrmAdministrador.aspx",
+    "FrmAdminEstrategias.aspx",
+    "FrmParametros.aspx",
+    "FrmFeriados.aspx",
+    "FrmMonedas.aspx",
+    "FrmOficinas.aspx",
+    "FrmProductos.aspx",
+    "FrmTablasGenerales.aspx",
+    "FrmTablasGeneralesMandante.aspx",
+    "FrmMandantes.aspx",
+    "FrmSegmentacion.aspx",
+
+    # ── Asignación y estrategias ──────────────────────────────────────────
+    "FrmAsignarEstudio.aspx",
+    "FrmAsignarLote.aspx",
+    "FrmAsignarTipoDeJuicio.aspx",
+    "FrmEstrategia.aspx",
+    "FrmEdicionTars.aspx",
+    "FrmVinculVariablesGMR.aspx",
+
+    # ── Gestión de lotes ─────────────────────────────────────────────────
+    "FrmGestionFlujos.aspx",
+    "FrmGestionUsuarios.aspx",
+    "FrmAvanzarFlow.aspx",
+
+    # ── Agenda por tipo ───────────────────────────────────────────────────
+    "FrmAgendaEquipo.aspx",
+    "FrmAgendaJudicial.aspx",
+    "FrmAgenteComisiones.aspx",
+
+    # ── Judicial ──────────────────────────────────────────────────────────
+    "FrmJDemanda.aspx",
+    "FrmJEmbargo.aspx",
+    "FrmJModificarDemanda.aspx",
+    "FrmJReasignarAbogado.aspx",
+    "FrmJConvenio.aspx",
+    "FrmJConveniosAnulados.aspx",
+    "FrmJElaborarDemanda.aspx",
+    "FrmRadicarDemanda.aspx",
+    "FrmValidacionGastosJudicial.aspx",
+
+    # ── Liquidaciones y comisiones ────────────────────────────────────────
+    "FrmLiquidaciones.aspx",
+    "FrmLiquidarGastos.aspx",
+    "FrmDetalleLiquidacion.aspx",
+    "FrmLiquidComisiones.aspx",
+    "FrmLiquidComisionesDet.aspx",
+    "FrmLiquidComisionesProg.aspx",
+    "FrmComisionistas.aspx",
+    "FrmConfigComisiones.aspx",
+
+    # ── Simulación ───────────────────────────────────────────────────────
+    "FrmSimulacionUnitaria.aspx",
+    "FrmSimulMasiva.aspx",
+
+    # ── Reportes e informes ───────────────────────────────────────────────
+    "FrmReportes.aspx",
+    "FrmReporteOperativo.aspx",
+    "FrmInformes.aspx",
+
+    # ── Envíos y comunicaciones ───────────────────────────────────────────
+    "FrmEnviarDocumentacion.aspx",
+    "FrmMensajes.aspx",
+
+    # ── Impresión ─────────────────────────────────────────────────────────
+    "FrmImpConvenioJudicial.aspx",
+    "FrmImpFichaClienteJudi.aspx",
+    "FrmImpFichaClientePre.aspx",
+
+    # ── Workflow ──────────────────────────────────────────────────────────
+    "WorkflowFrame.aspx",
+    "FrmEditorWorkflow.aspx",
+    "FrmIframeWorkflow.aspx",
+    "FrmEtapaVacia.aspx",
+
+    # ── Misc ──────────────────────────────────────────────────────────────
+    "Errors.aspx",
+    "Default.aspx",
+    "FrmBase.aspx",
+
+    # ── PopUps (Materialize) ──────────────────────────────────────────────
+    "PopAnCtaCte.aspx",
+    "PopAnPrestamos.aspx",
+    "PopAnTarjetas.aspx",
+    "PopUpAgendar.aspx",
+    "PopUpAgenteComisiones.aspx",
+    "PopUpChequesProtestados.aspx",
+    "PopUpCompromisos.aspx",
+    "PopUpContactos.aspx",
+    "PopUpContactosDomicilios.aspx",
+    "PopUpContactosEmails.aspx",
+    "PopUpContactosTelefonos.aspx",
+    "PopUpControles.aspx",
+    "PopUpConvenios.aspx",
+    "PopUpConveniosVerTodos.aspx",
+    "PopUpDetallePerfil.aspx",
+    "PopUpDocumentosUpload.aspx",
+    "PopUpDomicilios.aspx",
+    "PopUpDomicMapa.aspx",
+    "PopUpEmails.aspx",
+    "PopUpEstadosEspeciales.aspx",
+    "PopUpFlow.aspx",
+    "PopUpGarantias.aspx",
+    "PopUpGastosJudicial.aspx",
+    "PopUpGestionesHistoricas.aspx",
+    "PopUpJudiAgendar.aspx",
+    "PopUpLiquidacionCaso.aspx",
+    "PopUpLiquidacionPago.aspx",
+    "PopUpNota.aspx",
+    "PopUpNotasGestiones.aspx",
+    "PopUpNotasGestionesJudicial.aspx",
+    "PopUpPasajeJudicial.aspx",
+    "PopUpRecomendaciones.aspx",
+    "PopUpTelefonos.aspx",
 })
 
 

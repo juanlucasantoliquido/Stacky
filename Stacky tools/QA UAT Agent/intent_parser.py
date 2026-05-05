@@ -3,6 +3,7 @@ intent_parser.py — Validate and normalize an intent_spec.json produced by the
 orchestrator agent (UserInterfaceQAFreeForm).
 
 Fase 1 of the QA UAT Agent free-form improvement plan.
+Fase 2 adds automatic navigation_path[] computation via path_planner.py.
 
 This tool does NOT use an LLM.  The orchestrator agent is responsible for
 producing a well-formed intent_spec.json.  This tool only:
@@ -11,6 +12,8 @@ producing a well-formed intent_spec.json.  This tool only:
      using the ``resolved_data`` dict.
   3. Detects remaining unresolved placeholders and returns them as
      ``pending_data`` so the caller can emit a data_request.
+  4. [Fase 2] Auto-computes navigation_path[] via the navigation graph + BFS
+     when the field is absent or empty in intent_spec.
 
 CLI:
     python intent_parser.py --intent-file intent_spec.json [--verbose]
@@ -39,9 +42,19 @@ from typing import Any, Optional
 
 logger = logging.getLogger("stacky.qa_uat.intent_parser")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "1.1.0"
 _SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
 _EVIDENCE_DIR = Path(__file__).resolve().parent / "evidence"
+
+# Path planner is a Fase-2 optional dependency.  If navigation_graph.py or
+# path_planner.py are not present (e.g. running on an old installation), the
+# parser degrades gracefully and leaves navigation_path empty.
+try:
+    import path_planner as _path_planner
+    _PATH_PLANNER_AVAILABLE = True
+except ImportError:
+    _path_planner = None  # type: ignore[assignment]
+    _PATH_PLANNER_AVAILABLE = False
 
 # Regex matching placeholder tokens like {{LOTE_ID}} or {LOTE_ID} in values.
 _PLACEHOLDER_RE = re.compile(r'\{\{?([A-Z][A-Z0-9_]*)\}?\}')
@@ -120,9 +133,41 @@ def run(
     run_id = intent_spec.get("run_id") or f"freeform-{_ts()}"
     intent_spec["run_id"] = run_id
 
+    # ── [Fase 2] Auto-compute navigation_path via path planner ───────────────
+    path_planner_used = False
+    path_planner_warning = ""
+    if not intent_spec.get("navigation_path") and _PATH_PLANNER_AVAILABLE:
+        goal_action = intent_spec.get("goal_action") or ""
+        entry_screen = intent_spec.get("entry_screen") or None
+        if goal_action:
+            try:
+                plan_result = _path_planner.plan(
+                    goal_action=goal_action,
+                    entry_screen=entry_screen,
+                    assume_logged_in=False,
+                )
+                intent_spec["navigation_path"] = plan_result.path
+                path_planner_used = True
+                if plan_result.warning:
+                    path_planner_warning = plan_result.warning
+                logger.debug(
+                    "intent_parser: path_planner computed path %s (source=%s)",
+                    plan_result.path, plan_result.source,
+                )
+            except Exception as exc:
+                logger.warning("intent_parser: path_planner failed: %s", exc)
+        else:
+            logger.debug(
+                "intent_parser: navigation_path absent but no goal_action — skipping path planner"
+            )
+    elif intent_spec.get("navigation_path"):
+        logger.debug(
+            "intent_parser: navigation_path already present — path planner skipped"
+        )
+
     logger.debug(
-        "intent_parser: run_id=%s test_cases=%d resolved=%d pending=%d",
-        run_id, len(test_cases), len(resolved_data), len(pending),
+        "intent_parser: run_id=%s test_cases=%d resolved=%d pending=%d path_planner=%s",
+        run_id, len(test_cases), len(resolved_data), len(pending), path_planner_used,
     )
 
     return {
@@ -134,6 +179,8 @@ def run(
             "tool": "intent_parser",
             "version": _TOOL_VERSION,
             "duration_ms": int((time.time() - started) * 1000),
+            "path_planner_used": path_planner_used,
+            "path_planner_warning": path_planner_warning,
         },
     }
 

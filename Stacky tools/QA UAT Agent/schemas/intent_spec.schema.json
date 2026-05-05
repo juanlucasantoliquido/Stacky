@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "stacky/qa-uat-agent/intent_spec",
   "title": "IntentSpec",
-  "description": "Input contract for the QA UAT pipeline in free-form mode. Produced by the UserInterfaceQAFreeForm orchestrator agent.",
+  "description": "Input contract for the QA UAT pipeline in free-form mode. Produced by the UserInterfaceQAFreeForm orchestrator agent. Fase 2: navigation_path is now optional — intent_parser auto-computes it via path_planner.py when absent.",
   "type": "object",
   "required": ["intent_raw", "test_cases"],
   "additionalProperties": false,
@@ -10,8 +10,8 @@
     "schema_version": {
       "type": "string",
       "description": "Schema version for forward compatibility.",
-      "default": "1.0",
-      "examples": ["1.0"]
+      "default": "1.1",
+      "examples": ["1.0", "1.1"]
     },
     "run_id": {
       "type": "string",
@@ -37,7 +37,7 @@
     "navigation_path": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "Ordered list of Agenda Web screens the flow traverses.",
+      "description": "Ordered list of Agenda Web screens the flow traverses. OPTIONAL — if absent, intent_parser (Fase 2) auto-computes it from goal_action using path_planner.py + navigation_graph.py BFS. Provide explicitly only when overriding the computed path.",
       "examples": [["FrmLogin.aspx", "FrmBusqueda.aspx", "FrmDetalleClie.aspx"]]
     },
     "test_cases": {

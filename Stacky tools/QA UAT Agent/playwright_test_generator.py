@@ -631,9 +631,35 @@ def _render_from_playbook(
     # Convert playbook steps to ScenarioSpec-style pasos for template
     pasos_for_template = _playbook_steps_to_pasos(all_steps, resolved_fields)
 
+    # Build a synthetic ui_map so the template's {{ ui_map[step.target] }}
+    # resolves correctly.  We replace each raw CSS selector with a stable
+    # alias ("pb_step_N") and map that alias to the safe selector (inner
+    # double-quotes converted to single-quotes so the selector can be placed
+    # inside a TypeScript double-quoted string without escaping).
+    synthetic_ui_map: dict[str, str] = {}
+    aliased_pasos: list[dict] = []
+    for i, paso in enumerate(pasos_for_template):
+        accion = paso.get("accion", "")
+        selector = paso.get("target", "")
+        if accion in ("click", "fill", "wait_visible", "check", "double_click", "hover") and selector:
+            alias = f"pb_step_{i}"
+            safe_sel = selector.replace('"', "'")  # a:has-text("X") → a:has-text('X')
+            synthetic_ui_map[alias] = safe_sel
+            aliased_pasos.append({**paso, "target": alias})
+        else:
+            aliased_pasos.append(paso)
+
     sid_slug = _slugify(scenario.get("titulo", sid))
     filename = f"{sid}_{sid_slug}.spec.ts"
     spec_path = out_dir / filename
+
+    # Oracles: keep only those whose target resolves in synthetic_ui_map,
+    # OR those that don't need a selector (page_contains_text / page_not_contains_text).
+    _selector_free_types = ("page_contains_text", "page_not_contains_text")
+    filtered_oraculos = [
+        o for o in (scenario.get("oraculos") or [])
+        if o.get("tipo") in _selector_free_types or o.get("target") in synthetic_ui_map
+    ]
 
     try:
         rendered = template.render(
@@ -642,10 +668,10 @@ def _render_from_playbook(
             titulo=scenario.get("titulo", playbook.get("goal_label", "")),
             pantalla=pantalla,
             precondiciones=scenario.get("precondiciones", []),
-            pasos=pasos_for_template,
-            oraculos=scenario.get("oraculos", []),
+            pasos=aliased_pasos,
+            oraculos=filtered_oraculos,
             datos_requeridos=scenario.get("datos_requeridos", []),
-            ui_map={},
+            ui_map=synthetic_ui_map,
             detect_screen_errors=False,
             detect_screen_errors_vision=False,
             screen_error_detector_js="",

@@ -1,7 +1,8 @@
 """
-navigation_graph.py — Static navigation graph for Agenda Web.
+navigation_graph.py — Navigation graph for Agenda Web (static + learned).
 
 Fase 2 of the QA UAT Agent free-form improvement plan.
+Fase 4 extension: merges cache/learned_edges.json at import time (no-op if absent).
 
 Models Agenda Web as a directed graph of screens: nodes are screen filenames,
 edges are labelled navigation actions (link, button, menu, popup_open, etc.).
@@ -28,7 +29,10 @@ PUBLIC API:
 """
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 
@@ -305,6 +309,71 @@ GOAL_ACTION_TARGETS: dict[str, str] = {
     "ver_feriados":              "FrmFeriados.aspx",
 }
 
+# ── Fase 4: Learned-edge merge ───────────────────────────────────────────────
+#
+# navigation_graph_learner.py discovers new transitions from QA UAT test
+# evidence and writes them to cache/learned_edges.json.  We load + merge them
+# here so path_planner benefits automatically without touching this file.
+#
+# Rules:
+#   - Learned edges are ADDITIVE — they never replace static edges.
+#   - If cache/learned_edges.json is absent or malformed, this is a no-op.
+#   - Learned edges carry action="observed_navigate" (or as stored) so callers
+#     can distinguish them from hand-curated edges when needed.
+
+_logger = logging.getLogger("stacky.qa_uat.nav_graph")
+_LEARNED_EDGES_PATH = Path(__file__).parent / "cache" / "learned_edges.json"
+
+#: True once at least one learned edge has been merged into GRAPH.
+LEARNED_EDGES_LOADED: bool = False
+
+
+def _merge_learned_edges() -> bool:
+    """Load cache/learned_edges.json and merge new edges into GRAPH.
+
+    Runs once at module import time.  Returns True if any edges were added.
+    """
+    global LEARNED_EDGES_LOADED
+    if not _LEARNED_EDGES_PATH.is_file():
+        return False
+    try:
+        raw = json.loads(_LEARNED_EDGES_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        _logger.warning("nav_graph: could not load learned_edges.json: %s", exc)
+        return False
+
+    by_source: dict = raw.get("by_source", {})
+    added = 0
+    for source, edges in by_source.items():
+        existing_targets = {e.target for e in GRAPH.get(source, [])}
+        for edge_dict in edges:
+            target = edge_dict.get("target", "")
+            if not target or target in existing_targets:
+                continue  # already in static graph or invalid
+            if source not in GRAPH:
+                GRAPH[source] = []
+            GRAPH[source].append(
+                NavEdge(
+                    target=target,
+                    action=edge_dict.get("action", "observed_navigate"),
+                    label=edge_dict.get("label", ""),
+                    requires_login=bool(edge_dict.get("requires_login", False)),
+                    is_popup=bool(
+                        edge_dict.get("is_popup", "PopUp" in target)
+                    ),
+                )
+            )
+            existing_targets.add(target)
+            added += 1
+
+    LEARNED_EDGES_LOADED = added > 0
+    if added:
+        _logger.debug("nav_graph: merged %d learned edge(s) from cache", added)
+    return added > 0
+
+
+# Run once at import
+_merge_learned_edges()
 
 # ── Public API ────────────────────────────────────────────────────────────────
 

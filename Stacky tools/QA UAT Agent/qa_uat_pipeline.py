@@ -6,18 +6,27 @@ Connects all 8 tools in sequence:
   → B5 playwright_test_generator → B6 uat_test_runner
   → B7 uat_dossier_builder → B8 ado_evidence_publisher
 
+Fase 9 — Multi-round replanning:
+  After runner stage, if failures are detected and --replan is set, the pipeline
+  calls replan_engine.analyze() to compute a fix, patches intent_spec, and
+  re-runs from the generator stage.  Up to MAX_REPLAN_ROUNDS=3 attempts.
+  After 3 rounds (or when replan_engine returns "escalate"), the pipeline
+  continues to the dossier/publisher stages as normal with full context.
+
 CLI:
     python qa_uat_pipeline.py --ticket 70 [--mode dry-run|publish] [--headed] [--verbose]
     python qa_uat_pipeline.py --ticket 70 --skip-to runner [--verbose]
+    python qa_uat_pipeline.py --intent-file spec.json --replan [--verbose]
 
 Options:
-    --ticket         ADO work item ID (required)
+    --ticket         ADO work item ID (required unless --intent-file)
     --mode           dry-run (default) or publish — controls ado_evidence_publisher
     --headed         Run Playwright in headed mode (shows browser)
     --timeout-ms     Playwright per-test timeout in ms (default: 90000).
                      Cubre login ASP.NET + 2-3 navegaciones + steps + screenshots.
     --skip-to        Skip all stages before: reader|ui_map|compiler|generator|runner|dossier|publisher
     --ado-path       Path to ado.py (default: ../ADO Manager/ado.py)
+    --replan         Enable multi-round replanning (Fase 9). Up to 3 retry rounds.
     --verbose        Debug logging to stderr
 
 Output: JSON to stdout with pipeline summary.
@@ -35,8 +44,9 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.pipeline")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "1.1.0"  # Fase 9 — multi-round replanning
 _TOOL_ROOT = Path(__file__).parent  # NOT resolved — avoid symlink/junction issues on Windows
+_MAX_REPLAN_ROUNDS: int = 3  # Fase 9 — maximum retry rounds before escalation
 
 
 def _resolve_sibling_tool(tool_dir_name: str, entrypoint: str) -> Path:
@@ -159,6 +169,7 @@ def run(
     ado_path: Optional[Path] = None,
     detect_screen_errors: bool = False,
     detect_screen_errors_vision: bool = False,
+    replan: bool = False,
     verbose: bool = True,
 ) -> dict:
     """
@@ -231,6 +242,7 @@ def run(
         ado_path=ado_path,
         detect_screen_errors=detect_screen_errors,
         detect_screen_errors_vision=detect_screen_errors_vision,
+        replan=replan,
         verbose=verbose,
         started=started,
     )
@@ -316,6 +328,7 @@ def _run_freeform(
     auto_resolve: bool = False,
     detect_screen_errors: bool = False,
     detect_screen_errors_vision: bool = False,
+    replan: bool = False,
     verbose: bool = True,
 ) -> dict:
     """Free-form pipeline entry point (Fase 1/3).
@@ -461,6 +474,7 @@ def _run_freeform(
         ado_path=ado_path,
         detect_screen_errors=detect_screen_errors,
         detect_screen_errors_vision=detect_screen_errors_vision,
+        replan=replan,
         verbose=verbose,
         started=started,
     )
@@ -650,6 +664,7 @@ def _run_pipeline_stages(
     started: float,
     detect_screen_errors: bool = False,
     detect_screen_errors_vision: bool = False,
+    replan: bool = False,
 ) -> dict:
     """
     Run stages 2-11 (ui_map through publisher) given an already-loaded ticket_result.
@@ -803,6 +818,29 @@ def _run_pipeline_stages(
             return _build_output(ticket_id, stages, runner_result, started)
         _persist_json(evidence_dir / "runner_output.json", runner_result)
 
+        # ── Fase 9: Multi-round replanning ───────────────────────────────────
+        # Trigger only when --replan is set AND there are failures/blocks.
+        # Runs up to _MAX_REPLAN_ROUNDS rounds in-place, patching scenarios.json
+        # and re-running generator + runner for each actionable fix.
+        # After exhausting rounds (or getting "escalate") it falls through to
+        # the normal evaluator → failure_analyzer → dossier pipeline.
+        if replan:
+            runner_result, stages = _run_replan_loop(
+                runner_result=runner_result,
+                stages=stages,
+                evidence_dir=evidence_dir,
+                ticket_result=ticket_result,
+                tests_dir=tests_dir,
+                ui_maps_dir=ui_maps_dir,
+                headed=headed,
+                timeout_ms=timeout_ms,
+                detect_screen_errors=detect_screen_errors,
+                detect_screen_errors_vision=detect_screen_errors_vision,
+                verbose=verbose,
+            )
+            # Re-persist the final runner_output after all replan rounds
+            _persist_json(evidence_dir / "runner_output.json", runner_result)
+
     # ── Stage 5b: annotator (non-fatal) ─────────────────────────────────────
     stage = "annotator"
     if stage not in skip_stages:
@@ -873,6 +911,204 @@ def _run_pipeline_stages(
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _run_replan_loop(
+    runner_result: dict,
+    stages: dict,
+    evidence_dir: Path,
+    ticket_result: dict,
+    tests_dir: Path,
+    ui_maps_dir: Path,
+    headed: bool,
+    timeout_ms: int,
+    detect_screen_errors: bool,
+    detect_screen_errors_vision: bool,
+    verbose: bool,
+) -> tuple[dict, dict]:
+    """Fase 9 — Multi-round replanning loop.
+
+    Called right after the runner stage when --replan is set.
+    Attempts up to _MAX_REPLAN_ROUNDS corrective iterations.
+
+    Each round:
+      1. Load current intent_spec from evidence_dir/intent_spec.json
+         (may not exist in ADO-ticket mode — degrade gracefully)
+      2. Call replan_engine.analyze() to classify failures and compute patch
+      3. If action=="no_action": break (all tests pass now)
+      4. If action=="escalate":  break (no automated fix available)
+      5. If action=="retry":
+         a. Persist patched intent_spec → evidence_dir/intent_spec.json
+         b. Re-run playwright_test_generator with the updated spec
+         c. Re-run uat_test_runner
+         d. Update stages["runner"] with latest counts
+
+    Returns (final_runner_result, updated_stages).
+    Never raises — any error degrades gracefully (log + return current state).
+    """
+    try:
+        from replan_engine import analyze as replan_analyze, MAX_REPLAN_ROUNDS
+    except ImportError:
+        logger.warning("replan_engine not available — skipping replan loop")
+        return runner_result, stages
+
+    try:
+        from playwright_test_generator import run as generator_run
+        from uat_test_runner import run as runner_run
+    except ImportError as exc:
+        logger.warning("replan_loop: missing dependency %s — skipping", exc)
+        return runner_result, stages
+
+    intent_spec_path = evidence_dir / "intent_spec.json"
+    current_runner = runner_result
+    current_stages = stages.copy()
+
+    for round_number in range(1, MAX_REPLAN_ROUNDS + 1):
+        # Check if there are still failures to address
+        has_failures = _runner_has_failures(current_runner)
+        if not has_failures:
+            logger.info("replan_loop: round %d — no failures, stopping replan", round_number)
+            break
+
+        logger.info("replan_loop: starting round %d of %d", round_number, MAX_REPLAN_ROUNDS)
+
+        # Load current intent_spec (may not exist in ADO-ticket mode)
+        if not intent_spec_path.is_file():
+            logger.warning(
+                "replan_loop: intent_spec.json not found at %s — cannot patch; escalating",
+                intent_spec_path,
+            )
+            current_stages[f"replan_round_{round_number}"] = {
+                "ok": True, "skipped": True,
+                "reason": "intent_spec_not_found",
+            }
+            break
+
+        try:
+            intent_spec = json.loads(intent_spec_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("replan_loop: cannot parse intent_spec.json: %s — escalating", exc)
+            break
+
+        # Load evaluations if available
+        evaluations = None
+        eval_path = evidence_dir / "evaluations.json"
+        if eval_path.is_file():
+            try:
+                evaluations = json.loads(eval_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        # Analyse failures and compute replan action
+        replan_result = replan_analyze(
+            runner_output=current_runner,
+            evaluations=evaluations,
+            intent_spec=intent_spec,
+            evidence_dir=evidence_dir,
+            round_number=round_number,
+        )
+
+        current_stages[f"replan_round_{round_number}"] = {
+            "ok": True,
+            "skipped": False,
+            "action": replan_result.action,
+            "decisions": [
+                {"scenario_id": d.scenario_id, "replan_type": d.replan_type,
+                 "confidence": d.confidence}
+                for d in replan_result.decisions
+            ],
+        }
+
+        if replan_result.action == "no_action":
+            logger.info("replan_loop: round %d — no_action returned; stopping", round_number)
+            break
+
+        if replan_result.action == "escalate":
+            logger.warning(
+                "replan_loop: round %d — escalating to operator: %s",
+                round_number, replan_result.escalation_reason,
+            )
+            current_stages[f"replan_round_{round_number}"]["escalation_reason"] = (
+                replan_result.escalation_reason
+            )
+            break
+
+        # action == "retry" — patch intent_spec and re-run generator + runner
+        if replan_result.patched_intent_spec:
+            _persist_json(intent_spec_path, replan_result.patched_intent_spec)
+            logger.info("replan_loop: round %d — intent_spec patched and persisted", round_number)
+
+        # Re-run generator with patched scenarios
+        scenarios_path = evidence_dir / "scenarios.json"
+        if not scenarios_path.is_file():
+            logger.warning("replan_loop: scenarios.json not found — cannot re-generate; stopping")
+            break
+
+        try:
+            gen_result = generator_run(
+                scenarios_path=scenarios_path,
+                ui_maps_dir=ui_maps_dir,
+                out_dir=tests_dir,
+                template_path=None,
+                detect_screen_errors=detect_screen_errors,
+                detect_screen_errors_vision=detect_screen_errors_vision,
+                verbose=verbose,
+            )
+            if not gen_result.get("ok"):
+                logger.warning(
+                    "replan_loop: generator failed on round %d: %s",
+                    round_number, gen_result.get("message"),
+                )
+                break
+            current_stages[f"replan_round_{round_number}"]["generator"] = {
+                "generated": gen_result.get("generated", 0),
+                "blocked": gen_result.get("blocked", 0),
+            }
+        except Exception as exc:
+            logger.warning("replan_loop: generator exception on round %d: %s", round_number, exc)
+            break
+
+        # Re-run Playwright tests
+        try:
+            new_runner = runner_run(
+                tests_dir=tests_dir,
+                evidence_out=evidence_dir,
+                headed=headed,
+                timeout_ms=timeout_ms,
+                verbose=verbose,
+            )
+            if not new_runner.get("ok"):
+                logger.warning(
+                    "replan_loop: runner failed on round %d: %s",
+                    round_number, new_runner.get("message"),
+                )
+                break
+            current_runner = new_runner
+            current_stages[f"replan_round_{round_number}"]["runner"] = {
+                "pass": new_runner.get("pass_count", 0),
+                "fail": new_runner.get("fail_count", 0),
+                "blocked": new_runner.get("blocked_count", 0),
+            }
+            # Update main runner stage summary
+            current_stages["runner"] = _summarise_runner(current_runner)
+            logger.info(
+                "replan_loop: round %d complete — pass=%d fail=%d blocked=%d",
+                round_number,
+                new_runner.get("pass_count", 0),
+                new_runner.get("fail_count", 0),
+                new_runner.get("blocked_count", 0),
+            )
+        except Exception as exc:
+            logger.warning("replan_loop: runner exception on round %d: %s", round_number, exc)
+            break
+
+    return current_runner, current_stages
+
+
+def _runner_has_failures(runner_result: dict) -> bool:
+    """Return True if runner_result has any FAIL or BLOCKED scenarios."""
+    runs = runner_result.get("runs") or []
+    return any(r.get("status") in ("fail", "blocked", "error") for r in runs)
+
 
 def _extract_screens(ticket_result: dict) -> list:
     """
@@ -1131,6 +1367,14 @@ def _parse_args() -> argparse.Namespace:
         help="[Fase 4] Add vision-LLM screen analysis. Implies --detect-screen-errors. "
              "Requires `python screen_error_detector.py serve` running and the "
              "QA_UAT_VISION_DETECTOR_URL env var pointing to it.",
+    )
+    # Fase 9 — Multi-round replanning
+    p.add_argument(
+        "--replan", action="store_true",
+        help="[Fase 9] Enable multi-round replanning. After a FAIL or BLOCKED result "
+             "the pipeline calls replan_engine to compute an automated fix and "
+             f"retries the generator+runner stages up to {_MAX_REPLAN_ROUNDS} times "
+             "before escalating to the operator.",
     )
     args = p.parse_args()
     if args.detect_screen_errors_vision:

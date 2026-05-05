@@ -221,3 +221,115 @@ def call_llm(
         return _invoke_copilot_direct(system, user, model, max_tokens, timeout)
 
     raise LLMError(f"Unknown STACKY_LLM_BACKEND: {backend!r}. Use: vscode_bridge | copilot_direct | mock")
+
+
+# ── Vision (multimodal) ──────────────────────────────────────────────────────
+#
+# call_llm_vision() es un superset multimodal de call_llm. La extensión es
+# opt-in: ningún caller existente la usa, y el path de degradación es
+# explícito — si el backend no soporta visión, se levanta LLMError y el
+# caller puede caer a una alternativa (DOM-based detection en nuestro caso).
+#
+# Modelos esperados: gpt-4o, gpt-4o-mini (ambos disponibles en el endpoint
+# GitHub Models que ya autenticamos con `gh auth token`). Cualquier otro
+# modelo recibirá las imágenes en formato OpenAI-compatible content blocks
+# y fallará gracefully si el modelo no soporta visión.
+
+
+def _invoke_copilot_direct_vision(
+    system: str,
+    user: str,
+    model: str,
+    images: list[str],
+    max_tokens: int,
+    timeout: int,
+) -> dict:
+    """GitHub Models inference con content blocks multimodales.
+
+    `images` es una lista de URLs (`https://...`) o data URLs
+    (`data:image/png;base64,...`). El endpoint acepta el shape OpenAI:
+
+        {"role": "user", "content": [
+            {"type": "text", "text": "..."},
+            {"type": "image_url", "image_url": {"url": "..."}}
+        ]}
+    """
+    token = _gh_auth_token()
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": user}]
+    for url in images:
+        if not url:
+            continue
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": url},
+        })
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        "stream": False,
+    }
+    if _is_reasoning_model(model):
+        payload["max_completion_tokens"] = max_tokens
+    else:
+        payload["max_tokens"] = max_tokens
+        payload["temperature"] = 0.0
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    started = time.time()
+    data = _http_post_json(_GITHUB_MODELS_ENDPOINT, payload, headers, timeout=timeout)
+    elapsed = int((time.time() - started) * 1000)
+
+    choices = data.get("choices") or []
+    if not choices:
+        raise LLMError(f"No choices in vision response: {str(data)[:300]}")
+    text = (choices[0].get("message") or {}).get("content") or ""
+    return {"text": text, "model": data.get("model", model), "duration_ms": elapsed}
+
+
+def call_llm_vision(
+    *,
+    model: str,
+    system: str,
+    user: str,
+    images: list[str],
+    max_tokens: int = 512,
+    timeout: int = 60,
+) -> dict:
+    """Multimodal sibling of call_llm. Returns same shape: text/model/duration_ms.
+
+    Backend resolution:
+      - mock   → returns a deterministic stub (`{"has_error": false, ...}`)
+                 so tests don't make network calls.
+      - everything else → forces copilot_direct path (the VS Code bridge
+                 currently does not expose vision; routing directly to
+                 GitHub Models is the documented opt-in fallback).
+
+    Raises LLMError if the call fails. Callers MUST be prepared to swallow
+    the error and degrade gracefully (e.g. fall back to DOM-only detection).
+    """
+    backend = os.environ.get("STACKY_LLM_BACKEND", "vscode_bridge").lower()
+
+    if backend == "mock":
+        return {
+            "text": '{"has_error": false, "error_text": "", "category": "none", "confidence": "low"}',
+            "model": "mock-vision-1.0",
+            "duration_ms": 5,
+        }
+
+    # vscode_bridge does not pipe images today — we always go direct for vision.
+    return _invoke_copilot_direct_vision(
+        system=system,
+        user=user,
+        model=model,
+        images=list(images or []),
+        max_tokens=max_tokens,
+        timeout=timeout,
+    )

@@ -148,6 +148,27 @@ def run(
     parameterizable_fields: dict[str, dict] = {}
     action_steps_fill: list[dict] = []
 
+    # Detect legacy schema: when ALL meta values are strings (value→selector),
+    # recover by inverting: group by selector, longest key = last_value.
+    legacy_groups: dict[str, list[str]] = {}  # selector → [typed_values...]
+    new_schema_count = sum(1 for m in target_form_fields.values() if isinstance(m, dict))
+    legacy_schema_count = sum(1 for m in target_form_fields.values() if isinstance(m, str))
+
+    if legacy_schema_count > 0 and new_schema_count == 0:
+        # Pure legacy recording — invert the whole screen
+        for typed_value, selector in target_form_fields.items():
+            if isinstance(selector, str) and selector:
+                legacy_groups.setdefault(selector, []).append(typed_value)
+        for selector, typed_values in legacy_groups.items():
+            last_value = max(typed_values, key=len)  # longest = most complete
+            field_name_raw = re.sub(r'^#c_', '', selector)  # e.g. "abfMdCodigo"
+            meta = {"field_name": field_name_raw, "last_value": last_value, "input_type": "text", "label": field_name_raw}
+            target_form_fields[selector] = meta  # replace with recovered schema
+        logger.debug(
+            "session_to_playbook: recovered %d fields from legacy form_fields schema",
+            len(legacy_groups),
+        )
+
     for selector, meta in target_form_fields.items():
         if isinstance(meta, dict):
             # New schema: {label, last_value, input_type, field_name}
@@ -169,8 +190,8 @@ def run(
                 "source":   source,
             })
         else:
-            # Legacy schema: value (str) → selector — skip (unusable)
-            logger.debug("session_to_playbook: skipping legacy form_field key=%s", selector)
+            # Residual legacy key after recovery attempt — skip
+            logger.debug("session_to_playbook: skipping residual legacy form_field key=%s", selector)
 
     # ── Discover action_steps from discovered_selectors on target screen ──────
     # Look for buttons that were visible and likely interacted with.
@@ -306,9 +327,22 @@ def _build_action_steps(target_disc: dict, fill_steps: list[dict]) -> list[dict]
     steps: list[dict] = []
 
     # Opening action: agregar / add
+    # Use exact key match first to avoid "add_agregar" matching "add_agregar_rol".
     for key_pattern in ("add_agregar", "btn_agregar", "agregar", "add_"):
+        # 1. Exact match
+        if key_pattern in target_disc and target_disc[key_pattern]:
+            sel = target_disc[key_pattern]
+            steps.append({
+                "action": "click",
+                "selector": sel,
+                "label": key_pattern.replace("_", " ").strip(),
+                "_note": "open/add trigger",
+            })
+            steps.append({"action": "wait", "ms": 2000, "_note": "wait for form to render (PostBack)"})
+            break
+        # 2. Prefix match (key starts with pattern, e.g. add_agregar_usuario)
         for key, sel in target_disc.items():
-            if key_pattern in key.lower() and sel:
+            if key.lower().startswith(key_pattern) and sel:
                 steps.append({
                     "action": "click",
                     "selector": sel,

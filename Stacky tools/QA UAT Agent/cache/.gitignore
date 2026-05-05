@@ -4,6 +4,8 @@
 # baseline for the supported screen catalogue (committed deliberately).
 # Exception: discovered_selectors.json.schema — the schema reference file IS
 # committed so developers know the expected format.
+# Note: discovered_screens.json is git-ignored (generated at runtime by
+# autonomous_explorer.py + agenda_screens.add_discovered_screen()).
 *.json
 !.gitignore
 !discovered_selectors.json.schema

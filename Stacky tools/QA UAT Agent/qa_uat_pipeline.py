@@ -118,6 +118,8 @@ def main() -> None:
             timeout_ms=args.timeout_ms,
             skip_to=args.skip_to,
             ado_path=Path(args.ado_path) if args.ado_path else None,
+            detect_screen_errors=getattr(args, "detect_screen_errors", False),
+            detect_screen_errors_vision=getattr(args, "detect_screen_errors_vision", False),
             verbose=verbose,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -132,7 +134,11 @@ def main() -> None:
             headed=args.headed,
             timeout_ms=args.timeout_ms,
             skip_to=args.skip_to,
-            ado_path=Path(args.ado_path) if args.ado_path else None,            auto_resolve=getattr(args, "auto_resolve", False),            verbose=verbose,
+            ado_path=Path(args.ado_path) if args.ado_path else None,
+            auto_resolve=getattr(args, "auto_resolve", False),
+            detect_screen_errors=getattr(args, "detect_screen_errors", False),
+            detect_screen_errors_vision=getattr(args, "detect_screen_errors_vision", False),
+            verbose=verbose,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if not result.get("ok"):
@@ -151,6 +157,8 @@ def run(
     timeout_ms: int = 90_000,
     skip_to: Optional[str] = None,
     ado_path: Optional[Path] = None,
+    detect_screen_errors: bool = False,
+    detect_screen_errors_vision: bool = False,
     verbose: bool = True,
 ) -> dict:
     """
@@ -221,6 +229,8 @@ def run(
         skip_to=skip_to,
         skip_stages=skip_stages,
         ado_path=ado_path,
+        detect_screen_errors=detect_screen_errors,
+        detect_screen_errors_vision=detect_screen_errors_vision,
         verbose=verbose,
         started=started,
     )
@@ -304,6 +314,8 @@ def _run_freeform(
     skip_to: Optional[str] = None,
     ado_path: Optional[Path] = None,
     auto_resolve: bool = False,
+    detect_screen_errors: bool = False,
+    detect_screen_errors_vision: bool = False,
     verbose: bool = True,
 ) -> dict:
     """Free-form pipeline entry point (Fase 1/3).
@@ -447,6 +459,8 @@ def _run_freeform(
         skip_to=skip_to,
         skip_stages=skip_stages,
         ado_path=ado_path,
+        detect_screen_errors=detect_screen_errors,
+        detect_screen_errors_vision=detect_screen_errors_vision,
         verbose=verbose,
         started=started,
     )
@@ -634,6 +648,8 @@ def _run_pipeline_stages(
     ado_path: Path,
     verbose: bool,
     started: float,
+    detect_screen_errors: bool = False,
+    detect_screen_errors_vision: bool = False,
 ) -> dict:
     """
     Run stages 2-11 (ui_map through publisher) given an already-loaded ticket_result.
@@ -697,6 +713,8 @@ def _run_pipeline_stages(
         stages[stage] = _summarise_compiler(compiler_result)
         if not compiler_result.get("ok"):
             return _build_output(ticket_id, stages, compiler_result, started)
+        # Write scenarios.json now so that preconditions (next stage) can read it
+        _persist_json(evidence_dir / "scenarios.json", compiler_result)
 
     # ── Stage 3b: preconditions ──────────────────────────────────────────────
     stage = "preconditions"
@@ -738,6 +756,8 @@ def _run_pipeline_stages(
             ui_maps_dir=ui_maps_dir,
             out_dir=tests_dir,
             template_path=None,
+            detect_screen_errors=detect_screen_errors,
+            detect_screen_errors_vision=detect_screen_errors_vision,
             verbose=verbose,
         )
         stages[stage] = _summarise_generator(generator_result)
@@ -1098,7 +1118,24 @@ def _parse_args() -> argparse.Namespace:
                    help="[Fase 3] Auto-execute hint_queries from data_request via data_resolver.py "
                         "before emitting exit code 2. Resolves common fields (CLIENTE_ID, LOTE_ID, ...) "
                         "automatically; only truly missing data causes exit code 2.")
-    return p.parse_args()
+    # Fase 4 — In-flight UI error detection
+    p.add_argument(
+        "--detect-screen-errors", dest="detect_screen_errors", action="store_true",
+        help="[Fase 4] Inject post-step DOM scan into generated specs. Fails the "
+             "step immediately when a known validation/error pattern is found "
+             "(ASP.NET validators, .alert-danger, 'campo requerido', ...).",
+    )
+    p.add_argument(
+        "--detect-screen-errors-vision", dest="detect_screen_errors_vision",
+        action="store_true",
+        help="[Fase 4] Add vision-LLM screen analysis. Implies --detect-screen-errors. "
+             "Requires `python screen_error_detector.py serve` running and the "
+             "QA_UAT_VISION_DETECTOR_URL env var pointing to it.",
+    )
+    args = p.parse_args()
+    if args.detect_screen_errors_vision:
+        args.detect_screen_errors = True
+    return args
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from typing import Iterable
 
 from db import session_scope
-from models import AgentExecution, Ticket
+from models import AgentExecution, ExecutionLog, PackRun, Ticket
 from services.ado_client import AdoClient, AdoApiError, AdoConfigError
 
 logger = logging.getLogger("stacky_agents.ado_sync")
@@ -143,8 +143,27 @@ def _purge_orphans(session, project: str, fetched_ids: Iterable[int]) -> int:
     for t in locals_:
         if t.ado_id in fetched:
             continue
-        # El ticket ya no existe en ADO (eliminado) → borrar local
-        # independientemente de si tiene ejecuciones asociadas.
+        # El ticket ya no existe en ADO → borrar local.
+        # Hay que eliminar los registros dependientes primero para evitar
+        # violaciones de FK (AgentExecution.ticket_id es NOT NULL).
+        exec_ids = [
+            row[0] for row in
+            session.query(AgentExecution.id)
+            .filter(AgentExecution.ticket_id == t.id)
+            .all()
+        ]
+        if exec_ids:
+            # ExecutionLog tiene FK a agent_executions con ON DELETE CASCADE,
+            # pero SQLite puede no tenerlo activo — lo eliminamos explícitamente.
+            session.query(ExecutionLog).filter(
+                ExecutionLog.execution_id.in_(exec_ids)
+            ).delete(synchronize_session=False)
+            session.query(AgentExecution).filter(
+                AgentExecution.ticket_id == t.id
+            ).delete(synchronize_session=False)
+        session.query(PackRun).filter(
+            PackRun.ticket_id == t.id
+        ).delete(synchronize_session=False)
         session.delete(t)
         removed += 1
     return removed

@@ -331,13 +331,64 @@ def open_chat():
             timeout=10,
         )
         bridge_resp.raise_for_status()
-        return jsonify({"ok": True})
     except req_lib.exceptions.ConnectionError:
         abort(503, "VS Code bridge no disponible (puerto 5052). Verificá que la extensión Stacky esté activa.")
     except req_lib.exceptions.Timeout:
         abort(504, "VS Code bridge tardó demasiado en responder.")
     except req_lib.exceptions.RequestException as exc:
         abort(502, f"Error contactando VS Code bridge: {exc}")
+
+    # Registrar la sesión en la DB para que el tablero de tickets muestre
+    # el ticket como "en ejecución". El operador puede cerrarla desde el workbench
+    # con Aprobar / Descartar. Si ya hay una ejecución running para este ticket
+    # no creamos otra para evitar duplicados.
+    import json as _json
+    from datetime import datetime as _dt
+    from models import AgentExecution
+    exec_id: int | None = None
+    try:
+        inferred_type = _infer_agent_type_from_filename(vscode_agent_filename)
+        with session_scope() as _s2:
+            already_running = (
+                _s2.query(AgentExecution)
+                .filter_by(ticket_id=int(ticket_id), status="running")
+                .first()
+            )
+            if not already_running:
+                exec_record = AgentExecution(
+                    ticket_id=int(ticket_id),
+                    agent_type=inferred_type,
+                    status="running",
+                    input_context_json=_json.dumps(context_blocks, ensure_ascii=False),
+                    started_by="open_chat",
+                    started_at=_dt.utcnow(),
+                )
+                _s2.add(exec_record)
+                _s2.flush()
+                exec_id = exec_record.id
+            else:
+                exec_id = already_running.id
+    except Exception as _track_exc:
+        logger.warning("open_chat — no se pudo registrar ejecución: %s", _track_exc)
+
+    return jsonify({"ok": True, "execution_id": exec_id})
+
+
+def _infer_agent_type_from_filename(filename: str) -> str:
+    """Infiere el AgentType (business/functional/technical/developer/qa/custom)
+    a partir del nombre del archivo .agent.md — misma lógica que el frontend."""
+    f = (filename or "").lower()
+    if "business" in f or "negocio" in f:
+        return "business"
+    if "functional" in f or "funcional" in f:
+        return "functional"
+    if "technical" in f or "tecnic" in f:
+        return "technical"
+    if "dev" in f or "desarrollador" in f:
+        return "developer"
+    if "qa" in f or "test" in f:
+        return "qa"
+    return "custom"
 
 
 def _build_ado_enrichment_sections(ado_id: int) -> list[str]:

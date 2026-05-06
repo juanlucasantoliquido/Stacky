@@ -59,20 +59,20 @@
   },
   "suites": [
     {
-      "title": "65\\tests\\P05_ruc_parcial_20.spec.ts",
-      "file": "65/tests/P05_ruc_parcial_20.spec.ts",
+      "title": "freeform-20260505-112242\\tests\\P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts",
+      "file": "freeform-20260505-112242/tests/P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "ADO-65 | P05 — RUC = parcial 20",
-          "file": "65/tests/P05_ruc_parcial_20.spec.ts",
-          "line": 45,
+          "title": "ADO--1 | P01 — Verificar que se puede agregar un nuevo usuario desde el administrador",
+          "file": "freeform-20260505-112242/tests/P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts",
+          "line": 59,
           "column": 6,
           "specs": [
             {
-              "title": "p05 ruc_=_parcial_20",
+              "title": "p01 verificar_que_se_puede_agregar_un_nuevo_usuario_desde_el_adm",
               "ok": true,
               "tags": [],
               "tests": [
@@ -87,28 +87,58 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 30528,
+                      "duration": 70407,
                       "errors": [],
                       "stdout": [
                         {
                           "text": "Advanced filters ready: \u001b[33mfalse\u001b[39m\n"
                         },
                         {
-                          "text": "[STEP 01] fill input_ruc\n"
+                          "text": "[STEP 01] navigate FrmAdministrador.aspx\n"
                         },
                         {
-                          "text": "[STEP 02] click link_c_btnok\n"
+                          "text": "[STEP 03] click pb_step_2\n"
+                        },
+                        {
+                          "text": "[STEP 05] click pb_step_4\n"
+                        },
+                        {
+                          "text": "[STEP 07] fill pb_step_6\n"
+                        },
+                        {
+                          "text": "[STEP 08] fill pb_step_7\n"
+                        },
+                        {
+                          "text": "[STEP 09] fill pb_step_8\n"
+                        },
+                        {
+                          "text": "[STEP 10] click pb_step_9\n"
+                        },
+                        {
+                          "text": "[STEP 12] select pb_step_11\n"
+                        },
+                        {
+                          "text": "[STEP 15] fill pb_step_14\n"
+                        },
+                        {
+                          "text": "[STEP 16] fill pb_step_15\n"
+                        },
+                        {
+                          "text": "[STEP 17] fill pb_step_16\n"
+                        },
+                        {
+                          "text": "[STEP 18] click pb_step_17\n"
                         }
                       ],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-05-04T19:34:29.939Z",
+                      "startTime": "2026-05-05T16:32:59.345Z",
                       "annotations": [],
                       "attachments": [
                         {
                           "name": "screenshot",
                           "contentType": "image/png",
-                          "path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\65-tests-P05_ruc_parcial_2-ab09c-rcial-20-p05-ruc-parcial-20-chromium\\test-finished-1.png"
+                          "path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\freeform-20260505-112242-t-29a8c--nuevo-usuario-desde-el-adm-chromium\\test-finished-1.png"
                         }
                       ]
                     }
@@ -116,9 +146,9 @@
                   "status": "expected"
                 }
               ],
-              "id": "c14bfbb895290732aa07-403f7de2f4be72ad9cd9",
-              "file": "65/tests/P05_ruc_parcial_20.spec.ts",
-              "line": 58,
+              "id": "3c047e37332568e2f3a0-991e5f4c360fec4296b8",
+              "file": "freeform-20260505-112242/tests/P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts",
+              "line": 72,
               "column": 7
             }
           ]
@@ -128,8 +158,8 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-05-04T19:34:28.964Z",
-    "duration": 34436.297,
+    "startTime": "2026-05-05T16:32:57.799Z",
+    "duration": 73124.983,
     "expected": 1,
     "skipped": 0,
     "unexpected": 0,

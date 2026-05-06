@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "run_id": "freeform-20260505-001641",
+  "stage": "intent_parser",
+  "requests": [
+    {
+      "field": "LOTE_ID",
+      "description": "Unresolved placeholder {{LOTE_ID}} in test cases ['P01']",
+      "hint_query": "SELECT TOP 1 AGLOTE FROM RAGEN WHERE AGPERFIL IS NOT NULL ORDER BY NEWID()",
+      "hint_tables": [
+        "RAGEN"
+      ],
+      "reason": "Required by test cases: P01",
+      "in_case_ids": [
+        "P01"
+      ]
+    },
+    {
+      "field": "AGENTE_ID",
+      "description": "Unresolved placeholder {{AGENTE_ID}} in test cases ['P01']",
+      "hint_query": "SELECT TOP 1 AGPERFIL FROM RAGEN WHERE AGPERFIL IS NOT NULL ORDER BY NEWID()",
+      "hint_tables": [
+        "RAGEN"
+      ],
+      "reason": "Required by test cases: P01",
+      "in_case_ids": [
+        "P01"
+      ]
+    },
+    {
+      "field": "CLIENTE_ID",
+      "description": "Unresolved placeholder {{CLIENTE_ID}} in test cases ['P02']",
+      "hint_query": "-- CLIENTE_ID requires manual resolution. Use: SELECT TOP 1 IDIDIOMA FROM RIDIOMA ORDER BY NEWID()",
+      "hint_tables": [
+        "RIDIOMA"
+      ],
+      "reason": "Required by test cases: P02",
+      "in_case_ids": [
+        "P02"
+      ]
+    },
+    {
+      "field": "MONTO_CUOTA",
+      "description": "Unresolved placeholder {{MONTO_CUOTA}} in test cases ['P03']",
+      "hint_query": "-- Resolve MONTO_CUOTA: provide the correct value for this placeholder.\n-- Example: SELECT TOP 1 RIDIOMA FROM RIDIOMA WHERE ESTADO = 'A'",
+      "hint_tables": [
+        "RIDIOMA"
+      ],
+      "reason": "Required by test cases: P03",
+      "in_case_ids": [
+        "P03"
+      ]
+    }
+  ],
+  "resume_command": "python qa_uat_pipeline.py --intent-file evidence/freeform-20260505-001641/intent_spec.json --resume --data-file evidence/freeform-20260505-001641/resolved_data.json",
+  "resolved_data_path": "evidence/freeform-20260505-001641/resolved_data.json"
+}

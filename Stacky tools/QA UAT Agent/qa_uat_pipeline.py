@@ -44,6 +44,49 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.pipeline")
 
+# Execution logger — importado lazy para evitar que un fallo de importación
+# rompa el pipeline. Se usa via _get_exec_log() a lo largo de este módulo.
+try:
+    from execution_logger import get_logger as _get_exec_logger, get_active_logger as _get_active_exec_logger
+    _EXEC_LOG_AVAILABLE = True
+except ImportError:  # noqa: BLE001
+    _EXEC_LOG_AVAILABLE = False
+    def _get_exec_logger(*a, **kw):  # type: ignore[misc]
+        return None
+    def _get_active_exec_logger():  # type: ignore[misc]
+        return None
+
+
+def _init_exec_log(session_id: str, evidence_dir: Path):
+    """Inicializar (o recuperar) el ExecutionLogger para la sesión activa."""
+    if not _EXEC_LOG_AVAILABLE:
+        return None
+    try:
+        return _get_exec_logger(session_id, evidence_dir=evidence_dir)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _exec_log_stage_start(log, stage: str, params: Optional[dict] = None) -> float:
+    """Emitir stage_start y devolver t0 para calcular duration_ms."""
+    import time as _time
+    if log is not None:
+        try:
+            log.stage_start(stage, params)
+        except Exception:  # noqa: BLE001
+            pass
+    return _time.time()
+
+
+def _exec_log_stage_end(log, stage: str, t0: float, ok: bool, summary: Optional[dict] = None) -> None:
+    if log is not None:
+        try:
+            log.stage_end(stage, ok=ok,
+                          duration_ms=int((time.time() - t0) * 1000),
+                          result_summary=summary)
+        except Exception:  # noqa: BLE001
+            pass
+
 _TOOL_VERSION = "1.1.0"  # Fase 9 — multi-round replanning
 _TOOL_ROOT = Path(__file__).parent  # NOT resolved — avoid symlink/junction issues on Windows
 _MAX_REPLAN_ROUNDS: int = 3  # Fase 9 — maximum retry rounds before escalation
@@ -199,6 +242,17 @@ def run(
 
     ado_path = ado_path or _DEFAULT_ADO_PATH
     evidence_dir = _TOOL_ROOT / "evidence" / str(ticket_id)
+
+    # ── Execution logger ─────────────────────────────────────────────────────
+    _exec_log = _init_exec_log(str(ticket_id), evidence_dir)
+    if _exec_log is not None:
+        _exec_log.session_start({
+            "ticket_id": ticket_id, "mode": mode, "headed": headed,
+            "timeout_ms": timeout_ms, "skip_to": skip_to,
+            "replan": replan, "verbose": verbose,
+            "tool_version": _TOOL_VERSION,
+        })
+
     skip_stages: set = set()
     if skip_to and skip_to in _STAGE_NAMES:
         skip_stages = set(_STAGE_NAMES[: _STAGE_NAMES.index(skip_to)])
@@ -245,9 +299,16 @@ def run(
         replan=replan,
         verbose=verbose,
         started=started,
+        exec_log=_exec_log,
     )
     if isinstance(pipeline_result.get("stages"), dict):
         pipeline_result["stages"] = {**stages, **pipeline_result["stages"]}
+    if _exec_log is not None:
+        try:
+            _exec_log.session_end(pipeline_result)
+            _exec_log.close()
+        except Exception:  # noqa: BLE001
+            pass
     return pipeline_result
 
 
@@ -377,6 +438,17 @@ def _run_freeform(
     evidence_dir = _TOOL_ROOT / "evidence" / run_id
     evidence_dir.mkdir(parents=True, exist_ok=True)
 
+    # ── Execution logger (inicializar tan pronto como conocemos run_id) ──────
+    _exec_log = _init_exec_log(run_id, evidence_dir)
+    if _exec_log is not None:
+        _exec_log.session_start({
+            "run_id": run_id, "mode": mode, "headed": headed,
+            "timeout_ms": timeout_ms, "skip_to": skip_to,
+            "auto_resolve": auto_resolve, "verbose": verbose,
+            "tool_version": _TOOL_VERSION,
+            "source": "freeform",
+        })
+
     # Save current intent_spec state (with any newly merged resolved_data)
     _persist_json(evidence_dir / "intent_spec.json", intent_spec)
 
@@ -388,6 +460,7 @@ def _run_freeform(
         "resolved_data_keys": list((intent_spec.get("resolved_data") or {}).keys()),
         "pending": len(pending_data),
     }
+
 
     # ── Step 2: handle pending_data (auto-resolve or emit data_request) ─────
     if pending_data:
@@ -477,12 +550,19 @@ def _run_freeform(
         replan=replan,
         verbose=verbose,
         started=started,
+        exec_log=_exec_log,
     )
     # Merge freeform-specific stages into the result
     if isinstance(pipeline_result.get("stages"), dict):
         pipeline_result["stages"] = {**stages, **pipeline_result["stages"]}
     pipeline_result["run_id"] = run_id
     pipeline_result["source"] = "freeform"
+    if _exec_log is not None:
+        try:
+            _exec_log.session_end(pipeline_result)
+            _exec_log.close()
+        except Exception:  # noqa: BLE001
+            pass
     return pipeline_result
 
 
@@ -665,6 +745,7 @@ def _run_pipeline_stages(
     detect_screen_errors: bool = False,
     detect_screen_errors_vision: bool = False,
     replan: bool = False,
+    exec_log=None,   # ExecutionLogger | None  — inyectado desde run() / _run_freeform()
 ) -> dict:
     """
     Run stages 2-11 (ui_map through publisher) given an already-loaded ticket_result.
@@ -681,6 +762,7 @@ def _run_pipeline_stages(
     else:
         from ui_map_builder import run as ui_map_run
         _log_stage(stage)
+        _t0 = _exec_log_stage_start(exec_log, stage, {"screens": screens})
         for screen in screens:
             logger.debug("Building UI map for screen: %s", screen)
             ui_result = ui_map_run(screen=screen, rebuild=False, verbose=verbose)
@@ -689,8 +771,10 @@ def _run_pipeline_stages(
                     "ok": False, "skipped": False, "screen": screen,
                     "error": ui_result.get("error"), "message": ui_result.get("message"),
                 }
+                _exec_log_stage_end(exec_log, stage, _t0, ok=False, summary=stages[stage])
                 return _build_output(ticket_id, stages, ui_result, started)
         stages[stage] = {"ok": True, "skipped": False, "screens": screens}
+        _exec_log_stage_end(exec_log, stage, _t0, ok=True, summary=stages[stage])
 
     # ── Stage 3: compiler ────────────────────────────────────────────────────
     stage = "compiler"
@@ -704,6 +788,7 @@ def _run_pipeline_stages(
     else:
         from uat_scenario_compiler import run as compiler_run
         _log_stage(stage)
+        _t0 = _exec_log_stage_start(exec_log, stage)
         ui_aliases: list = []
         ui_elements: list = []
         for screen in screens:
@@ -726,6 +811,8 @@ def _run_pipeline_stages(
             verbose=verbose,
         )
         stages[stage] = _summarise_compiler(compiler_result)
+        _exec_log_stage_end(exec_log, stage, _t0, ok=compiler_result.get("ok", False),
+                            summary={"scenario_count": compiler_result.get("scenario_count", 0)})
         if not compiler_result.get("ok"):
             return _build_output(ticket_id, stages, compiler_result, started)
         # Write scenarios.json now so that preconditions (next stage) can read it
@@ -738,18 +825,21 @@ def _run_pipeline_stages(
     else:
         from uat_precondition_checker import run as preconditions_run
         _log_stage(stage)
+        _t0 = _exec_log_stage_start(exec_log, stage)
         prec_result = preconditions_run(
             scenarios_path=evidence_dir / "scenarios.json",
             verbose=verbose,
         )
         if prec_result.get("ok"):
             stages[stage] = _summarise_preconditions(prec_result)
+            _exec_log_stage_end(exec_log, stage, _t0, ok=True, summary=stages[stage])
         else:
             if prec_result.get("error") in ("db_credentials_missing", "db_unreachable"):
                 logger.warning("Precondition check skipped (%s): %s",
                                prec_result.get("error"), prec_result.get("message"))
                 stages[stage] = {"ok": True, "skipped": True,
                                  "reason": prec_result.get("error")}
+                _exec_log_stage_end(exec_log, stage, _t0, ok=True, summary=stages[stage])
             else:
                 stages[stage] = {"ok": False, "skipped": False,
                                  "error": prec_result.get("error"),
@@ -765,6 +855,7 @@ def _run_pipeline_stages(
     else:
         from playwright_test_generator import run as generator_run
         _log_stage(stage)
+        _t0 = _exec_log_stage_start(exec_log, stage)
         _persist_json(evidence_dir / "scenarios.json", compiler_result)
         generator_result = generator_run(
             scenarios_path=evidence_dir / "scenarios.json",
@@ -776,6 +867,9 @@ def _run_pipeline_stages(
             verbose=verbose,
         )
         stages[stage] = _summarise_generator(generator_result)
+        _exec_log_stage_end(exec_log, stage, _t0, ok=generator_result.get("ok", False),
+                            summary={"generated": generator_result.get("generated", 0),
+                                     "blocked": generator_result.get("blocked", 0)})
         if not generator_result.get("ok"):
             return _build_output(ticket_id, stages, generator_result, started)
         gen_specs = generator_result.get("results") or generator_result.get("specs", [])
@@ -806,6 +900,7 @@ def _run_pipeline_stages(
     else:
         from uat_test_runner import run as runner_run
         _log_stage(stage)
+        _t0 = _exec_log_stage_start(exec_log, stage, {"tests_dir": str(tests_dir)})
         runner_result = runner_run(
             tests_dir=tests_dir,
             evidence_out=evidence_dir,
@@ -814,6 +909,11 @@ def _run_pipeline_stages(
             verbose=verbose,
         )
         stages[stage] = _summarise_runner(runner_result)
+        _exec_log_stage_end(exec_log, stage, _t0, ok=runner_result.get("ok", False),
+                            summary={"pass": runner_result.get("pass", 0),
+                                     "fail": runner_result.get("fail", 0),
+                                     "blocked": runner_result.get("blocked", 0),
+                                     "total": runner_result.get("total", 0)})
         if not runner_result.get("ok"):
             return _build_output(ticket_id, stages, runner_result, started)
         _persist_json(evidence_dir / "runner_output.json", runner_result)
@@ -873,12 +973,14 @@ def _run_pipeline_stages(
     else:
         from uat_assertion_evaluator import run as evaluator_run
         _log_stage(stage)
+        _t0 = _exec_log_stage_start(exec_log, stage)
         evaluations_result = evaluator_run(
             scenarios_path=evidence_dir / "scenarios.json",
             runner_output_path=evidence_dir / "runner_output.json",
             verbose=verbose,
         )
         stages[stage] = _summarise_evaluator(evaluations_result)
+        _exec_log_stage_end(exec_log, stage, _t0, ok=evaluations_result.get("ok", False))
         if not evaluations_result.get("ok"):
             return _build_output(ticket_id, stages, evaluations_result, started)
 
@@ -894,12 +996,14 @@ def _run_pipeline_stages(
     else:
         from uat_failure_analyzer import run as analyzer_run
         _log_stage(stage)
+        _t0 = _exec_log_stage_start(exec_log, stage)
         analyzer_result = analyzer_run(
             evaluations_path=evidence_dir / "evaluations.json",
             runner_output_path=evidence_dir / "runner_output.json",
             verbose=verbose,
         )
         stages[stage] = _summarise_failure_analyzer(analyzer_result)
+        _exec_log_stage_end(exec_log, stage, _t0, ok=analyzer_result.get("ok", False))
         if not analyzer_result.get("ok"):
             return _build_output(ticket_id, stages, analyzer_result, started)
 

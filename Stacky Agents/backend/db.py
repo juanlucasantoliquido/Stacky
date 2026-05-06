@@ -38,8 +38,34 @@ def init_db() -> None:
     from services.egress_policies import EgressPolicy  # noqa: F401  (FA-41)
     from services.macros import Macro  # noqa: F401  (FA-51)
     from services.embeddings import ExecutionEmbedding  # noqa: F401  (FA-01)
+    from services.ado_pipeline_inference import PipelineInferenceCache  # noqa: F401
 
     Base.metadata.create_all(engine)
+    _migrate_add_columns()
+
+
+def _migrate_add_columns() -> None:
+    """SQLite-safe migration: adds columns that may not exist in older DB files."""
+    if not config.DATABASE_URL.startswith("sqlite"):
+        return
+    migrations = [
+        ("tickets", "work_item_type", "VARCHAR(40)"),
+        ("tickets", "parent_ado_id", "INTEGER"),
+    ]
+    with engine.connect() as conn:
+        for table, col, col_type in migrations:
+            try:
+                rows = conn.execute(
+                    __import__("sqlalchemy").text(f"PRAGMA table_info({table})")
+                ).fetchall()
+                existing = {r[1] for r in rows}
+                if col not in existing:
+                    conn.execute(__import__("sqlalchemy").text(
+                        f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"
+                    ))
+                    conn.commit()
+            except Exception:
+                pass
 
 
 @contextmanager

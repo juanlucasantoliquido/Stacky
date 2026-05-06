@@ -1,9 +1,37 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tickets, Agents, Executions } from "../api/endpoints";
-import type { Ticket, PipelineInferenceResult, AgentExecution, VsCodeAgent } from "../types";
+import type { Ticket, TicketNode, TicketHierarchy, PipelineInferenceResult, AgentExecution, VsCodeAgent } from "../types";
 import PipelineStatus from "../components/PipelineStatus";
+import TicketGraphView from "../components/TicketGraphView";
+import { getPinnedAgents } from "../services/preferences";
 import styles from "./TicketBoard.module.css";
+
+// Infiere el tipo de agente desde el filename — misma lógica que EmployeeCard.
+function inferType(filename: string): string {
+  const f = filename.toLowerCase();
+  if (f.includes("business") || f.includes("negocio")) return "business";
+  if (f.includes("functional") || f.includes("funcional")) return "functional";
+  if (f.includes("technical") || f.includes("tecnic")) return "technical";
+  if (f.includes("dev") || f.includes("desarrollador")) return "developer";
+  if (f.includes("qa") || f.includes("test")) return "qa";
+  return "custom";
+}
+
+// Encuentra el filename del agente configurado en el equipo que coincide con el tipo.
+// Primero busca en los agentes pinneados (el equipo del operador), luego en todos.
+function findAgentFilenameByType(
+  agentType: string,
+  vsCodeAgents: VsCodeAgent[],
+  pinnedFilenames: string[]
+): string | null {
+  const pinnedMatch = pinnedFilenames.find((f) => inferType(f) === agentType);
+  if (pinnedMatch) return pinnedMatch;
+  const anyMatch = vsCodeAgents.find((a) => inferType(a.filename) === agentType);
+  return anyMatch?.filename ?? null;
+}
+
+type ViewMode = "tree" | "graph";
 
 const ADO_STATE_COLORS: Record<string, string> = {
   "Active":             "#3b82f6",
@@ -37,13 +65,14 @@ interface RunModalProps {
   ticket: Ticket;
   mode: "suggested" | "custom";
   suggestedLabel: string | null;
+  suggestedFilename: string | null;
   vsCodeAgents: VsCodeAgent[];
   isLaunching: boolean;
   onConfirm: (note: string, filename: string | null) => void;
   onClose: () => void;
 }
 
-function RunModal({ ticket, mode, suggestedLabel, vsCodeAgents, isLaunching, onConfirm, onClose }: RunModalProps) {
+function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgents, isLaunching, onConfirm, onClose }: RunModalProps) {
   const [note, setNote] = useState("");
   const [selectedFilename, setSelectedFilename] = useState<string>(vsCodeAgents[0]?.filename ?? "");
 
@@ -71,7 +100,13 @@ function RunModal({ ticket, mode, suggestedLabel, vsCodeAgents, isLaunching, onC
           <div className={styles.modalAgentRow}>
             <span className={styles.modalAgentIcon}>▶</span>
             <span className={styles.modalAgentName}>{suggestedLabel}</span>
-            <span className={styles.modalAgentHint}>agente sugerido por inferencia</span>
+            {suggestedFilename ? (
+              <span className={styles.modalAgentHint}>
+                {suggestedFilename.replace(/\.agent\.md$/i, "")}
+              </span>
+            ) : (
+              <span className={styles.modalAgentHint}>sin agente asignado en equipo</span>
+            )}
           </div>
         )}
 
@@ -114,7 +149,7 @@ function RunModal({ ticket, mode, suggestedLabel, vsCodeAgents, isLaunching, onC
           </button>
           <button
             className={styles.modalConfirm}
-            onClick={() => onConfirm(note.trim(), mode === "custom" ? selectedFilename || null : null)}
+            onClick={() => onConfirm(note.trim(), mode === "custom" ? selectedFilename || null : suggestedFilename)}
             disabled={isLaunching || !canConfirm}
           >
             {isLaunching ? "⏳ Abriendo chat…" : "▶ Ejecutar"}
@@ -131,9 +166,10 @@ interface TicketCardProps {
   ticket: Ticket;
   runningExecution: AgentExecution | null;
   vsCodeAgents: VsCodeAgent[];
+  indent?: boolean;
 }
 
-function TicketCard({ ticket, runningExecution, vsCodeAgents }: TicketCardProps) {
+function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCardProps) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [runModal, setRunModal] = useState<"suggested" | "custom" | null>(null);
@@ -166,6 +202,12 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents }: TicketCardProps)
   const nextSuggested = result?.next_suggested ?? null;
   const nextLabel = nextSuggested ? (NEXT_AGENT_LABELS[nextSuggested] ?? nextSuggested) : null;
 
+  // Resuelve el filename del agente del equipo que corresponde al tipo sugerido.
+  // Prioriza agentes pinneados ("Tu Equipo") sobre cualquier agente disponible.
+  const suggestedFilename = nextSuggested
+    ? findAgentFilenameByType(nextSuggested, vsCodeAgents, getPinnedAgents())
+    : null;
+
   const isClosed = CLOSED_STATES.includes(ticket.ado_state ?? "");
   const isRunning = !!runningExecution && !isClosed;
 
@@ -188,7 +230,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents }: TicketCardProps)
 
   return (
     <>
-      <div className={`${styles.card} ${expanded ? styles.cardExpanded : ""} ${isRunning ? styles.cardRunning : ""}`}>
+      <div className={`${styles.card} ${expanded ? styles.cardExpanded : ""} ${isRunning ? styles.cardRunning : ""} ${indent ? styles.cardIndented : ""}`}>
 
         {/* Banner de ejecución activa */}
         {isRunning && (
@@ -289,6 +331,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents }: TicketCardProps)
           ticket={ticket}
           mode={runModal}
           suggestedLabel={nextLabel}
+          suggestedFilename={suggestedFilename}
           vsCodeAgents={vsCodeAgents}
           isLaunching={isLaunching}
           onConfirm={handleRunConfirm}
@@ -299,17 +342,91 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents }: TicketCardProps)
   );
 }
 
+// ─── EpicGroup ────────────────────────────────────────────────────────────────
+
+interface EpicGroupProps {
+  epic: TicketNode;
+  runningByTicket: Map<number, AgentExecution>;
+  vsCodeAgents: VsCodeAgent[];
+}
+
+function EpicGroup({ epic, runningByTicket, vsCodeAgents }: EpicGroupProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const isClosed = CLOSED_STATES.includes(epic.ado_state ?? "");
+  const runningExec = runningByTicket.get(epic.id) ?? null;
+
+  return (
+    <div className={styles.epicGroup}>
+      {/* Epic header */}
+      <div className={`${styles.epicHeader} ${isClosed ? styles.epicClosed : ""}`}>
+        <button
+          className={styles.epicCollapseBtn}
+          onClick={() => setCollapsed((x) => !x)}
+          title={collapsed ? "Expandir" : "Colapsar"}
+        >
+          {collapsed ? "▶" : "▼"}
+        </button>
+        <span className={styles.epicBadge}>EPIC</span>
+        <span className={styles.epicAdoId}>ADO-{epic.ado_id}</span>
+        <span
+          className={styles.epicState}
+          style={{ color: stateColor(epic.ado_state), borderColor: `${stateColor(epic.ado_state)}44` }}
+        >
+          {epic.ado_state ?? "—"}
+        </span>
+        <span className={styles.epicTitle}>{epic.title}</span>
+        <span className={styles.epicChildCount}>{epic.children.length} item{epic.children.length !== 1 ? "s" : ""}</span>
+        {runningExec && !isClosed && (
+          <span className={styles.epicRunningChip}>
+            <span className={styles.runningPulse} /> EN EJECUCIÓN
+          </span>
+        )}
+        {epic.ado_url && (
+          <a className={styles.epicAdoLink} href={epic.ado_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>↗</a>
+        )}
+      </div>
+
+      {/* Children */}
+      {!collapsed && (
+        <div className={styles.epicChildren}>
+          {epic.children.length === 0 ? (
+            <div className={styles.epicNoChildren}>Sin tareas asociadas</div>
+          ) : (
+            epic.children.map((child) => (
+              <TicketCard
+                key={child.id}
+                ticket={child}
+                runningExecution={runningByTicket.get(child.id) ?? null}
+                vsCodeAgents={vsCodeAgents}
+                indent
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── TicketBoard (página principal) ──────────────────────────────────────────
 
 export default function TicketBoard() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [onlyPending, setOnlyPending] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("tree");
 
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
     queryKey: ["tickets"],
     queryFn: Tickets.list,
     refetchInterval: 60_000,
+  });
+
+  const { data: hierarchy, isLoading: isHierarchyLoading } = useQuery<TicketHierarchy>({
+    queryKey: ["tickets-hierarchy"],
+    queryFn: Tickets.hierarchy,
+    refetchInterval: 60_000,
+    enabled: viewMode === "tree" || viewMode === "graph",
   });
 
   // Polling de ejecuciones activas cada 5 segundos
@@ -336,44 +453,27 @@ export default function TicketBoard() {
 
   const syncMutation = useMutation({
     mutationFn: Tickets.sync,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tickets"] }),
-  });
-
-  const batchInferMutation = useMutation({
-    mutationFn: async (ids: number[]) => {
-      const res = await Tickets.adoPipelineBatch(ids, false);
-      Object.entries(res.results).forEach(([tid, result]) => {
-        if (!("error" in result)) {
-          qc.setQueryData(["ado-pipeline", parseInt(tid)], result);
-        }
-      });
-      return res;
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tickets"] });
+      qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
     },
   });
 
-  // Auto-infer: al cargar/recargar tickets, inferir solo los que no tienen cache
-  useEffect(() => {
-    if (!tickets || tickets.length === 0 || batchInferMutation.isPending) return;
-    const pending = tickets.filter((t) => {
-      const hasCached = qc.getQueryData(["ado-pipeline", t.id]) != null;
-      const isClosed = CLOSED_STATES.includes(t.ado_state ?? "");
-      return !hasCached && !isClosed;
-    });
-    if (pending.length === 0) return;
-    batchInferMutation.mutate(pending.map((t) => t.id));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tickets]);
-
-  const filtered = (tickets ?? []).filter((t) => {
+  // Filtrado para vista jerárquica (filtra dentro de epics + orphans)
+  function filterNode(node: TicketNode): boolean {
     if (search) {
       const q = search.toLowerCase();
-      if (!t.title.toLowerCase().includes(q) && !String(t.ado_id).includes(q)) return false;
+      const selfMatch = node.title.toLowerCase().includes(q) || String(node.ado_id).includes(q);
+      const childMatch = node.children.some((c) => filterNode(c));
+      if (!selfMatch && !childMatch) return false;
     }
-    if (onlyPending) {
-      if (CLOSED_STATES.includes(t.ado_state ?? "")) return false;
-    }
+    if (onlyPending && CLOSED_STATES.includes(node.ado_state ?? "")) return false;
     return true;
-  });
+  }
+
+  const filteredEpics = (hierarchy?.epics ?? []).filter(filterNode);
+  const filteredOrphans = (hierarchy?.orphans ?? []).filter((n) => filterNode(n as TicketNode));
+  const totalHierarchy = filteredEpics.length + filteredOrphans.length;
 
   // Map ticketId -> running execution
   const runningByTicket = new Map<number, AgentExecution>();
@@ -395,14 +495,33 @@ export default function TicketBoard() {
         <div className={styles.headerLeft}>
           <span className={styles.logo}>📋</span>
           <h1 className={styles.title}>Tickets ADO</h1>
-          {tickets && (
-            <span className={styles.count}>{filtered.length} de {tickets.length}</span>
+          {viewMode === "tree" && (
+            <span className={styles.count}>{totalHierarchy} grupos</span>
           )}
-          {batchInferMutation.isPending && (
-            <span className={styles.autoInferBadge}>⏳ Analizando pipeline…</span>
+          {viewMode === "graph" && hierarchy && (
+            <span className={styles.count}>
+              {hierarchy.epics.length} épicas · {hierarchy.epics.reduce((a, e) => a + e.children.length, 0) + hierarchy.orphans.length} tareas
+            </span>
           )}
         </div>
         <div className={styles.headerActions}>
+          {/* Toggle vista */}
+          <div className={styles.viewToggle}>
+            <button
+              className={`${styles.viewToggleBtn} ${viewMode === "tree" ? styles.viewToggleActive : ""}`}
+              onClick={() => setViewMode("tree")}
+              title="Vista jerárquica Epic → Tasks"
+            >
+              🌳 Jerárquica
+            </button>
+            <button
+              className={`${styles.viewToggleBtn} ${viewMode === "graph" ? styles.viewToggleActive : ""}`}
+              onClick={() => setViewMode("graph")}
+              title="Vista grafo Epic → Tasks con conexiones visuales"
+            >
+              🔗 Grafo
+            </button>
+          </div>
           <label className={styles.filterToggle}>
             <input
               type="checkbox"
@@ -454,22 +573,61 @@ export default function TicketBoard() {
 
       {/* Lista */}
       <main className={styles.main}>
-        {isLoading && <div className={styles.loading}>Cargando tickets…</div>}
-        {!isLoading && filtered.length === 0 && (
-          <div className={styles.empty}>
-            No hay tickets. Hacé clic en «Sincronizar ADO».
-          </div>
+        {/* Vista jerárquica */}
+        {viewMode === "tree" && (
+          <>
+            {isHierarchyLoading && <div className={styles.loading}>Cargando jerarquía…</div>}
+            {!isHierarchyLoading && filteredEpics.length === 0 && filteredOrphans.length === 0 && (
+              <div className={styles.empty}>
+                No hay tickets. Hacé clic en «Sincronizar ADO».
+              </div>
+            )}
+            <div className={styles.treeView}>
+              {filteredEpics.map((epic) => (
+                <EpicGroup
+                  key={epic.id}
+                  epic={epic}
+                  runningByTicket={runningByTicket}
+                  vsCodeAgents={vsCodeAgents ?? []}
+                />
+              ))}
+              {filteredOrphans.length > 0 && (
+                <div className={styles.orphanSection}>
+                  <div className={styles.orphanHeader}>
+                    <span className={styles.orphanBadge}>SIN EPIC</span>
+                    <span className={styles.orphanCount}>{filteredOrphans.length} item{filteredOrphans.length !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className={styles.orphanGrid}>
+                    {filteredOrphans.map((t) => (
+                      <TicketCard
+                        key={t.id}
+                        ticket={t as Ticket}
+                        runningExecution={runningByTicket.get(t.id) ?? null}
+                        vsCodeAgents={vsCodeAgents ?? []}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         )}
-        <div className={styles.grid}>
-          {filtered.map((t) => (
-            <TicketCard
-              key={t.id}
-              ticket={t}
-              runningExecution={runningByTicket.get(t.id) ?? null}
-              vsCodeAgents={vsCodeAgents ?? []}
-            />
-          ))}
-        </div>
+
+        {/* Vista grafo */}
+        {viewMode === "graph" && (
+          <>
+            {isHierarchyLoading && <div className={styles.loading}>Cargando grafo…</div>}
+            {!isHierarchyLoading && (
+              <TicketGraphView
+                hierarchy={hierarchy ?? null}
+                onSync={() => syncMutation.mutate()}
+                isSyncing={syncMutation.isPending}
+                vsCodeAgents={vsCodeAgents ?? []}
+                runningByTicket={runningByTicket}
+              />
+            )}
+          </>
+        )}
       </main>
     </div>
   );

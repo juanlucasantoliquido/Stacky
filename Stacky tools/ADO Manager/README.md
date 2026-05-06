@@ -190,3 +190,83 @@ Tools/ADO Manager/
 ```
 
 > `ado-config.json` está en `.gitignore` — nunca commitear el PAT.
+
+
+---
+
+## Arquitectura
+
+```mermaid
+flowchart TD
+    subgraph CALLERS["CONSUMIDORES - Quienes llaman a ado.py"]
+        AF_AG["Agente Analista Funcional"]
+        TA_AG["Agente Analista Tecnico"]
+        DEV_AG["Agente Desarrollador"]
+        QA_AG["Agente QA UAT Pipeline\nado_evidence_publisher.py"]
+        CLI_USER["Operador via terminal"]
+    end
+
+    subgraph ADO_TOOL["ADO MANAGER - ado.py"]
+        direction TB
+        CFG["Configuracion\nado-config.json / PAT-ADO"]
+        AUTH["Autenticacion\nBasic Auth via PAT"]
+        ACTIONS["Acciones disponibles"]
+        LIST["list - Listar tickets WIQL"]
+        GET["get - Detalle ticket"]
+        CREATE["create - Crear work item"]
+        COMMENT["comment - Agregar comentario HTML/texto"]
+        STATE["state - Cambiar estado"]
+        COMMENTS["comments - Listar comentarios"]
+    end
+
+    subgraph ADO_API["AZURE DEVOPS REST API"]
+        WI["Work Items API\n/_apis/wit/workitems"]
+        WIQL["WIQL API\n/_apis/wit/wiql"]
+        CMT_API["Comments API\n/_apis/wit/workitems/id/comments"]
+    end
+
+    subgraph OUTPUT["OUTPUT - siempre JSON"]
+        OK["ok: true\n+ datos solicitados"]
+        ERR["ok: false\n+ error message\n+ exit code 1"]
+    end
+
+    AF_AG & TA_AG & DEV_AG & QA_AG & CLI_USER --> CFG
+    CFG --> AUTH
+    AUTH --> ACTIONS
+    ACTIONS --> LIST & GET & CREATE & COMMENT & STATE & COMMENTS
+    LIST --> WIQL
+    GET & CREATE & COMMENT & STATE & COMMENTS --> WI & CMT_API
+    WIQL & WI & CMT_API --> OK
+    WIQL & WI & CMT_API -->|"HTTP error"| ERR
+```
+
+---
+
+## Flujo de una llamada tipica
+
+```mermaid
+sequenceDiagram
+    participant AG as Agente / CLI
+    participant ADO as ado.py
+    participant CFG as ado-config.json
+    participant API as Azure DevOps API
+
+    AG->>ADO: python ado.py comment 65 --text "..." --html
+    ADO->>CFG: Leer org, project, PAT
+    ADO->>API: POST /workitems/65/comments (Basic Auth)
+    API-->>ADO: 200 OK + JSON respuesta
+    ADO-->>AG: {"ok": true, "action": "comment", "id": 65}
+```
+
+---
+
+## Input / Output
+
+| Accion | Input | Output |
+|---|---|---|
+| `list` | filtros opcionales (estado, texto, limite) | Array de work items resumidos |
+| `get` | ID del ticket | Detalle completo del work item |
+| `create` | titulo, descripcion, tipo, prioridad | Work item creado con ID |
+| `comment` | ID + texto/HTML | Confirmacion de comentario creado |
+| `state` | ID + nuevo estado | Confirmacion de transicion |
+| `comments` | ID | Lista de comentarios con fecha y autor |

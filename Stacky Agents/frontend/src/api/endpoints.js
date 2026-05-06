@@ -2,9 +2,16 @@ import { api, apiBase } from "./client";
 export const Tickets = {
     list: () => api.get("/api/tickets"),
     byId: (id) => api.get(`/api/tickets/${id}`),
+    hierarchy: () => api.get("/api/tickets/hierarchy"),
     fingerprint: (id) => api.get(`/api/tickets/${id}/fingerprint`), // N3
     glossary: (id) => api.get(`/api/tickets/${id}/glossary`), // FA-09
     comments: (id) => api.get(`/api/tickets/${id}/comments`),
+    adoPipelineStatus: (id, forceRefresh = false) => api.get(`/api/tickets/${id}/ado-pipeline-status${forceRefresh ? "?force_refresh=true" : ""}`),
+    adoPipelineBatch: (ticketIds, forceRefresh = false) => api.post("/api/tickets/ado-pipeline-batch", {
+        ticket_ids: ticketIds,
+        force_refresh: forceRefresh,
+    }),
+    invalidatePipelineCache: (id) => api.delete(`/api/tickets/${id}/ado-pipeline-cache`),
     sync: () => api.post("/api/tickets/sync"),
     syncStatus: () => api.get("/api/tickets/sync/status"),
 };

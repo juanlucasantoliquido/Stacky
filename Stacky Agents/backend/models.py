@@ -40,6 +40,8 @@ class Ticket(Base):
     ado_state: Mapped[str | None] = mapped_column(String(40))
     ado_url: Mapped[str | None] = mapped_column(String(400))
     priority: Mapped[int | None] = mapped_column(Integer)
+    work_item_type: Mapped[str | None] = mapped_column(String(40))  # Epic, Task, Bug, etc.
+    parent_ado_id: Mapped[int | None] = mapped_column(Integer)      # ADO id of parent Epic
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -57,6 +59,8 @@ class Ticket(Base):
             "ado_state": self.ado_state,
             "ado_url": self.ado_url,
             "priority": self.priority,
+            "work_item_type": self.work_item_type,
+            "parent_ado_id": self.parent_ado_id,
             "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
         }
 

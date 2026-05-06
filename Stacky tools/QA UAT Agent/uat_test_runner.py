@@ -217,6 +217,8 @@ def _run_single_spec(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,  # line-buffered
             env=env,
             cwd=str(tool_dir),

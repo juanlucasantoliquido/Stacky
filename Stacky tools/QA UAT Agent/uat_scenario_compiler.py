@@ -85,7 +85,8 @@ _ORACLE_KEYWORDS = {
 
 # Performance/load test keywords → out of scope
 _OUT_OF_SCOPE_KEYWORDS = re.compile(
-    r'\bperformance\b|\bcarga\b|\bvelocidad\b|\brespuesta\s*en\s*menos\b|\bms\b|\bsegundos\b',
+    r'\bperformance\b|\bprueba\s+de\s+carga\b|\btest\s+de\s+carga\b|\bcarga\s+de\s+trabajo\b'
+    r'|\bvelocidad\b|\brespuesta\s*en\s*menos\b|\bms\b|\bsegundos\b',
     re.IGNORECASE,
 )
 

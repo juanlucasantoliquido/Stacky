@@ -32,6 +32,6 @@
   "meta": {
     "tool": "uat_ticket_reader",
     "version": "1.0.0",
-    "duration_ms": 0
+    "duration_ms": 1
   }
 }

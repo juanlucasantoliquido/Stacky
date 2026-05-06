@@ -6,8 +6,11 @@ import type {
   ContextBlock,
   PackDefinition,
   PackRun,
+  PipelineBatchResponse,
+  PipelineInferenceResult,
   Ticket,
   TicketFingerprint,
+  TicketHierarchy,
   VsCodeAgent,
 } from "../types";
 
@@ -26,9 +29,21 @@ export interface TicketSyncResult {
 export const Tickets = {
   list: () => api.get<Ticket[]>("/api/tickets"),
   byId: (id: number) => api.get<Ticket & { executions: AgentExecution[] }>(`/api/tickets/${id}`),
+  hierarchy: () => api.get<TicketHierarchy>("/api/tickets/hierarchy"),
   fingerprint: (id: number) => api.get<TicketFingerprint>(`/api/tickets/${id}/fingerprint`),  // N3
   glossary: (id: number) => api.get<ContextBlock | null>(`/api/tickets/${id}/glossary`),  // FA-09
   comments: (id: number) => api.get<{ comments: { author: string; date: string; text: string }[] }>(`/api/tickets/${id}/comments`),
+  adoPipelineStatus: (id: number, forceRefresh = false) =>
+    api.get<PipelineInferenceResult>(
+      `/api/tickets/${id}/ado-pipeline-status${forceRefresh ? "?force_refresh=true" : ""}`
+    ),
+  adoPipelineBatch: (ticketIds: number[], forceRefresh = false) =>
+    api.post<PipelineBatchResponse>("/api/tickets/ado-pipeline-batch", {
+      ticket_ids: ticketIds,
+      force_refresh: forceRefresh,
+    }),
+  invalidatePipelineCache: (id: number) =>
+    api.delete<{ ok: boolean }>(`/api/tickets/${id}/ado-pipeline-cache`),
   sync: () => api.post<TicketSyncResult>("/api/tickets/sync"),
   syncStatus: () => api.get<{ last_synced_at: string | null }>("/api/tickets/sync/status"),
 };

@@ -16,6 +16,7 @@ from config import config
 from db import session_scope
 from models import AgentExecution, Ticket
 from services import audit_chain, confidence, egress_policies, embeddings, llm_router, output_cache, pii_masker, webhooks
+from services.stacky_logger import logger as stacky_logger
 
 
 class UnknownAgentError(ValueError):
@@ -61,6 +62,21 @@ def run_agent(
 
     log_streamer.open(execution_id)
     log_streamer.push(execution_id, "info", "▶ start")
+
+    # Log agent start to the centralized system log
+    stacky_logger.agent_event(
+        "agent_started",
+        execution_id=execution_id,
+        ticket_id=ticket_id,
+        user=user,
+        input_data={"agent_type": agent_type, "context_blocks": len(context_blocks)},
+        context_data={
+            "pack_run_id": pack_run_id,
+            "pack_step": pack_step,
+            "model_override": model_override,
+            "chain_from": chain_from,
+        },
+    )
 
     thread = threading.Thread(
         target=_run_in_background,
@@ -156,6 +172,15 @@ def _run_in_background(
                 row.status = "completed"
                 row.completed_at = datetime.utcnow()
             log("info", f"✓ done from cache ({md.get('duration_ms')}ms)")
+            stacky_logger.agent_event(
+                "agent_completed_from_cache",
+                execution_id=execution_id,
+                ticket_id=ticket_id,
+                level="INFO",
+                duration_ms=md.get("duration_ms"),
+                output_data={"cache_key": cached["cache_key"][:8], "hits": cached.get("hits")},
+                tags=["agent", "cache"],
+            )
             webhooks.fire_completed_safe(execution_id)
             return
 
@@ -251,6 +276,23 @@ def _run_in_background(
             row.completed_at = datetime.utcnow()
         log("info", f"✓ done ({md.get('duration_ms')}ms)")
 
+        stacky_logger.agent_event(
+            "agent_completed",
+            execution_id=execution_id,
+            ticket_id=ticket_id,
+            level="INFO",
+            duration_ms=md.get("duration_ms"),
+            output_data={
+                "output_chars": len(result.output or ""),
+                "confidence": conf.overall,
+                "contract_passed": cv_result.passed,
+                "contract_score": cv_result.score,
+                "model": decision.model,
+                "from_cache": False,
+            },
+            tags=["agent"],
+        )
+
         # FA-31 — Persistir en cache solo si pasó el contrato.
         # Importante: cacheamos la versión MASKED del output (re-hidratamos al servir).
         if config.CACHE_ENABLED and cv_result.passed:
@@ -275,9 +317,24 @@ def _run_in_background(
     except copilot_bridge.CancelledError:
         _mark_terminal(execution_id, status="cancelled")
         log("warn", "× cancelled")
+        stacky_logger.agent_event(
+            "agent_cancelled",
+            execution_id=execution_id,
+            ticket_id=ticket_id,
+            level="WARNING",
+            tags=["agent", "cancelled"],
+        )
     except Exception as exc:  # noqa: BLE001
         _mark_terminal(execution_id, status="error", error=str(exc))
         log("error", f"× {exc}")
+        stacky_logger.agent_event(
+            "agent_failed",
+            execution_id=execution_id,
+            ticket_id=ticket_id,
+            level="ERROR",
+            error_exc=exc,
+            tags=["agent", "error"],
+        )
     finally:
         log_streamer.close(execution_id)
 

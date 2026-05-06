@@ -80,6 +80,13 @@ def run(
     """Core logic — callable from tests with subprocess mocking."""
     started = time.time()
 
+    # Obtener el ExecutionLogger activo (inyectado por el pipeline) si existe.
+    try:
+        from execution_logger import get_active_logger as _get_active_logger
+        _exec_log = _get_active_logger()
+    except ImportError:
+        _exec_log = None
+
     # Check node/npx available
     if not _check_node_available():
         return _err("playwright_not_available",
@@ -114,6 +121,7 @@ def run(
             headed=headed,
             timeout_ms=timeout_ms,
             verbose=verbose,
+            exec_log=_exec_log,
         )
         runs.append(run_result)
         status = run_result.get("status", "blocked")
@@ -150,9 +158,23 @@ def _run_single_spec(
     headed: bool,
     timeout_ms: int,
     verbose: bool,
+    exec_log=None,  # ExecutionLogger | None
 ) -> dict:
     """Run a single .spec.ts and return run result dict."""
     started = time.time()
+
+    # Log inicio del spec
+    if exec_log is not None:
+        try:
+            exec_log.playwright_run_start(
+                scenario_id=scenario_id,
+                spec_file=str(spec_file),
+                headed=headed,
+                timeout_ms=timeout_ms,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     headless_flag = os.environ.get("STACKY_QA_UAT_HEADLESS", "1" if not headed else "0")
 
     env = {**os.environ, "STACKY_QA_UAT_HEADLESS": headless_flag}
@@ -244,6 +266,12 @@ def _run_single_spec(
         for line in proc.stdout:
             print(line, end="", flush=True)
             captured_lines.append(line)
+            # Log cada línea al execution_logger (solo si está en nivel DEBUG)
+            if exec_log is not None:
+                try:
+                    exec_log.playwright_line(scenario_id, line)
+                except Exception:  # noqa: BLE001
+                    pass
         proc.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
         proc.kill()
@@ -252,6 +280,21 @@ def _run_single_spec(
         except Exception:
             pass
         duration = int((time.time() - started) * 1000)
+        raw_stdout = "".join(captured_lines)
+        # Persistir stdout completo como archivo independiente (sin truncado)
+        _persist_playwright_stdout(scenario_dir, raw_stdout)
+        if exec_log is not None:
+            try:
+                exec_log.playwright_timeout(scenario_id, timeout_ms)
+                exec_log.playwright_run_end(
+                    scenario_id=scenario_id,
+                    status="blocked",
+                    duration_ms=duration,
+                    return_code=-1,
+                    reason="TIMEOUT",
+                )
+            except Exception:  # noqa: BLE001
+                pass
         return {
             "scenario_id": scenario_id,
             "spec_file": str(spec_file),
@@ -259,12 +302,14 @@ def _run_single_spec(
             "reason": "TIMEOUT",
             "duration_ms": duration,
             "artifacts": _collect_artifacts(scenario_dir),
-            "raw_stdout": "".join(captured_lines)[:50000],
+            "raw_stdout": raw_stdout[:50000],
             "raw_stderr": "Process timed out",
         }
 
     duration = int((time.time() - started) * 1000)
     stdout = "".join(captured_lines)
+    # Persistir stdout completo como archivo independiente (sin truncado de 50k)
+    _persist_playwright_stdout(scenario_dir, stdout)
     # stderr quedó merged en stdout (stderr=STDOUT), pero conservamos el campo
     # para no romper el contrato runner_output.schema.json.
     stderr = ""
@@ -309,10 +354,44 @@ def _run_single_spec(
     if status == "blocked":
         result["reason"] = "RUNTIME_ERROR"
 
+    # Log resultado al execution_logger
+    if exec_log is not None:
+        try:
+            for af in (assertion_failures or []):
+                exec_log.playwright_assertion(
+                    scenario_id=scenario_id,
+                    expected=str(af.get("expected", ""))[:500],
+                    received=str(af.get("actual", ""))[:500],
+                    message=str(af.get("message", ""))[:2000],
+                )
+            exec_log.playwright_run_end(
+                scenario_id=scenario_id,
+                status=status,
+                duration_ms=duration,
+                return_code=returncode,
+                assertion_failures=assertion_failures or [],
+                reason=result.get("reason"),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     return result
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _persist_playwright_stdout(scenario_dir: Path, stdout: str) -> None:
+    """Guardar el stdout completo de Playwright como archivo (sin truncado).
+
+    Útil para debugging post-ejecución sin depender de raw_stdout (que está
+    limitado a 50k chars en el runner_output.json).
+    """
+    try:
+        out_file = scenario_dir / "playwright_output.txt"
+        out_file.write_text(stdout, encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        pass  # Nunca interrumpir el pipeline por un fallo de logging
+
 
 def _check_node_available() -> bool:
     import sys as _sys

@@ -188,6 +188,7 @@ def call_llm(
     user: str,
     max_tokens: int = 1024,
     timeout: int = 120,
+    _call_site: str = "",  # módulo llamador para trazabilidad en logs
 ) -> dict:
     """
     Call LLM and return {"text": str, "model": str, "duration_ms": int}.
@@ -199,26 +200,100 @@ def call_llm(
 
     Raises LLMError if all backends fail.
     """
+    # Obtener el execution_logger activo para registrar la llamada LLM
+    _exec_log = None
+    try:
+        from execution_logger import get_active_logger as _get_active_logger
+        _exec_log = _get_active_logger()
+    except ImportError:
+        pass
+
     backend = os.environ.get("STACKY_LLM_BACKEND", "vscode_bridge").lower()
 
+    if _exec_log is not None:
+        try:
+            _exec_log.llm_call(
+                model=model,
+                backend=backend,
+                system_preview=system,
+                user_preview=user,
+                max_tokens=max_tokens,
+                call_site=_call_site,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     if backend == "mock":
-        return _invoke_mock(system, user, model, max_tokens)
+        result = _invoke_mock(system, user, model, max_tokens)
+        if _exec_log is not None:
+            try:
+                _exec_log.llm_response(model=model, backend=backend,
+                                       duration_ms=result.get("duration_ms", 0),
+                                       text_preview=result.get("text", ""))
+            except Exception:  # noqa: BLE001
+                pass
+        return result
 
     if backend == "vscode_bridge":
         if _vscode_bridge_healthy():
             try:
-                return _invoke_vscode_bridge(system, user, model, max_tokens, timeout)
+                result = _invoke_vscode_bridge(system, user, model, max_tokens, timeout)
+                if _exec_log is not None:
+                    try:
+                        _exec_log.llm_response(model=result.get("model", model),
+                                               backend="vscode_bridge",
+                                               duration_ms=result.get("duration_ms", 0),
+                                               text_preview=result.get("text", ""))
+                    except Exception:  # noqa: BLE001
+                        pass
+                return result
             except LLMError as exc:
                 logger.warning("VS Code bridge failed, falling back to copilot_direct: %s", exc)
+                if _exec_log is not None:
+                    try:
+                        _exec_log.llm_error(model=model, backend="vscode_bridge", error=str(exc))
+                    except Exception:  # noqa: BLE001
+                        pass
         else:
             logger.info("VS Code bridge not available, using copilot_direct")
         try:
-            return _invoke_copilot_direct(system, user, model, max_tokens, timeout)
-        except LLMError:
+            result = _invoke_copilot_direct(system, user, model, max_tokens, timeout)
+            if _exec_log is not None:
+                try:
+                    _exec_log.llm_response(model=result.get("model", model),
+                                           backend="copilot_direct",
+                                           duration_ms=result.get("duration_ms", 0),
+                                           text_preview=result.get("text", ""))
+                except Exception:  # noqa: BLE001
+                    pass
+            return result
+        except LLMError as exc:
+            if _exec_log is not None:
+                try:
+                    _exec_log.llm_error(model=model, backend="copilot_direct", error=str(exc))
+                except Exception:  # noqa: BLE001
+                    pass
             raise
 
     if backend == "copilot_direct":
-        return _invoke_copilot_direct(system, user, model, max_tokens, timeout)
+        try:
+            result = _invoke_copilot_direct(system, user, model, max_tokens, timeout)
+            if _exec_log is not None:
+                try:
+                    _exec_log.llm_response(model=result.get("model", model),
+                                           backend="copilot_direct",
+                                           duration_ms=result.get("duration_ms", 0),
+                                           text_preview=result.get("text", ""))
+                except Exception:  # noqa: BLE001
+                    pass
+            return result
+        except LLMError as exc:
+            if _exec_log is not None:
+                try:
+                    _exec_log.llm_error(model=model, backend="copilot_direct", error=str(exc))
+                except Exception:  # noqa: BLE001
+                    pass
+            raise
 
     raise LLMError(f"Unknown STACKY_LLM_BACKEND: {backend!r}. Use: vscode_bridge | copilot_direct | mock")
 

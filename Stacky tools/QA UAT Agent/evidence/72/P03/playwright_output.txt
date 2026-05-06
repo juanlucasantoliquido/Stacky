@@ -1,0 +1,44 @@
+
+Running 1 test using 1 worker
+
+Advanced filters ready: [33mtrue[39m
+[STEP 01] select select_debito_auto
+  ✘  1 [chromium] › evidence\72\tests\P03_filtro_debito_auto_no.spec.ts:80:7 › ADO-72 | P03 — Filtro Débito Auto = No › p03 filtro_débito_auto_=_no (36.7s)
+
+
+  1) [chromium] › evidence\72\tests\P03_filtro_debito_auto_no.spec.ts:80:7 › ADO-72 | P03 — Filtro Débito Auto = No › p03 filtro_débito_auto_=_no 
+
+    TimeoutError: locator.selectOption: Timeout 10000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('#c_ddlDebitoAuto')[22m
+
+
+      133 |     // [STEP 01] select No in select_debito_auto
+      134 |     console.log('[STEP 01] select select_debito_auto');
+    > 135 |     await page.locator("#c_ddlDebitoAuto").selectOption('No', { force: true });;
+          |                                            ^
+      136 |     await page.screenshot({ path: 'evidence/72/P03/step_01_after.png' });
+      137 |     STEP_BBOXES.push({ step_index: 1, screenshot_path: 'evidence/72/P03/step_01_after.png', target: "select_debito_auto", bbox: await page.locator("#c_ddlDebitoAuto").boundingBox().catch(() => null) });
+      138 |     
+        at N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\72\tests\P03_filtro_debito_auto_no.spec.ts:135:44
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\72-tests-P03_filtro_debito-4eb87-o-p03-filtro-débito-auto-no-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\72-tests-P03_filtro_debito-4eb87-o-p03-filtro-débito-auto-no-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\72-tests-P03_filtro_debito-4eb87-o-p03-filtro-débito-auto-no-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\72-tests-P03_filtro_debito-4eb87-o-p03-filtro-débito-auto-no-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\72-tests-P03_filtro_debito-4eb87-o-p03-filtro-débito-auto-no-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › evidence\72\tests\P03_filtro_debito_auto_no.spec.ts:80:7 › ADO-72 | P03 — Filtro Débito Auto = No › p03 filtro_débito_auto_=_no 

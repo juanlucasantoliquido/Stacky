@@ -59,20 +59,20 @@
   },
   "suites": [
     {
-      "title": "freeform-20260505-112242\\tests\\P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts",
-      "file": "freeform-20260505-112242/tests/P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts",
+      "title": "72\\tests\\P05_filtro_corredor.spec.ts",
+      "file": "72/tests/P05_filtro_corredor.spec.ts",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "ADO--1 | P01 — Verificar que se puede agregar un nuevo usuario desde el administrador",
-          "file": "freeform-20260505-112242/tests/P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts",
-          "line": 59,
+          "title": "ADO-72 | P05 — Filtro Corredor",
+          "file": "72/tests/P05_filtro_corredor.spec.ts",
+          "line": 67,
           "column": 6,
           "specs": [
             {
-              "title": "p01 verificar_que_se_puede_agregar_un_nuevo_usuario_desde_el_adm",
+              "title": "p05 filtro_corredor",
               "ok": true,
               "tags": [],
               "tests": [
@@ -87,58 +87,25 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 70407,
+                      "duration": 26904,
                       "errors": [],
                       "stdout": [
                         {
-                          "text": "Advanced filters ready: \u001b[33mfalse\u001b[39m\n"
+                          "text": "Advanced filters ready: \u001b[33mtrue\u001b[39m\n"
                         },
                         {
-                          "text": "[STEP 01] navigate FrmAdministrador.aspx\n"
-                        },
-                        {
-                          "text": "[STEP 03] click pb_step_2\n"
-                        },
-                        {
-                          "text": "[STEP 05] click pb_step_4\n"
-                        },
-                        {
-                          "text": "[STEP 07] fill pb_step_6\n"
-                        },
-                        {
-                          "text": "[STEP 08] fill pb_step_7\n"
-                        },
-                        {
-                          "text": "[STEP 09] fill pb_step_8\n"
-                        },
-                        {
-                          "text": "[STEP 10] click pb_step_9\n"
-                        },
-                        {
-                          "text": "[STEP 12] select pb_step_11\n"
-                        },
-                        {
-                          "text": "[STEP 15] fill pb_step_14\n"
-                        },
-                        {
-                          "text": "[STEP 16] fill pb_step_15\n"
-                        },
-                        {
-                          "text": "[STEP 17] fill pb_step_16\n"
-                        },
-                        {
-                          "text": "[STEP 18] click pb_step_17\n"
+                          "text": "[STEP 01] click link_c_btnok\n"
                         }
                       ],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-05-05T16:32:59.345Z",
+                      "startTime": "2026-05-06T14:30:47.837Z",
                       "annotations": [],
                       "attachments": [
                         {
                           "name": "screenshot",
                           "contentType": "image/png",
-                          "path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\freeform-20260505-112242-t-29a8c--nuevo-usuario-desde-el-adm-chromium\\test-finished-1.png"
+                          "path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\72-tests-P05_filtro_corred-253de-orredor-p05-filtro-corredor-chromium\\test-finished-1.png"
                         }
                       ]
                     }
@@ -146,9 +113,9 @@
                   "status": "expected"
                 }
               ],
-              "id": "3c047e37332568e2f3a0-991e5f4c360fec4296b8",
-              "file": "freeform-20260505-112242/tests/P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts",
-              "line": 72,
+              "id": "ee1e312a01b84a255518-01be03d4d8d5a0a03a4d",
+              "file": "72/tests/P05_filtro_corredor.spec.ts",
+              "line": 80,
               "column": 7
             }
           ]
@@ -158,8 +125,8 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-05-05T16:32:57.799Z",
-    "duration": 73124.983,
+    "startTime": "2026-05-06T14:30:46.854Z",
+    "duration": 28286.038999999997,
     "expected": 1,
     "skipped": 0,
     "unexpected": 0,

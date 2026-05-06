@@ -8,11 +8,27 @@ from config import config
 
 Path("data").mkdir(exist_ok=True)
 
+# When DATABASE_URL is sqlite:///:memory: (test environments), each new
+# connection normally gets its own empty database — tables created by one
+# connection would be invisible in background threads (e.g. stacky_logger
+# writer thread).  We remap it to a named shared-cache in-memory database
+# so that all connections/threads see the same data while each still gets
+# its own connection (no StaticPool locking issues).
+_effective_url = config.DATABASE_URL
+_connect_args: dict = {}
+
+if config.DATABASE_URL.startswith("sqlite"):
+    _connect_args["check_same_thread"] = False
+    if config.DATABASE_URL == "sqlite:///:memory:":
+        _effective_url = (
+            "sqlite:///file:stacky_shared_mem?mode=memory&cache=shared&uri=true"
+        )
+
 engine = create_engine(
-    config.DATABASE_URL,
+    _effective_url,
     echo=False,
     future=True,
-    connect_args={"check_same_thread": False} if config.DATABASE_URL.startswith("sqlite") else {},
+    connect_args=_connect_args,
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
@@ -23,7 +39,7 @@ class Base(DeclarativeBase):
 
 
 def init_db() -> None:
-    from models import AgentExecution, ExecutionLog, PackRun, Ticket, User  # noqa: F401
+    from models import AgentExecution, ExecutionLog, PackRun, SystemLog, Ticket, User  # noqa: F401
     from services.output_cache import OutputCache  # noqa: F401  (FA-31)
     from services.anti_patterns import AntiPattern  # noqa: F401  (FA-11)
     from services.webhooks import Webhook  # noqa: F401  (FA-52)

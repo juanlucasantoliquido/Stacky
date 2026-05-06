@@ -1,0 +1,13 @@
+[
+  {
+    "step_index": 1,
+    "screenshot_path": "evidence/72/P05/step_01_after.png",
+    "target": "link_c_btnok",
+    "bbox": {
+      "x": 1197,
+      "y": 357.21875,
+      "width": 35,
+      "height": 35
+    }
+  }
+]

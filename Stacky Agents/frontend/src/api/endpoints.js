@@ -144,3 +144,25 @@ export const Glossary = {
     promote: (id, definition) => api.post(`/api/glossary/candidates/${id}/promote`, { definition }),
     reject: (id) => api.post(`/api/glossary/candidates/${id}/reject`),
 };
+export const SystemLogs = {
+    list: (params) => {
+        const p = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => {
+            if (v !== undefined && v !== null && v !== "")
+                p.set(k, String(v));
+        });
+        const qs = p.toString();
+        return api.get(`/api/logs${qs ? `?${qs}` : ""}`);
+    },
+    byId: (id) => api.get(`/api/logs/${id}`),
+    stats: () => api.get("/api/logs/stats"),
+    exportUrl: (params) => {
+        const p = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => {
+            if (v !== undefined)
+                p.set(k, String(v));
+        });
+        return `${apiBase}/api/logs/export?${p.toString()}`;
+    },
+    purge: (days) => api.delete(`/api/logs/purge?days=${days}`),
+};

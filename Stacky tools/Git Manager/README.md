@@ -164,3 +164,102 @@ Error:
 ```
 
 Exit code `0` en éxito, `1` en error.
+
+
+---
+
+## Arquitectura
+
+```mermaid
+flowchart TD
+    subgraph CALLERS["CONSUMIDORES - Quienes llaman a git.py"]
+        DEV_AG["Agente Desarrollador\n(crear PR al finalizar)"]
+        TA_AG["Agente Analista Tecnico\n(verificar branches existentes)"]
+        CLI_USER["Operador via terminal"]
+    end
+
+    subgraph GIT_TOOL["GIT MANAGER - git.py"]
+        direction TB
+        CFG["Configuracion\ngit-config.json / PAT-ADO"]
+        AUTH["Autenticacion\nBasic Auth via PAT"]
+        ACTIONS["Acciones disponibles"]
+        REPOS["repos - Listar repos"]
+        BRANCHES["branches - Listar branches"]
+        PR_LIST["pr list - Listar PRs"]
+        PR_GET["pr get - Detalle de PR"]
+        PR_CREATE["pr create - Crear PR\n+ vincular work items + reviewers"]
+        PR_UPDATE["pr update - Actualizar PR\n+ publish draft"]
+        PR_ABANDON["pr abandon - Abandonar PR"]
+        IDENTITY["identity - Buscar usuarios por email"]
+    end
+
+    subgraph ADO_GIT_API["AZURE DEVOPS GIT API"]
+        REPO_API["Repos API\n/_apis/git/repositories"]
+        BRANCH_API["Branches API\n/refs?filter=heads/"]
+        PR_API["Pull Requests API\n/pullrequests"]
+        ID_API["Identity API\n/_apis/identities"]
+    end
+
+    subgraph OUTPUT["OUTPUT - siempre JSON"]
+        OK["ok: true\n+ datos del recurso"]
+        ERR["ok: false\n+ error message\n+ exit code 1"]
+    end
+
+    DEV_AG & TA_AG & CLI_USER --> CFG
+    CFG --> AUTH
+    AUTH --> ACTIONS
+    ACTIONS --> REPOS & BRANCHES & PR_LIST & PR_GET & PR_CREATE & PR_UPDATE & PR_ABANDON & IDENTITY
+    REPOS --> REPO_API
+    BRANCHES --> BRANCH_API
+    PR_LIST & PR_GET & PR_CREATE & PR_UPDATE & PR_ABANDON --> PR_API
+    IDENTITY --> ID_API
+    PR_API & REPO_API & BRANCH_API & ID_API --> OK
+    PR_API & REPO_API & BRANCH_API & ID_API -->|"HTTP error"| ERR
+```
+
+---
+
+## Flujo de creacion de PR tipico
+
+```mermaid
+sequenceDiagram
+    participant DEV as Agente Desarrollador
+    participant GIT as git.py
+    participant CFG as git-config.json
+    participant API as Azure DevOps Git API
+
+    DEV->>GIT: python git.py pr create --source feature/ADO-65 --target main --title "..." --work-items 65
+    GIT->>CFG: Leer org, project, repo, PAT
+    GIT->>API: POST /pullrequests (con branch, titulo, work items)
+    API-->>GIT: 201 Created + PR ID
+    GIT-->>DEV: {"ok": true, "pr_id": 42, "url": "https://..."}
+```
+
+---
+
+## Input / Output
+
+| Accion | Input | Output |
+|---|---|---|
+| `repos` | — | Lista de repositorios del proyecto |
+| `branches` | repo | Lista de branches con hash de ultimo commit |
+| `pr list` | repo, status opcional, branch origen | Array de PRs con estado y titulo |
+| `pr get` | PR ID, repo | Detalle completo del PR |
+| `pr create` | repo, source, target, titulo | PR creado con ID y URL |
+| `pr update` | PR ID, repo | PR actualizado |
+| `pr abandon` | PR ID, repo | Confirmacion de PR abandonado |
+| `identity` | email o nombre | GUID del usuario para usar como reviewer |
+
+---
+
+## Sinergia con ADO Manager
+
+```mermaid
+flowchart LR
+    DEV["Agente Desarrollador"]
+    ADO["ADO Manager\nado.py\ncambiar estado ticket"]
+    GIT["Git Manager\ngit.py\ncrear PR vinculado"]
+    ADO_SVC["Azure DevOps"]
+    DEV --> ADO --> ADO_SVC
+    DEV --> GIT --> ADO_SVC
+```

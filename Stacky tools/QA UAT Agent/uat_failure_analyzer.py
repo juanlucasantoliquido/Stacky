@@ -78,6 +78,7 @@ A Playwright UAT test failed. Classify the root cause using ONLY one of these ca
 Scenario: {scenario_id}
 Failed assertion: tipo={tipo}, target={target}, expected={expected!r}, actual={actual!r}
 Console errors: {console_errors}
+In-flight screen errors detected: {screen_errors}
 Raw test output: {raw_stdout}
 
 Reply with a JSON object:
@@ -199,6 +200,16 @@ def _analyze_failure(
 
     raw_stdout = run_result.get("raw_stdout", "")
     console_errors = _extract_console_errors(artifacts)
+    # In-flight screen errors captured by the post-step DOM/vision detector.
+    # When the test was generated with --detect-screen-errors, the artefact
+    # `screen_errors_<sid>.json` lives under the scenario evidence dir. Load
+    # it best-effort: missing file or unreadable JSON simply means "no
+    # in-flight evidence" and falls back to legacy classification.
+    screen_errors = _extract_screen_errors(artifacts, scenario_id)
+    if screen_errors:
+        evidence_links.extend(
+            [se.get("evidence_path", "") for se in screen_errors if se.get("evidence_path")]
+        )
 
     # Try heuristic first (fast, no LLM cost)
     heuristic_category = _heuristic_classify(
@@ -208,6 +219,7 @@ def _analyze_failure(
         actual=actual,
         raw_stdout=raw_stdout,
         console_errors=console_errors,
+        screen_errors=screen_errors,
     )
 
     if heuristic_category:
@@ -219,6 +231,7 @@ def _analyze_failure(
             "evidence_links": evidence_links,
             "failed_assertions_count": len(failed_assertions),
             "classified_by": "heuristic",
+            "screen_errors_count": len(screen_errors),
         }
 
     # Fall back to LLM
@@ -235,6 +248,7 @@ def _analyze_failure(
             actual=actual,
             console_errors=console_errors,
             raw_stdout=raw_stdout,
+            screen_errors=screen_errors,
         )
         return {
             "scenario_id": scenario_id,
@@ -244,6 +258,7 @@ def _analyze_failure(
             "evidence_links": evidence_links,
             "failed_assertions_count": len(failed_assertions),
             "classified_by": "llm",
+            "screen_errors_count": len(screen_errors),
         }
     except Exception as exc:
         logger.warning("LLM failure analysis failed for %s: %s", scenario_id, exc)
@@ -257,11 +272,40 @@ def _heuristic_classify(
     actual,
     raw_stdout: str,
     console_errors: list,
+    screen_errors: Optional[list] = None,
 ) -> Optional[dict]:
     """
     Fast heuristic classification before calling LLM.
     Returns dict with category/hypothesis/confidence or None.
+
+    `screen_errors` (when provided) is the list of in-flight DOM/vision
+    detections captured during the test. A short-circuit rule: if the
+    detector caught a "campo requerido" / validation message, classify
+    as `wrong_expected_in_ticket` with high confidence — the product is
+    behaving correctly (showing a validation error), but the test plan
+    didn't supply the required value.
     """
+    # Highest-priority signal: an in-flight validation error overrides the
+    # generic timeout/visibility heuristics below. The product showed a
+    # legitimate error message; the test never recovered. The classification
+    # depends on which step caught it but the most common case is a
+    # missing required value in the scenario's `datos_requeridos`.
+    if screen_errors:
+        first = screen_errors[0] if screen_errors else {}
+        errs = first.get("errors") or []
+        text = "; ".join((e.get("text") or "") for e in errs)[:240] or "error de UI"
+        return {
+            "category": "wrong_expected_in_ticket",
+            "hypothesis": (
+                f"El detector in-flight capturó un error de UI tras el "
+                f"step {first.get('step_index', '?')}: \"{text}\". "
+                "El producto se comportó correctamente mostrando la "
+                "validación; el escenario no aportaba un valor requerido "
+                "o el dato no satisfacía la regla del formulario."
+            ),
+            "confidence": "high",
+        }
+
     if actual is None and tipo in ("visible", "equals", "contains_literal"):
         return {
             "category": "missing_precondition",
@@ -325,6 +369,7 @@ def _classify_via_llm(
     actual,
     console_errors: list,
     raw_stdout: str,
+    screen_errors: Optional[list] = None,
 ) -> dict:
     """Call LLM to classify the failure. Validates category against enum."""
     from llm_client import call_llm
@@ -336,6 +381,7 @@ def _classify_via_llm(
         expected=expected,
         actual=actual,
         console_errors="; ".join(console_errors[:3]) or "none",
+        screen_errors=_format_screen_errors_for_prompt(screen_errors or []),
         raw_stdout=raw_stdout[:500] if raw_stdout else "none",
     )
 
@@ -406,6 +452,66 @@ def _extract_console_errors(artifacts: dict) -> list:
         ]
     except Exception:
         return []
+
+
+def _extract_screen_errors(artifacts: dict, scenario_id: str) -> list:
+    """Load screen_errors_<sid>.json from the scenario evidence dir.
+
+    The artefact is a list of in-flight detections written by the .spec.ts
+    when generated with --detect-screen-errors. We locate the file by
+    walking up from any known artefact (trace/video/screenshot path) and
+    looking for screen_errors_<sid>.json next to it. Returns [] when no
+    file is found OR when the file cannot be parsed — this stage MUST
+    NEVER fail because in-flight evidence is missing.
+    """
+    candidate_dirs: list = []
+    for key in ("trace", "video", "error_context", "console_log", "network_log"):
+        v = artifacts.get(key)
+        if v:
+            candidate_dirs.append(Path(v).parent)
+    for sc in artifacts.get("screenshots") or []:
+        candidate_dirs.append(Path(sc).parent)
+
+    seen: set = set()
+    for d in candidate_dirs:
+        if str(d) in seen:
+            continue
+        seen.add(str(d))
+        candidate = d / f"screen_errors_{scenario_id}.json"
+        if candidate.is_file():
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            entries = data.get("entries") if isinstance(data, dict) else data
+            if isinstance(entries, list):
+                # Annotate every entry with its source path for traceability.
+                for e in entries:
+                    if isinstance(e, dict):
+                        e.setdefault("evidence_path", str(candidate))
+                return entries
+    return []
+
+
+def _format_screen_errors_for_prompt(screen_errors: list) -> str:
+    """Render the in-flight detections as a compact prompt section.
+
+    Keeps the prompt under ~500 chars regardless of how many detections
+    were captured — only the first three entries are surfaced because
+    later entries usually echo the same root cause.
+    """
+    if not screen_errors:
+        return "none"
+    lines: list = []
+    for entry in screen_errors[:3]:
+        if not isinstance(entry, dict):
+            continue
+        step = entry.get("step_index", "?")
+        source = entry.get("source", "?")
+        errs = entry.get("errors") or []
+        text = "; ".join((e.get("text") or "")[:120] for e in errs[:2])
+        lines.append(f"step={step} source={source} text=\"{text}\"")
+    return " | ".join(lines) or "none"
 
 
 def _unknown_analysis(scenario_id: str, evidence_links: list, failed_assertions: list) -> dict:

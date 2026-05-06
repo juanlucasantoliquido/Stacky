@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.1",
+  "orchestrator_notes": "RF-005 ADO-72 - QA de nuevas columnas CLNUMDOC/OGCORREDOR/OGDEBAUT en listas de agenda. Columnas agregadas en SetColumnasGrillaAgendas() y proyectadas en Agenda.Consultar(). Select2 en ddlDebitoAuto requiere seteo via JS. En DEV: 2 registros AGHECHO=P con OGTIENEDEBITOAUTO=NULL (tratados como No), 0 con S, 0 con OGCORREDOR poblado.",
+  "navigation_path": [
+    "FrmLogin.aspx",
+    "FrmAgenda.aspx"
+  ],
+  "test_cases": [
+    {
+      "descripcion": "Busqueda sin filtros - verificar que ambas grillas muestran las columnas RUC, Corredor y Debito Auto.",
+      "datos": "Sin filtros. Abrir la Busqueda Avanzada (panel #c_acsBusquedaAgenda o collapsible), presionar el boton Buscar (#c_btnOk), esperar a que #c_GridAgendaUsu sea visible. Verificar que los encabezados de #c_GridAgendaUsu contienen textos RUC, Corredor y Deb (debito). Repetir verificacion en #c_GridAgendaAut.",
+      "id": "P01",
+      "esperado": "Ambas grillas (GridAgendaUsu y GridAgendaAut) muestran columnas con encabezados que contienen RUC, Corredor y Deb (debito automatico). No se produce ninguna excepcion JavaScript ni error ASP.NET 500."
+    },
+    {
+      "descripcion": "Filtro Debito Automatico = No - debe retornar registros pendientes",
+      "datos": "Abrir Busqueda Avanzada. Usando JavaScript (es Select2 oculto), setear #c_ddlDebitoAuto al valor N con dispatchEvent change. Presionar Buscar (#c_btnOk). Esperar recarga del grid #c_GridAgendaUsu.",
+      "id": "P02",
+      "esperado": "La grilla #c_GridAgendaUsu muestra al menos 1 fila de datos (en DEV hay ~2 registros con OGTIENEDEBITOAUTO NULL, tratados como No). No se produce error 500 ni excepcion JavaScript."
+    },
+    {
+      "descripcion": "Filtro Debito Automatico = Si - debe retornar resultado vacio sin error",
+      "datos": "Abrir Busqueda Avanzada. Usando JavaScript, setear #c_ddlDebitoAuto al valor S con dispatchEvent change. Presionar Buscar (#c_btnOk). Esperar recarga del grid.",
+      "id": "P03",
+      "esperado": "La grilla #c_GridAgendaUsu no muestra filas de datos (0 registros en DEV). El sistema no lanza excepcion JavaScript ni error ASP.NET. El grid muestra lista vacia o sin filas en tbody."
+    },
+    {
+      "descripcion": "Filtro Corredor con valor de texto - debe retornar 0 resultados sin excepcion",
+      "datos": "Abrir Busqueda Avanzada. Escribir TEST en el campo #c_abfCorredor. Presionar Buscar (#c_btnOk). Esperar recarga del grid.",
+      "id": "P04",
+      "esperado": "La grilla #c_GridAgendaUsu no muestra filas de datos (0 resultados en DEV). El sistema no lanza excepcion JavaScript ni error ASP.NET. Sin redirect a FrmError.aspx ni mensaje de error en pantalla."
+    }
+  ],
+  "entry_screen": "FrmAgenda.aspx",
+  "goal_action": "ver_agenda_personal",
+  "run_id": "freeform-20260505-ado72",
+  "intent_raw": "Validar la implementacion de RF-005 (ADO-72): verificar que las listas de agenda (GridAgendaUsu y GridAgendaAut) en FrmAgenda.aspx muestran las nuevas columnas CLNUMDOC (RUC), OGCORREDOR (Corredor) y OGDEBAUT (Debito Auto.), y que los filtros Debito Automatico y Corredor funcionan sin errores.",
+  "resolved_data": {},
+  "pending_data": []
+}

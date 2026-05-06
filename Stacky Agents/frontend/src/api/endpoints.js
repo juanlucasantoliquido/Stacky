@@ -2,9 +2,16 @@ import { api, apiBase } from "./client";
 export const Tickets = {
     list: () => api.get("/api/tickets"),
     byId: (id) => api.get(`/api/tickets/${id}`),
+    hierarchy: () => api.get("/api/tickets/hierarchy"),
     fingerprint: (id) => api.get(`/api/tickets/${id}/fingerprint`), // N3
     glossary: (id) => api.get(`/api/tickets/${id}/glossary`), // FA-09
     comments: (id) => api.get(`/api/tickets/${id}/comments`),
+    adoPipelineStatus: (id, forceRefresh = false) => api.get(`/api/tickets/${id}/ado-pipeline-status${forceRefresh ? "?force_refresh=true" : ""}`),
+    adoPipelineBatch: (ticketIds, forceRefresh = false) => api.post("/api/tickets/ado-pipeline-batch", {
+        ticket_ids: ticketIds,
+        force_refresh: forceRefresh,
+    }),
+    invalidatePipelineCache: (id) => api.delete(`/api/tickets/${id}/ado-pipeline-cache`),
     sync: () => api.post("/api/tickets/sync"),
     syncStatus: () => api.get("/api/tickets/sync/status"),
 };
@@ -136,4 +143,26 @@ export const Glossary = {
     scan: (project, days = 30) => api.post("/api/glossary/scan", { project, days }),
     promote: (id, definition) => api.post(`/api/glossary/candidates/${id}/promote`, { definition }),
     reject: (id) => api.post(`/api/glossary/candidates/${id}/reject`),
+};
+export const SystemLogs = {
+    list: (params) => {
+        const p = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => {
+            if (v !== undefined && v !== null && v !== "")
+                p.set(k, String(v));
+        });
+        const qs = p.toString();
+        return api.get(`/api/logs${qs ? `?${qs}` : ""}`);
+    },
+    byId: (id) => api.get(`/api/logs/${id}`),
+    stats: () => api.get("/api/logs/stats"),
+    exportUrl: (params) => {
+        const p = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => {
+            if (v !== undefined)
+                p.set(k, String(v));
+        });
+        return `${apiBase}/api/logs/export?${p.toString()}`;
+    },
+    purge: (days) => api.delete(`/api/logs/purge?days=${days}`),
 };

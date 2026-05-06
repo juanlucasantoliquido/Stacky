@@ -26,7 +26,12 @@ def _json_dumps(value: Any) -> str | None:
 def _json_loads(raw: str | None) -> Any:
     if not raw:
         return None
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        # May happen with truncated payloads — return the raw string so the
+        # record is still usable instead of crashing the API.
+        return raw
 
 
 class Ticket(Base):
@@ -40,6 +45,8 @@ class Ticket(Base):
     ado_state: Mapped[str | None] = mapped_column(String(40))
     ado_url: Mapped[str | None] = mapped_column(String(400))
     priority: Mapped[int | None] = mapped_column(Integer)
+    work_item_type: Mapped[str | None] = mapped_column(String(40))  # Epic, Task, Bug, etc.
+    parent_ado_id: Mapped[int | None] = mapped_column(Integer)      # ADO id of parent Epic
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -57,6 +64,8 @@ class Ticket(Base):
             "ado_state": self.ado_state,
             "ado_url": self.ado_url,
             "priority": self.priority,
+            "work_item_type": self.work_item_type,
+            "parent_ado_id": self.parent_ado_id,
             "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
         }
 
@@ -221,4 +230,92 @@ class ExecutionLog(Base):
             "message": self.message,
             "group": self.group_name,
             "indent": self.indent,
+        }
+
+
+class SystemLog(Base):
+    """Structured system-wide event log.
+
+    Captures every significant event across the entire Stacky Agents system:
+    HTTP requests/responses, agent lifecycle, service calls, integrations,
+    errors and frontend events. Designed for post-mortem debugging, auditing
+    and operational observability.
+    """
+
+    __tablename__ = "system_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # When
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    # Severity
+    level: Mapped[str] = mapped_column(String(10), nullable=False)          # DEBUG/INFO/WARNING/ERROR/CRITICAL
+    # Who generated the event
+    source: Mapped[str] = mapped_column(String(120), nullable=False)        # e.g. "agent_runner", "http.middleware"
+    action: Mapped[str] = mapped_column(String(120), nullable=False)        # e.g. "agent_started", "http_request"
+    # Correlation IDs
+    execution_id: Mapped[int | None] = mapped_column(Integer)               # related AgentExecution (no FK — may not exist)
+    ticket_id: Mapped[int | None] = mapped_column(Integer)
+    user: Mapped[str | None] = mapped_column(String(200))
+    request_id: Mapped[str | None] = mapped_column(String(36))              # UUID per HTTP request
+    # HTTP-specific
+    method: Mapped[str | None] = mapped_column(String(10))
+    endpoint: Mapped[str | None] = mapped_column(String(500))
+    status_code: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    # Payloads (truncated to safe sizes)
+    input_json: Mapped[str | None] = mapped_column(Text)                    # ≤ 16 KB
+    output_json: Mapped[str | None] = mapped_column(Text)                   # ≤ 16 KB
+    error_json: Mapped[str | None] = mapped_column(Text)                    # ≤ 64 KB — full stacktrace
+    context_json: Mapped[str | None] = mapped_column(Text)                  # arbitrary extra k/v
+    tags_json: Mapped[str | None] = mapped_column(Text)                     # ["batch", "agent", ...]
+
+    __table_args__ = (
+        Index("ix_syslog_timestamp", "timestamp"),
+        Index("ix_syslog_level_ts", "level", "timestamp"),
+        Index("ix_syslog_source_ts", "source", "timestamp"),
+        Index("ix_syslog_execution", "execution_id"),
+        Index("ix_syslog_ticket", "ticket_id"),
+        Index("ix_syslog_request", "request_id"),
+    )
+
+    @property
+    def input(self) -> Any:
+        return _json_loads(self.input_json)
+
+    @property
+    def output(self) -> Any:
+        return _json_loads(self.output_json)
+
+    @property
+    def error(self) -> Any:
+        return _json_loads(self.error_json)
+
+    @property
+    def context(self) -> dict:
+        return _json_loads(self.context_json) or {}
+
+    @property
+    def tags(self) -> list:
+        return _json_loads(self.tags_json) or []
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "level": self.level,
+            "source": self.source,
+            "action": self.action,
+            "execution_id": self.execution_id,
+            "ticket_id": self.ticket_id,
+            "user": self.user,
+            "request_id": self.request_id,
+            "method": self.method,
+            "endpoint": self.endpoint,
+            "status_code": self.status_code,
+            "duration_ms": self.duration_ms,
+            "input": self.input,
+            "output": self.output,
+            "error": self.error,
+            "context": self.context,
+            "tags": self.tags,
         }

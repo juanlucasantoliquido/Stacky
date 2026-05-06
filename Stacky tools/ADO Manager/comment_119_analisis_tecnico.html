@@ -1,0 +1,427 @@
+﻿<h2>🔬 ANÁLISIS TÉCNICO — ADO-119</h2>
+<blockquote>
+  <strong>Generado por:</strong> Analista Técnico Agéntico<br>
+  <strong>Fecha:</strong> 2026-05-05<br>
+  <strong>Documentación consultada:</strong> 00_INDICE_MAESTRO.md (T01), 03_CAPA_DATOS_RSDALC.md, 15_CONFIGURACION.md, RSDalc/Cliente.cs, RSDalc/Obligaciones.cs, RSBus/Obligaciones.cs, RSFac/Obligaciones.cs, FrmDetalleClie.aspx + .cs + .designer.cs, Global.asax.cs, Constantes.cs, Web.config
+</blockquote>
+<hr>
+
+<h2>0. RESUMEN RÁPIDO</h2>
+
+<h3>🎯 Qué debe desarrollar el Developer</h3>
+<p>
+Agregar dos campos de solo lectura (<strong>Corredor Principal</strong> y <strong>Riesgo de Cliente</strong>) en la sección superior de <code>FrmDetalleClie.aspx</code>, visibles únicamente cuando <code>Const.EsInstanciaPacifico == true</code>. El Corredor Principal se deriva con una query TOP 1 sobre <code>ROBLG</code> (por mayor <code>DEMORATOT</code>, desempate <code>OGFECMOR ASC</code>). El Riesgo de Cliente ya viene en el <code>DataSet CLIENTE</code> desde <code>GetCliente()</code> (campo <code>CLRIESGOENT</code>).
+</p>
+
+<h3>🧪 Cómo probar (paso a paso)</h3>
+<ol>
+  <li>Verificar que <code>Web.config</code> tiene <code>&lt;add key="EsInstanciaPacifico" value="1" /&gt;</code>.</li>
+  <li>Abrir la agenda y navegar a un cliente con al menos una obligación: <code>SELECT TOP 5 LOCOD FROM RLOTE ORDER BY LOCOD;</code></li>
+  <li>Entrar al Detalle de Cliente (FrmDetalleClie) y verificar que aparecen los campos <strong>Corredor Principal</strong> y <strong>Riesgo de Cliente</strong> en la sección superior.</li>
+  <li>Verificar que Corredor Principal muestra el OGCORREDOR de la obligación con mayor DEMORATOT del lote.</li>
+  <li>Verificar que Riesgo de Cliente muestra el valor de RCLIE.CLRIESGOENT para ese cliente.</li>
+  <li>Verificar que si se cambia <code>EsInstanciaPacifico</code> a <code>0</code> en Web.config y se reinicia la app, los campos desaparecen.</li>
+</ol>
+<hr>
+
+<h2>1. TRADUCCIÓN FUNCIONAL → TÉCNICA</h2>
+
+<h3>Requerimiento funcional (resumen)</h3>
+<p>Mostrar en la sección "Datos de Identificación e Información General del Deudor" de FrmDetalleClie dos nuevos campos de solo lectura: (1) <strong>Corredor Principal</strong> derivado de la obligación con mayor importe de deuda vigente del lote; (2) <strong>Riesgo de Cliente</strong> leído directamente del registro del deudor. Ambos visibles solo en instancia Pacífico.</p>
+
+<h3>Solución técnica propuesta</h3>
+<p>
+<strong>Corredor Principal:</strong> Nuevo método <code>GetCorredorPrincipal(string codCliente)</code> en la capa DAL → BUS → FAC sobre la tabla <code>ROBLG</code> con JOIN a <code>RDEUDA</code>. Ordena por <code>DEMORATOT DESC</code> y <code>OGFECMOR ASC</code> (empate = mora más antigua). Devuelve <code>CORREDOR_PRINCIPAL</code> como DataSet fusionado en <code>dsGeneral</code>.<br><br>
+<strong>Riesgo de Cliente:</strong> El campo <code>CLRIESGOENT</code> YA está en el SELECT de <code>RSDalc.Cliente.GetCliente()</code> (línea 23 del método) y por lo tanto ya disponible en <code>dsGeneral.Tables["CLIENTE"]</code>. Solo requiere binding en <code>CargoBloqueCliente()</code>.<br><br>
+<strong>Flag de instancia Pacífico:</strong> Mecanismo nuevo a introducir: <code>Const.EsInstanciaPacifico</code> (bool estático) leído de <code>AppSettings["EsInstanciaPacifico"]</code> en <code>Global.asax.cs</code>. Controla la visibilidad de ambos controles.
+</p>
+
+<h3>Flujo actual del sistema (cómo funciona HOY)</h3>
+<ol>
+  <li>Usuario navega a FrmDetalleClie (lote en <code>Session["lote"]</code>).</li>
+  <li><code>CargoDatosPagina()</code> llama a <code>facCliente.GetCliente(CodCliente)</code> → retorna tabla <code>CLIENTE</code> con CLRIESGOENT ya incluido.</li>
+  <li><code>CargoBloqueCliente(DataSet)</code> lee CLIENTE y LOTE y llena los <code>abf*</code> del header (ApellidoNombre, Documento, NumCliente, NivelMora, CategoriaCliente, TipoCliente, AtrasoTotal, Usuario, Perfil).</li>
+  <li>No existen controles para Corredor Principal ni Riesgo de Cliente.</li>
+</ol>
+
+<h3>Flujo propuesto (cómo debe funcionar DESPUÉS)</h3>
+<ol>
+  <li>(sin cambio) Usuario navega a FrmDetalleClie.</li>
+  <li><strong>[CAMBIO]</strong> <code>CargoDatosPagina()</code> además llama a <code>facOblig.GetCorredorPrincipal(CodCliente)</code> y fusiona en <code>dsGeneral</code>.</li>
+  <li>(sin cambio) <code>facCliente.GetCliente()</code> → CLRIESGOENT ya incluido en tabla CLIENTE.</li>
+  <li><strong>[CAMBIO]</strong> <code>CargoBloqueCliente()</code> lee y asigna <code>abfCorredorPrincipal.Value</code> y <code>abfRiesgoCliente.Value</code>.</li>
+  <li><strong>[CAMBIO]</strong> Visibilidad controlada por <code>Const.EsInstanciaPacifico</code> (setter en <code>InicializoControles()</code> o en el ASPX con <code>Visible="false"</code> + activación en code-behind).</li>
+</ol>
+<hr>
+
+<h2>2. ALCANCE DE CAMBIOS</h2>
+
+<h3>Cambios en código — nivel de MÉTODO</h3>
+
+<h4>[Constantes.cs] — Capa: Comun</h4>
+<p><strong>Clase:</strong> <code>Const</code><br>
+<strong>Ubicación:</strong> <code>trunk/OnLine/Negocio/Comun/Constantes.cs</code> — línea ~45<br>
+<strong>Tipo de cambio:</strong> Agregar nueva propiedad estática</p>
+<ul>
+  <li><strong>Antes:</strong> <code>public static string Aplicacion;</code></li>
+  <li><strong>Después:</strong> Agregar en la misma zona: <code>public static bool EsInstanciaPacifico;</code></li>
+  <li><strong>Razón:</strong> Mecanismo de flag de instancia para ocultar/mostrar features exclusivas de Pacífico.</li>
+  <li><strong>PRE:</strong> N/A (campo estático inicializado por Application_Start).</li>
+  <li><strong>POST:</strong> <code>Const.EsInstanciaPacifico</code> accesible en todo el código desde arranque.</li>
+  <li><strong>THROWS:</strong> N/A</li>
+</ul>
+
+<h4>[Global.asax.cs] — Capa: AgendaWeb</h4>
+<p><strong>Clase:</strong> <code>Global</code><br>
+<strong>Método:</strong> <code>Application_Start(Object sender, EventArgs e)</code> — línea ~30<br>
+<strong>Tipo de cambio:</strong> Agregar setter del nuevo flag</p>
+<ul>
+  <li><strong>Antes:</strong> <code>Comun.Const.Aplicacion = "1";</code> (único setter en Application_Start)</li>
+  <li><strong>Después:</strong> Agregar inmediatamente después: <code>Comun.Const.EsInstanciaPacifico = ConfigurationManager.AppSettings["EsInstanciaPacifico"] == "1";</code></li>
+  <li><strong>Razón:</strong> Setear el flag una vez al arranque desde configuración, igual que <code>Const.Aplicacion</code>.</li>
+  <li><strong>PRE:</strong> AppSettings["EsInstanciaPacifico"] presente en Web.config (si ausente, bool default = false → invisible).</li>
+  <li><strong>POST:</strong> <code>Const.EsInstanciaPacifico</code> = true si key = "1", false en cualquier otro caso.</li>
+  <li><strong>THROWS:</strong> N/A (ConfigurationManager devuelve null si key no existe → <code>null == "1"</code> = false, comportamiento seguro).</li>
+</ul>
+
+<h4>[Web.config] — Capa: AgendaWeb config</h4>
+<p><strong>Archivo:</strong> <code>trunk/OnLine/AgendaWeb/Web.config</code><br>
+<strong>Tipo de cambio:</strong> Agregar key de configuración</p>
+<ul>
+  <li><strong>Antes:</strong> No tiene key EsInstanciaPacifico.</li>
+  <li><strong>Después:</strong> Agregar en sección <code>&lt;appSettings&gt;</code>: <code>&lt;add key="EsInstanciaPacifico" value="1" /&gt;</code></li>
+  <li><strong>Razón:</strong> Activar el flag para la instancia Pacífico. En instalaciones Standard, esta key se omite (o value="0").</li>
+</ul>
+
+<h4>[Obligaciones.cs DAL] — Capa: RSDalc</h4>
+<p><strong>Clase:</strong> <code>RSDalc.Obligaciones</code><br>
+<strong>Método:</strong> <code>GetCorredorPrincipal(string codCliente)</code> — nuevo método<br>
+<strong>Archivo:</strong> <code>trunk/OnLine/Negocio/RSDalc/Obligaciones.cs</code><br>
+<strong>Tipo de cambio:</strong> Nuevo método</p>
+<ul>
+  <li><strong>Antes:</strong> No existe.</li>
+  <li><strong>Después:</strong> Retorna DataSet con tabla "CORREDOR_PRINCIPAL" con columna CORREDOR_PRINCIPAL (string). Selecciona TOP 1 ISNULL(OGCORREDOR,'') de ROBLG JOIN RDEUDA, WHERE OGLOTE = codCliente AND OGCORREDOR IS NOT NULL AND OGCORREDOR &lt;&gt; '', ORDER BY DEMORATOT DESC, OGFECMOR ASC. Para Oracle: usar ROWNUM=1 y NVL.</li>
+  <li><strong>PRE:</strong> <code>codCliente</code> no nulo ni vacío; conn conectada.</li>
+  <li><strong>POST:</strong> DataSet "CORREDOR_PRINCIPAL" con 0 o 1 fila. 0 filas si no hay obligaciones con corredor asignado.</li>
+  <li><strong>THROWS:</strong> Errores.Cantidad() &gt; 0 si falla la query (patrón estándar de cBase).</li>
+</ul>
+
+<h4>[Obligaciones.cs BUS] — Capa: RSBus</h4>
+<p><strong>Clase:</strong> <code>RSBus.Obligaciones</code><br>
+<strong>Método:</strong> <code>GetCorredorPrincipal(string codCliente)</code> — nuevo método (delegación)<br>
+<strong>Archivo:</strong> <code>trunk/OnLine/Negocio/RSBus/Obligaciones.cs</code><br>
+<strong>Tipo de cambio:</strong> Nuevo método de delegación (patrón idéntico a GetHistoricoObligaciones)</p>
+<ul>
+  <li><strong>PRE:</strong> conn inicializada en el constructor.</li>
+  <li><strong>POST:</strong> DataSet "CORREDOR_PRINCIPAL" retornado, errores propagados.</li>
+  <li><strong>THROWS:</strong> N/A (errores en Errores collection).</li>
+</ul>
+
+<h4>[Obligaciones.cs FAC] — Capa: RSFac</h4>
+<p><strong>Clase:</strong> <code>RSFac.Obligaciones</code><br>
+<strong>Método:</strong> <code>GetCorredorPrincipal(string codCliente)</code> — nuevo método (facade)<br>
+<strong>Archivo:</strong> <code>trunk/OnLine/Negocio/RSFac/Obligaciones.cs</code><br>
+<strong>Tipo de cambio:</strong> Nuevo método facade (patrón idéntico a GetHistoricoObligaciones)</p>
+<ul>
+  <li><strong>PRE:</strong> Crea conn, llama Bus, cierra conn.</li>
+  <li><strong>POST:</strong> DataSet "CORREDOR_PRINCIPAL" retornado; conn cerrada en todos los casos.</li>
+  <li><strong>THROWS:</strong> N/A.</li>
+</ul>
+
+<h4>[FrmDetalleClie.aspx.cs] — Capa: AgendaWeb</h4>
+<p><strong>Clase:</strong> <code>FrmDetalleClie</code><br>
+<strong>Método A:</strong> <code>CargoDatosPagina()</code> — línea ~615<br>
+<strong>Tipo de cambio:</strong> Agregar llamada a GetCorredorPrincipal</p>
+<ul>
+  <li><strong>Antes:</strong> <code>dsGeneral.Merge(facCliente.GetLote(CodCliente));</code> es la última merge antes de CargoBloqueCliente.</li>
+  <li><strong>Después:</strong> Agregar: <code>if (Const.EsInstanciaPacifico) dsGeneral.Merge(facOblig.GetCorredorPrincipal(CodCliente));</code> (solo ejecutar si la instancia lo requiere, por performance).</li>
+  <li><strong>PRE:</strong> CodCliente válido; facOblig ya declarado en la clase.</li>
+  <li><strong>POST:</strong> dsGeneral.Tables["CORREDOR_PRINCIPAL"] disponible.</li>
+</ul>
+<p><strong>Método B:</strong> <code>CargoBloqueCliente(DataSet Ds)</code> — línea ~655<br>
+<strong>Tipo de cambio:</strong> Agregar binding de los dos nuevos campos</p>
+<ul>
+  <li><strong>Antes:</strong> Termina con <code>abfCategoriaCliente.Value = Ds.Tables["CLIENTE"].Rows[0]["CLCATEGCLIEDESC"].ToString().Trim();</code></li>
+  <li><strong>Después:</strong> Agregar después del bloque existente, dentro del <code>if (Ds.Tables["CLIENTE"].Rows.Count &gt; 0 ...)</code>:<br>
+    <code>abfRiesgoCliente.Value = Ds.Tables["CLIENTE"].Rows[0]["CLRIESGOENT"].ToString().Trim();</code><br>
+    <code>if (Const.EsInstanciaPacifico &amp;&amp; Ds.Tables.Contains("CORREDOR_PRINCIPAL") &amp;&amp; Ds.Tables["CORREDOR_PRINCIPAL"].Rows.Count &gt; 0)</code><br>
+    <code>&nbsp;&nbsp;abfCorredorPrincipal.Value = Ds.Tables["CORREDOR_PRINCIPAL"].Rows[0]["CORREDOR_PRINCIPAL"].ToString().Trim();</code>
+  </li>
+  <li><strong>PRE:</strong> dsGeneral cargado con tablas CLIENTE y (opcionalmente) CORREDOR_PRINCIPAL.</li>
+  <li><strong>POST:</strong> abfCorredorPrincipal y abfRiesgoCliente con valores correctos.</li>
+  <li><strong>THROWS:</strong> N/A (guardado por el if de conteo de filas existente).</li>
+</ul>
+
+<h4>[FrmDetalleClie.aspx] — Capa: UI</h4>
+<p><strong>Tipo de cambio:</strong> Agregar dos AISBusinessField en el <code>&lt;div class="col s8"&gt;</code> del top panel, con <code>Visible="false"</code> como estado inicial, activados en code-behind según flag.</p>
+<ul>
+  <li><strong>Antes:</strong> 8 campos existentes (abfApellidoNombre, abfUsuario, abfDocumento, abfPerfil, abfNumCliente, abfNivelMora, abfCategoriaCliente, abfTipoCliente).</li>
+  <li><strong>Después:</strong> Agregar al final del bloque s8:<br>
+    <code>&lt;ais:AISBusinessField ID="abfCorredorPrincipal" runat="server" DataEntrySize="S9" LabelText="Corredor Principal:" FieldState="ReadOnly" Visible="false" /&gt;</code><br>
+    <code>&lt;ais:AISBusinessField ID="abfRiesgoCliente" runat="server" DataEntrySize="S3" LabelText="Riesgo de Cliente:" FieldState="ReadOnly" Visible="false" /&gt;</code>
+  </li>
+  <li><strong>Razón:</strong> Visible="false" por defecto → invisible en Standard. El code-behind activa con <code>abfCorredorPrincipal.Visible = Const.EsInstanciaPacifico;</code> en InicializoControles().</li>
+</ul>
+
+<h4>[FrmDetalleClie.aspx.designer.cs] — Capa: UI (auto-generado)</h4>
+<p>VS regenará automáticamente al hacer Build. Si se requiere agregar manualmente:</p>
+<ul>
+  <li>Agregar <code>protected global::AIS.PR.UI.Web.Controls.AISBusinessField abfCorredorPrincipal;</code></li>
+  <li>Agregar <code>protected global::AIS.PR.UI.Web.Controls.AISBusinessField abfRiesgoCliente;</code></li>
+</ul>
+
+<h3>Cambios en base de datos (si aplica)</h3>
+<p>No se requieren cambios en BD. Todos los campos existen:</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Campo</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tabla</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tipo</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Verificación</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>OGCORREDOR</code></td><td style="border:1px solid #ccc;padding:6px">ROBLG</td><td style="border:1px solid #ccc;padding:6px">varchar(20), nullable</td><td style="border:1px solid #ccc;padding:6px">✅ verificado en BD dev</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>DEMORATOT</code></td><td style="border:1px solid #ccc;padding:6px">RDEUDA</td><td style="border:1px solid #ccc;padding:6px">numeric, nullable</td><td style="border:1px solid #ccc;padding:6px">✅ en SELECT de GetObligaciones()</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>OGFECMOR</code></td><td style="border:1px solid #ccc;padding:6px">ROBLG</td><td style="border:1px solid #ccc;padding:6px">varchar(8), nullable</td><td style="border:1px solid #ccc;padding:6px">✅ verificado en BD dev</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>CLRIESGOENT</code></td><td style="border:1px solid #ccc;padding:6px">RCLIE</td><td style="border:1px solid #ccc;padding:6px">varchar(6), nullable</td><td style="border:1px solid #ccc;padding:6px">✅ verificado en BD dev — ya en GetCliente() SELECT</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>CLRIESGOSIS</code></td><td style="border:1px solid #ccc;padding:6px">RCLIE</td><td style="border:1px solid #ccc;padding:6px">varchar(6), nullable</td><td style="border:1px solid #ccc;padding:6px">✅ verificado en BD dev — alternativa si se prefiere riesgo de sistema</td></tr>
+</table>
+
+<h3>RIDIOMA — Mensajes nuevos</h3>
+<p>Los labels de los AISBusinessField se definen en el atributo <code>LabelText</code> del ASPX (texto estático), no en RIDIOMA. No se requieren inserciones en RIDIOMA.</p>
+<p>Referencia: IDTEXTO 9298 = "Corredor" (ESP) / "Broker" (ENG) / "Corretor" (POR) — ya existe para la columna de agenda. MAX IDTEXTO actual = 9302.</p>
+
+<h3>Archivos afectados — resumen</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Archivo</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Capa</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tipo de cambio</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmDetalleClie.aspx</code></td><td style="border:1px solid #ccc;padding:6px">UI</td><td style="border:1px solid #ccc;padding:6px">Agregar abfCorredorPrincipal + abfRiesgoCliente</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmDetalleClie.aspx.designer.cs</code></td><td style="border:1px solid #ccc;padding:6px">UI (auto-gen)</td><td style="border:1px solid #ccc;padding:6px">Declaraciones de controles (auto o manual)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmDetalleClie.aspx.cs</code></td><td style="border:1px solid #ccc;padding:6px">AgendaWeb</td><td style="border:1px solid #ccc;padding:6px">CargoDatosPagina() + CargoBloqueCliente() + InicializoControles()</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSDalc/Obligaciones.cs</code></td><td style="border:1px solid #ccc;padding:6px">RSDalc</td><td style="border:1px solid #ccc;padding:6px">Nuevo método GetCorredorPrincipal()</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSBus/Obligaciones.cs</code></td><td style="border:1px solid #ccc;padding:6px">RSBus</td><td style="border:1px solid #ccc;padding:6px">Nuevo método GetCorredorPrincipal() (delegación)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSFac/Obligaciones.cs</code></td><td style="border:1px solid #ccc;padding:6px">RSFac</td><td style="border:1px solid #ccc;padding:6px">Nuevo método GetCorredorPrincipal() (facade)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/Comun/Constantes.cs</code></td><td style="border:1px solid #ccc;padding:6px">Comun</td><td style="border:1px solid #ccc;padding:6px">Agregar Const.EsInstanciaPacifico (bool)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/Global.asax.cs</code></td><td style="border:1px solid #ccc;padding:6px">AgendaWeb</td><td style="border:1px solid #ccc;padding:6px">Setter Const.EsInstanciaPacifico en Application_Start</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/Web.config</code></td><td style="border:1px solid #ccc;padding:6px">Config</td><td style="border:1px solid #ccc;padding:6px">Agregar key EsInstanciaPacifico = 1</td></tr>
+</table>
+<hr>
+
+<h2>2B. SPEC TÉCNICA (SDD)</h2>
+<blockquote>Contratos formales. El Developer debe verificar que su implementación satisface cada contrato antes de dar el desarrollo por completado.</blockquote>
+
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Spec ID</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Método</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">PRE</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">POST</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">THROWS</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Test(s)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-01</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Obligaciones.GetCorredorPrincipal(codCliente)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">codCliente no nulo, conn conectada</td>
+    <td style="border:1px solid #ccc;padding:6px">DataSet "CORREDOR_PRINCIPAL" con 0-1 filas; fila contiene CORREDOR_PRINCIPAL = OGCORREDOR de la obligación con max DEMORATOT del lote</td>
+    <td style="border:1px solid #ccc;padding:6px">Errores.Cantidad() > 0 si falla SQL</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-001, TU-002, TU-003</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-02</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>FrmDetalleClie.CargoBloqueCliente(DataSet)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">Ds contiene tabla CLIENTE con ≥1 fila; Ds puede o no contener tabla CORREDOR_PRINCIPAL</td>
+    <td style="border:1px solid #ccc;padding:6px">Si Const.EsInstanciaPacifico: abfCorredorPrincipal y abfRiesgoCliente visibles y con valor correcto. Si !EsInstanciaPacifico: Visible=false</td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-004, TU-005</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-03</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>Const.EsInstanciaPacifico</code> (Global.asax.cs setter)</td>
+    <td style="border:1px solid #ccc;padding:6px">AppSettings leídos en Application_Start</td>
+    <td style="border:1px solid #ccc;padding:6px">true si AppSettings["EsInstanciaPacifico"] == "1"; false en cualquier otro caso (null, "0", ausente)</td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-006</td>
+  </tr>
+</table>
+<hr>
+
+<h2>3. PLAN DE PRUEBAS TÉCNICO</h2>
+
+<h3>Queries para obtener datos de prueba</h3>
+<pre><code>-- P01: Lote con múltiples obligaciones con corredor — validar selección por max DEMORATOT
+SELECT TOP 10 OGLOTE, OGCORREDOR, DEMORATOT, OGFECMOR
+FROM ROBLG INNER JOIN RDEUDA ON DEOBLIG = OGCOD
+WHERE OGCORREDOR IS NOT NULL AND OGCORREDOR &lt;&gt; ''
+ORDER BY OGLOTE, DEMORATOT DESC;
+
+-- P02: Lote sin corredor en ninguna obligación — validar campo vacío
+SELECT TOP 5 OGLOTE FROM ROBLG
+WHERE OGLOTE NOT IN (SELECT DISTINCT OGLOTE FROM ROBLG WHERE OGCORREDOR IS NOT NULL AND OGCORREDOR &lt;&gt; '')
+AND OGLOTE IS NOT NULL;
+
+-- P03: Cliente con CLRIESGOENT no nulo
+SELECT TOP 5 CLCOD, CLRIESGOENT, CLRIESGOSIS FROM RCLIE
+WHERE CLRIESGOENT IS NOT NULL AND CLRIESGOENT &lt;&gt; '';
+
+-- P04: Empate en DEMORATOT — validar desempate por OGFECMOR ASC (mora más antigua)
+SELECT OGLOTE, OGCORREDOR, DEMORATOT, OGFECMOR
+FROM ROBLG INNER JOIN RDEUDA ON DEOBLIG = OGCOD
+WHERE OGCORREDOR IS NOT NULL AND OGCORREDOR &lt;&gt; ''
+AND OGLOTE IN (
+  SELECT OGLOTE FROM ROBLG INNER JOIN RDEUDA ON DEOBLIG = OGCOD
+  WHERE OGCORREDOR IS NOT NULL
+  GROUP BY OGLOTE HAVING COUNT(DISTINCT DEMORATOT) = 1 AND COUNT(*) &gt; 1
+)
+ORDER BY OGLOTE, OGFECMOR ASC;</code></pre>
+
+<h3>Pruebas funcionales enriquecidas</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">#</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Caso de prueba</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Datos candidatos</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Resultado esperado</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P01</td><td style="border:1px solid #ccc;padding:6px">Lote con múltiples obligaciones — corredor de la de mayor DEMORATOT</td><td style="border:1px solid #ccc;padding:6px">Ejecutar query P01 arriba</td><td style="border:1px solid #ccc;padding:6px">abfCorredorPrincipal muestra el OGCORREDOR de la fila con DEMORATOT más alto</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P02</td><td style="border:1px solid #ccc;padding:6px">Lote sin obligaciones con corredor</td><td style="border:1px solid #ccc;padding:6px">Ejecutar query P02</td><td style="border:1px solid #ccc;padding:6px">abfCorredorPrincipal muestra vacío (no error)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P03</td><td style="border:1px solid #ccc;padding:6px">Cliente con CLRIESGOENT poblado</td><td style="border:1px solid #ccc;padding:6px">Ejecutar query P03</td><td style="border:1px solid #ccc;padding:6px">abfRiesgoCliente muestra el valor de CLRIESGOENT</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P04</td><td style="border:1px solid #ccc;padding:6px">Empate en DEMORATOT — desempate por mora más antigua</td><td style="border:1px solid #ccc;padding:6px">Ejecutar query P04</td><td style="border:1px solid #ccc;padding:6px">Se muestra corredor de la obligación con OGFECMOR más pequeña (más antigua)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P05</td><td style="border:1px solid #ccc;padding:6px">EsInstanciaPacifico = false — campos no visibles</td><td style="border:1px solid #ccc;padding:6px">Cambiar key a "0" en Web.config + reiniciar IIS</td><td style="border:1px solid #ccc;padding:6px">abfCorredorPrincipal y abfRiesgoCliente NO aparecen en la pantalla</td></tr>
+</table>
+
+<h3>Escenarios de borde</h3>
+<ul>
+  <li>Lote sin obligaciones en ROBLG → GetCorredorPrincipal retorna DataSet vacío → abfCorredorPrincipal queda en ""</li>
+  <li>Todas las obligaciones del lote tienen OGCORREDOR NULL → misma conducta (campo vacío)</li>
+  <li>CLRIESGOENT y CLRIESGOSIS ambos NULL en RCLIE → abfRiesgoCliente muestra ""</li>
+  <li>Una sola obligación en el lote → TOP 1 retorna esa misma</li>
+</ul>
+<hr>
+
+<h2>4. TESTS UNITARIOS OBLIGATORIOS</h2>
+<blockquote>⚠️ <strong>OBLIGATORIO PARA EL DESARROLLADOR:</strong> Todos los tests listados deben pasar antes de dar por completado el desarrollo.</blockquote>
+
+<h4>TU-001: GetCorredorPrincipal — happy path con múltiples obligaciones</h4>
+<ul>
+  <li><strong>Clase:</strong> <code>RSDalc.Obligaciones</code></li>
+  <li><strong>Método:</strong> <code>GetCorredorPrincipal(string codCliente)</code></li>
+  <li><strong>DADO:</strong> Lote con 2 obligaciones: OBL-A (DEMORATOT=1000, OGCORREDOR="COR1") y OBL-B (DEMORATOT=500, OGCORREDOR="COR2")</li>
+  <li><strong>CUANDO:</strong> <code>GetCorredorPrincipal("LOTE-TEST")</code></li>
+  <li><strong>ENTONCES:</strong> DataSet["CORREDOR_PRINCIPAL"].Rows[0]["CORREDOR_PRINCIPAL"] == "COR1"</li>
+</ul>
+
+<h4>TU-002: GetCorredorPrincipal — empate DEMORATOT, desempate por OGFECMOR ASC</h4>
+<ul>
+  <li><strong>Clase:</strong> <code>RSDalc.Obligaciones</code></li>
+  <li><strong>Método:</strong> <code>GetCorredorPrincipal(string codCliente)</code></li>
+  <li><strong>DADO:</strong> 2 obligaciones con DEMORATOT=1000 ambas: OBL-A (OGFECMOR="20240101", OGCORREDOR="COR-A"), OBL-B (OGFECMOR="20240601", OGCORREDOR="COR-B")</li>
+  <li><strong>CUANDO:</strong> <code>GetCorredorPrincipal("LOTE-TEST")</code></li>
+  <li><strong>ENTONCES:</strong> Retorna "COR-A" (OGFECMOR más antigua = inicio de mora más antiguo)</li>
+</ul>
+
+<h4>TU-003: GetCorredorPrincipal — lote sin obligaciones con corredor</h4>
+<ul>
+  <li><strong>Clase:</strong> <code>RSDalc.Obligaciones</code></li>
+  <li><strong>Método:</strong> <code>GetCorredorPrincipal(string codCliente)</code></li>
+  <li><strong>DADO:</strong> Lote con 1 obligación con OGCORREDOR = NULL</li>
+  <li><strong>CUANDO:</strong> <code>GetCorredorPrincipal("LOTE-SIN-CORREDOR")</code></li>
+  <li><strong>ENTONCES:</strong> DataSet["CORREDOR_PRINCIPAL"].Rows.Count == 0 (no error, DataSet vacío)</li>
+</ul>
+
+<h4>TU-004: CargoBloqueCliente — instancia Pacífico, controles visibles y con valor</h4>
+<ul>
+  <li><strong>Clase:</strong> <code>FrmDetalleClie</code> (test de integración de página)</li>
+  <li><strong>Método:</strong> <code>CargoBloqueCliente(DataSet)</code></li>
+  <li><strong>DADO:</strong> Const.EsInstanciaPacifico = true; CLIENTE.CLRIESGOENT = "A"; CORREDOR_PRINCIPAL.CORREDOR_PRINCIPAL = "COR1"</li>
+  <li><strong>CUANDO:</strong> CargoBloqueCliente(ds)</li>
+  <li><strong>ENTONCES:</strong> abfCorredorPrincipal.Value == "COR1"; abfRiesgoCliente.Value == "A"; ambos Visible == true</li>
+</ul>
+
+<h4>TU-005: CargoBloqueCliente — instancia Standard, controles ocultos</h4>
+<ul>
+  <li><strong>Clase:</strong> <code>FrmDetalleClie</code></li>
+  <li><strong>Método:</strong> <code>CargoBloqueCliente(DataSet)</code></li>
+  <li><strong>DADO:</strong> Const.EsInstanciaPacifico = false</li>
+  <li><strong>CUANDO:</strong> CargoBloqueCliente(ds)</li>
+  <li><strong>ENTONCES:</strong> abfCorredorPrincipal.Visible == false; abfRiesgoCliente.Visible == false</li>
+</ul>
+
+<h4>TU-006: Const.EsInstanciaPacifico — flag leído correctamente desde config</h4>
+<ul>
+  <li><strong>Clase:</strong> <code>Global</code></li>
+  <li><strong>Método:</strong> <code>Application_Start()</code></li>
+  <li><strong>DADO:</strong> AppSettings["EsInstanciaPacifico"] = "1"</li>
+  <li><strong>CUANDO:</strong> Application_Start se ejecuta</li>
+  <li><strong>ENTONCES:</strong> Const.EsInstanciaPacifico == true</li>
+</ul>
+<ul>
+  <li><strong>DADO:</strong> AppSettings["EsInstanciaPacifico"] ausente (o = "0")</li>
+  <li><strong>CUANDO:</strong> Application_Start se ejecuta</li>
+  <li><strong>ENTONCES:</strong> Const.EsInstanciaPacifico == false (comportamiento seguro por defecto)</li>
+</ul>
+
+<h3>Resumen de cobertura requerida</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Clase</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Método</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tests</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Escenarios</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Obligaciones</code></td><td style="border:1px solid #ccc;padding:6px"><code>GetCorredorPrincipal()</code></td><td style="border:1px solid #ccc;padding:6px">TU-001, TU-002, TU-003</td><td style="border:1px solid #ccc;padding:6px">Happy path, empate, sin corredor</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>FrmDetalleClie</code></td><td style="border:1px solid #ccc;padding:6px"><code>CargoBloqueCliente()</code></td><td style="border:1px solid #ccc;padding:6px">TU-004, TU-005</td><td style="border:1px solid #ccc;padding:6px">Instancia Pacífico, instancia Standard</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>Global</code></td><td style="border:1px solid #ccc;padding:6px"><code>Application_Start()</code></td><td style="border:1px solid #ccc;padding:6px">TU-006</td><td style="border:1px solid #ccc;padding:6px">Config presente/ausente</td></tr>
+</table>
+<hr>
+
+<h2>5. NOTAS PARA EL DESARROLLADOR</h2>
+
+<h3>Convenciones del proyecto a respetar</h3>
+<ul>
+  <li>Dual SQL obligatorio: el método <code>GetCorredorPrincipal()</code> debe manejar SQL Server (<code>TOP 1</code>) y Oracle (<code>WHERE ROWNUM = 1</code> con subquery) igual que GetObligaciones() en el mismo archivo.</li>
+  <li>Sanitización obligatoria: el parámetro codCliente debe pasarse con <code>cFormat.StToBD(codCliente)</code>, nunca concatenado directamente.</li>
+  <li>Patrón de delegación: DAL → BUS → FAC, siguiendo exactamente el patrón de GetHistoricoObligaciones() en cada capa.</li>
+  <li>El <code>facOblig</code> ya está declarado en FrmDetalleClie.aspx.cs (línea 16): <code>RSFac.Obligaciones facOblig = new RSFac.Obligaciones();</code>. No crear nueva instancia.</li>
+</ul>
+
+<h3>⚠️ Aclaración sobre CLRIESGOENT vs CLRIESGOSIS</h3>
+<p>
+La BD tiene dos campos de riesgo en RCLIE:
+</p>
+<ul>
+  <li><code>CLRIESGOENT</code> = "Riesgo Entidad" → riesgo que Pacífico asigna al cliente.</li>
+  <li><code>CLRIESGOSIS</code> = "Riesgo Sist. Finan." → riesgo calculado por el sistema financiero externo.</li>
+</ul>
+<p>
+<strong>Recomendación técnica:</strong> Usar <code>CLRIESGOENT</code> como "Riesgo de Cliente" (es el riesgo interno de Pacífico). Si el analista funcional confirma que el campo es el externo, cambiar a <code>CLRIESGOSIS</code>. Ambos ya están en el SELECT de <code>GetCliente()</code>; solo requiere cambiar el nombre del campo en el binding de CargoBloqueCliente. <strong>Confirmar con analista funcional antes de desplegar.</strong>
+</p>
+
+<h3>Precauciones</h3>
+<ul>
+  <li>No modificar la query de <code>GetCliente()</code> — CLRIESGOENT ya está en el SELECT, no hay que agregar nada.</li>
+  <li>La tabla "CORREDOR_PRINCIPAL" en dsGeneral se agrega solo si <code>Const.EsInstanciaPacifico == true</code>. En CargoBloqueCliente(), usar <code>Ds.Tables.Contains("CORREDOR_PRINCIPAL")</code> antes de acceder para evitar KeyNotFoundException.</li>
+  <li>La visibilidad de los controles debe setearse en <code>InicializoControles()</code> (ya existe en FrmDetalleClie.aspx.cs, línea ~150) para que se active en PostBack también.</li>
+  <li><code>Const.EsInstanciaPacifico</code> es un campo estático de clase → es global a toda la aplicación. No usar instancias de Const.</li>
+</ul>
+
+<h3>Patrón de referencia en el proyecto</h3>
+<p>Para el flag de instancia: ver cómo <code>Comun.Const.Aplicacion = "1";</code> se setea en <code>Global.asax.cs</code> línea 30 y cómo se usa en <code>RSDalc/Idioma.cs</code> línea 138 (<code>if (Const.Aplicacion == "1")</code>).</p>
+<p>Para el método nuevo en DAL/BUS/FAC: ver GetHistoricoObligaciones() en los tres archivos de la capa Obligaciones — es el patrón a replicar exactamente.</p>
+
+<h3>Query de derivación del Corredor Principal (SQL Server)</h3>
+<pre><code>-- GetCorredorPrincipal — SQL Server
+SELECT TOP 1 ISNULL(OGCORREDOR, '') AS CORREDOR_PRINCIPAL
+FROM ROBLG
+INNER JOIN RDEUDA ON DEOBLIG = OGCOD
+WHERE OGLOTE = {cFormat.StToBD(codCliente)}
+  AND OGCORREDOR IS NOT NULL
+  AND OGCORREDOR &lt;&gt; ''
+ORDER BY DEMORATOT DESC, OGFECMOR ASC;
+
+-- Equivalente Oracle
+SELECT CORREDOR_PRINCIPAL FROM (
+  SELECT NVL(OGCORREDOR, '') AS CORREDOR_PRINCIPAL
+  FROM ROBLG
+  INNER JOIN RDEUDA ON DEOBLIG = OGCOD
+  WHERE OGLOTE = {cFormat.StToBD(codCliente)}
+    AND OGCORREDOR IS NOT NULL
+    AND OGCORREDOR &lt;&gt; ''
+  ORDER BY DEMORATOT DESC, OGFECMOR ASC
+) WHERE ROWNUM = 1;</code></pre>
+
+<h3>Query de verificación post-implementación</h3>
+<pre><code>-- Verificar que el corredor retornado por la pantalla coincide con la query
+SELECT TOP 1 OGCORREDOR, DEMORATOT, OGFECMOR
+FROM ROBLG INNER JOIN RDEUDA ON DEOBLIG = OGCOD
+WHERE OGLOTE = 'LOTE_DE_PRUEBA'
+  AND OGCORREDOR IS NOT NULL AND OGCORREDOR &lt;&gt; ''
+ORDER BY DEMORATOT DESC, OGFECMOR ASC;</code></pre>
+
+<hr>
+<p><strong>Próximo paso:</strong> Desarrollador toma este ticket e implementa siguiendo este análisis.<br>
+<strong>Regla:</strong> Todos los tests unitarios de la sección 4 deben pasar al 100%.<br>
+<strong>Pendiente de confirmación:</strong> Analista funcional debe confirmar si "Riesgo de Cliente" = CLRIESGOENT (Riesgo Entidad, recomendado) o CLRIESGOSIS (Riesgo Sist. Finan.).</p>

@@ -101,11 +101,33 @@ def run(
     # Check DB credentials
     missing_env = [v for v in _DB_ENV_VARS if not os.getenv(v)]
     if missing_env:
-        return _err(
-            "db_credentials_missing",
-            f"Missing env vars: {', '.join(missing_env)}. "
-            f"Load from Tools/Stacky/.secrets/qa_db.env before running.",
+        # Fase 8 — lazy BD fallback: when DSN is missing, return a SKIPPED
+        # result instead of blocking the pipeline. Playbook-based generation
+        # does not require precondition checks (data comes from intent_spec).
+        # The dossier will show "preconditions_skipped: missing_env" so the
+        # operator knows the check was not performed.
+        logger.info(
+            "precondition_checker: env vars missing (%s) — returning skipped result",
+            ", ".join(missing_env),
         )
+        skipped_results = {
+            s.get("scenario_id", "?"): {
+                "ok": True,
+                "skipped": True,
+                "reason": f"BD env vars not set: {', '.join(missing_env)}",
+                "missing": [],
+            }
+            for s in scenarios
+        }
+        return {
+            "ok": True,
+            "ticket_id": ticket_id,
+            "skipped": True,
+            "skip_reason": f"Missing env vars: {', '.join(missing_env)}",
+            "summary": {"total": len(scenarios), "ok": len(scenarios), "blocked": 0, "skipped": len(scenarios)},
+            "results": skipped_results,
+            "elapsed_ms": int((time.time() - started) * 1000),
+        }
 
     # Try connecting to DB (or use injectable connector)
     try:

@@ -1,0 +1,2 @@
+{"ts": "2026-05-06T14:35:33.861867Z", "ticket_id": 72, "mode": "dry-run", "ok": true, "action": "preview_only", "verdict": "MIXED", "error": null, "dossier_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\dossier.json"}
+{"ts": "2026-05-06T14:39:05.851548Z", "ticket_id": 72, "mode": "publish", "ok": true, "action": "created", "verdict": "MIXED", "error": null, "dossier_path": "evidence\\72\\dossier.json"}

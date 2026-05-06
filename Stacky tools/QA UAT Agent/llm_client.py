@@ -188,6 +188,7 @@ def call_llm(
     user: str,
     max_tokens: int = 1024,
     timeout: int = 120,
+    _call_site: str = "",  # módulo llamador para trazabilidad en logs
 ) -> dict:
     """
     Call LLM and return {"text": str, "model": str, "duration_ms": int}.
@@ -199,25 +200,211 @@ def call_llm(
 
     Raises LLMError if all backends fail.
     """
+    # Obtener el execution_logger activo para registrar la llamada LLM
+    _exec_log = None
+    try:
+        from execution_logger import get_active_logger as _get_active_logger
+        _exec_log = _get_active_logger()
+    except ImportError:
+        pass
+
     backend = os.environ.get("STACKY_LLM_BACKEND", "vscode_bridge").lower()
 
+    if _exec_log is not None:
+        try:
+            _exec_log.llm_call(
+                model=model,
+                backend=backend,
+                system_preview=system,
+                user_preview=user,
+                max_tokens=max_tokens,
+                call_site=_call_site,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     if backend == "mock":
-        return _invoke_mock(system, user, model, max_tokens)
+        result = _invoke_mock(system, user, model, max_tokens)
+        if _exec_log is not None:
+            try:
+                _exec_log.llm_response(model=model, backend=backend,
+                                       duration_ms=result.get("duration_ms", 0),
+                                       text_preview=result.get("text", ""))
+            except Exception:  # noqa: BLE001
+                pass
+        return result
 
     if backend == "vscode_bridge":
         if _vscode_bridge_healthy():
             try:
-                return _invoke_vscode_bridge(system, user, model, max_tokens, timeout)
+                result = _invoke_vscode_bridge(system, user, model, max_tokens, timeout)
+                if _exec_log is not None:
+                    try:
+                        _exec_log.llm_response(model=result.get("model", model),
+                                               backend="vscode_bridge",
+                                               duration_ms=result.get("duration_ms", 0),
+                                               text_preview=result.get("text", ""))
+                    except Exception:  # noqa: BLE001
+                        pass
+                return result
             except LLMError as exc:
                 logger.warning("VS Code bridge failed, falling back to copilot_direct: %s", exc)
+                if _exec_log is not None:
+                    try:
+                        _exec_log.llm_error(model=model, backend="vscode_bridge", error=str(exc))
+                    except Exception:  # noqa: BLE001
+                        pass
         else:
             logger.info("VS Code bridge not available, using copilot_direct")
         try:
-            return _invoke_copilot_direct(system, user, model, max_tokens, timeout)
-        except LLMError:
+            result = _invoke_copilot_direct(system, user, model, max_tokens, timeout)
+            if _exec_log is not None:
+                try:
+                    _exec_log.llm_response(model=result.get("model", model),
+                                           backend="copilot_direct",
+                                           duration_ms=result.get("duration_ms", 0),
+                                           text_preview=result.get("text", ""))
+                except Exception:  # noqa: BLE001
+                    pass
+            return result
+        except LLMError as exc:
+            if _exec_log is not None:
+                try:
+                    _exec_log.llm_error(model=model, backend="copilot_direct", error=str(exc))
+                except Exception:  # noqa: BLE001
+                    pass
             raise
 
     if backend == "copilot_direct":
-        return _invoke_copilot_direct(system, user, model, max_tokens, timeout)
+        try:
+            result = _invoke_copilot_direct(system, user, model, max_tokens, timeout)
+            if _exec_log is not None:
+                try:
+                    _exec_log.llm_response(model=result.get("model", model),
+                                           backend="copilot_direct",
+                                           duration_ms=result.get("duration_ms", 0),
+                                           text_preview=result.get("text", ""))
+                except Exception:  # noqa: BLE001
+                    pass
+            return result
+        except LLMError as exc:
+            if _exec_log is not None:
+                try:
+                    _exec_log.llm_error(model=model, backend="copilot_direct", error=str(exc))
+                except Exception:  # noqa: BLE001
+                    pass
+            raise
 
     raise LLMError(f"Unknown STACKY_LLM_BACKEND: {backend!r}. Use: vscode_bridge | copilot_direct | mock")
+
+
+# ── Vision (multimodal) ──────────────────────────────────────────────────────
+#
+# call_llm_vision() es un superset multimodal de call_llm. La extensión es
+# opt-in: ningún caller existente la usa, y el path de degradación es
+# explícito — si el backend no soporta visión, se levanta LLMError y el
+# caller puede caer a una alternativa (DOM-based detection en nuestro caso).
+#
+# Modelos esperados: gpt-4o, gpt-4o-mini (ambos disponibles en el endpoint
+# GitHub Models que ya autenticamos con `gh auth token`). Cualquier otro
+# modelo recibirá las imágenes en formato OpenAI-compatible content blocks
+# y fallará gracefully si el modelo no soporta visión.
+
+
+def _invoke_copilot_direct_vision(
+    system: str,
+    user: str,
+    model: str,
+    images: list[str],
+    max_tokens: int,
+    timeout: int,
+) -> dict:
+    """GitHub Models inference con content blocks multimodales.
+
+    `images` es una lista de URLs (`https://...`) o data URLs
+    (`data:image/png;base64,...`). El endpoint acepta el shape OpenAI:
+
+        {"role": "user", "content": [
+            {"type": "text", "text": "..."},
+            {"type": "image_url", "image_url": {"url": "..."}}
+        ]}
+    """
+    token = _gh_auth_token()
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": user}]
+    for url in images:
+        if not url:
+            continue
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": url},
+        })
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        "stream": False,
+    }
+    if _is_reasoning_model(model):
+        payload["max_completion_tokens"] = max_tokens
+    else:
+        payload["max_tokens"] = max_tokens
+        payload["temperature"] = 0.0
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    started = time.time()
+    data = _http_post_json(_GITHUB_MODELS_ENDPOINT, payload, headers, timeout=timeout)
+    elapsed = int((time.time() - started) * 1000)
+
+    choices = data.get("choices") or []
+    if not choices:
+        raise LLMError(f"No choices in vision response: {str(data)[:300]}")
+    text = (choices[0].get("message") or {}).get("content") or ""
+    return {"text": text, "model": data.get("model", model), "duration_ms": elapsed}
+
+
+def call_llm_vision(
+    *,
+    model: str,
+    system: str,
+    user: str,
+    images: list[str],
+    max_tokens: int = 512,
+    timeout: int = 60,
+) -> dict:
+    """Multimodal sibling of call_llm. Returns same shape: text/model/duration_ms.
+
+    Backend resolution:
+      - mock   → returns a deterministic stub (`{"has_error": false, ...}`)
+                 so tests don't make network calls.
+      - everything else → forces copilot_direct path (the VS Code bridge
+                 currently does not expose vision; routing directly to
+                 GitHub Models is the documented opt-in fallback).
+
+    Raises LLMError if the call fails. Callers MUST be prepared to swallow
+    the error and degrade gracefully (e.g. fall back to DOM-only detection).
+    """
+    backend = os.environ.get("STACKY_LLM_BACKEND", "vscode_bridge").lower()
+
+    if backend == "mock":
+        return {
+            "text": '{"has_error": false, "error_text": "", "category": "none", "confidence": "low"}',
+            "model": "mock-vision-1.0",
+            "duration_ms": 5,
+        }
+
+    # vscode_bridge does not pipe images today — we always go direct for vision.
+    return _invoke_copilot_direct_vision(
+        system=system,
+        user=user,
+        model=model,
+        images=list(images or []),
+        max_tokens=max_tokens,
+        timeout=timeout,
+    )

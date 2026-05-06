@@ -1,14 +1,14 @@
 {
   "ok": true,
   "ticket_id": 70,
-  "compiled": 1,
-  "out_of_scope": 0,
+  "compiled": 6,
+  "out_of_scope": 1,
   "scenarios": [
     {
-      "scenario_id": "P_LEGACY",
+      "scenario_id": "P01",
       "ticket_id": 70,
       "pantalla": "FrmAgenda.aspx",
-      "titulo": "Cualquier escenario",
+      "titulo": "Búsqueda SIN filtros activos muestra todos los lotes",
       "precondiciones": [],
       "pasos": [
         {
@@ -19,17 +19,153 @@
       ],
       "oraculos": [
         {
-          "tipo": "invisible",
-          "target": "panel_c_lblagendausu",
+          "tipo": "visible",
+          "target": "msg_x",
           "valor": null
         }
       ],
       "datos_requeridos": [],
       "origen": {
         "ticket_section": "plan_pruebas",
-        "item_id": "P_LEGACY"
+        "item_id": "P01"
+      }
+    },
+    {
+      "scenario_id": "P02",
+      "ticket_id": 70,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Búsqueda con filtro Empresa filtra correctamente",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "msg_x",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      }
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 70,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Búsqueda con filtro Fecha filtra por rango",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "msg_x",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      }
+    },
+    {
+      "scenario_id": "P04",
+      "ticket_id": 70,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Búsqueda SIN resultados muestra mensaje vacío",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "msg_x",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      }
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 70,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Combinación de 2 filtros activos funciona correctamente",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "msg_x",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      }
+    },
+    {
+      "scenario_id": "P06",
+      "ticket_id": 70,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Combinación de 3 filtros activos funciona correctamente",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "msg_x",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P06"
       }
     }
   ],
-  "out_of_scope_items": []
+  "out_of_scope_items": [
+    {
+      "id": "P07",
+      "razon": "OUT_OF_SCOPE_NEEDS_HUMAN",
+      "descripcion": "Performance con más de 3 filtros activos simultáneos"
+    }
+  ]
 }

@@ -6,8 +6,11 @@ import type {
   ContextBlock,
   PackDefinition,
   PackRun,
+  PipelineBatchResponse,
+  PipelineInferenceResult,
   Ticket,
   TicketFingerprint,
+  TicketHierarchy,
   VsCodeAgent,
 } from "../types";
 
@@ -26,9 +29,21 @@ export interface TicketSyncResult {
 export const Tickets = {
   list: () => api.get<Ticket[]>("/api/tickets"),
   byId: (id: number) => api.get<Ticket & { executions: AgentExecution[] }>(`/api/tickets/${id}`),
+  hierarchy: () => api.get<TicketHierarchy>("/api/tickets/hierarchy"),
   fingerprint: (id: number) => api.get<TicketFingerprint>(`/api/tickets/${id}/fingerprint`),  // N3
   glossary: (id: number) => api.get<ContextBlock | null>(`/api/tickets/${id}/glossary`),  // FA-09
   comments: (id: number) => api.get<{ comments: { author: string; date: string; text: string }[] }>(`/api/tickets/${id}/comments`),
+  adoPipelineStatus: (id: number, forceRefresh = false) =>
+    api.get<PipelineInferenceResult>(
+      `/api/tickets/${id}/ado-pipeline-status${forceRefresh ? "?force_refresh=true" : ""}`
+    ),
+  adoPipelineBatch: (ticketIds: number[], forceRefresh = false) =>
+    api.post<PipelineBatchResponse>("/api/tickets/ado-pipeline-batch", {
+      ticket_ids: ticketIds,
+      force_refresh: forceRefresh,
+    }),
+  invalidatePipelineCache: (id: number) =>
+    api.delete<{ ok: boolean }>(`/api/tickets/${id}/ado-pipeline-cache`),
   sync: () => api.post<TicketSyncResult>("/api/tickets/sync"),
   syncStatus: () => api.get<{ last_synced_at: string | null }>("/api/tickets/sync/status"),
 };
@@ -377,4 +392,74 @@ export const Glossary = {
   promote: (id: number, definition: string) =>
     api.post<{ entry_id: number }>(`/api/glossary/candidates/${id}/promote`, { definition }),
   reject: (id: number) => api.post<{ ok: true }>(`/api/glossary/candidates/${id}/reject`),
+};
+
+// System-wide structured logging
+export interface SystemLogEntry {
+  id: number;
+  timestamp: string;
+  level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+  source: string;
+  action: string;
+  execution_id: number | null;
+  ticket_id: number | null;
+  user: string | null;
+  request_id: string | null;
+  method: string | null;
+  endpoint: string | null;
+  status_code: number | null;
+  duration_ms: number | null;
+  input: unknown;
+  output: unknown;
+  error: { type: string; message: string; traceback: string } | null;
+  context: Record<string, unknown>;
+  tags: string[];
+}
+
+export interface SystemLogsResponse {
+  total: number;
+  offset: number;
+  limit: number;
+  items: SystemLogEntry[];
+}
+
+export interface SystemLogStats {
+  total: number;
+  by_level: Record<string, number>;
+  by_source: { source: string; count: number }[];
+}
+
+export const SystemLogs = {
+  list: (params: {
+    level?: string;
+    source?: string;
+    action?: string;
+    execution_id?: number;
+    ticket_id?: number;
+    user?: string;
+    request_id?: string;
+    from?: string;
+    to?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+    });
+    const qs = p.toString();
+    return api.get<SystemLogsResponse>(`/api/logs${qs ? `?${qs}` : ""}`);
+  },
+  byId: (id: number) => api.get<SystemLogEntry>(`/api/logs/${id}`),
+  stats: () => api.get<SystemLogStats>("/api/logs/stats"),
+  exportUrl: (params: { format?: string; level?: string; source?: string; limit?: number }) => {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined) p.set(k, String(v));
+    });
+    return `${apiBase}/api/logs/export?${p.toString()}`;
+  },
+  purge: (days: number) =>
+    api.delete<{ deleted: number; older_than_days: number }>(`/api/logs/purge?days=${days}`),
 };

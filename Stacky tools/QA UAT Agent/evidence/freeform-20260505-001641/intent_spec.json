@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.1",
+  "intent_raw": "Proba crear un compromiso de pago",
+  "goal_action": "crear_compromiso_pago",
+  "entry_screen": "FrmAgenda.aspx",
+  "test_cases": [
+    {
+      "id": "P01",
+      "descripcion": "Navegar a FrmAgenda y seleccionar un cliente activo del lote",
+      "datos": "Lote: 0000036010900360006D, Agente: 1",
+      "esperado": "Cliente visible en la grilla de la agenda"
+    },
+    {
+      "id": "P02",
+      "descripcion": "Abrir detalle del cliente y activar PopUpCompromisos",
+      "datos": "Cliente: __PRIMER_REGISTRO_GRILLA__",
+      "esperado": "PopUp de Compromisos se abre correctamente"
+    },
+    {
+      "id": "P03",
+      "descripcion": "Completar el formulario de compromiso y guardar",
+      "datos": "Monto cuota: 50000, Cantidad cuotas: 3, Dia pago: 5",
+      "esperado": "Compromiso guardado exitosamente, aparece en la lista con estado VIGENTE"
+    }
+  ],
+  "resolved_data": {
+    "LOTE_ID": "0000036010900360006D",
+    "AGENTE_ID": "1",
+    "CLIENTE_ID": "__PRIMER_REGISTRO_GRILLA__",
+    "MONTO_CUOTA": "50000"
+  },
+  "orchestrator_notes": "Free-form iniciado por operador. Path calculado por path_planner BFS. CLIENTE_ID requiere resolucion manual.",
+  "pending_data": [],
+  "run_id": "freeform-20260505-001641",
+  "navigation_path": [
+    "FrmLogin.aspx",
+    "FrmAgenda.aspx",
+    "FrmDetalleClie.aspx",
+    "PopUpCompromisos.aspx"
+  ]
+}

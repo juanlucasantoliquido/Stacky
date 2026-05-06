@@ -79,6 +79,23 @@ def run(screen: str, rebuild: bool = False, verbose: bool = False) -> dict:
     """Core logic — callable from tests without subprocess."""
     started = time.time()
 
+    # Fail-fast on unsupported screen — single source of truth in
+    # `agenda_screens.SUPPORTED_SCREENS`. Returning a structured error here
+    # avoids opening Playwright + logging into Agenda Web only to discover
+    # we'd be inspecting a page the rest of the pipeline cannot consume.
+    from agenda_screens import is_supported, SUPPORTED_SCREENS
+    if not is_supported(screen):
+        return {
+            "ok": False,
+            "error": "unsupported_screen",
+            "screen": screen,
+            "supported_screens": sorted(SUPPORTED_SCREENS),
+            "message": (
+                f"Screen {screen!r} is not in the supported catalogue. "
+                f"Add it to agenda_screens.SUPPORTED_SCREENS first."
+            ),
+        }
+
     # Fail-fast on missing env vars (before opening browser)
     base_url = os.environ.get("AGENDA_WEB_BASE_URL", "").strip()
     user = os.environ.get("AGENDA_WEB_USER", "").strip()

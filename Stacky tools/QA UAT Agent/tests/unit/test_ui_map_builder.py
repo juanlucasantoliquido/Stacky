@@ -245,3 +245,28 @@ def test_output_validates_against_schema(tmp_path):
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     data = json.loads((FIXTURES / "ui_map_FrmAgenda.json").read_text(encoding="utf-8"))
     jsonschema.validate(instance=data, schema=schema)
+
+
+# ── Fase 1 — early validation against shared screen catalogue ────────────────
+
+
+def test_unsupported_screen_returns_structured_error_without_browser(monkeypatch):
+    """ui_map_builder MUST reject screens outside the catalogue BEFORE
+    touching env vars or opening Playwright. Returning a structured error
+    `{"ok": false, "error": "unsupported_screen", "screen": ...}` lets
+    callers (pipeline / VS Code extension) surface the failure cleanly.
+    """
+    import ui_map_builder
+    # Even with full credentials, the validation must short-circuit.
+    monkeypatch.setenv("AGENDA_WEB_BASE_URL", "http://localhost")
+    monkeypatch.setenv("AGENDA_WEB_USER", "u")
+    monkeypatch.setenv("AGENDA_WEB_PASS", "p")
+
+    with patch("playwright.sync_api.sync_playwright") as mock_pw:
+        result = ui_map_builder.run(screen="FrmReportes.aspx")
+
+    mock_pw.assert_not_called()
+    assert result["ok"] is False
+    assert result["error"] == "unsupported_screen"
+    assert result["screen"] == "FrmReportes.aspx"
+    assert "FrmAgenda.aspx" in result.get("supported_screens", [])

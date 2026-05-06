@@ -1,0 +1,396 @@
+{
+  "schema_version": "glossary/1.0",
+  "description": "Domain vocabulary for the Agenda Web QA UAT pipeline. Centralises Spanish/business tokens previously hardcoded inside uat_scenario_compiler._postprocess_compiled_spec, so the LLM compiler and post-processor share the same dictionary. Tokens here are NORMALISED to lowercase — consumers must lowercase the input before matching.",
+  "screens": {
+    "FrmAgenda.aspx": {
+      "label": "Agenda Personal",
+      "purpose": "Pantalla principal de búsqueda/filtrado de lotes agendados por usuario.",
+      "filter_keywords": [
+        "filtro",
+        "filtros",
+        "buscar",
+        "búsqueda",
+        "busqueda",
+        "debito",
+        "débito",
+        "debito automatico",
+        "débito automático",
+        "corredor",
+        "nombre de cliente",
+        "ruc",
+        "campos",
+        "lote",
+        "lotes",
+        "póliza",
+        "poliza",
+        "agenda",
+        "agendados"
+      ],
+      "filter_input_aliases": [
+        "select_debito_auto",
+        "input_corredor",
+        "input_nombre_cliente",
+        "input_ruc"
+      ],
+      "filter_action_button": "link_c_btnok",
+      "common_misroutes": {
+        "link_btnnext": "link_c_btnok"
+      }
+    },
+    "FrmDetalleLote.aspx": {
+      "label": "Detalle de Lote",
+      "purpose": "Pantalla de detalle de un lote seleccionado desde la agenda.",
+      "filter_keywords": [
+        "detalle",
+        "lote",
+        "renglones",
+        "póliza",
+        "poliza"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmGestion.aspx": {
+      "label": "Gestión",
+      "purpose": "Pantalla de gestión de operaciones sobre el lote.",
+      "filter_keywords": [
+        "gestion",
+        "gestión",
+        "operacion",
+        "operación"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "Login.aspx": {
+      "label": "Login (alias legacy)",
+      "purpose": "Alias de compatibilidad de FrmLogin.aspx.",
+      "filter_keywords": ["login"],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {"Login.aspx": "FrmLogin.aspx"}
+    },
+    "FrmLogin.aspx": {
+      "label": "Login",
+      "purpose": "Pantalla de autenticación de Agenda Web.",
+      "filter_keywords": [
+        "login",
+        "ingreso",
+        "iniciar sesion",
+        "iniciar sesión",
+        "usuario",
+        "contraseña",
+        "contrasena",
+        "autenticacion",
+        "autenticación"
+      ],
+      "filter_input_aliases": ["input_usuario", "input_contrasena", "btn_ok"],
+      "filter_action_button": "btn_ok",
+      "common_misroutes": {}
+    },
+    "FrmBusqueda.aspx": {
+      "label": "Búsqueda General",
+      "purpose": "Búsqueda transversal de clientes y pólizas en la Agenda Web.",
+      "filter_keywords": [
+        "busqueda",
+        "búsqueda",
+        "buscar",
+        "cliente",
+        "póliza",
+        "poliza",
+        "ruc",
+        "dni"
+      ],
+      "filter_input_aliases": ["input_ruc", "input_nombre", "btn_buscar"],
+      "filter_action_button": "btn_buscar",
+      "common_misroutes": {}
+    },
+    "FrmBusquedaJudicial.aspx": {
+      "label": "Búsqueda Judicial",
+      "purpose": "Búsqueda de expedientes judiciales en la Agenda Web.",
+      "filter_keywords": [
+        "judicial",
+        "busqueda judicial",
+        "expediente",
+        "demanda",
+        "embargo"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmDetalleClie.aspx": {
+      "label": "Detalle de Cliente",
+      "purpose": "Ficha completa del cliente: datos, pólizas, teléfonos, domicilios.",
+      "filter_keywords": [
+        "detalle cliente",
+        "ficha",
+        "cliente",
+        "datos cliente",
+        "pólizas",
+        "contacto"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmAgendaJudicial.aspx": {
+      "label": "Agenda Judicial",
+      "purpose": "Agenda de lotes en estado judicial.",
+      "filter_keywords": [
+        "judicial",
+        "agenda judicial",
+        "demanda",
+        "abogado"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmAgendaEquipo.aspx": {
+      "label": "Agenda Equipo",
+      "purpose": "Agenda compartida de equipo (lotes asignados a varios usuarios).",
+      "filter_keywords": [
+        "equipo",
+        "agenda equipo",
+        "compartida"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmLiquidaciones.aspx": {
+      "label": "Liquidaciones",
+      "purpose": "Gestión de liquidaciones de pólizas y lotes.",
+      "filter_keywords": [
+        "liquidacion",
+        "liquidación",
+        "liquidar",
+        "pago"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmSimulacionUnitaria.aspx": {
+      "label": "Simulación Unitaria",
+      "purpose": "Simulación de cobro para una póliza individual.",
+      "filter_keywords": [
+        "simulacion",
+        "simulación",
+        "simular",
+        "unitaria"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmSimulMasiva.aspx": {
+      "label": "Simulación Masiva",
+      "purpose": "Simulación de cobro masiva sobre múltiples pólizas.",
+      "filter_keywords": [
+        "simulacion masiva",
+        "simulación masiva",
+        "masiva"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmReportes.aspx": {
+      "label": "Reportes",
+      "purpose": "Generación y descarga de reportes de la Agenda Web.",
+      "filter_keywords": [
+        "reporte",
+        "reportes",
+        "informe",
+        "excel",
+        "exportar"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmAdministrador.aspx": {
+      "label": "Administrador",
+      "purpose": "Panel administrativo de la Agenda Web (configuración de usuarios, roles, etc).",
+      "filter_keywords": [
+        "administrador",
+        "admin",
+        "configuracion",
+        "configuración",
+        "roles",
+        "usuarios"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmParametros.aspx": {
+      "label": "Parámetros",
+      "purpose": "Configuración de parámetros globales del sistema.",
+      "filter_keywords": [
+        "parametros",
+        "parámetros",
+        "configuracion"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmJDemanda.aspx": {
+      "label": "Demanda Judicial",
+      "purpose": "Gestión de demandas judiciales sobre pólizas/lotes.",
+      "filter_keywords": [
+        "demanda",
+        "judicial",
+        "abogado",
+        "juzgado"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmJEmbargo.aspx": {
+      "label": "Embargo",
+      "purpose": "Registro y gestión de embargos judiciales.",
+      "filter_keywords": [
+        "embargo",
+        "judicial"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "FrmAsignarLote.aspx": {
+      "label": "Asignar Lote",
+      "purpose": "Asignación de lotes a usuarios o estudios.",
+      "filter_keywords": [
+        "asignar",
+        "asignacion",
+        "asignación",
+        "lote",
+        "usuario"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "PopUpAgendar.aspx": {
+      "label": "PopUp Agendar",
+      "purpose": "Ventana popup para agendar un lote.",
+      "filter_keywords": [
+        "agendar",
+        "popup",
+        "pop-up",
+        "agenda",
+        "fecha"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "PopUpNota.aspx": {
+      "label": "PopUp Nota",
+      "purpose": "Ventana popup para agregar notas a un lote o gestión.",
+      "filter_keywords": [
+        "nota",
+        "comentario",
+        "popup",
+        "observacion"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    },
+    "PopUpContactos.aspx": {
+      "label": "PopUp Contactos",
+      "purpose": "Ventana popup con datos de contacto del cliente.",
+      "filter_keywords": [
+        "contacto",
+        "contactos",
+        "telefono",
+        "popup"
+      ],
+      "filter_input_aliases": [],
+      "filter_action_button": null,
+      "common_misroutes": {}
+    }
+  },
+  "domain_terms": [
+    {
+      "term": "lote",
+      "aliases": ["lotes"],
+      "description": "Conjunto de pólizas agrupadas para procesamiento. Es la entidad central de la agenda.",
+      "applies_to_screens": ["FrmAgenda.aspx", "FrmDetalleLote.aspx", "FrmGestion.aspx"]
+    },
+    {
+      "term": "póliza",
+      "aliases": ["poliza", "polizas", "pólizas"],
+      "description": "Contrato de seguro individual; los lotes contienen pólizas.",
+      "applies_to_screens": ["FrmAgenda.aspx", "FrmDetalleLote.aspx"]
+    },
+    {
+      "term": "corredor",
+      "aliases": ["corredores"],
+      "description": "Intermediario comercial. Filtro de búsqueda en Agenda Personal.",
+      "applies_to_screens": ["FrmAgenda.aspx"]
+    },
+    {
+      "term": "ruc",
+      "aliases": [],
+      "description": "Registro Único del Contribuyente. Identificador fiscal del cliente; campo de filtro.",
+      "applies_to_screens": ["FrmAgenda.aspx"]
+    },
+    {
+      "term": "débito automático",
+      "aliases": ["debito automatico", "débito", "debito"],
+      "description": "Modalidad de cobro. Filtro select con opciones Sí/No/Todos en Agenda Personal.",
+      "applies_to_screens": ["FrmAgenda.aspx"]
+    },
+    {
+      "term": "nombre de cliente",
+      "aliases": ["cliente", "razón social", "razon social"],
+      "description": "Nombre o razón social del asegurado. Filtro de texto libre en Agenda Personal.",
+      "applies_to_screens": ["FrmAgenda.aspx"]
+    },
+    {
+      "term": "empresa",
+      "aliases": [],
+      "description": "Compañía aseguradora. Filtro select con código numérico (ej. 0001).",
+      "applies_to_screens": ["FrmAgenda.aspx"]
+    },
+    {
+      "term": "tipo de lote",
+      "aliases": ["tipo_lote", "tipo lote"],
+      "description": "Clasificación del lote (CRED, CTA, etc). Filtro select.",
+      "applies_to_screens": ["FrmAgenda.aspx"]
+    },
+    {
+      "term": "fecha desde",
+      "aliases": ["fecha_desde"],
+      "description": "Límite inferior del rango temporal de búsqueda.",
+      "applies_to_screens": ["FrmAgenda.aspx"]
+    },
+    {
+      "term": "fecha hasta",
+      "aliases": ["fecha_hasta"],
+      "description": "Límite superior del rango temporal de búsqueda.",
+      "applies_to_screens": ["FrmAgenda.aspx"]
+    },
+    {
+      "term": "agendado",
+      "aliases": ["agendados", "agenda", "agendar"],
+      "description": "Lote registrado en la agenda personal del usuario. 'Lista vacía' = sin agendados.",
+      "applies_to_screens": ["FrmAgenda.aspx"]
+    },
+    {
+      "term": "filtro",
+      "aliases": ["filtros", "filtrar", "buscar", "búsqueda", "busqueda"],
+      "description": "Acción de restringir resultados aplicando criterios. El botón 'Filtrar' (link_c_btnok) ejecuta la búsqueda.",
+      "applies_to_screens": ["FrmAgenda.aspx", "FrmGestion.aspx"]
+    }
+  ]
+}

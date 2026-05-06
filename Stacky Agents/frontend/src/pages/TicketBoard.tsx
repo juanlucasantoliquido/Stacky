@@ -453,11 +453,22 @@ export default function TicketBoard() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Estado de error para mostrar feedback de sync
+  const [syncError, setSyncError] = useState<string | null>(null);
   const syncMutation = useMutation({
     mutationFn: Tickets.sync,
     onSuccess: () => {
+      setSyncError(null);
       qc.invalidateQueries({ queryKey: ["tickets"] });
       qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+    },
+    onError: (err: any) => {
+      // err puede ser Error lanzado por api.client.ts
+      let msg = "Error al sincronizar con ADO.";
+      if (err && typeof err.message === "string") {
+        msg = err.message;
+      }
+      setSyncError(msg);
     },
   });
 
@@ -530,6 +541,13 @@ export default function TicketBoard() {
             />
             Solo abiertos
           </label>
+          {/* Error visual de sync */}
+          {syncError && (
+            <div style={{ color: "#fff", background: "#b91c1c", padding: "6px 12px", borderRadius: 6, marginBottom: 8, maxWidth: 340, fontSize: 15, fontWeight: 500 }}>
+              <span style={{ marginRight: 8 }}>⚠️</span>
+              {syncError}
+            </div>
+          )}
           <button
             className={styles.syncBtn}
             onClick={() => syncMutation.mutate()}
@@ -626,6 +644,7 @@ export default function TicketBoard() {
                 hierarchy={hierarchy ?? null}
                 onSync={() => syncMutation.mutate()}
                 isSyncing={syncMutation.isPending}
+                syncError={syncError}
                 vsCodeAgents={vsCodeAgents ?? []}
                 runningByTicket={runningByTicket}
               />

@@ -223,9 +223,104 @@ def normalize(screen_name: str) -> "str | None":
     return _LOWER_INDEX.get(screen_name.lower())
 
 
+def add_discovered_screen(screen_name: str, from_exploration: "str | None" = None) -> bool:
+    """Register a newly discovered screen in the runtime catalogue.
+
+    This function DOES NOT modify the source file — it adds the screen only
+    to the in-memory SUPPORTED_SCREENS and _LOWER_INDEX for the current
+    process. Persisting permanently requires a human to edit the source list
+    above (intentional: human review is required before promotion).
+
+    Writes to ``cache/discovered_screens.json`` so the set survives between
+    runs without touching the source code.  The JSON file is git-ignored (see
+    cache/.gitignore) and is loaded automatically at the bottom of this module
+    when it exists.
+
+    Args:
+        screen_name:       Canonical filename, e.g. ``FrmNewScreen.aspx``.
+        from_exploration:  Optional path to exploration_report.json for provenance.
+
+    Returns:
+        True if the screen was added, False if it was already known.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    global SUPPORTED_SCREENS, _LOWER_INDEX  # noqa: PLW0603
+
+    if not isinstance(screen_name, str) or not screen_name.endswith(".aspx"):
+        raise ValueError(f"screen_name must be an .aspx filename, got {screen_name!r}")
+
+    if screen_name.lower() in _LOWER_INDEX:
+        return False  # already known
+
+    # Add to in-memory catalogue
+    SUPPORTED_SCREENS = SUPPORTED_SCREENS | frozenset({screen_name})
+    _LOWER_INDEX[screen_name.lower()] = screen_name
+
+    # Persist to cache/discovered_screens.json
+    cache_dir = _Path(__file__).parent / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    disc_path = cache_dir / "discovered_screens.json"
+
+    existing: dict = {}
+    if disc_path.is_file():
+        try:
+            existing = _json.loads(disc_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+
+    screens_list: list = existing.get("screens", [])
+    if screen_name not in screens_list:
+        screens_list.append(screen_name)
+
+    existing["schema_version"] = "1.0"
+    existing["screens"] = sorted(screens_list)
+    existing["description"] = (
+        "Screens discovered by autonomous_explorer.py and added via "
+        "agenda_screens.add_discovered_screen(). Human review required before "
+        "promoting to the static SUPPORTED_SCREENS list."
+    )
+    if from_exploration:
+        provenance: dict = existing.get("provenance", {})
+        provenance[screen_name] = str(from_exploration)
+        existing["provenance"] = provenance
+
+    disc_path.write_text(_json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
+
+
+# ── Load discovered_screens at import time ────────────────────────────────────
+# Screens added via add_discovered_screen() in previous runs are loaded here
+# so the catalogue is complete without source-code changes.
+
+def _load_discovered_screens() -> None:
+    """Load cache/discovered_screens.json into SUPPORTED_SCREENS if present."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    global SUPPORTED_SCREENS, _LOWER_INDEX  # noqa: PLW0603
+
+    disc_path = _Path(__file__).parent / "cache" / "discovered_screens.json"
+    if not disc_path.is_file():
+        return
+    try:
+        data = _json.loads(disc_path.read_text(encoding="utf-8"))
+        for screen in data.get("screens", []):
+            if isinstance(screen, str) and screen.lower() not in _LOWER_INDEX:
+                SUPPORTED_SCREENS = SUPPORTED_SCREENS | frozenset({screen})
+                _LOWER_INDEX[screen.lower()] = screen
+    except Exception:
+        pass  # Corrupt cache — ignore silently, static catalogue still works
+
+
+_load_discovered_screens()
+
+
 __all__ = [
     "SUPPORTED_SCREENS",
     "is_supported",
     "extract_from_text",
     "normalize",
+    "add_discovered_screen",
 ]

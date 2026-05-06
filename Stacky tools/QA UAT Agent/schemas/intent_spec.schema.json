@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stacky/qa-uat-agent/intent_spec",
+  "title": "IntentSpec",
+  "description": "Input contract for the QA UAT pipeline in free-form mode. Produced by the UserInterfaceQAFreeForm orchestrator agent. Fase 2: navigation_path is now optional — intent_parser auto-computes it via path_planner.py when absent.",
+  "type": "object",
+  "required": ["intent_raw", "test_cases"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version for forward compatibility.",
+      "default": "1.1",
+      "examples": ["1.0", "1.1"]
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Unique run identifier. Auto-generated if absent. Format: freeform-YYYYMMDD-HHMMSS.",
+      "examples": ["freeform-20260504-093015"]
+    },
+    "intent_raw": {
+      "type": "string",
+      "minLength": 5,
+      "description": "The user's original natural-language intent, verbatim.",
+      "examples": ["Quiero crear un compromiso de pago para el cliente 12345"]
+    },
+    "goal_action": {
+      "type": "string",
+      "description": "Normalized action label derived by the orchestrator from intent_raw.",
+      "examples": ["crear_compromiso_pago", "agendar_contacto", "buscar_cliente"]
+    },
+    "entry_screen": {
+      "type": "string",
+      "description": "Primary Agenda Web screen where the flow begins.",
+      "examples": ["FrmAgenda.aspx", "FrmBusqueda.aspx", "FrmDetalleClie.aspx"]
+    },
+    "navigation_path": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Ordered list of Agenda Web screens the flow traverses. OPTIONAL — if absent, intent_parser (Fase 2) auto-computes it from goal_action using path_planner.py + navigation_graph.py BFS. Provide explicitly only when overriding the computed path.",
+      "examples": [["FrmLogin.aspx", "FrmBusqueda.aspx", "FrmDetalleClie.aspx"]]
+    },
+    "test_cases": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Test cases derived from the intent. Same structure as plan_pruebas[] in uat_ticket_reader output.",
+      "items": {
+        "type": "object",
+        "required": ["id", "descripcion"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^P\\d{2,}$",
+            "description": "Case identifier, e.g. P01, P02.",
+            "examples": ["P01"]
+          },
+          "descripcion": {
+            "type": "string",
+            "minLength": 5,
+            "description": "Human-readable test case description.",
+            "examples": ["Verificar que se crea el compromiso de pago exitosamente"]
+          },
+          "datos": {
+            "type": "string",
+            "description": "Input data for the test case. May contain {{PLACEHOLDER}} tokens resolved by orchestrator.",
+            "examples": ["Cliente: {{CLIENTE_ID}}, Monto: {{MONTO_CUOTA}}"]
+          },
+          "esperado": {
+            "type": "string",
+            "description": "Expected result / acceptance criterion.",
+            "examples": ["El compromiso queda guardado y aparece en la lista con estado VIGENTE"]
+          }
+        }
+      }
+    },
+    "resolved_data": {
+      "type": "object",
+      "description": "Map of placeholder tokens to resolved values. Populated iteratively as data_requests are resolved.",
+      "additionalProperties": {"type": "string"},
+      "examples": [{"CLIENTE_ID": "12345", "LOTE_ID": "987", "MONTO_CUOTA": "500.00"}]
+    },
+    "pending_data": {
+      "type": "array",
+      "description": "List of placeholder fields not yet resolved. Populated by intent_parser. Empty when all resolved.",
+      "items": {
+        "type": "object",
+        "required": ["field"],
+        "properties": {
+          "field": {"type": "string"},
+          "in_case_ids": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "orchestrator_notes": {
+      "type": "string",
+      "description": "Free-text notes from the orchestrator agent about the intent or resolution steps.",
+      "examples": ["Cliente encontrado en RIDIOMA con estado ACTIVO. Lote activo: 987."]
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stacky/qa-uat-agent/data_request",
+  "title": "DataRequest",
+  "description": "Contract for the QA UAT pipeline to request missing test data from the orchestrator agent. Emitted when exit code is 2 (PENDING_DATA). Written to evidence/<run_id>/data_request.json.",
+  "type": "object",
+  "required": ["schema_version", "run_id", "requests", "resume_command"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version.",
+      "default": "1.0",
+      "examples": ["1.0"]
+    },
+    "run_id": {
+      "type": "string",
+      "description": "run_id from the intent_spec that triggered this request.",
+      "examples": ["freeform-20260504-093015"]
+    },
+    "stage": {
+      "type": "string",
+      "description": "Pipeline stage that detected the missing data.",
+      "examples": ["intent_parser", "preconditions"]
+    },
+    "requests": {
+      "type": "array",
+      "minItems": 1,
+      "description": "List of data fields that need resolution before the pipeline can proceed.",
+      "items": {
+        "type": "object",
+        "required": ["field", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "The placeholder token name (without braces), e.g. CLIENTE_ID.",
+            "examples": ["CLIENTE_ID", "LOTE_ID", "MONTO_CUOTA"]
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of what this field represents.",
+            "examples": ["ID de un cliente activo con deuda vigente en el sistema"]
+          },
+          "hint_query": {
+            "type": "string",
+            "description": "Suggested SELECT query the orchestrator can run against the DB to find a valid value. Uses only read-only SELECT and whitelisted tables. The orchestrator must validate before executing.",
+            "examples": ["SELECT TOP 1 RIDIOMA FROM RIDIOMA WHERE ESTADO = 'A' ORDER BY NEWID()"]
+          },
+          "hint_tables": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "DB tables referenced by hint_query.",
+            "examples": [["RIDIOMA"], ["RAGEN", "RAGPAR"]]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this field is needed (context from the test case).",
+            "examples": ["Required by test case P01: buscar cliente por ID en FrmBusqueda"]
+          },
+          "in_case_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Test case IDs that reference this field.",
+            "examples": [["P01", "P02"]]
+          }
+        }
+      }
+    },
+    "resume_command": {
+      "type": "string",
+      "description": "The exact CLI command the orchestrator must run after writing resolved_data.json to continue the pipeline.",
+      "examples": [
+        "python qa_uat_pipeline.py --intent-file evidence/freeform-20260504-093015/intent_spec.json --resume --data-file evidence/freeform-20260504-093015/resolved_data.json"
+      ]
+    },
+    "resolved_data_path": {
+      "type": "string",
+      "description": "Where the orchestrator should write the resolved_data.json file.",
+      "examples": ["evidence/freeform-20260504-093015/resolved_data.json"]
+    }
+  }
+}

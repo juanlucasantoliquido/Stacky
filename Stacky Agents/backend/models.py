@@ -49,6 +49,9 @@ class Ticket(Base):
     parent_ado_id: Mapped[int | None] = mapped_column(Integer)      # ADO id of parent Epic
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Estado interno de Stacky (independiente de ado_state).
+    # Valores: idle | running | completed | error | cancelled
+    stacky_status: Mapped[str | None] = mapped_column(String(30), default="idle")
 
     executions: Mapped[list["AgentExecution"]] = relationship(back_populates="ticket")
 
@@ -67,6 +70,7 @@ class Ticket(Base):
             "work_item_type": self.work_item_type,
             "parent_ado_id": self.parent_ado_id,
             "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
+            "stacky_status": self.stacky_status or "idle",
         }
 
 

@@ -63,6 +63,15 @@ def run_agent(
     log_streamer.open(execution_id)
     log_streamer.push(execution_id, "info", "▶ start")
 
+    # Registrar estado 'running' en el ticket antes de lanzar el thread
+    from services import ticket_status as _ts
+    _ts.on_execution_start(
+        ticket_id=ticket_id,
+        execution_id=execution_id,
+        agent_type=agent_type,
+        user=user,
+    )
+
     # Log agent start to the centralized system log
     stacky_logger.agent_event(
         "agent_started",
@@ -314,6 +323,14 @@ def _run_in_background(
             embeddings.index_execution(execution_id)
         except Exception as exc:  # noqa: BLE001
             log("warn", f"embeddings index failed: {exc}")
+        # Actualizar estado del ticket a 'completed'
+        from services import ticket_status as _ts
+        _ts.on_execution_end(
+            ticket_id=ticket_id,
+            execution_id=execution_id,
+            final_status="completed",
+            agent_type=agent_type,
+        )
     except copilot_bridge.CancelledError:
         _mark_terminal(execution_id, status="cancelled")
         log("warn", "× cancelled")
@@ -323,6 +340,13 @@ def _run_in_background(
             ticket_id=ticket_id,
             level="WARNING",
             tags=["agent", "cancelled"],
+        )
+        from services import ticket_status as _ts
+        _ts.on_execution_end(
+            ticket_id=ticket_id,
+            execution_id=execution_id,
+            final_status="cancelled",
+            agent_type=agent_type,
         )
     except Exception as exc:  # noqa: BLE001
         _mark_terminal(execution_id, status="error", error=str(exc))
@@ -334,6 +358,14 @@ def _run_in_background(
             level="ERROR",
             error_exc=exc,
             tags=["agent", "error"],
+        )
+        from services import ticket_status as _ts
+        _ts.on_execution_end(
+            ticket_id=ticket_id,
+            execution_id=execution_id,
+            final_status="error",
+            agent_type=agent_type,
+            error=str(exc),
         )
     finally:
         log_streamer.close(execution_id)

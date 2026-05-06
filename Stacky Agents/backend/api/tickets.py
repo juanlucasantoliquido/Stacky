@@ -321,3 +321,69 @@ def get_attachments(ticket_id: int):
 
     attachments = client.fetch_attachments(ado_id)
     return jsonify({"attachments": attachments})
+
+
+@bp.get("/<int:ticket_id>/stacky-status")
+def get_stacky_status(ticket_id: int):
+    """Devuelve el stacky_status actual del ticket y su historial de transiciones.
+
+    Response:
+      {
+        "ticket_id": 1,
+        "current_status": "idle" | "running" | "completed" | "error" | "cancelled",
+        "history": [ { "id", "old_status", "new_status", "changed_by", "changed_at",
+                        "execution_id", "agent_type", "reason", "metadata" } ]
+      }
+    """
+    from services import ticket_status as ts
+
+    with session_scope() as session:
+        t = session.get(Ticket, ticket_id)
+        if t is None:
+            abort(404)
+
+    limit = request.args.get("limit", default=20, type=int)
+    return jsonify({
+        "ticket_id": ticket_id,
+        "current_status": ts.get_current_status(ticket_id),
+        "history": ts.get_history(ticket_id, limit=limit),
+    })
+
+
+@bp.patch("/<int:ticket_id>/stacky-status")
+def set_stacky_status(ticket_id: int):
+    """Permite actualizar manualmente el stacky_status de un ticket.
+
+    Body: { "status": "idle" | "running" | "completed" | "error" | "cancelled",
+            "reason": "texto libre opcional" }
+    Útil para resets manuales del operador o integraciones externas.
+    """
+    from services import ticket_status as ts
+
+    body = request.get_json(silent=True) or {}
+    new_status = body.get("status", "").strip()
+    reason = body.get("reason")
+    user = request.headers.get("X-User-Email") or "anonymous"
+
+    if not new_status:
+        return jsonify({"error": "campo 'status' requerido"}), 400
+
+    with session_scope() as session:
+        t = session.get(Ticket, ticket_id)
+        if t is None:
+            abort(404)
+
+    try:
+        ts.set_status(
+            ticket_id,
+            new_status,
+            changed_by=user,
+            reason=reason or f"Manual update via API by {user}",
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({
+        "ticket_id": ticket_id,
+        "current_status": ts.get_current_status(ticket_id),
+    })

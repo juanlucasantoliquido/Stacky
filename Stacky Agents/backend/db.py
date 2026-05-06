@@ -55,6 +55,7 @@ def init_db() -> None:
     from services.macros import Macro  # noqa: F401  (FA-51)
     from services.embeddings import ExecutionEmbedding  # noqa: F401  (FA-01)
     from services.ado_pipeline_inference import PipelineInferenceCache  # noqa: F401
+    from services.ticket_status import TicketStatusEvent  # noqa: F401  (ticket state tracking)
 
     Base.metadata.create_all(engine)
     _migrate_add_columns()
@@ -67,6 +68,7 @@ def _migrate_add_columns() -> None:
     migrations = [
         ("tickets", "work_item_type", "VARCHAR(40)"),
         ("tickets", "parent_ado_id", "INTEGER"),
+        ("tickets", "stacky_status", "VARCHAR(30)"),
     ]
     with engine.connect() as conn:
         for table, col, col_type in migrations:

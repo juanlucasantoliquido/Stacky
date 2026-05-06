@@ -43,6 +43,34 @@
   border-radius: 10px;
 }
 
+/* Badge contador de tickets corriendo en el header */
+.headerRunningCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fde68a;
+  background: rgba(234,179,8,0.15);
+  border: 1px solid rgba(234,179,8,0.35);
+  padding: 2px 9px;
+  border-radius: 10px;
+  animation: headerFadeIn 0.3s ease;
+}
+
+.headerRunningDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #facc15;
+  animation: pulse 1.4s infinite;
+}
+
+@keyframes headerFadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 .headerActions {
   display: flex;
   align-items: center;
@@ -366,6 +394,18 @@
   color: rgba(253,230,138,0.7);
 }
 
+/* Tipo de agente dentro del chip del banner global */
+.activeExecChipAgent {
+  font-size: 9px;
+  font-weight: 600;
+  background: rgba(234,179,8,0.25);
+  padding: 0 5px;
+  border-radius: 6px;
+  color: #fde68a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* ─── Card: estado running ───────────────── */
 .cardRunning {
   border-color: rgba(234,179,8,0.5) !important;
@@ -383,6 +423,19 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #fde68a;
+}
+
+/* Chip con el tipo de agente dentro del banner de la card */
+.runningCardAgent {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  background: rgba(234,179,8,0.2);
+  border: 1px solid rgba(234,179,8,0.4);
+  padding: 1px 7px;
+  border-radius: 8px;
+  text-transform: none;
 }
 
 .runningPulse {

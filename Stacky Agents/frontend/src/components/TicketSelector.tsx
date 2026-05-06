@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Tickets, type TicketSyncResult } from "../api/endpoints";
+import { useRunningStatus } from "../hooks/useRunningStatus";
 import { useWorkbench } from "../store/workbench";
 import type { Ticket } from "../types";
 import styles from "./TicketSelector.module.css";
@@ -11,6 +12,7 @@ export default function TicketSelector() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const { activeTicketId, setActiveTicket } = useWorkbench();
   const queryClient = useQueryClient();
+  const { isTicketRunning } = useRunningStatus();
 
   const { data, isLoading } = useQuery({
     queryKey: ["tickets"],
@@ -75,6 +77,7 @@ export default function TicketSelector() {
             key={t.id}
             ticket={t}
             active={t.id === activeTicketId}
+            running={isTicketRunning(t.id)}
             onSelect={() => setActiveTicket(t.id)}
           />
         ))}
@@ -86,28 +89,42 @@ export default function TicketSelector() {
 function Row({
   ticket,
   active,
+  running,
   onSelect,
 }: {
   ticket: Ticket;
   active: boolean;
+  running: boolean;
   onSelect: () => void;
 }) {
   return (
     <button
-      className={`${styles.row} ${active ? styles.active : ""}`}
+      className={`${styles.row} ${active ? styles.active : ""} ${running ? styles.rowRunning : ""}`}
       onClick={onSelect}
     >
       <div className={styles.rowHead}>
         <span className={styles.adoId}>ADO-{ticket.ado_id}</span>
         <span className={styles.state}>{ticket.ado_state ?? "—"}</span>
+        {running && (
+          <span className={styles.runningBadge} title="Agente en ejecución">
+            <span className={styles.runningDot} />
+            <span className={styles.runningLabel}>corriendo</span>
+          </span>
+        )}
       </div>
       <div className={styles.rowTitle}>{ticket.title}</div>
-      {ticket.last_execution && (
+      {!running && ticket.last_execution && (
         <div className={styles.rowMeta}>
           última: {ticket.last_execution.agent_type} •{" "}
           {ticket.last_execution.status}
         </div>
       )}
+      {running && (
+        <div className={styles.rowMetaRunning}>
+          ⚡ Agente procesando este ticket…
+        </div>
+      )}
     </button>
   );
 }
+

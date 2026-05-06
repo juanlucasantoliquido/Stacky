@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "evaluations": [
+    {
+      "scenario_id": "P01",
+      "status": "blocked",
+      "reason": "RUNTIME_ERROR",
+      "assertions": []
+    }
+  ]
+}

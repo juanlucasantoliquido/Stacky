@@ -58,6 +58,18 @@ def run(
     test_cases = intent_spec.get("test_cases") or []
     resolved_data = intent_spec.get("resolved_data") or {}
 
+    # ── Free-form always executes 1 single end-to-end test case ─────────────
+    # The orchestrator agent is instructed to generate exactly 1 test case (P01).
+    # If more than 1 are present (older prompts / agent regression), keep only
+    # the first and log a warning so the operator is aware.
+    if len(test_cases) > 1:
+        logger.warning(
+            "synthetic_ticket_builder: intent_spec has %d test_cases — "
+            "free-form mode runs 1 test only. Keeping P01, discarding P02+.",
+            len(test_cases),
+        )
+        test_cases = test_cases[:1]
+
     # ── Build plan_pruebas[] from test_cases[] ───────────────────────────────
     plan_pruebas = []
     for case in test_cases:
@@ -118,6 +130,7 @@ def run(
             }
         ],
         "analisis_tecnico": analisis_tecnico,
+        "navigation_path": navigation_path,
         "plan_pruebas": plan_pruebas,
         "notas_qa": [
             f"Free-form run: {run_id}",

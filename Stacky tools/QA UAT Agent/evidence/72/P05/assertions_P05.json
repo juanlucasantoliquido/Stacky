@@ -1,0 +1,25 @@
+{
+  "scenario_id": "P05",
+  "assertions": [
+    {
+      "oracle_id": 0,
+      "target": "table_agenda_usu",
+      "tipo": "count_eq",
+      "expected": 0,
+      "count": 1,
+      "visible": true,
+      "actual_text": "CLIENTE\tLOTE\tFECHA\tHORA\tRECOMENDACIÓN\tNIVEL MORA",
+      "state": "enabled"
+    },
+    {
+      "oracle_id": 1,
+      "target": "panel_gvc_agenda_usu",
+      "tipo": "visible",
+      "expected": null,
+      "count": 1,
+      "visible": true,
+      "actual_text": "CLIENTE\tLOTE\tFECHA\tHORA\tRECOMENDACIÓN\tNIVEL MORA",
+      "state": "enabled"
+    }
+  ]
+}

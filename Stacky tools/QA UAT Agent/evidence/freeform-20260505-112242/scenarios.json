@@ -1,0 +1,60 @@
+{
+  "ok": true,
+  "ticket_id": -1,
+  "compiled": 1,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": -1,
+      "pantalla": "FrmAdministrador.aspx",
+      "titulo": "Verificar que se puede agregar un nuevo usuario desde el administrador",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        },
+        {
+          "accion": "fill",
+          "target": "input_nombre_cliente",
+          "valor": "QA Usuario Test 01"
+        },
+        {
+          "accion": "fill",
+          "target": "input_ruc",
+          "valor": "12345678-9"
+        },
+        {
+          "accion": "select",
+          "target": "select_perfil",
+          "valor": "155"
+        },
+        {
+          "accion": "click",
+          "target": "btn_ok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "panel_gvc_agenda_usu",
+          "valor": "USQA01"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      }
+    }
+  ],
+  "out_of_scope_items": [],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 8318
+  }
+}

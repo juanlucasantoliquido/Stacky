@@ -7,6 +7,7 @@ from .executions import bp as executions_bp
 from .extras import bp as extras_bp
 from .git import bp as git_bp
 from .glossary import bp as glossary_bp
+from .logs import bp as logs_bp
 from .packs import bp as packs_bp
 from .phase4 import bp as phase4_bp
 from .phase5 import bp as phase5_bp
@@ -29,6 +30,7 @@ api_bp.register_blueprint(decisions_bp)
 api_bp.register_blueprint(git_bp)
 api_bp.register_blueprint(extras_bp)
 api_bp.register_blueprint(glossary_bp)
+api_bp.register_blueprint(logs_bp)
 api_bp.register_blueprint(phase4_bp)
 api_bp.register_blueprint(phase5_bp)
 api_bp.register_blueprint(phase6_bp)

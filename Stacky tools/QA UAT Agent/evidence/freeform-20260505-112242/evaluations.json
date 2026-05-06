@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "evaluations": [
+    {
+      "scenario_id": "P01",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "page_contains_text",
+          "target": "panel_gvc_agenda_usu",
+          "expected": "USQA01",
+          "actual": "__playwright_verified__",
+          "status": "pass",
+          "evidence_ref": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-112242\\P01\\assertions_P01.json"
+        }
+      ]
+    }
+  ]
+}

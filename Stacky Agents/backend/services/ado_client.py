@@ -34,7 +34,6 @@ _TOOLS_ROOT = _BACKEND_ROOT.parent.parent
 _DEFAULT_WIQL = (
     "SELECT [System.Id] FROM WorkItems "
     "WHERE [System.TeamProject] = @project "
-    "AND [System.State] NOT IN ('Closed', 'Done', 'Removed', 'Completed') "
     "ORDER BY [System.ChangedDate] DESC"
 )
 
@@ -148,6 +147,7 @@ class AdoClient:
             "System.WorkItemType",
             "System.AssignedTo",
             "System.ChangedDate",
+            "System.Parent",
             "Microsoft.VSTS.Common.Priority",
         ]
         fields_qs = ",".join(fields)

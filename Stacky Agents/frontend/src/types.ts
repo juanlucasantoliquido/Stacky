@@ -51,8 +51,24 @@ export interface Ticket {
   ado_state?: string;
   ado_url?: string;
   priority?: number;
+  work_item_type?: string;      // "Epic" | "Task" | "Bug" | etc.
+  parent_ado_id?: number | null;
   last_synced_at?: string;
   last_execution?: AgentExecution | null;
+  pipeline_summary?: {
+    done_stages: string[];
+    next_suggested: string | null;
+    overall_progress: number;
+  };
+}
+
+export interface TicketNode extends Ticket {
+  children: TicketNode[];
+}
+
+export interface TicketHierarchy {
+  epics: TicketNode[];
+  orphans: TicketNode[];
 }
 
 export interface AgentExecution {
@@ -100,6 +116,31 @@ export interface TicketFingerprint {
   suggested_pack: string;
   domain_confidence: number;
   keywords_detected: string[];
+}
+
+// ADO Pipeline Inference — inferencia LLM basada 100% en datos de ADO
+export interface PipelineStageInference {
+  stage: string;
+  label: string;
+  done: boolean;
+  confidence: number;
+  evidence: string;
+}
+
+export interface PipelineInferenceResult {
+  ado_id: number;
+  stages: Record<string, PipelineStageInference>;
+  next_suggested: string | null;
+  overall_progress: number;
+  summary: string;
+  inferred_at: string;
+  model_used: string;
+  source: "llm" | "cache";
+  error?: string;
+}
+
+export interface PipelineBatchResponse {
+  results: Record<string, PipelineInferenceResult>;
 }
 
 export interface PackStep {

@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "run_id": "freeform-20260505-112242",
+  "stage": "intent_parser",
+  "requests": [
+    {
+      "field": "USUARIO_NOMBRE",
+      "description": "Unresolved placeholder {{USUARIO_NOMBRE}} in test cases ['P01']",
+      "hint_query": "-- Resolve USUARIO_NOMBRE: provide the correct value for this placeholder.\n-- Example: SELECT TOP 1 RIDIOMA FROM RIDIOMA WHERE ESTADO = 'A'",
+      "hint_tables": [
+        "RIDIOMA"
+      ],
+      "reason": "Required by test cases: P01",
+      "in_case_ids": [
+        "P01"
+      ]
+    },
+    {
+      "field": "USUARIO_RUT",
+      "description": "Unresolved placeholder {{USUARIO_RUT}} in test cases ['P01']",
+      "hint_query": "-- Resolve USUARIO_RUT: provide the correct value for this placeholder.\n-- Example: SELECT TOP 1 RIDIOMA FROM RIDIOMA WHERE ESTADO = 'A'",
+      "hint_tables": [
+        "RIDIOMA"
+      ],
+      "reason": "Required by test cases: P01",
+      "in_case_ids": [
+        "P01"
+      ]
+    },
+    {
+      "field": "USUARIO_PERFIL",
+      "description": "Unresolved placeholder {{USUARIO_PERFIL}} in test cases ['P01']",
+      "hint_query": "-- Resolve USUARIO_PERFIL: provide the correct value for this placeholder.\n-- Example: SELECT TOP 1 RIDIOMA FROM RIDIOMA WHERE ESTADO = 'A'",
+      "hint_tables": [
+        "RIDIOMA"
+      ],
+      "reason": "Required by test cases: P01",
+      "in_case_ids": [
+        "P01"
+      ]
+    }
+  ],
+  "resume_command": "python qa_uat_pipeline.py --intent-file evidence/freeform-20260505-112242/intent_spec.json --resume --data-file evidence/freeform-20260505-112242/resolved_data.json",
+  "resolved_data_path": "evidence/freeform-20260505-112242/resolved_data.json"
+}

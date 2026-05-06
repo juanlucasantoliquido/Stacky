@@ -19,7 +19,7 @@ import { defineConfig, devices } from '@playwright/test';
  *                            Playwright en el navegador.
  */
 
-const headless = process.env.STACKY_QA_UAT_HEADLESS !== '0';
+const headless = process.env.STACKY_QA_UAT_HEADLESS === '1';
 const baseURL = process.env.AGENDA_WEB_BASE_URL ?? 'http://localhost/AgendaWeb/';
 const slowMo = parseInt(process.env.STACKY_QA_UAT_SLOW_MO ?? '0', 10);
 

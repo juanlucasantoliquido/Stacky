@@ -305,6 +305,9 @@ GOAL_ACTION_TARGETS: dict[str, str] = {
 
     # Administración
     "administrar":               "FrmAdministrador.aspx",
+    "administracion_de_usuarios": "FrmGestionUsuarios.aspx",
+    "gestion_usuarios":          "FrmGestionUsuarios.aspx",
+    "ver_usuarios":              "FrmGestionUsuarios.aspx",
     "parametros":                "FrmParametros.aspx",
     "ver_feriados":              "FrmFeriados.aspx",
 }

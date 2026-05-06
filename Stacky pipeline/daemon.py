@@ -1144,6 +1144,34 @@ class StackyDaemon:
             if _session:
                 _session.last_used = time.time()
 
+    # ── Verificación de sesión ────────────────────────────────────────────
+
+    def _session_check(self):
+        """Verifica la sesión SSO y dispara renovación si es necesaria."""
+        if self._renewal_in_progress:
+            return
+        if not self._mantis_url:
+            return
+
+        try:
+            from session_manager import SessionManager
+            sm = SessionManager(self._auth_path, self._mantis_url)
+            if sm.needs_renewal(max_age_hours=self._cfg["session_max_age_hours"]):
+                self._log("[SESSION] Sesión necesita renovación", level="warning")
+                self._renewal_in_progress = True
+                self._notifier.notify_session_expiring(self.project_name)
+
+                def _on_complete(success: bool):
+                    self._renewal_in_progress = False
+                    if success:
+                        self._log("[SESSION] Renovación completada")
+                    else:
+                        self._log("[SESSION] Renovación falló — scraping pausado", level="error")
+
+                sm.prompt_renewal_async(on_complete=_on_complete)
+        except Exception as e:
+            self._log(f"[SESSION] Error verificando sesión: {e}", level="warning")
+
     # ── Ciclo de limpieza ─────────────────────────────────────────────────
 
     def _cleanup_cycle(self):

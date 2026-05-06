@@ -119,3 +119,53 @@
   font-size: 11px;
   color: var(--text-faint);
 }
+
+/* ─── Running state ─────────────────────── */
+.rowRunning {
+  border-left-color: rgba(234,179,8,0.7) !important;
+  background: rgba(234,179,8,0.05) !important;
+}
+
+.rowRunning:hover {
+  background: rgba(234,179,8,0.09) !important;
+}
+
+.runningBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(234,179,8,0.15);
+  border: 1px solid rgba(234,179,8,0.4);
+  color: #fde68a;
+  padding: 1px 6px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-left: auto;
+}
+
+.runningDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #facc15;
+  flex-shrink: 0;
+  animation: selectorPulse 1.4s infinite;
+}
+
+@keyframes selectorPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(250,204,21,0.7); }
+  70%  { box-shadow: 0 0 0 5px rgba(250,204,21,0); }
+  100% { box-shadow: 0 0 0 0 rgba(250,204,21,0); }
+}
+
+.runningLabel {
+  line-height: 1;
+}
+
+.rowMetaRunning {
+  font-size: 11px;
+  color: #fde68a;
+  opacity: 0.85;
+}

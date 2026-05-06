@@ -4,6 +4,7 @@ import { Tickets, Agents, Executions } from "../api/endpoints";
 import type { Ticket, TicketNode, TicketHierarchy, PipelineInferenceResult, AgentExecution, VsCodeAgent } from "../types";
 import PipelineStatus from "../components/PipelineStatus";
 import TicketGraphView from "../components/TicketGraphView";
+import { useRunningStatus } from "../hooks/useRunningStatus";
 import { getPinnedAgents } from "../services/preferences";
 import styles from "./TicketBoard.module.css";
 
@@ -209,7 +210,9 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
     : null;
 
   const isClosed = CLOSED_STATES.includes(ticket.ado_state ?? "");
-  const isRunning = !!runningExecution && !isClosed;
+  // Fuente dual: AgentExecution activa (prop) O stacky_status del ticket (BD)
+  const isRunning = !isClosed && (!!runningExecution || ticket.stacky_status === "running");
+  const runningAgentType = runningExecution?.agent_type ?? null;
 
   const handleRunConfirm = useCallback(async (note: string, filename: string | null) => {
     setIsLaunching(true);
@@ -237,6 +240,9 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
           <div className={styles.runningCardBanner}>
             <span className={styles.runningPulse} />
             <span>EN EJECUCIÓN</span>
+            {runningAgentType && (
+              <span className={styles.runningCardAgent}>{runningAgentType}</span>
+            )}
           </div>
         )}
 
@@ -290,8 +296,14 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
               <button
                 className={styles.runSuggestedBtn}
                 onClick={(e) => { e.stopPropagation(); setRunModal("suggested"); }}
-                disabled={!nextSuggested}
-                title={nextSuggested ? `Correr agente sugerido: ${nextLabel}` : "Esperando inferencia de pipeline…"}
+                disabled={!nextSuggested || isRunning}
+                title={
+                  isRunning
+                    ? "Hay un agente corriendo sobre este ticket — esperá a que termine"
+                    : nextSuggested
+                    ? `Correr agente sugerido: ${nextLabel}`
+                    : "Esperando inferencia de pipeline…"
+                }
               >
                 ▶ Run Sugerido
                 {nextLabel && <span className={styles.runBtnHint}>{nextLabel}</span>}
@@ -299,6 +311,8 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
               <button
                 className={styles.runCustomBtn}
                 onClick={(e) => { e.stopPropagation(); setRunModal("custom"); }}
+                disabled={isRunning}
+                title={isRunning ? "Hay un agente corriendo sobre este ticket" : undefined}
               >
                 ⚙ Run Custom
               </button>
@@ -416,6 +430,9 @@ export default function TicketBoard() {
   const [onlyPending, setOnlyPending] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("tree");
 
+  // Hook centralizado de estado running (fuente dual: stacky_status + executions polling)
+  const { runningByTicket, runningTicketIds, getRunningTickets } = useRunningStatus();
+
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
     queryKey: ["tickets"],
     queryFn: Tickets.list,
@@ -427,21 +444,6 @@ export default function TicketBoard() {
     queryFn: Tickets.hierarchy,
     refetchInterval: 60_000,
     enabled: viewMode === "tree" || viewMode === "graph",
-  });
-
-  // Polling de ejecuciones activas cada 5 segundos
-  const { data: activeExecs } = useQuery<AgentExecution[]>({
-    queryKey: ["executions-active"],
-    queryFn: () => Executions.list({ status: "running" }),
-    refetchInterval: 5_000,
-    staleTime: 0,
-  });
-
-  const { data: queuedExecs } = useQuery<AgentExecution[]>({
-    queryKey: ["executions-queued"],
-    queryFn: () => Executions.list({ status: "queued" }),
-    refetchInterval: 5_000,
-    staleTime: 0,
   });
 
   // VsCode agents para el dropdown de Run Custom
@@ -475,17 +477,9 @@ export default function TicketBoard() {
   const filteredOrphans = (hierarchy?.orphans ?? []).filter((n) => filterNode(n as TicketNode));
   const totalHierarchy = filteredEpics.length + filteredOrphans.length;
 
-  // Map ticketId -> running execution
-  const runningByTicket = new Map<number, AgentExecution>();
-  [...(activeExecs ?? []), ...(queuedExecs ?? [])].forEach((e) => {
-    if (!runningByTicket.has(e.ticket_id)) {
-      runningByTicket.set(e.ticket_id, e);
-    }
-  });
-
   // Tickets activos (no cerrados) con ejecución en curso
-  const runningTickets = (tickets ?? []).filter(
-    (t) => runningByTicket.has(t.id) && !CLOSED_STATES.includes(t.ado_state ?? "")
+  const runningTickets = getRunningTickets(
+    (tickets ?? []).filter((t) => !CLOSED_STATES.includes(t.ado_state ?? ""))
   );
 
   return (
@@ -501,6 +495,12 @@ export default function TicketBoard() {
           {viewMode === "graph" && hierarchy && (
             <span className={styles.count}>
               {hierarchy.epics.length} épicas · {hierarchy.epics.reduce((a, e) => a + e.children.length, 0) + hierarchy.orphans.length} tareas
+            </span>
+          )}
+          {runningTicketIds.size > 0 && (
+            <span className={styles.headerRunningCount} title={`${runningTicketIds.size} ticket(s) con agente en ejecución`}>
+              <span className={styles.headerRunningDot} />
+              {runningTicketIds.size} corriendo
             </span>
           )}
         </div>
@@ -551,12 +551,16 @@ export default function TicketBoard() {
               : `${runningTickets.length} tickets en ejecución`}
           </span>
           <div className={styles.activeExecChips}>
-            {runningTickets.map((t) => (
-              <span key={t.id} className={styles.activeExecChip}>
-                ADO-{t.ado_id}
-                <span className={styles.activeExecChipTitle}>{t.title.slice(0, 30)}{t.title.length > 30 ? "…" : ""}</span>
-              </span>
-            ))}
+            {runningTickets.map((t) => {
+              const exec = runningByTicket.get(t.id);
+              return (
+                <span key={t.id} className={styles.activeExecChip}>
+                  ADO-{t.ado_id}
+                  {exec && <span className={styles.activeExecChipAgent}>{exec.agent_type}</span>}
+                  <span className={styles.activeExecChipTitle}>{t.title.slice(0, 28)}{t.title.length > 28 ? "…" : ""}</span>
+                </span>
+              );
+            })}
           </div>
         </div>
       )}

@@ -21,6 +21,13 @@ export type ExecutionStatus =
   | "cancelled"
   | "discarded";
 
+export type TicketStackyStatus =
+  | "idle"
+  | "running"
+  | "completed"
+  | "error"
+  | "cancelled";
+
 export type Verdict = "approved" | "discarded" | null;
 
 export interface AgentDefinition {
@@ -54,6 +61,9 @@ export interface Ticket {
   work_item_type?: string;      // "Epic" | "Task" | "Bug" | etc.
   parent_ado_id?: number | null;
   last_synced_at?: string;
+  // Estado interno de Stacky (independiente de ado_state).
+  // Actualizado por agent_runner vía ticket_status service.
+  stacky_status?: TicketStackyStatus;
   last_execution?: AgentExecution | null;
   pipeline_summary?: {
     done_stages: string[];

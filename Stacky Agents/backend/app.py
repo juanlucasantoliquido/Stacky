@@ -44,6 +44,12 @@ def create_app() -> Flask:
     if fixed:
         logger.info("reconciled %d orphan executions", fixed)
 
+    # Corregir tickets que quedaron con stacky_status='running' por crash/reinicio
+    from services.ticket_status import recover_stale_running_tickets
+    stale_fixed = recover_stale_running_tickets()
+    if stale_fixed:
+        logger.info("startup recovery: corregidos %d tickets con status 'running' inconsistente", stale_fixed)
+
     # Limpia restos de seeds/sandbox sin tocar tickets reales con ejecuciones.
     target_project = (config.ADO_PROJECT or "Strategist_Pacifico").strip()
     purged = purge_non_project_tickets(target_project)

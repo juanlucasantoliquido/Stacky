@@ -11,6 +11,7 @@ import type {
   Ticket,
   TicketFingerprint,
   TicketHierarchy,
+  TicketStackyStatus,
   VsCodeAgent,
 } from "../types";
 
@@ -46,6 +47,28 @@ export const Tickets = {
     api.delete<{ ok: boolean }>(`/api/tickets/${id}/ado-pipeline-cache`),
   sync: () => api.post<TicketSyncResult>("/api/tickets/sync"),
   syncStatus: () => api.get<{ last_synced_at: string | null }>("/api/tickets/sync/status"),
+  /** Devuelve el stacky_status actual + historial de transiciones del ticket */
+  stackyStatus: (id: number, limit = 20) =>
+    api.get<{
+      ticket_id: number;
+      current_status: TicketStackyStatus;
+      history: {
+        id: number;
+        old_status: string | null;
+        new_status: string;
+        changed_by: string;
+        changed_at: string;
+        execution_id: number | null;
+        agent_type: string | null;
+        reason: string | null;
+      }[];
+    }>(`/api/tickets/${id}/stacky-status?limit=${limit}`),
+  /** Actualiza manualmente el stacky_status de un ticket (reset operacional) */
+  setStackyStatus: (id: number, status: TicketStackyStatus, reason?: string) =>
+    api.patch<{ ticket_id: number; current_status: TicketStackyStatus }>(
+      `/api/tickets/${id}/stacky-status`,
+      { status, reason }
+    ),
 };
 
 export interface AgentHistoryEntry {

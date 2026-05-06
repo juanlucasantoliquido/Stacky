@@ -50,7 +50,12 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.session_recorder")
 
-_TOOL_VERSION = "1.1.0"
+_TOOL_VERSION = "1.2.0"
+# 1.2.0 = Recording-to-Replay (Fase 8) — form_fields schema fixed:
+#   BEFORE: {typed_value: selector}  → useless for replay (key = what you typed)
+#   AFTER:  {selector: {label, last_value, input_type, field_name}} → replay-ready
+#   Also: JS listener now captures 'input' events to track field edits, not just
+#   mousedown. This gives the selector as the stable key rather than the typed text.
 # 1.1.0 = Fase 7 — intent_inferrer integration: after a session is recorded,
 # infer_goal_from_path() is called on the navigation_path and the result is
 # stored as "inferred_goal_action" in session.json.
@@ -116,7 +121,30 @@ _RECORDER_LISTENER_JS = """
       tag: el.tagName.toLowerCase(),
       selector: bestSelector(el),
       label: bestLabel(el),
+      event_type: 'click',
     });
+  }, true);
+
+  // Capture field edits: record selector→{label,value,type} so replay
+  // knows which selector maps to which form field (not just "what you typed").
+  document.addEventListener('change', (ev) => {
+    const el = ev.target;
+    if (!el || !el.tagName) return;
+    const tag = el.tagName.toLowerCase();
+    if (!['input', 'select', 'textarea'].includes(tag)) return;
+    if (!window.__stackyFormFields) window.__stackyFormFields = {};
+    const sel = bestSelector(el);
+    if (!sel) return;
+    const label = (el.getAttribute('aria-label') || el.placeholder || el.name || '').trim();
+    const fieldName = (el.id || el.name || '').replace(/^c_abf|^c_ddl|^c_chk/i, '').toLowerCase().replace(/[^a-z0-9]+/g,'_');
+    const screen = window.location.pathname.split('/').pop() || '';
+    if (!window.__stackyFormFields[screen]) window.__stackyFormFields[screen] = {};
+    window.__stackyFormFields[screen][sel] = {
+      label: label || fieldName,
+      last_value: el.value || '',
+      input_type: el.type || tag,
+      field_name: fieldName,
+    };
   }, true);
 })();
 """
@@ -273,9 +301,44 @@ class _RecorderState:
                 # Keep the first-seen selector (most stable: the one present
                 # when the operator first landed on the screen).
                 bucket.setdefault(key, sel)
+        # New schema: form_fields[screen][selector] = {label, last_value, input_type, field_name}
+        # Populated by the 'change' event listener via __stackyFormFields.
+        # We only merge keys captured from the live JS drain (see _snapshot_loop).
         inputs = snapshot.get("inputs") or {}
         if inputs:
-            self.form_fields.setdefault(screen, {}).update(inputs)
+            # Legacy fallback: if we get {label: selector} from old JS, store under inputs
+            ff = self.form_fields.setdefault(screen, {})
+            for label_key, sel in inputs.items():
+                if sel and sel not in ff:
+                    ff[sel] = {
+                        "label": label_key,
+                        "last_value": "",
+                        "input_type": "text",
+                        "field_name": label_key,
+                    }
+
+    def merge_form_fields(self, form_fields_by_screen: dict) -> None:
+        """Merge __stackyFormFields captured by JS 'change' listener.
+
+        Schema: {screen: {selector: {label, last_value, input_type, field_name}}}
+        This is the correct schema — selector is the stable key.
+        """
+        for screen, fields in form_fields_by_screen.items():
+            ff = self.form_fields.setdefault(screen, {})
+            for selector, meta in fields.items():
+                if not selector:
+                    continue
+                if selector in ff:
+                    # Update last_value if we have a newer one
+                    if meta.get("last_value"):
+                        ff[selector]["last_value"] = meta["last_value"]
+                else:
+                    ff[selector] = {
+                        "label":      meta.get("label", ""),
+                        "last_value": meta.get("last_value", ""),
+                        "input_type": meta.get("input_type", "text"),
+                        "field_name": meta.get("field_name", ""),
+                    }
 
 
 async def _run_recording(*, goal: str, base_url: str, user: str, password: str,
@@ -399,6 +462,12 @@ async def _run_recording(*, goal: str, base_url: str, user: str, password: str,
                             # Keep the most recent interaction — the one that
                             # most likely triggered the next navigation.
                             state.last_interaction = events[-1]
+                        # Drain form field changes captured by the 'change' listener.
+                        form_fields_js = await page.evaluate(
+                            "(() => { const f = window.__stackyFormFields || {}; window.__stackyFormFields = {}; return f; })()"
+                        )
+                        if form_fields_js:
+                            state.merge_form_fields(form_fields_js)
                 except Exception as exc:
                     logger.debug("recorder: snapshot tick error: %s", exc)
                 try:

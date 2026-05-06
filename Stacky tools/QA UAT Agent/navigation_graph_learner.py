@@ -60,14 +60,16 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.nav_learner")
 
-_TOOL_VERSION = "2.1.0"
-# 2.1.0 = Fase 6 confidence scoring. Each ObservedEdge now carries a
-# confidence label ("tentative" | "probable" | "stable") derived from
-# observed_count, plus first_seen / last_seen ISO dates. learned_edges.json
-# schema bumped to "2.0" — extra fields only, no removals, so the existing
-# navigation_graph._merge_learned_edges() reader (which only inspects target
-# + action) keeps working unchanged.
-# 2.0.0 = added scan_session() + cache/discovered_selectors.json write path.
+_TOOL_VERSION = "2.2.0"
+# 2.2.0 = Recording-to-Replay (Fase 8) — recover empty trigger_selector in
+# session transitions using discovered_selectors.  When
+# transition.trigger_selector is "" (happens for PostBack ASP.NET navigations
+# where mousedown fires but the page reloads before our listener can relay the
+# event), _recover_trigger_from_discovered() checks the session's
+# discovered_selectors[source_screen] for a key that matches the target screen
+# keywords and injects the found selector into the learned_edges entry.
+# This turns the learned edge into a replay-ready edge, not just a topology hint.
+# 2.1.0 = Fase 6 confidence scoring.
 _TOOL_ROOT = Path(__file__).parent
 _CACHE_DIR = _TOOL_ROOT / "cache"
 _LEARNED_EDGES_PATH = _CACHE_DIR / "learned_edges.json"
@@ -130,12 +132,14 @@ class ObservedEdge:
     confidence: str = "tentative"      # Fase 6: "tentative" | "probable" | "stable"
     first_seen: str = ""               # ISO date "YYYY-MM-DD"
     last_seen: str = ""                # ISO date "YYYY-MM-DD"
+    trigger_selector: str = ""         # Fase 8: CSS selector that triggered this edge (replay-ready)
+    trigger_label: str = ""            # Fase 8: human label for the trigger
 
     def key(self) -> tuple:
         return (self.source, self.target)
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "source": self.source,
             "target": self.target,
             "action": self.action,
@@ -148,6 +152,11 @@ class ObservedEdge:
             "in_supported_screens": self.in_supported_screens,
             "status": self.status,
         }
+        if self.trigger_selector:
+            d["trigger_selector"] = self.trigger_selector
+        if self.trigger_label:
+            d["trigger_label"] = self.trigger_label
+        return d
 
 
 @dataclass
@@ -180,6 +189,78 @@ class ScanResult:
             "learned_edges_path": self.learned_edges_path,
             "elapsed_ms": self.elapsed_ms,
         }
+
+
+# ── Fase 8: trigger selector recovery ────────────────────────────────────────
+
+def _screen_to_keywords(screen_name: str) -> list[str]:
+    """Convert a screen filename to searchable keywords.
+
+    FrmGestionUsuarios.aspx → ["gestion", "usuarios", "gestionusuarios"]
+    FrmAdminEstrategias.aspx → ["admin", "estrategias", "adminEstrategias"]
+    """
+    # Strip .aspx and Frm prefix
+    name = screen_name.replace(".aspx", "").replace(".ASPX", "")
+    for prefix in ("FrmGestion", "FrmAdmin", "FrmDetalle", "FrmAgenda", "Frm", "PopUp"):
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+            break
+    # Split on CamelCase boundaries
+    import re as _re
+    parts = _re.sub(r'([A-Z][a-z])', r'_\1', name).lower().strip("_").split("_")
+    parts = [p for p in parts if p]
+    # Also add the full slug
+    full_slug = "".join(parts)
+    return parts + [full_slug]
+
+
+def _recover_trigger_from_discovered(
+    transition: dict,
+    discovered_selectors: dict,
+) -> tuple[str, str]:
+    """Attempt to recover a missing trigger_selector from discovered_selectors.
+
+    When a transition was recorded via PostBack (ASP.NET full-page reload),
+    the mousedown listener fires but the selector is lost before we can read
+    __stackyRecorderEvents. However, discovered_selectors[source_screen] was
+    snapshotted and contains keys like 'navigate_next_administraci_n_de_usuarios'
+    → '#c_251'. We match target screen keywords against those keys.
+
+    Returns (selector, label) — both "" if not found.
+    """
+    source = transition.get("from", "")
+    target = transition.get("to", "")
+    if not source or not target:
+        return "", ""
+
+    candidates = discovered_selectors.get(source, {})
+    if not candidates:
+        return "", ""
+
+    keywords = _screen_to_keywords(target)
+
+    # Score each candidate key by number of keyword matches
+    best_sel = ""
+    best_label = ""
+    best_score = 0
+    for key, sel in candidates.items():
+        if not sel or not key:
+            continue
+        key_lower = key.lower()
+        score = sum(1 for kw in keywords if kw in key_lower)
+        if score > best_score:
+            best_score = score
+            best_sel = sel
+            # Build human label from key: navigate_next_administraci_n_de_usuarios → Administración de Usuarios
+            best_label = key.replace("navigate_next_", "").replace("_", " ").strip().title()
+
+    if best_score > 0:
+        logger.debug(
+            "nav_learner: recovered trigger %s → %s (score=%d, keywords=%s)",
+            source, best_sel, best_score, keywords,
+        )
+        return best_sel, best_label
+    return "", ""
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -369,6 +450,16 @@ def scan_session(
         )
         action = "observed_navigate"
         label = (tr.get("trigger_label") or "").strip()
+        trigger_sel = (tr.get("trigger_selector") or "").strip()
+
+        # Fase 8: if trigger_selector is empty (PostBack navigation), try to
+        # recover it from the session's discovered_selectors snapshot.
+        discovered_selectors_map = session_data.get("discovered_selectors") or {}
+        if not trigger_sel:
+            trigger_sel, label_recovered = _recover_trigger_from_discovered(tr, discovered_selectors_map)
+            if trigger_sel and not label:
+                label = label_recovered
+
         if label:
             # Embed the demo-recorded label so the human reviewer (and the
             # learned_edges.json reader) sees what the operator clicked.
@@ -382,6 +473,8 @@ def scan_session(
             already_in_graph=in_graph,
             in_supported_screens=(in_src and in_tgt),
             status=status,
+            trigger_selector=trigger_sel,
+            trigger_label=label,
         )
 
     # Source 2: navigation_path (covers the case where transitions[] is empty

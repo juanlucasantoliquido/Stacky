@@ -1118,12 +1118,29 @@ def _extract_screens(ticket_result: dict) -> list:
     Pre-Fase-1 the supported-screen set was duplicated here. It now reads
     from the shared catalogue in `agenda_screens.SUPPORTED_SCREENS` so
     extending the MVP with a new screen is a one-file change.
+
+    NOTE: freeform tickets use Spanish field names (descripcion/datos/esperado)
+    instead of English (title/description). Both are checked.
+    Also checks navigation_path from the ticket for explicit screen references.
     """
     from agenda_screens import SUPPORTED_SCREENS
 
     found = set()
+
+    # Check navigation_path explicitly (freeform mode — most reliable source)
+    for screen in ticket_result.get("navigation_path") or []:
+        if screen in SUPPORTED_SCREENS:
+            found.add(screen)
+
+    # Check plan_pruebas — both English (ADO) and Spanish (freeform) field names
     for item in ticket_result.get("plan_pruebas") or []:
-        title_text = (item.get("title") or "") + " " + (item.get("description") or "")
+        title_text = (
+            (item.get("title") or "")
+            + " " + (item.get("description") or "")
+            + " " + (item.get("descripcion") or "")
+            + " " + (item.get("datos") or "")
+            + " " + (item.get("esperado") or "")
+        )
         lower = title_text.lower()
         for screen in SUPPORTED_SCREENS:
             if screen.lower() in lower:
@@ -1250,12 +1267,14 @@ def _summarise_dossier(r: dict) -> dict:
 
 
 def _summarise_preconditions(r: dict) -> dict:
-    base = {"ok": r.get("ok", False), "skipped": False}
+    base = {"ok": r.get("ok", False), "skipped": r.get("skipped", False)}
     if r.get("ok"):
         summary = r.get("summary", {})
         base["total"] = summary.get("total", 0)
         base["ok_count"] = summary.get("ok", 0)
         base["blocked"] = summary.get("blocked", 0)
+        if r.get("skipped"):
+            base["skip_reason"] = r.get("skip_reason", "")
     else:
         base["error"] = r.get("error")
         base["message"] = r.get("message")

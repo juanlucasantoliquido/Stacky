@@ -265,11 +265,15 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     }, "{{ ui_map[step.target] }}");
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
     {% elif step.accion == 'wait_networkidle' %}
-    // [STEP {{ '%02d' | format(loop.index) }}] wait load
-    await page.waitForLoadState('load');
+    // [STEP {{ '%02d' | format(loop.index) }}] wait networkidle + UpdatePanel DOM settle
+    await page.waitForLoadState('networkidle');
+    // Wait for ASP.NET ScriptManager/UpdatePanel to finish processing the async PostBack response
+    await page.waitForFunction(() => {
+      try { return !Sys.WebForms.PageRequestManager.getInstance().get_isInAsyncPostBack(); } catch(e) { return true; }
+    }, null, { timeout: 30000 }).catch(() => {});
     {% elif step.accion == 'wait_visible' %}
     // [STEP {{ '%02d' | format(loop.index) }}] wait visible {{ step.target }}
-    await expect(page.locator('{{ ui_map[step.target] }}')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('{{ ui_map[step.target] }}')).toBeVisible({ timeout: {{ step.timeout_ms | default(10000) }} });
     {% elif step.accion == 'press_key' %}
     // [STEP {{ '%02d' | format(loop.index) }}] press key {{ step.valor }} on {{ step.target }}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] press_key {{ step.valor }}');

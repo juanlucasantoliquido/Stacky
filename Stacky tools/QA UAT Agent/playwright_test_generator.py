@@ -39,14 +39,17 @@ logger = logging.getLogger("stacky.qa_uat.test_generator")
 #  - Skip steps whose value cannot be formatted for the input type — the
 #    scenario is reclassified `blocked` with a structured reason instead of
 #    letting the test runner report a false product defect.
-_TOOL_VERSION = "1.2.0"
-# 1.2.0 = Fase 8 — discovered_selectors fallback. Before marking a scenario
-# BLOCKED for SELECTOR_NOT_FOUND, the generator now checks
-# cache/discovered_selectors.json (produced by session_recorder + learner).
-# Selectors resolved from the cache are tagged with "source":"discovered"
-# in the result so operators can promote them to the static UI map.
+_TOOL_VERSION = "1.3.0"
+# 1.3.0 = Recording-to-Replay (Fase 8) — playbook-aware generation.
+#   Before falling through to UI-map lookup + LLM-generated steps, the
+#   generator checks cache/playbooks/ for a playbook whose goal_slug or
+#   target_screen matches the scenario's pantalla / goal_action. When found,
+#   the spec is rendered directly from the playbook's navigation_steps +
+#   action_steps + parameterizable_fields — no BLOCKED for missing selectors.
+# 1.2.0 = Fase 8 — discovered_selectors fallback.
 _DEFAULT_TEMPLATE = Path(__file__).resolve().parent / "templates" / "playwright_test.spec.ts.j2"
 _DISCOVERED_SELECTORS_PATH = Path(__file__).resolve().parent / "cache" / "discovered_selectors.json"
+_PLAYBOOKS_DIR = Path(__file__).resolve().parent / "cache" / "playbooks"
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -144,6 +147,9 @@ def run(
     _disc_path = discovered_selectors_path or _DISCOVERED_SELECTORS_PATH
     discovered_by_screen = _load_discovered_selectors(_disc_path)
 
+    # Fase 8 — load playbooks index once for the whole run.
+    playbook_index = _load_playbooks(_PLAYBOOKS_DIR)
+
     results = []
     generated_count = 0
     blocked_count = 0
@@ -189,6 +195,23 @@ def run(
         discovered_aliases = _merge_discovered_selectors(
             selector_map, discovered_by_screen, pantalla
         )
+
+        # Fase 8 — Playbook-aware generation: if a matching playbook exists,
+        # generate from it directly. This bypasses UI-map lookup entirely and
+        # prevents BLOCKED for screens whose form selectors aren't in the map.
+        playbook = _match_playbook(scenario, playbook_index)
+        if playbook:
+            logger.debug(
+                "playwright_test_generator: using playbook %r for scenario %s",
+                playbook.get("goal_slug"), sid,
+            )
+            pb_result = _render_from_playbook(playbook, scenario, out_dir, template_path, template)
+            results.append(pb_result)
+            if pb_result.get("status") == "generated":
+                generated_count += 1
+            else:
+                blocked_count += 1
+            continue
 
         # Validate all targets exist in UI map (or discovered cache)
         missing_selectors = _find_missing_selectors(scenario, selector_map)
@@ -487,6 +510,240 @@ def _load_discovered_selectors(path: Path) -> dict[str, dict[str, str]]:
     except Exception as exc:
         logger.warning("playwright_test_generator: cannot load discovered_selectors %s: %s", path, exc)
         return {}
+
+
+# ── Fase 8: Playbook-aware generation ────────────────────────────────────────
+
+def _load_playbooks(playbooks_dir: Path) -> dict[str, dict]:
+    """Load all playbooks from cache/playbooks/ keyed by goal_slug.
+
+    Also builds a secondary index: target_screen → [playbook, ...]
+    Returns a dict with keys "by_slug" and "by_screen".
+    """
+    index: dict = {"by_slug": {}, "by_screen": {}}
+    if not playbooks_dir.is_dir():
+        return index
+    for pb_file in sorted(playbooks_dir.glob("*.json")):
+        try:
+            # Use utf-8-sig to handle BOM written by tools like PowerShell
+            pb = json.loads(pb_file.read_text(encoding="utf-8-sig"))
+            slug = pb.get("goal_slug", pb_file.stem)
+            index["by_slug"][slug] = pb
+            screen = pb.get("target_screen", "")
+            if screen:
+                index["by_screen"].setdefault(screen, []).append(pb)
+        except Exception as exc:
+            logger.debug("playwright_test_generator: skipping playbook %s: %s", pb_file, exc)
+    return index
+
+
+def _match_playbook(scenario: dict, playbook_index: dict) -> Optional[dict]:
+    """Find the best playbook for a scenario.
+
+    Matching order (highest priority first):
+    1. scenario.goal_action matches playbook.goal_slug exactly
+    2. scenario.pantalla matches playbook.target_screen (first playbook wins)
+    3. Keywords from scenario.titulo match playbook.goal_slug
+
+    Returns None if no match found.
+    """
+    goal_action = (scenario.get("goal_action") or "").strip().lower()
+    pantalla = (scenario.get("pantalla") or "").strip()
+    titulo = (scenario.get("titulo") or "").strip().lower()
+
+    by_slug = playbook_index.get("by_slug", {})
+    by_screen = playbook_index.get("by_screen", {})
+
+    # 1. Direct goal_action match
+    if goal_action and goal_action in by_slug:
+        return by_slug[goal_action]
+
+    # 2. Screen match
+    if pantalla and pantalla in by_screen:
+        return by_screen[pantalla][0]
+
+    # 3. Keyword match against slug
+    if titulo:
+        titulo_words = set(re.sub(r'[^a-z0-9\s]', '', titulo).split())
+        best_pb = None
+        best_score = 0
+        for slug, pb in by_slug.items():
+            slug_words = set(slug.replace('_', ' ').split())
+            score = len(titulo_words & slug_words)
+            if score > best_score:
+                best_score = score
+                best_pb = pb
+        if best_score >= 2:
+            return best_pb
+
+    return None
+
+
+def _render_from_playbook(
+    playbook: dict,
+    scenario: dict,
+    out_dir: Path,
+    template_path: Path,
+    template,  # Jinja2 Template object
+) -> dict:
+    """Generate a .spec.ts from a playbook, bypassing UI-map lookup.
+
+    Resolves parameterizable_fields from scenario.datos (provided by the
+    intent_parser / scenario compiler). Fields with source=infer_unique get
+    auto-generated values; source=infer_numeric use the playbook default.
+
+    Returns a result dict (same schema as the normal generation path).
+    """
+    sid = scenario.get("scenario_id", "UNK")
+    pantalla = playbook.get("target_screen", scenario.get("pantalla", "FrmAgenda.aspx"))
+
+    # Resolve parameter values from scenario.datos
+    raw_datos = scenario.get("datos", "") or ""
+    data_map = _parse_datos(raw_datos)
+
+    resolved_fields: dict[str, str] = {}
+    for param_key, meta in playbook.get("parameterizable_fields", {}).items():
+        source = meta.get("source", "provided")
+        default_val = meta.get("default", "")
+
+        if source == "provided":
+            # Try to find the value in scenario.datos
+            val = data_map.get(param_key, "")
+            if not val:
+                # Try case-insensitive search
+                val = next((v for k, v in data_map.items() if k.upper() == param_key.upper()), "")
+            resolved_fields[param_key] = val or default_val or f"QA_{param_key}"
+        elif source == "infer_unique":
+            import uuid as _uuid
+            resolved_fields[param_key] = f"QA_{_uuid.uuid4().hex[:8].upper()}"
+        elif source == "infer_numeric":
+            resolved_fields[param_key] = default_val or "100"
+        elif source == "bd_query":
+            # BD not available at generation time — use default and note it
+            resolved_fields[param_key] = default_val or f"BD_{param_key}"
+        else:
+            resolved_fields[param_key] = data_map.get(param_key, default_val or "")
+
+    # Build spec pasos from playbook action_steps + navigation_steps
+    nav_steps = playbook.get("navigation_steps", [])
+    action_steps = playbook.get("action_steps", [])
+    all_steps = nav_steps + action_steps
+
+    # Convert playbook steps to ScenarioSpec-style pasos for template
+    pasos_for_template = _playbook_steps_to_pasos(all_steps, resolved_fields)
+
+    # Build a synthetic ui_map so the template's {{ ui_map[step.target] }}
+    # resolves correctly.  We replace each raw CSS selector with a stable
+    # alias ("pb_step_N") and map that alias to the safe selector (inner
+    # double-quotes converted to single-quotes so the selector can be placed
+    # inside a TypeScript double-quoted string without escaping).
+    synthetic_ui_map: dict[str, str] = {}
+    aliased_pasos: list[dict] = []
+    for i, paso in enumerate(pasos_for_template):
+        accion = paso.get("accion", "")
+        selector = paso.get("target", "")
+        if accion in ("click", "fill", "wait_visible", "check", "check_checkbox", "double_click", "hover", "select") and selector:
+            alias = f"pb_step_{i}"
+            safe_sel = selector.replace('"', "'")  # a:has-text("X") → a:has-text('X')
+            synthetic_ui_map[alias] = safe_sel
+            aliased_pasos.append({**paso, "target": alias})
+        else:
+            aliased_pasos.append(paso)
+
+    sid_slug = _slugify(scenario.get("titulo", sid))
+    filename = f"{sid}_{sid_slug}.spec.ts"
+    spec_path = out_dir / filename
+
+    # Oracles: keep only those whose target resolves in synthetic_ui_map,
+    # OR those that don't need a selector (page_contains_text / page_not_contains_text).
+    _selector_free_types = ("page_contains_text", "page_not_contains_text")
+    filtered_oraculos = [
+        o for o in (scenario.get("oraculos") or [])
+        if o.get("tipo") in _selector_free_types or o.get("target") in synthetic_ui_map
+    ]
+
+    try:
+        rendered = template.render(
+            ticket_id=scenario.get("ticket_id", -1),
+            scenario_id=sid,
+            titulo=scenario.get("titulo", playbook.get("goal_label", "")),
+            pantalla=pantalla,
+            precondiciones=scenario.get("precondiciones", []),
+            pasos=aliased_pasos,
+            oraculos=filtered_oraculos,
+            datos_requeridos=scenario.get("datos_requeridos", []),
+            ui_map=synthetic_ui_map,
+            detect_screen_errors=False,
+            detect_screen_errors_vision=False,
+            screen_error_detector_js="",
+        )
+    except Exception as exc:
+        return {
+            "scenario_id": sid,
+            "status": "blocked",
+            "reason": "PLAYBOOK_RENDER_FAILED",
+            "missing": [],
+            "details": str(exc),
+        }
+
+    _check_no_hardcoded_creds(rendered, sid)
+    spec_path.write_text(rendered, encoding="utf-8")
+
+    return {
+        "scenario_id": sid,
+        "status": "generated",
+        "path": str(spec_path),
+        "playbook_used": playbook.get("goal_slug"),
+        "resolved_fields": list(resolved_fields.keys()),
+        "used_selectors": [],
+        "unresolved_selectors": [],
+        "discovered_selectors_used": [],
+    }
+
+
+def _parse_datos(datos_str: str) -> dict[str, str]:
+    """Parse 'KEY=value, KEY2=value2' datos string into a dict."""
+    result: dict[str, str] = {}
+    if not datos_str:
+        return result
+    for part in re.split(r'[,;]\s*', datos_str):
+        if '=' in part:
+            k, _, v = part.partition('=')
+            result[k.strip()] = v.strip()
+    return result
+
+
+def _playbook_steps_to_pasos(steps: list[dict], resolved_fields: dict[str, str]) -> list[dict]:
+    """Convert playbook action_steps to template-compatible pasos dicts."""
+    pasos = []
+    for step in steps:
+        action = step.get("action", "")
+        selector = step.get("selector", "")
+        if not action:
+            continue
+        if action == "goto":
+            pasos.append({"accion": "navigate", "target": step.get("screen", ""), "valor": ""})
+        elif action == "click":
+            pasos.append({"accion": "click", "target": selector, "valor": ""})
+        elif action == "fill":
+            field_key = step.get("field", "")
+            val = resolved_fields.get(field_key, step.get("valor", ""))
+            pasos.append({"accion": "fill", "target": selector, "valor": val})
+        elif action == "check":
+            pasos.append({"accion": "check_checkbox", "target": selector, "valor": "true"})
+        elif action == "uncheck":
+            pasos.append({"accion": "check_checkbox", "target": selector, "valor": "false"})
+        elif action == "waitFor":
+            timeout_ms = step.get("timeout_ms", 10000)
+            pasos.append({"accion": "wait_visible", "target": selector, "valor": "", "timeout_ms": timeout_ms})
+        elif action == "select":
+            field_key = step.get("field", "")
+            val = resolved_fields.get(field_key, step.get("valor", ""))
+            pasos.append({"accion": "select", "target": selector, "valor": val})
+        elif action == "wait":
+            pasos.append({"accion": "wait_networkidle", "target": "", "valor": ""})
+        # skip _note-only steps
+    return pasos
 
 
 def _merge_discovered_selectors(

@@ -118,6 +118,8 @@ def main() -> None:
             timeout_ms=args.timeout_ms,
             skip_to=args.skip_to,
             ado_path=Path(args.ado_path) if args.ado_path else None,
+            detect_screen_errors=getattr(args, "detect_screen_errors", False),
+            detect_screen_errors_vision=getattr(args, "detect_screen_errors_vision", False),
             verbose=verbose,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -133,6 +135,9 @@ def main() -> None:
             timeout_ms=args.timeout_ms,
             skip_to=args.skip_to,
             ado_path=Path(args.ado_path) if args.ado_path else None,
+            auto_resolve=getattr(args, "auto_resolve", False),
+            detect_screen_errors=getattr(args, "detect_screen_errors", False),
+            detect_screen_errors_vision=getattr(args, "detect_screen_errors_vision", False),
             verbose=verbose,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -152,6 +157,8 @@ def run(
     timeout_ms: int = 90_000,
     skip_to: Optional[str] = None,
     ado_path: Optional[Path] = None,
+    detect_screen_errors: bool = False,
+    detect_screen_errors_vision: bool = False,
     verbose: bool = True,
 ) -> dict:
     """
@@ -222,6 +229,8 @@ def run(
         skip_to=skip_to,
         skip_stages=skip_stages,
         ado_path=ado_path,
+        detect_screen_errors=detect_screen_errors,
+        detect_screen_errors_vision=detect_screen_errors_vision,
         verbose=verbose,
         started=started,
     )
@@ -304,13 +313,20 @@ def _run_freeform(
     timeout_ms: int = 90_000,
     skip_to: Optional[str] = None,
     ado_path: Optional[Path] = None,
+    auto_resolve: bool = False,
+    detect_screen_errors: bool = False,
+    detect_screen_errors_vision: bool = False,
     verbose: bool = True,
 ) -> dict:
-    """Free-form pipeline entry point (Fase 1).
+    """Free-form pipeline entry point (Fase 1/3).
 
     Replaces Stage 1 (reader) with intent_parser + synthetic_ticket_builder.
-    When unresolved placeholders exist, emits data_request.json and returns
-    {"ok": True, "pending_data": [...], ...} — caller should exit with code 2.
+    When unresolved placeholders exist:
+      - If auto_resolve=True (Fase 3): tries to resolve via data_resolver first.
+        If all resolve successfully, continues without exit code 2.
+        If some remain unresolved, emits data_request.json for only those fields.
+      - If auto_resolve=False (default): emits data_request.json and returns
+        {"ok": True, "pending_data": [...], ...} — caller should exit with code 2.
     On resume (--resume --data-file), merges resolved_data and continues.
 
     Evidence dir: evidence/<run_id>/  (run_id from intent_spec)
@@ -360,29 +376,47 @@ def _run_freeform(
         "pending": len(pending_data),
     }
 
-    # ── Step 2: emit data_request if pending ────────────────────────────────
+    # ── Step 2: handle pending_data (auto-resolve or emit data_request) ─────
     if pending_data:
-        data_req = _build_data_request(
-            run_id=run_id,
-            pending_data=pending_data,
-            intent_spec=intent_spec,
-            evidence_dir=evidence_dir,
-        )
-        _persist_json(evidence_dir / "data_request.json", data_req)
-        logger.warning(
-            "PENDING_DATA: %d fields unresolved. data_request.json written to %s",
-            len(pending_data), evidence_dir / "data_request.json",
-        )
-        return {
-            "ok": True,
-            "run_id": run_id,
-            "pending_data": pending_data,
-            "data_request": data_req,
-            "data_request_path": str(evidence_dir / "data_request.json"),
-            "resume_command": data_req.get("resume_command", ""),
-            "stages": stages,
-            "elapsed_s": round(time.time() - started, 2),
-        }
+        # [Fase 3] --auto-resolve: try to execute hint_queries automatically
+        if auto_resolve:
+            pending_data = _auto_resolve_pending(
+                pending_data=pending_data,
+                intent_spec=intent_spec,
+                evidence_dir=evidence_dir,
+                run_id=run_id,
+                verbose=verbose,
+            )
+            # Update stages summary after auto-resolve attempt
+            stages["intent_parser"]["pending"] = len(pending_data)
+            stages["intent_parser"]["auto_resolved"] = True
+            # Re-persist intent_spec with newly merged resolved_data
+            _persist_json(evidence_dir / "intent_spec.json", intent_spec)
+
+        if pending_data:
+            data_req = _build_data_request(
+                run_id=run_id,
+                pending_data=pending_data,
+                intent_spec=intent_spec,
+                evidence_dir=evidence_dir,
+            )
+            _persist_json(evidence_dir / "data_request.json", data_req)
+            logger.warning(
+                "PENDING_DATA: %d fields unresolved. data_request.json written to %s",
+                len(pending_data), evidence_dir / "data_request.json",
+            )
+            return {
+                "ok": True,
+                "run_id": run_id,
+                "pending_data": pending_data,
+                "data_request": data_req,
+                "data_request_path": str(evidence_dir / "data_request.json"),
+                "resume_command": data_req.get("resume_command", ""),
+                "stages": stages,
+                "elapsed_s": round(time.time() - started, 2),
+            }
+        # All fields auto-resolved — fall through to synthetic_ticket_builder
+        logger.info("data_resolver: all pending fields auto-resolved — continuing pipeline")
 
     # ── Step 3: build synthetic ticket.json ──────────────────────────────────
     _log_stage("synthetic_ticket_builder")
@@ -425,6 +459,8 @@ def _run_freeform(
         skip_to=skip_to,
         skip_stages=skip_stages,
         ado_path=ado_path,
+        detect_screen_errors=detect_screen_errors,
+        detect_screen_errors_vision=detect_screen_errors_vision,
         verbose=verbose,
         started=started,
     )
@@ -434,6 +470,83 @@ def _run_freeform(
     pipeline_result["run_id"] = run_id
     pipeline_result["source"] = "freeform"
     return pipeline_result
+
+
+def _auto_resolve_pending(
+    pending_data: list,
+    intent_spec: dict,
+    evidence_dir: Path,
+    run_id: str,
+    verbose: bool = True,
+) -> list:
+    """[Fase 3] Attempt to auto-resolve pending_data fields via data_resolver.
+
+    Builds a minimal data_request dict (in memory, not written yet), calls
+    data_resolver.resolve_fields(), injects resolved values into intent_spec
+    resolved_data in-place, and returns only the fields that could NOT be resolved.
+
+    If data_resolver is not available, returns pending_data unchanged.
+    """
+    try:
+        from data_resolver import resolve_fields
+    except ImportError:
+        logger.debug(
+            "_auto_resolve_pending: data_resolver not available — skipping auto-resolve"
+        )
+        return pending_data
+
+    # Build the requests list (same format as data_request.requests[])
+    # using the existing hint_query infrastructure
+    requests_for_resolver = []
+    for item in pending_data:
+        field = item.get("field", "UNKNOWN")
+        hint_query, hint_tables = _hint_query_for_field(field, intent_spec)
+        requests_for_resolver.append({
+            "field": field,
+            "description": item.get("description", f"Value needed for {field}"),
+            "hint_query": hint_query,
+            "hint_tables": hint_tables,
+            "reason": item.get("description", ""),
+            "in_case_ids": item.get("in_case_ids") or [],
+        })
+
+    logger.info(
+        "_auto_resolve_pending: attempting to auto-resolve %d fields via data_resolver",
+        len(requests_for_resolver),
+    )
+
+    result = resolve_fields(requests=requests_for_resolver, verbose=verbose)
+
+    if result.resolved:
+        # Inject resolved values into intent_spec (in-place mutation is intentional)
+        resolved_data = intent_spec.setdefault("resolved_data", {})
+        resolved_data.update(result.resolved)
+        logger.info(
+            "_auto_resolve_pending: resolved %d/%d fields: %s",
+            len(result.resolved), len(pending_data), list(result.resolved.keys()),
+        )
+        # Persist resolved_data.json next to intent_spec
+        resolved_path = evidence_dir / "resolved_data.json"
+        existing: dict = {}
+        if resolved_path.is_file():
+            try:
+                import json as _json
+                existing = _json.loads(resolved_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        merged = {**existing, **result.resolved}
+        _persist_json(resolved_path, merged)
+
+    if result.blocked:
+        logger.warning(
+            "_auto_resolve_pending: %d fields blocked by SQL guard: %s",
+            len(result.blocked), [b["field"] for b in result.blocked],
+        )
+
+    # Return only fields that still need manual resolution
+    remaining_fields = {f["field"] for f in result.unresolved} | {b["field"] for b in result.blocked}
+    still_pending = [item for item in pending_data if item.get("field") in remaining_fields]
+    return still_pending
 
 
 def _build_data_request(
@@ -477,10 +590,18 @@ def _build_data_request(
 def _hint_query_for_field(field: str, intent_spec: dict) -> tuple:
     """
     Return a (hint_query_string, hint_tables_list) for common placeholder field names.
-    Only references _SAFE_TABLES.  Falls back to a generic RIDIOMA query.
+    [Fase 3] Delegates to data_resolver.FIELD_HINTS for the authoritative mapping.
+    Falls back to a generic comment when field is unknown.
     """
-    # Known field → table / column mappings
-    _KNOWN_FIELDS: dict = {
+    try:
+        from data_resolver import FIELD_HINTS
+        if field in FIELD_HINTS:
+            return FIELD_HINTS[field]
+    except ImportError:
+        pass  # data_resolver not available (old installation) — use inline fallback
+
+    # Inline fallback for the most common fields (keeps pipeline self-contained)
+    _FALLBACK: dict = {
         "CLIENTE_ID": (
             "SELECT TOP 1 RIDIOMA FROM RIDIOMA WHERE ESTADO = 'A' ORDER BY NEWID()",
             ["RIDIOMA"],
@@ -490,7 +611,7 @@ def _hint_query_for_field(field: str, intent_spec: dict) -> tuple:
             ["RAGEN"],
         ),
         "AGENTE_ID": (
-            "SELECT TOP 1 RAGTIP FROM RAGTIP WHERE ESTATUS = 'A' ORDER BY NEWID()",
+            "SELECT TOP 1 RAGTIP FROM RAGTIP ORDER BY NEWID()",
             ["RAGTIP"],
         ),
         "MOTIVO_ID": (
@@ -506,9 +627,8 @@ def _hint_query_for_field(field: str, intent_spec: dict) -> tuple:
             ["RASIST"],
         ),
     }
-    if field in _KNOWN_FIELDS:
-        return _KNOWN_FIELDS[field]
-    # Fallback: generic RIDIOMA query
+    if field in _FALLBACK:
+        return _FALLBACK[field]
     return (
         f"-- Resolve {field}: provide the correct value for this placeholder.\n"
         f"-- Example: SELECT TOP 1 RIDIOMA FROM RIDIOMA WHERE ESTADO = 'A'",
@@ -528,6 +648,8 @@ def _run_pipeline_stages(
     ado_path: Path,
     verbose: bool,
     started: float,
+    detect_screen_errors: bool = False,
+    detect_screen_errors_vision: bool = False,
 ) -> dict:
     """
     Run stages 2-11 (ui_map through publisher) given an already-loaded ticket_result.
@@ -591,6 +713,8 @@ def _run_pipeline_stages(
         stages[stage] = _summarise_compiler(compiler_result)
         if not compiler_result.get("ok"):
             return _build_output(ticket_id, stages, compiler_result, started)
+        # Write scenarios.json now so that preconditions (next stage) can read it
+        _persist_json(evidence_dir / "scenarios.json", compiler_result)
 
     # ── Stage 3b: preconditions ──────────────────────────────────────────────
     stage = "preconditions"
@@ -632,6 +756,8 @@ def _run_pipeline_stages(
             ui_maps_dir=ui_maps_dir,
             out_dir=tests_dir,
             template_path=None,
+            detect_screen_errors=detect_screen_errors,
+            detect_screen_errors_vision=detect_screen_errors_vision,
             verbose=verbose,
         )
         stages[stage] = _summarise_generator(generator_result)
@@ -987,7 +1113,29 @@ def _parse_args() -> argparse.Namespace:
     # Keep --verbose as a no-op alias for backwards compatibility
     p.add_argument("--verbose", action="store_true",
                    help="(Legacy flag — verbose is now the default. Use --background to suppress.)")
-    return p.parse_args()
+    # Fase 3 — Data Request Protocol
+    p.add_argument("--auto-resolve", dest="auto_resolve", action="store_true",
+                   help="[Fase 3] Auto-execute hint_queries from data_request via data_resolver.py "
+                        "before emitting exit code 2. Resolves common fields (CLIENTE_ID, LOTE_ID, ...) "
+                        "automatically; only truly missing data causes exit code 2.")
+    # Fase 4 — In-flight UI error detection
+    p.add_argument(
+        "--detect-screen-errors", dest="detect_screen_errors", action="store_true",
+        help="[Fase 4] Inject post-step DOM scan into generated specs. Fails the "
+             "step immediately when a known validation/error pattern is found "
+             "(ASP.NET validators, .alert-danger, 'campo requerido', ...).",
+    )
+    p.add_argument(
+        "--detect-screen-errors-vision", dest="detect_screen_errors_vision",
+        action="store_true",
+        help="[Fase 4] Add vision-LLM screen analysis. Implies --detect-screen-errors. "
+             "Requires `python screen_error_detector.py serve` running and the "
+             "QA_UAT_VISION_DETECTOR_URL env var pointing to it.",
+    )
+    args = p.parse_args()
+    if args.detect_screen_errors_vision:
+        args.detect_screen_errors = True
+    return args
 
 
 if __name__ == "__main__":

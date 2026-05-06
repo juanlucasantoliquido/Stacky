@@ -58,6 +58,8 @@ def main() -> None:
         ui_maps_dir=Path(args.ui_maps),
         out_dir=Path(args.out),
         template_path=Path(args.template) if args.template else None,
+        detect_screen_errors=args.detect_screen_errors,
+        detect_screen_errors_vision=args.detect_screen_errors_vision,
         verbose=args.verbose,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -69,6 +71,8 @@ def run(
     ui_maps_dir: Path,
     out_dir: Path,
     template_path: Optional[Path] = None,
+    detect_screen_errors: bool = False,
+    detect_screen_errors_vision: bool = False,
     verbose: bool = False,
 ) -> dict:
     """Core logic — callable from tests."""
@@ -97,6 +101,21 @@ def run(
         return _err("template_render_failed", "jinja2 not installed. Run: pip install Jinja2")
     except Exception as exc:
         return _err("template_render_failed", f"Cannot load template: {exc}")
+
+    # Load screen-error detector JS only when the feature is enabled. Keeps
+    # the dependency explicit and avoids importing the module in legacy runs.
+    screen_error_detector_js = ""
+    if detect_screen_errors:
+        try:
+            from screen_error_detector import render_dom_detector_js
+            screen_error_detector_js = render_dom_detector_js()
+        except Exception as exc:
+            logger.warning(
+                "Could not render DOM detector JS — falling back to disabled: %s",
+                exc,
+            )
+            detect_screen_errors = False
+            detect_screen_errors_vision = False
 
     out_dir.mkdir(parents=True, exist_ok=True)
     # Ensure deterministic runs: remove stale specs from previous executions.
@@ -209,6 +228,9 @@ def run(
                 oraculos=normalized_oraculos,
                 datos_requeridos=scenario.get("datos_requeridos", []),
                 ui_map=selector_map,
+                detect_screen_errors=detect_screen_errors,
+                detect_screen_errors_vision=detect_screen_errors_vision,
+                screen_error_detector_js=screen_error_detector_js,
             )
         except Exception as exc:
             return _err("template_render_failed", f"Jinja2 render failed for {sid}: {exc}")
@@ -437,8 +459,26 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--out", required=True, help="Output directory for .spec.ts files")
     parser.add_argument("--template", default=None,
                         help=f"Jinja2 template path (default: {_DEFAULT_TEMPLATE})")
+    parser.add_argument(
+        "--detect-screen-errors", action="store_true",
+        dest="detect_screen_errors",
+        help="Inject in-flight DOM error detection after each interactive "
+             "step. The generated spec.ts will fail the step when a known "
+             "validation/error pattern appears on screen.",
+    )
+    parser.add_argument(
+        "--detect-screen-errors-vision", action="store_true",
+        dest="detect_screen_errors_vision",
+        help="Additionally call a vision-LLM detector via "
+             "QA_UAT_VISION_DETECTOR_URL after each step. Implies "
+             "--detect-screen-errors.",
+    )
     parser.add_argument("--verbose", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    # vision implies the base flag
+    if args.detect_screen_errors_vision:
+        args.detect_screen_errors = True
+    return args
 
 
 if __name__ == "__main__":

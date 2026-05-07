@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tickets, Agents, Executions } from "../api/endpoints";
 import PipelineStatus from "../components/PipelineStatus";
@@ -84,6 +84,13 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }) {
         e.stopPropagation();
         inferMutation.mutate(true);
     }, [inferMutation]);
+    // Auto-trigger inference when card first expands and no result exists yet
+    useEffect(() => {
+        if (expanded && !result && !inferMutation.isPending && !isFetching) {
+            inferMutation.mutate(false);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [expanded]);
     const isLoading = isFetching || inferMutation.isPending;
     const result = inference ?? (inferMutation.data ?? null);
     const nextSuggested = result?.next_suggested ?? null;
@@ -116,9 +123,28 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }) {
 }
 function EpicGroup({ epic, runningByTicket, vsCodeAgents }) {
     const [collapsed, setCollapsed] = useState(false);
+    const [isLaunching, setIsLaunching] = useState(false);
     const isClosed = CLOSED_STATES.includes(epic.ado_state ?? "");
     const runningExec = runningByTicket.get(epic.id) ?? null;
-    return (_jsxs("div", { className: styles.epicGroup, children: [_jsxs("div", { className: `${styles.epicHeader} ${isClosed ? styles.epicClosed : ""}`, children: [_jsx("button", { className: styles.epicCollapseBtn, onClick: () => setCollapsed((x) => !x), title: collapsed ? "Expandir" : "Colapsar", children: collapsed ? "▶" : "▼" }), _jsx("span", { className: styles.epicBadge, children: "EPIC" }), _jsxs("span", { className: styles.epicAdoId, children: ["ADO-", epic.ado_id] }), _jsx("span", { className: styles.epicState, style: { color: stateColor(epic.ado_state), borderColor: `${stateColor(epic.ado_state)}44` }, children: epic.ado_state ?? "—" }), _jsx("span", { className: styles.epicTitle, children: epic.title }), _jsxs("span", { className: styles.epicChildCount, children: [epic.children.length, " item", epic.children.length !== 1 ? "s" : ""] }), runningExec && !isClosed && (_jsxs("span", { className: styles.epicRunningChip, children: [_jsx("span", { className: styles.runningPulse }), " EN EJECUCI\u00D3N"] })), epic.ado_url && (_jsx("a", { className: styles.epicAdoLink, href: epic.ado_url, target: "_blank", rel: "noreferrer", onClick: (e) => e.stopPropagation(), children: "\u2197" }))] }), !collapsed && (_jsx("div", { className: styles.epicChildren, children: epic.children.length === 0 ? (_jsx("div", { className: styles.epicNoChildren, children: "Sin tareas asociadas" })) : (epic.children.map((child) => (_jsx(TicketCard, { ticket: child, runningExecution: runningByTicket.get(child.id) ?? null, vsCodeAgents: vsCodeAgents, indent: true }, child.id)))) }))] }));
+    const isRunning = !isClosed && !!runningExec;
+    const functionalFilename = findAgentFilenameByType("functional", vsCodeAgents, getPinnedAgents());
+    const handleRunFunctional = useCallback(async (e) => {
+        e.stopPropagation();
+        if (!functionalFilename)
+            return;
+        setIsLaunching(true);
+        try {
+            await Agents.openChat({
+                ticket_id: epic.id,
+                context_blocks: [],
+                vscode_agent_filename: functionalFilename,
+            });
+        }
+        finally {
+            setIsLaunching(false);
+        }
+    }, [epic.id, functionalFilename]);
+    return (_jsxs("div", { className: styles.epicGroup, children: [_jsxs("div", { className: `${styles.epicHeader} ${isClosed ? styles.epicClosed : ""}`, children: [_jsx("button", { className: styles.epicCollapseBtn, onClick: () => setCollapsed((x) => !x), title: collapsed ? "Expandir" : "Colapsar", children: collapsed ? "▶" : "▼" }), _jsx("span", { className: styles.epicBadge, children: "EPIC" }), _jsxs("span", { className: styles.epicAdoId, children: ["ADO-", epic.ado_id] }), _jsx("span", { className: styles.epicState, style: { color: stateColor(epic.ado_state), borderColor: `${stateColor(epic.ado_state)}44` }, children: epic.ado_state ?? "—" }), _jsx("span", { className: styles.epicTitle, children: epic.title }), _jsxs("span", { className: styles.epicChildCount, children: [epic.children.length, " item", epic.children.length !== 1 ? "s" : ""] }), runningExec && !isClosed && (_jsxs("span", { className: styles.epicRunningChip, children: [_jsx("span", { className: styles.runningPulse }), " EN EJECUCI\u00D3N"] })), epic.ado_url && (_jsx("a", { className: styles.epicAdoLink, href: epic.ado_url, target: "_blank", rel: "noreferrer", onClick: (e) => e.stopPropagation(), children: "\u2197" })), !isClosed && (_jsx("button", { className: styles.epicRunBtn, onClick: handleRunFunctional, disabled: isLaunching || isRunning || !functionalFilename, title: isRunning ? "Hay un agente corriendo sobre esta \u00E9pica" : !functionalFilename ? "No hay agente funcional configurado en el equipo" : `Correr agente Funcional: ${functionalFilename?.replace(/\.agent\.md$/i, "")}`, children: isLaunching ? "\u23F3" : "\uD83D\uDD0D Funcional" }))] }), !collapsed && (_jsx("div", { className: styles.epicChildren, children: epic.children.length === 0 ? (_jsx("div", { className: styles.epicNoChildren, children: "Sin tareas asociadas" })) : (epic.children.map((child) => (_jsx(TicketCard, { ticket: child, runningExecution: runningByTicket.get(child.id) ?? null, vsCodeAgents: vsCodeAgents, indent: true }, child.id)))) }))] }));
 }
 // ─── TicketBoard (página principal) ──────────────────────────────────────────
 export default function TicketBoard() {

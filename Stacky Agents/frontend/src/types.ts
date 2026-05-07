@@ -153,6 +153,79 @@ export interface PipelineBatchResponse {
   results: Record<string, PipelineInferenceResult>;
 }
 
+// ── Multi-project ────────────────────────────────────────────────────────────
+
+export type TrackerType = "azure_devops" | "jira" | "mantis";
+
+export interface Project {
+  name: string;
+  display_name: string;
+  workspace_root: string;
+  tracker_type: TrackerType;
+  /** Azure DevOps fields */
+  organization?: string;
+  ado_project?: string;
+  /** Jira fields */
+  jira_url?: string;
+  jira_key?: string;
+  /** Mantis fields */
+  mantis_url?: string;
+  mantis_project_id?: string;
+  mantis_project_name?: string;
+  mantis_protocol?: "rest" | "soap";
+  /** Runtime */
+  active: boolean;
+  initialized: boolean;
+  has_credentials?: boolean;
+}
+
+export interface ProjectsResponse {
+  ok: boolean;
+  projects: Project[];
+  active: string | null;
+}
+
+export interface ActiveProjectResponse {
+  ok: boolean;
+  active: string | null;
+  display_name: string;
+  tracker_type: TrackerType;
+}
+
+export interface InitProjectPayload {
+  name: string;
+  display_name?: string;
+  workspace_root: string;
+  tracker_type: TrackerType;
+  // ADO
+  organization?: string;
+  ado_project?: string;
+  area_path?: string;
+  pat?: string;
+  // Jira
+  jira_url?: string;
+  jira_key?: string;
+  api_version?: string;
+  jql?: string;
+  verify_ssl?: boolean;
+  jira_user?: string;
+  jira_token?: string;
+  // Mantis
+  mantis_url?: string;
+  mantis_project_id?: string;
+  mantis_project_name?: string;
+  mantis_protocol?: "rest" | "soap";
+  mantis_token?: string;
+  mantis_username?: string;
+  mantis_password?: string;
+}
+
+export interface AgentWorkflowConfig {
+  allowed_states: string[];
+  transition_state: string;
+  requires_prior_output: boolean;
+}
+
 export interface PackStep {
   agent_type: AgentType;
   chain_from_previous: boolean;

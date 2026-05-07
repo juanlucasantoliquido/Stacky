@@ -4,6 +4,7 @@ interface TicketGraphViewProps {
   hierarchy: TicketHierarchy | null;
   onSync: () => void;
   isSyncing: boolean;
+  syncError?: string | null;
   vsCodeAgents?: VsCodeAgent[];
   runningByTicket?: Map<number, AgentExecution>;
 }

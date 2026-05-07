@@ -198,6 +198,14 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
     inferMutation.mutate(true);
   }, [inferMutation]);
 
+  // Auto-trigger inference when card first expands and no result exists yet
+  useEffect(() => {
+    if (expanded && !result && !inferMutation.isPending && !isFetching) {
+      inferMutation.mutate(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
+
   const isLoading = isFetching || inferMutation.isPending;
   const result = inference ?? (inferMutation.data ?? null);
   const nextSuggested = result?.next_suggested ?? null;
@@ -366,8 +374,26 @@ interface EpicGroupProps {
 
 function EpicGroup({ epic, runningByTicket, vsCodeAgents }: EpicGroupProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [isLaunching, setIsLaunching] = useState(false);
   const isClosed = CLOSED_STATES.includes(epic.ado_state ?? "");
   const runningExec = runningByTicket.get(epic.id) ?? null;
+  const isRunning = !isClosed && !!runningExec;
+  const functionalFilename = findAgentFilenameByType("functional", vsCodeAgents, getPinnedAgents());
+
+  const handleRunFunctional = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!functionalFilename) return;
+    setIsLaunching(true);
+    try {
+      await Agents.openChat({
+        ticket_id: epic.id,
+        context_blocks: [],
+        vscode_agent_filename: functionalFilename,
+      });
+    } finally {
+      setIsLaunching(false);
+    }
+  }, [epic.id, functionalFilename]);
 
   return (
     <div className={styles.epicGroup}>
@@ -397,6 +423,22 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents }: EpicGroupProps) {
         )}
         {epic.ado_url && (
           <a className={styles.epicAdoLink} href={epic.ado_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>↗</a>
+        )}
+        {!isClosed && (
+          <button
+            className={styles.epicRunBtn}
+            onClick={handleRunFunctional}
+            disabled={isLaunching || isRunning || !functionalFilename}
+            title={
+              isRunning
+                ? "Hay un agente corriendo sobre esta épica"
+                : !functionalFilename
+                ? "No hay agente funcional configurado en el equipo"
+                : `Correr agente Funcional: ${functionalFilename?.replace(/\.agent\.md$/i, "")}`
+            }
+          >
+            {isLaunching ? "⏳" : "🔍 Funcional"}
+          </button>
         )}
       </div>
 
@@ -453,11 +495,22 @@ export default function TicketBoard() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Estado de error para mostrar feedback de sync
+  const [syncError, setSyncError] = useState<string | null>(null);
   const syncMutation = useMutation({
     mutationFn: Tickets.sync,
     onSuccess: () => {
+      setSyncError(null);
       qc.invalidateQueries({ queryKey: ["tickets"] });
       qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+    },
+    onError: (err: any) => {
+      // err puede ser Error lanzado por api.client.ts
+      let msg = "Error al sincronizar con ADO.";
+      if (err && typeof err.message === "string") {
+        msg = err.message;
+      }
+      setSyncError(msg);
     },
   });
 
@@ -530,6 +583,13 @@ export default function TicketBoard() {
             />
             Solo abiertos
           </label>
+          {/* Error visual de sync */}
+          {syncError && (
+            <div style={{ color: "#fff", background: "#b91c1c", padding: "6px 12px", borderRadius: 6, marginBottom: 8, maxWidth: 340, fontSize: 15, fontWeight: 500 }}>
+              <span style={{ marginRight: 8 }}>⚠️</span>
+              {syncError}
+            </div>
+          )}
           <button
             className={styles.syncBtn}
             onClick={() => syncMutation.mutate()}
@@ -626,6 +686,7 @@ export default function TicketBoard() {
                 hierarchy={hierarchy ?? null}
                 onSync={() => syncMutation.mutate()}
                 isSyncing={syncMutation.isPending}
+                syncError={syncError}
                 vsCodeAgents={vsCodeAgents ?? []}
                 runningByTicket={runningByTicket}
               />

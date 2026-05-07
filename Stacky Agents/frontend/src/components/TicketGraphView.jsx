@@ -470,7 +470,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket }) {
 
 // ─── TicketGraphView (exportado) ──────────────────────────────────────────────
 
-export default function TicketGraphView({ hierarchy, onSync, isSyncing, vsCodeAgents = [], runningByTicket = new Map() }) {
+export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncError, vsCodeAgents = [], runningByTicket = new Map() }) {
   const qc = useQueryClient();
 
   // Cargar inferencias previas desde localStorage al montar
@@ -521,6 +521,13 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, vsCodeAg
         <button className={styles.inferAllBtn} onClick={handleInferAll}>
           🤖 Inferir pendientes
         </button>
+        {/* Error visual de sync */}
+        {syncError && (
+          <div style={{ color: "#fff", background: "#b91c1c", padding: "6px 12px", borderRadius: 6, margin: "0 12px 0 0", maxWidth: 340, fontSize: 15, fontWeight: 500, display: "inline-block", verticalAlign: "middle" }}>
+            <span style={{ marginRight: 8 }}>⚠️</span>
+            {syncError}
+          </div>
+        )}
         <button className={styles.syncBtn} onClick={onSync} disabled={isSyncing}>
           {isSyncing ? "↻ Sincronizando…" : "⟳ Sincronizar ADO"}
         </button>

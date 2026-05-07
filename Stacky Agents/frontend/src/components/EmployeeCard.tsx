@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import type { VsCodeAgent } from "../types";
+import type { VsCodeAgent, AgentExecution } from "../types";
 import {
   getPinnedAgents,
   getAgentAvatar,
@@ -21,6 +21,8 @@ interface EmployeeCardProps {
   agent: VsCodeAgent | undefined;
   onEdit: (filename: string) => void;
   onRemoved: () => void;
+  runningExecution?: AgentExecution | null;
+  runningTicketAdoId?: number | null;
 }
 
 const AGENT_TYPE_COLORS: Record<string, string> = {
@@ -42,7 +44,7 @@ function inferType(filename: string): string {
   return "custom";
 }
 
-export default function EmployeeCard({ filename, agent, onEdit, onRemoved }: EmployeeCardProps) {
+export default function EmployeeCard({ filename, agent, onEdit, onRemoved, runningExecution, runningTicketAdoId }: EmployeeCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [launchOpen, setLaunchOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -58,10 +60,20 @@ export default function EmployeeCard({ filename, agent, onEdit, onRemoved }: Emp
 
   return (
     <>
-      <div className={styles.card} style={{ "--agent-color": color } as React.CSSProperties}>
+      <div className={`${styles.card} ${runningExecution ? styles.cardRunning : ""}`} style={{ "--agent-color": color } as React.CSSProperties}>
         <div className={styles.typeBadge} style={{ background: color }}>
           {type}
         </div>
+
+        {/* Running indicator */}
+        {runningExecution && (
+          <div className={styles.runningBanner}>
+            <span className={styles.runningPulse} />
+            <span className={styles.runningText}>
+              EN EJECUCIÓN{runningTicketAdoId != null ? ` · ADO-${runningTicketAdoId}` : ""}
+            </span>
+          </div>
+        )}
 
         {/* Kebab menu */}
         <div className={styles.menuWrapper}>

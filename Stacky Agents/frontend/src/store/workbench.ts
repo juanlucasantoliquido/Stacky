@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AgentType, ContextBlock, VsCodeAgent } from "../types";
+import type { AgentType, AgentWorkflowConfig, ContextBlock, Project, VsCodeAgent } from "../types";
 
 interface WorkbenchState {
   activeTicketId: number | null;
@@ -13,6 +13,11 @@ interface WorkbenchState {
   systemPromptOverride: string | null;
   // VS Code custom agent (null = ninguno seleccionado)
   vsCodeAgent: VsCodeAgent | null;
+  activeProject: Project | null;
+  /** Agentes fijados del proyecto activo */
+  pinnedAgents: string[];
+  /** Workflows por agente filename: { allowed_states, transition_state, requires_prior_output } */
+  agentWorkflows: Record<string, AgentWorkflowConfig>;
 
   setActiveTicket: (id: number | null) => void;
   setActiveAgent: (t: AgentType | null) => void;
@@ -24,6 +29,9 @@ interface WorkbenchState {
   setModelOverride: (m: string | null) => void;
   setSystemPromptOverride: (sp: string | null) => void;
   setVsCodeAgent: (a: VsCodeAgent | null) => void;
+  setActiveProject: (p: Project | null) => void;
+  setPinnedAgents: (agents: string[]) => void;
+  setAgentWorkflows: (wf: Record<string, AgentWorkflowConfig>) => void;
 }
 
 export const useWorkbench = create<WorkbenchState>((set) => ({
@@ -35,6 +43,9 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   modelOverride: null,
   systemPromptOverride: null,
   vsCodeAgent: null,
+  activeProject: null,
+  pinnedAgents: [],
+  agentWorkflows: {},
 
   setActiveTicket: (id) =>
     set({ activeTicketId: id, activeExecutionId: null, blocks: [] }),
@@ -63,4 +74,7 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
       activeExecutionId: null,
       systemPromptOverride: a?.system_prompt ?? null,
     }),
+  setActiveProject: (p) => set({ activeProject: p }),
+  setPinnedAgents: (agents) => set({ pinnedAgents: agents }),
+  setAgentWorkflows: (wf) => set({ agentWorkflows: wf }),
 }));

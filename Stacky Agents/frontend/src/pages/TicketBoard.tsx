@@ -6,6 +6,7 @@ import PipelineStatus from "../components/PipelineStatus";
 import TicketGraphView from "../components/TicketGraphView";
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { getPinnedAgents } from "../services/preferences";
+import { useWorkbench } from "../store/workbench";
 import styles from "./TicketBoard.module.css";
 
 // Infiere el tipo de agente desde el filename — misma lógica que EmployeeCard.
@@ -198,9 +199,23 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
     inferMutation.mutate(true);
   }, [inferMutation]);
 
+  // Auto-trigger inference when card first expands and no result exists yet
+  useEffect(() => {
+    if (expanded && !result && !inferMutation.isPending && !isFetching) {
+      inferMutation.mutate(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
+
   const isLoading = isFetching || inferMutation.isPending;
   const result = inference ?? (inferMutation.data ?? null);
-  const nextSuggested = result?.next_suggested ?? null;
+  const rawNextSuggested = result?.next_suggested ?? null;
+  // #7: Tasks nunca proponen Negocio — ya tienen análisis funcional
+  // #8: Épicas nunca proponen Negocio — tienen su propio botón Funcional
+  const isTask  = (ticket.work_item_type ?? "").toLowerCase() === "task";
+  const isEpic  = (ticket.work_item_type ?? "").toLowerCase() === "epic";
+  const nextSuggested =
+    ((isTask || isEpic) && rawNextSuggested === "business") ? "functional" : rawNextSuggested;
   const nextLabel = nextSuggested ? (NEXT_AGENT_LABELS[nextSuggested] ?? nextSuggested) : null;
 
   // Resuelve el filename del agente del equipo que corresponde al tipo sugerido.
@@ -366,8 +381,26 @@ interface EpicGroupProps {
 
 function EpicGroup({ epic, runningByTicket, vsCodeAgents }: EpicGroupProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [isLaunching, setIsLaunching] = useState(false);
   const isClosed = CLOSED_STATES.includes(epic.ado_state ?? "");
   const runningExec = runningByTicket.get(epic.id) ?? null;
+  const isRunning = !isClosed && !!runningExec;
+  const functionalFilename = findAgentFilenameByType("functional", vsCodeAgents, getPinnedAgents());
+
+  const handleRunFunctional = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!functionalFilename) return;
+    setIsLaunching(true);
+    try {
+      await Agents.openChat({
+        ticket_id: epic.id,
+        context_blocks: [],
+        vscode_agent_filename: functionalFilename,
+      });
+    } finally {
+      setIsLaunching(false);
+    }
+  }, [epic.id, functionalFilename]);
 
   return (
     <div className={styles.epicGroup}>
@@ -397,6 +430,22 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents }: EpicGroupProps) {
         )}
         {epic.ado_url && (
           <a className={styles.epicAdoLink} href={epic.ado_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>↗</a>
+        )}
+        {!isClosed && (
+          <button
+            className={styles.epicRunBtn}
+            onClick={handleRunFunctional}
+            disabled={isLaunching || isRunning || !functionalFilename}
+            title={
+              isRunning
+                ? "Hay un agente corriendo sobre esta épica"
+                : !functionalFilename
+                ? "No hay agente funcional configurado en el equipo"
+                : `Correr agente Funcional: ${functionalFilename?.replace(/\.agent\.md$/i, "")}`
+            }
+          >
+            {isLaunching ? "⏳" : "🔍 Funcional"}
+          </button>
         )}
       </div>
 
@@ -428,7 +477,14 @@ export default function TicketBoard() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [onlyPending, setOnlyPending] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("tree");
+  const [viewMode, setViewMode] = useState<ViewMode>("graph");
+
+  // #3: Filtro de estados por agente activo
+  const vsCodeAgent = useWorkbench((s) => s.vsCodeAgent);
+  const agentWorkflows = useWorkbench((s) => s.agentWorkflows);
+  const activeAllowedStates: string[] = vsCodeAgent
+    ? (agentWorkflows[vsCodeAgent.filename]?.allowed_states ?? [])
+    : [];
 
   // Hook centralizado de estado running (fuente dual: stacky_status + executions polling)
   const { runningByTicket, runningTicketIds, getRunningTickets } = useRunningStatus();
@@ -453,11 +509,22 @@ export default function TicketBoard() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Estado de error para mostrar feedback de sync
+  const [syncError, setSyncError] = useState<string | null>(null);
   const syncMutation = useMutation({
     mutationFn: Tickets.sync,
     onSuccess: () => {
+      setSyncError(null);
       qc.invalidateQueries({ queryKey: ["tickets"] });
       qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+    },
+    onError: (err: any) => {
+      // err puede ser Error lanzado por api.client.ts
+      let msg = "Error al sincronizar con ADO.";
+      if (err && typeof err.message === "string") {
+        msg = err.message;
+      }
+      setSyncError(msg);
     },
   });
 
@@ -470,6 +537,12 @@ export default function TicketBoard() {
       if (!selfMatch && !childMatch) return false;
     }
     if (onlyPending && CLOSED_STATES.includes(node.ado_state ?? "")) return false;
+    // #3: si el agente activo tiene allowed_states, filtrar por estado
+    if (activeAllowedStates.length > 0 && !activeAllowedStates.includes(node.ado_state ?? "")) {
+      // Pero si tiene hijos que sí aplican, mostrar el nodo padre igual
+      const childMatch = node.children.some((c) => activeAllowedStates.includes(c.ado_state ?? ""));
+      if (!childMatch) return false;
+    }
     return true;
   }
 
@@ -530,6 +603,13 @@ export default function TicketBoard() {
             />
             Solo abiertos
           </label>
+          {/* Error visual de sync */}
+          {syncError && (
+            <div style={{ color: "#fff", background: "#b91c1c", padding: "6px 12px", borderRadius: 6, marginBottom: 8, maxWidth: 340, fontSize: 15, fontWeight: 500 }}>
+              <span style={{ marginRight: 8 }}>⚠️</span>
+              {syncError}
+            </div>
+          )}
           <button
             className={styles.syncBtn}
             onClick={() => syncMutation.mutate()}
@@ -562,6 +642,17 @@ export default function TicketBoard() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Banner de filtro por agente activo */}
+      {activeAllowedStates.length > 0 && vsCodeAgent && (
+        <div style={{ background: "#1e3a5f", color: "#7dd3fc", padding: "6px 16px", fontSize: 13, display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid #2563eb44" }}>
+          <span>🤖 {vsCodeAgent.name}</span>
+          <span style={{ color: "#94a3b8" }}>mostrando solo estados:</span>
+          {activeAllowedStates.map((s) => (
+            <span key={s} style={{ background: "#2563eb33", border: "1px solid #3b82f6", borderRadius: 4, padding: "1px 8px" }}>{s}</span>
+          ))}
         </div>
       )}
 
@@ -626,6 +717,7 @@ export default function TicketBoard() {
                 hierarchy={hierarchy ?? null}
                 onSync={() => syncMutation.mutate()}
                 isSyncing={syncMutation.isPending}
+                syncError={syncError}
                 vsCodeAgents={vsCodeAgents ?? []}
                 runningByTicket={runningByTicket}
               />

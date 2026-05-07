@@ -1,0 +1,80 @@
+{
+  "ok": true,
+  "ticket_id": 116,
+  "total": 3,
+  "pass": 1,
+  "fail": 1,
+  "blocked": 1,
+  "runs": [
+    {
+      "scenario_id": "P02",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\tests\\P02_unidad_promesa_no_lote.spec.ts",
+      "status": "blocked",
+      "duration_ms": 52173,
+      "artifacts": {
+        "trace": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P02\\trace.zip",
+        "video": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P02\\video.webm",
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P02\\error-context.md"
+      },
+      "raw_stdout": "\nRunning 1 test using 1 worker\n\n  ✘  1 [chromium] › evidence\\116\\tests\\P02_unidad_promesa_no_lote.spec.ts:72:7 › ADO-116 | P02 — Unidad promesa (no lote) › p02 unidad_promesa_(no_lote) (43.8s)\n\n\n  1) [chromium] › evidence\\116\\tests\\P02_unidad_promesa_no_lote.spec.ts:72:7 › ADO-116 | P02 — Unidad promesa (no lote) › p02 unidad_promesa_(no_lote) \n\n    Error: page.waitForURL: net::ERR_ABORTED; maybe frame was detached?\n    =========================== logs ===========================\n    waiting for navigation until \"load\"\n    ============================================================\n\n      66 |     await page.fill('#c_abfContrasena', PASS);\n      67 |     await page.locator('#c_btnOk').click({ noWaitAfter: true });\n    > 68 |     await page.waitForURL(/FrmAgenda/, { timeout: 25000 });\n         |                ^\n      69 |     await page.waitForLoadState('load', { timeout: 20000 });\n      70 |   });\n      71 |\n        at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\tests\\P02_unidad_promesa_no_lote.spec.ts:68:16\n\n    attachment #1: video (video/webm) ──────────────────────────────────────────────────────────────\n    test-results\\116-tests-P02_unidad_prome-4aec7-p02-unidad-promesa-no-lote--chromium\\video.webm\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    Error Context: test-results\\116-tests-P02_unidad_prome-4aec7-p02-unidad-promesa-no-lote--chromium\\error-context.md\n\n    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────\n    test-results\\116-tests-P02_unidad_prome-4aec7-p02-unidad-promesa-no-lote--chromium\\trace.zip\n    Usage:\n\n        npx playwright show-trace test-results\\116-tests-P02_unidad_prome-4aec7-p02-unidad-promesa-no-lote--chromium\\trace.zip\n\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n  1 failed\n    [chromium] › evidence\\116\\tests\\P02_unidad_promesa_no_lote.spec.ts:72:7 › ADO-116 | P02 — Unidad promesa (no lote) › p02 unidad_promesa_(no_lote) \n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P03",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\tests\\P03_aislamiento_por_usuario.spec.ts",
+      "status": "pass",
+      "duration_ms": 37562,
+      "artifacts": {
+        "trace": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P03\\trace.zip",
+        "video": null,
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P03\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P03\\step_01_after.png",
+          "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P03\\step_final_state.png",
+          "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P03\\test_failure.png"
+        ],
+        "console_log": null,
+        "network_log": null,
+        "error_context": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P03\\error-context.md"
+      },
+      "raw_stdout": "\nRunning 1 test using 1 worker\n\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate panel_agenda\n  ✓  1 [chromium] › evidence\\116\\tests\\P03_aislamiento_por_usuario.spec.ts:72:7 › ADO-116 | P03 — Aislamiento por usuario › p03 aislamiento_por_usuario (32.0s)\n\n  1 passed (34.6s)\n",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P04",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\tests\\P04_visibilidad_pacifico.spec.ts",
+      "status": "fail",
+      "duration_ms": 44116,
+      "artifacts": {
+        "trace": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P04\\trace.zip",
+        "video": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P04\\video.webm",
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P04\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P04\\step_final_state.png",
+          "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P04\\test_failure.png"
+        ],
+        "console_log": null,
+        "network_log": null,
+        "error_context": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P04\\error-context.md"
+      },
+      "raw_stdout": "\nRunning 1 test using 1 worker\n\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n  ✘  1 [chromium] › evidence\\116\\tests\\P04_visibilidad_pacifico.spec.ts:80:7 › ADO-116 | P04 — Visibilidad Pacifico › p04 visibilidad_pacifico (37.5s)\n\n\n  1) [chromium] › evidence\\116\\tests\\P04_visibilidad_pacifico.spec.ts:80:7 › ADO-116 | P04 — Visibilidad Pacifico › p04 visibilidad_pacifico \n\n    Error: P04: panel_timer debe ser visible\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\n    Locator:  locator('#updTimer')\n    Expected: visible\n    Received: hidden\n    Timeout:  5000ms\n\n    Call log:\n    \u001b[2m  - P04: panel_timer debe ser visible with timeout 5000ms\u001b[22m\n    \u001b[2m  - waiting for locator('#updTimer')\u001b[22m\n    \u001b[2m    9 × locator resolved to <div id=\"updTimer\">…</div>\u001b[22m\n    \u001b[2m      - unexpected value \"hidden\"\u001b[22m\n\n\n      143 |     \n      144 |     \n    > 145 |     await expect(page.locator('#updTimer'), 'P04: panel_timer debe ser visible').toBeVisible();\n          |                                                                                  ^\n      146 |     \n      147 |     \n      148 |     \n        at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\tests\\P04_visibilidad_pacifico.spec.ts:145:82\n\n    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────\n    test-results\\116-tests-P04_visibilidad_-f8a88-co-p04-visibilidad-pacifico-chromium\\test-failed-1.png\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────\n    test-results\\116-tests-P04_visibilidad_-f8a88-co-p04-visibilidad-pacifico-chromium\\video.webm\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    Error Context: test-results\\116-tests-P04_visibilidad_-f8a88-co-p04-visibilidad-pacifico-chromium\\error-context.md\n\n    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────\n    test-results\\116-tests-P04_visibilidad_-f8a88-co-p04-visibilidad-pacifico-chromium\\trace.zip\n    Usage:\n\n        npx playwright show-trace test-results\\116-tests-P04_visibilidad_-f8a88-co-p04-visibilidad-pacifico-chromium\\trace.zip\n\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n  1 failed\n    [chromium] › evidence\\116\\tests\\P04_visibilidad_pacifico.spec.ts:80:7 › ADO-116 | P04 — Visibilidad Pacifico › p04 visibilidad_pacifico \n",
+      "raw_stderr": "",
+      "assertion_failures": [
+        {
+          "message": "Error: P04: panel_timer debe ser visible\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\n    Locator:  locator('#updTimer')\n    Expected: visible\n    Received: hidden\n    Timeout:  5000ms\n\n    Call log:\n    \u001b[2m  - P04: panel_timer debe ser visible with timeo",
+          "expected": "visible",
+          "actual": "hidden\n    Timeout:  5000ms\n\n    Call log:\n    \u001b[2m  - P04: panel_timer debe ser visible with timeou"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "tool": "uat_test_runner",
+    "version": "1.1.0",
+    "duration_ms": 134079
+  }
+}

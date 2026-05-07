@@ -17,6 +17,8 @@
 | Flujo principal | Estado ADO → cron → output | **Empleado → Ticket → VS Code Copilot Chat** |
 | UX | Cron + dashboard de auditoría | **Equipo visual + Editor + Run + VS Code Chat** |
 | Mentalidad | "El sistema decide cuándo correr" | **"El humano elige su equipo y asigna tickets"** |
+| Trackers soportados | Solo Azure DevOps | **Azure DevOps + Jira + Mantis BT** |
+| Proyectos | Uno fijo por .env | **Multi-proyecto: cambio en 1 click** |
 
 ---
 
@@ -96,21 +98,48 @@ Tools/Stacky Agents/
 │   ├── models.py                      ← AgentExecution, Ticket, Pack
 │   ├── agent_runner.py                ← núcleo: run_agent(type, ctx)
 │   ├── prompt_builder.py              ← modular por agente
-│   ├── copilot_bridge.py              ← stub que invoca al engine real
+│   ├── copilot_bridge.py              ← wrapper del LLM (mock/copilot)
+│   ├── project_manager.py             ← gestión multi-proyecto (ADO/Jira/Mantis)
 │   ├── api/
 │   │   ├── __init__.py
-│   │   ├── agents.py                  ← POST /api/agents/run, GET /api/agents, GET /api/agents/vscode
+│   │   ├── agents.py                  ← POST /api/agents/run, GET /api/agents, route, estimate
 │   │   ├── executions.py              ← GET /api/executions, /api/executions/:id
 │   │   ├── tickets.py                 ← GET /api/tickets
-│   │   └── packs.py                   ← GET /api/packs, POST /api/packs/start
+│   │   ├── packs.py                   ← GET /api/packs, POST /api/packs/start
+│   │   ├── projects.py                ← CRUD proyectos, activo, tracker multi-tipo
+│   │   ├── preferences.py             ← GET/PUT /api/preferences (avatares, nicknames)
+│   │   ├── logs.py                    ← System logs: list, export, stats, purge
+│   │   ├── qa_uat.py                  ← POST /api/qa-uat/run (pipeline Playwright)
+│   │   ├── phase4.py                  ← FA-07, FA-16, FA-25, FA-15 (glossary)
+│   │   ├── phase5.py                  ← FA-36, FA-47, FA-40, FA-39, FA-08, FA-10
+│   │   ├── phase6.py                  ← FA-41, FA-48, FA-49, FA-51, FA-29, FA-28, FA-01, FA-02, FA-17, FA-27
+│   │   ├── similarity.py              ← FA-45, FA-14
+│   │   ├── decisions.py               ← FA-13 CRUD
+│   │   ├── anti_patterns.py           ← FA-11 CRUD
+│   │   ├── webhooks.py                ← FA-52 CRUD
+│   │   ├── git.py                     ← FA-05 file-context, context-block
+│   │   ├── extras.py                  ← FA-43, FA-46, FA-22, FA-23
+│   │   └── glossary.py                ← FA-15 entries/candidates
 │   ├── agents/
 │   │   ├── __init__.py
-│   │   ├── base.py                    ← BaseAgent
+│   │   ├── base.py                    ← BaseAgent + RunContext + compose_system_prompt
 │   │   ├── business.py
 │   │   ├── functional.py
 │   │   ├── technical.py
 │   │   ├── developer.py
-│   │   └── qa.py
+│   │   ├── qa.py
+│   │   ├── debug.py                   ← FA-29 Debug Agent
+│   │   ├── critic.py                  ← FA-47 Critic Agent
+│   │   └── custom.py                  ← agentes custom configurables
+│   ├── services/
+│   │   ├── ado_client.py              ← ADO REST API client
+│   │   ├── jira_client.py             ← Jira REST API client (v2/v3)
+│   │   ├── mantis_client.py           ← Mantis BT REST/SOAP client
+│   │   ├── ado_sync.py                ← sync ADO → BD local
+│   │   ├── jira_sync.py               ← sync Jira → BD local
+│   │   ├── mantis_sync.py             ← sync Mantis → BD local
+│   │   ├── stacky_logger.py           ← logger estructurado async → system_logs
+│   │   └── ... (50+ servicios de moats)
 │   └── packs/
 │       ├── __init__.py
 │       └── definitions.py
@@ -178,97 +207,77 @@ El frontend habla al backend por `http://localhost:5050`. El backend persiste en
 
 | Pieza | Estado |
 |---|---|
-| Documentación de diseño (00–09) | **Completa** — incluye roadmap + 52 moats catalogados + evolución estratégica V2 |
-| Backend Flask + modelos + endpoints | **Runnable** — copilot_bridge en modo mock |
-| Frontend React + componentes principales | **Runnable** — UI navegable, llamadas reales al backend |
-| **Team Screen (pantalla de empleados)** | **En desarrollo** — `TeamScreen.tsx`, `EmployeeCard.tsx`, avatares pixel art |
-| **Agent Launch Modal (→ VS Code Chat)** | **En desarrollo** — bridge `POST localhost:5052/open-chat` ya disponible |
-| **Gestión de equipo + avatares** | **En desarrollo** — `TeamManageDrawer`, `AvatarPicker`, `preferences.ts` |
-| VS Code extension + bridge HTTP (:5052) | **Implementado** — `/open-chat`, `/invoke`, `/models` |
-| SSE de logs en vivo | **Implementado** |
-| Persistencia de history y re-run | **Implementado** |
-| Agent Packs ejecutándose | **Diseñado + endpoint stub** — UI guía paso a paso |
+| Documentación de diseño (00–09) | **Completa** |
+| Backend Flask + modelos + endpoints | **Completo** — 52 moats implementados |
+| Frontend React + componentes | **Completo** — UI navegable, todas las funcionalidades activas |
+| Team Screen (pantalla de empleados) | **Completo** — avatares pixel art, gestión de equipo |
+| Agent Launch Modal (→ VS Code Chat) | **Completo** |
+| Multi-tracker (ADO + Jira + Mantis) | **Completo** — sync al arranque, switch en 1 click |
+| Multi-proyecto | **Completo** — UI + API CRUD + activo persistido |
+| QA UAT Pipeline (Playwright) | **Completo** — POST /api/qa-uat/run |
+| System Logs API | **Completo** — list, export CSV/JSON, stats, purge |
+| Preferences API | **Completo** — pinnedAgents, avatares, nicknames, roles |
+| VS Code extension + bridge HTTP (:5052) | **Completo** — 5 comandos + status bar |
+| SSE de logs en vivo | **Completo** |
+| Agent Packs ejecutándose | **Completo** — 5 packs + advance/pause/resume |
 
-### Moats implementados (de las 52 del catálogo)
+### 52 moats implementados
 
-| ID | Nombre | Categoría | Fase | Notas |
-|---|---|---|---|---|
-| **N1** | Contract Validator | Execution enrichment | Fase 1 | reglas por agente, score 0-100, badge en UI |
-| **N2** | Structured Output Renderer | Execution enrichment | Fase 1 | secciones colapsables, copy por sección |
-| **N3** | Ticket Pre-Analysis Fingerprint | Discoverability | Fase 1 | tipo / dominio / complejidad / pack sugerido |
-| **FA-09** | RIDIOMA / glossary auto-injection | Context | Fase 1 | bloque `[auto]` con términos de dominio detectados |
-| **FA-20** | Citation linker | Execution enrichment | Fase 2 | `archivo.ext:NN` y `ADO-XXXX` clickeables (vscode://, ADO) |
-| **FA-31** | Output cache por hash | Cost & quality | Fase 3 | hit gratuito si dos operadores corren mismo contexto |
-| **FA-33** | Cost preview pre-Run | Cost & quality | Fase 3 | tokens + USD + latencia visible antes de Run |
-| **FA-35** | Confidence scoring | Cost & quality | Fase 3 | score heurístico en metadata + badge |
-| **FA-45** | Similar past executions | Discoverability | Fase 3 | Jaccard sobre tokens; reemplazable por embeddings en Fase 6 |
-| **FA-14** | Output graveyard search | Memory | Fase 3 | búsqueda en discarded / errored para no repetir intentos |
-| **FA-12** | Best-output few-shot examples | Memory | Fase 3 | inyecta 1-2 outputs aprobados al system prompt; selecciona por contract+confidence |
-| **FA-04** | Multi-LLM routing con override | Cost & quality | Fase 3 | router elige Haiku/Sonnet/Opus por agente+contexto; UI override |
-| **FA-37** | PII auto-masking pre-prompt + logs | Compliance | Fase 3 | DNI/CUIT/email/tel/CBU/CARD enmascarados; map en memoria; unmask al render |
-| **FA-42** | Suggested next agent (markov) | Discoverability | Fase 4 | aprende transiciones aprobadas; default chain como fallback |
-| **FA-50** | Agent forking inline | Power-user | Fase 5 | system prompt editable per-Run; persiste en metadata |
-| **FA-11** | Anti-pattern registry | Memory | Fase 3 | tabla + CRUD + injection automática en system prompt |
-| **FA-52** | Webhooks out on exec.completed | Power-user | Fase 5 | tabla + delivery con HMAC-SHA256; events: completed/approved/discarded |
-| **FA-05** | Git context awareness | Context | Fase 3 | commits + autores + bloque `[auto]` por archivo afectado |
-| **FA-13** | Historical decisions database | Memory | Fase 5 | tabla + CRUD + matching por tags + injection en system prompt |
-| **FA-43** | Operator coaching | Discoverability | Fase 5 | tips heurísticos por usuario (re-run/discard/error/confidence) |
-| **FA-46** | Org-wide best practices feed | Discoverability | Fase 5 | resumen por agente/operador/contract failures/modelos/bloques |
-| **FA-22** | Output translator (en/es/pt) | Execution enrichment | Fase 4 | sin re-correr al agente; cache por hash; mock fallback |
-| **FA-23** | Multi-format export | Execution enrichment | Fase 4 | md/html/slack/email descargable desde el OutputPanel |
-| **FA-19** | Output schema endpoint | Execution enrichment | Fase 2 | `/api/agents/:type/schema` expuesto (consumible por UI) |
-| **FA-21** | Mermaid diagram auto-render | Execution enrichment | Fase 4 | detecta ```mermaid en outputs, renderiza SVG + zoom + link mermaid.live |
-| **FA-15** | Project glossary auto-build | Memory | Fase 4 | escanea outputs aprobados, extrae candidatos, operador los promueve |
-| **FA-16** | Drift detection | Cost & quality | Fase 4 | compara ventanas 7d: approval_rate, confidence, contract_score, error_rate |
-| **FA-07** | Schedule & release context | Context | Fase 4 | lee env `NEXT_RELEASE_DATE`/`RELEASE_FREEZE_DATE`, inyecta policy activa |
-| **FA-25** | Browser bookmarklet | Workflow | Fase 4 | POST selección desde cualquier web al editor; JS descargable |
-| **FA-44** | Onboarding sandbox | Discoverability | Fase 4 | proyecto `__sandbox__` con 4 tickets + exec pre-aprobada + tour 4 pasos |
+| ID | Nombre | Categoría |
+|---|---|---|
+| N1 | Contract Validator | Execution enrichment |
+| N2 | Structured Output Renderer | Execution enrichment |
+| N3 | Ticket Fingerprint | Discoverability |
+| FA-01 | Cross-ticket retrieval (TF-IDF) | Context |
+| FA-02 | Live BD context injection | Context |
+| FA-03 | Codebase semantic search | Context |
+| FA-04 | Multi-LLM routing | Cost & quality |
+| FA-05 | Git context awareness | Context |
+| FA-06 | Test coverage map | Context |
+| FA-07 | Schedule & release context | Context |
+| FA-08 | Project constraints injection | Context |
+| FA-09 | RIDIOMA/glossary auto-injection | Context |
+| FA-10 | Personal style memory | Memory |
+| FA-11 | Anti-pattern registry | Memory |
+| FA-12 | Best-output few-shot | Memory |
+| FA-13 | Historical decisions DB | Memory |
+| FA-14 | Output graveyard search | Memory |
+| FA-15 | Project glossary auto-build | Memory |
+| FA-16 | Drift detection | Cost & quality |
+| FA-17 | Auto-typecheck del Developer | Execution enrichment |
+| FA-18 | Auto-execute SELECTs | Execution enrichment |
+| FA-19 | Output schema endpoint | Execution enrichment |
+| FA-20 | Citation linker | Execution enrichment |
+| FA-21 | Mermaid diagram render | Execution enrichment |
+| FA-22 | Output translator | Execution enrichment |
+| FA-23 | Multi-format export | Execution enrichment |
+| FA-24 | VS Code extension | Workflow |
+| FA-25 | Browser bookmarklet | Workflow |
+| FA-27 | Slack/Teams slash commands | Workflow |
+| FA-28 | PR review hook | Workflow |
+| FA-29 | CI failure auto-debug | Workflow |
+| FA-31 | Output cache por hash | Cost & quality |
+| FA-32 | Diff-based re-execution | Cost & quality |
+| FA-33 | Cost preview pre-Run | Cost & quality |
+| FA-35 | Confidence scoring | Cost & quality |
+| FA-36 | Speculative pre-execution | Cost & quality |
+| FA-37 | PII auto-masking | Compliance |
+| FA-39 | Audit HMAC chain | Compliance |
+| FA-40 | Right-to-be-forgotten (GDPR) | Compliance |
+| FA-41 | Data egress controls | Compliance |
+| FA-42 | Suggested next agent (markov) | Discoverability |
+| FA-43 | Operator coaching | Discoverability |
+| FA-44 | Onboarding sandbox | Discoverability |
+| FA-45 | Similar past executions | Discoverability |
+| FA-46 | Org-wide best practices feed | Discoverability |
+| FA-47 | Agent critic loop | Power-user |
+| FA-48 | Multi-step prompt refinement | Power-user |
+| FA-49 | Parallel exploration | Power-user |
+| FA-50 | Agent forking inline | Power-user |
+| FA-51 | Macros declarativas (DSL) | Power-user |
+| FA-52 | Webhooks out | Power-user |
 
-| **FA-39** | Audit immutability (HMAC chain) | Compliance | Fase 5 | hash chain por ticket; verify detecta tampering exacto; se sella al completar exec |
-| **FA-08** | Project constraints injection | Context | Fase 5 | tabla `project_constraints` trigger/keywords → obligaciones inyectadas en system prompt |
-| **FA-32** | Diff-based re-execution | Cost & quality | Fase 5 | compute_diff → si < 30% cambió, delta-prompt solo actualiza secciones afectadas |
-| **FA-10** | Personal style memory | Memory | Fase 5 | analiza outputs aprobados del operador → profile length/depth/format → nota calibración |
-| **FA-36** | Speculative pre-execution | Cost & quality | Fase 5 | background pre-run mientras el operador edita; claim instantáneo si hash coincide |
-| **FA-47** | Agent critic loop | Power-user | Fase 5 | `CriticAgent` desafía output sin re-escribirlo; endpoint `/critique` por exec |
-| **FA-40** | Right-to-be-forgotten (GDPR) | Compliance | Fase 5 | enmascara PII en outputs históricos por user_email; preserva estructura |
-| **FA-18** | Auto-execute SELECTs del output | Execution enrichment | Fase 5 | detecta ```sql en output, ejecuta read-only (mock en dev, PROJECT_DB en prod) |
-| **FA-41** | Data egress controls | Compliance | Fase 6 | policies por (proyecto, data_class, allowed_llms) → block/warn antes del LLM call |
-| **FA-49** | Parallel exploration | Power-user | Fase 6 | N execs simultáneas con modelos distintos (Haiku/Sonnet/Opus) |
-| **FA-48** | Multi-step prompt refinement | Power-user | Fase 6 | chain de N prompts (analizar → criticar → refinar) |
-| **FA-51** | Macros declarativas (DSL) | Power-user | Fase 6 | tabla `macros` con definitions JSON ejecutables |
-| **FA-29** | CI failure auto-debug | Workflow | Fase 6 | webhook recibe build log → DebugAgent dispara análisis |
-| **FA-28** | PR review hook | Workflow | Fase 6 | webhook recibe diff → PRReviewAgent comenta findings |
-| **FA-01** | Cross-ticket retrieval (TF-IDF) | Context | Fase 6 | embeddings TF-IDF + cosine; auto-index al completar exec |
-| **FA-02** | Live BD context injection | Context | Fase 6 | SELECT-only contra PROJECT_DB con timeout + PII mask + max_rows |
-| **FA-17** | Auto-typecheck del Developer | Execution enrichment | Fase 6 | extract code blocks → compile/tsc; bloquea Approve si falla |
-| **FA-27** | Slack/Teams slash commands | Workflow | Fase 6 | webhook `/slash/stacky` con HMAC; comandos run/status/approve/discard/list |
-| **FA-24** | VS Code extension | Workflow | Fase 6 | comandos: run, includeFile, includeSelection, openWorkbench; status bar |
-
-**Total: 52 / 52 moats activos** ✅ — catálogo completo cerrado.
-
-### Tablas activas
-**Fase 1-3:** `tickets`, `agent_executions`, `execution_logs`, `pack_runs`, `users`, `output_cache`, `anti_patterns`, `webhooks`, `decisions`, `translation_cache`
-**Fase 4:** `glossary_entries`, `glossary_candidates`, `drift_alerts`
-**Fase 5:** `audit_entries`, `project_constraints`, `user_style_profiles`, `spec_executions`
-**Fase 6:** `egress_policies`, `macros`, `execution_embeddings`
-
-### Agentes activos
-business · functional · technical · developer · qa · debug (FA-29) · pr_review (FA-28) · __critic__ (FA-47)
-
-### Flujo agent_runner actualizado (orden de operaciones)
-```
-1. PII mask blocks (FA-37)
-2. Cache lookup (FA-31)  ← devuelve inmediato si hit
-3. LLM router decide modelo (FA-04)
-4. compose_system_prompt:
-   a. Override (FA-50) | few-shot (FA-12) | anti-patterns (FA-11) |
-      decisions (FA-13) | constraints (FA-08) | style memory (FA-10)
-5. build_prompt + delta_prefix si re-run incremental (FA-32)
-6. copilot_bridge.invoke (modelo decidido por router)
-7. unmask PII en output (FA-37)
-8. contract validator (N1) + confidence (FA-35)
-9. persist + cache store (FA-31) + webhooks (FA-52) + audit seal (FA-39)
-```
+**Total: 52 / 52 moats** ✅
 
 ---
 

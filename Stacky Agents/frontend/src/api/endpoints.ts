@@ -1,13 +1,18 @@
 import { api, apiBase } from "./client";
 import type {
+  ActiveProjectResponse,
   AgentDefinition,
   AgentExecution,
   AgentType,
+  AgentWorkflowConfig,
   ContextBlock,
+  InitProjectPayload,
   PackDefinition,
   PackRun,
   PipelineBatchResponse,
   PipelineInferenceResult,
+  Project,
+  ProjectsResponse,
   Ticket,
   TicketFingerprint,
   TicketHierarchy,
@@ -485,4 +490,59 @@ export const SystemLogs = {
   },
   purge: (days: number) =>
     api.delete<{ deleted: number; older_than_days: number }>(`/api/logs/purge?days=${days}`),
+};
+
+// ── Multi-project ─────────────────────────────────────────────────────────────
+
+export const Projects = {
+  list: () => api.get<ProjectsResponse>("/api/projects"),
+  getActive: () => api.get<ActiveProjectResponse>("/api/active_project"),
+  setActive: (name: string) =>
+    api.post<{ ok: boolean; active: string; project: Project }>("/api/active_project", { name }),
+  init: (payload: InitProjectPayload) =>
+    api.post<{ ok: boolean; project: Project }>("/api/init_project", payload),
+  update: (name: string, payload: Partial<InitProjectPayload>) =>
+    api.patch<{ ok: boolean; project: Project }>(`/api/projects/${name}`, payload),
+  remove: (name: string) =>
+    api.delete<{ ok: boolean; deleted: string }>(`/api/projects/${name}`),
+  byName: (name: string) =>
+    api.get<{ ok: boolean; project: Project }>(`/api/projects/${name}`),
+  getAgents: (name: string) =>
+    api.get<{ ok: boolean; pinned_agents: string[] }>(`/api/projects/${name}/agents`),
+  putAgents: (name: string, pinnedAgents: string[]) =>
+    api.put<{ ok: boolean; pinned_agents: string[] }>(`/api/projects/${name}/agents`, { pinned_agents: pinnedAgents }),
+  getCredentials: (name: string) =>
+    api.get<{ ok: boolean; tracker_type: string; has_credentials: boolean; jira_user: string | null; ado_user: string | null; mantis_token_saved?: boolean; mantis_username_saved?: boolean; mantis_project_id?: string; mantis_protocol?: string }>(`/api/projects/${name}/credentials`),
+  launchVsCode: (name: string) =>
+    api.post<{ ok: boolean; port: number; already_running: boolean; launching?: boolean; workspace_root: string }>(`/api/projects/${name}/launch-vscode`),
+  trackerStates: (name: string) =>
+    api.get<{ ok: boolean; states: string[]; tracker_type: string }>(`/api/projects/${name}/tracker-states`),
+  getAgentWorkflow: (projectName: string, filename: string) =>
+    api.get<AgentWorkflowConfig & { ok: boolean }>(`/api/projects/${projectName}/agent-workflow/${encodeURIComponent(filename)}`),
+  putAgentWorkflow: (projectName: string, filename: string, workflow: Partial<AgentWorkflowConfig>) =>
+    api.put<AgentWorkflowConfig & { ok: boolean }>(`/api/projects/${projectName}/agent-workflow/${encodeURIComponent(filename)}`, workflow),
+};
+
+export interface MantisProject {
+  id: string;
+  name: string;
+  description?: string;
+  status?: string;
+}
+
+export interface MantisListParams {
+  url: string;
+  protocol?: "rest" | "soap";
+  token?: string;
+  username?: string;
+  password?: string;
+  verify_ssl?: boolean;
+}
+
+export const Mantis = {
+  listProjects: (params: MantisListParams) =>
+    api.post<{ ok: boolean; projects: MantisProject[]; error?: string }>(
+      "/api/mantis/projects",
+      params
+    ),
 };

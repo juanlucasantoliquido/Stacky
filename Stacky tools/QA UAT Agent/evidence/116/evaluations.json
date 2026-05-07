@@ -1,0 +1,51 @@
+{
+  "ok": true,
+  "ticket_id": 116,
+  "evaluations": [
+    {
+      "scenario_id": "P02",
+      "status": "blocked",
+      "reason": "RUNTIME_ERROR",
+      "assertions": []
+    },
+    {
+      "scenario_id": "P03",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "page_not_contains_text",
+          "target": "table_agenda_usu",
+          "expected": "lotes ajenos",
+          "actual": "HTTP Error 404.0 - Not Found\nSe ha quitado el recurso que está buscando, se le ha cambiado el nombre o no está disponible en estos momentos.\nCausas más probables:\nEl directorio o archivo especificado no existe en el servidor web.\nLa dirección URL contiene un error tipográfico.\nUn filtro o módulo personalizado, como URLScan, restringe el acceso al archivo.\nQué puede intentar:\nCree el contenido en el servidor web.\nRevise la dirección URL del explorador.\nCompruebe el registro de seguimiento de solicitudes erróneas para ver qué módulo llama a SetStatus. Para obtener más información, haga clic aquí.\nDetailed Error Information:\nModule\t   IIS Web Core\nNotification\t   MapRequestHandler\nHandler\t   StaticFile\nError Code\t   0x80070002\nRequested URL\t   http://localhost:35017/AgendaWeb/panel_agenda\nPhysical Path\t   N:\\GIT\\RS\\RSPACIFICO\\trunk\\OnLine\\AgendaWeb\\panel_agenda\nLogon Method\t   Forms\nLogon User\t   PACIFICO\nMore Information:\nEste error significa que el archivo o directorio no existe en el servidor. Cree un archivo o directorio y vuelva a realizar la solicitud.\n\nView more information »",
+          "status": "review",
+          "evidence_ref": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P03\\assertions_P03.json"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P04",
+      "status": "fail",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "panel_timer",
+          "expected": null,
+          "actual": false,
+          "status": "fail",
+          "evidence_ref": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P04\\assertions_P04.json"
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "invisible",
+          "target": "panel_timer_session",
+          "expected": null,
+          "actual": false,
+          "status": "pass",
+          "evidence_ref": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\P04\\assertions_P04.json"
+        }
+      ]
+    }
+  ]
+}

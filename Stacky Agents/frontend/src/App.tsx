@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import TeamScreen from "./pages/TeamScreen";
 import TicketBoard from "./pages/TicketBoard";
 import SystemLogsPage from "./pages/SystemLogsPage";
+import TopBar from "./components/TopBar";
 import { initPreferences } from "./services/preferences";
 import styles from "./App.module.css";
 
@@ -16,6 +17,8 @@ export default function App() {
 
   return (
     <div className={styles.appRoot}>
+      <TopBar onGoToTeam={() => setTab("team")} />
+
       {/* Tabs de navegación principal */}
       <nav className={styles.nav}>
         <button

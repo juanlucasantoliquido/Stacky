@@ -13,6 +13,7 @@ from .phase4 import bp as phase4_bp
 from .phase5 import bp as phase5_bp
 from .phase6 import bp as phase6_bp
 from .preferences import bp as preferences_bp
+from .projects import bp as projects_bp
 from .qa_uat import bp as qa_uat_bp
 from .similarity import bp as similarity_bp
 from .tickets import bp as tickets_bp
@@ -35,6 +36,7 @@ api_bp.register_blueprint(phase4_bp)
 api_bp.register_blueprint(phase5_bp)
 api_bp.register_blueprint(phase6_bp)
 api_bp.register_blueprint(preferences_bp)
+api_bp.register_blueprint(projects_bp)
 api_bp.register_blueprint(qa_uat_bp)
 
 

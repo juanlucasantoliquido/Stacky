@@ -17,11 +17,12 @@ from api import api_bp
 from config import config
 from db import init_db
 from log_streamer import reconcile_orphans
+from project_manager import get_active_project, get_project_config
 from services.ado_sync import (
     AdoApiError,
     AdoConfigError,
     purge_non_project_tickets,
-    sync_tickets,
+    sync_tickets as _ado_sync,
 )
 from services.stacky_logger import logger as stacky_logger
 
@@ -29,6 +30,85 @@ from services.stacky_logger import logger as stacky_logger
 _NO_LOG_BODY_PATHS: frozenset[str] = frozenset({"/api/logs/frontend"})
 # Paths excluded from HTTP logging entirely (health / high-frequency polls)
 _SKIP_LOG_PATHS: frozenset[str] = frozenset({"/api/health"})
+
+
+def _startup_sync(logger) -> None:
+    """
+    Sincroniza los tickets del proyecto activo al arrancar.
+    Soporta Azure DevOps, Jira y Mantis BT.
+    Si no hay proyecto configurado cae al comportamiento original
+    (ADO con config global del .env).
+    """
+    active = get_active_project()
+    tracker_type = "azure_devops"
+    tracker: dict = {}
+
+    if active:
+        cfg     = get_project_config(active) or {}
+        tracker = cfg.get("issue_tracker") or {}
+        tracker_type = tracker.get("type", "azure_devops")
+
+    if tracker_type == "jira":
+        from services.jira_sync import sync_tickets as jira_sync
+        from services.jira_client import JiraApiError, JiraConfigError
+        try:
+            result = jira_sync(tracker_config=tracker)
+            logger.info(
+                "sync Jira ok: project=%s fetched=%d created=%d updated=%d removed=%d",
+                result["project"], result["fetched"], result["created"],
+                result["updated"], result["removed"],
+            )
+        except JiraConfigError as e:
+            logger.warning("sync Jira saltado: %s", e)
+        except JiraApiError as e:
+            logger.warning("sync Jira falló: %s", e)
+        except Exception:
+            logger.exception("sync Jira error inesperado en arranque")
+
+    elif tracker_type == "mantis":
+        from services.mantis_sync import sync_tickets as mantis_sync
+        from services.mantis_client import MantisApiError, MantisConfigError
+        try:
+            result = mantis_sync(tracker_config=tracker)
+            logger.info(
+                "sync Mantis ok: project=%s fetched=%d created=%d updated=%d removed=%d",
+                result["project"], result["fetched"], result["created"],
+                result["updated"], result["removed"],
+            )
+        except MantisConfigError as e:
+            logger.warning("sync Mantis saltado: %s", e)
+        except MantisApiError as e:
+            logger.warning("sync Mantis falló: %s", e)
+        except Exception:
+            logger.exception("sync Mantis error inesperado en arranque")
+
+    else:
+        # Azure DevOps
+        target_project = (
+            tracker.get("project")
+            or config.ADO_PROJECT
+            or "Strategist_Pacifico"
+        ).strip()
+        purged = purge_non_project_tickets(target_project)
+        if purged:
+            logger.info("purgados %d tickets ajenos al proyecto %s", purged, target_project)
+        try:
+            from services.ado_client import AdoClient
+            kw: dict = {}
+            if tracker.get("organization") and tracker.get("project"):
+                kw = {"org": tracker["organization"], "project": tracker["project"]}
+            result = _ado_sync(client=AdoClient(**kw))
+            logger.info(
+                "sync ADO ok: project=%s fetched=%d created=%d updated=%d removed=%d",
+                result["project"], result["fetched"], result["created"],
+                result["updated"], result["removed"],
+            )
+        except AdoConfigError as e:
+            logger.warning("sync ADO saltado: %s", e)
+        except AdoApiError as e:
+            logger.warning("sync ADO falló: %s", e)
+        except Exception:
+            logger.exception("sync ADO error inesperado en arranque")
 
 
 def create_app() -> Flask:
@@ -50,26 +130,7 @@ def create_app() -> Flask:
     if stale_fixed:
         logger.info("startup recovery: corregidos %d tickets con status 'running' inconsistente", stale_fixed)
 
-    # Limpia restos de seeds/sandbox sin tocar tickets reales con ejecuciones.
-    target_project = (config.ADO_PROJECT or "Strategist_Pacifico").strip()
-    purged = purge_non_project_tickets(target_project)
-    if purged:
-        logger.info("purgados %d tickets ajenos al proyecto %s", purged, target_project)
-
-    # Sync inicial best-effort: si hay PAT y proyecto, traemos work items reales.
-    try:
-        result = sync_tickets()
-        logger.info(
-            "sync ADO ok: project=%s fetched=%d created=%d updated=%d removed=%d",
-            result["project"], result["fetched"], result["created"],
-            result["updated"], result["removed"],
-        )
-    except AdoConfigError as e:
-        logger.warning("sync ADO saltado: %s", e)
-    except AdoApiError as e:
-        logger.warning("sync ADO falló: %s", e)
-    except Exception:
-        logger.exception("sync ADO error inesperado en arranque")
+    _startup_sync(logger)
 
     # ── Structured logging middleware ─────────────────────────────────────
 

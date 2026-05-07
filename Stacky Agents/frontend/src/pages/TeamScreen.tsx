@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
-import type { VsCodeAgent } from "../types";
-import { Agents } from "../api/endpoints";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { VsCodeAgent, AgentExecution, Ticket } from "../types";
+import { Agents, Tickets } from "../api/endpoints";
 import { getPinnedAgents } from "../services/preferences";
+import { useRunningStatus } from "../hooks/useRunningStatus";
 import EmployeeCard from "../components/EmployeeCard";
 import TeamManageDrawer from "../components/TeamManageDrawer";
 import EmployeeEditDrawer from "../components/EmployeeEditDrawer";
@@ -18,6 +20,26 @@ export default function TeamScreen() {
     setPinned([...getPinnedAgents()]);
   }, []);
 
+  // Running status — quién está trabajando ahora
+  const { runningByTicket } = useRunningStatus();
+  const { data: tickets } = useQuery<Ticket[]>({
+    queryKey: ["tickets"],
+    queryFn: Tickets.list,
+    staleTime: 60_000,
+  });
+  const ticketById = useMemo<Map<number, Ticket>>(
+    () => new Map((tickets ?? []).map((t) => [t.id, t])),
+    [tickets]
+  );
+  // Map: inferred agent type → running execution (first match)
+  const runningByAgentType = useMemo<Map<string, AgentExecution>>(() => {
+    const map = new Map<string, AgentExecution>();
+    for (const exec of runningByTicket.values()) {
+      if (!map.has(exec.agent_type)) map.set(exec.agent_type, exec);
+    }
+    return map;
+  }, [runningByTicket]);
+
   useEffect(() => {
     Agents.vsCodeAgents()
       .then(setAllAgents)
@@ -27,6 +49,16 @@ export default function TeamScreen() {
 
   function agentByFilename(filename: string): VsCodeAgent | undefined {
     return allAgents.find((a) => a.filename === filename);
+  }
+
+  function inferAgentType(filename: string): string {
+    const f = filename.toLowerCase();
+    if (f.includes("business") || f.includes("negocio")) return "business";
+    if (f.includes("functional") || f.includes("funcional")) return "functional";
+    if (f.includes("technical") || f.includes("tecnic")) return "technical";
+    if (f.includes("dev") || f.includes("desarrollador")) return "developer";
+    if (f.includes("qa") || f.includes("test")) return "qa";
+    return "custom";
   }
 
   return (
@@ -55,15 +87,24 @@ export default function TeamScreen() {
           <EmptyState onAdd={() => setManageOpen(true)} />
         ) : (
           <div className={styles.grid}>
-            {pinned.map((filename) => (
-              <EmployeeCard
-                key={filename}
-                filename={filename}
-                agent={agentByFilename(filename)}
-                onEdit={(f) => setEditTarget(f)}
-                onRemoved={refresh}
-              />
-            ))}
+            {pinned.map((filename) => {
+              const agentType = inferAgentType(filename);
+              const runningExec = runningByAgentType.get(agentType) ?? null;
+              const runningAdoId = runningExec
+                ? (ticketById.get(runningExec.ticket_id)?.ado_id ?? null)
+                : null;
+              return (
+                <EmployeeCard
+                  key={filename}
+                  filename={filename}
+                  agent={agentByFilename(filename)}
+                  runningExecution={runningExec}
+                  runningTicketAdoId={runningAdoId}
+                  onEdit={(f) => setEditTarget(f)}
+                  onRemoved={refresh}
+                />
+              );
+            })}
           </div>
         )}
       </main>

@@ -18,6 +18,50 @@
   box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 0 1px var(--agent-color, var(--accent));
 }
 
+.cardRunning {
+  border-color: rgba(251,191,36,0.5);
+  box-shadow: 0 0 0 1px rgba(251,191,36,0.4), 0 2px 12px rgba(0,0,0,0.35);
+}
+
+/* ─── Running banner ──────────────────────── */
+.runningBanner {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fbbf24;
+  background: rgba(251,191,36,0.1);
+  border: 1px solid rgba(251,191,36,0.3);
+  border-radius: 5px;
+  padding: 3px 8px;
+  width: 100%;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.runningPulse {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fbbf24;
+  animation: pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.runningText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
 /* ─── Type badge ──────────────────────────── */
 .typeBadge {
   position: absolute;

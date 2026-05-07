@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWorkbench } from "../store/workbench";
 import { Projects } from "../api/endpoints";
-import type { Project } from "../types";
+import type { AgentWorkflowConfig, Project } from "../types";
 import NewProjectModal from "./NewProjectModal";
 import EditProjectModal from "./EditProjectModal";
 import styles from "./TopBar.module.css";
@@ -16,6 +16,7 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
   const isRunning = runningExecutionId != null;
   const setActiveProject = useWorkbench((s) => s.setActiveProject);
   const setPinnedAgents = useWorkbench((s) => s.setPinnedAgents);
+  const setAgentWorkflows = useWorkbench((s) => s.setAgentWorkflows);
   const queryClient = useQueryClient();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -29,11 +30,30 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
   const loadProjectAgents = useCallback(async (name: string) => {
     try {
       const res = await Projects.getAgents(name);
-      setPinnedAgents(res.pinned_agents ?? []);
+      const agents = res.pinned_agents ?? [];
+      setPinnedAgents(agents);
+      // Cargar workflow de cada agente y guardar en store
+      const wfMap: Record<string, AgentWorkflowConfig> = {};
+      await Promise.all(
+        agents.map(async (filename) => {
+          try {
+            const wf = await Projects.getAgentWorkflow(name, filename);
+            if (wf.ok) {
+              wfMap[filename] = {
+                allowed_states: wf.allowed_states ?? [],
+                transition_state: wf.transition_state ?? "",
+                requires_prior_output: wf.requires_prior_output ?? false,
+              };
+            }
+          } catch { /* ignore */ }
+        })
+      );
+      setAgentWorkflows(wfMap);
     } catch {
       setPinnedAgents([]);
+      setAgentWorkflows({});
     }
-  }, [setPinnedAgents]);
+  }, [setPinnedAgents, setAgentWorkflows]);
 
   async function loadProjects() {
     try {
@@ -90,7 +110,7 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
             </button>
           )}
           <img
-            src="/stacky-agents-logo.svg"
+            src="/stacky-logo.svg"
             alt="Stacky"
             className={styles.logoImg}
             width={22}

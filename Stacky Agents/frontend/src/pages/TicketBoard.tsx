@@ -6,6 +6,7 @@ import PipelineStatus from "../components/PipelineStatus";
 import TicketGraphView from "../components/TicketGraphView";
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { getPinnedAgents } from "../services/preferences";
+import { useWorkbench } from "../store/workbench";
 import styles from "./TicketBoard.module.css";
 
 // Infiere el tipo de agente desde el filename — misma lógica que EmployeeCard.
@@ -208,7 +209,13 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
 
   const isLoading = isFetching || inferMutation.isPending;
   const result = inference ?? (inferMutation.data ?? null);
-  const nextSuggested = result?.next_suggested ?? null;
+  const rawNextSuggested = result?.next_suggested ?? null;
+  // #7: Tasks nunca proponen Negocio — ya tienen análisis funcional
+  // #8: Épicas nunca proponen Negocio — tienen su propio botón Funcional
+  const isTask  = (ticket.work_item_type ?? "").toLowerCase() === "task";
+  const isEpic  = (ticket.work_item_type ?? "").toLowerCase() === "epic";
+  const nextSuggested =
+    ((isTask || isEpic) && rawNextSuggested === "business") ? "functional" : rawNextSuggested;
   const nextLabel = nextSuggested ? (NEXT_AGENT_LABELS[nextSuggested] ?? nextSuggested) : null;
 
   // Resuelve el filename del agente del equipo que corresponde al tipo sugerido.
@@ -470,7 +477,14 @@ export default function TicketBoard() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [onlyPending, setOnlyPending] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("tree");
+  const [viewMode, setViewMode] = useState<ViewMode>("graph");
+
+  // #3: Filtro de estados por agente activo
+  const vsCodeAgent = useWorkbench((s) => s.vsCodeAgent);
+  const agentWorkflows = useWorkbench((s) => s.agentWorkflows);
+  const activeAllowedStates: string[] = vsCodeAgent
+    ? (agentWorkflows[vsCodeAgent.filename]?.allowed_states ?? [])
+    : [];
 
   // Hook centralizado de estado running (fuente dual: stacky_status + executions polling)
   const { runningByTicket, runningTicketIds, getRunningTickets } = useRunningStatus();
@@ -523,6 +537,12 @@ export default function TicketBoard() {
       if (!selfMatch && !childMatch) return false;
     }
     if (onlyPending && CLOSED_STATES.includes(node.ado_state ?? "")) return false;
+    // #3: si el agente activo tiene allowed_states, filtrar por estado
+    if (activeAllowedStates.length > 0 && !activeAllowedStates.includes(node.ado_state ?? "")) {
+      // Pero si tiene hijos que sí aplican, mostrar el nodo padre igual
+      const childMatch = node.children.some((c) => activeAllowedStates.includes(c.ado_state ?? ""));
+      if (!childMatch) return false;
+    }
     return true;
   }
 
@@ -622,6 +642,17 @@ export default function TicketBoard() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Banner de filtro por agente activo */}
+      {activeAllowedStates.length > 0 && vsCodeAgent && (
+        <div style={{ background: "#1e3a5f", color: "#7dd3fc", padding: "6px 16px", fontSize: 13, display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid #2563eb44" }}>
+          <span>🤖 {vsCodeAgent.name}</span>
+          <span style={{ color: "#94a3b8" }}>mostrando solo estados:</span>
+          {activeAllowedStates.map((s) => (
+            <span key={s} style={{ background: "#2563eb33", border: "1px solid #3b82f6", borderRadius: 4, padding: "1px 8px" }}>{s}</span>
+          ))}
         </div>
       )}
 

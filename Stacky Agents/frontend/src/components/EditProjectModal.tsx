@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Projects, Mantis, type MantisProject, type MantisListParams } from "../api/endpoints";
-import type { InitProjectPayload, Project, TrackerType } from "../types";
+import type { AgentWorkflowConfig, InitProjectPayload, Project, TrackerType } from "../types";
 import styles from "./NewProjectModal.module.css";
 
 interface Props {
@@ -42,6 +42,12 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   const [mantisLoading, setMantisLoading] = useState(false);
   const [mantisLoadError, setMantisLoadError] = useState<string | null>(null);
 
+  // Workflow por agente
+  const [pinnedAgents, setPinnedAgents] = useState<string[]>([]);
+  const [trackerStates, setTrackerStates] = useState<string[]>([]);
+  const [workflows, setWorkflows] = useState<Record<string, AgentWorkflowConfig>>({});
+  const [savingWorkflow, setSavingWorkflow] = useState<string | null>(null);
+
   // Carga el usuario guardado para mostrarlo en el placeholder
   useEffect(() => {
     Projects.getCredentials(project.name)
@@ -61,7 +67,55 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
         }
       })
       .catch(() => {});
+
+    // Cargar agentes fijados
+    Projects.getAgents(project.name)
+      .then((res) => { if (res.ok) setPinnedAgents(res.pinned_agents ?? []); })
+      .catch(() => {});
+
+    // Cargar estados del tracker
+    Projects.trackerStates(project.name)
+      .then((res) => { if (res.ok) setTrackerStates(res.states ?? []); })
+      .catch(() => {});
   }, [project.name]);
+
+  // Cargar workflow de cada agente fijado
+  useEffect(() => {
+    if (pinnedAgents.length === 0) return;
+    pinnedAgents.forEach((filename) => {
+      Projects.getAgentWorkflow(project.name, filename)
+        .then((res) => {
+          if (res.ok) {
+            setWorkflows((prev) => ({
+              ...prev,
+              [filename]: {
+                allowed_states: res.allowed_states ?? [],
+                transition_state: res.transition_state ?? "",
+                requires_prior_output: res.requires_prior_output ?? false,
+              },
+            }));
+          }
+        })
+        .catch(() => {});
+    });
+  }, [project.name, pinnedAgents]);
+
+  function patchWorkflow(filename: string, key: keyof AgentWorkflowConfig, value: unknown) {
+    setWorkflows((prev) => ({
+      ...prev,
+      [filename]: { ...(prev[filename] ?? { allowed_states: [], transition_state: "", requires_prior_output: false }), [key]: value },
+    }));
+  }
+
+  async function saveWorkflow(filename: string) {
+    const wf = workflows[filename];
+    if (!wf) return;
+    setSavingWorkflow(filename);
+    try {
+      await Projects.putAgentWorkflow(project.name, filename, wf);
+    } catch { /* ignore */ }
+    finally { setSavingWorkflow(null); }
+  }
 
   async function loadMantisProjects() {
     const url      = (form.mantis_url || "").trim();
@@ -373,6 +427,90 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
           )}
 
           {error && <div className={styles.error}>{error}</div>}
+
+          {/* ── Workflow por agente ─────────────────────────────── */}
+          {pinnedAgents.length > 0 && (
+            <>
+              <hr className={styles.divider} />
+              <span className={styles.trackerHeading}>⚙️ Workflow por agente</span>
+              <p style={{ fontSize: 12, color: "var(--text-muted, #999)", marginTop: 4, marginBottom: 12 }}>
+                Configurá qué estados puede ver cada agente, a qué estado debe mover el ticket al terminar, y si requiere output anterior.
+              </p>
+              {pinnedAgents.map((filename) => {
+                const wf = workflows[filename] ?? { allowed_states: [], transition_state: "", requires_prior_output: false };
+                const label = filename.replace(/\.agent\.md$/i, "").replace(/_/g, " ");
+                return (
+                  <details key={filename} className={styles.advanced} style={{ marginBottom: 8 }}>
+                    <summary style={{ fontWeight: 600, cursor: "pointer" }}>🤖 {label}</summary>
+                    <div className={styles.advancedBody}>
+                      <label className={styles.labelSm}>Estados visibles (allowed_states)</label>
+                      <p style={{ fontSize: 11, color: "var(--text-muted, #999)", margin: "2px 0 6px" }}>
+                        Estados del tracker que este agente puede procesar. Uno por línea.
+                        {trackerStates.length > 0 && (
+                          <> Disponibles: <strong>{trackerStates.join(", ")}</strong></>
+                        )}
+                      </p>
+                      <textarea
+                        className={styles.input}
+                        rows={3}
+                        style={{ resize: "vertical", fontFamily: "monospace", fontSize: 12 }}
+                        value={wf.allowed_states.join("\n")}
+                        onChange={(e) =>
+                          patchWorkflow(filename, "allowed_states",
+                            e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))
+                        }
+                      />
+
+                      <label className={styles.labelSm} style={{ marginTop: 8 }}>Estado de transición (transition_state)</label>
+                      <p style={{ fontSize: 11, color: "var(--text-muted, #999)", margin: "2px 0 6px" }}>
+                        Estado al que se moverá el ticket cuando el agente termine.
+                      </p>
+                      {trackerStates.length > 0 ? (
+                        <select
+                          className={styles.input}
+                          value={wf.transition_state}
+                          onChange={(e) => patchWorkflow(filename, "transition_state", e.target.value)}
+                        >
+                          <option value="">— Sin transición automática —</option>
+                          {trackerStates.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className={styles.input}
+                          type="text"
+                          placeholder="Ej: In Progress"
+                          value={wf.transition_state}
+                          onChange={(e) => patchWorkflow(filename, "transition_state", e.target.value)}
+                        />
+                      )}
+
+                      <label className={styles.labelSm} style={{ marginTop: 8 }}>
+                        <input
+                          type="checkbox"
+                          style={{ marginRight: 6 }}
+                          checked={wf.requires_prior_output}
+                          onChange={(e) => patchWorkflow(filename, "requires_prior_output", e.target.checked)}
+                        />
+                        Requiere output del agente anterior (requires_prior_output)
+                      </label>
+
+                      <button
+                        type="button"
+                        className={styles.btnAccent}
+                        style={{ marginTop: 10, fontSize: 12, padding: "4px 14px" }}
+                        disabled={savingWorkflow === filename}
+                        onClick={() => saveWorkflow(filename)}
+                      >
+                        {savingWorkflow === filename ? "Guardando…" : "💾 Guardar workflow"}
+                      </button>
+                    </div>
+                  </details>
+                );
+              })}
+            </>
+          )}
         </div>
 
         <div className={styles.footer}>

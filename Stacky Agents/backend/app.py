@@ -25,6 +25,7 @@ from services.ado_sync import (
     sync_tickets as _ado_sync,
 )
 from services.stacky_logger import logger as stacky_logger
+from services.console_log_handler import install_console_log_handler
 
 # Endpoints whose request body should NOT be logged (may contain credentials)
 _NO_LOG_BODY_PATHS: frozenset[str] = frozenset({"/api/logs/frontend"})
@@ -120,6 +121,7 @@ def create_app() -> Flask:
     logger = logging.getLogger("stacky_agents.app")
 
     init_db()
+    install_console_log_handler()
     fixed = reconcile_orphans()
     if fixed:
         logger.info("reconciled %d orphan executions", fixed)

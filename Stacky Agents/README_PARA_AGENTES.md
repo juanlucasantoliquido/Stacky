@@ -16,14 +16,18 @@
 8. [Las 52 funcionalidades (moats)](#8-las-52-funcionalidades-moats)
 9. [Modelo de datos](#9-modelo-de-datos)
 10. [Variables de entorno](#10-variables-de-entorno)
-11. [Extensión VS Code](#11-extensión-vs-code)
-12. [Pendientes y backlog](#12-pendientes-y-backlog)
+11. [Multi-proyecto y Multi-tracker](#11-multi-proyecto-y-multi-tracker)
+12. [QA UAT Pipeline (Playwright)](#12-qa-uat-pipeline-playwright)
+13. [System Logs API](#13-system-logs-api)
+14. [Rollback de acciones ADO](#14-rollback-de-acciones-ado)
+15. [Extensión VS Code](#15-extensión-vs-code)
+16. [Pendientes y backlog](#16-pendientes-y-backlog)
 
 ---
 
 ## 1. Qué es Stacky Agents
 
-**Stacky Agents** es un workbench de agentes de IA para el flujo de desarrollo de tickets en Azure DevOps (ADO) del proyecto RSPacifico. Es un **producto separado** del Stacky Pipeline anterior.
+**Stacky Agents** es un workbench de agentes de IA para el flujo de desarrollo de tickets en múltiples issue trackers (Azure DevOps, Jira, Mantis BT). Es un **producto separado** del Stacky Pipeline anterior, con soporte multi-proyecto nativo.
 
 ### Diferencia fundamental con Stacky Pipeline
 
@@ -33,6 +37,8 @@
 | Orden de ejecución | Rígido (estados ADO) | Libre — cualquier agente, cualquier momento |
 | Contexto del agente | Fijo por diseño | Editable antes de cada Run |
 | Re-ejecutar | Revertir estado ADO | Click en "Clone & edit" |
+| Issue tracker | Solo Azure DevOps | ADO + Jira + Mantis BT |
+| Proyectos | Uno fijo por .env | Multi-proyecto, switch en 1 click |
 | Trazabilidad | Parcial (artefactos) | Total (cada exec en BD con prompt+output) |
 | Pantalla principal | Dashboard de auditoría | Team Screen — agentes como empleados |
 
@@ -61,19 +67,30 @@ El sistema NO es un pipeline automático. No tiene cron. No mueve estados de ADO
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  FRONTEND (React + Vite, :5173)                                 │
-│  Workbench de 3 columnas:                                       │
+│  Team Screen + Workbench de 3 columnas:                         │
 │  [Ticket + Agente + Packs] | [Editor de contexto] | [Output]   │
 └───────────────────────┬─────────────────────────────────────────┘
                         │ HTTPS + SSE
 ┌───────────────────────▼─────────────────────────────────────────┐
 │  BACKEND (Flask 3, :5050)                                       │
 │  agent_runner.py — orquesta 10 etapas por Run                  │
-│  Blueprints: agents, packs, executions, tickets, extras, ...   │
+│  Blueprints: agents, packs, executions, tickets, projects,     │
+│              preferences, logs, qa_uat, phase4-6, ...          │
 └───────┬──────────────────┬───────────────────┬──────────────────┘
         │                  │                   │
-   SQLite/Postgres    copilot_bridge.py     ADO REST API
-   (todas las tablas)  (LLM engine)        (tickets, comments)
+   SQLite/Postgres    copilot_bridge.py     Issue Tracker
+   (todas las tablas)  (LLM engine)        (ADO | Jira | Mantis)
 ```
+
+### Issue trackers soportados
+
+| Tracker | Auth | Protocolo |
+|---|---|---|
+| Azure DevOps | PAT | REST v7 |
+| Jira Cloud / Server DC | Basic (email + token) | REST v2 / v3 |
+| Mantis BT | API Token o usuario/contraseña | REST o SOAP |
+
+El tracker activo se determina por el **proyecto activo** (`/api/active_project`). Al cambiar de proyecto activo, los tickets del panel se sincronizan del nuevo tracker automáticamente.
 
 ### Rutas de archivos clave
 
@@ -81,25 +98,36 @@ El sistema NO es un pipeline automático. No tiene cron. No mueve estados de ADO
 Tools/Stacky/Stacky Agents/
 ├── README.md                     ← descripción general del producto
 ├── README_PARA_AGENTES.md        ← este archivo
-├── STACKY_AGENTS_COMPLETE.md     ← referencia exhaustiva de las 52 moats
-├── MejorasStackyAgent.md         ← mejoras pendientes aprobadas
+├── STACKY_AGENTS_COMPLETE.md     ← referencia exhaustiva (52 moats, endpoints, multi-tracker)
+├── MejorasStackyAgent.md         ← mejoras aprobadas y estado de implementación
 ├── backend/
-│   ├── app.py                    ← entrypoint Flask; registra blueprints, init_db
+│   ├── app.py                    ← entrypoint Flask; registra blueprints, init_db, startup_sync
 │   ├── agent_runner.py           ← núcleo: ejecuta agentes en threads, 10 etapas
-│   ├── agents/base.py            ← BaseAgent + RunContext; compose_system_prompt
+│   ├── project_manager.py        ← gestión multi-proyecto (ADO/Jira/Mantis)
+│   ├── agents/base.py            ← BaseAgent + RunContext; compose_system_prompt 6 fuentes
 │   ├── copilot_bridge.py         ← wrapper del LLM (mock/copilot)
 │   ├── log_streamer.py           ← buffer in-memory de logs por exec; SSE feed
 │   ├── prompt_builder.py         ← render_blocks(blocks) → markdown
 │   ├── db.py                     ← SQLAlchemy engine, init_db(), session_scope()
-│   ├── models.py                 ← ORM: Ticket, AgentExecution, ExecutionLog, PackRun, User
+│   ├── models.py                 ← ORM: Ticket, AgentExecution, ExecutionLog, PackRun, User, SystemLog
 │   ├── fingerprint.py            ← análisis de complejidad de tickets
 │   ├── contract_validator.py     ← validación de outputs por agente
-│   ├── agents/                   ← 8 clases de agentes (uno por archivo)
-│   ├── api/                      ← blueprints Flask (agents, executions, tickets, etc.)
+│   ├── agents/                   ← 8 clases: base, business, functional, technical,
+│   │                                developer, qa, debug, critic, custom
+│   ├── api/                      ← 20 blueprints Flask
+│   │   ├── agents.py / executions.py / tickets.py / packs.py
+│   │   ├── projects.py           ← /api/projects/* (multi-proyecto CRUD)
+│   │   ├── preferences.py        ← /api/preferences (avatares, nicknames, roles)
+│   │   ├── logs.py               ← /api/logs/* (system logs, export, stats, purge)
+│   │   ├── qa_uat.py             ← /api/qa-uat/run (pipeline Playwright)
+│   │   └── phase4/5/6 + extras + similarity + decisions + anti_patterns + webhooks + git + glossary
+│   ├── services/                 ← 50+ servicios de moats + trackers
+│   │   ├── ado_client.py / ado_sync.py
+│   │   ├── jira_client.py / jira_sync.py   ← Jira Cloud + Server/DC
+│   │   ├── mantis_client.py / mantis_sync.py ← Mantis BT REST + SOAP
+│   │   └── stacky_logger.py               ← logger estructurado async → system_logs
 │   ├── packs/                    ← definición de los 5 packs
-│   ├── services/                 ← servicios de negocio (retrieval, similarity, etc.)
-│   ├── .env                      ← variables de entorno (no commitear)
-│   └── requirements.txt
+│   └── projects/                 ← configuraciones por proyecto ({NOMBRE}/config.json)
 ├── frontend/                     ← React + Vite + TypeScript
 ├── vscode_extension/             ← extensión nativa de VS Code
 └── docs/                         ← documentación ampliada (00_VISION.md … 09_EVOLUTION_V2.md)
@@ -127,6 +155,75 @@ Cuando se ejecuta `POST /api/agents/run`, el `agent_runner.py` pasa por estas et
 ### Requisitos
 
 - Python 3.8+
+- Node.js 18+ (para frontend y VS Code extension)
+
+### Inicio rápido (Windows)
+
+```bat
+REM Doble click en start_dashboard.bat
+REM Hace automáticamente:
+REM   - Crea venv en backend/.venv
+REM   - pip install -r backend/requirements.txt
+REM   - Crea backend/.env desde .env.example si no existe
+REM   - Crea BD y seed de 5 tickets dummy
+REM   - npm install en frontend/
+REM   - Abre backend (:5050) y frontend (:5173) en ventanas separadas
+REM   - Abre http://localhost:5173 en el browser
+```
+
+### Manual
+
+```bash
+# Backend
+cd "Tools/Stacky/Stacky Agents/backend"
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+pip install -r requirements.txt
+python app.py                 # http://localhost:5050
+
+# Frontend (otra terminal)
+cd "Tools/Stacky/Stacky Agents/frontend"
+npm install
+npm run dev                   # http://localhost:5173
+```
+
+### Tests
+
+```bash
+cd backend
+pytest tests/
+# 40+ tests cubriendo los moats principales
+```
+
+### Onboarding sandbox
+
+```bash
+cd backend
+python scripts/seed_sandbox.py
+# Crea proyecto __sandbox__ con 4 tickets ficticios y 1 exec pre-aprobada
+```
+
+### Configurar un proyecto nuevo (multi-tracker)
+
+```bash
+# Azure DevOps
+curl -X POST http://localhost:5050/api/init_project \
+  -H "Content-Type: application/json" \
+  -d '{"name":"RSPACIFICO","tracker_type":"azure_devops","organization":"UbimiaPacifico","ado_project":"Strategist_Pacifico","pat":"TOKEN"}'
+
+# Jira
+curl -X POST http://localhost:5050/api/init_project \
+  -H "Content-Type: application/json" \
+  -d '{"name":"JIRA_PROJ","tracker_type":"jira","jira_url":"https://empresa.atlassian.net","jira_key":"B2IM","jira_user":"me@empresa.com","jira_token":"ATATT..."}'
+
+# Mantis BT
+curl -X POST http://localhost:5050/api/init_project \
+  -H "Content-Type: application/json" \
+  -d '{"name":"MANTIS_PROJ","tracker_type":"mantis","mantis_url":"https://mantis.empresa.com","mantis_project_id":"1","protocol":"rest","mantis_token":"TOKEN"}'
+
+# Activar proyecto
+curl -X POST http://localhost:5050/api/active_project -d '{"name":"RSPACIFICO"}'
+```
 - Node.js 18+ (para frontend y VS Code extension)
 
 ### Backend
@@ -744,21 +841,137 @@ El archivo `.env` vive en `backend/.env`. No committear. Ver `backend/.env.examp
 |---|---|---|
 | `FLASK_SECRET_KEY` | Secret de la app Flask | — |
 | `ANTHROPIC_API_KEY` | API key de Anthropic/Claude | — |
-| `ADO_ORG` | Organización de Azure DevOps | `UbimiaPacifico` |
-| `ADO_PROJECT` | Proyecto de ADO | `Strategist_Pacifico` |
+| `ADO_ORG` | Organización de Azure DevOps (override global) | `UbimiaPacifico` |
+| `ADO_PROJECT` | Proyecto de ADO (override global) | `Strategist_Pacifico` |
 | `ADO_PAT` | Personal Access Token de ADO | (desde `Tools/PAT-ADO`) |
-| `PROJECT_DB_URL` | Connection string BD del proyecto | — |
+| `JIRA_URL` | URL base de Jira (e.g. `https://empresa.atlassian.net`) | — |
+| `JIRA_USER` | Email del usuario Jira | — |
+| `JIRA_TOKEN` | API Token Jira o contraseña | — |
+| `MANTIS_URL` | URL base de Mantis BT | — |
+| `MANTIS_TOKEN` | API Token Mantis REST | — |
+| `MANTIS_PROJECT_ID` | ID numérico del proyecto Mantis | — |
+| `PROJECT_DB_URL` | Connection string BD del proyecto (FA-02) | — |
 | `PROJECT_DB_URL_{PROYECTO}` | Connection string por proyecto específico | — |
-| `GIT_REPO_ROOT` | Raíz del repositorio Git | 3 niveles arriba del backend |
+| `GIT_REPO_ROOT` | Raíz del repositorio Git (FA-05) | 3 niveles arriba del backend |
 | `AUDIT_SECRET` | Secret HMAC para el audit chain (FA-39) | `stacky-agents-audit-default-secret-change-in-prod` |
-| `SLASH_SECRET` | Secret HMAC para slash commands (FA-27) | — |
-| `NEXT_RELEASE_DATE` | Fecha próxima release (FA-07) | — |
-| `RELEASE_FREEZE_DATE` | Fecha de freeze (FA-07) | — |
+| `SLASH_TOKEN` | Secret HMAC para slash commands (FA-27) | `stacky-slash-default-secret` |
+| `NEXT_RELEASE_DATE` | Fecha próxima release ISO (FA-07) | — |
+| `RELEASE_FREEZE_DATE` | Fecha de code freeze ISO (FA-07) | — |
+| `SYSLOG_RETENTION_DAYS` | Retención de system_logs en días | `90` |
 | `MOCK_LLM` | Si `true`, no llama al LLM real | `false` |
 
 ---
 
-## 11. Extensión VS Code
+## 11. Multi-proyecto y Multi-tracker
+
+### Gestión de proyectos
+
+Cada proyecto vive en `backend/projects/{NOMBRE}/config.json` con su propio tracker, workspace y credenciales. Las credenciales sensibles van en `backend/projects/{NOMBRE}/auth/`.
+
+**Endpoints:**
+
+| Acción | Endpoint | Descripción |
+|---|---|---|
+| Listar proyectos | `GET /api/projects` | Lista todos los proyectos inicializados con estado |
+| Proyecto activo | `GET /api/active_project` | Proyecto activo actual |
+| Cambiar activo | `POST /api/active_project` | `{"name": "RSPACIFICO"}` — cambia y sincroniza tickets |
+| Crear proyecto | `POST /api/init_project` | Inicializa proyecto con tracker (ADO/Jira/Mantis) |
+| Actualizar | `PATCH /api/projects/<name>` | Actualiza configuración del proyecto |
+| Eliminar | `DELETE /api/projects/<name>` | Elimina proyecto y su configuración |
+
+### Sincronización automática al arranque
+
+`app.py` ejecuta `_startup_sync()` que detecta el tipo de tracker del proyecto activo y sincroniza los tickets automáticamente. Soporta:
+- **Azure DevOps**: via `services/ado_sync.py`
+- **Jira**: via `services/jira_sync.py` (Cloud v3 + Server/DC v2)
+- **Mantis BT**: via `services/mantis_sync.py` (REST + SOAP)
+
+Si no hay credenciales configuradas, el arranque continúa sin sincronizar (warning en logs).
+
+### Credenciales por proyecto
+
+Las credenciales se almacenan en `backend/projects/{NOMBRE}/auth/`:
+- ADO: `ado_auth.json` → `{"org": "...", "project": "...", "pat": "..."}`
+- Jira: `jira_auth.json` → `{"url": "...", "user": "...", "token": "..."}`
+- Mantis: `mantis_auth.json` → `{"url": "...", "token": "...", "project_id": "...", "protocol": "rest"}`
+
+---
+
+## 12. QA UAT Pipeline (Playwright)
+
+Ejecuta el pipeline de QA automatizado basado en Playwright desde la UI de Stacky Agents. Los resultados quedan en el historial de ejecuciones del ticket.
+
+### Uso
+
+```bash
+# Lanzar pipeline (dry-run por defecto)
+curl -X POST http://localhost:5050/api/qa-uat/run \
+  -H "Content-Type: application/json" \
+  -d '{"ticket_id": 70, "mode": "dry-run", "headed": false, "timeout_ms": 30000}'
+# → {"execution_id": 42, "stream_url": "/api/executions/42/logs/stream"}
+
+# Seguir logs en tiempo real
+curl -N http://localhost:5050/api/executions/42/logs/stream
+
+# Consultar resultado final
+curl http://localhost:5050/api/qa-uat/run/42
+# → {"pipeline_result": {"verdict": "PASS", ...}}
+```
+
+### Modos
+
+| Modo | Comportamiento |
+|---|---|
+| `dry-run` (default) | Ejecuta Playwright, genera evidencia, NO publica al tracker |
+| `publish` | Ejecuta y publica los resultados como comentario en el ticket |
+
+**Veredictos:** `PASS` / `FAIL` / `BLOCKED` / `MIXED`
+
+---
+
+## 13. System Logs API
+
+Todos los eventos del backend se persisten en `system_logs` via `stacky_logger.py` (async, no-bloqueante). Los logs incluyen: HTTP requests, lifecycle de execs, llamadas a trackers externos, errores.
+
+### Endpoints principales
+
+```bash
+# Listar logs (con filtros)
+GET /api/logs?level=ERROR&source=agent_runner&limit=50
+
+# Exportar como CSV
+GET /api/logs/export?format=csv&from=2026-01-01
+
+# Estadísticas por level/source
+GET /api/logs/stats
+
+# Purgar logs antiguos
+DELETE /api/logs/purge?days=30
+```
+
+**Filtros disponibles:** `level`, `source`, `action`, `execution_id`, `ticket_id`, `user`, `from`/`to` (ISO), `q` (full-text).
+
+Los datos sensibles (tokens, passwords, PAT) son **redactados automáticamente** antes de persistir.
+
+---
+
+## 14. Rollback de acciones ADO
+
+Si un agente publicó un comentario o tarea incorrecta en ADO, el operador puede revertirla sin perder el output en Stacky.
+
+```bash
+POST /api/executions/42/rollback-ado
+```
+
+Comportamiento:
+- Borra el comentario/task del tracker (ADO/Jira/Mantis)
+- Actualiza `verdict` a `"rolled_back"` en BD local
+- Preserva el output para auditoría
+- Registra la operación en system_logs
+
+---
+
+## 15. Extensión VS Code
 
 Ubicación: `Tools/Stacky/Stacky Agents/vscode_extension/`
 
@@ -768,6 +981,10 @@ cd vscode_extension
 npm install
 npm run compile
 # → genera out/extension.js
+
+# Empaquetar e instalar
+npx @vscode/vsce package
+code --install-extension stacky-agents-0.1.0.vsix
 ```
 
 **Comandos disponibles desde la command palette:**
@@ -778,28 +995,25 @@ npm run compile
 | `Stacky: Open Workbench` | Abre `http://localhost:5173` en el browser |
 | `Stacky: Include this file as context` | POST del archivo actual al inbox del backend |
 | `Stacky: Include selection as context` | POST del texto seleccionado al inbox |
-| `Stacky: Set active ticket` | Input del ADO ID; persiste en `globalState` |
+| `Stacky: Set active ticket` | Input del ADO/Jira/Mantis ID; persiste en `globalState` |
 
 **Status bar:** muestra `◆ Stacky: ADO-1234` (bottom-left). Click → set active ticket.
 
 **Menú contextual:** click derecho en editor → "Include this file" / "Include selection".
 
+**Configuración** (settings.json):
+- `stackyAgents.apiBase` — URL del backend (default: `http://localhost:5050`)
+- `stackyAgents.userEmail` — email para auth
+
 ---
 
-## 12. Pendientes y backlog
+## 16. Pendientes y backlog
 
-Las siguientes funcionalidades están diseñadas pero no implementadas:
-
-| ID | Feature | Descripción |
+| ID | Feature | Estado |
 |---|---|---|
-| FA-34 | Token/cost budgets | Límites de gasto por usuario/proyecto con enforcement |
-| FA-38 | Prompt injection detection | Detección heurística + clasificador de inyecciones |
-| FA-30 | CLI `stacky-agents` | `pipx install stacky-agents-cli` con `run`, `status`, `tail`, `approve` |
-
-### Mejoras aprobadas pendientes (MejorasStackyAgent.md)
-
-1. **Rollback de acciones:** botón para borrar comentarios o tickets creados por un agente en ADO si se equivocó.
-2. **Visual de trabajo activo:** cuando un agente está ejecutando un ticket, mostrar animación visible y estado en movimiento en la UI.
+| FA-34 | Token/cost budgets con enforcement | Backlog — diseñado, tabla `budgets` pendiente |
+| FA-38 | Prompt injection detection | Backlog — heurísticas diseñadas |
+| FA-30 | CLI `stacky-agents` | Backlog — `pipx install stacky-agents-cli` |
 
 ---
 

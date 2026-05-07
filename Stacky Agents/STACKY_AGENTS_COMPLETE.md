@@ -433,6 +433,47 @@ El backend corre en `http://localhost:5050`. Todos los endpoints bajo `/api`.
 | GET | `/api/users/:email/style-profile` | `?agent_type=` → perfil de estilo |
 | POST | `/api/users/:email/style-profile/compute` | `{agent_type}` → computa y persiste |
 
+### Multi-proyecto
+| Método | Path | Descripción |
+|---|---|---|
+| GET | `/api/projects` | Lista todos los proyectos |
+| GET | `/api/active_project` | Proyecto activo |
+| POST | `/api/active_project` | Cambiar proyecto activo: `{"name": "RSPACIFICO"}` |
+| POST | `/api/init_project` | Inicializar nuevo proyecto (ADO/Jira/Mantis) |
+| PATCH | `/api/projects/<name>` | Actualizar configuración del proyecto |
+| DELETE | `/api/projects/<name>` | Eliminar proyecto |
+| GET | `/api/projects/<name>/pinned-agents` | Agentes fijados del proyecto |
+| PUT | `/api/projects/<name>/pinned-agents` | Actualizar agentes fijados |
+| GET | `/api/projects/<name>/agent-workflow` | Config de workflow del proyecto |
+| PUT | `/api/projects/<name>/agent-workflow` | Actualizar workflow |
+
+### Preferences
+| Método | Path | Descripción |
+|---|---|---|
+| GET | `/api/preferences` | Devuelve preferencias completas del operador |
+| PUT | `/api/preferences` | Merge de preferencias (pinnedAgents, avatares, etc.) |
+
+### QA UAT Pipeline
+| Método | Path | Descripción |
+|---|---|---|
+| POST | `/api/qa-uat/run` | Lanza pipeline Playwright para un ticket |
+| GET | `/api/qa-uat/run/<execution_id>` | Consulta resultado del pipeline |
+
+### System Logs
+| Método | Path | Descripción |
+|---|---|---|
+| GET | `/api/logs` | Lista logs con filtros + paginación (max 1000) |
+| GET | `/api/logs/<id>` | Log entry completa |
+| GET | `/api/logs/export` | Exporta como JSON o CSV (max 10.000 filas) |
+| POST | `/api/logs/frontend` | Ingesta error JS del navegador |
+| DELETE | `/api/logs/purge` | Elimina logs más viejos que N días |
+| GET | `/api/logs/stats` | Conteo por level y source |
+
+### Rollback ADO
+| Método | Path | Descripción |
+|---|---|---|
+| POST | `/api/executions/:id/rollback-ado` | Revierte la publicación ADO de la exec |
+
 ---
 
 ## 6. Las 52 funcionalidades (moats)
@@ -1036,12 +1077,19 @@ El cliente reconecta automáticamente con `Last-Event-ID`.
 | `DATABASE_URL` | `sqlite:///./data/stacky_agents.db` | URL de la BD |
 | `LLM_BACKEND` | `mock` | `mock` (sin LLM) o `copilot` |
 | `LLM_MODEL` | `claude-sonnet-4-6` | Modelo default |
-| `ADO_ORG` | `` | Organización ADO (e.g. `UbimiaPacifico`) |
-| `ADO_PROJECT` | `` | Proyecto ADO (e.g. `Strategist_Pacifico`) |
+| `ADO_ORG` | `` | Organización ADO (e.g. `UbimiaPacifico`) — override global |
+| `ADO_PROJECT` | `` | Proyecto ADO — override global |
 | `ADO_PAT` | `` | Personal Access Token de ADO |
+| `JIRA_URL` | `` | URL base Jira (e.g. `https://empresa.atlassian.net`) |
+| `JIRA_USER` | `` | Email del usuario Jira |
+| `JIRA_TOKEN` | `` | API Token Jira o contraseña |
+| `MANTIS_URL` | `` | URL base Mantis BT |
+| `MANTIS_TOKEN` | `` | API Token Mantis REST |
+| `MANTIS_PROJECT_ID` | `` | ID numérico del proyecto Mantis |
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | CORS whitelist (CSV) |
 | `PORT` | `5050` | Puerto del backend |
 | `LOG_LEVEL` | `INFO` | Nivel de log (DEBUG/INFO/WARN/ERROR) |
+| `SYSLOG_RETENTION_DAYS` | `90` | Retención de system_logs en días |
 | `AUDIT_SECRET` | `stacky-agents-audit-default-secret-change-in-prod` | HMAC key para audit chain |
 | `SLASH_TOKEN` | `stacky-slash-default-secret` | Token para slash commands |
 | `NEXT_RELEASE_DATE` | `` | Fecha ISO de próxima release (FA-07) |
@@ -1201,7 +1249,269 @@ code --install-extension stacky-agents-0.1.0.vsix
 
 ---
 
-## 13. Integración externa
+## 13. Multi-proyecto y Multi-tracker
+
+### Gestión multi-proyecto
+
+Stacky Agents soporta múltiples proyectos/clientes de forma nativa. Cada proyecto vive en `backend/projects/{NOMBRE}/config.json` con su propio issue tracker, workspace y credenciales.
+
+**Endpoints:**
+
+| Método | Path | Descripción |
+|---|---|---|
+| GET | `/api/projects` | Lista todos los proyectos inicializados |
+| GET | `/api/active_project` | Proyecto activo actual |
+| POST | `/api/active_project` | Cambiar proyecto activo: `{"name": "RSPACIFICO"}` |
+| POST | `/api/init_project` | Crear/inicializar proyecto nuevo |
+| PATCH | `/api/projects/<name>` | Actualizar configuración |
+| DELETE | `/api/projects/<name>` | Eliminar proyecto |
+| GET | `/api/projects/<name>/pinned-agents` | Agentes fijados del proyecto |
+| PUT | `/api/projects/<name>/pinned-agents` | Actualizar agentes fijados |
+| GET | `/api/projects/<name>/agent-workflow` | Config de workflow del proyecto |
+| PUT | `/api/projects/<name>/agent-workflow` | Actualizar workflow |
+
+**Body de POST /api/init_project (Azure DevOps):**
+```json
+{
+  "name": "RSPACIFICO",
+  "display_name": "RS Pacífico",
+  "workspace_root": "N:/GIT/RS/RSPacifico/trunk",
+  "tracker_type": "azure_devops",
+  "organization": "UbimiaPacifico",
+  "ado_project": "Strategist_Pacifico",
+  "area_path": "Strategist_Pacifico\\AgendaWeb",
+  "pat": "TOKEN_AQUI"
+}
+```
+
+**Body de POST /api/init_project (Jira):**
+```json
+{
+  "name": "PROYECTO_JIRA",
+  "tracker_type": "jira",
+  "jira_url": "https://empresa.atlassian.net",
+  "jira_key": "B2IM",
+  "api_version": "3",
+  "verify_ssl": true,
+  "jira_user": "me@company.com",
+  "jira_token": "ATATT..."
+}
+```
+
+**Body de POST /api/init_project (Mantis BT):**
+```json
+{
+  "name": "PROYECTO_MANTIS",
+  "tracker_type": "mantis",
+  "mantis_url": "https://mantis.empresa.com",
+  "mantis_project_id": "1",
+  "protocol": "rest",
+  "mantis_token": "API_TOKEN"
+}
+```
+
+**Comportamiento al cambiar de proyecto activo:**
+- Los tickets del panel se sincronizan del nuevo tracker
+- Las preferencias (avatares, nicknames) se mantienen globales
+- El sistema registra el switch en system_logs
+
+---
+
+### Soporte multi-tracker
+
+Stacky Agents soporta tres issue trackers de forma nativa. El tracker activo se determina por el proyecto activo.
+
+#### Azure DevOps
+- Autenticación: PAT (Personal Access Token)
+- Sync: estado, prioridad, título, descripción, área
+- Publish: POST /api/executions/:id/publish-to-ado → comentario o tarea
+
+#### Jira (Cloud y Server/Data Center)
+- Soporta Jira Cloud (API v3) y Jira Server/DC (API v2)
+- Autenticación: Basic (usuario + token/contraseña)
+- SSL: configurable (`verify_ssl`), compatible con certificados corporativos via `truststore`
+- Credenciales: env `JIRA_URL/JIRA_USER/JIRA_TOKEN` o `projects/{NAME}/auth/jira_auth.json`
+- Sync: mapeo de estados Jira → estados internos; prioridades Jira → escala 1-5
+
+#### Mantis BT
+- Soporta Mantis BT 2.0+ (REST) y versiones antiguas (SOAP/MantisConnect)
+- Autenticación REST: API Token por header `Authorization`
+- Autenticación SOAP: usuario + contraseña via XMLRPC
+- Credenciales: env `MANTIS_URL/MANTIS_TOKEN/MANTIS_PROJECT_ID` o `auth/mantis_auth.json`
+- Issues resueltos/cerrados (status ≥ 80) se filtran del panel de tickets
+
+#### Variables de entorno adicionales por tracker
+
+| Variable | Tracker | Descripción |
+|---|---|---|
+| `JIRA_URL` | Jira | URL base (e.g. `https://empresa.atlassian.net`) |
+| `JIRA_USER` | Jira | Email del usuario |
+| `JIRA_TOKEN` | Jira | API Token o contraseña |
+| `MANTIS_URL` | Mantis | URL base de la instancia |
+| `MANTIS_TOKEN` | Mantis | API Token REST |
+| `MANTIS_PROJECT_ID` | Mantis | ID numérico del proyecto |
+
+---
+
+## 14. QA UAT Pipeline (Playwright)
+
+Stacky Agents incluye un blueprint para ejecutar el pipeline de QA UAT basado en Playwright directamente desde la UI, con los resultados integrados en el historial de ejecuciones.
+
+### Endpoints
+
+| Método | Path | Descripción |
+|---|---|---|
+| POST | `/api/qa-uat/run` | Lanza el pipeline para un ticket. HTTP 202. |
+| GET | `/api/qa-uat/run/<execution_id>` | Consulta resultado (con output JSON parseado). |
+
+### Body de POST /api/qa-uat/run
+
+```json
+{
+  "ticket_id": 70,
+  "mode": "dry-run",
+  "headed": false,
+  "timeout_ms": 30000
+}
+```
+
+| Campo | Tipo | Default | Descripción |
+|---|---|---|---|
+| `ticket_id` | int | requerido | ADO/Jira/Mantis work item ID |
+| `mode` | string | `"dry-run"` | `"dry-run"` o `"publish"` |
+| `headed` | bool | `false` | Playwright headed (visible) |
+| `timeout_ms` | int | `30000` | Timeout por paso (1000-300000 ms) |
+
+### Respuesta
+
+```json
+{
+  "execution_id": 42,
+  "ticket_id": 70,
+  "mode": "dry-run",
+  "stream_url": "/api/executions/42/logs/stream"
+}
+```
+
+### Veredictos posibles
+
+| Verdict | Significado |
+|---|---|
+| `PASS` | Todos los tests pasaron |
+| `FAIL` | Al menos un test falló |
+| `BLOCKED` | El pipeline no pudo ejecutar (error de entorno) |
+| `MIXED` | Resultados mixtos en múltiples escenarios |
+
+### Comportamiento
+
+- Los logs del pipeline se streaman en tiempo real via SSE: `GET /api/executions/:id/logs/stream`
+- Al completar, `status` pasa a `"completed"` o `"failed"`
+- El `output` contiene el JSON completo del pipeline summary
+- `mode="publish"` publica los resultados directamente al ticket en el tracker
+- **Seguridad:** nunca modifica el estado del ticket (solo `mode="publish"` puede comentar)
+- El pipeline se ejecuta en un thread background; nunca bloquea el servidor
+
+---
+
+## 15. System Logs API
+
+Stacky Agents registra todos los eventos del sistema en la tabla `system_logs` via el módulo `stacky_logger.py`. Los logs son async, no-bloqueantes y con retención configurable.
+
+### Endpoints
+
+| Método | Path | Descripción |
+|---|---|---|
+| GET | `/api/logs` | Lista logs con filtros + paginación (max 1000/llamada) |
+| GET | `/api/logs/<id>` | Log entry completa |
+| GET | `/api/logs/export` | Exporta como JSON o CSV (max 10.000 filas) |
+| POST | `/api/logs/frontend` | Ingesta error/evento del navegador (cuerpo NO logueado) |
+| DELETE | `/api/logs/purge` | Elimina logs más viejos que N días |
+| GET | `/api/logs/stats` | Conteo agregado por level y source |
+
+### Filtros de GET /api/logs
+
+| Query param | Descripción |
+|---|---|
+| `level` | DEBUG / INFO / WARNING / ERROR / CRITICAL |
+| `source` | Substring del source (e.g. `agent_runner`) |
+| `action` | Substring del action (e.g. `agent_started`) |
+| `execution_id` | Filtra por exec específica |
+| `ticket_id` | Filtra por ticket |
+| `user` | Email del operador |
+| `request_id` | UUID de request HTTP |
+| `from` / `to` | Rango de fechas ISO |
+| `q` | Búsqueda full-text en action, source, input, output, error |
+| `limit` / `offset` | Paginación (max 1000) |
+
+### Tipos de log registrados
+
+El `stacky_logger` escribe automáticamente:
+- Cada request/response HTTP (salvo `/api/health`)
+- Cada exec: start, etapas, completion
+- Cada error/excepción del backend
+- Llamadas a servicios externos (ADO, Jira, Mantis, Git)
+- Eventos de integración (webhooks, slash commands)
+- Switches de proyecto activo
+
+### Configuración
+
+```env
+SYSLOG_RETENTION_DAYS=90     # default 90 días
+```
+
+**Datos sensibles:** las claves `password`, `token`, `pat`, `secret`, `authorization`, `api_key` son automáticamente redactadas antes de persistir.
+
+---
+
+## 16. Preferences API
+
+Persiste las preferencias de personalización del operador en `data/preferences.json`.
+
+### Endpoints
+
+| Método | Path | Descripción |
+|---|---|---|
+| GET | `/api/preferences` | Devuelve objeto completo de preferencias |
+| PUT | `/api/preferences` | Hace merge del payload (claves permitidas solamente) |
+
+### Claves permitidas
+
+| Clave | Tipo | Descripción |
+|---|---|---|
+| `pinnedAgents` | `string[]` | Agentes fijados en el Team Screen |
+| `agentAvatars` | `Record<string, string>` | Avatar por agent_type (ID de galería o base64) |
+| `agentNicknames` | `Record<string, string>` | Apodo por agent_type |
+| `agentRoles` | `Record<string, string>` | Rol personalizado por agent_type |
+
+### Ejemplo
+
+```http
+PUT /api/preferences
+{"pinnedAgents": ["technical", "developer", "qa"], "agentNicknames": {"technical": "Archi"}}
+```
+
+---
+
+## 17. Rollback de acciones ADO
+
+El sistema soporta revertir comentarios o tasks creados en ADO por un agente.
+
+### Endpoint
+
+| Método | Path | Descripción |
+|---|---|---|
+| POST | `/api/executions/:id/rollback-ado` | Elimina el comentario/tarea ADO generado por la exec |
+
+### Comportamiento
+
+- Solo aplica a execs con `verdict="approved"` que hayan publicado a ADO
+- El endpoint borra el comentario o task del ticket ADO y actualiza el `verdict` a `"rolled_back"` en BD
+- El output de la exec se preserva en la BD local para auditoría
+- Loguea la operación en system_logs con el operador que ejecutó el rollback
+
+---
+
+## 18. Integración externa
 
 ### Webhooks de salida (FA-52)
 
@@ -1296,36 +1606,54 @@ curl -X POST /api/pr/review-webhook \
 ## Resumen rápido para onboarding de otro agente
 
 ```
-STACKY AGENTS — FACTS SHEET
+STACKY AGENTS — FACTS SHEET (actualizado 2026-05-06)
 
-Qué es: workbench de IA para tickets ADO. El humano decide cuándo correr cada agente.
+Qué es: workbench de IA para tickets (ADO/Jira/Mantis). El humano decide cuándo
+        correr cada agente. No hay cron, no hay estados automáticos.
 
 Tech stack:
   - Backend: Flask 3.x + SQLAlchemy + SQLite (dev) / Postgres (prod)
   - Frontend: React 18 + Vite + Zustand + TanStack Query
-  - LLM: mock por default; conectar copilot_bridge.py al engine real para prod
+  - LLM: mock por default; conectar copilot_bridge.py al engine real en prod
+  - LLM compatible: Claude Haiku 4.5 / Sonnet 4.6 / Opus 4.7 (auto-routing)
 
-8 agentes: business | functional | technical | developer | qa | debug | pr_review | __critic__
+Issue trackers soportados: Azure DevOps | Jira (Cloud + Server/DC) | Mantis BT (REST + SOAP)
+Multi-proyecto: sí — switch en 1 click desde la UI
 
+8 agentes: business | functional | technical | developer | qa |
+           debug | pr_review | __critic__
 5 packs: desarrollo | qa-express | discovery | hotfix | refactor
+52 moats activos: 8 categorías (ver STACKY_AGENTS_COMPLETE.md §6)
 
-52 moats activos: 8 categorías (context / memory / enrichment / workflow /
-                  cost-quality / compliance / discoverability / power-user)
+Flujo de un Run (10 etapas):
+  PII mask → cache lookup → LLM router → egress check →
+  compose_system_prompt (6 fuentes: override/few-shot/anti-patterns/decisions/constraints/style) →
+  build_prompt (+ delta_prefix si re-run incremental) →
+  LLM call → unmask PII → validate (contract + confidence) →
+  persist + cache store + webhooks fire + audit seal + TF-IDF index
 
-Flujo de un Run (10 etapas): PII mask → cache → LLM router → egress check →
-  compose_system_prompt (6 fuentes) → build_prompt → LLM call →
-  unmask PII → validate + confidence → persist + seal + index
+Para correr:
+  cd "Tools/Stacky Agents" && doble click start_dashboard.bat (Windows)
+  Backend manual: cd backend && python app.py    # http://localhost:5050
+  Frontend manual: cd frontend && npm run dev    # http://localhost:5173
 
-Para correr: cd "Tools/Stacky Agents" && doble click start_dashboard.bat
 Para tests: cd backend && pytest tests/
-Para onboarding: python scripts/seed_sandbox.py
+Para onboarding: cd backend && python scripts/seed_sandbox.py
+Para QA UAT:     POST /api/qa-uat/run {"ticket_id": 70, "mode": "dry-run"}
 
 Endpoints principales:
-  POST /api/agents/run          → dispara una exec
-  GET  /api/executions/:id/logs/stream  → SSE de logs
-  POST /api/executions/:id/approve      → aprueba
-  POST /api/translate           → traduce output
-  POST /api/ci/failure-webhook  → CI debug automático
+  POST /api/agents/run                   → dispara una exec (202, background thread)
+  GET  /api/executions/:id/logs/stream   → SSE de logs en vivo
+  POST /api/executions/:id/approve       → aprueba
+  POST /api/executions/:id/publish-to-ado → publica al ticket
+  POST /api/executions/:id/rollback-ado  → revierte publicación ADO
+  POST /api/translate                    → traduce output
+  POST /api/ci/failure-webhook           → CI debug automático
+  POST /api/qa-uat/run                   → QA UAT pipeline Playwright
+  GET  /api/logs                         → system logs con filtros
+  GET  /api/projects                     → lista de proyectos
+  POST /api/active_project               → cambia proyecto activo
 
 Variables críticas: LLM_BACKEND, ADO_PAT, AUDIT_SECRET, DATABASE_URL
+Variables multi-tracker: JIRA_URL/JIRA_USER/JIRA_TOKEN, MANTIS_URL/MANTIS_TOKEN
 ```

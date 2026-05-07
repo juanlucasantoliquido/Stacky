@@ -1,0 +1,209 @@
+<!-- stacky-qa-uat:run id="0f1ba0bd-e487-4410-a50d-2629f73fafa6" hash="b4df9f8d20336ec99e008efbdf7aeb1548439b4ecc24272316f8886016bf8b4d" -->
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 13px; color: #1a1a1a;">
+
+<h2 style="margin: 0 0 8px; font-size: 16px; color: #a4262c; border-bottom: 2px solid #a4262c; padding-bottom: 6px;">
+  🤖 QA UAT — ADO-116 &nbsp;
+  <span style="background: #a4262c; color: #fff; border-radius: 4px; padding: 2px 10px; font-size: 13px;">❌ FAIL</span>
+</h2>
+
+<p style="margin: 4px 0 12px; color: #555; font-size: 12px;">
+  Run: <code>0f1ba0bd-e487-4410-a50d-2629f73fafa6</code> &nbsp;|&nbsp;
+  Fecha: 2026-05-07 &nbsp;|&nbsp;
+  Agente: UserInterfaceQAFreeForm v1.6.0 &nbsp;|&nbsp;
+  Entorno: localhost:35017 (IIS Express / trunk)
+</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #a4262c;">⚠️ BUG CRÍTICO — CA-08 FAIL: EsInstanciaPacifico() no implementado</h3>
+<div style="background: #fdf3f3; border-left: 4px solid #a4262c; padding: 10px 14px; margin-bottom: 14px; border-radius: 2px;">
+  <p style="margin: 0 0 8px;"><strong>Hallazgo:</strong> El contador <em>"Promesas a Vencer en 7 días:"</em> es visible para usuarios de instancias no-Pacífico (CA-08 especifica que NO debe aparecer).</p>
+  <p style="margin: 0 0 8px;"><strong>Evidencia directa:</strong></p>
+  <ul style="margin: 0 0 8px; padding-left: 20px;">
+    <li><code>PACIFICO</code> → counter visible, valor <strong>0</strong> ✅ (correcto: Pacífico debe ver el contador)</li>
+    <li><code>SANCHEZRO</code> → counter visible, valor <strong>0</strong> ❌ (<strong>no-Pacífico NO debe ver el contador</strong>)</li>
+  </ul>
+  <p style="margin: 0 0 8px;"><strong>Causa raíz en código</strong> (<code>trunk/OnLine/AIS.PR.UI.Web.Controls/AISMenu.cs</code>, línea 584):</p>
+  <pre style="background: #f8f0f0; padding: 8px; border-radius: 3px; font-size: 12px; overflow-x: auto;">
+// Condición actual (INCORRECTA):
+if (!EsJudicial)   // ← renderiza para TODOS los usuarios no-judiciales
+
+// Condición requerida:
+if (!EsJudicial &amp;&amp; EsInstanciaPacifico(usuario.CodUsuario))
+  </pre>
+  <p style="margin: 0;"><strong>El método <code>EsInstanciaPacifico()</code> mencionado en el análisis técnico y en el comentario de implementación no existe en el archivo.</strong> La búsqueda exhaustiva del código confirma su ausencia.</p>
+</div>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resumen de ejecución (pipeline Playwright)</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 12px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Descripción</th>
+      <th style="text-align: center; padding: 6px 10px; border: 1px solid #ddd;">Estado pipeline</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Diagnóstico</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="background: #fff8e1;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P01</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Conteo ventana 7 días</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #c19c00; font-weight: bold;">⚠️ BLOCKED</span> (no generado)</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">El compilador no generó spec: oráculo <code>count_eq="COUNT query"</code> no es un valor numérico resoluble. Sin datos de promesas en ventana para PACIFICO hoy (2026-05-06): las 2 promesas PABLO vencieron el 2026-05-05.</td>
+    </tr>
+    <tr style="background: #fff8e1;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P02</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Unidad promesa (no lote)</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #c19c00; font-weight: bold;">⚠️ BLOCKED</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>net::ERR_ABORTED</code> en <code>waitForURL(/FrmAgenda/)</code>. Usuario PACIFICO redirigido a URL no contemplada por el test (posible cambio de contraseña o flujo específico de primer login). El lote de referencia <code>10003269210997120010</code> no está asignado a PACIFICO.</td>
+    </tr>
+    <tr style="background: #e8f5e9;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P03</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Aislamiento por usuario</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #107c10; font-weight: bold;">✅ PASS (Playwright)</span><br/><span style="color: #c19c00; font-size: 11px;">⚠️ REVIEW (oráculo débil)</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Test Playwright ejecutado sin error. Oráculo <code>page_not_contains_text("lotes ajenos")</code> es trivialmente verdadero (esa cadena literal nunca aparece). No se validó aislamiento real entre PABLO y SANCHEZRO. Requiere test con datos concretos de lotes entre ambos usuarios.</td>
+    </tr>
+    <tr style="background: #fdf3f3;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P04</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Visibilidad Pacífico</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #a4262c; font-weight: bold;">❌ FAIL</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Selector <code>#updTimer</code> incorrecto (elemento <code>hidden</code> en la UI). El oráculo generado no apunta al elemento del contador de promesas. Sin embargo, el diagnóstico manual confirmó CA-08 FAIL independientemente: <strong>SANCHEZRO ve el contador</strong>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Diagnóstico CA-08 — Verificación manual directa (fuera del pipeline)</h3>
+<div style="background: #f3f9f3; border-left: 4px solid #a4262c; padding: 10px 14px; margin-bottom: 14px; border-radius: 2px;">
+  <p style="margin: 0 0 6px;">Script <code>diag_116_ca08.py</code> — Playwright headless — 2026-05-07:</p>
+  <pre style="background: #f5f5f5; padding: 8px; border-radius: 3px; font-size: 12px;">
+USER=PACIFICO  | counter_visible=True  | counter_value=0  → PASS ✅ (esperado: visible)
+USER=SANCHEZRO | counter_visible=True  | counter_value=0  → FAIL ❌ (esperado: oculto)
+
+CA-08 OVERALL: *** FAIL — contador visible para usuario no-Pacífico ***
+  </pre>
+</div>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Criterios de aceptación — estado al 2026-05-07</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 12px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="padding: 6px 10px; border: 1px solid #ddd;">CA</th>
+      <th style="padding: 6px 10px; border: 1px solid #ddd;">Descripción</th>
+      <th style="padding: 6px 10px; border: 1px solid #ddd; text-align: center;">Estado</th>
+      <th style="padding: 6px 10px; border: 1px solid #ddd;">Evidencia</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">CA-01</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Contador muestra valor correcto para Pacífico con promesas en ventana</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #c19c00;">⚠️ SIN DATOS</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">No hay promesas vigentes en [2026-05-06, 2026-05-12] para ningún usuario Pacífico. Las 2 promesas PABLO (CPFECVEN=2026-05-05) vencieron ayer.</td>
+    </tr>
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">CA-02</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Promesa fuera de los 7 días no se cuenta</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #c19c00;">⚠️ SIN DATOS</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">No es posible verificar sin datos en la ventana.</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">CA-03</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Unidad es promesa individual, no lote</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #c19c00;">⚠️ SIN DATOS</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">No verificable sin promesas en ventana.</td>
+    </tr>
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">CA-04</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Promesa con vencimiento = hoy incluida (límite inferior inclusive)</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #107c10; font-weight: bold;">✅ PASS</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">SQL en RSDalc usa <code>BETWEEN ... AND ...</code> con <code>GETDATE()</code> como límite inferior → inclusive por definición SQL. Verificado por TU-001 del developer.</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">CA-05</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Contador muestra 0 cuando no hay promesas (no se oculta)</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #107c10; font-weight: bold;">✅ PASS</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">PACIFICO muestra <code>Promesas a Vencer en 7 días: 0</code>. El render no está condicionado al valor.</td>
+    </tr>
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">CA-06</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Solo lotes propios del gestor</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #c19c00;">⚠️ REVIEW</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">SQL usa <code>UPUSUARIO = CodUsuario</code> → correcto por código. P03 Playwright pasó trivialmente sin validar datos reales.</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">CA-07</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Promesas vencidas (fecha &lt; hoy) excluidas</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #107c10; font-weight: bold;">✅ PASS</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Las 2 promesas PABLO (CPFECVEN=2026-05-05, ayer) no aparecen en el contador hoy. SQL <code>BETWEEN GETDATE() AND DATEADD(day,6,GETDATE())</code> las excluye correctamente.</td>
+    </tr>
+    <tr style="background: #fdf3f3;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><strong>CA-08</strong></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><strong>Contador NO aparece en instancias no-Pacífico</strong></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #a4262c; font-weight: bold;">❌ FAIL</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><strong>SANCHEZRO (no-Pacífico) ve el contador.</strong> Guard es <code>!EsJudicial</code>. <code>EsInstanciaPacifico()</code> no existe.</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">CA-09</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Recálculo al refrescar</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #107c10; font-weight: bold;">✅ PASS</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">El contador se calcula en cada carga de página (postback ASP.NET, no caché): verificado por la arquitectura. No requiere test adicional.</td>
+    </tr>
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">CA-10</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Consistencia lógica con reporte Cartera en Gestión</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;"><span style="color: #107c10; font-weight: bold;">✅ PASS</span></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Ambas queries usan <code>CPHISTORICO='0'</code> + <code>CPCANPAG &lt; CPCANCOM</code> + <code>CPFECVEN &gt;= hoy</code>. RSDalc es la misma capa. Lógica de vigencia consistente.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #a4262c;">Fix requerido — CA-08</h3>
+<div style="background: #fdf3f3; border-left: 4px solid #a4262c; padding: 10px 14px; margin-bottom: 14px; border-radius: 2px;">
+  <p style="margin: 0 0 6px;"><strong>Archivo:</strong> <code>trunk/OnLine/AIS.PR.UI.Web.Controls/AISMenu.cs</code></p>
+  <p style="margin: 0 0 6px;"><strong>Línea ~584:</strong></p>
+  <pre style="background: #f5f5f5; padding: 8px; border-radius: 3px; font-size: 12px; overflow-x: auto;">
+// ❌ Actual (incorrecto — visible para todos):
+if (!EsJudicial)
+{
+    writer.Write(...Promesas a Vencer en 7 días...);
+}
+
+// ✅ Requerido (visible solo si instancia Pacífico):
+if (!EsJudicial &amp;&amp; EsInstanciaPacifico(usuario.CodUsuario))
+{
+    writer.Write(...Promesas a Vencer en 7 días...);
+}
+  </pre>
+  <p style="margin: 0 0 6px;"><strong>Nuevo método privado a implementar en AISMenu.cs</strong> (según spec del analista técnico):</p>
+  <pre style="background: #f5f5f5; padding: 8px; border-radius: 3px; font-size: 12px; overflow-x: auto;">
+// ADO-116 | Verifica si el usuario conectado pertenece a la instancia Pacífico (PEEMPRESA='0010')
+private bool EsInstanciaPacifico(string codUsuario)
+{
+    try
+    {
+        RSFac.Agenda agenda = new RSFac.Agenda();
+        return agenda.EsInstanciaPacifico(codUsuario);
+    }
+    catch { return false; }
+}
+  </pre>
+  <p style="margin: 0;"><em>El pass-through en RSFac/RSBus/RSDalc ya fue previsto en el análisis técnico (query: RUSUPERF JOIN RPERFEMP WHERE PEEMPRESA='0010').</em></p>
+</div>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Precondición de datos faltante — CA-01/CA-02/CA-03</h3>
+<div style="background: #fff8e1; border-left: 4px solid #c19c00; padding: 10px 14px; margin-bottom: 14px; border-radius: 2px;">
+  <p style="margin: 0 0 6px;">Para verificar CA-01, CA-02, CA-03 se necesitan promesas en la ventana [hoy, hoy+6] asignadas a un usuario Pacífico. Las 2 promesas de referencia (PABLO, CPFECVEN=2026-05-05) vencieron ayer.</p>
+  <p style="margin: 0;"><strong>Acción requerida por el Dev antes del próximo ciclo QA:</strong> insertar en RCPAGO al menos 2 promesas vigentes (<code>CPFECVEN</code> entre 2026-05-07 y 2026-05-13) para un usuario Pacífico (PABLO6 o PACIFICO), con <code>CPCANPAG=0</code>, <code>CPCANCOM&gt;0</code>, <code>CPHISTORICO='0'</code>.</p>
+</div>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resumen ejecutivo</h3>
+<p style="margin: 0 0 12px; line-height: 1.5;">
+  El ticket <strong>no puede pasar a producción</strong> en su estado actual. CA-08 (exclusividad Pacífico) falla de forma reproducible y objetiva: <code>EsInstanciaPacifico()</code> no fue implementado y el guard actual (<code>!EsJudicial</code>) expone el contador a todas las instancias. Los CA-04, CA-05, CA-07, CA-09, CA-10 pasan por código y comportamiento observado. CA-01/02/03 requieren datos de prueba en ventana activa. CA-06 requiere test con datos reales entre usuarios.
+</p>
+<p style="margin: 0 0 12px;">
+  <strong>Veredicto: ❌ FAIL — Reabre el ticket. Fix mínimo: implementar <code>EsInstanciaPacifico()</code> + corregir guard en línea 584 de AISMenu.cs.</strong>
+</p>
+
+<p style="margin: 16px 0 4px; font-size: 11px; color: #888;">
+  Generado por: Agente QA UAT Pacífico (UserInterfaceQAFreeForm v1.6.0) — Run 0f1ba0bd — 2026-05-07
+</p>
+
+</div>

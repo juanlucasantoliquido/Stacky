@@ -47,15 +47,16 @@
 }
 
 .input {
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: #1f2937;
+  border: 1px solid var(--border, #374151);
   border-radius: 6px;
-  color: var(--text-primary);
+  color: #e2e8f0;
   padding: 7px 10px;
   font-size: 13px;
   font-family: inherit;
   width: 100%;
   box-sizing: border-box;
+  color-scheme: dark;
 }
 
 .input:focus {
@@ -64,21 +65,23 @@
 }
 
 .select {
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: #1f2937;
+  border: 1px solid var(--border, #374151);
   border-radius: 6px;
-  color: var(--text-primary);
+  color: #e2e8f0;
   padding: 7px 10px;
   font-size: 12px;
   width: 100%;
   box-sizing: border-box;
+  appearance: auto;
+  color-scheme: dark;
 }
 
 .textarea {
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: #1f2937;
+  border: 1px solid var(--border, #374151);
   border-radius: 6px;
-  color: var(--text-primary);
+  color: #e2e8f0;
   padding: 8px 10px;
   font-size: 12px;
   font-family: inherit;
@@ -86,6 +89,7 @@
   resize: vertical;
   width: 100%;
   box-sizing: border-box;
+  color-scheme: dark;
 }
 
 .divider {

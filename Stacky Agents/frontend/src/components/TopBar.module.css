@@ -65,14 +65,15 @@
 }
 
 .projectSelect {
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: #1f2937;
+  border: 1px solid var(--border, #374151);
   border-radius: 5px;
-  color: var(--text-primary);
+  color: #e2e8f0;
   font-size: 12px;
   padding: 3px 6px;
   cursor: pointer;
   max-width: 200px;
+  color-scheme: dark;
 }
 
 .projectSelect:focus {

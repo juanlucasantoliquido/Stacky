@@ -1,4 +1,4 @@
-# Stacky Tools — Roadmap Spec-Driven Development
+# Stacky Tools — Roadmap
 
 > **Documento rector del ecosistema de herramientas Stacky.**
 >
@@ -26,7 +26,7 @@ Una spec bien escrita elimina esa incertidumbre.
 
 ### Restricción de acceso a servicios externos
 
-**Todo acceso a servicios externos (ADO, Git, BD, LLM) ocurre exclusivamente via Stacky Tools.** Ningún agente llama APIs REST directamente ni usa MCP tools de Azure DevOps. El agente usa la CLI de la tool; la tool encapsula el acceso al servicio.
+**Todo acceso a servicios externos (ADO, Git, BD, LLM) ocurre exclusivamente via Stacky Tools.** Ningún agente llama APIs REST directamente ni usa MCP tools de Azure DevOps.
 
 ```
 Agente → StackyTool CLI → Servicio externo
@@ -35,10 +35,10 @@ Agente → StackyTool CLI → Servicio externo
 ```
 
 Esto garantiza:
-- Auditoría centralizada (la tool loguea, el agente no necesita hacerlo)
-- Credenciales en un solo lugar (la tool las gestiona)
+- Auditoría centralizada
+- Credenciales en un solo lugar
 - Testabilidad (se mockea la tool, no el servicio externo)
-- Versionabilidad (el contrato de la tool es estable, la API del servicio puede cambiar)
+- Versionabilidad
 
 ### Categorías de tools
 
@@ -47,9 +47,9 @@ Esto garantiza:
 | `ado_*` | Interacción con Azure DevOps | ADO Manager, `ado_evidence_publisher` |
 | `git_*` | Interacción con Git/ADO Repos | Git Manager |
 | `uat_*` | Pipeline de UAT funcional | ticket_reader, scenario_compiler, test_runner |
-| `ui_*` | Inspección y verificación de UI | ui_map_builder, web_ui_verifier |
+| `ui_*` | Inspección y verificación de UI | ui_map_builder |
 | `llm_*` | Acceso a modelos LLM | LLM Router, copilot_bridge |
-| `db_*` | Consultas a BD (solo-lectura) | precondition_checker, test_data_finder |
+| `db_*` | Consultas a BD (solo-lectura) | precondition_checker, data_resolver |
 
 ---
 
@@ -61,46 +61,109 @@ Esto garantiza:
 |---|---|---|---|
 | **ADO Manager** (`ado.py`) | `Tools/Stacky/Stacky tools/ADO Manager/` | ❌ pendiente | ❌ |
 | **Git Manager** (`git.py`) | `Tools/Stacky/Stacky tools/Git Manager/` | ❌ pendiente | ❌ |
-| **web_ui_verifier** | `Tools/Stacky/Stacky pipeline/web_ui_verifier.py` | ❌ pendiente | ❌ |
 | **copilot_bridge** | `Tools/Stacky/Stacky Agents/backend/copilot_bridge.py` | ❌ pendiente | ❌ |
 | **ado_html_postprocessor** | `Tools/Stacky/Stacky pipeline/ado_html_postprocessor.py` | ❌ pendiente | ❌ |
 | **ado_client** (Agents backend) | `Tools/Stacky/Stacky Agents/backend/services/ado_client.py` | ❌ pendiente | parcial |
 | **llm_router** | `Tools/Stacky/Stacky Agents/backend/services/llm_router.py` | ❌ pendiente | parcial |
 
-### 1.B Tools QA UAT Agent — nuevas (MVP)
+### 1.B Tools QA UAT Agent — estado actual
 
-| Tool | Ubicación | Spec | Implementada |
+#### Pipeline core
+
+| Tool | Implementada | Spec | Tests |
 |---|---|---|---|
-| `uat_ticket_reader.py` | `Tools/Stacky/Stacky tools/QA UAT Agent/` | ❌ pendiente | ❌ |
-| `uat_scenario_compiler.py` | idem | ❌ pendiente | ❌ |
-| `ui_map_builder.py` | idem | ❌ pendiente | ❌ |
-| `selector_discovery.py` | idem | ❌ pendiente | ❌ |
-| `playwright_test_generator.py` | idem | ❌ pendiente | ❌ |
-| `uat_test_runner.py` | idem | ❌ pendiente | ❌ |
-| `uat_dossier_builder.py` | idem | ❌ pendiente | ❌ |
-| `ado_evidence_publisher.py` | idem | ❌ pendiente | ❌ |
+| `uat_ticket_reader.py` | ✅ | `SPEC/uat_ticket_reader.md` | parcial |
+| `ui_map_builder.py` | ✅ | `SPEC/ui_map_builder.md` | parcial |
+| `selector_discovery.py` | ✅ | `SPEC/selector_discovery.md` | parcial |
+| `uat_scenario_compiler.py` | ✅ | `SPEC/uat_scenario_compiler.md` | parcial |
+| `uat_precondition_checker.py` | ✅ | — | ❌ |
+| `playwright_test_generator.py` | ✅ | `SPEC/playwright_test_generator.md` | parcial |
+| `spec_linter.py` | ✅ | — | ❌ |
+| `uat_test_runner.py` | ✅ | `SPEC/uat_test_runner.md` | parcial |
+| `screenshot_annotator.py` | ✅ | — | ❌ |
+| `uat_assertion_evaluator.py` | ✅ | — | ❌ |
+| `uat_failure_analyzer.py` | ✅ | — | ❌ |
+| `uat_dossier_builder.py` | ✅ | `SPEC/uat_dossier_builder.md` | parcial |
+| `ado_evidence_publisher.py` | ✅ | `SPEC/ado_evidence_publisher.md` | parcial |
+| `qa_uat_pipeline.py` | ✅ | — | smoke (122/122) |
 
-### 1.C Tools QA UAT Agent — post-MVP (Fase 3.B/C)
+#### Free-form mode
 
-| Tool | Fase |
-|---|---|
-| `uat_precondition_checker.py` | 3.B |
-| `uat_evidence_capturer.py` | 3.B |
-| `uat_assertion_evaluator.py` | 3.B |
-| `uat_failure_analyzer.py` | 3.B |
-| `uat_cleanup_tool.py` | 3.B |
-| `uat_session_manager.py` | 3.B |
-| `uat_report_summarizer.py` | 3.C |
-| `uat_flakiness_detector.py` | 3.C |
-| `uat_golden_path_validator.py` | 3.C |
-| `uat_test_data_finder.py` | 3.C |
-| `uat_action_recorder.py` | 3.C |
+| Tool | Implementada | Descripción |
+|---|---|---|
+| `intent_parser.py` | ✅ | Parsea intent_spec.json |
+| `synthetic_ticket_builder.py` | ✅ | Genera ticket.json desde intent_spec |
+| `data_resolver.py` | ✅ | Resuelve placeholders via BD (SELECT only) |
+| `intent_inferrer.py` | ✅ | Infiere intent_spec desde texto libre (LLM) |
+
+#### Instrumentación forense (Fases 1–4)
+
+| Tool | Implementada | Smoke |
+|---|---|---|
+| `event_schema.py` | ✅ | — |
+| `event_store.py` | ✅ | Fase 1 |
+| `forensic_event_logger.py` | ✅ | Fase 1 |
+| `run_manifest.py` | ✅ | Fase 1 |
+| `checkpoint_manager.py` | ✅ | Fase 1 |
+| `artifact_registry.py` | ✅ | Fase 1 |
+| `event_policy.py` | ✅ | Fase 1 |
+| `data_contracts.py` | ✅ | Fase 1 |
+| `redactor.py` | ✅ | Fase 2 |
+| `command_runner.py` | ✅ | Fase 2 |
+| `powershell_logger.py` | ✅ | Fase 2 |
+| `filesystem_logger.py` | ✅ | Fase 2 |
+| `pipeline_stage_logger.py` | ✅ | Fase 2 |
+| `playwright/forensic_logger.ts` | ✅ | Fase 3 |
+| `playwright/instrumented_actions.ts` | ✅ | Fase 3 |
+| `playwright_forensic_bridge.py` | ✅ | Fase 3 |
+| `blocker_registry.py` | ✅ | Fase 4 |
+| `human_unlock.py` | ✅ | Fase 4 |
+| `learning_store.py` | ✅ | Fase 4 |
+| `learning_candidate_generator.py` | ✅ | Fase 4 |
+| `metrics_collector.py` | ✅ | Fase 4 |
+| `analytics_builder.py` | ✅ | Fase 4 |
+| `kpi_builder.py` | ✅ | Fase 4 |
+| `observability_validator.py` | ✅ | Fase 4 |
+| `replay_run.py` | ✅ | Fase 4 |
+
+#### Autonomía agéntica
+
+| Tool | Implementada | Descripción |
+|---|---|---|
+| `replan_engine.py` | ✅ | Replanning automático (Fase 9) |
+| `navigation_graph.py` | ✅ | Grafo de navegación |
+| `navigation_graph_learner.py` | ✅ | Aprende edges desde sesiones |
+| `path_planner.py` | ✅ | Path óptimo por confianza |
+| `graph_promoter.py` | ✅ | Promueve edges al grafo activo |
+| `session_recorder.py` | ✅ | Graba sesiones de navegación |
+| `session_to_playbook.py` | ✅ | Sesión → playbook |
+| `playbook_router.py` | ✅ | Selecciona playbook según ticket/screen |
+| `playbook_performance.py` | ✅ | Métricas de playbooks |
+| `autonomous_explorer.py` | ✅ | Exploración autónoma (Fase 10) |
+
+#### Conocimiento de la app
+
+| Tool | Implementada | Descripción |
+|---|---|---|
+| `agenda_screens.py` | ✅ | ~90 pantallas de la Agenda Web |
+| `agenda_glossary.py` | ✅ | Glosario semántico UI |
+| `form_knowledge.json` | ✅ | Conocimiento de formularios |
+
+#### Guardrails / diagnóstico
+
+| Tool | Implementada | Descripción |
+|---|---|---|
+| `environment_preflight.py` | ✅ | Verifica que la app esté activa |
+| `smoke_path_checker.py` | ✅ | Pre-validación rápida ≤20s |
+| `execution_logger.py` | ✅ | Logger de sesión de ejecución |
+| `screen_error_detector.py` | ✅ | Detecta errores en screenshots |
+| `sql_query_guard.py` | ✅ | Whitelist de queries SQL |
 
 ---
 
 ## 2. Estructura de una spec
 
-Toda spec vive en `Tools/Stacky/Stacky tools/<Tool Name>/SPEC.md` (o `SPEC/<tool_name>.md` para herramientas individuales dentro de un tool folder con múltiples scripts).
+Toda spec vive en `Tools/Stacky/Stacky tools/<Tool Name>/SPEC/<tool_name>.md`.
 
 Secciones obligatorias:
 
@@ -122,234 +185,45 @@ Secciones obligatorias:
 
 ---
 
-## 3. Fases del roadmap
+## 3. Roadmap pendiente
 
-### FASE 0 — Spec de tools existentes (prioridad: unblocking)
+### FASE 0 — Spec de tools existentes sin spec
 
-> **Objetivo**: documentar las tools que ya están en producción pero no tienen spec formal. Sin esto, los agentes que las usan pueden invocarlas incorrectamente o depender de comportamientos no documentados.
-
-| # | Tool | Archivo spec destino | Bloqueante para |
+| # | Tool | Archivo spec destino | Estado |
 |---|---|---|---|
-| F0.1 | ADO Manager (`ado.py`) | `Tools/Stacky/Stacky tools/ADO Manager/SPEC.md` | Todos los agentes que leen/escriben ADO |
-| F0.2 | Git Manager (`git.py`) | `Tools/Stacky/Stacky tools/Git Manager/SPEC.md` | Agentes que crean PRs |
-| F0.3 | `web_ui_verifier.py` | `Tools/Stacky/Stacky tools/QA UAT Agent/SPEC/web_ui_verifier.md` | Pipeline UAT (deploys, screenshots) |
-| F0.4 | `copilot_bridge.py` | `Tools/Stacky/Stacky Agents/backend/SPEC/copilot_bridge.md` | Cualquier agente que use LLM via bridge |
-| F0.5 | `ado_html_postprocessor.py` | `Tools/Stacky/Stacky tools/ADO Manager/SPEC/ado_html_postprocessor.md` | `ado_evidence_publisher` + otros comentarios ADO |
-| F0.6 | `llm_router.py` | `Tools/Stacky/Stacky Agents/backend/SPEC/llm_router.md` | Cualquier tool que use LLM |
+| F0.1 | ADO Manager (`ado.py`) | `Tools/Stacky/Stacky tools/ADO Manager/SPEC.md` | ❌ pendiente |
+| F0.2 | Git Manager (`git.py`) | `Tools/Stacky/Stacky tools/Git Manager/SPEC.md` | ❌ pendiente |
+| F0.3 | `copilot_bridge.py` | `Tools/Stacky/Stacky Agents/backend/SPEC/copilot_bridge.md` | ❌ pendiente |
+| F0.4 | `ado_html_postprocessor.py` | `Tools/Stacky/Stacky tools/ADO Manager/SPEC/ado_html_postprocessor.md` | ❌ pendiente |
+| F0.5 | `llm_router.py` | `Tools/Stacky/Stacky Agents/backend/SPEC/llm_router.md` | ❌ pendiente |
 
-**Criterio de completitud de Fase 0**: cada spec cubre las 11 secciones; ningún agente del ecosistema invoca una tool sin spec.
+### FASE E — Cobertura de tests (QA UAT Agent)
 
-**Duración estimada**: 1-2 iteraciones de agente.
-
----
-
-### FASE 1 — Spec de tools QA UAT MVP (spec-first, no código)
-
-> **Objetivo**: especificar completamente las 8 tools del MVP antes de escribir una sola línea de implementación. El orden de specs respeta el orden de ejecución del pipeline.
-
-| # | Tool | Archivo spec | Depende de spec |
-|---|---|---|---|
-| F1.1 | `uat_ticket_reader.py` | `SPEC/uat_ticket_reader.md` | ADO Manager (F0.1) |
-| F1.2 | `ui_map_builder.py` | `SPEC/ui_map_builder.md` | `web_ui_verifier` (F0.3) |
-| F1.3 | `selector_discovery.py` | `SPEC/selector_discovery.md` | `ui_map_builder` (F1.2) |
-| F1.4 | `uat_scenario_compiler.py` | `SPEC/uat_scenario_compiler.md` | `uat_ticket_reader` (F1.1), `llm_router` (F0.6) |
-| F1.5 | `playwright_test_generator.py` | `SPEC/playwright_test_generator.md` | `uat_scenario_compiler` (F1.4), `ui_map_builder` (F1.2) |
-| F1.6 | `uat_test_runner.py` | `SPEC/uat_test_runner.md` | `playwright_test_generator` (F1.5) |
-| F1.7 | `uat_dossier_builder.py` | `SPEC/uat_dossier_builder.md` | `uat_test_runner` (F1.6), `llm_router` (F0.6) |
-| F1.8 | `ado_evidence_publisher.py` | `SPEC/ado_evidence_publisher.md` | ADO Manager (F0.1), `ado_html_postprocessor` (F0.5) |
-
-**Criterio de completitud de Fase 1**: 8 specs completas con criterios de aceptación; revision humana sign-off por spec antes de habilitar implementación.
-
----
-
-### FASE 2 — Implementación MVP (código + tests)
-
-> **Regla**: ninguna tool se implementa sin que su spec esté en estado `approved` (marcada en el inventario). El orden de implementación sigue el orden del pipeline, con excepciones donde el código es trivialmente derivable de la spec.
-
-Orden recomendado:
-
-1. `uat_ticket_reader.py` — entrada del pipeline; desbloquea todo lo demás
-2. `ui_map_builder.py` + `selector_discovery.py` — par acoplado; desbloquea el generator
-3. `uat_scenario_compiler.py` — usa LLM; requiere `llm_router` funcional
-4. `playwright_test_generator.py` — plantilla determinista; bajo riesgo, alta reutilización
-5. `uat_test_runner.py` — ejecución; depende de los `.spec.ts` generados en paso anterior
-6. `uat_dossier_builder.py` — ensamblador; bajo riesgo
-7. `ado_evidence_publisher.py` — única superficie de escritura a ADO; mayor rigor en testing
-
-Artefactos por tool:
-- `<tool>.py` — implementación
-- `tests/unit/test_<tool>.py` — cobertura ≥ 80%
-- `prompt_cards/<tool>.md` — si la tool usa LLM
-- Actualización del inventario en este roadmap: `❌ → ✅`
-
----
-
-### FASE 3 — Spec + implementación tools Fase 3.B
-
-> **Objetivo**: completar el pipeline UAT con precondición checker, evaluador de assertions semánticas, failure analyzer y session manager.
-
-Misma lógica: spec primero, código después.
-
-| # | Tool | Notas |
+| # | Objetivo | Estado |
 |---|---|---|
-| F3.1 | `uat_precondition_checker.py` | Requiere spec de acceso BD QA (cuenta `RSPACIFICOREAD`) |
-| F3.2 | `uat_evidence_capturer.py` | Hooks Playwright; spec define qué capturar y en qué formato |
-| F3.3 | `uat_assertion_evaluator.py` | LLM semántico; spec define cuándo PASS vs REVIEW |
-| F3.4 | `uat_failure_analyzer.py` | LLM; spec define taxonomía completa |
-| F3.5 | `uat_cleanup_tool.py` | Spec define límites de lo que puede borrar |
-| F3.6 | `uat_session_manager.py` | Spec define política de cuenta `PABLO` (§0.bis.2 del roadmap Fase 3) |
+| E1 | Tests unitarios ≥ 80% cobertura en todas las tools de pipeline core | ❌ pendiente |
+| E2 | Specs formales para `spec_linter`, `screenshot_annotator`, `uat_assertion_evaluator`, `uat_failure_analyzer` | ❌ pendiente |
+| E3 | Integration test con AgendaWeb real (ticket 70) | ❌ pendiente |
 
----
+### FASE F — Integraciones Stacky Agents backend
 
-### FASE 4 — Integración Stacky Agents backend + UI
-
-> **Objetivo**: exponer el pipeline UAT desde el workbench de Stacky Agents (endpoint Flask + SSE + botón "Publicar" en frontend).
-
-Componentes:
-- `Tools/Stacky/Stacky Agents/backend/agents/qa_uat.py` — wrapper del agente sobre `qa_uat_pipeline.py`
-- Endpoint `POST /api/qa-uat/run` con streaming SSE
-- Frontend: pestaña "Dossier UAT" + botón "Publicar comentario en ADO"
-- Registro del agente `qa_uat` en el sistema de agentes (`AgentExecution` en BD)
-
-Prerequisito: Fases 0, 1 y 2 completadas.
-
----
-
-### FASE 5 — Tools avanzadas (Fase 3.C)
-
-> **Objetivo**: ampliar el alcance del agente QA UAT con pantallas adicionales, flakiness detection, golden path validation y action recording.
-
-Spec + implementación de:
-- `uat_report_summarizer.py`
-- `uat_flakiness_detector.py`
-- `uat_golden_path_validator.py`
-- `uat_test_data_finder.py`
-- `uat_action_recorder.py`
-
----
-
-## 4. Proceso de una spec → código
-
-```
-1. Redactar SPEC.md completo (11 secciones)
-         │
-         ▼
-2. Review humano (sign-off en el archivo: añadir `status: approved` al header)
-         │
-         ▼
-3. Implementar <tool>.py siguiendo la spec como única fuente de verdad
-         │
-         ▼
-4. Escribir tests unitarios cubriendo todos los criterios de aceptación
-         │
-         ▼
-5. Ejecutar tests — cobertura ≥ 80%
-         │
-         ▼
-6. Actualizar inventario: ❌ → ✅ en este roadmap
-         │
-         ▼
-7. PR obligatorio con: spec + implementación + tests + evidencia de tests pasando
-```
-
-**Prohibido**: implementar sin spec aprobada. Prohibido marcar una spec como aprobada si le falta alguna de las 11 secciones.
-
----
-
-## 5. Convenciones de todas las tools
-
-### Output JSON canónico
-
-Toda tool retorna JSON a stdout:
-
-```json
-// Éxito
-{"ok": true, "data": {...}, "meta": {"duration_ms": 123, "tool": "uat_ticket_reader", "version": "1.0.0"}}
-
-// Error
-{"ok": false, "error": "<error_code>", "message": "Descripción legible del error", "meta": {...}}
-```
-
-- `"ok"` es siempre el primer campo.
-- `"error"` es un código snake_case (`ado_unreachable`, `ticket_not_found`, etc.), nunca texto libre.
-- Exit code `0` para éxito, `1` para error.
-
-### Credenciales
-
-- Nunca por argumento CLI (evitar leakage en logs de shell)
-- Siempre desde env vars o archivos `.env` cargados con `python-dotenv`
-- Fail rápido si la env var requerida no está seteada: `{"ok": false, "error": "missing_env_var", "message": "RS_QA_DB_PASS is required. Cargala desde Tools/Stacky/.secrets/qa_db.env"}`
-
-### Dependencias Python
-
-Cada tool declara sus dependencias en un `requirements.txt` de su carpeta. No depender de paquetes no declarados.
-
-### Logging
-
-- Logs a stderr (no a stdout, que es reservado para JSON)
-- Nivel INFO por defecto; DEBUG con flag `--verbose`
-- Formato: `[YYYY-MM-DD HH:MM:SS] [TOOL] [LEVEL] mensaje`
-
-### Idempotencia
-
-Toda tool que escribe datos (archivos, ADO, BD) debe ser idempotente: ejecutarla dos veces con el mismo input produce el mismo resultado.
-
----
-
-## 6. Estado actual del roadmap
-
-### Fase 0 — Specs tools existentes
-
-| # | Tool | Spec | Estado |
+| # | Artefacto | Descripción | Estado |
 |---|---|---|---|
-| F0.1 | ADO Manager | `Tools/Stacky/Stacky tools/ADO Manager/SPEC.md` | ✅ completada |
-| F0.2 | Git Manager | `Tools/Stacky/Stacky tools/Git Manager/SPEC.md` | ✅ completada |
-| F0.3 | web_ui_verifier | `Tools/Stacky/Stacky tools/QA UAT Agent/SPEC/web_ui_verifier.md` | ✅ completada |
-| F0.4 | copilot_bridge | `Tools/Stacky/Stacky Agents/backend/SPEC/copilot_bridge.md` | ⏸ pendiente |
-| F0.5 | ado_html_postprocessor | `Tools/Stacky/Stacky tools/ADO Manager/SPEC/ado_html_postprocessor.md` | ⏸ pendiente |
-| F0.6 | llm_router | `Tools/Stacky/Stacky Agents/backend/SPEC/llm_router.md` | ⏸ pendiente |
-
-### Fase 1 — Specs tools QA UAT MVP
-
-| # | Tool | Spec | Estado |
-|---|---|---|---|
-| F1.1 | `uat_ticket_reader` | `SPEC/uat_ticket_reader.md` | ✅ completada |
-| F1.2 | `ui_map_builder` | `SPEC/ui_map_builder.md` | ✅ completada |
-| F1.3 | `selector_discovery` | `SPEC/selector_discovery.md` | ✅ completada |
-| F1.4 | `uat_scenario_compiler` | `SPEC/uat_scenario_compiler.md` | ✅ completada |
-| F1.5 | `playwright_test_generator` | `SPEC/playwright_test_generator.md` | ✅ completada |
-| F1.6 | `uat_test_runner` | `SPEC/uat_test_runner.md` | ✅ completada |
-| F1.7 | `uat_dossier_builder` | `SPEC/uat_dossier_builder.md` | ✅ completada |
-| F1.8 | `ado_evidence_publisher` | `SPEC/ado_evidence_publisher.md` | ✅ completada |
-
-### Fase 2 — Implementación MVP
-
-| # | Tool | Implementada | Tests | Estado |
-|---|---|---|---|---|
-| F2.1 | `uat_ticket_reader` | ❌ | ❌ | ⏸ pendiente (requiere sign-off F1.1) |
-| F2.2 | `ui_map_builder` + `selector_discovery` | ❌ | ❌ | ⏸ pendiente |
-| F2.3 | `uat_scenario_compiler` | ❌ | ❌ | ⏸ pendiente |
-| F2.4 | `playwright_test_generator` | ❌ | ❌ | ⏸ pendiente |
-| F2.5 | `uat_test_runner` | ❌ | ❌ | ⏸ pendiente |
-| F2.6 | `uat_dossier_builder` | ❌ | ❌ | ⏸ pendiente |
-| F2.7 | `ado_evidence_publisher` | ❌ | ❌ | ⏸ pendiente |
-
-### Fases 3–5
-
-⏸ pendientes, desbloqueadas al completar Fase 2.
+| F1 | `POST /api/qa-uat/run` | Endpoint Flask con streaming SSE | ❌ pendiente |
+| F2 | Panel de KPIs en frontend React | Visualización de KPIs/blockers/analytics | ❌ pendiente |
+| F3 | Auto-collect métricas al fin de cada run | Llamar `MetricsCollector.collect_and_persist()` en `run()` | ❌ pendiente |
+| F4 | Auto-generar learnings al fin de cada run | Llamar `LearningCandidateGenerator.generate()` en `run()` | ❌ pendiente |
 
 ---
 
-## 7. Próximo paso inmediato
+## 4. Smoke tests actuales
 
-> **Para habilitar la implementación MVP**, el operador debe dar sign-off a las specs F1.1–F1.8.
-
-Proceso de sign-off: revisar el archivo `SPEC/<tool>.md`, y si está conforme, agregar en el header YAML:
-
-```yaml
-status: approved
-approved_by: <nombre>
-approved_date: YYYY-MM-DD
+```bash
+cd "n:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent"
+python smoke_phase1.py   # 22/22 PASS — Event Store
+python smoke_phase2.py   # 31/31 PASS — Command logging
+python smoke_phase3.py   # 22/22 PASS — Playwright forense
+python smoke_phase4.py   # 47/47 PASS — Human Unlock, métricas, analytics
 ```
 
-Una vez aprobadas las 8 specs, comenzar implementación en el orden indicado en Fase 2.
+Total: **122/122 smoke checks PASS** (2026-05-08).

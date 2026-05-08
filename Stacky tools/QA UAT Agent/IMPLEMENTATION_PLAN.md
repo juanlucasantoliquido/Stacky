@@ -1,246 +1,350 @@
-# Plan de Implementación — Agente QA UAT MVP
+# Plan de Implementación — QA UAT Agent
 
-> **Generado por**: StackyToolArchitect  
-> **Fecha**: 2026-05-02  
-> **Fuentes consultadas**: `PHASE3_QA_UAT_ROADMAP.md`, `STACKY_TOOLS_ROADMAP.md`, 9 SPECs en `SPEC/`, spike `web_ui_verifier.py`  
-> **Estado**: Fase A implementada. Fases B-D pendientes de implementación.
+> **Autor**: StackyToolArchitect
+> **Última actualización**: 2026-05-08
+> **Estado**: Todas las fases completadas y validadas.
 
 ---
 
-## Restricciones innegociables (aplicables a todas las fases)
+## Resumen de fases
+
+| Fase | Descripción | Estado | Smoke |
+|---|---|---|---|
+| Fase A | Infraestructura base (schemas, templates, requirements) | ✅ completa | — |
+| Fase B | Pipeline core (8 tools: reader→publisher) | ✅ completa | — |
+| Fase C | Orquestador `qa_uat_pipeline.py` | ✅ completa | — |
+| Fase D | Integraciones (free-form, playbooks, replanning) | ✅ completa | — |
+| Fase 1 (forense) | Event Store, persistencia, schemas, contratos | ✅ completa | 22/22 |
+| Fase 2 (forense) | Logging de comandos, PowerShell, filesystem | ✅ completa | 31/31 |
+| Fase 3 (forense) | Instrumentación Playwright forense | ✅ completa | 22/22 |
+| Fase 4 (forense) | Human Unlock, learnings, métricas, analytics, replay | ✅ completa | 47/47 |
+
+---
+
+## Restricciones innegociables
 
 | Restricción | Detalle |
 |---|---|
-| Sin credenciales en repo | Toda credencial via `os.getenv()` con fail-fast; archivos `.env` solo en `Tools/Stacky/.secrets/` (cubierto por `.gitignore`) |
-| Sin `ado.py state` | Prohibido en cualquier `uat_*.py` y `ado_evidence_publisher.py`; verificado por test estático en CI |
+| Sin credenciales en repo | Toda credencial via `os.getenv()` con fail-fast |
+| Sin `ado.py state` | Prohibido en cualquier `uat_*.py` y `ado_evidence_publisher.py` |
 | JSON a stdout | Toda tool retorna `{"ok": true, ...}` o `{"ok": false, "error": "...", "message": "..."}` con exit code 1 en error |
-| Sin MCP Azure | El agente usa solo `python ado.py ...` via subprocess; nunca `mcp_azure-devops_*` |
-| Python 3.8+ | Sin walrus operator ni features post-3.8 en las tools |
-| Sin credenciales hardcodeadas en `.spec.ts` | Tests Playwright usan `process.env.AGENDA_WEB_USER`, etc. |
+| Sin MCP Azure | El agente usa solo `python ado.py ...` via subprocess |
+| Sin gestión del runtime de la app | QA UAT Agent NUNCA inicia/detiene IIS Express |
+| BD solo-lectura | Todo acceso a BD es SELECT (guardado por `sql_query_guard.py`) |
+| Sin publicación silenciosa | `--mode publish` requiere acción CLI explícita |
 
 ---
 
-## Fase A — Infraestructura base (implementada)
+## Fase A — Infraestructura base (completa)
 
-**Criterio de entrada**: nada previo necesario.  
-**Criterio de salida / DoD**: 5 schemas JSON, 3 templates Jinja2, 1 `requirements.txt`, 1 `playwright.config.ts`  listos. Cada schema valida los ejemplos JSON de su SPEC correspondiente.
+### Artefactos
 
-### Tabla de tareas Fase A
-
-| ID | Artefacto | Archivo destino | Basado en SPEC | Estado |
-|---|---|---|---|---|
-| A1 | Schema `uat_ticket.schema.json` | `schemas/uat_ticket.schema.json` | `SPEC/uat_ticket_reader.md` §4 | ✅ implementado |
-| A2 | Schema `scenario_spec.schema.json` | `schemas/scenario_spec.schema.json` | `SPEC/uat_scenario_compiler.md` §4 | ✅ implementado |
-| A3 | Schema `ui_map.schema.json` | `schemas/ui_map.schema.json` | `SPEC/ui_map_builder.md` §4 | ✅ implementado |
-| A4 | Schema `runner_output.schema.json` | `schemas/runner_output.schema.json` | `SPEC/uat_test_runner.md` §4 | ✅ implementado |
-| A5 | Schema `dossier.schema.json` | `schemas/dossier.schema.json` | `SPEC/uat_dossier_builder.md` §4 | ✅ implementado |
-| A6 | Template `playwright_test.spec.ts.j2` | `templates/playwright_test.spec.ts.j2` | `SPEC/playwright_test_generator.md` §4 | ✅ implementado |
-| A7 | Template `dossier.md.j2` | `templates/dossier.md.j2` | `SPEC/uat_dossier_builder.md` §4 | ✅ implementado |
-| A8 | Template `ado_comment.html.j2` | `templates/ado_comment.html.j2` | `SPEC/uat_dossier_builder.md` §4 | ✅ implementado |
-| A9 | `requirements.txt` | `requirements.txt` | Dependencias de todas las SPECs §8 | ✅ implementado |
-| A10 | `playwright.config.ts` | `playwright.config.ts` | `SPEC/uat_test_runner.md` §3 env vars | ✅ implementado |
-
-**Qué hace el humano en Fase A**: revisar que los schemas cubren todos los campos; aprobar `playwright.config.ts`; setear las variables de entorno en la máquina QA.  
-**Qué hace el agente**: genera los artefactos; no ejecuta código contra servicios externos.
-
-**Riesgos**:
-- Los schemas podrían necesitar ajustes cuando las tools reales se implementen → los schemas son versionables; actualizar con PR.
-- El template `playwright_test.spec.ts.j2` asume mapeo de acciones; si las SPECs cambian los tipos de acción, hay que actualizar el template.
-
----
-
-## Fase B — Pipeline core (pendiente de implementación)
-
-**Criterio de entrada**: Fase A completa (schemas y templates validados).  
-**Criterio de salida / DoD**: 8 tools implementadas con tests unitarios que pasan (≥ 80% cobertura). Inventario de `STACKY_TOOLS_ROADMAP.md` actualizado de `❌` a `✅` por cada tool.
-
-### Orden de implementación (respeta desbloqueado)
-
-| ID | Tool | Archivo destino | Desbloquea | Depende de | Tests requeridos (de SPEC §11) |
-|---|---|---|---|---|---|
-| B1 | `uat_ticket_reader.py` | `uat_ticket_reader.py` | B4, B3 | `ado.py`, `llm_router.py`, A1 | `test_ticket_70_returns_7_scenarios`, `test_ticket_without_analysis_returns_blocked`, `test_nonexistent_ticket_returns_not_found`, `test_cache_flag_skips_ado_call`, `test_output_validates_against_schema`, `test_preconditions_detected_ridioma_inserts`, `test_llm_fallback_on_regex_match` |
-| B2 | `selector_discovery.py` | `selector_discovery.py` | B3 | Stdlib solo | `test_data_testid_returns_high`, `test_stable_asp_id_returns_medium`, `test_autogenerated_asp_id_returns_low`, `test_label_only_returns_high`, `test_empty_input_returns_low_without_exception`, `test_deterministic_pure_function` |
-| B3 | `ui_map_builder.py` | `ui_map_builder.py` | B5 | B2, Playwright, `llm_router.py`, A3 | `test_missing_env_var_fails_before_browser`, `test_cache_hit_skips_playwright`, `test_rebuild_flag_bypasses_cache`, `test_alias_semantic_follows_pattern`, `test_low_robustness_elements_in_warnings`, `test_login_failed_returns_error`, `test_output_validates_against_schema` |
-| B4 | `uat_scenario_compiler.py` | `uat_scenario_compiler.py` | B5 | B1, `llm_router.py`, A2 | `test_ticket_70_compiles_6_scenarios_and_1_out_of_scope`, `test_each_scenario_has_required_fields`, `test_placeholder_scenario_rejected`, `test_empty_plan_returns_error`, `test_unsupported_screen_marked_blocked`, `test_llm_fallback_on_regex`, `test_output_validates_against_schema` |
-| B5 | `playwright_test_generator.py` | `playwright_test_generator.py` | B6 | B4, B3, A6 | `test_6_scenarios_generate_6_spec_files`, `test_missing_selector_blocks_scenario`, `test_no_hardcoded_credentials_in_output`, `test_generated_files_have_required_sections`, `test_blocked_scenario_no_file_generated`, `test_output_validates_against_schema` |
-| B6 | `uat_test_runner.py` | `uat_test_runner.py` | B7 | B5, Node/npx, A4 | `test_no_tests_found_returns_error`, `test_playwright_not_available_returns_error`, `test_assertion_failure_marks_scenario_fail`, `test_runtime_error_marks_scenario_blocked`, `test_artifacts_created_for_each_run`, `test_evidence_directory_structure_correct`, `test_output_validates_against_schema` |
-| B7 | `uat_dossier_builder.py` | `uat_dossier_builder.py` | B8 | B6, `llm_router.py`, `ado_html_postprocessor.py`, A7, A8, A5 | `test_dossier_built_successfully_for_ticket_70`, `test_ado_comment_contains_idempotence_marker`, `test_hash_is_sha256_of_comment_content`, `test_verdict_pass_when_all_pass`, `test_verdict_fail_when_one_fails`, `test_verdict_blocked_when_all_blocked`, `test_verdict_mixed_when_fail_and_blocked`, `test_missing_artifact_returns_error`, `test_executive_summary_length_constraint`, `test_dossier_json_validates_against_schema` |
-| B8 | `ado_evidence_publisher.py` | `ado_evidence_publisher.py` | C1 | B7, `ado.py` | `test_dry_run_generates_preview_without_touching_ado`, `test_first_publish_creates_comment`, `test_second_publish_same_hash_skipped_unchanged`, `test_second_publish_different_hash_updated`, `test_ado_manager_failure_returns_error_dossier_stays`, `test_audit_log_written_on_every_invocation`, `test_missing_dossier_returns_error`, `test_marker_not_found_returns_error`, **`test_no_state_subcommand_in_codebase`** (test estático de seguridad) |
-
-### Subdirectorios requeridos (crear antes de B1)
-
-```
-Tools/Stacky/Stacky tools/QA UAT Agent/
-  evidence/          # creado en runtime por las tools
-  cache/ui_maps/     # creado por ui_map_builder
-  audit/             # creado por ado_evidence_publisher
-  tests/
-    unit/
-    fixtures/
-  prompt_cards/      # para tools que usan LLM
-```
-
-### Criterio de done por tool (Fase B)
-
-- [ ] Archivo `<tool>.py` implementado en `Tools/Stacky/Stacky tools/QA UAT Agent/`
-- [ ] `tests/unit/test_<tool>.py` con todos los tests del SPEC §11 passing
-- [ ] Cobertura ≥ 80% medida con `pytest --cov`
-- [ ] Sin ninguna ocurrencia de `ado.py state` ni credenciales literales en el archivo
-- [ ] `python <tool>.py --help` describe los argumentos sin error
-- [ ] Inventario en `STACKY_TOOLS_ROADMAP.md` actualizado a `✅`
-
-**Qué hace el humano en Fase B**: revisar cada PR por tool; firmar el criterio de aceptación de su SPEC §10; configurar env vars en la máquina QA para las tools que requieren Playwright o ADO.  
-**Qué hace el agente**: implementa la tool, escribe los tests, corre `pytest`, crea el PR.
-
-**Riesgos y mitigaciones**:
-
-| Riesgo | Mitigación |
-|---|---|
-| `llm_router.py` no tiene SPEC formal → las tools B1, B3, B4, B7 pueden fallar en integración | Antes de implementar B1, verificar que `llm_router.py` responde correctamente. Mockear en tests unitarios. |
-| `ado.py comment <id> --html` podría no existir todavía | Verificar la SPEC de ADO Manager antes de B8; si no existe el subcomando, agregar primero a `ado.py`. |
-| Playwright no instalado en la máquina QA | Documentar en README: `pip install playwright && playwright install chromium`. |
-| El `ado_html_postprocessor.py` no tiene SPEC formal | Leer su código antes de B7 para entender su contrato real. |
-| Credenciales de BD QA no disponibles para tests de B1 que lean ADO real | Mockear `ado.py` en tests unitarios con fixtures JSON en `tests/fixtures/`. |
-
----
-
-## Fase C — Orquestador (pendiente)
-
-**Criterio de entrada**: Fase B completa (las 8 tools passing sus tests).
-
-| ID | Artefacto | Descripción |
+| ID | Artefacto | Estado |
 |---|---|---|
-| C1 | `qa_uat_pipeline.py` | Orquestador: input `--ticket <id>`, ejecuta B1→B2→B3→B4→B5→B6→B7→B8 en secuencia. Output: dossier path + exit code global. |
+| A1 | `schemas/uat_ticket.schema.json` | ✅ |
+| A2 | `schemas/scenario_spec.schema.json` | ✅ |
+| A3 | `schemas/ui_map.schema.json` | ✅ |
+| A4 | `schemas/runner_output.schema.json` | ✅ |
+| A5 | `schemas/dossier.schema.json` | ✅ |
+| A6 | `templates/playwright_test.spec.ts.j2` | ✅ |
+| A7 | `templates/dossier.md.j2` | ✅ |
+| A8 | `templates/ado_comment.html.j2` | ✅ |
+| A9 | `requirements.txt` | ✅ |
+| A10 | `playwright.config.ts` | ✅ |
 
-### Contrato de `qa_uat_pipeline.py`
+---
+
+## Fase B — Pipeline core (completa)
+
+### Tools implementadas
+
+| ID | Tool | Tests |
+|---|---|---|
+| B1 | `uat_ticket_reader.py` | `tests/unit/test_uat_ticket_reader.py` |
+| B2 | `selector_discovery.py` | `tests/unit/test_selector_discovery.py` |
+| B3 | `ui_map_builder.py` | `tests/unit/test_ui_map_builder.py` |
+| B4 | `uat_scenario_compiler.py` | `tests/unit/test_uat_scenario_compiler.py` |
+| B5 | `playwright_test_generator.py` | `tests/unit/test_playwright_test_generator.py` |
+| B6 | `uat_test_runner.py` | `tests/unit/test_uat_test_runner.py` |
+| B7 | `uat_dossier_builder.py` | `tests/unit/test_uat_dossier_builder.py` |
+| B8 | `ado_evidence_publisher.py` | `tests/unit/test_ado_evidence_publisher.py` |
+
+### Tools adicionales (Fase 3.B)
+
+| Tool | Descripción |
+|---|---|
+| `uat_precondition_checker.py` | Verifica datos en BD dev antes de ejecutar |
+| `uat_assertion_evaluator.py` | Evalúa oráculos → PASS/FAIL/BLOCKED/REVIEW |
+| `uat_failure_analyzer.py` | Clasifica FAILs en taxonomía con hipótesis |
+| `screenshot_annotator.py` | Anota screenshots con box rojo (Pillow) |
+| `spec_linter.py` | Valida que los .spec.ts generados no contengan login |
+
+---
+
+## Fase C — Orquestador (completa)
+
+`qa_uat_pipeline.py` orquesta los stages 1–9 con las siguientes capacidades:
+
+- **Modo ADO**: `--ticket N`
+- **Modo free-form**: `--intent-file PATH`
+- **Skip de stages**: `--skip-to STAGE`
+- **Replanning**: `--replan` (Fase 9)
+- **Guardrails**: tiempo total, intentos de login, lanzamientos de browser
+- **Preflight**: verifica que la Agenda Web esté activa antes de cualquier acción
+- **Smoke path**: pre-validación rápida (≤20s) antes de abrir browser
+
+### Stages del pipeline
+
+| Stage | Tool | LLM | Fatal |
+|---|---|---|---|
+| reader | `uat_ticket_reader.py` | ❌ | ✅ |
+| ui_map | `ui_map_builder.py` | ❌ | ✅ |
+| compiler | `uat_scenario_compiler.py` | ✅ gpt-4.1-mini | ✅ |
+| preconditions | `uat_precondition_checker.py` | ❌ | ❌ (warning) |
+| generator | `playwright_test_generator.py` | ❌ | ✅ |
+| spec_linter | `spec_linter.py` | ❌ | ✅ |
+| runner | `uat_test_runner.py` | ❌ | ✅ |
+| annotator | `screenshot_annotator.py` | ❌ | ❌ (non-fatal) |
+| evaluator | `uat_assertion_evaluator.py` | ❌ | ✅ |
+| failure_analyzer | `uat_failure_analyzer.py` | ✅ gpt-4.1 | ✅ |
+| dossier | `uat_dossier_builder.py` | ✅ gpt-4.1 | ✅ |
+| publisher | `ado_evidence_publisher.py` | ❌ | ✅ |
+
+---
+
+## Fase D — Integraciones (completa)
+
+### D1 — Free-form mode
 
 ```bash
-python qa_uat_pipeline.py --ticket 70 [--mode dry-run|publish] [--headed] [--verbose]
+python qa_uat_pipeline.py --intent-file evidence/mi_run/intent_spec.json
+python qa_uat_pipeline.py --intent-file ... --resume --data-file resolved_data.json
+python qa_uat_pipeline.py --intent-file ... --auto-resolve
 ```
 
-**Output JSON a stdout**:
-```json
-{
-  "ok": true,
-  "ticket_id": 70,
-  "verdict": "PASS",
-  "dossier_path": "evidence/70/dossier.json",
-  "ado_comment_action": "created",
-  "pipeline_steps": [
-    {"step": "uat_ticket_reader", "status": "ok", "duration_ms": 843},
-    {"step": "uat_scenario_compiler", "status": "ok", "duration_ms": 1240},
-    {"step": "ui_map_builder", "status": "ok", "duration_ms": 3200},
-    {"step": "playwright_test_generator", "status": "ok", "duration_ms": 520},
-    {"step": "uat_test_runner", "status": "ok", "duration_ms": 32400},
-    {"step": "uat_dossier_builder", "status": "ok", "duration_ms": 1800},
-    {"step": "ado_evidence_publisher", "status": "ok", "duration_ms": 840}
-  ],
-  "meta": {"tool": "qa_uat_pipeline", "version": "1.0.0", "total_duration_ms": 40843}
-}
-```
+Módulos involucrados:
+- `intent_parser.py` — parsea y valida `intent_spec.json`
+- `synthetic_ticket_builder.py` — construye `ticket.json` desde intent_spec
+- `data_resolver.py` — resuelve placeholders via BD (SELECT only)
 
-**Comportamiento ante fallo**: si cualquier step retorna `ok: false`, el pipeline para (`fail-fast`), reporta el step fallido con su error, y emite `ok: false` a stdout con exit code 1. Los artefactos parciales quedan en disco para diagnóstico.
+Exit codes:
+- `0` — OK
+- `1` — error fatal
+- `2` — PENDING_DATA (datos sin resolver, usar `--resume`)
 
-**Qué hace el humano en Fase C**: revisar el `DOSSIER_UAT.md` generado; decidir si publicar (`--mode publish`); mover el estado del ticket en ADO si decide aprobarlo.
+### D2 — Playbooks y autonomía
 
----
-
-## Fase D — Integración backend Stacky (pendiente)
-
-**Criterio de entrada**: Fase C completa.
-
-| ID | Artefacto | Descripción | Prioridad MVP |
-|---|---|---|---|
-| D1 | `POST /api/qa-uat/run` | Endpoint Flask que invoca `qa_uat_pipeline.py` via subprocess, streamed via SSE. | Alta |
-| D2 | `Agentes/qa-uat-agent/PROMPT.agent.md` | Verificar que el prompt existente solo use CLI (`python <tool>.py`), sin MCP. Ajustar si hay referencias directas a API ADO. | Alta |
-| D3 | Panel de dossier frontend React | Visualización de `dossier.json` + verdict badge + artifacts links. | Media (post-MVP) |
-
-### Detalles Fase D1
-
-El endpoint debe:
-1. Recibir `{ticket_id, mode, headed}` en el body JSON.
-2. Validar que `ticket_id` es entero positivo.
-3. Ejecutar `python qa_uat_pipeline.py --ticket {id} --mode {mode}` via subprocess.
-4. Streamear el stdout via SSE al frontend.
-5. Al finalizar, persistir el resultado en el historial de ejecuciones de Stacky.
-6. Nunca exponer credenciales en la respuesta HTTP ni en los logs del servidor.
-
-**Qué hace el humano en Fase D**: revisar y aprobar el PR del endpoint; confirmar que el panel muestra los datos correctamente; no hay operaciones destructivas en esta fase.
-
----
-
-## Árbol de archivos post-implementación completa
-
-```
-Tools/Stacky/Stacky tools/QA UAT Agent/
-├── IMPLEMENTATION_PLAN.md          ← este archivo
-├── README.md
-├── STACKY_TOOLS_ROADMAP.md
-├── requirements.txt                ← Fase A ✅
-├── playwright.config.ts            ← Fase A ✅
-├── schemas/                        ← Fase A ✅
-│   ├── uat_ticket.schema.json
-│   ├── scenario_spec.schema.json
-│   ├── ui_map.schema.json
-│   ├── runner_output.schema.json
-│   └── dossier.schema.json
-├── templates/                      ← Fase A ✅
-│   ├── playwright_test.spec.ts.j2
-│   ├── dossier.md.j2
-│   └── ado_comment.html.j2
-├── SPEC/
-│   ├── uat_ticket_reader.md
-│   ├── uat_scenario_compiler.md
-│   ├── ui_map_builder.md
-│   ├── selector_discovery.md
-│   ├── playwright_test_generator.md
-│   ├── uat_test_runner.md
-│   ├── uat_dossier_builder.md
-│   ├── ado_evidence_publisher.md
-│   └── web_ui_verifier.md
-├── uat_ticket_reader.py            ← Fase B
-├── selector_discovery.py           ← Fase B
-├── ui_map_builder.py               ← Fase B
-├── uat_scenario_compiler.py        ← Fase B
-├── playwright_test_generator.py    ← Fase B
-├── uat_test_runner.py              ← Fase B
-├── uat_dossier_builder.py          ← Fase B
-├── ado_evidence_publisher.py       ← Fase B
-├── qa_uat_pipeline.py              ← Fase C
-├── prompt_cards/                   ← Fase B (LLM tools)
-│   ├── uat_ticket_reader.md
-│   ├── ui_map_builder.md
-│   ├── uat_scenario_compiler.md
-│   └── uat_dossier_builder.md
-├── tests/
-│   ├── unit/
-│   │   ├── test_uat_ticket_reader.py
-│   │   ├── test_selector_discovery.py
-│   │   ├── test_ui_map_builder.py
-│   │   ├── test_uat_scenario_compiler.py
-│   │   ├── test_playwright_test_generator.py
-│   │   ├── test_uat_test_runner.py
-│   │   ├── test_uat_dossier_builder.py
-│   │   └── test_ado_evidence_publisher.py
-│   └── fixtures/
-│       ├── ticket_70.json          ← respuesta mock de ado.py get 70
-│       ├── comments_70.json        ← respuesta mock de ado.py comments 70
-│       ├── scenarios_70.json
-│       ├── ui_map_FrmAgenda.json
-│       └── runner_output_70.json
-├── evidence/                       ← generado en runtime (no se versiona)
-├── cache/ui_maps/                  ← generado en runtime (no se versiona)
-└── audit/                          ← generado en runtime (no se versiona)
-```
-
----
-
-## Sign-offs requeridos del humano antes de cada fase
-
-| Fase | Sign-off requerido |
+| Tool | Descripción |
 |---|---|
-| Antes de Fase B | Revisar schemas (`schemas/*.json`) contra los ejemplos JSON de cada SPEC; aprobar `playwright.config.ts`; confirmar env vars configuradas |
-| Antes de B8 | Verificar que `ado.py comment <id>` acepta `--html` y `--text`; si no, agregar a ADO Manager primero (ese es un pre-requisito bloqueante) |
-| Antes de Fase C | Smoke test manual de cada tool individual con el ticket 70 real |
-| Antes de Fase D1 | Revisión de seguridad del endpoint (autenticación, validación de inputs, ausencia de credenciales en logs) |
-| Antes de merge a main | PR review + CI verde (todos los tests pasan, incluyendo el test estático de seguridad `test_no_state_subcommand_in_codebase`) |
+| `session_recorder.py` | Graba sesiones de navegación para aprendizaje |
+| `session_to_playbook.py` | Convierte sesión grabada → playbook replay-ready |
+| `navigation_graph.py` | Grafo de navegación aprendido |
+| `navigation_graph_learner.py` | Aprende edges + trigger_selector PostBack |
+| `path_planner.py` | Calcula path óptimo por pesos de confianza |
+| `graph_promoter.py` | Promueve edges al grafo activo |
+| `playbook_router.py` | Selecciona playbook según ticket/screen |
+| `intent_inferrer.py` | Infiere intent_spec desde texto libre (LLM) |
+
+### D3 — Replanning automático (Fase 9)
+
+```bash
+python qa_uat_pipeline.py --ticket 70 --replan
+```
+
+`replan_engine.py` ejecuta hasta N rondas de corrección automática:
+1. Analiza fallas del runner
+2. Clasifica: `no_action` / `retry` / `escalate`
+3. Si `retry`: parchea intent_spec, re-genera specs, re-ejecuta runner
+
+---
+
+## Fase 1–4 — Instrumentación forense (completa)
+
+### Fase 1 — Event Store
+
+| Módulo | Descripción |
+|---|---|
+| `event_schema.py` | Schema universal v1.0 — `build_event()`, `validate_event()` |
+| `event_store.py` | Persistencia dual SQLite+JSONL con dead_letters fallback |
+| `forensic_event_logger.py` | Logger forense canónico — toda la instrumentación pasa por aquí |
+| `run_manifest.py` | `run_manifest.json` + `run_state.json` por run |
+| `checkpoint_manager.py` | Checkpoints por stage |
+| `artifact_registry.py` | Registry de artefactos con SHA256 |
+| `event_policy.py` | 10 checks de trazabilidad |
+| `data_contracts.py` | 16 contratos de calidad DC-01..DC-16 |
+| `redactor.py` | Redacción de secretos en todos los logs |
+
+**Run ID format**: `uat-<ticket_id>-<YYYYMMDD>-<HHMMSS>`
+
+**Smoke**: `python smoke_phase1.py` → 22/22 PASS
+
+### Fase 2 — Logging de comandos
+
+| Módulo | Descripción |
+|---|---|
+| `command_runner.py` | Wrapper forense para subprocess — `run_logged()`, `run_streaming()` |
+| `powershell_logger.py` | PowerShell con Start-Transcript forense |
+| `filesystem_logger.py` | Wrapper forense para operaciones de archivo |
+| `pipeline_stage_logger.py` | Ciclo de vida forense por stage |
+
+**Smoke**: `python smoke_phase2.py` → 31/31 PASS
+
+### Fase 3 — Playwright forense
+
+| Módulo | Descripción |
+|---|---|
+| `playwright/forensic_logger.ts` | Escribe JSONL desde proceso TypeScript |
+| `playwright/instrumented_actions.ts` | Wrappers con eventos intent+result |
+| `playwright_forensic_bridge.py` | Importa eventos TS → `ForensicEventLogger` Python |
+| `uat_test_runner.py` (modificado) | Pasa `run_dir`, `forensic_log`, `artifact_registry` al runner |
+
+**Config via env vars**: `QA_UAT_FORENSIC_RUN_DIR`, `QA_UAT_FORENSIC_RUN_ID`, `QA_UAT_FORENSIC_TICKET_ID`
+
+**Output TypeScript**:
+- `<run_dir>/playwright/actions.jsonl`
+- `<run_dir>/playwright/network.jsonl`
+- `<run_dir>/playwright/console.jsonl`
+- `<run_dir>/playwright/screenshots.jsonl`
+
+**Smoke**: `python smoke_phase3.py` → 22/22 PASS
+
+### Fase 4 — Human Unlock, learnings, métricas, analytics
+
+| Módulo | Descripción |
+|---|---|
+| `blocker_registry.py` | Registry JSON de blockers: `register()`, `resolve()`, `skip()` |
+| `human_unlock.py` | Desbloqueo humano con eventos forenses + CLI entry point |
+| `learning_store.py` | SQLite global — candidates requieren aprobación humana |
+| `learning_candidate_generator.py` | Detecta 5 patrones: selector_fix, timeout_fix, flow_fix, blocker_resolved, replan_success |
+| `metrics_collector.py` | Métricas por run → `data/metrics.jsonl` (append-only) |
+| `analytics_builder.py` | Analytics histórico: pass_rate, top_failures, duration_trends, blocker_analysis |
+| `kpi_builder.py` | 6 KPIs con semáforo green/yellow/red |
+| `observability_validator.py` | Validación 8-capas: event_policy, data_contracts, run_manifest, checkpoints, artifacts, playwright, blockers, metrics |
+| `replay_run.py` | Replay forense desde event log (solo analítico, no re-ejecuta) |
+
+**Nuevos comandos CLI**:
+```bash
+python qa_uat_pipeline.py --analytics-report [--days N]
+python qa_uat_pipeline.py --ticket N --replay-run RUN_ID
+python qa_uat_pipeline.py --ticket N --validate-observability
+python qa_uat_pipeline.py --ticket N --list-blockers RUN_ID
+python qa_uat_pipeline.py --ticket N --run-id RUN_ID --resolve-blocker BLOCKER_ID --answer TEXT
+```
+
+**Smoke**: `python smoke_phase4.py` → 47/47 PASS
+
+---
+
+## Árbol de archivos actual
+
+```
+QA UAT Agent/
+├── qa_uat_pipeline.py              ← Orquestador CLI
+├── requirements.txt                ← Dependencias Python
+├── playwright.config.ts            ← Config Playwright
+├── package.json                    ← Dependencias Node.js
+│
+├── ── Pipeline core ─────────────────────────────────────
+├── uat_ticket_reader.py
+├── ui_map_builder.py
+├── selector_discovery.py
+├── uat_scenario_compiler.py
+├── uat_precondition_checker.py
+├── playwright_test_generator.py
+├── spec_linter.py
+├── uat_test_runner.py
+├── screenshot_annotator.py
+├── uat_assertion_evaluator.py
+├── uat_failure_analyzer.py
+├── uat_dossier_builder.py
+├── ado_evidence_publisher.py
+│
+├── ── Free-form mode ────────────────────────────────────
+├── intent_parser.py
+├── synthetic_ticket_builder.py
+├── data_resolver.py
+│
+├── ── Forense (Fase 1–4) ───────────────────────────────
+├── event_schema.py
+├── event_store.py
+├── forensic_event_logger.py
+├── run_manifest.py
+├── checkpoint_manager.py
+├── artifact_registry.py
+├── event_policy.py
+├── data_contracts.py
+├── redactor.py
+├── command_runner.py
+├── powershell_logger.py
+├── filesystem_logger.py
+├── pipeline_stage_logger.py
+├── playwright/forensic_logger.ts
+├── playwright/instrumented_actions.ts
+├── playwright_forensic_bridge.py
+├── blocker_registry.py
+├── human_unlock.py
+├── learning_store.py
+├── learning_candidate_generator.py
+├── metrics_collector.py
+├── analytics_builder.py
+├── kpi_builder.py
+├── observability_validator.py
+├── replay_run.py
+│
+├── ── Autonomía agéntica ────────────────────────────────
+├── replan_engine.py
+├── autonomous_explorer.py
+├── navigation_graph.py
+├── navigation_graph_learner.py
+├── path_planner.py
+├── graph_promoter.py
+├── session_recorder.py
+├── session_to_playbook.py
+├── playbook_router.py
+├── playbook_performance.py
+├── intent_inferrer.py
+│
+├── ── Conocimiento de la app ───────────────────────────
+├── agenda_screens.py               ← ~90 pantallas de la Agenda Web
+├── agenda_glossary.py
+├── form_knowledge.json
+│
+├── ── Guardrails / diagnóstico ─────────────────────────
+├── environment_preflight.py
+├── smoke_path_checker.py
+├── execution_logger.py
+├── screen_error_detector.py
+├── sql_query_guard.py
+│
+├── ── Schemas, templates, SPEC ─────────────────────────
+├── schemas/
+├── templates/
+├── SPEC/
+│
+├── ── Smoke tests ───────────────────────────────────────
+├── smoke_phase1.py                 ← 22/22 PASS
+├── smoke_phase2.py                 ← 31/31 PASS
+├── smoke_phase3.py                 ← 22/22 PASS
+├── smoke_phase4.py                 ← 47/47 PASS
+├── tests/
+│
+└── ── Persistencia runtime ─────────────────────────────
+    ├── data/
+    │   ├── learning_store.sqlite
+    │   └── metrics.jsonl
+    ├── evidence/<ticket_id>/<run_id>/
+    ├── cache/ui_maps/
+    └── audit/
+```
+
+---
+
+## Próximos pasos potenciales
+
+| Item | Descripción | Prioridad |
+|---|---|---|
+| Auto-collect métricas | Llamar `MetricsCollector.collect_and_persist()` al final de `run()` | Media |
+| Auto-generar learnings | Llamar `LearningCandidateGenerator.generate()` al final del pipeline | Media |
+| UI surfacing KPIs | Panel en el frontend de Stacky Agents con KPIs/blockers | Baja |
+| Endpoint Flask | `POST /api/qa-uat/run` con streaming SSE | Baja |
+| Tests unitarios completos | Cobertura ≥ 80% en todas las tools de Fase B | Media |

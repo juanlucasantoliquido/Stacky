@@ -116,6 +116,15 @@ def run(
     max_total_min        = int(os.environ.get("QA_UAT_MAX_TOTAL_MINUTES", "6"))
     max_total_s          = max_total_min * 60
 
+    # ── Fase 1: Navigation strategy env vars ─────────────────────────────────
+    # QA_NAV_STRATEGY controls which mechanism navigate_webforms uses in specs.
+    # "form_submit" (default) — HTMLFormElement.prototype.submit() bypass ScriptManager
+    # "dopostback"            — window.__doPostBack() fallback for UpdatePanel controls
+    # "link_click"            — anchor/button click for direct navigation
+    nav_strategy  = os.environ.get("QA_NAV_STRATEGY", "form_submit")
+    nav_retries   = int(os.environ.get("QA_NAV_RETRIES", "3"))
+    nav_timeout   = int(os.environ.get("QA_NAV_TIMEOUT_MS", "45000"))
+
     # ── Fase 3: Forensic bridge setup (opcional) ────────────────────────────
     _bridge = None
     _bridge_env: dict = {}
@@ -279,6 +288,11 @@ def _run_all_specs_once(
     env = {**os.environ, "STACKY_QA_UAT_HEADLESS": headless_flag}
     if headed and "STACKY_QA_UAT_SLOW_MO" not in env:
         env["STACKY_QA_UAT_SLOW_MO"] = "500"
+    # Fase 1 — Forward navigation strategy to the Playwright subprocess.
+    # navigate_webforms steps in generated specs read these vars.
+    env.setdefault("QA_NAV_STRATEGY",   os.environ.get("QA_NAV_STRATEGY",   "form_submit"))
+    env.setdefault("QA_NAV_RETRIES",    os.environ.get("QA_NAV_RETRIES",    "3"))
+    env.setdefault("QA_NAV_TIMEOUT_MS", os.environ.get("QA_NAV_TIMEOUT_MS", "45000"))
     if extra_env:
         env.update(extra_env)
 

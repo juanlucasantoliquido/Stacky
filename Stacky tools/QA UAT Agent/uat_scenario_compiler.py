@@ -52,14 +52,21 @@ _SUPPORTED_ACTIONS = frozenset({
     # original actions
     "navigate", "click", "fill", "select", "wait_networkidle", "wait_visible",
     # new actions (Fase 1 — agenda-expert)
-    "press_key",        # keyboard press: Enter, Tab, Escape, F5, etc.
-    "hover",            # hover over element (reveals tooltips / dropdowns)
-    "double_click",     # double-click (edit-in-place, expand tree nodes)
-    "check_checkbox",   # check/uncheck checkbox; valor="true"|"false"
-    "select_radio",     # select a radio button; valor=option label or value
-    "clear",            # clear field content (dates, combos, text)
-    "wait_for_text",    # wait until element contains text; valor=<text>
-    "scroll_into_view", # scroll element into viewport before interacting
+    "press_key",          # keyboard press: Enter, Tab, Escape, F5, etc.
+    "hover",              # hover over element (reveals tooltips / dropdowns)
+    "double_click",       # double-click (edit-in-place, expand tree nodes)
+    "check_checkbox",     # check/uncheck checkbox; valor="true"|"false"
+    "select_radio",       # select a radio button; valor=option label or value
+    "clear",              # clear field content (dates, combos, text)
+    "wait_for_text",      # wait until element contains text; valor=<text>
+    "scroll_into_view",   # scroll element into viewport before interacting
+    # Fase 1 — navegación determinística de pantallas hijas WebForms
+    "navigate_webforms",  # HTMLFormElement.prototype.submit() — bypass ScriptManager
+                          # Campos requeridos:
+                          #   target: pantalla destino (ej: FrmDetalleClie.aspx)
+                          #   eventtarget: __EVENTTARGET (ej: ctl00$c$GridObligaciones)
+                          #   eventargument: __EVENTARGUMENT (ej: Select$0)
+                          # Usar cuando: target está en CHILD_SCREENS de navigation_driver
 })
 
 # Placeholder patterns that indicate incomplete scenario
@@ -345,12 +352,27 @@ Respond ONLY with valid JSON, no explanations.
 The JSON must have:
 - "pantalla": one of [{", ".join(f'"{s}"' for s in sorted(_SUPPORTED_SCREENS))}]
 - "precondiciones": list of strings
-- "pasos": list of {{"accion": "<navigate|click|fill|select|wait_networkidle|wait_visible|press_key|hover|double_click|check_checkbox|select_radio|clear|wait_for_text|scroll_into_view>", "target": "<alias>", "valor": <str|null>}}
+- "pasos": list of {{"accion": "<navigate|click|fill|select|wait_networkidle|wait_visible|press_key|hover|double_click|check_checkbox|select_radio|clear|wait_for_text|scroll_into_view|navigate_webforms>", "target": "<alias>", "valor": <str|null>}}
 - "oraculos": list of {{"tipo": "<equals|contains_literal|count_gt|count_eq|visible|invisible|state|page_contains_text|page_not_contains_text|select_value_is>", "target": "<alias>", "valor": <str|null>}}
 - "datos_requeridos": list of {{"tabla": "<str>", "filtro": "<str>"}}
 
 Action semantics for new actions:
 - press_key: valor = key name (e.g. "Enter", "Tab", "Escape", "F5"). target = focused element alias.
+- hover: valor = null. Hover over element to reveal tooltip or dropdown menu.
+- double_click: valor = null. Double-click for edit-in-place or expand node.
+- check_checkbox: valor = "true" to check, "false" to uncheck.
+- select_radio: valor = option label or value to select.
+- clear: valor = null. Clear the field content.
+- wait_for_text: valor = text string to wait for inside the element.
+- scroll_into_view: valor = null. Scroll element into viewport before interacting.
+- navigate_webforms: Navigate to a child screen via HTMLFormElement.prototype.submit() (bypasses ScriptManager).
+    WHEN TO USE: when the test opens a child screen (FrmDetalleClie, FrmDetalleLote, FrmGestion, FrmAgendaJudicial, etc.) by clicking a grid row or a link that triggers a postback — NOT a direct URL.
+    The step JSON MUST include extra fields:
+      "eventtarget": "<__EVENTTARGET value e.g. ctl00$c$GridObligaciones>"
+      "eventargument": "<__EVENTARGUMENT value e.g. Select$0>"
+    "target" = the destination screen name (e.g. FrmDetalleClie.aspx)
+    "valor" = null
+    DO NOT use navigate_webforms for top-level screens accessible via direct URL — use navigate instead.
 - hover: valor = null. Hover over element to reveal tooltip or dropdown menu.
 - double_click: valor = null. Double-click for edit-in-place or expand node.
 - check_checkbox: valor = "true" to check, "false" to uncheck.

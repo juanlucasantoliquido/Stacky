@@ -9,6 +9,9 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+{% if pasos | selectattr('accion', 'equalto', 'navigate_webforms') | list %}
+import { navigateViaFormSubmit } from '../../playwright/helpers/webforms_nav';
+{% endif %}
 
 const BASE_URL = process.env.AGENDA_WEB_BASE_URL!;
 
@@ -287,6 +290,35 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     // [STEP {{ "%02d" | format(loop.index) }}] navigate to {{ step.target }}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] navigate {{ step.target }}');
     await page.goto(`${BASE_URL}{{ step.target }}`, { waitUntil: 'domcontentloaded' });
+    await waitForAgendaStable(page);
+    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    {% elif step.accion == 'navigate_webforms' %}
+    // [STEP {{ "%02d" | format(loop.index) }}] navigate_webforms → {{ step.target }}
+    // Uses HTMLFormElement.prototype.submit() to bypass ScriptManager (headless-safe).
+    console.log('[STEP {{ '%02d' | format(loop.index) }}] navigate_webforms {{ step.target }} eventtarget={{ step.eventtarget }} arg={{ step.eventargument }}');
+    {
+      const _navResult_{{ loop.index }} = await navigateViaFormSubmit(
+        page,
+        {{ step.eventtarget | tojson }},
+        {{ step.eventargument | tojson }},
+        {{ step.target | tojson }},
+        {
+          timeoutMs: 45_000,
+          maxAttempts: 3,
+          screenshotDir: 'evidence/{{ ticket_id }}/{{ scenario_id }}',
+          screenshotPrefix: 'step_{{ '%02d' | format(loop.index) }}_nav_webforms',
+        },
+      );
+      if (!_navResult_{{ loop.index }}.ok) {
+        throw new Error(
+          `[BLOCKED_NAV_WEBFORMS] step {{ loop.index }} failed to reach {{ step.target }}. ` +
+          `errorCode=${_navResult_{{ loop.index }}.errorCode} ` +
+          `attempts=${_navResult_{{ loop.index }}.attempts} ` +
+          `detail=${_navResult_{{ loop.index }}.errorDetail}`,
+        );
+      }
+      console.log('[STEP {{ '%02d' | format(loop.index) }}] navigate_webforms OK — landed on', page.url(), 'in', _navResult_{{ loop.index }}.elapsedMs, 'ms');
+    }
     await waitForAgendaStable(page);
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
     {% elif step.accion == 'expand_collapsible' %}

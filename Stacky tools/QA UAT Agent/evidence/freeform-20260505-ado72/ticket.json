@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "ticket": {
+    "id": -1,
+    "title": "Validar la implementacion de RF-005 (ADO-72): verificar que las listas de agenda (GridAgendaUsu y GridAgendaAut) en FrmAgenda.aspx muestran las nuevas columnas CLNUMDOC (RUC), OGCORREDOR (Corredor) y OGDEBAUT (Debito Auto.), y que los filtros Debito Automatico y Corredor funcionan sin errores.",
+    "state": "FreeForm",
+    "type": "QA",
+    "url": "freeform://freeform-20260505-ado72"
+  },
+  "description_md": "**Run ID**: freeform-20260505-ado72\n**Intent**: Validar la implementacion de RF-005 (ADO-72): verificar que las listas de agenda (GridAgendaUsu y GridAgendaAut) en FrmAgenda.aspx muestran las nuevas columnas CLNUMDOC (RUC), OGCORREDOR (Corredor) y OGDEBAUT (Debito Auto.), y que los filtros Debito Automatico y Corredor funcionan sin errores.\n**Goal**: ver_agenda_personal\n**Entry screen**: FrmAgenda.aspx\n**Navigation**: FrmLogin.aspx → FrmAgenda.aspx\n",
+  "comments": [
+    {
+      "id": 1,
+      "author": "UserInterfaceQAFreeForm",
+      "date": "2026-05-05T18:14:28",
+      "text_md": "## Análisis Técnico (Free-Form QA — generado por UserInterfaceQAFreeForm)\n\n**Intent**: Validar la implementacion de RF-005 (ADO-72): verificar que las listas de agenda (GridAgendaUsu y GridAgendaAut) en FrmAgenda.aspx muestran las nuevas columnas CLNUMDOC (RUC), OGCORREDOR (Corredor) y OGDEBAUT (Debito Auto.), y que los filtros Debito Automatico y Corredor funcionan sin errores.\n**Acción objetivo**: ver_agenda_personal\n**Pantalla de entrada**: FrmAgenda.aspx\n**Ruta de navegación**: FrmLogin.aspx → FrmAgenda.aspx\n\n**Datos resueltos**:\n  (ninguno)\n\nNotas del orquestador:\nRF-005 ADO-72 - QA de nuevas columnas CLNUMDOC/OGCORREDOR/OGDEBAUT en listas de agenda. Columnas agregadas en SetColumnasGrillaAgendas() y proyectadas en Agenda.Consultar(). Select2 en ddlDebitoAuto requiere seteo via JS. En DEV: 2 registros AGHECHO=P con OGTIENEDEBITOAUTO=NULL (tratados como No), 0 con S, 0 con OGCORREDOR poblado.\n\n## Plan de Pruebas\n\n**P01**: Busqueda sin filtros - verificar que ambas grillas muestran las columnas RUC, Corredor y Debito Auto.\n  Datos: Sin filtros. Abrir la Busqueda Avanzada (panel #c_acsBusquedaAgenda o collapsible), presionar el boton Buscar (#c_btnOk), esperar a que #c_GridAgendaUsu sea visible. Verificar que los encabezados de #c_GridAgendaUsu contienen textos RUC, Corredor y Deb (debito). Repetir verificacion en #c_GridAgendaAut.\n  Esperado: Ambas grillas (GridAgendaUsu y GridAgendaAut) muestran columnas con encabezados que contienen RUC, Corredor y Deb (debito automatico). No se produce ninguna excepcion JavaScript ni error ASP.NET 500.\n",
+      "role": "analisis_tecnico"
+    }
+  ],
+  "analisis_tecnico": "## Análisis Técnico (Free-Form QA — generado por UserInterfaceQAFreeForm)\n\n**Intent**: Validar la implementacion de RF-005 (ADO-72): verificar que las listas de agenda (GridAgendaUsu y GridAgendaAut) en FrmAgenda.aspx muestran las nuevas columnas CLNUMDOC (RUC), OGCORREDOR (Corredor) y OGDEBAUT (Debito Auto.), y que los filtros Debito Automatico y Corredor funcionan sin errores.\n**Acción objetivo**: ver_agenda_personal\n**Pantalla de entrada**: FrmAgenda.aspx\n**Ruta de navegación**: FrmLogin.aspx → FrmAgenda.aspx\n\n**Datos resueltos**:\n  (ninguno)\n\nNotas del orquestador:\nRF-005 ADO-72 - QA de nuevas columnas CLNUMDOC/OGCORREDOR/OGDEBAUT en listas de agenda. Columnas agregadas en SetColumnasGrillaAgendas() y proyectadas en Agenda.Consultar(). Select2 en ddlDebitoAuto requiere seteo via JS. En DEV: 2 registros AGHECHO=P con OGTIENEDEBITOAUTO=NULL (tratados como No), 0 con S, 0 con OGCORREDOR poblado.\n\n## Plan de Pruebas\n\n**P01**: Busqueda sin filtros - verificar que ambas grillas muestran las columnas RUC, Corredor y Debito Auto.\n  Datos: Sin filtros. Abrir la Busqueda Avanzada (panel #c_acsBusquedaAgenda o collapsible), presionar el boton Buscar (#c_btnOk), esperar a que #c_GridAgendaUsu sea visible. Verificar que los encabezados de #c_GridAgendaUsu contienen textos RUC, Corredor y Deb (debito). Repetir verificacion en #c_GridAgendaAut.\n  Esperado: Ambas grillas (GridAgendaUsu y GridAgendaAut) muestran columnas con encabezados que contienen RUC, Corredor y Deb (debito automatico). No se produce ninguna excepcion JavaScript ni error ASP.NET 500.\n",
+  "navigation_path": [
+    "FrmLogin.aspx",
+    "FrmAgenda.aspx"
+  ],
+  "plan_pruebas": [
+    {
+      "id": "P01",
+      "descripcion": "Busqueda sin filtros - verificar que ambas grillas muestran las columnas RUC, Corredor y Debito Auto.",
+      "datos": "Sin filtros. Abrir la Busqueda Avanzada (panel #c_acsBusquedaAgenda o collapsible), presionar el boton Buscar (#c_btnOk), esperar a que #c_GridAgendaUsu sea visible. Verificar que los encabezados de #c_GridAgendaUsu contienen textos RUC, Corredor y Deb (debito). Repetir verificacion en #c_GridAgendaAut.",
+      "esperado": "Ambas grillas (GridAgendaUsu y GridAgendaAut) muestran columnas con encabezados que contienen RUC, Corredor y Deb (debito automatico). No se produce ninguna excepcion JavaScript ni error ASP.NET 500."
+    }
+  ],
+  "notas_qa": [
+    "Free-form run: freeform-20260505-ado72",
+    "Entry screen: FrmAgenda.aspx",
+    "Navigation path: FrmLogin.aspx → FrmAgenda.aspx"
+  ],
+  "adjuntos": [],
+  "precondiciones_detected": [],
+  "meta": {
+    "tool": "synthetic_ticket_builder",
+    "version": "1.0.0",
+    "run_id": "freeform-20260505-ado72",
+    "source": "freeform",
+    "duration_ms": 12
+  }
+}

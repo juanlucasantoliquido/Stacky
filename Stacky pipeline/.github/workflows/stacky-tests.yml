@@ -1,0 +1,40 @@
+name: Stacky Tests
+
+on:
+  push:
+    paths:
+      - 'Tools/Stacky/**'
+  pull_request:
+    paths:
+      - 'Tools/Stacky/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Tools/Stacky
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests with coverage
+        run: |
+          pytest tests/unit tests/integration \
+            --cov=. \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=70 \
+            -v
+
+      - name: Type check
+        run: mypy *.py --ignore-missing-imports --no-error-summary
+        continue-on-error: true

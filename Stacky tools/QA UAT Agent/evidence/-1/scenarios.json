@@ -1,0 +1,65 @@
+{
+  "ok": true,
+  "ticket_id": -1,
+  "compiled": 1,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": -1,
+      "pantalla": "FrmBusqueda.aspx",
+      "titulo": "Busqueda sin filtros - verificar que ambas grillas muestran las columnas RUC, Corredor y Debito Auto.",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "table_agenda_usu",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "table_agenda_usu",
+          "valor": "RUC"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "table_agenda_usu",
+          "valor": "Corredor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "table_agenda_usu",
+          "valor": "Deb"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "table_agenda_aut",
+          "valor": "RUC"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "table_agenda_aut",
+          "valor": "Corredor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "table_agenda_aut",
+          "valor": "Deb"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      }
+    }
+  ],
+  "out_of_scope_items": []
+}

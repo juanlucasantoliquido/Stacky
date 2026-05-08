@@ -1,0 +1,404 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.0",
+  "run_id": "35dda4b2-3573-4ee9-a12a-5d3df27efc12",
+  "ticket_id": 57,
+  "ticket_title": "GAP Menor — Campos Adicionales y Ordenamiento en Resumen de Agenda (REQ-01)",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "FAIL",
+  "executive_summary": "Resumen Ejecutivo UAT:  \nEl ticket \"GAP Menor — Campos Adicionales y Ordenamiento en Resumen de Agenda (REQ-01)\" fue evaluado con 7 escenarios, de los cuales ninguno fue aprobado. Todos los escenarios (P01 a P07) presentaron incidencias que impidieron su validación exitosa. Se requiere revisión y corrección de los puntos observados antes de una nueva ronda de pruebas.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.1.0",
+    "total": 7,
+    "pass": 0,
+    "fail": 7,
+    "blocked": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "Agenda con lotes USD - columna Prima visible",
+      "status": "fail",
+      "duration_ms": 38471,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P01\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P01\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P01\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Se navegó a FrmAgenda.aspx para preparar el entorno antes de ejecutar el escenario.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P01:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P01\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Se verificó el estado final: la grilla c_gridagendaaut está visible y muestra Prima=1355030.88 y Moneda=US.D.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P01:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al ingresar un número de cuenta en la agenda y hacer clic en el botón de confirmación, la columna \"Prima\" se muestre correctamente con el valor esperado de 1355030.88 en la moneda USD. El resultado fue un fallo, indicando que la prima no se mostró como se esperaba."
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "Ordenamiento DESC - mayor primero",
+      "status": "fail",
+      "duration_ms": 39052,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P02\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P02\\step_02_after.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P02\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P02\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P02:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_02_after.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P02\\step_02_after.png",
+          "step_index": 2,
+          "action": "click",
+          "target": "link_ddlacciones",
+          "value": null,
+          "description": "Hacer click sobre el botón 'ddlacciones'.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P02:step_02_after.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P02\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Estado final tras ejecutar todos los pasos. Se valida que: la grilla 'c_gridagendaaut' cumple la regla equals.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P02:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que al seleccionar una empresa específica ('1011240108601559') y proceder con la acción correspondiente, el sistema muestre correctamente la información relacionada con dicha empresa en orden descendente. El resultado fue un fallo, indicando que la verificación de la selección no coincidió con el valor esperado."
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "Conversion USD a local para sort",
+      "status": "fail",
+      "duration_ms": 38072,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P03\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P03\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P03\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P03:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P03\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Estado final tras ejecutar todos los pasos; se valida que la grilla 'c_gridagendaaut' sea visible y muestre '22,843,820'.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P03:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar la correcta conversión de una cantidad en dólares estadounidenses (USD) a la moneda local, asegurando que el resultado visible en la interfaz sea el esperado tras ingresar los valores y realizar la conversión. El resultado fallido indica que la conversión no se realizó correctamente, ya que el valor mostrado no coincide con lo esperado."
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "P04",
+      "status": "fail",
+      "duration_ms": 38427,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P04\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P04\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P04\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Se dejó preparado el escenario con las precondiciones y datos necesarios para iniciar la ejecución UAT.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P04:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P04\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Se capturó y verificó el estado final tras la ejecución para validar resultados esperados y generar evidencia.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P04:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": ""
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "OGMONEDA sin entry en RCAMBIO - fallback",
+      "status": "fail",
+      "duration_ms": 38176,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P05\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P05\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P05\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Navegación a FrmAgenda.aspx como preparación inicial antes de ejecutar el escenario.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P05:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P05\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Validar estado final: 'panel_gvc_gridagendaaut_div' visible y que contiene el texto 'ISNULL/NVL aplica tasa=1'.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P05:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al no encontrar un selector en el componente RCAMBIO y al ingresar un rango de fechas, el sistema muestre correctamente el mensaje \"ISNULL/NVL aplica tasa=1\" en el panel correspondiente. El resultado fue un fallo, indicando que el mensaje esperado no se mostró en la página."
+    },
+    {
+      "scenario_id": "P06",
+      "titulo": "Agenda vacia",
+      "status": "fail",
+      "duration_ms": 34588,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P06\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P06\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P06\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Navegar a FrmAgenda.aspx para preparar el escenario antes de ejecutar los pasos del caso.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P06:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P06\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Verificar que las grillas c_gridagendaaut y c_gridagendausu sean visibles y que el botón btnnext esté invisible.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P06:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que, al no tener lotes agendados activos, las secciones de la agenda ('grid_c_gridagendaaut' y 'grid_c_gridagendausu') sean invisibles para el usuario. El resultado \"FAIL\" indica que al menos una de las condiciones de visibilidad no se cumplió como se esperaba."
+    },
+    {
+      "scenario_id": "P07",
+      "titulo": "Exportar Excel incluye columnas nuevas",
+      "status": "fail",
+      "duration_ms": 33815,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P07\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P07\\step_01_after.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P07\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P07\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Navegar a FrmAgenda.aspx para preparar el entorno antes de ejecutar el escenario.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P07:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_01_after.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P07\\step_01_after.png",
+          "step_index": 1,
+          "action": "click",
+          "target": "link_c_btnexportexcelagusu",
+          "value": null,
+          "description": "Hacer clic en el botón 'c_btnexportexcelagusu' para intentar exportar a Excel y validar que el archivo incluya las columnas nuevas.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P07:step_01_after.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P07\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Verificar estado final y validar que en 'panel_loader_general' aparezcan los textos 'LODEUDA' y 'OGMONEDA' según los oráculos.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P07:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que al hacer clic en el botón de exportación a Excel, el archivo generado incluya correctamente las nuevas columnas 'LODEUDA' y 'OGMONEDA'. El resultado fue un fallo, indicando que al menos una de las columnas esperadas no estaba presente en la página."
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P01",
+      "titulo": "P01",
+      "message": "Scenario P01 failed with status fail",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P01\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "P02",
+      "message": "Scenario P02 failed with status fail",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P02\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "P03",
+      "message": "Scenario P03 failed with status fail",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P03\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "P04",
+      "message": "Scenario P04 failed with status fail",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P04\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "P05",
+      "message": "Scenario P05 failed with status fail",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P05\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P06",
+      "titulo": "P06",
+      "message": "Scenario P06 failed with status fail",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P06\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P07",
+      "titulo": "P07",
+      "message": "Scenario P07 failed with status fail",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\P07\\step_00_setup.png"
+    }
+  ],
+  "recommendation_for_human_qa": [
+    "Revise los casos de prueba fallidos para identificar las causas raíz de los errores.",
+    "Asegúrese de que los datos de entrada utilizados en las pruebas sean correctos y estén actualizados.",
+    "Verifique que las dependencias y configuraciones del entorno de pruebas sean las adecuadas.",
+    "Consulte los registros de errores y la salida de la terminal para obtener información adicional sobre las fallas."
+  ],
+  "next_steps": [
+    "Revisar los escenarios fallidos con el desarrollador.",
+    "Crear bug tickets para cada fallo confirmado.",
+    "Planificar re-ejecución tras correcciones."
+  ],
+  "generated_at": "2026-05-03T02:22:22Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.1.0",
+    "duration_ms": 343936
+  },
+  "comment_hash": "f360244c119c128062a393605ac679e360277a658a67556a52c4df8d135fc156",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\ado_comment.html"
+  }
+}

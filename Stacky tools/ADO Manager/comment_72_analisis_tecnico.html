@@ -1,0 +1,277 @@
+<h2>🔬 ANÁLISIS TÉCNICO — ADO-72</h2>
+<blockquote>
+  <strong>Generado por:</strong> Analista Técnico Agéntico<br>
+  <strong>Fecha:</strong> 2026-05-04<br>
+  <strong>Documentación consultada:</strong> 00_INDICE_MAESTRO.md, 10_AGENDAWEB_PAGINAS.md, 03_CAPA_DATOS_RSDALC.md, 25_REFERENCIA_TABLAS_BD.md, 07_BASE_DATOS.md, ONLINE/INDEX.md, ONLINE/03-agenda-personal-navegacion.md
+</blockquote>
+<hr>
+
+<h2>0. RESUMEN RÁPIDO</h2>
+
+<h3>🎯 Qué debe desarrollar el Developer</h3>
+<p>Alinear las listas de Agenda Personal con los nuevos filtros ya incorporados (RF-002/ADO-65): agregar columnas de lista para <code>RUC</code>, <code>Corredor</code> y <code>Débito Auto.</code> en ambas grillas de <code>FrmAgenda</code>. Ajustar los SELECT de <code>RSDalc.Agenda.Consultar()</code> para devolver <code>CLNUMDOC</code>, <code>OGCORREDOR</code> y alias <code>OGDEBAUT</code>.</p>
+
+<h3>🧪 Cómo probar (paso a paso)</h3>
+<ol>
+  <li>Abrir <code>FrmAgenda.aspx</code> y ejecutar Buscar sin filtros: validar que ambas grillas muestran nuevas columnas <code>RUC</code>, <code>Corredor</code> y <code>Débito Auto.</code>.</li>
+  <li>Usar un lote candidato actual (<code>AGLOTE=4127924112345393</code>): validar que <code>RUC</code> se muestra con valor de <code>CLNUMDOC</code>.</li>
+  <li>Filtrar por <code>RUC</code> parcial (ej. <code>1234</code>) y validar que los resultados coinciden con lo mostrado en la nueva columna.</li>
+  <li>Filtrar <code>Débito Automático=No</code>: validar que aparecen los pendientes actuales (en DEV, <code>OGTIENEDEBITOAUTO</code> viene NULL y se interpreta como No).</li>
+  <li>Filtrar <code>Débito Automático=Sí</code>: validar resultado 0 con los datos actuales de DEV.</li>
+  <li>Filtrar por <code>Corredor</code>: validar que no rompe y retorna 0 con los datos actuales (no hay <code>OGCORREDOR</code> poblado en DEV).</li>
+</ol>
+<hr>
+
+<h2>1. TRADUCCIÓN FUNCIONAL → TÉCNICA</h2>
+
+<h3>Requerimiento funcional (resumen)</h3>
+<p>RF-005 pide coherencia entre criterios de filtro y columnas visibles en Agenda Personal. Para los nuevos campos de Pacífico ya agregados al filtro (Débito Automático, Corredor, Nombre de Cliente, RUC), la lista debe reflejar al menos los datos equivalentes visibles en resultado.</p>
+
+<h3>Solución técnica propuesta</h3>
+<p>La UI de lista en <code>FrmAgenda</code> está definida por columnas fijas de <code>AISGridView</code> y no se autoalinea con filtros. Se debe extender <code>SetColumnasGrillaAgendas()</code> con las columnas faltantes y ampliar los SELECT de <code>RSDalc.Agenda.Consultar()</code> (AGENDAAUT y AGENDAUSU) para devolver los campos requeridos. No requiere cambio en firmas RSFac/RSBus ni DDL: los filtros ya están implementados y las columnas BD existen.</p>
+
+<h3>Flujo actual del sistema (cómo funciona HOY)</h3>
+<ol>
+  <li>Usuario ejecuta búsqueda en <code>FrmAgenda.aspx</code> con 11 filtros (incluyendo Débito Auto/Corredor/Nombre/RUC).</li>
+  <li><code>FrmAgenda.FiltrarGrilla()</code> invoca <code>RSFac.Agenda.Consultar()</code> y carga <code>GridAgendaUsu</code>/<code>GridAgendaAut</code>.</li>
+  <li><code>SetColumnasGrillaAgendas()</code> solo muestra Cliente, Lote, Fecha, Hora, Recomendación, Nivel Mora, Prima, Moneda.</li>
+  <li><code>RSDalc.Agenda.Consultar()</code> filtra por RUC/Corredor/Débito, pero no retorna esas columnas en SELECT.</li>
+</ol>
+
+<h3>Flujo propuesto (cómo debe funcionar DESPUÉS)</h3>
+<ol>
+  <li>(sin cambio) Se mantienen los filtros actuales.</li>
+  <li><strong>[CAMBIO]</strong> <code>SetColumnasGrillaAgendas()</code> agrega <code>CLNUMDOC</code>, <code>OGCORREDOR</code> y <code>OGDEBAUT</code>.</li>
+  <li><strong>[CAMBIO]</strong> <code>RSDalc.Agenda.Consultar()</code> incorpora en ambos SELECT: <code>CLNUMDOC</code>, <code>OGCORREDOR</code> y cálculo <code>OGDEBAUT</code> (S/N, NULL→N).</li>
+  <li>La grilla queda consistente con los filtros visibles para RUC, Corredor y Débito Auto.</li>
+</ol>
+<hr>
+
+<h2>2. ALCANCE DE CAMBIOS</h2>
+
+<h3>Cambios en código — nivel de MÉTODO</h3>
+
+<h4>trunk/OnLine/AgendaWeb/FrmAgenda.aspx.cs — Capa: AgendaWeb</h4>
+<p><strong>Clase:</strong> <code>FrmAgenda</code><br>
+<strong>Método:</strong> <code>SetColumnasGrillaAgendas(AISGridView Grid)</code> — línea ~150<br>
+<strong>Tipo de cambio:</strong> Modificar lógica</p>
+<ul>
+  <li><strong>Antes:</strong> define 8 columnas visibles sin RUC/Corredor/Débito.</li>
+  <li><strong>Después:</strong> agregar columnas <code>CLNUMDOC</code>, <code>OGCORREDOR</code>, <code>OGDEBAUT</code> (manteniendo orden funcional acordado).</li>
+  <li><strong>Razón:</strong> la grilla no refleja campos nuevos del filtro y rompe coherencia RF-005.</li>
+  <li><strong>PRE:</strong> DataSource contiene esas columnas en tablas <code>AGENDAAUT</code>/<code>AGENDAUSU</code>.</li>
+  <li><strong>POST:</strong> ambas grillas renderizan las 3 columnas adicionales con textos de <code>RCONTROLES</code>.</li>
+  <li><strong>THROWS:</strong> N/A.</li>
+</ul>
+
+<h4>trunk/OnLine/Negocio/RSDalc/Agenda.cs — Capa: RSDalc</h4>
+<p><strong>Clase:</strong> <code>Agenda</code><br>
+<strong>Método:</strong> <code>Consultar(...)</code> — línea ~35<br>
+<strong>Tipo de cambio:</strong> Modificar lógica SQL</p>
+<ul>
+  <li><strong>Antes:</strong> ambos SELECT retornan hasta <code>OGMONEDA</code>; no proyectan RUC, Corredor ni valor de Débito para grilla.</li>
+  <li><strong>Después:</strong> agregar en SELECT de <code>sSql</code> y <code>sSql2</code>: <code>CLNUMDOC</code>, <code>OGCORREDOR</code> y alias <code>OGDEBAUT</code> (CASE con NULL→'N').</li>
+  <li><strong>Razón:</strong> la UI requiere campos proyectados para mostrar columnas alineadas con filtros ya activos.</li>
+  <li><strong>PRE:</strong> joins actuales con <code>RCLIE</code> y <code>ROBLG</code> se mantienen (<code>CLNUMDOC</code>, <code>OGCORREDOR</code>, <code>OGTIENEDEBITOAUTO</code> disponibles).</li>
+  <li><strong>POST:</strong> DataSet <code>AGENDAAUT/AGENDAUSU</code> expone columnas nuevas sin romper filtros existentes.</li>
+  <li><strong>THROWS:</strong> N/A (manejo actual por <code>conn.Errores</code>).</li>
+</ul>
+
+<h3>Cambios en base de datos</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tipo</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Objeto</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Descripción</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Verificación</td><td style="border:1px solid #ccc;padding:6px"><code>ROBLG.OGTIENEDEBITOAUTO</code></td><td style="border:1px solid #ccc;padding:6px">VARCHAR(6), existe en BD dev ✅</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Verificación</td><td style="border:1px solid #ccc;padding:6px"><code>ROBLG.OGCORREDOR</code></td><td style="border:1px solid #ccc;padding:6px">VARCHAR(20), existe en BD dev ✅</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">Verificación</td><td style="border:1px solid #ccc;padding:6px"><code>RCLIE.CLNUMDOC</code></td><td style="border:1px solid #ccc;padding:6px">VARCHAR(20), existe en BD dev ✅</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">DDL/DML</td><td style="border:1px solid #ccc;padding:6px"><code>N/A</code></td><td style="border:1px solid #ccc;padding:6px">No requiere scripts de BD</td></tr>
+</table>
+
+<h3>RIDIOMA — Mensajes nuevos</h3>
+<p>No aplica. Ya existen IDs y controles para columnas/filtros: <code>9298</code> (Corredor), <code>9300</code> (RUC), <code>9301</code> (Débito Auto.).</p>
+
+<h3>Archivos afectados — resumen</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Archivo</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Capa</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tipo de cambio</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmAgenda.aspx.cs</code></td><td style="border:1px solid #ccc;padding:6px">AgendaWeb</td><td style="border:1px solid #ccc;padding:6px">Agregar columnas en método de definición de grilla</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSDalc/Agenda.cs</code></td><td style="border:1px solid #ccc;padding:6px">RSDalc</td><td style="border:1px solid #ccc;padding:6px">Extender SELECT de AGENDAAUT/AGENDAUSU con campos de coherencia</td></tr>
+</table>
+<hr>
+
+<h2>2B. SPEC TÉCNICA (SDD)</h2>
+<blockquote>
+  Contratos formales derivados del análisis. El Developer debe verificar que su implementación satisface <strong>cada contrato</strong> antes de dar el desarrollo por completado.
+</blockquote>
+
+<table style="border-collapse:collapse;width:100%">
+  <tr>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Spec ID</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">CA-REF</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Método</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">PRE</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">POST</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">THROWS</th>
+    <th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Test(s)</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-01</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-01</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>FrmAgenda.SetColumnasGrillaAgendas(AISGridView)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">DataSource con campos CLNUMDOC/OGCORREDOR/OGDEBAUT</td>
+    <td style="border:1px solid #ccc;padding:6px">Grilla contiene columnas visibles alineadas con filtros</td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-001, TU-002</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ccc;padding:6px">S-02</td>
+    <td style="border:1px solid #ccc;padding:6px">CA-02</td>
+    <td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Agenda.Consultar(...)</code></td>
+    <td style="border:1px solid #ccc;padding:6px">Filtros existentes deben permanecer intactos</td>
+    <td style="border:1px solid #ccc;padding:6px">AGENDAAUT/AGENDAUSU proyectan CLNUMDOC, OGCORREDOR y OGDEBAUT</td>
+    <td style="border:1px solid #ccc;padding:6px">N/A</td>
+    <td style="border:1px solid #ccc;padding:6px">TU-003, TU-004, TU-005</td>
+  </tr>
+</table>
+<hr>
+
+<h2>3. PLAN DE PRUEBAS TÉCNICO</h2>
+
+<h3>Pruebas funcionales enriquecidas con datos reales</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">#</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Caso de prueba</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Datos de BD candidatos</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Resultado esperado</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P01</td><td style="border:1px solid #ccc;padding:6px">Búsqueda sin filtros + validación de nuevas columnas</td><td style="border:1px solid #ccc;padding:6px">AGLOTE=4127924112345393 / 1011240108601559 (AGHECHO='P')</td><td style="border:1px solid #ccc;padding:6px">Se visualizan RUC, Corredor y Débito Auto. en ambas grillas</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P02</td><td style="border:1px solid #ccc;padding:6px">Filtro RUC parcial</td><td style="border:1px solid #ccc;padding:6px">CLNUMDOC contiene '1234'</td><td style="border:1px solid #ccc;padding:6px">Resultados coinciden con columna RUC</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P03</td><td style="border:1px solid #ccc;padding:6px">Filtro Débito Auto = No</td><td style="border:1px solid #ccc;padding:6px">Total pendientes=2; DebitoNull=2</td><td style="border:1px solid #ccc;padding:6px">Retorna registros actuales (NULL tratado como No)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P04</td><td style="border:1px solid #ccc;padding:6px">Filtro Débito Auto = Sí</td><td style="border:1px solid #ccc;padding:6px">DebitoSi=0 en DEV</td><td style="border:1px solid #ccc;padding:6px">Resultado vacío sin error</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">P05</td><td style="border:1px solid #ccc;padding:6px">Filtro Corredor</td><td style="border:1px solid #ccc;padding:6px">ConCorredor=0 en DEV</td><td style="border:1px solid #ccc;padding:6px">Resultado vacío sin error; columna visible</td></tr>
+</table>
+
+<h3>Queries para obtener datos de prueba</h3>
+<pre><code>-- Candidatos de agenda pendiente
+SELECT TOP 20 A.AGLOTE, A.AGFECREC, A.AGHORAREC,
+       O.OGTIENEDEBITOAUTO, O.OGCORREDOR,
+       C.CLNUMDOC, C.CLAPELLIDO1, C.CLNOMBRE
+FROM RAGEN A
+INNER JOIN RLOTE L ON L.LOCOD = A.AGLOTE
+INNER JOIN ROBLG O ON O.OGLOTE = L.LOCOD AND O.OGLIDER='1'
+INNER JOIN RCLIE C ON C.CLCOD = L.LOCOD
+WHERE A.AGHECHO='P'
+ORDER BY A.AGFECREC DESC, A.AGHORAREC DESC;
+
+-- Distribución para Débito/Corredor
+SELECT COUNT(1) AS TotalPendientes,
+       SUM(CASE WHEN O.OGTIENEDEBITOAUTO='S' THEN 1 ELSE 0 END) AS DebitoSi,
+       SUM(CASE WHEN O.OGTIENEDEBITOAUTO='N' THEN 1 ELSE 0 END) AS DebitoNo,
+       SUM(CASE WHEN O.OGTIENEDEBITOAUTO IS NULL THEN 1 ELSE 0 END) AS DebitoNull,
+       SUM(CASE WHEN O.OGCORREDOR IS NOT NULL AND LTRIM(RTRIM(O.OGCORREDOR))&lt;&gt;'' THEN 1 ELSE 0 END) AS ConCorredor
+FROM RAGEN A
+INNER JOIN RLOTE L ON L.LOCOD=A.AGLOTE
+INNER JOIN ROBLG O ON O.OGLOTE=L.LOCOD AND O.OGLIDER='1'
+WHERE A.AGHECHO='P';</code></pre>
+
+<h3>Escenarios de borde a verificar</h3>
+<ul>
+  <li>Valores NULL de <code>OGTIENEDEBITOAUTO</code> deben mostrarse como No (o código N según diseño elegido) y no romper grilla.</li>
+  <li><code>OGCORREDOR</code> NULL/vacío no debe generar excepciones ni desalineación de columnas.</li>
+</ul>
+<hr>
+
+<h2>4. TESTS UNITARIOS OBLIGATORIOS</h2>
+<blockquote>
+  ⚠️ <strong>OBLIGATORIO PARA EL DESARROLLADOR:</strong> Todos los tests listados deben pasar antes de cerrar el ticket.
+</blockquote>
+
+<h3>Tests requeridos</h3>
+
+<h4>TU-001: Columnas de agenda incluyen campos de coherencia</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>FrmAgenda</code></li>
+  <li><strong>Método:</strong> <code>SetColumnasGrillaAgendas(AISGridView)</code></li>
+  <li><strong>CA-REF:</strong> CA-01</li>
+  <li><strong>DADO:</strong> instancia de <code>AISGridView</code> vacía</li>
+  <li><strong>CUANDO:</strong> se invoca <code>SetColumnasGrillaAgendas</code></li>
+  <li><strong>ENTONCES:</strong> existe columna para <code>CLNUMDOC</code>, <code>OGCORREDOR</code> y <code>OGDEBAUT</code></li>
+</ul>
+
+<h4>TU-002: Orden de columnas no rompe columnas existentes</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>FrmAgenda</code></li>
+  <li><strong>Método:</strong> <code>SetColumnasGrillaAgendas(AISGridView)</code></li>
+  <li><strong>CA-REF:</strong> CA-01</li>
+  <li><strong>DADO:</strong> grilla inicial</li>
+  <li><strong>CUANDO:</strong> se agregan nuevas columnas</li>
+  <li><strong>ENTONCES:</strong> <code>CLIENTE/LOCOD/AGFECREC/AGHORAREC/RECOMENDACION/NIVELMORA/LODEUDA/OGMONEDA</code> siguen presentes</li>
+</ul>
+
+<h4>TU-003: Consultar proyecta CLNUMDOC y OGCORREDOR en AGENDAAUT/AGENDAUSU</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(...)</code></li>
+  <li><strong>CA-REF:</strong> CA-02</li>
+  <li><strong>DADO:</strong> mock/fake de <code>cConexion</code> con captura de SQL y DataSet de respuesta</li>
+  <li><strong>CUANDO:</strong> se invoca <code>Consultar</code></li>
+  <li><strong>ENTONCES:</strong> ambos SQL contienen <code>CLNUMDOC</code> y <code>OGCORREDOR</code> en SELECT</li>
+</ul>
+
+<h4>TU-004: Consultar proyecta OGDEBAUT con regla NULL→N</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>RSDalc.Agenda</code></li>
+  <li><strong>Método:</strong> <code>Consultar(...)</code></li>
+  <li><strong>CA-REF:</strong> CA-02</li>
+  <li><strong>DADO:</strong> entrada con combinación de OGTIENEDEBITOAUTO nulo/S/N</li>
+  <li><strong>CUANDO:</strong> se construye SQL</li>
+  <li><strong>ENTONCES:</strong> alias <code>OGDEBAUT</code> contempla NULL como No/N</li>
+</ul>
+
+<h4>TU-005: Sin valores de corredor/débito en datos no falla el render de grilla</h4>
+<ul>
+  <li><strong>Clase a testear:</strong> <code>FrmAgenda</code></li>
+  <li><strong>Método:</strong> <code>LlenarGrillas()</code></li>
+  <li><strong>CA-REF:</strong> CA-02</li>
+  <li><strong>DADO:</strong> DataSet con columnas nuevas y valores NULL</li>
+  <li><strong>CUANDO:</strong> se ejecuta DataBind</li>
+  <li><strong>ENTONCES:</strong> no hay excepción y la grilla muestra celdas vacías/controladas</li>
+</ul>
+
+<h3>Resumen de cobertura requerida</h3>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Clase</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Método</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Tests</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Escenarios</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>FrmAgenda</code></td><td style="border:1px solid #ccc;padding:6px"><code>SetColumnasGrillaAgendas()</code></td><td style="border:1px solid #ccc;padding:6px">TU-001, TU-002</td><td style="border:1px solid #ccc;padding:6px">Happy path, regresión de columnas existentes</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>RSDalc.Agenda</code></td><td style="border:1px solid #ccc;padding:6px"><code>Consultar()</code></td><td style="border:1px solid #ccc;padding:6px">TU-003, TU-004</td><td style="border:1px solid #ccc;padding:6px">Proyección de campos, regla NULL/No</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px"><code>FrmAgenda</code></td><td style="border:1px solid #ccc;padding:6px"><code>LlenarGrillas()</code></td><td style="border:1px solid #ccc;padding:6px">TU-005</td><td style="border:1px solid #ccc;padding:6px">Valores nulos, estabilidad de render</td></tr>
+</table>
+<hr>
+
+<h2>5. NOTAS PARA EL DESARROLLADOR</h2>
+
+<h3>Convenciones del proyecto a respetar</h3>
+<p>En DAL mantener construcción SQL con <code>StringBuilder</code> y sanitización <code>cFormat.StToBD()</code>. No introducir SPs ni parámetros ADO.NET fuera del patrón actual.</p>
+
+<h3>Precauciones</h3>
+<ul>
+  <li>No modificar firmas de <code>RSFac/RSBus/FrmAgenda.FiltrarGrilla()</code>: ya están extendidas por ADO-65 y en uso.</li>
+  <li>No alterar semántica de filtros existentes (fecha/perfil/recomendación/etc.) al tocar SELECT.</li>
+  <li>El alias de columna para Débito debe ser <code>OGDEBAUT</code> para reutilizar <code>RCONTROLES</code> ya cargado.</li>
+</ul>
+
+<h3>Patrón de referencia en el proyecto</h3>
+<p>La incorporación de columnas de prima/moneda ya se hizo en <code>FrmAgenda.SetColumnasGrillaAgendas()</code> y en <code>RSDalc.Agenda.Consultar()</code> (ADO-57). Repetir ese patrón para las nuevas columnas.</p>
+
+<h3>Queries de verificación post-implementación</h3>
+<pre><code>-- Verificar metadatos de controles de grilla
+SELECT ICFORM, ICCONTROL, ICTEXTO
+FROM RCONTROLES
+WHERE ICFORM='AgendaWeb.FORMAGENDA'
+  AND ICCONTROL IN ('GridAgendaUsu#CLNUMDOC','GridAgendaUsu#OGCORREDOR','GridAgendaUsu#OGDEBAUT',
+                    'GridAgendaAut#CLNUMDOC','GridAgendaAut#OGCORREDOR','GridAgendaAut#OGDEBAUT')
+ORDER BY ICCONTROL;
+
+-- Verificar existencia de columnas fuente en BD
+SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE (TABLE_NAME='ROBLG' AND COLUMN_NAME IN ('OGTIENEDEBITOAUTO','OGCORREDOR'))
+   OR (TABLE_NAME='RCLIE' AND COLUMN_NAME='CLNUMDOC')
+ORDER BY TABLE_NAME, COLUMN_NAME;</code></pre>
+
+<hr>
+<p><strong>Próximo paso:</strong> Desarrollador toma este ticket e implementa siguiendo este análisis.<br>
+<strong>Regla:</strong> Todos los tests unitarios de la sección 4 deben pasar al 100%.</p>

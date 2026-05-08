@@ -1,0 +1,24 @@
+{
+  "coefficients": [
+    0.097049,
+    0.0,
+    -0.135658,
+    0.105214,
+    0.021324,
+    0.0,
+    0.0
+  ],
+  "intercept": 15.468533,
+  "trained_at": "2026-04-22T01:39:32.560202+00:00",
+  "n_samples": 25,
+  "rmse": 8.851,
+  "features": [
+    "tech_complexity",
+    "uncertainty",
+    "impact",
+    "files_affected",
+    "functional_risk",
+    "external_dep",
+    "similar_tickets_count"
+  ]
+}

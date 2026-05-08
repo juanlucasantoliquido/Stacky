@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Fondo hexagonal -->
+  <polygon points="24,2 43,13 43,35 24,46 5,35 5,13" fill="#1d4ed8" opacity="0.15"/>
+  <polygon points="24,4 41,14 41,34 24,44 7,34 7,14" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+  <!-- Rayo / bolt -->
+  <path d="M27 6L14 26h10l-3 16 16-22H26z" fill="#f59e0b" stroke="#fbbf24" stroke-width="0.5" stroke-linejoin="round"/>
+</svg>

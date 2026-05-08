@@ -1,0 +1,115 @@
+{
+  "ok": true,
+  "ticket_id": 70,
+  "total": 6,
+  "pass": 5,
+  "fail": 1,
+  "blocked": 0,
+  "runs": [
+    {
+      "scenario_id": "P01",
+      "spec_file": "evidence/70/tests/P01_busqueda_sin_filtros.spec.ts",
+      "status": "pass",
+      "duration_ms": 4321,
+      "artifacts": {
+        "trace": "evidence/70/P01/trace.zip",
+        "video": "evidence/70/P01/video.webm",
+        "screenshots": [
+          "evidence/70/P01/step_00_setup.png",
+          "evidence/70/P01/step_01_after.png"
+        ],
+        "console_log": "evidence/70/P01/console.json",
+        "network_log": "evidence/70/P01/network.json"
+      },
+      "raw_stdout": "✓  P01 busqueda sin filtros muestra todos los lotes (4321ms)",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P02",
+      "spec_file": "evidence/70/tests/P02_busqueda_empresa.spec.ts",
+      "status": "pass",
+      "duration_ms": 3800,
+      "artifacts": {
+        "trace": "evidence/70/P02/trace.zip",
+        "video": "evidence/70/P02/video.webm",
+        "screenshots": ["evidence/70/P02/step_00_setup.png"],
+        "console_log": "evidence/70/P02/console.json",
+        "network_log": "evidence/70/P02/network.json"
+      },
+      "raw_stdout": "✓  P02 busqueda empresa filtra correctamente (3800ms)",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P03",
+      "spec_file": "evidence/70/tests/P03_busqueda_fecha.spec.ts",
+      "status": "pass",
+      "duration_ms": 4100,
+      "artifacts": {
+        "trace": "evidence/70/P03/trace.zip",
+        "video": "evidence/70/P03/video.webm",
+        "screenshots": ["evidence/70/P03/step_00_setup.png"],
+        "console_log": "evidence/70/P03/console.json",
+        "network_log": "evidence/70/P03/network.json"
+      },
+      "raw_stdout": "✓  P03 busqueda fecha filtra por rango (4100ms)",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P04",
+      "spec_file": "evidence/70/tests/P04_busqueda_sin_resultados.spec.ts",
+      "status": "fail",
+      "duration_ms": 5200,
+      "artifacts": {
+        "trace": "evidence/70/P04/trace.zip",
+        "video": "evidence/70/P04/video.webm",
+        "screenshots": ["evidence/70/P04/step_00_setup.png", "evidence/70/P04/step_02_after.png"],
+        "console_log": "evidence/70/P04/console.json",
+        "network_log": "evidence/70/P04/network.json"
+      },
+      "assertion_failures": [
+        {
+          "message": "P04: mensaje lista vacía - Expected: 'No hay lotes agendados', Received: ''",
+          "expected": "No hay lotes agendados",
+          "actual": ""
+        }
+      ],
+      "raw_stdout": "✗  P04 busqueda sin resultados muestra mensaje vacío (5200ms)",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P05",
+      "spec_file": "evidence/70/tests/P05_combinacion_2_filtros.spec.ts",
+      "status": "pass",
+      "duration_ms": 4500,
+      "artifacts": {
+        "trace": "evidence/70/P05/trace.zip",
+        "video": "evidence/70/P05/video.webm",
+        "screenshots": ["evidence/70/P05/step_00_setup.png"],
+        "console_log": "evidence/70/P05/console.json",
+        "network_log": "evidence/70/P05/network.json"
+      },
+      "raw_stdout": "✓  P05 combinacion 2 filtros activos (4500ms)",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P06",
+      "spec_file": "evidence/70/tests/P06_combinacion_3_filtros.spec.ts",
+      "status": "pass",
+      "duration_ms": 4700,
+      "artifacts": {
+        "trace": "evidence/70/P06/trace.zip",
+        "video": "evidence/70/P06/video.webm",
+        "screenshots": ["evidence/70/P06/step_00_setup.png"],
+        "console_log": "evidence/70/P06/console.json",
+        "network_log": "evidence/70/P06/network.json"
+      },
+      "raw_stdout": "✓  P06 combinacion 3 filtros activos (4700ms)",
+      "raw_stderr": ""
+    }
+  ],
+  "meta": {
+    "tool": "uat_test_runner",
+    "version": "1.0.0",
+    "duration_ms": 32400
+  }
+}

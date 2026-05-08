@@ -1,0 +1,14 @@
+{
+  "$comment": "Schema reference for cache/discovered_selectors.json. The actual file is git-ignored (generated at runtime by session_recorder.py + navigation_graph_learner.py). This schema file documents the expected structure.",
+  "schema_version": "1.0",
+  "generated_at": "<ISO-8601 timestamp>",
+  "tool_version": "<navigation_graph_learner version>",
+  "description": "Element selectors captured by session_recorder.py during operator demo sessions. Used by playwright_test_generator.py as fallback when an alias is missing from the curated UI map.",
+  "by_screen": {
+    "<screen_name>.aspx": {
+      "<alias_semantic>": "<css_selector>",
+      "btn_compromisos": "#btnCompromisos",
+      "btn_agendar": "[id*='btnAgendar']"
+    }
+  }
+}

@@ -1,0 +1,93 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ─── Filter tabs ──────────────────────────── */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tab,
+.tabActive {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  transition: background 0.12s, color 0.12s;
+}
+.tab:hover { background: var(--bg-elev); color: var(--text-primary); }
+.tabActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ─── Avatar grid ──────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.cell,
+.cellActive,
+.uploadCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  padding: 4px;
+  cursor: pointer;
+  background: var(--bg-elev);
+  transition: border-color 0.12s, background 0.12s;
+  min-height: 64px;
+}
+.cell:hover    { border-color: var(--accent); background: var(--bg-base); }
+.cellActive    { border-color: var(--accent-hot) !important; background: rgba(88,166,255,0.12); }
+
+.cell img,
+.cellActive img,
+.uploadCell img {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* ─── Upload slot ──────────────────────────── */
+.uploadCell {
+  border-style: dashed;
+  color: var(--text-muted);
+  gap: 2px;
+}
+.uploadCell:hover { border-color: var(--accent); color: var(--accent); }
+.uploadCell:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.uploadIcon {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 300;
+}
+
+.uploadLabel {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Hint ─────────────────────────────────── */
+.hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}

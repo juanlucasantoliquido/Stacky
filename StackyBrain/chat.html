@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StackyBrain Chat</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1117;
+      color: #e1e4e8;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 14px 20px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #3fb950;
+      box-shadow: 0 0 6px #3fb950;
+    }
+
+    header h1 { font-size: 16px; font-weight: 600; color: #c9d1d9; }
+    header .model { font-size: 12px; color: #8b949e; margin-left: auto; }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .msg {
+      max-width: 780px;
+      width: fit-content;
+      padding: 12px 16px;
+      border-radius: 12px;
+      line-height: 1.6;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .msg.user {
+      background: #1f6feb;
+      color: #fff;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+
+    .msg.assistant {
+      background: #161b22;
+      border: 1px solid #30363d;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg.assistant code {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 13px;
+    }
+
+    .msg.assistant pre {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 12px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+
+    .msg.assistant pre code {
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    /* ── Bloque de razonamiento (think) ── */
+    .think-block {
+      margin: 8px 0 10px 0;
+      border: 1px solid #388bfd44;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .think-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      background: #0d1929;
+      cursor: pointer;
+      user-select: none;
+      font-size: 12px;
+      color: #388bfd;
+      font-weight: 600;
+    }
+
+    .think-header:hover { background: #111f35; }
+
+    .think-arrow {
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+    .think-block.open .think-arrow { transform: rotate(90deg); }
+
+    .think-body {
+      display: none;
+      padding: 10px 14px;
+      background: #0d1117;
+      font-size: 13px;
+      color: #8b949e;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      border-top: 1px solid #388bfd22;
+    }
+    .think-block.open .think-body { display: block; }
+
+    .msg.error {
+      background: #3d1c1c;
+      border: 1px solid #f85149;
+      color: #ff7b72;
+      align-self: flex-start;
+    }
+
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      padding: 14px 16px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      border-bottom-left-radius: 4px;
+      width: fit-content;
+    }
+
+    .typing-indicator span {
+      width: 7px; height: 7px;
+      background: #8b949e;
+      border-radius: 50%;
+      animation: bounce 1.2s infinite;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    #input-area {
+      padding: 16px 20px;
+      background: #161b22;
+      border-top: 1px solid #30363d;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    #prompt {
+      flex: 1;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      color: #e1e4e8;
+      font-size: 14px;
+      padding: 10px 14px;
+      resize: none;
+      max-height: 160px;
+      min-height: 42px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+      line-height: 1.5;
+    }
+
+    #prompt:focus { border-color: #1f6feb; }
+    #prompt::placeholder { color: #484f58; }
+
+    button {
+      background: #1f6feb;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+      height: 42px;
+    }
+
+    button:hover:not(:disabled) { background: #388bfd; }
+    button:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+
+    #clear-btn {
+      background: transparent;
+      border: 1px solid #30363d;
+      color: #8b949e;
+    }
+
+    #clear-btn:hover:not(:disabled) { background: #21262d; color: #e1e4e8; }
+
+    #model-select {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      border-radius: 8px;
+      padding: 4px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="dot" id="status-dot" title="Ollama local"></div>
+  <h1>StackyBrain Chat</h1>
+  <select id="model-select" title="Modelo activo">
+    <option value="qwen2.5-coder:14b">qwen2.5-coder:14b — código</option>
+    <option value="deepseek-r1:14b">deepseek-r1:14b — razonamiento 💭</option>
+  </select>
+  <span class="model" id="status-label">conectando…</span>
+</header>
+
+<div id="messages"></div>
+
+<div id="input-area">
+  <textarea id="prompt" placeholder="Escribí tu mensaje… (Enter para enviar, Shift+Enter para nueva línea)" rows="1"></textarea>
+  <button id="clear-btn" title="Limpiar chat">↺</button>
+  <button id="send-btn">Enviar</button>
+</div>
+
+<script>
+  const OLLAMA_URL = "http://localhost:11434";
+  const messagesEl = document.getElementById("messages");
+  const promptEl   = document.getElementById("prompt");
+  const sendBtn    = document.getElementById("send-btn");
+  const clearBtn   = document.getElementById("clear-btn");
+  const modelSel   = document.getElementById("model-select");
+  const statusDot  = document.getElementById("status-dot");
+  const statusLbl  = document.getElementById("status-label");
+
+  let history = []; // {role, content}
+  let streaming = false;
+
+  // ── Ping Ollama al cargar ──────────────────────────────────────────────────
+  async function pingOllama() {
+    try {
+      const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) });
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      const models = (data.models || []).map(m => m.name);
+      // Actualizar selector con modelos disponibles
+      modelSel.innerHTML = "";
+      models.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m; opt.textContent = m;
+        if (m.startsWith("qwen2.5-coder:14b")) opt.selected = true;
+        modelSel.appendChild(opt);
+      });
+      if (!models.length) {
+        const opt = document.createElement("option");
+        opt.value = "qwen2.5-coder:14b"; opt.textContent = "qwen2.5-coder:14b";
+        modelSel.appendChild(opt);
+      }
+      statusDot.style.background = "#3fb950";
+      statusDot.style.boxShadow  = "0 0 6px #3fb950";
+      statusLbl.textContent = "Ollama conectado";
+    } catch {
+      statusDot.style.background = "#f85149";
+      statusDot.style.boxShadow  = "0 0 6px #f85149";
+      statusLbl.textContent = "Ollama sin conexión — ¿está corriendo?";
+    }
+  }
+  pingOllama();
+
+  // ── Scroll al fondo ────────────────────────────────────────────────────────
+  function scrollBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  // ── Render de markdown básico ──────────────────────────────────────────────
+  function renderMarkdown(text) {
+    // Extraer y reemplazar bloques <think> antes de procesar markdown
+    let html = text;
+
+    // Bloques <think>...</think> → sección colapsable
+    html = html.replace(/<think>([\s\S]*?)<\/think>/g, (_, content) => {
+      const id = "think-" + Math.random().toString(36).slice(2);
+      return `<div class="think-block" id="${id}">
+        <div class="think-header" onclick="toggleThink('${id}')">
+          <span class="think-arrow">▶</span>
+          💭 Razonamiento interno — clic para ver
+        </div>
+        <div class="think-body">${escapeHtml(content.trim())}</div>
+      </div>`;
+    });
+
+    html = html
+      // Bloques de código
+      .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+        `<pre><code class="lang-${lang}">${escapeHtml(code.trim())}</code></pre>`)
+      // Inline code
+      .replace(/`([^`]+)`/g, (_, c) => `<code>${escapeHtml(c)}</code>`)
+      // Bold
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      // Italic
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      // Newlines (solo en texto, no dentro de think-blocks ya procesados)
+      .replace(/\n/g, "<br>");
+    return html;
+  }
+
+  function toggleThink(id) {
+    document.getElementById(id)?.classList.toggle("open");
+  }
+
+  function escapeHtml(t) {
+    return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  // ── Agregar mensaje a la UI ────────────────────────────────────────────────
+  function addMessage(role, content) {
+    const div = document.createElement("div");
+    div.className = `msg ${role}`;
+    if (role === "assistant") {
+      div.innerHTML = renderMarkdown(content);
+    } else {
+      div.textContent = content;
+    }
+    messagesEl.appendChild(div);
+    scrollBottom();
+    return div;
+  }
+
+  function showTyping() {
+    const el = document.createElement("div");
+    el.className = "typing-indicator";
+    el.id = "typing";
+    el.innerHTML = "<span></span><span></span><span></span>";
+    messagesEl.appendChild(el);
+    scrollBottom();
+  }
+
+  function removeTyping() {
+    document.getElementById("typing")?.remove();
+  }
+
+  // ── Enviar mensaje ─────────────────────────────────────────────────────────
+  async function sendMessage() {
+    const text = promptEl.value.trim();
+    if (!text || streaming) return;
+
+    promptEl.value = "";
+    promptEl.style.height = "42px";
+    history.push({ role: "user", content: text });
+    addMessage("user", text);
+
+    streaming = true;
+    sendBtn.disabled = true;
+    showTyping();
+
+    const model = modelSel.value;
+
+    try {
+      const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: history,
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+
+      removeTyping();
+      const msgDiv = addMessage("assistant", "");
+      let fullContent = "";
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const lines = decoder.decode(value, { stream: true }).split("\n");
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const chunk = JSON.parse(line);
+            const token = chunk?.message?.content || "";
+            fullContent += token;
+            msgDiv.innerHTML = renderMarkdown(fullContent);
+            scrollBottom();
+            if (chunk.done) break;
+          } catch { /* línea parcial, ignorar */ }
+        }
+      }
+
+      history.push({ role: "assistant", content: fullContent });
+
+    } catch (err) {
+      removeTyping();
+      const errDiv = document.createElement("div");
+      errDiv.className = "msg error";
+      errDiv.textContent = `Error: ${err.message}\n\nAsegurate de que Ollama esté corriendo:\n  ollama serve`;
+      messagesEl.appendChild(errDiv);
+      scrollBottom();
+      history.pop(); // revertir el user message
+    } finally {
+      streaming = false;
+      sendBtn.disabled = false;
+      promptEl.focus();
+    }
+  }
+
+  // ── Eventos ────────────────────────────────────────────────────────────────
+  sendBtn.addEventListener("click", sendMessage);
+
+  promptEl.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Auto-resize del textarea
+  promptEl.addEventListener("input", () => {
+    promptEl.style.height = "42px";
+    promptEl.style.height = Math.min(promptEl.scrollHeight, 160) + "px";
+  });
+
+  clearBtn.addEventListener("click", () => {
+    history = [];
+    messagesEl.innerHTML = "";
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.0",
+  "run_id": "d40f64e0-e3f3-4c8c-9720-11289b64f2a5",
+  "ticket_id": 0,
+  "ticket_title": "Proba crear un compromiso de pago",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "BLOCKED",
+  "executive_summary": "Resumen Ejecutivo UAT:  \nLa prueba \"Proba crear un compromiso de pago\" se encuentra BLOQUEADA. Se ejecutó 1 escenario (P01), el cual no pudo completarse debido a un inconveniente identificado. No se registraron escenarios aprobados. Se requiere resolución del bloqueo para continuar con la validación funcional del proceso de creación de compromisos de pago.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.2.0",
+    "total": 1,
+    "pass": 0,
+    "fail": 0,
+    "blocked": 1
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "Navegar a FrmAgenda y seleccionar un cliente activo del lote",
+      "status": "blocked",
+      "duration_ms": 54123,
+      "artifacts": {
+        "trace": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-001641\\P01\\trace.zip",
+        "video": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-001641\\P01\\video.webm",
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-001641\\P01\\test_failure.png"
+        ],
+        "console_log": null,
+        "network_log": null,
+        "error_context": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-001641\\P01\\error-context.md"
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "test_failure.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-001641\\P01\\test_failure.png",
+          "step_index": null,
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Paso intermedio: se intentó navegar a FrmAgenda.aspx y seleccionar un cliente activo del lote; se buscó validar que la tabla 'table_agenda_usu' estuviera visible.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P01:test_failure.png}}"
+        }
+      ],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar la funcionalidad de navegación y selección de un cliente activo en la interfaz 'FrmAgenda', asegurando que el lote específico y el agente estén disponibles y activos para proceder con la acción. El resultado \"BLOCKED\" indica que hubo un impedimento para completar la prueba, lo que sugiere un problema en las precondiciones o en la interfaz.",
+      "reason": "RUNTIME_ERROR"
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P01",
+      "titulo": "P01",
+      "message": "RUNTIME_ERROR",
+      "trace_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-001641\\P01\\trace.zip",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-001641\\P01\\test_failure.png"
+    }
+  ],
+  "recommendation_for_human_qa": [
+    "Verifica los registros de errores para identificar la causa exacta del error en tiempo de ejecución.",
+    "Asegúrate de que todas las dependencias y configuraciones necesarias estén correctamente instaladas.",
+    "Reproduce el error en un entorno controlado para aislar el problema.",
+    "Consulta la documentación del sistema para posibles soluciones relacionadas con errores de ejecución."
+  ],
+  "next_steps": [
+    "Resolver bloqueos de entorno antes de re-ejecutar.",
+    "Verificar configuración de env vars y base de datos."
+  ],
+  "generated_at": "2026-05-05T03:24:15Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.2.0",
+    "duration_ms": 45067
+  },
+  "comment_hash": "953194c30c60dd1b9927b2968f8973ad63c25abbab39e86a2ef52abdf90b5bb4",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-001641\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-001641\\ado_comment.html"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "ticket_id": -1,
+  "compiled": 1,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": -1,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Navegar a FrmAgenda y seleccionar un cliente activo del lote",
+      "precondiciones": [
+        "El lote 0000036010900360006D debe estar disponible.",
+        "El agente 1 debe estar activo."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmAgenda.aspx",
+          "valor": null
+        },
+        {
+          "accion": "select",
+          "target": "select_empresa",
+          "valor": "0000036010900360006D"
+        },
+        {
+          "accion": "fill",
+          "target": "input_corredor",
+          "valor": "1"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "table_agenda_usu",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      }
+    }
+  ],
+  "out_of_scope_items": [],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 14639
+  }
+}

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges">
+  <!-- devops-1: DevOps with hard hat and tools -->
+  <rect x="24" y="12" width="16" height="16" fill="#f5c5a3"/>
+  <!-- hard hat yellow -->
+  <rect x="18" y="4" width="28" height="6" fill="#f1c40f"/>
+  <rect x="20" y="6" width="24" height="8" fill="#f1c40f"/>
+  <rect x="16" y="10" width="32" height="4" fill="#d4ac0d"/>
+  <!-- eyes -->
+  <rect x="27" y="18" width="4" height="3" fill="#1a1a2e"/>
+  <rect x="33" y="18" width="4" height="3" fill="#1a1a2e"/>
+  <!-- mouth -->
+  <rect x="29" y="24" width="6" height="2" fill="#c4724a"/>
+  <!-- work shirt orange -->
+  <rect x="18" y="28" width="28" height="18" fill="#e67e22"/>
+  <rect x="10" y="28" width="10" height="14" fill="#e67e22"/>
+  <rect x="44" y="28" width="10" height="14" fill="#e67e22"/>
+  <!-- pocket -->
+  <rect x="20" y="32" width="8" height="8" fill="#d35400"/>
+  <rect x="36" y="32" width="8" height="8" fill="#d35400"/>
+  <!-- hands -->
+  <rect x="10" y="42" width="8" height="6" fill="#f5c5a3"/>
+  <rect x="46" y="42" width="8" height="6" fill="#f5c5a3"/>
+  <!-- wrench in hand -->
+  <rect x="4" y="40" width="8" height="3" fill="#8b949e"/>
+  <rect x="4" y="38" width="3" height="3" fill="#8b949e"/>
+  <rect x="9" y="38" width="3" height="3" fill="#8b949e"/>
+  <!-- pants work green -->
+  <rect x="20" y="46" width="10" height="14" fill="#2ecc71"/>
+  <rect x="34" y="46" width="10" height="14" fill="#2ecc71"/>
+  <!-- boots brown -->
+  <rect x="18" y="56" width="14" height="8" fill="#8b4513"/>
+  <rect x="32" y="56" width="14" height="8" fill="#8b4513"/>
+  <rect x="18" y="58" width="14" height="2" fill="#5d2e0c"/>
+  <rect x="32" y="58" width="14" height="2" fill="#5d2e0c"/>
+</svg>

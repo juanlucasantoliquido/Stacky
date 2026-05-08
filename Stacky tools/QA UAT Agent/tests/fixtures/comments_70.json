@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "comments": [
+    {
+      "id": 1,
+      "author": "Analista Técnico",
+      "date": "2026-04-20T10:00:00Z",
+      "text": "<h2>Análisis Técnico</h2><p>Se analiza el comportamiento de combinación de filtros en FrmAgenda.aspx.</p><h3>Plan de Pruebas</h3><p>P01: Búsqueda SIN filtros activos muestra todos los lotes<br/>Datos: usuario=PABLO, empresa=0001<br/>Esperado: Grid con &gt;= 1 resultado, sin mensaje de lista vacía</p><p>P02: Búsqueda con filtro Empresa filtra correctamente<br/>Datos: usuario=PABLO, empresa=0001, filtro_empresa=0001<br/>Esperado: Solo lotes de empresa 0001 en el grid</p><p>P03: Búsqueda con filtro Fecha filtra por rango<br/>Datos: fecha_desde=01/01/2026, fecha_hasta=31/01/2026<br/>Esperado: Grid con lotes del rango indicado</p><p>P04: Búsqueda SIN resultados muestra mensaje vacío<br/>Datos: empresa=9999 (inexistente)<br/>Esperado: Mensaje 'No hay lotes agendados' visible, grid vacío</p><p>P05: Combinación de 2 filtros activos funciona correctamente<br/>Datos: empresa=0001, tipo_lote=CRED<br/>Esperado: Grid filtrado por ambos criterios</p><p>P06: Combinación de 3 filtros activos funciona correctamente<br/>Datos: empresa=0001, tipo_lote=CRED, fecha_desde=01/2026<br/>Esperado: Grid filtrado por los 3 criterios</p><p>P07: Performance con más de 3 filtros activos simultáneos<br/>Datos: 5 filtros activos<br/>Esperado: Respuesta en menos de 3 segundos</p><p>Notas para QA: Aplicar 3 INSERTs RIDIOMA antes de ejecutar P04:<br/>INSERT INTO RIDIOMA VALUES (9296, 'No hay lotes agendados', ...);<br/>INSERT INTO RIDIOMA VALUES (9297, 'Lista vacía', ...);<br/>INSERT INTO RIDIOMA VALUES (9298, 'Sin resultados', ...);</p>"
+    },
+    {
+      "id": 2,
+      "author": "Dev Pacifico",
+      "date": "2026-04-25T14:00:00Z",
+      "text": "<h2>Implementación</h2><p>Se implementaron los cambios en FrmAgenda.aspx.cs para el manejo de filtros.</p><p>Archivos modificados: FrmAgenda.aspx, FrmAgenda.aspx.cs, AgendaNegocios.cs</p><p>Commit: d1aec6d</p>"
+    }
+  ]
+}

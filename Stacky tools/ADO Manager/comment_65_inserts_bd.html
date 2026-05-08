@@ -1,0 +1,31 @@
+<div>
+  <h3>ADDENDUM TECNICO - ADO-65 - Scripts BD incluidos</h3>
+  <p>Se confirma que los inserts de configuracion para los nuevos filtros SI estan incorporados en el repositorio.</p>
+
+  <h4>RCONTROLES (5 inserts)</h4>
+  <p><strong>Archivo:</strong> trunk/BD/1 - Inicializacion BD/600804 - Inserts RCONTROLES.sql</p>
+  <ul>
+    <li>Linea 4842: AgendaWeb.FORMAGENDA, ddlDebitoAuto, 9297</li>
+    <li>Linea 4843: AgendaWeb.FORMAGENDA, lblDebitoAuto, 9297</li>
+    <li>Linea 4844: AgendaWeb.FORMAGENDA, abfCorredor, 9298</li>
+    <li>Linea 4845: AgendaWeb.FORMAGENDA, abfNombreCliente, 9299</li>
+    <li>Linea 4846: AgendaWeb.FORMAGENDA, abfRUC, 9300</li>
+  </ul>
+
+  <h4>RIDIOMA (12 inserts)</h4>
+  <p><strong>Archivo:</strong> trunk/BD/1 - Inicializacion BD/600804 - Inserts RIDIOMA.sql</p>
+  <ul>
+    <li>Lineas 4811-4813: IDTEXTO 9297 (ESP/ENG/POR) - Debito Automatico</li>
+    <li>Lineas 4814-4816: IDTEXTO 9298 (ESP/ENG/POR) - Corredor</li>
+    <li>Lineas 4817-4819: IDTEXTO 9299 (ESP/ENG/POR) - Nombre de Cliente</li>
+    <li>Lineas 4820-4822: IDTEXTO 9300 (ESP/ENG/POR) - RUC</li>
+  </ul>
+
+  <h4>Constantes en codigo</h4>
+  <p><strong>Archivo:</strong> trunk/OnLine/Negocio/Comun/coMens.cs</p>
+  <ul>
+    <li>Lineas 272-275: m9297, m9298, m9299, m9300</li>
+  </ul>
+
+  <p><strong>Nota:</strong> El inconveniente observado en UI no era ausencia de inserts en scripts, sino el render del LabelText del control ddlDebitoAuto, ya corregido en FrmAgenda.aspx.</p>
+</div>

@@ -1,0 +1,103 @@
+.badge {
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.badge[data-tier="pass"] {
+  border-color: var(--success);
+}
+.badge[data-tier="warn"] {
+  border-color: var(--warn);
+}
+.badge[data-tier="fail"] {
+  border-color: var(--danger);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  width: 100%;
+  background: var(--bg-elev);
+  border: none;
+  cursor: default;
+  color: var(--text);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.badge[data-tier="pass"] .header { background: color-mix(in srgb, var(--success) 10%, var(--bg-elev)); }
+.badge[data-tier="warn"] .header { background: color-mix(in srgb, var(--warn) 10%, var(--bg-elev)); }
+.badge[data-tier="fail"] .header { background: color-mix(in srgb, var(--danger) 10%, var(--bg-elev)); }
+
+.header[aria-expanded] {
+  cursor: pointer;
+}
+
+.label {
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.score {
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.badge[data-tier="pass"] .score { color: var(--success); }
+.badge[data-tier="warn"] .score { color: var(--warn); }
+.badge[data-tier="fail"] .score { color: var(--danger); }
+
+.status {
+  flex: 1;
+  font-weight: 600;
+}
+.badge[data-tier="pass"] .status { color: var(--success); }
+.badge[data-tier="warn"] .status { color: var(--warn); }
+.badge[data-tier="fail"] .status { color: var(--danger); }
+
+.count {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.count [data-sev="error"] { color: var(--danger); }
+.count [data-sev="warning"] { color: var(--warn); }
+
+.chevron {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.item {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.item[data-sev="error"] { color: var(--danger); }
+.item[data-sev="warning"] { color: var(--warn); }
+
+.sev {
+  flex-shrink: 0;
+  width: 12px;
+}

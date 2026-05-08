@@ -1,0 +1,334 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.0",
+  "run_id": "6b87d1e1-49e0-43b8-900b-69e4e5ae769d",
+  "ticket_id": 72,
+  "ticket_title": "RF-005 — Alineación de campos de las listas de agenda con nuevos campos solicitados",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "MIXED",
+  "executive_summary": "Resumen Ejecutivo UAT:  \nEl ticket RF-005 presentó un veredicto MIXTO. De los 4 escenarios evaluados, ninguno fue aprobado y se identificaron 4 incidencias en los escenarios P01, P03, P04 y P05. Las fallas están relacionadas con la alineación de campos en las listas de agenda y la incorporación de los nuevos campos solicitados. Se recomienda revisar y corregir los puntos observados antes de proceder con la siguiente fase.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.2.0",
+    "total": 4,
+    "pass": 0,
+    "fail": 1,
+    "blocked": 3
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "Búsqueda sin filtros + validación de nuevas columnas",
+      "status": "blocked",
+      "duration_ms": 37450,
+      "artifacts": {
+        "trace": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\trace.zip",
+        "video": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\video.webm",
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\step_01_after.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\step_final_state.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\test_failure.png"
+        ],
+        "console_log": null,
+        "network_log": null,
+        "error_context": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\error-context.md"
+      },
+      "assertion_failures": [
+        {
+          "message": "Error: P01: página debe contener \"RUC\"\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\n    Locator: locator('body')\n    Timeout: 5000ms\n    \u001b[32m- Expected substring  -   1\u001b[39m\n    \u001b[31m+ Received string     + 203\u001b[39m\n\n    \u001b[32m- RUC\u001b[39",
+          "expected": "substring  -   1\u001b[39m\n    \u001b[31m+",
+          "actual": "string     + 203\u001b[39m\n\n    \u001b[32m- RUC\u001b[39m\n    \u001b[31m+\u001b[39m\n    \u001b[31m+ \u001b[43m    \u001b[49m\u001b[39m\n    \u001b[31m+"
+        }
+      ],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P01:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_01_after.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\step_01_after.png",
+          "step_index": 1,
+          "action": "click",
+          "target": "link_c_btnok",
+          "value": null,
+          "description": "Hacer click sobre el botón 'c_btnok'.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P01:step_01_after.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Estado final tras ejecutar todos los pasos. Se valida que: 'table_agenda_usu' es visible; 'table_agenda_aut' es visible; 'None' cumple la regla page_contains_text; 'None' cumple la regla page_contains_text; 'None' cumple la regla page_contains_text.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P01:step_final_state.png}}"
+        },
+        {
+          "screenshot_name": "test_failure.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\test_failure.png",
+          "step_index": null,
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Paso intermedio del escenario.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P01:test_failure.png}}"
+        }
+      ],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar la funcionalidad de búsqueda sin filtros en la aplicación, asegurando que al hacer clic en el botón 'link_c_btnok', se muestren correctamente las nuevas columnas en la interfaz, específicamente la visibilidad de los textos 'RUC', 'Corredor' y 'Débito Auto'. El resultado fue BLOCKED, lo que indica que la prueba no pudo completarse debido a un impedimento.",
+      "reason": "evaluator_inconclusive",
+      "reclassified_from": "fail"
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "Filtro Débito Auto = No",
+      "status": "blocked",
+      "duration_ms": 41150,
+      "artifacts": {
+        "trace": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\trace.zip",
+        "video": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\video.webm",
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\step_final_state.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\test_failure.png"
+        ],
+        "console_log": null,
+        "network_log": null,
+        "error_context": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\error-context.md"
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P03:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Estado final tras ejecutar todos los pasos. Se valida que: 'table_agenda_aut' contiene exactamente 2 ítems; 'table_agenda_usu' contiene exactamente 2 ítems.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P03:step_final_state.png}}"
+        },
+        {
+          "screenshot_name": "test_failure.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\test_failure.png",
+          "step_index": null,
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Paso intermedio del escenario.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P03:test_failure.png}}"
+        }
+      ],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que, al seleccionar la opción \"No\" en el filtro \"Débito Auto\" y confirmar la acción, el sistema devuelva exactamente 2 elementos en la lista filtrada. Sin embargo, el resultado fue \"BLOCKED\", lo que indica que la prueba no pudo completarse debido a un impedimento.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "Filtro Débito Auto = Sí",
+      "status": "blocked",
+      "duration_ms": 40959,
+      "artifacts": {
+        "trace": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\trace.zip",
+        "video": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\video.webm",
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\step_final_state.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\test_failure.png"
+        ],
+        "console_log": null,
+        "network_log": null,
+        "error_context": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\error-context.md"
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P04:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Estado final tras ejecutar todos los pasos. Se valida que: 'panel_agenda' cumple la regla page_contains_text.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P04:step_final_state.png}}"
+        },
+        {
+          "screenshot_name": "test_failure.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\test_failure.png",
+          "step_index": null,
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Paso intermedio del escenario.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P04:test_failure.png}}"
+        }
+      ],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al aplicar el filtro \"Débito Auto\" con el valor \"Sí\" en la pantalla de Agenda, el sistema muestre correctamente el mensaje \"Lista vacía\" cuando no hay registros que cumplan con el criterio. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la interfaz o en la lógica del filtro.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "Filtro Corredor",
+      "status": "fail",
+      "duration_ms": 29993,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P05\\step_00_setup.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P05\\step_01_after.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P05\\step_final_state.png",
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P05\\test_failure.png"
+        ],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [
+        {
+          "message": "Oracle 'table_agenda_usu' (tipo=count_eq) expected='0' actual='1'",
+          "expected": "0",
+          "actual": "1"
+        }
+      ],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P05\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P05:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_01_after.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P05\\step_01_after.png",
+          "step_index": 1,
+          "action": "click",
+          "target": "link_c_btnok",
+          "value": null,
+          "description": "Hacer click sobre el botón 'c_btnok'.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P05:step_01_after.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P05\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Estado final tras ejecutar todos los pasos. Se valida que: 'table_agenda_usu' contiene exactamente 0 ítems; 'panel_gvc_agenda_usu' es visible.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P05:step_final_state.png}}"
+        },
+        {
+          "screenshot_name": "test_failure.png",
+          "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P05\\test_failure.png",
+          "step_index": null,
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Paso intermedio del escenario.",
+          "description_source": "deterministic",
+          "attachment_token": "{{ATTACH:P05:test_failure.png}}"
+        }
+      ],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que, al hacer clic en el botón 'link_c_btnok' con la precondición de que ConCorredor es 0 en DEV, el conteo de elementos relacionados sea igual a 0 y que no haya elementos visibles en la interfaz. El resultado fue un fallo, indicando que la funcionalidad del filtro no se comportó como se esperaba."
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P01",
+      "titulo": "P01",
+      "message": "Error: P01: página debe contener \"RUC\"\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\n    Locator: locator('body')\n    Timeout: 5000ms\n    \u001b[32m- Expected substring  -   1\u001b[39m\n    \u001b[31m+ Received string     + 203\u001b[39m\n\n    \u001b[32m- RUC\u001b[39",
+      "expected": "substring  -   1\u001b[39m\n    \u001b[31m+",
+      "actual": "string     + 203\u001b[39m\n\n    \u001b[32m- RUC\u001b[39m\n    \u001b[31m+\u001b[39m\n    \u001b[31m+ \u001b[43m    \u001b[49m\u001b[39m\n    \u001b[31m+",
+      "trace_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\trace.zip",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P01\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "P03",
+      "message": "RUNTIME_ERROR",
+      "trace_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\trace.zip",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P03\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "P04",
+      "message": "RUNTIME_ERROR",
+      "trace_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\trace.zip",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P04\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "P05",
+      "message": "Oracle 'table_agenda_usu' (tipo=count_eq) expected='0' actual='1'",
+      "expected": "0",
+      "actual": "1",
+      "screenshot_path": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\P05\\step_00_setup.png"
+    }
+  ],
+  "recommendation_for_human_qa": [
+    "Verifica que la página muestre correctamente el texto 'RUC' según los requisitos.",
+    "Revisa los errores de tiempo de ejecución (RUNTIME_ERROR) en los casos P03 y P04 para identificar posibles problemas de código o configuración.",
+    "Asegúrate de que la tabla 'table_agenda_usu' esté vacía cuando se espera, revisando los datos de prueba y el proceso de limpieza antes de ejecutar los tests."
+  ],
+  "next_steps": [
+    "Separar fallos de bloqueos para tratamiento diferencial.",
+    "Resolver bloqueos de entorno.",
+    "Crear bugs para los escenarios fallidos."
+  ],
+  "generated_at": "2026-05-06T14:35:33Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.2.0",
+    "duration_ms": 258454
+  },
+  "comment_hash": "9d16dd8b4a48eb175cf3194a20f96edd4eb0462d3ee0525d81453d87f3aff789",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\72\\ado_comment.html"
+  }
+}

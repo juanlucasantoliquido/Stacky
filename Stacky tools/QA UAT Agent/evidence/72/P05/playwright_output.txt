@@ -1,0 +1,8 @@
+
+Running 1 test using 1 worker
+
+Advanced filters ready: [33mtrue[39m
+[STEP 01] click link_c_btnok
+  ✓  1 [chromium] › evidence\72\tests\P05_filtro_corredor.spec.ts:80:7 › ADO-72 | P05 — Filtro Corredor › p05 filtro_corredor (26.9s)
+
+  1 passed (28.3s)

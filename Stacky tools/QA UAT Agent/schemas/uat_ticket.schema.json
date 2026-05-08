@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "uat_ticket.schema.json",
+  "title": "UATTicket",
+  "description": "Output normalizado de uat_ticket_reader.py — contrato de entrada del pipeline UAT",
+  "type": "object",
+  "required": ["ok", "ticket", "description_md", "comments", "analisis_tecnico", "plan_pruebas", "notas_qa", "adjuntos", "precondiciones_detected", "meta"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "true si la lectura fue exitosa"
+    },
+    "ticket": {
+      "type": "object",
+      "required": ["id", "title", "state", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "state": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "url": { "type": "string" }
+      }
+    },
+    "description_md": {
+      "type": "string",
+      "description": "Texto/HTML de la descripción del ticket"
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "author", "date", "text_md", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "author": { "type": "string" },
+          "date": { "type": "string" },
+          "text_md": { "type": "string" },
+          "role": {
+            "type": "string",
+            "enum": ["analisis_funcional", "analisis_tecnico", "implementacion", "qa", "otros"]
+          }
+        }
+      }
+    },
+    "analisis_tecnico": {
+      "type": "string",
+      "description": "Texto completo del comentario clasificado como analisis_tecnico"
+    },
+    "plan_pruebas": {
+      "type": "array",
+      "description": "Items P01..P0N extraídos del análisis técnico",
+      "items": {
+        "type": "object",
+        "required": ["id", "descripcion"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^P\\d{2,}$",
+            "description": "Identificador del plan de prueba, ej: P01"
+          },
+          "descripcion": { "type": "string", "minLength": 1 },
+          "datos": { "type": "string" },
+          "esperado": { "type": "string" }
+        }
+      }
+    },
+    "notas_qa": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Notas textuales para QA extraídas del ticket"
+    },
+    "adjuntos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
+    },
+    "precondiciones_detected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tipo", "recurso"],
+        "additionalProperties": false,
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": ["RIDIOMA_INSERT", "BUILD_DEPLOY", "WEB_CONFIG_FLAG", "SQL_SCRIPT", "DATO_BD"]
+          },
+          "recurso": { "type": "string", "minLength": 1 },
+          "evidencia": { "type": "string" }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["tool", "version"],
+      "additionalProperties": true,
+      "properties": {
+        "tool": { "type": "string", "const": "uat_ticket_reader" },
+        "version": { "type": "string" },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "if": { "properties": { "ok": { "const": false } } },
+  "then": {
+    "required": ["ok", "error"],
+    "properties": {
+      "error": {
+        "type": "string",
+        "enum": [
+          "invalid_id",
+          "ado_error",
+          "ticket_not_found",
+          "missing_technical_analysis",
+          "no_test_plan_in_ticket",
+          "parse_failed",
+          "llm_unavailable"
+        ]
+      },
+      "message": { "type": "string" }
+    }
+  }
+}

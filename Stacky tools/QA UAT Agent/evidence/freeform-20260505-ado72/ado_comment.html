@@ -1,0 +1,120 @@
+<!-- stacky-qa-uat:run id="fce206e7-979d-4910-a0a0-937eda683602" hash="73b4cb9e16e04649f6fdadacbc502301f0a64848ffd3eef5964c7097dd34e07b" -->
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 13px; color: #1a1a1a;">
+
+<h2 style="margin: 0 0 8px; font-size: 16px; color: #0078d4; border-bottom: 2px solid #0078d4; padding-bottom: 6px;">
+  🤖 Dossier UAT — ADO-freeform-20260505-ado72
+  &nbsp;
+  
+  <span style="background: #c19c00; color: #fff; border-radius: 4px; padding: 2px 10px; font-size: 13px;">⚠️ BLOCKED</span>
+  
+</h2>
+
+<p style="margin: 4px 0 12px; color: #555; font-size: 12px;">
+  Run: <code>fce206e7-979d-4910-a0a0-937eda683602</code> &nbsp;|&nbsp;
+  Fecha: 2026-05-05T21:14:43Z &nbsp;|&nbsp;
+  Agente: 1.2.0 &nbsp;|&nbsp;
+  Commit: <code>N/A</code>
+</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resumen ejecutivo</h3>
+<p style="margin: 0 0 12px; line-height: 1.5;">Resumen Ejecutivo UAT:  
+La validación de la implementación RF-005 (ADO-72) fue bloqueada. Se verificó que las listas GridAgendaUsu y GridAgendaAut en FrmAgenda.aspx incluyeran las nuevas columnas CLNUMDOC, OGCORREDOR y OGDEBAUT, así como el funcionamiento de los filtros Debito Automático y Corredor. Sin embargo, el único escenario probado (P01) presentó un inconveniente que impidió su aprobación. Se requiere resolución del incidente para continuar con la validación.</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resultados por escenario</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 12px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Título</th>
+      <th style="text-align: center; padding: 6px 10px; border: 1px solid #ddd;">Estado</th>
+      <th style="text-align: right; padding: 6px 10px; border: 1px solid #ddd;">Duración</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr style="background: #fff;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P01</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Busqueda sin filtros - verificar que ambas grillas muestran las columnas RUC, Corredor y Debito Auto.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #c19c00; font-weight: bold;">⚠️ BLOCKED</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">0 ms</td>
+    </tr>
+    
+  </tbody>
+</table>
+
+
+
+
+<h3 style="margin: 16px 0 6px; font-size: 14px; color: #333;">Lo que se intentó verificar</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 14px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd; width: 90px;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Qué se intentó verificar</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr style="background: #fff; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P01</code>
+        <br/><span style="color: #c19c00; font-size: 11px;">⚠️</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que, al realizar una búsqueda sin filtros, ambas grillas de la interfaz muestren correctamente las columnas "RUC", "Corredor" y "Débito Auto". El resultado fue bloqueado, lo que indica que no se pudo completar la verificación debido a un problema en la ejecución del test.</td>
+    </tr>
+    
+  </tbody>
+</table>
+<p style="font-size: 10px; color: #999; margin: -10px 0 14px; text-align: right; font-style: italic;">Narrativas generadas por IA (gpt-4o-mini)</p>
+
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #a4262c;">Fallas detectadas</h3>
+
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">P01 — P01</strong><br/>
+  <span style="font-size: 12px;">missing_selectors</span>
+  
+  
+</div>
+
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Recomendaciones para el QA humano</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  
+  <li>Verifica si existen dependencias previas no resueltas que estén bloqueando la prueba.</li>
+  
+  <li>Consulta con el equipo de desarrollo para identificar la causa del bloqueo.</li>
+  
+  <li>Documenta el motivo específico del bloqueo en el sistema de seguimiento de incidencias.</li>
+  
+  <li>Asegúrate de que todos los requisitos previos estén completos antes de reintentar la prueba.</li>
+  
+</ul>
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Próximos pasos</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  
+  <li>Resolver bloqueos de entorno antes de re-ejecutar.</li>
+  
+  <li>Verificar configuración de env vars y base de datos.</li>
+  
+</ul>
+
+
+<p style="margin: 16px 0 0; padding: 8px 12px; background: #f3f9ff; border: 1px solid #cce0f5; border-radius: 4px; font-size: 11px; color: #444; line-height: 1.5;">
+  <strong>ℹ️ Postura del agente</strong>: Este comentario fue publicado automáticamente por Stacky Agents — QA UAT Pipeline.
+  El agente <strong>no cambió el estado del ticket</strong>. Mover a "QA Done", "Cerrado" u otro estado es una decisión exclusivamente humana.
+</p>
+
+</div>

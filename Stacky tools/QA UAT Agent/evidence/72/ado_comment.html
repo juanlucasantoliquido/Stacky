@@ -1,0 +1,523 @@
+<!-- stacky-qa-uat:run id="6b87d1e1-49e0-43b8-900b-69e4e5ae769d" hash="9d16dd8b4a48eb175cf3194a20f96edd4eb0462d3ee0525d81453d87f3aff789" -->
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 13px; color: #1a1a1a;">
+
+<h2 style="margin: 0 0 8px; font-size: 16px; color: #0078d4; border-bottom: 2px solid #0078d4; padding-bottom: 6px;">
+  🤖 Dossier UAT — ADO-72
+  &nbsp;
+  
+  <span style="background: #7a4100; color: #fff; border-radius: 4px; padding: 2px 10px; font-size: 13px;">🔶 MIXED</span>
+  
+</h2>
+
+<p style="margin: 4px 0 12px; color: #555; font-size: 12px;">
+  Run: <code>6b87d1e1-49e0-43b8-900b-69e4e5ae769d</code> &nbsp;|&nbsp;
+  Fecha: 2026-05-06T14:35:33Z &nbsp;|&nbsp;
+  Agente: 1.2.0 &nbsp;|&nbsp;
+  Commit: <code>N/A</code>
+</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resumen ejecutivo</h3>
+<p style="margin: 0 0 12px; line-height: 1.5;">Resumen Ejecutivo UAT:  
+El ticket RF-005 presentó un veredicto MIXTO. De los 4 escenarios evaluados, ninguno fue aprobado y se identificaron 4 incidencias en los escenarios P01, P03, P04 y P05. Las fallas están relacionadas con la alineación de campos en las listas de agenda y la incorporación de los nuevos campos solicitados. Se recomienda revisar y corregir los puntos observados antes de proceder con la siguiente fase.</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resultados por escenario</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 12px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Título</th>
+      <th style="text-align: center; padding: 6px 10px; border: 1px solid #ddd;">Estado</th>
+      <th style="text-align: right; padding: 6px 10px; border: 1px solid #ddd;">Duración</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr style="background: #fff;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P01</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Búsqueda sin filtros + validación de nuevas columnas</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #c19c00; font-weight: bold;">⚠️ BLOCKED</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">37450 ms</td>
+    </tr>
+    
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P03</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Filtro Débito Auto = No</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #c19c00; font-weight: bold;">⚠️ BLOCKED</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">41150 ms</td>
+    </tr>
+    
+    <tr style="background: #fff;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P04</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Filtro Débito Auto = Sí</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #c19c00; font-weight: bold;">⚠️ BLOCKED</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">40959 ms</td>
+    </tr>
+    
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P05</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Filtro Corredor</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #a4262c; font-weight: bold;">❌ FAIL</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">29993 ms</td>
+    </tr>
+    
+  </tbody>
+</table>
+
+
+
+
+<h3 style="margin: 16px 0 6px; font-size: 14px; color: #333;">Lo que se intentó verificar</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 14px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd; width: 90px;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Qué se intentó verificar</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr style="background: #fff; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P01</code>
+        <br/><span style="color: #c19c00; font-size: 11px;">⚠️</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar la funcionalidad de búsqueda sin filtros en la aplicación, asegurando que al hacer clic en el botón 'link_c_btnok', se muestren correctamente las nuevas columnas en la interfaz, específicamente la visibilidad de los textos 'RUC', 'Corredor' y 'Débito Auto'. El resultado fue BLOCKED, lo que indica que la prueba no pudo completarse debido a un impedimento.</td>
+    </tr>
+    
+    <tr style="background: #fafafa; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P03</code>
+        <br/><span style="color: #c19c00; font-size: 11px;">⚠️</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">El escenario de prueba automatizado intentó verificar que, al seleccionar la opción "No" en el filtro "Débito Auto" y confirmar la acción, el sistema devuelva exactamente 2 elementos en la lista filtrada. Sin embargo, el resultado fue "BLOCKED", lo que indica que la prueba no pudo completarse debido a un impedimento.</td>
+    </tr>
+    
+    <tr style="background: #fff; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P04</code>
+        <br/><span style="color: #c19c00; font-size: 11px;">⚠️</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que, al aplicar el filtro "Débito Auto" con el valor "Sí" en la pantalla de Agenda, el sistema muestre correctamente el mensaje "Lista vacía" cuando no hay registros que cumplan con el criterio. El resultado "BLOCKED" indica que la prueba no pudo completarse, posiblemente debido a un problema en la interfaz o en la lógica del filtro.</td>
+    </tr>
+    
+    <tr style="background: #fafafa; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P05</code>
+        <br/><span style="color: #a4262c; font-size: 11px;">❌</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">El escenario de prueba automatizado intentó verificar que, al hacer clic en el botón 'link_c_btnok' con la precondición de que ConCorredor es 0 en DEV, el conteo de elementos relacionados sea igual a 0 y que no haya elementos visibles en la interfaz. El resultado fue un fallo, indicando que la funcionalidad del filtro no se comportó como se esperaba.</td>
+    </tr>
+    
+  </tbody>
+</table>
+<p style="font-size: 10px; color: #999; margin: -10px 0 14px; text-align: right; font-style: italic;">Narrativas generadas por IA (gpt-4o-mini)</p>
+
+
+<h3 style="margin: 16px 0 6px; font-size: 14px; color: #333;">Evidencia por escenario</h3>
+
+<div style="border: 1px solid #e1e1e1; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; background: #fcfcfc;">
+  <div style="margin-bottom: 8px; font-size: 13px;">
+    <strong><code>P01</code> — Búsqueda sin filtros + validación de nuevas columnas</strong>
+    
+    <span style="margin-left: 8px; color: #c19c00;">⚠️ BLOCKED</span>
+    
+  </div>
+  
+  <div style="margin: 0 0 10px; padding: 7px 11px; background: #f0f7ff; border-left: 3px solid #0078d4; border-radius: 0 3px 3px 0; font-size: 12px; color: #1a3a5c; line-height: 1.5;">
+    <strong>📋 Lo que se intentó verificar:</strong> Este escenario de prueba automatizado intentó verificar la funcionalidad de búsqueda sin filtros en la aplicación, asegurando que al hacer clic en el botón 'link_c_btnok', se muestren correctamente las nuevas columnas en la interfaz, específicamente la visibilidad de los textos 'RUC', 'Corredor' y 'Débito Auto'. El resultado fue BLOCKED, lo que indica que la prueba no pudo completarse debido a un impedimento.
+    <span style="float: right; font-size: 10px; color: #888; font-style: italic;">generado por IA (gpt-4o-mini)</span>
+  </div>
+  
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Setup
+        
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.</span>
+    </div>
+    <a href="{{ATTACH:P01:step_00_setup.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P01:step_00_setup.png}}" alt="step_00_setup.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Paso 1
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Hacer click sobre el botón 'c_btnok'.</span>
+    </div>
+    <a href="{{ATTACH:P01:step_01_after.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P01:step_01_after.png}}" alt="step_01_after.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Estado final
+        
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Estado final tras ejecutar todos los pasos. Se valida que: 'table_agenda_usu' es visible; 'table_agenda_aut' es visible; 'None' cumple la regla page_contains_text; 'None' cumple la regla page_contains_text; 'None' cumple la regla page_contains_text.</span>
+    </div>
+    <a href="{{ATTACH:P01:step_final_state.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P01:step_final_state.png}}" alt="step_final_state.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Paso None
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Paso intermedio del escenario.</span>
+    </div>
+    <a href="{{ATTACH:P01:test_failure.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P01:test_failure.png}}" alt="test_failure.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+</div>
+
+<div style="border: 1px solid #e1e1e1; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; background: #fcfcfc;">
+  <div style="margin-bottom: 8px; font-size: 13px;">
+    <strong><code>P03</code> — Filtro Débito Auto = No</strong>
+    
+    <span style="margin-left: 8px; color: #c19c00;">⚠️ BLOCKED</span>
+    
+  </div>
+  
+  <div style="margin: 0 0 10px; padding: 7px 11px; background: #f0f7ff; border-left: 3px solid #0078d4; border-radius: 0 3px 3px 0; font-size: 12px; color: #1a3a5c; line-height: 1.5;">
+    <strong>📋 Lo que se intentó verificar:</strong> El escenario de prueba automatizado intentó verificar que, al seleccionar la opción "No" en el filtro "Débito Auto" y confirmar la acción, el sistema devuelva exactamente 2 elementos en la lista filtrada. Sin embargo, el resultado fue "BLOCKED", lo que indica que la prueba no pudo completarse debido a un impedimento.
+    <span style="float: right; font-size: 10px; color: #888; font-style: italic;">generado por IA (gpt-4o-mini)</span>
+  </div>
+  
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Setup
+        
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.</span>
+    </div>
+    <a href="{{ATTACH:P03:step_00_setup.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P03:step_00_setup.png}}" alt="step_00_setup.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Estado final
+        
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Estado final tras ejecutar todos los pasos. Se valida que: 'table_agenda_aut' contiene exactamente 2 ítems; 'table_agenda_usu' contiene exactamente 2 ítems.</span>
+    </div>
+    <a href="{{ATTACH:P03:step_final_state.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P03:step_final_state.png}}" alt="step_final_state.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Paso None
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Paso intermedio del escenario.</span>
+    </div>
+    <a href="{{ATTACH:P03:test_failure.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P03:test_failure.png}}" alt="test_failure.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+</div>
+
+<div style="border: 1px solid #e1e1e1; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; background: #fcfcfc;">
+  <div style="margin-bottom: 8px; font-size: 13px;">
+    <strong><code>P04</code> — Filtro Débito Auto = Sí</strong>
+    
+    <span style="margin-left: 8px; color: #c19c00;">⚠️ BLOCKED</span>
+    
+  </div>
+  
+  <div style="margin: 0 0 10px; padding: 7px 11px; background: #f0f7ff; border-left: 3px solid #0078d4; border-radius: 0 3px 3px 0; font-size: 12px; color: #1a3a5c; line-height: 1.5;">
+    <strong>📋 Lo que se intentó verificar:</strong> Este escenario de prueba automatizado intentó verificar que, al aplicar el filtro "Débito Auto" con el valor "Sí" en la pantalla de Agenda, el sistema muestre correctamente el mensaje "Lista vacía" cuando no hay registros que cumplan con el criterio. El resultado "BLOCKED" indica que la prueba no pudo completarse, posiblemente debido a un problema en la interfaz o en la lógica del filtro.
+    <span style="float: right; font-size: 10px; color: #888; font-style: italic;">generado por IA (gpt-4o-mini)</span>
+  </div>
+  
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Setup
+        
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.</span>
+    </div>
+    <a href="{{ATTACH:P04:step_00_setup.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P04:step_00_setup.png}}" alt="step_00_setup.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Estado final
+        
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Estado final tras ejecutar todos los pasos. Se valida que: 'panel_agenda' cumple la regla page_contains_text.</span>
+    </div>
+    <a href="{{ATTACH:P04:step_final_state.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P04:step_final_state.png}}" alt="step_final_state.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Paso None
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Paso intermedio del escenario.</span>
+    </div>
+    <a href="{{ATTACH:P04:test_failure.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P04:test_failure.png}}" alt="test_failure.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+</div>
+
+<div style="border: 1px solid #e1e1e1; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; background: #fcfcfc;">
+  <div style="margin-bottom: 8px; font-size: 13px;">
+    <strong><code>P05</code> — Filtro Corredor</strong>
+    
+    <span style="margin-left: 8px; color: #a4262c;">❌ FAIL</span>
+    
+  </div>
+  
+  <div style="margin: 0 0 10px; padding: 7px 11px; background: #f0f7ff; border-left: 3px solid #0078d4; border-radius: 0 3px 3px 0; font-size: 12px; color: #1a3a5c; line-height: 1.5;">
+    <strong>📋 Lo que se intentó verificar:</strong> El escenario de prueba automatizado intentó verificar que, al hacer clic en el botón 'link_c_btnok' con la precondición de que ConCorredor es 0 en DEV, el conteo de elementos relacionados sea igual a 0 y que no haya elementos visibles en la interfaz. El resultado fue un fallo, indicando que la funcionalidad del filtro no se comportó como se esperaba.
+    <span style="float: right; font-size: 10px; color: #888; font-style: italic;">generado por IA (gpt-4o-mini)</span>
+  </div>
+  
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Setup
+        
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Preparación inicial: navegación a FrmAgenda.aspx antes de ejecutar el escenario.</span>
+    </div>
+    <a href="{{ATTACH:P05:step_00_setup.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P05:step_00_setup.png}}" alt="step_00_setup.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Paso 1
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Hacer click sobre el botón 'c_btnok'.</span>
+    </div>
+    <a href="{{ATTACH:P05:step_01_after.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P05:step_01_after.png}}" alt="step_01_after.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Estado final
+        
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Estado final tras ejecutar todos los pasos. Se valida que: 'table_agenda_usu' contiene exactamente 0 ítems; 'panel_gvc_agenda_usu' es visible.</span>
+    </div>
+    <a href="{{ATTACH:P05:step_final_state.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P05:step_final_state.png}}" alt="step_final_state.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Paso None
+      </strong>
+      
+      <br/>
+      <span style="color: #555;">Paso intermedio del escenario.</span>
+    </div>
+    <a href="{{ATTACH:P05:test_failure.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P05:test_failure.png}}" alt="test_failure.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+</div>
+
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #a4262c;">Fallas detectadas</h3>
+
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">P01 — P01</strong><br/>
+  <span style="font-size: 12px;">Error: P01: página debe contener "RUC"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 5000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 203[39m
+
+    [32m- RUC[39</span>
+  
+  <table style="margin-top: 6px; font-size: 11px; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 2px 8px; background: #f3f2f1; border: 1px solid #ddd;"><strong>Esperado</strong></td>
+      <td style="padding: 2px 8px; border: 1px solid #ddd; font-family: monospace;">substring  -   1[39m
+    [31m+</td>
+    </tr>
+    <tr>
+      <td style="padding: 2px 8px; background: #f3f2f1; border: 1px solid #ddd;"><strong>Actual</strong></td>
+      <td style="padding: 2px 8px; border: 1px solid #ddd; font-family: monospace;">string     + 203[39m
+
+    [32m- RUC[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+</td>
+    </tr>
+  </table>
+  
+  <div style="margin-top: 4px; font-size: 11px; color: #555;">Trace: <code>N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\72\P01\trace.zip</code></div>
+</div>
+
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">P03 — P03</strong><br/>
+  <span style="font-size: 12px;">RUNTIME_ERROR</span>
+  
+  <div style="margin-top: 4px; font-size: 11px; color: #555;">Trace: <code>N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\72\P03\trace.zip</code></div>
+</div>
+
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">P04 — P04</strong><br/>
+  <span style="font-size: 12px;">RUNTIME_ERROR</span>
+  
+  <div style="margin-top: 4px; font-size: 11px; color: #555;">Trace: <code>N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\72\P04\trace.zip</code></div>
+</div>
+
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">P05 — P05</strong><br/>
+  <span style="font-size: 12px;">Oracle 'table_agenda_usu' (tipo=count_eq) expected='0' actual='1'</span>
+  
+  <table style="margin-top: 6px; font-size: 11px; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 2px 8px; background: #f3f2f1; border: 1px solid #ddd;"><strong>Esperado</strong></td>
+      <td style="padding: 2px 8px; border: 1px solid #ddd; font-family: monospace;">0</td>
+    </tr>
+    <tr>
+      <td style="padding: 2px 8px; background: #f3f2f1; border: 1px solid #ddd;"><strong>Actual</strong></td>
+      <td style="padding: 2px 8px; border: 1px solid #ddd; font-family: monospace;">1</td>
+    </tr>
+  </table>
+  
+  
+</div>
+
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Recomendaciones para el QA humano</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  
+  <li>Verifica que la página muestre correctamente el texto 'RUC' según los requisitos.</li>
+  
+  <li>Revisa los errores de tiempo de ejecución (RUNTIME_ERROR) en los casos P03 y P04 para identificar posibles problemas de código o configuración.</li>
+  
+  <li>Asegúrate de que la tabla 'table_agenda_usu' esté vacía cuando se espera, revisando los datos de prueba y el proceso de limpieza antes de ejecutar los tests.</li>
+  
+</ul>
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Próximos pasos</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  
+  <li>Separar fallos de bloqueos para tratamiento diferencial.</li>
+  
+  <li>Resolver bloqueos de entorno.</li>
+  
+  <li>Crear bugs para los escenarios fallidos.</li>
+  
+</ul>
+
+
+<p style="margin: 16px 0 0; padding: 8px 12px; background: #f3f9ff; border: 1px solid #cce0f5; border-radius: 4px; font-size: 11px; color: #444; line-height: 1.5;">
+  <strong>ℹ️ Postura del agente</strong>: Este comentario fue publicado automáticamente por Stacky Agents — QA UAT Pipeline.
+  El agente <strong>no cambió el estado del ticket</strong>. Mover a "QA Done", "Cerrado" u otro estado es una decisión exclusivamente humana.
+</p>
+
+</div>

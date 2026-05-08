@@ -1,0 +1,44 @@
+{
+  "intent_raw": "Buscar cliente activo y ver su detalle",
+  "goal_action": "ver_detalle_cliente",
+  "test_cases": [
+    {
+      "id": "P01",
+      "titulo": "Buscar cliente",
+      "datos": "rut={{CLIENTE_ID}}",
+      "esperado": "Ver detalle"
+    },
+    {
+      "id": "P02",
+      "titulo": "Ver lote",
+      "datos": "lote={{LOTE_ID}}",
+      "esperado": "Ver lote activo"
+    }
+  ],
+  "resolved_data": {
+    "CLIENTE_ID": "Msg 207, Level 16, State 1, Server aisbddev02, Line 1",
+    "LOTE_ID": "Msg 207, Level 16, State 1, Server aisbddev02, Line 1"
+  },
+  "pending_data": [
+    {
+      "field": "CLIENTE_ID",
+      "in_case_ids": [
+        "P01"
+      ],
+      "description": "Unresolved placeholder {{CLIENTE_ID}} in test cases ['P01']"
+    },
+    {
+      "field": "LOTE_ID",
+      "in_case_ids": [
+        "P02"
+      ],
+      "description": "Unresolved placeholder {{LOTE_ID}} in test cases ['P02']"
+    }
+  ],
+  "run_id": "freeform-20260504-234244",
+  "navigation_path": [
+    "FrmLogin.aspx",
+    "FrmAgenda.aspx",
+    "FrmDetalleClie.aspx"
+  ]
+}

@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "scenario_spec.schema.json",
+  "title": "ScenarioSpecCollection",
+  "description": "Output de uat_scenario_compiler.py — lista de ScenarioSpec ejecutables",
+  "type": "object",
+  "required": ["ok", "ticket_id", "compiled", "out_of_scope", "scenarios", "out_of_scope_items", "meta"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "ticket_id": { "type": "integer", "minimum": 1 },
+    "compiled": { "type": "integer", "minimum": 0 },
+    "out_of_scope": { "type": "integer", "minimum": 0 },
+    "scenarios": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/ScenarioSpec" }
+    },
+    "out_of_scope_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "razon"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "razon": {
+            "type": "string",
+            "enum": ["OUT_OF_SCOPE_NEEDS_HUMAN", "SCREEN_NOT_SUPPORTED", "INCOMPLETE_SCENARIO", "PLACEHOLDER_DETECTED"]
+          },
+          "descripcion": { "type": "string" }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["tool", "version"],
+      "additionalProperties": true,
+      "properties": {
+        "tool": { "type": "string", "const": "uat_scenario_compiler" },
+        "version": { "type": "string" },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "definitions": {
+    "ScenarioSpec": {
+      "type": "object",
+      "required": ["scenario_id", "ticket_id", "pantalla", "titulo", "precondiciones", "pasos", "oraculos", "datos_requeridos", "origen"],
+      "additionalProperties": false,
+      "properties": {
+        "scenario_id": {
+          "type": "string",
+          "pattern": "^P\\d{2,}$"
+        },
+        "ticket_id": { "type": "integer", "minimum": 1 },
+        "pantalla": {
+          "type": "string",
+          "enum": ["FrmAgenda.aspx", "FrmDetalleLote.aspx", "FrmGestion.aspx", "Login.aspx"],
+          "description": "Pantallas soportadas en MVP"
+        },
+        "titulo": { "type": "string", "minLength": 1 },
+        "precondiciones": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 0
+        },
+        "pasos": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["accion", "target"],
+            "additionalProperties": false,
+            "properties": {
+              "accion": {
+                "type": "string",
+                "enum": ["navigate", "click", "fill", "select", "wait_networkidle", "wait_visible"]
+              },
+              "target": { "type": "string", "minLength": 1 },
+              "valor": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "oraculos": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["tipo", "target"],
+            "additionalProperties": false,
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "equals",
+                  "contains_literal",
+                  "contains_semantic",
+                  "count_gt",
+                  "count_eq",
+                  "visible",
+                  "invisible",
+                  "state"
+                ]
+              },
+              "target": { "type": "string", "minLength": 1 },
+              "valor": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "datos_requeridos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tabla"],
+            "additionalProperties": false,
+            "properties": {
+              "tabla": { "type": "string" },
+              "filtro": { "type": "string" }
+            }
+          }
+        },
+        "origen": {
+          "type": "object",
+          "required": ["ticket_section", "item_id"],
+          "additionalProperties": false,
+          "properties": {
+            "ticket_section": { "type": "string" },
+            "item_id": { "type": "string" }
+          }
+        },
+        "needs_human_review": {
+          "type": "boolean",
+          "description": "true si LLM + fallback no pudieron parsear completamente el P0N"
+        }
+      }
+    }
+  },
+  "if": { "properties": { "ok": { "const": false } } },
+  "then": {
+    "required": ["ok", "error"],
+    "properties": {
+      "error": {
+        "type": "string",
+        "enum": [
+          "invalid_input_json",
+          "no_test_plan_in_ticket",
+          "all_scenarios_out_of_scope",
+          "screen_not_supported_yet",
+          "scenario_compilation_failed"
+        ]
+      },
+      "message": { "type": "string" }
+    }
+  }
+}

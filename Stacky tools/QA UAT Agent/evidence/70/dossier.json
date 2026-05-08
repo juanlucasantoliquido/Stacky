@@ -1,0 +1,200 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.0",
+  "run_id": "dd23214b-36ad-480d-b558-435bbac508f4",
+  "ticket_id": 70,
+  "ticket_title": "RF-003 — Validación del comportamiento de combinación de filtros",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "FAIL",
+  "executive_summary": "Resumen Ejecutivo UAT:  \nLa validación del ticket RF-003 sobre el comportamiento de combinación de filtros resultó insatisfactoria. De los 3 escenarios evaluados, ninguno fue aprobado; los escenarios P01, P04 y P05 presentaron incidencias que impidieron su correcta ejecución. Se recomienda revisar y corregir los problemas identificados antes de proceder con una nueva ronda de pruebas.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.1.0",
+    "total": 3,
+    "pass": 0,
+    "fail": 3,
+    "blocked": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "Abrir FrmAgenda.aspx sin click - grillas pueden estar vacias pero NO aparece mensaje de lista vacia.",
+      "status": "fail",
+      "duration_ms": 32128,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P01\\step_00_setup.png",
+          "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P01\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P01\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Abrir FrmAgenda.aspx para preparar el entorno inicial antes de ejecutar el escenario.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P01:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P01\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Confirmar en el estado final que 'panel_c_lblagendausu' esté invisible para asegurar que no aparece el mensaje de lista vacía al abrir FrmAgenda.aspx.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P01:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que al abrir la página FrmAgenda.aspx, las grillas pueden estar vacías sin que se muestre un mensaje de \"lista vacía\". La verificación falló al comprobar que el elemento 'panel_c_lblagendaaut' no era invisible, lo que indica que el mensaje no se comportó como se esperaba."
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "FechaDesde=19000101, FechaHasta=19000101, click Buscar - debe aparecer mensaje &quot;No hay lotes agendados que cumplan los criterios seleccionados&quot; como Aviso.",
+      "status": "fail",
+      "duration_ms": 37641,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P04\\step_00_setup.png",
+          "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P04\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P04\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Navegué a FrmAgenda.aspx para preparar el entorno antes de ejecutar la prueba.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P04:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P04\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Al buscar con FechaDesde=19000101 y FechaHasta=19000101 validé que panel_dialogfinsesion muestre: 'No hay lotes agendados que cumplan los criterios seleccionados'.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P04:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al ingresar la misma fecha para \"FechaDesde\" y \"FechaHasta\" y hacer clic en \"Buscar\", se muestre el mensaje de aviso \"No hay lotes agendados que cumplan los criterios seleccionados\". El resultado fue un fallo, indicando que la funcionalidad no se comportó como se esperaba."
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "Aplicar filtros, navegar fuera, volver - todos los DDL muestran Todos/Todas.",
+      "status": "fail",
+      "duration_ms": 37059,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [
+          "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P05\\step_00_setup.png",
+          "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P05\\step_01_after.png",
+          "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P05\\step_final_state.png"
+        ],
+        "console_log": null,
+        "network_log": null
+      },
+      "assertion_failures": [],
+      "steps": [
+        {
+          "screenshot_name": "step_00_setup.png",
+          "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P05\\step_00_setup.png",
+          "step_index": "setup",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Navegar a FrmAgenda.aspx para preparar el escenario antes de ejecutar las acciones.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P05:step_00_setup.png}}"
+        },
+        {
+          "screenshot_name": "step_01_after.png",
+          "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P05\\step_01_after.png",
+          "step_index": 1,
+          "action": "click",
+          "target": "link_ddlacciones",
+          "value": "Todos",
+          "description": "Hacer clic en 'ddlacciones' y seleccionar 'Todos' para aplicar el filtro correspondiente.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P05:step_01_after.png}}"
+        },
+        {
+          "screenshot_name": "step_final_state.png",
+          "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P05\\step_final_state.png",
+          "step_index": "final",
+          "action": null,
+          "target": null,
+          "value": null,
+          "description": "Validar que todos los desplegables muestran 'Todos' o 'Todas' y que empresa, nivel de mora, perfil, recomendación, región y tipo de cliente son visibles.",
+          "description_source": "llm",
+          "attachment_token": "{{ATTACH:P05:step_final_state.png}}"
+        }
+      ],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al aplicar filtros y navegar fuera de la sección, todos los menús desplegables (DDL) continúen mostrando las opciones \"Todos\" y \"Todas\" en su interfaz. El resultado fue un fallo, lo que indica que la funcionalidad no se comportó como se esperaba."
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P01",
+      "titulo": "P01",
+      "message": "Scenario P01 failed with status fail",
+      "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P01\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "P04",
+      "message": "Scenario P04 failed with status fail",
+      "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P04\\step_00_setup.png"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "P05",
+      "message": "Scenario P05 failed with status fail",
+      "screenshot_path": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\P05\\step_00_setup.png"
+    }
+  ],
+  "recommendation_for_human_qa": [
+    "Revisa los casos de prueba asociados a los identificadores P01, P04 y P05 para identificar las causas específicas de las fallas.",
+    "Asegúrate de que los datos de entrada utilizados en las pruebas sean correctos y estén actualizados.",
+    "Consulta los registros de errores y la salida de la terminal para obtener detalles adicionales sobre los fallos.",
+    "Verifica si existen cambios recientes en el código que puedan haber afectado la funcionalidad probada."
+  ],
+  "next_steps": [
+    "Revisar los escenarios fallidos con el desarrollador.",
+    "Crear bug tickets para cada fallo confirmado.",
+    "Planificar re-ejecución tras correcciones."
+  ],
+  "generated_at": "2026-05-03T03:20:48Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.1.0",
+    "duration_ms": 118112
+  },
+  "comment_hash": "16a2d93f3d84674a49ac968f0c05abb4afbcbcfc1937a743df5bbdcbbca83087",
+  "paths": {
+    "dossier_md": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\DOSSIER_UAT.md",
+    "ado_comment_html": "n:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\ado_comment.html"
+  }
+}

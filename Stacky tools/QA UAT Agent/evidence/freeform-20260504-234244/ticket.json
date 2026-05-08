@@ -1,0 +1,60 @@
+{
+  "ok": true,
+  "ticket": {
+    "id": -1,
+    "title": "Buscar cliente activo y ver su detalle",
+    "state": "FreeForm",
+    "type": "QA",
+    "url": "freeform://freeform-20260504-234244"
+  },
+  "description_md": "**Run ID**: freeform-20260504-234244\n**Intent**: Buscar cliente activo y ver su detalle\n**Goal**: ver_detalle_cliente\n**Entry screen**: FrmAgenda.aspx\n**Navigation**: FrmLogin.aspx → FrmAgenda.aspx → FrmDetalleClie.aspx\n",
+  "comments": [
+    {
+      "id": 1,
+      "author": "UserInterfaceQAFreeForm",
+      "date": "2026-05-04T23:42:49",
+      "text_md": "## Análisis Técnico (Free-Form QA — generado por UserInterfaceQAFreeForm)\n\n**Intent**: Buscar cliente activo y ver su detalle\n**Acción objetivo**: ver_detalle_cliente\n**Pantalla de entrada**: FrmAgenda.aspx\n**Ruta de navegación**: FrmLogin.aspx → FrmAgenda.aspx → FrmDetalleClie.aspx\n\n**Datos resueltos**:\n  CLIENTE_ID: Msg 207, Level 16, State 1, Server aisbddev02, Line 1\n  LOTE_ID: Msg 207, Level 16, State 1, Server aisbddev02, Line 1\n\n## Plan de Pruebas\n\n**P01**: \n  Datos: rut={{CLIENTE_ID}}\n  Esperado: Ver detalle\n\n**P02**: \n  Datos: lote={{LOTE_ID}}\n  Esperado: Ver lote activo\n",
+      "role": "analisis_tecnico"
+    }
+  ],
+  "analisis_tecnico": "## Análisis Técnico (Free-Form QA — generado por UserInterfaceQAFreeForm)\n\n**Intent**: Buscar cliente activo y ver su detalle\n**Acción objetivo**: ver_detalle_cliente\n**Pantalla de entrada**: FrmAgenda.aspx\n**Ruta de navegación**: FrmLogin.aspx → FrmAgenda.aspx → FrmDetalleClie.aspx\n\n**Datos resueltos**:\n  CLIENTE_ID: Msg 207, Level 16, State 1, Server aisbddev02, Line 1\n  LOTE_ID: Msg 207, Level 16, State 1, Server aisbddev02, Line 1\n\n## Plan de Pruebas\n\n**P01**: \n  Datos: rut={{CLIENTE_ID}}\n  Esperado: Ver detalle\n\n**P02**: \n  Datos: lote={{LOTE_ID}}\n  Esperado: Ver lote activo\n",
+  "plan_pruebas": [
+    {
+      "id": "P01",
+      "descripcion": "",
+      "datos": "rut={{CLIENTE_ID}}",
+      "esperado": "Ver detalle"
+    },
+    {
+      "id": "P02",
+      "descripcion": "",
+      "datos": "lote={{LOTE_ID}}",
+      "esperado": "Ver lote activo"
+    }
+  ],
+  "notas_qa": [
+    "Free-form run: freeform-20260504-234244",
+    "Entry screen: FrmAgenda.aspx",
+    "Navigation path: FrmLogin.aspx → FrmAgenda.aspx → FrmDetalleClie.aspx"
+  ],
+  "adjuntos": [],
+  "precondiciones_detected": [
+    {
+      "tipo": "resolved_data",
+      "recurso": "CLIENTE_ID=Msg 207, Level 16, State 1, Server aisbddev02, Line 1",
+      "hint": "Dato resuelto por orquestador: CLIENTE_ID=Msg 207, Level 16, State 1, Server aisbddev02, Line 1"
+    },
+    {
+      "tipo": "resolved_data",
+      "recurso": "LOTE_ID=Msg 207, Level 16, State 1, Server aisbddev02, Line 1",
+      "hint": "Dato resuelto por orquestador: LOTE_ID=Msg 207, Level 16, State 1, Server aisbddev02, Line 1"
+    }
+  ],
+  "meta": {
+    "tool": "synthetic_ticket_builder",
+    "version": "1.0.0",
+    "run_id": "freeform-20260504-234244",
+    "source": "freeform",
+    "duration_ms": 0
+  }
+}

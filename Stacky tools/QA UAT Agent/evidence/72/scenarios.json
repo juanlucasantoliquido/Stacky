@@ -1,0 +1,172 @@
+{
+  "ok": true,
+  "ticket_id": 72,
+  "compiled": 4,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": 72,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Búsqueda sin filtros + validación de nuevas columnas",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "table_agenda_usu",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "table_agenda_aut",
+          "valor": null
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "RUC"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "Corredor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "Débito Auto"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "lotes",
+          "filtro": "AGLOTE='4127924112345393' OR AGLOTE='1011240108601559' AND AGHECHO='P'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      }
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 72,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Filtro Débito Auto = No",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "select",
+          "target": "select_debito_auto",
+          "valor": "No"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_eq",
+          "target": "table_agenda_aut",
+          "valor": "2"
+        },
+        {
+          "tipo": "count_eq",
+          "target": "table_agenda_usu",
+          "valor": "2"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      }
+    },
+    {
+      "scenario_id": "P04",
+      "ticket_id": 72,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Filtro Débito Auto = Sí",
+      "precondiciones": [
+        "El usuario está en la pantalla de Agenda."
+      ],
+      "pasos": [
+        {
+          "accion": "select",
+          "target": "select_debito_auto",
+          "valor": "Sí"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "panel_agenda",
+          "valor": "Lista vacía"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "DebitoSi",
+          "filtro": "0"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      }
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 72,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Filtro Corredor",
+      "precondiciones": [
+        "ConCorredor=0 en DEV"
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_eq",
+          "target": "table_agenda_usu",
+          "valor": "0"
+        },
+        {
+          "tipo": "visible",
+          "target": "panel_gvc_agenda_usu",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      }
+    }
+  ],
+  "out_of_scope_items": [],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 22874
+  }
+}

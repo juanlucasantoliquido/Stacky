@@ -1,0 +1,23 @@
+{
+  "scenario_id": "P03",
+  "assertions": [
+    {
+      "oracle_id": 0,
+      "target": "guardar",
+      "tipo": "visible",
+      "expected": null,
+      "count": 0,
+      "visible": false,
+      "actual_text": null
+    },
+    {
+      "oracle_id": 1,
+      "target": "cerrar",
+      "tipo": "visible",
+      "expected": null,
+      "count": 0,
+      "visible": false,
+      "actual_text": null
+    }
+  ]
+}

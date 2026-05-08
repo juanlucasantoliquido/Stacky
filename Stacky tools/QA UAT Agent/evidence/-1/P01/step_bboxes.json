@@ -1,0 +1,113 @@
+[
+  {
+    "step_index": 3,
+    "screenshot_path": "evidence/-1/P01/step_03_after.png",
+    "target": "pb_step_2",
+    "bbox": null
+  },
+  {
+    "step_index": 5,
+    "screenshot_path": "evidence/-1/P01/step_05_after.png",
+    "target": "pb_step_4",
+    "bbox": {
+      "x": 632.4000244140625,
+      "y": 141,
+      "width": 612.4000244140625,
+      "height": 30
+    }
+  },
+  {
+    "step_index": 7,
+    "screenshot_path": "evidence/-1/P01/step_07_after.png",
+    "target": "pb_step_6",
+    "bbox": {
+      "x": 561.125,
+      "y": 225.8000030517578,
+      "width": 149.7125244140625,
+      "height": 24
+    }
+  },
+  {
+    "step_index": 8,
+    "screenshot_path": "evidence/-1/P01/step_08_after.png",
+    "target": "pb_step_7",
+    "bbox": {
+      "x": 728.8375244140625,
+      "y": 225.8000030517578,
+      "width": 317.425048828125,
+      "height": 24
+    }
+  },
+  {
+    "step_index": 9,
+    "screenshot_path": "evidence/-1/P01/step_09_after.png",
+    "target": "pb_step_8",
+    "bbox": {
+      "x": 896.5499877929688,
+      "y": 297.8000183105469,
+      "width": 149.71258544921875,
+      "height": 24
+    }
+  },
+  {
+    "step_index": 10,
+    "screenshot_path": "evidence/-1/P01/step_10_after.png",
+    "target": "pb_step_9",
+    "bbox": {
+      "x": 1023.0625,
+      "y": 363.8000183105469,
+      "width": 35,
+      "height": 35
+    }
+  },
+  {
+    "step_index": 12,
+    "screenshot_path": "evidence/-1/P01/step_12_after.png",
+    "target": "pb_step_11",
+    "bbox": null
+  },
+  {
+    "step_index": 15,
+    "screenshot_path": "evidence/-1/P01/step_15_after.png",
+    "target": "pb_step_14",
+    "bbox": {
+      "x": 159.47500610351562,
+      "y": 150.625,
+      "width": 222.95001220703125,
+      "height": 24.800003051757812
+    }
+  },
+  {
+    "step_index": 16,
+    "screenshot_path": "evidence/-1/P01/step_16_after.png",
+    "target": "pb_step_15",
+    "bbox": {
+      "x": 400.4250183105469,
+      "y": 150.625,
+      "width": 463.9125061035156,
+      "height": 24.800003051757812
+    }
+  },
+  {
+    "step_index": 17,
+    "screenshot_path": "evidence/-1/P01/step_17_after.png",
+    "target": "pb_step_16",
+    "bbox": {
+      "x": 641.375,
+      "y": 257.125,
+      "width": 222.95001220703125,
+      "height": 24.800018310546875
+    }
+  },
+  {
+    "step_index": 18,
+    "screenshot_path": "evidence/-1/P01/step_18_after.png",
+    "target": "pb_step_17",
+    "bbox": {
+      "x": 923.2250366210938,
+      "y": 361.625,
+      "width": 90.0374755859375,
+      "height": 36
+    }
+  }
+]

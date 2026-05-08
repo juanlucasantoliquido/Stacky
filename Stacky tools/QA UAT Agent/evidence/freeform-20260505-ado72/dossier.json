@@ -1,0 +1,59 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.0",
+  "run_id": "fce206e7-979d-4910-a0a0-937eda683602",
+  "ticket_id": "freeform-20260505-ado72",
+  "ticket_title": "Validar la implementacion de RF-005 (ADO-72): verificar que las listas de agenda (GridAgendaUsu y GridAgendaAut) en FrmAgenda.aspx muestran las nuevas columnas CLNUMDOC (RUC), OGCORREDOR (Corredor) y OGDEBAUT (Debito Auto.), y que los filtros Debito Automatico y Corredor funcionan sin errores.",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "BLOCKED",
+  "executive_summary": "Resumen Ejecutivo UAT:  \nLa validación de la implementación RF-005 (ADO-72) fue bloqueada. Se verificó que las listas GridAgendaUsu y GridAgendaAut en FrmAgenda.aspx incluyeran las nuevas columnas CLNUMDOC, OGCORREDOR y OGDEBAUT, así como el funcionamiento de los filtros Debito Automático y Corredor. Sin embargo, el único escenario probado (P01) presentó un inconveniente que impidió su aprobación. Se requiere resolución del incidente para continuar con la validación.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.2.0",
+    "total": 1,
+    "pass": 0,
+    "fail": 0,
+    "blocked": 1
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "Busqueda sin filtros - verificar que ambas grillas muestran las columnas RUC, Corredor y Debito Auto.",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al realizar una búsqueda sin filtros, ambas grillas de la interfaz muestren correctamente las columnas \"RUC\", \"Corredor\" y \"Débito Auto\". El resultado fue bloqueado, lo que indica que no se pudo completar la verificación debido a un problema en la ejecución del test.",
+      "reason": "missing_selectors"
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P01",
+      "titulo": "P01",
+      "message": "missing_selectors"
+    }
+  ],
+  "recommendation_for_human_qa": [
+    "Verifica si existen dependencias previas no resueltas que estén bloqueando la prueba.",
+    "Consulta con el equipo de desarrollo para identificar la causa del bloqueo.",
+    "Documenta el motivo específico del bloqueo en el sistema de seguimiento de incidencias.",
+    "Asegúrate de que todos los requisitos previos estén completos antes de reintentar la prueba."
+  ],
+  "next_steps": [
+    "Resolver bloqueos de entorno antes de re-ejecutar.",
+    "Verificar configuración de env vars y base de datos."
+  ],
+  "generated_at": "2026-05-05T21:14:43Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.2.0",
+    "duration_ms": 6300
+  },
+  "comment_hash": "73b4cb9e16e04649f6fdadacbc502301f0a64848ffd3eef5964c7097dd34e07b",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-ado72\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-ado72\\ado_comment.html"
+  }
+}

@@ -1,0 +1,672 @@
+
+Running 1 test using 1 worker
+
+Advanced filters ready: [33mtrue[39m
+[STEP 01] click link_c_btnok
+  ✘  1 [chromium] › evidence\72\tests\P01_busqueda_sin_filtros_validacion_de_nuevas_columnas.spec.ts:104:7 › ADO-72 | P01 — Búsqueda sin filtros + validación de nuevas columnas › p01 búsqueda_sin_filtros_+_validación_de_nuevas_columnas (32.7s)
+
+
+  1) [chromium] › evidence\72\tests\P01_busqueda_sin_filtros_validacion_de_nuevas_columnas.spec.ts:104:7 › ADO-72 | P01 — Búsqueda sin filtros + validación de nuevas columnas › p01 búsqueda_sin_filtros_+_validación_de_nuevas_columnas 
+
+    Error: P01: página debe contener "RUC"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 5000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 203[39m
+
+    [32m- RUC[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+         menulogoutSalirAgenda PersonalUsuario:USUARIO TESTPendiente de Hoy:0Pendiente de otros Días:17Realizado Hoy:2Total en Agenda:19Barrido Realizado:11%Clientes Asignados:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion ManualsearchBúsqueda de InhibicionessearchExcepciones de Conveniosformat_list_bulletedReportes OperativosleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador[43m [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                             AccionesExportar AgendasClientes Asignados[39m
+    [31m+                             chevron_rightAvanzar[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ 		search[39m
+    [31m+ 			Búsqueda Avanzada[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Desde[43m [49m[39m
+    [31m+                                 Hasta[43m [49m[39m
+    [31m+                                 Empresa TodasRIPLEYTodas[43m  [49m[39m
+    [31m+                                 Perfil Todos1 - Soporte AIS155 - Gerente de Cobranzas (Ripley)1660 - Administrador363 - Supervisor de Cobranzas (Ripley)Todos[43m  [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Región TodasAISEN DEL GENERAL CARLOS IBAÑEZ DEL CAMPOANTOFAGASTAARAUCANIAARICA Y PARINACOTAATACAMABIO-BIOCOQUIMBOLIBERTADOR GENERAL BERNARDO O HIGGINSLOS LAGOSMAGALLANESMAULEREGION DE LOS RIOSREGION METROPOLITANATARAPACAVALPARAISOTodas[43m  [49m[39m
+    [31m+                                 Recomendación TodasBAJO -  PILOTO MK BAJOCTEL -  Compra de FonosEMCF -  Empex Con FonoGANC - Terreno Asistido - Clien. con contacto sin CPRCC5 -  Clientes Vigentes entre 121 y 150 d as moraTodas[43m  [49m[39m
+    [31m+                                 Nivel de Mora TodosCastigoCiclo 1Ciclo 2Ciclo 3Ciclo 4Ciclo 5Ciclo 6Ciclo 7Ciclo 8Ciclo 9Cobranza JudicialCobranza preventivaFlujoJudicialNo MoraPeriodo de autopagoSin AsignarVigenteSin Asignar[43m  [49m[39m
+    [31m+                                 Tipo de Cliente TodosCliente CastigoCliente JudicialCliente MixtoCliente VigenteTodos[43m  [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Ventil[43m [49m[39m
+    [31m+                                 Campaña TodasA rellenarTodas[43m  [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                                    [49m[39m
+    [31m+                                     searchFiltrar[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 	Agendados por Usuario[39m
+    [31m+[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				ClienteLoteFechaHoraRecomendaciónNivel Mora[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 	Agendados por Motor Experto[39m
+    [31m+[39m
+    [31m+ [43m                [49m[39m
+    [31m+                     grid_onAgendados por Motor Experto[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				ClienteLoteFechaHoraRecomendaciónNivel Mora[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				6499714 6499714 6499714649971403/12/202514:53:44EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12406972 12406972 124069721240697203/12/202514:53:45EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12266465 12266465 122664651226646503/12/202514:53:45EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				19559074 19559074 195590741955907403/12/202514:53:45EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12272340 12272340 122723401227234003/12/202514:53:44EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12261570 12261570 122615701226157003/12/202514:53:44EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12285038 12285038 122850381228503803/12/202514:53:44EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				10396023 10396023 103960231039602303/12/202514:53:43EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				15471591 15471591 154715911547159103/12/202514:53:43EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12256873 12256873 122568731225687303/12/202514:53:43EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12242167 12242167 122421671224216703/12/202514:53:43EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12326138 12326138 123261381232613803/12/202514:53:42EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12271212 12271212 122712121227121203/12/202514:53:42EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				16417065 16417065 164170651641706503/12/202514:53:42EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12405368 12405368 124053681240536803/12/202514:53:42EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				15317201 15317201 153172011531720103/12/202514:53:41EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ 				12355359 12355359 123553591235535903/12/202514:53:40EDPP - Compromiso de pago[43m [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ Filtrar[39m
+
+    Call log:
+    [2m  - P01: página debe contener "RUC" with timeout 5000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    4 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m      - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m            [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirAgenda PersonalUsuario:USUARIO TESTPendiente de Hoy:0Pendiente de otros Días:17Realizado Hoy:2Total en Agenda:19Barrido Realizado:11%Clientes Asignados:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion ManualsearchBúsqueda de InhibicionessearchExcepciones de Conveniosformat_list_bulletedReportes OperativosleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            AccionesExportar AgendasClientes Asignados[22m
+    [2m                            chevron_rightAvanzar[22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda Avanzada[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m			[22m
+    [2m                        [22m
+    [2m				[22m
+    [2m                            [22m
+    [2m                                Desde [22m
+    [2m                                Hasta [22m
+    [2m                                Empresa TodasRIPLEYTodas  [22m
+    [2m                                Perfil Todos1 - Soporte AIS155 - Gerente de Cobranzas (Ripley)1660 - Administrador363 - Supervisor de Cobranzas (Ripley)Todos  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Región TodasAISEN DEL GENERAL CARLOS IBAÑEZ DEL CAMPOANTOFAGASTAARAUCANIAARICA Y PARINACOTAATACAMABIO-BIOCOQUIMBOLIBERTADOR GENERAL BERNARDO O HIGGINSLOS LAGOSMAGALLANESMAULEREGION DE LOS RIOSREGION METROPOLITANATARAPACAVALPARAISOTodas  [22m
+    [2m                                Recomendación TodasBAJO -  PILOTO MK BAJOCTEL -  Compra de FonosEMCF -  Empex Con FonoGANC - Terreno Asistido - Clien. con contacto sin CPRCC5 -  Clientes Vigentes entre 121 y 150 d as moraTodas  [22m
+    [2m                                Nivel de Mora TodosCastigoCiclo 1Ciclo 2Ciclo 3Ciclo 4Ciclo 5Ciclo 6Ciclo 7Ciclo 8Ciclo 9Cobranza JudicialCobranza preventivaFlujoJudicialNo MoraPeriodo de autopagoSin AsignarVigenteSin Asignar  [22m
+    [2m                                Tipo de Cliente TodosCliente CastigoCliente JudicialCliente MixtoCliente VigenteTodos  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Ventil [22m
+    [2m                                Campaña TodasA rellenarTodas  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m                                    searchFiltrar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Agendados por Usuario[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					ClienteLoteFechaHoraRecomendaciónNivel Mora[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Agendados por Motor Experto[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    grid_onAgendados por Motor Experto[22m
+    [2m                [22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					ClienteLoteFechaHoraRecomendaciónNivel Mora[22m
+    [2m				[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					6499714 6499714 6499714649971403/12/202514:53:44EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12406972 12406972 124069721240697203/12/202514:53:45EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12266465 12266465 122664651226646503/12/202514:53:45EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					19559074 19559074 195590741955907403/12/202514:53:45EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12272340 12272340 122723401227234003/12/202514:53:44EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12261570 12261570 122615701226157003/12/202514:53:44EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12285038 12285038 122850381228503803/12/202514:53:44EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					10396023 10396023 103960231039602303/12/202514:53:43EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					15471591 15471591 154715911547159103/12/202514:53:43EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12256873 12256873 122568731225687303/12/202514:53:43EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12242167 12242167 122421671224216703/12/202514:53:43EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12326138 12326138 123261381232613803/12/202514:53:42EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12271212 12271212 122712121227121203/12/202514:53:42EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					16417065 16417065 164170651641706503/12/202514:53:42EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12405368 12405368 124053681240536803/12/202514:53:42EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					15317201 15317201 153172011531720103/12/202514:53:41EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m					12355359 12355359 123553591235535903/12/202514:53:40EDPP - Compromiso de pago [22m
+    [2m				[22m
+    [2m			[22m
+    [2m[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2mFiltrar"[22m
+    [2m    5 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m      - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirAgenda PersonalUsuario:USUARIO TESTPendiente de Hoy:0Pendiente de otros Días:17Realizado Hoy:2Total en Agenda:19Barrido Realizado:11%Clientes Asignados:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion ManualsearchBúsqueda de InhibicionessearchExcepciones de Conveniosformat_list_bulletedReportes OperativosleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            AccionesExportar AgendasClientes Asignados[22m
+    [2m                            chevron_rightAvanzar[22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda Avanzada[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m                        [22m
+    [2m	[22m
+    [2m                            [22m
+    [2m                                Desde [22m
+    [2m                                Hasta [22m
+    [2m                                Empresa TodasRIPLEYTodas  [22m
+    [2m                                Perfil Todos1 - Soporte AIS155 - Gerente de Cobranzas (Ripley)1660 - Administrador363 - Supervisor de Cobranzas (Ripley)Todos  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Región TodasAISEN DEL GENERAL CARLOS IBAÑEZ DEL CAMPOANTOFAGASTAARAUCANIAARICA Y PARINACOTAATACAMABIO-BIOCOQUIMBOLIBERTADOR GENERAL BERNARDO O HIGGINSLOS LAGOSMAGALLANESMAULEREGION DE LOS RIOSREGION METROPOLITANATARAPACAVALPARAISOTodas  [22m
+    [2m                                Recomendación TodasBAJO -  PILOTO MK BAJOCTEL -  Compra de FonosEMCF -  Empex Con FonoGANC - Terreno Asistido - Clien. con contacto sin CPRCC5 -  Clientes Vigentes entre 121 y 150 d as moraTodas  [22m
+    [2m                                Nivel de Mora TodosCastigoCiclo 1Ciclo 2Ciclo 3Ciclo 4Ciclo 5Ciclo 6Ciclo 7Ciclo 8Ciclo 9Cobranza JudicialCobranza preventivaFlujoJudicialNo MoraPeriodo de autopagoSin AsignarVigenteSin Asignar  [22m
+    [2m                                Tipo de Cliente TodosCliente CastigoCliente JudicialCliente MixtoCliente VigenteTodos  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Ventil [22m
+    [2m                                Campaña TodasA rellenarTodas  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m                                    searchFiltrar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m[22m
+    [2m                    [22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m            [22m
+    [2m                [22m
+    [2m	Agendados por Usuario[22m
+    [2m[22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m            [22m
+    [2m	[22m
+    [2m		[22m
+    [2m			[22m
+    [2m				ClienteLoteFechaHoraRecomendaciónNivel Mora[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m[22m
+    [2m            [22m
+    [2m                [22m
+    [2m	Agendados por Motor Experto[22m
+    [2m[22m
+    [2m                [22m
+    [2m                    grid_onAgendados por Motor Experto[22m
+    [2m                [22m
+    [2m            [22m
+    [2m            [22m
+    [2m	[22m
+    [2m		[22m
+    [2m			[22m
+    [2m				ClienteLoteFechaHoraRecomendaciónNivel Mora[22m
+    [2m			[22m
+    [2m		[22m
+    [2m			[22m
+    [2m				6499714 6499714 6499714649971403/12/202514:53:44EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12406972 12406972 124069721240697203/12/202514:53:45EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12266465 12266465 122664651226646503/12/202514:53:45EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				19559074 19559074 195590741955907403/12/202514:53:45EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12272340 12272340 122723401227234003/12/202514:53:44EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12261570 12261570 122615701226157003/12/202514:53:44EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12285038 12285038 122850381228503803/12/202514:53:44EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				10396023 10396023 103960231039602303/12/202514:53:43EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				15471591 15471591 154715911547159103/12/202514:53:43EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12256873 12256873 122568731225687303/12/202514:53:43EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12242167 12242167 122421671224216703/12/202514:53:43EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12326138 12326138 123261381232613803/12/202514:53:42EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12271212 12271212 122712121227121203/12/202514:53:42EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				16417065 16417065 164170651641706503/12/202514:53:42EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12405368 12405368 124053681240536803/12/202514:53:42EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				15317201 15317201 153172011531720103/12/202514:53:41EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m				12355359 12355359 123553591235535903/12/202514:53:40EDPP - Compromiso de pago [22m
+    [2m			[22m
+    [2m		[22m
+    [2m[22m
+    [2m		[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2mFiltrar"[22m
+
+
+      176 |     
+      177 |     
+    > 178 |     await expect(page.locator('body'), 'P01: página debe contener "RUC"').toContainText('RUC');
+          |                                                                           ^
+      179 |     
+      180 |     
+      181 |     
+        at N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\72\tests\P01_busqueda_sin_filtros_validacion_de_nuevas_columnas.spec.ts:178:75
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\72-tests-P01_busqueda_sin_-3aed7-lidación-de-nuevas-columnas-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\72-tests-P01_busqueda_sin_-3aed7-lidación-de-nuevas-columnas-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\72-tests-P01_busqueda_sin_-3aed7-lidación-de-nuevas-columnas-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\72-tests-P01_busqueda_sin_-3aed7-lidación-de-nuevas-columnas-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\72-tests-P01_busqueda_sin_-3aed7-lidación-de-nuevas-columnas-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › evidence\72\tests\P01_busqueda_sin_filtros_validacion_de_nuevas_columnas.spec.ts:104:7 › ADO-72 | P01 — Búsqueda sin filtros + validación de nuevas columnas › p01 búsqueda_sin_filtros_+_validación_de_nuevas_columnas 

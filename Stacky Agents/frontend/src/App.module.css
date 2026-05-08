@@ -1,0 +1,39 @@
+.appRoot {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.nav {
+  display: flex;
+  gap: 0;
+  background: var(--bg-panel);
+  border-bottom: 2px solid var(--border);
+  padding: 0 16px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.navTab {
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.navTab:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.navTab.active {
+  color: #a5b4fc;
+  border-bottom-color: #6366f1;
+}

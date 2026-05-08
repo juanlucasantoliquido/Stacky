@@ -1,0 +1,25 @@
+{
+  "scenario_id": "P03",
+  "assertions": [
+    {
+      "oracle_id": 0,
+      "target": "table_agenda_aut",
+      "tipo": "count_eq",
+      "expected": 2,
+      "count": 1,
+      "visible": true,
+      "actual_text": "CLIENTE\tLOTE\tFECHA\tHORA\tRECOMENDACIÓN\tNIVEL MORA\n6499714 6499714 6499714\t6499714\t03/12/2025\t14:53:44\tEDPP - Compromiso de pago\t \n12406972 12406972 12406972\t12406972\t03/12/2025\t14:53:45\tEDPP - Compromiso de pago\t \n12266465 12266465 12266465\t12266465\t03/12/2025\t14:53:45\tEDPP - Compromiso de pago\t \n19559074 19559074 19559074\t19559074\t03/12/2025\t14:53:45\tEDPP - Compromiso de pago\t \n12272340 12272340 12272340\t12272340\t03/12/2025\t14:53:44\tEDPP - Compromiso de pago\t \n12261570 12261570 12261570\t12261570\t03/12/2025\t14:53:44\tEDPP - Compromiso de pago\t \n12285038 12285038 12285038\t12285038\t03/12/2025\t14:53:44\tEDPP - Compromiso de pago\t \n10396023 10396023 10396023\t10396023\t03/12/2025\t14:53:43\tEDPP - Compromiso de pago\t \n15471591 15471591 15471591\t15471591\t03/12/2025\t14:53:43\tEDPP - Compromiso de pago\t \n12256873 12256873 12256873\t12256873\t03/12/2025\t14:53:43\tEDPP - Compromiso de pago\t \n12242167 12242167 12242167\t12242167\t03/12/2025\t14:53:43\tEDPP - Compromiso de pago\t \n12326138 12326138 12326138\t1232",
+      "state": "enabled"
+    },
+    {
+      "oracle_id": 1,
+      "target": "table_agenda_usu",
+      "tipo": "count_eq",
+      "expected": 2,
+      "count": 1,
+      "visible": true,
+      "actual_text": "CLIENTE\tLOTE\tFECHA\tHORA\tRECOMENDACIÓN\tNIVEL MORA",
+      "state": "enabled"
+    }
+  ]
+}

@@ -1,0 +1,352 @@
+<!-- stacky-qa-uat:run id="dd23214b-36ad-480d-b558-435bbac508f4" hash="16a2d93f3d84674a49ac968f0c05abb4afbcbcfc1937a743df5bbdcbbca83087" -->
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 13px; color: #1a1a1a;">
+
+<h2 style="margin: 0 0 8px; font-size: 16px; color: #0078d4; border-bottom: 2px solid #0078d4; padding-bottom: 6px;">
+  🤖 Dossier UAT — ADO-70
+  &nbsp;
+  
+  <span style="background: #a4262c; color: #fff; border-radius: 4px; padding: 2px 10px; font-size: 13px;">❌ FAIL</span>
+  
+</h2>
+
+<p style="margin: 4px 0 12px; color: #555; font-size: 12px;">
+  Run: <code>dd23214b-36ad-480d-b558-435bbac508f4</code> &nbsp;|&nbsp;
+  Fecha: 2026-05-03T03:20:48Z &nbsp;|&nbsp;
+  Agente: 1.1.0 &nbsp;|&nbsp;
+  Commit: <code>N/A</code>
+</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resumen ejecutivo</h3>
+<p style="margin: 0 0 12px; line-height: 1.5;">Resumen Ejecutivo UAT:  
+La validación del ticket RF-003 sobre el comportamiento de combinación de filtros resultó insatisfactoria. De los 3 escenarios evaluados, ninguno fue aprobado; los escenarios P01, P04 y P05 presentaron incidencias que impidieron su correcta ejecución. Se recomienda revisar y corregir los problemas identificados antes de proceder con una nueva ronda de pruebas.</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resultados por escenario</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 12px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Título</th>
+      <th style="text-align: center; padding: 6px 10px; border: 1px solid #ddd;">Estado</th>
+      <th style="text-align: right; padding: 6px 10px; border: 1px solid #ddd;">Duración</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr style="background: #fff;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P01</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Abrir FrmAgenda.aspx sin click - grillas pueden estar vacias pero NO aparece mensaje de lista vacia.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #a4262c; font-weight: bold;">❌ FAIL</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">32128 ms</td>
+    </tr>
+    
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P04</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">FechaDesde=19000101, FechaHasta=19000101, click Buscar - debe aparecer mensaje &quot;No hay lotes agendados que cumplan los criterios seleccionados&quot; como Aviso.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #a4262c; font-weight: bold;">❌ FAIL</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">37641 ms</td>
+    </tr>
+    
+    <tr style="background: #fff;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P05</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Aplicar filtros, navegar fuera, volver - todos los DDL muestran Todos/Todas.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #a4262c; font-weight: bold;">❌ FAIL</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">37059 ms</td>
+    </tr>
+    
+  </tbody>
+</table>
+
+
+
+
+<h3 style="margin: 16px 0 6px; font-size: 14px; color: #333;">Lo que se intentó verificar</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 14px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd; width: 90px;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Qué se intentó verificar</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr style="background: #fff; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P01</code>
+        <br/><span style="color: #a4262c; font-size: 11px;">❌</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">El escenario de prueba automatizado intentó verificar que al abrir la página FrmAgenda.aspx, las grillas pueden estar vacías sin que se muestre un mensaje de "lista vacía". La verificación falló al comprobar que el elemento 'panel_c_lblagendaaut' no era invisible, lo que indica que el mensaje no se comportó como se esperaba.</td>
+    </tr>
+    
+    <tr style="background: #fafafa; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P04</code>
+        <br/><span style="color: #a4262c; font-size: 11px;">❌</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que, al ingresar la misma fecha para "FechaDesde" y "FechaHasta" y hacer clic en "Buscar", se muestre el mensaje de aviso "No hay lotes agendados que cumplan los criterios seleccionados". El resultado fue un fallo, indicando que la funcionalidad no se comportó como se esperaba.</td>
+    </tr>
+    
+    <tr style="background: #fff; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P05</code>
+        <br/><span style="color: #a4262c; font-size: 11px;">❌</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que, al aplicar filtros y navegar fuera de la sección, todos los menús desplegables (DDL) continúen mostrando las opciones "Todos" y "Todas" en su interfaz. El resultado fue un fallo, lo que indica que la funcionalidad no se comportó como se esperaba.</td>
+    </tr>
+    
+  </tbody>
+</table>
+<p style="font-size: 10px; color: #999; margin: -10px 0 14px; text-align: right; font-style: italic;">Narrativas generadas por IA (gpt-4o-mini)</p>
+
+
+<h3 style="margin: 16px 0 6px; font-size: 14px; color: #333;">Evidencia por escenario</h3>
+
+<div style="border: 1px solid #e1e1e1; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; background: #fcfcfc;">
+  <div style="margin-bottom: 8px; font-size: 13px;">
+    <strong><code>P01</code> — Abrir FrmAgenda.aspx sin click - grillas pueden estar vacias pero NO aparece mensaje de lista vacia.</strong>
+    
+    <span style="margin-left: 8px; color: #a4262c;">❌ FAIL</span>
+    
+  </div>
+  
+  <div style="margin: 0 0 10px; padding: 7px 11px; background: #f0f7ff; border-left: 3px solid #0078d4; border-radius: 0 3px 3px 0; font-size: 12px; color: #1a3a5c; line-height: 1.5;">
+    <strong>📋 Lo que se intentó verificar:</strong> El escenario de prueba automatizado intentó verificar que al abrir la página FrmAgenda.aspx, las grillas pueden estar vacías sin que se muestre un mensaje de "lista vacía". La verificación falló al comprobar que el elemento 'panel_c_lblagendaaut' no era invisible, lo que indica que el mensaje no se comportó como se esperaba.
+    <span style="float: right; font-size: 10px; color: #888; font-style: italic;">generado por IA (gpt-4o-mini)</span>
+  </div>
+  
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Setup
+        
+      </strong>
+      
+      <span style="font-size: 10px; color: #888; margin-left: 6px;">(descripción IA)</span>
+      
+      <br/>
+      <span style="color: #555;">Abrir FrmAgenda.aspx para preparar el entorno inicial antes de ejecutar el escenario.</span>
+    </div>
+    <a href="{{ATTACH:P01:step_00_setup.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P01:step_00_setup.png}}" alt="step_00_setup.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Estado final
+        
+      </strong>
+      
+      <span style="font-size: 10px; color: #888; margin-left: 6px;">(descripción IA)</span>
+      
+      <br/>
+      <span style="color: #555;">Confirmar en el estado final que 'panel_c_lblagendausu' esté invisible para asegurar que no aparece el mensaje de lista vacía al abrir FrmAgenda.aspx.</span>
+    </div>
+    <a href="{{ATTACH:P01:step_final_state.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P01:step_final_state.png}}" alt="step_final_state.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+</div>
+
+<div style="border: 1px solid #e1e1e1; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; background: #fcfcfc;">
+  <div style="margin-bottom: 8px; font-size: 13px;">
+    <strong><code>P04</code> — FechaDesde=19000101, FechaHasta=19000101, click Buscar - debe aparecer mensaje &quot;No hay lotes agendados que cumplan los criterios seleccionados&quot; como Aviso.</strong>
+    
+    <span style="margin-left: 8px; color: #a4262c;">❌ FAIL</span>
+    
+  </div>
+  
+  <div style="margin: 0 0 10px; padding: 7px 11px; background: #f0f7ff; border-left: 3px solid #0078d4; border-radius: 0 3px 3px 0; font-size: 12px; color: #1a3a5c; line-height: 1.5;">
+    <strong>📋 Lo que se intentó verificar:</strong> Este escenario de prueba automatizado intentó verificar que, al ingresar la misma fecha para "FechaDesde" y "FechaHasta" y hacer clic en "Buscar", se muestre el mensaje de aviso "No hay lotes agendados que cumplan los criterios seleccionados". El resultado fue un fallo, indicando que la funcionalidad no se comportó como se esperaba.
+    <span style="float: right; font-size: 10px; color: #888; font-style: italic;">generado por IA (gpt-4o-mini)</span>
+  </div>
+  
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Setup
+        
+      </strong>
+      
+      <span style="font-size: 10px; color: #888; margin-left: 6px;">(descripción IA)</span>
+      
+      <br/>
+      <span style="color: #555;">Navegué a FrmAgenda.aspx para preparar el entorno antes de ejecutar la prueba.</span>
+    </div>
+    <a href="{{ATTACH:P04:step_00_setup.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P04:step_00_setup.png}}" alt="step_00_setup.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Estado final
+        
+      </strong>
+      
+      <span style="font-size: 10px; color: #888; margin-left: 6px;">(descripción IA)</span>
+      
+      <br/>
+      <span style="color: #555;">Al buscar con FechaDesde=19000101 y FechaHasta=19000101 validé que panel_dialogfinsesion muestre: 'No hay lotes agendados que cumplan los criterios seleccionados'.</span>
+    </div>
+    <a href="{{ATTACH:P04:step_final_state.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P04:step_final_state.png}}" alt="step_final_state.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+</div>
+
+<div style="border: 1px solid #e1e1e1; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; background: #fcfcfc;">
+  <div style="margin-bottom: 8px; font-size: 13px;">
+    <strong><code>P05</code> — Aplicar filtros, navegar fuera, volver - todos los DDL muestran Todos/Todas.</strong>
+    
+    <span style="margin-left: 8px; color: #a4262c;">❌ FAIL</span>
+    
+  </div>
+  
+  <div style="margin: 0 0 10px; padding: 7px 11px; background: #f0f7ff; border-left: 3px solid #0078d4; border-radius: 0 3px 3px 0; font-size: 12px; color: #1a3a5c; line-height: 1.5;">
+    <strong>📋 Lo que se intentó verificar:</strong> Este escenario de prueba automatizado intentó verificar que, al aplicar filtros y navegar fuera de la sección, todos los menús desplegables (DDL) continúen mostrando las opciones "Todos" y "Todas" en su interfaz. El resultado fue un fallo, lo que indica que la funcionalidad no se comportó como se esperaba.
+    <span style="float: right; font-size: 10px; color: #888; font-style: italic;">generado por IA (gpt-4o-mini)</span>
+  </div>
+  
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Setup
+        
+      </strong>
+      
+      <span style="font-size: 10px; color: #888; margin-left: 6px;">(descripción IA)</span>
+      
+      <br/>
+      <span style="color: #555;">Navegar a FrmAgenda.aspx para preparar el escenario antes de ejecutar las acciones.</span>
+    </div>
+    <a href="{{ATTACH:P05:step_00_setup.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P05:step_00_setup.png}}" alt="step_00_setup.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Paso 1
+      </strong>
+      
+      <span style="font-size: 10px; color: #888; margin-left: 6px;">(descripción IA)</span>
+      
+      <br/>
+      <span style="color: #555;">Hacer clic en 'ddlacciones' y seleccionar 'Todos' para aplicar el filtro correspondiente.</span>
+    </div>
+    <a href="{{ATTACH:P05:step_01_after.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P05:step_01_after.png}}" alt="step_01_after.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+  <div style="margin: 8px 0; padding: 6px 0; border-top: 1px dashed #eee;">
+    <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+      <strong>
+        Estado final
+        
+      </strong>
+      
+      <span style="font-size: 10px; color: #888; margin-left: 6px;">(descripción IA)</span>
+      
+      <br/>
+      <span style="color: #555;">Validar que todos los desplegables muestran 'Todos' o 'Todas' y que empresa, nivel de mora, perfil, recomendación, región y tipo de cliente son visibles.</span>
+    </div>
+    <a href="{{ATTACH:P05:step_final_state.png}}" target="_blank" style="display: inline-block;">
+      <img src="{{ATTACH:P05:step_final_state.png}}" alt="step_final_state.png"
+           style="max-width: 720px; border: 1px solid #ddd; border-radius: 3px;"/>
+    </a>
+  </div>
+  
+</div>
+
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #a4262c;">Fallas detectadas</h3>
+
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">P01 — P01</strong><br/>
+  <span style="font-size: 12px;">Scenario P01 failed with status fail</span>
+  
+  
+</div>
+
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">P04 — P04</strong><br/>
+  <span style="font-size: 12px;">Scenario P04 failed with status fail</span>
+  
+  
+</div>
+
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">P05 — P05</strong><br/>
+  <span style="font-size: 12px;">Scenario P05 failed with status fail</span>
+  
+  
+</div>
+
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Recomendaciones para el QA humano</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  
+  <li>Revisa los casos de prueba asociados a los identificadores P01, P04 y P05 para identificar las causas específicas de las fallas.</li>
+  
+  <li>Asegúrate de que los datos de entrada utilizados en las pruebas sean correctos y estén actualizados.</li>
+  
+  <li>Consulta los registros de errores y la salida de la terminal para obtener detalles adicionales sobre los fallos.</li>
+  
+  <li>Verifica si existen cambios recientes en el código que puedan haber afectado la funcionalidad probada.</li>
+  
+</ul>
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Próximos pasos</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  
+  <li>Revisar los escenarios fallidos con el desarrollador.</li>
+  
+  <li>Crear bug tickets para cada fallo confirmado.</li>
+  
+  <li>Planificar re-ejecución tras correcciones.</li>
+  
+</ul>
+
+
+<p style="margin: 16px 0 0; padding: 8px 12px; background: #f3f9ff; border: 1px solid #cce0f5; border-radius: 4px; font-size: 11px; color: #444; line-height: 1.5;">
+  <strong>ℹ️ Postura del agente</strong>: Este comentario fue publicado automáticamente por Stacky Agents — QA UAT Pipeline.
+  El agente <strong>no cambió el estado del ticket</strong>. Mover a "QA Done", "Cerrado" u otro estado es una decisión exclusivamente humana.
+</p>
+
+</div>

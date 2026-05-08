@@ -1,0 +1,539 @@
+.graphRoot {
+  padding: 16px 20px;
+  overflow-x: auto;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.toolbarCount {
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  flex: 1;
+}
+.inferAllBtn, .syncBtn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+.inferAllBtn {
+  background: rgba(59,130,246,0.18);
+  color: #93c5fd;
+  border: 1px solid rgba(59,130,246,0.35);
+}
+.inferAllBtn:hover { background: rgba(59,130,246,0.28); }
+.syncBtn {
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.6);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.syncBtn:hover:not(:disabled) { background: rgba(255,255,255,0.12); }
+.syncBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Sections */
+.section { margin-bottom: 32px; }
+.sectionTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 14px;
+}
+
+/* Epics container — horizontal scroll */
+.epicsContainer {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* EpicGroup */
+.epicGroup {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  min-width: 260px;
+}
+
+.connectorSvg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.epicNodeWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 1;
+}
+
+.childrenCount {
+  font-size: 10px;
+  color: rgba(196,181,253,0.55);
+  font-weight: 600;
+}
+
+/* Children row */
+.childrenRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 20px;
+  padding-top: 4px;
+}
+
+.childNodeWrap { flex-shrink: 0; }
+
+/* Orphans grid */
+.orphansGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+/* Node Card */
+.nodeCard {
+  border: 1.5px solid;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.15s;
+  min-width: 240px;
+  max-width: 320px;
+  position: relative;
+}
+.nodeCard:hover {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.1), 0 4px 16px rgba(0,0,0,0.4);
+  transform: translateY(-1px);
+}
+.nodeExpanded {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.15), 0 6px 20px rgba(0,0,0,0.5);
+}
+
+/* Epic card extra */
+.epicCard {
+  min-width: 280px;
+  box-shadow: 0 0 12px rgba(124,58,237,0.2);
+}
+
+.epicBadge {
+  font-size: 9px;
+  font-weight: 800;
+  background: rgba(124,58,237,0.25);
+  color: #c4b5fd;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(124,58,237,0.4);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Node header */
+.nodeHeader { display: flex; flex-direction: column; gap: 5px; }
+.nodeTopRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.nodeAdoId {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: monospace;
+  opacity: 0.8;
+}
+.nodeStateBadge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid;
+  font-weight: 600;
+  background: rgba(255,255,255,0.04);
+}
+.wiType {
+  font-size: 9px;
+  color: rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.05);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.nodeTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  /* Limit to 2 lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Pipeline bar */
+.pipelineBar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.stageChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 5px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.chipDone {
+  background: rgba(34,197,94,0.15);
+  color: #4ade80;
+  border-color: rgba(34,197,94,0.3);
+}
+.chipPending {
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.3);
+  border-color: rgba(255,255,255,0.08);
+}
+.chipNext {
+  background: rgba(59,130,246,0.18);
+  color: #93c5fd;
+  border-color: rgba(59,130,246,0.4);
+  font-weight: 700;
+  box-shadow: 0 0 6px rgba(59,130,246,0.3);
+}
+.chipLabel { font-size: 9px; }
+.tick { font-size: 9px; color: #4ade80; }
+
+.nextBadge {
+  font-size: 10px;
+  color: #fbbf24;
+  background: rgba(251,191,36,0.1);
+  border: 1px solid rgba(251,191,36,0.25);
+  padding: 2px 7px;
+  border-radius: 8px;
+  margin-left: 4px;
+}
+.nextBadgeEpic {
+  font-size: 10px;
+  color: #c4b5fd;
+  background: rgba(124,58,237,0.18);
+  border: 1px solid rgba(124,58,237,0.3);
+  padding: 2px 7px;
+  border-radius: 8px;
+  margin-left: 4px;
+}
+
+/* Next agent row — prominente */
+.nextAgentRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 5px 8px;
+  background: rgba(251,191,36,0.07);
+  border: 1px solid rgba(251,191,36,0.2);
+  border-radius: 6px;
+}
+.nextAgentLabel {
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  flex: 1;
+}
+
+.inferRowInline {
+  margin-top: 4px;
+}
+
+.inferBtn, .inferBtnSmall {
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(99,102,241,0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99,102,241,0.35);
+  transition: background 0.15s;
+}
+.inferBtn:hover, .inferBtnSmall:hover { background: rgba(99,102,241,0.25); }
+
+/* Node body (expandido) */
+.nodeBody {
+  border-top: 1px solid rgba(255,255,255,0.07);
+  margin-top: 8px;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inferSummary {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  font-style: italic;
+  line-height: 1.4;
+}
+.inferMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: rgba(255,255,255,0.3);
+}
+.refreshBtn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 5px;
+}
+.refreshBtn:hover { color: rgba(255,255,255,0.7); }
+.nodeDesc {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.adoLink {
+  font-size: 10px;
+  color: #93c5fd;
+  text-decoration: none;
+}
+.adoLink:hover { text-decoration: underline; }
+
+.empty {
+  color: rgba(255,255,255,0.3);
+  font-size: 13px;
+  text-align: center;
+  padding: 40px 0;
+}
+
+/* ─── Running indicator ────────────────────────────────────────────── */
+.nodeRunning {
+  box-shadow: 0 0 0 2px rgba(34,197,94,0.5), 0 4px 16px rgba(34,197,94,0.15) !important;
+}
+.nodeRunningBanner {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #86efac;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px 4px;
+  background: rgba(34,197,94,0.1);
+  border-bottom: 1px solid rgba(34,197,94,0.2);
+  border-radius: 8px 8px 0 0;
+  margin: -10px -12px 6px;
+}
+.runningPulse {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.75); }
+}
+
+/* ─── Run button compacto (siempre visible en header) ─────────────── */
+.runBtnCompact {
+  margin-left: auto;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 5px;
+  border: 1px solid rgba(99,102,241,0.4);
+  background: rgba(99,102,241,0.15);
+  color: #a5b4fc;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.runBtnCompact:hover {
+  background: rgba(99,102,241,0.3);
+  border-color: rgba(99,102,241,0.7);
+}
+
+/* ─── Run buttons expandidos ──────────────────────────────────────── */
+.runButtons {
+  display: flex;
+  gap: 7px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.runSuggestedBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-width: 0;
+}
+.runSuggestedBtn:hover:not(:disabled) { background: linear-gradient(135deg, #7c3aed, #6366f1); }
+.runSuggestedBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.runBtnHint {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.runCustomBtn {
+  padding: 6px 11px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.runCustomBtn:hover { background: rgba(255,255,255,0.11); }
+
+/* ─── Modal ───────────────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(3px);
+  animation: overlayIn 0.15s ease;
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.modal {
+  background: var(--bg-panel, #1e1e2e);
+  border: 1px solid rgba(99,102,241,0.4);
+  border-radius: 14px;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: modalIn 0.18s cubic-bezier(0.34,1.56,0.64,1);
+  overflow: hidden;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.93) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modalHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.modalIcon { font-size: 22px; line-height: 1; margin-top: 2px; }
+.modalTitleBlock { flex: 1; min-width: 0; }
+.modalTitle { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.modalSub {
+  font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.modalClose {
+  background: transparent; border: none; color: rgba(255,255,255,0.35);
+  font-size: 14px; cursor: pointer; padding: 4px 6px; border-radius: 4px;
+  flex-shrink: 0; transition: color 0.15s;
+}
+.modalClose:hover { color: rgba(255,255,255,0.75); }
+.modalAgentRow {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 20px;
+  background: rgba(34,197,94,0.08);
+  border-bottom: 1px solid rgba(34,197,94,0.15);
+}
+.modalAgentIcon { font-size: 13px; color: #86efac; }
+.modalAgentName { font-size: 13px; font-weight: 700; color: #86efac; }
+.modalAgentHint { font-size: 11px; color: rgba(134,239,172,0.5); }
+.modalSection { padding: 14px 20px 0; display: flex; flex-direction: column; gap: 7px; }
+.modalLabel { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.55); }
+.modalOptional { font-weight: 400; color: rgba(255,255,255,0.3); }
+.modalSelect {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 7px; color: var(--text-primary);
+  padding: 8px 12px; font-size: 13px; outline: none; width: 100%; cursor: pointer;
+}
+.modalSelect:focus { border-color: rgba(99,102,241,0.6); }
+.modalTextarea {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 7px; color: var(--text-primary);
+  padding: 10px 12px; font-size: 13px; font-family: inherit;
+  resize: vertical; outline: none; width: 100%; box-sizing: border-box;
+  min-height: 88px; line-height: 1.5;
+}
+.modalTextarea::placeholder { color: rgba(255,255,255,0.25); }
+.modalTextarea:focus { border-color: rgba(99,102,241,0.6); }
+.modalEmpty { font-size: 12px; color: rgba(255,255,255,0.35); font-style: italic; margin: 0; }
+.modalActions {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 16px 20px 18px;
+}
+.modalCancel {
+  padding: 7px 18px; border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: transparent; color: rgba(255,255,255,0.55);
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.modalCancel:hover:not(:disabled) { background: rgba(255,255,255,0.07); }
+.modalCancel:disabled { opacity: 0.4; cursor: not-allowed; }
+.modalConfirm {
+  padding: 7px 22px; border-radius: 7px; border: none;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: all 0.15s; box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+}
+.modalConfirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  box-shadow: 0 4px 14px rgba(99,102,241,0.5);
+}
+.modalConfirm:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+

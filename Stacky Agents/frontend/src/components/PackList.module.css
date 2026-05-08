@@ -1,0 +1,50 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  color: inherit;
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 8px;
+  font-size: 12px;
+  text-align: left;
+  align-items: center;
+}
+
+.row:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.play {
+  color: var(--accent);
+}
+
+.name {
+  font-weight: 500;
+}
+
+.steps {
+  color: var(--text-muted);
+  font-size: 10px;
+}

@@ -1,0 +1,18 @@
+{
+  "batch_root":    "../../../../trunk/Batch",
+  "negocio_root":  "../../../../trunk/Batch/Negocio",
+  "output_root":   "../../../../trunk/BatchVC/TESTBD",
+  "test_framework": "NUnit",
+  "mock_framework": "Moq",
+  "enrich_with_llm": false,
+  "language": "es",
+  "excluded_processes": [
+    "Negocio",
+    "Soluciones",
+    "TestBD",
+    "FlujosGMR",
+    "FlujosGMRJ",
+    "ProxDiaHabil",
+    "RecBatch2014"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "total": 1,
+  "pass": 1,
+  "fail": 0,
+  "blocked": 0,
+  "runs": [
+    {
+      "scenario_id": "P01",
+      "spec_file": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-112242\\tests\\P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts",
+      "status": "pass",
+      "duration_ms": 75648,
+      "artifacts": {
+        "trace": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-112242\\P01\\trace.zip",
+        "video": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-112242\\P01\\video.webm",
+        "screenshots": [
+          "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-112242\\P01\\test_failure.png"
+        ],
+        "console_log": null,
+        "network_log": null,
+        "error_context": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\freeform-20260505-112242\\P01\\error-context.md"
+      },
+      "raw_stdout": "\nRunning 1 test using 1 worker\n\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAdministrador.aspx\n[STEP 03] click pb_step_2\n[STEP 05] click pb_step_4\n[STEP 07] fill pb_step_6\n[STEP 08] fill pb_step_7\n[STEP 09] fill pb_step_8\n[STEP 10] click pb_step_9\n[STEP 12] select pb_step_11\n[STEP 15] fill pb_step_14\n[STEP 16] fill pb_step_15\n[STEP 17] fill pb_step_16\n[STEP 18] click pb_step_17\n  ✓  1 [chromium] › evidence\\freeform-20260505-112242\\tests\\P01_verificar_que_se_puede_agregar_un_nuevo_usuario_de.spec.ts:72:7 › ADO--1 | P01 — Verificar que se puede agregar un nuevo usuario desde el administrador › p01 verificar_que_se_puede_agregar_un_nuevo_usuario_desde_el_adm (1.2m)\n\n  1 passed (1.2m)\n",
+      "raw_stderr": ""
+    }
+  ],
+  "meta": {
+    "tool": "uat_test_runner",
+    "version": "1.1.0",
+    "duration_ms": 75762
+  }
+}

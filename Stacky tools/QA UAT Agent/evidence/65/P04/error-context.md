@@ -1,0 +1,318 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: 65\tests\P04_nombre_de_cliente_texto_parcial.spec.ts >> ADO-65 | P04 — Nombre de Cliente = texto parcial >> p04 nombre_de_cliente_=_texto_parcial
+- Location: evidence\65\tests\P04_nombre_de_cliente_texto_parcial.spec.ts:58:7
+
+# Error details
+
+```
+Error: locator._expect: expectedNumber: expected float, got object
+```
+
+```
+Error: apiRequestContext._wrapApiCall: ENOENT: no such file or directory, open 'N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\test-results\.playwright-artifacts-0\traces\b219c9784aa1bee57c01-da468aec3011943d008c.network'
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e4]:
+        - list [ref=e5]:
+          - listitem [ref=e6]:
+            - link "menu" [ref=e7] [cursor=pointer]:
+              - /url: "#"
+              - generic: menu
+        - generic [ref=e8]:
+          - img [ref=e9]
+          - img [ref=e10]
+        - generic [ref=e11]:
+          - generic [ref=e13] [cursor=pointer]:
+            - generic: logout
+            - text: Salir
+          - img [ref=e14]
+        - generic [ref=e15]: Agenda Personal
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - generic [ref=e19]: "Usuario:"
+            - generic [ref=e20]: USUARIO TEST
+          - generic [ref=e22]:
+            - generic [ref=e23]: "Pendiente de Hoy:"
+            - generic [ref=e24]: "0"
+          - generic [ref=e26]:
+            - generic [ref=e27]: "Pendiente de otros Días:"
+            - generic [ref=e28]: "2"
+          - generic [ref=e30]:
+            - generic [ref=e31]: "Realizado Hoy:"
+            - generic [ref=e32]: "0"
+          - generic [ref=e34]:
+            - generic [ref=e35]: "Total en Agenda:"
+            - generic [ref=e36]: "2"
+          - generic [ref=e38]:
+            - generic [ref=e39]: "Barrido Realizado:"
+            - generic [ref=e40]: 0%
+          - generic [ref=e42]:
+            - generic [ref=e43]: "Clientes Asignados:"
+            - generic [ref=e44]: "10430"
+    - list [ref=e45]:
+      - listitem [ref=e46]:
+        - generic [ref=e47]:
+          - generic: format_list_bulleted
+          - text: Cobranza Prejudicial
+        - list [ref=e49]:
+          - listitem [ref=e50]:
+            - link "event Agenda Personal" [ref=e51] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmAgenda.aspx
+              - generic: event
+              - text: Agenda Personal
+          - listitem [ref=e52]:
+            - link "event_note Pooles de Trabajo" [ref=e53] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmAgenda.aspx?q=rh3wPkybH+atHWY9zjvV4w==
+              - generic: event_note
+              - text: Pooles de Trabajo
+          - listitem [ref=e54]:
+            - link "search Busqueda de Clientes" [ref=e55] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmBusqueda.aspx
+              - generic: search
+              - text: Busqueda de Clientes
+          - listitem [ref=e56]:
+            - link "date_range Agenda de Grupo" [ref=e57] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmAgendaEquipo.aspx
+              - generic: date_range
+              - text: Agenda de Grupo
+          - listitem [ref=e58]:
+            - list [ref=e59]:
+              - listitem [ref=e60]:
+                - generic [ref=e61] [cursor=pointer]:
+                  - generic: format_list_bulleted
+                  - text: Supervision
+              - listitem [ref=e62]:
+                - list [ref=e63]:
+                  - listitem [ref=e64]:
+                    - generic [ref=e65] [cursor=pointer]:
+                      - generic: format_list_bulleted
+                      - text: Reportes Operativos
+      - listitem [ref=e66]:
+        - generic [ref=e67]:
+          - generic: format_list_bulleted
+          - text: Cobranza Judicial
+        - list [ref=e69]:
+          - listitem [ref=e70]:
+            - link "event Agenda De Demandas" [ref=e71] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmAgendaJudicial.aspx
+              - generic: event
+              - text: Agenda De Demandas
+          - listitem [ref=e72]:
+            - link "search Buscar Demandas" [ref=e73] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmBusquedaJudicial.aspx
+              - generic: search
+              - text: Buscar Demandas
+          - listitem [ref=e74]:
+            - link "rule Validar Gastos" [ref=e75] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmValidacionGastosJudicial.aspx
+              - generic: rule
+              - text: Validar Gastos
+          - listitem [ref=e76]:
+            - link "confirmation_number Liquidar Gastos" [ref=e77] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmLiquidarGastos.aspx
+              - generic: confirmation_number
+              - text: Liquidar Gastos
+          - listitem [ref=e78]:
+            - link "switch_account Reasignar Abogado" [ref=e79] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmJReasignarAbogado.aspx
+              - generic: switch_account
+              - text: Reasignar Abogado
+          - listitem [ref=e80]:
+            - list [ref=e81]:
+              - listitem [ref=e82]:
+                - generic [ref=e83] [cursor=pointer]:
+                  - generic: format_list_bulleted
+                  - text: Reportes Operativos
+              - listitem [ref=e84]:
+                - list [ref=e85]:
+                  - listitem [ref=e86]:
+                    - generic [ref=e87] [cursor=pointer]:
+                      - generic: format_list_bulleted
+                      - text: Reportes OBI
+      - listitem [ref=e88]:
+        - generic [ref=e89]:
+          - generic: format_list_bulleted
+          - text: Facturación y Gastos
+        - list [ref=e91]:
+          - listitem [ref=e92]:
+            - link "rule Validar Facturas" [ref=e93] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmLiquidaciones.aspx?q=V7lQE0kItNVN2Y7dSl7FiScu1K/9opoNFBT3rUlgpvM=
+              - generic: rule
+              - text: Validar Facturas
+          - listitem [ref=e94]:
+            - link "rule Validar Notas de Gastos" [ref=e95] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmLiquidaciones.aspx?q=V7lQE0kItNVN2Y7dSl7FieWKk8YQotwBcHU/2DP3KIw=
+              - generic: rule
+              - text: Validar Notas de Gastos
+          - listitem [ref=e96]:
+            - link "receipt Facturas" [ref=e97] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmLiquidaciones.aspx?q=ught2GWZJBvaEArAcf6NiHOOp6prF5Vq+94RnI70taQ=
+              - generic: receipt
+              - text: Facturas
+          - listitem [ref=e98]:
+            - link "confirmation_number Notas de Gastos" [ref=e99] [cursor=pointer]:
+              - /url: /AgendaWeb/FrmLiquidaciones.aspx?q=ught2GWZJBvaEArAcf6NiEmPUsCvT75NbJGKOtz0/0Y=
+              - generic: confirmation_number
+              - text: Notas de Gastos
+      - listitem [ref=e100]:
+        - separator [ref=e101]
+      - listitem [ref=e102]:
+        - link "settings Administrador" [ref=e103] [cursor=pointer]:
+          - /url: /AgendaWeb/FrmAdministrador.aspx
+          - generic: settings
+          - text: Administrador
+      - listitem [ref=e104]
+      - listitem [ref=e105]
+    - generic [ref=e106]:
+      - generic [ref=e110]:
+        - link "Acciones" [ref=e111] [cursor=pointer]:
+          - /url: "#!"
+        - link "chevron_right Avanzar" [ref=e112] [cursor=pointer]:
+          - /url: javascript:__doPostBack('ctl00$btnNext','')
+          - generic: chevron_right
+          - text: Avanzar
+      - list [ref=e113]:
+        - listitem [ref=e114]:
+          - generic [ref=e115] [cursor=pointer]:
+            - generic [ref=e116]: search
+            - generic [ref=e117]: Búsqueda Avanzada
+          - generic [ref=e120]:
+            - generic [ref=e121]:
+              - generic [ref=e122]:
+                - textbox "Desde" [ref=e123]
+                - generic [ref=e124]: Desde
+              - generic [ref=e125]:
+                - textbox "Hasta" [ref=e126]
+                - generic [ref=e127]: Hasta
+              - generic [ref=e128]:
+                - generic [ref=e129]: Empresa
+                - combobox "Todas" [ref=e132] [cursor=pointer]:
+                  - generic "Todas" [ref=e133]
+              - generic [ref=e135]:
+                - generic [ref=e136]: Perfil
+                - combobox "Todos" [ref=e139] [cursor=pointer]:
+                  - generic "Todos" [ref=e140]
+            - generic [ref=e142]:
+              - generic [ref=e143]:
+                - generic [ref=e144]: Región
+                - combobox "Todas" [ref=e147] [cursor=pointer]:
+                  - generic "Todas" [ref=e148]
+              - generic [ref=e150]:
+                - generic [ref=e151]: Recomendación
+                - combobox "Todas" [ref=e154] [cursor=pointer]:
+                  - generic "Todas" [ref=e155]
+              - generic [ref=e157]:
+                - generic [ref=e158]: Nivel de Mora
+                - combobox "Todos" [ref=e161] [cursor=pointer]:
+                  - generic "Todos" [ref=e162]
+              - generic [ref=e164]:
+                - generic [ref=e165]: Tipo de Cliente
+                - combobox "Todos" [ref=e168] [cursor=pointer]:
+                  - generic "Todos" [ref=e169]
+            - generic [ref=e171]:
+              - generic [ref=e172]:
+                - generic [ref=e173]: lblDebitoAuto
+                - combobox "Todos" [ref=e176] [cursor=pointer]:
+                  - generic "Todos" [ref=e177]
+              - generic [ref=e179]:
+                - textbox "Corredor:" [ref=e180]
+                - generic [ref=e181]: "Corredor:"
+              - generic [ref=e182]:
+                - textbox "Nombre de Cliente:" [ref=e183]: garcia
+                - generic [ref=e184]: "Nombre de Cliente:"
+              - generic [ref=e185]:
+                - textbox "RUC:" [ref=e186]
+                - generic [ref=e187]: "RUC:"
+            - link "search Filtrar" [active] [ref=e190] [cursor=pointer]:
+              - /url: javascript:__doPostBack('ctl00$c$btnOk','')
+              - generic: search
+              - text: Filtrar
+      - generic [ref=e191]:
+        - generic [ref=e192]:
+          - generic [ref=e193]: Agendados por Usuario
+          - link "grid_on Agendados por Usuario" [ref=e195] [cursor=pointer]:
+            - /url: javascript:__doPostBack('ctl00$c$btnExportExcelAgUsu','')
+            - generic: grid_on
+            - text: Agendados por Usuario
+        - table [ref=e197]:
+          - rowgroup [ref=e198]:
+            - row "Cliente Lote Fecha Hora Recomendación Nivel Mora Prima Moneda" [ref=e199]:
+              - columnheader "Cliente" [ref=e200]:
+                - link "Cliente" [ref=e201] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaUsu','Sort$CLIENTE')
+              - columnheader "Lote" [ref=e202]:
+                - link "Lote" [ref=e203] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaUsu','Sort$LOCOD')
+              - columnheader "Fecha" [ref=e204]:
+                - link "Fecha" [ref=e205] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaUsu','Sort$AGFECREC')
+              - columnheader "Hora" [ref=e206]:
+                - link "Hora" [ref=e207] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaUsu','Sort$AGHORAREC')
+              - columnheader "Recomendación" [ref=e208]:
+                - link "Recomendación" [ref=e209] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaUsu','Sort$RECOMENDACION')
+              - columnheader "Nivel Mora" [ref=e210]:
+                - link "Nivel Mora" [ref=e211] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaUsu','Sort$NIVELMORA')
+              - columnheader "Prima" [ref=e212]:
+                - link "Prima" [ref=e213] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaUsu','Sort$LODEUDA')
+              - columnheader "Moneda" [ref=e214]:
+                - link "Moneda" [ref=e215] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaUsu','Sort$OGMONEDA')
+          - rowgroup [ref=e216]:
+            - row "MONTEZUMA GARRIDO NATALIA 4127924112345393 20/03/2026 10:00:00 OECA - Cerrar Cuenta y Enviar Carpeta Recup Act Ciclo 9 48882,83 US.D" [ref=e217]:
+              - cell "MONTEZUMA GARRIDO NATALIA" [ref=e218] [cursor=pointer]
+              - cell "4127924112345393" [ref=e219] [cursor=pointer]
+              - cell "20/03/2026" [ref=e220] [cursor=pointer]
+              - cell "10:00:00" [ref=e221] [cursor=pointer]
+              - cell "OECA - Cerrar Cuenta y Enviar Carpeta Recup Act" [ref=e222] [cursor=pointer]
+              - cell "Ciclo 9" [ref=e223] [cursor=pointer]
+              - cell "48882,83" [ref=e224] [cursor=pointer]
+              - cell "US.D" [ref=e225] [cursor=pointer]
+          - rowgroup
+        - generic [ref=e227]: Agendados por Motor Experto
+        - table [ref=e230]:
+          - rowgroup [ref=e231]:
+            - row "Cliente Lote Fecha Hora Recomendación Nivel Mora Prima Moneda" [ref=e232]:
+              - columnheader "Cliente" [ref=e233]:
+                - link "Cliente" [ref=e234] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaAut','Sort$CLIENTE')
+              - columnheader "Lote" [ref=e235]:
+                - link "Lote" [ref=e236] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaAut','Sort$LOCOD')
+              - columnheader "Fecha" [ref=e237]:
+                - link "Fecha" [ref=e238] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaAut','Sort$AGFECREC')
+              - columnheader "Hora" [ref=e239]:
+                - link "Hora" [ref=e240] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaAut','Sort$AGHORAREC')
+              - columnheader "Recomendación" [ref=e241]:
+                - link "Recomendación" [ref=e242] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaAut','Sort$RECOMENDACION')
+              - columnheader "Nivel Mora" [ref=e243]:
+                - link "Nivel Mora" [ref=e244] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaAut','Sort$NIVELMORA')
+              - columnheader "Prima" [ref=e245]:
+                - link "Prima" [ref=e246] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaAut','Sort$LODEUDA')
+              - columnheader "Moneda" [ref=e247]:
+                - link "Moneda" [ref=e248] [cursor=pointer]:
+                  - /url: javascript:__doPostBack('ctl00$c$GridAgendaAut','Sort$OGMONEDA')
+  - generic:
+    - generic: Filtrar
+```

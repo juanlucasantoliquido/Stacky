@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.1",
+  "intent_raw": "quiero que haga una unica prueba de agregar un usuario",
+  "goal_action": "administrar",
+  "entry_screen": "FrmAgenda.aspx",
+  "test_cases": [
+    {
+      "id": "P01",
+      "descripcion": "Verificar que se puede agregar un nuevo usuario desde el administrador",
+      "datos": "Nombre: QA Usuario Test 01, RUT: 12345678-9, Perfil: 155",
+      "esperado": "USQA01 aparece en la lista de usuarios"
+    }
+  ],
+  "resolved_data": {
+    "USUARIO_NOMBRE": "QA Usuario Test 01",
+    "USUARIO_RUT": "12345678-9",
+    "USUARIO_PERFIL": "155"
+  },
+  "orchestrator_notes": "Prueba freeform unitaria: agregar un usuario.",
+  "pending_data": [],
+  "run_id": "freeform-20260505-112242",
+  "navigation_path": [
+    "FrmLogin.aspx",
+    "FrmAgenda.aspx",
+    "FrmAdministrador.aspx"
+  ]
+}

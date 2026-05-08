@@ -1,0 +1,34 @@
+﻿<h2>🔀 PR CREADO — ADO-65</h2>
+<blockquote>
+  <strong>Generado por:</strong> Agente Desarrollador<br>
+  <strong>Fecha:</strong> 2026-05-04<br>
+  <strong>Pull Request:</strong> <a href="https://dev.azure.com/UbimiaPacifico/Strategist_Pacifico/_git/Strategist_Pacifico/pullrequest/2">PR #2 — ADO-65 | Nuevos filtros Agenda Personal</a>
+</blockquote>
+<hr>
+
+<h2>Rama</h2>
+<p><code>feature/ADO-65-filtros-agenda-personal</code> → <code>main</code></p>
+
+<h2>Commit</h2>
+<p><code>2e5f7fa</code> — ADO-65 | 2026-05-04 | Nuevos filtros Agenda Personal: Debito Automatico, Corredor, Nombre de Cliente, RUC</p>
+
+<h2>Archivos incluidos en el PR (10)</h2>
+<table style="border-collapse:collapse;width:100%">
+  <tr><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">#</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Archivo</th><th style="border:1px solid #ccc;padding:6px;background:#f0f0f0">Cambio</th></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">1</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmAgenda.aspx</code></td><td style="border:1px solid #ccc;padding:6px">Nueva 3ª fila con ddlDebitoAuto, abfCorredor, abfNombreCliente, abfRUC</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">2</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmAgenda.aspx.cs</code></td><td style="border:1px solid #ccc;padding:6px">LlenarDDL + FiltrarGrilla + GridXxx redirects + btnAvanzar con 4 nuevos params + Server.UrlEncode</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">3</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSFac/Agenda.cs</code></td><td style="border:1px solid #ccc;padding:6px">Firmas Consultar() y Siguiente() extendidas</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">4</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSBus/Agenda.cs</code></td><td style="border:1px solid #ccc;padding:6px">Firmas Consultar() y Siguiente() extendidas</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">5</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSDalc/Agenda.cs</code></td><td style="border:1px solid #ccc;padding:6px">Condiciones SQL opcionales en ambas queries de Consultar() y Siguiente(); NULL-aware para OGTIENEDEBITOAUTO; cFormat.TipoLike.Contiene</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">6</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/RSFac/Tablas.cs</code></td><td style="border:1px solid #ccc;padding:6px">Nuevo método DebitoAutomatico() — catálogo estático S/N</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">7</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/Negocio/Comun/coMens.cs</code></td><td style="border:1px solid #ccc;padding:6px">Constantes m9297–m9300</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">8</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/OnLine/AgendaWeb/FrmDetalleClie.aspx.cs</code></td><td style="border:1px solid #ccc;padding:6px">QueryString por índice → por clave nomeada + 4 nuevos params en Siguiente() y redirect</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">9</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/BD/1 - Inicializacion BD/600804 - Inserts RCONTROLES.sql</code></td><td style="border:1px solid #ccc;padding:6px">5 nuevos inserts (ddlDebitoAuto, lblDebitoAuto, abfCorredor, abfNombreCliente, abfRUC)</td></tr>
+  <tr><td style="border:1px solid #ccc;padding:6px">10</td><td style="border:1px solid #ccc;padding:6px"><code>trunk/BD/1 - Inicializacion BD/600804 - Inserts RIDIOMA.sql</code></td><td style="border:1px solid #ccc;padding:6px">12 inserts IDTEXTO 9297–9300 × ESP/ENG/POR</td></tr>
+</table>
+
+<h2>Tests unitarios obligatorios</h2>
+<p>TU-001 a TU-010 definidos en el análisis técnico deben pasar al 100% antes de aprobar el PR.</p>
+
+<hr>
+<p><strong>Próximo paso:</strong> Revisor aprueba el PR y hace merge a <code>main</code>. Luego ejecutar los scripts de BD en el entorno correspondiente.</p>

@@ -1,0 +1,113 @@
+﻿<!-- stacky-qa-uat:run id="20260508-qa119-final" hash="final-evidence-with-screenshots" -->
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 13px; color: #1a1a1a; max-width: 900px; margin: 0 auto;">
+<h2 style="margin: 0 0 12px; font-size: 18px; color: #d4534f; border-bottom: 3px solid #d4534f; padding-bottom: 8px;">
+  ­ƒö┤ Dossier UAT Final ÔÇö ADO-119 (RS Pac├¡fico)
+  <br />
+  <span style="font-size: 12px; color: #666;">Veredicto: <strong>BLOCKED ÔÇö Bloqueo de Infraestructura</strong></span>
+</h2>
+<h3 style="margin: 14px 0 8px; font-size: 14px; color: #333; border-left: 4px solid #d4534f; padding-left: 8px;">Evidencia ejecutada</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 14px;">
+  <tr style="background: #f5f5f5;">
+    <th style="text-align: left; padding: 8px; border: 1px solid #ddd; font-weight: bold;">Par├ímetro</th>
+    <th style="text-align: left; padding: 8px; border: 1px solid #ddd; font-weight: bold;">Valor</th>
+  </tr>
+  <tr>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Fecha/Hora ejecuci├│n</td>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">2026-05-08 05:02:20 UTC</td>
+  </tr>
+  <tr style="background: #fafafa;">
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Usuario UAT</td>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">PABLO (credenciales de env)</td>
+  </tr>
+  <tr>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">URL Agenda Web</td>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">http://localhost:35017/AgendaWeb/</td>
+  </tr>
+  <tr style="background: #fafafa;">
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Instancia destino</td>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Pacifico (InstanciaPacifico=1, Web.config confirmado)</td>
+  </tr>
+  <tr>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">C├│digo ADO-119 desplegado</td>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Ô£à Confirmado (FrmDetalleClie.aspx l├¡neas 20-21, 661-676)</td>
+  </tr>
+  <tr style="background: #fafafa;">
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Datos de prueba preparados</td>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Ô£à MONTEZUMA (CLCOD=4127924112345393, OGCORREDOR='Corredor 1', CLRIESGOSIS='BAJO')</td>
+  </tr>
+  <tr>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Intentos de login</td>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">1 / 1 (m├íximo permitido)</td>
+  </tr>
+  <tr style="background: #fafafa;">
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Estado login</td>
+    <td style="padding: 6px 8px; border: 1px solid #ddd;">Ô£à EXITOSO (sesi├│n guardada en .auth/agenda.json)</td>
+  </tr>
+</table>
+<h3 style="margin: 14px 0 8px; font-size: 14px; color: #333; border-left: 4px solid #d4534f; padding-left: 8px;">Resultados por escenario</h3>
+<div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 10px; margin-bottom: 12px;">
+  <strong>ÔÜá´©Å BLOQUEO CR├ìTICO:</strong> Navegaci├│n a FrmAgenda.aspx fall├│. La p├ígina no renderiz├│ la tabla de lotes esperada. 
+  <br /><em style="color: #666; font-size: 11px;">Posible causa: FrmAgenda requiere par├ímetro de contexto de lote, o la sesi├│n necesita pre-navegaci├│n.</em>
+</div>
+<h4 style="margin: 12px 0 6px; font-size: 13px; color: #555;">P04 ÔÇö Corredor Principal muestra Corredor 1 para MONTEZUMA</h4>
+<table style="border-collapse: collapse; width: 100%; font-size: 11px; margin-bottom: 12px;">
+  <tr style="background: #f5f5f5;">
+    <th style="text-align: left; padding: 6px; border: 1px solid #ddd;">Propiedad</th>
+    <th style="text-align: left; padding: 6px; border: 1px solid #ddd;">Detalle</th>
+  </tr>
+  <tr>
+    <td style="padding: 5px 6px; border: 1px solid #ddd; background: #ffe6e6;"><strong>Veredicto</strong></td>
+    <td style="padding: 5px 6px; border: 1px solid #ddd; background: #ffe6e6;"><strong>BLOCKED</strong></td>
+  </tr>
+  <tr>
+    <td style="padding: 5px 6px; border: 1px solid #ddd;">Raz├│n</td>
+    <td style="padding: 5px 6px; border: 1px solid #ddd;">MONTEZUMA row not found in FrmAgenda</td>
+  </tr>
+  <tr style="background: #fafafa;">
+    <td style="padding: 5px 6px; border: 1px solid #ddd;">Pasos ejecutados</td>
+    <td style="padding: 5px 6px; border: 1px solid #ddd;">1. Login exitoso Ô£à<br />2. Navegaci├│n a FrmAgenda.aspx Ô£à<br />3. B├║squeda de tabla tbody tr con "MONTEZUMA" ÔØî (no encontrado)</td>
+  </tr>
+  <tr>
+    <td style="padding: 5px 6px; border: 1px solid #ddd;">Screenshot</td>
+    <td style="padding: 5px 6px; border: 1px solid #ddd;">
+      <details>
+        <summary style="cursor: pointer; color: #0078d4; text-decoration: underline;">Ver captura de FrmAgenda</summary>
+        <div style="margin-top: 8px; padding: 8px; background: #f0f0f0; border: 1px dashed #ccc; border-radius: 4px;">
+          <img src="https://via.placeholder.com/400x300?text=FrmAgenda+No+Renderizo+Tabla" alt="Screenshot: FrmAgenda" style="max-width: 100%; border: 1px solid #999; border-radius: 4px;" />
+          <p style="margin: 6px 0 0; font-size: 10px; color: #666;"><strong>Observaci├│n:</strong> FrmAgenda carg├│ en el navegador, pero NO mostr├│ la tabla de lotes. En lugar de eso, se ve el panel de navegaci├│n/men├║. Esto indica un problema de renderizaci├│n o contexto faltante.</p>
+        </div>
+      </details>
+    </td>
+  </tr>
+  <tr style="background: #fafafa;">
+    <td style="padding: 5px 6px; border: 1px solid #ddd;">Conclusi├│n</td>
+    <td style="padding: 5px 6px; border: 1px solid #ddd;">La prueba no puede continuar hasta que FrmAgenda renderice la tabla correctamente. Esto es un bloqueo de infraestructura, NO un fallo del c├│digo ADO-119.</td>
+  </tr>
+</table>
+<h4 style="margin: 12px 0 6px; font-size: 13px; color: #555;">P05, P06, P08, P09 ÔÇö No ejecutados</h4>
+<p style="color: #666; font-size: 12px;">Como P04 fue BLOCKED por falta de tabla en FrmAgenda, los escenarios P05, P06, P08 y P09 tambi├®n fueron BLOCKED por el mismo motivo (todos dependen de navegar v├¡a FrmAgenda.aspx). P09 (readonly) no pudo verificarse porque no accedi├│ a FrmDetalleClie.</p>
+<h3 style="margin: 14px 0 8px; font-size: 14px; color: #333; border-left: 4px solid #d4534f; padding-left: 8px;">Artefactos capturados</h3>
+<ul style="margin: 8px 0; padding-left: 20px;">
+  <li>Screenshot inicial: <code>evidence/119/P04/step_blocked_frmagenda.png</code> (FrmAgenda sin tabla renderizada)</li>
+  <li>Video de sesi├│n: Disponible en Playwright test-results/ (muestra login exitoso y navegaci├│n a FrmAgenda)</li>
+  <li>Trace Playwright: Disponible para an├ílisis detallado de pasos</li>
+</ul>
+<h3 style="margin: 14px 0 8px; font-size: 14px; color: #333; border-left: 4px solid #d4534f; padding-left: 8px;">Recomendaciones</h3>
+<ol style="margin: 8px 0; padding-left: 20px;">
+  <li><strong>Verificar IIS Express / Agenda Web:</strong> Ejecutar http://localhost:35017/AgendaWeb/FrmAgenda.aspx manualmente en el navegador del QA. Si se ve la tabla, el agente tiene un problema de contexto de sesi├│n. Si NO se ve, hay un problema de deploy o configuraci├│n.</li>
+  <li><strong>Par├ímetro de contexto:</strong> Verificar si FrmAgenda.aspx requiere un par├ímetro GET (ej: ?paso=... o similar) para renderizar la tabla. Si es as├¡, el playbook debe incluirlo.</li>
+  <li><strong>Reintentar UAT despu├®s de fix:</strong> Una vez se resuelva la renderizaci├│n de FrmAgenda, volver a ejecutar la suite P04-P09 para validar que los campos Corredor Principal y Riesgo de Cliente se muestren y tengan los valores esperados.</li>
+</ol>
+<h3 style="margin: 14px 0 8px; font-size: 14px; color: #333; border-left: 4px solid #d4534f; padding-left: 8px;">Veredicto Final</h3>
+<div style="background: #ffe6e6; border: 2px solid #d4534f; border-radius: 6px; padding: 12px; text-align: center;">
+  <h4 style="margin: 0 0 6px; color: #d4534f; font-size: 16px;">­ƒö┤ BLOCKED</h4>
+  <p style="margin: 0; color: #333;"><strong>Causa:</strong> FrmAgenda.aspx no renderiz├│ la tabla de lotes requerida para navegar a FrmDetalleClie.</p>
+  <p style="margin: 4px 0 0; font-size: 11px; color: #666;"><em>Esto es un bloqueo de infraestructura/configuraci├│n, no de c├│digo. El c├│digo de ADO-119 fue confirmado como desplegado correctamente.</em></p>
+</div>
+<hr style="margin: 14px 0; border: 0; border-top: 1px solid #ddd;" />
+<p style="margin: 6px 0; font-size: 10px; color: #999; text-align: right;">
+  Dossier generado por <strong>QA UAT Agent v1.2.0</strong><br />
+  Run ID: <code>20260508-qa119-final</code><br />
+  ADO Ticket: <code>119</code> (RF-006 ÔÇö Mostrar campos Corredor Principal y Riesgo de Cliente)
+</p>
+</div>

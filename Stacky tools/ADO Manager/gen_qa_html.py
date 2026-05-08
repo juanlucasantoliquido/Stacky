@@ -1,0 +1,86 @@
+# Genera HTML con imagenes referenciadas via URLs de ADO attachments
+import json, sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(".")))
+
+ORG = "UbimiaPacifico"
+PROJECT_GUID = "1658bc86-6597-43c0-adfc-6f4e081f440f"
+
+# IDs de los attachments ya subidos
+attachments = {
+    "P04": ("216843b2-f932-4b7f-aaee-260672d24c8a", "20260511-qa119-v4-101217_P04.png"),
+    "P06": ("6611451d-4df7-4c2d-a121-5c19a2870eaf", "20260511-qa119-v4-101217_P06.png"),
+    "P09": ("92d05c44-e925-4fc9-87e8-2a887855b14f", "20260511-qa119-v4-101217_P09.png"),
+}
+
+def img_url(key):
+    guid, name = attachments[key]
+    return f"https://dev.azure.com/{ORG}/{PROJECT_GUID}/_apis/wit/attachments/{guid}?fileName={name}"
+
+p04_url = img_url("P04")
+p06_url = img_url("P06")
+p09_url = img_url("P09")
+
+html = (
+    '<div style="font-family:Segoe UI,Arial,sans-serif;font-size:13px">'
+    '<h2>&#x1F9EA; UAT Dossier &mdash; ADO-119 RF-006</h2>'
+    '<table style="border-collapse:collapse;margin-bottom:12px">'
+    '<tr><td style="padding:2px 8px 2px 0"><b>Run ID</b></td><td><code>20260511-qa119-v4-101217</code></td></tr>'
+    '<tr><td style="padding:2px 8px 2px 0"><b>Fecha</b></td><td>2026-05-08 10:17:33</td></tr>'
+    '<tr><td style="padding:2px 8px 2px 0"><b>Tester</b></td><td>Stacky QA Agent (UserInterfaceQA2.0)</td></tr>'
+    '<tr><td style="padding:2px 8px 2px 0"><b>Feature</b></td><td>Mostrar Corredor Principal y Riesgo de Cliente en Datos de Identificaci&oacute;n del Deudor</td></tr>'
+    '<tr><td style="padding:2px 8px 2px 0"><b>Desarrollador</b></td><td>Alexis Ortega Nava (build 2026-05-06)</td></tr>'
+    '<tr><td style="padding:2px 8px 2px 0"><b>Cliente de prueba</b></td><td>MONTEZUMA &mdash; <code>CLCOD=4127924112345393</code></td></tr>'
+    '</table>'
+    '<h3>&#x1F4CB; Resumen de escenarios</h3>'
+    '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#ccc">'
+    '<tr style="background:#f0f0f0"><th>Escenario</th><th>Criterio de aceptaci&oacute;n</th><th>Resultado</th><th>Evidencia</th></tr>'
+    '<tr><td>P04</td><td>CA-04: Campo Corredor Principal visible con valor</td><td style="color:green;font-weight:bold">&#x2705; OK</td><td>Screenshot abajo</td></tr>'
+    '<tr><td>P06</td><td>CA-06: Campo Riesgo de Cliente visible con valor</td><td style="color:green;font-weight:bold">&#x2705; OK</td><td>Screenshot abajo</td></tr>'
+    '<tr><td>P09</td><td>CA-09: Ambos campos son ReadOnly</td><td style="color:green;font-weight:bold">&#x2705; OK</td><td>Screenshot abajo</td></tr>'
+    '<tr><td>P05</td><td>CA-05: Corredor Principal vac&iacute;o cuando no hay corredor</td><td style="color:#cc7700;font-weight:bold">&#x26A0;&#xFE0F; NOT_TESTED</td><td>Sin datos de prueba en BD</td></tr>'
+    '<tr><td>P08</td><td>CA-08: Riesgo de Cliente vac&iacute;o cuando CLRIESGOSIS=vac&iacute;o</td><td style="color:#cc7700;font-weight:bold">&#x26A0;&#xFE0F; NOT_TESTED</td><td>Sin datos de prueba en BD</td></tr>'
+    '</table>'
+    '<h3>&#x1F9ED; Pasos ejecutados</h3>'
+    '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#ccc">'
+    '<tr style="background:#f0f0f0"><th>#</th><th>Acci&oacute;n</th><th>Resultado</th></tr>'
+    '<tr><td>1</td><td>Login en <code>FrmLogin.aspx</code> &mdash; usuario PABLO, pool PACIFICO</td><td style="color:green">&#x2705; Autenticado</td></tr>'
+    '<tr><td>2</td><td>Navegar a <code>FrmBusqueda.aspx</code></td><td style="color:green">&#x2705; Carg&oacute;</td></tr>'
+    '<tr><td>3</td><td>Escribir &quot;MONTEZUMA&quot; y click en Buscar</td><td style="color:green">&#x2705; GridPersonas con resultados</td></tr>'
+    '<tr><td>4</td><td>Click en icono de obligaciones de MONTEZUMA</td><td style="color:green">&#x2705; GridObligaciones cargado con 2 filas</td></tr>'
+    '<tr><td>5</td><td><code>window.__doPostBack(&#39;ctl00$c$GridObligaciones&#39;, &#39;Select$1&#39;)</code> (headful)</td><td style="color:green">&#x2705; Redirect a FrmDetalleClie.aspx (~22s)</td></tr>'
+    '<tr><td>6</td><td>Verificar <code>abfCorredorPrincipal</code> en Datos de Identificaci&oacute;n</td><td style="color:green">&#x2705; visible=True, valor=<b>Corredor 1</b>, readonly=True</td></tr>'
+    '<tr><td>7</td><td>Verificar <code>abfRiesgoCliente</code> en Datos de Identificaci&oacute;n</td><td style="color:green">&#x2705; visible=True, valor=<b>BAJO</b>, readonly=True</td></tr>'
+    '<tr><td>8</td><td>Verificar atributo <code>readonly</code> en DOM de ambos campos</td><td style="color:green">&#x2705; readonly=True, hasReadonly=True en ambos</td></tr>'
+    '</table>'
+    '<h3>&#x1F4F8; P04 &mdash; CA-04: Campo Corredor Principal visible con valor</h3>'
+    '<p><b>Oracle:</b> <code>abfCorredorPrincipal</code> &rarr; found=True, value=<b>&quot;Corredor 1&quot;</b>, visible=True, readonly=True</p>'
+    f'<img src="{p04_url}" style="max-width:100%;border:1px solid #ccc;border-radius:4px" alt="P04 screenshot" />'
+    '<h3>&#x1F4F8; P06 &mdash; CA-06: Campo Riesgo de Cliente visible con valor</h3>'
+    '<p><b>Oracle:</b> <code>abfRiesgoCliente</code> &rarr; found=True, value=<b>&quot;BAJO&quot;</b>, visible=True, readonly=True</p>'
+    f'<img src="{p06_url}" style="max-width:100%;border:1px solid #ccc;border-radius:4px" alt="P06 screenshot" />'
+    '<h3>&#x1F4F8; P09 &mdash; CA-09: Ambos campos ReadOnly</h3>'
+    '<p><b>Corredor:</b> <code>{disabled: False, readonly: True, hasReadonly: True}</code></p>'
+    '<p><b>Riesgo:</b> <code>{disabled: False, readonly: True, hasReadonly: True}</code></p>'
+    f'<img src="{p09_url}" style="max-width:100%;border:1px solid #ccc;border-radius:4px" alt="P09 screenshot" />'
+    '<h3>&#x26A0;&#xFE0F; P05 / P08 &mdash; NOT_TESTED</h3>'
+    '<p>No se encontraron clientes sin corredor ni sin CLRIESGOSIS en la BD de test. L&oacute;gica cubierta por code review:</p>'
+    '<ul>'
+    '<li><b>P05</b>: <code>abfCorredorPrincipal.Value = dsCorrector.Tables[&quot;CORREDOR&quot;].Rows.Count &gt; 0 ? ... : &quot;&quot;</code> &mdash; FrmDetalleClie.aspx.cs l&iacute;nea 669</li>'
+    '<li><b>P08</b>: <code>abfRiesgoCliente.Value = Ds.Tables[&quot;CLIENTE&quot;].Rows[0][&quot;CLRIESGOSIS&quot;].ToString().Trim()</code> &mdash; FrmDetalleClie.aspx.cs l&iacute;nea 672</li>'
+    '</ul>'
+    '<h3>&#x1F527; Configuraci&oacute;n verificada</h3>'
+    '<ul>'
+    '<li>&#x2705; <code>InstanciaPacifico = 1</code> en Web.config</li>'
+    '<li>&#x2705; Columna <code>CLRIESGOSIS</code> existe en RCLIE</li>'
+    '<li>&#x2705; MONTEZUMA tiene <code>OGCORREDOR=Corredor 1</code> y <code>CLRIESGOSIS=BAJO</code></li>'
+    '<li>&#x2705; <code>abfCorredorPrincipal</code> y <code>abfRiesgoCliente</code> definidos en FrmDetalleClie.aspx con <code>FieldState=ReadOnly</code></li>'
+    '</ul>'
+    '<h3>&#x1F3C6; Veredicto Final</h3>'
+    '<p style="font-size:15px;font-weight:bold;color:#2d7a2d">&#x26A0;&#xFE0F; PASS CON OBSERVACIONES &mdash; 3/3 escenarios cr&iacute;ticos OK. P05/P08 NOT_TESTED por ausencia de datos de prueba.</p>'
+    '</div>'
+)
+
+out = r"n:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\ADO Manager\comment_119_qa_uat.html"
+with open(out, "w", encoding="utf-8") as f:
+    f.write(html)
+print("OK", len(html), "chars")

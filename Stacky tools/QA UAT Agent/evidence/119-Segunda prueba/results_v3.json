@@ -1,0 +1,22 @@
+{
+  "P04": {
+    "verdict": "BLOCKED",
+    "reason": "FrmBusqueda sin resultados para MONTEZUMA"
+  },
+  "P06": {
+    "verdict": "BLOCKED",
+    "reason": "FrmBusqueda sin resultados para MONTEZUMA"
+  },
+  "P09": {
+    "verdict": "BLOCKED",
+    "reason": "FrmBusqueda sin resultados para MONTEZUMA"
+  },
+  "P05": {
+    "verdict": "BLOCKED",
+    "reason": "FrmBusqueda sin resultados para búsqueda genérica"
+  },
+  "P08": {
+    "verdict": "BLOCKED",
+    "reason": "FrmBusqueda sin resultados para búsqueda genérica"
+  }
+}

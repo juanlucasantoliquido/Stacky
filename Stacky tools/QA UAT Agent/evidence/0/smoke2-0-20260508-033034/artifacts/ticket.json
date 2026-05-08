@@ -1,9 +1,0 @@
-{
-  "ticket": 0,
-  "title": "Smoke test",
-  "scenarios": [
-    {
-      "id": "P01"
-    }
-  ]
-}

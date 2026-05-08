@@ -159,6 +159,7 @@ def run(
         return _err("no_test_plan_in_ticket", "plan_pruebas is empty")
 
     ticket_id = (ticket_json.get("ticket") or {}).get("id", 0)
+    analisis_tecnico = ticket_json.get("analisis_tecnico") or ""
 
     scenarios = []
     out_of_scope = []
@@ -193,6 +194,7 @@ def run(
         spec = _compile_scenario(
             pid, desc, datos, esperado, ticket_id,
             ui_aliases=ui_aliases, ui_elements=ui_elements, verbose=verbose,
+            analisis_tecnico=analisis_tecnico,
         )
         if spec is None:
             out_of_scope.append({
@@ -273,6 +275,7 @@ def _compile_scenario(
     pid: str, desc: str, datos: str, esperado: str,
     ticket_id: int, ui_aliases: Optional[list] = None,
     ui_elements: Optional[list] = None, verbose: bool = False,
+    analisis_tecnico: str = "",
 ) -> Optional[dict]:
     """
     Compile a single P0N item into a ScenarioSpec.
@@ -282,6 +285,7 @@ def _compile_scenario(
     spec = _compile_via_llm(
         pid, desc, datos, esperado, ticket_id,
         ui_aliases=ui_aliases, ui_elements=ui_elements, verbose=verbose,
+        analisis_tecnico=analisis_tecnico,
     )
     if spec:
         return spec
@@ -294,6 +298,7 @@ def _compile_via_llm(
     pid: str, desc: str, datos: str, esperado: str,
     ticket_id: int, ui_aliases: Optional[list] = None,
     ui_elements: Optional[list] = None, verbose: bool = False,
+    analisis_tecnico: str = "",
 ) -> Optional[dict]:
     """Attempt to compile via LLM. Return None on failure."""
     try:
@@ -364,7 +369,12 @@ Oracle selection rules (HARD CONSTRAINTS — violating them will cause the scena
 pasos must have at least 1 item. oraculos must have at least 1 item.
 
 {glossary_block}"""
+        technical_context = (
+            f"Technical context (use this to determine the target screen and fields):\n{analisis_tecnico}\n\n"
+            if analisis_tecnico else ""
+        )
         user_prompt = (
+            f"{technical_context}"
             f"Test case {pid}: {desc}\n"
             f"Test data: {datos or 'none'}\n"
             f"Expected: {esperado or 'not specified'}"

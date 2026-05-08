@@ -1,0 +1,66 @@
+{
+  "run_id": "20260511-qa119-v4-101734",
+  "timestamp": "2026-05-08T10:22:57.690837",
+  "results": [
+    {
+      "id": "P04",
+      "ca": "CA-04",
+      "result": "OK",
+      "detail": "Corredor Principal = 'Corredor 1' (expected 'Corredor 1')",
+      "field": {
+        "found": true,
+        "value": "Corredor 1",
+        "visible": true,
+        "readonly": true,
+        "id": "c_abfCorredorPrincipal"
+      },
+      "screenshot": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\119\\20260511-qa119-v4-101734_P04.png"
+    },
+    {
+      "id": "P06",
+      "ca": "CA-06",
+      "result": "OK",
+      "detail": "Riesgo de Cliente = 'BAJO' (expected 'BAJO')",
+      "field": {
+        "found": true,
+        "value": "BAJO",
+        "visible": true,
+        "readonly": true,
+        "id": "c_abfRiesgoCliente"
+      },
+      "screenshot": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\119\\20260511-qa119-v4-101734_P06.png"
+    },
+    {
+      "id": "P09",
+      "ca": "CA-09",
+      "result": "OK",
+      "detail": "Corredor readonly=True, Riesgo readonly=True",
+      "corredor_details": {
+        "disabled": false,
+        "readonly": true,
+        "hasReadonly": true,
+        "fieldState": "N/A"
+      },
+      "riesgo_details": {
+        "disabled": false,
+        "readonly": true,
+        "hasReadonly": true
+      },
+      "screenshot": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\119\\20260511-qa119-v4-101734_P09.png"
+    },
+    {
+      "id": "P05",
+      "ca": "CA-05",
+      "result": "NOT_TESTED",
+      "detail": "No se encontró cliente sin corredor en la BD de prueba. MONTEZUMA tiene corredor en ambas obligaciones.",
+      "note": "El campo abfCorredorPrincipal está visible y muestra valor vacío cuando GetCorredorPrincipal retorna 0 filas (verificado en código fuente FrmDetalleClie.aspx.cs línea 669)"
+    },
+    {
+      "id": "P08",
+      "ca": "CA-08",
+      "result": "NOT_TESTED",
+      "detail": "No se encontró cliente sin CLRIESGOSIS en los primeros 6 apellidos buscados.",
+      "note": "El campo abfRiesgoCliente muestra '' cuando CLRIESGOSIS = '' en RCLIE (verificado en código fuente FrmDetalleClie.aspx.cs línea 672)"
+    }
+  ]
+}

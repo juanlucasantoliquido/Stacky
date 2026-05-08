@@ -1,8 +1,0 @@
-
-Running 1 test using 1 worker
-
-Advanced filters ready: [33mfalse[39m
-[STEP 01] navigate panel_agenda
-  ✓  1 [chromium] › evidence\116\tests\P03_aislamiento_por_usuario.spec.ts:72:7 › ADO-116 | P03 — Aislamiento por usuario › p03 aislamiento_por_usuario (32.0s)
-
-  1 passed (34.6s)

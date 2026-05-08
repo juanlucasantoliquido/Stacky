@@ -1,0 +1,82 @@
+{"ts": "2026-05-08T03:30:36.523397+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Start time: 20260508003036"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Username: UBIMIA\\juanluca"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "RunAs User: UBIMIA\\juanluca"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Configuration Name:"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Machine: PT-C-0100 (Microsoft Windows NT 10.0.26200.0)"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Host Application: C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.1.0_x64__8wekyb3d8bbwe\\pwsh.dll -NoProfile -NonInteractive -Command $transcriptPath = 'N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\0\\smoke2-0-20260508-033034\\powershell\\transcript_001.log'"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Start-Transcript -Path $transcriptPath -Append -Force | Out-Null"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "try {"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Write-Host 'PowerShell smoke test OK'; Get-Date -Format 'yyyy-MM-dd'"}
+{"ts": "2026-05-08T03:30:36.538659+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "} finally {"}
+{"ts": "2026-05-08T03:30:36.554780+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Stop-Transcript | Out-Null"}
+{"ts": "2026-05-08T03:30:36.554780+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "}"}
+{"ts": "2026-05-08T03:30:36.554780+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Process ID: 26272"}
+{"ts": "2026-05-08T03:30:36.554780+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "PSEdition: Core"}
+{"ts": "2026-05-08T03:30:36.554780+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "GitCommitId: 7.6.1"}
+{"ts": "2026-05-08T03:30:36.554780+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "OS: Microsoft Windows 10.0.26200"}
+{"ts": "2026-05-08T03:30:36.554780+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "Platform: Win32NT"}
+{"ts": "2026-05-08T03:30:36.554780+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0"}
+{"ts": "2026-05-08T03:30:36.570755+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "PSRemotingProtocolVersion: 2.4"}
+{"ts": "2026-05-08T03:30:36.573723+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "SerializationVersion: 1.1.0.1"}
+{"ts": "2026-05-08T03:30:36.573723+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "WSManStackVersion: 3.0"}
+{"ts": "2026-05-08T03:30:36.573723+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:36.573723+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "2026-05-08"}
+{"ts": "2026-05-08T03:30:36.573723+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:36.573723+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "End time: 20260508003036"}
+{"ts": "2026-05-08T03:30:36.590169+00:00", "source": "powershell", "stage": "test_ps", "label": "smoke_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:37.683635+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:37.685646+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Start time: 20260508003036"}
+{"ts": "2026-05-08T03:30:37.688146+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Username: UBIMIA\\juanluca"}
+{"ts": "2026-05-08T03:30:37.688146+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "RunAs User: UBIMIA\\juanluca"}
+{"ts": "2026-05-08T03:30:37.688146+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Configuration Name:"}
+{"ts": "2026-05-08T03:30:37.693010+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Machine: PT-C-0100 (Microsoft Windows NT 10.0.26200.0)"}
+{"ts": "2026-05-08T03:30:37.696857+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Host Application: C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.1.0_x64__8wekyb3d8bbwe\\pwsh.dll -NoProfile -NonInteractive -Command $transcriptPath = 'N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\0\\smoke2-0-20260508-033034\\powershell\\transcript_001.log'"}
+{"ts": "2026-05-08T03:30:37.696857+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Start-Transcript -Path $transcriptPath -Append -Force | Out-Null"}
+{"ts": "2026-05-08T03:30:37.701709+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "try {"}
+{"ts": "2026-05-08T03:30:37.702718+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Write-Host 'PowerShell smoke test OK'; Get-Date -Format 'yyyy-MM-dd'"}
+{"ts": "2026-05-08T03:30:37.702718+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "} finally {"}
+{"ts": "2026-05-08T03:30:37.708082+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Stop-Transcript | Out-Null"}
+{"ts": "2026-05-08T03:30:37.712304+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "}"}
+{"ts": "2026-05-08T03:30:37.715537+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Process ID: 26272"}
+{"ts": "2026-05-08T03:30:37.717558+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "PSEdition: Core"}
+{"ts": "2026-05-08T03:30:37.717558+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "GitCommitId: 7.6.1"}
+{"ts": "2026-05-08T03:30:37.717558+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "OS: Microsoft Windows 10.0.26200"}
+{"ts": "2026-05-08T03:30:37.717558+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Platform: Win32NT"}
+{"ts": "2026-05-08T03:30:37.717558+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0"}
+{"ts": "2026-05-08T03:30:37.729129+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "PSRemotingProtocolVersion: 2.4"}
+{"ts": "2026-05-08T03:30:37.733497+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "SerializationVersion: 1.1.0.1"}
+{"ts": "2026-05-08T03:30:37.733497+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "WSManStackVersion: 3.0"}
+{"ts": "2026-05-08T03:30:37.738780+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:37.740791+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "2026-05-08"}
+{"ts": "2026-05-08T03:30:37.740791+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:37.740791+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "End time: 20260508003036"}
+{"ts": "2026-05-08T03:30:37.749277+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:37.754612+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:37.754612+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Start time: 20260508003037"}
+{"ts": "2026-05-08T03:30:37.758551+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Username: UBIMIA\\juanluca"}
+{"ts": "2026-05-08T03:30:37.758551+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "RunAs User: UBIMIA\\juanluca"}
+{"ts": "2026-05-08T03:30:37.765152+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Configuration Name:"}
+{"ts": "2026-05-08T03:30:37.765152+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Machine: PT-C-0100 (Microsoft Windows NT 10.0.26200.0)"}
+{"ts": "2026-05-08T03:30:37.765152+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Host Application: C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.1.0_x64__8wekyb3d8bbwe\\pwsh.dll -NoProfile -NonInteractive -Command $transcriptPath = 'N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\0\\smoke2-0-20260508-033034\\powershell\\transcript_001.log'"}
+{"ts": "2026-05-08T03:30:37.771194+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Start-Transcript -Path $transcriptPath -Append -Force | Out-Null"}
+{"ts": "2026-05-08T03:30:37.771194+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "try {"}
+{"ts": "2026-05-08T03:30:37.773759+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Write-Host 'AGENDA_WEB_PASS=***REDACTED***'; Write-Host 'done'"}
+{"ts": "2026-05-08T03:30:37.773759+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "} finally {"}
+{"ts": "2026-05-08T03:30:37.773759+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Stop-Transcript | Out-Null"}
+{"ts": "2026-05-08T03:30:37.781171+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "}"}
+{"ts": "2026-05-08T03:30:37.781171+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Process ID: 39364"}
+{"ts": "2026-05-08T03:30:37.781171+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "PSEdition: Core"}
+{"ts": "2026-05-08T03:30:37.786481+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "GitCommitId: 7.6.1"}
+{"ts": "2026-05-08T03:30:37.786481+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "OS: Microsoft Windows 10.0.26200"}
+{"ts": "2026-05-08T03:30:37.790518+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "Platform: Win32NT"}
+{"ts": "2026-05-08T03:30:37.790518+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0"}
+{"ts": "2026-05-08T03:30:37.797101+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "PSRemotingProtocolVersion: 2.4"}
+{"ts": "2026-05-08T03:30:37.797101+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "SerializationVersion: 1.1.0.1"}
+{"ts": "2026-05-08T03:30:37.802675+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "WSManStackVersion: 3.0"}
+{"ts": "2026-05-08T03:30:37.804685+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:37.807412+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "AGENDA_WEB_PASS=***REDACTED***"}
+{"ts": "2026-05-08T03:30:37.807412+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "done"}
+{"ts": "2026-05-08T03:30:37.812774+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "**********************"}
+{"ts": "2026-05-08T03:30:37.812774+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "End time: 20260508003037"}
+{"ts": "2026-05-08T03:30:37.812774+00:00", "source": "powershell", "stage": "test_ps_secret", "label": "secret_ps_test", "level": "info", "line": "**********************"}

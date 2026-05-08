@@ -1,0 +1,13 @@
+{
+  "run_id": "smoke2-0-20260508-033034",
+  "stage": "reader",
+  "status": "completed",
+  "seq": 1,
+  "event_id": null,
+  "ts": "2026-05-08T03:30:37.967Z",
+  "payload": {
+    "duration_ms": 140,
+    "scenarios": 3,
+    "ok": true
+  }
+}

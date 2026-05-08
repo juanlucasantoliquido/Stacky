@@ -1,0 +1,22 @@
+{
+  "command_id": "cmd_0004",
+  "seq": 4,
+  "label": "smoke_test",
+  "cmd": "pwsh -NoProfile -NonInteractive -Command $transcriptPath = 'N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\0\\smoke2-0-20260508-033034\\powershell\\transcript_001.log'\nStart-Transcript -Path $transcriptPath -Append -Force | Out-Null\ntry {\nWrite-Host 'PowerShell smoke test OK'; Get-Date -Format 'yyyy-MM-dd'\n} finally {\n    Stop-Transcript | Out-Null\n}",
+  "cwd": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent",
+  "shell": false,
+  "timeout_s": 30,
+  "run_id": "smoke2-0-20260508-033034",
+  "stage": "test_ps",
+  "env_redacted_keys": [],
+  "started_at": "2026-05-08T03:30:35.228Z",
+  "returncode": 0,
+  "duration_ms": 1297,
+  "ok": true,
+  "stdout_bytes": 36,
+  "stderr_bytes": 0,
+  "stdout_lines": 2,
+  "stderr_lines": 0,
+  "error": null,
+  "finished_at": "2026-05-08T03:30:36.523Z"
+}

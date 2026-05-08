@@ -1,0 +1,22 @@
+{
+  "command_id": "cmd_0006",
+  "seq": 6,
+  "label": "reader_simulation",
+  "cmd": "C:\\Users\\juanluca\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -c print('reader work done')",
+  "cwd": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent",
+  "shell": false,
+  "timeout_s": 10,
+  "run_id": "smoke2-0-20260508-033034",
+  "stage": "reader",
+  "env_redacted_keys": [],
+  "started_at": "2026-05-08T03:30:37.828Z",
+  "returncode": 0,
+  "duration_ms": 93,
+  "ok": true,
+  "stdout_bytes": 17,
+  "stderr_bytes": 0,
+  "stdout_lines": 1,
+  "stderr_lines": 0,
+  "error": null,
+  "finished_at": "2026-05-08T03:30:37.960Z"
+}

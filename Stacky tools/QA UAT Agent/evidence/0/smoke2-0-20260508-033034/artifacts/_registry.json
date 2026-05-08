@@ -1,0 +1,16 @@
+[
+  {
+    "artifact_id": "art_77da8fff25b6",
+    "run_id": "smoke2-0-20260508-033034",
+    "ticket_id": 0,
+    "type": "ticket",
+    "artifact_type": "ticket",
+    "path": "artifacts\\ticket.json",
+    "sha256": "90c46003b8c1cc30b99db4854341efaa2f771112578644a05060682d4478bd18",
+    "size_bytes": 102,
+    "created_by_event_id": null,
+    "scenario_id": null,
+    "ts": "2026-05-08T03:30:37.824Z",
+    "extra": {}
+  }
+]

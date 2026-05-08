@@ -76,6 +76,10 @@ def run(
     headed: bool = False,
     timeout_ms: int = _DEFAULT_TIMEOUT_MS,
     verbose: bool = False,
+    # Fase 3: forensic bridge (opcionales — backward compatible)
+    run_dir: Optional[Path] = None,
+    forensic_log: Optional[object] = None,
+    artifact_registry: Optional[object] = None,
 ) -> dict:
     """Core logic — callable from tests with subprocess mocking."""
     started = time.time()
@@ -112,6 +116,26 @@ def run(
     max_total_min        = int(os.environ.get("QA_UAT_MAX_TOTAL_MINUTES", "6"))
     max_total_s          = max_total_min * 60
 
+    # ── Fase 3: Forensic bridge setup (opcional) ────────────────────────────
+    _bridge = None
+    _bridge_env: dict = {}
+    if run_dir is not None:
+        try:
+            from playwright_forensic_bridge import PlaywrightForensicBridge
+            from forensic_event_logger import make_run_id as _make_run_id
+            _run_id = _make_run_id(ticket_id) if forensic_log is None else getattr(forensic_log, "run_id", _make_run_id(ticket_id))
+            _bridge = PlaywrightForensicBridge(
+                run_dir=run_dir,
+                run_id=_run_id,
+                ticket_id=ticket_id,
+                forensic_log=forensic_log,
+                artifact_registry=artifact_registry,
+            )
+            _bridge.prepare()
+            _bridge_env = _bridge.get_env_vars()
+        except Exception as _bex:
+            logger.warning("PlaywrightForensicBridge init failed (skipped): %s", _bex)
+
     # ── Run ALL specs in a SINGLE Playwright invocation ──────────────────────
     runs, browser_launches, login_count = _run_all_specs_once(
         spec_files=spec_files,
@@ -122,7 +146,16 @@ def run(
         max_total_s=max_total_s,
         verbose=verbose,
         exec_log=_exec_log,
+        extra_env=_bridge_env,
     )
+
+    # ── Fase 3: Import Playwright forensic events post-run ────────────────────
+    if _bridge is not None:
+        try:
+            _bridge_summary = _bridge.import_playwright_events()
+            logger.debug("Forensic bridge summary: %s", _bridge_summary)
+        except Exception as _biex:
+            logger.warning("PlaywrightForensicBridge import failed (skipped): %s", _biex)
 
     # ── Enforce browser launch limit ─────────────────────────────────────────
     if browser_launches > max_browser_launches:
@@ -216,6 +249,7 @@ def _run_all_specs_once(
     max_total_s: int,
     verbose: bool,
     exec_log=None,
+    extra_env: Optional[dict] = None,
 ) -> tuple:
     """Run every spec in tests_dir with a SINGLE 'npx playwright test <dir>' call.
 
@@ -245,6 +279,8 @@ def _run_all_specs_once(
     env = {**os.environ, "STACKY_QA_UAT_HEADLESS": headless_flag}
     if headed and "STACKY_QA_UAT_SLOW_MO" not in env:
         env["STACKY_QA_UAT_SLOW_MO"] = "500"
+    if extra_env:
+        env.update(extra_env)
 
     cmd = [
         "npx", "playwright", "test",

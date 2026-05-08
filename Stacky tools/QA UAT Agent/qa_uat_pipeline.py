@@ -148,6 +148,57 @@ def main() -> None:
                             format="%(levelname)s %(name)s: %(message)s")
         verbose = True
 
+    # ── Fase 4b: Comandos analíticos/forenses (no requieren ticket obligatorio) ──
+    if getattr(args, "analytics_report", False):
+        result = _cmd_analytics_report(days=getattr(args, "days", 7))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(0 if result.get("ok") else 1)
+
+    if getattr(args, "replay_run", None):
+        if args.ticket is None:
+            sys.stderr.write("error: --replay-run requiere --ticket\n")
+            sys.exit(1)
+        result = _cmd_replay_run(
+            ticket_id=args.ticket,
+            run_id=args.replay_run,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(0 if result.get("ok") else 1)
+
+    if getattr(args, "validate_observability", False):
+        if args.ticket is None:
+            sys.stderr.write("error: --validate-observability requiere --ticket\n")
+            sys.exit(1)
+        result = _cmd_validate_observability(ticket_id=args.ticket)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(0 if result.get("ok") else 1)
+
+    if getattr(args, "list_blockers", None):
+        if args.ticket is None:
+            sys.stderr.write("error: --list-blockers requiere --ticket\n")
+            sys.exit(1)
+        result = _cmd_list_blockers(
+            ticket_id=args.ticket,
+            run_id=args.list_blockers,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(0)
+
+    if getattr(args, "resolve_blocker", None):
+        if args.ticket is None or not args.run_id or not args.answer:
+            sys.stderr.write(
+                "error: --resolve-blocker requiere --ticket, --run-id y --answer\n"
+            )
+            sys.exit(1)
+        result = _cmd_resolve_blocker(
+            ticket_id=args.ticket,
+            run_id=args.run_id,
+            blocker_id=args.resolve_blocker,
+            answer=args.answer,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(0 if result.get("ok") else 1)
+
     # Validate mutually exclusive --ticket / --intent-file
     if args.ticket is None and not getattr(args, "intent_file", None):
         sys.stderr.write(
@@ -1602,6 +1653,118 @@ def _summarise_publisher(r: dict, mode: str) -> dict:
     return base
 
 
+# ── Fase 4b: Command handlers ─────────────────────────────────────────────────
+
+def _cmd_analytics_report(days: int = 7) -> dict:
+    """Generar reporte analítico + KPIs."""
+    try:
+        from metrics_collector import MetricsCollector
+        from analytics_builder import AnalyticsBuilder
+        from kpi_builder import KPIBuilder
+
+        mc = MetricsCollector(evidence_dir=_TOOL_ROOT / "evidence")
+        ab = AnalyticsBuilder(metrics_collector=mc)
+        kb = KPIBuilder(ab)
+
+        report = ab.full_report(days=days)
+        kpis = kb.build_kpis(days=days)
+
+        return {
+            "ok": True,
+            "days": days,
+            "kpis": kpis,
+            "report": report,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _cmd_replay_run(ticket_id: int, run_id: str) -> dict:
+    """Reproducir un run desde su event log."""
+    try:
+        from replay_run import ReplayRun
+        run_dir = _TOOL_ROOT / "evidence" / str(ticket_id) / run_id
+        if not run_dir.exists():
+            return {
+                "ok": False,
+                "error": f"run_dir no existe: {run_dir}",
+                "hint": f"Verifica que el run_id '{run_id}' existe en evidence/{ticket_id}/",
+            }
+        rr = ReplayRun(run_id=run_id, run_dir=run_dir)
+        return rr.replay()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _cmd_validate_observability(ticket_id: int) -> dict:
+    """Validar observabilidad de todos los runs de un ticket."""
+    try:
+        from observability_validator import ObservabilityValidator
+        evidence_dir = _TOOL_ROOT / "evidence" / str(ticket_id)
+        if not evidence_dir.exists():
+            return {
+                "ok": False,
+                "error": f"evidence/{ticket_id}/ no existe",
+            }
+
+        results = []
+        run_dirs = [d for d in evidence_dir.iterdir() if d.is_dir() and d.name.startswith("uat-")]
+        if not run_dirs:
+            return {
+                "ok": False,
+                "ticket_id": ticket_id,
+                "error": "No se encontraron run dirs (uat-*) en evidence/" + str(ticket_id),
+            }
+
+        for run_dir in sorted(run_dirs):
+            ov = ObservabilityValidator(run_dir=run_dir, run_id=run_dir.name)
+            result = ov.validate()
+            results.append(result)
+
+        all_ok = all(r.get("ok") for r in results)
+        return {
+            "ok": all_ok,
+            "ticket_id": ticket_id,
+            "runs_checked": len(results),
+            "results": results,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _cmd_list_blockers(ticket_id: int, run_id: str) -> dict:
+    """Listar blockers de un run."""
+    try:
+        from human_unlock import HumanUnlock
+        run_dir = _TOOL_ROOT / "evidence" / str(ticket_id) / run_id
+        blockers = HumanUnlock.list_blockers(run_dir=run_dir, run_id=run_id)
+        return {
+            "ok": True,
+            "run_id": run_id,
+            "ticket_id": ticket_id,
+            "blockers": blockers,
+            "total": len(blockers),
+            "pending": sum(1 for b in blockers if b.get("status") == "pending"),
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _cmd_resolve_blocker(ticket_id: int, run_id: str, blocker_id: str, answer: str) -> dict:
+    """Resolver un blocker desde CLI."""
+    try:
+        from human_unlock import HumanUnlock
+        run_dir = _TOOL_ROOT / "evidence" / str(ticket_id) / run_id
+        return HumanUnlock.resolve_from_cli(
+            run_dir=run_dir,
+            run_id=run_id,
+            blocker_id=blocker_id,
+            answer=answer,
+        )
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def _parse_args() -> argparse.Namespace:
@@ -1674,6 +1837,42 @@ def _parse_args() -> argparse.Namespace:
              "the pipeline calls replan_engine to compute an automated fix and "
              f"retries the generator+runner stages up to {_MAX_REPLAN_ROUNDS} times "
              "before escalating to the operator.",
+    )
+    # Fase 4b — Human Unlock, analytics, replay
+    p.add_argument(
+        "--replay-run", dest="replay_run", default=None, metavar="RUN_ID",
+        help="[Fase 4b] Reproducir un run desde su event log. "
+             "Requiere --ticket para resolver el run_dir. "
+             "Ejemplo: --ticket 70 --replay-run uat-70-20260101-120000",
+    )
+    p.add_argument(
+        "--validate-observability", dest="validate_observability", action="store_true",
+        help="[Fase 4b] Validar cobertura forense de todos los runs de un ticket. "
+             "Requiere --ticket. Devuelve JSON con score y checks.",
+    )
+    p.add_argument(
+        "--analytics-report", dest="analytics_report", action="store_true",
+        help="[Fase 4b] Generar reporte analítico de runs históricos.",
+    )
+    p.add_argument(
+        "--days", type=int, default=7,
+        help="[Fase 4b] Período en días para --analytics-report (default: 7).",
+    )
+    p.add_argument(
+        "--list-blockers", dest="list_blockers", default=None, metavar="RUN_ID",
+        help="[Fase 4b] Listar blockers de un run. Requiere --ticket.",
+    )
+    p.add_argument(
+        "--resolve-blocker", dest="resolve_blocker", default=None, metavar="BLOCKER_ID",
+        help="[Fase 4b] Resolver un blocker. Requiere --ticket, --run-id y --answer.",
+    )
+    p.add_argument(
+        "--run-id", dest="run_id", default=None, metavar="RUN_ID",
+        help="[Fase 4b] Run ID para operaciones de blocker.",
+    )
+    p.add_argument(
+        "--answer", default=None,
+        help="[Fase 4b] Respuesta del operador para --resolve-blocker.",
     )
     args = p.parse_args()
     if args.detect_screen_errors_vision:

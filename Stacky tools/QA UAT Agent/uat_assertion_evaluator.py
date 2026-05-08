@@ -51,7 +51,11 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.assertion_evaluator")
 
-_TOOL_VERSION = "1.1.0"
+_TOOL_VERSION = "1.2.0"
+# 1.2.0 — Fase 4: new oracle type 'field_ais_state' (AIS multi-signal readonly detection:
+#          fieldstate attr, disabled, readOnly, aspNetDisabled, CSS pointer-events, aria-readonly);
+#          hardened silent except in _load_assertions_evidence;
+#          best-effort screenshot annotation hook for fail/review scenarios.
 # 1.1.0 — Fase 3: added started_at/ended_at timestamps to each evaluation and
 #          assertion result for correlation with ADO audit log and dossier tracing.
 
@@ -60,6 +64,7 @@ _DETERMINISTIC_TYPES = frozenset({
     "equals", "contains_literal", "count_eq", "count_gt",
     "count_lt", "visible", "invisible", "state",
     "page_contains_text", "page_not_contains_text", "select_value_is",
+    "field_ais_state",  # Fase 4: AIS FieldState multi-signal readonly detection
 })
 
 # Oracle types that may use LLM fallback
@@ -201,6 +206,9 @@ def run(
     # Write evaluation results to evidence dir (best-effort)
     _persist_evaluations(runner_output_path, evaluations, ticket_id)
 
+    # Fase 4: annotate screenshots for failed/review scenarios (best-effort)
+    _annotate_failed_scenarios(runner_output_path, evaluations)
+
     return {
         "ok": True,
         "ticket_id": ticket_id,
@@ -279,6 +287,12 @@ def _evaluate_deterministic(tipo: str, expected, actual) -> str:
         # expected = state name (e.g. "disabled", "enabled", "checked")
         return "pass" if str(actual).lower() == str(expected).lower() else "fail"
 
+    elif tipo == "field_ais_state":
+        # Fase 4: AIS FieldState multi-signal detection.
+        # actual = derived state string: 'readonly' | 'disabled' | 'enabled' (Playwright afterEach)
+        # OR actual = raw AIS signals dict (fallback path).
+        return _evaluate_ais_state(expected, actual)
+
     elif tipo in ("page_contains_text", "page_not_contains_text", "select_value_is"):
         # Playwright validates these natively in the spec.
         # actual == "__playwright_verified__" when the test PASSED.
@@ -348,8 +362,11 @@ def _load_assertions_evidence(run_result: dict) -> dict:
         if assertions_file.is_file():
             try:
                 return json.loads(assertions_file.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "Could not parse assertions evidence %s: %s",
+                    assertions_file, exc,
+                )
     return {}
 
 
@@ -369,7 +386,14 @@ def _get_actual_value(evidence: dict, target: str, tipo: str, run_result: dict):
         if assertion.get("target") == target:
             if tipo in ("visible", "invisible"):
                 return assertion.get("visible")
-            if tipo == "state":
+            if tipo in ("state", "field_ais_state"):
+                # field_ais_state: prefer derived 'state' string; fall back to raw ais_state dict
+                derived = assertion.get("state")
+                if derived is not None:
+                    return derived
+                ais_raw = assertion.get("ais_state")
+                if ais_raw and isinstance(ais_raw, dict):
+                    return _derive_ais_state_string(ais_raw)
                 return assertion.get("state")
             if tipo in ("count_eq", "count_gt", "count_lt"):
                 return assertion.get("count")
@@ -433,6 +457,74 @@ def _persist_evaluations(runner_output_path: Path, evaluations: list, ticket_id:
         logger.debug("Evaluations written to %s", out_path)
     except Exception as exc:
         logger.warning("Could not persist evaluations: %s", exc)
+
+
+def _annotate_failed_scenarios(runner_output_path: Path, evaluations: list) -> None:
+    """
+    Fase 4: Best-effort screenshot annotation for fail/review scenarios.
+
+    Calls screenshot_annotator.annotate_scenario() for each scenario whose
+    status is 'fail' or 'review', if the scenario evidence directory exists.
+    Pillow absence is handled inside annotate_scenario — returns annotated=0.
+    """
+    try:
+        from screenshot_annotator import annotate_scenario  # noqa: PLC0415
+    except ImportError:
+        logger.debug("screenshot_annotator not available — skipping annotation")
+        return
+
+    evidence_dir = runner_output_path.parent
+    for ev in evaluations:
+        if ev.get("status") not in ("fail", "review"):
+            continue
+        scenario_id = ev.get("scenario_id", "")
+        scenario_dir = evidence_dir / scenario_id
+        if not scenario_dir.is_dir():
+            continue
+        try:
+            result = annotate_scenario(scenario_dir)
+            if result.get("annotated", 0) > 0:
+                logger.debug(
+                    "Annotated %d screenshot(s) for scenario %s",
+                    result["annotated"], scenario_id,
+                )
+            for err in result.get("errors", []):
+                if err != "pillow_not_available":
+                    logger.warning("Annotation error for %s: %s", scenario_id, err)
+        except Exception as exc:
+            logger.warning("Screenshot annotation failed for %s: %s", scenario_id, exc)
+
+
+def _evaluate_ais_state(expected, actual) -> str:
+    """
+    Evaluate 'field_ais_state' oracle.
+
+    expected: 'readonly' | 'disabled' | 'enabled' (from scenario oracle)
+    actual:   derived state string OR raw AIS signals dict from Playwright evidence.
+    """
+    if actual is None:
+        return "review"
+    if isinstance(actual, str):
+        return "pass" if actual.lower() == str(expected).lower() else "fail"
+    if isinstance(actual, dict):
+        derived = _derive_ais_state_string(actual)
+        return "pass" if derived == str(expected).lower() else "fail"
+    return "review"
+
+
+def _derive_ais_state_string(ais_raw: dict) -> str:
+    """Convert raw AIS signal dict to 'readonly' | 'disabled' | 'enabled'."""
+    is_readonly = (
+        (ais_raw.get("fieldstate") or "").upper() == "READONLY"
+        or bool(ais_raw.get("readonly"))
+        or bool(ais_raw.get("has_readonly"))
+        or bool(ais_raw.get("css_no_pointer"))
+        or bool(ais_raw.get("aria_readonly"))
+    )
+    if is_readonly:
+        return "readonly"
+    is_disabled = bool(ais_raw.get("disabled")) or bool(ais_raw.get("aspnet_disabled"))
+    return "disabled" if is_disabled else "enabled"
 
 
 # ── Error helper ──────────────────────────────────────────────────────────────

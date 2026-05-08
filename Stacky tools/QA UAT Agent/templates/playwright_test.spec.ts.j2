@@ -468,6 +468,11 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     await expect(page.locator('{{ ui_map[oracle.target] }}'), '{{ scenario_id }}: {{ oracle.target }} no debe ser visible').toBeHidden();
     {% elif oracle.tipo == 'state' %}
     await expect(page.locator('{{ ui_map[oracle.target] }}')).toHaveAttribute('{{ oracle.valor }}', '');
+    {% elif oracle.tipo == 'field_ais_state' %}
+    // AIS FieldState — multi-signal readonly/disabled detection.
+    // No native Playwright assertion; evidence captured in afterEach (ais_state object).
+    // uat_assertion_evaluator.py evaluates derived 'state' field against expected: '{{ oracle.valor }}'.
+    console.log('[ORACLE {{ loop.index0 }}] field_ais_state {{ oracle.target }} expected={{ oracle.valor }}');
     {% endif %}
     {% endfor %}
 
@@ -505,6 +510,38 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
           const bodyText = (await page.locator('body').innerText({ timeout: 2000 })) || '';
           entry.actual_text = bodyText.slice(0, 4000);
           entry.visible = true;
+        } else if (probe.tipo === 'field_ais_state') {
+          // Fase 4: AIS FieldState multi-signal detection.
+          // Captures all signals AIS WebForms uses to express ReadOnly/Disabled:
+          //   fieldstate attr, disabled, readOnly, aspNetDisabled class,
+          //   CSS pointer-events:none, aria-readonly.
+          const aisState = await page.evaluate((sel: string) => {
+            const el = document.querySelector(sel) as HTMLElement | null;
+            if (!el) return null;
+            const inp = el as HTMLInputElement;
+            const cs = window.getComputedStyle(el);
+            return {
+              fieldstate: el.getAttribute('fieldstate') || null,
+              disabled: inp.disabled === true,
+              readonly: inp.readOnly === true,
+              has_readonly: el.hasAttribute('readonly'),
+              aspnet_disabled: el.classList.contains('aspNetDisabled'),
+              css_no_pointer: cs.pointerEvents === 'none',
+              aria_readonly: el.getAttribute('aria-readonly') === 'true',
+            };
+          }, probe.selector).catch(() => null);
+          entry.ais_state = aisState;
+          if (aisState) {
+            const isReadonly = aisState.fieldstate?.toUpperCase() === 'READONLY'
+              || aisState.readonly || aisState.has_readonly
+              || aisState.css_no_pointer || aisState.aria_readonly;
+            const isDisabled = aisState.disabled || aisState.aspnet_disabled;
+            entry.state = isReadonly ? 'readonly' : isDisabled ? 'disabled' : 'enabled';
+            entry.visible = await page.locator(probe.selector).first().isVisible({ timeout: 2000 }).catch(() => null);
+          } else {
+            entry.state = null;
+            entry.visible = false;
+          }
         } else {
           const loc = page.locator(probe.selector);
           // count

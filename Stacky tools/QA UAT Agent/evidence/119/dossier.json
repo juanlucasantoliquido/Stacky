@@ -1,0 +1,218 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.0",
+  "run_id": "c0872b92-040f-4fc1-9039-7fa6632c7eb2",
+  "ticket_id": 119,
+  "ticket_title": "ADO-119 RF-006 — Mostrar campos Corredor Principal y Riesgo de Cliente en Datos de Identificacion del Deudor",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "BLOCKED",
+  "executive_summary": "Resumen Ejecutivo UAT:  \nEl ticket ADO-119 RF-006 se encuentra BLOQUEADO. De los 11 escenarios de prueba ejecutados, ninguno fue aprobado y se identificaron 11 incidencias en los escenarios P01, P02, P03, P04, P05, P06, P07, P08, P10, P11 y P12. Se requiere resolución de los problemas detectados para continuar con la validación y asegurar el cumplimiento de los requisitos solicitados.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.2.0",
+    "total": 11,
+    "pass": 0,
+    "fail": 0,
+    "blocked": 11
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "Campo Corredor Principal visible con corredor correcto (lote con una obligacion con OGCORREDOR post-batch)",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que el campo \"Corredor Principal\" sea visible y contenga el valor correcto correspondiente al \"OGCORREDOR\" de la obligación con mayor deuda después de la ejecución del batch. El resultado \"BLOCKED\" indica que la verificación no se pudo completar, posiblemente debido a que el campo no se mostró como se esperaba.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "Corredor Principal = OGCORREDOR de la obligacion con mayor deuda (multiples obligaciones)",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al ingresar el corredor principal \"OGCORREDOR\" y confirmar la acción, el sistema seleccione correctamente el valor \"CORREDOR B\" en función de la obligación con mayor deuda entre múltiples obligaciones. El resultado \"BLOCKED\" indica que la funcionalidad no se comportó como se esperaba.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "Desempate por fecha de inicio de mora mas antigua cuando hay empate de importe",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, en caso de un empate en el importe de las deudas, el sistema seleccione correctamente al corredor con la fecha de inicio de mora más antigua. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la red o en la carga del panel.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "Lote con una sola obligacion con OGCORREDOR asignado",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que, al navegar al 'panel_agenda' para el lote con OGCORREDOR asignado, el sistema muestre correctamente el nombre del corredor asociado, que en este caso es 'Corredor 1'. El resultado bloqueado indica que la funcionalidad no se comportó como se esperaba.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "Lote sin OGCORREDOR asignado: campo Corredor Principal vacio, sin error",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al acceder al panel de agenda de un lote sin OGCORREDOR asignado, el campo \"Corredor Principal\" se muestre vacío y que no se genere ningún error, confirmando que la carga de la página se realiza correctamente. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la red o en la carga de la página.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P06",
+      "titulo": "Campo Riesgo de Cliente visible con clasificacion correcta (atributo de lote)",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que el campo \"Riesgo de Cliente\" sea visible en el panel de agenda y que muestre correctamente la clasificación \"BAJO\" para el lote específico con ID 4127924112345393. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a que el panel no se mostró como se esperaba.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P07",
+      "titulo": "Riesgo de Cliente en cabecera consistente con Vista Obligaciones",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que el \"Riesgo de Cliente\" en la cabecera de la interfaz coincida con el valor mostrado en la \"Vista Obligaciones\". La prueba se bloqueó debido a que no se cumplió la condición de igualdad esperada entre ambos elementos.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P08",
+      "titulo": "Lote sin clasificacion de riesgo: campo Riesgo de Cliente vacio, sin error",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al acceder al panel de agenda de un lote sin clasificación de riesgo, el campo \"Riesgo de Cliente\" permanezca vacío y no genere ningún error. La verificación se centró en asegurar que el contenido de la página no muestre texto relacionado con riesgos, confirmando así el comportamiento esperado del sistema en esta situación.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P10",
+      "titulo": "Los campos NO aparecen en instancias distintas de Pacifico (InstanciaPacifico != 1)",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que los campos específicos no sean visibles en instancias distintas de Pacifico, asegurando que la funcionalidad de ocultar elementos en entornos no-Pacifico funcione correctamente. El resultado bloqueado indica que la verificación no se pudo completar debido a un problema en la visibilidad del panel de agenda.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P11",
+      "titulo": "Los campos se actualizan tras el batch nocturno de posicion",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que los campos de datos en el sistema se actualicen correctamente después de la ejecución del batch nocturno de carga de posición. Se validó que ambos paneles mostraran el mensaje \"Datos Actualizados\" tras completar el proceso de carga.",
+      "reason": "missing_selectors"
+    },
+    {
+      "scenario_id": "P12",
+      "titulo": "Corredor Principal en cabecera consistente con OGCORREDOR de Vista Obligaciones",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {},
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "El escenario de prueba automatizado intentó verificar que al navegar a la 'Vista Obligaciones', el corredor principal en la cabecera muestre correctamente el OGCORREDOR correspondiente a la obligación con mayor deuda. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la navegación o en la carga de datos.",
+      "reason": "missing_selectors"
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P01",
+      "titulo": "P01",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "P02",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "P03",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "P04",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "P05",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P06",
+      "titulo": "P06",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P07",
+      "titulo": "P07",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P08",
+      "titulo": "P08",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P10",
+      "titulo": "P10",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P11",
+      "titulo": "P11",
+      "message": "missing_selectors"
+    },
+    {
+      "scenario_id": "P12",
+      "titulo": "P12",
+      "message": "missing_selectors"
+    }
+  ],
+  "recommendation_for_human_qa": [
+    "Revise las dependencias y configuraciones previas necesarias para ejecutar las pruebas.",
+    "Verifique que todos los recursos requeridos (archivos, servicios, bases de datos) estén disponibles y accesibles.",
+    "Consulte los registros de errores o mensajes del sistema para identificar posibles bloqueos o permisos faltantes."
+  ],
+  "next_steps": [
+    "Resolver bloqueos de entorno antes de re-ejecutar.",
+    "Verificar configuración de env vars y base de datos."
+  ],
+  "generated_at": "2026-05-08T04:27:33Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.2.0",
+    "duration_ms": 30914
+  },
+  "comment_hash": "17cc19cac989c387faa7882d7e74917cbc4e21e67c90cb907c0aca4eccb5c73c",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\119\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\119\\ado_comment.html"
+  }
+}

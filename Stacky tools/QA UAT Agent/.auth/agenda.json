@@ -1,0 +1,25 @@
+{
+  "cookies": [
+    {
+      "name": "ASP.NET_SessionId",
+      "value": "p4nklggzz5qztfwku1jyhsh1",
+      "domain": "localhost",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": ".RSAUTHAGENDA",
+      "value": "B735663D724BE40258E6FFA7A87EAE2DECA2807BC3FE3B121913A7021AD441C4C090F12B6277F2268C62FA22C66E336811323A32D293578AD2B4E04C6484BE08A4A8A339BAC3EB1B288B62C7D06AF44993A84B26770916AFA5BF644DDB0CF3B5BB649950FF8AF800B4904BA5767F1A115A920DBE390F12A917EB1F51B5146C91",
+      "domain": "localhost",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

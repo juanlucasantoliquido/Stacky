@@ -1,0 +1,102 @@
+{
+  "ok": true,
+  "ticket": {
+    "id": 119,
+    "title": "ADO-119 RF-006 — Mostrar campos Corredor Principal y Riesgo de Cliente en Datos de Identificacion del Deudor",
+    "state": "Reviewed by Dev",
+    "type": "Task",
+    "url": "https://dev.azure.com/UbimiaPacifico/Strategist_Pacifico/_workitems/edit/119"
+  },
+  "description_md": "RF-006 — Mostrar campos Corredor Principal y Riesgo de Cliente en Datos de Identificacion del Deudor. Implementacion completada por Developer Agentico 2026-05-06. BUILD SUCCEEDED.",
+  "analisis_tecnico": "ADO-119 Corredor Principal y Riesgo de Cliente en Detalle de Cliente. Campos abfCorredorPrincipal y abfRiesgoCliente en FrmDetalleClie.aspx condicionados a InstanciaPacifico=1. GetCorredorPrincipal query por OGLOTE en ROBLG JOIN RDEUDA ORDER BY DEMORATOT DESC, OGFECMOR ASC. CLRIESGOSIS de RCLIE.",
+  "plan_pruebas": [
+    {
+      "id": "P01",
+      "descripcion": "Campo Corredor Principal visible con corredor correcto (lote con una obligacion con OGCORREDOR post-batch)",
+      "datos": "Lote con al menos una obligacion con OGCORREDOR poblado post-batch",
+      "esperado": "Campo Corredor Principal muestra el valor de OGCORREDOR de la obligacion de mayor deuda"
+    },
+    {
+      "id": "P02",
+      "descripcion": "Corredor Principal = OGCORREDOR de la obligacion con mayor deuda (multiples obligaciones)",
+      "datos": "Lote con tres obligaciones: deuda 5000 CORREDOR A, deuda 12000 CORREDOR B, deuda 8000 CORREDOR C",
+      "esperado": "Campo Corredor Principal muestra CORREDOR B (mayor deuda 12000)"
+    },
+    {
+      "id": "P03",
+      "descripcion": "Desempate por fecha de inicio de mora mas antigua cuando hay empate de importe",
+      "datos": "Lote con dos obligaciones: deuda 10000 CORREDOR X fecha 2025-01-15, deuda 10000 CORREDOR Y fecha 2025-03-10",
+      "esperado": "Campo Corredor Principal muestra CORREDOR X (fecha de mora mas antigua)"
+    },
+    {
+      "id": "P04",
+      "descripcion": "Lote con una sola obligacion con OGCORREDOR asignado",
+      "datos": "Lote 4127924112345393 con OGCORREDOR=Corredor 1 en ROBLG (verificado en BD)",
+      "esperado": "Campo Corredor Principal muestra Corredor 1"
+    },
+    {
+      "id": "P05",
+      "descripcion": "Lote sin OGCORREDOR asignado: campo Corredor Principal vacio, sin error",
+      "datos": "Lote de RLOTE sin OGCORREDOR en ninguna obligacion (ej: 1000001118137685)",
+      "esperado": "Campo Corredor Principal aparece vacio o con guion, pantalla carga correctamente"
+    },
+    {
+      "id": "P06",
+      "descripcion": "Campo Riesgo de Cliente visible con clasificacion correcta (atributo de lote)",
+      "datos": "Lote 4127924112345393 con CLRIESGOSIS=BAJO en RCLIE (verificado en BD)",
+      "esperado": "Campo Riesgo de Cliente muestra BAJO"
+    },
+    {
+      "id": "P07",
+      "descripcion": "Riesgo de Cliente en cabecera consistente con Vista Obligaciones",
+      "datos": "Lote con CLRIESGOSIS poblado, navegar a Vista Obligaciones del mismo lote",
+      "esperado": "Valor de Riesgo de Cliente identico en cabecera y Vista Obligaciones"
+    },
+    {
+      "id": "P08",
+      "descripcion": "Lote sin clasificacion de riesgo: campo Riesgo de Cliente vacio, sin error",
+      "datos": "Lote de RLOTE sin CLRIESGOSIS en RCLIE (ej: 1000001118137685)",
+      "esperado": "Campo Riesgo de Cliente aparece vacio o con guion, pantalla carga correctamente"
+    },
+    {
+      "id": "P09",
+      "descripcion": "Ambos campos son de solo lectura para todos los perfiles",
+      "datos": "Acceder a FrmDetalleClie con campos visibles e intentar edicion",
+      "esperado": "Campos no admiten edicion; FieldState=ReadOnly; no hay input activo"
+    },
+    {
+      "id": "P10",
+      "descripcion": "Los campos NO aparecen en instancias distintas de Pacifico (InstanciaPacifico != 1)",
+      "datos": "Instancia no-Pacifico (no disponible en entorno dev actual)",
+      "esperado": "Campos abfCorredorPrincipal y abfRiesgoCliente no visibles"
+    },
+    {
+      "id": "P11",
+      "descripcion": "Los campos se actualizan tras el batch nocturno de posicion",
+      "datos": "Requiere ejecutar batch nocturno de carga de posicion y recargar pantalla",
+      "esperado": "Valores de Corredor Principal y Riesgo de Cliente reflejan datos actualizados por el batch"
+    },
+    {
+      "id": "P12",
+      "descripcion": "Corredor Principal en cabecera consistente con OGCORREDOR de Vista Obligaciones",
+      "datos": "Lote con multiples obligaciones con OGCORREDOR, navegar a Vista Obligaciones",
+      "esperado": "Valor de Corredor Principal identico al OGCORREDOR de la obligacion de mayor deuda en Vista Obligaciones"
+    }
+  ],
+  "notas_qa": [
+    "En dev: OGCORREDOR poblado solo en lote 4127924112345393 (Corredor 1)",
+    "En dev: CLRIESGOSIS=BAJO en lote/cliente 4127924112345393",
+    "InstanciaPacifico=1 en Web.config — campos siempre visibles en dev",
+    "Lotes sin datos: RLOTE tiene 1000001118137685 y otros sin OGCORREDOR ni CLRIESGOSIS"
+  ],
+  "adjuntos": [
+    {"name": "plan-de-pruebas.md", "url": "https://dev.azure.com/UbimiaPacifico/1658bc86-6597-43c0-adfc-6f4e081f440f/_apis/wit/attachments/279555fe-2195-4dc1-b0e1-fb457b9dd3b3"}
+  ],
+  "precondiciones_detected": [],
+  "meta": {
+    "tool": "uat_ticket_reader",
+    "version": "1.0.0",
+    "source": "manual — plan from attachment plan-de-pruebas.md provided in ticket context",
+    "duration_ms": 0
+  }
+}

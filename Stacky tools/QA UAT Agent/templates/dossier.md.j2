@@ -13,6 +13,8 @@
 
 {% if verdict == 'PASS' %}
 **✅ PASS** — Todos los escenarios ejecutables pasaron.
+{% elif verdict == 'PARTIAL_PASS' %}
+**🟡 PARTIAL PASS** — {{ context.pass }} de {{ context.total }} escenarios pasaron. {{ context.not_tested | default(0) }} escenario(s) no pudo ejecutarse por falta de datos de prueba (ver § Criterios sin cobertura).
 {% elif verdict == 'FAIL' %}
 **❌ FAIL** — Al menos un escenario falló.
 {% elif verdict == 'BLOCKED' %}
@@ -34,7 +36,7 @@
 | Escenario | Título | Estado | Duración |
 |---|---|---|---|
 {% for s in scenarios %}
-| `{{ s.scenario_id }}` | {{ s.titulo }} | {% if s.status == 'pass' %}✅ PASS{% elif s.status == 'fail' %}❌ FAIL{% elif s.status == 'blocked' %}⚠️ BLOCKED{% else %}⏭️ SKIPPED{% endif %} | {{ s.duration_ms | default(0) }} ms |
+| `{{ s.scenario_id }}` | {{ s.titulo }} | {% if s.status == 'pass' %}✅ PASS{% elif s.status == 'fail' %}❌ FAIL{% elif s.status == 'not_tested' %}🔲 NOT TESTED{% elif s.status == 'blocked' %}⚠️ BLOCKED{% else %}⏭️ SKIPPED{% endif %} | {{ s.duration_ms | default(0) }} ms |
 {% endfor %}
 
 ---
@@ -66,6 +68,21 @@
 {% endfor %}
 {% endif %}
 
+{% if coverage_gaps %}
+## Criterios sin cobertura (datos de prueba faltantes)
+
+> Estos escenarios **no son fallas del producto** — no pudieron ejecutarse porque los datos
+> de prueba requeridos no están disponibles en el ambiente QA.
+> Para completar la cobertura, ejecutar los queries sugeridos o provisionar los datos indicados.
+
+| Escenario | Término no resuelto | Acción sugerida |
+|---|---|---|
+{% for gap in coverage_gaps %}
+| `{{ gap.scenario_id }}` | {{ gap.precondition_term | default('N/A') }} | {{ gap.suggested_query or gap.reason or 'Verificar precondición manualmente' }} |
+{% endfor %}
+
+{% endif %}
+
 ---
 
 ## Evidencia por escenario
@@ -73,7 +90,7 @@
 {% for s in scenarios %}
 ### {{ s.scenario_id }} — {{ s.titulo }}
 
-**Estado**: {% if s.status == 'pass' %}✅ PASS{% elif s.status == 'fail' %}❌ FAIL{% elif s.status == 'blocked' %}⚠️ BLOCKED ({{ s.reason | default('N/A') }}){% else %}⏭️ SKIPPED{% endif %}
+**Estado**: {% if s.status == 'pass' %}✅ PASS{% elif s.status == 'fail' %}❌ FAIL{% elif s.status == 'not_tested' %}🔲 NOT TESTED — datos de prueba faltantes{% elif s.status == 'blocked' %}⚠️ BLOCKED ({{ s.reason | default('N/A') }}){% else %}⏭️ SKIPPED{% endif %}
 
 {% if s.artifacts %}
 **Artefactos**:

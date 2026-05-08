@@ -31,7 +31,12 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.dossier_builder")
 
-_TOOL_VERSION = "1.2.0"
+_TOOL_VERSION = "1.3.0"
+# 1.3.0 — Fase 3:
+#   - PARTIAL_PASS verdict when pass>0 and not_tested>0 (data gap, not product defect)
+#   - coverage_gaps field: loads precondition_gap.json files, exposes in dossier
+#   - context.not_tested count added
+#   - schema_version bumped to qa-uat-dossier/1.1
 _EXEC_SUMMARY_MAX_LEN = 600
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 # Token format used inside ado_comment.html for image src/href placeholders.
@@ -147,6 +152,11 @@ def run(
             logger.warning("evaluations.json unreadable, using runner status only: %s", exc)
             evaluations_by_sid = {}
 
+    # Fase 3: Load precondition gaps from precondition_gap.json files.
+    # These files are written by uat_precondition_checker._run_parsed_preconditions()
+    # and optionally by other stages. They drive the PARTIAL_PASS verdict.
+    precondition_gaps: list[dict] = _load_precondition_gaps(runner_output_path.parent)
+
     # Compute verdict — reclassify each run BEFORE summarizing.
     # Precedence: (1) semantic evaluator status, (2) test_generator_defect
     # heuristic on technical failures, (3) raw runner status. This is the
@@ -235,6 +245,7 @@ def run(
     pass_count = sum(1 for r in runs if r.get("status") == "pass")
     fail_count = sum(1 for r in runs if r.get("status") == "fail")
     blocked_count = sum(1 for r in runs if r.get("status") == "blocked")
+    not_tested_count = sum(1 for r in runs if r.get("status") == "not_tested")
     context = {
         "environment": os.environ.get("STACKY_ENV", "qa"),
         "agent_version": _TOOL_VERSION,
@@ -242,12 +253,17 @@ def run(
         "pass": pass_count,
         "fail": fail_count,
         "blocked": blocked_count,
+        "not_tested": not_tested_count,
     }
 
     # Build dossier JSON (schema-compliant)
+    # Fase 3: coverage_gaps lists scenarios that were not_tested due to
+    # precondition data gaps (from precondition_gap.json). Separated from
+    # `failures` so the stakeholder sees the distinction clearly.
+    not_tested_runs = [r for r in runs if r.get("status") == "not_tested"]
     dossier: dict = {
         "ok": True,
-        "schema_version": "qa-uat-dossier/1.0",
+        "schema_version": "qa-uat-dossier/1.1",
         "run_id": run_id,
         "ticket_id": ticket_id,
         "ticket_title": ticket_title,
@@ -268,6 +284,8 @@ def run(
             ) for r in runs
         ],
         "failures": [_format_failure(r) for r in failures],
+        # Fase 3: coverage_gaps — scenarios not_tested due to missing test data
+        "coverage_gaps": _format_coverage_gaps(not_tested_runs, precondition_gaps),
         "recommendation_for_human_qa": recommendations,
         "next_steps": _next_steps(verdict),
         "generated_at": _now_iso(),
@@ -339,24 +357,34 @@ def run(
 
 def _compute_verdict(runs: list) -> str:
     """
-    PASS   — all runs pass
-    FAIL   — at least one fail, no blocked
-    BLOCKED — all non-pass are blocked (no fail)
-    MIXED  — has both fail and blocked
+    PASS         — all runs pass, 0 not_tested
+    PARTIAL_PASS — some pass, none fail, but ≥1 not_tested (data gap, not a product defect)
+    FAIL         — at least one fail, no blocked
+    BLOCKED      — all non-pass are blocked (no fail, no not_tested)
+    MIXED        — has both fail and blocked/not_tested
+
+    Fase 3: PARTIAL_PASS introduced to distinguish genuine pass with incomplete
+    coverage from a full clean PASS. NOT_TESTED scenarios come from precondition
+    gaps detected by uat_precondition_checker (precondition_gap.json).
     """
     if not runs:
         return "BLOCKED"
     statuses = [r.get("status") for r in runs]
-    has_fail = any(s == "fail" for s in statuses)
-    has_blocked = any(s == "blocked" for s in statuses)
-    all_pass = all(s == "pass" for s in statuses)
+    has_fail     = any(s == "fail" for s in statuses)
+    has_blocked  = any(s == "blocked" for s in statuses)
+    has_not_tested = any(s == "not_tested" for s in statuses)
+    all_pass     = all(s == "pass" for s in statuses)
 
     if all_pass:
         return "PASS"
-    if has_fail and has_blocked:
+    if has_fail and (has_blocked or has_not_tested):
         return "MIXED"
     if has_fail:
         return "FAIL"
+    # Some pass, none fail, but there are not_tested scenarios → partial coverage
+    pass_count = sum(1 for s in statuses if s == "pass")
+    if has_not_tested and pass_count > 0 and not has_fail:
+        return "PARTIAL_PASS"
     return "BLOCKED"
 
 
@@ -765,6 +793,88 @@ def _sha256_hex(content: str) -> str:
 def _now_iso() -> str:
     import datetime
     return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ── Fase 3: precondition gap helpers ─────────────────────────────────────────
+
+def _load_precondition_gaps(evidence_dir: Path) -> list[dict]:
+    """
+    Busca archivos precondition_gap.json en subdirectorios del directorio de evidencia.
+    Retorna una lista de gaps consolidada con `scenario_id` como clave.
+
+    Formato esperado de precondition_gap.json:
+      {"scenario_id": "SC-01", "gaps": [{"term": "...", "reason": "..."}], ...}
+    o el formato de precondition_parser.emit_precondition_gap:
+      {"unresolved": ["term1", ...], "scenario_id": "..."}
+    """
+    gaps: list[dict] = []
+    if not evidence_dir.is_dir():
+        return gaps
+
+    # Buscar en el directorio raíz y en subdirectorios (por escenario)
+    search_paths = list(evidence_dir.glob("precondition_gap.json")) + \
+                   list(evidence_dir.glob("*/precondition_gap.json"))
+
+    for gap_path in search_paths:
+        try:
+            data = json.loads(gap_path.read_text(encoding="utf-8"))
+            # Normalizar diferentes formatos
+            scenario_id = data.get("scenario_id") or gap_path.parent.name
+            unresolved = data.get("unresolved") or []
+            gap_items = data.get("gaps") or [{"term": u, "reason": "unresolved"} for u in unresolved]
+            if gap_items:
+                gaps.append({
+                    "scenario_id": scenario_id,
+                    "gaps": gap_items,
+                    "gap_file": str(gap_path),
+                })
+        except Exception as exc:
+            logger.debug("_load_precondition_gaps: cannot parse %s: %s", gap_path, exc)
+
+    return gaps
+
+
+def _format_coverage_gaps(not_tested_runs: list, precondition_gaps: list[dict]) -> list[dict]:
+    """
+    Construye la lista de cobertura incompleta para el dossier.
+
+    Combina los runs con status=not_tested con los precondition_gaps disponibles.
+    Cada entry explica qué escenario no fue probado y por qué, con el query
+    sugerido cuando esté disponible.
+
+    Retorna lista de:
+      {
+        "scenario_id": str,
+        "reason": str,                      # humano-legible
+        "precondition_term": str | None,    # término que no pudo resolverse
+        "suggested_query": str | None,      # query SQL de discovery si disponible
+      }
+    """
+    gaps_by_sid = {g["scenario_id"]: g for g in precondition_gaps}
+    result = []
+
+    for run in not_tested_runs:
+        sid = run.get("scenario_id", "")
+        run_reason = run.get("reason", "PRECONDITION_MISSING_DATA")
+
+        gap_data = gaps_by_sid.get(sid)
+        if gap_data:
+            for gap_item in gap_data.get("gaps") or []:
+                result.append({
+                    "scenario_id": sid,
+                    "reason": run_reason,
+                    "precondition_term": gap_item.get("term") or gap_item,
+                    "suggested_query": gap_item.get("suggested_query"),
+                })
+        else:
+            result.append({
+                "scenario_id": sid,
+                "reason": run_reason,
+                "precondition_term": None,
+                "suggested_query": None,
+            })
+
+    return result
 
 
 def _err(code: str, message: str) -> dict:

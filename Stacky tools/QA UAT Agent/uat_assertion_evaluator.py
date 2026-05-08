@@ -51,7 +51,9 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.assertion_evaluator")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "1.1.0"
+# 1.1.0 — Fase 3: added started_at/ended_at timestamps to each evaluation and
+#          assertion result for correlation with ADO audit log and dossier tracing.
 
 # Oracle types handled deterministically (no LLM)
 _DETERMINISTIC_TYPES = frozenset({
@@ -157,12 +159,15 @@ def run(
             actual = _get_actual_value(assertions_evidence, target, tipo, run_result)
 
             # Evaluate
+            import datetime as _dt
+            assertion_started_at = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
             assertion_status = _evaluate_assertion(
                 tipo=tipo,
                 expected=expected,
                 actual=actual,
                 verbose=verbose,
             )
+            assertion_ended_at = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
             if assertion_status == "fail":
                 scenario_status = "fail"
@@ -177,12 +182,20 @@ def run(
                 "actual": actual,
                 "status": assertion_status,
                 "evidence_ref": _assertions_ref(run_result, scenario_id),
+                "evaluated_at": assertion_started_at,
+                "eval_duration_ms": round(
+                    (_dt.datetime.strptime(assertion_ended_at, "%Y-%m-%dT%H:%M:%S.%fZ")
+                     - _dt.datetime.strptime(assertion_started_at, "%Y-%m-%dT%H:%M:%S.%fZ")
+                    ).total_seconds() * 1000, 1
+                ),
             })
 
+        import datetime as _dt
         evaluations.append({
             "scenario_id": scenario_id,
             "status": scenario_status,
             "assertions": assertion_results,
+            "evaluated_at": _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         })
 
     # Write evaluation results to evidence dir (best-effort)

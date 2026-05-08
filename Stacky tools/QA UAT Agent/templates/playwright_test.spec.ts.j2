@@ -17,6 +17,15 @@ const BASE_URL = process.env.AGENDA_WEB_BASE_URL!;
 
 if (!BASE_URL) throw new Error('AGENDA_WEB_BASE_URL env var is required');
 
+{% if resolved_values %}
+// ── Fase 2: Resolved values from precondition_parser (DB-discovered) ─────────
+// These constants are populated at spec-generation time from resolved_values.json.
+// At runtime, process.env overrides take priority (useful for CI parametrisation).
+{% for key, val in resolved_values.items() %}
+const RESOLVED_{{ key }} = process.env['RESOLVED_{{ key }}'] || {{ val | tojson }};
+{% endfor %}
+{% endif %}
+
 // NOTE: AGENDA_WEB_USER / AGENDA_WEB_PASS are used only by playwright/global.setup.ts
 // for the one-time login.  Specs restore auth from storageState — no login here.
 

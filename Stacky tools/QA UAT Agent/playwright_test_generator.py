@@ -151,6 +151,10 @@ def run(
     # Fase 8 — load playbooks index once for the whole run.
     playbook_index = _load_playbooks(_PLAYBOOKS_DIR)
 
+    # Fase 2 — load resolved_values.json if present alongside scenarios.json.
+    # Maps TABLA_COLUMNA keys to resolved DB values for injection as RESOLVED.* constants.
+    _resolved_values = _load_resolved_values(scenarios_path.parent)
+
     results = []
     generated_count = 0
     blocked_count = 0
@@ -316,6 +320,8 @@ def run(
                 detect_screen_errors=detect_screen_errors,
                 detect_screen_errors_vision=detect_screen_errors_vision,
                 screen_error_detector_js=screen_error_detector_js,
+                # Fase 2: resolved values from precondition_parser pipeline
+                resolved_values=_resolved_values.get(sid, _resolved_values),
             )
         except Exception as exc:
             return _err("template_render_failed", f"Jinja2 render failed for {sid}: {exc}")
@@ -549,6 +555,61 @@ def _load_discovered_selectors(path: Path) -> dict[str, dict[str, str]]:
     except Exception as exc:
         logger.warning("playwright_test_generator: cannot load discovered_selectors %s: %s", path, exc)
         return {}
+
+
+# ── Fase 2: resolved_values loader ───────────────────────────────────────────
+
+def _load_resolved_values(evidence_dir: Path) -> dict:
+    """
+    Busca resolved_values.json en el directorio de evidencia del ticket.
+    Puede estar en:
+      - evidence_dir/resolved_values.json       (nivel ticket, para todos los escenarios)
+      - evidence_dir/<scenario_id>/resolved_values.json  (por escenario)
+
+    Retorna un dict con dos niveles:
+      {
+        "_global": {"TABLA_COLUMNA": "value", ...},           # nivel ticket
+        "<scenario_id>": {"TABLA_COLUMNA": "value", ...},     # por escenario (override global)
+      }
+
+    Cuando se pasa a template.render(), se usa _resolved_values.get(sid, _resolved_values)
+    para que el template reciba el dict aplanado correcto para cada escenario.
+    """
+    merged: dict = {}
+
+    # Nivel global (al lado de scenarios.json)
+    global_path = evidence_dir / "resolved_values.json"
+    if global_path.is_file():
+        try:
+            data = json.loads(global_path.read_text(encoding="utf-8"))
+            # resolved_values.json puede tener formato:
+            #   {"scenario_id": "...", "values": {"TABLA_COLUMNA": "v"}}
+            # o flat: {"TABLA_COLUMNA": "v"}
+            if "values" in data:
+                merged["_global"] = data["values"]
+            else:
+                merged["_global"] = {k: v for k, v in data.items() if not k.startswith("_")}
+        except Exception as exc:
+            logger.debug("playwright_test_generator: cannot parse %s: %s", global_path, exc)
+
+    # Nivel por escenario (subdirectorio)
+    for child in evidence_dir.iterdir() if evidence_dir.is_dir() else []:
+        if not child.is_dir():
+            continue
+        rv_path = child / "resolved_values.json"
+        if not rv_path.is_file():
+            continue
+        try:
+            data = json.loads(rv_path.read_text(encoding="utf-8"))
+            sid = child.name
+            if "values" in data:
+                merged[sid] = {**merged.get("_global", {}), **data["values"]}
+            else:
+                merged[sid] = {**merged.get("_global", {}), **{k: v for k, v in data.items() if not k.startswith("_")}}
+        except Exception as exc:
+            logger.debug("playwright_test_generator: cannot parse %s: %s", rv_path, exc)
+
+    return merged
 
 
 # ── Fase 8: Playbook-aware generation ────────────────────────────────────────

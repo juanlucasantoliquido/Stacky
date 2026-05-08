@@ -30,7 +30,13 @@ from typing import Optional
 # These are the read-only tables available to RSPACIFICOREAD in the dev DB.
 # Kept as a module-level constant so both the agent and data_resolver import
 # the same authoritative whitelist.
+#
+# Fase 2: Extended with tables confirmed by db_query_119.py (2026-05-04):
+#   RLOTE (LOCOD), ROBLG (OGLOTE, OGCORREDOR, OGCODCLI), RCLIE (CLCOD, CLRIESGOENT)
+# At runtime, sql_query_guard accepts a dynamic whitelist from schema_explorer
+# via the table_whitelist parameter of validate().
 WHITELISTED_TABLES: frozenset[str] = frozenset({
+    # Tablas originales
     "RAGEN",
     "RIDIOMA",
     "RAGTIP",
@@ -40,6 +46,12 @@ WHITELISTED_TABLES: frozenset[str] = frozenset({
     "RACON",
     "RAGPAR",
     "RASIST",
+    # Tablas confirmadas con db_query_119.py (Fase 2)
+    "RLOTE",
+    "ROBLG",
+    "RCLIE",
+    # INFORMATION_SCHEMA — solo para schema_explorer (SELECT-only)
+    "INFORMATION_SCHEMA",
 })
 
 # ── Forbidden SQL keywords (any of these = automatic block) ──────────────────

@@ -42,7 +42,12 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.precondition_checker")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "1.1.0"
+# 1.1.0 — Fase 2:
+#   - _SAFE_TABLES ahora se extiende dinámicamente desde schema_explorer.get_tables_for_guard()
+#   - Integra precondition_parser para parsear precondiciones funcionales complejas
+#   - Emite resolved_values.json y precondition_gap.json junto con el resultado principal
+#   - Las checks de test_data ya no están limitadas a _SAFE_TABLES estáticas
 
 # Required env vars for DB connection
 _DB_ENV_VARS = ("RS_QA_DB_USER", "RS_QA_DB_PASS", "RS_QA_DB_DSN")
@@ -51,11 +56,23 @@ _DB_ENV_VARS = ("RS_QA_DB_USER", "RS_QA_DB_PASS", "RS_QA_DB_DSN")
 # Matches: "RIDIOMA 9296", "INSERTs RIDIOMA 9296-9298", "RIDIOMA 9296,9297,9298"
 _RIDIOMA_RE = re.compile(r'(?:RIDIOMA|IDTEXTO)[=\s]+(\d+(?:[-,]\d+)*)', re.IGNORECASE)
 
-# Supported tabla checks (safe-listed for SELECT queries)
-_SAFE_TABLES = frozenset({
+# Supported tabla checks (safe-listed para SELECT queries)
+# Fase 2: ampliado con tablas confirmadas + merge dinámico desde schema_explorer
+_SAFE_TABLES_STATIC = frozenset({
     "RAGEN", "RIDIOMA", "RAGTIP", "RAGMOT", "RAGCAL",
-    "RACOMI", "RACON", "RAGPAR", "RASIST", "RAGTIP",
+    "RACOMI", "RACON", "RAGPAR", "RASIST",
+    # Tablas confirmadas con db_query_119.py (Fase 2)
+    "RLOTE", "ROBLG", "RCLIE",
 })
+
+
+def _get_safe_tables() -> frozenset:
+    """Retorna el conjunto de tablas seguras, combinando estáticas + schema_explorer."""
+    try:
+        from schema_explorer import get_tables_for_guard
+        return _SAFE_TABLES_STATIC | get_tables_for_guard()
+    except Exception:
+        return _SAFE_TABLES_STATIC
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -139,6 +156,9 @@ def run(
     results = {}
     blocked_count = 0
 
+    # Fase 2: safe tables resueltas dinámicamente (schema_explorer + estáticas)
+    safe_tables = _get_safe_tables()
+
     try:
         for scenario in scenarios:
             scenario_id = scenario.get("scenario_id", "?")
@@ -158,13 +178,23 @@ def run(
                         ),
                     })
 
+            # Check 1b: Fase 2 — Precondiciones funcionales complejas via precondition_parser
+            precondiciones = scenario.get("precondiciones") or []
+            _run_parsed_preconditions(
+                precondiciones=precondiciones,
+                scenario_id=scenario_id,
+                connection=connection,
+                missing=missing,
+                scenarios_path=scenarios_path,
+            )
+
             # Check 2: Required test data from datos_requeridos
             for data_req in (scenario.get("datos_requeridos") or []):
                 tabla = data_req.get("tabla", "")
                 filtro = data_req.get("filtro", "")
                 if not tabla or not filtro:
                     continue
-                if tabla not in _SAFE_TABLES:
+                if tabla.upper() not in {t.upper() for t in safe_tables}:
                     logger.warning("Tabla '%s' not in safe-list, skipping data check", tabla)
                     continue
                 ok = _check_test_data(connection, tabla, filtro, verbose=verbose)
@@ -207,6 +237,70 @@ def run(
         "results": results,
         "elapsed_s": round(time.time() - started, 2),
     }
+
+
+def _run_parsed_preconditions(
+    precondiciones: list[str],
+    scenario_id: str,
+    connection,
+    missing: list,
+    scenarios_path: Path,
+) -> None:
+    """
+    Fase 2: Parsea precondiciones funcionales complejas usando precondition_parser
+    y emite resolved_values.json + precondition_gap.json junto a scenarios.json.
+
+    Solo procesa precondiciones que NO son RIDIOMA (esas ya las maneja Check 1).
+    Las precondiciones RIDIOMA se detectan por el regex _RIDIOMA_RE.
+    """
+    non_ridioma = [
+        p for p in precondiciones
+        if p.strip() and not _RIDIOMA_RE.search(p)
+    ]
+    if not non_ridioma:
+        return
+
+    try:
+        from precondition_parser import parse_all, emit_resolved_values, emit_precondition_gap
+    except ImportError:
+        logger.debug("precondition_parser not available — skipping parsed preconditions check")
+        return
+
+    base_dir = scenarios_path.parent / scenario_id
+    try:
+        parse_results = parse_all(non_ridioma, connection=connection, use_llm=False)
+
+        # Emitir resolved_values.json
+        emit_resolved_values(
+            parse_results=parse_results,
+            scenario_id=scenario_id,
+            out_path=base_dir / "resolved_values.json",
+        )
+
+        # Emitir precondition_gap.json
+        emit_precondition_gap(
+            parse_results=parse_results,
+            scenario_id=scenario_id,
+            out_path=base_dir / "precondition_gap.json",
+        )
+
+        # Para precondiciones con gaps, añadir a missing
+        for r in parse_results:
+            for u in r.unresolved:
+                missing.append({
+                    "tipo": "precondition_unresolved",
+                    "recurso": u[:120],
+                    "hint": (
+                        "Precondición no pudo resolverse automáticamente. "
+                        "Verificar en precondition_gap.json. "
+                        "Usar `python domain_glossary.py --lookup \"<término>\"` para diagnosticar."
+                    ),
+                })
+    except Exception as exc:
+        logger.warning(
+            "precondition_checker: _run_parsed_preconditions failed for %s: %s",
+            scenario_id, exc,
+        )
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────

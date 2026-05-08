@@ -46,7 +46,10 @@ from sql_query_guard import validate as guard_validate, WHITELISTED_TABLES
 
 logger = logging.getLogger("stacky.qa_uat.data_resolver")
 
-_TOOL_VERSION = "1.0.0"
+_TOOL_VERSION = "1.1.0"
+# 1.1.0 — Fase 2: FIELD_HINTS fallback now uses dynamic pipeline from
+# precondition_parser + sql_builder when field is not in static FIELD_HINTS.
+# Static FIELD_HINTS kept for backward compat with existing data_request.json files.
 
 # ── DB configuration ─────────────────────────────────────────────────────────
 _DB_SERVER_DEFAULT = "aisbddev02.cloud.ais-int.net"
@@ -322,13 +325,23 @@ def resolve_fields(
                     field_name, hint_query,
                 )
             else:
-                unresolved.append({
-                    "field": field_name,
-                    "reason": "No hint_query available and field not in FIELD_HINTS. Manual resolution required.",
-                    "description": description,
-                    "in_case_ids": in_cases,
-                })
-                continue
+                # Fase 2: Try dynamic resolution via precondition_parser + sql_builder
+                dynamic_query = _try_dynamic_resolution(field_name, description)
+                if dynamic_query:
+                    hint_query = dynamic_query
+                    hint_tables = []
+                    logger.debug(
+                        "data_resolver: field %r — dynamic resolution: %s",
+                        field_name, hint_query[:80],
+                    )
+                else:
+                    unresolved.append({
+                        "field": field_name,
+                        "reason": "No hint_query available and field not in FIELD_HINTS. Manual resolution required.",
+                        "description": description,
+                        "in_case_ids": in_cases,
+                    })
+                    continue
 
         # Skip comment-only hints (manual-resolution markers from FIELD_HINTS)
         if hint_query.strip().startswith("--"):
@@ -421,6 +434,57 @@ def resolve_fields(
 def get_field_hint(field_name: str) -> Optional[tuple[str, list[str]]]:
     """Return (hint_query, hint_tables) for a known field, or None."""
     return FIELD_HINTS.get(field_name)
+
+
+# ── Fase 2: Dynamic resolution via precondition_parser + sql_builder ─────────
+
+def _try_dynamic_resolution(field_name: str, description: str) -> Optional[str]:
+    """
+    Intenta construir una hint_query dinámica desde el nombre del campo y
+    su descripción, usando el pipeline precondition_parser → sql_builder.
+
+    Retorna la query SQL como string, o None si no se puede construir.
+
+    Esta función es el puente entre el protocolo legacy de data_request.json
+    (que usa field_name + FIELD_HINTS) y el pipeline nuevo (Fase 2).
+    """
+    try:
+        from precondition_parser import parse
+        from sql_builder import build_check_query, build_data_lookup_query
+    except ImportError:
+        return None
+
+    # Intentar con la descripción primero (más contexto), luego con el field_name
+    search_texts = []
+    if description and description.strip():
+        search_texts.append(description.strip())
+    if field_name:
+        # Convertir field_name estilo "TABLA_COLUMNA" o "CORREDOR_ID" en texto legible
+        readable = field_name.replace("_", " ").lower()
+        search_texts.append(readable)
+
+    for text in search_texts:
+        try:
+            result = parse(text, use_llm=False)  # sin LLM en fallback sync
+            if result.conditions:
+                cond = result.conditions[0]
+                # Intentar construir data lookup query (para obtener un valor real)
+                q = build_data_lookup_query(
+                    table=cond.table,
+                    column=cond.column,
+                    extra_conditions=[cond.to_sql_condition()] if cond.condition else None,
+                    order_random=True,
+                )
+                if q:
+                    logger.debug(
+                        "data_resolver: _try_dynamic_resolution(%r) → %s",
+                        field_name, q[:80],
+                    )
+                    return q
+        except Exception as exc:
+            logger.debug("data_resolver: dynamic resolution failed for %r: %s", field_name, exc)
+
+    return None
 
 
 # ── DB execution ─────────────────────────────────────────────────────────────

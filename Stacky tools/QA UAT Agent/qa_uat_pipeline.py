@@ -1768,6 +1768,169 @@ def _run_pipeline_stages(
             logger.warning("data_readiness_check failed (non-fatal): %s", _dr_exc)
             stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_dr_exc}"}
 
+    # ── Stage S8b-contract: data_contract_compiler (Sprint 8b) ──────────────
+    # Compile a data contract for each scenario: extract what data is needed
+    # BEFORE opening the browser.  Non-blocking — the contract is used by the
+    # next stage (data_readiness_v2) and recorded as an evidence artifact.
+    # Activates when compiled scenarios are available (compiler stage ran).
+    stage = "data_contract_compile"
+    _sc_scenarios_for_contract = (
+        (compiler_result.get("scenarios") or [])
+        if "compiler" not in skip_stages else []
+    )
+    _data_contracts: list = []  # list of DataContractResult objects
+    if stage in skip_stages or not _sc_scenarios_for_contract:
+        stages[stage] = {"ok": True, "skipped": True,
+                         "reason": "no_compiled_scenarios"}
+    else:
+        try:
+            from uat_data_contract_compiler import compile_all_contracts as _compile_contracts
+            _t0_dcc = _exec_log_stage_start(exec_log, stage)
+            _data_contracts = _compile_contracts(
+                scenarios=_sc_scenarios_for_contract,
+                ticket_id=ticket_id,
+                exec_logger=exec_log,
+                evidence_dir=evidence_dir,
+                run_id=str(ticket_id),
+            )
+            _dcc_total = len(_data_contracts)
+            _dcc_with_reqs = sum(1 for c in _data_contracts if c.requirements)
+            _dcc_blocking = sum(len(c.blocking_requirements) for c in _data_contracts)
+            stages[stage] = {
+                "ok": True,
+                "skipped": False,
+                "contracts_compiled": _dcc_total,
+                "contracts_with_requirements": _dcc_with_reqs,
+                "total_blocking_requirements": _dcc_blocking,
+            }
+            _exec_log_stage_end(exec_log, stage, _t0_dcc, ok=True, summary=stages[stage])
+            logger.info(
+                "Sprint 8b: data contracts compiled: total=%d with_reqs=%d blocking=%d",
+                _dcc_total, _dcc_with_reqs, _dcc_blocking,
+            )
+        except ImportError:
+            logger.debug("uat_data_contract_compiler unavailable — skipping Sprint 8b stage")
+            stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+        except Exception as _dcc_exc:  # noqa: BLE001
+            logger.warning("data_contract_compile failed (non-fatal): %s", _dcc_exc)
+            stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_dcc_exc}"}
+
+    # ── Stage S8b-readiness: data_readiness_v2 (Sprint 8b) ──────────────────
+    # Check whether the data contracts compiled above are satisfiable.
+    # If any BLOCKING requirement is MISSING, the stage records resolution_options
+    # so the operator or Data Resolution Broker (Sprint 9) knows what to do next.
+    #
+    # Behaviour: NON-BLOCKING by default — the stage records missing requirements
+    # as evidence but does NOT block the pipeline unless env var
+    # QA_UAT_BLOCK_ON_MISSING_DATA_CONTRACT=true is set (operator opt-in).
+    # This avoids false positives when DB is unavailable in CI environments.
+    stage = "data_readiness_v2"
+    _block_on_missing_contract = (
+        os.environ.get("QA_UAT_BLOCK_ON_MISSING_DATA_CONTRACT", "false").lower() == "true"
+    )
+    if stage in skip_stages or not _data_contracts:
+        stages[stage] = {"ok": True, "skipped": True,
+                         "reason": "no_data_contracts"}
+    else:
+        try:
+            from data_readiness_checker import check_readiness as _check_readiness_v2
+            _t0_drv2 = _exec_log_stage_start(exec_log, stage)
+            _drv2_results: list = []
+            _drv2_missing_count = 0
+            _drv2_blocking_missing_count = 0
+
+            for _dc in _data_contracts:
+                if not _dc.requirements:
+                    continue
+                _drv2_res = _check_readiness_v2(
+                    contract=_dc,
+                    exec_logger=exec_log,
+                    evidence_dir=evidence_dir,
+                    run_id=str(ticket_id),
+                )
+                _drv2_results.append({
+                    "scenario_id": _drv2_res.scenario_id,
+                    "ready": _drv2_res.ready,
+                    "decision": _drv2_res.decision,
+                    "blocking_missing_count": _drv2_res.blocking_missing_count,
+                    "missing": [m.to_dict() for m in _drv2_res.missing],
+                    "artifact_path": _drv2_res.artifact_path,
+                })
+                _drv2_missing_count += len(_drv2_res.missing)
+                _drv2_blocking_missing_count += _drv2_res.blocking_missing_count
+
+            stages[stage] = {
+                "ok": True,
+                "skipped": False,
+                "scenarios_checked": len(_drv2_results),
+                "missing_count": _drv2_missing_count,
+                "blocking_missing_count": _drv2_blocking_missing_count,
+                "results": _drv2_results,
+            }
+            _exec_log_stage_end(exec_log, stage, _t0_drv2, ok=True, summary=stages[stage])
+
+            if _drv2_blocking_missing_count > 0:
+                logger.warning(
+                    "Sprint 8b: data_readiness_v2 found %d blocking missing requirement(s) "
+                    "across %d scenario(s). Resolution options are in evidence artifacts.",
+                    _drv2_blocking_missing_count, len(_drv2_results),
+                )
+                _exec_log_event(exec_log, "data_missing_resolution_required", {
+                    "blocking_missing_count": _drv2_blocking_missing_count,
+                    "scenarios": [
+                        {"scenario_id": r["scenario_id"],
+                         "missing": r["missing"]}
+                        for r in _drv2_results if r["blocking_missing_count"] > 0
+                    ],
+                    "human_action": (
+                        "Review data_readiness_v2_*.json in evidence directory. "
+                        "For each missing requirement, choose from resolution_options: "
+                        "ASK_USER_FOR_VALUE | RUN_DISCOVERY_QUERY | GENERATE_SQL_SEED | MARK_MANUAL_REVIEW"
+                    ),
+                })
+                # Optionally block the pipeline (operator opt-in only)
+                if _block_on_missing_contract:
+                    _drv2_fail = {
+                        "ok": False,
+                        "verdict": "BLOCKED",
+                        "category": "DATA",
+                        "reason": "DATA_CONTRACT_MISSING_REQUIREMENTS",
+                        "error": "data_contract_missing_requirements",
+                        "failed_stage": "data_readiness_v2",
+                        "message": (
+                            f"Sprint 8b data readiness check: {_drv2_blocking_missing_count} "
+                            "blocking requirement(s) cannot be satisfied. "
+                            "Check data_readiness_v2_*.json for resolution options."
+                        ),
+                        "human_action_required": (
+                            "Provide required data or generate a SQL seed proposal. "
+                            "See resolution_options in data_readiness_v2_*.json artifacts."
+                        ),
+                        "data_readiness_v2_results": _drv2_results,
+                    }
+                    if exec_log is not None:
+                        try:
+                            exec_log.pipeline_verdict(
+                                verdict="BLOCKED",
+                                category="DATA",
+                                reason="DATA_CONTRACT_MISSING_REQUIREMENTS",
+                                failed_stage="data_readiness_v2",
+                                confidence=1.0,
+                                evidence_refs=["data_readiness_v2"],
+                                human_action_required=_drv2_fail["human_action_required"],
+                            )
+                            exec_log.session_end(_drv2_fail)
+                            exec_log.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+                    return _build_output(ticket_id, stages, _drv2_fail, started)
+        except ImportError:
+            logger.debug("data_readiness_checker unavailable — skipping Sprint 8b readiness check")
+            stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+        except Exception as _drv2_exc:  # noqa: BLE001
+            logger.warning("data_readiness_v2 failed (non-fatal): %s", _drv2_exc)
+            stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_drv2_exc}"}
+
     # ── Stage 4: generator ───────────────────────────────────────────────────
     stage = "generator"
     tests_dir = evidence_dir / "tests"

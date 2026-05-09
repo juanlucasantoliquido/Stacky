@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "data_contract/1.0",
+  "title": "UATDataContract",
+  "description": "Schema for data_contract.json artifacts produced by uat_data_contract_compiler.py (Sprint 8b). Captures what data a UAT scenario needs before it can be executed.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "data_contract_version",
+    "compiled_at",
+    "requirements"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "data_contract/1.0",
+      "description": "Schema version identifier"
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Scenario identifier (e.g. RF-007-CA-01)"
+    },
+    "ticket_id": {
+      "type": ["integer", "string"],
+      "description": "ADO work item ID or freeform run_id"
+    },
+    "feature": {
+      "type": ["string", "null"],
+      "description": "Functional feature name (e.g. Lista Obligaciones)"
+    },
+    "screen": {
+      "type": ["string", "null"],
+      "description": "Target screen filename (e.g. FrmDetalleClie.aspx)"
+    },
+    "data_contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Contract version (semver major.minor)"
+    },
+    "compiled_at": {
+      "type": "string",
+      "description": "UTC ISO 8601 timestamp when this contract was compiled"
+    },
+    "compiled_by": {
+      "type": "string",
+      "description": "Module that produced this contract (e.g. uat_data_contract_compiler/1.0.0)"
+    },
+    "requirements": {
+      "type": "array",
+      "description": "List of data requirements for this scenario",
+      "items": {
+        "$ref": "#/definitions/DataRequirement"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "Aggregated summary of requirements",
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "blocking": { "type": "integer", "minimum": 0 },
+        "entities": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "DataRequirement": {
+      "type": "object",
+      "required": [
+        "requirement_id",
+        "entity",
+        "alias",
+        "required_fields",
+        "constraints",
+        "candidate_sources",
+        "blocking"
+      ],
+      "properties": {
+        "requirement_id": {
+          "type": "string",
+          "pattern": "^data\\.req\\..+$",
+          "description": "Unique requirement identifier (e.g. data.req.cliente_con_obligaciones)",
+          "examples": ["data.req.cliente_con_obligaciones", "data.req.catalogo_corredor"]
+        },
+        "entity": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Entity name (e.g. Cliente, Obligacion, Catalogo)"
+        },
+        "alias": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Snake_case alias for the requirement (e.g. cliente_con_obligaciones)"
+        },
+        "required_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "DB column or field names that must exist and be non-null",
+          "examples": [["CLCOD"], ["CLCOD", "Estado"]]
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Human-readable constraints the data must satisfy",
+          "examples": [
+            ["cliente existe", "cliente tiene al menos una obligacion activa"]
+          ]
+        },
+        "candidate_sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "live_db_readonly",
+              "user_input",
+              "sql_seed",
+              "fixture_catalog",
+              "existing_safe"
+            ]
+          },
+          "minItems": 1,
+          "description": "Ordered list of preferred data sources (first = most preferred)"
+        },
+        "blocking": {
+          "type": "boolean",
+          "description": "If true, scenario cannot proceed without this requirement being satisfied"
+        },
+        "db_table": {
+          "type": ["string", "null"],
+          "description": "DB table where this entity lives (null if schema unknown)"
+        },
+        "db_key_column": {
+          "type": ["string", "null"],
+          "description": "Primary key column for the entity (null if schema unknown)"
+        },
+        "inferred_from": {
+          "type": "string",
+          "enum": [
+            "step_keywords",
+            "screen_ui_map",
+            "functional_context",
+            "technical_context",
+            "explicit_precondition"
+          ],
+          "description": "How this requirement was detected"
+        },
+        "schema_known": {
+          "type": "boolean",
+          "description": "Whether the DB schema for this entity is known. If false, SQL seed requires human mapping."
+        },
+        "notes": {
+          "type": ["string", "null"],
+          "description": "Optional human-readable notes for operators"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

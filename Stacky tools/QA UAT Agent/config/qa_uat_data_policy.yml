@@ -1,0 +1,193 @@
+# qa_uat_data_policy.yml — QA UAT Agent Data Policy (Sprint 8b)
+#
+# Policy-as-code for data management in UAT testing.
+# This file is the SINGLE SOURCE OF TRUTH for:
+#   - Which environments may receive seeded data
+#   - SQL safety requirements
+#   - Publishing gates (minimum confidence, oracle requirements)
+#   - Cleanup policies per environment
+#
+# PRINCIPLES:
+#   - Production is ALWAYS read-only and never a seeding target.
+#   - Every seed must be approved by a human operator before execution.
+#   - Every seed is rollback-first (ROLLBACK TRANSACTION is the default).
+#   - All seeded data is tagged with CreatedBy = 'QA_UAT_AGENT' and SeedRunId.
+#
+# MODIFICATION: Only modify this file via Pull Request. Changes take effect
+# on the NEXT pipeline run (no hot reload). Operators must approve seed
+# proposals regardless of policy settings — human_approval is non-negotiable.
+#
+# Last updated: 2026-05-09
+# Version: 1.0.0
+
+---
+version: "1.0.0"
+updated_at: "2026-05-09"
+updated_by: "StackyToolArchitect/Sprint8b"
+
+# ── Environment-level policy ──────────────────────────────────────────────────
+#
+# Environments must match DB_NAME() patterns used in SQL guard checks.
+# DEV: local developer environments or CI ephemeral DBs
+# QA:  shared QA environment (pre-UAT)
+# UAT: formal UAT environment — user-supplied data only, no seed
+# PROD: production — no seed, no DML, read-only queries only
+
+environments:
+  DEV:
+    allow_seed: true
+    require_human_approval: true       # even DEV requires human sign-off
+    allow_dml: true                    # only if allow_seed=true and human_approved
+    allow_user_supplied_existing_data: true
+    default_cleanup_policy: after_run  # options: after_run, after_release, manual, never
+    max_seed_rows_per_table: 50        # hard cap per INSERT batch
+    notes: "DEV seeds are allowed but still require human approval and are auto-cleaned."
+
+  QA:
+    allow_seed: true
+    require_human_approval: true
+    allow_dml: true
+    allow_user_supplied_existing_data: true
+    default_cleanup_policy: after_run
+    max_seed_rows_per_table: 20
+    notes: "QA seeds require explicit human approval. Max 20 rows per table."
+
+  UAT:
+    allow_seed: false
+    require_human_approval: true
+    allow_dml: false
+    allow_user_supplied_existing_data: true
+    default_cleanup_policy: manual
+    notes: "UAT environment uses existing data only. No seed scripts allowed."
+
+  PROD:
+    allow_seed: false
+    require_human_approval: false      # irrelevant — seed is blocked regardless
+    allow_dml: false
+    allow_user_supplied_existing_data: false
+    block_all_write_operations: true
+    default_cleanup_policy: never
+    notes: >
+      PRODUCTION IS READ-ONLY. Any attempt to execute DML or seed data
+      in PROD is a hard block. sql_safety_validator enforces this via
+      DB_NAME() LIKE '%PROD%' guard inside every generated script.
+
+# ── SQL safety requirements ───────────────────────────────────────────────────
+#
+# These rules are enforced by sql_safety_validator.py (Sprint 10).
+# A seed proposal that violates any of these rules is rejected before
+# human approval is even requested.
+
+sql_safety:
+  require_transaction: true              # must have BEGIN TRANSACTION
+  require_rollback_default: true         # ROLLBACK must be the un-commented action
+  require_seed_run_id: true              # must declare @SeedRunId variable
+  require_prod_guard: true              # must contain IF DB_NAME() LIKE '%PROD%' RAISERROR block
+  require_verification_select: true     # must have a verification SELECT after INSERTs
+  require_seed_marker_in_inserts: true  # CreatedBy='QA_UAT_AGENT' in every INSERT
+
+  # Keywords that are ALWAYS forbidden in seed scripts (no exceptions)
+  forbid_keywords:
+    - "DROP"
+    - "TRUNCATE"
+    - "ALTER"
+    - "DISABLE TRIGGER"
+    - "ENABLE TRIGGER"
+    - "sp_executesql"
+    - "xp_cmdshell"
+    - "OPENROWSET"
+    - "BULK INSERT"
+
+  # DELETE is only allowed when the WHERE clause contains the SeedRunId marker
+  allow_delete_only_with_seed_marker: true
+
+  # UPDATE is only allowed when the WHERE clause contains the SeedRunId marker
+  allow_update_only_with_seed_marker: true
+
+  # COMMIT must be commented-out by default in generated scripts
+  # (operator must manually un-comment after review)
+  commit_must_be_commented: true
+
+  # Max number of INSERT statements per seed script
+  max_inserts_per_script: 100
+
+# ── Cleanup policy definitions ────────────────────────────────────────────────
+#
+# cleanup_manager.py (Sprint 11) will enforce these policies.
+
+cleanup_policies:
+  after_run:
+    description: "Delete seeded data immediately after the UAT run completes."
+    trigger: "run_end"
+    requires_human_approval: false    # auto-cleanup is safe since data was only for the run
+    rollback_available: false         # cleanup cannot be rolled back after execution
+
+  after_release:
+    description: "Delete seeded data after the release cycle completes."
+    trigger: "release_event"
+    requires_human_approval: true
+    rollback_available: false
+
+  manual:
+    description: "Operator manually triggers cleanup."
+    trigger: "human_action"
+    requires_human_approval: true
+    rollback_available: false
+
+  never:
+    description: "Data is never automatically cleaned up (PROD-only, read-only data)."
+    trigger: null
+    requires_human_approval: false
+    rollback_available: false
+
+# ── Publishing gates ──────────────────────────────────────────────────────────
+#
+# A UAT run result may only be published to ADO/Jira/Mantis when ALL gates pass.
+# Gates are checked by test_confidence_scorer.py (Sprint 14).
+
+publish_gates:
+  # Minimum test confidence score [0-100] required before publishing
+  min_test_confidence: 85
+
+  # Requires at least one oracle to validate behavior
+  require_oracle: true
+
+  # Requires the data lineage chain to be complete
+  require_data_lineage: false          # relaxed in Sprint 8b; enforced from Sprint 14
+
+  # For scenarios with after_run cleanup policy, the cleanup result must be present
+  require_cleanup_result_for_after_run: false  # relaxed until Sprint 11
+
+  # A passing run where GRID_EMPTY was detected and NOT resolved should not be published
+  block_publish_on_unresolved_grid_empty: true
+
+  # A passing run where data was UNVERIFIED (DB unavailable) may still publish
+  # but confidence score is capped at 70%
+  unverified_data_confidence_cap: 70
+
+# ── Data request timeout ──────────────────────────────────────────────────────
+
+data_request:
+  # Hours to wait for human to provide data before escalating
+  timeout_hours: 24
+
+  # After timeout_hours without response, escalate via...
+  escalation_action: "mark_manual_review"  # options: mark_manual_review, block_run, skip_scenario
+
+# ── Env var overrides ─────────────────────────────────────────────────────────
+#
+# These env vars take precedence over this config file at runtime.
+# Document expected values here for operator reference.
+
+env_var_overrides:
+  QA_UAT_ALLOW_SQL_SEED: "false"                    # master kill-switch
+  QA_UAT_ALLOW_SQL_SEED_ENVIRONMENTS: "DEV,QA"
+  QA_UAT_SEED_REQUIRE_HUMAN_APPROVAL: "true"
+  QA_UAT_SEED_DEFAULT_ROLLBACK: "true"
+  QA_UAT_SEED_WRITER_DB_URL: ""                     # write-capable connection (empty = disabled)
+  QA_UAT_READONLY_DB_URL: ""                        # read-only connection
+  QA_UAT_MIN_TEST_CONFIDENCE_FOR_PUBLISH: "85"
+  QA_UAT_REQUIRE_ORACLE_FOR_P0: "true"
+  QA_UAT_CLEANUP_POLICY_DEFAULT: "after_run"
+  QA_UAT_BLOCK_PROD_DML: "true"
+  QA_UAT_DATA_REQUEST_TIMEOUT_HOURS: "24"

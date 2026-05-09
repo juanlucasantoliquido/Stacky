@@ -1879,6 +1879,102 @@ def _run_pipeline_stages(
             # Re-persist the final runner_output after all replan rounds
             _persist_json(evidence_dir / "runner_output.json", runner_result)
 
+    # ── Stage 6-triage: failure_triage (Sprint 6 — post-runner) ────────────
+    # Runs for all non-PASS verdicts. PASS runs get a lightweight triage confirming
+    # the verdict. Non-fatal — a triage failure never blocks downstream stages.
+    _triage_result: Optional[dict] = None
+    try:
+        from failure_triage import run_failure_triage as _run_triage
+        _runner_verdict = runner_result.get("verdict", "")
+        _runner_classification = runner_result.get("runner_summary")
+        # Build execution_log list from JSONL file (if available)
+        _exec_log_events: list = []
+        _exec_log_path = evidence_dir / "execution.jsonl"
+        if _exec_log_path.is_file():
+            try:
+                for _line in _exec_log_path.read_text(encoding="utf-8").splitlines():
+                    _line = _line.strip()
+                    if _line:
+                        try:
+                            import json as _json_inner
+                            _exec_log_events.append(_json_inner.loads(_line))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        _triage = _run_triage(
+            ticket_id=ticket_id if isinstance(ticket_id, int) else 0,
+            run_id=str(ticket_id),
+            result_json=runner_result,
+            execution_log=_exec_log_events,
+            runner_classification=_runner_classification,
+            exec_logger=exec_log,
+            evidence_dir=str(evidence_dir),
+        )
+        _triage_result = _triage.to_dict()
+        stages["triage"] = {
+            "ok": True,
+            "skipped": False,
+            "verdict": _triage.verdict,
+            "category": _triage.category,
+            "reason": _triage.reason,
+            "confidence": _triage.confidence,
+            "owner": _triage.owner,
+            "human_approval_required": _triage.human_approval_required,
+            "artifact_path": _triage.artifact_path,
+        }
+        # Sprint 6 — selector_healing_advisor for NAV/GEN BLOCKED runs
+        if _triage.verdict == "BLOCKED" and _triage.category in ("NAV", "GEN"):
+            try:
+                from selector_healing_advisor import suggest_selector_healing as _suggest_healing
+                from selector_healing_advisor import emit_healing_suggestion as _emit_healing
+                # Find the screen from triage evidence or ticket result
+                _heal_screen = (
+                    _extract_screen_from_ticket(ticket_result) or "unknown_screen"
+                )
+                # Find missing alias from runner_result or triage
+                _missing_alias = runner_result.get("reason", _triage.reason or "unknown_alias")
+                _ui_map_file = str(evidence_dir.parent / "cache" / "ui_maps" / f"{_heal_screen}.json")
+                _heal = _suggest_healing(
+                    screen=_heal_screen,
+                    missing_alias=_missing_alias,
+                    ui_map_path=_ui_map_file,
+                    execution_log=_exec_log_events,
+                )
+                if exec_log is not None:
+                    _emit_healing(exec_log, _heal)
+                stages["triage"]["healing_suggestion"] = {
+                    "candidate_alias": _heal.candidate_alias,
+                    "confidence": _heal.confidence,
+                    "status": _heal.status,  # always "suggested"
+                    "requires_human_approval": _heal.requires_human_approval,  # always True
+                }
+            except ImportError:
+                pass
+            except Exception as _heal_exc:
+                logger.debug("selector_healing_advisor failed (non-fatal): %s", _heal_exc)
+
+        # Sprint 6 — when triage confidence >= 0.85, prefer triage verdict over runner
+        if _triage.confidence >= 0.85 and _triage.verdict != runner_result.get("verdict"):
+            logger.info(
+                "Sprint 6: triage overrides runner verdict %s→%s (confidence=%.2f)",
+                runner_result.get("verdict"), _triage.verdict, _triage.confidence,
+            )
+            runner_result = {
+                **runner_result,
+                "verdict": _triage.verdict,
+                "category": _triage.category,
+                "reason": _triage.reason,
+                "_triage_override": True,
+            }
+
+    except ImportError:
+        logger.debug("failure_triage module unavailable — skipping Sprint 6 triage stage")
+        stages["triage"] = {"ok": True, "skipped": True, "reason": "module_unavailable"}
+    except Exception as _triage_exc:
+        logger.warning("failure_triage stage failed (non-fatal): %s", _triage_exc)
+        stages["triage"] = {"ok": True, "skipped": True, "reason": f"triage_error: {_triage_exc}"}
+
     # ── Stage 5b: annotator (non-fatal) ─────────────────────────────────────
     stage = "annotator"
     if stage not in skip_stages:
@@ -2349,6 +2445,26 @@ def _summarise_generator(r: dict) -> dict:
         base["error"] = r.get("error")
         base["message"] = r.get("message")
     return base
+
+
+def _extract_screen_from_ticket(ticket_result: dict) -> Optional[str]:
+    """Extract the first .aspx screen name from a ticket result dict (Sprint 6 helper)."""
+    try:
+        nav_path = ticket_result.get("navigation_path") or []
+        for item in nav_path:
+            if isinstance(item, str) and item.endswith(".aspx"):
+                return item
+            if isinstance(item, dict):
+                s = item.get("screen") or item.get("url") or ""
+                if s.endswith(".aspx"):
+                    return s
+        # Fallback: search all string values
+        for val in str(ticket_result).split():
+            if val.endswith(".aspx"):
+                return val.strip("\"'[](){},")
+    except Exception:
+        pass
+    return None
 
 
 def _summarise_runner(r: dict) -> dict:

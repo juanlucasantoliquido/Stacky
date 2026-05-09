@@ -1,0 +1,28 @@
+{
+  "eval_id": "ticket_120_env_mismatch",
+  "description": "Ticket 120 — fingerprint check detectó build activo != expected, runner nunca inició",
+  "input": {
+    "ticket_id": 120,
+    "run_id": "fixture-run-120-env-mismatch",
+    "result_json": {
+      "ok": false,
+      "verdict": "BLOCKED",
+      "category": "ENV",
+      "reason": "DEPLOYMENT_MISMATCH",
+      "failed_stage": "deployment_fingerprint_check"
+    },
+    "execution_log": [
+      {"event": "session_start", "ticket_id": 120},
+      {"event": "deployment_fingerprint_check", "decision": "BLOCKED", "reason": "DEPLOYMENT_MISMATCH", "expected": {"build_id": "1.2.3"}, "active": {"build_id": "1.1.9"}},
+      {"event": "pipeline_verdict_decision", "verdict": "BLOCKED", "category": "ENV", "reason": "DEPLOYMENT_MISMATCH"}
+    ],
+    "runner_classification": null
+  },
+  "expected": {
+    "verdict": "BLOCKED",
+    "category": "ENV",
+    "reason": "DEPLOYMENT_MISMATCH",
+    "owner": "devops",
+    "min_confidence": 0.90
+  }
+}

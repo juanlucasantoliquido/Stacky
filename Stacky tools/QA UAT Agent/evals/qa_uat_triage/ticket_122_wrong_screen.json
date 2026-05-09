@@ -1,0 +1,28 @@
+{
+  "eval_id": "ticket_122_wrong_screen",
+  "description": "Ticket 122 RF-008 — screen_detector devolvió baja confianza (ambigüedad de pantalla)",
+  "input": {
+    "ticket_id": 122,
+    "run_id": "fixture-run-122-wrong-screen",
+    "result_json": {
+      "ok": false,
+      "verdict": "BLOCKED",
+      "category": "PIP",
+      "reason": "LOW_CONFIDENCE_SCREEN_DETECTION",
+      "failed_stage": "screen_detection"
+    },
+    "execution_log": [
+      {"event": "session_start", "ticket_id": 122},
+      {"event": "screen_detection_result", "data": {"reason": "LOW_CONFIDENCE_SCREEN_DETECTION", "confidence": 0.45, "screens": ["FrmAgenda.aspx", "FrmDetalleClie.aspx"]}},
+      {"event": "pipeline_verdict_decision", "verdict": "BLOCKED", "category": "PIP", "reason": "LOW_CONFIDENCE_SCREEN_DETECTION"}
+    ],
+    "runner_classification": null
+  },
+  "expected": {
+    "verdict": "BLOCKED",
+    "category": "PIP",
+    "reason": "LOW_CONFIDENCE_SCREEN_DETECTION",
+    "owner": "qa_automation",
+    "min_confidence": 0.85
+  }
+}

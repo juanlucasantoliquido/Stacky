@@ -1,0 +1,40 @@
+{
+  "eval_id": "ticket_116_app_fail",
+  "description": "Ticket 116 — Runner completó, assertion de negocio falló (contador esperado vs actual)",
+  "input": {
+    "ticket_id": 116,
+    "run_id": "fixture-run-116-app-fail",
+    "result_json": {
+      "ok": false,
+      "verdict": "FAIL",
+      "category": "APP",
+      "reason": "ASSERTION_FAILED",
+      "failed_stage": "runner",
+      "pass": 3,
+      "fail": 1,
+      "blocked": 0,
+      "total": 4
+    },
+    "execution_log": [
+      {"event": "session_start", "ticket_id": 116},
+      {"event": "screen_detection_result", "data": {"screens": ["FrmDetalleClie.aspx"], "confidence": 0.95}},
+      {"event": "runner_summary", "verdict": "FAIL", "category": "APP", "reason": "ASSERTION_FAILED", "total": 4, "passed": 3, "failed": 1},
+      {"event": "pipeline_verdict_decision", "verdict": "FAIL", "category": "APP", "reason": "ASSERTION_FAILED"}
+    ],
+    "runner_classification": {
+      "verdict": "FAIL",
+      "category": "APP",
+      "reason": "ASSERTION_FAILED",
+      "total": 4,
+      "passed": 3,
+      "failed": 1
+    }
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "category": "APP",
+    "reason": "ASSERTION_FAILED",
+    "owner": "developer",
+    "min_confidence": 0.85
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "eval_id": "ticket_119_pass",
+  "description": "Ticket 119 — Todos los tests pasaron, 5/5",
+  "input": {
+    "ticket_id": 119,
+    "run_id": "fixture-run-119-pass",
+    "result_json": {
+      "ok": true,
+      "verdict": "PASS",
+      "category": null,
+      "reason": null,
+      "pass": 5,
+      "fail": 0,
+      "blocked": 0,
+      "total": 5
+    },
+    "execution_log": [
+      {"event": "session_start", "ticket_id": 119},
+      {"event": "screen_detection_result", "data": {"screens": ["FrmDetalleClie.aspx"], "confidence": 0.97}},
+      {"event": "runner_summary", "verdict": "PASS", "category": null, "reason": null, "total": 5, "passed": 5, "failed": 0},
+      {"event": "pipeline_verdict_decision", "verdict": "PASS", "category": null, "reason": null}
+    ],
+    "runner_classification": {
+      "verdict": "PASS",
+      "category": null,
+      "reason": null,
+      "total": 5,
+      "passed": 5,
+      "failed": 0
+    }
+  },
+  "expected": {
+    "verdict": "PASS",
+    "category": null,
+    "owner": "qa_automation",
+    "min_confidence": 0.95
+  }
+}

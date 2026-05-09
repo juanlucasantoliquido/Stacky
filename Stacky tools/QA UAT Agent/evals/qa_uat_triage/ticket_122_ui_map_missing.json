@@ -1,0 +1,28 @@
+{
+  "eval_id": "ticket_122_ui_map_missing",
+  "description": "Ticket 122 RF-008 — UI map de FrmDetalleClie.aspx ausente",
+  "input": {
+    "ticket_id": 122,
+    "run_id": "fixture-run-122-uimap-missing",
+    "result_json": {
+      "ok": false,
+      "verdict": "BLOCKED",
+      "category": "GEN",
+      "reason": "UI_MAP_MISSING",
+      "failed_stage": "ui_map"
+    },
+    "execution_log": [
+      {"event": "session_start", "ticket_id": 122},
+      {"event": "ui_map_cache_result", "screen": "FrmDetalleClie.aspx", "cache_hit": false},
+      {"event": "pipeline_verdict_decision", "verdict": "BLOCKED", "category": "GEN", "reason": "UI_MAP_MISSING"}
+    ],
+    "runner_classification": null
+  },
+  "expected": {
+    "verdict": "BLOCKED",
+    "category": "GEN",
+    "reason": "UI_MAP_MISSING",
+    "owner": "qa_automation",
+    "min_confidence": 0.90
+  }
+}

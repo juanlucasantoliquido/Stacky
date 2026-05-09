@@ -1,0 +1,29 @@
+{
+  "eval_id": "ticket_120_grid_empty",
+  "description": "Ticket 120 — fingerprint OK, data_readiness falló por grilla vacía",
+  "input": {
+    "ticket_id": 120,
+    "run_id": "fixture-run-120-grid-empty",
+    "result_json": {
+      "ok": false,
+      "verdict": "BLOCKED",
+      "category": "DATA",
+      "reason": "GRID_EMPTY",
+      "failed_stage": "data_readiness_check"
+    },
+    "execution_log": [
+      {"event": "session_start", "ticket_id": 120},
+      {"event": "deployment_fingerprint_check", "decision": "ALLOW"},
+      {"event": "data_readiness_check", "blocked": 1, "total": 1, "reasons": ["GRID_EMPTY"]},
+      {"event": "pipeline_verdict_decision", "verdict": "BLOCKED", "category": "DATA", "reason": "GRID_EMPTY"}
+    ],
+    "runner_classification": null
+  },
+  "expected": {
+    "verdict": "BLOCKED",
+    "category": "DATA",
+    "reason": "GRID_EMPTY",
+    "owner": "data_owner",
+    "min_confidence": 0.90
+  }
+}

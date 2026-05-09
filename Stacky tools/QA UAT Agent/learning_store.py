@@ -379,3 +379,120 @@ class LearningStore:
             except Exception:
                 pass
             self._conn = None
+
+
+# ── Runtime application helper ────────────────────────────────────────────────
+
+def apply_approved_learnings_to_selectors(
+    ticket_id: Any,
+    run_id: str,
+    discovered_selectors_path: Optional[Path] = None,
+    db_path: Optional[Path] = None,
+) -> dict:
+    """Apply approved selector_fix learnings to the discovered_selectors.json cache.
+
+    Reads all 'approved' learnings with category='selector_fix' for the given
+    ticket_id and merges their evidence selectors into cache/discovered_selectors.json.
+    This way the next generator run benefits from human-approved selector overrides
+    without manual file editing.
+
+    Parameters
+    ----------
+    ticket_id : int | str
+        Ticket whose approved learnings to apply.
+    run_id : str
+        Current run_id — used to record the application in applied_learnings.
+    discovered_selectors_path : Path, optional
+        Override for tests. Defaults to cache/discovered_selectors.json.
+    db_path : Path, optional
+        Override for tests. Defaults to data/learning_store.sqlite.
+
+    Returns
+    -------
+    dict
+        {
+            "ok": bool,
+            "applied_count": int,   # number of selector entries merged
+            "learning_ids": [...],  # learnings whose evidence was merged
+            "skipped": [...],       # learnings with no usable selector evidence
+        }
+    """
+    _disc_path = discovered_selectors_path or (
+        Path(__file__).parent / "cache" / "discovered_selectors.json"
+    )
+    store = LearningStore(db_path=db_path)
+    try:
+        approved = store.get_approved(ticket_id=ticket_id, category="selector_fix")
+        if not approved:
+            return {"ok": True, "applied_count": 0, "learning_ids": [], "skipped": []}
+
+        # Load existing discovered_selectors.json
+        if _disc_path.is_file():
+            try:
+                disc = json.loads(_disc_path.read_text(encoding="utf-8"))
+            except Exception:
+                disc = {"by_screen": {}}
+        else:
+            disc = {"by_screen": {}}
+        by_screen: dict = disc.setdefault("by_screen", {})
+
+        applied_ids: list[str] = []
+        skipped_ids: list[str] = []
+        merged_count = 0
+
+        for learning in approved:
+            lid = learning["learning_id"]
+            evidence = learning.get("evidence") or {}
+            # evidence schema for selector_fix:
+            #   { "screen": "FrmDetalleClie.aspx",
+            #     "alias": "GridObligaciones",
+            #     "selector": "#GridObligaciones",
+            #     "selector_tried": "#grid1" }   # optional
+            screen  = evidence.get("screen")
+            alias   = evidence.get("alias")
+            selector = evidence.get("selector")
+            if not (screen and alias and selector):
+                skipped_ids.append(lid)
+                continue
+
+            screen_map = by_screen.setdefault(screen, {})
+            # Only merge if selector differs from current (avoid no-op writes)
+            if screen_map.get(alias) == selector:
+                skipped_ids.append(lid)
+                continue
+
+            screen_map[alias] = selector
+            merged_count += 1
+            applied_ids.append(lid)
+            # Record in DB that this learning was applied
+            store.record_application(
+                learning_id=lid,
+                run_id=run_id,
+                ticket_id=ticket_id,
+                applied_by="apply_approved_learnings_to_selectors",
+                context={"screen": screen, "alias": alias},
+                outcome={"selector_merged": selector},
+            )
+
+        if merged_count > 0:
+            _disc_path.parent.mkdir(parents=True, exist_ok=True)
+            _disc_path.write_text(
+                json.dumps(disc, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            _py_logger.info(
+                "LearningStore: merged %d selector(s) from %d approved learning(s) "
+                "into %s for ticket %s",
+                merged_count, len(applied_ids), _disc_path, ticket_id,
+            )
+
+        return {
+            "ok": True,
+            "applied_count": merged_count,
+            "learning_ids": applied_ids,
+            "skipped": skipped_ids,
+        }
+    except Exception as exc:
+        _py_logger.warning("apply_approved_learnings_to_selectors failed: %s", exc)
+        return {"ok": False, "applied_count": 0, "learning_ids": [], "skipped": [], "error": str(exc)}
+    finally:
+        store.close()

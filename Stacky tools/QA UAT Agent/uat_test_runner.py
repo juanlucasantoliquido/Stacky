@@ -290,9 +290,12 @@ def _run_all_specs_once(
         env["STACKY_QA_UAT_SLOW_MO"] = "500"
     # Fase 1 — Forward navigation strategy to the Playwright subprocess.
     # navigate_webforms steps in generated specs read these vars.
-    env.setdefault("QA_NAV_STRATEGY",   os.environ.get("QA_NAV_STRATEGY",   "form_submit"))
-    env.setdefault("QA_NAV_RETRIES",    os.environ.get("QA_NAV_RETRIES",    "3"))
-    env.setdefault("QA_NAV_TIMEOUT_MS", os.environ.get("QA_NAV_TIMEOUT_MS", "45000"))
+    env.setdefault("QA_NAV_STRATEGY",        os.environ.get("QA_NAV_STRATEGY",        "form_submit"))
+    env.setdefault("QA_NAV_RETRIES",         os.environ.get("QA_NAV_RETRIES",         "3"))
+    env.setdefault("QA_NAV_TIMEOUT_MS",      os.environ.get("QA_NAV_TIMEOUT_MS",      "45000"))
+    # Fase 3: configurable timeouts for grid visibility and per-action waits.
+    env.setdefault("QA_UAT_GRID_TIMEOUT_MS",   os.environ.get("QA_UAT_GRID_TIMEOUT_MS",   "5000"))
+    env.setdefault("QA_UAT_ACTION_TIMEOUT_MS",  os.environ.get("QA_UAT_ACTION_TIMEOUT_MS",  "30000"))
     if extra_env:
         env.update(extra_env)
 
@@ -399,6 +402,10 @@ def _run_all_specs_once(
         exec_log=exec_log,
     )
 
+    # Fase 3: Collect nav_precheck_result.json files written by precheckGrid()
+    # TypeScript helper and emit them as structured events in execution.jsonl.
+    _collect_nav_precheck_events(evidence_out, ticket_id, exec_log)
+
     return runs, 1, login_count
 
 
@@ -475,7 +482,8 @@ def _parse_per_spec_results(
             status = "pass"
         elif any(s == "timedOut" for s in statuses):
             status = "blocked"
-            error_messages = [f"Timeout ({s})" for s in statuses if s == "timedOut"] + error_messages
+            # Fase 3: tag timed-out messages so _classify_blocked_reason picks PLAYWRIGHT_TIMEOUT.
+            error_messages = [f"[PLAYWRIGHT_TIMEOUT] Timeout ({s})" for s in statuses if s == "timedOut"] + error_messages
         elif any(s == "failed" for s in statuses):
             status = "fail"
         elif any(s == "interrupted" for s in statuses):
@@ -511,7 +519,8 @@ def _parse_per_spec_results(
         if status == "fail" and assertion_failures:
             result["assertion_failures"] = assertion_failures
         if status == "blocked":
-            result["reason"] = "RUNTIME_ERROR"
+            # Fase 3: classify blocked reason granularly instead of always RUNTIME_ERROR.
+            result["reason"] = _classify_blocked_reason(error_messages)
         if exec_log is not None:
             try:
                 exec_log.playwright_run_end(
@@ -569,6 +578,54 @@ def _collect_test_results(suite: dict) -> list:
     for sub in suite.get("suites", []):
         results.extend(_collect_test_results(sub))
     return results
+
+
+def _classify_blocked_reason(error_messages: list) -> str:
+    """Map Playwright error message text to a structured reason code.
+
+    Priority: PLAYWRIGHT_TIMEOUT > GRID_EMPTY > ROW_NOT_FOUND >
+              SELECTOR_NOT_FOUND > DEPLOYMENT_MISMATCH > RUNTIME_ERROR
+    """
+    combined = " ".join(str(m) for m in error_messages).lower()
+    if "playwright_timeout" in combined or "timeout" in combined:
+        return "PLAYWRIGHT_TIMEOUT"
+    if "grid_empty" in combined:
+        return "GRID_EMPTY"
+    if "row_not_found" in combined or "row not found" in combined:
+        return "ROW_NOT_FOUND"
+    if "selector_not_found" in combined or "locator resolved to 0" in combined:
+        return "SELECTOR_NOT_FOUND"
+    if "deployment" in combined or "version mismatch" in combined:
+        return "DEPLOYMENT_MISMATCH"
+    return "RUNTIME_ERROR"
+
+
+def _collect_nav_precheck_events(evidence_out: Path, ticket_id: int, exec_log) -> None:
+    """Read nav_precheck_result.json files written by precheckGrid() TypeScript helper.
+
+    Emits a nav_precheck_result event to the active ExecutionLogger for each file
+    found in evidence_out/<scenario_id>/nav_precheck_result.json.
+    Called after all specs finish so events appear in execution.jsonl regardless
+    of whether the spec passed or failed.
+    """
+    if exec_log is None:
+        return
+    for precheck_file in sorted(evidence_out.glob("*/nav_precheck_result.json")):
+        try:
+            data = json.loads(precheck_file.read_text(encoding="utf-8"))
+            scenario_id = precheck_file.parent.name
+            exec_log.event("nav_precheck_result", {
+                "ticket_id": ticket_id,
+                "scenario_id": scenario_id,
+                "grid_alias": data.get("grid_alias"),
+                "selector": data.get("selector"),
+                "row_count": data.get("row_count", 0),
+                "decision": data.get("verdict"),
+                "reason": data.get("reason"),
+                "elapsed_ms": data.get("elapsed_ms"),
+            })
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _blocked_result(spec_file: Path, scenario_id: str, reason: str) -> dict:

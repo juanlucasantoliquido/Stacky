@@ -9,6 +9,10 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 os.environ.setdefault("STACKY_LLM_BACKEND", "mock")
+# Fase 3: UI-map tests must run with the UI-map fallback path active.
+# In production, QA_UAT_REQUIRE_PLAYBOOK=true forces the playbook path.
+# Tests declare this explicitly so behavior is predictable.
+os.environ.setdefault("QA_UAT_REQUIRE_PLAYBOOK", "false")
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 TOOL_DIR = Path(__file__).parent.parent.parent

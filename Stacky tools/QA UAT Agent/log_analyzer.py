@@ -80,6 +80,8 @@ def main() -> None:
 
     p_summary = sub.add_parser("summary", help="Resumen de ejecuciones")
     _add_filters(p_summary)
+    p_summary.add_argument("--json", action="store_true",
+                            help="Emitir resultado como JSON (para CI/dashboard)")
 
     p_errors = sub.add_parser("errors", help="Listar errores y excepciones")
     _add_filters(p_errors)
@@ -120,7 +122,7 @@ def main() -> None:
     if args.command == "list":
         _cmd_list(sessions)
     elif args.command == "summary":
-        _cmd_summary(sessions)
+        _cmd_summary(sessions, as_json=getattr(args, "json", False))
     elif args.command == "errors":
         _cmd_errors(sessions, include_playwright=args.include_playwright)
     elif args.command == "llm-stats":
@@ -275,9 +277,14 @@ def _cmd_list(sessions: list[Session]) -> None:
     print(f"\n{len(sessions)} sessions total.")
 
 
-def _cmd_summary(sessions: list[Session]) -> None:
+def _cmd_summary(sessions: list[Session], as_json: bool = False) -> None:
     if not sessions:
-        print("No sessions found.")
+        if as_json:
+            print(json.dumps({"sessions": 0, "pass": 0, "fail_app": 0, "blocked": 0,
+                               "blocked_env": 0, "blocked_nav": 0, "blocked_pip": 0,
+                               "mixed": 0, "incomplete": 0, "unknown": 0, "non_pass": 0}))
+        else:
+            print("No sessions found.")
         return
 
     total = len(sessions)
@@ -286,13 +293,19 @@ def _cmd_summary(sessions: list[Session]) -> None:
     mixed_c = sum(1 for s in sessions if s.verdict == "MIXED")
     blocked_c = sum(1 for s in sessions if s.verdict == "BLOCKED")
     incomplete_c = sum(1 for s in sessions if s.verdict == "INCOMPLETE")
-    # FORENSIC-20260508 | FIX-5 | Sessions whose session_end.data.verdict is null/missing
-    # produce verdict="UNKNOWN" which fell through all conditionals and was invisible in
-    # the summary. Count them as FAIL so the operator sees there's something to investigate.
+    # FORENSIC-20260508 | FIX-5 | FASE2/OBS: UNKNOWN is its own column — not merged into
+    # FAIL — so operators can distinguish product failures from pipeline contract violations.
     unknown_c = sum(1 for s in sessions if s.verdict not in (
         "PASS", "FAIL", "MIXED", "BLOCKED", "INCOMPLETE"
     ))
-    fail_total = fail_c + unknown_c  # unknown counts as FAIL for summary purposes
+    non_pass_c = fail_c + blocked_c + mixed_c + incomplete_c + unknown_c
+
+    # FASE4: BLOCKED subcategories derived from session_end.data.category
+    # ENV = credential/connectivity failures; NAV = grid/navigation failures;
+    # PIP = pipeline logic failures (default for anything else).
+    blocked_env_c = sum(1 for s in sessions if _blocked_category(s) == "ENV")
+    blocked_nav_c = sum(1 for s in sessions if _blocked_category(s) == "NAV")
+    blocked_pip_c = sum(1 for s in sessions if _blocked_category(s) == "PIP")
     elapsed_vals = [s.elapsed_s for s in sessions if s.elapsed_s is not None]
     avg_elapsed = sum(elapsed_vals) / len(elapsed_vals) if elapsed_vals else None
 
@@ -304,20 +317,68 @@ def _cmd_summary(sessions: list[Session]) -> None:
     pw_fail = sum(1 for e in all_pw if (e.get("data") or {}).get("status") == "fail")
     pw_blocked = sum(1 for e in all_pw if (e.get("data") or {}).get("status") == "blocked")
 
+    if as_json:
+        print(json.dumps({
+            "sessions": total,
+            "pass": pass_c,
+            "fail_app": fail_c,
+            "blocked": blocked_c,
+            "blocked_env": blocked_env_c,
+            "blocked_nav": blocked_nav_c,
+            "blocked_pip": blocked_pip_c,
+            "mixed": mixed_c,
+            "incomplete": incomplete_c,
+            "unknown": unknown_c,
+            "non_pass": non_pass_c,
+            "avg_elapsed_s": round(avg_elapsed, 2) if avg_elapsed else None,
+            "playwright": {
+                "pass": pw_pass, "fail": pw_fail, "blocked": pw_blocked, "total": len(all_pw)
+            },
+        }, indent=2))
+        return
+
     print("\n=== QA UAT Agent — Execution Summary ===")
     print(f"  Sessions analyzed : {total}")
     print(f"  PASS              : {pass_c}  ({_pct(pass_c, total)})")
-    print(f"  FAIL              : {fail_total}  ({_pct(fail_total, total)})"
-          + (f"  [{unknown_c} UNKNOWN/null verdict]" if unknown_c else ""))
+    print(f"  FAIL (product)    : {fail_c}  ({_pct(fail_c, total)})")
     print(f"  MIXED             : {mixed_c}  ({_pct(mixed_c, total)})")
     print(f"  BLOCKED           : {blocked_c}  ({_pct(blocked_c, total)})")
+    if blocked_c:
+        print(f"    ├ ENV (credenciales/conectividad) : {blocked_env_c}  ({_pct(blocked_env_c, blocked_c)})")
+        print(f"    ├ NAV (grilla/navegación)         : {blocked_nav_c}  ({_pct(blocked_nav_c, blocked_c)})")
+        print(f"    └ PIP (pipeline/compilación)      : {blocked_pip_c}  ({_pct(blocked_pip_c, blocked_c)})")
     print(f"  INCOMPLETE        : {incomplete_c}  ({_pct(incomplete_c, total)})")
+    print(f"  UNKNOWN           : {unknown_c}  ({_pct(unknown_c, total)})"
+          + ("  [pipeline contract violation — investigate]" if unknown_c else ""))
+    print(f"  NON_PASS          : {non_pass_c}  ({_pct(non_pass_c, total)})")
     print(f"  Avg elapsed       : {f'{avg_elapsed:.1f}s' if avg_elapsed else '—'}")
     print(f"\n  Playwright specs:")
     print(f"    PASS    : {pw_pass}  ({_pct(pw_pass, len(all_pw))})")
     print(f"    FAIL    : {pw_fail}  ({_pct(pw_fail, len(all_pw))})")
     print(f"    BLOCKED : {pw_blocked}  ({_pct(pw_blocked, len(all_pw))})")
     print(f"    Total   : {len(all_pw)}")
+
+
+def _blocked_category(session: "Session") -> str:
+    """Return the BLOCKED subcategory for a session: 'ENV', 'NAV', or 'PIP'.
+
+    Only meaningful when session.verdict == 'BLOCKED'.
+    Reads session_end.data.category (populated by Fase 2) and maps to subcategory:
+      - 'ENV' credentials / connectivity failures (environment_preflight)
+      - 'NAV' grid / navigation failures at runtime (precheckGrid, nav_timeout)
+      - 'PIP' pipeline/compilation/generation failures (default)
+    """
+    if session.verdict != "BLOCKED":
+        return ""
+    end = session.session_end
+    if not end:
+        return "PIP"
+    cat = ((end.get("data") or {}).get("category") or "").upper()
+    if cat == "ENV":
+        return "ENV"
+    if cat == "NAV":
+        return "NAV"
+    return "PIP"
 
 
 def _cmd_errors(sessions: list[Session], include_playwright: bool = False) -> None:

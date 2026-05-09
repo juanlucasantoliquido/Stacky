@@ -82,6 +82,7 @@ class EnvironmentPreflightResult:
     base_url: str
     login_url: str
     elapsed_ms: int
+    deployment: Optional[dict] = None  # DeploymentFingerprint.to_dict() — advisory, may be None
 
     def to_pipeline_dict(self) -> dict:
         """Convert to the standard BLOCKED pipeline response dict.
@@ -89,7 +90,7 @@ class EnvironmentPreflightResult:
         The pipeline returns this directly when preflight fails so the
         caller gets a consistent structure.
         """
-        return {
+        d = {
             "ok": False,
             "verdict": self.verdict,
             "reason": self.reason,
@@ -99,6 +100,9 @@ class EnvironmentPreflightResult:
             "elapsed_ms": self.elapsed_ms,
             "stage": "environment_preflight",
         }
+        if self.deployment is not None:
+            d["deployment"] = self.deployment
+        return d
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -185,6 +189,19 @@ def run_environment_preflight(config: Optional[dict] = None) -> EnvironmentPrefl
         )
 
     elapsed = int((time.time() - started) * 1000)
+
+    # ── Check 4 (advisory): deployment fingerprint ───────────────────────────
+    # Non-blocking — only warns when QA_EXPECTED_BUILD_ID is set and mismatches.
+    fingerprint_dict: Optional[dict] = None
+    try:
+        from deployment_fingerprint import check_deployment
+        fp = check_deployment(base_url=base_url)
+        fingerprint_dict = fp.to_dict()
+        if not fp.matched and fp.mismatch_reason:
+            logger.warning("Deployment mismatch: %s", fp.mismatch_reason)
+    except Exception as _fp_exc:  # noqa: BLE001
+        logger.debug("DeploymentFingerprint unavailable: %s", _fp_exc)
+
     return EnvironmentPreflightResult(
         ok=True,
         verdict="OK",
@@ -193,6 +210,7 @@ def run_environment_preflight(config: Optional[dict] = None) -> EnvironmentPrefl
         base_url=base_url,
         login_url=login_url,
         elapsed_ms=elapsed,
+        deployment=fingerprint_dict,
     )
 
 

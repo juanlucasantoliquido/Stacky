@@ -88,6 +88,15 @@ def _exec_log_stage_end(log, stage: str, t0: float, ok: bool, summary: Optional[
         except Exception:  # noqa: BLE001
             pass
 
+
+def _exec_log_event(log, event_name: str, data: dict) -> None:
+    """FASE2/OBS — Emit a named structured event. No-op if log is None."""
+    if log is not None:
+        try:
+            log.event(event_name, data)
+        except Exception:  # noqa: BLE001
+            pass
+
 _TOOL_VERSION = "1.1.0"  # Fase 9 — multi-round replanning
 _TOOL_ROOT = Path(__file__).parent  # NOT resolved — avoid symlink/junction issues on Windows
 _MAX_REPLAN_ROUNDS: int = 3  # Fase 9 — maximum retry rounds before escalation
@@ -295,21 +304,49 @@ def run(
     ado_path = ado_path or _DEFAULT_ADO_PATH
     evidence_dir = _TOOL_ROOT / "evidence" / str(ticket_id)
 
+    # ── Execution logger — FASE1/OBS: init BEFORE preflight/smoke so that
+    # ──   any early BLOCKED exit still produces execution.jsonl. ────────────
+    _exec_log = _init_exec_log(str(ticket_id), evidence_dir)
+    if _exec_log is not None:
+        _exec_log.session_start({
+            "ticket_id": ticket_id, "mode": mode, "headed": headed,
+            "timeout_ms": timeout_ms, "skip_to": skip_to,
+            "replan": replan, "verbose": verbose,
+            "tool_version": _TOOL_VERSION,
+            "event": "pipeline_invocation_start",
+        })
+
     # ── Preflight: verify AgendaWeb is up before doing anything costly ───────
     # QA UAT Agent NEVER manages AgendaWeb's runtime.  If the app is not
     # running, we return BLOCKED immediately (< 15s, no browser opened).
+    _t0_preflight = time.time()
     try:
         from environment_preflight import run_environment_preflight
         preflight = run_environment_preflight()
+        _exec_log_stage_end(
+            _exec_log, "environment_preflight", _t0_preflight, ok=preflight.ok,
+            summary={"verdict": preflight.verdict, "reason": preflight.reason,
+                     "base_url": preflight.base_url},
+        )
         if not preflight.ok:
             logger.warning("Preflight BLOCKED: %s — %s", preflight.reason, preflight.message)
-            return {
+            _pf_result = {
                 **preflight.to_pipeline_dict(),
                 "ticket_id": ticket_id,
                 "verdict": "BLOCKED",
+                "category": "ENV",
+                "reason": preflight.reason,
+                "failed_stage": "environment_preflight",
                 "stages": {"environment_preflight": preflight.to_dict()},
                 "elapsed_s": round(time.time() - started, 2),
             }
+            if _exec_log is not None:
+                try:
+                    _exec_log.session_end(_pf_result)
+                    _exec_log.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            return _pf_result
         logger.info("Preflight OK: %s", preflight.message)
     except Exception as _pf_exc:  # noqa: BLE001
         logger.warning("Preflight check failed (non-fatal): %s", _pf_exc)
@@ -319,32 +356,38 @@ def run(
     # Verifies app responds, auth file exists, and target screen is reachable.
     # Runs in ≤20s. On failure → BLOCKED immediately, no browser opened.
     # Skip with QA_UAT_SKIP_SMOKE=true if needed.
+    _t0_smoke = time.time()
     try:
         from smoke_path_checker import run_smoke_path
         # Use default screen — full screen list is determined after reader
         _smoke = run_smoke_path(screen="FrmAgenda.aspx")
+        _exec_log_stage_end(
+            _exec_log, "smoke_path", _t0_smoke, ok=bool(_smoke.get("ok")),
+            summary={"verdict": _smoke.get("verdict"), "reason": _smoke.get("reason")},
+        )
         if not _smoke.get("ok"):
             logger.warning("Smoke path BLOCKED: %s — %s", _smoke.get("reason"), _smoke.get("message"))
-            return {
+            _smoke_result = {
                 **_smoke,
                 "ticket_id": ticket_id,
+                "verdict": "BLOCKED",
+                "category": "ENV",
+                "reason": _smoke.get("reason", "SMOKE_BLOCKED"),
+                "failed_stage": "smoke_path",
                 "stages": {"smoke_path": _smoke},
                 "elapsed_s": round(time.time() - started, 2),
             }
+            if _exec_log is not None:
+                try:
+                    _exec_log.session_end(_smoke_result)
+                    _exec_log.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            return _smoke_result
         if _smoke.get("verdict") != "WARNING":
             logger.info("Smoke path OK (%dms)", _smoke.get("elapsed_ms", 0))
     except Exception as _sm_exc:  # noqa: BLE001
         logger.warning("Smoke path check failed (non-fatal): %s", _sm_exc)
-
-    # ── Execution logger ─────────────────────────────────────────────────────
-    _exec_log = _init_exec_log(str(ticket_id), evidence_dir)
-    if _exec_log is not None:
-        _exec_log.session_start({
-            "ticket_id": ticket_id, "mode": mode, "headed": headed,
-            "timeout_ms": timeout_ms, "skip_to": skip_to,
-            "replan": replan, "verbose": verbose,
-            "tool_version": _TOOL_VERSION,
-        })
 
     skip_stages: set = set()
     if skip_to and skip_to in _STAGE_NAMES:
@@ -374,7 +417,14 @@ def run(
         )
         stages[stage] = _summarise_reader(ticket_result)
         if not ticket_result.get("ok"):
-            return _build_output(ticket_id, stages, ticket_result, started)
+            _out = _build_output(ticket_id, stages, ticket_result, started)
+            if _exec_log is not None:
+                try:
+                    _exec_log.session_end(_out)
+                    _exec_log.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            return _out
 
     # Delegate stages 2-11 to shared implementation (also used by _run_freeform)
     pipeline_result = _run_pipeline_stages(
@@ -459,10 +509,18 @@ def _run_dossier_and_publisher(
         return _build_output(ticket_id, stages, publisher_result, started)
 
     verdict = dossier_result.get("verdict", "UNKNOWN")
+    # FASE2/OBS: emit pipeline_verdict_decision before returning success
+    _exec_log_event(
+        _get_active_exec_logger(),
+        "pipeline_verdict_decision",
+        {"verdict": verdict, "category": "APP" if verdict in ("FAIL", "PASS", "MIXED") else "PIP",
+         "reason": verdict},
+    )
     return {
         "ok": True,
         "ticket_id": ticket_id,
         "verdict": verdict,
+        "category": "APP" if verdict in ("FAIL", "PASS", "MIXED") else "PIP",
         "stages": stages,
         "elapsed_s": round(time.time() - started, 2),
     }
@@ -881,6 +939,7 @@ def _run_pipeline_stages(
         _cred_err = {
             "ok": False,
             "verdict": "BLOCKED",
+            "category": "ENV",
             "reason": "MISSING_CREDENTIALS",
             "message": (
                 "AGENDA_WEB_USER y/o AGENDA_WEB_PASS no están configurados. "
@@ -921,6 +980,20 @@ def _run_pipeline_stages(
     # ── Stage 2: ui_map ──────────────────────────────────────────────────────
     stage = "ui_map"
     screens = _extract_screens(ticket_result)
+    # FASE2/OBS: emit screen_detection_result for forensic traceability
+    _exec_log_event(exec_log, "screen_detection_result", {
+        "ticket_id": ticket_id,
+        "sources_scanned": ["navigation_path", "plan_pruebas", "analisis_tecnico", "description_md"],
+        "selected_screens": screens,
+        "fallback_used": screens == ["FrmAgenda.aspx"] and not any(
+            "FrmAgenda.aspx" in str(v)
+            for v in [
+                ticket_result.get("analisis_tecnico") or "",
+                str(ticket_result.get("plan_pruebas") or ""),
+            ]
+        ),
+        "supported_screens_version": "agenda_screens.py",
+    })
     if stage in skip_stages:
         stages[stage] = {"ok": True, "skipped": True, "screens": screens}
     else:
@@ -940,17 +1013,25 @@ def _run_pipeline_stages(
             logger.debug("Building UI map for screen: %s", screen)
             # If discovery is disabled, verify the cache exists without rebuilding.
             cache_file = ui_maps_dir / f"{screen}.json"
+            # FASE2/OBS: emit ui_map_cache_result per screen
+            _exec_log_event(exec_log, "ui_map_cache_result", {
+                "screen": screen,
+                "cache_hit": cache_file.is_file(),
+                "cache_path": str(cache_file),
+                "discovery_allowed": allow_discovery,
+            })
             if not allow_discovery and not cache_file.is_file():
                 ui_fail = {
                     "ok": False,
+                    "verdict": "BLOCKED",
+                    "category": "GEN",
+                    "reason": "NO_PLAYBOOK_OR_UI_MAP",
                     "error": "ui_discovery_disabled_no_cache",
                     "message": (
                         f"QA_UAT_ALLOW_UI_DISCOVERY=false y no hay UI map cacheado para {screen}. "
                         "Grabá el flujo una vez con 'python ui_map_builder.py --screen {screen} --rebuild' "
                         "y luego reintentá."
                     ),
-                    "verdict": "BLOCKED",
-                    "reason": "NO_PLAYBOOK_OR_UI_MAP",
                 }
                 stages[stage] = {
                     "ok": False, "skipped": False, "screen": screen,
@@ -1006,26 +1087,44 @@ def _run_pipeline_stages(
         stages[stage] = _summarise_compiler(compiler_result)
         # FORENSIC-20260508 | FIX-6 | Use key 'compiled' (not 'scenario_count') to match
         # the compiler output contract. 'scenario_count' was always 0 in exec logs.
+        compiled_count = compiler_result.get("compiled", 0)
+        out_of_scope_count = compiler_result.get("out_of_scope", 0)
         _exec_log_stage_end(exec_log, stage, _t0, ok=compiler_result.get("ok", False),
-                            summary={"scenario_count": compiler_result.get("compiled", 0),
-                                     "out_of_scope": compiler_result.get("out_of_scope", 0)})
+                            summary={"scenario_count": compiled_count,
+                                     "out_of_scope": out_of_scope_count})
+        # FASE2/OBS: emit compiler_summary event with full detail
+        _out_of_scope_items = compiler_result.get("out_of_scope_items", [])
+        _scope_mismatch_count = sum(
+            1 for i in _out_of_scope_items if i.get("razon") == "SCOPE_MISMATCH"
+        )
+        _exec_log_event(exec_log, "compiler_summary", {
+            "compiled": compiled_count,
+            "scenario_count": compiled_count,
+            "out_of_scope": out_of_scope_count,
+            "out_of_scope_count": out_of_scope_count,
+            "scope_screen": screens[0] if len(screens) == 1 else screens,
+            "reasons": {"SCOPE_MISMATCH": _scope_mismatch_count},
+        })
         if not compiler_result.get("ok"):
             return _build_output(ticket_id, stages, compiler_result, started)
         # FORENSIC-20260508 | FIX-3 | Early-exit when 0 scenarios compiled and items
         # existed but were all discarded. Avoids wasting 3 more stages only to fail
         # at runner with the confusing 'no_tests_found' error.
-        compiled_count = compiler_result.get("compiled", 0)
-        out_of_scope_count = compiler_result.get("out_of_scope", 0)
         if compiled_count == 0 and out_of_scope_count > 0:
+            # FASE1/PIP/FIX-3: Explicit BLOCKED verdict so session_end never has null verdict.
             no_scenarios_result = {
                 "ok": False,
+                "verdict": "BLOCKED",
+                "category": "PIP",
+                "reason": "NO_EXECUTABLE_SCENARIOS",
                 "error": "no_executable_scenarios",
                 "message": (
                     f"El compiler procesó {out_of_scope_count} item(s) del plan de pruebas "
                     f"pero ninguno resultó ejecutable. Revisá out_of_scope_items en scenarios.json."
                 ),
                 "out_of_scope_count": out_of_scope_count,
-                "out_of_scope_items": compiler_result.get("out_of_scope_items", []),
+                "out_of_scope_items": _out_of_scope_items,
+                "human_action_required": "review_screen_scope_or_test_plan",
             }
             _persist_json(evidence_dir / "scenarios.json", compiler_result)
             return _build_output(ticket_id, stages, no_scenarios_result, started)
@@ -1067,6 +1166,20 @@ def _run_pipeline_stages(
         stages[stage] = {"ok": True, "skipped": True}
         _persist_json(evidence_dir / "scenarios.json", compiler_result)
     else:
+        # Fase 4 — apply approved learnings before generating specs so that
+        # human-reviewed selector fixes take effect without manual cache edits.
+        _session_id = str(ticket_id)
+        try:
+            from learning_store import apply_approved_learnings_to_selectors
+            _learn_result = apply_approved_learnings_to_selectors(
+                ticket_id=ticket_id,
+                run_id=_session_id,
+            )
+            if _learn_result.get("applied_count", 0) > 0:
+                _exec_log_event(exec_log, "approved_learnings_applied", _learn_result)
+        except Exception as _learn_exc:  # noqa: BLE001
+            logger.debug("apply_approved_learnings skipped: %s", _learn_exc)
+
         from playwright_test_generator import run as generator_run
         _log_stage(stage)
         _t0 = _exec_log_stage_start(exec_log, stage)
@@ -1516,9 +1629,12 @@ def _extract_screens(ticket_result: dict) -> list:
                 found.add(screen)
 
     # Also scan the ticket description itself
+    # FASE1/GEN/FIX-1: Fixed operator precedence bug — previously only ticket.description
+    # was concatenated when it was non-empty (description_md was silently dropped).
     desc_text = (
-        (ticket_result.get("ticket") or {}).get("description") or ""
-        + " " + (ticket_result.get("description_md") or "")
+        ((ticket_result.get("ticket") or {}).get("description") or "")
+        + " "
+        + (ticket_result.get("description_md") or "")
     ).lower()
     for screen in SUPPORTED_SCREENS:
         if screen.lower() in desc_text:
@@ -1567,10 +1683,24 @@ def _fail(stage: str, error: str, message: str) -> dict:
 
 
 def _build_output(ticket_id: int, stages: dict, failed_result: dict, started: float) -> dict:
+    # FASE1/PIP/OBS: always propagate verdict/category/reason/failed_stage so
+    # session_end never has null verdict and log_analyzer never produces UNKNOWN.
+    verdict  = failed_result.get("verdict", "BLOCKED")
+    category = failed_result.get("category", "PIP")
+    reason   = failed_result.get("reason") or failed_result.get("error", "pipeline_error")
+    failed_stage = (
+        failed_result.get("failed_stage")
+        or failed_result.get("stage")
+        or "unknown"
+    )
     return {
         "ok": False,
         "ticket_id": ticket_id,
-        "stage": failed_result.get("stage", "unknown"),
+        "verdict": verdict,
+        "category": category,
+        "reason": reason,
+        "failed_stage": failed_stage,
+        "stage": failed_stage,
         "error": failed_result.get("error", "pipeline_error"),
         "message": failed_result.get("message", ""),
         "stages": stages,

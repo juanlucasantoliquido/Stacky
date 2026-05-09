@@ -233,9 +233,29 @@ class ExecutionLogger:
         self._write("session_end", {
             "ok": result.get("ok"),
             "verdict": result.get("verdict"),
+            "category": result.get("category"),
+            "reason": result.get("reason"),
+            "failed_stage": result.get("failed_stage"),
             "elapsed_s": result.get("elapsed_s"),
             "stages_summary": _stages_summary(result.get("stages", {})),
         }, ok=result.get("ok"))
+
+    def event(self, event_name: str, data: dict, **kwargs: Any) -> None:
+        """Emit a named structured event with arbitrary payload.
+
+        Use for domain-specific checkpoints like screen_detection_result,
+        ui_map_cache_result, compiler_summary, pipeline_verdict_decision, etc.
+
+        Parameters
+        ----------
+        event_name : str
+            Machine-readable event identifier (e.g. 'screen_detection_result').
+        data : dict
+            Payload. Must be JSON-serializable. No automatic sanitization.
+        **kwargs : Any
+            Optional top-level JSONL fields: stage, scenario_id, ok, duration_ms.
+        """
+        self._write(event_name, data, **kwargs)
 
     def stage_start(self, stage: str, params: Optional[dict] = None) -> None:
         self._write("stage_start", {"params": _sanitize(params or {})}, stage=stage)
@@ -425,6 +445,15 @@ class ExecutionLogger:
 
     def info(self, message: str, **extra: Any) -> None:
         self._write("info", {"message": message, **{k: str(v) for k, v in extra.items()}})
+
+    def pipeline_verdict(self, verdict: str, category: str, reason: str, **extra: Any) -> None:
+        """Emit a pipeline_verdict_decision event before the final return."""
+        self._write("pipeline_verdict_decision", {
+            "verdict": verdict,
+            "category": category,
+            "reason": reason,
+            **extra,
+        })
 
     def error(
         self,

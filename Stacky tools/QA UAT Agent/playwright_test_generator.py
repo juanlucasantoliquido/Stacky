@@ -185,47 +185,9 @@ def run(
             })
             continue
 
-        # Load UI map for this screen
-        ui_map_file = ui_maps_dir / f"{pantalla}.json"
-        if not ui_map_file.is_file():
-            blocked_count += 1
-            results.append({
-                "scenario_id": sid,
-                "status": "blocked",
-                "reason": "UI_MAP_NOT_FOUND",
-                "missing": [f"cache/ui_maps/{pantalla}.json"],
-            })
-            continue
-            return _err("ui_map_not_found", f"No UI map found for screen {pantalla}")
-
-        try:
-            ui_map_data = json.loads(ui_map_file.read_text(encoding="utf-8"))
-        except Exception as exc:
-            blocked_count += 1
-            results.append({
-                "scenario_id": sid,
-                "status": "blocked",
-                "reason": "UI_MAP_NOT_FOUND",
-                "missing": [str(exc)],
-            })
-            continue
-
-        # Build alias → selector mapping
-        selector_map = _build_selector_map(ui_map_data)
-        # Build alias → input_type mapping (M1+M3): needed to format scenario
-        # fill values (e.g. "01/01/2026" → "2026-01-01" for <input type=date>).
-        input_type_map = _build_input_type_map(ui_map_data)
-
-        # Fase 8 — augment selector_map with discovered_selectors for this
-        # screen before missing-selector check. Keeps track of which aliases
-        # were resolved from the cache so the result can flag them.
-        discovered_aliases = _merge_discovered_selectors(
-            selector_map, discovered_by_screen, pantalla
-        )
-
-        # Fase 8 — Playbook-aware generation: if a matching playbook exists,
-        # generate from it directly. This bypasses UI-map lookup entirely and
-        # prevents BLOCKED for screens whose form selectors aren't in the map.
+        # Fase 3 — Playbook check BEFORE UI map load.
+        # A playbook provides its own selectors; the UI map is only needed as fallback.
+        # This prevents false UI_MAP_NOT_FOUND blocks when a valid playbook exists.
         playbook = _match_playbook(scenario, playbook_index)
 
         # RULE: When QA_UAT_REQUIRE_PLAYBOOK=true and no playbook is found,
@@ -257,6 +219,44 @@ def run(
             else:
                 blocked_count += 1
             continue
+
+        # No playbook — fall through to UI map validation.
+        # Load UI map for this screen.
+        ui_map_file = ui_maps_dir / f"{pantalla}.json"
+        if not ui_map_file.is_file():
+            blocked_count += 1
+            results.append({
+                "scenario_id": sid,
+                "status": "blocked",
+                "reason": "UI_MAP_NOT_FOUND",
+                "missing": [f"cache/ui_maps/{pantalla}.json"],
+            })
+            continue
+
+        try:
+            ui_map_data = json.loads(ui_map_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            blocked_count += 1
+            results.append({
+                "scenario_id": sid,
+                "status": "blocked",
+                "reason": "UI_MAP_NOT_FOUND",
+                "missing": [str(exc)],
+            })
+            continue
+
+        # Build alias → selector mapping
+        selector_map = _build_selector_map(ui_map_data)
+        # Build alias → input_type mapping (M1+M3): needed to format scenario
+        # fill values (e.g. "01/01/2026" → "2026-01-01" for <input type=date>).
+        input_type_map = _build_input_type_map(ui_map_data)
+
+        # Augment selector_map with discovered_selectors for this screen before
+        # missing-selector check. Keeps track of which aliases were resolved from
+        # the cache so the result can flag them.
+        discovered_aliases = _merge_discovered_selectors(
+            selector_map, discovered_by_screen, pantalla
+        )
 
         # Validate all targets exist in UI map (or discovered cache)
         missing_selectors = _find_missing_selectors(scenario, selector_map)
@@ -745,6 +745,34 @@ def _render_from_playbook(
 
     # Convert playbook steps to ScenarioSpec-style pasos for template
     pasos_for_template = _playbook_steps_to_pasos(all_steps, resolved_fields)
+
+    # Fase 3 — Validate: no action-requiring steps with empty selectors.
+    # An empty selector in a playbook step means the playbook was recorded
+    # incompletely. Block before emitting TypeScript — an empty selector would
+    # cause a Playwright "strict mode violation" that looks like a product defect.
+    _ACTIONS_NEEDING_SELECTOR = {
+        "click", "fill", "wait_visible", "check", "check_checkbox",
+        "double_click", "hover", "select",
+    }
+    empty_selector_steps = [
+        paso for paso in pasos_for_template
+        if paso.get("accion") in _ACTIONS_NEEDING_SELECTOR
+        and not (paso.get("target") or "").strip()
+    ]
+    if empty_selector_steps:
+        return {
+            "scenario_id": sid,
+            "status": "blocked",
+            "reason": "MISSING_PLAYBOOK_SELECTOR",
+            "message": (
+                f"Playbook {playbook.get('goal_slug')!r} tiene {len(empty_selector_steps)} paso(s) "
+                "sin selector CSS. Completá el playbook en cache/playbooks/ antes de reintentar."
+            ),
+            "missing": [
+                f"step[accion={p.get('accion')}].selector"
+                for p in empty_selector_steps
+            ],
+        }
 
     # Build a synthetic ui_map so the template's {{ ui_map[step.target] }}
     # resolves correctly.  We replace each raw CSS selector with a stable

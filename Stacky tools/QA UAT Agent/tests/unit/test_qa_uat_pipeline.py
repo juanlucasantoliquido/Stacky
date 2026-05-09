@@ -130,6 +130,8 @@ class _PipelineMocks:
         import uat_precondition_checker
         import uat_assertion_evaluator
         import uat_failure_analyzer
+        import environment_preflight
+        import smoke_path_checker
 
         ticket_r = self._overrides["reader"] or _ticket_ok()
         ui_r = self._overrides["ui_map"] or _ui_map_ok()
@@ -159,7 +161,28 @@ class _PipelineMocks:
             "ok": True, "ticket_id": 70, "analyses": [],
         }
 
+        # Mock preflight result — always OK in unit tests
+        _preflight_ok = environment_preflight.EnvironmentPreflightResult(
+            ok=True, verdict="OK", reason="OK", message="Mocked preflight OK",
+            base_url="http://localhost/AgendaWeb/",
+            login_url="http://localhost/AgendaWeb/FrmLogin.aspx",
+            elapsed_ms=1,
+        )
+        # Mock smoke result — always OK in unit tests
+        _smoke_ok = {
+            "ok": True, "verdict": "OK", "reason": "OK",
+            "message": "Mocked smoke OK", "elapsed_ms": 1,
+        }
+
         self._patches = [
+            # Env vars: credential check in _run_pipeline_stages reads os.environ directly
+            patch.dict(os.environ, {
+                "AGENDA_WEB_USER": "QA_TEST_USER",
+                "AGENDA_WEB_PASS": "QA_TEST_PASS",
+            }),
+            patch.object(environment_preflight, "run_environment_preflight",
+                         return_value=_preflight_ok),
+            patch.object(smoke_path_checker, "run_smoke_path", return_value=_smoke_ok),
             patch.object(uat_ticket_reader, "run", return_value=ticket_r),
             patch.object(ui_map_builder, "run", return_value=ui_r),
             patch.object(uat_scenario_compiler, "run", return_value=compiler_r),
@@ -365,10 +388,140 @@ def test_extract_screens_ignores_unsupported_mentions():
 
     ticket_result = {
         "plan_pruebas": [
-            {"title": "Pantalla nueva FrmReportes.aspx", "description": ""},
+            {"title": "Pantalla nueva FrmInventado123.aspx", "description": ""},
             {"title": "FrmAgenda.aspx", "description": ""},
         ]
     }
     found = pipeline._extract_screens(ticket_result)
     assert found == ["FrmAgenda.aspx"]
-    assert "FrmReportes.aspx" not in found
+    assert "FrmInventado123.aspx" not in found
+
+
+# ── Fase 1 — nuevos tests de contrato OBS/PIP ─────────────────────────────────
+
+def test_build_output_always_has_verdict():
+    """_build_output must always include verdict/category/reason/failed_stage."""
+    import qa_uat_pipeline as pipeline
+    import time
+
+    # Minimal failed_result sin verdict
+    failed = {"ok": False, "error": "some_error", "message": "Something failed"}
+    out = pipeline._build_output(999, {}, failed, time.time())
+    assert "verdict" in out, "_build_output must always include 'verdict'"
+    assert "category" in out, "_build_output must always include 'category'"
+    assert "reason" in out, "_build_output must always include 'reason'"
+    assert "failed_stage" in out, "_build_output must always include 'failed_stage'"
+    assert out["verdict"] == "BLOCKED"   # default
+    assert out["category"] == "PIP"      # default
+
+
+def test_build_output_propagates_explicit_verdict():
+    """_build_output must propagate explicit verdict/category/reason from failed_result."""
+    import qa_uat_pipeline as pipeline
+    import time
+
+    failed = {
+        "ok": False,
+        "verdict": "BLOCKED",
+        "category": "ENV",
+        "reason": "MISSING_CREDENTIALS",
+        "failed_stage": "environment_preflight",
+        "error": "cred_missing",
+        "message": "No credentials",
+    }
+    out = pipeline._build_output(70, {}, failed, time.time())
+    assert out["verdict"] == "BLOCKED"
+    assert out["category"] == "ENV"
+    assert out["reason"] == "MISSING_CREDENTIALS"
+    assert out["failed_stage"] == "environment_preflight"
+
+
+def test_pipeline_early_exit_compiled_zero_out_scope_sets_verdict_blocked():
+    """When compiled=0 and out_of_scope>0, pipeline early-exit must return verdict=BLOCKED PIP."""
+    import qa_uat_pipeline as pipeline
+
+    no_exec_compiler = {
+        "ok": True,
+        "compiled": 0,
+        "out_of_scope": 3,
+        "out_of_scope_items": [
+            {"id": "P01", "razon": "SCOPE_MISMATCH"},
+            {"id": "P02", "razon": "SCOPE_MISMATCH"},
+            {"id": "P03", "razon": "SCOPE_MISMATCH"},
+        ],
+    }
+
+    with _PipelineMocks(compiler_result=no_exec_compiler):
+        result = pipeline.run(ticket_id=70, mode="dry-run")
+
+    assert result["ok"] is False
+    assert result["verdict"] == "BLOCKED", f"expected BLOCKED, got {result.get('verdict')}"
+    assert result["category"] == "PIP"
+    assert result["reason"] == "NO_EXECUTABLE_SCENARIOS"
+    # Generator and runner must NOT have run
+    assert "generator" not in result["stages"]
+    assert "runner" not in result["stages"]
+
+
+def test_pipeline_preflight_blocked_includes_verdict_and_category():
+    """When preflight is BLOCKED, the pipeline response must include verdict/category."""
+    import qa_uat_pipeline as pipeline
+    import environment_preflight
+
+    _pf_blocked = environment_preflight.EnvironmentPreflightResult(
+        ok=False, verdict="BLOCKED", reason="APP_NOT_RUNNING",
+        message="AgendaWeb not responding",
+        base_url="http://localhost/AgendaWeb/",
+        login_url="http://localhost/AgendaWeb/FrmLogin.aspx",
+        elapsed_ms=5000,
+    )
+
+    with _PipelineMocks():
+        with patch.object(environment_preflight, "run_environment_preflight",
+                          return_value=_pf_blocked):
+            result = pipeline.run(ticket_id=70, mode="dry-run")
+
+    assert result["ok"] is False
+    assert result["verdict"] == "BLOCKED"
+    assert result["category"] == "ENV"
+    assert result["reason"] == "APP_NOT_RUNNING"
+
+
+def test_extract_screens_desc_text_concatenates_both_sources():
+    """FIX-1: desc_text must concatenate ticket.description AND description_md."""
+    import qa_uat_pipeline as pipeline
+
+    # When ticket.description is non-empty, description_md must ALSO be scanned
+    ticket_result = {
+        "ticket": {"description": "Pantalla de agenda general"},
+        "description_md": "Ver FrmDetalleClie.aspx para el mantenedor",
+        "plan_pruebas": [],
+        "analisis_tecnico": "",
+    }
+    found = pipeline._extract_screens(ticket_result)
+    assert "FrmDetalleClie.aspx" in found, (
+        "FIX-1 bug: description_md was not scanned when ticket.description was non-empty"
+    )
+
+
+def test_extract_screens_ticket_122_does_not_fallback_to_frmagenda():
+    """FIX-1: A ticket with analisis_tecnico mentioning FrmDetalleClie.aspx must NOT
+    fallback to FrmAgenda.aspx."""
+    import qa_uat_pipeline as pipeline
+
+    ticket_result = {
+        "ticket": {"description": "Mantenedor de Domicilios"},
+        "description_md": "",
+        "plan_pruebas": [
+            {"title": "Verificar listado de domicilios", "description": ""},
+        ],
+        "analisis_tecnico": (
+            "El ticket corresponde a la pantalla FrmDetalleClie.aspx, "
+            "sección Vista Relaciones / Mantenedor de Domicilios."
+        ),
+    }
+    found = pipeline._extract_screens(ticket_result)
+    assert "FrmDetalleClie.aspx" in found
+    assert "FrmAgenda.aspx" not in found, (
+        "When FrmDetalleClie.aspx is found, FrmAgenda.aspx must not appear"
+    )

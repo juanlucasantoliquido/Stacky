@@ -1,0 +1,10 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "ticket_id": 997,
+  "run_id": "uat-997-20260509T195733Z-bcb00c",
+  "verdict": "BLOCKED",
+  "reason": "COMPILER_EMPTY",
+  "content_hash": "8db39bd5ee0a1fed",
+  "generated_at": "2026-05-09T19:57:33.954078+00:00",
+  "idempotency_key": "uat-997-20260509T195733Z-bcb00c|8db39bd5ee0a1fed"
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-05-09T20:10:52.531058+00:00",
+  "ticket_id": 99,
+  "run_id": "uat-99-20260509T201052Z-5dc965",
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "NO_EXECUTABLE_SCENARIOS",
+  "failed_stage": "unknown",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'unknown'. [PIP] NO_EXECUTABLE_SCENARIOS. El compiler procesó 1 item(s) del plan de pruebas pero ninguno resultó ejecutable. Revisá out_of_scope_items en scenarios.json.",
+  "human_action_required": "review_screen_scope_or_test_plan",
+  "exec_summary": {
+    "session_started_at": "2026-05-09T20:10:52.483500Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 15
+  },
+  "artifacts": {
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\99\\uat-99-20260509T201052Z-5dc965\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\99\\uat-99-20260509T201052Z-5dc965\\execution.jsonl"
+  },
+  "evidence_refs": [
+    "evidence_bundle_manifest.json",
+    "execution.jsonl"
+  ],
+  "elapsed_build_ms": 0.0
+}

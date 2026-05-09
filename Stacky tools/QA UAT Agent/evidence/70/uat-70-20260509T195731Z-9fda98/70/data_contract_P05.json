@@ -1,0 +1,92 @@
+{
+  "schema_version": "data_contract/1.0",
+  "scenario_id": "P05",
+  "ticket_id": 70,
+  "feature": null,
+  "screen": "FrmAgenda.aspx",
+  "data_contract_version": "1.0",
+  "compiled_at": "2026-05-09T19:57:31.755110Z",
+  "compiled_by": "uat_data_contract_compiler/1.0.0",
+  "requirements": [
+    {
+      "requirement_id": "data.req.lote_asignado",
+      "entity": "Lote",
+      "alias": "lote_asignado",
+      "required_fields": [
+        "AGLOTE"
+      ],
+      "constraints": [
+        "lote existe en RAGEN",
+        "lote tiene perfil asignado"
+      ],
+      "candidate_sources": [
+        "live_db_readonly",
+        "user_input",
+        "sql_seed"
+      ],
+      "blocking": true,
+      "inferred_from": "step_keywords",
+      "schema_known": true,
+      "db_table": "RAGEN",
+      "db_key_column": "AGLOTE",
+      "notes": null
+    },
+    {
+      "requirement_id": "data.req.catalogo_combo_opciones",
+      "entity": "Catalogo",
+      "alias": "catalogo_combo_opciones",
+      "required_fields": [
+        "IDCODIGO",
+        "DESCRIPCION"
+      ],
+      "constraints": [
+        "catalogo tiene al menos una opcion activa",
+        "catalogo no esta vacio"
+      ],
+      "candidate_sources": [
+        "live_db_readonly",
+        "sql_seed"
+      ],
+      "blocking": true,
+      "inferred_from": "step_keywords",
+      "schema_known": false,
+      "db_table": null,
+      "db_key_column": null,
+      "notes": null
+    },
+    {
+      "requirement_id": "data.req.gestion_en_agenda",
+      "entity": "GestionAgenda",
+      "alias": "gestion_en_agenda",
+      "required_fields": [
+        "AGPERFIL",
+        "AGLOTE"
+      ],
+      "constraints": [
+        "existe al menos una gestion asignada al agente QA"
+      ],
+      "candidate_sources": [
+        "live_db_readonly",
+        "user_input"
+      ],
+      "blocking": true,
+      "inferred_from": "step_keywords",
+      "schema_known": true,
+      "db_table": "RAGEN",
+      "db_key_column": "AGPERFIL",
+      "notes": null
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "blocking": 3,
+    "entities": [
+      "Lote",
+      "Catalogo",
+      "GestionAgenda"
+    ]
+  },
+  "ok": true,
+  "error": null,
+  "artifact_path": null
+}

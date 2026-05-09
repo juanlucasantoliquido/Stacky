@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ScenarioCompilerResult.schema.json",
+  "title": "ScenarioCompilerResult",
+  "description": "Output contract for uat_scenario_compiler.run(). Sprint 4.",
+  "type": "object",
+  "required": ["ok", "compiled", "out_of_scope", "scenarios"],
+  "additionalProperties": true,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "ticket_id": { "type": ["integer", "string", "null"] },
+    "compiled": { "type": "integer", "minimum": 0 },
+    "out_of_scope": { "type": "integer", "minimum": 0 },
+    "scenarios": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/ScenarioSpec" }
+    },
+    "out_of_scope_items": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "tool": { "type": "string" },
+        "version": { "type": "string" },
+        "duration_ms": { "type": "integer" }
+      }
+    }
+  },
+  "definitions": {
+    "ScenarioSpec": { "$ref": "ScenarioSpec.schema.json" }
+  }
+}

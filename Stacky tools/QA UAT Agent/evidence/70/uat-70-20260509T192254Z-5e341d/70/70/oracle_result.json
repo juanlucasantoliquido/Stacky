@@ -1,0 +1,17 @@
+{
+  "schema_version": "oracle_result/1.0",
+  "ok": true,
+  "run_id": "70",
+  "ticket_id": 70,
+  "total_scenarios": 0,
+  "evaluated_scenarios": 0,
+  "pass_count": 0,
+  "fail_count": 0,
+  "no_oracle_count": 0,
+  "weak_only_count": 0,
+  "p0_blocked_count": 0,
+  "publish_blocked": false,
+  "scenario_results": [],
+  "evidence_path": null,
+  "evaluated_at": "2026-05-09T19:22:54.906339Z"
+}

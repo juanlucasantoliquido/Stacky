@@ -196,6 +196,34 @@ class _PipelineMocks:
             # Prevent actual filesystem writes during pipeline
             patch.object(pipeline, "_persist_json"),
         ]
+        import ui_map_resolution
+
+        # Sprint 2: ui_map_resolution gate.  When ui_map_result is a failure dict,
+        # translate to a BLOCKED resolve result so the pipeline stops at ui_map stage.
+        if self._overrides["ui_map"] and not self._overrides["ui_map"].get("ok"):
+            _umr_blocked = {
+                "ok": False, "decision": "BLOCKED", "reason": "UI_MAP_MISSING",
+                "screens": [], "missing_screens": ["FrmAgenda.aspx"],
+                "allow_rebuild": False, "elapsed_ms": 1,
+                "human_action_required": "Run ui_map_builder.py --rebuild",
+                "artifact_path": None,
+            }
+        else:
+            _umr_blocked = {
+                "ok": True, "decision": "ALLOW", "reason": None,
+                "screens": [{"screen": "FrmAgenda.aspx", "cache_hit": True,
+                              "rebuild_attempted": False, "rebuild_ok": False,
+                              "available": True, "reason": None,
+                              "cache_path": "cache/ui_maps/FrmAgenda.aspx.json"}],
+                "missing_screens": [],
+                "allow_rebuild": False, "elapsed_ms": 1,
+                "human_action_required": None, "artifact_path": None,
+            }
+
+        self._patches.extend([
+            patch.object(ui_map_resolution, "resolve_ui_maps", return_value=_umr_blocked),
+        ])
+
         for p in self._patches:
             p.start()
         return self
@@ -239,7 +267,7 @@ def test_reader_failure_stops_pipeline():
 
 
 def test_ui_map_failure_stops_pipeline():
-    """When ui_map_builder returns ok=False, pipeline stops."""
+    """When ui_map is missing (resolve_ui_maps BLOCKED), pipeline stops at ui_map stage."""
     import qa_uat_pipeline as pipeline
 
     ui_fail = {"ok": False, "error": "playwright_not_installed", "message": "Playwright not found"}
@@ -247,7 +275,8 @@ def test_ui_map_failure_stops_pipeline():
         result = pipeline.run(ticket_id=70, mode="dry-run")
 
     assert result["ok"] is False
-    assert result["error"] == "playwright_not_installed"
+    # Sprint 2: pipeline now uses ui_map_resolution gate — reason is UI_MAP_MISSING
+    assert result.get("reason") == "UI_MAP_MISSING" or result.get("verdict") == "BLOCKED"
     assert result["stages"]["ui_map"]["ok"] is False
     assert "compiler" not in result["stages"]
 

@@ -1,0 +1,15 @@
+{
+  "schema_version": "data_lineage/1.0",
+  "ok": true,
+  "run_id": "70",
+  "ticket_id": 70,
+  "total_entries": 0,
+  "seeded_count": 0,
+  "user_supplied_count": 0,
+  "fixture_count": 0,
+  "discovered_count": 0,
+  "unknown_count": 0,
+  "entries": [],
+  "evidence_path": null,
+  "built_at": "2026-05-09T19:38:31.056015Z"
+}

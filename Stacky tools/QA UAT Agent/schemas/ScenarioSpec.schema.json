@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ScenarioSpec.schema.json",
+  "title": "ScenarioSpec",
+  "description": "A single compiled UAT scenario. Sprint 4.",
+  "type": "object",
+  "required": ["scenario_id", "title", "status"],
+  "additionalProperties": true,
+  "properties": {
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier, e.g. 'RF-007-CA-01' or 'P01'."
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["compiled", "out_of_scope", "blocked", "pending"]
+    },
+    "screen": {
+      "type": ["string", "null"],
+      "description": "Canonical screen filename, e.g. 'FrmAgenda.aspx'."
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string" },
+          "alias_semantic": { "type": ["string", "null"] },
+          "value": {},
+          "expected": {}
+        }
+      }
+    },
+    "data_readiness_preconditions": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "assertions": { "type": "array" },
+    "out_of_scope_reason": { "type": ["string", "null"] }
+  }
+}

@@ -58,12 +58,59 @@ except ImportError:  # noqa: BLE001
         return None
 
 
-def _init_exec_log(session_id: str, evidence_dir: Path):
-    """Inicializar (o recuperar) el ExecutionLogger para la sesión activa."""
+def _write_run_index(ticket_evidence_dir: Path, run_id: str, artifact_root: str) -> None:
+    """Sprint 1 — Escribir latest.json e index.json en el directorio del ticket.
+
+    latest.json  → apunta siempre al run más reciente.
+    index.json   → lista acumulativa de todos los runs del ticket (más reciente primero).
+    """
+    import datetime as _dt_idx
+    try:
+        ticket_evidence_dir.mkdir(parents=True, exist_ok=True)
+
+        # latest.json — siempre sobreescrito con el run actual
+        latest_path = ticket_evidence_dir / "latest.json"
+        latest_path.write_text(
+            json.dumps({"run_id": run_id, "artifact_root": artifact_root},
+                       ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # index.json — acumulativo; cada run se prepend (más reciente primero)
+        index_path = ticket_evidence_dir / "index.json"
+        existing: list = []
+        if index_path.is_file():
+            try:
+                data = json.loads(index_path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    existing = data
+            except Exception:  # noqa: BLE001
+                existing = []
+
+        new_entry = {
+            "run_id": run_id,
+            "artifact_root": artifact_root,
+            "created_at": _dt_idx.datetime.now(_dt_idx.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+        }
+        index_path.write_text(
+            json.dumps([new_entry] + existing, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Sprint 1: failed to write run index for %s: %s", ticket_evidence_dir, exc)
+
+
+def _init_exec_log(session_id: str, evidence_dir: Path, run_id: Optional[str] = None):
+    """Inicializar (o recuperar) el ExecutionLogger para la sesión activa.
+
+    Sprint 1 — acepta run_id explícito para emitirlo en cada evento.
+    """
     if not _EXEC_LOG_AVAILABLE:
         return None
     try:
-        return _get_exec_logger(session_id, evidence_dir=evidence_dir)
+        return _get_exec_logger(session_id, evidence_dir=evidence_dir, run_id=run_id)
     except Exception:  # noqa: BLE001
         return None
 
@@ -302,14 +349,24 @@ def run(
         return _fail("reader", "invalid_mode", f"mode must be 'dry-run' or 'publish', got: {mode!r}")
 
     ado_path = ado_path or _DEFAULT_ADO_PATH
-    evidence_dir = _TOOL_ROOT / "evidence" / str(ticket_id)
+
+    # ── Sprint 1 — run_id: identidad canónica de ejecución por run, no por ticket.
+    # Formato: uat-<ticket_id>-<YYYYMMDDTHHMMSSZ>-<uuid6>
+    # Garantiza que dos re-runs del mismo ticket nunca comparten evidencia.
+    import uuid as _uuid
+    import datetime as _dt
+    _ts_stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    _run_id = f"uat-{ticket_id}-{_ts_stamp}-{_uuid.uuid4().hex[:6]}"
+
+    # evidence/<ticket_id>/           ← índice + latest.json por ticket
+    # evidence/<ticket_id>/<run_id>/  ← evidencia aislada por run
+    _ticket_evidence_dir = _TOOL_ROOT / "evidence" / str(ticket_id)
+    evidence_dir = _ticket_evidence_dir / _run_id
 
     # ── Execution logger — P0/OBS: init BEFORE preflight/smoke so that
     # ──   any early BLOCKED exit still produces execution.jsonl (roadmap Cambio 1.1).
-    _run_id = str(ticket_id)
-    _exec_log = _init_exec_log(_run_id, evidence_dir)
+    _exec_log = _init_exec_log(_run_id, evidence_dir, run_id=_run_id)
     if _exec_log is not None:
-        import datetime as _dt
         _exec_log.session_start({
             "event": "session_start",
             "run_id": _run_id,
@@ -324,6 +381,14 @@ def run(
             "replan": replan,
             "verbose": verbose,
         })
+        # Sprint 1 — artifact_root_created event (evidencia del artifact root de este run)
+        try:
+            _exec_log.artifact_root_created(str(evidence_dir))
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Sprint 1 — escribir latest.json e index.json en el directorio del ticket
+    _write_run_index(_ticket_evidence_dir, _run_id, str(evidence_dir))
 
     # ── Preflight: verify AgendaWeb is up before doing anything costly ───────
     # QA UAT Agent NEVER manages AgendaWeb's runtime.  If the app is not
@@ -371,10 +436,16 @@ def run(
         logger.warning("Preflight check failed (non-fatal): %s", _pf_exc)
         # Do not block the pipeline if the preflight module itself errors
 
-    # ── Stage 2b: deployment_fingerprint_check (Sprint 3) ────────────────────
-    # Verify the running build matches the ticket's expected build BEFORE any
-    # browser is opened.  BLOCKED if mismatch in any mode; WARN if source is
-    # missing in dry-run mode only.
+    # ── Stage 2b: deployment_fingerprint_check (Sprint 2/3) ──────────────────
+    # Sprint 2 — adds QA_UAT_DEPLOYMENT_POLICY=off|soft|hard gate.
+    # policy=off  → skip entirely
+    # policy=soft → warn on mismatch/missing, never block
+    # policy=hard → block on mismatch OR missing source (BUILD_UNVERIFIABLE)
+    # policy unset → legacy behavior (mode=publish → BLOCK, dry-run → WARN)
+    _fp_policy = os.environ.get("QA_UAT_DEPLOYMENT_POLICY", "").strip().lower()
+    if _fp_policy not in ("off", "soft", "hard"):
+        _fp_policy = None
+
     _t0_fp = time.time()
     try:
         from deployment_fingerprint import check_deployment_fingerprint as _check_fp
@@ -399,14 +470,32 @@ def run(
             expected=_fp_expected,
             base_url=_fp_base_url,
             mode=mode,
+            policy=_fp_policy,
             exec_logger=_exec_log,
             evidence_dir=evidence_dir,
             run_id=_run_id,
         )
+        _exec_log_event(_exec_log, "deployment_fingerprint_checked", {
+            "policy": _fp_policy or "legacy",
+            "decision": _fp_result.decision,
+            "reason": _fp_result.reason,
+            "matched": _fp_result.matched,
+            "source": _fp_result.source,
+            "expected": _fp_result.expected,
+            "active": _fp_result.active,
+            "skipped": _fp_result.skipped,
+        })
         if _fp_result.decision == "BLOCKED":
             logger.warning(
-                "deployment_fingerprint BLOCKED: reason=%s expected=%s active=%s",
-                _fp_result.reason, _fp_result.expected, _fp_result.active,
+                "deployment_fingerprint BLOCKED: policy=%s reason=%s expected=%s active=%s",
+                _fp_policy, _fp_result.reason, _fp_result.expected, _fp_result.active,
+            )
+            # Sprint 2 — distinguish BUILD_UNVERIFIABLE (hard+no source) from DEPLOYMENT_MISMATCH
+            _fp_human_action = (
+                "Build source unavailable — deploy a verifiable build or set policy=soft."
+                if _fp_result.reason == "BUILD_UNVERIFIABLE"
+                else "Deploy the expected build or update QA_UAT_EXPECTED_BUILD_ID "
+                     "to match the active build before running QA tests."
             )
             _fp_fail = {
                 "ok": False,
@@ -416,21 +505,17 @@ def run(
                 "error": (_fp_result.reason or "DEPLOYMENT_MISMATCH").lower(),
                 "failed_stage": "deployment_fingerprint_check",
                 "message": (
-                    f"Deployment fingerprint check BLOCKED (ticket {ticket_id}): "
+                    f"Deployment fingerprint check BLOCKED (ticket {ticket_id}, policy={_fp_policy!r}): "
                     f"{_fp_result.reason}. "
                     f"Expected={_fp_result.expected}, Active={_fp_result.active}. "
-                    "Deploying the expected build before running QA tests."
                 ),
                 "deployment_fingerprint": _fp_result.to_dict(),
-                "human_action_required": (
-                    "Deploy the expected build or update QA_UAT_EXPECTED_BUILD_ID "
-                    "to match the active build before running QA tests."
-                ),
+                "human_action_required": _fp_human_action,
                 "ticket_id": ticket_id,
                 "stages": {"deployment_fingerprint_check": _fp_result.to_dict()},
                 "elapsed_s": round(time.time() - started, 2),
             }
-            if _exec_log is not None:
+            if _exec_log is not None and not _exec_log._closed:
                 try:
                     _exec_log.pipeline_verdict(
                         verdict="BLOCKED",
@@ -438,8 +523,8 @@ def run(
                         reason=_fp_result.reason or "DEPLOYMENT_MISMATCH",
                         failed_stage="deployment_fingerprint_check",
                         confidence=1.0,
-                        evidence_refs=["deployment_fingerprint_check"],
-                        human_action_required=_fp_fail["human_action_required"],
+                        evidence_refs=["deployment_fingerprint_checked"],
+                        human_action_required=_fp_human_action,
                     )
                     _exec_log.session_end(_fp_fail)
                     _exec_log.close()
@@ -448,11 +533,11 @@ def run(
             return _fp_fail
         elif _fp_result.decision == "WARN":
             logger.warning(
-                "deployment_fingerprint WARN: reason=%s (continuing pipeline)",
-                _fp_result.reason,
+                "deployment_fingerprint WARN: policy=%s reason=%s (continuing pipeline)",
+                _fp_policy, _fp_result.reason,
             )
     except ImportError:
-        logger.debug("deployment_fingerprint module unavailable — skipping Sprint 3 check")
+        logger.debug("deployment_fingerprint module unavailable — skipping fingerprint gate")
     except Exception as _fp_exc:  # noqa: BLE001
         logger.warning("deployment_fingerprint check failed (non-fatal): %s", _fp_exc)
 
@@ -541,31 +626,130 @@ def run(
             return _out
 
     # Delegate stages 2-11 to shared implementation (also used by _run_freeform)
-    pipeline_result = _run_pipeline_stages(
-        ticket_result=ticket_result,
-        evidence_dir=evidence_dir,
-        ticket_id=ticket_id,
-        mode=mode,
-        headed=headed,
-        timeout_ms=timeout_ms,
-        skip_to=skip_to,
-        skip_stages=skip_stages,
-        ado_path=ado_path,
-        detect_screen_errors=detect_screen_errors,
-        detect_screen_errors_vision=detect_screen_errors_vision,
-        replan=replan,
-        verbose=verbose,
-        started=started,
-        exec_log=_exec_log,
-    )
-    if isinstance(pipeline_result.get("stages"), dict):
-        pipeline_result["stages"] = {**stages, **pipeline_result["stages"]}
-    if _exec_log is not None:
-        try:
-            _exec_log.session_end(pipeline_result)
-            _exec_log.close()
-        except Exception:  # noqa: BLE001
-            pass
+    # Sprint 1 — wrap in try/finally to guarantee session_end on crash.
+    pipeline_result: dict = {}
+    try:
+        pipeline_result = _run_pipeline_stages(
+            ticket_result=ticket_result,
+            evidence_dir=evidence_dir,
+            ticket_id=ticket_id,
+            mode=mode,
+            headed=headed,
+            timeout_ms=timeout_ms,
+            skip_to=skip_to,
+            skip_stages=skip_stages,
+            ado_path=ado_path,
+            detect_screen_errors=detect_screen_errors,
+            detect_screen_errors_vision=detect_screen_errors_vision,
+            replan=replan,
+            verbose=verbose,
+            started=started,
+            exec_log=_exec_log,
+        )
+        if isinstance(pipeline_result.get("stages"), dict):
+            pipeline_result["stages"] = {**stages, **pipeline_result["stages"]}
+    except Exception as _pipeline_crash:  # noqa: BLE001
+        import traceback as _tb
+        logger.error("Sprint 1: pipeline crashed unexpectedly: %s", _pipeline_crash)
+        pipeline_result = {
+            "ok": False,
+            "ticket_id": ticket_id,
+            "verdict": "BLOCKED",
+            "category": "OPS",
+            "reason": "PIPELINE_CRASH",
+            "failed_stage": "pipeline",
+            "error": "pipeline_crash",
+            "message": str(_pipeline_crash),
+            "stages": stages,
+            "elapsed_s": round(time.time() - started, 2),
+        }
+        if _exec_log is not None:
+            try:
+                _exec_log.error("pipeline_crash", exc=_pipeline_crash,
+                                detail="Unhandled exception in _run_pipeline_stages")
+                _exec_log.pipeline_verdict(
+                    verdict="BLOCKED", category="OPS", reason="PIPELINE_CRASH",
+                    failed_stage="pipeline", confidence=1.0,
+                    human_action_required="Check pipeline logs for unhandled exception",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        # Sprint 1 — session_end garantizado en TODOS los exit paths (incluyendo crashes).
+        # Nota: los early exits (preflight, fingerprint, smoke) ya llaman session_end
+        # antes de retornar, por lo que el ExecutionLogger ya está cerrado cuando
+        # llegan a este punto. El check _exec_log._closed previene doble escritura.
+        if _exec_log is not None and not _exec_log._closed:
+            try:
+                _exec_log.session_end(pipeline_result)
+                _exec_log.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    # Sprint 1 — añadir run_id y artifact_root al resultado para que el backend
+    # pueda retornarlos en el 202 y almacenarlos en metadata_dict.
+    pipeline_result.setdefault("run_id", _run_id)
+    pipeline_result.setdefault("artifact_root", str(evidence_dir))
+
+    # Sprint 5 — normalizar verdict y escribir result.json en TODOS los exit paths.
+    # Garantiza que el evidence bundle siempre tiene result.json para el bundle checker.
+    try:
+        from verdict_normalizer import normalize_from_result
+        _norm = normalize_from_result(pipeline_result)
+        # Overwrite with canonical values only if current result has null/invalid verdict
+        if not pipeline_result.get("verdict"):
+            pipeline_result["verdict"] = _norm.verdict
+        if not pipeline_result.get("category"):
+            pipeline_result["category"] = _norm.category
+        if not pipeline_result.get("reason"):
+            pipeline_result["reason"] = _norm.reason
+        pipeline_result["_normalized"] = True
+    except Exception as _norm_err:  # noqa: BLE001
+        logger.warning("Sprint5: verdict_normalizer error (non-fatal): %s", _norm_err)
+
+    # Sprint 5 — escribir result.json siempre (incluyendo runs bloqueados).
+    try:
+        _result_json_path = evidence_dir / "result.json"
+        _persist_json(_result_json_path, pipeline_result)
+    except Exception as _rj_err:  # noqa: BLE001
+        logger.warning("Sprint5: could not write result.json: %s", _rj_err)
+
+    # Sprint 5 — evidence bundle check (siempre, sin bloquear el resultado).
+    try:
+        from evidence_bundle_checker import check_bundle, TIER_RAN_PLAYWRIGHT, TIER_PREFLIGHT_ONLY, TIER_ALWAYS
+        _ran_playwright = bool(
+            isinstance(pipeline_result.get("stages"), dict)
+            and pipeline_result["stages"].get("runner", {}).get("ok") is not None
+        )
+        _bundle_tier = TIER_RAN_PLAYWRIGHT if _ran_playwright else TIER_ALWAYS
+        _bundle_manifest = check_bundle(
+            evidence_dir=evidence_dir,
+            run_id=_run_id,
+            tier=_bundle_tier,
+            exec_logger=None,  # logger already closed
+        )
+        pipeline_result["_evidence_complete"] = _bundle_manifest.get("complete", False)
+        pipeline_result["_evidence_missing"]  = _bundle_manifest.get("missing", [])
+    except Exception as _bc_err:  # noqa: BLE001
+        logger.warning("Sprint5: evidence_bundle_checker error (non-fatal): %s", _bc_err)
+
+    # Sprint 5 — generar qa_dossier_builder para runs bloqueados o sin dossier uat.
+    # El uat_dossier_builder ya genera dossier.json para runs que llegan al runner.
+    # Aquí generamos uno para BLOCKED/early exits.
+    try:
+        _dossier_path = evidence_dir / "dossier.json"
+        if not _dossier_path.exists() and not pipeline_result.get("ok"):
+            from qa_dossier_builder import build_dossier as _build_pipeline_dossier
+            _build_pipeline_dossier(
+                ticket_id=ticket_id,
+                run_id=_run_id,
+                evidence_dir=evidence_dir,
+                result=pipeline_result,
+                verbose=False,
+            )
+    except Exception as _db_err:  # noqa: BLE001
+        logger.warning("Sprint5: qa_dossier_builder error (non-fatal): %s", _db_err)
+
     return pipeline_result
 
 
@@ -609,8 +793,45 @@ def _run_dossier_and_publisher(
         return _build_output(ticket_id, stages, dossier_result, started)
 
     # ── Stage 7: publisher ───────────────────────────────────────────────────
+    # Sprint 5 — publish readiness gate: block publish on CRITICAL conditions only
+    # (verdict=UNKNOWN or run_id missing). Evidence bundle incompleteness is logged
+    # as warning but does not block publish at this stage — it is enforced at run().
     _log_stage("publisher")
     dossier_path = evidence_dir / "dossier.json"
+    _dossier_verdict = dossier_result.get("verdict") or "PASS"
+    _dossier_run_id  = dossier_result.get("run_id")
+    try:
+        from verdict_normalizer import normalize
+        _pub_norm = normalize(
+            verdict=_dossier_verdict,
+            category=dossier_result.get("category"),
+            reason=dossier_result.get("reason") or _dossier_verdict,
+            run_id=_dossier_run_id,
+        )
+        # Only hard-block on UNKNOWN reason or missing run_id (critical identity/safety issues)
+        _critical_blockers = []
+        if _pub_norm.reason == "UNKNOWN":
+            _critical_blockers.append("UNKNOWN reason code — open bug P0 before publishing")
+        if not _dossier_run_id:
+            _critical_blockers.append("run_id missing from dossier — cannot guarantee idempotent publish")
+        if _critical_blockers:
+            logger.warning(
+                "_run_dossier_and_publisher: publish BLOCKED by critical gate: %s",
+                _critical_blockers,
+            )
+            return _build_output(ticket_id, stages, {
+                "ok": False,
+                "verdict": "BLOCKED",
+                "category": "OBS",
+                "reason": "PUBLISH_GATE",
+                "failed_stage": "publisher_readiness",
+                "message": "; ".join(_critical_blockers[:3]),
+                "human_action_required": "Check verdict and run_id before publishing to ADO",
+            }, started)
+    except Exception as _pub_gate_err:  # noqa: BLE001
+        # Non-fatal — proceed to publisher and let it decide
+        logger.warning("Sprint5: publish readiness gate error (non-fatal): %s", _pub_gate_err)
+
     publisher_result = publisher_run(
         ticket_id=ticket_id,
         dossier_path=dossier_path,
@@ -1320,62 +1541,155 @@ def _run_pipeline_stages(
         })
 
     if not screens:
-        # screen_detector returned empty list without blocking — fall back defensively
-        screens = ["FrmAgenda.aspx"]
+        # Sprint 2 — screen_detector returned empty list without blocking.
+        # Do NOT fall back silently to FrmAgenda.aspx for child-screen tickets.
+        # Emit a BLOCKED GEN result so the operator knows detection produced no output.
+        _empty_screen_result = {
+            "ok": False,
+            "verdict": "BLOCKED",
+            "category": "PIP",
+            "reason": "SCREEN_DETECTION_EMPTY",
+            "failed_stage": "screen_detection",
+            "error": "no_screens_detected",
+            "message": (
+                "Screen detection returned no screens without a block reason. "
+                "Review ticket description or add aliases to screen_aliases.yml."
+            ),
+            "human_action_required": (
+                "Add screen aliases to screen_aliases.yml or update ticket with "
+                "explicit screen name (e.g. FrmAgenda.aspx)."
+            ),
+        }
+        stages["screen_detection"] = {"ok": False, "skipped": False, **_empty_screen_result}
+        if exec_log is not None and not exec_log._closed:
+            try:
+                exec_log.pipeline_verdict(
+                    verdict="BLOCKED",
+                    category="PIP",
+                    reason="SCREEN_DETECTION_EMPTY",
+                    failed_stage="screen_detection",
+                    confidence=1.0,
+                    evidence_refs=["screen_detection_result"],
+                    human_action_required=_empty_screen_result["human_action_required"],
+                )
+                exec_log.session_end(_empty_screen_result)
+                exec_log.close()
+            except Exception:  # noqa: BLE001
+                pass
+        return _build_output(ticket_id, stages, _empty_screen_result, started)
 
     if stage in skip_stages:
         stages[stage] = {"ok": True, "skipped": True, "screens": screens}
     else:
-        # Guard: QA_UAT_ALLOW_UI_DISCOVERY controls whether a browser can be opened
-        # to map the UI dynamically.  DEFAULT IS FALSE — only cached maps/playbooks
-        # are used unless the operator explicitly opts in.
-        # To enable dynamic discovery: set QA_UAT_ALLOW_UI_DISCOVERY=true
-        allow_discovery = os.environ.get("QA_UAT_ALLOW_UI_DISCOVERY", "false").lower() in ("1", "true", "yes")
-
         if _dl := _check_deadline(stage):
             return _dl
 
-        from ui_map_builder import run as ui_map_run
         _log_stage(stage)
         _t0 = _exec_log_stage_start(exec_log, stage, {"screens": screens})
-        for screen in screens:
-            logger.debug("Building UI map for screen: %s", screen)
-            # If discovery is disabled, verify the cache exists without rebuilding.
-            cache_file = ui_maps_dir / f"{screen}.json"
-            # FASE2/OBS: emit ui_map_cache_result per screen
-            _exec_log_event(exec_log, "ui_map_cache_result", {
-                "screen": screen,
-                "cache_hit": cache_file.is_file(),
-                "cache_path": str(cache_file),
-                "discovery_allowed": allow_discovery,
-            })
-            if not allow_discovery and not cache_file.is_file():
-                ui_fail = {
+
+        # Sprint 2 — ui_map_resolution gate: consolidated check + artifact before
+        # any browser is opened.  Replaces per-screen ad-hoc cache checks.
+        try:
+            from ui_map_resolution import resolve_ui_maps as _resolve_ui_maps
+            _umr = _resolve_ui_maps(
+                screens=screens,
+                evidence_dir=evidence_dir,
+                run_id=_run_id if "_run_id" in dir() else str(ticket_id),
+                exec_logger=exec_log,
+                verbose=verbose,
+            )
+            if _umr["decision"] == "BLOCKED":
+                _umr_reason = _umr.get("reason") or "UI_MAP_MISSING"
+                _umr_missing = _umr.get("missing_screens", [])
+                _umr_fail = {
                     "ok": False,
                     "verdict": "BLOCKED",
                     "category": "GEN",
-                    "reason": "NO_PLAYBOOK_OR_UI_MAP",
-                    "error": "ui_discovery_disabled_no_cache",
+                    "reason": _umr_reason,
+                    "failed_stage": "ui_map",
+                    "error": _umr_reason.lower(),
                     "message": (
-                        f"QA_UAT_ALLOW_UI_DISCOVERY=false y no hay UI map cacheado para {screen}. "
-                        "Grabá el flujo una vez con 'python ui_map_builder.py --screen {screen} --rebuild' "
-                        "y luego reintentá."
+                        f"UI map missing for screen(s): {_umr_missing}. "
+                        f"Run: python ui_map_builder.py --screen <screen> --rebuild"
                     ),
+                    "ui_map_resolution": _umr,
+                    "human_action_required": _umr.get("human_action_required"),
                 }
                 stages[stage] = {
-                    "ok": False, "skipped": False, "screen": screen,
-                    "error": ui_fail["error"], "message": ui_fail["message"],
+                    "ok": False, "skipped": False, "screens": screens,
+                    "missing_screens": _umr_missing, "reason": _umr_reason,
                 }
                 _exec_log_stage_end(exec_log, stage, _t0, ok=False, summary=stages[stage])
-                return _build_output(ticket_id, stages, ui_fail, started)
-            ui_result = ui_map_run(screen=screen, rebuild=False, verbose=verbose)
-            if not ui_result.get("ok"):
-                stages[stage] = {
-                    "ok": False, "skipped": False, "screen": screen,
-                    "error": ui_result.get("error"), "message": ui_result.get("message"),
-                }
-                _exec_log_stage_end(exec_log, stage, _t0, ok=False, summary=stages[stage])
-                return _build_output(ticket_id, stages, ui_result, started)
+                if exec_log is not None and not exec_log._closed:
+                    try:
+                        exec_log.pipeline_verdict(
+                            verdict="BLOCKED",
+                            category="GEN",
+                            reason=_umr_reason,
+                            failed_stage="ui_map",
+                            confidence=1.0,
+                            evidence_refs=["ui_map_resolution"],
+                            human_action_required=_umr.get("human_action_required"),
+                        )
+                        exec_log.session_end(_umr_fail)
+                        exec_log.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                return _build_output(ticket_id, stages, _umr_fail, started)
+            # ALLOW: emit per-screen cache results for observability
+            for _sr in _umr.get("screens", []):
+                _exec_log_event(exec_log, "ui_map_cache_result", {
+                    "screen": _sr["screen"],
+                    "cache_hit": _sr["cache_hit"],
+                    "cache_path": _sr["cache_path"],
+                    "available": _sr["available"],
+                    "rebuild_attempted": _sr["rebuild_attempted"],
+                    "rebuild_ok": _sr["rebuild_ok"],
+                })
+        except ImportError:
+            # Graceful degradation: ui_map_resolution.py unavailable
+            # Fall back to legacy per-screen check with QA_UAT_ALLOW_UI_DISCOVERY
+            logger.debug("ui_map_resolution module unavailable — using legacy UI map check")
+            allow_discovery = os.environ.get("QA_UAT_ALLOW_UI_DISCOVERY", "false").lower() in ("1", "true", "yes")
+            from ui_map_builder import run as ui_map_run
+            for screen in screens:
+                cache_file = ui_maps_dir / f"{screen}.json"
+                _exec_log_event(exec_log, "ui_map_cache_result", {
+                    "screen": screen,
+                    "cache_hit": cache_file.is_file(),
+                    "cache_path": str(cache_file),
+                    "discovery_allowed": allow_discovery,
+                })
+                if not allow_discovery and not cache_file.is_file():
+                    ui_fail = {
+                        "ok": False,
+                        "verdict": "BLOCKED",
+                        "category": "GEN",
+                        "reason": "UI_MAP_MISSING",
+                        "error": "ui_map_missing",
+                        "message": (
+                            f"No hay UI map cacheado para {screen}. "
+                            f"Ejecutar: python ui_map_builder.py --screen {screen} --rebuild"
+                        ),
+                        "human_action_required": (
+                            f"python ui_map_builder.py --screen {screen} --rebuild"
+                        ),
+                    }
+                    stages[stage] = {
+                        "ok": False, "skipped": False, "screen": screen,
+                        "reason": "UI_MAP_MISSING",
+                    }
+                    _exec_log_stage_end(exec_log, stage, _t0, ok=False, summary=stages[stage])
+                    return _build_output(ticket_id, stages, ui_fail, started)
+                ui_result = ui_map_run(screen=screen, rebuild=False, verbose=verbose)
+                if not ui_result.get("ok"):
+                    stages[stage] = {
+                        "ok": False, "skipped": False, "screen": screen,
+                        "error": ui_result.get("error"), "message": ui_result.get("message"),
+                    }
+                    _exec_log_stage_end(exec_log, stage, _t0, ok=False, summary=stages[stage])
+                    return _build_output(ticket_id, stages, ui_result, started)
+
         stages[stage] = {"ok": True, "skipped": False, "screens": screens}
         _exec_log_stage_end(exec_log, stage, _t0, ok=True, summary=stages[stage])
 
@@ -1474,6 +1788,47 @@ def _run_pipeline_stages(
         # FORENSIC-20260508 | FIX-3 | Early-exit when 0 scenarios compiled and items
         # existed but were all discarded. Avoids wasting 3 more stages only to fail
         # at runner with the confusing 'no_tests_found' error.
+        # Sprint 4 — COMPILER_EMPTY: nothing compiled AND nothing discarded.
+        # This is a PIP bug (ticket has no valid test plan items at all).
+        # NOTE: derive counts from scenarios/out_of_scope_items lists as fallback
+        # when explicit 'compiled'/'out_of_scope' keys are absent (backward compat).
+        _scenarios_list = compiler_result.get("scenarios") or []
+        _oos_items_list = compiler_result.get("out_of_scope_items") or []
+        _effective_compiled = compiled_count if compiled_count > 0 else len(_scenarios_list)
+        _effective_oos = out_of_scope_count if out_of_scope_count > 0 else len(_oos_items_list)
+        if _effective_compiled == 0 and _effective_oos == 0:
+            _compiler_empty_result = {
+                "ok": False,
+                "verdict": "BLOCKED",
+                "category": "PIP",
+                "reason": "COMPILER_EMPTY",
+                "error": "compiler_empty",
+                "message": (
+                    "El compiler no produjo ningún escenario ni item out_of_scope. "
+                    "Verificá que el ticket tenga un plan de pruebas o criterios de aceptación válidos."
+                ),
+                "compiled": 0,
+                "out_of_scope": 0,
+                "human_action_required": "review_ticket_test_plan_or_acceptance_criteria",
+            }
+            _persist_json(evidence_dir / "scenarios.json", compiler_result)
+            if exec_log is not None:
+                try:
+                    exec_log.pipeline_verdict(
+                        verdict="BLOCKED",
+                        category="PIP",
+                        reason="COMPILER_EMPTY",
+                        failed_stage="compiler",
+                        confidence=1.0,
+                        evidence_refs=["compiler_summary"],
+                        human_action_required=_compiler_empty_result["human_action_required"],
+                    )
+                    exec_log.session_end(_compiler_empty_result)
+                    exec_log.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            return _build_output(ticket_id, stages, _compiler_empty_result, started)
+
         if compiled_count == 0 and out_of_scope_count > 0:
             # FASE1/PIP/FIX-3: Explicit BLOCKED verdict so session_end never has null verdict.
             no_scenarios_result = {
@@ -1492,6 +1847,61 @@ def _run_pipeline_stages(
             }
             _persist_json(evidence_dir / "scenarios.json", compiler_result)
             return _build_output(ticket_id, stages, no_scenarios_result, started)
+
+        # Sprint 4 — Compiler contract validation: validate compiler output shape
+        # before persisting scenarios.json or advancing to the next stage.
+        try:
+            from contract_validator import validate_compiler_output as _validate_compiler_contract
+            _cc_result = _validate_compiler_contract(
+                output=compiler_result,
+                evidence_dir=evidence_dir,
+                run_id=_run_id if "_run_id" in dir() else str(ticket_id),
+                exec_logger=exec_log,
+            )
+            stages["compiler_contract"] = {
+                "ok": _cc_result.ok,
+                "skipped": False,
+                "decision": _cc_result.decision,
+                "violations": _cc_result.violations,
+                "reason": _cc_result.reason,
+                "score": _cc_result.score,
+            }
+            if not _cc_result.ok:
+                _cc_fail = {
+                    "ok": False,
+                    "verdict": "BLOCKED",
+                    "category": "PIP",
+                    "reason": _cc_result.reason or "COMPILER_CONTRACT_INVALID",
+                    "error": "compiler_contract_invalid",
+                    "failed_stage": "compiler_contract",
+                    "message": (
+                        f"Compiler output failed contract validation: "
+                        f"{_cc_result.reason}. "
+                        f"Violations: {'; '.join(_cc_result.violations[:3])}."
+                    ),
+                    "violations": _cc_result.violations,
+                    "human_action_required": "fix_compiler_output_to_match_ScenarioCompilerResult_schema",
+                }
+                if exec_log is not None:
+                    try:
+                        exec_log.pipeline_verdict(
+                            verdict="BLOCKED",
+                            category="PIP",
+                            reason=_cc_result.reason or "COMPILER_CONTRACT_INVALID",
+                            failed_stage="compiler_contract",
+                            confidence=1.0,
+                            evidence_refs=["compiler_contract_result"],
+                            human_action_required=_cc_fail["human_action_required"],
+                        )
+                        exec_log.session_end(_cc_fail)
+                        exec_log.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                return _build_output(ticket_id, stages, _cc_fail, started)
+        except ImportError:
+            logger.debug("contract_validator unavailable — skipping compiler contract check")
+            stages["compiler_contract"] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+
         # Write scenarios.json now so that preconditions (next stage) can read it
         _persist_json(evidence_dir / "scenarios.json", compiler_result)
 
@@ -1559,7 +1969,7 @@ def _run_pipeline_stages(
                     scenarios=_sc_scenarios,
                     ui_maps_dir=ui_maps_dir,
                     evidence_dir=evidence_dir,
-                    run_id=str(ticket_id),
+                    run_id=_run_id,  # Sprint 4 fix: was str(ticket_id)
                 )
                 # Emit event for every validation result
                 for _sc_item in _sc_result.get("results", []):
@@ -1677,11 +2087,45 @@ def _run_pipeline_stages(
     if stage in skip_stages:
         stages[stage] = {"ok": True, "skipped": True}
     elif not _any_data_preconditions:
-        # No data readiness preconditions defined — skip gracefully
+        # No data readiness preconditions defined — skip gracefully.
+        # Sprint 3: still write a baseline data_readiness.json artifact so it
+        # always exists when there are executable scenarios (criterion 3).
         stages[stage] = {
             "ok": True, "skipped": True,
             "reason": "no_data_readiness_preconditions",
         }
+        if _sc_scenarios_for_readiness and evidence_dir is not None:
+            try:
+                _baseline_dr = {
+                    "schema_version": "data_readiness/1.0",
+                    "scenario_id": "__all__",
+                    "decision": "READY",
+                    "all_ready": True,
+                    "checks": [],
+                    "skipped": True,
+                    "skip_reason": "no_data_readiness_preconditions",
+                    "category": None,
+                    "reason": None,
+                    "artifact_path": None,
+                }
+                _dr_artifact = evidence_dir / "data_readiness.json"
+                _dr_artifact.write_text(
+                    json.dumps(_baseline_dr, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                _baseline_dr["artifact_path"] = str(_dr_artifact)
+                stages[stage]["artifact_path"] = str(_dr_artifact)
+                _exec_log_event(exec_log, "data_readiness_check", {
+                    "scenario_id": "__all__",
+                    "decision": "READY",
+                    "all_ready": True,
+                    "checks": [],
+                    "skipped": True,
+                    "skip_reason": "no_data_readiness_preconditions",
+                    "artifact_path": str(_dr_artifact),
+                })
+            except Exception as _dr_base_exc:  # noqa: BLE001
+                logger.debug("data_readiness baseline artifact write failed (non-fatal): %s", _dr_base_exc)
     else:
         try:
             from uat_precondition_checker import check_data_readiness as _check_dr
@@ -1702,7 +2146,7 @@ def _run_pipeline_stages(
                     preconditions=_dr_precs,
                     exec_logger=exec_log,
                     evidence_dir=evidence_dir,
-                    run_id=str(ticket_id),
+                    run_id=_run_id,  # Sprint 3 fix: use run_id, not str(ticket_id)
                 )
                 _dr_results.append({
                     "scenario_id": _sc_id,
@@ -1727,6 +2171,35 @@ def _run_pipeline_stages(
                                 summary=stages[stage])
 
             if _dr_blocked:
+                # Sprint 3: generate seed SQL suggestion artifacts when data is blocked
+                try:
+                    from uat_precondition_checker import generate_seed_sql as _gen_seed
+                    # Collect all blocked DataCheck objects from all scenarios
+                    _blocked_checks = []
+                    for _dr_r in _dr_results:
+                        _sc_artifact = _dr_r.get("artifact_path")
+                        if _sc_artifact and Path(_sc_artifact).is_file():
+                            try:
+                                _sc_data = json.loads(Path(_sc_artifact).read_text(encoding="utf-8"))
+                                _blocked_checks.extend([
+                                    c for c in _sc_data.get("checks", [])
+                                    if c.get("decision") == "BLOCKED"
+                                ])
+                            except Exception:  # noqa: BLE001
+                                pass
+                    if _blocked_checks:
+                        _first_blocked_sc = next(
+                            (r["scenario_id"] for r in _dr_results if r["decision"] == "BLOCKED"),
+                            "unknown",
+                        )
+                        _gen_seed(
+                            blocked_checks=_blocked_checks,
+                            scenario_id=_first_blocked_sc,
+                            evidence_dir=evidence_dir,
+                        )
+                except Exception as _seed_exc:  # noqa: BLE001
+                    logger.debug("data_readiness: seed SQL generation failed (non-fatal): %s", _seed_exc)
+
                 _dr_fail = {
                     "ok": False,
                     "verdict": "BLOCKED",
@@ -1741,7 +2214,8 @@ def _run_pipeline_stages(
                     ),
                     "human_action_required": (
                         "Seed the required test data or update input_data in the scenario. "
-                        "Check data_readiness.json for per-scenario details."
+                        "Check data_readiness.json for per-scenario details. "
+                        "Review seed_sql_suggestion.sql if generated."
                     ),
                     "data_readiness_results": _dr_results,
                 }
@@ -2347,6 +2821,60 @@ def _run_pipeline_stages(
                                      "blocked": generator_result.get("blocked", 0)})
         if not generator_result.get("ok"):
             return _build_output(ticket_id, stages, generator_result, started)
+
+        # Sprint 4 — Generator contract validation: validate shape before runner.
+        try:
+            from contract_validator import validate_generator_output as _validate_generator_contract
+            _gc_result = _validate_generator_contract(
+                output=generator_result,
+                evidence_dir=evidence_dir,
+                run_id=_run_id if "_run_id" in dir() else str(ticket_id),
+                exec_logger=exec_log,
+            )
+            stages["generator_contract"] = {
+                "ok": _gc_result.ok,
+                "skipped": False,
+                "decision": _gc_result.decision,
+                "violations": _gc_result.violations,
+                "reason": _gc_result.reason,
+                "score": _gc_result.score,
+            }
+            if not _gc_result.ok:
+                _gc_fail = {
+                    "ok": False,
+                    "verdict": "BLOCKED",
+                    "category": "PIP",
+                    "reason": _gc_result.reason or "GENERATOR_CONTRACT_INVALID",
+                    "error": "generator_contract_invalid",
+                    "failed_stage": "generator_contract",
+                    "message": (
+                        f"Generator output failed contract validation: "
+                        f"{_gc_result.reason}. "
+                        f"Violations: {'; '.join(_gc_result.violations[:3])}."
+                    ),
+                    "violations": _gc_result.violations,
+                    "human_action_required": "fix_generator_output_to_match_GeneratedTestPlan_schema",
+                }
+                if exec_log is not None:
+                    try:
+                        exec_log.pipeline_verdict(
+                            verdict="BLOCKED",
+                            category="PIP",
+                            reason=_gc_result.reason or "GENERATOR_CONTRACT_INVALID",
+                            failed_stage="generator_contract",
+                            confidence=1.0,
+                            evidence_refs=["generator_contract_result"],
+                            human_action_required=_gc_fail["human_action_required"],
+                        )
+                        exec_log.session_end(_gc_fail)
+                        exec_log.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                return _build_output(ticket_id, stages, _gc_fail, started)
+        except ImportError:
+            logger.debug("contract_validator unavailable — skipping generator contract check")
+            stages["generator_contract"] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+
         gen_specs = generator_result.get("results") or generator_result.get("specs", [])
         all_blocked = gen_specs and all(s.get("status") == "blocked" for s in gen_specs)
         if all_blocked:
@@ -3273,8 +3801,9 @@ def _fail(stage: str, error: str, message: str) -> dict:
 def _build_output(ticket_id: int, stages: dict, failed_result: dict, started: float) -> dict:
     # P0/PIP/OBS: always propagate verdict/category/reason/failed_stage so
     # session_end never has null verdict and log_analyzer never produces UNKNOWN.
-    verdict  = failed_result.get("verdict", "BLOCKED")
-    category = failed_result.get("category", "PIP")
+    # Sprint 1 — use `or "BLOCKED"` instead of default to handle explicit None values.
+    verdict  = failed_result.get("verdict") or "BLOCKED"
+    category = failed_result.get("category") or "PIP"
     reason   = failed_result.get("reason") or failed_result.get("error", "pipeline_error")
     failed_stage = (
         failed_result.get("failed_stage")

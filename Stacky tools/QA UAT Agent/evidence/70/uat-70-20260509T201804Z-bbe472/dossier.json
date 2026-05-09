@@ -1,0 +1,29 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-05-09T20:18:04.839850+00:00",
+  "ticket_id": 70,
+  "run_id": "uat-70-20260509T201804Z-bbe472",
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "all_scenarios_out_of_scope",
+  "failed_stage": "unknown",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'unknown'. [PIP] all_scenarios_out_of_scope. No in-scope scenarios found",
+  "human_action_required": "Investigate PIP/all_scenarios_out_of_scope and rerun pipeline",
+  "exec_summary": {
+    "session_started_at": "2026-05-09T20:18:04.808439Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 17
+  },
+  "artifacts": {
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201804Z-bbe472\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201804Z-bbe472\\execution.jsonl"
+  },
+  "evidence_refs": [
+    "evidence_bundle_manifest.json",
+    "execution.jsonl"
+  ],
+  "elapsed_build_ms": 0.0
+}

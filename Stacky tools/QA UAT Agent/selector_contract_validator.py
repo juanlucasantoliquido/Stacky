@@ -135,6 +135,22 @@ def validate_selector_contract(
     SelectorContractResult
         Contains decision, reason, and full evidence lists.
     """
+    # ── Guard: if no aliases requested, nothing to validate → ALLOW ──────────
+    if not aliases_requested:
+        result = SelectorContractResult(
+            valid=True,
+            screen=screen,
+            aliases_requested=[],
+            aliases_available=[],
+            missing_aliases=[],
+            decorative_action_attempts=[],
+            decision="ALLOW",
+            category=None,
+            reason=None,
+        )
+        _persist_artifact(result, evidence_dir, run_id, scenario_id)
+        return result
+
     # ── Guard: UI map file must exist ─────────────────────────────────────────
     ui_map_file = Path(ui_map_path)
     if not ui_map_file.is_file():
@@ -306,6 +322,7 @@ def validate_all_scenarios(
     ui_maps_dir: Path,
     evidence_dir: Optional[Path] = None,
     run_id: Optional[str] = None,
+    exec_logger=None,
 ) -> dict:
     """Validate selector contracts for all compiled scenarios in one pass.
 
@@ -334,9 +351,12 @@ def validate_all_scenarios(
     """
     results = []
     blocked = []
+    scenario_ids = []  # track per-result scenario_id since SelectorContractResult lacks it
     for scenario in scenarios:
         screen = scenario.get("screen", "")
-        scenario_id = scenario.get("id", "unknown")
+        # Accept either 'scenario_id' or 'id' (backward compat)
+        scenario_id = scenario.get("scenario_id") or scenario.get("id", "unknown")
+        scenario_ids.append(scenario_id)
         # Collect aliases from scenario steps
         aliases: list[str] = []
         action_map: dict[str, str] = {}
@@ -361,14 +381,68 @@ def validate_all_scenarios(
         results.append(r)
         if r.decision == "BLOCKED":
             blocked.append(r)
+        # Emit per-scenario event when exec_logger is provided (Sprint 4)
+        if exec_logger is not None:
+            try:
+                exec_logger.event("selector_contract_validation", {
+                    "screen": screen,
+                    "scenario_id": scenario_id,
+                    "ok": r.valid,
+                    "decision": r.decision,
+                    "reason": r.reason,
+                    "aliases_requested": r.aliases_requested,
+                    "missing_aliases": r.missing_aliases,
+                })
+            except Exception:  # noqa: BLE001
+                pass
+
+    ok = len(blocked) == 0
+    first_blocked_reason = blocked[0].reason if blocked else None
+    first_blocked_screen = blocked[0].screen if blocked else None
+
+    # Sprint 4: write consolidated selector_contract.json to evidence_dir
+    consolidated_artifact_path: Optional[str] = None
+    if evidence_dir is not None:
+        try:
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+            consolidated = {
+                "schema_version": "selector_contract/1.0",
+                "ok": ok,
+                "blocked_count": len(blocked),
+                "allow_count": len(results) - len(blocked),
+                "first_blocked_reason": first_blocked_reason,
+                "first_blocked_screen": first_blocked_screen,
+                "scenarios": [
+                    {
+                        "screen": r.screen,
+                        "scenario_id": sid,
+                        "decision": r.decision,
+                        "reason": r.reason,
+                        "aliases_requested": r.aliases_requested,
+                        "missing_aliases": r.missing_aliases,
+                    }
+                    for r, sid in zip(results, scenario_ids)
+                ],
+            }
+            art = evidence_dir / "selector_contract.json"
+            art.write_text(
+                json.dumps(consolidated, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            consolidated_artifact_path = str(art)
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning(
+                "selector_contract_validator: cannot write consolidated artifact: %s", exc
+            )
 
     return {
-        "ok": len(blocked) == 0,
+        "ok": ok,
         "results": results,
         "blocked_count": len(blocked),
         "allow_count": len(results) - len(blocked),
-        "first_blocked_reason": blocked[0].reason if blocked else None,
-        "first_blocked_screen": blocked[0].screen if blocked else None,
+        "first_blocked_reason": first_blocked_reason,
+        "first_blocked_screen": first_blocked_screen,
+        "artifact_path": consolidated_artifact_path,
     }
 
 

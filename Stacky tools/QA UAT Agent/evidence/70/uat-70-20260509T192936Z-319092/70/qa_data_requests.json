@@ -1,0 +1,58 @@
+[
+  {
+    "id": "datareq-0-001",
+    "run_id": "70",
+    "ticket_id": 0,
+    "scenario_id": "P02",
+    "requirement_id": "data.req.catalogo_combo_opciones",
+    "question": "Necesito que exista al menos un valor en el catálogo 'catalogo_combo_opciones' para poder ejecutar el scenario.",
+    "required_fields_json": "[]",
+    "status": "pending_user_input",
+    "created_at": "2026-05-09T19:29:36.306295Z",
+    "resolved_at": null,
+    "resolved_by": null,
+    "resolution_type": null
+  },
+  {
+    "id": "datareq-0-001",
+    "run_id": "70",
+    "ticket_id": 0,
+    "scenario_id": "P04",
+    "requirement_id": "data.req.catalogo_combo_opciones",
+    "question": "Necesito que exista al menos un valor en el catálogo 'catalogo_combo_opciones' para poder ejecutar el scenario.",
+    "required_fields_json": "[]",
+    "status": "pending_user_input",
+    "created_at": "2026-05-09T19:29:36.313265Z",
+    "resolved_at": null,
+    "resolved_by": null,
+    "resolution_type": null
+  },
+  {
+    "id": "datareq-0-001",
+    "run_id": "70",
+    "ticket_id": 0,
+    "scenario_id": "P05",
+    "requirement_id": "data.req.catalogo_combo_opciones",
+    "question": "Necesito que exista al menos un valor en el catálogo 'catalogo_combo_opciones' para poder ejecutar el scenario.",
+    "required_fields_json": "[]",
+    "status": "pending_user_input",
+    "created_at": "2026-05-09T19:29:36.322158Z",
+    "resolved_at": null,
+    "resolved_by": null,
+    "resolution_type": null
+  },
+  {
+    "id": "datareq-0-001",
+    "run_id": "70",
+    "ticket_id": 0,
+    "scenario_id": "P06",
+    "requirement_id": "data.req.catalogo_combo_opciones",
+    "question": "Necesito que exista al menos un valor en el catálogo 'catalogo_combo_opciones' para poder ejecutar el scenario.",
+    "required_fields_json": "[]",
+    "status": "pending_user_input",
+    "created_at": "2026-05-09T19:29:36.332924Z",
+    "resolved_at": null,
+    "resolved_by": null,
+    "resolution_type": null
+  }
+]

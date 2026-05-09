@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "SelectorContract.schema.json",
+  "title": "SelectorContract",
+  "description": "Validation result for aliases_requested vs ui_map. Sprint 4.",
+  "type": "object",
+  "required": ["ok", "screen", "aliases_requested", "aliases_available", "missing_aliases", "decision"],
+  "additionalProperties": true,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "screen": { "type": "string", "minLength": 1 },
+    "scenario_id": { "type": ["string", "null"] },
+    "aliases_requested": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "aliases_available": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "missing_aliases": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "decorative_aliases": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Aliases that exist but are marked is_decorative=true."
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["ALLOW", "BLOCKED"]
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "SELECTOR_ALIAS_NOT_IN_UI_MAP | SELECTOR_IS_DECORATIVE | null"
+    },
+    "artifact_path": { "type": ["string", "null"] }
+  }
+}

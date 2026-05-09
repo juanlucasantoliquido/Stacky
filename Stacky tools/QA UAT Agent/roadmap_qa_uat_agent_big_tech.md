@@ -2980,3 +2980,19 @@ La línea estratégica que une todo el documento es simple:
 No se busca automatizar más por automatizar.
 Se busca automatizar con mejor señal, menor costo, más trazabilidad y control humano explícito.
 ```
+
+---
+
+## 21. Estado de implementación — Sprint 8
+
+| Capacidad | Sprint | Estado | Módulo(s) |
+|---|---|---|---|
+| Failure triage determinístico | Sprint 8 | ✅ implementado | `failure_triage.py` |
+| Eval fixtures (tickets 116/119/120/122) | Sprint 8 | ✅ implementado | `evals/qa_uat_triage/` |
+| Learning Verifier | Sprint 8 | ✅ implementado | `learning_verifier.py` |
+| Selector Healing Advisor (solo sugerencia) | Sprint 8 | ✅ implementado | `selector_healing_advisor.py` |
+| Seguridad: PII masking + secrets redaction | Fase 8 | ✅ implementado | `qa_security.py` |
+| Prompt injection detection | Fase 8 | ✅ implementado | `qa_security.py` |
+| Budget enforcer (allow/warn/block) | Fase 8 | ✅ implementado | `qa_budget_enforcer.py` |
+| Test prioritizer | Fase 8 | ✅ implementado | `test_prioritizer.py` |
+| Quarantine registry (TTL + owner) | Fase 8 | ✅ implementado | `quarantine_registry.py` |

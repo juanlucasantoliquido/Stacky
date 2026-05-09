@@ -1,0 +1,19 @@
+{
+  "schema_version": "contract_validation/1.0",
+  "ok": false,
+  "decision": "BLOCKED",
+  "schema_id": "ScenarioCompilerResult.schema.json",
+  "violations": [
+    "scenarios[0]: missing title/description",
+    "scenarios[1]: missing title/description",
+    "scenarios[2]: missing title/description",
+    "scenarios[3]: missing title/description",
+    "scenarios[4]: missing title/description",
+    "scenarios[5]: missing title/description"
+  ],
+  "reason": "CONTRACT_INVALID",
+  "score": 0.3999999999999999,
+  "elapsed_ms": 0,
+  "artifact_path": null,
+  "contract_type": "compiler"
+}

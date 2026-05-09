@@ -1,0 +1,29 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-05-09T19:57:31.656623+00:00",
+  "ticket_id": 70,
+  "run_id": "uat-70-20260509T195731Z-395807",
+  "verdict": "BLOCKED",
+  "category": "GEN",
+  "reason": "UI_MAP_MISSING",
+  "failed_stage": "ui_map",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'ui_map'. [GEN] UI_MAP_MISSING. UI map missing for screen(s): ['FrmAgenda.aspx']. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "human_action_required": "Run ui_map_builder.py --rebuild",
+  "exec_summary": {
+    "session_started_at": "2026-05-09T19:57:31.627103Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 13
+  },
+  "artifacts": {
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-395807\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-395807\\execution.jsonl"
+  },
+  "evidence_refs": [
+    "evidence_bundle_manifest.json",
+    "execution.jsonl"
+  ],
+  "elapsed_build_ms": 0.0
+}

@@ -1,0 +1,68 @@
+{
+  "schema_version": "data_contract/1.0",
+  "scenario_id": "P02",
+  "ticket_id": 70,
+  "feature": null,
+  "screen": "FrmAgenda.aspx",
+  "data_contract_version": "1.0",
+  "compiled_at": "2026-05-09T19:21:10.597977Z",
+  "compiled_by": "uat_data_contract_compiler/1.0.0",
+  "requirements": [
+    {
+      "requirement_id": "data.req.catalogo_combo_opciones",
+      "entity": "Catalogo",
+      "alias": "catalogo_combo_opciones",
+      "required_fields": [
+        "IDCODIGO",
+        "DESCRIPCION"
+      ],
+      "constraints": [
+        "catalogo tiene al menos una opcion activa",
+        "catalogo no esta vacio"
+      ],
+      "candidate_sources": [
+        "live_db_readonly",
+        "sql_seed"
+      ],
+      "blocking": true,
+      "inferred_from": "step_keywords",
+      "schema_known": false,
+      "db_table": null,
+      "db_key_column": null,
+      "notes": null
+    },
+    {
+      "requirement_id": "data.req.gestion_en_agenda",
+      "entity": "GestionAgenda",
+      "alias": "gestion_en_agenda",
+      "required_fields": [
+        "AGPERFIL",
+        "AGLOTE"
+      ],
+      "constraints": [
+        "existe al menos una gestion asignada al agente QA"
+      ],
+      "candidate_sources": [
+        "live_db_readonly",
+        "user_input"
+      ],
+      "blocking": true,
+      "inferred_from": "step_keywords",
+      "schema_known": true,
+      "db_table": "RAGEN",
+      "db_key_column": "AGPERFIL",
+      "notes": null
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "blocking": 2,
+    "entities": [
+      "Catalogo",
+      "GestionAgenda"
+    ]
+  },
+  "ok": true,
+  "error": null,
+  "artifact_path": null
+}

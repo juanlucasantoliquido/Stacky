@@ -94,10 +94,13 @@ _registry_lock = threading.Lock()
 def get_logger(
     session_id: str,
     evidence_dir: Optional[Path] = None,
+    run_id: Optional[str] = None,
 ) -> "ExecutionLogger":
     """
     Obtener o crear el ExecutionLogger para `session_id`.
 
+    Sprint 1 — Si se pasa `run_id`, se emite como campo top-level en cada
+    evento, permitiendo distinguir ejecuciones del mismo ticket.
     Si ya existe en el registry se devuelve el mismo objeto (singleton por sesión).
     Si se pasa `evidence_dir`, se usa como directorio de salida.
     Si no se pasa, se usa evidence/<session_id>/ relativo al directorio de este módulo.
@@ -107,7 +110,7 @@ def get_logger(
             return _registry[session_id]
         if evidence_dir is None:
             evidence_dir = Path(__file__).parent / "evidence" / session_id
-        log = ExecutionLogger(session_id, evidence_dir=evidence_dir)
+        log = ExecutionLogger(session_id, evidence_dir=evidence_dir, run_id=run_id)
         _registry[session_id] = log
         return log
 
@@ -134,8 +137,11 @@ def close_logger(session_id: str) -> None:
 class ExecutionLogger:
     """Logger estructurado por sesión. Thread-safe. Nunca lanza al exterior."""
 
-    def __init__(self, session_id: str, evidence_dir: Path) -> None:
+    def __init__(self, session_id: str, evidence_dir: Path, run_id: Optional[str] = None) -> None:
         self.session_id = session_id
+        # Sprint 1 — run_id es la identidad canónica de ejecución.
+        # Cuando no se provee, se usa session_id para retrocompatibilidad.
+        self.run_id: str = run_id or session_id
         self.evidence_dir = evidence_dir
         self._lock = threading.Lock()
         self._seq = 0
@@ -192,6 +198,9 @@ class ExecutionLogger:
 
         record: dict = {
             "ts": _utcnow(),
+            # Sprint 1 — run_id es el identificador canónico de ejecución.
+            # session_id se mantiene para retrocompatibilidad con log_analyzer legacy.
+            "run_id": self.run_id,
             "session_id": self.session_id,
             "seq": seq,
             "event": event,
@@ -446,6 +455,93 @@ class ExecutionLogger:
     def info(self, message: str, **extra: Any) -> None:
         self._write("info", {"message": message, **{k: str(v) for k, v in extra.items()}})
 
+    def artifact_root_created(self, artifact_root: str) -> None:
+        """Sprint 1 — Emitir evento cuando el artifact root del run es creado.
+
+        Permite a los consumidores de execution.jsonl localizar todos los
+        artefactos de esta ejecución sin necesidad de inferir el path.
+        """
+        self._write("artifact_root_created", {
+            "artifact_root": artifact_root,
+            "run_id": self.run_id,
+        })
+
+    def stage_confidence(
+        self,
+        stage: str,
+        confidence: float,
+        signals: Optional[list] = None,
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """Sprint 6 — Emit a confidence score for a pipeline stage.
+
+        Parameters
+        ----------
+        stage : str
+            Stage name (e.g. 'screen_detection', 'compiler', 'ui_map').
+        confidence : float
+            0.0-1.0 confidence in the stage outcome.
+        signals : list[str] | None
+            Human-readable signals that drove the confidence score.
+        metadata : dict | None
+            Additional stage-specific metadata.
+
+        Example event:
+            {
+              "event": "stage_confidence",
+              "stage": "screen_detection",
+              "confidence": 0.94,
+              "signals": ["exact_aspx_match", "source=analisis_tecnico"],
+            }
+        """
+        self._write("stage_confidence", {
+            "stage": stage,
+            "confidence": round(max(0.0, min(1.0, confidence)), 4),
+            "signals": signals or [],
+            **(metadata or {}),
+        })
+
+    def human_decision(
+        self,
+        decision: str,
+        operator: Optional[str] = None,
+        run_id: Optional[str] = None,
+        ticket_id: Optional[int] = None,
+        reason: Optional[str] = None,
+        approved_publish: bool = False,
+        **extra: Any,
+    ) -> None:
+        """Sprint 6 — Emit a human decision event (approve/reject/rollback/skip).
+
+        This event is required before any external action (publish, rollback)
+        and is the authoritative record that a human was in the loop.
+
+        Parameters
+        ----------
+        decision : str
+            One of: 'approve_publish', 'reject_publish', 'request_rollback',
+            'skip', 'defer'.
+        operator : str | None
+            Identity of the operator (username or agent identifier).
+        run_id : str | None
+            QA UAT run_id for traceability.
+        ticket_id : int | None
+            ADO ticket ID.
+        reason : str | None
+            Free-text reason for the decision.
+        approved_publish : bool
+            Convenience flag — True only for 'approve_publish'.
+        """
+        self._write("human_decision", {
+            "decision": decision,
+            "operator": operator or "unknown",
+            "run_id": run_id or self.run_id,
+            "ticket_id": ticket_id,
+            "reason": reason,
+            "approved_publish": approved_publish,
+            **extra,
+        })
+
     def pipeline_verdict(
         self,
         verdict: str,
@@ -490,6 +586,118 @@ class ExecutionLogger:
             "evidence_refs": evidence_refs or [],
             "human_action_required": human_action_required,
             **extra,
+        })
+
+    def locator_quality_result(
+        self,
+        screen: str,
+        avg_score: float,
+        total_aliases: int,
+        low_quality_count: int,
+        warnings: Optional[list] = None,
+        high_count: int = 0,
+        medium_count: int = 0,
+    ) -> None:
+        """Sprint 7 — Emit locator_quality_result event after scoring a UI map.
+
+        Parameters
+        ----------
+        screen : str
+            Screen/form name (e.g. 'FrmDetalleClie.aspx').
+        avg_score : float
+            Average locator quality score (0.0–1.0).
+        total_aliases : int
+            Total number of aliases scored.
+        low_quality_count : int
+            Number of aliases with robustness='low'.
+        warnings : list[str] | None
+            Global warnings from the quality report.
+        high_count : int
+            Aliases with robustness='high'.
+        medium_count : int
+            Aliases with robustness='medium'.
+        """
+        self._write("locator_quality_result", {
+            "screen":             screen,
+            "avg_score":          round(max(0.0, min(1.0, avg_score)), 4),
+            "total_aliases":      total_aliases,
+            "high_count":         high_count,
+            "medium_count":       medium_count,
+            "low_quality_count":  low_quality_count,
+            "warnings":           warnings or [],
+        })
+
+    def flake_suspected(
+        self,
+        test_id: str,
+        reason: str,
+        attempt: int,
+        evidence: Optional[list] = None,
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """Sprint 7 — Emit flake_suspected event when a test passes on retry.
+
+        This event is emitted when a test fails on the first attempt but passes
+        on a subsequent attempt — indicating possible flakiness rather than a
+        real product bug.
+
+        Parameters
+        ----------
+        test_id : str
+            Scenario or test identifier.
+        reason : str
+            Reason the flake is suspected (e.g. 'PASS_ON_RETRY', 'INCONSISTENT_RESULT').
+        attempt : int
+            Attempt number where the pass was observed.
+        evidence : list[str] | None
+            Supporting evidence (artifact paths, error snippets, etc.).
+        metadata : dict | None
+            Additional context.
+        """
+        self._write("flake_suspected", {
+            "test_id":  test_id,
+            "reason":   reason,
+            "attempt":  attempt,
+            "evidence": evidence or [],
+            **(metadata or {}),
+        })
+
+    def learning_applied(
+        self,
+        learning_id: str,
+        category: str,
+        applied_to_stage: str,
+        title: str = "",
+        effect: Optional[dict] = None,
+        input_hash: Optional[str] = None,
+    ) -> None:
+        """Sprint 8 — Emit a learning_applied event when a verified learning affects runtime.
+
+        This event is the proof that a learning has been applied — required by
+        LearningVerifier.verify_learning_applicability with evidence_type='runtime_event'.
+
+        Parameters
+        ----------
+        learning_id : str
+            Unique identifier for the learning (e.g. 'lrn-5f4bbe6f28b3').
+        category : str
+            Triage category the learning addresses (APP/ENV/GEN/NAV/PIP/…).
+        applied_to_stage : str
+            Pipeline stage where the learning was applied (e.g. 'screen_detection').
+        title : str
+            Human-readable learning title.
+        effect : dict | None
+            Observed effect: {"before": ..., "after": ...} for before/after comparison.
+        input_hash : str | None
+            Hash of the input that triggered the learning application.
+        """
+        self._write("learning_applied", {
+            "learning_id":      learning_id,
+            "category":         category,
+            "title":            title,
+            "applied_to_stage": applied_to_stage,
+            "input_hash":       input_hash,
+            "effect":           effect or {},
         })
 
     def error(

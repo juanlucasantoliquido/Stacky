@@ -259,6 +259,30 @@ def _run_pipeline_in_background(
                 meta = row.metadata_dict or {}
                 meta["verdict"] = verdict
                 meta["elapsed_s"] = result.get("elapsed_s")
+                # Sprint 1 — store run_id and artifact_root for UI navigation
+                if result.get("run_id"):
+                    meta["run_id"] = result["run_id"]
+                if result.get("artifact_root"):
+                    meta["artifact_root"] = result["artifact_root"]
+                # Sprint 6 — store governance metadata for historial + policy enforcement
+                _s6_fields = {
+                    "category":              result.get("category"),
+                    "reason":                result.get("reason"),
+                    "failed_stage":          result.get("failed_stage"),
+                    "evidence_complete":     result.get("_evidence_complete"),
+                    "evidence_missing":      result.get("_evidence_missing") or [],
+                    "normalized":            result.get("_normalized", False),
+                }
+                # contract results (from Sprint 4 contract validator)
+                _stages = result.get("stages") or {}
+                if "compiler_contract" in _stages:
+                    _s6_fields["compiler_contract_ok"] = _stages["compiler_contract"].get("ok")
+                if "generator_contract" in _stages:
+                    _s6_fields["generator_contract_ok"] = _stages["generator_contract"].get("ok")
+                # confidence: use pipeline_verdict_decision confidence if present
+                if "confidence" in result:
+                    _s6_fields["confidence"] = result["confidence"]
+                meta.update({k: v for k, v in _s6_fields.items() if v is not None})
                 row.metadata_dict = meta
 
         log_streamer.close(execution_id)
@@ -387,6 +411,54 @@ def get_dashboard():
     except Exception as exc:
         return jsonify({"ok": False, "error": "dashboard_error",
                         "message": str(exc)}), 500
+
+
+# ── Sprint 6: Publish policy endpoint ────────────────────────────────────────
+
+@bp.post("/run/<int:execution_id>/policy")
+def check_run_publish_policy(execution_id: int):
+    """Sprint 6 — Evaluate publish policy for a completed QA UAT run.
+
+    POST /api/qa-uat/run/<execution_id>/policy
+    Body (optional): {"human_approved": true, "mode": "publish"}
+    Response: {"ok": true, "allowed": false, "violations": [...]}
+    """
+    _ensure_pipeline_on_path()
+    payload = request.get_json(force=True, silent=True) or {}
+    human_approved = bool(payload.get("human_approved", False))
+    mode = payload.get("mode", "dry-run")
+
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            return jsonify({"ok": False, "error": "not_found",
+                            "message": f"execution {execution_id} not found"}), 404
+        meta = row.metadata_dict or {}
+        verdict = meta.get("verdict")
+        run_id  = meta.get("run_id")
+        artifact_root = meta.get("artifact_root")
+
+    evidence_dir = Path(artifact_root) if artifact_root else None
+
+    try:
+        from qa_uat_publish_policy import evaluate_policy, write_policy_result
+        policy_result = evaluate_policy(
+            verdict=verdict,
+            run_id=run_id,
+            evidence_dir=evidence_dir,
+            human_approved=human_approved,
+            mode=mode,
+        )
+        if evidence_dir:
+            write_policy_result(evidence_dir, policy_result)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "policy_error", "message": str(exc)}), 500
+
+    return jsonify({
+        "ok": True,
+        "execution_id": execution_id,
+        **policy_result.to_dict(),
+    })
 
 
 @bp.post("/budget-check")

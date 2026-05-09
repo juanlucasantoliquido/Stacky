@@ -543,6 +543,24 @@ def _parse_per_spec_results(
                     trace_enabled=trace_enabled,
                 )
 
+        # ── Sprint 7: detect flake — passed on retry after initial failure ────
+        if (
+            max_attempts > 1
+            and statuses
+            and statuses[-1] == "passed"
+            and statuses[0] != "passed"
+            and exec_log is not None
+        ):
+            try:
+                exec_log.flake_suspected(
+                    test_id=scenario_id,
+                    reason="PASS_ON_RETRY",
+                    attempt=max_attempts,
+                    evidence=[f"statuses={statuses}"],
+                )
+            except Exception as _fex:  # noqa: BLE001
+                logger.debug("flake_suspected emit failed (non-fatal): %s", _fex)
+
         if all(s == "passed" for s in statuses) and statuses:
             status = "pass"
         elif any(s == "timedOut" for s in statuses):

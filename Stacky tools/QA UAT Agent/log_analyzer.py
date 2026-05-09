@@ -140,11 +140,32 @@ def main() -> None:
 # ── Session loading ───────────────────────────────────────────────────────────
 
 class Session:
-    """Representa una sesión de ejecución y sus eventos."""
+    """Representa una sesión de ejecución y sus eventos.
+
+    Sprint 1 — soporta dos estructuras de evidencia:
+    - Nuevo (anidado):  evidence/<ticket_id>/<run_id>/execution.jsonl
+    - Legacy (plano):   evidence/<session_id>/execution.jsonl
+    """
     def __init__(self, session_id: str, log_path: Path) -> None:
         self.session_id = session_id
         self.log_path = log_path
         self._events: Optional[list] = None
+
+        # Sprint 1 — inferir ticket_id y run_id del path
+        # Nuevo: evidence/122/uat-122-20260509T.../execution.jsonl
+        #   parent.name = run_id (empieza con "uat-")
+        #   parent.parent.name = ticket_id
+        # Legacy: evidence/122/execution.jsonl  o  evidence/freeform-.../execution.jsonl
+        #   parent.name = session_id (ticket number o free-form)
+        _parent = log_path.parent
+        if _parent.name.startswith("uat-"):
+            # Nuevo formato anidado
+            self.run_id: str = _parent.name
+            self.ticket_id: Optional[str] = _parent.parent.name
+        else:
+            # Legacy plano
+            self.run_id = session_id
+            self.ticket_id = session_id if session_id.isdigit() else None
 
     @property
     def events(self) -> list:
@@ -206,12 +227,22 @@ def _load_sessions(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
 ) -> list[Session]:
-    """Cargar sesiones desde evidence_root/*/execution.jsonl."""
+    """Cargar sesiones desde evidence_root.
+
+    Sprint 1 — soporta dos estructuras:
+    - Nuevo (anidado):  evidence/<ticket_id>/<run_id>/execution.jsonl
+    - Legacy (plano):   evidence/<session_id>/execution.jsonl
+
+    En el formato nuevo el session_id es el run_id (uat-<ticket>-<ts>-<uuid6>).
+    En el formato legacy el session_id es el directorio padre (ej: "122").
+    Ambos son encontrados por rglob("execution.jsonl").
+    """
     if not evidence_root.is_dir():
         return []
 
     sessions = []
     for log_path in sorted(evidence_root.rglob("execution.jsonl")):
+        # El session_id es siempre el directorio inmediato del archivo
         sid = log_path.parent.name
         if session_id and sid != session_id:
             continue

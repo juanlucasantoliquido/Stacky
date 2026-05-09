@@ -1,0 +1,16 @@
+{
+  "base_url": "http://localhost:35017/AgendaWeb/",
+  "username_source": "env",
+  "password_present": true,
+  "password_hash_prefix": "ba230eb5",
+  "manage_app": false,
+  "allow_ui_discovery": false,
+  "allow_llm_navigation": false,
+  "require_playbook": true,
+  "max_login_attempts": 1,
+  "max_browser_launches": 1,
+  "max_total_minutes": 6,
+  "expected_human_minutes": 2,
+  "max_runtime_multiplier": 3,
+  "frozen_at": "2026-05-09T19:42:11Z"
+}

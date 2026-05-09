@@ -245,6 +245,12 @@ def run(
                  "duration_ms": int((time.time() - started) * 1000)},
     }
     _write_audit(ticket_id, mode, result, dossier_path)
+
+    # Sprint 6 — write rollback_audit.json for auditable comment reversion.
+    # Contains enough information to identify and delete the published comment.
+    if posted_comment_id:
+        _write_rollback_audit(ticket_id, run_id, comment_hash, posted_comment_id, dossier_path)
+
     return result
 
 
@@ -492,6 +498,51 @@ def _post_comment(ticket_id: int, html_content: str, ado_path: Path) -> dict:
 
 
 # ── Audit log ─────────────────────────────────────────────────────────────────
+
+def _write_rollback_audit(
+    ticket_id: int,
+    run_id: str,
+    comment_hash: str,
+    comment_id,
+    dossier_path: Path,
+) -> None:
+    """Sprint 6 — Write rollback_audit.json for auditable comment reversion.
+
+    Contains enough information to identify and delete/replace the published
+    ADO comment. Stored next to the dossier for traceability.
+
+    Fields:
+        ticket_id, run_id, comment_id, comment_hash: enough to find the comment.
+        published_at: ISO timestamp.
+        rollback_instruction: human-readable steps to revert.
+        rollback_status: "not_rolled_back" initially.
+    """
+    audit = {
+        "schema_version": "rollback_audit/1.0",
+        "ticket_id": ticket_id,
+        "run_id": run_id,
+        "comment_id": comment_id,
+        "comment_hash": comment_hash,
+        "published_at": datetime.utcnow().isoformat() + "Z",
+        "dossier_path": str(dossier_path),
+        "rollback_status": "not_rolled_back",
+        "rollback_instruction": (
+            f"To roll back: delete ADO comment id={comment_id} "
+            f"on work item #{ticket_id}, or replace with retraction notice. "
+            f"Use ado_evidence_publisher with mode=publish and replace_previous=True "
+            f"on the corrected dossier."
+        ),
+    }
+    rollback_path = dossier_path.parent / "rollback_audit.json"
+    try:
+        rollback_path.write_text(
+            json.dumps(audit, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        logger.debug("ado_evidence_publisher: wrote rollback_audit.json at %s", rollback_path)
+    except Exception as exc:
+        logger.warning("ado_evidence_publisher: could not write rollback_audit.json: %s", exc)
+
 
 def _write_audit(ticket_id: int, mode: str, result: dict, dossier_path: Path) -> None:
     """Append an audit row to audit/<YYYY-MM-DD>.jsonl."""

@@ -1,0 +1,617 @@
+[
+  {
+    "run_id": "uat-70-20260509T201805Z-9cb1ee",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201805Z-9cb1ee",
+    "created_at": "2026-05-09T20:18:05.858718Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201805Z-159970",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201805Z-159970",
+    "created_at": "2026-05-09T20:18:05.808041Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201805Z-0f8196",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201805Z-0f8196",
+    "created_at": "2026-05-09T20:18:05.624729Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201805Z-5c5f30",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201805Z-5c5f30",
+    "created_at": "2026-05-09T20:18:05.437764Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201805Z-aafb41",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201805Z-aafb41",
+    "created_at": "2026-05-09T20:18:05.233679Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201805Z-92f721",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201805Z-92f721",
+    "created_at": "2026-05-09T20:18:05.024894Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201804Z-7b000b",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201804Z-7b000b",
+    "created_at": "2026-05-09T20:18:04.858994Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201804Z-bbe472",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201804Z-bbe472",
+    "created_at": "2026-05-09T20:18:04.815311Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201804Z-cf4509",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201804Z-cf4509",
+    "created_at": "2026-05-09T20:18:04.778400Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201804Z-3793aa",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201804Z-3793aa",
+    "created_at": "2026-05-09T20:18:04.475185Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201051Z-ccb045",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201051Z-ccb045",
+    "created_at": "2026-05-09T20:10:51.183067Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201051Z-439d7f",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201051Z-439d7f",
+    "created_at": "2026-05-09T20:10:51.116437Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201050Z-021b4d",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201050Z-021b4d",
+    "created_at": "2026-05-09T20:10:50.833206Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201050Z-393644",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201050Z-393644",
+    "created_at": "2026-05-09T20:10:50.623508Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201050Z-9b9c5c",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201050Z-9b9c5c",
+    "created_at": "2026-05-09T20:10:50.417016Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201050Z-24db2b",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201050Z-24db2b",
+    "created_at": "2026-05-09T20:10:50.199150Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201050Z-3682d4",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201050Z-3682d4",
+    "created_at": "2026-05-09T20:10:50.016878Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201049Z-ba0e01",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201049Z-ba0e01",
+    "created_at": "2026-05-09T20:10:49.983545Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201049Z-a8240d",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201049Z-a8240d",
+    "created_at": "2026-05-09T20:10:49.933969Z"
+  },
+  {
+    "run_id": "uat-70-20260509T201049Z-9eb3be",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T201049Z-9eb3be",
+    "created_at": "2026-05-09T20:10:49.600677Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200432Z-e5a38f",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200432Z-e5a38f",
+    "created_at": "2026-05-09T20:04:32.212514Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200432Z-bc435b",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200432Z-bc435b",
+    "created_at": "2026-05-09T20:04:32.162001Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200431Z-d53d05",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200431Z-d53d05",
+    "created_at": "2026-05-09T20:04:31.842495Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200431Z-410eb5",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200431Z-410eb5",
+    "created_at": "2026-05-09T20:04:31.523829Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200431Z-7afbec",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200431Z-7afbec",
+    "created_at": "2026-05-09T20:04:31.300972Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200431Z-151422",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200431Z-151422",
+    "created_at": "2026-05-09T20:04:31.095558Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200430Z-6f835c",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200430Z-6f835c",
+    "created_at": "2026-05-09T20:04:30.907547Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200430Z-d7f392",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200430Z-d7f392",
+    "created_at": "2026-05-09T20:04:30.847506Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200430Z-315964",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200430Z-315964",
+    "created_at": "2026-05-09T20:04:30.791137Z"
+  },
+  {
+    "run_id": "uat-70-20260509T200430Z-901cc9",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T200430Z-901cc9",
+    "created_at": "2026-05-09T20:04:30.462453Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195832Z-ffa63d",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195832Z-ffa63d",
+    "created_at": "2026-05-09T19:58:32.616411Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195832Z-9263b1",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195832Z-9263b1",
+    "created_at": "2026-05-09T19:58:32.564459Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195832Z-4e895e",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195832Z-4e895e",
+    "created_at": "2026-05-09T19:58:32.339189Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195832Z-432165",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195832Z-432165",
+    "created_at": "2026-05-09T19:58:32.147990Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195831Z-8de51f",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195831Z-8de51f",
+    "created_at": "2026-05-09T19:58:31.918321Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195831Z-d9de10",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195831Z-d9de10",
+    "created_at": "2026-05-09T19:58:31.736203Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195831Z-beabe0",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195831Z-beabe0",
+    "created_at": "2026-05-09T19:58:31.572554Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195831Z-45773d",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195831Z-45773d",
+    "created_at": "2026-05-09T19:58:31.531416Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195831Z-8403c0",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195831Z-8403c0",
+    "created_at": "2026-05-09T19:58:31.478624Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195831Z-e18c7c",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195831Z-e18c7c",
+    "created_at": "2026-05-09T19:58:31.133310Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195732Z-1529d2",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195732Z-1529d2",
+    "created_at": "2026-05-09T19:57:32.854588Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195732Z-238bf0",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195732Z-238bf0",
+    "created_at": "2026-05-09T19:57:32.821335Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195732Z-26edef",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195732Z-26edef",
+    "created_at": "2026-05-09T19:57:32.590477Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195732Z-6a3213",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195732Z-6a3213",
+    "created_at": "2026-05-09T19:57:32.355001Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195732Z-ba2b6c",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195732Z-ba2b6c",
+    "created_at": "2026-05-09T19:57:32.121549Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195731Z-404e8f",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-404e8f",
+    "created_at": "2026-05-09T19:57:31.921798Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195731Z-9fda98",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-9fda98",
+    "created_at": "2026-05-09T19:57:31.718827Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195731Z-53055d",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-53055d",
+    "created_at": "2026-05-09T19:57:31.676089Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195731Z-395807",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-395807",
+    "created_at": "2026-05-09T19:57:31.633104Z"
+  },
+  {
+    "run_id": "uat-70-20260509T195731Z-a3bf50",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-a3bf50",
+    "created_at": "2026-05-09T19:57:31.187573Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194705Z-36f395",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194705Z-36f395",
+    "created_at": "2026-05-09T19:47:05.254541Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194705Z-9515bb",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194705Z-9515bb",
+    "created_at": "2026-05-09T19:47:05.226164Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194704Z-e8f83e",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194704Z-e8f83e",
+    "created_at": "2026-05-09T19:47:04.999212Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194704Z-18701e",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194704Z-18701e",
+    "created_at": "2026-05-09T19:47:04.640238Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194704Z-3c9880",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194704Z-3c9880",
+    "created_at": "2026-05-09T19:47:04.440393Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194704Z-b19250",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194704Z-b19250",
+    "created_at": "2026-05-09T19:47:04.258599Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194704Z-7926c6",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194704Z-7926c6",
+    "created_at": "2026-05-09T19:47:04.026506Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194703Z-ee35e7",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194703Z-ee35e7",
+    "created_at": "2026-05-09T19:47:03.993649Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194703Z-8bf57e",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194703Z-8bf57e",
+    "created_at": "2026-05-09T19:47:03.954796Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194703Z-d32e72",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194703Z-d32e72",
+    "created_at": "2026-05-09T19:47:03.604213Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194017Z-348146",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194017Z-348146",
+    "created_at": "2026-05-09T19:40:17.244821Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194017Z-46f6b7",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194017Z-46f6b7",
+    "created_at": "2026-05-09T19:40:17.211843Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194016Z-0d98df",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194016Z-0d98df",
+    "created_at": "2026-05-09T19:40:16.908644Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194016Z-72c17f",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194016Z-72c17f",
+    "created_at": "2026-05-09T19:40:16.641259Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194016Z-fe1a56",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194016Z-fe1a56",
+    "created_at": "2026-05-09T19:40:16.187464Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194015Z-2b23e2",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194015Z-2b23e2",
+    "created_at": "2026-05-09T19:40:15.684317Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194015Z-833d94",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194015Z-833d94",
+    "created_at": "2026-05-09T19:40:15.248545Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194015Z-63b25d",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194015Z-63b25d",
+    "created_at": "2026-05-09T19:40:15.172202Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194015Z-e5a300",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194015Z-e5a300",
+    "created_at": "2026-05-09T19:40:15.103544Z"
+  },
+  {
+    "run_id": "uat-70-20260509T194014Z-5a0763",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T194014Z-5a0763",
+    "created_at": "2026-05-09T19:40:14.578114Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193831Z-f211ba",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193831Z-f211ba",
+    "created_at": "2026-05-09T19:38:31.489344Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193831Z-e17a68",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193831Z-e17a68",
+    "created_at": "2026-05-09T19:38:31.455995Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193831Z-f2c9ef",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193831Z-f2c9ef",
+    "created_at": "2026-05-09T19:38:31.277659Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193831Z-0987f2",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193831Z-0987f2",
+    "created_at": "2026-05-09T19:38:31.089280Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193830Z-0c233f",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193830Z-0c233f",
+    "created_at": "2026-05-09T19:38:30.908977Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193830Z-d1d80f",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193830Z-d1d80f",
+    "created_at": "2026-05-09T19:38:30.692914Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193830Z-5255f0",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193830Z-5255f0",
+    "created_at": "2026-05-09T19:38:30.489541Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193830Z-65403b",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193830Z-65403b",
+    "created_at": "2026-05-09T19:38:30.472954Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193830Z-91e4ee",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193830Z-91e4ee",
+    "created_at": "2026-05-09T19:38:30.455331Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193830Z-c3af39",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193830Z-c3af39",
+    "created_at": "2026-05-09T19:38:30.145417Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193822Z-a787d9",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193822Z-a787d9",
+    "created_at": "2026-05-09T19:38:22.309047Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193717Z-6e4e0a",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193717Z-6e4e0a",
+    "created_at": "2026-05-09T19:37:17.061025Z"
+  },
+  {
+    "run_id": "uat-70-20260509T193532Z-8ac083",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T193532Z-8ac083",
+    "created_at": "2026-05-09T19:35:32.408998Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192936Z-5350b5",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192936Z-5350b5",
+    "created_at": "2026-05-09T19:29:36.629885Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192936Z-7dc27c",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192936Z-7dc27c",
+    "created_at": "2026-05-09T19:29:36.606524Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192936Z-f2fbdb",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192936Z-f2fbdb",
+    "created_at": "2026-05-09T19:29:36.424688Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192936Z-319092",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192936Z-319092",
+    "created_at": "2026-05-09T19:29:36.258487Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192936Z-c6c9d5",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192936Z-c6c9d5",
+    "created_at": "2026-05-09T19:29:36.091743Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192935Z-60ebce",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192935Z-60ebce",
+    "created_at": "2026-05-09T19:29:35.909121Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192935Z-b6f398",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192935Z-b6f398",
+    "created_at": "2026-05-09T19:29:35.763596Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192935Z-c1a866",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192935Z-c1a866",
+    "created_at": "2026-05-09T19:29:35.741952Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192935Z-6ba069",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192935Z-6ba069",
+    "created_at": "2026-05-09T19:29:35.713349Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192935Z-935db8",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192935Z-935db8",
+    "created_at": "2026-05-09T19:29:35.441155Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192256Z-678422",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192256Z-678422",
+    "created_at": "2026-05-09T19:22:56.197868Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192256Z-96e597",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192256Z-96e597",
+    "created_at": "2026-05-09T19:22:56.172346Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192255Z-ee017d",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192255Z-ee017d",
+    "created_at": "2026-05-09T19:22:55.998423Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192255Z-6f7ccb",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192255Z-6f7ccb",
+    "created_at": "2026-05-09T19:22:55.731773Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192255Z-ec2240",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192255Z-ec2240",
+    "created_at": "2026-05-09T19:22:55.514936Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192255Z-c336c6",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192255Z-c336c6",
+    "created_at": "2026-05-09T19:22:55.298218Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192255Z-35d161",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192255Z-35d161",
+    "created_at": "2026-05-09T19:22:55.120113Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192255Z-6da5f9",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192255Z-6da5f9",
+    "created_at": "2026-05-09T19:22:55.080677Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192255Z-7dffa8",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192255Z-7dffa8",
+    "created_at": "2026-05-09T19:22:55.043072Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192254Z-5e341d",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192254Z-5e341d",
+    "created_at": "2026-05-09T19:22:54.625068Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192111Z-f9b4be",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192111Z-f9b4be",
+    "created_at": "2026-05-09T19:21:11.491365Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192111Z-2fee69",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192111Z-2fee69",
+    "created_at": "2026-05-09T19:21:11.461443Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192111Z-b1c55c",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192111Z-b1c55c",
+    "created_at": "2026-05-09T19:21:11.289153Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192111Z-6afa9e",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192111Z-6afa9e",
+    "created_at": "2026-05-09T19:21:11.096428Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192110Z-9eec11",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192110Z-9eec11",
+    "created_at": "2026-05-09T19:21:10.903742Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192110Z-a90a5d",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192110Z-a90a5d",
+    "created_at": "2026-05-09T19:21:10.739353Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192110Z-67ed99",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192110Z-67ed99",
+    "created_at": "2026-05-09T19:21:10.580136Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192110Z-15e745",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192110Z-15e745",
+    "created_at": "2026-05-09T19:21:10.541896Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192110Z-a194d5",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192110Z-a194d5",
+    "created_at": "2026-05-09T19:21:10.136662Z"
+  },
+  {
+    "run_id": "uat-70-20260509T192109Z-231bda",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T192109Z-231bda",
+    "created_at": "2026-05-09T19:21:09.875761Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191105Z-b89096",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191105Z-b89096",
+    "created_at": "2026-05-09T19:11:05.896295Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191105Z-c88837",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191105Z-c88837",
+    "created_at": "2026-05-09T19:11:05.864180Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191105Z-aa0550",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191105Z-aa0550",
+    "created_at": "2026-05-09T19:11:05.534534Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191105Z-d30414",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191105Z-d30414",
+    "created_at": "2026-05-09T19:11:05.322320Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191105Z-1d12e0",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191105Z-1d12e0",
+    "created_at": "2026-05-09T19:11:05.153761Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191104Z-fbd321",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191104Z-fbd321",
+    "created_at": "2026-05-09T19:11:04.970993Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191104Z-9146b5",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191104Z-9146b5",
+    "created_at": "2026-05-09T19:11:04.776145Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191104Z-8a0c8a",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191104Z-8a0c8a",
+    "created_at": "2026-05-09T19:11:04.747612Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191104Z-c1abe5",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191104Z-c1abe5",
+    "created_at": "2026-05-09T19:11:04.723095Z"
+  },
+  {
+    "run_id": "uat-70-20260509T191104Z-38b16c",
+    "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T191104Z-38b16c",
+    "created_at": "2026-05-09T19:11:04.324548Z"
+  }
+]

@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "GeneratedTestPlan.schema.json",
+  "title": "GeneratedTestPlan",
+  "description": "Output contract for playwright_test_generator.run(). Sprint 4.",
+  "type": "object",
+  "required": ["ok", "specs"],
+  "additionalProperties": true,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "specs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["scenario_id", "status"],
+        "additionalProperties": true,
+        "properties": {
+          "scenario_id": { "type": "string", "minLength": 1 },
+          "status": {
+            "type": "string",
+            "enum": ["generated", "blocked", "skipped", "error"]
+          },
+          "spec_file": { "type": ["string", "null"] },
+          "blocked_reason": { "type": ["string", "null"] },
+          "aliases_used": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "aliases_missing": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "generated_count": { "type": "integer", "minimum": 0 },
+    "blocked_count": { "type": "integer", "minimum": 0 },
+    "meta": { "type": "object" }
+  }
+}

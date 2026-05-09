@@ -1,0 +1,21 @@
+{
+  "schema_version": "data_readiness_v2/1.0",
+  "ready": true,
+  "scenario_id": "P01",
+  "ticket_id": 70,
+  "checked_at": "2026-05-09T20:10:50.450060Z",
+  "decision": "UNVERIFIED",
+  "missing": [],
+  "resolved": [
+    {
+      "requirement_id": "data.req.gestion_en_agenda",
+      "entity": "GestionAgenda",
+      "alias": "gestion_en_agenda",
+      "source": "unverified",
+      "resolved_fields": {},
+      "confidence": 0.0
+    }
+  ],
+  "blocking_missing_count": 0,
+  "artifact_path": null
+}

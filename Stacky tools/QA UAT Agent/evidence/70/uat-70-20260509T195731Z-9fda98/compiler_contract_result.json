@@ -1,0 +1,12 @@
+{
+  "schema_version": "contract_validation/1.0",
+  "ok": true,
+  "decision": "ALLOW",
+  "schema_id": "ScenarioCompilerResult.schema.json",
+  "violations": [],
+  "reason": null,
+  "score": 1.0,
+  "elapsed_ms": 0,
+  "artifact_path": null,
+  "contract_type": "compiler"
+}

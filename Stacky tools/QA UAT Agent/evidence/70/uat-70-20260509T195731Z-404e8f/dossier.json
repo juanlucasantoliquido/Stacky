@@ -1,0 +1,37 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-05-09T19:57:32.088174+00:00",
+  "ticket_id": 70,
+  "run_id": "uat-70-20260509T195731Z-404e8f",
+  "verdict": "BLOCKED",
+  "category": "OBS",
+  "reason": "EVIDENCE_INCOMPLETE",
+  "failed_stage": "publisher_readiness",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'publisher_readiness'. [OBS] EVIDENCE_INCOMPLETE. Evidence bundle incomplete — missing: ",
+  "human_action_required": "Check evidence bundle and verdict before publishing to ADO",
+  "exec_summary": {
+    "session_started_at": "2026-05-09T19:57:31.921798Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 64
+  },
+  "artifacts": {
+    "compiler_contract_result_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-404e8f\\compiler_contract_result.json",
+    "data_readiness_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-404e8f\\data_readiness.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-404e8f\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-404e8f\\execution.jsonl",
+    "generator_contract_result_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-404e8f\\generator_contract_result.json",
+    "triage_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260509T195731Z-404e8f\\triage.json"
+  },
+  "evidence_refs": [
+    "compiler_contract_result.json",
+    "data_readiness.json",
+    "evidence_bundle_manifest.json",
+    "execution.jsonl",
+    "generator_contract_result.json",
+    "triage.json"
+  ],
+  "elapsed_build_ms": 0.0
+}

@@ -106,6 +106,8 @@ _DATA_NAV_REASONS = {
     "TEST_ENTITY_NOT_FOUND":   "DATA",
     "TEST_USER_PERMISSION_MISSING": "DATA",
     "DATA_SOURCE_UNREACHABLE": "ENV",
+    "CATALOG_MISSING":         "DATA",   # Sprint 3: catalog not seeded
+    "CATALOG_EMPTY":           "DATA",   # Sprint 3: catalog has 0 entries
 }
 
 
@@ -732,6 +734,185 @@ def infer_failure_category(reason: str) -> str:
     'ENV'
     """
     return _DATA_NAV_REASONS.get(reason, "NAV")
+
+
+# ── Seed SQL generator (Sprint 3 Item 3.3) ────────────────────────────────────
+
+_SEED_SQL_TEMPLATES: dict[str, dict] = {
+    # entity → {seed_sql, rollback_sql, label}
+    "ROBLG": {
+        "label": "obligaciones_de_prueba",
+        "seed_sql": (
+            "-- SEED: obligaciones de prueba para QA UAT (Sprint 3)\n"
+            "-- Idempotente: usa MERGE para no duplicar\n"
+            "-- Etiqueta: QA_UAT_SEED_{scenario_id}\n"
+            "MERGE INTO RSPACIFICO.ROBLG AS target\n"
+            "USING (\n"
+            "    SELECT 'QA_UAT_SEED_{scenario_id}' AS QA_LABEL,\n"
+            "           {clcod} AS CLCOD,\n"
+            "           SYSDATE AS FECALT\n"
+            "    FROM DUAL\n"
+            "    WHERE NOT EXISTS (\n"
+            "        SELECT 1 FROM RSPACIFICO.ROBLG\n"
+            "        WHERE CLCOD = {clcod} AND QA_LABEL = 'QA_UAT_SEED_{scenario_id}'\n"
+            "    )\n"
+            ") AS source ON (target.CLCOD = source.CLCOD AND target.QA_LABEL = source.QA_LABEL)\n"
+            "WHEN NOT MATCHED THEN INSERT (CLCOD, QA_LABEL, FECALT)\n"
+            "    VALUES (source.CLCOD, source.QA_LABEL, source.FECALT);\n"
+        ),
+        "rollback_sql": (
+            "-- ROLLBACK: eliminar obligaciones seed de QA UAT (Sprint 3)\n"
+            "-- Etiqueta: QA_UAT_SEED_{scenario_id}\n"
+            "DELETE FROM RSPACIFICO.ROBLG\n"
+            "WHERE QA_LABEL = 'QA_UAT_SEED_{scenario_id}';\n"
+            "-- Verificar antes de commit:\n"
+            "-- SELECT COUNT(*) FROM RSPACIFICO.ROBLG WHERE QA_LABEL = 'QA_UAT_SEED_{scenario_id}';\n"
+        ),
+    },
+    "CLCLIE": {
+        "label": "cliente_de_prueba",
+        "seed_sql": (
+            "-- SEED: cliente de prueba para QA UAT (Sprint 3)\n"
+            "-- Idempotente: INSERT IF NOT EXISTS\n"
+            "-- Etiqueta: QA_UAT_SEED_{scenario_id}\n"
+            "INSERT INTO RSPACIFICO.CLCLIE (CLCOD, CLNOMB, QA_LABEL)\n"
+            "SELECT {clcod}, 'QA UAT TEST CLIENT', 'QA_UAT_SEED_{scenario_id}'\n"
+            "FROM DUAL\n"
+            "WHERE NOT EXISTS (\n"
+            "    SELECT 1 FROM RSPACIFICO.CLCLIE\n"
+            "    WHERE CLCOD = {clcod} AND QA_LABEL = 'QA_UAT_SEED_{scenario_id}'\n"
+            ");\n"
+        ),
+        "rollback_sql": (
+            "-- ROLLBACK: eliminar cliente seed de QA UAT (Sprint 3)\n"
+            "DELETE FROM RSPACIFICO.CLCLIE\n"
+            "WHERE QA_LABEL = 'QA_UAT_SEED_{scenario_id}';\n"
+        ),
+    },
+}
+
+_GENERIC_SEED_SQL = (
+    "-- SEED: datos de prueba para QA UAT (Sprint 3) — entidad {entity}\n"
+    "-- IMPORTANTE: reemplazar con INSERT idempotente para la entidad {entity}.\n"
+    "-- Etiqueta todos los registros con: QA_UAT_SEED_{scenario_id}\n"
+    "-- Incluir rollback_sql para eliminar datos seed después del test.\n"
+    "-- Ver: docs/seed-sql-guidelines.md\n"
+)
+
+_GENERIC_ROLLBACK_SQL = (
+    "-- ROLLBACK: eliminar datos seed de QA UAT (Sprint 3) — entidad {entity}\n"
+    "-- DELETE FROM <tabla> WHERE QA_LABEL = 'QA_UAT_SEED_{scenario_id}';\n"
+)
+
+
+def generate_seed_sql(
+    blocked_checks: list,
+    scenario_id: str,
+    evidence_dir: Optional[Path] = None,
+) -> dict:
+    """Generate seed SQL suggestion for blocked data readiness checks.
+
+    Sprint 3 — produces idempotent, labeled SQL seed + rollback suggestions
+    for every BLOCKED check.  Never executes any SQL.
+
+    Parameters
+    ----------
+    blocked_checks : list[DataCheck]
+        Only checks with decision="BLOCKED" should be passed.
+    scenario_id : str
+        Scenario identifier — embedded in SQL labels for traceability.
+    evidence_dir : Path | None
+        If provided, writes seed_sql_suggestion.sql and rollback_sql_suggestion.sql.
+
+    Returns
+    -------
+    dict
+        {
+          "ok": True,
+          "scenario_id": ...,
+          "seed_sql": "<full SQL>",
+          "rollback_sql": "<full SQL>",
+          "seed_sql_path": "<path or None>",
+          "rollback_sql_path": "<path or None>",
+          "entities": [...],
+        }
+    """
+    if not blocked_checks:
+        return {
+            "ok": True,
+            "scenario_id": scenario_id,
+            "seed_sql": None,
+            "rollback_sql": None,
+            "seed_sql_path": None,
+            "rollback_sql_path": None,
+            "entities": [],
+        }
+
+    seed_parts: list[str] = [
+        f"-- ============================================================\n"
+        f"-- QA UAT SEED SQL — Sprint 3\n"
+        f"-- Scenario: {scenario_id}\n"
+        f"-- Generated: READ-ONLY suggestion, NOT executed automatically\n"
+        f"-- Label all seed records with: QA_UAT_SEED_{scenario_id}\n"
+        f"-- ============================================================\n",
+    ]
+    rollback_parts: list[str] = [
+        f"-- ============================================================\n"
+        f"-- QA UAT ROLLBACK SQL — Sprint 3\n"
+        f"-- Scenario: {scenario_id}\n"
+        f"-- Run AFTER QA UAT test to clean up seed data.\n"
+        f"-- ============================================================\n",
+    ]
+
+    entities_seen: list[str] = []
+    for check in blocked_checks:
+        entity = getattr(check, "entity", None) or check.get("entity", "UNKNOWN")  # type: ignore[union-attr]
+        if entity not in entities_seen:
+            entities_seen.append(entity)
+
+        input_data = getattr(check, "input_data", {}) or {}
+        clcod = input_data.get("CLCOD", "{CLCOD_REPLACE}")
+        fmt = {"scenario_id": scenario_id, "entity": entity, "clcod": clcod}
+
+        template = _SEED_SQL_TEMPLATES.get(entity)
+        if template:
+            seed_parts.append(template["seed_sql"].format(**fmt))
+            rollback_parts.append(template["rollback_sql"].format(**fmt))
+        else:
+            seed_parts.append(_GENERIC_SEED_SQL.format(**fmt))
+            rollback_parts.append(_GENERIC_ROLLBACK_SQL.format(**fmt))
+
+    seed_sql = "\n".join(seed_parts)
+    rollback_sql = "\n".join(rollback_parts)
+
+    seed_path: Optional[Path] = None
+    rollback_path: Optional[Path] = None
+
+    if evidence_dir is not None:
+        try:
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+            seed_path = evidence_dir / "seed_sql_suggestion.sql"
+            seed_path.write_text(seed_sql, encoding="utf-8")
+            rollback_path = evidence_dir / "rollback_sql_suggestion.sql"
+            rollback_path.write_text(rollback_sql, encoding="utf-8")
+            logger.info(
+                "data_readiness: seed SQL written to %s, rollback to %s",
+                seed_path, rollback_path,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("data_readiness: failed to write seed SQL artifacts: %s", exc)
+            seed_path = None
+            rollback_path = None
+
+    return {
+        "ok": True,
+        "scenario_id": scenario_id,
+        "seed_sql": seed_sql,
+        "rollback_sql": rollback_sql,
+        "seed_sql_path": str(seed_path) if seed_path else None,
+        "rollback_sql_path": str(rollback_path) if rollback_path else None,
+        "entities": entities_seen,
+    }
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

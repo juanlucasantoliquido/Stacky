@@ -154,11 +154,21 @@ def check_deployment_fingerprint(
     base_url: str,
     sources: Optional[list] = None,  # sources to try in order; None = use defaults
     mode: str = "dry-run",           # "dry-run" | "publish"
+    policy: Optional[str] = None,    # Sprint 2: "off" | "soft" | "hard" — overrides mode-based logic
     exec_logger=None,
     evidence_dir: Optional[Path] = None,
     run_id: Optional[str] = None,
 ) -> DeploymentFingerprintResult:
     """Check that the running build matches what the ticket expects.
+
+    Sprint 2 — policy parameter:
+    - "off"  : skip gate entirely (always ALLOW, no matter what)
+    - "soft" : WARN on mismatch or missing source, never blocks
+    - "hard" : BLOCK on mismatch AND on missing source (BUILD_UNVERIFIABLE)
+    - None   : use pre-Sprint 2 behavior (bound to mode=dry-run/publish)
+
+    The policy can also be set via QA_UAT_DEPLOYMENT_POLICY env var.
+    Explicit `policy` parameter takes precedence over env var.
 
     Parameters
     ----------
@@ -172,7 +182,9 @@ def check_deployment_fingerprint(
     sources : list[str] | None
         Source names to try in order.  Defaults to all sources.
     mode : str
-        "dry-run" or "publish".  Affects BLOCKED vs WARN for missing sources.
+        "dry-run" or "publish".  Used for pre-Sprint 2 behavior when policy=None.
+    policy : str | None
+        Sprint 2 gate policy. Reads QA_UAT_DEPLOYMENT_POLICY if None.
     exec_logger : ExecutionLogger | None
         If provided, emits deployment_fingerprint_check event.
     evidence_dir : Path | None
@@ -189,15 +201,22 @@ def check_deployment_fingerprint(
     base_url = _normalize_base_url(base_url)
     sources = sources or _resolve_sources_from_env(_ALL_SOURCES)
 
+    # Sprint 2 — resolve effective policy
+    _policy = policy or os.environ.get("QA_UAT_DEPLOYMENT_POLICY", "").strip().lower()
+    if _policy not in ("off", "soft", "hard"):
+        _policy = None  # fall back to pre-Sprint 2 mode-based logic
+
     # ── Case: no expected build defined ─────────────────────────────────────
     if not expected:
         elapsed = int((time.time() - started) * 1000)
+        # Sprint 2 — policy=off → skip entirely even without expected
+        decision = "ALLOW" if _policy == "off" else "WARN"
         result = DeploymentFingerprintResult(
             matched=True,
             source=_SOURCE_NONE,
             expected={},
             active={},
-            decision="WARN",
+            decision=decision,
             category=None,
             reason="NO_EXPECTED_BUILD_DEFINED",
             skipped=True,
@@ -212,21 +231,52 @@ def check_deployment_fingerprint(
         )
         return result
 
+    # ── Case: policy=off — skip gate ─────────────────────────────────────────
+    if _policy == "off":
+        elapsed = int((time.time() - started) * 1000)
+        result = DeploymentFingerprintResult(
+            matched=True,
+            source="policy_off",
+            expected=expected or {},
+            active={},
+            decision="ALLOW",
+            category=None,
+            reason="POLICY_OFF",
+            skipped=True,
+            elapsed_ms=elapsed,
+            artifact_path=None,
+        )
+        _emit_event(exec_logger, ticket_id, result)
+        _write_artifact(result, evidence_dir, run_id)
+        logger.info("deployment_fingerprint: gate disabled by policy=off for ticket %s", ticket_id)
+        return result
+
     # ── Probe sources ────────────────────────────────────────────────────────
     active, source_used, probe_error = _probe_sources(base_url, sources)
 
     elapsed = int((time.time() - started) * 1000)
 
     # ── Determine decision ──────────────────────────────────────────────────
+    # Sprint 2: policy=soft/hard takes precedence over mode-based logic.
     if source_used == _SOURCE_NONE:
         # No source produced data
-        if mode == "publish":
+        if _policy == "hard":
+            decision = "BLOCKED"
+            category = "ENV"
+            reason = "BUILD_UNVERIFIABLE"   # Sprint 2 reason code (harder than FINGERPRINT_SOURCE_MISSING)
+            matched = False
+        elif _policy == "soft":
+            decision = "WARN"
+            category = None
+            reason = "FINGERPRINT_SOURCE_MISSING"
+            matched = True
+        elif mode == "publish":
             decision = "BLOCKED"
             category = "ENV"
             reason = "FINGERPRINT_SOURCE_MISSING"
             matched = False
         else:
-            # dry-run: warn but continue
+            # dry-run without explicit policy: warn but continue
             decision = "WARN"
             category = None
             reason = "FINGERPRINT_SOURCE_MISSING"
@@ -237,10 +287,18 @@ def check_deployment_fingerprint(
         reason = None
         matched = True
     else:
-        decision = "BLOCKED"
-        category = "ENV"
-        reason = "DEPLOYMENT_MISMATCH"
-        matched = False
+        # Mismatch detected
+        if _policy == "soft":
+            decision = "WARN"
+            category = None
+            reason = "DEPLOYMENT_MISMATCH"
+            matched = False
+        else:
+            # hard or legacy behavior: always block on mismatch
+            decision = "BLOCKED"
+            category = "ENV"
+            reason = "DEPLOYMENT_MISMATCH"
+            matched = False
 
     result = DeploymentFingerprintResult(
         matched=matched,

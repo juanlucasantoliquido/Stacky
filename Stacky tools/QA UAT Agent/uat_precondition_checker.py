@@ -10,6 +10,14 @@ Checks (all read-only, SELECT only):
   2. Required test data exists in BD QA (from ScenarioSpec.datos_requeridos)
   3. Environment vars for BD are set
 
+Sprint 3 additions:
+  - check_data_readiness() — per-scenario data readiness check (grid rows, records,
+    permissions). Categorizes failures as DATA (GRID_EMPTY, TEST_ENTITY_NOT_FOUND,
+    TEST_USER_PERMISSION_MISSING) vs ENV (DATA_SOURCE_UNREACHABLE).
+  - Writes data_readiness.json artifact to evidence.
+  - Emits data_readiness_check event to execution.jsonl.
+  - All checks are strictly read-only (SELECT/GET only — no DML).
+
 DB credentials (NEVER via CLI — evitar logs):
   RS_QA_DB_USER — read-only user (e.g. RSPACIFICOREAD)
   RS_QA_DB_PASS — password
@@ -37,8 +45,9 @@ import os
 import re
 import sys
 import time
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, List, Optional
 
 logger = logging.getLogger("stacky.qa_uat.precondition_checker")
 
@@ -73,6 +82,656 @@ def _get_safe_tables() -> frozenset:
         return _SAFE_TABLES_STATIC | get_tables_for_guard()
     except Exception:
         return _SAFE_TABLES_STATIC
+
+
+# ── Sprint 3: Data Readiness Check ───────────────────────────────────────────
+# All checks are READ-ONLY (SELECT/GET). No INSERT/UPDATE/DELETE is ever issued.
+# If a check cannot be performed without DML it is marked skipped=True with
+# reason VERIFICATION_REQUIRES_DML.
+
+_DATA_REASONS = {
+    "grid_empty":              ("DATA", "GRID_EMPTY"),
+    "entity_not_found":        ("DATA", "TEST_ENTITY_NOT_FOUND"),
+    "permission_missing":      ("DATA", "TEST_USER_PERMISSION_MISSING"),
+    "source_unreachable":      ("ENV",  "DATA_SOURCE_UNREACHABLE"),
+    "verification_needs_dml":  (None,   "VERIFICATION_REQUIRES_DML"),
+}
+
+_DATA_NAV_REASONS = {
+    "SELECTOR_NOT_FOUND":      "NAV",
+    "SELECTOR_TIMEOUT":        "NAV",
+    "PAGE_LOAD_FAILED":        "ENV",
+    "DEPLOYMENT_MISMATCH":     "ENV",
+    "GRID_EMPTY":              "DATA",
+    "TEST_ENTITY_NOT_FOUND":   "DATA",
+    "TEST_USER_PERMISSION_MISSING": "DATA",
+    "DATA_SOURCE_UNREACHABLE": "ENV",
+}
+
+
+@dataclass
+class DataCheck:
+    """Result of a single data readiness precondition check."""
+    entity: str
+    type: str                        # "grid" | "record" | "user_permission" | "api_endpoint"
+    input_data: dict
+    expected: dict
+    actual: dict
+    decision: str                    # "ALLOW" | "BLOCKED" | "SKIPPED"
+    category: Optional[str]          # "DATA" | "ENV" | None
+    reason: Optional[str]
+    human_action_required: Optional[str]
+    skipped: bool
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class DataReadinessResult:
+    """Aggregated result of all data readiness checks for a scenario."""
+    all_ready: bool
+    checks: List[DataCheck]
+    decision: str                    # "ALLOW" | "BLOCKED"
+    category: Optional[str]         # "DATA" | "ENV" | None
+    reason: Optional[str]
+    artifact_path: Optional[str]
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        return d
+
+
+def check_data_readiness(
+    ticket_id: int,
+    scenario_id: str,
+    preconditions: List[dict],
+    exec_logger=None,
+    evidence_dir: Optional[Path] = None,
+    run_id: Optional[str] = None,
+    _db_connector=None,             # injectable for testing
+) -> DataReadinessResult:
+    """Verify data readiness before running the UAT runner for a scenario.
+
+    Parameters
+    ----------
+    ticket_id : int
+        ADO work item ID (for logging/event).
+    scenario_id : str
+        Scenario identifier (e.g. "RF-007-CA-01").
+    preconditions : list[dict]
+        Each entry: {entity, type, input_data, expected}.
+        Supported types: "grid", "record", "user_permission", "api_endpoint".
+    exec_logger : ExecutionLogger | None
+        If provided, emits data_readiness_check event.
+    evidence_dir : Path | None
+        If provided, writes data_readiness.json artifact.
+    run_id : str | None
+        Sub-directory for artifact placement.
+    _db_connector : callable | None
+        Injectable DB connector factory (for unit tests).
+
+    Returns
+    -------
+    DataReadinessResult
+        decision = "ALLOW" | "BLOCKED"
+    """
+    checks: List[DataCheck] = []
+
+    for prec in preconditions:
+        check = _run_single_data_check(
+            prec=prec,
+            ticket_id=ticket_id,
+            scenario_id=scenario_id,
+            _db_connector=_db_connector,
+        )
+        checks.append(check)
+
+    blocked = [c for c in checks if c.decision == "BLOCKED"]
+    all_ready = len(blocked) == 0
+
+    if blocked:
+        # Use first blocked check's category/reason as the aggregate
+        first = blocked[0]
+        decision = "BLOCKED"
+        category = first.category
+        reason = first.reason
+    else:
+        decision = "ALLOW"
+        category = None
+        reason = None
+
+    result = DataReadinessResult(
+        all_ready=all_ready,
+        checks=checks,
+        decision=decision,
+        category=category,
+        reason=reason,
+        artifact_path=None,
+    )
+
+    # ── Artifact ──────────────────────────────────────────────────────────────
+    artifact_path = _write_data_readiness_artifact(result, evidence_dir, run_id, scenario_id)
+    if artifact_path:
+        result.artifact_path = str(artifact_path)
+
+    # ── Event ─────────────────────────────────────────────────────────────────
+    _emit_data_readiness_event(exec_logger, ticket_id, scenario_id, result)
+
+    if decision == "BLOCKED":
+        logger.warning(
+            "data_readiness BLOCKED ticket=%s scenario=%s reason=%s category=%s",
+            ticket_id, scenario_id, reason, category,
+        )
+    else:
+        logger.info(
+            "data_readiness ALLOW ticket=%s scenario=%s checks=%d",
+            ticket_id, scenario_id, len(checks),
+        )
+
+    return result
+
+
+def _run_single_data_check(
+    prec: dict,
+    ticket_id: int,
+    scenario_id: str,
+    _db_connector=None,
+) -> DataCheck:
+    """Execute a single data readiness check. All access is read-only."""
+    entity = prec.get("entity", "unknown")
+    check_type = prec.get("type", "record")
+    input_data = prec.get("input_data", {})
+    expected = prec.get("expected", {})
+
+    try:
+        if check_type == "grid":
+            return _check_grid(entity, input_data, expected, _db_connector)
+
+        elif check_type == "record":
+            return _check_record(entity, input_data, expected, _db_connector)
+
+        elif check_type == "user_permission":
+            return _check_user_permission(entity, input_data, expected, _db_connector)
+
+        elif check_type == "api_endpoint":
+            return _check_api_endpoint(entity, input_data, expected)
+
+        else:
+            # Unknown check type — skip with explanation
+            return DataCheck(
+                entity=entity,
+                type=check_type,
+                input_data=input_data,
+                expected=expected,
+                actual={},
+                decision="SKIPPED",
+                category=None,
+                reason=f"UNKNOWN_CHECK_TYPE:{check_type}",
+                human_action_required=None,
+                skipped=True,
+            )
+
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "data_readiness check error entity=%s type=%s: %s", entity, check_type, exc
+        )
+        return DataCheck(
+            entity=entity,
+            type=check_type,
+            input_data=input_data,
+            expected=expected,
+            actual={"error": str(exc)},
+            decision="BLOCKED",
+            category="ENV",
+            reason="DATA_SOURCE_UNREACHABLE",
+            human_action_required=f"check_connectivity_for_{entity}",
+            skipped=False,
+        )
+
+
+def _check_grid(
+    entity: str,
+    input_data: dict,
+    expected: dict,
+    _db_connector=None,
+) -> DataCheck:
+    """Check that a grid entity has at least min_rows rows.
+
+    READ-ONLY: only executes SELECT COUNT(*) queries.
+    If DB is unavailable, marks as SKIPPED (not blocked) so the pipeline
+    proceeds with the runner which will discover the issue.
+    """
+    min_rows = expected.get("min_rows", 1)
+
+    # Try DB check if connector available
+    row_count = _query_grid_count(entity, input_data, _db_connector)
+
+    if row_count is None:
+        # Cannot verify — DB not available
+        return DataCheck(
+            entity=entity,
+            type="grid",
+            input_data=input_data,
+            expected=expected,
+            actual={"row_count": None, "note": "db_unavailable"},
+            decision="SKIPPED",
+            category=None,
+            reason="VERIFICATION_REQUIRES_DML",  # reused as "cannot verify"
+            human_action_required=None,
+            skipped=True,
+        )
+
+    if row_count < min_rows:
+        return DataCheck(
+            entity=entity,
+            type="grid",
+            input_data=input_data,
+            expected=expected,
+            actual={"row_count": row_count},
+            decision="BLOCKED",
+            category="DATA",
+            reason="GRID_EMPTY",
+            human_action_required=(
+                f"seed_{entity.lower()}_o_cambiar_input_data"
+            ),
+            skipped=False,
+        )
+
+    return DataCheck(
+        entity=entity,
+        type="grid",
+        input_data=input_data,
+        expected=expected,
+        actual={"row_count": row_count},
+        decision="ALLOW",
+        category=None,
+        reason=None,
+        human_action_required=None,
+        skipped=False,
+    )
+
+
+def _check_record(
+    entity: str,
+    input_data: dict,
+    expected: dict,
+    _db_connector=None,
+) -> DataCheck:
+    """Check that a record exists in the database.
+
+    READ-ONLY: only SELECT queries.
+    """
+    exists = _query_record_exists(entity, input_data, _db_connector)
+
+    if exists is None:
+        return DataCheck(
+            entity=entity,
+            type="record",
+            input_data=input_data,
+            expected=expected,
+            actual={"exists": None, "note": "db_unavailable"},
+            decision="SKIPPED",
+            category=None,
+            reason="VERIFICATION_REQUIRES_DML",
+            human_action_required=None,
+            skipped=True,
+        )
+
+    if not exists:
+        return DataCheck(
+            entity=entity,
+            type="record",
+            input_data=input_data,
+            expected=expected,
+            actual={"exists": False},
+            decision="BLOCKED",
+            category="DATA",
+            reason="TEST_ENTITY_NOT_FOUND",
+            human_action_required=(
+                f"create_{entity.lower()}_with_input_data_{json.dumps(input_data, ensure_ascii=False)[:80]}"
+            ),
+            skipped=False,
+        )
+
+    return DataCheck(
+        entity=entity,
+        type="record",
+        input_data=input_data,
+        expected=expected,
+        actual={"exists": True},
+        decision="ALLOW",
+        category=None,
+        reason=None,
+        human_action_required=None,
+        skipped=False,
+    )
+
+
+def _check_user_permission(
+    entity: str,
+    input_data: dict,
+    expected: dict,
+    _db_connector=None,
+) -> DataCheck:
+    """Check that a user has the required permission.
+
+    READ-ONLY: only SELECT queries.
+    """
+    user = input_data.get("user") or input_data.get("usuario") or ""
+    permission = expected.get("permission") or expected.get("permiso") or entity
+
+    has_perm = _query_user_permission(user, permission, _db_connector)
+
+    if has_perm is None:
+        return DataCheck(
+            entity=entity,
+            type="user_permission",
+            input_data=input_data,
+            expected=expected,
+            actual={"has_permission": None, "note": "db_unavailable"},
+            decision="SKIPPED",
+            category=None,
+            reason="VERIFICATION_REQUIRES_DML",
+            human_action_required=None,
+            skipped=True,
+        )
+
+    if not has_perm:
+        return DataCheck(
+            entity=entity,
+            type="user_permission",
+            input_data=input_data,
+            expected=expected,
+            actual={"has_permission": False, "user": user, "permission": permission},
+            decision="BLOCKED",
+            category="DATA",
+            reason="TEST_USER_PERMISSION_MISSING",
+            human_action_required=(
+                f"grant_permission_{permission}_to_user_{user}"
+            ),
+            skipped=False,
+        )
+
+    return DataCheck(
+        entity=entity,
+        type="user_permission",
+        input_data=input_data,
+        expected=expected,
+        actual={"has_permission": True, "user": user, "permission": permission},
+        decision="ALLOW",
+        category=None,
+        reason=None,
+        human_action_required=None,
+        skipped=False,
+    )
+
+
+def _check_api_endpoint(
+    entity: str,
+    input_data: dict,
+    expected: dict,
+) -> DataCheck:
+    """Check that an API endpoint is reachable (HTTP GET).
+
+    READ-ONLY: only GET requests.
+    """
+    import urllib.request
+    import urllib.error
+
+    url = input_data.get("url", "")
+    if not url:
+        return DataCheck(
+            entity=entity,
+            type="api_endpoint",
+            input_data=input_data,
+            expected=expected,
+            actual={},
+            decision="SKIPPED",
+            category=None,
+            reason="VERIFICATION_REQUIRES_DML",
+            human_action_required="provide_url_in_input_data",
+            skipped=True,
+        )
+
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            status = resp.getcode()
+        ok = status < 500
+        if ok:
+            return DataCheck(
+                entity=entity,
+                type="api_endpoint",
+                input_data=input_data,
+                expected=expected,
+                actual={"status": status, "reachable": True},
+                decision="ALLOW",
+                category=None,
+                reason=None,
+                human_action_required=None,
+                skipped=False,
+            )
+        return DataCheck(
+            entity=entity,
+            type="api_endpoint",
+            input_data=input_data,
+            expected=expected,
+            actual={"status": status, "reachable": False},
+            decision="BLOCKED",
+            category="ENV",
+            reason="DATA_SOURCE_UNREACHABLE",
+            human_action_required=f"check_api_endpoint_{url}",
+            skipped=False,
+        )
+    except (urllib.error.URLError, OSError) as exc:
+        return DataCheck(
+            entity=entity,
+            type="api_endpoint",
+            input_data=input_data,
+            expected=expected,
+            actual={"error": str(exc), "reachable": False},
+            decision="BLOCKED",
+            category="ENV",
+            reason="DATA_SOURCE_UNREACHABLE",
+            human_action_required=f"check_connectivity_for_{entity}",
+            skipped=False,
+        )
+
+
+# ── DB query helpers (read-only) ───────────────────────────────────────────────
+
+def _get_readiness_connection(_db_connector=None):
+    """Get a DB connection for readiness checks. Returns None if unavailable."""
+    if _db_connector is not None:
+        try:
+            return _db_connector()
+        except Exception:
+            return None
+
+    missing = [v for v in _DB_ENV_VARS if not os.getenv(v)]
+    if missing:
+        return None
+
+    try:
+        connector = _get_db_connector()
+        return connector()
+    except Exception:
+        return None
+
+
+def _query_grid_count(
+    entity: str,
+    input_data: dict,
+    _db_connector=None,
+) -> Optional[int]:
+    """SELECT COUNT(*) from the entity table matching input_data. Returns None if DB unavailable."""
+    safe_tables = _get_safe_tables()
+    table_name = entity.upper()
+    if table_name not in {t.upper() for t in safe_tables}:
+        # Table not in safe list — cannot verify without potential injection risk
+        logger.warning(
+            "data_readiness: entity '%s' not in safe-list — skipping grid count check",
+            entity,
+        )
+        return None
+
+    conn = _get_readiness_connection(_db_connector)
+    if conn is None:
+        return None
+
+    try:
+        # Build WHERE clause from input_data (read-only)
+        where_parts = []
+        params = []
+        for col, val in input_data.items():
+            # Only allow simple equality conditions (no SQL injection via column names)
+            if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', col):
+                where_parts.append(f"{col} = ?")
+                params.append(val)
+
+        where_clause = " AND ".join(where_parts) if where_parts else "1=1"
+        query = f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"  # nosec
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+        count = row[0] if row else 0
+        cursor.close()
+        return int(count)
+    except Exception as exc:
+        logger.warning("data_readiness: grid count error for %s: %s", entity, exc)
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _query_record_exists(
+    entity: str,
+    input_data: dict,
+    _db_connector=None,
+) -> Optional[bool]:
+    """Check if a record exists. Returns None if DB unavailable."""
+    count = _query_grid_count(entity, input_data, _db_connector)
+    if count is None:
+        return None
+    return count > 0
+
+
+def _query_user_permission(
+    user: str,
+    permission: str,
+    _db_connector=None,
+) -> Optional[bool]:
+    """Check user permission in RASIST or similar table. Returns None if DB unavailable."""
+    conn = _get_readiness_connection(_db_connector)
+    if conn is None:
+        return None
+
+    try:
+        # Read-only check — validate user exists and has the permission
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM RASIST WHERE CODUSR = ? AND CODPER = ? AND ACTIVO = 1",
+            (user, permission),
+        )
+        row = cursor.fetchone()
+        count = row[0] if row else 0
+        cursor.close()
+        return count > 0
+    except Exception as exc:
+        logger.warning(
+            "data_readiness: permission check error user=%s perm=%s: %s",
+            user, permission, exc,
+        )
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+# ── Artifact & event (Sprint 3) ───────────────────────────────────────────────
+
+def _write_data_readiness_artifact(
+    result: DataReadinessResult,
+    evidence_dir: Optional[Path],
+    run_id: Optional[str],
+    scenario_id: str,
+) -> Optional[Path]:
+    """Write data_readiness.json artifact; return path or None."""
+    if evidence_dir is None:
+        return None
+    try:
+        if run_id:
+            artifact_dir = evidence_dir / str(run_id)
+        else:
+            artifact_dir = evidence_dir
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        artifact_path = artifact_dir / "data_readiness.json"
+        data = {
+            "schema_version": "data_readiness/1.0",
+            "scenario_id": scenario_id,
+            **result.to_dict(),
+        }
+        artifact_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        logger.debug("data_readiness artifact: %s", artifact_path)
+        return artifact_path
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("data_readiness: cannot write artifact: %s", exc)
+        return None
+
+
+def _emit_data_readiness_event(
+    exec_logger,
+    ticket_id: int,
+    scenario_id: str,
+    result: DataReadinessResult,
+) -> None:
+    """Emit data_readiness_check event to execution.jsonl."""
+    if exec_logger is None:
+        return
+    try:
+        exec_logger.event("data_readiness_check", {
+            "ticket_id": ticket_id,
+            "scenario_id": scenario_id,
+            "checks": [c.to_dict() for c in result.checks],
+            "all_ready": result.all_ready,
+            "decision": result.decision,
+            "category": result.category,
+            "reason": result.reason,
+            "artifact_path": result.artifact_path,
+        })
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("data_readiness: cannot emit event: %s", exc)
+
+
+# ── Category inference table (Sprint 3 Item 3.3) ─────────────────────────────
+
+def infer_failure_category(reason: str) -> str:
+    """Infer the pipeline failure category from a reason code.
+
+    Returns the canonical category string.  NAVIGATION_TIMEOUT is only
+    valid when there is trace/screenshot evidence of an existing-but-unresponsive
+    selector.  Call this before setting a final reason to ensure correct
+    categorization.
+
+    Examples
+    --------
+    >>> infer_failure_category("GRID_EMPTY")
+    'DATA'
+    >>> infer_failure_category("SELECTOR_NOT_FOUND")
+    'NAV'
+    >>> infer_failure_category("DEPLOYMENT_MISMATCH")
+    'ENV'
+    """
+    return _DATA_NAV_REASONS.get(reason, "NAV")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

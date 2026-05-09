@@ -371,6 +371,91 @@ def run(
         logger.warning("Preflight check failed (non-fatal): %s", _pf_exc)
         # Do not block the pipeline if the preflight module itself errors
 
+    # ── Stage 2b: deployment_fingerprint_check (Sprint 3) ────────────────────
+    # Verify the running build matches the ticket's expected build BEFORE any
+    # browser is opened.  BLOCKED if mismatch in any mode; WARN if source is
+    # missing in dry-run mode only.
+    _t0_fp = time.time()
+    try:
+        from deployment_fingerprint import check_deployment_fingerprint as _check_fp
+        from environment_preflight import get_agenda_base_url as _get_base_url
+        _fp_base_url = _get_base_url()
+        # Build expected dict from env vars (ticket-level config)
+        _fp_expected_build_id = (
+            os.environ.get("QA_UAT_EXPECTED_BUILD_ID", "").strip()
+            or os.environ.get("QA_EXPECTED_BUILD_ID", "").strip()
+            or None
+        )
+        _fp_expected_branch = os.environ.get("QA_UAT_EXPECTED_BRANCH", "").strip() or None
+        _fp_expected: Optional[dict] = None
+        if _fp_expected_build_id or _fp_expected_branch:
+            _fp_expected = {
+                "build_id": _fp_expected_build_id,
+                "commit": None,
+                "branch": _fp_expected_branch,
+            }
+        _fp_result = _check_fp(
+            ticket_id=ticket_id,
+            expected=_fp_expected,
+            base_url=_fp_base_url,
+            mode=mode,
+            exec_logger=_exec_log,
+            evidence_dir=evidence_dir,
+            run_id=_run_id,
+        )
+        if _fp_result.decision == "BLOCKED":
+            logger.warning(
+                "deployment_fingerprint BLOCKED: reason=%s expected=%s active=%s",
+                _fp_result.reason, _fp_result.expected, _fp_result.active,
+            )
+            _fp_fail = {
+                "ok": False,
+                "verdict": "BLOCKED",
+                "category": "ENV",
+                "reason": _fp_result.reason or "DEPLOYMENT_MISMATCH",
+                "error": (_fp_result.reason or "DEPLOYMENT_MISMATCH").lower(),
+                "failed_stage": "deployment_fingerprint_check",
+                "message": (
+                    f"Deployment fingerprint check BLOCKED (ticket {ticket_id}): "
+                    f"{_fp_result.reason}. "
+                    f"Expected={_fp_result.expected}, Active={_fp_result.active}. "
+                    "Deploying the expected build before running QA tests."
+                ),
+                "deployment_fingerprint": _fp_result.to_dict(),
+                "human_action_required": (
+                    "Deploy the expected build or update QA_UAT_EXPECTED_BUILD_ID "
+                    "to match the active build before running QA tests."
+                ),
+                "ticket_id": ticket_id,
+                "stages": {"deployment_fingerprint_check": _fp_result.to_dict()},
+                "elapsed_s": round(time.time() - started, 2),
+            }
+            if _exec_log is not None:
+                try:
+                    _exec_log.pipeline_verdict(
+                        verdict="BLOCKED",
+                        category="ENV",
+                        reason=_fp_result.reason or "DEPLOYMENT_MISMATCH",
+                        failed_stage="deployment_fingerprint_check",
+                        confidence=1.0,
+                        evidence_refs=["deployment_fingerprint_check"],
+                        human_action_required=_fp_fail["human_action_required"],
+                    )
+                    _exec_log.session_end(_fp_fail)
+                    _exec_log.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            return _fp_fail
+        elif _fp_result.decision == "WARN":
+            logger.warning(
+                "deployment_fingerprint WARN: reason=%s (continuing pipeline)",
+                _fp_result.reason,
+            )
+    except ImportError:
+        logger.debug("deployment_fingerprint module unavailable — skipping Sprint 3 check")
+    except Exception as _fp_exc:  # noqa: BLE001
+        logger.warning("deployment_fingerprint check failed (non-fatal): %s", _fp_exc)
+
     # ── Smoke path: fast pre-validation before opening browser ───────────────
     # Verifies app responds, auth file exists, and target screen is reachable.
     # Runs in ≤20s. On failure → BLOCKED immediately, no browser opened.
@@ -1374,6 +1459,114 @@ def _run_pipeline_stages(
             logger.debug("selector_contract_validator unavailable — skipping alias contract check")
             stages["selector_contract"] = {"ok": True, "skipped": True,
                                            "reason": "module_not_found"}
+
+    # ── Stage 3d: data_readiness_check (Sprint 3) ────────────────────────────
+    # Verify that test data is available BEFORE opening the browser.
+    # Categorizes failures as DATA (GRID_EMPTY, TEST_ENTITY_NOT_FOUND, etc.)
+    # vs ENV (DATA_SOURCE_UNREACHABLE) so the root cause is clear without
+    # needing to run Playwright.
+    #
+    # Only runs when compiled scenarios include data_readiness_preconditions.
+    # If DB is unavailable, checks are skipped gracefully (not blocked).
+    stage = "data_readiness_check"
+    _sc_scenarios_for_readiness = (compiler_result.get("scenarios") or []) if "compiler" not in skip_stages else []
+    _any_data_preconditions = any(
+        s.get("data_readiness_preconditions")
+        for s in _sc_scenarios_for_readiness
+    )
+    if stage in skip_stages:
+        stages[stage] = {"ok": True, "skipped": True}
+    elif not _any_data_preconditions:
+        # No data readiness preconditions defined — skip gracefully
+        stages[stage] = {
+            "ok": True, "skipped": True,
+            "reason": "no_data_readiness_preconditions",
+        }
+    else:
+        try:
+            from uat_precondition_checker import check_data_readiness as _check_dr
+            _dr_blocked = False
+            _dr_block_reason: Optional[str] = None
+            _dr_block_category: Optional[str] = None
+            _dr_results: list = []
+            _t0_dr = _exec_log_stage_start(exec_log, stage)
+
+            for _sc in _sc_scenarios_for_readiness:
+                _sc_id = _sc.get("scenario_id") or _sc.get("id", "unknown")
+                _dr_precs = _sc.get("data_readiness_preconditions") or []
+                if not _dr_precs:
+                    continue
+                _dr_res = _check_dr(
+                    ticket_id=ticket_id,
+                    scenario_id=_sc_id,
+                    preconditions=_dr_precs,
+                    exec_logger=exec_log,
+                    evidence_dir=evidence_dir,
+                    run_id=str(ticket_id),
+                )
+                _dr_results.append({
+                    "scenario_id": _sc_id,
+                    "decision": _dr_res.decision,
+                    "category": _dr_res.category,
+                    "reason": _dr_res.reason,
+                    "all_ready": _dr_res.all_ready,
+                    "artifact_path": _dr_res.artifact_path,
+                })
+                if _dr_res.decision == "BLOCKED" and not _dr_blocked:
+                    _dr_blocked = True
+                    _dr_block_reason = _dr_res.reason
+                    _dr_block_category = _dr_res.category
+
+            stages[stage] = {
+                "ok": not _dr_blocked,
+                "skipped": False,
+                "results": _dr_results,
+                "blocked_count": sum(1 for r in _dr_results if r["decision"] == "BLOCKED"),
+            }
+            _exec_log_stage_end(exec_log, stage, _t0_dr, ok=not _dr_blocked,
+                                summary=stages[stage])
+
+            if _dr_blocked:
+                _dr_fail = {
+                    "ok": False,
+                    "verdict": "BLOCKED",
+                    "category": _dr_block_category or "DATA",
+                    "reason": _dr_block_reason or "DATA_READINESS_FAILED",
+                    "error": (_dr_block_reason or "DATA_READINESS_FAILED").lower(),
+                    "failed_stage": "data_readiness_check",
+                    "message": (
+                        f"Data readiness check BLOCKED: {_dr_block_reason}. "
+                        "Test data is not available for one or more scenarios. "
+                        "No Playwright tests will be run."
+                    ),
+                    "human_action_required": (
+                        "Seed the required test data or update input_data in the scenario. "
+                        "Check data_readiness.json for per-scenario details."
+                    ),
+                    "data_readiness_results": _dr_results,
+                }
+                if exec_log is not None:
+                    try:
+                        exec_log.pipeline_verdict(
+                            verdict="BLOCKED",
+                            category=_dr_block_category or "DATA",
+                            reason=_dr_block_reason or "DATA_READINESS_FAILED",
+                            failed_stage="data_readiness_check",
+                            confidence=1.0,
+                            evidence_refs=["data_readiness_check"],
+                            human_action_required=_dr_fail["human_action_required"],
+                        )
+                        exec_log.session_end(_dr_fail)
+                        exec_log.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                return _build_output(ticket_id, stages, _dr_fail, started)
+        except ImportError:
+            logger.debug("uat_precondition_checker unavailable — skipping data readiness check")
+            stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+        except Exception as _dr_exc:  # noqa: BLE001
+            logger.warning("data_readiness_check failed (non-fatal): %s", _dr_exc)
+            stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_dr_exc}"}
 
     # ── Stage 4: generator ───────────────────────────────────────────────────
     stage = "generator"

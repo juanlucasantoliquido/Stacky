@@ -286,6 +286,13 @@ def _cmd_summary(sessions: list[Session]) -> None:
     mixed_c = sum(1 for s in sessions if s.verdict == "MIXED")
     blocked_c = sum(1 for s in sessions if s.verdict == "BLOCKED")
     incomplete_c = sum(1 for s in sessions if s.verdict == "INCOMPLETE")
+    # FORENSIC-20260508 | FIX-5 | Sessions whose session_end.data.verdict is null/missing
+    # produce verdict="UNKNOWN" which fell through all conditionals and was invisible in
+    # the summary. Count them as FAIL so the operator sees there's something to investigate.
+    unknown_c = sum(1 for s in sessions if s.verdict not in (
+        "PASS", "FAIL", "MIXED", "BLOCKED", "INCOMPLETE"
+    ))
+    fail_total = fail_c + unknown_c  # unknown counts as FAIL for summary purposes
     elapsed_vals = [s.elapsed_s for s in sessions if s.elapsed_s is not None]
     avg_elapsed = sum(elapsed_vals) / len(elapsed_vals) if elapsed_vals else None
 
@@ -300,7 +307,8 @@ def _cmd_summary(sessions: list[Session]) -> None:
     print("\n=== QA UAT Agent — Execution Summary ===")
     print(f"  Sessions analyzed : {total}")
     print(f"  PASS              : {pass_c}  ({_pct(pass_c, total)})")
-    print(f"  FAIL              : {fail_c}  ({_pct(fail_c, total)})")
+    print(f"  FAIL              : {fail_total}  ({_pct(fail_total, total)})"
+          + (f"  [{unknown_c} UNKNOWN/null verdict]" if unknown_c else ""))
     print(f"  MIXED             : {mixed_c}  ({_pct(mixed_c, total)})")
     print(f"  BLOCKED           : {blocked_c}  ({_pct(blocked_c, total)})")
     print(f"  INCOMPLETE        : {incomplete_c}  ({_pct(incomplete_c, total)})")

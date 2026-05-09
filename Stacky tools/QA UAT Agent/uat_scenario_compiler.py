@@ -225,7 +225,20 @@ def run(
             continue
 
         # Filter by scope
+        # FORENSIC-20260508 | FIX-2 | Items discarded by scope filter must be
+        # added to out_of_scope_items with SCOPE_MISMATCH reason, not silently
+        # dropped. Previously compiled=0 with 0 out_of_scope masked the real
+        # count (e.g. ticket 122: 4 items discarded, only 2 in out_of_scope).
         if scope_screen and spec["pantalla"] != scope_screen:
+            out_of_scope.append({
+                "id": pid,
+                "razon": "SCOPE_MISMATCH",
+                "descripcion": desc,
+                "details": {
+                    "spec_pantalla": spec["pantalla"],
+                    "scope_screen": scope_screen,
+                },
+            })
             continue
 
         # Validate screen is supported

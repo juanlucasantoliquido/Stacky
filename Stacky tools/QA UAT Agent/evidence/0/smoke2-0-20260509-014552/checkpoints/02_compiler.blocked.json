@@ -1,0 +1,12 @@
+{
+  "run_id": "smoke2-0-20260509-014552",
+  "stage": "compiler",
+  "status": "blocked",
+  "seq": 2,
+  "event_id": null,
+  "ts": "2026-05-09T01:45:56.880Z",
+  "payload": {
+    "reason": "MISSING_PLAYBOOK",
+    "duration_ms": 0
+  }
+}

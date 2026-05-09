@@ -1,0 +1,22 @@
+{
+  "command_id": "cmd_0001",
+  "seq": 1,
+  "label": "python_version",
+  "cmd": "C:\\Users\\juanluca\\AppData\\Local\\Programs\\Python\\Python311\\python.exe --version",
+  "cwd": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent",
+  "shell": false,
+  "timeout_s": 15,
+  "run_id": "smoke2-0-20260509-014552",
+  "stage": "test_cmd",
+  "env_redacted_keys": [],
+  "started_at": "2026-05-09T01:45:52.400Z",
+  "returncode": 0,
+  "duration_ms": 62,
+  "ok": true,
+  "stdout_bytes": 14,
+  "stderr_bytes": 0,
+  "stdout_lines": 1,
+  "stderr_lines": 0,
+  "error": null,
+  "finished_at": "2026-05-09T01:45:52.484Z"
+}

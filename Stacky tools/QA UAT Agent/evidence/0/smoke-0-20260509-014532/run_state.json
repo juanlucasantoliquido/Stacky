@@ -1,0 +1,11 @@
+{
+  "run_id": "smoke-0-20260509-014532",
+  "status": "running",
+  "current_stage": "reader",
+  "last_completed_stage": null,
+  "last_event_id": null,
+  "resume_from": null,
+  "blocked_reason": null,
+  "waiting_for_human": false,
+  "updated_at": "2026-05-09T01:45:32.285Z"
+}

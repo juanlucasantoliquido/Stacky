@@ -106,10 +106,18 @@ const STEP_BBOXES_OUT_PATH = 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_bb
 // mandamos el screenshot al detector LLM-vision para casos donde el
 // error no esté en el DOM (ej. modales pintados con canvas / iframes
 // cross-origin / mensajes embebidos en imágenes).
+//
+// EXCEPCION ASP.NET: Se capturan adicionalmente:
+//   1. Excepciones no manejadas (YSOD / página Errors.aspx) via título/URL/body
+//   2. Respuestas HTTP 5xx del servidor (network-level)
+//   3. Errores JS no capturados del contexto de la página (pageerror)
+//   4. Errores de consola clasificados como 'error' (console.error)
+// Estas 4 fuentes se persisten en screen_errors_<sid>.json junto con
+// los errores DOM/vision para que el uat_failure_analyzer los clasifique.
 type ScreenErrorEntry = {
   step_index: number;
   screenshot_path: string | null;
-  source: 'dom' | 'vision' | 'runtime';
+  source: 'dom' | 'vision' | 'runtime' | 'aspnet_exception' | 'network_5xx' | 'page_error' | 'console_error';
   errors: { text: string; source: string }[];
   category?: string;
   confidence?: string;
@@ -121,10 +129,177 @@ const VISION_DETECTOR_URL = process.env.QA_UAT_VISION_DETECTOR_URL || '';
 const FAIL_ON_SCREEN_ERROR = process.env.QA_UAT_FAIL_ON_SCREEN_ERROR !== '0';
 
 {{ screen_error_detector_js }}
+{{ aspnet_exception_detector_js }}
+
+// ── ASP.NET / network exception helpers ──────────────────────────────────────
+
+// Registra la captura pasiva de excepciones de red y de JS via listeners
+// de página. Llamar UNA VEZ desde test.beforeEach (o desde el body del test
+// antes del primer goto) para que esté activo durante toda la ejecución.
+async function __installExceptionListeners(page: any, stepRef: { current: number }): Promise<void> {
+  // 1. HTTP 5xx — Respuestas del servidor con error.
+  //    ADEMÁS se captura el body de la respuesta para extraer el stack trace
+  //    del YSOD HTML o de la custom error page de la Agenda Web.
+  page.on('response', async (response: any) => {
+    const status = response.status();
+    if (status >= 500) {
+      const url = response.url();
+      let exceptionType: string | null = null;
+      let exceptionMessage: string | null = null;
+      let stackSnippet: string | null = null;
+      let bodySnippet = '';
+      try {
+        // Intentar leer el body solo si el content-type es HTML o text.
+        // Evitar leer binarios/imágenes.
+        const ct = response.headers()['content-type'] || '';
+        if (ct.includes('html') || ct.includes('text')) {
+          const body = await response.text().catch(() => '');
+          bodySnippet = body.slice(0, 400);
+          // --- Extraer excepción del YSOD HTML ---
+          // Pattern 1: "Exception Details: System.Data.SqlClient.SqlException: ..."
+          const excMatch = body.match(/Exception Details:\s*([\w.]+Exception)[:\s]+([^\n\r<]{1,300})/i);
+          if (excMatch) {
+            exceptionType = excMatch[1];
+            exceptionMessage = excMatch[2].trim();
+          }
+          // Pattern 2: línea de excepción directa
+          if (!exceptionType) {
+            const excMatch2 = body.match(/\b(System(?:\.\w+)+Exception|Microsoft(?:\.\w+)+Exception)[:\s]+([^\n\r<]{1,200})/);
+            if (excMatch2) {
+              exceptionType = excMatch2[1];
+              exceptionMessage = excMatch2[2].trim();
+            }
+          }
+          // Pattern 3: error en español de la Agenda Web
+          if (!exceptionType) {
+            const esMatch = body.match(/(?:Se produjo|Ha ocurrido|ocurrió)\s+(?:una|un)\s+[^<\n]{1,180}/i);
+            if (esMatch) {
+              exceptionMessage = esMatch[0].trim();
+            }
+          }
+          // Stack trace snippet
+          const stMatch = body.match(/((?:en |at )\s*\w[\w.]+\([^)]{0,120}\))/);
+          if (stMatch) stackSnippet = stMatch[1].trim();
+        }
+      } catch (_bodyErr) { /* best-effort — never fail the test */ }
+
+      const excLabel = exceptionType
+        ? `${exceptionType}: ${(exceptionMessage || '').slice(0, 150)}`
+        : `HTTP ${status} desde ${url}`;
+
+      const entry: ScreenErrorEntry = {
+        step_index: stepRef.current,
+        screenshot_path: null,
+        source: 'network_5xx',
+        errors: [{ text: excLabel.slice(0, 300), source: `http_${status}` }],
+        category: exceptionType ? 'server_exception' : 'server_error',
+        captured_at: new Date().toISOString(),
+      };
+      SCREEN_ERRORS.push(entry);
+      console.error(
+        '[exceptions] HTTP ' + status + ' step=' + stepRef.current +
+        (exceptionType ? ' EXC=' + exceptionType : '') +
+        (exceptionMessage ? ' MSG=' + exceptionMessage.slice(0, 80) : '') +
+        (stackSnippet ? ' STACK=' + stackSnippet.slice(0, 80) : ''),
+      );
+    }
+  });
+
+  // 2. request_failed — Se emite cuando IIS Express crashea (exit code -1),
+  //    la conexión se rechaza, o el request se cancela abruptamente.
+  //    Esto es diferente a una respuesta 5xx — no hay respuesta HTTP en absoluto.
+  page.on('requestfailed', (request: any) => {
+    const failure = request.failure();
+    const errText = failure ? failure.errorText : 'unknown';
+    // Filtrar cancelaciones normales (navegaciones que interrumpen requests anteriores)
+    if (errText === 'net::ERR_ABORTED' || errText === 'NS_BINDING_ABORTED') return;
+    const url = request.url();
+    // Solo nos interesan requests al servidor AgendaWeb, no CDN/estáticos externos
+    if (!url.includes('localhost') && !url.includes('127.0.0.1') && !url.includes(':35017')) return;
+    const msg = `Request fallido: ${url} — ${errText}`;
+    const entry: ScreenErrorEntry = {
+      step_index: stepRef.current,
+      screenshot_path: null,
+      source: 'request_failed',
+      errors: [{ text: msg.slice(0, 300), source: 'requestfailed' }],
+      category: 'iisexpress_crash',
+      captured_at: new Date().toISOString(),
+    };
+    SCREEN_ERRORS.push(entry);
+    console.error('[exceptions] IIS/request failed at step ' + stepRef.current + ': ' + msg.slice(0, 150));
+  });
+
+  // 3. JS exceptions no capturadas en la página (window.onerror / unhandled rejection)
+  page.on('pageerror', (err: Error) => {
+    const txt = String(err && err.message ? err.message : err).slice(0, 300);
+    const entry: ScreenErrorEntry = {
+      step_index: stepRef.current,
+      screenshot_path: null,
+      source: 'page_error',
+      errors: [{ text: txt, source: 'pageerror' }],
+      captured_at: new Date().toISOString(),
+    };
+    SCREEN_ERRORS.push(entry);
+    console.error('[exceptions] JS page error at step ' + stepRef.current + ': ' + txt);
+  });
+
+  // 4. console.error del contexto de la página
+  page.on('console', (msg: any) => {
+    if (msg.type() === 'error') {
+      const txt = String(msg.text() || '').slice(0, 300);
+      // Filtramos errores de recursos (imágenes/fuentes faltantes) que
+      // generan ruido pero no indican una excepción real de la app.
+      if (txt.includes('net::ERR_') || txt.includes('Failed to load resource')) return;
+      const entry: ScreenErrorEntry = {
+        step_index: stepRef.current,
+        screenshot_path: null,
+        source: 'console_error',
+        errors: [{ text: txt, source: 'console.error' }],
+        captured_at: new Date().toISOString(),
+      };
+      SCREEN_ERRORS.push(entry);
+      console.warn('[exceptions] console.error at step ' + stepRef.current + ': ' + txt.slice(0, 120));
+    }
+  });
+}
+
+// Verifica ACTIVAMENTE si la página actual es una página de error ASP.NET.
+// Llamar después de cada goto/navigate para detección inmediata.
+async function __checkAspNetExceptionAfterNav(
+  page: any, stepIndex: number,
+): Promise<void> {
+  try {
+    const result = await __checkAspNetException(page);
+    if (result && result.is_exception_page) {
+      const screenshotPath = 'evidence/{{ ticket_id }}/{{ scenario_id }}/aspnet_exception_step_' + stepIndex + '.png';
+      await page.screenshot({ path: screenshotPath }).catch(() => null);
+      const msg = `[ASP.NET EXCEPTION] Página de error detectada. Título: "${result.title}" URL: ${result.url} Fuente: ${result.match_source}. Body: ${result.body_snippet || ''}`;
+      const entry: ScreenErrorEntry = {
+        step_index: stepIndex,
+        screenshot_path: screenshotPath,
+        source: 'aspnet_exception',
+        errors: [{ text: msg.slice(0, 400), source: result.match_source }],
+        category: 'server_error',
+        captured_at: new Date().toISOString(),
+      };
+      SCREEN_ERRORS.push(entry);
+      console.error('[exceptions] ' + msg.slice(0, 200));
+      // Esta es una excepción de servidor — siempre falla el test.
+      throw new Error(msg.slice(0, 400));
+    }
+  } catch (e: any) {
+    if (e && e.message && e.message.includes('[ASP.NET EXCEPTION]')) throw e;
+    // Detector en sí falló — loguear y continuar (nunca romper el test por el detector).
+    console.warn('[exceptions] aspnet exception check failed: ' + (e && e.message ? e.message : String(e)));
+  }
+}
 
 async function __checkScreenAfterStep(
   page: any, stepIndex: number, screenshotPath: string,
 ): Promise<void> {
+  // Primero: verificar si llegamos a una página de error ASP.NET
+  await __checkAspNetExceptionAfterNav(page, stepIndex);
+
   let domErrors: { text: string; source: string }[] = [];
   try {
     const r = await __detectScreenErrors(page);
@@ -230,9 +405,22 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     // - {{ pre }}
     {% endfor %}
 
+    // ── Exception & network listener setup ──────────────────────────────────
+    // stepRef permite a los listeners pasivos (response / pageerror / console)
+    // registrar en qué step de acción ocurrió el evento, sin pasar `page` al
+    // cierre del listener.
+{% if detect_screen_errors %}
+    const _stepRef = { current: 0 };
+    await __installExceptionListeners(page, _stepRef);
+{% endif %}
+
     // SETUP
     await page.goto(`${BASE_URL}{{ pantalla }}`, { waitUntil: 'domcontentloaded' });
     await waitForAgendaStable(page);
+{% if detect_screen_errors %}
+    // Verificar excepción ASP.NET inmediatamente tras la navegación inicial.
+    await __checkAspNetExceptionAfterNav(page, 0);
+{% endif %}
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_00_setup.png' });
 
     // TARGET SCREEN VALIDATION — fail fast if wrong screen reached after navigation.
@@ -297,13 +485,22 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     {% for step in pasos %}
     {% if step.accion == 'navigate' %}
     // [STEP {{ "%02d" | format(loop.index) }}] navigate to {{ step.target }}
+{% if detect_screen_errors %}
+    _stepRef.current = {{ loop.index }};
+{% endif %}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] navigate {{ step.target }}');
     await page.goto(`${BASE_URL}{{ step.target }}`, { waitUntil: 'domcontentloaded' });
     await waitForAgendaStable(page);
+{% if detect_screen_errors %}
+    await __checkAspNetExceptionAfterNav(page, {{ loop.index }});
+{% endif %}
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
     {% elif step.accion == 'navigate_webforms' %}
     // [STEP {{ "%02d" | format(loop.index) }}] navigate_webforms → {{ step.target }}
     // Uses HTMLFormElement.prototype.submit() to bypass ScriptManager (headless-safe).
+{% if detect_screen_errors %}
+    _stepRef.current = {{ loop.index }};
+{% endif %}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] navigate_webforms {{ step.target }} eventtarget={{ step.eventtarget }} arg={{ step.eventargument }}');
     {
       const _navResult_{{ loop.index }} = await navigateViaFormSubmit(
@@ -338,6 +535,9 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
     {% elif step.accion == 'click' %}
     // [STEP {{ '%02d' | format(loop.index) }}] click {{ step.target }}
+{% if detect_screen_errors %}
+    _stepRef.current = {{ loop.index }};
+{% endif %}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] click {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded().catch(() => null);
     await page.locator("{{ ui_map[step.target] }}").click();
@@ -347,6 +547,9 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     {% if detect_screen_errors %}await __checkScreenAfterStep(page, {{ loop.index }}, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png');{% endif %}
     {% elif step.accion == 'fill' %}
     // [STEP {{ '%02d' | format(loop.index) }}] fill {{ step.target }} with "{{ step.valor }}"
+{% if detect_screen_errors %}
+    _stepRef.current = {{ loop.index }};
+{% endif %}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] fill {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded().catch(() => null);
     await page.locator("{{ ui_map[step.target] }}").fill('{{ step.valor }}');
@@ -355,6 +558,9 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     {% if detect_screen_errors %}await __checkScreenAfterStep(page, {{ loop.index }}, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png');{% endif %}
     {% elif step.accion == 'select' %}
     // [STEP {{ '%02d' | format(loop.index) }}] select {{ step.valor }} in {{ step.target }}
+{% if detect_screen_errors %}
+    _stepRef.current = {{ loop.index }};
+{% endif %}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] select {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded().catch(() => null);
     await page.locator("{{ ui_map[step.target] }}").selectOption('{{ step.valor }}');

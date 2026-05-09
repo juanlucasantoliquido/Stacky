@@ -1,0 +1,18 @@
+INFO stacky.qa_uat.pipeline: Preflight OK: AgendaWeb disponible en http://localhost:35017/AgendaWeb/ (2761ms)
+WARNING stacky.qa_uat.smoke_path: Smoke path warning (AUTH_NOT_AVAILABLE): Sesión no disponible: Auth file is 6656s old (> 1800s). El globalSetup se ejecutará para hacer login antes de los specs.
+DEBUG stacky.qa_uat.execution_logger: ExecutionLogger opened: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\122\execution.jsonl
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: reader
+DEBUG stacky.qa_uat.ticket_reader: ado cmd: C:\Users\juanluca\AppData\Local\Programs\Python\Python311\python.exe C:\Desarrollo\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\ADO Manager\ado.py get 122
+DEBUG stacky.qa_uat.ticket_reader: ado cmd: C:\Users\juanluca\AppData\Local\Programs\Python\Python311\python.exe C:\Desarrollo\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\ADO Manager\ado.py comments 122
+DEBUG stacky.qa_uat.ticket_reader: classified as analisis_tecnico via regex keyword 'análisis técnico'
+DEBUG stacky.qa_uat.ticket_reader: Plan de pruebas extracted from HTML table in comment 31502260
+INFO stacky.qa_uat.pipeline: Effective config frozen: {'base_url': 'http://localhost:35017/AgendaWeb/', 'username_source': 'env', 'password_present': True, 'password_hash_prefix': 'd026bd53', 'manage_app': False, 'allow_ui_discovery': False, 'allow_llm_navigation': False, 'require_playbook': True, 'max_login_attempts': 1, 'max_browser_launches': 1, 'max_total_minutes': 6, 'expected_human_minutes': 2, 'max_runtime_multiplier': 3, 'frozen_at': '2026-05-09T01:20:14Z'}
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: ui_map
+DEBUG stacky.qa_uat.pipeline: Building UI map for screen: FrmAgenda.aspx
+DEBUG stacky.qa_uat.ui_map_builder: cache hit for FrmAgenda.aspx (hash=sha256:6245caba9c3ff8f357db915435892665ae9a0ee5c97c1beb7ce6c7356a871a0b)
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: compiler
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: preconditions
+INFO stacky.qa_uat.precondition_checker: precondition_checker: env vars missing (RS_QA_DB_USER, RS_QA_DB_PASS, RS_QA_DB_DSN) — returning skipped result
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: generator
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: spec_linter
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: runner

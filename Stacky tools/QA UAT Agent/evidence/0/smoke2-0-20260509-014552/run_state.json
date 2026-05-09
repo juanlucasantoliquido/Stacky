@@ -1,0 +1,11 @@
+{
+  "run_id": "smoke2-0-20260509-014552",
+  "status": "blocked",
+  "current_stage": "compiler",
+  "last_completed_stage": "reader",
+  "last_event_id": null,
+  "resume_from": "compiler",
+  "blocked_reason": "MISSING_PLAYBOOK",
+  "waiting_for_human": true,
+  "updated_at": "2026-05-09T01:45:56.885Z"
+}

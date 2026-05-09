@@ -1,0 +1,14 @@
+{
+  "scenario": "P04",
+  "ca": "CA-04",
+  "run_id": "20260508-qa119-v5-202915",
+  "clcod": "4127924112345393",
+  "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx",
+  "corredor_found": true,
+  "corredor_visible": true,
+  "corredor_value": "Corredor 1",
+  "corredor_readonly": true,
+  "expected_value": "Corredor 1",
+  "pass": true,
+  "oracle": "abfCorredorPrincipal visible con valor Corredor 1 para MONTEZUMA"
+}

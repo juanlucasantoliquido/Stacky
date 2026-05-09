@@ -1,2 +1,0 @@
-{"ts": "2026-05-07T02:38:05.549234Z", "ticket_id": 116, "mode": "dry-run", "ok": true, "action": "preview_only", "verdict": "BLOCKED", "error": null, "dossier_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\dossier.json"}
-{"ts": "2026-05-07T02:41:58.637721Z", "ticket_id": 116, "mode": "dry-run", "ok": true, "action": "preview_only", "verdict": "MIXED", "error": null, "dossier_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\116\\dossier.json"}

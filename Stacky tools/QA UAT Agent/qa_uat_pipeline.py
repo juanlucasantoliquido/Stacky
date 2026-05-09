@@ -1004,10 +1004,31 @@ def _run_pipeline_stages(
             verbose=verbose,
         )
         stages[stage] = _summarise_compiler(compiler_result)
+        # FORENSIC-20260508 | FIX-6 | Use key 'compiled' (not 'scenario_count') to match
+        # the compiler output contract. 'scenario_count' was always 0 in exec logs.
         _exec_log_stage_end(exec_log, stage, _t0, ok=compiler_result.get("ok", False),
-                            summary={"scenario_count": compiler_result.get("scenario_count", 0)})
+                            summary={"scenario_count": compiler_result.get("compiled", 0),
+                                     "out_of_scope": compiler_result.get("out_of_scope", 0)})
         if not compiler_result.get("ok"):
             return _build_output(ticket_id, stages, compiler_result, started)
+        # FORENSIC-20260508 | FIX-3 | Early-exit when 0 scenarios compiled and items
+        # existed but were all discarded. Avoids wasting 3 more stages only to fail
+        # at runner with the confusing 'no_tests_found' error.
+        compiled_count = compiler_result.get("compiled", 0)
+        out_of_scope_count = compiler_result.get("out_of_scope", 0)
+        if compiled_count == 0 and out_of_scope_count > 0:
+            no_scenarios_result = {
+                "ok": False,
+                "error": "no_executable_scenarios",
+                "message": (
+                    f"El compiler procesó {out_of_scope_count} item(s) del plan de pruebas "
+                    f"pero ninguno resultó ejecutable. Revisá out_of_scope_items en scenarios.json."
+                ),
+                "out_of_scope_count": out_of_scope_count,
+                "out_of_scope_items": compiler_result.get("out_of_scope_items", []),
+            }
+            _persist_json(evidence_dir / "scenarios.json", compiler_result)
+            return _build_output(ticket_id, stages, no_scenarios_result, started)
         # Write scenarios.json now so that preconditions (next stage) can read it
         _persist_json(evidence_dir / "scenarios.json", compiler_result)
 
@@ -1453,6 +1474,12 @@ def _extract_screens(ticket_result: dict) -> list:
     NOTE: freeform tickets use Spanish field names (descripcion/datos/esperado)
     instead of English (title/description). Both are checked.
     Also checks navigation_path from the ticket for explicit screen references.
+
+    FORENSIC-20260508 | FIX-1 | Also scans analisis_tecnico for screen names.
+    Tickets whose plan items don't mention screen names explicitly (e.g.
+    MantenedorDirecciones → FrmDetalleClie) previously fell back to
+    FrmAgenda.aspx, causing the compiler to build the wrong UI map and
+    silently drop all LLM-generated scenarios (scope_screen mismatch).
     """
     from agenda_screens import SUPPORTED_SCREENS
 
@@ -1476,6 +1503,27 @@ def _extract_screens(ticket_result: dict) -> list:
         for screen in SUPPORTED_SCREENS:
             if screen.lower() in lower:
                 found.add(screen)
+
+    # FORENSIC-20260508 | FIX-1 | Also scan analisis_tecnico — the technical
+    # analysis often names the target screen explicitly (e.g. "FrmDetalleClie.aspx")
+    # even when plan item texts don't. This is the most reliable signal for
+    # tickets about child screens (MantenedorDirecciones, FrmGestion, etc.).
+    analisis = ticket_result.get("analisis_tecnico") or ""
+    if analisis:
+        lower_analisis = analisis.lower()
+        for screen in SUPPORTED_SCREENS:
+            if screen.lower() in lower_analisis:
+                found.add(screen)
+
+    # Also scan the ticket description itself
+    desc_text = (
+        (ticket_result.get("ticket") or {}).get("description") or ""
+        + " " + (ticket_result.get("description_md") or "")
+    ).lower()
+    for screen in SUPPORTED_SCREENS:
+        if screen.lower() in desc_text:
+            found.add(screen)
+
     return sorted(found) if found else ["FrmAgenda.aspx"]
 
 
@@ -1548,11 +1596,13 @@ def _summarise_reader(r: dict) -> dict:
 def _summarise_compiler(r: dict) -> dict:
     base = {"ok": r.get("ok", False), "skipped": False}
     if r.get("ok"):
-        scenarios = r.get("scenarios") or []
-        in_scope = [s for s in scenarios if not s.get("out_of_scope")]
-        out_scope = [s for s in scenarios if s.get("out_of_scope")]
-        base["scenario_count"] = len(in_scope)
-        base["out_of_scope_count"] = len(out_scope)
+        # FORENSIC-20260508 | FIX-4 | The compiler output contract has 'compiled' (int)
+        # and 'out_of_scope_items' (list). The old code filtered r['scenarios'] for
+        # items with out_of_scope=True — but compiled scenarios never have that flag.
+        # Out-of-scope items live in r['out_of_scope_items']. This always produced
+        # out_of_scope_count=0 in the pipeline summary.
+        base["scenario_count"] = r.get("compiled", len(r.get("scenarios") or []))
+        base["out_of_scope_count"] = r.get("out_of_scope", len(r.get("out_of_scope_items") or []))
     else:
         base["error"] = r.get("error")
         base["message"] = r.get("message")

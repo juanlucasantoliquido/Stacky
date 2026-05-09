@@ -1,0 +1,16 @@
+{
+  "run_id": "smoke2-0-20260509-014552",
+  "ticket_id": 0,
+  "trace_id": "trace-smoke2-0-20260509-014552",
+  "schema_version": "1.0",
+  "started_at": "2026-05-09T01:45:52.383Z",
+  "tool_version": "1.0.0",
+  "mode": "dry-run",
+  "headed": false,
+  "operator": "system",
+  "env_summary": {
+    "USERNAME": "juanluca",
+    "OS": "Windows_NT",
+    "COMPUTERNAME": "PT-C-0100"
+  }
+}

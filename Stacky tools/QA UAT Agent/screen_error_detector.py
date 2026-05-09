@@ -111,6 +111,18 @@ DOM_ERROR_SELECTORS: list[str] = [
     "span[style*='color: red']",
     "label[style*='color:red']",
     "div[style*='color:red']",
+    # ── Agenda Web exception / error page selectors ──────────────────────────
+    # Página de error personalizada de la Agenda Web (Errors.aspx)
+    "#lblError",
+    "#ctl00_lblError",
+    "#ctl00_ContentPlaceHolder1_lblError",
+    # ASP.NET YSOD (yellow screen of death) — modo development
+    "#content .details",          # <div class="details"> del YSOD estándar
+    "h2[class='subtitle']",       # subtítulo del YSOD ("Server Error…")
+    # Tablas de stack trace del YSOD
+    "table[class='details']",
+    # Página de error genérica IIS / ASP.NET
+    "#ctl00_Header1_PH_Label",
 ]
 
 # Patrones de texto que delatan estados de bloqueo, aunque el contenedor
@@ -131,6 +143,39 @@ DOM_ERROR_TEXT_PATTERNS: list[str] = [
     "error de validación",
     "error de validacion",
     "no autorizado",
+    # ── ASP.NET runtime exception text patterns ──────────────────────────────
+    # Texto que aparece en páginas de error no manejadas de ASP.NET/IIS.
+    # Se usan solo como fallback cuando el selector-pass no encontró nada.
+    "ha ocurrido un error",
+    "se produjo un error",
+    "server error",
+    "runtime error",
+    "exception details",
+    "stack trace",
+    "description: an unhandled exception",
+    "object reference not set",
+    "index was outside",
+    "error de la aplicación",
+]
+
+# ── ASP.NET exception page indicators ────────────────────────────────────────
+#
+# Cuando ASP.NET lanza una excepción NO manejada el navegador recibe una
+# página de error cuyo TITLE es fijo y reconocible ANTES de que el DOM
+# esté completamente renderizado. Usamos esto como primera señal de alerta,
+# antes de escanear el DOM con los selectores/patterns de arriba.
+#
+# El template lo usa así (en TypeScript dentro del spec.ts):
+#   const isExcPage = ASPNET_EXCEPTION_TITLE_PATTERNS.some(p => title.includes(p));
+#
+ASPNET_EXCEPTION_TITLE_PATTERNS: list[str] = [
+    "Server Error",          # YSOD estándar: "Server Error in '/' Application"
+    "Runtime Error",         # YSOD alternativo
+    "Error - AgendaWeb",     # custom error page title de la Agenda Web
+    "Ha ocurrido un error",  # custom title en español
+    "Se produjo un error",
+    "Application Error",     # IIS custom error
+    "Unhandled Exception",
 ]
 
 # JS function injectada en el spec.ts vía Jinja2. Se ejecuta dentro del
@@ -196,6 +241,62 @@ async function __detectScreenErrors(page) {
   }, { SELECTORS, TEXT_PATTERNS });
 }
 """
+
+# ── ASP.NET exception page detector (JS) ─────────────────────────────────────
+#
+# Se inyecta en el spec.ts junto con __detectScreenErrors. Comprueba el
+# TITLE del documento contra los patrones conocidos de páginas de error
+# de ASP.NET/IIS/Agenda Web. Es O(1) — sin querySelectorAll — y se llama
+# ANTES del escaneo DOM normal para identificar inmediatamente cuando la
+# app arrojó una excepción no manejada y redirigió a una página de error.
+#
+# También inspecciona la URL actual por si la app redirigió a Errors.aspx.
+#
+ASPNET_EXCEPTION_DETECTOR_JS: str = """
+async function __checkAspNetException(page) {
+  // Evalúa en el contexto de la página — sin round-trips de selector.
+  const TITLE_PATTERNS = __TITLE_PATTERNS__;
+  const result = await page.evaluate((TITLE_PATTERNS) => {
+    const title = (document.title || '').toLowerCase();
+    const url   = (window.location.href || '').toLowerCase();
+    // Check 1: title matches known exception page patterns
+    const titleMatch = TITLE_PATTERNS.find(p => title.includes(p.toLowerCase()));
+    // Check 2: URL contains error-page indicators
+    const urlMatch = ['errors.aspx', '/error', '?error=', 'aspxerrorpath']
+      .find(u => url.includes(u));
+    // Check 3: ASP.NET YSOD body heuristic — hidden behind title in prod mode
+    const bodyText = (document.body && document.body.innerText) || '';
+    const bodyLower = bodyText.toLowerCase();
+    const bodyMatch = [
+      'server error in',
+      'runtime error',
+      'exception details:',
+      'description: an unhandled exception occurred',
+      'stack trace:',
+    ].find(p => bodyLower.includes(p));
+    if (titleMatch || urlMatch || bodyMatch) {
+      // Capturamos los primeros 400 chars del body para diagnóstico.
+      const bodySnippet = bodyText.replace(/\\s+/g, ' ').trim().slice(0, 400);
+      return {
+        is_exception_page: true,
+        title: document.title,
+        url: window.location.href,
+        match_source: titleMatch ? 'title' : urlMatch ? 'url' : 'body',
+        body_snippet: bodySnippet,
+      };
+    }
+    return { is_exception_page: false };
+  }, TITLE_PATTERNS);
+  return result;
+}
+"""
+
+
+def render_aspnet_exception_detector_js() -> str:
+    """Materializa ASPNET_EXCEPTION_DETECTOR_JS con los patrones de título."""
+    return ASPNET_EXCEPTION_DETECTOR_JS.replace(
+        "__TITLE_PATTERNS__", json.dumps(ASPNET_EXCEPTION_TITLE_PATTERNS)
+    )
 
 
 def render_dom_detector_js() -> str:

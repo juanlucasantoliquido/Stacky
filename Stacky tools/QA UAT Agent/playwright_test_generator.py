@@ -120,10 +120,12 @@ def run(
     # Load screen-error detector JS only when the feature is enabled. Keeps
     # the dependency explicit and avoids importing the module in legacy runs.
     screen_error_detector_js = ""
+    aspnet_exception_detector_js = ""
     if detect_screen_errors:
         try:
-            from screen_error_detector import render_dom_detector_js
+            from screen_error_detector import render_dom_detector_js, render_aspnet_exception_detector_js
             screen_error_detector_js = render_dom_detector_js()
+            aspnet_exception_detector_js = render_aspnet_exception_detector_js()
         except Exception as exc:
             logger.warning(
                 "Could not render DOM detector JS — falling back to disabled: %s",
@@ -320,6 +322,7 @@ def run(
                 detect_screen_errors=detect_screen_errors,
                 detect_screen_errors_vision=detect_screen_errors_vision,
                 screen_error_detector_js=screen_error_detector_js,
+                aspnet_exception_detector_js=aspnet_exception_detector_js,
                 # Fase 2: resolved values from precondition_parser pipeline
                 resolved_values=_resolved_values.get(sid, _resolved_values),
             )
@@ -787,6 +790,7 @@ def _render_from_playbook(
             detect_screen_errors=False,
             detect_screen_errors_vision=False,
             screen_error_detector_js="",
+            aspnet_exception_detector_js="",
         )
     except Exception as exc:
         return {

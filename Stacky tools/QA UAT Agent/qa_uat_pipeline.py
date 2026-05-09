@@ -1112,6 +1112,44 @@ def _run_pipeline_stages(
             }
         return None
 
+    # ── Stage S8-sec: security_check (Sprint 8) — PII, secrets, injection ──
+    # Run AFTER reader/credentials validation and BEFORE quality_intake / LLM calls.
+    # Non-blocking: "block" decision is logged and recorded but pipeline continues.
+    # The operator reviews the security_check event and decides whether to abort.
+    try:
+        from artifact_security import run_security_check as _run_sec_check
+        _sec_texts = {
+            "ticket_description": str(
+                ticket_result.get("description_md") or ticket_result.get("description", "")
+            ),
+            "analisis_tecnico": str(ticket_result.get("analisis_tecnico", "") or ""),
+            "plan_pruebas": " ".join(
+                str(p) for p in (ticket_result.get("plan_pruebas") or [])
+            ),
+        }
+        for _sec_source, _sec_text in _sec_texts.items():
+            if _sec_text.strip():
+                _sec_evt = _run_sec_check(
+                    text=_sec_text,
+                    source=_sec_source,
+                    exec_logger=exec_log,
+                )
+                if _sec_evt.get("decision") == "block":
+                    logger.warning(
+                        "security_check BLOCK: source=%s injection_risk=%s patterns=%s",
+                        _sec_source, _sec_evt.get("injection_risk"),
+                        _sec_evt.get("injection_patterns"),
+                    )
+                elif _sec_evt.get("pii_found") or _sec_evt.get("secrets_found"):
+                    logger.info(
+                        "security_check: pii=%s secrets=%s source=%s — sanitize_and_continue",
+                        _sec_evt.get("pii_found"), _sec_evt.get("secrets_found"), _sec_source,
+                    )
+    except ImportError:
+        logger.debug("artifact_security module unavailable — skipping Sprint 8 security check")
+    except Exception as _sec_exc:  # noqa: BLE001
+        logger.warning("security_check failed (non-fatal): %s", _sec_exc)
+
     # ── Stage 2c: quality_intake_result (Sprint 4) ──────────────────────────
     # Classify each acceptance criterion by the most appropriate test layer
     # BEFORE screen detection and compilation.  Only items with
@@ -1815,6 +1853,120 @@ def _run_pipeline_stages(
             stages[stage] = {"ok": True, "skipped": True, "reason": f"linter_error: {_lint_exc}"}
     else:
         stages[stage] = {"ok": True, "skipped": True}
+
+    # ── Stage S8-budget: budget_check (Sprint 8) ────────────────────────────
+    # Estimate run cost and check against monthly budget BEFORE opening any browser.
+    # "block" from budget_enforcer blocks lane full-uat/nightly-regression.
+    # "warn" is logged but pipeline continues.
+    # "preflight" and "compile-only" lanes are always allowed.
+    _lane = os.environ.get("QA_UAT_LANE", "full-uat")
+    _scenario_count_for_budget = stages.get("compiler", {}).get("scenario_count", 0)
+    try:
+        from budget_enforcer import check_budget as _check_budget
+        _budget_result = _check_budget(
+            lane=_lane,
+            ticket_id=ticket_id if isinstance(ticket_id, int) else 0,
+            scenario_count=_scenario_count_for_budget,
+            exec_logger=exec_log,
+        )
+        if _budget_result.decision == "block":
+            _budget_blocked = {
+                "ok": False,
+                "verdict": "BLOCKED",
+                "category": "OPS",
+                "reason": "BUDGET_EXCEEDED",
+                "error": "budget_block",
+                "message": (
+                    f"Budget enforcement blocked run: lane={_lane} "
+                    f"used={_budget_result.used_usd:.2f}/{_budget_result.budget_total_usd:.2f} USD. "
+                    f"{_budget_result.reason}"
+                ),
+                "budget_check": {
+                    "lane": _lane,
+                    "decision": _budget_result.decision,
+                    "reason": _budget_result.reason,
+                    "used_usd": _budget_result.used_usd,
+                    "budget_total_usd": _budget_result.budget_total_usd,
+                },
+                "human_action_required": (
+                    "Review budget usage at /api/qa-uat/dashboard and wait until next period, "
+                    "or increase QA_UAT_BUDGET_MONTHLY_USD."
+                ),
+                "ticket_id": ticket_id,
+                "stages": stages,
+                "elapsed_s": round(time.time() - started, 2),
+            }
+            if exec_log is not None:
+                try:
+                    exec_log.pipeline_verdict(
+                        verdict="BLOCKED",
+                        category="OPS",
+                        reason="BUDGET_EXCEEDED",
+                        failed_stage="budget_check",
+                        confidence=1.0,
+                        evidence_refs=["budget_check"],
+                        human_action_required=_budget_blocked["human_action_required"],
+                    )
+                    exec_log.session_end(_budget_blocked)
+                    exec_log.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            return _budget_blocked
+        elif _budget_result.decision == "warn":
+            logger.warning(
+                "budget_check WARN: lane=%s used=%.2f/%.2f USD reason=%s",
+                _lane, _budget_result.used_usd, _budget_result.budget_total_usd,
+                _budget_result.reason,
+            )
+    except ImportError:
+        logger.debug("budget_enforcer module unavailable — skipping Sprint 8 budget check")
+    except Exception as _budget_exc:  # noqa: BLE001
+        logger.warning("budget_check failed (non-fatal): %s", _budget_exc)
+
+    # ── Stage S8-prio: test_prioritizer (Sprint 8) ──────────────────────────
+    # Order compiled scenarios by priority score before sending to the runner.
+    # Only effective when compiled scenarios are available (compiler ran).
+    # Does NOT block — exclusions by time budget are logged but pipeline continues.
+    try:
+        from test_prioritizer import prioritize_scenarios as _prioritize
+        _raw_scenarios: list = []
+        _scenarios_file = evidence_dir / "scenarios.json"
+        if _scenarios_file.is_file():
+            _sc_data = json.loads(_scenarios_file.read_text(encoding="utf-8"))
+            _raw_scenarios = _sc_data.get("scenarios", [])
+        if _raw_scenarios:
+            _time_budget_s = int(os.environ.get("QA_UAT_SCENARIO_TIME_BUDGET_S", "720"))
+            _changed_screens_str = os.environ.get("QA_UAT_CHANGED_SCREENS", "")
+            _changed_screens = [s.strip() for s in _changed_screens_str.split(",") if s.strip()]
+            _prio_result = _prioritize(
+                scenarios=_raw_scenarios,
+                changed_screens=_changed_screens or None,
+                time_budget_seconds=_time_budget_s,
+                exec_logger=exec_log,
+            )
+            if _prio_result.selected:
+                # Rewrite scenarios.json with prioritized order
+                import copy as _copy2
+                _sc_reordered = _copy2.deepcopy(_sc_data)
+                _sc_reordered["scenarios"] = [
+                    ps.original_scenario for ps in _prio_result.selected
+                ]
+                _sc_reordered["prioritization"] = {
+                    "total_candidates": len(_raw_scenarios),
+                    "selected": len(_prio_result.selected),
+                    "excluded": len(_prio_result.excluded),
+                    "time_budget_seconds": _prio_result.time_budget_seconds,
+                    "estimated_total_seconds": _prio_result.estimated_total_seconds,
+                }
+                _persist_json(_scenarios_file, _sc_reordered)
+                logger.info(
+                    "test_prioritizer: reordered %d scenarios (excluded %d beyond time budget %ds)",
+                    len(_prio_result.selected), len(_prio_result.excluded), _time_budget_s,
+                )
+    except ImportError:
+        logger.debug("test_prioritizer module unavailable — skipping Sprint 8 prioritization")
+    except Exception as _prio_exc:  # noqa: BLE001
+        logger.warning("test_prioritizer failed (non-fatal): %s", _prio_exc)
 
     # ── Stage 5: runner ──────────────────────────────────────────────────────
     stage = "runner"

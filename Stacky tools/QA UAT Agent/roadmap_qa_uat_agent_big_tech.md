@@ -2980,3 +2980,89 @@ La línea estratégica que une todo el documento es simple:
 No se busca automatizar más por automatizar.
 Se busca automatizar con mejor señal, menor costo, más trazabilidad y control humano explícito.
 ```
+
+---
+
+## 21. Estado de implementación — v1.0 completada
+
+| Fase | Sprint | Estado | Archivo principal | Tests |
+|---|---|---|---|---|
+| Fase 1 — OBS/PIP Hardening | Sprint 1 | Completo | `execution_logger.py`, `screen_detector.py` | 14 |
+| Fase 2 — Screen + UI Map | Sprint 2 | Completo | `selector_contract_validator.py`, `screen_detection.json` | 15 |
+| Fase 3 — ENV/DATA Preflight | Sprint 3 | Completo | `deployment_fingerprint.py`, `uat_precondition_checker.py` | 21 |
+| Fase 4 — Quality Intake | Sprint 4 | Completo | `quality_intake.py`, `test_portfolio.json` | 23 |
+| Fase 5 — Runner Industrial | Sprint 5 | Completo | `playwright_config_writer.py`, `playwright_result_classifier.py` | 24 |
+| Fase 6 — Triage + Evals | Sprint 6 | Completo | `failure_triage.py`, `learning_verifier.py`, `selector_healing_advisor.py` | 37 |
+| Fase 7 — Lanes + Metricas | Sprint 7 | Completo | `lane_dispatcher.py`, `quarantine_registry.py`, `metrics_collector.py`, `dashboard_builder.py`, `ci_artifacts_publisher.py` | 33 |
+| Fase 8 — Seguridad + Budget | Sprint 8 | Completo | `artifact_security.py`, `budget_enforcer.py`, `test_prioritizer.py` | 27 |
+| Fase 9 — ML Prioritization | Backlog | Pendiente | — | — |
+
+### Sprint 8 — Detalle de implementacion
+
+**Item 8.1 — `artifact_security.py`**
+- `mask_pii(text, policy)` — detecta y enmascara: email, RUT, DNI, telefono, tarjeta, cuenta bancaria, direccion
+- `redact_secrets(data)` — detecta y redacta: Bearer/JWT, API keys (sk-*, ghp_*, etc.), passwords en query strings, connection strings
+- `detect_prompt_injection(text, source)` — 14+ patrones: ignore previous instructions, override system prompt, base64 payload, HTML comments
+- `run_security_check(text, source, exec_logger)` — funcion compuesta que emite evento `security_check` a `execution.jsonl`
+- Integrado en `qa_uat_pipeline._run_pipeline_stages()` Stage S8-sec: corre sobre description_md, analisis_tecnico y plan_pruebas antes de quality_intake
+
+**Item 8.2 — `budget_enforcer.py`**
+- `check_budget(lane, ticket_id, scenario_count, model_tier, exec_logger)` → `BudgetCheckResult`
+- Tabla de costos por lane: preflight (0.001), compile-only (0.005), smoke-uat (0.05+0.02/sc), full-uat (0.10+0.05/sc), forensic-rerun (0.20+0.10/sc), nightly-regression (0.15+0.03/sc)
+- Variables de entorno: `QA_UAT_BUDGET_MONTHLY_USD`, `QA_UAT_BUDGET_WARN_THRESHOLD`, `QA_UAT_BUDGET_BLOCK_THRESHOLD`, `QA_UAT_BUDGET_PERIOD`
+- Reglas: preflight/compile-only siempre allow (salvo >100 runs/dia); forensic-rerun >90% → warn con razon; full-uat/nightly >95% → block
+- Ledger persistido en `data/budget_ledger.json`; reset automatico por periodo
+- Emite evento `budget_check` a `execution.jsonl`
+- Integrado en pipeline Stage S8-budget: antes del runner, bloquea con categoria OPS si decision=block
+
+**Item 8.3 — `test_prioritizer.py`**
+- `prioritize_scenarios(scenarios, history, changed_screens, time_budget_seconds, exec_logger)` → `PrioritizationResult`
+- Scoring interpretable sin ML (7 factores, pesos fijos):
+  - 0.30 × business_risk (high=1.0, medium=0.6, low=0.3)
+  - 0.20 × recent_failure (fallo en ultimos 30d = 1.0, decae con distancia)
+  - 0.15 × changed_screen (pantalla modificada = 1.0)
+  - 0.10 × low_flake_bonus (flake_rate < 0.05 = 1.0)
+  - 0.10 × fast_test_bonus (estimated_seconds < 30 = 1.0)
+  - 0.10 × historical_bug_density (% runs APP/FAIL)
+  - 0.05 × manual_priority (P0=1.0, P1=0.6, P2=0.3)
+- Excluye scenarios que excedan `time_budget_seconds` (default: 720s = 12 min)
+- Variable de entorno: `QA_UAT_SCENARIO_TIME_BUDGET_S`, `QA_UAT_CHANGED_SCREENS`
+- Reescribe `scenarios.json` con orden de prioridad + campo `prioritization` para auditabilidad
+- Emite evento `test_prioritization_result` a `execution.jsonl`
+- Integrado en pipeline Stage S8-prio: despues del compiler, antes del runner
+
+**Item 8.4 — Endpoints Flask (Stacky Agents)**
+
+Archivo: `Stacky Agents/backend/api/qa_uat.py`
+
+| Endpoint | Metodo | Descripcion |
+|---|---|---|
+| `/api/qa-uat/lanes` | GET | 6 lanes con metadata (id, label, description, estimated_seconds) |
+| `/api/qa-uat/portfolio/<ticket_id>` | GET | `test_portfolio.json` del ultimo run del ticket |
+| `/api/qa-uat/dashboard?period=N` | GET | 3 paneles: run_health, generation_health, quarantine_health |
+| `/api/qa-uat/budget-check` | POST | Estima costo y retorna decision (allow/warn/block) |
+| `/api/qa-uat/quarantine` | GET | Lista entradas de cuarentena (activas + expiradas + resueltas) |
+| `/api/qa-uat/quarantine` | POST | Agrega scenario a cuarentena (requiere owner + ttl_days) |
+| `/api/qa-uat/quarantine/<id>` | DELETE | Resuelve (cierra) una entrada de cuarentena |
+
+### Metricas acumuladas del roadmap v1.0
+
+| Metrica | Valor |
+|---|---|
+| Tests acumulados (Sprint 1-8) | 694+ |
+| Regresiones nuevas introducidas | 0 |
+| Categorias de resultado soportadas | 9 (APP, ENV, DATA, PIP, GEN, NAV, OBS, SEC, OPS) |
+| Lanes de ejecucion | 6 |
+| Eventos estructurados en execution.jsonl | 20+ |
+| Evals verificables | 6 |
+| Artefactos de evidencia por run | 10+ |
+
+### Roadmap v2.0 — Backlog Fase 9
+
+Lo que queda para un roadmap v2.0:
+
+- **ML-based prioritization**: requiere >= 1.000 runs historicos para entrenar un modelo ligero (XGBoost o similar). El scoring heuristico de Sprint 8 genera las features correctas.
+- **Review Apps / entornos efimeros**: contenedores por PR para eliminar la dependencia de ambiente compartido mutable.
+- **Auto-healing con aprobacion de operador integrado en UI**: `selector_healing_advisor.py` ya propone; falta el flujo de aprobacion en Workbench.
+- **Integracion ADO/Jira/Mantis para publicacion de bugs automatica**: con aprobacion humana en cada paso. `ado_evidence_publisher.py` ya existe; falta el endpoint de publicacion con confirmacion.
+- **Egress controls**: validar que ningun trace/screenshot/log salga de la red corporativa sin mascara de PII aplicada.

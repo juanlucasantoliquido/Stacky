@@ -1,0 +1,14 @@
+{
+  "schema_version": "selector_contract/1.0",
+  "valid": false,
+  "screen": "",
+  "aliases_requested": [],
+  "aliases_available": [],
+  "missing_aliases": [],
+  "decorative_action_attempts": [],
+  "decision": "BLOCKED",
+  "category": "GEN",
+  "reason": "UI_MAP_MISSING",
+  "run_id": "70",
+  "scenario_id": "unknown"
+}

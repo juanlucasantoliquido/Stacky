@@ -28,12 +28,19 @@ from typing import Optional
 
 logger = logging.getLogger("stacky.qa_uat.test_runner")
 
+# v1.2.0 — Sprint 5: industrial Playwright runner.
+# - playwright_config_writer generates playwright.config.ts before run (no hardcoded timeouts).
+# - playwright_result_classifier classifies results into APP/NAV/ENV/DATA/OPS/OBS/PIP.
+# - runner_summary event emitted to execution.jsonl with verdict/category/reason/artifacts.
+# - retry_decision event emitted per retry.
+# - nav_precheck_result events enriched with category/screen.
+# - total=0 always BLOCKED PIP NO_TESTS_FOUND.
 # v1.1.0 — harvests Playwright JSON reporter `attachments[]` (trace.zip,
 # video.webm, error-context.md, screenshots) into evidence/<ticket>/<sid>/
 # so the dossier and failure_analyzer have real artefact paths instead of
 # null. Pre-1.1 the runner only scanned evidence/<sid>/ by extension and
 # missed everything Playwright leaves under test-results/.
-_TOOL_VERSION = "1.1.0"
+_TOOL_VERSION = "1.2.0"
 # Default per-test timeout in ms.
 # 90s acomoda: login ASP.NET WebForms (~10-25s) + 2-3 navegaciones a FrmAgenda
 # (~5-15s c/u) + steps + screenshots. El default anterior de 30s reventaba
@@ -90,6 +97,22 @@ def run(
         _exec_log = _get_active_logger()
     except ImportError:
         _exec_log = None
+
+    # ── Sprint 5.1: Generate playwright.config.ts from env vars ─────────────
+    # Always regenerate before running so timeouts/reporters are always consistent
+    # with the current environment.  Failure is non-fatal (best-effort).
+    try:
+        from playwright_config_writer import generate_config as _gen_config
+        _cfg_result = _gen_config(output_dir=Path(__file__).parent)
+        if not _cfg_result.get("ok"):
+            logger.warning("playwright_config_writer failed (non-fatal): %s",
+                           _cfg_result.get("message"))
+        else:
+            logger.debug("playwright.config.ts regenerated: %s", _cfg_result.get("config_path"))
+    except ImportError:
+        logger.debug("playwright_config_writer unavailable — config.ts not regenerated")
+    except Exception as _cfg_exc:
+        logger.warning("playwright_config_writer error (non-fatal): %s", _cfg_exc)
 
     # Check node/npx available
     if not _check_node_available():
@@ -213,11 +236,32 @@ def run(
     pass_count    = sum(1 for r in runs if r.get("status") == "pass")
     fail_count    = sum(1 for r in runs if r.get("status") == "fail")
     blocked_count = sum(1 for r in runs if r.get("status") == "blocked")
+    duration_ms   = int((time.time() - started) * 1000)
 
     import hashlib as _hashlib
     _user = os.environ.get("AGENDA_WEB_USER", "")
     _pass = os.environ.get("AGENDA_WEB_PASS", "")
     _pass_hash = _hashlib.sha256(_pass.encode()).hexdigest()[:8] if _pass else ""
+
+    # ── Sprint 5.2/5.3: Classify results and emit runner_summary ─────────────
+    tool_dir = Path(__file__).parent
+    _json_report_path = str(tool_dir / "reports" / "playwright-results.json")
+    _junit_report_path = str(tool_dir / "reports" / "junit.xml")
+    _exec_log_path = str(evidence_out / "execution.jsonl")
+
+    classification = _classify_and_emit_runner_summary(
+        runs=runs,
+        total=len(runs),
+        pass_count=pass_count,
+        fail_count=fail_count,
+        blocked_count=blocked_count,
+        duration_ms=duration_ms,
+        json_report_path=_json_report_path,
+        junit_report_path=_junit_report_path,
+        exec_log_path=_exec_log_path,
+        exec_log=_exec_log,
+        evidence_out=evidence_out,
+    )
 
     return {
         "ok": True,
@@ -226,11 +270,16 @@ def run(
         "pass": pass_count,
         "fail": fail_count,
         "blocked": blocked_count,
+        # Sprint 5 — classification propagated to pipeline output
+        "verdict": classification.get("verdict", "PASS" if len(runs) > 0 and fail_count == 0 and blocked_count == 0 else "BLOCKED"),
+        "category": classification.get("category"),
+        "reason": classification.get("reason"),
         "runs": runs,
+        "runner_summary": classification,
         "meta": {
             "tool": "uat_test_runner",
             "version": _TOOL_VERSION,
-            "duration_ms": int((time.time() - started) * 1000),
+            "duration_ms": duration_ms,
             "browser_launch_count": browser_launches,
             "login_count": login_count,
             "base_url": os.environ.get("AGENDA_WEB_BASE_URL", "http://localhost:35017/AgendaWeb/"),
@@ -478,6 +527,22 @@ def _parse_per_spec_results(
         ]
         error_messages = [e.get("message", "") or e.get("value", "") for e in errors]
 
+        # ── Sprint 5.4: emit retry_decision for each retry attempt ────────────
+        max_attempts = len(statuses)
+        if max_attempts > 1:
+            retry_reason = "PLAYWRIGHT_TIMEOUT" if any(s == "timedOut" for s in statuses) else "PLAYWRIGHT_FAILURE"
+            trace_env = os.environ.get("QA_UAT_TRACE", "on-first-retry")
+            trace_enabled = trace_env in ("always", "on-first-retry", "retain-on-failure")
+            for attempt_idx in range(2, max_attempts + 1):
+                _emit_retry_decision(
+                    exec_log=exec_log,
+                    scenario_id=scenario_id,
+                    reason=retry_reason,
+                    attempt=attempt_idx,
+                    max_attempts=max_attempts,
+                    trace_enabled=trace_enabled,
+                )
+
         if all(s == "passed" for s in statuses) and statuses:
             status = "pass"
         elif any(s == "timedOut" for s in statuses):
@@ -605,6 +670,10 @@ def _collect_nav_precheck_events(evidence_out: Path, ticket_id: int, exec_log) -
 
     Emits a nav_precheck_result event to the active ExecutionLogger for each file
     found in evidence_out/<scenario_id>/nav_precheck_result.json.
+
+    Sprint 5.5 — enriches events with category and screen fields for classifier
+    compatibility.  Visible = false → NAV/SELECTOR_NOT_FOUND; row_count = 0 → DATA/GRID_EMPTY.
+
     Called after all specs finish so events appear in execution.jsonl regardless
     of whether the spec passed or failed.
     """
@@ -614,18 +683,252 @@ def _collect_nav_precheck_events(evidence_out: Path, ticket_id: int, exec_log) -
         try:
             data = json.loads(precheck_file.read_text(encoding="utf-8"))
             scenario_id = precheck_file.parent.name
+
+            # Sprint 5.5 — resolve category/reason from precheck outcome
+            visible = data.get("visible", data.get("found", True))
+            row_count = data.get("row_count", 0)
+            if not visible:
+                decision  = "BLOCKED"
+                category  = "NAV"
+                reason    = "SELECTOR_NOT_FOUND"
+            elif row_count == 0:
+                decision  = "BLOCKED"
+                category  = "DATA"
+                reason    = "GRID_EMPTY"
+            else:
+                decision  = data.get("verdict", data.get("decision", "PASS"))
+                category  = None
+                reason    = None
+
             exec_log.event("nav_precheck_result", {
                 "ticket_id": ticket_id,
                 "scenario_id": scenario_id,
-                "grid_alias": data.get("grid_alias"),
+                "screen": data.get("screen"),
+                "target_alias": data.get("target_alias") or data.get("grid_alias"),
                 "selector": data.get("selector"),
-                "row_count": data.get("row_count", 0),
-                "decision": data.get("verdict"),
-                "reason": data.get("reason"),
-                "elapsed_ms": data.get("elapsed_ms"),
+                "visible": visible,
+                "row_count": row_count,
+                "timeout_ms": data.get("timeout_ms") or data.get("elapsed_ms"),
+                "decision": decision,
+                "category": category,
+                "reason": reason,
             })
         except Exception:  # noqa: BLE001
             pass
+
+
+# ── Sprint 5.3: runner_summary classification and event emission ──────────────
+
+def _classify_and_emit_runner_summary(
+    runs: list,
+    total: int,
+    pass_count: int,
+    fail_count: int,
+    blocked_count: int,
+    duration_ms: int,
+    json_report_path: str,
+    junit_report_path: str,
+    exec_log_path: str,
+    exec_log,
+    evidence_out: Path,
+) -> dict:
+    """
+    Sprint 5.3 — Classify all results and emit runner_summary to execution.jsonl.
+
+    Uses playwright_result_classifier if available; falls back to heuristic
+    classification from the runs list when the module is unavailable.
+
+    Returns the classification dict (subset of PlaywrightClassificationResult).
+    """
+    # ── Structural guard: total=0 is always BLOCKED PIP NO_TESTS_FOUND ────────
+    if total == 0:
+        summary = {
+            "verdict": "BLOCKED",
+            "category": "PIP",
+            "reason": "NO_TESTS_FOUND",
+            "total": 0,
+            "passed": 0,
+            "failed": 0,
+            "blocked": 0,
+            "skipped": 0,
+            "retries": 0,
+            "duration_ms": duration_ms,
+            "artifacts": {},
+            "scenario_results": [],
+        }
+        _emit_runner_summary(exec_log, summary)
+        return summary
+
+    # ── Try classifier ─────────────────────────────────────────────────────────
+    try:
+        from playwright_result_classifier import classify_playwright_results as _classify
+
+        # Collect nav_precheck events from evidence dirs
+        precheck_events = _collect_precheck_events_from_evidence(evidence_out)
+
+        result = _classify(
+            junit_path=junit_report_path if Path(junit_report_path).is_file() else None,
+            json_path=json_report_path if Path(json_report_path).is_file() else None,
+            execution_log_path=exec_log_path if Path(exec_log_path).is_file() else None,
+            nav_precheck_results=precheck_events,
+        )
+
+        # Build artifact links including per-scenario counts
+        artifacts = dict(result.artifacts)
+        artifacts.update({
+            "junit": junit_report_path if Path(junit_report_path).is_file() else None,
+            "json_results": json_report_path if Path(json_report_path).is_file() else None,
+        })
+        tool_dir = Path(__file__).parent
+        html_idx = tool_dir / "playwright-report" / "index.html"
+        if html_idx.is_file():
+            artifacts["html_report"] = str(html_idx)
+
+        summary = {
+            "verdict": result.verdict,
+            "category": result.category,
+            "reason": result.reason,
+            "total": result.total if result.total > 0 else total,
+            "passed": result.passed if result.total > 0 else pass_count,
+            "failed": result.failed if result.total > 0 else fail_count,
+            "blocked": result.blocked if result.total > 0 else blocked_count,
+            "skipped": result.skipped,
+            "retries": result.retries,
+            "duration_ms": result.duration_ms or duration_ms,
+            "artifacts": artifacts,
+            "scenario_results": [
+                {
+                    "scenario_id": s.scenario_id,
+                    "status": s.status,
+                    "duration_ms": s.duration_ms,
+                    "attempts": s.attempts,
+                    "classification": s.classification,
+                }
+                for s in result.scenario_results
+            ],
+        }
+        _emit_runner_summary(exec_log, summary)
+        return summary
+
+    except ImportError:
+        logger.debug("playwright_result_classifier unavailable — using heuristic summary")
+    except Exception as _cls_exc:
+        logger.warning("playwright_result_classifier error (non-fatal): %s", _cls_exc)
+
+    # ── Heuristic fallback (classifier unavailable) ────────────────────────────
+    if pass_count == total:
+        verdict, category, reason = "PASS", None, None
+    elif fail_count > 0 and pass_count > 0:
+        verdict, category, reason = "MIXED", "APP", "ASSERTION_FAILED"
+    elif fail_count > 0:
+        verdict, category, reason = "FAIL", "APP", "ASSERTION_FAILED"
+    else:
+        verdict, category, reason = "BLOCKED", "OPS", "WORKER_CRASH"
+
+    summary = {
+        "verdict": verdict,
+        "category": category,
+        "reason": reason,
+        "total": total,
+        "passed": pass_count,
+        "failed": fail_count,
+        "blocked": blocked_count,
+        "skipped": 0,
+        "retries": 0,
+        "duration_ms": duration_ms,
+        "artifacts": {
+            "junit": junit_report_path if Path(junit_report_path).is_file() else None,
+            "json_results": json_report_path if Path(json_report_path).is_file() else None,
+            "html_report": None,
+            "trace_count": 0,
+            "screenshots_count": 0,
+            "video_count": 0,
+        },
+        "scenario_results": [
+            {
+                "scenario_id": r.get("scenario_id", "unknown"),
+                "status": r.get("status", "unknown"),
+                "duration_ms": r.get("duration_ms", 0),
+                "attempts": 1,
+                "classification": {
+                    "verdict": "PASS" if r.get("status") == "pass" else
+                               "FAIL" if r.get("status") == "fail" else "BLOCKED",
+                    "category": None if r.get("status") == "pass" else "APP",
+                    "reason": None if r.get("status") == "pass" else "ASSERTION_FAILED",
+                },
+            }
+            for r in runs
+        ],
+    }
+    _emit_runner_summary(exec_log, summary)
+    return summary
+
+
+def _emit_runner_summary(exec_log, summary: dict) -> None:
+    """Emit runner_summary event to execution.jsonl."""
+    if exec_log is None:
+        return
+    try:
+        exec_log.event("runner_summary", summary)
+    except Exception as _ex:
+        logger.debug("runner_summary event emit failed (non-fatal): %s", _ex)
+
+
+def _collect_precheck_events_from_evidence(evidence_out: Path) -> list:
+    """Read nav_precheck_result.json files from evidence dir and return as event list."""
+    events: list = []
+    if not evidence_out.is_dir():
+        return events
+    for precheck_file in sorted(evidence_out.glob("*/nav_precheck_result.json")):
+        try:
+            data = json.loads(precheck_file.read_text(encoding="utf-8"))
+            scenario_id = precheck_file.parent.name
+            events.append({
+                "event": "nav_precheck_result",
+                "scenario_id": data.get("scenario_id") or scenario_id,
+                "grid_alias": data.get("grid_alias") or data.get("target_alias"),
+                "selector": data.get("selector"),
+                "row_count": data.get("row_count", 0),
+                "decision": data.get("verdict") or data.get("decision"),
+                "category": data.get("category"),
+                "reason": data.get("reason"),
+                "screen": data.get("screen"),
+            })
+        except Exception:  # noqa: BLE001
+            pass
+    return events
+
+
+# ── Sprint 5.4: retry_decision event ─────────────────────────────────────────
+
+def _emit_retry_decision(
+    exec_log,
+    scenario_id: str,
+    reason: str,
+    attempt: int,
+    max_attempts: int,
+    trace_enabled: bool,
+) -> None:
+    """
+    Sprint 5.4 — Emit a retry_decision event to execution.jsonl.
+
+    Called whenever Playwright re-runs a test (attempt > 1) so each retry
+    is individually auditable.
+    """
+    if exec_log is None:
+        return
+    from datetime import datetime, timezone
+    try:
+        exec_log.event("retry_decision", {
+            "scenario_id": scenario_id,
+            "reason": reason,
+            "attempt": attempt,
+            "max_attempts": max_attempts,
+            "trace_enabled": trace_enabled,
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        })
+    except Exception as _ex:
+        logger.debug("retry_decision event emit failed (non-fatal): %s", _ex)
 
 
 def _blocked_result(spec_file: Path, scenario_id: str, reason: str) -> dict:

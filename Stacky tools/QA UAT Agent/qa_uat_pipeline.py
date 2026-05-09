@@ -625,8 +625,10 @@ def _run_dossier_and_publisher(
     # P0/OBS — verdict must NEVER be UNKNOWN in new runs (roadmap Cambio 1.2 + 1.3).
     # If dossier does not emit a verdict, default to PASS when ok=True (all tests ran).
     verdict = dossier_result.get("verdict") or "PASS"
-    category = "APP" if verdict in ("FAIL", "PASS", "MIXED") else "PIP"
-    reason = verdict  # dossier verdict string is self-describing on success path
+    # Sprint 5 — prefer runner_summary classification for category/reason on success path
+    _runner_summary = runner_result.get("runner_summary") or {}
+    category = _runner_summary.get("category") or ("APP" if verdict in ("FAIL", "PASS", "MIXED") else "PIP")
+    reason   = _runner_summary.get("reason") or verdict  # dossier verdict string is self-describing
 
     # P0/OBS: emit complete pipeline_verdict_decision event before returning (roadmap Cambio 1.3)
     _active_log = _get_active_exec_logger()
@@ -651,6 +653,9 @@ def _run_dossier_and_publisher(
         "ticket_id": ticket_id,
         "verdict": verdict,
         "category": category,
+        "reason": reason,
+        # Sprint 5 — expose runner_summary artifact links in pipeline output
+        "runner_summary": _runner_summary,
         "stages": stages,
         "elapsed_s": round(time.time() - started, 2),
     }
@@ -1837,10 +1842,16 @@ def _run_pipeline_stages(
         )
         stages[stage] = _summarise_runner(runner_result)
         _exec_log_stage_end(exec_log, stage, _t0, ok=runner_result.get("ok", False),
-                            summary={"pass": runner_result.get("pass", 0),
-                                     "fail": runner_result.get("fail", 0),
-                                     "blocked": runner_result.get("blocked", 0),
-                                     "total": runner_result.get("total", 0)})
+                            summary={
+                                "pass": runner_result.get("pass", 0),
+                                "fail": runner_result.get("fail", 0),
+                                "blocked": runner_result.get("blocked", 0),
+                                "total": runner_result.get("total", 0),
+                                # Sprint 5 — classification in stage summary
+                                "verdict":  runner_result.get("verdict"),
+                                "category": runner_result.get("category"),
+                                "reason":   runner_result.get("reason"),
+                            })
         if not runner_result.get("ok"):
             return _build_output(ticket_id, stages, runner_result, started)
         _persist_json(evidence_dir / "runner_output.json", runner_result)
@@ -2347,6 +2358,18 @@ def _summarise_runner(r: dict) -> dict:
         base["fail"] = r.get("fail", r.get("fail_count", 0))
         base["blocked"] = r.get("blocked", r.get("blocked_count", 0))
         base["total"] = r.get("total", r.get("total_count", 0))
+        # Sprint 5 — propagate classification from runner_summary
+        base["verdict"]  = r.get("verdict")
+        base["category"] = r.get("category")
+        base["reason"]   = r.get("reason")
+        runner_summary = r.get("runner_summary")
+        if runner_summary:
+            base["runner_summary"] = {
+                "verdict":  runner_summary.get("verdict"),
+                "category": runner_summary.get("category"),
+                "reason":   runner_summary.get("reason"),
+                "artifacts": runner_summary.get("artifacts", {}),
+            }
     else:
         base["error"] = r.get("error")
         base["message"] = r.get("message")

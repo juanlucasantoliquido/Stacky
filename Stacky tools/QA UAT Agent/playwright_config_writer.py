@@ -71,6 +71,7 @@ _CONFIG_TEMPLATE = """\
 import {{ defineConfig }} from '@playwright/test';
 
 export default defineConfig({{
+  globalSetup: './playwright/global.setup.ts',
   timeout: Number(process.env.QA_UAT_TEST_TIMEOUT_MS ?? {QA_UAT_TEST_TIMEOUT_MS}),
   expect: {{
     timeout: Number(process.env.QA_UAT_EXPECT_TIMEOUT_MS ?? {QA_UAT_EXPECT_TIMEOUT_MS}),
@@ -90,6 +91,7 @@ export default defineConfig({{
     headless: process.env.QA_UAT_HEADED !== 'true',
     actionTimeout: Number(process.env.QA_UAT_ACTION_TIMEOUT_MS ?? {QA_UAT_ACTION_TIMEOUT_MS}),
     navigationTimeout: Number(process.env.QA_UAT_NAV_TIMEOUT_MS ?? {QA_UAT_NAV_TIMEOUT_MS}),
+    storageState: '.auth/agenda.json',
   }},
 }});
 """

@@ -182,6 +182,25 @@ def run(
                     logger.debug("Plan de pruebas extracted from HTML table in comment %s", c["id"])
                     break
     if not plan_pruebas:
+        # Fallback 1: try fetching ADO attachments (plan stored as .md file, not in comment body)
+        adjuntos_raw = _get_work_item_attachments(wi, ado_path, ticket_id)
+        for adj in adjuntos_raw:
+            name = str(adj.get("name") or "").lower()
+            url = str(adj.get("url") or "")
+            if url and ("plan" in name or "prueba" in name):
+                attachment_text = _fetch_attachment_text(url, verbose=verbose)
+                if attachment_text:
+                    logger.info("Trying plan extraction from attachment %r", adj.get("name"))
+                    plan_pruebas = _extract_plan_pruebas(attachment_text)
+                    if not plan_pruebas:
+                        plan_pruebas = _extract_plan_from_html_table(attachment_text)
+                    if not plan_pruebas:
+                        plan_pruebas = _extract_plan_from_markdown_headers(attachment_text)
+                if plan_pruebas:
+                    logger.info("Plan de pruebas extracted from ADO attachment %r", adj.get("name"))
+                    break
+
+    if not plan_pruebas:
         return _err("no_test_plan_in_ticket",
                     "Could not extract P01..P0N items from analisis_tecnico comment")
 
@@ -228,6 +247,79 @@ def run(
 
 
 # ── ADO Manager wrappers ───────────────────────────────────────────────────────
+
+def _load_pat_header() -> Optional[str]:
+    """Read the ADO PAT from PAT-ADO file and return the Authorization header value."""
+    try:
+        # Walk up to workspace root looking for PAT-ADO
+        here = Path(__file__).resolve()
+        for ancestor in [here] + list(here.parents):
+            candidate = ancestor / "PAT-ADO"
+            if candidate.is_file():
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+                pat_encoded = data.get("pat", "")
+                if data.get("pat_format") == "preencoded" and pat_encoded:
+                    return f"Basic {pat_encoded}"
+                elif pat_encoded:
+                    import base64
+                    raw = f":{pat_encoded}"
+                    return f"Basic {base64.b64encode(raw.encode()).decode()}"
+    except Exception as exc:
+        logger.debug("Could not load PAT: %s", exc)
+    return None
+
+
+def _fetch_attachment_text(url: str, verbose: bool = False) -> Optional[str]:
+    """Download an ADO attachment using the workspace PAT. Returns decoded text or None."""
+    try:
+        import urllib.request
+        auth_header = _load_pat_header()
+        if not auth_header:
+            logger.debug("No PAT available for attachment download")
+            return None
+        req = urllib.request.Request(url, headers={"Authorization": auth_header})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            # Try utf-8, fall back to latin-1
+            for enc in ("utf-8", "utf-8-sig", "latin-1"):
+                try:
+                    return raw.decode(enc)
+                except UnicodeDecodeError:
+                    continue
+    except Exception as exc:
+        logger.debug("Attachment fetch failed for %s: %s", url[:80], exc)
+    return None
+
+
+def _get_work_item_attachments(wi: dict, ado_path: Path, ticket_id: int) -> list:
+    """Fetch work item attachments from ADO REST API (fallback for ado.py which lacks download cmd)."""
+    try:
+        import urllib.request
+        auth_header = _load_pat_header()
+        if not auth_header:
+            return []
+        # Use ADO REST API: GET workItems/{id}?$expand=relations
+        wi_url = (
+            f"https://dev.azure.com/UbimiaPacifico/Strategist_Pacifico"
+            f"/_apis/wit/workItems/{ticket_id}?$expand=relations&api-version=7.0"
+        )
+        req = urllib.request.Request(wi_url, headers={"Authorization": auth_header})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        relations = data.get("relations") or []
+        attachments = []
+        for rel in relations:
+            if "AttachedFile" in str(rel.get("rel", "")):
+                attrs = rel.get("attributes") or {}
+                attachments.append({
+                    "name": attrs.get("name", "attachment"),
+                    "url": rel.get("url", ""),
+                })
+        return attachments
+    except Exception as exc:
+        logger.debug("Could not fetch work item relations: %s", exc)
+        return []
+
 
 def _ado_run(ado_path: Path, args: list) -> dict:
     """Invoke ado.py via subprocess and return parsed JSON output."""
@@ -349,6 +441,46 @@ def _extract_plan_pruebas(text: str) -> list:
             item["datos"] = datos_m.group(1).strip()
         if esperado_m:
             item["esperado"] = esperado_m.group(1).strip()
+        items.append(item)
+
+    return items
+
+
+def _extract_plan_from_markdown_headers(text: str) -> list:
+    """Extract P01..P0N items from markdown '### P01 — Description' header format."""
+    items = []
+    seen_ids: set = set()
+
+    # Match ### P01 — Description  or  ## P01: Description
+    header_re = re.compile(
+        r'^#{1,4}\s+(?:P|Caso\s+)(\d{2,3})\s*[—–\-:.]\s*(.+)', re.MULTILINE
+    )
+    esperado_re = re.compile(
+        r'\|\s*\*\*Resultado\s+esperado\*\*\s*\|\s*(.+?)\s*\|', re.IGNORECASE
+    )
+    condicion_re = re.compile(
+        r'\|\s*\*\*Condici[oó]n\*\*\s*\|\s*(.+?)\s*\|', re.IGNORECASE
+    )
+
+    headers = list(header_re.finditer(text))
+    for idx, m in enumerate(headers):
+        pid = f"P{m.group(1).zfill(2)}"
+        if pid in seen_ids:
+            continue
+        seen_ids.add(pid)
+        desc = m.group(2).strip()
+        # Extract the block until the next heading of the same or higher level
+        start = m.end()
+        end = headers[idx + 1].start() if idx + 1 < len(headers) else len(text)
+        block = text[start:end]
+
+        item: dict = {"id": pid, "descripcion": desc}
+        cond_m = condicion_re.search(block)
+        if cond_m:
+            item["datos"] = re.sub(r'\s+', ' ', cond_m.group(1)).strip()
+        esp_m = esperado_re.search(block)
+        if esp_m:
+            item["esperado"] = re.sub(r'\s+', ' ', esp_m.group(1)).strip()
         items.append(item)
 
     return items

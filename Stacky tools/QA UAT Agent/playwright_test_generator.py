@@ -355,6 +355,17 @@ def run(
         "generated": generated_count,
         "blocked": blocked_count,
         "results": results,
+        # 'specs' is the contract-compliant view of results expected by
+        # contract_validator.validate_generator_output (GeneratedTestPlan.schema).
+        "specs": [
+            {
+                "scenario_id": r.get("scenario_id"),
+                "status": r.get("status"),
+                "blocked_reason": r.get("reason"),
+                "spec_file": r.get("path"),
+            }
+            for r in results
+        ],
         "meta": {
             "tool": "playwright_test_generator",
             "version": _TOOL_VERSION,
@@ -819,6 +830,7 @@ def _render_from_playbook(
             detect_screen_errors_vision=False,
             screen_error_detector_js="",
             aspnet_exception_detector_js="",
+            resolved_values={},
         )
     except Exception as exc:
         return {

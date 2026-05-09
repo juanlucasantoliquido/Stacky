@@ -624,6 +624,11 @@ def run(
                 except Exception:  # noqa: BLE001
                     pass
             return _out
+        # Persist ticket.json in the run evidence dir so dossier_builder can read it.
+        try:
+            _persist_json(evidence_dir / "ticket.json", ticket_result)
+        except Exception as _tj_err:  # noqa: BLE001
+            logger.warning("Could not persist ticket.json in run dir: %s", _tj_err)
 
     # Delegate stages 2-11 to shared implementation (also used by _run_freeform)
     # Sprint 1 — wrap in try/finally to guarantee session_end on crash.
@@ -1734,16 +1739,23 @@ def _run_pipeline_stages(
             # Replace acceptance_criteria and plan_pruebas with UAT-only items
             _compiler_ticket["acceptance_criteria"] = _uat_cas
             if isinstance(_compiler_ticket.get("plan_pruebas"), list):
-                # Keep plan_pruebas items whose description matches a UAT CA
+                # Keep plan_pruebas items whose description matches a UAT CA.
+                # NOTE: _uat_cas may contain enriched text (desc + datos + esperado)
+                # while plan_pruebas items store only descripcion — use substring check.
                 _uat_set = set(_uat_cas)
                 _compiler_ticket["plan_pruebas"] = [
                     p for p in _compiler_ticket["plan_pruebas"]
                     if (
-                        isinstance(p, str) and p.strip() in _uat_set
+                        isinstance(p, str) and (
+                            p.strip() in _uat_set
+                            or any(p.strip() in u for u in _uat_set)
+                        )
                     ) or (
                         isinstance(p, dict) and (
                             p.get("description", "") in _uat_set
                             or p.get("descripcion", "") in _uat_set
+                            or any(p.get("description", "") in u for u in _uat_set)
+                            or any(p.get("descripcion", "") in u for u in _uat_set)
                         )
                     )
                 ]

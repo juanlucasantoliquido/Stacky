@@ -124,7 +124,7 @@ _LAYER_RULES: list[tuple[str, bool, str, str]] = [
     # --- uat (visual/browser interaction) ---
     (
         "uat", True,
-        r"validar\s+que\s+al\s+hacer\s+clic|navegar\s+a\b|seleccionar\s+en\s+pantalla|formulari[oa]\b|grilla\b|visualmente|pantalla\b|tabla\b|bot[oó]n\b|campo\s+de\s+texto|desplegable\b|combo\b|dropdown\b|modal\b|popup\b|filtrar?\b|filtros?\s+de\b|se\s+(?:filtr|mustr|cargu|actualiz)",
+        r"validar\s+que\s+al\s+hacer\s+clic|navegar\s+a\b|seleccionar\s+en\s+pantalla|formulari[oa]\b|grilla\b|visualmente|pantalla\b|tabla\b|bot[oó]n\b|campo\s+de\s+texto|desplegable\b|combo\b|dropdown\b|modal\b|popup\b|filtrar?\b|filtros?\s+de\b|columna\b|columnas\b|pesta[nñ]a\b|lista\s+de\b|se\s+(?:filtr|muestr|cargu|actualiz)",
         "criterio implica interacción visual o navegación de negocio en pantalla",
     ),
 ]
@@ -558,8 +558,11 @@ def extract_acceptance_criteria(ticket_result: dict) -> list[str]:
                 cas.append(item.strip())
             elif isinstance(item, dict):
                 desc = item.get("description") or item.get("descripcion") or item.get("title") or ""
-                if desc:
-                    cas.append(str(desc).strip())
+                datos = item.get("datos") or ""
+                esperado = item.get("esperado") or ""
+                full_text = " ".join(filter(None, [desc, datos, esperado])).strip()
+                if full_text:
+                    cas.append(full_text)
         if cas:
             return [c for c in cas if c]
 

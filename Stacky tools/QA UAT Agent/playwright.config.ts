@@ -4,6 +4,7 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
+  globalSetup: './playwright/global.setup.ts',
   timeout: Number(process.env.QA_UAT_TEST_TIMEOUT_MS ?? 60000),
   expect: {
     timeout: Number(process.env.QA_UAT_EXPECT_TIMEOUT_MS ?? 10000),
@@ -23,5 +24,6 @@ export default defineConfig({
     headless: process.env.QA_UAT_HEADED !== 'true',
     actionTimeout: Number(process.env.QA_UAT_ACTION_TIMEOUT_MS ?? 15000),
     navigationTimeout: Number(process.env.QA_UAT_NAV_TIMEOUT_MS ?? 30000),
+    storageState: '.auth/agenda.json',
   },
 });

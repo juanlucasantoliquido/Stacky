@@ -125,14 +125,15 @@ def run(
     if not runner_data.get("ok"):
         return _err("missing_artifact", "runner_output.json has ok=false")
 
-    # Load ticket data
+    # Load ticket data — fallback: use ticket_id from runner if file is missing
     try:
         ticket_data = json.loads(ticket_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        return _err("missing_artifact", f"Cannot read ticket.json: {exc}")
+        logger.warning("uat_dossier_builder: cannot read ticket.json (%s) — using minimal stub", exc)
+        ticket_data = {}
 
     ticket_id = runner_data.get("ticket_id", 0)
-    ticket_obj = ticket_data.get("ticket") or {}
+    ticket_obj = ticket_data.get("ticket") or ticket_data
     ticket_title = ticket_obj.get("title", f"Ticket #{ticket_id}")
 
     # Load evaluations.json (optional) — semantic verdict from uat_assertion_evaluator.py

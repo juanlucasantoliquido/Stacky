@@ -1,0 +1,1276 @@
+{
+  "config": {
+    "configFile": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright.config.ts",
+    "rootDir": "N:/GIT/RS/RSPACIFICO/Tools/Stacky/Stacky tools/QA UAT Agent",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "N:/GIT/RS/RSPACIFICO/Tools/Stacky/Stacky tools/QA UAT Agent/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "N:/GIT/RS/RSPACIFICO/Tools/Stacky/Stacky tools/QA UAT Agent",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "html",
+        {
+          "outputFolder": "playwright-report",
+          "open": "never"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "reports/junit.xml"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "reports/playwright-results.json"
+        }
+      ],
+      [
+        "list",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.59.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+      "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ADO-120 | P02 — La columna \"Fecha de ingreso judicial\" no es recuperable por configuracion",
+          "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+          "line": 90,
+          "column": 6,
+          "specs": [
+            {
+              "title": "p02 la_columna_\"fecha_de_ingreso_judicial\"_no_es_recuperable_por",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27913,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts:97:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+                          "column": 16,
+                          "line": 97
+                        },
+                        "snippet": "\u001b[0m \u001b[90m  95 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m  96 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m  97 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m  98 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m  99 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 100 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+                            "column": 16,
+                            "line": 97
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   95 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n   96 |     // If we are redirected to login, the session expired — fail immediately.\n>  97 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n   98 |     await waitForAgendaStable(page);\n   99 |     const beforeEachUrl = page.url().toLowerCase();\n  100 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts:97:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T21:35:35.546Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-27f7b-icial-no-es-recuperable-por\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-27f7b-icial-no-es-recuperable-por\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-27f7b-icial-no-es-recuperable-por\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+                        "column": 16,
+                        "line": 97
+                      }
+                    },
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27686,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts:97:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+                          "column": 16,
+                          "line": 97
+                        },
+                        "snippet": "\u001b[0m \u001b[90m  95 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m  96 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m  97 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m  98 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m  99 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 100 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+                            "column": 16,
+                            "line": 97
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   95 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n   96 |     // If we are redirected to login, the session expired — fail immediately.\n>  97 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n   98 |     await waitForAgendaStable(page);\n   99 |     const beforeEachUrl = page.url().toLowerCase();\n  100 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts:97:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-09T21:36:05.743Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-27f7b-icial-no-es-recuperable-por-retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-27f7b-icial-no-es-recuperable-por-retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-27f7b-icial-no-es-recuperable-por-retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-27f7b-icial-no-es-recuperable-por-retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+                        "column": 16,
+                        "line": 97
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "9e8d08221d85b59b020f-196cd6175dac4376a30a",
+              "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+              "line": 116,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+      "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ADO-120 | P05 — Comportamiento con campos sin valor (nulos) en los 8 nuevos campos",
+          "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+          "line": 98,
+          "column": 6,
+          "specs": [
+            {
+              "title": "p05 comportamiento_con_campos_sin_valor_(nulos)_en_los_8_nuevos_",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27932,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts:105:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+                          "column": 16,
+                          "line": 105
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 103 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 104 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 105 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 106 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 107 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 108 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+                            "column": 16,
+                            "line": 105
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  103 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  104 |     // If we are redirected to login, the session expired — fail immediately.\n> 105 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n  106 |     await waitForAgendaStable(page);\n  107 |     const beforeEachUrl = page.url().toLowerCase();\n  108 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts:105:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T21:36:35.811Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-22f8f-alor-nulos-en-los-8-nuevos-\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-22f8f-alor-nulos-en-los-8-nuevos-\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-22f8f-alor-nulos-en-los-8-nuevos-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+                        "column": 16,
+                        "line": 105
+                      }
+                    },
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27673,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts:105:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+                          "column": 16,
+                          "line": 105
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 103 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 104 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 105 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 106 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 107 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 108 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+                            "column": 16,
+                            "line": 105
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  103 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  104 |     // If we are redirected to login, the session expired — fail immediately.\n> 105 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n  106 |     await waitForAgendaStable(page);\n  107 |     const beforeEachUrl = page.url().toLowerCase();\n  108 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts:105:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-09T21:37:06.065Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-22f8f-alor-nulos-en-los-8-nuevos--retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-22f8f-alor-nulos-en-los-8-nuevos--retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-22f8f-alor-nulos-en-los-8-nuevos--retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-22f8f-alor-nulos-en-los-8-nuevos--retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+                        "column": 16,
+                        "line": 105
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "fcc9ab29edc90a8e1107-2a1b88555747c399da9e",
+              "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+              "line": 124,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+      "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ADO-120 | P06 — Valores \"Si\"/\"No\" del campo \"Afiliado al Debito Automatico\"",
+          "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+          "line": 106,
+          "column": 6,
+          "specs": [
+            {
+              "title": "p06 valores_\"si\"/\"no\"_del_campo_\"afiliado_al_debito_automatico\"",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27388,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts:113:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+                          "column": 16,
+                          "line": 113
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 111 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 112 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 113 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 114 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 115 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 116 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+                            "column": 16,
+                            "line": 113
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  111 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  112 |     // If we are redirected to login, the session expired — fail immediately.\n> 113 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n  114 |     await waitForAgendaStable(page);\n  115 |     const beforeEachUrl = page.url().toLowerCase();\n  116 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts:113:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T21:37:36.104Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-49a05-liado-al-debito-automatico-\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-49a05-liado-al-debito-automatico-\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-49a05-liado-al-debito-automatico-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+                        "column": 16,
+                        "line": 113
+                      }
+                    },
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27224,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts:113:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+                          "column": 16,
+                          "line": 113
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 111 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 112 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 113 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 114 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 115 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 116 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+                            "column": 16,
+                            "line": 113
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  111 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  112 |     // If we are redirected to login, the session expired — fail immediately.\n> 113 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n  114 |     await waitForAgendaStable(page);\n  115 |     const beforeEachUrl = page.url().toLowerCase();\n  116 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts:113:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-09T21:38:05.449Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-49a05-liado-al-debito-automatico--retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-49a05-liado-al-debito-automatico--retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-49a05-liado-al-debito-automatico--retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-49a05-liado-al-debito-automatico--retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+                        "column": 16,
+                        "line": 113
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "8cd6f101af985bab3703-187bde4d6bae977c7ac5",
+              "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+              "line": 132,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+      "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ADO-120 | P07 — Los 8 nuevos campos son de solo lectura para todos los perfiles",
+          "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+          "line": 82,
+          "column": 6,
+          "specs": [
+            {
+              "title": "p07 los_8_nuevos_campos_son_de_solo_lectura_para_todos_los_perfiles",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27356,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts:89:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+                          "column": 16,
+                          "line": 89
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 87 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 88 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 89 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 90 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 91 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 92 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+                            "column": 16,
+                            "line": 89
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  87 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  88 |     // If we are redirected to login, the session expired — fail immediately.\n> 89 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n     |                ^\n  90 |     await waitForAgendaStable(page);\n  91 |     const beforeEachUrl = page.url().toLowerCase();\n  92 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts:89:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T21:38:34.556Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-83003-ura-para-todos-los-perfiles\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-83003-ura-para-todos-los-perfiles\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-83003-ura-para-todos-los-perfiles\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+                        "column": 16,
+                        "line": 89
+                      }
+                    },
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27705,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts:89:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+                          "column": 16,
+                          "line": 89
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 87 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 88 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 89 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 90 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 91 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 92 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+                            "column": 16,
+                            "line": 89
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  87 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  88 |     // If we are redirected to login, the session expired — fail immediately.\n> 89 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n     |                ^\n  90 |     await waitForAgendaStable(page);\n  91 |     const beforeEachUrl = page.url().toLowerCase();\n  92 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts:89:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-09T21:39:03.743Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-83003-ura-para-todos-los-perfiles-retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-83003-ura-para-todos-los-perfiles-retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-83003-ura-para-todos-los-perfiles-retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-83003-ura-para-todos-los-perfiles-retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+                        "column": 16,
+                        "line": 89
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "88256629f9ec3448eb4f-46581261e7ddcfe5e56f",
+              "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+              "line": 108,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+      "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ADO-120 | P08 — Formato monetario de \"Saldo a favor disponible\" y \"Monto de la Cuota\"",
+          "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+          "line": 98,
+          "column": 6,
+          "specs": [
+            {
+              "title": "p08 formato_monetario_de_\"saldo_a_favor_disponible\"_y_\"monto_de_",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27467,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts:105:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+                          "column": 16,
+                          "line": 105
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 103 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 104 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 105 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 106 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 107 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 108 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+                            "column": 16,
+                            "line": 105
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  103 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  104 |     // If we are redirected to login, the session expired — fail immediately.\n> 105 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n  106 |     await waitForAgendaStable(page);\n  107 |     const beforeEachUrl = page.url().toLowerCase();\n  108 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts:105:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T21:39:34.490Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-a952d-avor-disponible-y-monto-de-\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-a952d-avor-disponible-y-monto-de-\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-a952d-avor-disponible-y-monto-de-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+                        "column": 16,
+                        "line": 105
+                      }
+                    },
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27971,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts:105:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+                          "column": 16,
+                          "line": 105
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 103 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 104 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 105 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 106 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 107 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 108 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+                            "column": 16,
+                            "line": 105
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  103 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  104 |     // If we are redirected to login, the session expired — fail immediately.\n> 105 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n  106 |     await waitForAgendaStable(page);\n  107 |     const beforeEachUrl = page.url().toLowerCase();\n  108 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts:105:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-09T21:40:04.242Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-a952d-avor-disponible-y-monto-de--retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-a952d-avor-disponible-y-monto-de--retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-a952d-avor-disponible-y-monto-de--retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-a952d-avor-disponible-y-monto-de--retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+                        "column": 16,
+                        "line": 105
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c6a9c41cf6acde29a004-e5b8413827aa9df0fa1c",
+              "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+              "line": 124,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+      "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ADO-120 | P11 — La sub-vista de detalle de cuotas no se ve afectada (regresion)",
+          "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+          "line": 82,
+          "column": 6,
+          "specs": [
+            {
+              "title": "p11 la_sub-vista_de_detalle_de_cuotas_no_se_ve_afectada_(regresion)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 26701,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts:89:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+                          "column": 16,
+                          "line": 89
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 87 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 88 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 89 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 90 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 91 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 92 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+                            "column": 16,
+                            "line": 89
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  87 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  88 |     // If we are redirected to login, the session expired — fail immediately.\n> 89 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n     |                ^\n  90 |     await waitForAgendaStable(page);\n  91 |     const beforeEachUrl = page.url().toLowerCase();\n  92 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts:89:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T21:40:34.554Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-402ac-o-se-ve-afectada-regresion-\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-402ac-o-se-ve-afectada-regresion-\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-402ac-o-se-ve-afectada-regresion-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+                        "column": 16,
+                        "line": 89
+                      }
+                    },
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 26777,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts:89:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+                          "column": 16,
+                          "line": 89
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 87 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 88 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 89 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 90 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 91 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 92 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+                            "column": 16,
+                            "line": 89
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  87 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  88 |     // If we are redirected to login, the session expired — fail immediately.\n> 89 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n     |                ^\n  90 |     await waitForAgendaStable(page);\n  91 |     const beforeEachUrl = page.url().toLowerCase();\n  92 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts:89:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-09T21:41:03.286Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-402ac-o-se-ve-afectada-regresion--retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-402ac-o-se-ve-afectada-regresion--retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-402ac-o-se-ve-afectada-regresion--retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-402ac-o-se-ve-afectada-regresion--retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+                        "column": 16,
+                        "line": 89
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "ef5d2efb0f5895ddaac3-e27143eaa0391a6883a8",
+              "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+              "line": 108,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+      "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ADO-120 | P12 — Exportacion incluye nuevos campos y excluye columna eliminada (si aplica)",
+          "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+          "line": 154,
+          "column": 6,
+          "specs": [
+            {
+              "title": "p12 exportacion_incluye_nuevos_campos_y_excluye_columna_eliminad",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 12,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 26699,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts:161:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+                          "column": 16,
+                          "line": 161
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 159 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 160 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 161 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 162 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 163 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 164 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+                            "column": 16,
+                            "line": 161
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  159 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  160 |     // If we are redirected to login, the session expired — fail immediately.\n> 161 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n  162 |     await waitForAgendaStable(page);\n  163 |     const beforeEachUrl = page.url().toLowerCase();\n  164 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts:161:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T21:41:31.923Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-5df0d--y-excluye-columna-eliminad\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-5df0d--y-excluye-columna-eliminad\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-5df0d--y-excluye-columna-eliminad\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+                        "column": 16,
+                        "line": 161
+                      }
+                    },
+                    {
+                      "workerIndex": 13,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 26595,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts:161:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+                          "column": 16,
+                          "line": 161
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 159 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 160 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 161 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 162 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 163 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 164 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+                            "column": 16,
+                            "line": 161
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  159 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  160 |     // If we are redirected to login, the session expired — fail immediately.\n> 161 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n      |                ^\n  162 |     await waitForAgendaStable(page);\n  163 |     const beforeEachUrl = page.url().toLowerCase();\n  164 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts:161:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-09T21:42:00.641Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-5df0d--y-excluye-columna-eliminad-retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-5df0d--y-excluye-columna-eliminad-retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-5df0d--y-excluye-columna-eliminad-retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-5df0d--y-excluye-columna-eliminad-retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+                        "column": 16,
+                        "line": 161
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "32eddf970dd6460d994b-1664d772c0f88149a74c",
+              "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+              "line": 180,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+      "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ADO-120 | P13 — Consistencia de \"Nombre del Corredor\" con RF-006 (Corredor Principal en cabecera)",
+          "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+          "line": 82,
+          "column": 6,
+          "specs": [
+            {
+              "title": "p13 consistencia_de_\"nombre_del_corredor\"_con_rf-006_(corredor_p",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 14,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 26620,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts:89:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+                          "column": 16,
+                          "line": 89
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 87 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 88 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 89 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 90 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 91 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 92 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+                            "column": 16,
+                            "line": 89
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  87 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  88 |     // If we are redirected to login, the session expired — fail immediately.\n> 89 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n     |                ^\n  90 |     await waitForAgendaStable(page);\n  91 |     const beforeEachUrl = page.url().toLowerCase();\n  92 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts:89:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T21:42:29.380Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-6c0fa-redor-con-rf-006-corredor-p\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-6c0fa-redor-con-rf-006-corredor-p\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-6c0fa-redor-con-rf-006-corredor-p\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+                        "column": 16,
+                        "line": 89
+                      }
+                    },
+                    {
+                      "workerIndex": 15,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 27496,
+                      "error": {
+                        "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts:89:16",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+                          "column": 16,
+                          "line": 89
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 87 |\u001b[39m     \u001b[90m// beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\u001b[39m\n \u001b[90m 88 |\u001b[39m     \u001b[90m// If we are redirected to login, the session expired — fail immediately.\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 89 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${TARGET_SCREEN}`\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m20\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 90 |\u001b[39m     \u001b[36mawait\u001b[39m waitForAgendaStable(page)\u001b[33m;\u001b[39m\n \u001b[90m 91 |\u001b[39m     \u001b[36mconst\u001b[39m beforeEachUrl \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39murl()\u001b[33m.\u001b[39mtoLowerCase()\u001b[33m;\u001b[39m\n \u001b[90m 92 |\u001b[39m     \u001b[36mif\u001b[39m (beforeEachUrl\u001b[33m.\u001b[39mincludes(\u001b[32m'frmlogin'\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+                            "column": 16,
+                            "line": 89
+                          },
+                          "message": "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  87 |     // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).\n  88 |     // If we are redirected to login, the session expired — fail immediately.\n> 89 |     await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });\n     |                ^\n  90 |     await waitForAgendaStable(page);\n  91 |     const beforeEachUrl = page.url().toLowerCase();\n  92 |     if (beforeEachUrl.includes('frmlogin')) {\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts:89:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-09T21:42:57.727Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-6c0fa-redor-con-rf-006-corredor-p-retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-6c0fa-redor-con-rf-006-corredor-p-retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-6c0fa-redor-con-rf-006-corredor-p-retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\evidence-120-uat-120-20260-6c0fa-redor-con-rf-006-corredor-p-retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T213329Z-cc5262\\tests\\P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+                        "column": 16,
+                        "line": 89
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "029fd9f5eee2347370e7-3021999607184c6bc68d",
+              "file": "evidence/120/uat-120-20260509T213329Z-cc5262/tests/P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+              "line": 108,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-05-09T21:35:14.620Z",
+    "duration": 491470.87200000003,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 8,
+    "flaky": 0
+  }
+}

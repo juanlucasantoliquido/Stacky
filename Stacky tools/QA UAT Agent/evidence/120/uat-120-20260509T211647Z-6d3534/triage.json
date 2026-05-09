@@ -1,0 +1,20 @@
+{
+  "schema": "triage/1.0",
+  "triage_version": "1.0",
+  "ticket_id": 120,
+  "run_id": "120",
+  "timestamp": "2026-05-09T21:25:40Z",
+  "verdict": "FAIL",
+  "category": "ENV",
+  "reason": "PAGE_LOAD_FAILED",
+  "confidence": 1.0,
+  "evidence": [
+    "result_json.category=ENV reason=PAGE_LOAD_FAILED",
+    "runner_classification: FAIL/ENV/PAGE_LOAD_FAILED"
+  ],
+  "owner": "devops",
+  "next_action": "Verificar build activo y deployment en ambiente de pruebas",
+  "rerun_recommended": true,
+  "publish_recommended": false,
+  "human_approval_required": true
+}

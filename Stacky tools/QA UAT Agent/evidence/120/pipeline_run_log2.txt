@@ -1,0 +1,80 @@
+DEBUG stacky.qa_uat.execution_logger: ExecutionLogger opened: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260509T205853Z-8630d8\execution.jsonl
+INFO stacky.qa_uat.pipeline: Preflight OK: AgendaWeb disponible en http://localhost:35017/AgendaWeb/ (2767ms)
+DEBUG stacky.qa_uat.deployment_fingerprint: deployment_fingerprint artifact: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260509T205853Z-8630d8\uat-120-20260509T205853Z-8630d8\deployment_fingerprint.json
+INFO stacky.qa_uat.deployment_fingerprint: deployment_fingerprint: skipped (no expected build defined) for ticket 120
+WARNING stacky.qa_uat.pipeline: deployment_fingerprint WARN: policy=None reason=NO_EXPECTED_BUILD_DEFINED (continuing pipeline)
+WARNING stacky.qa_uat.smoke_path: Smoke path warning (AUTH_NOT_AVAILABLE): Sesi¾n no disponible: Auth file is 77385s old (> 1800s). El globalSetup se ejecutarß para hacer login antes de los specs.
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: reader
+DEBUG stacky.qa_uat.ticket_reader: ado cmd: C:\Users\juanluca\AppData\Local\Programs\Python\Python311\python.exe C:\Desarrollo\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\ADO Manager\ado.py get 120
+DEBUG stacky.qa_uat.ticket_reader: ado cmd: C:\Users\juanluca\AppData\Local\Programs\Python\Python311\python.exe C:\Desarrollo\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\ADO Manager\ado.py comments 120
+DEBUG stacky.qa_uat.ticket_reader: LLM classified comment as 'implementacion'
+DEBUG stacky.qa_uat.ticket_reader: classified as implementacion via regex keyword 'implementacion'
+DEBUG stacky.qa_uat.ticket_reader: classified as analisis_tecnico via regex keyword 'analisis tecnico'
+DEBUG stacky.qa_uat.ticket_reader: classified as analisis_tecnico via regex keyword 'anßlisis tÚcnico'
+INFO stacky.qa_uat.ticket_reader: Trying plan extraction from attachment 'plan-de-pruebas.md'
+INFO stacky.qa_uat.ticket_reader: Plan de pruebas extracted from ADO attachment 'plan-de-pruebas.md'
+INFO stacky.qa_uat.pipeline: Effective config frozen: {'base_url': 'http://localhost:35017/AgendaWeb/', 'username_source': 'env', 'password_present': True, 'password_hash_prefix': '81a4e2e6', 'manage_app': False, 'allow_ui_discovery': False, 'allow_llm_navigation': False, 'require_playbook': True, 'max_login_attempts': 1, 'max_browser_launches': 1, 'max_total_minutes': 6, 'expected_human_minutes': 2, 'max_runtime_multiplier': 3, 'frozen_at': '2026-05-09T20:59:05Z'}
+INFO stacky.qa_uat.quality_intake: quality_intake: ticket=120, 13 CAs to classify
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-01] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-02] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-03] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-04] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-05] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-06] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-07] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-08] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-09] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-10] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-11] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-12] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-13] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+INFO stacky.qa_uat.quality_intake: test_portfolio.json written to N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260509T205853Z-8630d8\120\test_portfolio.json
+INFO stacky.qa_uat.quality_intake: quality_intake done: 13 items, uat_required=True, layers={'uat': 7, 'manual_review': 6}
+WARNING stacky.qa_uat.screen_detector: screen_aliases.yml load error: No module named 'yaml' ù alias matching disabled
+DEBUG stacky.qa_uat.screen_detector: screen_detection.json written to N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260509T205853Z-8630d8\120\screen_detection.json
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: ui_map
+DEBUG stacky.qa_uat.ui_map_resolution: ui_map_resolution: screen=FrmDetalleClie.aspx cache_hit=True rebuild=False available=True reason=None
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: compiler
+WARNING stacky.qa_uat.verdict_normalizer: verdict_normalizer: unknown reason code 'NO_TEST_PLAN_IN_TICKET' ù using as-is. Add to REASON_CODES if this is a new permanent code.
+DEBUG stacky.qa_uat.verdict_normalizer: verdict_normalizer: BLOCKED PIP/NO_TEST_PLAN_IN_TICKET stage=unknown
+DEBUG stacky.qa_uat.evidence_bundle_checker: evidence_bundle_checker: bundle complete [uat-120-20260509T205853Z-8630d8] tier=always required=3 optional=0
+DEBUG stacky.qa_uat.qa_dossier_builder: qa_dossier_builder: wrote N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260509T205853Z-8630d8\dossier.json
+DEBUG stacky.qa_uat.qa_dossier_builder: qa_dossier_builder: wrote N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260509T205853Z-8630d8\ado_comment.html
+DEBUG stacky.qa_uat.qa_dossier_builder: qa_dossier_builder: wrote N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260509T205853Z-8630d8\publish_audit.json
+{
+  "ok": false,
+  "ticket_id": 120,
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "no_test_plan_in_ticket",
+  "failed_stage": "unknown",
+  "stage": "unknown",
+  "error": "no_test_plan_in_ticket",
+  "message": "plan_pruebas is empty",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "RF-007 - Modificaciones en la Lista de Obligaciones",
+      "plan_item_count": 13
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 13,
+      "layers": {
+        "uat": 7,
+        "manual_review": 6
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T205853Z-8630d8\\120\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": true,
+      "skipped": false,
+      "screens": [
+        "FrmDetalleClie.aspx"
+      ]
+    },

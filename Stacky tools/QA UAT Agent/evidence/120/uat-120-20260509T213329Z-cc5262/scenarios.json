@@ -1,0 +1,621 @@
+{
+  "ok": true,
+  "ticket_id": 120,
+  "compiled": 8,
+  "out_of_scope": 5,
+  "scenarios": [
+    {
+      "scenario_id": "P02",
+      "ticket_id": 120,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "La columna \"Fecha de ingreso judicial\" no es recuperable por configuracion",
+      "precondiciones": [
+        "El usuario accede a la Vista Obligaciones en la instancia Pacifico"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "invisible",
+          "target": "input_fecha_ingreso_judicial",
+          "valor": null
+        },
+        {
+          "tipo": "page_not_contains_text",
+          "target": "None",
+          "valor": "Fecha de ingreso judicial"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "CLIENTE",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 120,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Comportamiento con campos sin valor (nulos) en los 8 nuevos campos",
+      "precondiciones": [
+        "Existen obligaciones en la base de datos con campos nulos en los 8 nuevos campos."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "wait_networkidle",
+          "target": "grid_obligaciones",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "grid_obligaciones",
+          "valor": "-"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "grid_obligaciones",
+          "valor": ""
+        },
+        {
+          "tipo": "count_gt",
+          "target": "grid_obligaciones",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "Obligaciones",
+          "filtro": "V000000201605P"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "CLIENTE",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P06",
+      "ticket_id": 120,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Valores \"Si\"/\"No\" del campo \"Afiliado al Debito Automatico\"",
+      "precondiciones": [
+        "Existen obligaciones con valor positivo y negativo para 'Afiliado al Debito Automatico' en la fuente de ingesta.",
+        "El usuario carga la Vista Obligaciones de un lote que contiene ambos tipos."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "msg_titulo_cliente",
+          "valor": "Si"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "msg_titulo_cliente",
+          "valor": "No"
+        },
+        {
+          "tipo": "page_not_contains_text",
+          "target": "msg_titulo_cliente",
+          "valor": "Otros valores"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P06"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "CLIENTE",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P07",
+      "ticket_id": 120,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Los 8 nuevos campos son de solo lectura para todos los perfiles",
+      "precondiciones": [
+        "El usuario ha cargado la Vista Obligaciones de la instancia Pacifico con un lote con datos en los 8 nuevos campos."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "msg_titulo_cliente",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "invisible",
+          "target": "input_nombre",
+          "valor": null
+        },
+        {
+          "tipo": "invisible",
+          "target": "input_apellido",
+          "valor": null
+        },
+        {
+          "tipo": "invisible",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "tipo": "invisible",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGCANAL",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGMEDIOPAGO",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGDEBAUT_DESC",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "DESALDOFAVOR",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGCUOTA",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGMONTOCUOTA",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGCORREDOR",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGNROCUOTAS",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P07"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "CLIENTE",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P08",
+      "ticket_id": 120,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Formato monetario de \"Saldo a favor disponible\" y \"Monto de la Cuota\"",
+      "precondiciones": [
+        "Existen obligaciones con valores monetarios en 'Saldo a favor disponible' y 'Monto de la Cuota'.",
+        "La instancia Pacifico tiene una configuración de formato numérico y moneda definida."
+      ],
+      "pasos": [
+        {
+          "accion": "wait_visible",
+          "target": "input_nombre",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "input_apellido",
+          "valor": null
+        },
+        {
+          "accion": "scroll_into_view",
+          "target": "input_nombre",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "input_nombre",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "input_apellido",
+          "valor": null
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "Saldo a favor disponible"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "Monto de la Cuota"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "Obligaciones",
+          "filtro": "V000000201605P"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P08"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "CLIENTE",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P11",
+      "ticket_id": 120,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "La sub-vista de detalle de cuotas no se ve afectada (regresion)",
+      "precondiciones": [
+        "El usuario ha cargado la Vista Obligaciones de la instancia Pacifico con un lote que tiene obligaciones con cuotas."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "msg_titulo_cliente",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "OGCANAL",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGMEDIOPAGO",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGDEBAUT_DESC",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "DESALDOFAVOR",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGCUOTA",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGMONTOCUOTA",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGCORREDOR",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "OGNROCUOTAS",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "Obligaciones",
+          "filtro": "lote = 'V000000201605P'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P11"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "CLIENTE",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P12",
+      "ticket_id": 120,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Exportacion incluye nuevos campos y excluye columna eliminada (si aplica)",
+      "precondiciones": [
+        "El usuario ha cargado la lista con datos en la Vista Obligaciones de la instancia Pacifico."
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "btnExportar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "archivo_exportado",
+          "valor": "OGCANAL"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "archivo_exportado",
+          "valor": "OGMEDIOPAGO"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "archivo_exportado",
+          "valor": "OGDEBAUT_DESC"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "archivo_exportado",
+          "valor": "DESALDOFAVOR"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "archivo_exportado",
+          "valor": "OGCUOTA"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "archivo_exportado",
+          "valor": "OGMONTOCUOTA"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "archivo_exportado",
+          "valor": "OGCORREDOR"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "archivo_exportado",
+          "valor": "OGNROCUOTAS"
+        },
+        {
+          "tipo": "page_not_contains_text",
+          "target": "archivo_exportado",
+          "valor": "OGFECPASAJEJUD"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P12"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "CLIENTE",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P13",
+      "ticket_id": 120,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Consistencia de \"Nombre del Corredor\" con RF-006 (Corredor Principal en cabecera)",
+      "precondiciones": [
+        "El lote con obligación V000000201605P debe existir en la base de datos.",
+        "El Corredor Principal debe estar definido en la cabecera del Detalle de Cliente."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "msg_titulo_cliente",
+          "valor": null
+        },
+        {
+          "accion": "wait_for_text",
+          "target": "input_nombre",
+          "valor": "Nombre del Corredor"
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "equals",
+          "target": "input_nombre",
+          "valor": "Nombre del Corredor"
+        },
+        {
+          "tipo": "equals",
+          "target": "OGCORREDOR",
+          "valor": "Nombre del Corredor"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "Obligaciones",
+          "filtro": "lote = 'V000000201605P'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P13"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "CLIENTE",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    }
+  ],
+  "out_of_scope_items": [
+    {
+      "id": "P01",
+      "razon": "ORACLE_TARGETS_DECORATIVE_LAYOUT",
+      "descripcion": "Eliminacion de la columna \"Fecha de ingreso judicial\" en instancia Pacifico",
+      "details": {
+        "oracle_index": 0,
+        "target": "msg_titulo_cliente",
+        "tipo": "invisible",
+        "alias_kind": "div",
+        "label": null
+      }
+    },
+    {
+      "id": "P03",
+      "razon": "ORACLE_TARGETS_DECORATIVE_LAYOUT",
+      "descripcion": "Los 8 nuevos campos aparecen como columnas en la Vista Obligaciones",
+      "details": {
+        "oracle_index": 0,
+        "target": "msg_titulo_cliente",
+        "tipo": "visible",
+        "alias_kind": "div",
+        "label": null
+      }
+    },
+    {
+      "id": "P04",
+      "razon": "PLACEHOLDER_DETECTED",
+      "descripcion": "Cada campo nuevo muestra el valor correcto proveniente del batch"
+    },
+    {
+      "id": "P09",
+      "razon": "ORACLE_TARGETS_DECORATIVE_LAYOUT",
+      "descripcion": "Los cambios son exclusivos de la instancia Pacifico (prueba de regresion)",
+      "details": {
+        "oracle_index": 0,
+        "target": "msg_titulo_cliente",
+        "tipo": "visible",
+        "alias_kind": "div",
+        "label": null
+      }
+    },
+    {
+      "id": "P10",
+      "razon": "PLACEHOLDER_DETECTED",
+      "descripcion": "Actualizacion de datos tras batch nocturno"
+    }
+  ],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 84035
+  },
+  "prioritization": {
+    "total_candidates": 8,
+    "selected": 8,
+    "excluded": 0,
+    "time_budget_seconds": 720,
+    "estimated_total_seconds": 480
+  }
+}

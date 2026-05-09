@@ -1,0 +1,23 @@
+{
+  "ok": false,
+  "ticket_id": 120,
+  "verdict": "BLOCKED",
+  "category": "OPS",
+  "reason": "PIPELINE_CRASH",
+  "failed_stage": "pipeline",
+  "error": "pipeline_crash",
+  "message": "'charmap' codec can't encode character '\\u25b6' in position 20: character maps to <undefined>",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "RF-007 - Modificaciones en la Lista de Obligaciones",
+      "plan_item_count": 13
+    }
+  },
+  "elapsed_s": 97.71,
+  "run_id": "uat-120-20260509T211332Z-478573",
+  "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211332Z-478573",
+  "_normalized": true
+}

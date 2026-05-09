@@ -1,0 +1,495 @@
+{
+  "ok": false,
+  "ticket_id": 120,
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "missing_artifact",
+  "failed_stage": "unknown",
+  "stage": "unknown",
+  "error": "missing_artifact",
+  "message": "Cannot read ticket.json: [Errno 2] No such file or directory: 'N:\\\\GIT\\\\RS\\\\RSPACIFICO\\\\Tools\\\\Stacky\\\\Stacky tools\\\\QA UAT Agent\\\\evidence\\\\120\\\\uat-120-20260509T211647Z-6d3534\\\\ticket.json'",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "RF-007 - Modificaciones en la Lista de Obligaciones",
+      "plan_item_count": 13
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 13,
+      "layers": {
+        "uat": 7,
+        "manual_review": 6
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": true,
+      "skipped": false,
+      "screens": [
+        "FrmDetalleClie.aspx"
+      ]
+    },
+    "compiler": {
+      "ok": true,
+      "skipped": false,
+      "scenario_count": 9,
+      "out_of_scope_count": 4
+    },
+    "compiler_contract": {
+      "ok": true,
+      "skipped": false,
+      "decision": "ALLOW",
+      "violations": [],
+      "reason": null,
+      "score": 1.0
+    },
+    "preconditions": {
+      "ok": true,
+      "skipped": true,
+      "total": 9,
+      "ok_count": 9,
+      "blocked": 0,
+      "skip_reason": "Missing env vars: RS_QA_DB_USER, RS_QA_DB_PASS, RS_QA_DB_DSN"
+    },
+    "selector_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_alias_contract_scenarios"
+    },
+    "data_readiness_check": {
+      "ok": true,
+      "skipped": true,
+      "reason": "error:name '_run_id' is not defined"
+    },
+    "data_contract_compile": {
+      "ok": true,
+      "skipped": false,
+      "contracts_compiled": 9,
+      "contracts_with_requirements": 9,
+      "total_blocking_requirements": 12
+    },
+    "data_readiness_v2": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_checked": 9,
+      "missing_count": 3,
+      "blocking_missing_count": 3,
+      "results": [
+        {
+          "scenario_id": "P02",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_readiness_v2_P02.json"
+        },
+        {
+          "scenario_id": "P05",
+          "ready": false,
+          "decision": "MISSING",
+          "blocking_missing_count": 1,
+          "missing": [
+            {
+              "requirement_id": "data.req.cliente_con_obligaciones",
+              "entity": "Obligacion",
+              "alias": "cliente_con_obligaciones",
+              "reason": "SCHEMA_UNKNOWN",
+              "blocking": true,
+              "resolution_options": [
+                "ASK_USER_FOR_VALUE",
+                "MARK_MANUAL_REVIEW"
+              ],
+              "db_table": null,
+              "schema_known": false,
+              "notes": null
+            }
+          ],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_readiness_v2_P05.json"
+        },
+        {
+          "scenario_id": "P06",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_readiness_v2_P06.json"
+        },
+        {
+          "scenario_id": "P07",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_readiness_v2_P07.json"
+        },
+        {
+          "scenario_id": "P08",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_readiness_v2_P08.json"
+        },
+        {
+          "scenario_id": "P10",
+          "ready": false,
+          "decision": "MISSING",
+          "blocking_missing_count": 1,
+          "missing": [
+            {
+              "requirement_id": "data.req.cliente_con_obligaciones",
+              "entity": "Obligacion",
+              "alias": "cliente_con_obligaciones",
+              "reason": "SCHEMA_UNKNOWN",
+              "blocking": true,
+              "resolution_options": [
+                "ASK_USER_FOR_VALUE",
+                "MARK_MANUAL_REVIEW"
+              ],
+              "db_table": null,
+              "schema_known": false,
+              "notes": null
+            }
+          ],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_readiness_v2_P10.json"
+        },
+        {
+          "scenario_id": "P11",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_readiness_v2_P11.json"
+        },
+        {
+          "scenario_id": "P12",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_readiness_v2_P12.json"
+        },
+        {
+          "scenario_id": "P13",
+          "ready": false,
+          "decision": "MISSING",
+          "blocking_missing_count": 1,
+          "missing": [
+            {
+              "requirement_id": "data.req.obligacion_con_corredor_y_riesgo",
+              "entity": "Obligacion",
+              "alias": "obligacion_con_corredor_y_riesgo",
+              "reason": "SCHEMA_UNKNOWN",
+              "blocking": true,
+              "resolution_options": [
+                "ASK_USER_FOR_VALUE",
+                "MARK_MANUAL_REVIEW"
+              ],
+              "db_table": null,
+              "schema_known": false,
+              "notes": null
+            }
+          ],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_readiness_v2_P13.json"
+        }
+      ]
+    },
+    "data_resolution_broker": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_with_requests": 3,
+      "total_requests": 3,
+      "results": [
+        {
+          "scenario_id": "P05",
+          "pending_request_ids": [
+            "datareq-0-001"
+          ],
+          "decisions_count": 1,
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_resolution_request_P05.json"
+        },
+        {
+          "scenario_id": "P10",
+          "pending_request_ids": [
+            "datareq-0-001"
+          ],
+          "decisions_count": 1,
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_resolution_request_P10.json"
+        },
+        {
+          "scenario_id": "P13",
+          "pending_request_ids": [
+            "datareq-0-001"
+          ],
+          "decisions_count": 1,
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\data_resolution_request_P13.json"
+        }
+      ]
+    },
+    "sql_seed_proposal": {
+      "ok": true,
+      "skipped": false,
+      "seed_results": [
+        {
+          "scenario_id": "P02",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\seed_proposal_P02.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\cleanup_proposal_P02.sql",
+          "script_sha256": "8587e79ed75df7f9053d6ba92306e001d068b77c92ae72d0b9f1841c37919dda",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P05",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\seed_proposal_P05.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\cleanup_proposal_P05.sql",
+          "script_sha256": "4acbfdbdc346eaa37e23fd5b2f58c73b797ee9cf283651c82bb271329fb6e1a9",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P06",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\seed_proposal_P06.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\cleanup_proposal_P06.sql",
+          "script_sha256": "42ba6cd41385d2aca5069c99e7a5eaef787aa5d4c73662be727d7f25813a80e4",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P07",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\seed_proposal_P07.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\cleanup_proposal_P07.sql",
+          "script_sha256": "ca6365949494798e8260996e2c3225d19b941cf274691df65720e582fa0b2dd6",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P08",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\seed_proposal_P08.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\cleanup_proposal_P08.sql",
+          "script_sha256": "7624144ab88d263d945729af96e84ba05f8742260e3ac2500c92da074f229319",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P10",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\seed_proposal_P10.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\cleanup_proposal_P10.sql",
+          "script_sha256": "9f59cdc4650efc0347f5535017b68f7fdfa29ec613045c737b171f55cf5a4be1",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P11",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\seed_proposal_P11.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\cleanup_proposal_P11.sql",
+          "script_sha256": "fa51b88ef79d296856ea768f108c28876372f2e9a7b27f13d9a4c10858f52ee1",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P12",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\seed_proposal_P12.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\cleanup_proposal_P12.sql",
+          "script_sha256": "82daee4d3f27b2f19157566ad75fae7fb9ad238fe5b3522ff0d1e1e31497ab36",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P13",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\seed_proposal_P13.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\120\\cleanup_proposal_P13.sql",
+          "script_sha256": "e5636df535e06ba7cb946d67881686f325a9c63da8a75a91611fbb3c232d835d",
+          "safety_safe": true
+        }
+      ]
+    },
+    "catalog_readiness": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_catalogs_required"
+    },
+    "seed_cleanup": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_applied_seeds",
+      "cleanup_count": 0
+    },
+    "generator": {
+      "ok": true,
+      "skipped": false,
+      "generated": 9,
+      "blocked": 0,
+      "total": 9
+    },
+    "generator_contract": {
+      "ok": true,
+      "skipped": false,
+      "decision": "ALLOW",
+      "violations": [],
+      "reason": null,
+      "score": 1.0
+    },
+    "spec_linter": {
+      "ok": true,
+      "skipped": false,
+      "checked": 9,
+      "violations": []
+    },
+    "oracle_evaluation": {
+      "ok": true,
+      "skipped": false,
+      "oracle_publish_blocked": false,
+      "p0_blocked_count": 0,
+      "no_oracle_count": 9,
+      "weak_only_count": 0,
+      "oracle_fail_count": 0,
+      "weak_files": 9,
+      "weak_tests": 5,
+      "no_assertion_tests": 4,
+      "strong_tests": 0
+    },
+    "runner": {
+      "ok": true,
+      "skipped": false,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 9,
+      "total": 9,
+      "verdict": "FAIL",
+      "category": "ENV",
+      "reason": "PAGE_LOAD_FAILED",
+      "runner_summary": {
+        "verdict": "FAIL",
+        "category": "ENV",
+        "reason": "PAGE_LOAD_FAILED",
+        "artifacts": {
+          "junit": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+          "json_results": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+          "html_report": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+          "trace_count": 9,
+          "screenshots_count": 8,
+          "video_count": 9
+        }
+      }
+    },
+    "triage": {
+      "ok": true,
+      "skipped": false,
+      "verdict": "FAIL",
+      "category": "ENV",
+      "reason": "PAGE_LOAD_FAILED",
+      "confidence": 1.0,
+      "owner": "devops",
+      "human_approval_required": true,
+      "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534\\triage.json"
+    },
+    "quarantine_check": {
+      "ok": true,
+      "skipped": false,
+      "checked_count": 9,
+      "quarantined_count": 0,
+      "results": [
+        {
+          "scenario_id": "p02_la_columna__fecha_de_ingre",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p05_comportamiento_con_campos_",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p06_valores__si___no__del_camp",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p07_los_8_nuevos_campos_son_de",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p08_formato_monetario_de__sald",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p10_actualizacion_de_datos_tra",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p11_la_sub-vista_de_detalle_de",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p12_exportacion_incluye_nuevos",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p13_consistencia_de__nombre_de",
+          "quarantined": false
+        }
+      ]
+    },
+    "run_metrics_summary": {
+      "ok": true,
+      "skipped": false,
+      "unknown_count": 0,
+      "lane": null
+    },
+    "annotator": {
+      "ok": true,
+      "skipped": false,
+      "annotated": 0,
+      "errors": [
+        "pillow_not_available"
+      ]
+    },
+    "test_confidence": {
+      "ok": true,
+      "skipped": false,
+      "total_scenarios": 9,
+      "high_count": 0,
+      "medium_count": 0,
+      "low_count": 9,
+      "blocked_count": 9,
+      "publish_blocked": true,
+      "lineage_entries": 0,
+      "lineage_seeded": 0
+    },
+    "evaluator": {
+      "ok": true,
+      "skipped": false,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 9,
+      "review": 0
+    },
+    "failure_analyzer": {
+      "ok": true,
+      "skipped": true
+    },
+    "dossier": {
+      "ok": false,
+      "skipped": false,
+      "error": "missing_artifact",
+      "message": "Cannot read ticket.json: [Errno 2] No such file or directory: 'N:\\\\GIT\\\\RS\\\\RSPACIFICO\\\\Tools\\\\Stacky\\\\Stacky tools\\\\QA UAT Agent\\\\evidence\\\\120\\\\uat-120-20260509T211647Z-6d3534\\\\ticket.json'"
+    }
+  },
+  "elapsed_s": 533.0,
+  "run_id": "uat-120-20260509T211647Z-6d3534",
+  "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T211647Z-6d3534",
+  "_normalized": true
+}

@@ -1,0 +1,201 @@
+{
+  "schema_version": "weak_assertion_report/1.0",
+  "ok": true,
+  "run_id": "120",
+  "ticket_id": 120,
+  "files_analyzed": 8,
+  "total_tests": 8,
+  "strong_tests": 0,
+  "weak_tests": 5,
+  "trivial_tests": 0,
+  "no_assertion_tests": 3,
+  "publish_blocked": false,
+  "file_analyses": [
+    {
+      "file_name": "P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p02 la_columna_",
+          "file_name": "P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+          "line_number": 116,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 1,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p05 comportamiento_con_campos_sin_valor_(nulos)_en_los_8_nuevos_",
+          "file_name": "P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+          "line_number": 124,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p06 valores_",
+          "file_name": "P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+          "line_number": 132,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 3,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 0,
+      "trivial_tests": 0,
+      "no_assertion_tests": 1,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p07 los_8_nuevos_campos_son_de_solo_lectura_para_todos_los_perfiles",
+          "file_name": "P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+          "line_number": 108,
+          "assertion_strength": "NONE",
+          "expect_call_count": 0,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Test has no expect() calls \u2014 cannot verify any functional requirement"
+        }
+      ]
+    },
+    {
+      "file_name": "P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p08 formato_monetario_de_",
+          "file_name": "P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+          "line_number": 124,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 0,
+      "trivial_tests": 0,
+      "no_assertion_tests": 1,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p11 la_sub-vista_de_detalle_de_cuotas_no_se_ve_afectada_(regresion)",
+          "file_name": "P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+          "line_number": 108,
+          "assertion_strength": "NONE",
+          "expect_call_count": 0,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Test has no expect() calls \u2014 cannot verify any functional requirement"
+        }
+      ]
+    },
+    {
+      "file_name": "P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p12 exportacion_incluye_nuevos_campos_y_excluye_columna_eliminad",
+          "file_name": "P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+          "line_number": 180,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 9,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 0,
+      "trivial_tests": 0,
+      "no_assertion_tests": 1,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p13 consistencia_de_",
+          "file_name": "P13_consistencia_de_nombre_del_corredor_con_rf_006_cor.spec.ts",
+          "line_number": 108,
+          "assertion_strength": "NONE",
+          "expect_call_count": 0,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Test has no expect() calls \u2014 cannot verify any functional requirement"
+        }
+      ]
+    }
+  ],
+  "evidence_path": null,
+  "analyzed_at": "2026-05-09T21:18:59.485434Z"
+}

@@ -1,0 +1,35 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-05-09T20:59:06.060560+00:00",
+  "ticket_id": 120,
+  "run_id": "uat-120-20260509T205853Z-8630d8",
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "no_test_plan_in_ticket",
+  "failed_stage": "unknown",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'unknown'. [PIP] no_test_plan_in_ticket. plan_pruebas is empty",
+  "human_action_required": "Investigate PIP/no_test_plan_in_ticket and rerun pipeline",
+  "exec_summary": {
+    "session_started_at": "2026-05-09T20:58:53.838659Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 25
+  },
+  "artifacts": {
+    "effective_config_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T205853Z-8630d8\\effective_config.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T205853Z-8630d8\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T205853Z-8630d8\\execution.jsonl",
+    "result_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T205853Z-8630d8\\result.json",
+    "ui_map_resolution_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T205853Z-8630d8\\ui_map_resolution.json"
+  },
+  "evidence_refs": [
+    "effective_config.json",
+    "evidence_bundle_manifest.json",
+    "execution.jsonl",
+    "result.json",
+    "ui_map_resolution.json"
+  ],
+  "elapsed_build_ms": 0.0
+}

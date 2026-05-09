@@ -1,0 +1,30 @@
+DEBUG stacky.qa_uat.execution_logger: ExecutionLogger opened: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260509T210124Z-4701ed\execution.jsonl
+INFO stacky.qa_uat.pipeline: Preflight OK: AgendaWeb disponible en http://localhost:35017/AgendaWeb/ (2819ms)
+DEBUG stacky.qa_uat.deployment_fingerprint: deployment_fingerprint artifact: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260509T210124Z-4701ed\uat-120-20260509T210124Z-4701ed\deployment_fingerprint.json
+INFO stacky.qa_uat.deployment_fingerprint: deployment_fingerprint: skipped (no expected build defined) for ticket 120
+WARNING stacky.qa_uat.pipeline: deployment_fingerprint WARN: policy=None reason=NO_EXPECTED_BUILD_DEFINED (continuing pipeline)
+WARNING stacky.qa_uat.smoke_path: Smoke path warning (AUTH_NOT_AVAILABLE): Sesi¾n no disponible: Auth file is 77537s old (> 1800s). El globalSetup se ejecutarß para hacer login antes de los specs.
+INFO stacky.qa_uat.pipeline: \u25b6 Stage: reader
+DEBUG stacky.qa_uat.ticket_reader: ado cmd: C:\Users\juanluca\AppData\Local\Programs\Python\Python311\python.exe C:\Desarrollo\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\ADO Manager\ado.py get 120
+DEBUG stacky.qa_uat.ticket_reader: ado cmd: C:\Users\juanluca\AppData\Local\Programs\Python\Python311\python.exe C:\Desarrollo\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\ADO Manager\ado.py comments 120
+DEBUG stacky.qa_uat.ticket_reader: LLM classified comment as 'implementacion'
+DEBUG stacky.qa_uat.ticket_reader: classified as implementacion via regex keyword 'implementacion'
+DEBUG stacky.qa_uat.ticket_reader: classified as analisis_tecnico via regex keyword 'analisis tecnico'
+DEBUG stacky.qa_uat.ticket_reader: classified as analisis_tecnico via regex keyword 'anßlisis tÚcnico'
+INFO stacky.qa_uat.ticket_reader: Trying plan extraction from attachment 'plan-de-pruebas.md'
+INFO stacky.qa_uat.ticket_reader: Plan de pruebas extracted from ADO attachment 'plan-de-pruebas.md'
+INFO stacky.qa_uat.pipeline: Effective config frozen: {'base_url': 'http://localhost:35017/AgendaWeb/', 'username_source': 'env', 'password_present': True, 'password_hash_prefix': '81a4e2e6', 'manage_app': False, 'allow_ui_discovery': False, 'allow_llm_navigation': False, 'require_playbook': True, 'max_login_attempts': 1, 'max_browser_launches': 1, 'max_total_minutes': 6, 'expected_human_minutes': 2, 'max_runtime_multiplier': 3, 'frozen_at': '2026-05-09T21:01:36Z'}
+INFO stacky.qa_uat.quality_intake: quality_intake: ticket=120, 13 CAs to classify
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-01] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-02] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-03] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-04] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-05] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-06] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-07] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-08] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-09] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-10] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-11] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-12] layer=uat needs_browser=True reason=criterio implica interacci¾n visual o navegaci¾n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-13] layer=manual_review needs_browser=False reason=texto ambiguo ù ninguna se±al clara identificada

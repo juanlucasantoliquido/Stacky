@@ -1,0 +1,69 @@
+{
+  "scenario_id": "P10",
+  "assertions": [
+    {
+      "oracle_id": 0,
+      "target": "grid_obligaciones",
+      "tipo": "page_contains_text",
+      "expected": "OGCANAL",
+      "actual_text": "",
+      "visible": true
+    },
+    {
+      "oracle_id": 1,
+      "target": "grid_obligaciones",
+      "tipo": "page_contains_text",
+      "expected": "OGMEDIOPAGO",
+      "actual_text": "",
+      "visible": true
+    },
+    {
+      "oracle_id": 2,
+      "target": "grid_obligaciones",
+      "tipo": "page_contains_text",
+      "expected": "OGDEBAUT_DESC",
+      "actual_text": "",
+      "visible": true
+    },
+    {
+      "oracle_id": 3,
+      "target": "grid_obligaciones",
+      "tipo": "page_contains_text",
+      "expected": "DESALDOFAVOR",
+      "actual_text": "",
+      "visible": true
+    },
+    {
+      "oracle_id": 4,
+      "target": "grid_obligaciones",
+      "tipo": "page_contains_text",
+      "expected": "OGCUOTA",
+      "actual_text": "",
+      "visible": true
+    },
+    {
+      "oracle_id": 5,
+      "target": "grid_obligaciones",
+      "tipo": "page_contains_text",
+      "expected": "OGMONTOCUOTA",
+      "actual_text": "",
+      "visible": true
+    },
+    {
+      "oracle_id": 6,
+      "target": "grid_obligaciones",
+      "tipo": "page_contains_text",
+      "expected": "OGCORREDOR",
+      "actual_text": "",
+      "visible": true
+    },
+    {
+      "oracle_id": 7,
+      "target": "grid_obligaciones",
+      "tipo": "page_contains_text",
+      "expected": "OGNROCUOTAS",
+      "actual_text": "",
+      "visible": true
+    }
+  ]
+}

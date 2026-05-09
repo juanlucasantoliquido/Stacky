@@ -1,0 +1,49 @@
+{
+  "ok": false,
+  "ticket_id": 120,
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "no_test_plan_in_ticket",
+  "failed_stage": "unknown",
+  "stage": "unknown",
+  "error": "no_test_plan_in_ticket",
+  "message": "plan_pruebas is empty",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "RF-007 - Modificaciones en la Lista de Obligaciones",
+      "plan_item_count": 13
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 13,
+      "layers": {
+        "uat": 7,
+        "manual_review": 6
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T205853Z-8630d8\\120\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": true,
+      "skipped": false,
+      "screens": [
+        "FrmDetalleClie.aspx"
+      ]
+    },
+    "compiler": {
+      "ok": false,
+      "skipped": false,
+      "error": "no_test_plan_in_ticket",
+      "message": "plan_pruebas is empty"
+    }
+  },
+  "elapsed_s": 12.18,
+  "run_id": "uat-120-20260509T205853Z-8630d8",
+  "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260509T205853Z-8630d8",
+  "_normalized": true
+}

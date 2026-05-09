@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "decision": "ALLOW",
+  "reason": null,
+  "screens": [
+    {
+      "screen": "FrmDetalleClie.aspx",
+      "cache_hit": true,
+      "rebuild_attempted": false,
+      "rebuild_ok": false,
+      "available": true,
+      "reason": null,
+      "cache_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\cache\\ui_maps\\FrmDetalleClie.aspx.json"
+    }
+  ],
+  "missing_screens": [],
+  "allow_rebuild": false,
+  "elapsed_ms": 0,
+  "human_action_required": null,
+  "artifact_path": null
+}

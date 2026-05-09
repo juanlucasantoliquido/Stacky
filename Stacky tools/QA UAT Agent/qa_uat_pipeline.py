@@ -1107,6 +1107,90 @@ def _run_pipeline_stages(
             }
         return None
 
+    # ── Stage 2c: quality_intake_result (Sprint 4) ──────────────────────────
+    # Classify each acceptance criterion by the most appropriate test layer
+    # BEFORE screen detection and compilation.  Only items with
+    # layer=uat or layer=smoke_e2e will be forwarded to the compiler.
+    # Non-UAT items are preserved in test_portfolio.json with owner+handoff.
+    # If no UAT items exist after classification → SKIPPED PIP NO_UAT_ITEMS (not error).
+    _quality_intake_result: Optional[object] = None  # QualityIntakeResult | None
+    _uat_cas: Optional[list] = None  # filtered list forwarded to compiler
+    stage = "quality_intake"
+    try:
+        from quality_intake import run_quality_intake as _run_qi, extract_acceptance_criteria as _extract_cas, build_no_uat_skipped_result as _build_no_uat
+        _t0_qi = _exec_log_stage_start(exec_log, stage)
+        _qi_cas = _extract_cas(ticket_result)
+        if _qi_cas:
+            _quality_intake_result = _run_qi(
+                ticket_id=ticket_id if isinstance(ticket_id, int) else 0,
+                title=ticket_result.get("title", str(ticket_id)),
+                description_md=ticket_result.get("description_md", ""),
+                acceptance_criteria=_qi_cas,
+                analisis_tecnico=ticket_result.get("analisis_tecnico", ""),
+                plan_pruebas=" ".join(
+                    str(p) for p in (ticket_result.get("plan_pruebas") or [])
+                ),
+                exec_logger=exec_log,
+                evidence_dir=evidence_dir,
+                run_id=str(ticket_id),
+            )
+            _qi_layers = _quality_intake_result.layer_counts()
+            stages[stage] = {
+                "ok": True,
+                "skipped": False,
+                "items_total": _quality_intake_result.items_total,
+                "layers": _qi_layers,
+                "uat_required": _quality_intake_result.uat_required,
+                "manual_review_required": _quality_intake_result.manual_review_required,
+                "artifact_path": _quality_intake_result.artifact_path,
+            }
+            _exec_log_stage_end(exec_log, stage, _t0_qi, ok=True, summary=stages[stage])
+
+            # Build list of UAT/smoke_e2e CAs to forward to compiler
+            _uat_cas = [
+                i.description for i in _quality_intake_result.uat_items
+            ]
+
+            # SKIPPED path: no UAT items at all → positive signal, not error
+            if not _uat_cas:
+                _no_uat = _build_no_uat(
+                    ticket_id=ticket_id if isinstance(ticket_id, int) else 0,
+                    portfolio_path=_quality_intake_result.artifact_path,
+                )
+                stages[stage]["uat_required"] = False
+                if exec_log is not None:
+                    try:
+                        exec_log.pipeline_verdict(
+                            verdict="SKIPPED",
+                            category="PIP",
+                            reason="NO_UAT_ITEMS",
+                            failed_stage=None,
+                            confidence=1.0,
+                            evidence_refs=["quality_intake_result"],
+                            human_action_required=_no_uat.get("human_action_required"),
+                        )
+                        exec_log.session_end(_no_uat)
+                        exec_log.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                stages_copy = {**stages}
+                _no_uat["stages"] = stages_copy
+                _no_uat["elapsed_s"] = round(time.time() - started, 2)
+                return _no_uat
+        else:
+            # No CAs found — skip quality_intake gracefully, pipeline continues normally
+            stages[stage] = {
+                "ok": True, "skipped": True,
+                "reason": "no_acceptance_criteria_found",
+            }
+            _exec_log_stage_end(exec_log, stage, _t0_qi, ok=True, summary=stages[stage])
+    except ImportError:
+        logger.debug("quality_intake module unavailable — skipping Sprint 4 classification")
+        stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+    except Exception as _qi_exc:  # noqa: BLE001
+        logger.warning("quality_intake failed (non-fatal): %s", _qi_exc)
+        stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_qi_exc}"}
+
     # ── Stage 2: ui_map ──────────────────────────────────────────────────────
     # P0/PIP — use screen_detector.py for auditable, blocking-aware detection
     # (roadmap Cambio 1.4). Falls back to legacy _extract_screens() if module
@@ -1279,8 +1363,43 @@ def _run_pipeline_stages(
                             ui_elements.append(el)
                 except Exception:
                     pass
+        # Sprint 4 — Layer Router filter: only pass UAT/smoke_e2e CAs to compiler.
+        # When quality_intake ran and found UAT items, build a filtered ticket copy
+        # so the compiler only generates scenarios for browser-testable CAs.
+        # Non-UAT items are preserved in test_portfolio.json (not discarded).
+        _compiler_ticket = ticket_result
+        if _uat_cas is not None:
+            # quality_intake ran — build a ticket view with only UAT CAs
+            # We enrich plan_pruebas with the filtered UAT descriptions so the
+            # compiler sees only the items that need browser validation.
+            import copy as _copy
+            _compiler_ticket = _copy.deepcopy(ticket_result)
+            # Replace acceptance_criteria and plan_pruebas with UAT-only items
+            _compiler_ticket["acceptance_criteria"] = _uat_cas
+            if isinstance(_compiler_ticket.get("plan_pruebas"), list):
+                # Keep plan_pruebas items whose description matches a UAT CA
+                _uat_set = set(_uat_cas)
+                _compiler_ticket["plan_pruebas"] = [
+                    p for p in _compiler_ticket["plan_pruebas"]
+                    if (
+                        isinstance(p, str) and p.strip() in _uat_set
+                    ) or (
+                        isinstance(p, dict) and (
+                            p.get("description", "") in _uat_set
+                            or p.get("descripcion", "") in _uat_set
+                        )
+                    )
+                ]
+            _exec_log_event(exec_log, "compiler_filtered_by_intake", {
+                "ticket_id": ticket_id,
+                "uat_ca_count": len(_uat_cas),
+                "original_ca_count": len(
+                    ticket_result.get("acceptance_criteria") or
+                    ticket_result.get("plan_pruebas") or []
+                ),
+            })
         compiler_result = compiler_run(
-            ticket_json=ticket_result,
+            ticket_json=_compiler_ticket,
             scope_screen=screens[0] if len(screens) == 1 else None,
             ui_aliases=ui_aliases or None,
             ui_elements=ui_elements or None,
@@ -1459,6 +1578,44 @@ def _run_pipeline_stages(
             logger.debug("selector_contract_validator unavailable — skipping alias contract check")
             stages["selector_contract"] = {"ok": True, "skipped": True,
                                            "reason": "module_not_found"}
+
+    # ── Sprint 4: Auto-inject data_readiness_preconditions ──────────────────
+    # When quality_intake found UAT items with needs_data_seed=True, inject
+    # data_readiness_preconditions into compiler_result scenarios so that
+    # Stage 3d (check_data_readiness from Sprint 3) activates automatically.
+    # This only mutates the in-memory compiler_result (not scenarios.json yet).
+    if _quality_intake_result is not None and "compiler" not in skip_stages:
+        try:
+            from quality_intake import _auto_data_preconditions as _adp
+            _intake_items_by_desc = {
+                i.description: i
+                for i in _quality_intake_result.items
+                if i.needs_data_seed and i.needs_browser
+            }
+            if _intake_items_by_desc:
+                _injected_count = 0
+                for _sc in (compiler_result.get("scenarios") or []):
+                    # Match scenario to intake item by description or title similarity
+                    _sc_title = _sc.get("title", "") or _sc.get("pantalla", "") or ""
+                    for _desc, _intake_item in _intake_items_by_desc.items():
+                        # Inject if scenario doesn't already have data preconditions
+                        if not _sc.get("data_readiness_preconditions"):
+                            _precs = _adp(_intake_item)
+                            if _precs:
+                                _sc["data_readiness_preconditions"] = _precs
+                                _injected_count += 1
+                                break  # one intake item per scenario
+                if _injected_count:
+                    logger.info(
+                        "Sprint 4: auto-injected data_readiness_preconditions into %d scenario(s)",
+                        _injected_count,
+                    )
+                    _exec_log_event(exec_log, "data_preconditions_auto_injected", {
+                        "ticket_id": ticket_id,
+                        "injected_count": _injected_count,
+                    })
+        except Exception as _adp_exc:  # noqa: BLE001
+            logger.warning("data_readiness_preconditions auto-inject failed (non-fatal): %s", _adp_exc)
 
     # ── Stage 3d: data_readiness_check (Sprint 3) ────────────────────────────
     # Verify that test data is available BEFORE opening the browser.

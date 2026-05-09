@@ -8,6 +8,7 @@ and never silently falls back to FrmAgenda.aspx for a child screen.
 PUBLIC API
 ----------
     detect_screens(ticket_result) -> ScreenDetectionResult
+    detect_screens_and_persist(ticket_result, evidence_dir, run_id) -> ScreenDetectionResult
 
 The returned object contains:
     - selected_screens: list[str]   canonical screen filenames to test
@@ -17,6 +18,7 @@ The returned object contains:
     - blocked: bool                 True when detection should block the pipeline
     - block_reason: str | None      "SCREEN_AMBIGUOUS" | "LOW_CONFIDENCE_SCREEN_DETECTION" | None
     - confidence: float             0.0–1.0 aggregate confidence
+    - artifact_path: str | None     path to screen_detection.json artifact (set by persist)
 
 BLOCKING RULES (roadmap Cambio 1.4)
 ------------------------------------
@@ -32,9 +34,19 @@ SOURCES (priority order)
 3. plan_pruebas item texts (test plan — matches screen name directly)  confidence=0.85
 4. ticket description / description_md                                 confidence=0.70
 5. screen_aliases.yml keyword matching (heuristic)                    confidence=0.60
+
+ARTIFACT (Sprint 2)
+-------------------
+detect_screens_and_persist() writes screen_detection.json to:
+    evidence/<ticket_id>/<run_id>/screen_detection.json
+
+This file is the auditable record of the detection decision for a specific run.
+The execution.jsonl event screen_detection_result references this path via
+the artifact_path field.
 """
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -85,9 +97,11 @@ class ScreenDetectionResult:
     blocked: bool = False
     block_reason: Optional[str] = None
     confidence: float = 0.0
+    # Set by detect_screens_and_persist() after writing the artifact.
+    artifact_path: Optional[str] = None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "selected_screens": self.selected_screens,
             "matches": self.matches,
             "fallback_used": self.fallback_used,
@@ -95,7 +109,11 @@ class ScreenDetectionResult:
             "blocked": self.blocked,
             "block_reason": self.block_reason,
             "confidence": round(self.confidence, 4),
+            "supported_screens_version": "screen_aliases.yml",
         }
+        if self.artifact_path is not None:
+            d["artifact_path"] = self.artifact_path
+        return d
 
 
 # ── Core detector ─────────────────────────────────────────────────────────────
@@ -287,4 +305,62 @@ def detect_screens(ticket_result: dict) -> ScreenDetectionResult:
     )
 
 
-__all__ = ["detect_screens", "ScreenDetectionResult"]
+# ── Artifact persistence (Sprint 2) ──────────────────────────────────────────
+
+def detect_screens_and_persist(
+    ticket_result: dict,
+    evidence_dir: Path,
+    run_id: str,
+) -> "ScreenDetectionResult":
+    """Run detect_screens() and write screen_detection.json to evidence.
+
+    The artifact is written to:
+        evidence_dir / run_id / screen_detection.json
+
+    The returned ScreenDetectionResult has artifact_path set to the absolute
+    path of the written file (or None if write failed), so the caller can
+    reference it in the execution.jsonl event.
+
+    Parameters
+    ----------
+    ticket_result : dict
+        Output of uat_ticket_reader.run().
+    evidence_dir : Path
+        Base evidence directory (e.g. evidence/<ticket_id>/).
+    run_id : str
+        Run identifier (e.g. ticket_id or freeform run_id).
+    """
+    result = detect_screens(ticket_result)
+
+    artifact_dir = evidence_dir / str(run_id)
+    artifact_path: Optional[str] = None
+    try:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        artifact_file = artifact_dir / "screen_detection.json"
+        artifact_payload = {
+            "schema_version": "screen_detection/1.0",
+            "run_id": run_id,
+            "selected_screens": result.selected_screens,
+            "matches": result.matches,
+            "fallback_used": result.fallback_used,
+            "ambiguous": result.ambiguous,
+            "blocked": result.blocked,
+            "block_reason": result.block_reason,
+            "confidence": round(result.confidence, 4),
+            "supported_screens_version": "screen_aliases.yml",
+        }
+        artifact_file.write_text(
+            json.dumps(artifact_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        artifact_path = str(artifact_file)
+        _logger.debug("screen_detection.json written to %s", artifact_path)
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("screen_detector: could not write artifact: %s", exc)
+
+    # Return a new result with artifact_path set (dataclass is mutable)
+    result.artifact_path = artifact_path
+    return result
+
+
+__all__ = ["detect_screens", "detect_screens_and_persist", "ScreenDetectionResult"]

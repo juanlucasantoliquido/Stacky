@@ -1028,10 +1028,16 @@ def _run_pipeline_stages(
     # unavailable so the pipeline degrades gracefully.
     stage = "ui_map"
     try:
-        from screen_detector import detect_screens as _detect_screens
-        _detection = _detect_screens(ticket_result)
+        from screen_detector import detect_screens_and_persist as _detect_screens_persist
+        # Sprint 2: persist screen_detection.json artifact per run alongside detection
+        _detection = _detect_screens_persist(
+            ticket_result=ticket_result,
+            evidence_dir=evidence_dir,
+            run_id=str(ticket_id),
+        )
         screens = _detection.selected_screens
         # P0/OBS: emit screen_detection_result with full structured evidence (roadmap Cambio 1.4)
+        # Sprint 2: include artifact_path reference in event
         _exec_log_event(exec_log, "screen_detection_result", {
             "ticket_id": ticket_id,
             **_detection.to_dict(),
@@ -1040,6 +1046,7 @@ def _run_pipeline_stages(
                 "plan_pruebas", "description", "screen_aliases.yml",
             ],
             "supported_screens_version": "screen_detector.py+screen_aliases.yml",
+            "artifact_path": _detection.artifact_path,
         })
         # Block pipeline if detector signals ambiguity or low confidence
         if _detection.blocked:
@@ -1097,6 +1104,7 @@ def _run_pipeline_stages(
             "blocked": False,
             "sources_scanned": ["navigation_path", "plan_pruebas", "analisis_tecnico", "description_md"],
             "supported_screens_version": "legacy:_extract_screens",
+            "artifact_path": None,
         })
 
     if not screens:
@@ -1267,6 +1275,105 @@ def _run_pipeline_stages(
                                  "error": prec_result.get("error"),
                                  "message": prec_result.get("message")}
                 return _build_output(ticket_id, stages, prec_result, started)
+
+    # ── Stage 3c: selector_contract_validation (Sprint 2) ───────────────────
+    # Validate that all aliases requested by the compiled scenarios exist in
+    # the UI map BEFORE handing control to the generator. If any alias is
+    # missing or targets a decorative element, the pipeline is blocked here
+    # so no .spec.ts file is ever written with broken selectors.
+    #
+    # NOTE: Validation only runs when compiled scenarios include explicit
+    # alias_semantic / screen fields (the generator-facing format). Scenarios
+    # in the legacy pantalla/pasos format are skipped — they are handled by
+    # playwright_test_generator which does its own selector resolution.
+    stage = "selector_contract"
+    if stage not in skip_stages and "compiler" not in skip_stages:
+        try:
+            from selector_contract_validator import validate_all_scenarios as _validate_sc
+            _sc_scenarios_raw = (compiler_result.get("scenarios") or [])
+            # Filter to scenarios that use the generator-facing format
+            # (must have 'screen' field and at least one step with 'alias_semantic')
+            _sc_scenarios = [
+                s for s in _sc_scenarios_raw
+                if s.get("screen") and any(
+                    step.get("alias_semantic")
+                    for step in s.get("steps", [])
+                )
+            ]
+            if not _sc_scenarios:
+                # No alias-contract-checkable scenarios — skip validation gracefully.
+                # This is expected for legacy pantalla/pasos compiled format or empty plans.
+                stages["selector_contract"] = {
+                    "ok": True, "skipped": True,
+                    "reason": "no_alias_contract_scenarios",
+                }
+            else:
+                _sc_result = _validate_sc(
+                    scenarios=_sc_scenarios,
+                    ui_maps_dir=ui_maps_dir,
+                    evidence_dir=evidence_dir,
+                    run_id=str(ticket_id),
+                )
+                # Emit event for every validation result
+                for _sc_item in _sc_result.get("results", []):
+                    _item_dict = _sc_item.to_dict()
+                    _exec_log_event(exec_log, "selector_contract_validation", {
+                        **_item_dict,
+                        "artifact_path": _sc_item.artifact_path,
+                    })
+                stages["selector_contract"] = {
+                    "ok": _sc_result["ok"],
+                    "skipped": False,
+                    "blocked_count": _sc_result["blocked_count"],
+                    "allow_count": _sc_result["allow_count"],
+                    "first_blocked_reason": _sc_result.get("first_blocked_reason"),
+                }
+                if not _sc_result["ok"]:
+                    _sc_block_reason = _sc_result.get("first_blocked_reason", "SELECTOR_ALIAS_NOT_IN_UI_MAP")
+                    _sc_block_screen = _sc_result.get("first_blocked_screen", screens[0] if screens else "unknown")
+                    logger.warning(
+                        "selector_contract BLOCKED: reason=%s screen=%s",
+                        _sc_block_reason, _sc_block_screen,
+                    )
+                    _sc_fail = {
+                        "ok": False,
+                        "verdict": "BLOCKED",
+                        "category": "GEN",
+                        "reason": _sc_block_reason,
+                        "error": _sc_block_reason.lower(),
+                        "failed_stage": "selector_contract",
+                        "message": (
+                            f"Selector contract validation failed for screen {_sc_block_screen!r}: "
+                            f"{_sc_block_reason}. "
+                            f"{_sc_result['blocked_count']} scenario(s) blocked. "
+                            "No .spec.ts files will be generated. "
+                            "Fix the aliases in the UI map or update the compiler output."
+                        ),
+                        "human_action_required": (
+                            "Check aliases in compiled scenarios vs. UI map. "
+                            f"Run: python ui_map_builder.py --screen {_sc_block_screen} --rebuild"
+                        ),
+                    }
+                    if exec_log is not None:
+                        try:
+                            exec_log.pipeline_verdict(
+                                verdict="BLOCKED",
+                                category="GEN",
+                                reason=_sc_block_reason,
+                                failed_stage="selector_contract",
+                                confidence=1.0,
+                                evidence_refs=["selector_contract_validation"],
+                                human_action_required=_sc_fail["human_action_required"],
+                            )
+                            exec_log.session_end(_sc_fail)
+                            exec_log.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+                    return _build_output(ticket_id, stages, _sc_fail, started)
+        except ImportError:
+            logger.debug("selector_contract_validator unavailable — skipping alias contract check")
+            stages["selector_contract"] = {"ok": True, "skipped": True,
+                                           "reason": "module_not_found"}
 
     # ── Stage 4: generator ───────────────────────────────────────────────────
     stage = "generator"

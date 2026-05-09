@@ -13,6 +13,12 @@
 #
 # MAINTENANCE: add aliases when a new ticket misidentifies a screen due to informal
 # language. Never remove an alias without a reason — silent fallbacks cause false runs.
+#
+# Sprint 2 additions: FrmDetalleCliente, FrmGestionUsuarios, FrmLiquidaciones,
+# FrmSimulacion*, FrmAgendaEquipo, FrmAgendaJudicial, FrmBusquedaJudicial,
+# PopUpDomicilios, PopUpConvenios, PopUpContactos, FrmMensajes, FrmReporteOperativo
+
+# ── Pantallas principales ──────────────────────────────────────────────────────
 
 FrmDetalleClie.aspx:
   aliases:
@@ -28,6 +34,13 @@ FrmDetalleClie.aspx:
     - detalle del cliente
     - mantenedordireccion
     - direcciones del cliente
+    - frmdetalleclie
+
+FrmDetalleCliente.aspx:
+  aliases:
+    - detallescliente
+    - detalle cliente ng
+    - cliente detalle materialize
 
 FrmAgenda.aspx:
   aliases:
@@ -37,6 +50,7 @@ FrmAgenda.aspx:
     - listado de lotes
     - pantalla de agenda
     - agenda de gestión
+    - agenda cobro
 
 FrmDetalleLote.aspx:
   aliases:
@@ -44,6 +58,7 @@ FrmDetalleLote.aspx:
     - detalle del lote
     - información del lote
     - ficha lote
+    - info lote
 
 FrmGestion.aspx:
   aliases:
@@ -51,6 +66,7 @@ FrmGestion.aspx:
     - pantalla de gestión
     - registrar gestión
     - nueva gestión
+    - ingresar gestión
 
 FrmBusqueda.aspx:
   aliases:
@@ -58,6 +74,17 @@ FrmBusqueda.aspx:
     - busqueda de clientes
     - buscar cliente
     - buscador
+    - pantalla de búsqueda
+    - búsqueda simple
+
+FrmBusquedaJudicial.aspx:
+  aliases:
+    - búsqueda judicial
+    - busqueda judicial
+    - buscador judicial
+    - buscar caso judicial
+
+# ── Administración y configuración ────────────────────────────────────────────
 
 FrmAdministrador.aspx:
   aliases:
@@ -66,11 +93,45 @@ FrmAdministrador.aspx:
     - panel admin
     - admin
 
+FrmAdminEstrategias.aspx:
+  aliases:
+    - admin estrategias
+    - administración de estrategias
+    - configurar estrategias
+
 FrmParametros.aspx:
   aliases:
     - parámetros
     - parametros del sistema
     - configuración del sistema
+    - configuración general
+
+FrmFeriados.aspx:
+  aliases:
+    - feriados
+    - calendario de feriados
+    - días feriados
+
+FrmMandantes.aspx:
+  aliases:
+    - mandantes
+    - gestión de mandantes
+    - configurar mandantes
+
+FrmSegmentacion.aspx:
+  aliases:
+    - segmentación
+    - segmentacion de clientes
+    - segmentar
+
+FrmGestionUsuarios.aspx:
+  aliases:
+    - gestión de usuarios
+    - gestion usuarios
+    - usuarios del sistema
+    - administrar usuarios
+
+# ── Reportes ──────────────────────────────────────────────────────────────────
 
 FrmReportes.aspx:
   aliases:
@@ -78,3 +139,196 @@ FrmReportes.aspx:
     - generar reporte
     - informe
     - reporte operativo
+
+FrmReporteOperativo.aspx:
+  aliases:
+    - reporte operativo
+    - reporte de operaciones
+    - informe operativo
+
+FrmInformes.aspx:
+  aliases:
+    - informes
+    - generar informe
+    - listado de informes
+
+# ── Agenda por tipo ───────────────────────────────────────────────────────────
+
+FrmAgendaEquipo.aspx:
+  aliases:
+    - agenda equipo
+    - agenda del equipo
+    - vista de equipo
+    - agenda por equipo
+
+FrmAgendaJudicial.aspx:
+  aliases:
+    - agenda judicial
+    - agenda de casos judiciales
+    - vista judicial
+
+FrmAgenteComisiones.aspx:
+  aliases:
+    - agente comisiones
+    - comisiones del agente
+    - comisionista agenda
+
+# ── Liquidaciones y comisiones ────────────────────────────────────────────────
+
+FrmLiquidaciones.aspx:
+  aliases:
+    - liquidaciones
+    - pantalla de liquidaciones
+    - lista de liquidaciones
+    - consultar liquidaciones
+
+FrmDetalleLiquidacion.aspx:
+  aliases:
+    - detalle liquidación
+    - detalle de liquidación
+    - ficha liquidación
+
+FrmLiquidarGastos.aspx:
+  aliases:
+    - liquidar gastos
+    - liquidación de gastos
+    - gastos a liquidar
+
+FrmLiquidComisiones.aspx:
+  aliases:
+    - liquidar comisiones
+    - liquidación de comisiones
+    - comisiones a pagar
+
+FrmComisionistas.aspx:
+  aliases:
+    - comisionistas
+    - listado de comisionistas
+    - gestión de comisionistas
+
+# ── Simulación ────────────────────────────────────────────────────────────────
+
+FrmSimulacionUnitaria.aspx:
+  aliases:
+    - simulación unitaria
+    - simulacion unitaria
+    - simular pago individual
+    - simulador unitario
+
+FrmSimulMasiva.aspx:
+  aliases:
+    - simulación masiva
+    - simulacion masiva
+    - simular pagos en lote
+    - simulador masivo
+
+# ── Judicial ──────────────────────────────────────────────────────────────────
+
+FrmJDemanda.aspx:
+  aliases:
+    - demanda judicial
+    - registrar demanda
+    - nueva demanda
+    - jdemanda
+
+FrmJEmbargo.aspx:
+  aliases:
+    - embargo
+    - registrar embargo
+    - gestión de embargo
+
+FrmJConvenio.aspx:
+  aliases:
+    - convenio judicial
+    - acuerdo judicial
+    - convenio de pago judicial
+
+FrmRadicarDemanda.aspx:
+  aliases:
+    - radicar demanda
+    - radicación de demanda
+    - presentar demanda
+
+# ── Asignación ────────────────────────────────────────────────────────────────
+
+FrmAsignarEstudio.aspx:
+  aliases:
+    - asignar estudio
+    - asignación a estudio
+    - estudio jurídico asignación
+
+FrmAsignarLote.aspx:
+  aliases:
+    - asignar lote
+    - asignación de lote
+    - asignar cartera
+
+FrmEstrategia.aspx:
+  aliases:
+    - estrategia
+    - configurar estrategia
+    - gestión de estrategia
+    - editar estrategia
+
+# ── Comunicaciones y mensajes ─────────────────────────────────────────────────
+
+FrmMensajes.aspx:
+  aliases:
+    - mensajes
+    - bandeja de mensajes
+    - notificaciones
+    - mensajería
+
+FrmEnviarDocumentacion.aspx:
+  aliases:
+    - enviar documentación
+    - enviar documentos
+    - carga de documentos
+
+# ── PopUps ────────────────────────────────────────────────────────────────────
+
+PopUpDomicilios.aspx:
+  aliases:
+    - popup domicilios
+    - ventana domicilios
+    - modal de domicilios
+    - domicilios popup
+
+PopUpConvenios.aspx:
+  aliases:
+    - popup convenios
+    - ventana convenios
+    - modal de convenios
+    - convenios popup
+
+PopUpContactos.aspx:
+  aliases:
+    - popup contactos
+    - ventana contactos
+    - modal de contactos
+
+PopUpContactosTelefonos.aspx:
+  aliases:
+    - popup teléfonos
+    - ventana teléfonos
+    - modal de teléfonos
+    - contactos telefonos popup
+
+PopUpContactosEmails.aspx:
+  aliases:
+    - popup emails
+    - ventana de emails
+    - modal de correos
+
+PopUpNota.aspx:
+  aliases:
+    - popup nota
+    - ventana nota
+    - agregar nota
+    - nota modal
+
+PopUpGarantias.aspx:
+  aliases:
+    - garantías
+    - popup garantias
+    - ventana garantías

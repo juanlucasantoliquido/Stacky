@@ -1975,6 +1975,94 @@ def _run_pipeline_stages(
         logger.warning("failure_triage stage failed (non-fatal): %s", _triage_exc)
         stages["triage"] = {"ok": True, "skipped": True, "reason": f"triage_error: {_triage_exc}"}
 
+    # ── Stage 7.1: quarantine_check (Sprint 7 — post-triage) ────────────────
+    # Verify if any scenario in the runner result is actively quarantined.
+    # Quarantined scenarios are skipped from gate decisions.
+    # Expired quarantines fail the gate (not renewed automatically).
+    _quarantine_flags: dict[str, bool] = {}  # scenario_id -> is_quarantined
+    try:
+        from quarantine_registry import get_registry as _get_qr
+        _qr = _get_qr()
+        _qr.expire_old_quarantines()  # force expiry sweep before check
+        _runner_scenarios = (
+            (runner_result.get("runner_summary") or {}).get("scenario_results") or []
+        )
+        _quarantine_checked: list[dict] = []
+        for _sc_res in _runner_scenarios:
+            _sc_id = _sc_res.get("scenario_id") or _sc_res.get("id") or ""
+            _is_q = _qr.is_quarantined(_sc_id) if _sc_id else False
+            _quarantine_flags[_sc_id] = _is_q
+            _quarantine_checked.append({
+                "scenario_id": _sc_id,
+                "quarantined": _is_q,
+            })
+        stages["quarantine_check"] = {
+            "ok": True,
+            "skipped": not bool(_runner_scenarios),
+            "checked_count": len(_quarantine_checked),
+            "quarantined_count": sum(1 for c in _quarantine_checked if c["quarantined"]),
+            "results": _quarantine_checked,
+        }
+        _exec_log_event(exec_log, "quarantine_check_complete", {
+            "ticket_id": ticket_id,
+            "checked_count": len(_quarantine_checked),
+            "quarantined_count": stages["quarantine_check"]["quarantined_count"],
+        })
+    except ImportError:
+        logger.debug("quarantine_registry unavailable — skipping Sprint 7 quarantine_check")
+        stages["quarantine_check"] = {"ok": True, "skipped": True, "reason": "module_unavailable"}
+    except Exception as _qr_exc:
+        logger.warning("quarantine_check failed (non-fatal): %s", _qr_exc)
+        stages["quarantine_check"] = {"ok": True, "skipped": True, "reason": f"error:{_qr_exc}"}
+
+    # ── Stage 7.2: run_metrics_summary (Sprint 7 — post-quarantine) ──────────
+    # Collect sprint-7 metrics from the execution.jsonl events, persist to
+    # run_metrics.jsonl, and emit run_metrics_summary event.
+    try:
+        from metrics_collector import (
+            collect_run_metrics as _collect_sprint7_metrics,
+            build_run_metrics_summary_event as _build_metrics_event,
+            persist_run_metrics as _persist_run_metrics,
+        )
+        # Load execution events so far (flush exec_log if needed)
+        _exec_events_for_metrics: list[dict] = []
+        _exec_log_path_for_metrics = evidence_dir / "execution.jsonl"
+        if _exec_log_path_for_metrics.is_file():
+            try:
+                for _line in _exec_log_path_for_metrics.read_text(encoding="utf-8").splitlines():
+                    _line = _line.strip()
+                    if _line:
+                        try:
+                            _exec_events_for_metrics.append(json.loads(_line))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        _lane_name = os.environ.get("QA_UAT_LANE")
+        _sprint7_metrics = _collect_sprint7_metrics(
+            execution_log=_exec_events_for_metrics,
+            run_id=str(ticket_id),
+            ticket_id=ticket_id,
+            lane=_lane_name,
+        )
+        _persist_run_metrics(_sprint7_metrics)
+        _metrics_event = _build_metrics_event(_sprint7_metrics)
+        _exec_log_event(exec_log, "run_metrics_summary", {
+            k: v for k, v in _metrics_event.items() if k != "event"
+        })
+        stages["run_metrics_summary"] = {
+            "ok": True,
+            "skipped": False,
+            "unknown_count": _sprint7_metrics.signal.unknown_verdict_count,
+            "lane": _lane_name,
+        }
+    except ImportError:
+        logger.debug("metrics_collector (sprint 7) unavailable — skipping run_metrics_summary")
+        stages["run_metrics_summary"] = {"ok": True, "skipped": True, "reason": "module_unavailable"}
+    except Exception as _ms_exc:
+        logger.warning("run_metrics_summary failed (non-fatal): %s", _ms_exc)
+        stages["run_metrics_summary"] = {"ok": True, "skipped": True, "reason": f"error:{_ms_exc}"}
+
     # ── Stage 5b: annotator (non-fatal) ─────────────────────────────────────
     stage = "annotator"
     if stage not in skip_stages:

@@ -1,0 +1,390 @@
+/* ConfidenceDashboard.module.css — Sprint 14: Test Confidence + Data Lineage */
+
+.container {
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--border, #333);
+}
+
+.title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted, #aaa);
+  text-transform: uppercase;
+  flex: 1;
+}
+
+.headerActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.actionBtn {
+  padding: 0.3rem 0.7rem;
+  background: #374151;
+  color: #e5e7eb;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.actionBtn:hover {
+  background: #4b5563;
+}
+
+.actionBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border, #333);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.tab {
+  padding: 0.45rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted, #888);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: color 0.15s;
+}
+
+.tab:hover {
+  color: var(--text, #ccc);
+}
+
+.tabActive {
+  color: var(--text, #ccc);
+  border-bottom-color: #2563eb;
+}
+
+/* ── Tab content ── */
+.tabContent {
+  padding: 0.75rem 0.9rem;
+}
+
+/* ── Summary bar ── */
+.summaryBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text, #ccc);
+}
+
+.summaryItem {
+  white-space: nowrap;
+}
+
+.blockingBadge {
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  color: #fca5a5;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* ── Level badge ── */
+.levelBadge {
+  display: inline-flex;
+  align-items: center;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ── Score bar ── */
+.scoreBarWrap {
+  position: relative;
+  flex: 1;
+  min-width: 80px;
+  max-width: 140px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.scoreBarFill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.scoreBarLabel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 4px rgba(0,0,0,0.6);
+}
+
+/* ── Scenario cards ── */
+.scenarioList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.scenarioCard {
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.scenarioCard.blocked {
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.scenarioHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.scenarioId {
+  font-family: monospace;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text, #ccc);
+  min-width: 110px;
+}
+
+.p0Tag {
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  color: #fca5a5;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+}
+
+.blockTag {
+  color: #fca5a5;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.expandIcon {
+  color: var(--muted, #666);
+  font-size: 0.85rem;
+  margin-left: 0.25rem;
+}
+
+/* ── Factors list ── */
+.factorsList {
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--border, #333);
+  background: rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.factorGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.factorGroupLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.1rem;
+}
+
+.factorRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  padding-left: 0.5rem;
+}
+
+.factorDelta {
+  font-family: monospace;
+  font-weight: 700;
+  min-width: 28px;
+}
+
+.factorName {
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: var(--text, #ccc);
+  min-width: 160px;
+}
+
+.factorReason {
+  color: var(--muted, #888);
+  font-size: 0.72rem;
+}
+
+.noFactors {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted, #888);
+  font-style: italic;
+}
+
+/* ── Source badge ── */
+.sourceBadge {
+  display: inline-flex;
+  align-items: center;
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 600;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* ── Lineage table ── */
+.lineageWrap {
+  overflow-x: auto;
+}
+
+.lineageTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  color: var(--text, #ccc);
+}
+
+.lineageTable th {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  color: var(--muted, #888);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border, #333);
+  white-space: nowrap;
+}
+
+.lineageTable td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: top;
+}
+
+.lineageTable tbody tr:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.cleanedRow td {
+  opacity: 0.7;
+}
+
+.fieldCell {
+  font-family: monospace;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.valueCell {
+  font-family: monospace;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenarioCell {
+  font-family: monospace;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.scriptCell {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--muted, #888);
+  white-space: nowrap;
+}
+
+.cleanedCell {
+  text-align: center;
+}
+
+.cleanedYes {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+.cleanedNo {
+  color: var(--muted, #888);
+}
+
+.noteCell {
+  font-size: 0.7rem;
+  color: var(--muted, #aaa);
+  font-style: italic;
+}
+
+.redacted {
+  color: var(--muted, #666);
+  font-size: 0.7rem;
+}
+
+/* ── Loading / empty ── */
+.loading {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted, #888);
+  font-style: italic;
+}
+
+.empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted, #888);
+  font-style: italic;
+}

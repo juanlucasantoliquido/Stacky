@@ -1,0 +1,247 @@
+/* CatalogDashboard.module.css — Sprint 12: Catalog Readiness UI */
+
+.panel {
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+/* ── Header ── */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--border, #333);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted, #aaa);
+  text-transform: uppercase;
+}
+
+.headRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── Status badges ── */
+.badgeOk {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(0, 180, 80, 0.15);
+  border: 1px solid rgba(0, 180, 80, 0.4);
+  color: #4ecb71;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.badgeEmpty {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(255, 90, 90, 0.12);
+  border: 1px solid rgba(255, 90, 90, 0.4);
+  color: #ff6b6b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.badgeSeedRequired {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(255, 165, 0, 0.12);
+  border: 1px solid rgba(255, 165, 0, 0.4);
+  color: #ffa500;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.badgeUnverified {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(150, 150, 150, 0.1);
+  border: 1px solid rgba(150, 150, 150, 0.3);
+  color: #999;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.badgeProdBlocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(200, 0, 0, 0.15);
+  border: 1px solid rgba(200, 0, 0, 0.4);
+  color: #ff4444;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* ── Body / catalog list ── */
+.body {
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ── Empty state ── */
+.empty {
+  color: var(--muted, #aaa);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 1rem 0;
+}
+
+/* ── Summary bar ── */
+.summary {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0.4rem 0.9rem;
+  border-bottom: 1px solid var(--border, #333);
+  background: rgba(0, 0, 0, 0.1);
+  font-size: 0.72rem;
+  color: var(--muted, #aaa);
+}
+
+.summaryItem {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* ── Catalog card ── */
+.catalogCard {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border, #333);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.catalogCardHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.82rem;
+}
+
+.catalogCardHead:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.catalogName {
+  font-weight: 600;
+  color: var(--text, #eee);
+}
+
+.dbTable {
+  font-size: 0.72rem;
+  color: var(--muted, #888);
+  font-family: monospace;
+}
+
+.rowCount {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--muted, #888);
+}
+
+.catalogCardBody {
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--border, #2a2a2a);
+  font-size: 0.78rem;
+  color: var(--muted, #aaa);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.errorHint {
+  font-size: 0.72rem;
+  color: #ff6b6b;
+  font-family: monospace;
+}
+
+.seedHint {
+  font-size: 0.72rem;
+  color: #ffa500;
+  font-family: monospace;
+}
+
+/* ── Loading / error ── */
+.loading {
+  padding: 0.6rem 0.9rem;
+  color: var(--muted, #aaa);
+  font-size: 0.8rem;
+}
+
+.error {
+  padding: 0.6rem 0.9rem;
+  color: #ff6b6b;
+  font-size: 0.78rem;
+}
+
+/* ── Check button ── */
+.checkBtn {
+  background: rgba(126, 182, 255, 0.1);
+  border: 1px solid rgba(126, 182, 255, 0.35);
+  color: #7eb6ff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.25rem 0.65rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.checkBtn:hover:not(:disabled) {
+  background: rgba(126, 182, 255, 0.18);
+}
+
+.checkBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(126, 182, 255, 0.3);
+  border-top-color: #7eb6ff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

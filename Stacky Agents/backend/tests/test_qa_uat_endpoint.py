@@ -201,3 +201,103 @@ def test_get_run_completed_includes_pipeline_result(client, ticket_in_db):
     assert body["status"] == "completed"
     assert body["pipeline_result"]["verdict"] == "PASS"
     assert body["pipeline_result"]["ok"] is True
+
+
+# ── GET /api/qa-uat/data-request (Sprint 9) ───────────────────────────────────
+
+class TestGetDataRequestList:
+    """Tests for GET /api/qa-uat/data-request?run_id=<id>&ticket_id=<id>."""
+
+    def test_returns_empty_list_when_no_file(self, client, tmp_path):
+        """Returns ok=True with empty requests list when qa_data_requests.json not found."""
+        with patch("api.qa_uat._PIPELINE_ROOT", tmp_path):
+            r = client.get("/api/qa-uat/data-request?run_id=999&ticket_id=999")
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["ok"] is True
+        assert body["requests"] == []
+        assert body["total"] == 0
+        assert body["pending"] == 0
+
+    def test_returns_requests_from_file(self, client, tmp_path):
+        """Returns correct list when qa_data_requests.json exists."""
+        store_dir = tmp_path / "evidence" / "120" / "120"
+        store_dir.mkdir(parents=True)
+
+        requests_data = [
+            {
+                "id": "req-001",
+                "scenario_id": "RF-007-CA-01",
+                "status": "pending_user_input",
+                "required_fields_json": '["CLCOD"]',
+                "question": "¿Qué cliente usar?",
+            },
+            {
+                "id": "req-002",
+                "scenario_id": "RF-007-CA-02",
+                "status": "resolved",
+                "required_fields_json": '["CLCOD"]',
+                "question": "¿Qué cliente usar?",
+                "resolution_type": "provide_existing_value",
+            },
+        ]
+        (store_dir / "qa_data_requests.json").write_text(
+            json.dumps(requests_data), encoding="utf-8"
+        )
+
+        with patch("api.qa_uat._PIPELINE_ROOT", tmp_path):
+            r = client.get("/api/qa-uat/data-request?run_id=120&ticket_id=120")
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["ok"] is True
+        assert body["total"] == 2
+        assert body["pending"] == 1
+
+    def test_status_filter_pending(self, client, tmp_path):
+        """status=pending_user_input filter returns only pending requests."""
+        store_dir = tmp_path / "evidence" / "120" / "120"
+        store_dir.mkdir(parents=True)
+
+        requests_data = [
+            {
+                "id": "req-001",
+                "scenario_id": "RF-007-CA-01",
+                "status": "pending_user_input",
+                "required_fields_json": '[]',
+                "question": "Q1",
+            },
+            {
+                "id": "req-002",
+                "scenario_id": "RF-007-CA-02",
+                "status": "resolved",
+                "required_fields_json": '[]',
+                "question": "Q2",
+            },
+        ]
+        (store_dir / "qa_data_requests.json").write_text(
+            json.dumps(requests_data), encoding="utf-8"
+        )
+
+        with patch("api.qa_uat._PIPELINE_ROOT", tmp_path):
+            r = client.get(
+                "/api/qa-uat/data-request?run_id=120&ticket_id=120&status=pending_user_input"
+            )
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["ok"] is True
+        assert len(body["requests"]) == 1
+        assert body["requests"][0]["id"] == "req-001"
+        # total/pending reflect filtered list (endpoint applies filter before counting)
+        assert body["total"] == 1
+        assert body["pending"] == 1
+
+    def test_missing_run_id_returns_400(self, client):
+        """Missing run_id parameter → 400."""
+        r = client.get("/api/qa-uat/data-request?ticket_id=120")
+        assert r.status_code == 400
+
+    def test_missing_ticket_id_returns_400(self, client):
+        """Missing ticket_id parameter → 400."""
+        r = client.get("/api/qa-uat/data-request?run_id=120")
+        assert r.status_code == 400
+

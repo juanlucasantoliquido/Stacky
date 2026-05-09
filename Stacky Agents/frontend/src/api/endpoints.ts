@@ -283,15 +283,7 @@ export interface QaUatRunStatus {
   error?: string;
 }
 
-export const QaUat = {
-  run: (ticketId: number, mode: "dry-run" | "publish" = "dry-run") =>
-    api.post<{ ok: boolean; execution_id: string; status: string }>(
-      "/api/qa-uat/run",
-      { ticket_id: ticketId, mode }
-    ),
-  status: (executionId: string) =>
-    api.get<QaUatRunStatus>(`/api/qa-uat/run/${executionId}`),
-};
+// QaUat namespace — see full definition below (Sprint 9+)
 
 // FA-13
 export const Decisions = {
@@ -544,5 +536,515 @@ export const Mantis = {
     api.post<{ ok: boolean; projects: MantisProject[]; error?: string }>(
       "/api/mantis/projects",
       params
+    ),
+};
+
+// ── QA UAT — Sprint 9 types ───────────────────────────────────────────────────
+
+export interface DataRequestOption {
+  id: string;         // provide_existing_value | run_discovery_query | generate_sql_seed | manual_review
+  label: string;
+  requires_input: string[];
+}
+
+export interface DataRequestDecision {
+  event: string;
+  ticket_id: number;
+  scenario_id: string;
+  missing_requirement: string;
+  question_for_user: string;
+  options: DataRequestOption[];
+  request_id: string;
+  requirement_id: string;
+  required_fields: string[];
+}
+
+export interface DataRequest {
+  id: string;
+  run_id: string;
+  ticket_id: number;
+  scenario_id: string;
+  requirement_id: string;
+  question: string;
+  required_fields_json: string;  // JSON-serialised string[]
+  status: "pending_user_input" | "resolved" | "timeout" | "rejected";
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_type: string | null;
+}
+
+export interface DataRequestListResponse {
+  ok: boolean;
+  requests: DataRequest[];
+  total: number;
+  pending: number;
+  resolution_artifacts?: Record<string, DataRequestDecision[]>;
+}
+
+export interface DataRequestResolveResponse {
+  ok: boolean;
+  result: {
+    request_id: string;
+    status: string;
+    resolution_type: string;
+    resolved_at: string;
+    validation?: { valid: boolean; resolved_data_ref: string | null };
+  };
+  error?: string;
+  message?: string;
+}
+
+export interface QaUatRunResponse {
+  execution_id: number;
+  ticket_id: number;
+  mode: string;
+  stream_url: string;
+}
+
+export interface QaUatRunStatus {
+  id: number;
+  status: "queued" | "running" | "completed" | "error" | "failed";
+  agent_type: string;
+  output?: string;
+  error?: string;
+  pipeline_result?: {
+    ok: boolean;
+    ticket_id: number;
+    verdict?: "PASS" | "FAIL" | "BLOCKED" | "MIXED";
+    elapsed_s?: number;
+    stages?: Record<string, unknown>;
+    category?: string;
+    reason?: string;
+    failed_stage?: string;
+    human_action_required?: string;
+    data_readiness_v2_results?: unknown[];
+    data_resolution_requests?: unknown[];
+  };
+  metadata?: Record<string, unknown>;
+}
+
+// ── QA UAT — Sprint 10: SQL Seed Proposal types ───────────────────────────────
+
+export interface SqlSafetyChecks {
+  transaction_present: boolean;
+  rollback_default: boolean;
+  prod_guard_present: boolean;
+  seed_run_id_present: boolean;
+  verification_select_present: boolean;
+  dangerous_keywords: string[];
+}
+
+export interface SqlSafetyFinding {
+  rule: string;
+  detail: string;
+}
+
+export interface SqlSafetyResult {
+  schema_version?: string;
+  safe: boolean;
+  risk_level: "low" | "medium" | "high" | "critical";
+  requires_human_approval: boolean;
+  blocking_findings: SqlSafetyFinding[];
+  checks: SqlSafetyChecks;
+  script_sha256: string;
+  source: string;
+}
+
+export interface SeedProposal {
+  scenario_id: string;
+  script_path: string;
+  cleanup_path: string | null;
+  script_content: string | null;      // null if > 64KB
+  cleanup_content: string | null;
+  safety_result: SqlSafetyResult | null;
+}
+
+export interface SeedProposalListResponse {
+  ok: boolean;
+  proposals: SeedProposal[];
+  total: number;
+}
+
+// ── QA UAT — Sprint 12: Catalog Readiness ─────────────────────────────────────
+
+export interface CatalogCheckResult {
+  catalog_name: string;
+  db_table: string;
+  status: "OK" | "EMPTY" | "UNVERIFIED" | "SEED_REQUIRED" | "PROD_BLOCKED";
+  row_count: number | null;
+  min_rows: number;
+  blocking: boolean;
+  seed_proposed: boolean;
+  seed_script_path: string | null;
+  error: string | null;
+}
+
+export interface CatalogReadinessResult {
+  schema_version?: string;
+  ok: boolean;
+  scenario_id: string;
+  run_id: string;
+  ticket_id: number;
+  total: number;
+  ok_count: number;
+  empty_count: number;
+  unverified_count: number;
+  seed_proposed_count: number;
+  blocking_empty_count: number;
+  catalog_results: CatalogCheckResult[];
+  evidence_path: string | null;
+  checked_at: string | null;
+}
+
+export interface CatalogFixtureSummary {
+  catalog_name: string;
+  db_table: string;
+  pk_column: string;
+  min_rows: number;
+  description: string;
+  seed_rows_count: number;
+}
+
+// ── QA UAT — Sprint 13: Oracle Engine + Weak Assertion Detector ───────────────
+
+export interface OracleCheckResult {
+  oracle_id: string;
+  scenario_id: string;
+  oracle_type: "UI" | "DB" | "API" | "CATALOG" | "CUSTOM";
+  strength: "P0" | "P1" | "P2";
+  description: string;
+  verdict: "PASS" | "FAIL" | "NO_ORACLE" | "WEAK_ONLY" | "SKIP" | "ERROR";
+  actual: unknown;
+  expected: unknown;
+  error: string | null;
+}
+
+export interface ScenarioOracleResult {
+  scenario_id: string;
+  oracle_verdict: "PASS" | "FAIL" | "NO_ORACLE" | "WEAK_ONLY" | "SKIP" | "ERROR";
+  is_p0: boolean;
+  oracle_count: number;
+  strong_count: number;
+  weak_count: number;
+  pass_count: number;
+  fail_count: number;
+  blocking: boolean;
+  oracle_checks: OracleCheckResult[];
+}
+
+export interface OracleEvaluationResult {
+  schema_version?: string;
+  ok: boolean;
+  run_id: string;
+  ticket_id: number;
+  total_scenarios: number;
+  evaluated_scenarios: number;
+  pass_count: number;
+  fail_count: number;
+  no_oracle_count: number;
+  weak_only_count: number;
+  p0_blocked_count: number;
+  publish_blocked: boolean;
+  scenario_results: ScenarioOracleResult[];
+  evidence_path: string | null;
+  evaluated_at: string | null;
+}
+
+export interface TestAssertionResult {
+  test_name: string;
+  file_name: string;
+  line_number: number | null;
+  assertion_strength: "STRONG" | "WEAK" | "TRIVIAL" | "NONE";
+  expect_call_count: number;
+  strong_count: number;
+  weak_count: number;
+  trivial_count: number;
+  is_weak: boolean;
+  finding: string | null;
+}
+
+export interface FileAssertionAnalysis {
+  file_name: string;
+  total_tests: number;
+  strong_tests: number;
+  weak_tests: number;
+  trivial_tests: number;
+  no_assertion_tests: number;
+  has_weak_tests: boolean;
+  test_results: TestAssertionResult[];
+}
+
+export interface WeakAssertionReport {
+  schema_version?: string;
+  ok: boolean;
+  run_id: string;
+  ticket_id: number;
+  files_analyzed: number;
+  total_tests: number;
+  strong_tests: number;
+  weak_tests: number;
+  trivial_tests: number;
+  no_assertion_tests: number;
+  publish_blocked: boolean;
+  file_analyses: FileAssertionAnalysis[];
+  evidence_path: string | null;
+  analyzed_at: string | null;
+}
+
+// ── QA UAT — Sprint 14: Test Confidence + Data Lineage ────────────────────────
+
+export interface ScoreFactor {
+  name: string;
+  delta: number;
+  reason: string;
+}
+
+export interface ConfidenceScore {
+  scenario_id: string;
+  score: number;
+  level: "HIGH" | "MEDIUM" | "LOW";
+  is_p0: boolean;
+  publish_blocked: boolean;
+  factors: ScoreFactor[];
+}
+
+export interface ConfidenceReport {
+  schema_version?: string;
+  ok: boolean;
+  run_id: string;
+  ticket_id: number;
+  total_scenarios: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  blocked_count: number;
+  min_confidence: number;
+  publish_blocked: boolean;
+  scenario_scores: ConfidenceScore[];
+  evidence_path: string | null;
+  scored_at: string | null;
+}
+
+export interface LineageEntry {
+  field: string;
+  value: string | null;
+  source: "SEEDED" | "USER_SUPPLIED" | "ENVIRONMENT" | "FIXTURE" | "DISCOVERED" | "UNKNOWN";
+  scenario_id: string;
+  seed_run_id: string | null;
+  seed_script: string | null;
+  seeded_at: string | null;
+  cleaned_up: boolean;
+  cleanup_at: string | null;
+  origin_note: string | null;
+  evidence_refs: string[];
+}
+
+export interface DataLineageResult {
+  schema_version?: string;
+  ok: boolean;
+  run_id: string;
+  ticket_id: number;
+  total_entries: number;
+  seeded_count: number;
+  user_supplied_count: number;
+  fixture_count: number;
+  discovered_count: number;
+  unknown_count: number;
+  entries: LineageEntry[];
+  evidence_path: string | null;
+  built_at: string | null;
+}
+
+// ── QA UAT — Sprint 9 endpoints ───────────────────────────────────────────────
+
+export const QaUat = {
+  /** Launch the QA UAT pipeline for a ticket. Returns execution_id. */
+  run: (payload: { ticket_id: number; mode?: string; headed?: boolean; timeout_ms?: number }) =>
+    api.post<QaUatRunResponse>("/api/qa-uat/run", payload),
+
+  /** Poll a QA UAT execution result (alias: getRunResult). */
+  status: (executionId: number | string) =>
+    api.get<QaUatRunStatus>(`/api/qa-uat/run/${executionId}`),
+
+  /** Poll a QA UAT execution result. */
+  getRunResult: (executionId: number) =>
+    api.get<QaUatRunStatus>(`/api/qa-uat/run/${executionId}`),
+
+  /** List all data resolution requests for a run. */
+  listDataRequests: (runId: string, ticketId: number, status?: string) =>
+    api.get<DataRequestListResponse>(
+      `/api/qa-uat/data-request?run_id=${encodeURIComponent(runId)}&ticket_id=${ticketId}${status ? `&status=${status}` : ""}`
+    ),
+
+  /** Get status of a specific data request. */
+  getDataRequestStatus: (requestId: string, runId: string, ticketId: number) =>
+    api.get<{ ok: boolean; result: DataRequest }>(
+      `/api/qa-uat/data-request/${encodeURIComponent(requestId)}/status?run_id=${encodeURIComponent(runId)}&ticket_id=${ticketId}`
+    ),
+
+  /** Resolve a pending data request (submit value or choose decision). */
+  resolveDataRequest: (
+    requestId: string,
+    payload: {
+      resolution_type: string;
+      supplied_fields?: Record<string, string>;
+      note?: string;
+      run_id: string;
+      ticket_id: number;
+      scenario_id?: string;
+    }
+  ) =>
+    api.post<DataRequestResolveResponse>(
+      `/api/qa-uat/data-request/${encodeURIComponent(requestId)}/resolve`,
+      payload
+    ),
+
+  /** Create data resolution broker requests from a readiness result. */
+  createDataRequests: (
+    runId: string,
+    payload: { readiness_result: Record<string, unknown>; environment?: string }
+  ) =>
+    api.post<{ ok: boolean; result: Record<string, unknown> }>(
+      `/api/qa-uat/data-request/${encodeURIComponent(runId)}`,
+      payload
+    ),
+
+  // ── Sprint 10: SQL Seed Proposal ───────────────────────────────────────────
+
+  /** List seed proposals for a run (reads evidence artifacts). */
+  listSeedProposals: (runId: string, ticketId: number, scenarioId?: string) =>
+    api.get<SeedProposalListResponse>(
+      `/api/qa-uat/seed-proposal?run_id=${encodeURIComponent(runId)}&ticket_id=${ticketId}${scenarioId ? `&scenario_id=${encodeURIComponent(scenarioId)}` : ""}`
+    ),
+
+  /** Validate an arbitrary SQL script against safety rules. */
+  validateSeedScript: (sqlText: string, source?: string) =>
+    api.post<{ ok: boolean; result: SqlSafetyResult }>(
+      "/api/qa-uat/seed-proposal/validate",
+      { sql_text: sqlText, source: source ?? "operator_submitted" }
+    ),
+
+  // ── Sprint 11: Human Approval + Cleanup ────────────────────────────────────
+
+  /** Approve a seed proposal and optionally execute it (dry_run=true by default). */
+  approveSeedProposal: (payload: {
+    run_id: string;
+    ticket_id: number;
+    scenario_id: string;
+    approved_sha256: string;
+    approved_by?: string;
+    dry_run?: boolean;
+  }) =>
+    api.post<{ ok: boolean; result: Record<string, unknown> }>(
+      "/api/qa-uat/seed-proposal/approve",
+      payload
+    ),
+
+  /** Trigger cleanup for seeded data. */
+  triggerCleanup: (payload: {
+    run_id: string;
+    ticket_id: number;
+    scenario_id: string;
+    seed_run_id: string;
+    cleanup_policy?: string;
+    dry_run?: boolean;
+  }) =>
+    api.post<{ ok: boolean; result: Record<string, unknown> }>(
+      "/api/qa-uat/seed-proposal/cleanup",
+      payload
+    ),
+
+  /** List seed approval records for a run. */
+  listSeedApprovals: (runId: string, ticketId: number) =>
+    api.get<{ ok: boolean; approvals: Record<string, unknown>[]; total: number }>(
+      `/api/qa-uat/seed-proposal/approvals?run_id=${encodeURIComponent(runId)}&ticket_id=${ticketId}`
+    ),
+
+  // ── Sprint 12: Catalog Readiness ──────────────────────────────────────────
+
+  /** Get catalog readiness artifacts for a run (from evidence dir). */
+  listCatalogReadiness: (runId: string, ticketId: number, scenarioId?: string) =>
+    api.get<{ ok: boolean; catalogs: CatalogReadinessResult[]; total: number }>(
+      `/api/qa-uat/catalog-readiness?run_id=${encodeURIComponent(runId)}&ticket_id=${ticketId}${scenarioId ? `&scenario_id=${encodeURIComponent(scenarioId)}` : ""}`
+    ),
+
+  /** Trigger an on-demand catalog readiness check. */
+  checkCatalogReadiness: (payload: {
+    run_id: string;
+    ticket_id: number;
+    scenario_id?: string;
+    required_catalogs: string[];
+    dry_run?: boolean;
+  }) =>
+    api.post<{ ok: boolean; result: CatalogReadinessResult }>(
+      "/api/qa-uat/catalog-readiness/check",
+      payload
+    ),
+
+  /** List catalog fixture definitions from catalog_fixtures.yml. */
+  listCatalogFixtures: () =>
+    api.get<{ ok: boolean; fixtures: CatalogFixtureSummary[]; total: number }>(
+      "/api/qa-uat/catalog-readiness/fixtures"
+    ),
+
+  // ── Sprint 13: Oracle Engine + Weak Assertion Detector ────────────────────
+
+  /** List oracle_result.json artifacts for a run. */
+  listOracleResults: (runId: string, ticketId: number, scenarioId?: string) =>
+    api.get<{ ok: boolean; results: OracleEvaluationResult[]; total: number }>(
+      `/api/qa-uat/oracle-result?run_id=${encodeURIComponent(runId)}&ticket_id=${ticketId}${scenarioId ? `&scenario_id=${encodeURIComponent(scenarioId)}` : ""}`
+    ),
+
+  /** Trigger on-demand oracle evaluation for a run. */
+  evaluateOracles: (payload: {
+    run_id: string;
+    ticket_id: number;
+    scenarios_path?: string;
+    runner_output_path?: string;
+    oracle_contracts_dir?: string;
+  }) =>
+    api.post<{ ok: boolean; result: OracleEvaluationResult }>(
+      "/api/qa-uat/oracle-result/evaluate",
+      payload
+    ),
+
+  /** Get weak assertion report for a run. */
+  getWeakAssertions: (runId: string, ticketId: number) =>
+    api.get<{ ok: boolean; report: WeakAssertionReport | null; message?: string }>(
+      `/api/qa-uat/oracle-result/weak-assertions?run_id=${encodeURIComponent(runId)}&ticket_id=${ticketId}`
+    ),
+
+  // ── Sprint 14: Test Confidence + Data Lineage ─────────────────────────────
+
+  /** Get confidence report for a run. */
+  getConfidenceReport: (runId: string, ticketId: number) =>
+    api.get<{ ok: boolean; report: ConfidenceReport | null; message?: string }>(
+      `/api/qa-uat/confidence-report?run_id=${encodeURIComponent(runId)}&ticket_id=${ticketId}`
+    ),
+
+  /** Trigger on-demand confidence scoring for a run. */
+  scoreConfidence: (payload: {
+    run_id: string;
+    ticket_id: number;
+    min_confidence?: number;
+    deployment_matched?: boolean | null;
+  }) =>
+    api.post<{ ok: boolean; result: ConfidenceReport }>(
+      "/api/qa-uat/confidence-report/score",
+      payload
+    ),
+
+  /** Get data lineage artifact for a run. */
+  getDataLineage: (runId: string, ticketId: number) =>
+    api.get<{ ok: boolean; lineage: DataLineageResult | null; message?: string }>(
+      `/api/qa-uat/data-lineage?run_id=${encodeURIComponent(runId)}&ticket_id=${ticketId}`
+    ),
+
+  /** Trigger on-demand data lineage build for a run. */
+  buildDataLineage: (payload: { run_id: string; ticket_id: number }) =>
+    api.post<{ ok: boolean; result: DataLineageResult }>(
+      "/api/qa-uat/data-lineage/build",
+      payload
     ),
 };

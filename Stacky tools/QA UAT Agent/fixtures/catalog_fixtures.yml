@@ -1,0 +1,236 @@
+# catalog_fixtures.yml — Catalog Fixture Definitions (Sprint 12)
+#
+# This file defines the catalog tables used by Agenda Web (UCollect Strategy /
+# Pacífico) and their minimum expected row counts.  When a catalog is found
+# EMPTY during catalog_readiness_checker.py, the seed_rows entries are used
+# to generate a SQL INSERT script for human approval.
+#
+# STRUCTURE:
+#   catalogs:
+#     - catalog_name: <logical name used in required_catalogs lists>
+#       db_table: <fully qualified table name, e.g. dbo.Provincia>
+#       pk_column: <primary key column — used for existence check>
+#       min_rows: <minimum row count to consider OK>
+#       description: <human-readable description>
+#       seed_rows:
+#         - fields:
+#             <column>: <value>
+#             ...
+#
+# SECURITY:
+#   - Seed scripts generated from this file always use ROLLBACK TRANSACTION.
+#   - A human operator must review and approve before COMMIT.
+#   - This file is source-controlled — all changes must go through PR review.
+#
+# MODIFICATION:
+#   Add new catalogs as needed.  Keep seed_rows minimal (1-5 reference rows).
+#   Column values must be safe, non-PII reference data.
+#
+# Last updated: 2026-05-09
+# Version: 1.0.0
+
+---
+version: "1.0.0"
+updated_at: "2026-05-09"
+updated_by: "StackyToolArchitect/Sprint12"
+
+catalogs:
+
+  # ── Geografía ───────────────────────────────────────────────────────────────
+
+  - catalog_name: Provincia
+    db_table: dbo.Provincia
+    pk_column: ProCod
+    min_rows: 1
+    description: >
+      Tabla de provincias. Usada en combos de domicilio del cliente.
+      Un catálogo vacío produce timeout en el formulario de alta de cliente.
+    seed_rows:
+      - fields:
+          ProCod: 1
+          ProNom: "Lima"
+          ProAbre: "LIM"
+          EstReg: 1
+
+      - fields:
+          ProCod: 2
+          ProNom: "Callao"
+          ProAbre: "CAL"
+          EstReg: 1
+
+      - fields:
+          ProCod: 3
+          ProNom: "Arequipa"
+          ProAbre: "ARE"
+          EstReg: 1
+
+  - catalog_name: Departamento
+    db_table: dbo.Departamento
+    pk_column: DepCod
+    min_rows: 1
+    description: >
+      Tabla de departamentos. Cascadea con Provincia en formulario de domicilio.
+    seed_rows:
+      - fields:
+          DepCod: 101
+          ProCod: 1
+          DepNom: "Lima Cercado"
+          EstReg: 1
+
+      - fields:
+          DepCod: 201
+          ProCod: 2
+          DepNom: "Callao"
+          EstReg: 1
+
+      - fields:
+          DepCod: 301
+          ProCod: 3
+          DepNom: "Arequipa"
+          EstReg: 1
+
+  # ── Tipos de Documento ───────────────────────────────────────────────────────
+
+  - catalog_name: TipoDoc
+    db_table: dbo.TipoDoc
+    pk_column: TdoCod
+    min_rows: 1
+    description: >
+      Tipos de documento de identidad (DNI, RUC, CE, etc.).
+      Requerido para búsqueda de cliente y alta.
+    seed_rows:
+      - fields:
+          TdoCod: "DNI"
+          TdoDes: "Documento Nacional de Identidad"
+          TdoLon: 8
+          EstReg: 1
+
+      - fields:
+          TdoCod: "RUC"
+          TdoDes: "Registro Único de Contribuyentes"
+          TdoLon: 11
+          EstReg: 1
+
+      - fields:
+          TdoCod: "CE"
+          TdoDes: "Carnet de Extranjería"
+          TdoLon: 12
+          EstReg: 1
+
+  # ── Estados de Obligación ────────────────────────────────────────────────────
+
+  - catalog_name: TipoObligacion
+    db_table: dbo.TipoObligacion
+    pk_column: TobCod
+    min_rows: 1
+    description: >
+      Tipos de obligación (CREDITO, SERVICIO, MULTA, etc.).
+      Requerido para filtros en GridObligaciones.
+    seed_rows:
+      - fields:
+          TobCod: "CRE"
+          TobDes: "Crédito"
+          EstReg: 1
+
+      - fields:
+          TobCod: "SRV"
+          TobDes: "Servicio"
+          EstReg: 1
+
+      - fields:
+          TobCod: "MUL"
+          TobDes: "Multa"
+          EstReg: 1
+
+  - catalog_name: EstadoObligacion
+    db_table: dbo.EstadoObligacion
+    pk_column: EobCod
+    min_rows: 1
+    description: >
+      Estados de obligación (ACTIVO, CANCELADO, VENCIDO, etc.).
+      Requerido para la columna de estado en GridObligaciones.
+    seed_rows:
+      - fields:
+          EobCod: "ACT"
+          EobDes: "Activo"
+          EstReg: 1
+
+      - fields:
+          EobCod: "CAN"
+          EobDes: "Cancelado"
+          EstReg: 1
+
+      - fields:
+          EobCod: "VEN"
+          EobDes: "Vencido"
+          EstReg: 1
+
+  # ── Gestión / Workflow ────────────────────────────────────────────────────────
+
+  - catalog_name: EstadoCuenta
+    db_table: dbo.EstadoCuenta
+    pk_column: EcuCod
+    min_rows: 1
+    description: >
+      Estado de cuenta del cliente. Requerido en panel de detalle de cliente.
+    seed_rows:
+      - fields:
+          EcuCod: "NOR"
+          EcuDes: "Normal"
+          EstReg: 1
+
+      - fields:
+          EcuCod: "MOR"
+          EcuDes: "Moroso"
+          EstReg: 1
+
+      - fields:
+          EcuCod: "BLO"
+          EcuDes: "Bloqueado"
+          EstReg: 1
+
+  - catalog_name: TipoGestion
+    db_table: dbo.TipoGestion
+    pk_column: TgeCod
+    min_rows: 1
+    description: >
+      Tipos de gestión de cobranza. Requerido para el registro de gestiones.
+    seed_rows:
+      - fields:
+          TgeCod: "TEL"
+          TgeDes: "Telefónica"
+          EstReg: 1
+
+      - fields:
+          TgeCod: "VIS"
+          TgeDes: "Visita"
+          EstReg: 1
+
+      - fields:
+          TgeCod: "COR"
+          TgeDes: "Correo"
+          EstReg: 1
+
+  # ── Acceso / Seguridad ────────────────────────────────────────────────────────
+
+  - catalog_name: Rol
+    db_table: dbo.Rol
+    pk_column: RolCod
+    min_rows: 1
+    description: >
+      Roles de usuario del sistema. Requerido para pruebas de perfiles y acceso.
+    seed_rows:
+      - fields:
+          RolCod: "ADM"
+          RolDes: "Administrador"
+          EstReg: 1
+
+      - fields:
+          RolCod: "OPE"
+          RolDes: "Operador"
+          EstReg: 1
+
+      - fields:
+          RolCod: "SUP"
+          RolDes: "Supervisor"
+          EstReg: 1

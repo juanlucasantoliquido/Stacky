@@ -1,0 +1,343 @@
+/* OracleDashboard.module.css — Sprint 13: Oracle Engine + Weak Assertion Detector */
+
+.container {
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--border, #333);
+}
+
+.title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted, #aaa);
+  text-transform: uppercase;
+  flex: 1;
+}
+
+.evaluateBtn {
+  padding: 0.3rem 0.75rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.evaluateBtn:hover {
+  background: #1d4ed8;
+}
+
+.evaluateBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Error banner ── */
+.errorBanner {
+  background: rgba(220, 38, 38, 0.1);
+  border-bottom: 1px solid rgba(220, 38, 38, 0.3);
+  color: #fca5a5;
+  font-size: 0.78rem;
+  padding: 0.5rem 0.9rem;
+}
+
+/* ── Section ── */
+.section {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--border, #333);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.sectionTitle {
+  margin: 0 0 0.6rem 0;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Summary bar ── */
+.summaryBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text, #ccc);
+}
+
+.summaryItem {
+  white-space: nowrap;
+}
+
+.blockingBadge {
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  color: #fca5a5;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* ── Verdict badge ── */
+.verdictBadge {
+  display: inline-flex;
+  align-items: center;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ── Strength badge ── */
+.strengthBadge {
+  display: inline-flex;
+  align-items: center;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  letter-spacing: 0.03em;
+}
+
+/* ── Scenario list ── */
+.scenarioList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.scenarioCard {
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.scenarioCard.blocking {
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.scenarioHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.scenarioId {
+  font-family: monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text, #ccc);
+  min-width: 120px;
+}
+
+.p0Tag {
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  color: #fca5a5;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+}
+
+.blockingTag {
+  color: #fca5a5;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.oracleCounts {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--muted, #888);
+  white-space: nowrap;
+}
+
+.expandIcon {
+  color: var(--muted, #666);
+  font-size: 0.85rem;
+  margin-left: 0.25rem;
+}
+
+/* ── Oracle checks ── */
+.oracleChecks {
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--border, #333);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.noOracle {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #9333ea;
+  font-style: italic;
+}
+
+.oracleCheck {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.76rem;
+  flex-wrap: wrap;
+}
+
+.checkId {
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: var(--muted, #888);
+}
+
+.checkType {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--muted, #aaa);
+  font-size: 0.66rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+}
+
+.checkDesc {
+  color: var(--text, #ccc);
+  font-size: 0.75rem;
+  flex: 1;
+}
+
+.checkError {
+  color: #fca5a5;
+  font-size: 0.72rem;
+  font-family: monospace;
+}
+
+/* ── Weak assertion file cards ── */
+.fileList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.weakFileCard {
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.weakFileCard.hasWeak {
+  border-color: rgba(217, 119, 6, 0.35);
+  background: rgba(217, 119, 6, 0.03);
+}
+
+.weakFileHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.fileName {
+  font-family: monospace;
+  font-size: 0.76rem;
+  color: var(--text, #ccc);
+  flex: 1;
+}
+
+.weakCounts {
+  font-size: 0.73rem;
+  color: var(--muted, #888);
+  white-space: nowrap;
+}
+
+.weakTests {
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--border, #333);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.weakTest {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+  flex-wrap: wrap;
+}
+
+.weakTestName {
+  font-family: monospace;
+  color: var(--text, #ccc);
+  font-size: 0.73rem;
+}
+
+.weakStrength {
+  font-weight: 700;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.weakFinding {
+  color: var(--muted, #aaa);
+  font-size: 0.72rem;
+  font-style: italic;
+  flex: 1;
+}
+
+.allStrong {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #4ade80;
+}
+
+/* ── Loading / empty states ── */
+.loading {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted, #888);
+  font-style: italic;
+}
+
+.empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted, #888);
+  font-style: italic;
+}

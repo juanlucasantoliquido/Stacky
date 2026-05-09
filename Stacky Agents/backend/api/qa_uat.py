@@ -33,9 +33,10 @@ SAFETY RULES (same as all uat_*.py):
 from __future__ import annotations
 
 import json
+import re
 import sys
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, request
@@ -46,6 +47,11 @@ from models import AgentExecution, Ticket
 from ._helpers import current_user
 
 bp = Blueprint("qa_uat", __name__, url_prefix="/qa-uat")
+
+
+def _utcnow_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
 
 # Path to qa_uat_pipeline.py — two levels up from the Stacky Agents backend
 _PIPELINE_ROOT = (
@@ -542,6 +548,652 @@ def add_quarantine():
                         "message": str(exc)}), 500
 
 
+# ── Sprint 9 — Data Request endpoints ────────────────────────────────────────
+#
+# POST /api/qa-uat/data-request/<run_id>          — create pending data request
+# POST /api/qa-uat/data-request/<request_id>/resolve — resolve with value/decision
+# GET  /api/qa-uat/data-request/<request_id>/status  — query status
+
+
+@bp.post("/data-request/<run_id>")
+def create_data_request(run_id: str):
+    """
+    Create a set of data resolution requests for a pipeline run that has
+    missing data requirements (data_readiness_v2 returned MISSING).
+
+    POST /api/qa-uat/data-request/<run_id>
+    Body:
+        {
+            "readiness_result": {   // DataReadinessCheckResult as dict
+                "scenario_id": "RF-007-CA-01",
+                "ticket_id": 120,
+                "missing": [...]
+            },
+            "environment": "QA"    // optional, defaults to QA_UAT_TARGET_ENVIRONMENT env var
+        }
+
+    Response (201):
+        {"ok": true, "result": {"pending_request_ids": [...], "decisions": [...]}}
+
+    Errors:
+        400 — missing/invalid body
+        503 — broker module not available
+        500 — broker error
+    """
+    _ensure_pipeline_on_path()
+    try:
+        from data_resolution_broker import run as broker_run  # type: ignore[import]
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": "import_error",
+                        "message": f"data_resolution_broker not available: {exc}"}), 503
+
+    payload = request.get_json(force=True, silent=True) or {}
+    readiness_result = payload.get("readiness_result")
+    if not readiness_result or not isinstance(readiness_result, dict):
+        abort(400, "readiness_result (dict) is required")
+
+    missing = readiness_result.get("missing", [])
+    if not isinstance(missing, list):
+        abort(400, "readiness_result.missing must be a list")
+
+    environment = payload.get("environment") or None
+
+    # Determine evidence_dir from run_id
+    ticket_id = readiness_result.get("ticket_id", 0)
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id)
+
+    try:
+        result = broker_run(
+            readiness_result=readiness_result,
+            run_id=run_id,
+            evidence_dir=evidence_dir,
+            environment=environment,
+        )
+        return jsonify({"ok": True, "result": result.to_dict()}), 201
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "broker_error",
+                        "message": str(exc)}), 500
+
+
+@bp.post("/data-request/<request_id>/resolve")
+def resolve_data_request(request_id: str):
+    """
+    Resolve a pending data request with a user-supplied value or decision.
+
+    POST /api/qa-uat/data-request/<request_id>/resolve
+    Body:
+        {
+            "resolution_type": "provide_existing_value",  // one of the option IDs
+            "supplied_fields": {"CLCOD": "12345"},        // when resolution_type = provide_existing_value
+            "note": "optional human note",
+            "run_id": "120-abc",          // required to locate qa_data_requests.json
+            "ticket_id": 120,             // required to locate evidence directory
+            "scenario_id": "RF-007-CA-01"
+        }
+
+    Response (200):
+        {"ok": true, "result": {"request_id": "...", "valid": true, "resolved_data_ref": "..."}}
+
+    Errors:
+        400 — missing/invalid body
+        404 — request_id not found in store
+        422 — validation failed
+        503 — module not available
+        500 — internal error
+    """
+    _ensure_pipeline_on_path()
+    payload = request.get_json(force=True, silent=True) or {}
+
+    resolution_type = payload.get("resolution_type")
+    if not resolution_type:
+        abort(400, "resolution_type is required")
+
+    run_id = payload.get("run_id")
+    ticket_id = payload.get("ticket_id")
+    if not run_id or not ticket_id:
+        abort(400, "run_id and ticket_id are required")
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id)
+    store_path = evidence_dir / str(run_id) / "qa_data_requests.json"
+
+    # Load the pending record
+    if not store_path.is_file():
+        return jsonify({"ok": False, "error": "not_found",
+                        "message": f"No data requests found for run_id={run_id}"}), 404
+
+    try:
+        import json as _json
+        records = _json.loads(store_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "store_read_error",
+                        "message": str(exc)}), 500
+
+    record = next((r for r in records if r.get("id") == request_id), None)
+    if record is None:
+        return jsonify({"ok": False, "error": "not_found",
+                        "message": f"Request {request_id} not found"}), 404
+
+    if record.get("status") not in ("pending_user_input",):
+        return jsonify({"ok": False, "error": "already_resolved",
+                        "message": f"Request {request_id} is already {record.get('status')}"}), 409
+
+    # If user is providing a value, validate it
+    supplied_fields = payload.get("supplied_fields") or {}
+    validation_result = None
+
+    if resolution_type == "provide_existing_value" and supplied_fields:
+        try:
+            from user_data_validator import validate as udv_validate  # type: ignore[import]
+            user = current_user()
+            validation_result = udv_validate(
+                request_id=request_id,
+                supplied_fields=supplied_fields,
+                supplied_by=user,
+                evidence_dir=evidence_dir,
+                run_id=run_id,
+            )
+            if not validation_result.valid:
+                return jsonify({
+                    "ok": False,
+                    "error": "validation_failed",
+                    "message": validation_result.reason or "Validation failed",
+                    "result": validation_result.to_dict(),
+                }), 422
+            if validation_result.injection_detected:
+                return jsonify({
+                    "ok": False,
+                    "error": "prompt_injection_detected",
+                    "message": "Prompt injection detected in supplied data",
+                    "result": validation_result.to_dict(),
+                }), 422
+        except ImportError as exc:
+            return jsonify({"ok": False, "error": "import_error",
+                            "message": f"user_data_validator not available: {exc}"}), 503
+
+    # Update the record
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    record["status"] = "resolved"
+    record["resolved_at"] = now
+    record["resolved_by"] = current_user()
+    record["resolution_type"] = resolution_type
+    if payload.get("note"):
+        record["note"] = payload["note"]
+
+    try:
+        store_path.write_text(
+            __import__("json").dumps(records, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "store_write_error",
+                        "message": str(exc)}), 500
+
+    response_body = {
+        "ok": True,
+        "result": {
+            "request_id": request_id,
+            "status": "resolved",
+            "resolution_type": resolution_type,
+            "resolved_at": now,
+        },
+    }
+    if validation_result is not None:
+        response_body["result"]["validation"] = {
+            "valid": validation_result.valid,
+            "resolved_data_ref": validation_result.resolved_data_ref,
+        }
+    return jsonify(response_body)
+
+
+@bp.get("/data-request/<request_id>/status")
+def get_data_request_status(request_id: str):
+    """
+    Return the status of a data resolution request.
+
+    GET /api/qa-uat/data-request/<request_id>/status?run_id=<run_id>&ticket_id=<ticket_id>
+
+    Query params:
+        run_id    string  required
+        ticket_id int     required
+
+    Response (200):
+        {"ok": true, "result": {"request_id": "...", "status": "pending_user_input", ...}}
+
+    Errors:
+        400 — missing query params
+        404 — not found
+    """
+    run_id = request.args.get("run_id")
+    ticket_id_raw = request.args.get("ticket_id")
+
+    if not run_id or not ticket_id_raw:
+        abort(400, "run_id and ticket_id query parameters are required")
+
+    try:
+        ticket_id = int(ticket_id_raw)
+    except ValueError:
+        abort(400, "ticket_id must be an integer")
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id)
+    store_path = evidence_dir / run_id / "qa_data_requests.json"
+
+    if not store_path.is_file():
+        return jsonify({"ok": False, "error": "not_found",
+                        "message": f"No data requests found for run_id={run_id}"}), 404
+
+    try:
+        records = json.loads(store_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "store_read_error",
+                        "message": str(exc)}), 500
+
+    record = next((r for r in records if r.get("id") == request_id), None)
+    if record is None:
+        return jsonify({"ok": False, "error": "not_found",
+                        "message": f"Request {request_id} not found"}), 404
+
+    return jsonify({"ok": True, "result": record})
+
+
+@bp.get("/data-request")
+def list_data_requests():
+    """
+    List all data resolution requests for a given run.
+
+    GET /api/qa-uat/data-request?run_id=<run_id>&ticket_id=<ticket_id>
+
+    Query params:
+        run_id    string   required
+        ticket_id int      required
+        status    string   optional — filter by status (pending_user_input|resolved|timeout)
+
+    Response (200):
+        {"ok": true, "requests": [...], "total": N, "pending": N}
+
+    Errors:
+        400 — missing query params
+        404 — no requests file found for this run
+    """
+    run_id = request.args.get("run_id")
+    ticket_id_raw = request.args.get("ticket_id")
+    status_filter = request.args.get("status")
+
+    if not run_id or not ticket_id_raw:
+        abort(400, "run_id and ticket_id query parameters are required")
+
+    try:
+        ticket_id = int(ticket_id_raw)
+    except ValueError:
+        abort(400, "ticket_id must be an integer")
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id)
+    store_path = evidence_dir / run_id / "qa_data_requests.json"
+
+    if not store_path.is_file():
+        return jsonify({
+            "ok": True,
+            "requests": [],
+            "total": 0,
+            "pending": 0,
+            "message": f"No data requests found for run_id={run_id}",
+        })
+
+    try:
+        records = json.loads(store_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "store_read_error",
+                        "message": str(exc)}), 500
+
+    if status_filter:
+        records = [r for r in records if r.get("status") == status_filter]
+
+    pending_count = sum(1 for r in records if r.get("status") == "pending_user_input")
+
+    # Also load the resolution artifact for context if available
+    resolution_artifacts: dict = {}
+    resolution_dir = evidence_dir / run_id
+    if resolution_dir.is_dir():
+        for artifact_file in resolution_dir.glob("data_resolution_request_*.json"):
+            try:
+                artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+                scenario_id = artifact_data.get("scenario_id", "")
+                if scenario_id:
+                    resolution_artifacts[scenario_id] = artifact_data
+            except Exception:
+                pass
+
+    return jsonify({
+        "ok": True,
+        "requests": records,
+        "total": len(records),
+        "pending": pending_count,
+        "resolution_artifacts": resolution_artifacts,
+    })
+
+
+# ── Sprint 10: Seed Proposal Preview ─────────────────────────────────────────
+
+@bp.get("/seed-proposal")
+def get_seed_proposal():
+    """
+    GET /api/qa-uat/seed-proposal?run_id=<id>&ticket_id=<id>&scenario_id=<optional>
+
+    Returns seed proposal scripts and safety results for a pipeline run.
+    Scripts are read from evidence artifacts written by sql_seed_generator.py.
+
+    Response: {"ok": true, "proposals": [...], "total": N}
+
+    Each proposal:
+      {
+          "scenario_id": "RF-007-CA-01",
+          "seed_run_id": "seed-120-ABCDEF",
+          "script_path": "...",
+          "cleanup_path": "...",
+          "script_content": "...",    -- null if file too large (>64KB)
+          "cleanup_content": "...",
+          "script_sha256": "...",
+          "safety_result": { "safe": true, "risk_level": "low", ... }
+      }
+    """
+    _ensure_pipeline_on_path()
+
+    run_id = request.args.get("run_id", "").strip()
+    ticket_id_raw = request.args.get("ticket_id", "").strip()
+    scenario_filter = request.args.get("scenario_id", "").strip() or None
+
+    if not run_id:
+        return jsonify({"ok": False, "error": "missing_run_id",
+                        "message": "run_id is required"}), 400
+    if not ticket_id_raw:
+        return jsonify({"ok": False, "error": "missing_ticket_id",
+                        "message": "ticket_id is required"}), 400
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id_raw)
+    run_dir = evidence_dir / run_id
+
+    proposals = []
+    if run_dir.is_dir():
+        for seed_file in sorted(run_dir.glob("seed_proposal_*.sql")):
+            # Extract scenario_id from filename: seed_proposal_<scenario_id>.sql
+            scenario_id = seed_file.stem.replace("seed_proposal_", "")
+            if scenario_filter and scenario_id != scenario_filter:
+                continue
+
+            cleanup_file = run_dir / f"cleanup_proposal_{scenario_id}.sql"
+            safety_file = run_dir / f"seed_safety_result_{scenario_id}.json"
+
+            # Read script content (capped at 64KB for safety)
+            script_content = None
+            try:
+                raw = seed_file.read_bytes()
+                if len(raw) <= 65536:
+                    script_content = raw.decode("utf-8", errors="replace")
+            except Exception:
+                pass
+
+            cleanup_content = None
+            try:
+                raw = cleanup_file.read_bytes()
+                if len(raw) <= 65536:
+                    cleanup_content = raw.decode("utf-8", errors="replace")
+            except Exception:
+                pass
+
+            safety_result = None
+            try:
+                if safety_file.exists():
+                    safety_result = json.loads(safety_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+            proposals.append({
+                "scenario_id": scenario_id,
+                "script_path": str(seed_file),
+                "cleanup_path": str(cleanup_file) if cleanup_file.exists() else None,
+                "script_content": script_content,
+                "cleanup_content": cleanup_content,
+                "safety_result": safety_result,
+            })
+
+    return jsonify({"ok": True, "proposals": proposals, "total": len(proposals)})
+
+
+@bp.post("/seed-proposal/validate")
+def validate_seed_proposal():
+    """
+    POST /api/qa-uat/seed-proposal/validate
+
+    Validate an arbitrary SQL seed script against safety rules.
+    Useful for operator-edited scripts or re-validation after manual review.
+
+    Body: { "sql_text": "...", "source": "optional-label" }
+    Response: { "ok": true, "result": { "safe": bool, "risk_level": str, ... } }
+    """
+    _ensure_pipeline_on_path()
+
+    body = request.get_json(silent=True) or {}
+    sql_text = body.get("sql_text", "")
+    source = body.get("source", "operator_submitted")[:200]
+
+    if not sql_text or not sql_text.strip():
+        return jsonify({"ok": False, "error": "empty_sql",
+                        "message": "sql_text is required and must not be empty"}), 400
+
+    if len(sql_text) > 131072:  # 128KB hard cap
+        return jsonify({"ok": False, "error": "sql_too_large",
+                        "message": "sql_text exceeds 128KB limit"}), 400
+
+    try:
+        from sql_safety_validator import validate as safety_validate  # type: ignore[import]
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": "import_error",
+                        "message": f"sql_safety_validator not available: {exc}"}), 503
+
+    try:
+        result = safety_validate(sql_text, source=source)
+        return jsonify({"ok": True, "result": result.to_dict()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "validation_error",
+                        "message": str(exc)}), 500
+
+
+# ── Sprint 11: Human Approval + Seed Executor + Cleanup ──────────────────────
+
+@bp.post("/seed-proposal/approve")
+def approve_seed_proposal():
+    """
+    POST /api/qa-uat/seed-proposal/approve
+
+    Record operator approval for a seed script and optionally trigger execution.
+    The operator supplies the SHA-256 of the script they reviewed — this is
+    matched against the actual file content before any execution.
+
+    Body:
+      {
+          "run_id": "120",
+          "ticket_id": 120,
+          "scenario_id": "RF-007-CA-01",
+          "approved_sha256": "<sha256 of reviewed script>",
+          "approved_by": "operator@example.com",
+          "dry_run": true          -- default true; set false to trigger real execution
+      }
+
+    Response:
+      { "ok": true, "result": { "verdict": "SKIPPED|APPLIED|...", ... } }
+    """
+    _ensure_pipeline_on_path()
+
+    body = request.get_json(silent=True) or {}
+    run_id = str(body.get("run_id", "")).strip()
+    ticket_id_raw = body.get("ticket_id")
+    scenario_id = str(body.get("scenario_id", "")).strip()
+    approved_sha256 = str(body.get("approved_sha256", "")).strip()
+    approved_by = str(body.get("approved_by", current_user() or "unknown"))[:200].strip()
+    dry_run = bool(body.get("dry_run", True))
+
+    for field_name, val in [("run_id", run_id), ("scenario_id", scenario_id),
+                             ("approved_sha256", approved_sha256)]:
+        if not val:
+            return jsonify({"ok": False, "error": f"missing_{field_name}",
+                            "message": f"{field_name} is required"}), 400
+
+    if ticket_id_raw is None:
+        return jsonify({"ok": False, "error": "missing_ticket_id",
+                        "message": "ticket_id is required"}), 400
+
+    try:
+        from seed_executor import execute as seed_execute  # type: ignore[import]
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": "import_error",
+                        "message": f"seed_executor not available: {exc}"}), 503
+
+    # Locate the seed script in evidence directory
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id_raw)
+    run_dir = evidence_dir / run_id
+    safe_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", scenario_id)
+    script_path = run_dir / f"seed_proposal_{safe_id}.sql"
+
+    if not script_path.exists():
+        return jsonify({"ok": False, "error": "script_not_found",
+                        "message": f"Seed script not found: {script_path}"}), 404
+
+    # Record approval in evidence
+    approval_record = {
+        "scenario_id": scenario_id,
+        "approved_sha256": approved_sha256,
+        "approved_by": approved_by,
+        "approved_at": _utcnow_iso(),
+        "dry_run": dry_run,
+    }
+    try:
+        approval_path = run_dir / f"seed_approval_{safe_id}.json"
+        approval_path.write_text(
+            __import__("json").dumps(approval_record, indent=2), encoding="utf-8"
+        )
+    except Exception:
+        pass  # Non-fatal; proceed with execution
+
+    try:
+        result = seed_execute(
+            script_path=script_path,
+            approved_sha256=approved_sha256,
+            scenario_id=scenario_id,
+            seed_run_id=f"seed-{ticket_id_raw}-{run_id}",
+            run_id=run_id,
+            ticket_id=ticket_id_raw,
+            evidence_dir=evidence_dir,
+            dry_run=dry_run,
+        )
+        return jsonify({"ok": True, "result": result.to_dict()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "execution_error",
+                        "message": str(exc)}), 500
+
+
+@bp.post("/seed-proposal/cleanup")
+def trigger_cleanup():
+    """
+    POST /api/qa-uat/seed-proposal/cleanup
+
+    Trigger cleanup for seeded data after a UAT run.
+
+    Body:
+      {
+          "run_id": "120",
+          "ticket_id": 120,
+          "scenario_id": "RF-007-CA-01",
+          "seed_run_id": "seed-120-ABCDEF",
+          "cleanup_policy": "after_run",   -- default
+          "dry_run": true
+      }
+
+    Response:
+      { "ok": true, "result": { "verdict": "CLEANED|SKIPPED|...", ... } }
+    """
+    _ensure_pipeline_on_path()
+
+    body = request.get_json(silent=True) or {}
+    run_id = str(body.get("run_id", "")).strip()
+    ticket_id_raw = body.get("ticket_id")
+    scenario_id = str(body.get("scenario_id", "")).strip()
+    seed_run_id = str(body.get("seed_run_id", "")).strip()
+    cleanup_policy = str(body.get("cleanup_policy", "after_run")).strip()
+    dry_run = bool(body.get("dry_run", True))
+
+    for field_name, val in [("run_id", run_id), ("scenario_id", scenario_id),
+                             ("seed_run_id", seed_run_id)]:
+        if not val:
+            return jsonify({"ok": False, "error": f"missing_{field_name}",
+                            "message": f"{field_name} is required"}), 400
+
+    if ticket_id_raw is None:
+        return jsonify({"ok": False, "error": "missing_ticket_id",
+                        "message": "ticket_id is required"}), 400
+
+    try:
+        from cleanup_manager import cleanup as do_cleanup  # type: ignore[import]
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": "import_error",
+                        "message": f"cleanup_manager not available: {exc}"}), 503
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id_raw)
+    run_dir = evidence_dir / run_id
+    safe_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", scenario_id)
+    cleanup_script_path = run_dir / f"cleanup_proposal_{safe_id}.sql"
+
+    if not cleanup_script_path.exists():
+        return jsonify({"ok": False, "error": "cleanup_script_not_found",
+                        "message": f"Cleanup script not found: {cleanup_script_path}"}), 404
+
+    try:
+        result = do_cleanup(
+            cleanup_script_path=cleanup_script_path,
+            seed_run_id=seed_run_id,
+            scenario_id=scenario_id,
+            run_id=run_id,
+            ticket_id=ticket_id_raw,
+            cleanup_policy=cleanup_policy,
+            evidence_dir=evidence_dir,
+            dry_run=dry_run,
+        )
+        return jsonify({"ok": True, "result": result.to_dict()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "cleanup_error",
+                        "message": str(exc)}), 500
+
+
+@bp.get("/seed-proposal/approvals")
+def list_seed_approvals():
+    """
+    GET /api/qa-uat/seed-proposal/approvals?run_id=<id>&ticket_id=<id>
+
+    List all seed approval records for a run.
+
+    Response: { "ok": true, "approvals": [...], "total": N }
+    """
+    run_id = request.args.get("run_id", "").strip()
+    ticket_id_raw = request.args.get("ticket_id", "").strip()
+
+    if not run_id:
+        return jsonify({"ok": False, "error": "missing_run_id",
+                        "message": "run_id is required"}), 400
+    if not ticket_id_raw:
+        return jsonify({"ok": False, "error": "missing_ticket_id",
+                        "message": "ticket_id is required"}), 400
+
+    run_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id_raw) / run_id
+    approvals = []
+    if run_dir.is_dir():
+        for ap_file in sorted(run_dir.glob("seed_approval_*.json")):
+            try:
+                approvals.append(__import__("json").loads(ap_file.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+
+    return jsonify({"ok": True, "approvals": approvals, "total": len(approvals)})
+
+
 @bp.delete("/quarantine/<quarantine_id>")
 def resolve_quarantine(quarantine_id: str):
     """
@@ -566,4 +1218,542 @@ def resolve_quarantine(quarantine_id: str):
         return jsonify({"ok": True, "resolved": True, "id": quarantine_id})
     except Exception as exc:
         return jsonify({"ok": False, "error": "quarantine_resolve_error",
+                        "message": str(exc)}), 500
+
+
+# ── Sprint 12: Catalog Readiness ───────────────────────────────────────────────
+
+
+@bp.get("/catalog-readiness")
+def get_catalog_readiness():
+    """
+    GET /api/qa-uat/catalog-readiness?run_id=&ticket_id=&scenario_id=
+
+    Returns catalog readiness artifacts from the evidence directory for a
+    given run. Reads `catalog_readiness_<scenario_id>.json` files.
+
+    Query params:
+      run_id      (required)
+      ticket_id   (required)
+      scenario_id (optional, filter)
+
+    Response:
+      { "ok": true, "catalogs": [...], "total": N }
+    """
+    run_id = request.args.get("run_id", "").strip()
+    ticket_id = request.args.get("ticket_id", "").strip()
+    scenario_id = request.args.get("scenario_id", "").strip()
+
+    if not run_id:
+        return jsonify({"ok": False, "error": "missing_run_id",
+                        "message": "run_id is required"}), 400
+    if not ticket_id:
+        return jsonify({"ok": False, "error": "missing_ticket_id",
+                        "message": "ticket_id is required"}), 400
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / ticket_id / run_id
+    pattern = f"catalog_readiness_{re.sub(r'[^a-zA-Z0-9_-]', '_', scenario_id)}*.json" \
+        if scenario_id else "catalog_readiness_*.json"
+
+    results = []
+    for artifact in sorted(evidence_dir.glob(pattern)) if evidence_dir.is_dir() else []:
+        try:
+            data = json.loads(artifact.read_text(encoding="utf-8"))
+            results.append(data)
+        except Exception:
+            pass
+
+    return jsonify({"ok": True, "catalogs": results, "total": len(results)})
+
+
+@bp.post("/catalog-readiness/check")
+def check_catalog_readiness_endpoint():
+    """
+    POST /api/qa-uat/catalog-readiness/check
+
+    Trigger an on-demand catalog readiness check for a list of catalog names.
+
+    Body:
+      {
+          "run_id": "120",
+          "ticket_id": 120,
+          "scenario_id": "RF-007-CA-01",
+          "required_catalogs": ["Provincia", "Departamento", "TipoDoc"],
+          "dry_run": true
+      }
+
+    Response:
+      { "ok": true, "result": { ...CatalogReadinessResult... } }
+    """
+    _ensure_pipeline_on_path()
+
+    body = request.get_json(silent=True) or {}
+    run_id = str(body.get("run_id", "")).strip()
+    ticket_id_raw = body.get("ticket_id")
+    scenario_id = str(body.get("scenario_id", "")).strip()
+    required_catalogs = body.get("required_catalogs", [])
+    dry_run = bool(body.get("dry_run", True))
+
+    if not run_id:
+        return jsonify({"ok": False, "error": "missing_run_id",
+                        "message": "run_id is required"}), 400
+    if ticket_id_raw is None:
+        return jsonify({"ok": False, "error": "missing_ticket_id",
+                        "message": "ticket_id is required"}), 400
+    if not isinstance(required_catalogs, list) or not required_catalogs:
+        return jsonify({"ok": False, "error": "missing_required_catalogs",
+                        "message": "required_catalogs must be a non-empty list"}), 400
+
+    try:
+        from catalog_readiness_checker import check_catalog_readiness  # type: ignore[import]
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": "import_error",
+                        "message": f"catalog_readiness_checker not available: {exc}"}), 503
+
+    evidence_dir = _PIPELINE_ROOT / "evidence"
+    fixtures_path = _PIPELINE_ROOT / "fixtures" / "catalog_fixtures.yml"
+
+    try:
+        result = check_catalog_readiness(
+            scenario_id=scenario_id or str(ticket_id_raw),
+            required_catalogs=required_catalogs,
+            db_url=None,  # read-only; no write credentials here
+            exec_logger=None,
+            evidence_dir=evidence_dir,
+            run_id=run_id,
+            ticket_id=ticket_id_raw,
+            fixtures_path=fixtures_path,
+            dry_run=dry_run,
+        )
+        return jsonify({"ok": True, "result": result.to_dict()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "catalog_check_error",
+                        "message": str(exc)}), 500
+
+
+@bp.get("/catalog-readiness/fixtures")
+def list_catalog_fixtures():
+    """
+    GET /api/qa-uat/catalog-readiness/fixtures
+
+    Returns the list of catalog fixtures defined in catalog_fixtures.yml.
+    Used by the frontend catalog dashboard to display available catalogs.
+
+    Response:
+      { "ok": true, "fixtures": [...], "total": N }
+    """
+    _ensure_pipeline_on_path()
+
+    try:
+        from catalog_readiness_checker import load_catalog_fixtures  # type: ignore[import]
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": "import_error",
+                        "message": f"catalog_readiness_checker not available: {exc}"}), 503
+
+    fixtures_path = _PIPELINE_ROOT / "fixtures" / "catalog_fixtures.yml"
+    try:
+        fixtures = load_catalog_fixtures(fixtures_path)
+        return jsonify({
+            "ok": True,
+            "fixtures": [f.to_dict() for f in fixtures.values()],
+            "total": len(fixtures),
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "fixtures_load_error",
+                        "message": str(exc)}), 500
+
+
+# ── Sprint 13: Oracle Engine + Weak Assertion Detector ───────────────────────
+
+
+@bp.get("/oracle-result")
+def get_oracle_results():
+    """
+    GET /api/qa-uat/oracle-result?run_id=&ticket_id=&scenario_id=
+
+    List oracle_result.json artifacts for a run.
+
+    Query params:
+      run_id     (required)
+      ticket_id  (required)
+      scenario_id (optional — filter by scenario)
+
+    Response:
+      { "ok": true, "results": [...], "total": N }
+    """
+    _ensure_pipeline_on_path()
+
+    run_id = request.args.get("run_id", "").strip()
+    ticket_id_raw = request.args.get("ticket_id", "").strip()
+    scenario_id = request.args.get("scenario_id", "").strip()
+
+    if not run_id or not ticket_id_raw:
+        return jsonify({"ok": False, "error": "missing_params",
+                        "message": "run_id and ticket_id are required"}), 400
+
+    try:
+        ticket_id = int(ticket_id_raw)
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_ticket_id",
+                        "message": "ticket_id must be an integer"}), 400
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id) / run_id
+
+    results = []
+    artifact_path = evidence_dir / "oracle_result.json"
+    if artifact_path.is_file():
+        try:
+            import json as _json
+            data = _json.loads(artifact_path.read_text(encoding="utf-8"))
+            # Filter by scenario_id if provided
+            if scenario_id:
+                scenario_results = [
+                    r for r in data.get("scenario_results", [])
+                    if r.get("scenario_id") == scenario_id
+                ]
+                data = {**data, "scenario_results": scenario_results}
+            results.append(data)
+        except Exception as exc:
+            return jsonify({"ok": False, "error": "read_error",
+                            "message": str(exc)}), 500
+
+    return jsonify({"ok": True, "results": results, "total": len(results)})
+
+
+@bp.post("/oracle-result/evaluate")
+def trigger_oracle_evaluation():
+    """
+    POST /api/qa-uat/oracle-result/evaluate
+
+    Trigger on-demand oracle evaluation for a run.
+
+    Body:
+      {
+          "run_id": "120",
+          "ticket_id": 120,
+          "scenarios_path": null,       -- optional, resolved from evidence_dir if absent
+          "runner_output_path": null,   -- optional
+          "oracle_contracts_dir": null  -- optional
+      }
+
+    Response:
+      { "ok": true, "result": { ... OracleEvaluationResult ... } }
+    """
+    _ensure_pipeline_on_path()
+
+    try:
+        from oracle_engine import evaluate as oracle_evaluate  # type: ignore[import]
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": "import_error",
+                        "message": f"oracle_engine not available: {exc}"}), 503
+
+    body = request.get_json(silent=True) or {}
+    run_id = str(body.get("run_id", "")).strip()
+    ticket_id_raw = body.get("ticket_id")
+
+    if not run_id:
+        return jsonify({"ok": False, "error": "missing_run_id",
+                        "message": "run_id is required"}), 400
+
+    if ticket_id_raw is None:
+        return jsonify({"ok": False, "error": "missing_ticket_id",
+                        "message": "ticket_id is required"}), 400
+
+    try:
+        ticket_id = int(ticket_id_raw)
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "invalid_ticket_id",
+                        "message": "ticket_id must be an integer"}), 400
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id) / run_id
+    _pipeline_root = _PIPELINE_ROOT
+
+    # Resolve paths: use body overrides or default to evidence locations
+    scenarios_path_raw = body.get("scenarios_path")
+    runner_output_path_raw = body.get("runner_output_path")
+    oracle_contracts_dir_raw = body.get("oracle_contracts_dir")
+
+    from pathlib import Path as _Path  # noqa: PLC0415
+    scenarios_path = _Path(scenarios_path_raw) if scenarios_path_raw else evidence_dir / "scenarios.json"
+    runner_output_path = _Path(runner_output_path_raw) if runner_output_path_raw else evidence_dir / "runner_output.json"
+    oracle_contracts_dir = _Path(oracle_contracts_dir_raw) if oracle_contracts_dir_raw else evidence_dir / "oracle_contracts"
+    fixtures_path = _pipeline_root / "fixtures" / "catalog_fixtures.yml"
+
+    try:
+        result = oracle_evaluate(
+            scenarios_path=scenarios_path if scenarios_path.exists() else None,
+            runner_output_path=runner_output_path if runner_output_path.exists() else None,
+            oracle_contracts_dir=oracle_contracts_dir if oracle_contracts_dir.is_dir() else None,
+            exec_logger=None,
+            evidence_dir=evidence_dir,
+            run_id=run_id,
+            ticket_id=ticket_id,
+            fixtures_path=fixtures_path if fixtures_path.exists() else None,
+        )
+        return jsonify({"ok": True, "result": result.to_dict()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "oracle_evaluation_error",
+                        "message": str(exc)}), 500
+
+
+@bp.get("/oracle-result/weak-assertions")
+def get_weak_assertions():
+    """
+    GET /api/qa-uat/oracle-result/weak-assertions?run_id=&ticket_id=
+
+    Return the weak_assertion_report.json for a run.
+
+    Query params:
+      run_id     (required)
+      ticket_id  (required)
+
+    Response:
+      { "ok": true, "report": { ... WeakAssertionReport ... } }
+    """
+    _ensure_pipeline_on_path()
+
+    run_id = request.args.get("run_id", "").strip()
+    ticket_id_raw = request.args.get("ticket_id", "").strip()
+
+    if not run_id or not ticket_id_raw:
+        return jsonify({"ok": False, "error": "missing_params",
+                        "message": "run_id and ticket_id are required"}), 400
+
+    try:
+        ticket_id = int(ticket_id_raw)
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_ticket_id",
+                        "message": "ticket_id must be an integer"}), 400
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id) / run_id
+    artifact_path = evidence_dir / "weak_assertion_report.json"
+
+    if not artifact_path.is_file():
+        return jsonify({"ok": True, "report": None,
+                        "message": "no_report_available"})
+
+    try:
+        import json as _json
+        report = _json.loads(artifact_path.read_text(encoding="utf-8"))
+        return jsonify({"ok": True, "report": report})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "read_error",
+                        "message": str(exc)}), 500
+
+
+# ── Sprint 14: Test Confidence + Data Lineage ─────────────────────────────────
+
+
+@bp.get("/confidence-report")
+def get_confidence_report():
+    """
+    GET /api/qa-uat/confidence-report?run_id=&ticket_id=
+
+    Return the confidence_report.json for a run.
+
+    Query params:
+      run_id     (required)
+      ticket_id  (required)
+
+    Response:
+      { "ok": true, "report": { ... ConfidenceScorerResult ... } }
+    """
+    _ensure_pipeline_on_path()
+
+    run_id = request.args.get("run_id", "").strip()
+    ticket_id_raw = request.args.get("ticket_id", "").strip()
+
+    if not run_id or not ticket_id_raw:
+        return jsonify({"ok": False, "error": "missing_params",
+                        "message": "run_id and ticket_id are required"}), 400
+
+    try:
+        ticket_id = int(ticket_id_raw)
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_ticket_id",
+                        "message": "ticket_id must be an integer"}), 400
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id) / run_id
+    artifact_path = evidence_dir / "confidence_report.json"
+
+    if not artifact_path.is_file():
+        return jsonify({"ok": True, "report": None, "message": "no_report_available"})
+
+    try:
+        import json as _json
+        report = _json.loads(artifact_path.read_text(encoding="utf-8"))
+        return jsonify({"ok": True, "report": report})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "read_error",
+                        "message": str(exc)}), 500
+
+
+@bp.post("/confidence-report/score")
+def trigger_confidence_score():
+    """
+    POST /api/qa-uat/confidence-report/score
+
+    Trigger on-demand confidence scoring for a run.
+
+    Body:
+      {
+          "run_id": "120",
+          "ticket_id": 120,
+          "min_confidence": 60,            -- optional, default 60
+          "deployment_matched": null        -- optional bool
+      }
+
+    Response:
+      { "ok": true, "result": { ... ConfidenceScorerResult ... } }
+    """
+    _ensure_pipeline_on_path()
+
+    try:
+        from test_confidence_scorer import score_all as confidence_score_all  # type: ignore[import]
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": "import_error",
+                        "message": f"test_confidence_scorer not available: {exc}"}), 503
+
+    body = request.get_json(silent=True) or {}
+    run_id = str(body.get("run_id", "")).strip()
+    ticket_id_raw = body.get("ticket_id")
+
+    if not run_id:
+        return jsonify({"ok": False, "error": "missing_run_id",
+                        "message": "run_id is required"}), 400
+    if ticket_id_raw is None:
+        return jsonify({"ok": False, "error": "missing_ticket_id",
+                        "message": "ticket_id is required"}), 400
+
+    try:
+        ticket_id = int(ticket_id_raw)
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "invalid_ticket_id",
+                        "message": "ticket_id must be an integer"}), 400
+
+    min_confidence = int(body.get("min_confidence", 60))
+    deployment_matched = body.get("deployment_matched")  # None | True | False
+    if deployment_matched is not None:
+        deployment_matched = bool(deployment_matched)
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id) / run_id
+    scenarios_file = evidence_dir / "scenarios.json"
+
+    scenarios: list = []
+    if scenarios_file.is_file():
+        try:
+            import json as _json
+            raw = _json.loads(scenarios_file.read_text(encoding="utf-8"))
+            scenarios = raw.get("scenarios", []) if isinstance(raw, dict) else raw
+        except Exception:
+            pass
+
+    try:
+        result = confidence_score_all(
+            scenarios=scenarios,
+            evidence_dir=evidence_dir,
+            run_id=run_id,
+            ticket_id=ticket_id,
+            deployment_matched=deployment_matched,
+            min_confidence=min_confidence,
+        )
+        return jsonify({"ok": True, "result": result.to_dict()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "scoring_error",
+                        "message": str(exc)}), 500
+
+
+@bp.get("/data-lineage")
+def get_data_lineage():
+    """
+    GET /api/qa-uat/data-lineage?run_id=&ticket_id=
+
+    Return the data_lineage.json artifact for a run.
+
+    Query params:
+      run_id     (required)
+      ticket_id  (required)
+
+    Response:
+      { "ok": true, "lineage": { ... DataLineageResult ... } }
+    """
+    _ensure_pipeline_on_path()
+
+    run_id = request.args.get("run_id", "").strip()
+    ticket_id_raw = request.args.get("ticket_id", "").strip()
+
+    if not run_id or not ticket_id_raw:
+        return jsonify({"ok": False, "error": "missing_params",
+                        "message": "run_id and ticket_id are required"}), 400
+
+    try:
+        ticket_id = int(ticket_id_raw)
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_ticket_id",
+                        "message": "ticket_id must be an integer"}), 400
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id) / run_id
+    artifact_path = evidence_dir / "data_lineage.json"
+
+    if not artifact_path.is_file():
+        return jsonify({"ok": True, "lineage": None, "message": "no_lineage_available"})
+
+    try:
+        import json as _json
+        lineage = _json.loads(artifact_path.read_text(encoding="utf-8"))
+        return jsonify({"ok": True, "lineage": lineage})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "read_error",
+                        "message": str(exc)}), 500
+
+
+@bp.post("/data-lineage/build")
+def trigger_data_lineage_build():
+    """
+    POST /api/qa-uat/data-lineage/build
+
+    Trigger on-demand data lineage build for a run.
+
+    Body:
+      { "run_id": "120", "ticket_id": 120 }
+
+    Response:
+      { "ok": true, "result": { ... DataLineageResult ... } }
+    """
+    _ensure_pipeline_on_path()
+
+    try:
+        from data_lineage_builder import build as lineage_build  # type: ignore[import]
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": "import_error",
+                        "message": f"data_lineage_builder not available: {exc}"}), 503
+
+    body = request.get_json(silent=True) or {}
+    run_id = str(body.get("run_id", "")).strip()
+    ticket_id_raw = body.get("ticket_id")
+
+    if not run_id:
+        return jsonify({"ok": False, "error": "missing_run_id",
+                        "message": "run_id is required"}), 400
+    if ticket_id_raw is None:
+        return jsonify({"ok": False, "error": "missing_ticket_id",
+                        "message": "ticket_id is required"}), 400
+
+    try:
+        ticket_id = int(ticket_id_raw)
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "invalid_ticket_id",
+                        "message": "ticket_id must be an integer"}), 400
+
+    evidence_dir = _PIPELINE_ROOT / "evidence" / str(ticket_id) / run_id
+
+    try:
+        result = lineage_build(
+            evidence_dir=evidence_dir,
+            run_id=run_id,
+            ticket_id=ticket_id,
+        )
+        return jsonify({"ok": True, "result": result.to_dict()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "lineage_build_error",
                         "message": str(exc)}), 500

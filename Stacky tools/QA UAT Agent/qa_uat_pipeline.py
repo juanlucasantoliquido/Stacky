@@ -1931,6 +1931,382 @@ def _run_pipeline_stages(
             logger.warning("data_readiness_v2 failed (non-fatal): %s", _drv2_exc)
             stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_drv2_exc}"}
 
+    # ── Stage S9-broker: data_resolution_broker (Sprint 9) ──────────────────
+    # If data_readiness_v2 found blocking missing requirements, invoke the
+    # Data Resolution Broker to create structured decision requests for the
+    # human operator.  This stage is always non-blocking (the pipeline
+    # continues after creating the requests).  If QA_UAT_BLOCK_ON_MISSING_DATA_CONTRACT
+    # is true and there are pending requests, the pipeline emits BLOCKED.
+    stage = "data_resolution_broker"
+    _drv2_stage_result = stages.get("data_readiness_v2", {})
+    _drv2_blocking_count = _drv2_stage_result.get("blocking_missing_count", 0)
+    if stage in skip_stages or _drv2_blocking_count == 0:
+        stages[stage] = {"ok": True, "skipped": True,
+                         "reason": "no_blocking_missing_requirements"}
+    else:
+        try:
+            from data_resolution_broker import run as _broker_run
+            _t0_broker = _exec_log_stage_start(exec_log, stage)
+            _broker_results = []
+            _drv2_results_for_broker = _drv2_stage_result.get("results", [])
+            for _drv2_r in _drv2_results_for_broker:
+                if _drv2_r.get("blocking_missing_count", 0) == 0:
+                    continue
+                _broker_res = _broker_run(
+                    readiness_result=_drv2_r,
+                    run_id=str(ticket_id),
+                    exec_logger=exec_log,
+                    evidence_dir=evidence_dir,
+                )
+                _broker_results.append({
+                    "scenario_id": _broker_res.scenario_id,
+                    "pending_request_ids": _broker_res.pending_request_ids,
+                    "decisions_count": len(_broker_res.decisions),
+                    "artifact_path": _broker_res.artifact_path,
+                })
+            stages[stage] = {
+                "ok": True,
+                "skipped": False,
+                "scenarios_with_requests": len(_broker_results),
+                "total_requests": sum(
+                    len(r["pending_request_ids"]) for r in _broker_results
+                ),
+                "results": _broker_results,
+            }
+            _exec_log_stage_end(exec_log, stage, _t0_broker, ok=True, summary=stages[stage])
+            logger.info(
+                "Sprint 9: data_resolution_broker created %d pending request(s)",
+                stages[stage]["total_requests"],
+            )
+            # If blocking and policy demands it, emit BLOCKED
+            if _block_on_missing_contract and stages[stage]["total_requests"] > 0:
+                _broker_fail = {
+                    "ok": False,
+                    "verdict": "BLOCKED",
+                    "category": "DATA",
+                    "reason": "USER_DATA_REQUIRED",
+                    "error": "user_data_required",
+                    "failed_stage": stage,
+                    "message": (
+                        f"Sprint 9: {stages[stage]['total_requests']} data request(s) created. "
+                        "Operator must resolve before pipeline can continue."
+                    ),
+                    "human_action_required": (
+                        "Review data_resolution_request_*.json in evidence directory. "
+                        "Resolve each pending request via the UI or "
+                        "POST /api/qa-uat/data-request/<request_id>/resolve"
+                    ),
+                    "data_resolution_results": _broker_results,
+                }
+                if exec_log is not None:
+                    try:
+                        exec_log.pipeline_verdict(
+                            verdict="BLOCKED",
+                            category="DATA",
+                            reason="USER_DATA_REQUIRED",
+                            failed_stage=stage,
+                            confidence=1.0,
+                            evidence_refs=["data_resolution_broker"],
+                            human_action_required=_broker_fail["human_action_required"],
+                        )
+                        exec_log.session_end(_broker_fail)
+                        exec_log.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                return _build_output(ticket_id, stages, _broker_fail, started)
+        except ImportError:
+            logger.debug("data_resolution_broker unavailable — skipping Sprint 9 stage")
+            stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+        except Exception as _broker_exc:  # noqa: BLE001
+            logger.warning("data_resolution_broker failed (non-fatal): %s", _broker_exc)
+            stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_broker_exc}"}
+
+    # ── Stage S10-seed-proposal: sql_seed_generator (Sprint 10) ─────────────
+    # If the broker produced decisions that chose 'generate_sql_seed', invoke
+    # sql_seed_generator + sql_safety_validator.
+    #
+    # Behaviour:
+    #   - If safety FAILS → BLOCKED SEC SQL_SEED_SAFETY_FAILED.
+    #   - If safety PASSES → emit sql_seed_proposal_generated and pause pipeline
+    #     with SQL_SEED_APPROVAL_REQUIRED (blocking if opt-in, else warn only).
+    #   - If no broker results chose generate_sql_seed → skip.
+    stage = "sql_seed_proposal"
+    _broker_stage = stages.get("data_resolution_broker", {})
+    _broker_skipped = _broker_stage.get("skipped", True)
+    # Check whether any decision chose generate_sql_seed
+    _has_seed_decisions = False
+    if not _broker_skipped:
+        for _br in _broker_stage.get("results", []):
+            if _br.get("decisions_count", 0) > 0:
+                _has_seed_decisions = True
+                break
+
+    if stage in skip_stages or not _has_seed_decisions or not _data_contracts:
+        stages[stage] = {"ok": True, "skipped": True,
+                         "reason": "no_seed_decisions"}
+    else:
+        try:
+            from sql_seed_generator import generate as _seed_generate
+            _t0_seed = _exec_log_stage_start(exec_log, stage)
+            _seed_results = []
+            _seed_safety_failed = False
+            for _dc in _data_contracts:
+                if not _dc.requirements:
+                    continue
+                _seed_res = _seed_generate(
+                    data_contract=_dc,
+                    exec_logger=exec_log,
+                    evidence_dir=evidence_dir,
+                    run_id=str(ticket_id),
+                )
+                _seed_results.append({
+                    "scenario_id": _seed_res.scenario_id,
+                    "verdict": _seed_res.verdict,
+                    "reason": _seed_res.reason,
+                    "script_path": _seed_res.script_path,
+                    "cleanup_path": _seed_res.cleanup_path,
+                    "script_sha256": _seed_res.script_sha256,
+                    "safety_safe": (
+                        (_seed_res.safety_result or {}).get("safe", True)
+                    ),
+                })
+                if _seed_res.verdict == "BLOCKED" and _seed_res.reason == "SQL_SEED_SAFETY_FAILED":
+                    _seed_safety_failed = True
+                    break
+
+            stages[stage] = {
+                "ok": not _seed_safety_failed,
+                "skipped": False,
+                "seed_results": _seed_results,
+            }
+            _exec_log_stage_end(exec_log, stage, _t0_seed, ok=not _seed_safety_failed,
+                                summary=stages[stage])
+
+            if _seed_safety_failed:
+                _seed_fail = {
+                    "ok": False,
+                    "verdict": "BLOCKED",
+                    "category": "SEC",
+                    "reason": "SQL_SEED_SAFETY_FAILED",
+                    "error": "sql_seed_safety_failed",
+                    "failed_stage": stage,
+                    "message": "SQL seed proposal failed safety validation. Review blocking_findings.",
+                    "human_action_required": "Review sql_seed_safety_result events in execution.jsonl.",
+                    "seed_results": _seed_results,
+                }
+                if exec_log is not None:
+                    try:
+                        exec_log.pipeline_verdict(
+                            verdict="BLOCKED",
+                            category="SEC",
+                            reason="SQL_SEED_SAFETY_FAILED",
+                            failed_stage=stage,
+                            confidence=1.0,
+                            evidence_refs=["sql_seed_safety_result"],
+                            human_action_required=_seed_fail["human_action_required"],
+                        )
+                        exec_log.session_end(_seed_fail)
+                        exec_log.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                return _build_output(ticket_id, stages, _seed_fail, started)
+
+            # Safety passed — pause and ask for approval
+            generated_count = sum(
+                1 for r in _seed_results if r["verdict"] == "GENERATED"
+            )
+            if generated_count > 0:
+                logger.info(
+                    "Sprint 10: sql_seed_proposal_generated for %d scenario(s). "
+                    "Awaiting human approval.",
+                    generated_count,
+                )
+                _exec_log_event(exec_log, "sql_seed_approval_required", {
+                    "generated_count": generated_count,
+                    "seed_results": _seed_results,
+                    "human_action": (
+                        "Review seed_proposal_*.sql in evidence directory. "
+                        "Un-comment COMMIT TRANSACTION and obtain human approval before executing. "
+                        "NEVER execute in production."
+                    ),
+                })
+                if _block_on_missing_contract:
+                    _approval_fail = {
+                        "ok": False,
+                        "verdict": "BLOCKED",
+                        "category": "DATA",
+                        "reason": "SQL_SEED_APPROVAL_REQUIRED",
+                        "error": "sql_seed_approval_required",
+                        "failed_stage": stage,
+                        "message": (
+                            f"Sprint 10: {generated_count} seed proposal(s) require human approval. "
+                            "Review seed_proposal_*.sql in evidence directory."
+                        ),
+                        "human_action_required": (
+                            "Review and approve seed scripts. "
+                            "Un-comment COMMIT TRANSACTION after approval."
+                        ),
+                        "seed_results": _seed_results,
+                    }
+                    if exec_log is not None:
+                        try:
+                            exec_log.pipeline_verdict(
+                                verdict="BLOCKED",
+                                category="DATA",
+                                reason="SQL_SEED_APPROVAL_REQUIRED",
+                                failed_stage=stage,
+                                confidence=1.0,
+                                evidence_refs=["sql_seed_proposal_generated"],
+                                human_action_required=_approval_fail["human_action_required"],
+                            )
+                            exec_log.session_end(_approval_fail)
+                            exec_log.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+                    return _build_output(ticket_id, stages, _approval_fail, started)
+        except ImportError:
+            logger.debug("sql_seed_generator unavailable — skipping Sprint 10 stage")
+            stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+        except Exception as _seed_exc:  # noqa: BLE001
+            logger.warning("sql_seed_proposal failed (non-fatal): %s", _seed_exc)
+            stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_seed_exc}"}
+
+    # ── Stage S12-catalog: catalog_readiness_checker (Sprint 12) ─────────────
+    # Check that catalog tables required by the scenario have enough rows before
+    # test generation begins. Empty catalogs cause silent NAV timeouts rather
+    # than explicit errors. This stage is non-blocking: empty catalogs produce
+    # a CATALOG_EMPTY event and a seed proposal, but do not stop the pipeline.
+    stage = "catalog_readiness"
+    try:
+        from catalog_readiness_checker import (  # type: ignore[import]
+            check_catalog_readiness,
+        )
+
+        # Infer required catalogs from compiler_result (from stage 3)
+        _required_catalogs: list[str] = []
+        if isinstance(compiler_result, dict):
+            for _sc in compiler_result.get("scenarios", []):
+                _required_catalogs.extend(_sc.get("required_catalogs", []))
+        elif hasattr(compiler_result, "scenarios"):
+            for _sc in compiler_result.scenarios:
+                _cats = getattr(_sc, "required_catalogs", [])
+                _required_catalogs.extend(_cats if _cats else [])
+
+        # Remove duplicates while preserving order
+        _seen: set[str] = set()
+        _unique_catalogs: list[str] = []
+        for _c in _required_catalogs:
+            if _c not in _seen:
+                _seen.add(_c)
+                _unique_catalogs.append(_c)
+
+        if not _unique_catalogs:
+            stages[stage] = {"ok": True, "skipped": True, "reason": "no_catalogs_required"}
+        else:
+            _fixtures_path = Path(__file__).parent / "fixtures" / "catalog_fixtures.yml"
+            _cat_result = check_catalog_readiness(
+                scenario_id=str(ticket_id),
+                required_catalogs=_unique_catalogs,
+                db_url=None,  # read-only; env var for write not used here
+                exec_logger=exec_log,
+                evidence_dir=evidence_dir,
+                run_id=str(ticket_id),
+                ticket_id=ticket_id,
+                fixtures_path=_fixtures_path,
+                dry_run=True,  # always dry-run in pipeline
+            )
+            stages[stage] = {
+                "ok": _cat_result.ok,
+                "skipped": False,
+                "total": _cat_result.total,
+                "ok_count": _cat_result.ok_count,
+                "empty_count": _cat_result.empty_count,
+                "unverified_count": _cat_result.unverified_count,
+                "blocking_empty_count": _cat_result.blocking_empty_count,
+                "seed_proposed_count": _cat_result.seed_proposed_count,
+            }
+            if not _cat_result.ok:
+                _exec_log_event(exec_log, "catalog_readiness_warning", {
+                    "blocking_empty_count": _cat_result.blocking_empty_count,
+                    "empty_catalogs": [
+                        r["catalog_name"] for r in _cat_result.to_dict()["catalog_results"]
+                        if r["status"] in ("EMPTY", "SEED_REQUIRED")
+                    ],
+                })
+    except ImportError:
+        logger.debug("catalog_readiness_checker unavailable — skipping Sprint 12 stage")
+        stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+    except Exception as _cat_exc:  # noqa: BLE001
+        logger.warning("catalog_readiness stage failed (non-fatal): %s", _cat_exc)
+        stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_cat_exc}"}
+
+    # ── Stage S11-cleanup: cleanup_manager (Sprint 11) ────────────────────────    # After a seed was applied (verdict=APPLIED via seed_executor), check if
+    # cleanup_policy=after_run so we auto-clean seeded rows before the run ends.
+    # This stage is non-blocking: if cleanup fails, it is logged but does not
+    # fail the whole pipeline — evidence is written regardless.
+    stage = "seed_cleanup"
+    try:
+        from cleanup_manager import cleanup as _cleanup, check_cleanup_policy  # type: ignore[import]
+
+        # Find all seed_execution_result artifacts in this run
+        _cleanup_count = 0
+        _cleanup_results = []
+        _run_dir = evidence_dir / str(ticket_id)
+        for _exec_artifact in sorted(_run_dir.glob("seed_execution_result_*.json")) if _run_dir.is_dir() else []:
+            try:
+                import json as _json
+                _exec_data = _json.loads(_exec_artifact.read_text(encoding="utf-8"))
+                _scenario_id_c = _exec_data.get("scenario_id", "unknown")
+                _seed_run_id_c = _exec_data.get("seed_run_id", "")
+                _script_path_c = _exec_data.get("script_path") or ""
+                # Only auto-cleanup if seed was actually APPLIED
+                if _exec_data.get("verdict") != "APPLIED":
+                    continue
+                # Determine cleanup policy from config
+                _cleanup_policy_c = "after_run"  # default from policy
+                _cleanup_script_path_c = str(_exec_artifact).replace(
+                    "seed_execution_result_", "cleanup_proposal_"
+                ).replace(".json", ".sql")
+                if not __import__("os").path.exists(_cleanup_script_path_c):
+                    logger.debug("S11-cleanup: no cleanup script for %s — skipping", _scenario_id_c)
+                    continue
+                if not check_cleanup_policy(_cleanup_policy_c):
+                    logger.info("S11-cleanup: policy=%s skips auto-cleanup for %s", _cleanup_policy_c, _scenario_id_c)
+                    continue
+                _cr = _cleanup(
+                    cleanup_script_path=_cleanup_script_path_c,
+                    seed_run_id=_seed_run_id_c,
+                    scenario_id=_scenario_id_c,
+                    run_id=str(ticket_id),
+                    ticket_id=ticket_id,
+                    cleanup_policy=_cleanup_policy_c,
+                    exec_logger=exec_log,
+                    evidence_dir=evidence_dir,
+                    dry_run=True,  # always dry_run in pipeline; real cleanup triggered by operator
+                )
+                _cleanup_results.append(_cr.to_dict())
+                _cleanup_count += 1
+            except Exception as _ce:
+                logger.warning("S11-cleanup: error processing %s: %s", _exec_artifact.name, _ce)
+
+        stages[stage] = {
+            "ok": True,
+            "skipped": _cleanup_count == 0,
+            "reason": "no_applied_seeds" if _cleanup_count == 0 else None,
+            "cleanup_count": _cleanup_count,
+        }
+        if _cleanup_count > 0:
+            _exec_log_event(exec_log, "seed_cleanup_summary", {
+                "cleanup_count": _cleanup_count,
+                "results": _cleanup_results,
+            })
+    except ImportError:
+        logger.debug("cleanup_manager unavailable — skipping Sprint 11 stage")
+        stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+    except Exception as _cleanup_exc:  # noqa: BLE001
+        logger.warning("seed_cleanup stage failed (non-fatal): %s", _cleanup_exc)
+        stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_cleanup_exc}"}
+
     # ── Stage 4: generator ───────────────────────────────────────────────────
     stage = "generator"
     tests_dir = evidence_dir / "tests"
@@ -2130,6 +2506,72 @@ def _run_pipeline_stages(
         logger.debug("test_prioritizer module unavailable — skipping Sprint 8 prioritization")
     except Exception as _prio_exc:  # noqa: BLE001
         logger.warning("test_prioritizer failed (non-fatal): %s", _prio_exc)
+
+    # ── Stage S13-oracle: oracle_engine + weak_assertion_detector (Sprint 13) ─
+    # Evaluate oracle contracts and detect weak assertions in generated spec files.
+    # Non-blocking: weak assertions lower confidence but do not stop the pipeline.
+    # P0 scenarios without any oracle set human_action_required flag.
+    stage = "oracle_evaluation"
+    try:
+        from oracle_engine import evaluate as _oracle_evaluate  # type: ignore[import]
+        from weak_assertion_detector import detect as _weak_detect  # type: ignore[import]
+
+        _scenarios_path_o = evidence_dir / "scenarios.json"
+        _runner_output_path_o = evidence_dir / "runner_output.json"
+        _oracle_contracts_dir_o = evidence_dir / "oracle_contracts"
+        _fixtures_path_o = Path(__file__).parent / "fixtures" / "catalog_fixtures.yml"
+
+        # Collect generated spec files for weak assertion analysis
+        _spec_files_o = sorted(tests_dir.glob("**/*.spec.ts")) if tests_dir.is_dir() else []
+        _spec_files_o += sorted(tests_dir.glob("**/*.spec.js")) if tests_dir.is_dir() else []
+
+        _oracle_result = _oracle_evaluate(
+            scenarios_path=_scenarios_path_o if _scenarios_path_o.exists() else None,
+            runner_output_path=_runner_output_path_o if _runner_output_path_o.exists() else None,
+            oracle_contracts_dir=_oracle_contracts_dir_o if _oracle_contracts_dir_o.is_dir() else None,
+            exec_logger=exec_log,
+            evidence_dir=evidence_dir,
+            run_id=str(ticket_id),
+            ticket_id=ticket_id,
+            fixtures_path=_fixtures_path_o if _fixtures_path_o.exists() else None,
+        )
+
+        _weak_report = _weak_detect(
+            spec_files=_spec_files_o,
+            exec_logger=exec_log,
+            evidence_dir=evidence_dir,
+            run_id=str(ticket_id),
+            ticket_id=ticket_id,
+            block_on_no_strong=False,  # non-blocking in pipeline — emit warning only
+        )
+
+        stages[stage] = {
+            "ok": True,
+            "skipped": False,
+            "oracle_publish_blocked": _oracle_result.publish_blocked,
+            "p0_blocked_count": _oracle_result.p0_blocked_count,
+            "no_oracle_count": _oracle_result.no_oracle_count,
+            "weak_only_count": _oracle_result.weak_only_count,
+            "oracle_fail_count": _oracle_result.fail_count,
+            "weak_files": _weak_report.files_analyzed,
+            "weak_tests": _weak_report.weak_tests,
+            "no_assertion_tests": _weak_report.no_assertion_tests,
+            "strong_tests": _weak_report.strong_tests,
+        }
+
+        if _oracle_result.publish_blocked:
+            _exec_log_event(exec_log, "oracle_weak_warning", {
+                "p0_blocked_count": _oracle_result.p0_blocked_count,
+                "no_oracle_count": _oracle_result.no_oracle_count,
+                "human_action_required": True,
+            })
+
+    except ImportError:
+        logger.debug("oracle_engine or weak_assertion_detector unavailable — skipping Sprint 13 stage")
+        stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+    except Exception as _oracle_exc:  # noqa: BLE001
+        logger.warning("oracle_evaluation stage failed (non-fatal): %s", _oracle_exc)
+        stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_oracle_exc}"}
 
     # ── Stage 5: runner ──────────────────────────────────────────────────────
     stage = "runner"
@@ -2398,6 +2840,76 @@ def _run_pipeline_stages(
             stages[stage] = {"ok": True, "skipped": True, "reason": f"annotator_error: {exc}"}
     else:
         stages[stage] = {"ok": True, "skipped": True}
+
+    # ── Stage S14-confidence: test_confidence_scorer + data_lineage_builder (Sprint 14) ──
+    # Score each scenario based on evidence quality (oracle, seed, cleanup, assertions, etc.).
+    # Non-blocking by default: low confidence emits a warning and sets human_action_required
+    # but does not stop the pipeline. Gate is enforced at publish time.
+    # Also builds data_lineage.json tracing all test data back to its origin.
+    stage = "test_confidence"
+    try:
+        from test_confidence_scorer import score_all as _score_all  # type: ignore[import]
+        from data_lineage_builder import build as _lineage_build      # type: ignore[import]
+
+        # Load scenarios list
+        _scenarios_conf: list[dict] = []
+        _scenarios_file_conf = evidence_dir / "scenarios.json"
+        if _scenarios_file_conf.is_file():
+            try:
+                _sc_raw = json.loads(_scenarios_file_conf.read_text(encoding="utf-8"))
+                _scenarios_conf = _sc_raw.get("scenarios", []) if isinstance(_sc_raw, dict) else _sc_raw
+            except Exception:
+                pass
+
+        # Deployment fingerprint result from earlier stage
+        _fingerprint_matched: bool | None = None
+        _fp_stage = stages.get("deployment_fingerprint_check", {})
+        if not _fp_stage.get("skipped"):
+            _fingerprint_matched = _fp_stage.get("matched")
+
+        _conf_result = _score_all(
+            scenarios=_scenarios_conf,
+            evidence_dir=evidence_dir,
+            run_id=str(ticket_id),
+            ticket_id=ticket_id,
+            deployment_matched=_fingerprint_matched,
+            min_confidence=60,  # configurable gate threshold
+            exec_logger=exec_log,
+        )
+
+        _lineage_result = _lineage_build(
+            evidence_dir=evidence_dir,
+            run_id=str(ticket_id),
+            ticket_id=ticket_id,
+            exec_logger=exec_log,
+        )
+
+        stages[stage] = {
+            "ok": True,           # non-blocking in pipeline; gate at publish
+            "skipped": False,
+            "total_scenarios": _conf_result.total_scenarios,
+            "high_count": _conf_result.high_count,
+            "medium_count": _conf_result.medium_count,
+            "low_count": _conf_result.low_count,
+            "blocked_count": _conf_result.blocked_count,
+            "publish_blocked": _conf_result.publish_blocked,
+            "lineage_entries": _lineage_result.total_entries,
+            "lineage_seeded": _lineage_result.seeded_count,
+        }
+
+        if _conf_result.publish_blocked:
+            _exec_log_event(exec_log, "confidence_gate_warning", {
+                "blocked_count": _conf_result.blocked_count,
+                "min_confidence": _conf_result.min_confidence,
+                "human_action_required": True,
+            })
+
+    except ImportError:
+        logger.debug("test_confidence_scorer or data_lineage_builder unavailable — skipping Sprint 14 stage")
+        stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+    except Exception as _conf_exc:  # noqa: BLE001
+        logger.warning("test_confidence stage failed (non-fatal): %s", _conf_exc)
+        stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_conf_exc}"}
 
     # ── Stage 6: evaluator ───────────────────────────────────────────────────
     stage = "evaluator"

@@ -446,12 +446,49 @@ class ExecutionLogger:
     def info(self, message: str, **extra: Any) -> None:
         self._write("info", {"message": message, **{k: str(v) for k, v in extra.items()}})
 
-    def pipeline_verdict(self, verdict: str, category: str, reason: str, **extra: Any) -> None:
-        """Emit a pipeline_verdict_decision event before the final return."""
+    def pipeline_verdict(
+        self,
+        verdict: str,
+        category: str,
+        reason: str,
+        failed_stage: Optional[str] = None,
+        confidence: float = 1.0,
+        evidence_refs: Optional[list] = None,
+        human_action_required: Optional[str] = None,
+        **extra: Any,
+    ) -> None:
+        """Emit a pipeline_verdict_decision event before the final return.
+
+        This event is the canonical record of the pipeline's final decision.
+        It must be emitted before session_end on EVERY exit path — pass, fail,
+        or blocked — so that execution.jsonl is always complete (roadmap Cambio 1.3).
+
+        Parameters
+        ----------
+        verdict : str
+            PASS | FAIL | BLOCKED | MIXED
+        category : str
+            APP | ENV | DATA | PIP | GEN | NAV | OBS | SEC | OPS
+            (UNKNOWN is prohibited — signals a tool bug)
+        reason : str
+            Machine-readable reason code (e.g. NO_EXECUTABLE_SCENARIOS)
+        failed_stage : str | None
+            Pipeline stage where the decision was made, or None for PASS.
+        confidence : float
+            0.0-1.0 confidence in the verdict classification.
+        evidence_refs : list[str] | None
+            Names of event types that corroborate this verdict.
+        human_action_required : str | None
+            Free-text action the operator should take after this verdict.
+        """
         self._write("pipeline_verdict_decision", {
             "verdict": verdict,
             "category": category,
             "reason": reason,
+            "failed_stage": failed_stage,
+            "confidence": round(confidence, 4),
+            "evidence_refs": evidence_refs or [],
+            "human_action_required": human_action_required,
             **extra,
         })
 

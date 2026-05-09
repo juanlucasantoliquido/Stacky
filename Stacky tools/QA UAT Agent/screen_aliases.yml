@@ -1,0 +1,80 @@
+# screen_aliases.yml — Keyword aliases for screen detection (roadmap Cambio 1.4).
+#
+# Used by screen_detector.py to match Spanish/informal ticket text to canonical
+# Agenda Web screen filenames when the exact filename is not mentioned.
+#
+# Format:
+#   FrmScreenName.aspx:
+#     aliases:
+#       - spanish phrase or keyword (lowercase)
+#
+# Confidence assigned for alias matches: 0.60 (lower than exact match at 0.70-1.0).
+# All aliases are matched case-insensitively and as substrings.
+#
+# MAINTENANCE: add aliases when a new ticket misidentifies a screen due to informal
+# language. Never remove an alias without a reason — silent fallbacks cause false runs.
+
+FrmDetalleClie.aspx:
+  aliases:
+    - detalle cliente
+    - detalle de cliente
+    - vista relaciones
+    - mantenedor de domicilios
+    - domicilio cliente
+    - provincia departamento
+    - ficha cliente
+    - datos del cliente
+    - perfil cliente
+    - detalle del cliente
+    - mantenedordireccion
+    - direcciones del cliente
+
+FrmAgenda.aspx:
+  aliases:
+    - agenda principal
+    - agenda de cobro
+    - grilla de lotes
+    - listado de lotes
+    - pantalla de agenda
+    - agenda de gestión
+
+FrmDetalleLote.aspx:
+  aliases:
+    - detalle lote
+    - detalle del lote
+    - información del lote
+    - ficha lote
+
+FrmGestion.aspx:
+  aliases:
+    - gestión
+    - pantalla de gestión
+    - registrar gestión
+    - nueva gestión
+
+FrmBusqueda.aspx:
+  aliases:
+    - búsqueda
+    - busqueda de clientes
+    - buscar cliente
+    - buscador
+
+FrmAdministrador.aspx:
+  aliases:
+    - administrador
+    - panel de administración
+    - panel admin
+    - admin
+
+FrmParametros.aspx:
+  aliases:
+    - parámetros
+    - parametros del sistema
+    - configuración del sistema
+
+FrmReportes.aspx:
+  aliases:
+    - reportes
+    - generar reporte
+    - informe
+    - reporte operativo

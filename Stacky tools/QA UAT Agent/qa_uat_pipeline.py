@@ -304,16 +304,25 @@ def run(
     ado_path = ado_path or _DEFAULT_ADO_PATH
     evidence_dir = _TOOL_ROOT / "evidence" / str(ticket_id)
 
-    # ── Execution logger — FASE1/OBS: init BEFORE preflight/smoke so that
-    # ──   any early BLOCKED exit still produces execution.jsonl. ────────────
-    _exec_log = _init_exec_log(str(ticket_id), evidence_dir)
+    # ── Execution logger — P0/OBS: init BEFORE preflight/smoke so that
+    # ──   any early BLOCKED exit still produces execution.jsonl (roadmap Cambio 1.1).
+    _run_id = str(ticket_id)
+    _exec_log = _init_exec_log(_run_id, evidence_dir)
     if _exec_log is not None:
+        import datetime as _dt
         _exec_log.session_start({
-            "ticket_id": ticket_id, "mode": mode, "headed": headed,
-            "timeout_ms": timeout_ms, "skip_to": skip_to,
-            "replan": replan, "verbose": verbose,
+            "event": "session_start",
+            "run_id": _run_id,
+            "ticket_id": ticket_id,
+            "mode": mode,
+            "tool": "qa_uat_agent",
             "tool_version": _TOOL_VERSION,
-            "event": "pipeline_invocation_start",
+            "started_at": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            "headed": headed,
+            "timeout_ms": timeout_ms,
+            "skip_to": skip_to,
+            "replan": replan,
+            "verbose": verbose,
         })
 
     # ── Preflight: verify AgendaWeb is up before doing anything costly ───────
@@ -342,6 +351,16 @@ def run(
             }
             if _exec_log is not None:
                 try:
+                    # P0/OBS — emit pipeline_verdict_decision before session_end (roadmap Cambio 1.3)
+                    _exec_log.pipeline_verdict(
+                        verdict="BLOCKED",
+                        category="ENV",
+                        reason=preflight.reason,
+                        failed_stage="environment_preflight",
+                        confidence=1.0,
+                        evidence_refs=["environment_preflight_result"],
+                        human_action_required="Check application server and environment configuration",
+                    )
                     _exec_log.session_end(_pf_result)
                     _exec_log.close()
                 except Exception:  # noqa: BLE001
@@ -379,6 +398,16 @@ def run(
             }
             if _exec_log is not None:
                 try:
+                    # P0/OBS — emit pipeline_verdict_decision before session_end (roadmap Cambio 1.3)
+                    _exec_log.pipeline_verdict(
+                        verdict="BLOCKED",
+                        category="ENV",
+                        reason=_smoke.get("reason", "SMOKE_BLOCKED"),
+                        failed_stage="smoke_path",
+                        confidence=1.0,
+                        evidence_refs=["smoke_path_result"],
+                        human_action_required="Check smoke path configuration and application availability",
+                    )
                     _exec_log.session_end(_smoke_result)
                     _exec_log.close()
                 except Exception:  # noqa: BLE001
@@ -508,19 +537,35 @@ def _run_dossier_and_publisher(
     if not publisher_result.get("ok"):
         return _build_output(ticket_id, stages, publisher_result, started)
 
-    verdict = dossier_result.get("verdict", "UNKNOWN")
-    # FASE2/OBS: emit pipeline_verdict_decision before returning success
-    _exec_log_event(
-        _get_active_exec_logger(),
-        "pipeline_verdict_decision",
-        {"verdict": verdict, "category": "APP" if verdict in ("FAIL", "PASS", "MIXED") else "PIP",
-         "reason": verdict},
-    )
+    # P0/OBS — verdict must NEVER be UNKNOWN in new runs (roadmap Cambio 1.2 + 1.3).
+    # If dossier does not emit a verdict, default to PASS when ok=True (all tests ran).
+    verdict = dossier_result.get("verdict") or "PASS"
+    category = "APP" if verdict in ("FAIL", "PASS", "MIXED") else "PIP"
+    reason = verdict  # dossier verdict string is self-describing on success path
+
+    # P0/OBS: emit complete pipeline_verdict_decision event before returning (roadmap Cambio 1.3)
+    _active_log = _get_active_exec_logger()
+    if _active_log is not None:
+        try:
+            _active_log.pipeline_verdict(
+                verdict=verdict,
+                category=category,
+                reason=reason,
+                failed_stage=None,
+                confidence=1.0,
+                evidence_refs=["runner_summary", "evaluator_summary", "dossier"],
+                human_action_required=(
+                    "review_dossier_and_decide" if verdict in ("FAIL", "MIXED") else None
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     return {
         "ok": True,
         "ticket_id": ticket_id,
         "verdict": verdict,
-        "category": "APP" if verdict in ("FAIL", "PASS", "MIXED") else "PIP",
+        "category": category,
         "stages": stages,
         "elapsed_s": round(time.time() - started, 2),
     }
@@ -978,22 +1023,86 @@ def _run_pipeline_stages(
         return None
 
     # ── Stage 2: ui_map ──────────────────────────────────────────────────────
+    # P0/PIP — use screen_detector.py for auditable, blocking-aware detection
+    # (roadmap Cambio 1.4). Falls back to legacy _extract_screens() if module
+    # unavailable so the pipeline degrades gracefully.
     stage = "ui_map"
-    screens = _extract_screens(ticket_result)
-    # FASE2/OBS: emit screen_detection_result for forensic traceability
-    _exec_log_event(exec_log, "screen_detection_result", {
-        "ticket_id": ticket_id,
-        "sources_scanned": ["navigation_path", "plan_pruebas", "analisis_tecnico", "description_md"],
-        "selected_screens": screens,
-        "fallback_used": screens == ["FrmAgenda.aspx"] and not any(
-            "FrmAgenda.aspx" in str(v)
-            for v in [
-                ticket_result.get("analisis_tecnico") or "",
-                str(ticket_result.get("plan_pruebas") or ""),
-            ]
-        ),
-        "supported_screens_version": "agenda_screens.py",
-    })
+    try:
+        from screen_detector import detect_screens as _detect_screens
+        _detection = _detect_screens(ticket_result)
+        screens = _detection.selected_screens
+        # P0/OBS: emit screen_detection_result with full structured evidence (roadmap Cambio 1.4)
+        _exec_log_event(exec_log, "screen_detection_result", {
+            "ticket_id": ticket_id,
+            **_detection.to_dict(),
+            "sources_scanned": [
+                "navigation_path", "analisis_tecnico",
+                "plan_pruebas", "description", "screen_aliases.yml",
+            ],
+            "supported_screens_version": "screen_detector.py+screen_aliases.yml",
+        })
+        # Block pipeline if detector signals ambiguity or low confidence
+        if _detection.blocked:
+            _block_reason = _detection.block_reason or "SCREEN_DETECTION_FAILED"
+            _category = "PIP"
+            _human_action = (
+                "Clarify which screen the ticket targets and re-run, "
+                "or add aliases to screen_aliases.yml"
+            )
+            logger.warning(
+                "screen_detector BLOCKED: %s — screens=%s",
+                _block_reason, _detection.selected_screens,
+            )
+            _screen_blocked_result = {
+                "ok": False,
+                "verdict": "BLOCKED",
+                "category": _category,
+                "reason": _block_reason,
+                "failed_stage": "screen_detection",
+                "error": _block_reason.lower(),
+                "message": (
+                    f"Deteccion de pantalla bloqueada: {_block_reason}. "
+                    f"Pantallas candidatas: {_detection.selected_screens}. "
+                    f"Accion requerida: {_human_action}"
+                ),
+                "screen_detection": _detection.to_dict(),
+                "human_action_required": _human_action,
+            }
+            stages["screen_detection"] = {"ok": False, "skipped": False, **_screen_blocked_result}
+            if exec_log is not None:
+                try:
+                    exec_log.pipeline_verdict(
+                        verdict="BLOCKED",
+                        category=_category,
+                        reason=_block_reason,
+                        failed_stage="screen_detection",
+                        confidence=_detection.confidence,
+                        evidence_refs=["screen_detection_result"],
+                        human_action_required=_human_action,
+                    )
+                    exec_log.session_end(_screen_blocked_result)
+                    exec_log.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            return _build_output(ticket_id, stages, _screen_blocked_result, started)
+    except ImportError:
+        # Graceful degradation: screen_detector.py unavailable — use legacy function
+        logger.debug("screen_detector unavailable — using legacy _extract_screens()")
+        screens = _extract_screens(ticket_result)
+        _exec_log_event(exec_log, "screen_detection_result", {
+            "ticket_id": ticket_id,
+            "selected_screens": screens,
+            "fallback_used": screens == ["FrmAgenda.aspx"],
+            "ambiguous": False,
+            "blocked": False,
+            "sources_scanned": ["navigation_path", "plan_pruebas", "analisis_tecnico", "description_md"],
+            "supported_screens_version": "legacy:_extract_screens",
+        })
+
+    if not screens:
+        # screen_detector returned empty list without blocking — fall back defensively
+        screens = ["FrmAgenda.aspx"]
+
     if stage in skip_stages:
         stages[stage] = {"ok": True, "skipped": True, "screens": screens}
     else:
@@ -1683,7 +1792,7 @@ def _fail(stage: str, error: str, message: str) -> dict:
 
 
 def _build_output(ticket_id: int, stages: dict, failed_result: dict, started: float) -> dict:
-    # FASE1/PIP/OBS: always propagate verdict/category/reason/failed_stage so
+    # P0/PIP/OBS: always propagate verdict/category/reason/failed_stage so
     # session_end never has null verdict and log_analyzer never produces UNKNOWN.
     verdict  = failed_result.get("verdict", "BLOCKED")
     category = failed_result.get("category", "PIP")
@@ -1693,7 +1802,26 @@ def _build_output(ticket_id: int, stages: dict, failed_result: dict, started: fl
         or failed_result.get("stage")
         or "unknown"
     )
-    return {
+    human_action = failed_result.get("human_action_required")
+
+    # P0/OBS — emit pipeline_verdict_decision for every failed exit (roadmap Cambio 1.3).
+    # Uses get_active_logger() so callers don't need to thread the log object through.
+    _active_log = _get_active_exec_logger()
+    if _active_log is not None:
+        try:
+            _active_log.pipeline_verdict(
+                verdict=verdict,
+                category=category,
+                reason=reason,
+                failed_stage=failed_stage,
+                confidence=failed_result.get("confidence", 1.0),
+                evidence_refs=failed_result.get("evidence_refs", []),
+                human_action_required=human_action,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    output = {
         "ok": False,
         "ticket_id": ticket_id,
         "verdict": verdict,
@@ -1706,6 +1834,9 @@ def _build_output(ticket_id: int, stages: dict, failed_result: dict, started: fl
         "stages": stages,
         "elapsed_s": round(time.time() - started, 2),
     }
+    if human_action:
+        output["human_action_required"] = human_action
+    return output
 
 
 # ── Per-stage summaries ───────────────────────────────────────────────────────

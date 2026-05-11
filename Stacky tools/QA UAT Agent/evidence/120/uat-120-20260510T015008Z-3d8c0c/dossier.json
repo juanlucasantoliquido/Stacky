@@ -1,0 +1,45 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-05-10T01:51:53.325183+00:00",
+  "ticket_id": 120,
+  "run_id": "uat-120-20260510T015008Z-3d8c0c",
+  "verdict": "BLOCKED",
+  "category": "OPS",
+  "reason": "PIPELINE_CRASH",
+  "failed_stage": "pipeline",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'pipeline'. [OPS] PIPELINE_CRASH. [Errno 22] Invalid argument",
+  "human_action_required": "Investigate OPS/PIPELINE_CRASH and rerun pipeline",
+  "exec_summary": {
+    "session_started_at": "2026-05-10T01:50:08.293771Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 109
+  },
+  "artifacts": {
+    "compiler_contract_result_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\compiler_contract_result.json",
+    "effective_config_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\effective_config.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\execution.jsonl",
+    "generator_contract_result_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\generator_contract_result.json",
+    "navigation_contract_validation_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\navigation_contract_validation.json",
+    "result_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\result.json",
+    "scenarios_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\scenarios.json",
+    "ticket_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\ticket.json",
+    "ui_map_resolution_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015008Z-3d8c0c\\ui_map_resolution.json"
+  },
+  "evidence_refs": [
+    "compiler_contract_result.json",
+    "effective_config.json",
+    "evidence_bundle_manifest.json",
+    "execution.jsonl",
+    "generator_contract_result.json",
+    "navigation_contract_validation.json",
+    "result.json",
+    "scenarios.json",
+    "ticket.json",
+    "ui_map_resolution.json"
+  ],
+  "elapsed_build_ms": 16.0
+}

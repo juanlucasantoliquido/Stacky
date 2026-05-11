@@ -377,7 +377,7 @@ def _run_all_specs_once(
     )
 
     logger.debug("Running all specs: %s", " ".join(cmd))
-    print(f"\n[uat_test_runner] ▶ Single invocation: {len(spec_files)} spec(s), timeout={total_timeout_s}s", flush=True)
+    print(f"\n[uat_test_runner] >> Single invocation: {len(spec_files)} spec(s), timeout={total_timeout_s}s", flush=True)
 
     if exec_log is not None:
         try:
@@ -1086,7 +1086,7 @@ def _run_single_spec(
         }
 
     # Banner para que el operador identifique en qué escenario está.
-    print(f"\n[uat_test_runner] ▶ {scenario_id} ({spec_file.name})", flush=True)
+    print(f"\n[uat_test_runner] >> {scenario_id} ({spec_file.name})", flush=True)
 
     try:
         assert proc.stdout is not None  # narrowing para type checkers

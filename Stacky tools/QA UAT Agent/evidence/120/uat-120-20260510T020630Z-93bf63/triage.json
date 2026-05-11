@@ -1,0 +1,20 @@
+{
+  "schema": "triage/1.0",
+  "triage_version": "1.0",
+  "ticket_id": 120,
+  "run_id": "120",
+  "timestamp": "2026-05-10T02:08:56Z",
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "NO_TESTS_FOUND",
+  "confidence": 1.0,
+  "evidence": [
+    "result_json.category=PIP reason=NO_TESTS_FOUND",
+    "runner_classification: BLOCKED/PIP/NO_TESTS_FOUND"
+  ],
+  "owner": "qa_automation",
+  "next_action": "Revisar contrato entre stages del pipeline y corregir stage que falló",
+  "rerun_recommended": false,
+  "publish_recommended": false,
+  "human_approval_required": true
+}

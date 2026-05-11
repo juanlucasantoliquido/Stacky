@@ -1,0 +1,28 @@
+{
+  "schema_version": "evidence_bundle/1.0",
+  "run_id": "uat-120-20260510T020630Z-93bf63",
+  "evidence_dir": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63",
+  "tier": "playwright",
+  "complete": true,
+  "required": [
+    "execution.jsonl",
+    "result.json",
+    "effective_config.json",
+    "dossier.json"
+  ],
+  "present": [
+    "execution.jsonl",
+    "result.json",
+    "effective_config.json",
+    "dossier.json"
+  ],
+  "missing": [],
+  "optional_present": [
+    "compiler_contract_result.json",
+    "generator_contract_result.json",
+    "runner_output.json",
+    "evaluations.json",
+    "triage.json"
+  ],
+  "elapsed_ms": 16.0
+}

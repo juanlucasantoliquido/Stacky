@@ -1,0 +1,48 @@
+{
+  "_meta": {
+    "fixture_id": "ticket_120_direct_goto_frm_detalle_crashes_iis",
+    "description": "Ticket 120 regression: direct page.goto to FrmDetalleClie.aspx crashed IIS. Root cause was NAV (invalid direct navigation), secondary effect was ENV (app pool crash). Old triage incorrectly classified as ENV/PAGE_LOAD_FAILED primary.",
+    "created_at": "2026-05-09",
+    "ticket_id": 120,
+    "lane": "uat_human",
+    "scenario": "8 escenarios, todos fallaron en beforeEach por direct goto a FrmDetalleClie.aspx"
+  },
+  "input": {
+    "result_json": {
+      "verdict": "BLOCKED",
+      "category": "ENV",
+      "reason": "PAGE_LOAD_FAILED",
+      "failed_stage": "runner",
+      "ok": false
+    },
+    "execution_log": [
+      {
+        "event": "session_start",
+        "run_id": "uat-120-regression-fixture",
+        "ticket_id": 120
+      },
+      {
+        "event": "stage_start",
+        "stage": "runner"
+      }
+    ],
+    "runner_classification": null
+  },
+  "expected": {
+    "verdict": "BLOCKED",
+    "primary_category": "NAV",
+    "primary_reason": "INVALID_DIRECT_NAVIGATION_TO_SESSION_DEPENDENT_SCREEN",
+    "secondary_category": "ENV",
+    "secondary_reason": "APP_POOL_CRASH_AFTER_INVALID_NAVIGATION",
+    "business_steps_executed": 0,
+    "rerun_recommended": false,
+    "human_action_required_contains": "human_path"
+  },
+  "assertions": [
+    "category must be NAV (not ENV) because login succeeded before the failure",
+    "reason must be INVALID_DIRECT_NAVIGATION_TO_SESSION_DEPENDENT_SCREEN",
+    "causal chain evidence must be documented",
+    "rerun_recommended must be false (structural fix required, not flake)",
+    "human_action_required must reference human_path or nav strategy"
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "lane": "uat_human",
+  "allow_deeplink_override": false,
+  "scenarios": [
+    {
+      "scenario_id": "P02",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": null,
+      "decision": "BLOCKED",
+      "category": "DATA",
+      "reason": "NAVIGATION_DATA_MISSING",
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P05",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": null,
+      "decision": "BLOCKED",
+      "category": "DATA",
+      "reason": "NAVIGATION_DATA_MISSING",
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P06",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": null,
+      "decision": "BLOCKED",
+      "category": "DATA",
+      "reason": "NAVIGATION_DATA_MISSING",
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P08",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": null,
+      "decision": "BLOCKED",
+      "category": "DATA",
+      "reason": "NAVIGATION_DATA_MISSING",
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P10",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": null,
+      "decision": "BLOCKED",
+      "category": "DATA",
+      "reason": "NAVIGATION_DATA_MISSING",
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P11",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": null,
+      "decision": "BLOCKED",
+      "category": "DATA",
+      "reason": "NAVIGATION_DATA_MISSING",
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P12",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": null,
+      "decision": "BLOCKED",
+      "category": "DATA",
+      "reason": "NAVIGATION_DATA_MISSING",
+      "path_id": "open_from_busqueda"
+    }
+  ],
+  "blocked_count": 1,
+  "allowed_count": 6,
+  "decision": "BLOCKED"
+}

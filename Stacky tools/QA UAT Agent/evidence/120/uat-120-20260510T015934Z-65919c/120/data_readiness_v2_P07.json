@@ -1,0 +1,21 @@
+{
+  "schema_version": "data_readiness_v2/1.0",
+  "ready": true,
+  "scenario_id": "P07",
+  "ticket_id": 120,
+  "checked_at": "2026-05-10T02:01:16.874430Z",
+  "decision": "UNVERIFIED",
+  "missing": [],
+  "resolved": [
+    {
+      "requirement_id": "data.req.cliente_existente",
+      "entity": "Cliente",
+      "alias": "cliente_existente",
+      "source": "unverified",
+      "resolved_fields": {},
+      "confidence": 0.0
+    }
+  ],
+  "blocking_missing_count": 0,
+  "artifact_path": null
+}

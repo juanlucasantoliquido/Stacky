@@ -1,0 +1,615 @@
+DEBUG stacky.qa_uat.execution_logger: ExecutionLogger opened: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\execution.jsonl
+INFO stacky.qa_uat.pipeline: Preflight OK: AgendaWeb disponible en http://localhost:35017/AgendaWeb/ (2833ms)
+DEBUG stacky.qa_uat.deployment_fingerprint: deployment_fingerprint artifact: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\uat-120-20260510T020630Z-93bf63\deployment_fingerprint.json
+INFO stacky.qa_uat.deployment_fingerprint: deployment_fingerprint: skipped (no expected build defined) for ticket 120
+WARNING stacky.qa_uat.pipeline: deployment_fingerprint WARN: policy=None reason=NO_EXPECTED_BUILD_DEFINED (continuing pipeline)
+WARNING stacky.qa_uat.smoke_path: Smoke path screen check skipped (AUTH_REQUIRED): FrmAgenda.aspx may redirect to login without a session ÔÇö globalSetup will authenticate.
+INFO stacky.qa_uat.pipeline: Smoke path OK (6357ms)
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: reader
+DEBUG stacky.qa_uat.ticket_reader: ado cmd: C:\Users\juanluca\AppData\Local\Programs\Python\Python311\python.exe C:\Desarrollo\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\ADO Manager\ado.py get 120
+DEBUG stacky.qa_uat.ticket_reader: ado cmd: C:\Users\juanluca\AppData\Local\Programs\Python\Python311\python.exe C:\Desarrollo\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\ADO Manager\ado.py comments 120
+DEBUG stacky.qa_uat.ticket_reader: LLM classified comment as 'implementacion'
+DEBUG stacky.qa_uat.ticket_reader: classified as implementacion via regex keyword 'implementacion'
+DEBUG stacky.qa_uat.ticket_reader: classified as analisis_tecnico via regex keyword 'analisis tecnico'
+DEBUG stacky.qa_uat.ticket_reader: classified as analisis_tecnico via regex keyword 'an├ílisis t├®cnico'
+INFO stacky.qa_uat.ticket_reader: Trying plan extraction from attachment 'plan-de-pruebas.md'
+INFO stacky.qa_uat.ticket_reader: Plan de pruebas extracted from ADO attachment 'plan-de-pruebas.md'
+INFO stacky.qa_uat.pipeline: Effective config frozen: {'base_url': 'http://localhost:35017/AgendaWeb/', 'username_source': 'env', 'password_present': True, 'password_hash_prefix': '81a4e2e6', 'manage_app': False, 'allow_ui_discovery': False, 'allow_llm_navigation': False, 'require_playbook': True, 'max_login_attempts': 1, 'max_browser_launches': 1, 'max_total_minutes': 6, 'expected_human_minutes': 2, 'max_runtime_multiplier': 3, 'frozen_at': '2026-05-10T02:06:47Z'}
+INFO stacky.qa_uat.quality_intake: quality_intake: ticket=120, 13 CAs to classify
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-01] layer=uat needs_browser=True reason=criterio implica interacci├│n visual o navegaci├│n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-02] layer=uat needs_browser=True reason=criterio implica interacci├│n visual o navegaci├│n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-03] layer=uat needs_browser=True reason=criterio implica interacci├│n visual o navegaci├│n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-04] layer=manual_review needs_browser=False reason=texto ambiguo ÔÇö ninguna se├▒al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-05] layer=uat needs_browser=True reason=criterio implica interacci├│n visual o navegaci├│n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-06] layer=manual_review needs_browser=False reason=texto ambiguo ÔÇö ninguna se├▒al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-07] layer=uat needs_browser=True reason=criterio implica interacci├│n visual o navegaci├│n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-08] layer=manual_review needs_browser=False reason=texto ambiguo ÔÇö ninguna se├▒al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-09] layer=uat needs_browser=True reason=criterio implica interacci├│n visual o navegaci├│n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-10] layer=manual_review needs_browser=False reason=texto ambiguo ÔÇö ninguna se├▒al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-11] layer=manual_review needs_browser=False reason=texto ambiguo ÔÇö ninguna se├▒al clara identificada
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-12] layer=uat needs_browser=True reason=criterio implica interacci├│n visual o navegaci├│n de negocio en pantalla
+DEBUG stacky.qa_uat.quality_intake:   [120-CA-13] layer=manual_review needs_browser=False reason=texto ambiguo ÔÇö ninguna se├▒al clara identificada
+INFO stacky.qa_uat.quality_intake: test_portfolio.json written to N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\test_portfolio.json
+INFO stacky.qa_uat.quality_intake: quality_intake done: 13 items, uat_required=True, layers={'uat': 7, 'manual_review': 6}
+DEBUG stacky.qa_uat.screen_detector: screen_detection.json written to N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\screen_detection.json
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: ui_map
+DEBUG stacky.qa_uat.ui_map_resolution: ui_map_resolution: screen=FrmDetalleClie.aspx cache_hit=True rebuild=False available=True reason=None
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: compiler
+DEBUG stacky.qa_uat.contract_validator: contract_validator: jsonschema not installed ÔÇö using structural fallback
+DEBUG stacky.qa_uat.contract_validator: contract_validator artifact: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\compiler_contract_result.json
+DEBUG stacky.qa_uat.contract_validator: compiler contract ALLOW: score=1.00
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: preconditions
+WARNING stacky.qa_uat.pipeline: Precondition check skipped (db_unreachable): Cannot connect to BD QA: ('IM002', '[IM002] [Microsoft][Administrador de controladores ODBC] No se encuentra el nombre del origen de datos y no se especific├│ ning├║n controlador predeterminado (0) (SQLDriverConnect)')
+INFO stacky.qa_uat.pipeline: Sprint 4: auto-injected data_readiness_preconditions into 8 scenario(s)
+WARNING stacky.qa_uat.pipeline: data_readiness_check failed (non-fatal): name '_run_id' is not defined
+DEBUG stacky.qa_uat.data_contract_compiler: data_contract artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_contract_P02.json
+INFO stacky.qa_uat.data_contract_compiler: data_contract compiled: scenario=P02 requirements=1 blocking=1 entities=['Cliente']
+DEBUG stacky.qa_uat.data_contract_compiler: data_contract artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_contract_P05.json
+INFO stacky.qa_uat.data_contract_compiler: data_contract compiled: scenario=P05 requirements=2 blocking=2 entities=['Obligacion', 'Cliente']
+DEBUG stacky.qa_uat.data_contract_compiler: data_contract artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_contract_P06.json
+INFO stacky.qa_uat.data_contract_compiler: data_contract compiled: scenario=P06 requirements=1 blocking=1 entities=['Cliente']
+DEBUG stacky.qa_uat.data_contract_compiler: data_contract artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_contract_P07.json
+INFO stacky.qa_uat.data_contract_compiler: data_contract compiled: scenario=P07 requirements=1 blocking=1 entities=['Cliente']
+DEBUG stacky.qa_uat.data_contract_compiler: data_contract artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_contract_P08.json
+INFO stacky.qa_uat.data_contract_compiler: data_contract compiled: scenario=P08 requirements=1 blocking=1 entities=['Cliente']
+DEBUG stacky.qa_uat.data_contract_compiler: data_contract artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_contract_P10.json
+INFO stacky.qa_uat.data_contract_compiler: data_contract compiled: scenario=P10 requirements=1 blocking=1 entities=['Cliente']
+DEBUG stacky.qa_uat.data_contract_compiler: data_contract artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_contract_P11.json
+INFO stacky.qa_uat.data_contract_compiler: data_contract compiled: scenario=P11 requirements=1 blocking=1 entities=['Cliente']
+DEBUG stacky.qa_uat.data_contract_compiler: data_contract artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_contract_P12.json
+INFO stacky.qa_uat.data_contract_compiler: data_contract compiled: scenario=P12 requirements=1 blocking=1 entities=['Cliente']
+INFO stacky.qa_uat.pipeline: Sprint 8b: data contracts compiled: total=8 with_reqs=8 blocking=9
+WARNING stacky.qa_uat.data_readiness_checker: data_readiness_v2: cannot connect to DB: ('IM002', '[IM002] [Microsoft][Administrador de controladores ODBC] No se encuentra el nombre del origen de datos y no se especific├│ ning├║n controlador predeterminado (0) (SQLDriverConnect)')
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2: requirement data.req.cliente_existente unverified (DB unavailable)
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2 artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_readiness_v2_P02.json
+INFO stacky.qa_uat.data_readiness_checker: data_readiness_v2 UNVERIFIED: scenario=P02 resolved=1
+WARNING stacky.qa_uat.data_readiness_checker: data_readiness_v2: cannot connect to DB: ('IM002', '[IM002] [Microsoft][Administrador de controladores ODBC] No se encuentra el nombre del origen de datos y no se especific├│ ning├║n controlador predeterminado (0) (SQLDriverConnect)')
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2: requirement data.req.cliente_existente unverified (DB unavailable)
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2 artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_readiness_v2_P05.json
+WARNING stacky.qa_uat.data_readiness_checker: data_readiness_v2 MISSING: scenario=P05 blocking=1 options=[['ASK_USER_FOR_VALUE', 'MARK_MANUAL_REVIEW']]
+WARNING stacky.qa_uat.data_readiness_checker: data_readiness_v2: cannot connect to DB: ('IM002', '[IM002] [Microsoft][Administrador de controladores ODBC] No se encuentra el nombre del origen de datos y no se especific├│ ning├║n controlador predeterminado (0) (SQLDriverConnect)')
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2: requirement data.req.cliente_existente unverified (DB unavailable)
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2 artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_readiness_v2_P06.json
+INFO stacky.qa_uat.data_readiness_checker: data_readiness_v2 UNVERIFIED: scenario=P06 resolved=1
+WARNING stacky.qa_uat.data_readiness_checker: data_readiness_v2: cannot connect to DB: ('IM002', '[IM002] [Microsoft][Administrador de controladores ODBC] No se encuentra el nombre del origen de datos y no se especific├│ ning├║n controlador predeterminado (0) (SQLDriverConnect)')
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2: requirement data.req.cliente_existente unverified (DB unavailable)
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2 artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_readiness_v2_P07.json
+INFO stacky.qa_uat.data_readiness_checker: data_readiness_v2 UNVERIFIED: scenario=P07 resolved=1
+WARNING stacky.qa_uat.data_readiness_checker: data_readiness_v2: cannot connect to DB: ('IM002', '[IM002] [Microsoft][Administrador de controladores ODBC] No se encuentra el nombre del origen de datos y no se especific├│ ning├║n controlador predeterminado (0) (SQLDriverConnect)')
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2: requirement data.req.cliente_existente unverified (DB unavailable)
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2 artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_readiness_v2_P08.json
+INFO stacky.qa_uat.data_readiness_checker: data_readiness_v2 UNVERIFIED: scenario=P08 resolved=1
+WARNING stacky.qa_uat.data_readiness_checker: data_readiness_v2: cannot connect to DB: ('IM002', '[IM002] [Microsoft][Administrador de controladores ODBC] No se encuentra el nombre del origen de datos y no se especific├│ ning├║n controlador predeterminado (0) (SQLDriverConnect)')
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2: requirement data.req.cliente_existente unverified (DB unavailable)
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2 artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_readiness_v2_P10.json
+INFO stacky.qa_uat.data_readiness_checker: data_readiness_v2 UNVERIFIED: scenario=P10 resolved=1
+WARNING stacky.qa_uat.data_readiness_checker: data_readiness_v2: cannot connect to DB: ('IM002', '[IM002] [Microsoft][Administrador de controladores ODBC] No se encuentra el nombre del origen de datos y no se especific├│ ning├║n controlador predeterminado (0) (SQLDriverConnect)')
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2: requirement data.req.cliente_existente unverified (DB unavailable)
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2 artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_readiness_v2_P11.json
+INFO stacky.qa_uat.data_readiness_checker: data_readiness_v2 UNVERIFIED: scenario=P11 resolved=1
+WARNING stacky.qa_uat.data_readiness_checker: data_readiness_v2: cannot connect to DB: ('IM002', '[IM002] [Microsoft][Administrador de controladores ODBC] No se encuentra el nombre del origen de datos y no se especific├│ ning├║n controlador predeterminado (0) (SQLDriverConnect)')
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2: requirement data.req.cliente_existente unverified (DB unavailable)
+DEBUG stacky.qa_uat.data_readiness_checker: data_readiness_v2 artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_readiness_v2_P12.json
+INFO stacky.qa_uat.data_readiness_checker: data_readiness_v2 UNVERIFIED: scenario=P12 resolved=1
+WARNING stacky.qa_uat.pipeline: Sprint 8b: data_readiness_v2 found 1 blocking missing requirement(s) across 8 scenario(s). Resolution options are in evidence artifacts.
+INFO stacky.qa_uat.data_resolution_broker: data_resolution_broker: request_id=datareq-0-001 scenario=P05 alias=cliente_con_obligaciones options=['provide_existing_value', 'manual_review']
+DEBUG stacky.qa_uat.data_resolution_broker: data_resolution_broker: artifact written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\data_resolution_request_P05.json
+DEBUG stacky.qa_uat.data_resolution_broker: data_resolution_broker: qa_data_requests persisted: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\qa_data_requests.json
+INFO stacky.qa_uat.pipeline: Sprint 9: data_resolution_broker created 1 pending request(s)
+INFO stacky.qa_uat.sql_safety_validator: sql_safety_validator: SAFE source=seed:P02 sha256=451dea38afd4e0f9
+DEBUG stacky.qa_uat.sql_seed_generator: sql_seed_generator: scripts written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\seed_proposal_P02.sql, N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\cleanup_proposal_P02.sql
+INFO stacky.qa_uat.sql_seed_generator: sql_seed_generator: GENERATED scenario=P02 seed_run_id=seed-120-15755CD2C988 sha256=451dea38afd4e0f9
+INFO stacky.qa_uat.sql_seed_generator: sql_seed_generator: requirement Obligacion/cliente_con_obligaciones skipped ÔÇö schema_known=False, db_table=None, schema_mapping_has_entity=False
+INFO stacky.qa_uat.sql_safety_validator: sql_safety_validator: SAFE source=seed:P05 sha256=448167c1d05d26ee
+DEBUG stacky.qa_uat.sql_seed_generator: sql_seed_generator: scripts written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\seed_proposal_P05.sql, N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\cleanup_proposal_P05.sql
+INFO stacky.qa_uat.sql_seed_generator: sql_seed_generator: GENERATED scenario=P05 seed_run_id=seed-120-141D142E5DAA sha256=448167c1d05d26ee
+INFO stacky.qa_uat.sql_safety_validator: sql_safety_validator: SAFE source=seed:P06 sha256=eea2baedd6f3a265
+DEBUG stacky.qa_uat.sql_seed_generator: sql_seed_generator: scripts written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\seed_proposal_P06.sql, N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\cleanup_proposal_P06.sql
+INFO stacky.qa_uat.sql_seed_generator: sql_seed_generator: GENERATED scenario=P06 seed_run_id=seed-120-7A2ED64C956F sha256=eea2baedd6f3a265
+INFO stacky.qa_uat.sql_safety_validator: sql_safety_validator: SAFE source=seed:P07 sha256=40e8e3d012328b7e
+DEBUG stacky.qa_uat.sql_seed_generator: sql_seed_generator: scripts written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\seed_proposal_P07.sql, N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\cleanup_proposal_P07.sql
+INFO stacky.qa_uat.sql_seed_generator: sql_seed_generator: GENERATED scenario=P07 seed_run_id=seed-120-3BD02C31B41A sha256=40e8e3d012328b7e
+INFO stacky.qa_uat.sql_safety_validator: sql_safety_validator: SAFE source=seed:P08 sha256=9eed31284fae7383
+DEBUG stacky.qa_uat.sql_seed_generator: sql_seed_generator: scripts written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\seed_proposal_P08.sql, N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\cleanup_proposal_P08.sql
+INFO stacky.qa_uat.sql_seed_generator: sql_seed_generator: GENERATED scenario=P08 seed_run_id=seed-120-A0399FCCE9E5 sha256=9eed31284fae7383
+INFO stacky.qa_uat.sql_safety_validator: sql_safety_validator: SAFE source=seed:P10 sha256=3acda6bdd81ee583
+DEBUG stacky.qa_uat.sql_seed_generator: sql_seed_generator: scripts written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\seed_proposal_P10.sql, N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\cleanup_proposal_P10.sql
+INFO stacky.qa_uat.sql_seed_generator: sql_seed_generator: GENERATED scenario=P10 seed_run_id=seed-120-F413D017893A sha256=3acda6bdd81ee583
+INFO stacky.qa_uat.sql_safety_validator: sql_safety_validator: SAFE source=seed:P11 sha256=db1778d72c24cd9a
+DEBUG stacky.qa_uat.sql_seed_generator: sql_seed_generator: scripts written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\seed_proposal_P11.sql, N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\cleanup_proposal_P11.sql
+INFO stacky.qa_uat.sql_seed_generator: sql_seed_generator: GENERATED scenario=P11 seed_run_id=seed-120-3FC9373A4C3E sha256=db1778d72c24cd9a
+INFO stacky.qa_uat.sql_safety_validator: sql_safety_validator: SAFE source=seed:P12 sha256=abc96402f98c15d4
+DEBUG stacky.qa_uat.sql_seed_generator: sql_seed_generator: scripts written: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\seed_proposal_P12.sql, N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\120\cleanup_proposal_P12.sql
+INFO stacky.qa_uat.sql_seed_generator: sql_seed_generator: GENERATED scenario=P12 seed_run_id=seed-120-FC59F7F83F56 sha256=abc96402f98c15d4
+INFO stacky.qa_uat.pipeline: Sprint 10: sql_seed_proposal_generated for 8 scenario(s). Awaiting human approval.
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: generator
+DEBUG stacky.qa_uat.test_generator: playwright_test_generator: using playbook 'busqueda_detalle_cliente' for scenario P02
+DEBUG stacky.qa_uat.test_generator: playwright_test_generator: using playbook 'busqueda_detalle_cliente' for scenario P05
+DEBUG stacky.qa_uat.test_generator: playwright_test_generator: using playbook 'busqueda_detalle_cliente' for scenario P06
+DEBUG stacky.qa_uat.test_generator: playwright_test_generator: using playbook 'busqueda_detalle_cliente' for scenario P07
+DEBUG stacky.qa_uat.test_generator: playwright_test_generator: using playbook 'busqueda_detalle_cliente' for scenario P08
+DEBUG stacky.qa_uat.test_generator: playwright_test_generator: using playbook 'busqueda_detalle_cliente' for scenario P10
+DEBUG stacky.qa_uat.test_generator: playwright_test_generator: using playbook 'busqueda_detalle_cliente' for scenario P11
+DEBUG stacky.qa_uat.test_generator: playwright_test_generator: using playbook 'busqueda_detalle_cliente' for scenario P12
+DEBUG stacky.qa_uat.contract_validator: contract_validator artifact: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\generator_contract_result.json
+DEBUG stacky.qa_uat.contract_validator: generator contract ALLOW: score=1.00
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: spec_linter
+DEBUG stacky.qa_uat.budget_enforcer: Budget check OK lane=full-uat ticket=120 estimated=0.5000 remaining=200.00
+INFO stacky.qa_uat.test_prioritizer: Prioritization: total=8 selected=8 excluded=0 top=P02(0.31) budget=720s estimated=480s
+INFO stacky.qa_uat.pipeline: test_prioritizer: reordered 8 scenarios (excluded 0 beyond time budget 720s)
+INFO stacky.qa_uat.oracle_engine: oracle_engine: total=8 evaluated=8 pass=0 fail=0 no_oracle=8 p0_blocked=0 publish_blocked=False
+INFO stacky.qa_uat.weak_assertion_detector: weak_assertion_detector: files=8 total=8 strong=0 weak=5 none=3 publish_blocked=False
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: runner
+INFO stacky.qa_uat.playwright_config_writer: playwright.config.ts written to N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright.config.ts
+DEBUG stacky.qa_uat.test_runner: playwright.config.ts regenerated: C:\Desarrollo\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright.config.ts
+DEBUG stacky.qa_uat.test_runner: Running all specs: npx playwright test evidence/120/uat-120-20260510T020630Z-93bf63/tests --timeout=90000 --workers=1 --config N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright.config.ts
+
+[uat_test_runner] >> Single invocation: 8 spec(s), timeout=360s
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED ÔÇö Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+TimeoutError: page.goto: Timeout 30000ms exceeded.
+Call log:
+[2m  - navigating to "http://localhost:35017/AgendaWeb/FrmLogin.aspx", waiting until "domcontentloaded"[22m
+
+
+   at playwright\global.setup.ts:140
+
+  138 |
+  139 |     const loginURL = `${baseURL}FrmLogin.aspx`;
+> 140 |     await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      |                ^
+  141 |     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });
+  142 |     await page.fill(LOGIN_PASS_SEL, pass);
+  143 |     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });
+    at globalSetup (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\global.setup.ts:140:16)
+
+
+To open last HTML report run:
+[36m[39m
+[36m  npx playwright show-report[39m
+[36m[39m
+DEBUG stacky.qa_uat.failure_triage: failure_triage: wrote N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\triage.json
+DEBUG stacky.qa_uat.quarantine_registry: quarantine_registry: SQLite storage initialised at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\data\quarantine.db
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: annotator
+WARNING stacky.qa_uat.screenshot_annotator: Pillow not installed ÔÇö no screenshots will be annotated
+INFO stacky.qa_uat.test_confidence_scorer: confidence_scorer: total=8 high=0 medium=0 low=8 blocked=8 publish_blocked=True
+INFO stacky.qa_uat.data_lineage_builder: data_lineage_builder: total=0 seeded=0 user_supplied=0 fixture=0
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: evaluator
+DEBUG stacky.qa_uat.assertion_evaluator: Evaluations written to N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T020630Z-93bf63\evaluations.json
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: dossier
+DEBUG stacky.qa_uat.dossier_builder: ADO HTML postprocessor unavailable: 'NoneType' object has no attribute '__dict__'
+INFO stacky.qa_uat.pipeline: ÔûÂ Stage: publisher
+WARNING stacky.qa_uat.verdict_normalizer: verdict_normalizer: unknown reason code 'BLOCKED' ÔÇö using as-is. Add to REASON_CODES if this is a new permanent code.
+DEBUG stacky.qa_uat.verdict_normalizer: verdict_normalizer: BLOCKED OPS/BLOCKED stage=None
+DEBUG stacky.qa_uat.verdict_normalizer: verdict_normalizer: BLOCKED PIP/COMPILER_EMPTY stage=None
+DEBUG stacky.qa_uat.evidence_bundle_checker: evidence_bundle_checker: bundle complete [uat-120-20260510T020630Z-93bf63] tier=playwright required=4 optional=5
+{
+  "ok": true,
+  "ticket_id": 120,
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "NO_TESTS_FOUND",
+  "runner_summary": {
+    "verdict": "BLOCKED",
+    "category": "PIP",
+    "reason": "NO_TESTS_FOUND",
+    "total": 8,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 8,
+    "skipped": 0,
+    "retries": 0,
+    "duration_ms": 40967,
+    "artifacts": {
+      "junit": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+      "json_results": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+      "html_report": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+      "trace_count": 0,
+      "screenshots_count": 0,
+      "video_count": 0
+    },
+    "scenario_results": []
+  },
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "RF-007 - Modificaciones en la Lista de Obligaciones",
+      "plan_item_count": 13
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 13,
+      "layers": {
+        "uat": 7,
+        "manual_review": 6
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": true,
+      "skipped": false,
+      "screens": [
+        "FrmDetalleClie.aspx"
+      ]
+    },
+    "compiler": {
+      "ok": true,
+      "skipped": false,
+      "scenario_count": 8,
+      "out_of_scope_count": 5
+    },
+    "compiler_contract": {
+      "ok": true,
+      "skipped": false,
+      "decision": "ALLOW",
+      "violations": [],
+      "reason": null,
+      "score": 1.0
+    },
+    "preconditions": {
+      "ok": true,
+      "skipped": true,
+      "reason": "db_unreachable"
+    },
+    "selector_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_alias_contract_scenarios"
+    },
+    "data_readiness_check": {
+      "ok": true,
+      "skipped": true,
+      "reason": "error:name '_run_id' is not defined"
+    },
+    "data_contract_compile": {
+      "ok": true,
+      "skipped": false,
+      "contracts_compiled": 8,
+      "contracts_with_requirements": 8,
+      "total_blocking_requirements": 9
+    },
+    "data_readiness_v2": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_checked": 8,
+      "missing_count": 1,
+      "blocking_missing_count": 1,
+      "results": [
+        {
+          "scenario_id": "P02",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\data_readiness_v2_P02.json"
+        },
+        {
+          "scenario_id": "P05",
+          "ready": false,
+          "decision": "MISSING",
+          "blocking_missing_count": 1,
+          "missing": [
+            {
+              "requirement_id": "data.req.cliente_con_obligaciones",
+              "entity": "Obligacion",
+              "alias": "cliente_con_obligaciones",
+              "reason": "SCHEMA_UNKNOWN",
+              "blocking": true,
+              "resolution_options": [
+                "ASK_USER_FOR_VALUE",
+                "MARK_MANUAL_REVIEW"
+              ],
+              "db_table": null,
+              "schema_known": false,
+              "notes": null
+            }
+          ],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\data_readiness_v2_P05.json"
+        },
+        {
+          "scenario_id": "P06",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\data_readiness_v2_P06.json"
+        },
+        {
+          "scenario_id": "P07",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\data_readiness_v2_P07.json"
+        },
+        {
+          "scenario_id": "P08",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\data_readiness_v2_P08.json"
+        },
+        {
+          "scenario_id": "P10",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\data_readiness_v2_P10.json"
+        },
+        {
+          "scenario_id": "P11",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\data_readiness_v2_P11.json"
+        },
+        {
+          "scenario_id": "P12",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\data_readiness_v2_P12.json"
+        }
+      ]
+    },
+    "data_resolution_broker": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_with_requests": 1,
+      "total_requests": 1,
+      "results": [
+        {
+          "scenario_id": "P05",
+          "pending_request_ids": [
+            "datareq-0-001"
+          ],
+          "decisions_count": 1,
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\data_resolution_request_P05.json"
+        }
+      ]
+    },
+    "sql_seed_proposal": {
+      "ok": true,
+      "skipped": false,
+      "seed_results": [
+        {
+          "scenario_id": "P02",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\seed_proposal_P02.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\cleanup_proposal_P02.sql",
+          "script_sha256": "451dea38afd4e0f99d4004737c2c87e1f4a8f285bf4b9fc84c3ad30b3af326c3",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P05",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\seed_proposal_P05.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\cleanup_proposal_P05.sql",
+          "script_sha256": "448167c1d05d26eea0b562fc5da55ca1813d3fd75e8229f1e874ad923120a7ef",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P06",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\seed_proposal_P06.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\cleanup_proposal_P06.sql",
+          "script_sha256": "eea2baedd6f3a2652070948a43b2d6db6fc62d1900ff42b0d5d23a9a998339e6",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P07",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\seed_proposal_P07.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\cleanup_proposal_P07.sql",
+          "script_sha256": "40e8e3d012328b7e56454f07660e43f304e9231d6a24039c3c217adb867b68cd",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P08",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\seed_proposal_P08.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\cleanup_proposal_P08.sql",
+          "script_sha256": "9eed31284fae73834a5b8fdbdeee4d9f7d8339656d463016be7aeaae1b598db8",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P10",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\seed_proposal_P10.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\cleanup_proposal_P10.sql",
+          "script_sha256": "3acda6bdd81ee58389e4ca46482567f844c838392991f248bb8017527b6462ab",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P11",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\seed_proposal_P11.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\cleanup_proposal_P11.sql",
+          "script_sha256": "db1778d72c24cd9ad731128102ee4709360f9a786ccb4859c78977935dd80fa7",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P12",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\seed_proposal_P12.sql",
+          "cleanup_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\120\\cleanup_proposal_P12.sql",
+          "script_sha256": "abc96402f98c15d4c19bef0c32f80eca89e476c823560c086e8bfb9fd053bdd8",
+          "safety_safe": true
+        }
+      ]
+    },
+    "catalog_readiness": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_catalogs_required"
+    },
+    "seed_cleanup": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_applied_seeds",
+      "cleanup_count": 0
+    },
+    "navigation_contract_validation": {
+      "ok": true,
+      "skipped": false,
+      "lane": "uat_human",
+      "scenarios_checked": 8,
+      "blocked_count": 0,
+      "allowed_count": 8
+    },
+    "generator": {
+      "ok": true,
+      "skipped": false,
+      "generated": 8,
+      "blocked": 0,
+      "total": 8
+    },
+    "generator_contract": {
+      "ok": true,
+      "skipped": false,
+      "decision": "ALLOW",
+      "violations": [],
+      "reason": null,
+      "score": 1.0
+    },
+    "spec_linter": {
+      "ok": true,
+      "skipped": false,
+      "checked": 8,
+      "violations": []
+    },
+    "oracle_evaluation": {
+      "ok": true,
+      "skipped": false,
+      "oracle_publish_blocked": false,
+      "p0_blocked_count": 0,
+      "no_oracle_count": 8,
+      "weak_only_count": 0,
+      "oracle_fail_count": 0,
+      "weak_files": 8,
+      "weak_tests": 5,
+      "no_assertion_tests": 3,
+      "strong_tests": 0
+    },
+    "runner": {
+      "ok": true,
+      "skipped": false,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 8,
+      "total": 8,
+      "verdict": "BLOCKED",
+      "category": "PIP",
+      "reason": "NO_TESTS_FOUND",
+      "runner_summary": {
+        "verdict": "BLOCKED",
+        "category": "PIP",
+        "reason": "NO_TESTS_FOUND",
+        "artifacts": {
+          "junit": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+          "json_results": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+          "html_report": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+          "trace_count": 0,
+          "screenshots_count": 0,
+          "video_count": 0
+        }
+      }
+    },
+    "triage": {
+      "ok": true,
+      "skipped": false,
+      "verdict": "BLOCKED",
+      "category": "PIP",
+      "reason": "NO_TESTS_FOUND",
+      "confidence": 1.0,
+      "owner": "qa_automation",
+      "human_approval_required": true,
+      "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\triage.json"
+    },
+    "quarantine_check": {
+      "ok": true,
+      "skipped": true,
+      "checked_count": 0,
+      "quarantined_count": 0,
+      "results": []
+    },
+    "run_metrics_summary": {
+      "ok": true,
+      "skipped": false,
+      "unknown_count": 0,
+      "lane": null
+    },
+    "annotator": {
+      "ok": true,
+      "skipped": false,
+      "annotated": 0,
+      "errors": [
+        "pillow_not_available"
+      ]
+    },
+    "test_confidence": {
+      "ok": true,
+      "skipped": false,
+      "total_scenarios": 8,
+      "high_count": 0,
+      "medium_count": 0,
+      "low_count": 8,
+      "blocked_count": 8,
+      "publish_blocked": true,
+      "lineage_entries": 0,
+      "lineage_seeded": 0
+    },
+    "evaluator": {
+      "ok": true,
+      "skipped": false,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 8,
+      "review": 0
+    },
+    "failure_analyzer": {
+      "ok": true,
+      "skipped": true
+    },
+    "dossier": {
+      "ok": true,
+      "skipped": false,
+      "verdict": "BLOCKED",
+      "paths": {
+        "dossier_md": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\DOSSIER_UAT.md",
+        "ado_comment_html": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\ado_comment.html"
+      },
+      "run_id": "7b058b9a-169a-4ad2-973c-d68180b42b21"
+    },
+    "publisher": {
+      "ok": true,
+      "skipped": false,
+      "publish_state": "dry-run",
+      "mode": "dry-run"
+    }
+  },
+  "elapsed_s": 173.28,
+  "run_id": "uat-120-20260510T020630Z-93bf63",
+  "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63",
+  "_normalized": true,
+  "_evidence_complete": true,
+  "_evidence_missing": []
+}

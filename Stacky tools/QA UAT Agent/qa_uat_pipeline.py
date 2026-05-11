@@ -2793,6 +2793,180 @@ def _run_pipeline_stages(
         logger.warning("seed_cleanup stage failed (non-fatal): %s", _cleanup_exc)
         stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_cleanup_exc}"}
 
+    # ── Stage NAV-CONTRACT: navigation_contract_validation ───────────────────
+    # Validate that every compiled scenario has a viable navigation strategy
+    # BEFORE handing control to the generator.  If any scenario targets a
+    # session-dependent screen via direct goto (or is missing required nav data),
+    # the pipeline is blocked here — NO .spec.ts files are ever generated with
+    # invalid navigation.
+    #
+    # Key rules enforced:
+    #   1. Screens with direct_entry_allowed=False cannot use direct goto.
+    #   2. Lanes in _HUMAN_ONLY_LANES MUST use a human_path.
+    #   3. Deeplink lanes must have required params available.
+    #   4. Missing nav data → BLOCKED / DATA / NAVIGATION_DATA_MISSING.
+    #   5. Missing nav path  → BLOCKED / NAV  / NAV_PATH_MISSING.
+    stage = "navigation_contract_validation"
+    _nav_scenarios = (compiler_result.get("scenarios") or []) if "compiler" not in skip_stages else []
+    _current_lane = os.environ.get("QA_UAT_LANE", "uat_human")
+    # Collect available test data from env + compiler output
+    _nav_available_data: dict = {
+        "CLCOD": os.environ.get("QA_UAT_CLCOD", "") or os.environ.get("TEST_CLCOD", ""),
+        "OBLCOD": os.environ.get("QA_UAT_OBLCOD", "") or os.environ.get("TEST_OBLCOD", ""),
+    }
+    # Remove empty values
+    _nav_available_data = {k: v for k, v in _nav_available_data.items() if v}
+
+    if stage in skip_stages or not _nav_scenarios:
+        stages[stage] = {"ok": True, "skipped": True,
+                         "reason": "no_compiled_scenarios" if not _nav_scenarios else "skip_requested"}
+    else:
+        try:
+            from navigation_strategy_resolver import (
+                resolve_navigation_strategy as _resolve_nav,
+                write_navigation_contract_validation_event as _write_nav_event,
+            )
+            _t0_nav = _exec_log_stage_start(exec_log, stage,
+                                            {"lane": _current_lane, "scenario_count": len(_nav_scenarios)})
+            _nav_blocked = False
+            _nav_block_result: Optional[dict] = None
+            _nav_allow_deeplink_override = (
+                os.environ.get("QA_UAT_ALLOW_DEEPLINK_OVERRIDE", "false").lower() == "true"
+            )
+            _nav_summaries: list = []
+            _nav_blocked_count = 0
+            _nav_allowed_count = 0
+
+            for _nav_sc in _nav_scenarios:
+                _nav_sc_id = _nav_sc.get("scenario_id") or _nav_sc.get("id", "unknown")
+                # Determine target screen: prefer explicit 'pantalla', fallback to 'screen'
+                _nav_target = (
+                    _nav_sc.get("pantalla")
+                    or _nav_sc.get("screen")
+                    or (screens[0] if screens else "")
+                )
+                if not _nav_target:
+                    # No target screen — cannot validate, skip this scenario
+                    _nav_summaries.append({
+                        "scenario_id": _nav_sc_id,
+                        "decision": "SKIPPED",
+                        "reason": "no_target_screen",
+                    })
+                    continue
+
+                # Merge scenario-level data with env data
+                _sc_data = dict(_nav_available_data)
+                _sc_input = _nav_sc.get("input_data") or _nav_sc.get("datos_requeridos") or []
+                if isinstance(_sc_input, dict):
+                    _sc_data.update({k: str(v) for k, v in _sc_input.items() if v})
+                elif isinstance(_sc_input, list):
+                    for _item in _sc_input:
+                        if isinstance(_item, dict):
+                            _k = _item.get("filtro") or _item.get("key") or ""
+                            _v = _item.get("valor") or _item.get("value") or ""
+                            if _k and _v:
+                                _sc_data[_k] = str(_v)
+
+                _nav_decision = _resolve_nav(
+                    ticket_id=ticket_id if isinstance(ticket_id, int) else 0,
+                    scenario_id=_nav_sc_id,
+                    target_screen=_nav_target,
+                    lane=_current_lane,
+                    available_data=_sc_data,
+                    allow_deeplink_override=_nav_allow_deeplink_override,
+                )
+                # Write navigation_contract_validation event to execution.jsonl
+                _write_nav_event(exec_log, ticket_id if isinstance(ticket_id, int) else 0,
+                                 _nav_sc_id, _nav_decision)
+                _nav_summaries.append({
+                    "scenario_id": _nav_sc_id,
+                    "target_screen": _nav_target,
+                    "strategy": _nav_decision.get("strategy"),
+                    "decision": _nav_decision.get("decision"),
+                    "category": _nav_decision.get("category"),
+                    "reason": _nav_decision.get("reason"),
+                    "path_id": _nav_decision.get("path_id"),
+                })
+                if _nav_decision.get("decision") == "BLOCKED" and not _nav_blocked:
+                    _nav_blocked = True
+                    _nav_block_result = _nav_decision
+                    _nav_blocked_count += 1
+                else:
+                    _nav_allowed_count += 1
+
+            # Write navigation_contract_validation.json artifact
+            try:
+                _nav_artifact = evidence_dir / "navigation_contract_validation.json"
+                _nav_artifact.write_text(
+                    json.dumps({
+                        "lane": _current_lane,
+                        "allow_deeplink_override": _nav_allow_deeplink_override,
+                        "scenarios": _nav_summaries,
+                        "blocked_count": _nav_blocked_count,
+                        "allowed_count": _nav_allowed_count,
+                        "decision": "BLOCKED" if _nav_blocked else "ALLOW_GENERATION",
+                    }, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except Exception as _nav_art_exc:  # noqa: BLE001
+                logger.warning("Failed to write navigation_contract_validation.json: %s", _nav_art_exc)
+
+            stages[stage] = {
+                "ok": not _nav_blocked,
+                "skipped": False,
+                "lane": _current_lane,
+                "scenarios_checked": len(_nav_summaries),
+                "blocked_count": _nav_blocked_count,
+                "allowed_count": _nav_allowed_count,
+            }
+            _exec_log_stage_end(exec_log, stage, _t0_nav, ok=not _nav_blocked,
+                                summary=stages[stage])
+
+            if _nav_blocked and _nav_block_result is not None:
+                _nav_fail_reason = _nav_block_result.get("reason", "NAV_CONTRACT_BLOCKED")
+                _nav_fail_category = _nav_block_result.get("category", "NAV")
+                _nav_fail = {
+                    "ok": False,
+                    "verdict": "BLOCKED",
+                    "category": _nav_fail_category,
+                    "reason": _nav_fail_reason,
+                    "error": _nav_fail_reason.lower(),
+                    "failed_stage": stage,
+                    "message": (
+                        f"Navigation contract validation BLOCKED for scenario "
+                        f"{_nav_block_result.get('scenario_id', 'unknown')} "
+                        f"targeting '{_nav_block_result.get('target_screen', 'unknown')}': "
+                        f"{_nav_fail_reason}. Lane: {_current_lane}."
+                    ),
+                    "human_action_required": _nav_block_result.get("human_action_required",
+                        "Review navigation_contracts.yml and ensure the screen has a valid "
+                        "human_path or deeplink for the current lane."
+                    ),
+                    "navigation_contract_validation": _nav_block_result,
+                }
+                if exec_log is not None and not exec_log._closed:
+                    try:
+                        exec_log.pipeline_verdict(
+                            verdict="BLOCKED",
+                            category=_nav_fail_category,
+                            reason=_nav_fail_reason,
+                            failed_stage=stage,
+                            confidence=1.0,
+                            evidence_refs=["navigation_contract_validation"],
+                            human_action_required=_nav_fail.get("human_action_required"),
+                        )
+                        exec_log.session_end(_nav_fail)
+                        exec_log.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                return _build_output(ticket_id, stages, _nav_fail, started)
+        except ImportError:
+            logger.debug("navigation_strategy_resolver unavailable — skipping nav contract validation")
+            stages[stage] = {"ok": True, "skipped": True, "reason": "module_not_found"}
+        except Exception as _nav_exc:  # noqa: BLE001
+            logger.warning("navigation_contract_validation failed (non-fatal): %s", _nav_exc)
+            stages[stage] = {"ok": True, "skipped": True, "reason": f"error:{_nav_exc}"}
+
     # ── Stage 4: generator ───────────────────────────────────────────────────
     stage = "generator"
     tests_dir = evidence_dir / "tests"

@@ -128,6 +128,111 @@ LANES: dict[str, dict] = {
         "stages_skipped": [],
         "timeout_target_s": None,
     },
+    # ── Navigation-aware lanes (cuarta parte) ─────────────────────────────────
+    "uat_human": {
+        "description": (
+            "Full UAT simulating real operator workflow. "
+            "Human navigation paths ONLY — no deeplink. "
+            "Sessions are established via globalSetup. "
+            "Navigation through FrmBusqueda → select → FrmDetalleClie. <10min."
+        ),
+        "env": {
+            "QA_UAT_LANE": "uat_human",
+            "QA_UAT_RETRIES": "1",
+            "QA_UAT_TEST_TIMEOUT_MS": "120000",
+            # Explicitly disable deeplink override — human simulation only
+            "QA_UAT_ALLOW_DEEPLINK_OVERRIDE": "false",
+        },
+        "stages_active": list(_ALL_STAGES),
+        "stages_skipped": [],
+        "timeout_target_s": 600,
+        "navigation": {
+            "strategy": "human_path",
+            "deeplink_allowed": False,
+            "human_path_required": True,
+            "description": "Simulates operator navigation: search → select → detail",
+        },
+    },
+    "uat_human_simulation": {
+        "description": "Alias for uat_human. Explicit simulation of human operator.",
+        "env": {
+            "QA_UAT_LANE": "uat_human_simulation",
+            "QA_UAT_RETRIES": "1",
+            "QA_UAT_TEST_TIMEOUT_MS": "120000",
+            "QA_UAT_ALLOW_DEEPLINK_OVERRIDE": "false",
+        },
+        "stages_active": list(_ALL_STAGES),
+        "stages_skipped": [],
+        "timeout_target_s": 600,
+        "navigation": {
+            "strategy": "human_path",
+            "deeplink_allowed": False,
+            "human_path_required": True,
+        },
+    },
+    "smoke_deeplink": {
+        "description": (
+            "Fast smoke using deeplink navigation. "
+            "Validates screen/context load without full human flow. "
+            "Requires deeplink support in navigation_contracts.yml. <2min."
+        ),
+        "env": {
+            "QA_UAT_LANE": "smoke_deeplink",
+            "QA_UAT_PRIORITY_FILTER": "P0",
+            "QA_UAT_RETRIES": "1",
+            "QA_UAT_TEST_TIMEOUT_MS": "60000",
+        },
+        "stages_active": list(_ALL_STAGES),
+        "stages_skipped": [],
+        "timeout_target_s": 120,
+        "navigation": {
+            "strategy": "deeplink",
+            "deeplink_allowed": True,
+            "human_path_required": False,
+            "description": "Uses FrmDetalleClie.aspx?clcod=... for fast context validation",
+        },
+    },
+    "regression_deeplink": {
+        "description": (
+            "Regression using deeplink or human path depending on contract. "
+            "Validates correctness across all priority levels. <5min."
+        ),
+        "env": {
+            "QA_UAT_LANE": "regression_deeplink",
+            "QA_UAT_RETRIES": "2",
+            "QA_UAT_TEST_TIMEOUT_MS": "90000",
+        },
+        "stages_active": list(_ALL_STAGES),
+        "stages_skipped": [],
+        "timeout_target_s": 300,
+        "navigation": {
+            "strategy": "deeplink",
+            "deeplink_allowed": True,
+            "human_path_required": False,
+        },
+    },
+    "diagnostic": {
+        "description": (
+            "Diagnostic/technical lane. Allows direct navigation and deeplink. "
+            "Used for troubleshooting specific screen behaviors. "
+            "NOT for UAT simulation — human gate required for results."
+        ),
+        "env": {
+            "QA_UAT_LANE": "diagnostic",
+            "QA_UAT_RETRIES": "1",
+            "QA_UAT_TEST_TIMEOUT_MS": "30000",
+            "QA_UAT_ALLOW_DEEPLINK_OVERRIDE": "true",
+        },
+        "stages_active": list(_ALL_STAGES),
+        "stages_skipped": [],
+        "timeout_target_s": 120,
+        "navigation": {
+            "strategy": "deeplink",
+            "deeplink_allowed": True,
+            "human_path_required": False,
+            "description": "Technical diagnostic — deeplink or direct navigation allowed",
+        },
+    },
 }
 
 

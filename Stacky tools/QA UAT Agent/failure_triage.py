@@ -99,15 +99,24 @@ _REASON_RULES: list[tuple[str, str, str, float]] = [
     # ENV — environment / deployment
     ("DEPLOYMENT_MISMATCH",               "ENV",  "DEPLOYMENT_MISMATCH",               1.0),
     ("DEPLOYMENT_FINGERPRINT",            "ENV",  "DEPLOYMENT_MISMATCH",               1.0),
-    ("PAGE_LOAD_FAILED",                  "ENV",  "PAGE_LOAD_FAILED",                  0.95),
     ("SMOKE_BLOCKED",                     "ENV",  "SMOKE_BLOCKED",                     0.95),
     ("ENVIRONMENT_NOT_READY",             "ENV",  "ENVIRONMENT_NOT_READY",             0.90),
+    ("SERVER_UNREACHABLE_BEFORE_TEST",    "ENV",  "SERVER_UNREACHABLE_BEFORE_TEST",    1.0),
+    ("APP_POOL_CRASH_AFTER_INVALID_NAVIGATION", "ENV", "APP_POOL_CRASH_AFTER_INVALID_NAVIGATION", 0.95),
+    # PAGE_LOAD_FAILED is intentionally lower priority — causal analysis may
+    # reclassify it as NAV/INVALID_DIRECT_NAVIGATION when login succeeded.
+    ("PAGE_LOAD_FAILED",                  "ENV",  "PAGE_LOAD_FAILED",                  0.70),
     # DATA — data precondition failures
     ("GRID_EMPTY",                        "DATA", "GRID_EMPTY",                        1.0),
     ("TEST_ENTITY_NOT_FOUND",             "DATA", "TEST_ENTITY_NOT_FOUND",             1.0),
     ("TEST_USER_PERMISSION_MISSING",      "DATA", "TEST_USER_PERMISSION_MISSING",      0.95),
     ("DATA_SOURCE_UNREACHABLE",           "DATA", "DATA_SOURCE_UNREACHABLE",           0.95),
     ("DATA_BLOCKED",                      "DATA", "DATA_BLOCKED",                      0.90),
+    ("NAVIGATION_DATA_MISSING",           "DATA", "NAVIGATION_DATA_MISSING",           1.0),
+    ("DEEPLINK_PARAM_MISSING",            "DATA", "DEEPLINK_PARAM_MISSING",            1.0),
+    ("DEEPLINK_ENTITY_NOT_FOUND",         "DATA", "DEEPLINK_ENTITY_NOT_FOUND",         1.0),
+    ("DEEPLINK_PERMISSION_DENIED",        "DATA", "DEEPLINK_PERMISSION_DENIED",        0.90),
+    ("HUMAN_PATH_GRID_EMPTY",             "DATA", "HUMAN_PATH_GRID_EMPTY",             1.0),
     # PIP — pipeline meta failures
     ("NO_TESTS_FOUND",                    "PIP",  "NO_TESTS_FOUND",                    1.0),
     ("SPEC_FILE_MISSING",                 "PIP",  "SPEC_FILE_MISSING",                 1.0),
@@ -116,9 +125,27 @@ _REASON_RULES: list[tuple[str, str, str, float]] = [
     ("SCREEN_AMBIGUOUS",                  "PIP",  "SCREEN_AMBIGUOUS",                  0.90),
     ("SCREEN_DETECTION_FAILED",           "PIP",  "SCREEN_DETECTION_FAILED",           0.90),
     ("COMPILER_BLOCKED",                  "PIP",  "COMPILER_BLOCKED",                  0.85),
+    ("INVALID_NAVIGATION_STRATEGY_FOR_LANE", "PIP", "INVALID_NAVIGATION_STRATEGY_FOR_LANE", 1.0),
     # NAV — navigation / selector failures
+    # NAV rules have HIGH priority — they represent causal root causes of
+    # symptoms that would otherwise be classified as ENV/PAGE_LOAD_FAILED.
+    ("INVALID_DIRECT_NAVIGATION_TO_SESSION_DEPENDENT_SCREEN",
+                                          "NAV",  "INVALID_DIRECT_NAVIGATION_TO_SESSION_DEPENDENT_SCREEN", 1.0),
+    ("NAV_PATH_MISSING",                  "NAV",  "NAV_PATH_MISSING",                  1.0),
+    ("NAV_CONTRACT_MISSING",              "NAV",  "NAV_CONTRACT_MISSING",              1.0),
+    ("NAV_CONTRACT_BLOCKED",              "NAV",  "NAV_CONTRACT_BLOCKED",              1.0),
+    ("DEEPLINK_CONTEXT_NOT_RECONSTRUCTED", "NAV", "DEEPLINK_CONTEXT_NOT_RECONSTRUCTED", 1.0),
+    ("DEEPLINK_SERVER_ERROR",             "APP",  "DEEPLINK_SERVER_ERROR",             0.95),
+    ("DEEPLINK_REDIRECTED_TO_LOGIN",      "SEC",  "DEEPLINK_REDIRECTED_TO_LOGIN",      0.95),
+    ("DEEPLINK_HTTP_UNREACHABLE",         "ENV",  "DEEPLINK_HTTP_UNREACHABLE",         0.95),
+    ("HUMAN_PATH_STEP_FAILED",            "NAV",  "HUMAN_PATH_STEP_FAILED",            0.95),
     ("SELECTOR_TIMEOUT",                  "NAV",  "SELECTOR_TIMEOUT",                  0.90),
     ("SELECTOR_NOT_FOUND",                "NAV",  "SELECTOR_NOT_FOUND",                0.90),
+    ("BLOCKED_NAV_CONTEXT",               "NAV",  "DEEPLINK_CONTEXT_NOT_RECONSTRUCTED", 0.95),
+    ("BLOCKED_NAV_GRID_EMPTY",            "DATA", "HUMAN_PATH_GRID_EMPTY",             0.95),
+    ("BLOCKED_NAV_DATA",                  "DATA", "NAVIGATION_DATA_MISSING",           0.95),
+    ("BLOCKED_SESSION_EXPIRED",           "SEC",  "AUTH_FAILED",                       0.90),
+    ("BLOCKED_WRONG_SCREEN",              "NAV",  "INVALID_DIRECT_NAVIGATION_TO_SESSION_DEPENDENT_SCREEN", 0.90),
     # APP — application / assertion failures
     ("ASSERTION_FAILED",                  "APP",  "ASSERTION_FAILED",                  0.90),
     # OPS — infrastructure
@@ -363,24 +390,35 @@ def _determine_category_reason(
                 evidence.append(f"pipeline_verdict_decision: category={ec} reason={er}")
                 break
 
-    # 6. Scan execution_log for early-exit events
+    # 6. Scan execution_log for early-exit events (causal chain analysis)
+    _login_succeeded = False
+    _nav_contract_blocked = False
+    _nav_contract_reason: Optional[str] = None
     for evt in execution_log:
         ev_type = evt.get("event", "")
+
+        # Track login success (global.setup OK = login was fine)
+        if ev_type in ("session_start", "globalsetup_success", "auth_state_created"):
+            _login_succeeded = True
+
         if ev_type == "ui_map_cache_result":
             if not evt.get("cache_hit", True):
                 screen = evt.get("screen", "unknown")
                 signals.append(("GEN", "UI_MAP_MISSING", 1.0, "ui_map_cache_result"))
                 evidence.append(f"ui_map_cache_result: screen={screen} cache_hit=False")
-        elif ev_type == "deployment_fingerprint_check":
+
+        elif ev_type == "deployment_fingerprint_check" or ev_type == "deployment_fingerprint_checked":
             data = evt.get("data") or evt
             if data.get("decision") == "BLOCKED":
                 signals.append(("ENV", "DEPLOYMENT_MISMATCH", 1.0, "deployment_fingerprint_check"))
                 evidence.append("deployment_fingerprint_check: decision=BLOCKED")
+
         elif ev_type == "data_readiness_check":
             data = evt.get("data") or evt
             if data.get("blocked", 0) > 0:
                 signals.append(("DATA", "GRID_EMPTY", 0.95, "data_readiness_check"))
                 evidence.append(f"data_readiness_check: blocked={data.get('blocked')}")
+
         elif ev_type == "screen_detection_result":
             data = evt.get("data") or evt
             reason_evt = data.get("reason", "")
@@ -388,6 +426,75 @@ def _determine_category_reason(
                               "SCREEN_DETECTION_FAILED"):
                 signals.append(("PIP", reason_evt, 0.90, "screen_detection_result"))
                 evidence.append(f"screen_detection_result: reason={reason_evt}")
+
+        elif ev_type == "navigation_contract_validation":
+            # Navigation contract validation event — HIGH PRIORITY causal signal
+            data = evt.get("data") or evt
+            decision = data.get("decision", "")
+            nav_reason = data.get("reason", "")
+            nav_category = data.get("category", "NAV")
+            if decision == "BLOCKED" and nav_reason:
+                _nav_contract_blocked = True
+                _nav_contract_reason = nav_reason
+                if nav_category in VALID_CATEGORIES:
+                    signals.append((nav_category, nav_reason, 1.0, "navigation_contract_validation"))
+                    evidence.append(
+                        f"navigation_contract_validation: BLOCKED category={nav_category} reason={nav_reason}"
+                    )
+
+        elif ev_type == "deeplink_readiness_check":
+            data = evt.get("data") or evt
+            dr_decision = data.get("decision", "")
+            dr_reason = data.get("reason", "")
+            dr_category = data.get("category", "NAV")
+            if dr_decision == "BLOCKED" and dr_reason:
+                if dr_category in VALID_CATEGORIES:
+                    signals.append((dr_category, dr_reason, 1.0, "deeplink_readiness_check"))
+                    evidence.append(
+                        f"deeplink_readiness_check: BLOCKED category={dr_category} reason={dr_reason}"
+                    )
+
+    # ── CAUSAL CHAIN RULE: Login OK + page.goto failure = NAV (not ENV) ─────
+    # If the execution log shows that globalSetup/login succeeded, but the
+    # runner failed at navigation/beforeEach, the root cause is NAV, not ENV.
+    # The ENV signal (PAGE_LOAD_FAILED) is the symptom of invalid navigation.
+    # Apply only when:
+    #   a) we have a PAGE_LOAD_FAILED signal but no stronger NAV signal yet, AND
+    #   b) there is evidence that login was successful before the failure.
+    _has_page_load_failed = any(
+        s[1] == "PAGE_LOAD_FAILED" for s in signals
+    )
+    _has_nav_signal = any(
+        s[0] == "NAV" for s in signals
+    )
+    _login_ok_from_session = bool(
+        # Look for evidence of successful login in log events or result
+        _login_succeeded
+        or any(
+            evt.get("event") in ("globalsetup_ok", "auth_state_ok", "login_succeeded")
+            for evt in execution_log
+        )
+        or result_json.get("globalsetup_ok") is True
+    )
+    if _has_page_load_failed and not _has_nav_signal and _login_ok_from_session:
+        # Promote PAGE_LOAD_FAILED to INVALID_DIRECT_NAVIGATION_TO_SESSION_DEPENDENT_SCREEN
+        # This is the ticket 120 pattern: login OK → direct goto → crash → ENV symptom
+        # Remove PAGE_LOAD_FAILED signals so the NAV reclassification wins unconditionally.
+        signals[:] = [
+            s for s in signals
+            if not (s[0] == "ENV" and s[1] == "PAGE_LOAD_FAILED")
+        ]
+        signals.append((
+            "NAV",
+            "INVALID_DIRECT_NAVIGATION_TO_SESSION_DEPENDENT_SCREEN",
+            0.90,
+            "causal_chain:login_ok+page_load_failed=nav_not_env",
+        ))
+        evidence.append(
+            "CAUSAL CHAIN: login succeeded before test start, then page.goto failed. "
+            "Root cause: invalid direct navigation to session-dependent screen (not ENV). "
+            "Secondary cause: APP_POOL_CRASH_AFTER_INVALID_NAVIGATION."
+        )
 
     if not signals:
         # Fallback: unknown classification — use BLOCKED APP as safe default
@@ -416,21 +523,23 @@ def _match_reason_rule(reason: str) -> Optional[tuple[str, str, float]]:
 def _stage_to_category(failed_stage: str) -> tuple[Optional[str], float]:
     """Map a pipeline stage name to a category with confidence."""
     stage_map: dict[str, tuple[str, float]] = {
-        "ui_map":                    ("GEN", 0.95),
-        "ui_map_builder":            ("GEN", 0.95),
-        "selector_contract":         ("GEN", 0.95),
-        "generator":                 ("GEN", 0.90),
-        "compiler":                  ("PIP", 0.90),
-        "reader":                    ("PIP", 0.90),
-        "intent_parser":             ("PIP", 0.90),
-        "runner":                    ("APP", 0.75),
-        "environment_preflight":     ("ENV", 0.95),
-        "smoke_path":                ("ENV", 0.90),
-        "deployment_fingerprint":    ("ENV", 1.0),
+        "ui_map":                       ("GEN", 0.95),
+        "ui_map_builder":               ("GEN", 0.95),
+        "selector_contract":            ("GEN", 0.95),
+        "generator":                    ("GEN", 0.90),
+        "compiler":                     ("PIP", 0.90),
+        "reader":                       ("PIP", 0.90),
+        "intent_parser":                ("PIP", 0.90),
+        "runner":                       ("APP", 0.75),
+        "environment_preflight":        ("ENV", 0.95),
+        "smoke_path":                   ("ENV", 0.90),
+        "deployment_fingerprint":       ("ENV", 1.0),
         "deployment_fingerprint_check": ("ENV", 1.0),
-        "data_readiness_check":      ("DATA", 0.95),
-        "screen_detection":          ("PIP", 0.90),
-        "quality_intake":            ("PIP", 0.85),
+        "data_readiness_check":         ("DATA", 0.95),
+        "screen_detection":             ("PIP", 0.90),
+        "quality_intake":               ("PIP", 0.85),
+        "navigation_contract_validation": ("NAV", 1.0),
+        "deeplink_readiness_check":     ("NAV", 0.95),
     }
     lower_stage = (failed_stage or "").lower()
     for key, val in stage_map.items():
@@ -475,6 +584,37 @@ def _build_next_action(
         return "Verificar screen_detection.json y ampliar screen_aliases.yml para la pantalla del ticket"
 
     if category == "NAV":
+        if reason == "INVALID_DIRECT_NAVIGATION_TO_SESSION_DEPENDENT_SCREEN":
+            screen = _extract_screen_from_log(execution_log) or "la pantalla afectada"
+            return (
+                f"Usar nav_path humano (open_from_busqueda) o deeplink gobernado para '{screen}'. "
+                "NO usar page.goto() directo a pantallas session-dependientes. "
+                "Revisar navigation_contracts.yml y navigation_contract_validation.json."
+            )
+        if reason == "NAV_PATH_MISSING":
+            screen = _extract_screen_from_log(execution_log) or "la pantalla afectada"
+            return (
+                f"Definir un human_path para '{screen}' en navigation_contracts.yml. "
+                "Agregar entrypoint, steps, required_data y required_assertions."
+            )
+        if reason == "NAV_CONTRACT_MISSING":
+            screen = _extract_screen_from_log(execution_log) or "la pantalla afectada"
+            return (
+                f"Agregar un contrato de navegación para '{screen}' en navigation_contracts.yml. "
+                "Declarar si direct_entry_allowed, deeplink_allowed y los human_paths."
+            )
+        if reason == "DEEPLINK_CONTEXT_NOT_RECONSTRUCTED":
+            return (
+                "El deeplink cargó la URL pero no reconstruyó el contexto esperado. "
+                "Corregir el deeplink handler en la aplicación o usar human_path. "
+                "Revisar deeplink_readiness_check en execution.jsonl."
+            )
+        if reason == "HUMAN_PATH_STEP_FAILED":
+            return (
+                "Un paso de la navegación humana falló (búsqueda, click, selección). "
+                "Revisar el Flow Object ClienteFlow.openDetalleFromBusqueda en playwright/flows/. "
+                "Verificar selectores en UI map y estado del ambiente."
+            )
         alias = _extract_failed_alias_from_log(execution_log) or "el selector afectado"
         screen = _extract_screen_from_log(execution_log) or "la pantalla afectada"
         return f"Revisar selector {alias} en {screen} — posible drift de DOM — verificar selector_contract.json"
@@ -526,6 +666,20 @@ def _should_rerun(verdict: str, category: Optional[str], reason: Optional[str]) 
         return False  # Data issue — rerun won't help without seeding
     if category == "NAV" and reason == "SELECTOR_TIMEOUT":
         return True  # Might be a flake
+    # Navigation contract failures — do NOT rerun, they need structural fixes
+    if category == "NAV" and reason in (
+        "INVALID_DIRECT_NAVIGATION_TO_SESSION_DEPENDENT_SCREEN",
+        "NAV_PATH_MISSING",
+        "NAV_CONTRACT_MISSING",
+        "DEEPLINK_CONTEXT_NOT_RECONSTRUCTED",
+    ):
+        return False
+    if category == "DATA" and reason in (
+        "NAVIGATION_DATA_MISSING",
+        "DEEPLINK_PARAM_MISSING",
+        "HUMAN_PATH_GRID_EMPTY",
+    ):
+        return False
     return False
 
 

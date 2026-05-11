@@ -14,20 +14,20 @@
       ],
       "pasos": [
         {
-          "accion": "navigate",
-          "target": "FrmDetalleClie.aspx",
+          "accion": "wait_visible",
+          "target": "msg_titulo_cliente",
           "valor": null
         }
       ],
       "oraculos": [
         {
           "tipo": "invisible",
-          "target": "input_fecha_ingreso_judicial",
-          "valor": null
+          "target": "cmbProvincia",
+          "valor": "Fecha de ingreso judicial"
         },
         {
-          "tipo": "page_not_contains_text",
-          "target": "None",
+          "tipo": "invisible",
+          "target": "cmbDepartamento",
           "valor": "Fecha de ingreso judicial"
         }
       ],
@@ -43,7 +43,7 @@
       "pantalla": "FrmDetalleClie.aspx",
       "titulo": "Comportamiento con campos sin valor (nulos) en los 8 nuevos campos",
       "precondiciones": [
-        "Existen obligaciones en la base de datos con campos nulos en los 8 nuevos campos."
+        "Existencia de una obligación con campos nulos en los 8 nuevos campos."
       ],
       "pasos": [
         {
@@ -76,7 +76,7 @@
       ],
       "datos_requeridos": [
         {
-          "tabla": "Obligaciones",
+          "tabla": "obligaciones",
           "filtro": "V000000201605P"
         }
       ],
@@ -91,34 +91,44 @@
       "pantalla": "FrmDetalleClie.aspx",
       "titulo": "Valores \"Si\"/\"No\" del campo \"Afiliado al Debito Automatico\"",
       "precondiciones": [
-        "Existen obligaciones con valor positivo y negativo para 'Afiliado al Debito Automatico' en la fuente de ingesta.",
-        "El usuario carga la Vista Obligaciones de un lote que contiene ambos tipos."
+        "El lote con obligación V000000201605P está cargado en la Vista Obligaciones.",
+        "Existen obligaciones con valores positivos y negativos para 'Afiliado al Debito Automatico'."
       ],
       "pasos": [
         {
           "accion": "navigate",
           "target": "FrmDetalleClie.aspx",
           "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "msg_titulo_cliente",
+          "valor": null
         }
       ],
       "oraculos": [
         {
           "tipo": "page_contains_text",
-          "target": "msg_titulo_cliente",
+          "target": "OGDEBAUT_DESC",
           "valor": "Si"
         },
         {
           "tipo": "page_contains_text",
-          "target": "msg_titulo_cliente",
+          "target": "OGDEBAUT_DESC",
           "valor": "No"
         },
         {
           "tipo": "page_not_contains_text",
-          "target": "msg_titulo_cliente",
-          "valor": "Otros valores"
+          "target": "OGDEBAUT_DESC",
+          "valor": "Otros"
         }
       ],
-      "datos_requeridos": [],
+      "datos_requeridos": [
+        {
+          "tabla": "Obligaciones",
+          "filtro": "V000000201605P"
+        }
+      ],
       "origen": {
         "ticket_section": "plan_pruebas",
         "item_id": "P06"
@@ -224,18 +234,18 @@
       "pasos": [
         {
           "accion": "wait_visible",
-          "target": "input_nombre",
+          "target": "msg_titulo_cliente",
           "valor": null
         },
         {
-          "accion": "wait_visible",
+          "accion": "wait_for_text",
+          "target": "input_nombre",
+          "valor": "Saldo a favor disponible"
+        },
+        {
+          "accion": "wait_for_text",
           "target": "input_apellido",
-          "valor": null
-        },
-        {
-          "accion": "scroll_into_view",
-          "target": "input_nombre",
-          "valor": null
+          "valor": "Monto de la Cuota"
         }
       ],
       "oraculos": [
@@ -252,23 +262,91 @@
         {
           "tipo": "page_contains_text",
           "target": "None",
-          "valor": "Saldo a favor disponible"
-        },
-        {
-          "tipo": "page_contains_text",
-          "target": "None",
-          "valor": "Monto de la Cuota"
+          "valor": "formato monetario correcto"
         }
       ],
       "datos_requeridos": [
         {
-          "tabla": "Obligaciones",
+          "tabla": "obligaciones",
           "filtro": "V000000201605P"
         }
       ],
       "origen": {
         "ticket_section": "plan_pruebas",
         "item_id": "P08"
+      }
+    },
+    {
+      "scenario_id": "P10",
+      "ticket_id": 120,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Actualizacion de datos tras batch nocturno",
+      "precondiciones": [
+        "El usuario ha visualizado la Vista Obligaciones de un lote determinado antes de la ejecución del batch nocturno."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "wait_networkidle",
+          "target": "None",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "OGCANAL",
+          "valor": "nuevo valor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "OGMEDIOPAGO",
+          "valor": "nuevo valor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "OGDEBAUT_DESC",
+          "valor": "nuevo valor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "DESALDOFAVOR",
+          "valor": "nuevo valor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "OGCUOTA",
+          "valor": "nuevo valor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "OGMONTOCUOTA",
+          "valor": "nuevo valor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "OGCORREDOR",
+          "valor": "nuevo valor"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "OGNROCUOTAS",
+          "valor": "nuevo valor"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "Obligaciones",
+          "filtro": "lote = 'V000000201605P'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P10"
       }
     },
     {
@@ -362,103 +440,54 @@
       "oraculos": [
         {
           "tipo": "page_contains_text",
-          "target": "archivo_exportado",
+          "target": "exported_file",
           "valor": "OGCANAL"
         },
         {
           "tipo": "page_contains_text",
-          "target": "archivo_exportado",
+          "target": "exported_file",
           "valor": "OGMEDIOPAGO"
         },
         {
           "tipo": "page_contains_text",
-          "target": "archivo_exportado",
+          "target": "exported_file",
           "valor": "OGDEBAUT_DESC"
         },
         {
           "tipo": "page_contains_text",
-          "target": "archivo_exportado",
+          "target": "exported_file",
           "valor": "DESALDOFAVOR"
         },
         {
           "tipo": "page_contains_text",
-          "target": "archivo_exportado",
+          "target": "exported_file",
           "valor": "OGCUOTA"
         },
         {
           "tipo": "page_contains_text",
-          "target": "archivo_exportado",
+          "target": "exported_file",
           "valor": "OGMONTOCUOTA"
         },
         {
           "tipo": "page_contains_text",
-          "target": "archivo_exportado",
+          "target": "exported_file",
           "valor": "OGCORREDOR"
         },
         {
           "tipo": "page_contains_text",
-          "target": "archivo_exportado",
+          "target": "exported_file",
           "valor": "OGNROCUOTAS"
         },
         {
           "tipo": "page_not_contains_text",
-          "target": "archivo_exportado",
-          "valor": "OGFECPASAJEJUD"
+          "target": "exported_file",
+          "valor": "Fecha de ingreso judicial"
         }
       ],
       "datos_requeridos": [],
       "origen": {
         "ticket_section": "plan_pruebas",
         "item_id": "P12"
-      }
-    },
-    {
-      "scenario_id": "P13",
-      "ticket_id": 120,
-      "pantalla": "FrmDetalleClie.aspx",
-      "titulo": "Consistencia de \"Nombre del Corredor\" con RF-006 (Corredor Principal en cabecera)",
-      "precondiciones": [
-        "El lote con obligación V000000201605P debe existir en la base de datos.",
-        "El Corredor Principal debe estar definido en la cabecera del Detalle de Cliente."
-      ],
-      "pasos": [
-        {
-          "accion": "navigate",
-          "target": "FrmDetalleClie.aspx",
-          "valor": null
-        },
-        {
-          "accion": "wait_visible",
-          "target": "msg_titulo_cliente",
-          "valor": null
-        },
-        {
-          "accion": "wait_for_text",
-          "target": "input_nombre",
-          "valor": "Nombre del Corredor"
-        }
-      ],
-      "oraculos": [
-        {
-          "tipo": "equals",
-          "target": "input_nombre",
-          "valor": "Nombre del Corredor"
-        },
-        {
-          "tipo": "equals",
-          "target": "OGCORREDOR",
-          "valor": "Nombre del Corredor"
-        }
-      ],
-      "datos_requeridos": [
-        {
-          "tabla": "Obligaciones",
-          "filtro": "lote = 'V000000201605P'"
-        }
-      ],
-      "origen": {
-        "ticket_section": "plan_pruebas",
-        "item_id": "P13"
       }
     }
   ],
@@ -505,9 +534,16 @@
       }
     },
     {
-      "id": "P10",
-      "razon": "PLACEHOLDER_DETECTED",
-      "descripcion": "Actualizacion de datos tras batch nocturno"
+      "id": "P13",
+      "razon": "ORACLE_TARGETS_DECORATIVE_LAYOUT",
+      "descripcion": "Consistencia de \"Nombre del Corredor\" con RF-006 (Corredor Principal en cabecera)",
+      "details": {
+        "oracle_index": 0,
+        "target": "msg_titulo_cliente",
+        "tipo": "equals",
+        "alias_kind": "div",
+        "label": null
+      }
     }
   ]
 }

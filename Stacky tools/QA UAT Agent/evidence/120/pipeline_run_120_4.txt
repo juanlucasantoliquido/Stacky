@@ -1,0 +1,66 @@
+DEBUG stacky.qa_uat.execution_logger: ExecutionLogger opened: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T015555Z-9bd8f3\execution.jsonl
+INFO stacky.qa_uat.pipeline: Preflight OK: AgendaWeb disponible en http://localhost:35017/AgendaWeb/ (3051ms)
+DEBUG stacky.qa_uat.deployment_fingerprint: deployment_fingerprint artifact: N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260510T015555Z-9bd8f3\uat-120-20260510T015555Z-9bd8f3\deployment_fingerprint.json
+INFO stacky.qa_uat.deployment_fingerprint: deployment_fingerprint: skipped (no expected build defined) for ticket 120
+WARNING stacky.qa_uat.pipeline: deployment_fingerprint WARN: policy=None reason=NO_EXPECTED_BUILD_DEFINED (continuing pipeline)
+WARNING stacky.qa_uat.pipeline: Smoke path BLOCKED: SCREEN_UNREACHABLE ÔÇö La pantalla FrmAgenda.aspx no responde en http://localhost:35017/AgendaWeb/FrmAgenda.aspx. Verific├í que AgendaWeb est├® completamente iniciada.
+{
+  "ok": false,
+  "verdict": "BLOCKED",
+  "reason": "SCREEN_UNREACHABLE",
+  "message": "La pantalla FrmAgenda.aspx no responde en http://localhost:35017/AgendaWeb/FrmAgenda.aspx. Verific├í que AgendaWeb est├® completamente iniciada.",
+  "checks": [
+    {
+      "ok": true,
+      "label": "base_url",
+      "status": 200,
+      "error": ""
+    },
+    {
+      "ok": true,
+      "label": "auth_file",
+      "message": "Auth file valid"
+    },
+    {
+      "ok": false,
+      "label": "screen:FrmAgenda.aspx",
+      "status": null,
+      "error": "OSError: timed out"
+    }
+  ],
+  "elapsed_ms": 6432,
+  "stage": "smoke_path",
+  "ticket_id": 120,
+  "category": "ENV",
+  "failed_stage": "smoke_path",
+  "stages": {
+    "smoke_path": {
+      "ok": false,
+      "verdict": "BLOCKED",
+      "reason": "SCREEN_UNREACHABLE",
+      "message": "La pantalla FrmAgenda.aspx no responde en http://localhost:35017/AgendaWeb/FrmAgenda.aspx. Verific├í que AgendaWeb est├® completamente iniciada.",
+      "checks": [
+        {
+          "ok": true,
+          "label": "base_url",
+          "status": 200,
+          "error": ""
+        },
+        {
+          "ok": true,
+          "label": "auth_file",
+          "message": "Auth file valid"
+        },
+        {
+          "ok": false,
+          "label": "screen:FrmAgenda.aspx",
+          "status": null,
+          "error": "OSError: timed out"
+        }
+      ],
+      "elapsed_ms": 6432,
+      "stage": "smoke_path"
+    }
+  },
+  "elapsed_s": 11.13
+}

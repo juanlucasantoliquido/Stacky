@@ -1,0 +1,16 @@
+[
+  {
+    "id": "datareq-0-001",
+    "run_id": "120",
+    "ticket_id": 0,
+    "scenario_id": "P05",
+    "requirement_id": "data.req.cliente_con_obligaciones",
+    "question": "Necesito un CLCOD que tenga al menos una obligación activa con corredor y riesgo.",
+    "required_fields_json": "[\"CLCOD\"]",
+    "status": "pending_user_input",
+    "created_at": "2026-05-10T01:51:43.172918Z",
+    "resolved_at": null,
+    "resolved_by": null,
+    "resolution_type": null
+  }
+]

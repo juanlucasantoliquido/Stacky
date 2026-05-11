@@ -1,0 +1,28 @@
+{
+  "schema_version": "screen_detection/1.0",
+  "run_id": "120",
+  "selected_screens": [
+    "FrmAdministrador.aspx",
+    "FrmDetalleClie.aspx"
+  ],
+  "matches": [
+    {
+      "screen": "FrmDetalleClie.aspx",
+      "source": "analisis_tecnico",
+      "match_type": "exact",
+      "confidence": 0.95
+    },
+    {
+      "screen": "FrmAdministrador.aspx",
+      "source": "screen_aliases.yml",
+      "match_type": "alias",
+      "confidence": 0.6
+    }
+  ],
+  "fallback_used": false,
+  "ambiguous": false,
+  "blocked": false,
+  "block_reason": null,
+  "confidence": 0.95,
+  "supported_screens_version": "screen_aliases.yml"
+}

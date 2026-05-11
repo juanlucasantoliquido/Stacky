@@ -1,0 +1,49 @@
+{
+  "ok": false,
+  "ticket_id": 120,
+  "verdict": "BLOCKED",
+  "category": "GEN",
+  "reason": "UI_MAP_MISSING",
+  "failed_stage": "ui_map",
+  "stage": "ui_map",
+  "error": "ui_map_missing",
+  "message": "UI map missing for screen(s): ['FrmAdministrador.aspx']. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "RF-007 - Modificaciones en la Lista de Obligaciones",
+      "plan_item_count": 13
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 13,
+      "layers": {
+        "uat": 7,
+        "manual_review": 6
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T012829Z-bc9abd\\120\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": false,
+      "skipped": false,
+      "screens": [
+        "FrmAdministrador.aspx",
+        "FrmDetalleClie.aspx"
+      ],
+      "missing_screens": [
+        "FrmAdministrador.aspx"
+      ],
+      "reason": "UI_MAP_MISSING"
+    }
+  },
+  "elapsed_s": 15.36,
+  "human_action_required": "UI map missing for: FrmAdministrador.aspx. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "run_id": "uat-120-20260510T012829Z-bc9abd",
+  "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T012829Z-bc9abd",
+  "_normalized": true
+}

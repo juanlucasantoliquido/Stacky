@@ -1,0 +1,35 @@
+{
+  "_meta": {
+    "fixture_id": "ticket_120_uat_human_valid",
+    "description": "Ticket 120 regression: UAT human simulation via FrmBusqueda → seleccionar cliente → FrmDetalleClie. Should produce human_path strategy with open_from_busqueda path_id.",
+    "created_at": "2026-05-09",
+    "ticket_id": 120,
+    "lane": "uat_human"
+  },
+  "input": {
+    "scenario_id": "P01",
+    "target_screen": "FrmDetalleClie.aspx",
+    "lane": "uat_human",
+    "available_data": {
+      "CLCOD": "12345"
+    }
+  },
+  "expected": {
+    "navigation_strategy": "human_path",
+    "path_id": "open_from_busqueda",
+    "entrypoint": "FrmBusqueda.aspx",
+    "direct_goto_used": false,
+    "deeplink_used": false,
+    "business_steps_executed": 8,
+    "decision": "ALLOW_GENERATION",
+    "data_available": true
+  },
+  "assertions": [
+    "decision must be ALLOW_GENERATION",
+    "strategy must be human_path",
+    "path_id must be open_from_busqueda",
+    "entrypoint must be FrmBusqueda.aspx",
+    "deeplink_rejected_reason must be lane_requires_human_simulation",
+    "required_assertions must include selected_client_loaded and detalle_cliente_visible"
+  ]
+}

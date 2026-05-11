@@ -137,7 +137,7 @@ async function globalSetup(_config: FullConfig): Promise<void> {
     const page    = await context.newPage();
 
     const loginURL = `${baseURL}FrmLogin.aspx`;
-    await page.goto(loginURL, { waitUntil: 'load', timeout: 30_000 });
+    await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });
     await page.fill(LOGIN_PASS_SEL, pass);
     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });

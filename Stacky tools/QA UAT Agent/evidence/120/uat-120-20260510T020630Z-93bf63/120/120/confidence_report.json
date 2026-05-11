@@ -1,0 +1,111 @@
+{
+  "schema_version": "confidence_report/1.0",
+  "ok": false,
+  "run_id": "120",
+  "ticket_id": 120,
+  "total_scenarios": 8,
+  "high_count": 0,
+  "medium_count": 0,
+  "low_count": 8,
+  "blocked_count": 8,
+  "min_confidence": 60,
+  "publish_blocked": true,
+  "scenario_scores": [
+    {
+      "scenario_id": "P02",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": [
+        {
+          "name": "no_assertions",
+          "delta": -10,
+          "reason": "No expect() calls in spec"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P05",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P06",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P07",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": [
+        {
+          "name": "no_assertions",
+          "delta": -10,
+          "reason": "No expect() calls in spec"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P08",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P10",
+      "score": 15,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": [
+        {
+          "name": "many_assertions",
+          "delta": 15,
+          "reason": "8 assertions in spec"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P11",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": [
+        {
+          "name": "no_assertions",
+          "delta": -10,
+          "reason": "No expect() calls in spec"
+        }
+      ]
+    },
+    {
+      "scenario_id": "P12",
+      "score": 15,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": [
+        {
+          "name": "many_assertions",
+          "delta": 15,
+          "reason": "9 assertions in spec"
+        }
+      ]
+    }
+  ],
+  "evidence_path": null,
+  "scored_at": "2026-05-10T02:08:56.979323Z"
+}

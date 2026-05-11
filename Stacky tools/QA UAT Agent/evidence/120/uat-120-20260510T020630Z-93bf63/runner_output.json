@@ -1,0 +1,186 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "total": 8,
+  "pass": 0,
+  "fail": 0,
+  "blocked": 8,
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "NO_TESTS_FOUND",
+  "runs": [
+    {
+      "scenario_id": "P02",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\tests\\P02_la_columna_fecha_de_ingreso_judicial_no_es_recuper.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nTimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at playwright\\global.setup.ts:140\n\n  138 |\n  139 |     const loginURL = `${baseURL}FrmLogin.aspx`;\n> 140 |     await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });\n      |                ^\n  141 |     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });\n  142 |     await page.fill(LOGIN_PASS_SEL, pass);\n  143 |     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });\n    at globalSetup (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:140:16)\n\n\nTo open last HTML report run:\n\u001b[36m\u001b[39m\n\u001b[36m  npx playwright show-report\u001b[39m\n\u001b[36m\u001b[39m\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P05",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\tests\\P05_comportamiento_con_campos_sin_valor_nulos_en_los_8.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nTimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at playwright\\global.setup.ts:140\n\n  138 |\n  139 |     const loginURL = `${baseURL}FrmLogin.aspx`;\n> 140 |     await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });\n      |                ^\n  141 |     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });\n  142 |     await page.fill(LOGIN_PASS_SEL, pass);\n  143 |     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });\n    at globalSetup (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:140:16)\n\n\nTo open last HTML report run:\n\u001b[36m\u001b[39m\n\u001b[36m  npx playwright show-report\u001b[39m\n\u001b[36m\u001b[39m\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P06",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\tests\\P06_valores_sino_del_campo_afiliado_al_debito_automati.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nTimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at playwright\\global.setup.ts:140\n\n  138 |\n  139 |     const loginURL = `${baseURL}FrmLogin.aspx`;\n> 140 |     await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });\n      |                ^\n  141 |     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });\n  142 |     await page.fill(LOGIN_PASS_SEL, pass);\n  143 |     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });\n    at globalSetup (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:140:16)\n\n\nTo open last HTML report run:\n\u001b[36m\u001b[39m\n\u001b[36m  npx playwright show-report\u001b[39m\n\u001b[36m\u001b[39m\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P07",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\tests\\P07_los_8_nuevos_campos_son_de_solo_lectura_para_todos.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nTimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at playwright\\global.setup.ts:140\n\n  138 |\n  139 |     const loginURL = `${baseURL}FrmLogin.aspx`;\n> 140 |     await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });\n      |                ^\n  141 |     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });\n  142 |     await page.fill(LOGIN_PASS_SEL, pass);\n  143 |     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });\n    at globalSetup (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:140:16)\n\n\nTo open last HTML report run:\n\u001b[36m\u001b[39m\n\u001b[36m  npx playwright show-report\u001b[39m\n\u001b[36m\u001b[39m\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P08",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\tests\\P08_formato_monetario_de_saldo_a_favor_disponible_y_mo.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nTimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at playwright\\global.setup.ts:140\n\n  138 |\n  139 |     const loginURL = `${baseURL}FrmLogin.aspx`;\n> 140 |     await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });\n      |                ^\n  141 |     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });\n  142 |     await page.fill(LOGIN_PASS_SEL, pass);\n  143 |     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });\n    at globalSetup (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:140:16)\n\n\nTo open last HTML report run:\n\u001b[36m\u001b[39m\n\u001b[36m  npx playwright show-report\u001b[39m\n\u001b[36m\u001b[39m\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P10",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\tests\\P10_actualizacion_de_datos_tras_batch_nocturno.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nTimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at playwright\\global.setup.ts:140\n\n  138 |\n  139 |     const loginURL = `${baseURL}FrmLogin.aspx`;\n> 140 |     await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });\n      |                ^\n  141 |     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });\n  142 |     await page.fill(LOGIN_PASS_SEL, pass);\n  143 |     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });\n    at globalSetup (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:140:16)\n\n\nTo open last HTML report run:\n\u001b[36m\u001b[39m\n\u001b[36m  npx playwright show-report\u001b[39m\n\u001b[36m\u001b[39m\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P11",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\tests\\P11_la_sub_vista_de_detalle_de_cuotas_no_se_ve_afectad.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nTimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at playwright\\global.setup.ts:140\n\n  138 |\n  139 |     const loginURL = `${baseURL}FrmLogin.aspx`;\n> 140 |     await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });\n      |                ^\n  141 |     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });\n  142 |     await page.fill(LOGIN_PASS_SEL, pass);\n  143 |     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });\n    at globalSetup (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:140:16)\n\n\nTo open last HTML report run:\n\u001b[36m\u001b[39m\n\u001b[36m  npx playwright show-report\u001b[39m\n\u001b[36m\u001b[39m\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P12",
+      "spec_file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T020630Z-93bf63\\tests\\P12_exportacion_incluye_nuevos_campos_y_excluye_column.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nTimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at playwright\\global.setup.ts:140\n\n  138 |\n  139 |     const loginURL = `${baseURL}FrmLogin.aspx`;\n> 140 |     await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 30_000 });\n      |                ^\n  141 |     await page.fill(LOGIN_USER_SEL, user,  { timeout: 10_000 });\n  142 |     await page.fill(LOGIN_PASS_SEL, pass);\n  143 |     await page.locator(LOGIN_BTN_SEL).click({ noWaitAfter: true });\n    at globalSetup (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:140:16)\n\n\nTo open last HTML report run:\n\u001b[36m\u001b[39m\n\u001b[36m  npx playwright show-report\u001b[39m\n\u001b[36m\u001b[39m\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    }
+  ],
+  "runner_summary": {
+    "verdict": "BLOCKED",
+    "category": "PIP",
+    "reason": "NO_TESTS_FOUND",
+    "total": 8,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 8,
+    "skipped": 0,
+    "retries": 0,
+    "duration_ms": 40967,
+    "artifacts": {
+      "junit": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+      "json_results": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+      "html_report": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+      "trace_count": 0,
+      "screenshots_count": 0,
+      "video_count": 0
+    },
+    "scenario_results": []
+  },
+  "meta": {
+    "tool": "uat_test_runner",
+    "version": "1.2.0",
+    "duration_ms": 40967,
+    "browser_launch_count": 1,
+    "login_count": 1,
+    "base_url": "http://localhost:35017/AgendaWeb/",
+    "managed_app": false,
+    "credentials_source": "env",
+    "username": "PABLO",
+    "password_present": true,
+    "password_hash_prefix": "81a4e2e6",
+    "max_total_minutes": 6,
+    "max_login_attempts": 1,
+    "max_browser_launches": 1
+  }
+}

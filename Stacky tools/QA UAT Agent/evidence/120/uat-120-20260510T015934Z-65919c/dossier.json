@@ -1,0 +1,229 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.1",
+  "run_id": "0a2bde5c-6db5-4789-b8f1-10cc8f893c72",
+  "ticket_id": 0,
+  "ticket_title": "RF-007 - Modificaciones en la Lista de Obligaciones",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "BLOCKED",
+  "executive_summary": "Resumen Ejecutivo UAT:  \nEl ticket RF-007 - Modificaciones en la Lista de Obligaciones se encuentra BLOQUEADO. Se ejecutaron 8 escenarios, de los cuales ninguno fue aprobado y se identificaron 8 incidencias en los escenarios P02, P05, P06, P07, P08, P10, P12 y P13. Se requiere resolución de los problemas detectados para continuar con la validación y asegurar el cumplimiento de los requisitos funcionales.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.3.0",
+    "total": 8,
+    "pass": 0,
+    "fail": 0,
+    "blocked": 8,
+    "not_tested": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P02",
+      "titulo": "La columna \"Fecha de ingreso judicial\" no es recuperable por configuracion",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que la columna \"Fecha de ingreso judicial\" no sea visible en la Vista Obligaciones de la instancia Pacifico, asegurando que la configuración impida su recuperación. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la interfaz o en la configuración del entorno.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "Comportamiento con campos sin valor (nulos) en los 8 nuevos campos",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar el comportamiento de la interfaz al mostrar una obligación que contiene campos nulos en los 8 nuevos campos. Se validó que la página contenga los textos esperados y que haya al menos un elemento en el grid de obligaciones, lo que indica cómo se manejan los datos faltantes en la visualización.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P06",
+      "titulo": "Valores \"Si\"/\"No\" del campo \"Afiliado al Debito Automatico\"",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que el campo \"Afiliado al Débito Automático\" en la vista de obligaciones muestre correctamente las opciones \"Sí\" y \"No\", asegurando que no aparezca ningún valor no esperado como \"OtroValor\". El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la disponibilidad del lote o en la carga de la página.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P07",
+      "titulo": "Los 8 nuevos campos son de solo lectura para todos los perfiles",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que los 8 nuevos campos en la Vista Obligaciones de la instancia Pacífico sean de solo lectura para todos los perfiles de usuario. El resultado \"BLOCKED\" indica que no se pudo completar la verificación, posiblemente debido a un problema en la visibilidad de los elementos en la interfaz.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P08",
+      "titulo": "Formato monetario de \"Saldo a favor disponible\" y \"Monto de la Cuota\"",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que los campos \"Saldo a favor disponible\" y \"Monto de la Cuota\" se muestren correctamente en el formato monetario definido en la configuración de la instancia Pacifico. La prueba se bloqueó debido a que no se pudo validar la visibilidad y el contenido esperado en la página.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P10",
+      "titulo": "Actualizacion de datos tras batch nocturno",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, tras la ejecución del batch nocturno, la Vista Obligaciones en 'FrmDetalleClie.aspx' muestre correctamente el nuevo valor actualizado en múltiples elementos de la página. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la carga de la página o en la ejecución del batch.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P12",
+      "titulo": "Exportacion incluye nuevos campos y excluye columna eliminada (si aplica)",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al exportar la lista de datos desde la Vista Obligaciones, se incluyan correctamente los nuevos campos 'OGCANAL', 'OGMEDIOPAGO', 'OGDEBAUT_DESC', 'DESALDOFAVOR' y 'OGCUOTA', y que se excluya cualquier columna que haya sido eliminada. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la interfaz o en la funcionalidad de exportación.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P13",
+      "titulo": "Consistencia de \"Nombre del Corredor\" con RF-006 (Corredor Principal en cabecera)",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que el campo \"Nombre del Corredor\" en la interfaz de usuario de la aplicación se muestre correctamente con el valor esperado, conforme a la especificación RF-006. El resultado \"BLOCKED\" indica que no se pudo completar la prueba, posiblemente debido a que el lote o la funcionalidad no estaban disponibles.",
+      "reason": "RUNTIME_ERROR"
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P02",
+      "titulo": "P02",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "P05",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P06",
+      "titulo": "P06",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P07",
+      "titulo": "P07",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P08",
+      "titulo": "P08",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P10",
+      "titulo": "P10",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P12",
+      "titulo": "P12",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P13",
+      "titulo": "P13",
+      "message": "RUNTIME_ERROR"
+    }
+  ],
+  "coverage_gaps": [],
+  "recommendation_for_human_qa": [
+    "Revise los registros de errores para identificar la causa exacta del error de ejecución.",
+    "Verifique que todas las dependencias y configuraciones necesarias estén correctamente instaladas.",
+    "Ejecute los casos de prueba de forma individual para aislar el problema.",
+    "Consulte con el equipo de desarrollo si persisten los errores tras las verificaciones iniciales."
+  ],
+  "next_steps": [
+    "Resolver bloqueos de entorno antes de re-ejecutar.",
+    "Verificar configuración de env vars y base de datos."
+  ],
+  "generated_at": "2026-05-10T02:02:30Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.3.0",
+    "duration_ms": 29105
+  },
+  "comment_hash": "841be719effc5bb59dc0f47b85eb47e0c14e444f2d3f0291ef0b9ec946d87b5c",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015934Z-65919c\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260510T015934Z-65919c\\ado_comment.html"
+  }
+}

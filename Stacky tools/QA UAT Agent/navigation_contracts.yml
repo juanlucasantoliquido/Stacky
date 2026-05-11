@@ -1,0 +1,265 @@
+# navigation_contracts.yml — Navigation contracts for Stacky QA UAT Agent
+#
+# DESCRIPTION
+# -----------
+# Declares, per screen, whether direct entry is allowed, whether deeplink is
+# supported, what human navigation paths are approved, and what lanes may use
+# each strategy.
+#
+# SCHEMA (per screen)
+# -------------------
+# screen_type:
+#   entrypoint   — can be reached directly without context (login page, search page)
+#   detail       — requires context from a prior navigation (entity selected)
+#   list         — list/search screen (may or may not require prior context)
+#   form         — data entry / edit form
+#   popup        — modal / popup dialog
+#   report       — report viewer
+#
+# direct_entry_allowed: bool  — plain goto(url) without params is safe
+# deeplink_allowed: bool      — deeplink with params reconstructs context
+# human_path_required_for_uat: bool — uat_human lane MUST use human nav
+#
+# deeplink:
+#   pattern: url pattern with {PARAM} placeholders
+#   required_params: list of param names
+#   reconstructs_context: list of context items the deeplink sets up
+#   required_assertions: list of assertion keys that MUST pass after deeplink
+#   allowed_lanes: lanes that MAY use deeplink
+#   forbidden_lanes: lanes that MUST NOT use deeplink
+#
+# human_paths: dict of named paths
+#   entrypoint: starting screen filename
+#   steps: list of navigation step descriptions (informational)
+#   required_data: data keys needed to execute this path
+#   emits_context: context items set after successful navigation
+#   required_assertions: assertion keys that MUST pass after navigation
+#
+# assertions: dict of assertion key → description
+#   Used in required_assertions to document what each assertion validates.
+#
+# VERSION HISTORY
+# ---------------
+# 1.0 — Initial contracts for FrmDetalleClie, FrmBusqueda, FrmAgenda, FrmLogin
+
+_meta:
+  version: "1.0"
+  created_at: "2026-05-09"
+  description: "Screen navigation contracts for Stacky QA UAT Agent"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LOGIN
+# ─────────────────────────────────────────────────────────────────────────────
+FrmLogin.aspx:
+  screen_type: entrypoint
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false
+  notes: "Entry point. Always accessible directly. Auth managed by globalSetup."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BÚSQUEDA (search / list)
+# ─────────────────────────────────────────────────────────────────────────────
+FrmBusqueda.aspx:
+  screen_type: list
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false
+
+  human_paths:
+    open_direct:
+      entrypoint: FrmBusqueda.aspx
+      steps:
+        - "Navigate directly to FrmBusqueda.aspx"
+      required_data: []
+      emits_context:
+        - search_form_visible
+      required_assertions:
+        - search_form_visible
+
+  assertions:
+    search_form_visible: "Search form is rendered and filters are interactable"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DETALLE CLIENTE (session-dependent detail screen)
+# ─────────────────────────────────────────────────────────────────────────────
+FrmDetalleClie.aspx:
+  screen_type: detail
+  direct_entry_allowed: false
+  deeplink_allowed: true
+  human_path_required_for_uat: true
+
+  deeplink:
+    pattern: "FrmDetalleClie.aspx?clcod={CLCOD}"
+    required_params:
+      - CLCOD
+    reconstructs_context:
+      - authenticated_user
+      - selected_client
+      - permissions
+      - navigation_context
+    required_assertions:
+      - selected_client_loaded
+      - detalle_cliente_visible
+      - no_server_error
+    allowed_lanes:
+      - smoke_deeplink
+      - regression_deeplink
+      - diagnostic
+      - forensic_rerun
+    forbidden_lanes:
+      - uat_human
+      - uat_human_simulation
+
+  human_paths:
+    open_from_busqueda:
+      entrypoint: FrmBusqueda.aspx
+      steps:
+        - "Navigate to FrmBusqueda.aspx"
+        - "Fill CLCOD in the client filter"
+        - "Click Buscar button"
+        - "Verify at least one result row appears"
+        - "Click on the matching client row"
+        - "Verify FrmDetalleClie.aspx is loaded with client context"
+      required_data:
+        - CLCOD
+      emits_context:
+        - selected_client
+        - navigation_context
+      required_assertions:
+        - search_results_visible
+        - selected_client_loaded
+        - detalle_cliente_visible
+
+  assertions:
+    selected_client_loaded: "Client code is visible in the detail form header or title"
+    detalle_cliente_visible: "Detail form body (tabs, fields) is visible and not in error state"
+    no_server_error: "No ASP.NET yellow screen of death or unhandled exception visible"
+    search_results_visible: "Search results grid shows at least one row matching CLCOD"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENDA (personal calendar)
+# ─────────────────────────────────────────────────────────────────────────────
+FrmAgenda.aspx:
+  screen_type: entrypoint
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false
+
+  human_paths:
+    open_direct:
+      entrypoint: FrmAgenda.aspx
+      steps:
+        - "Navigate directly to FrmAgenda.aspx"
+      required_data: []
+      emits_context:
+        - agenda_calendar_visible
+      required_assertions:
+        - agenda_calendar_visible
+
+  assertions:
+    agenda_calendar_visible: "Agenda calendar component is rendered"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENDA EQUIPO
+# ─────────────────────────────────────────────────────────────────────────────
+FrmAgendaEquipo.aspx:
+  screen_type: list
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false
+
+  human_paths:
+    open_direct:
+      entrypoint: FrmAgendaEquipo.aspx
+      steps:
+        - "Navigate directly to FrmAgendaEquipo.aspx"
+      required_data: []
+      emits_context:
+        - team_agenda_visible
+      required_assertions:
+        - team_agenda_visible
+
+  assertions:
+    team_agenda_visible: "Team agenda component is rendered"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENDA JUDICIAL
+# ─────────────────────────────────────────────────────────────────────────────
+FrmAgendaJudicial.aspx:
+  screen_type: list
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false
+
+  human_paths:
+    open_direct:
+      entrypoint: FrmAgendaJudicial.aspx
+      steps:
+        - "Navigate directly to FrmAgendaJudicial.aspx"
+      required_data: []
+      emits_context:
+        - judicial_agenda_visible
+      required_assertions:
+        - judicial_agenda_visible
+
+  assertions:
+    judicial_agenda_visible: "Judicial agenda component is rendered"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DETALLE OBLIGACION (session-dependent)
+# ─────────────────────────────────────────────────────────────────────────────
+FrmDetalleObligacion.aspx:
+  screen_type: detail
+  direct_entry_allowed: false
+  deeplink_allowed: false
+  human_path_required_for_uat: true
+
+  human_paths:
+    open_from_detalle_cliente:
+      entrypoint: FrmDetalleClie.aspx
+      steps:
+        - "Navigate to FrmDetalleClie.aspx with CLCOD (via human_path open_from_busqueda)"
+        - "Locate the obligaciones grid"
+        - "Click on the target obligacion row"
+        - "Verify FrmDetalleObligacion.aspx is loaded"
+      required_data:
+        - CLCOD
+        - OBLCOD
+      emits_context:
+        - selected_client
+        - selected_obligacion
+      required_assertions:
+        - obligacion_detail_visible
+        - no_server_error
+
+  assertions:
+    obligacion_detail_visible: "Obligacion detail form is rendered with expected fields"
+    no_server_error: "No ASP.NET yellow screen of death or unhandled exception visible"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEFAULT (catch-all for unknown screens)
+# ─────────────────────────────────────────────────────────────────────────────
+Default.aspx:
+  screen_type: entrypoint
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false
+
+FrmReportes.aspx:
+  screen_type: list
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false
+
+FrmAdministrador.aspx:
+  screen_type: list
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false
+
+FrmLiquidaciones.aspx:
+  screen_type: list
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false

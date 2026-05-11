@@ -1,0 +1,81 @@
+{
+  "lane": "uat_human",
+  "allow_deeplink_override": false,
+  "scenarios": [
+    {
+      "scenario_id": "P02",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P05",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P06",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P07",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P08",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P10",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P11",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P12",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    }
+  ],
+  "blocked_count": 0,
+  "allowed_count": 8,
+  "decision": "ALLOW_GENERATION"
+}

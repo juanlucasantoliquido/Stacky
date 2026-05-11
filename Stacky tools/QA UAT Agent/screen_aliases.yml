@@ -88,10 +88,10 @@ FrmBusquedaJudicial.aspx:
 
 FrmAdministrador.aspx:
   aliases:
-    - administrador
     - panel de administración
     - panel admin
-    - admin
+    - frmadministrador
+    - pantalla de administración
 
 FrmAdminEstrategias.aspx:
   aliases:

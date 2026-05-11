@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "fixture_id": "ticket_120_deeplink_valid",
+    "description": "Ticket 120 regression: deeplink via FrmDetalleClie.aspx?clcod=12345 in smoke_deeplink lane. Should be ALLOW_GENERATION with deeplink strategy.",
+    "created_at": "2026-05-09",
+    "ticket_id": 120,
+    "lane": "smoke_deeplink"
+  },
+  "input": {
+    "scenario_id": "P01",
+    "target_screen": "FrmDetalleClie.aspx",
+    "lane": "smoke_deeplink",
+    "available_data": {
+      "CLCOD": "12345"
+    }
+  },
+  "expected": {
+    "verdict": "PASS_OR_CONTINUE_TO_BUSINESS_STEPS",
+    "navigation_strategy": "deeplink",
+    "deeplink_context_loaded": true,
+    "direct_goto_used": false,
+    "decision": "ALLOW_GENERATION",
+    "url_contains": "FrmDetalleClie.aspx",
+    "url_contains_clcod": true
+  },
+  "assertions": [
+    "decision must be ALLOW_GENERATION",
+    "strategy must be deeplink",
+    "url must contain FrmDetalleClie.aspx and CLCOD value",
+    "direct_goto_allowed must be false (deeplink != direct goto)",
+    "required_context_assertions must be populated"
+  ]
+}

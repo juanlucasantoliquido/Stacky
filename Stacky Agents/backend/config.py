@@ -44,11 +44,34 @@ class Config:
         str(Path.home() / "AppData" / "Roaming" / "Code" / "User" / "prompts"),
     )
 
+    # Codex CLI runtime
+    CODEX_CLI_BIN = os.getenv("CODEX_CLI_BIN", "codex")
+    CODEX_CLI_MODEL = os.getenv("CODEX_CLI_MODEL", "")
+    CODEX_CLI_SANDBOX = os.getenv("CODEX_CLI_SANDBOX", "danger-full-access")
+    CODEX_CLI_APPROVAL = os.getenv("CODEX_CLI_APPROVAL", "never")
+    QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
+        "QA_BROWSER_DEFAULT_BASE_URL",
+        "http://localhost:35017/AgendaWeb/",
+    )
+
     ADO_ORG = os.getenv("ADO_ORG", "")
     ADO_PROJECT = os.getenv("ADO_PROJECT", "")
     ADO_PAT = os.getenv("ADO_PAT", "")
 
     CACHE_ENABLED = os.getenv("CACHE_ENABLED", "true").lower() == "true"
+
+    # ── Gateway de finalización de agentes (Plan SSD P1) ─────────────────────
+    # Valores: "off" (default) | "shadow" | "on"
+    #   off    → endpoint no registrado / devuelve 404.
+    #   shadow → corre en lectura/simulación, no muta DB ni ADO. P1.
+    #   on     → gateway canónico activo. Reservado para P5.
+    STACKY_COMPLETION_GATEWAY: str = os.getenv(
+        "STACKY_COMPLETION_GATEWAY", "off"
+    ).lower().strip()
+
+    # Token simétrico que los agentes deben incluir en X-Stacky-Agent-Token.
+    # Debe setearse en .env de producción. En tests se puede usar cualquier valor.
+    STACKY_AGENT_TOKEN: str = os.getenv("STACKY_AGENT_TOKEN", "")
 
 
 config = Config()

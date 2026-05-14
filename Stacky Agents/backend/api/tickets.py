@@ -387,3 +387,547 @@ def set_stacky_status(ticket_id: int):
         "ticket_id": ticket_id,
         "current_status": ts.get_current_status(ticket_id),
     })
+
+
+@bp.patch("/by-ado/<int:ado_id>/stacky-status")
+def set_stacky_status_by_ado(ado_id: int):
+    """Actualiza el stacky_status usando el ADO work item ID en lugar del ticket_id interno.
+
+    Permite que los agentes (que solo conocen el ADO ID) actualicen el estado
+    al finalizar su trabajo, sin necesidad de conocer el ID interno de Stacky.
+
+    Body:
+      {
+        "status": "completed" | "error" | "cancelled" | "idle",
+        "reason": "texto libre opcional",
+        "agent_type": "developer" | "technical" | ... (opcional),
+        "html_output_path": "Agentes/outputs/<ADO_ID>/comment.html" (opcional)
+      }
+
+    Si `html_output_path` viene, se persiste en la AgentExecution más reciente
+    del ticket (preferentemente la del mismo agent_type). El post-hook de
+    publicación en ADO usa ese path. Si no viene, se asume convención
+    canónica Agentes/outputs/<ado_id>/comment.html.
+
+    Responde 200 aunque el ticket no esté en BD (para no romper al agente).
+    """
+    from services import ticket_status as ts
+
+    body = request.get_json(silent=True) or {}
+    new_status = body.get("status", "").strip()
+    reason = body.get("reason")
+    agent_type = body.get("agent_type")
+    html_output_path = body.get("html_output_path")
+    user = request.headers.get("X-User-Email") or "agent"
+
+    if not new_status:
+        return jsonify({"ok": False, "error": "campo 'status' requerido"}), 400
+
+    with session_scope() as session:
+        t = session.query(Ticket).filter(Ticket.ado_id == ado_id).first()
+        if t is None:
+            logger.warning("set_stacky_status_by_ado: ADO-%s no encontrado en BD — ignorado", ado_id)
+            return jsonify({"ok": True, "skipped": True, "reason": "ticket not in local DB"}), 200
+        ticket_id = t.id
+
+        # Persistir html_output_path en la última AgentExecution del ticket
+        # antes de la transición de estado (para que el post-hook lo encuentre).
+        if html_output_path:
+            q = session.query(AgentExecution).filter(
+                AgentExecution.ticket_id == ticket_id
+            )
+            if agent_type:
+                q = q.filter(AgentExecution.agent_type == agent_type)
+            last_exec = q.order_by(AgentExecution.started_at.desc()).first()
+            if last_exec is not None:
+                last_exec.html_output_path = html_output_path
+
+    try:
+        ts.set_status(
+            ticket_id,
+            new_status,
+            changed_by=user,
+            agent_type=agent_type,
+            reason=reason or f"Agent signal via by-ado endpoint (ADO-{ado_id})",
+            metadata={"html_output_path": html_output_path} if html_output_path else None,
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    return jsonify({
+        "ok": True,
+        "ado_id": ado_id,
+        "ticket_id": ticket_id,
+        "current_status": ts.get_current_status(ticket_id),
+        "html_output_path": html_output_path,
+    })
+
+
+@bp.post("/by-ado/<int:ado_id>/agent-completion")
+def agent_completion(ado_id: int):
+    """Gateway canónico de finalización de agentes (Plan SSD P1).
+
+    Endpoint: POST /api/tickets/by-ado/{ado_id}/agent-completion
+
+    Auth obligatoria: header X-Stacky-Agent-Token. Si falta o es inválido → 401.
+    X-User-Email opcional (trazabilidad).
+
+    Feature flag STACKY_COMPLETION_GATEWAY:
+      off    → 404 (endpoint deshabilitado, comportamiento P0).
+      shadow → corre en simulación, no muta DB/ADO. Responde 200 con plan.
+      on     → gateway canónico activo (reservado para P5, responde 501 por ahora).
+
+    Payload v1:
+      {
+        "execution_id": 44,               // opcional; si se omite, se resuelve
+        "agent_type": "functional",       // requerido
+        "status": "completed",            // requerido; uno de: completed|error|cancelled|needs_review
+        "html_output_path": "Agentes/outputs/149/comment.html",  // opcional
+        "metadata": {
+          "html_sha256": "...",           // opcional
+          "agent_version": "Agente@2026-05-14",  // opcional
+          "duration_ms": 184232          // opcional
+        },
+        "reason": "texto libre",          // opcional
+        "allow_synthetic_rescue": false   // opcional; solo con status=completed
+      }
+
+    Respuesta shadow:
+      {
+        "mode": "shadow",
+        "ok": true,
+        "would_succeed": true|false,
+        "correlation_id": "uuid",
+        "ticket_id": 42,
+        "execution_id": 44,
+        "plan": [...],
+        "errors": [...],
+        "discrepancies": [...]
+      }
+    """
+    import os as _os
+    import uuid as _uuid
+    from services.agent_completion import CompletionPayload, GatewayError
+
+    correlation_id = str(_uuid.uuid4())
+    # Leer el flag dinámicamente en cada request para permitir hot-reload en tests
+    # y cambios sin reiniciar el proceso (via env var update o config en runtime).
+    gateway_mode = _os.getenv("STACKY_COMPLETION_GATEWAY", "off").lower().strip()
+
+    # ── Feature flag: off → 404 ──────────────────────────────────────────────
+    if gateway_mode == "off":
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "gateway_disabled",
+                "message": (
+                    "El gateway de finalización de agentes está deshabilitado. "
+                    "Establezca STACKY_COMPLETION_GATEWAY=shadow para activarlo. "
+                    "Use PATCH /api/tickets/by-ado/{ado_id}/stacky-status para el flujo legacy."
+                ),
+            },
+        }), 404
+
+    # ── Feature flag: on → 501 (P5) ─────────────────────────────────────────
+    if gateway_mode == "on":
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "not_implemented",
+                "message": (
+                    "El gateway en modo 'on' se habilitará en la fase P5. "
+                    "Use STACKY_COMPLETION_GATEWAY=shadow para operar en modo shadow."
+                ),
+            },
+            "correlation_id": correlation_id,
+        }), 501
+
+    # ── Auth: X-Stacky-Agent-Token ───────────────────────────────────────────
+    agent_token_header = request.headers.get("X-Stacky-Agent-Token", "").strip()
+    expected_token = _os.getenv("STACKY_AGENT_TOKEN", "").strip()
+
+    if not agent_token_header:
+        logger.warning(
+            "gateway[%s] 401 missing token: ado_id=%s corr=%s",
+            gateway_mode, ado_id, correlation_id,
+        )
+        return jsonify({
+            "ok": False,
+            "error": {"code": "auth_required", "message": "Header X-Stacky-Agent-Token requerido"},
+            "correlation_id": correlation_id,
+        }), 401
+
+    if expected_token and agent_token_header != expected_token:
+        logger.warning(
+            "gateway[%s] 401 invalid token: ado_id=%s corr=%s",
+            gateway_mode, ado_id, correlation_id,
+        )
+        return jsonify({
+            "ok": False,
+            "error": {"code": "auth_required", "message": "X-Stacky-Agent-Token inválido"},
+            "correlation_id": correlation_id,
+        }), 401
+
+    user = request.headers.get("X-User-Email") or "agent"
+
+    # ── Parse payload v1 ─────────────────────────────────────────────────────
+    body = request.get_json(silent=True) or {}
+    if not body:
+        return jsonify({
+            "ok": False,
+            "error": {"code": "payload_invalid", "message": "Body JSON requerido"},
+            "correlation_id": correlation_id,
+        }), 400
+
+    try:
+        payload = CompletionPayload.from_dict(body)
+    except (ValueError, KeyError) as exc:
+        return jsonify({
+            "ok": False,
+            "error": {"code": "payload_invalid", "message": str(exc)},
+            "correlation_id": correlation_id,
+        }), 400
+
+    # ── Modo shadow ──────────────────────────────────────────────────────────
+    if gateway_mode == "shadow":
+        from services.agent_completion import run_shadow
+
+        # legacy_state: si el cliente quiere que el gateway detecte discrepancias
+        # puede pasar el resultado del legacy en body["_legacy_observed"].
+        # Es opcional — si no viene, el gateway solo simula.
+        legacy_state: dict | None = body.get("_legacy_observed")
+
+        try:
+            result, http_status = run_shadow(
+                ado_id=ado_id,
+                payload=payload,
+                user=user,
+                correlation_id=correlation_id,
+                legacy_state=legacy_state,
+            )
+            return jsonify(result.to_dict()), http_status
+        except Exception as exc:
+            logger.exception(
+                "gateway[shadow] internal_error: ado_id=%s corr=%s", ado_id, correlation_id,
+            )
+            return jsonify({
+                "ok": False,
+                "error": {
+                    "code": "internal_error",
+                    "message": "Error interno en el gateway shadow",
+                    "detail": {"correlation_id": correlation_id},
+                },
+                "correlation_id": correlation_id,
+            }), 500
+
+    # Modo desconocido (guardrail)
+    return jsonify({
+        "ok": False,
+        "error": {
+            "code": "gateway_config_error",
+            "message": (
+                f"STACKY_COMPLETION_GATEWAY='{gateway_mode}' no es un valor válido. "
+                "Valores aceptados: off | shadow | on"
+            ),
+        },
+        "correlation_id": correlation_id,
+    }), 500
+
+
+@bp.post("/recover-stale-status")
+def recover_stale_status():
+    """Corrige tickets con stacky_status='running' cuya última ejecución ya terminó.
+
+    Equivalente al startup recovery pero invocable on-demand desde el frontend
+    o el operador. También detecta ejecuciones con timeout (running por más de
+    EXECUTION_TIMEOUT_MINUTES) y las cierra como 'error'.
+
+    Response:
+      {
+        "ok": true,
+        "fixed": N,                         // cantidad (compatibilidad)
+        "count": N,                         // mismo valor, nombre explícito
+        "trigger": "manual",
+        "details": [
+          { "ticket_id": 42, "ado_id": 122, "old_status": "running",
+            "new_status": "completed", "execution_id": 99,
+            "agent_type": "developer", "kind": "execution_ended",
+            "reason": "...", "trigger": "manual" },
+          ...
+        ]
+      }
+    """
+    from services.ticket_status import recover_stale_running_tickets
+
+    try:
+        details = recover_stale_running_tickets(trigger="manual")
+    except Exception as exc:
+        logger.exception("recover-stale-status falló")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({
+        "ok": True,
+        "fixed": len(details),
+        "count": len(details),
+        "trigger": "manual",
+        "details": details,
+    })
+
+
+# ── Fase 4: cierre manual fallback ────────────────────────────────────────────
+
+
+@bp.post("/<int:ticket_id>/finish-work")
+def finish_work(ticket_id: int):
+    """Cierre manual de un ticket cuando la automatización no lo logró (Fase 4).
+
+    Acciones (en orden, todas con audit trail):
+      1. Validar precondiciones (existe ticket, no está ya completed).
+      2. Si publish_to_ado=True: localizar y publicar el HTML del agente en ADO.
+      3. Si target_ado_state se provee: cambiar el System.State del work item.
+      4. Marcar stacky_status='completed' con changed_by=operador.
+      5. Registrar evento estructurado en stacky_logger ('manual_finish_work').
+
+    Body (JSON):
+      {
+        "operator_reason": "texto obligatorio, min 5 chars",
+        "publish_to_ado": true,         // default true
+        "html_output_path": "..."|null, // override del HTML — opcional
+        "target_ado_state": "Done"|null,// si null, no se cambia el estado ADO
+        "force_publish": false,          // bypassea dedupe de ado_publisher
+        "dry_run": false                 // si true, solo valida — no ejecuta
+      }
+
+    Response:
+      {
+        "ok": bool,
+        "dry_run": bool,
+        "ticket_id": int,
+        "ado_id": int|null,
+        "preconditions": { html_exists, html_valid_reason, current_stacky_status },
+        "actions": [
+          { "action": "publish_ado_comment", "ok": bool, "reason": str|null,
+            "html_sha256": str|null, "record_id": int|null },
+          { "action": "update_ado_state",    "ok": bool, "to": str, "reason": str|null },
+          { "action": "update_stacky_status","ok": bool, "to": "completed" }
+        ],
+        "current_status": str
+      }
+    """
+    from services import ticket_status as ts
+    from services.ado_publisher import publish_from_execution
+    from services import agent_html_output as html_io
+
+    body = request.get_json(silent=True) or {}
+    operator_reason = (body.get("operator_reason") or "").strip()
+    publish_to_ado_flag = bool(body.get("publish_to_ado", True))
+    html_output_path = body.get("html_output_path")
+    target_ado_state = body.get("target_ado_state")
+    force_publish = bool(body.get("force_publish", False))
+    dry_run = bool(body.get("dry_run", False))
+    operator = request.headers.get("X-User-Email") or "anonymous"
+
+    if len(operator_reason) < 5:
+        return jsonify({
+            "ok": False,
+            "error": "operator_reason requerido (mínimo 5 caracteres)",
+        }), 400
+
+    # ── 1. Cargar contexto ────────────────────────────────────────────────────
+    with session_scope() as session:
+        ticket = session.get(Ticket, ticket_id)
+        if ticket is None:
+            abort(404)
+        ado_id: int | None = getattr(ticket, "ado_id", None)
+        current_stacky = getattr(ticket, "stacky_status", "idle") or "idle"
+
+        # Última ejecución para localizar el HTML del agente
+        last_exec = (
+            session.query(AgentExecution)
+            .filter(AgentExecution.ticket_id == ticket_id)
+            .order_by(AgentExecution.started_at.desc())
+            .first()
+        )
+        execution_id = last_exec.id if last_exec else None
+        exec_hint = last_exec.html_output_path if last_exec else None
+
+    if current_stacky == "completed":
+        return jsonify({
+            "ok": False,
+            "error": "ticket ya está en stacky_status='completed'",
+            "current_status": current_stacky,
+        }), 409
+
+    # ── 2. Preflight: HTML existe y es válido? ────────────────────────────────
+    html_exists = False
+    html_invalid_reason: str | None = None
+    if ado_id is not None and publish_to_ado_flag:
+        hint = html_output_path or exec_hint
+        try:
+            html_io.read_and_validate(int(ado_id), hint=hint)
+            html_exists = True
+        except html_io.ValidationError as exc:
+            html_invalid_reason = str(exc)
+            # NOT_FOUND no es bloqueante — publicaremos una nota de cierre manual.
+            # SECRET_DETECTED sí: rechazar la operación.
+            if exc.code == "SECRET_DETECTED":
+                return jsonify({
+                    "ok": False,
+                    "error": f"HTML contiene secretos; cierre manual abortado: {exc.message}",
+                    "preconditions": {
+                        "html_exists": False,
+                        "html_invalid_reason": html_invalid_reason,
+                        "current_stacky_status": current_stacky,
+                    },
+                }), 422
+
+    preconditions = {
+        "html_exists": html_exists,
+        "html_invalid_reason": html_invalid_reason,
+        "current_stacky_status": current_stacky,
+        "execution_id": execution_id,
+        "ado_id": ado_id,
+    }
+
+    if dry_run:
+        return jsonify({
+            "ok": True,
+            "dry_run": True,
+            "ticket_id": ticket_id,
+            "ado_id": ado_id,
+            "preconditions": preconditions,
+            "actions": [],
+            "current_status": current_stacky,
+            "operator": operator,
+        })
+
+    actions: list[dict] = []
+
+    # ── 3. Publicar en ADO ────────────────────────────────────────────────────
+    if publish_to_ado_flag and ado_id is not None:
+        if html_exists and execution_id is not None:
+            result = publish_from_execution(
+                execution_id,
+                triggered_by="finish_work",
+                force=force_publish,
+            )
+            actions.append({
+                "action": "publish_ado_comment",
+                "ok": result.ok,
+                "status": result.status,
+                "reason": result.reason,
+                "html_sha256": result.html_sha256,
+                "record_id": result.record_id,
+            })
+        else:
+            # No hay HTML — publicar nota de cierre manual textual
+            try:
+                from services.ado_client import AdoClient
+                fallback_html = (
+                    "<p><b>Cierre manual desde Stacky Agents.</b></p>"
+                    f"<p>Operador: {operator}</p>"
+                    f"<p>Motivo: {operator_reason}</p>"
+                )
+                AdoClient().post_comment(int(ado_id), fallback_html, "html")
+                actions.append({
+                    "action": "publish_ado_comment",
+                    "ok": True,
+                    "status": "ok",
+                    "reason": "no_agent_html_fallback_note",
+                    "html_sha256": None,
+                    "record_id": None,
+                })
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("finish_work: fallback note falló")
+                actions.append({
+                    "action": "publish_ado_comment",
+                    "ok": False,
+                    "status": "failed",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "html_sha256": None,
+                    "record_id": None,
+                })
+
+    # ── 4. Cambiar estado en ADO ──────────────────────────────────────────────
+    if target_ado_state and ado_id is not None:
+        try:
+            from services.ado_client import AdoClient
+            AdoClient().update_work_item_state(int(ado_id), target_ado_state)
+            actions.append({
+                "action": "update_ado_state",
+                "ok": True,
+                "to": target_ado_state,
+                "reason": None,
+            })
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("finish_work: update_ado_state falló")
+            actions.append({
+                "action": "update_ado_state",
+                "ok": False,
+                "to": target_ado_state,
+                "reason": f"{type(exc).__name__}: {exc}",
+            })
+
+    # ── 5. Cerrar en Stacky BD ────────────────────────────────────────────────
+    try:
+        ts.set_status(
+            ticket_id,
+            "completed",
+            changed_by=operator,
+            execution_id=execution_id,
+            reason=f"Manual finish-work: {operator_reason}",
+            metadata={
+                "trigger": "manual_finish_work",
+                "operator": operator,
+                "operator_reason": operator_reason,
+                "target_ado_state": target_ado_state,
+                "actions": actions,
+            },
+        )
+        actions.append({
+            "action": "update_stacky_status",
+            "ok": True,
+            "to": "completed",
+            "reason": None,
+        })
+    except ValueError as exc:
+        actions.append({
+            "action": "update_stacky_status",
+            "ok": False,
+            "to": "completed",
+            "reason": str(exc),
+        })
+
+    # ── 6. Evento estructurado para audit ─────────────────────────────────────
+    try:
+        from services.stacky_logger import logger as slog
+        slog.info(
+            "tickets",
+            "manual_finish_work",
+            ticket_id=ticket_id,
+            execution_id=execution_id,
+            user=operator,
+            context_data={
+                "ado_id": ado_id,
+                "operator_reason": operator_reason,
+                "target_ado_state": target_ado_state,
+                "preconditions": preconditions,
+                "actions": actions,
+                "dry_run": False,
+            },
+            tags=["ticket", "finish_work", "manual"],
+        )
+    except Exception:
+        logger.exception("emit manual_finish_work falló (no crítico)")
+
+    overall_ok = all(a.get("ok") for a in actions)
+    return jsonify({
+        "ok": overall_ok,
+        "dry_run": False,
+        "ticket_id": ticket_id,
+        "ado_id": ado_id,
+        "preconditions": preconditions,
+        "actions": actions,
+        "current_status": ts.get_current_status(ticket_id),
+        "operator": operator,
+    })

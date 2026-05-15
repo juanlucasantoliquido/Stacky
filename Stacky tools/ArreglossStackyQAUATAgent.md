@@ -1,1 +1,5 @@
 1) Tiene casos de que por datos en la BD no puede terminar de hacer el test y quiero que si tiene que moldear algun dato me entregue el insert hardcodeado ya listo para ejecutar y poder saltear esa barrera y seguir con el test.
+--resuelto
+
+
+2) Utilizar CUCUMBER.

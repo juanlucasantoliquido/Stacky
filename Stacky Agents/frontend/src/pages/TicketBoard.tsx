@@ -5,6 +5,7 @@ import type { Ticket, TicketNode, TicketHierarchy, PipelineInferenceResult, Agen
 import PipelineStatus from "../components/PipelineStatus";
 import TicketGraphView from "../components/TicketGraphView";
 import RecoverExecutionButton from "../components/RecoverExecutionButton";
+import FinishWorkButton from "../components/FinishWorkButton";
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { getPinnedAgents } from "../services/preferences";
 import { useWorkbench } from "../store/workbench";
@@ -325,6 +326,21 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
                   adoId={ticket.ado_id}
                   ticketId={ticket.id}
                   orphanExecution={inconsistency.orphanExecution}
+                />
+              </div>
+            )}
+
+            {/* Botón de cierre manual: visible solo cuando el nodo está expandido,
+                stacky_status='running' y no hay inconsistencia activa (esa ya la
+                maneja RecoverExecutionButton). Patrón consistente con RecoverExecutionButton. */}
+            {ticket.stacky_status === "running" && !inconsistency.isInconsistent && (
+              <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
+                <FinishWorkButton
+                  ticket={ticket}
+                  onCompleted={() => {
+                    qc.invalidateQueries({ queryKey: ["tickets"] });
+                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+                  }}
                 />
               </div>
             )}

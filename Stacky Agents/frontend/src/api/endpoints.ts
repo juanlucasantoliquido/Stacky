@@ -33,6 +33,32 @@ export interface TicketSyncResult {
   message?: string;
 }
 
+/** Contrato de respuesta del endpoint POST /api/tickets/{id}/finish-work */
+export interface FinishWorkResponse {
+  ok: boolean;
+  dry_run: boolean;
+  ticket_id: number;
+  ado_id: number | null;
+  preconditions: {
+    html_exists: boolean;
+    html_invalid_reason: string | null;
+    current_stacky_status: string;
+    execution_id: number | null;
+    ado_id: number | null;
+  };
+  actions: {
+    action: string;
+    ok: boolean;
+    to?: string | null;
+    reason?: string | null;
+    status?: string | null;
+    html_sha256?: string | null;
+    record_id?: number | null;
+  }[];
+  current_status: string;
+  operator: string;
+}
+
 export const Tickets = {
   list: () => api.get<Ticket[]>("/api/tickets"),
   byId: (id: number) => api.get<Ticket & { executions: AgentExecution[] }>(`/api/tickets/${id}`),
@@ -74,6 +100,25 @@ export const Tickets = {
     api.patch<{ ticket_id: number; current_status: TicketStackyStatus }>(
       `/api/tickets/${id}/stacky-status`,
       { status, reason }
+    ),
+  /**
+   * Cierre manual fallback de un ticket (Fase 4).
+   * Envía X-Completion-Source: manual_ui para trazabilidad en SystemLogs.
+   */
+  finishWork: (
+    id: number,
+    payload: {
+      operator_reason: string;
+      publish_to_ado?: boolean;
+      target_ado_state?: string | null;
+      force_publish?: boolean;
+      dry_run?: boolean;
+    }
+  ): Promise<FinishWorkResponse> =>
+    api.postWithHeaders<FinishWorkResponse>(
+      `/api/tickets/${id}/finish-work`,
+      payload,
+      { "X-Completion-Source": "manual_ui" }
     ),
 };
 

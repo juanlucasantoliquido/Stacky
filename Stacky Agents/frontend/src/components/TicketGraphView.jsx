@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tickets, Agents } from "../api/endpoints";
 import { getPinnedAgents } from "../services/preferences";
 import RecoverExecutionButton from "./RecoverExecutionButton";
+import FinishWorkButton from "./FinishWorkButton";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import styles from "./TicketGraphView.module.css";
 
@@ -372,6 +373,21 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
                   ticketId={ticket.id}
                   orphanExecution={inconsistency.orphanExecution}
                   compact
+                />
+              </div>
+            )}
+
+            {/* Botón de cierre manual: solo en nodo expandido, stacky_status='running'
+                y sin inconsistencia activa. Patrón coherente con TicketBoard y
+                con RecoverExecutionButton (que aparece solo en su caso específico). */}
+            {!isEpic && ticket.stacky_status === "running" && !inconsistency.isInconsistent && (
+              <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
+                <FinishWorkButton
+                  ticket={ticket}
+                  onCompleted={() => {
+                    qc.invalidateQueries({ queryKey: ["tickets"] });
+                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+                  }}
                 />
               </div>
             )}

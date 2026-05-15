@@ -403,6 +403,14 @@ def set_stacky_status_by_ado(ado_id: int):
       correlation_id, user_email, reason.
     - Si STACKY_COMPLETION_GATEWAY=on, agrega warning en log indicando que se
       usó el override manual mientras el gateway está activo.
+    - Auto-publish server-side: cuando status=completed Y html_output_path apunta
+      a un archivo existente Y existe AgentExecution válida, Stacky invoca
+      ado_publisher.publish_from_execution automáticamente. El agente NO envía
+      ningún flag para activar esto — la decisión es enteramente server-side.
+      Controlado por env var STACKY_LEGACY_AUTO_PUBLISH (default "on").
+      Si está en "off", el publish se omite y se registra publish.skipped.
+      Si publish falla, el error se registra pero NO rompe el PATCH (el estado
+      local ya quedó guardado). El resultado de publish se incluye en el response.
 
     Body:
       {
@@ -411,6 +419,10 @@ def set_stacky_status_by_ado(ado_id: int):
         "agent_type": "developer" | "technical" | ... (opcional),
         "html_output_path": "Agentes/outputs/<ADO_ID>/comment.html" (opcional)
       }
+
+    Nota: el campo "auto_publish" es ignorado si está presente en el body —
+    el comportamiento de publicación es server-side y no puede ser controlado
+    por el agente.
 
     Responde 200 aunque el ticket no esté en BD (para no romper al agente).
     """
@@ -427,8 +439,11 @@ def set_stacky_status_by_ado(ado_id: int):
     user = request.headers.get("X-User-Email") or "agent"
     correlation_id = str(_uuid.uuid4())
 
-    # Warning si gateway está activo (plan §B-2)
+    # Leer env vars de control server-side
     gateway_mode = _os.getenv("STACKY_COMPLETION_GATEWAY", "off").lower().strip()
+    legacy_auto_publish = _os.getenv("STACKY_LEGACY_AUTO_PUBLISH", "on").lower().strip()
+
+    # Warning si gateway está activo (plan §B-2)
     if gateway_mode == "on":
         logger.warning(
             "legacy_stacky_status: manual override while gateway is active — "
@@ -471,6 +486,7 @@ def set_stacky_status_by_ado(ado_id: int):
             "html_output_path": html_output_path,
             "reason": reason,
             "gateway_mode": gateway_mode,
+            "legacy_auto_publish": legacy_auto_publish,
             "gateway_active_warning": gateway_mode == "on",
             "execution_id": last_exec.id if last_exec else None,
         }
@@ -500,6 +516,87 @@ def set_stacky_status_by_ado(ado_id: int):
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
+    # ── Auto-publish server-side ──────────────────────────────────────────────
+    # Decisión arquitectónica: el agente NO controla si se publica.
+    # Stacky publica automáticamente cuando se cumplen TODAS las precondiciones:
+    #   1. status == "completed"
+    #   2. html_output_path presente en el body (el agente siempre lo manda)
+    #   3. AgentExecution válida encontrada en BD
+    #   4. STACKY_LEGACY_AUTO_PUBLISH != "off" (default "on")
+    #
+    # Si STACKY_LEGACY_AUTO_PUBLISH="off" → publish.skipped(reason="legacy_auto_publish_disabled")
+    # Si falla → publish.failed registrado, PATCH response sigue siendo OK.
+    publish_result: dict
+
+    if new_status != "completed":
+        publish_result = {"skipped": True, "reason": "status_not_completed"}
+    elif legacy_auto_publish == "off":
+        publish_result = {"skipped": True, "reason": "legacy_auto_publish_disabled"}
+        logger.info(
+            "set_stacky_status_by_ado: publish.skipped(legacy_auto_publish_disabled) — "
+            "ADO-%s corr=%s",
+            ado_id, correlation_id,
+        )
+    elif not html_output_path:
+        publish_result = {"skipped": True, "reason": "html_output_path_missing"}
+    elif last_exec is None:
+        publish_result = {"skipped": True, "reason": "no_execution_found"}
+        logger.warning(
+            "set_stacky_status_by_ado: publish.skipped(no_execution_found) — "
+            "ADO-%s html_output_path=%s corr=%s",
+            ado_id, html_output_path, correlation_id,
+        )
+    else:
+        logger.info(
+            "set_stacky_status_by_ado: publish.attempted — "
+            "ADO-%s exec=%d html=%s corr=%s",
+            ado_id, last_exec.id, html_output_path, correlation_id,
+        )
+        try:
+            from services.ado_publisher import publish_from_execution
+            pr = publish_from_execution(last_exec.id, triggered_by="legacy_auto_publish")
+            if pr.ok:
+                publish_result = {
+                    "ok": True,
+                    "status": pr.status,
+                    "ado_id": pr.ado_id,
+                    "execution_id": pr.execution_id,
+                    "html_sha256": pr.html_sha256,
+                    "ado_response": pr.ado_response,
+                    "record_id": pr.record_id,
+                    "event": "publish.succeeded",
+                }
+                logger.info(
+                    "set_stacky_status_by_ado: publish.succeeded — "
+                    "ADO-%s exec=%d status=%s corr=%s",
+                    ado_id, last_exec.id, pr.status, correlation_id,
+                )
+            else:
+                publish_result = {
+                    "ok": False,
+                    "status": pr.status,
+                    "reason": pr.reason,
+                    "execution_id": pr.execution_id,
+                    "event": "publish.failed",
+                }
+                logger.warning(
+                    "set_stacky_status_by_ado: publish.failed — "
+                    "ADO-%s exec=%d reason=%s corr=%s",
+                    ado_id, last_exec.id, pr.reason, correlation_id,
+                )
+        except Exception as pub_exc:
+            publish_result = {
+                "ok": False,
+                "reason": str(pub_exc),
+                "type": type(pub_exc).__name__,
+                "event": "publish.failed",
+            }
+            logger.exception(
+                "set_stacky_status_by_ado: publish raised exception — "
+                "ADO-%s exec=%d corr=%s",
+                ado_id, last_exec.id if last_exec else "?", correlation_id,
+            )
+
     return jsonify({
         "ok": True,
         "ado_id": ado_id,
@@ -509,6 +606,7 @@ def set_stacky_status_by_ado(ado_id: int):
         "completion_source": "manual",
         "correlation_id": correlation_id,
         "gateway_active_warning": gateway_mode == "on",
+        "publish": publish_result,
     })
 
 
@@ -787,6 +885,13 @@ def finish_work(ticket_id: int):
     force_publish = bool(body.get("force_publish", False))
     dry_run = bool(body.get("dry_run", False))
     operator = request.headers.get("X-User-Email") or "anonymous"
+    # Trazabilidad de origen: el frontend UI envía "manual_ui"; agentes envían "agent" u omiten.
+    # Backward-compat: si no viene el header ni el campo, default "manual".
+    completion_source: str = (
+        request.headers.get("X-Completion-Source")
+        or body.get("completion_source")
+        or "manual"
+    )
 
     if len(operator_reason) < 5:
         return jsonify({
@@ -939,6 +1044,7 @@ def finish_work(ticket_id: int):
             reason=f"Manual finish-work: {operator_reason}",
             metadata={
                 "trigger": "manual_finish_work",
+                "completion_source": completion_source,
                 "operator": operator,
                 "operator_reason": operator_reason,
                 "target_ado_state": target_ado_state,
@@ -970,13 +1076,14 @@ def finish_work(ticket_id: int):
             user=operator,
             context_data={
                 "ado_id": ado_id,
+                "completion_source": completion_source,
                 "operator_reason": operator_reason,
                 "target_ado_state": target_ado_state,
                 "preconditions": preconditions,
                 "actions": actions,
                 "dry_run": False,
             },
-            tags=["ticket", "finish_work", "manual"],
+            tags=["ticket", "finish_work", "manual", completion_source],
         )
     except Exception:
         logger.exception("emit manual_finish_work falló (no crítico)")

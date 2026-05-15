@@ -391,10 +391,18 @@ def set_stacky_status(ticket_id: int):
 
 @bp.patch("/by-ado/<int:ado_id>/stacky-status")
 def set_stacky_status_by_ado(ado_id: int):
-    """Actualiza el stacky_status usando el ADO work item ID en lugar del ticket_id interno.
+    """Override manual auditado de stacky_status (endpoint legacy, plan §17).
 
-    Permite que los agentes (que solo conocen el ADO ID) actualicen el estado
-    al finalizar su trabajo, sin necesidad de conocer el ID interno de Stacky.
+    IMPORTANTE: Este endpoint se mantiene como OVERRIDE MANUAL AUDITADO.
+    No debe usarse para el flujo normal de finalización de agentes — para eso
+    está POST /api/tickets/by-ado/{ado_id}/agent-completion con el gateway.
+
+    Cada invocación:
+    - Escribe completion_source='manual' en la AgentExecution si el campo existe.
+    - Emite SystemLog(source='legacy_stacky_status', action='manual_override') con
+      correlation_id, user_email, reason.
+    - Si STACKY_COMPLETION_GATEWAY=on, agrega warning en log indicando que se
+      usó el override manual mientras el gateway está activo.
 
     Body:
       {
@@ -404,14 +412,12 @@ def set_stacky_status_by_ado(ado_id: int):
         "html_output_path": "Agentes/outputs/<ADO_ID>/comment.html" (opcional)
       }
 
-    Si `html_output_path` viene, se persiste en la AgentExecution más reciente
-    del ticket (preferentemente la del mismo agent_type). El post-hook de
-    publicación en ADO usa ese path. Si no viene, se asume convención
-    canónica Agentes/outputs/<ado_id>/comment.html.
-
     Responde 200 aunque el ticket no esté en BD (para no romper al agente).
     """
+    import os as _os
+    import uuid as _uuid
     from services import ticket_status as ts
+    from models import SystemLog
 
     body = request.get_json(silent=True) or {}
     new_status = body.get("status", "").strip()
@@ -419,6 +425,16 @@ def set_stacky_status_by_ado(ado_id: int):
     agent_type = body.get("agent_type")
     html_output_path = body.get("html_output_path")
     user = request.headers.get("X-User-Email") or "agent"
+    correlation_id = str(_uuid.uuid4())
+
+    # Warning si gateway está activo (plan §B-2)
+    gateway_mode = _os.getenv("STACKY_COMPLETION_GATEWAY", "off").lower().strip()
+    if gateway_mode == "on":
+        logger.warning(
+            "legacy_stacky_status: manual override while gateway is active — "
+            "ado_id=%s user=%s corr=%s — verificar si fue intencional",
+            ado_id, user, correlation_id,
+        )
 
     if not new_status:
         return jsonify({"ok": False, "error": "campo 'status' requerido"}), 400
@@ -430,9 +446,9 @@ def set_stacky_status_by_ado(ado_id: int):
             return jsonify({"ok": True, "skipped": True, "reason": "ticket not in local DB"}), 200
         ticket_id = t.id
 
-        # Persistir html_output_path en la última AgentExecution del ticket
-        # antes de la transición de estado (para que el post-hook lo encuentre).
-        if html_output_path:
+        # Persistir html_output_path + completion_source='manual' en la última AgentExecution
+        last_exec = None
+        if html_output_path or True:  # siempre intentar marcar completion_source
             q = session.query(AgentExecution).filter(
                 AgentExecution.ticket_id == ticket_id
             )
@@ -440,7 +456,37 @@ def set_stacky_status_by_ado(ado_id: int):
                 q = q.filter(AgentExecution.agent_type == agent_type)
             last_exec = q.order_by(AgentExecution.started_at.desc()).first()
             if last_exec is not None:
-                last_exec.html_output_path = html_output_path
+                if html_output_path and hasattr(last_exec, "html_output_path"):
+                    last_exec.html_output_path = html_output_path
+                # Marcar como override manual (campo de P2)
+                if hasattr(last_exec, "completion_source"):
+                    last_exec.completion_source = "manual"
+
+        # Emitir SystemLog de override manual auditado
+        log_ctx = {
+            "correlation_id": correlation_id,
+            "ado_id": ado_id,
+            "new_status": new_status,
+            "agent_type": agent_type,
+            "html_output_path": html_output_path,
+            "reason": reason,
+            "gateway_mode": gateway_mode,
+            "gateway_active_warning": gateway_mode == "on",
+            "execution_id": last_exec.id if last_exec else None,
+        }
+        audit_log = SystemLog(
+            level="WARNING" if gateway_mode == "on" else "INFO",
+            source="legacy_stacky_status",
+            action="manual_override",
+            ticket_id=ticket_id,
+            execution_id=last_exec.id if last_exec else None,
+            user=user,
+            context_json=__import__("json").dumps(log_ctx, ensure_ascii=False, default=str),
+            tags_json=__import__("json").dumps(
+                ["legacy", "manual_override"] + (["gateway_active_warning"] if gateway_mode == "on" else [])
+            ),
+        )
+        session.add(audit_log)
 
     try:
         ts.set_status(
@@ -448,8 +494,8 @@ def set_stacky_status_by_ado(ado_id: int):
             new_status,
             changed_by=user,
             agent_type=agent_type,
-            reason=reason or f"Agent signal via by-ado endpoint (ADO-{ado_id})",
-            metadata={"html_output_path": html_output_path} if html_output_path else None,
+            reason=reason or f"Manual override via legacy endpoint (ADO-{ado_id}) corr={correlation_id}",
+            metadata={"html_output_path": html_output_path, "completion_source": "manual"} if html_output_path else {"completion_source": "manual"},
         )
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
@@ -460,6 +506,9 @@ def set_stacky_status_by_ado(ado_id: int):
         "ticket_id": ticket_id,
         "current_status": ts.get_current_status(ticket_id),
         "html_output_path": html_output_path,
+        "completion_source": "manual",
+        "correlation_id": correlation_id,
+        "gateway_active_warning": gateway_mode == "on",
     })
 
 
@@ -527,20 +576,6 @@ def agent_completion(ado_id: int):
                 ),
             },
         }), 404
-
-    # ── Feature flag: on → 501 (P5) ─────────────────────────────────────────
-    if gateway_mode == "on":
-        return jsonify({
-            "ok": False,
-            "error": {
-                "code": "not_implemented",
-                "message": (
-                    "El gateway en modo 'on' se habilitará en la fase P5. "
-                    "Use STACKY_COMPLETION_GATEWAY=shadow para operar en modo shadow."
-                ),
-            },
-            "correlation_id": correlation_id,
-        }), 501
 
     # ── Auth: X-Stacky-Agent-Token ───────────────────────────────────────────
     agent_token_header = request.headers.get("X-Stacky-Agent-Token", "").strip()
@@ -615,6 +650,32 @@ def agent_completion(ado_id: int):
                 "error": {
                     "code": "internal_error",
                     "message": "Error interno en el gateway shadow",
+                    "detail": {"correlation_id": correlation_id},
+                },
+                "correlation_id": correlation_id,
+            }), 500
+
+    # ── Modo on (P5 — gateway canónico activo) ───────────────────────────────
+    if gateway_mode == "on":
+        from services.agent_completion import run_on
+
+        try:
+            result, http_status = run_on(
+                ado_id=ado_id,
+                payload=payload,
+                user=user,
+                correlation_id=correlation_id,
+            )
+            return jsonify(result.to_dict()), http_status
+        except Exception as exc:
+            logger.exception(
+                "gateway[on] internal_error: ado_id=%s corr=%s", ado_id, correlation_id,
+            )
+            return jsonify({
+                "ok": False,
+                "error": {
+                    "code": "internal_error",
+                    "message": "Error interno en el gateway (modo on)",
                     "detail": {"correlation_id": correlation_id},
                 },
                 "correlation_id": correlation_id,

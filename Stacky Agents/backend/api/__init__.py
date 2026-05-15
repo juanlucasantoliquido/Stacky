@@ -16,6 +16,7 @@ from .preferences import bp as preferences_bp
 from .projects import bp as projects_bp
 from .qa_uat import bp as qa_uat_bp
 from .similarity import bp as similarity_bp
+from .metrics import bp as metrics_bp
 from .tickets import bp as tickets_bp
 from .webhooks import bp as webhooks_bp
 
@@ -38,6 +39,7 @@ api_bp.register_blueprint(phase6_bp)
 api_bp.register_blueprint(preferences_bp)
 api_bp.register_blueprint(projects_bp)
 api_bp.register_blueprint(qa_uat_bp)
+api_bp.register_blueprint(metrics_bp)
 
 
 @api_bp.get("/health")

@@ -437,6 +437,82 @@ def recover_stale_running_tickets(trigger: str = "startup") -> list[dict]:
                 trigger, exec_row.id, exec_row.ticket_id, timeout_minutes,
             )
 
+        # --- Caso C: ejecuciones activas con heartbeat stale (Fase 4) ---
+        # Si una execution está corriendo pero su heartbeat.json no se
+        # actualiza desde hace > STACKY_HEARTBEAT_TIMEOUT_MINUTES, el runtime
+        # probablemente murió silenciosamente. Marcamos error vía heartbeat
+        # (independiente del timeout de Caso B).
+        try:
+            from services.heartbeat_monitor import is_execution_heartbeat_stale
+        except Exception:  # noqa: BLE001
+            is_execution_heartbeat_stale = None  # type: ignore[assignment]
+
+        if is_execution_heartbeat_stale is not None:
+            still_running = (
+                session.query(AgentExecution)
+                .filter(
+                    AgentExecution.status == "running",
+                    AgentExecution.started_at >= timeout_cutoff,
+                )
+                .all()
+            )
+            for exec_row in still_running:
+                stale, status = is_execution_heartbeat_stale(
+                    exec_row.id,
+                    started_at=exec_row.started_at,
+                )
+                # Sólo actuamos cuando hubo un heartbeat previo que dejó de
+                # actualizarse. La ausencia total de heartbeat puede ser un
+                # runtime legacy que no lo soporta — esos los maneja el
+                # timeout absoluto del Caso B, no este Caso C.
+                if not stale or not status.exists:
+                    continue
+                old_exec_status = exec_row.status
+                exec_row.status = "error"
+                exec_row.completed_at = datetime.utcnow()
+                age = status.age_seconds
+                age_msg = (
+                    f"sin heartbeat" if not status.exists
+                    else f"heartbeat stale ({int(age or 0)}s)"
+                )
+                exec_row.error_message = (
+                    f"Ejecución cerrada por reaper: {age_msg} [{trigger}]"
+                )
+                if hasattr(exec_row, "completion_source"):
+                    exec_row.completion_source = "recovery"
+
+                ticket_of_exec = session.get(Ticket, exec_row.ticket_id)
+                if ticket_of_exec and ticket_of_exec.stacky_status == "running":
+                    ticket_of_exec.stacky_status = "error"
+                    event = TicketStatusEvent(
+                        ticket_id=exec_row.ticket_id,
+                        execution_id=exec_row.id,
+                        agent_type=exec_row.agent_type,
+                        old_status="running",
+                        new_status="error",
+                        changed_by=f"system:reaper:{trigger}",
+                        reason=f"Heartbeat stale [{trigger}]: {age_msg}",
+                    )
+                    session.add(event)
+
+                details.append({
+                    "ticket_id": exec_row.ticket_id,
+                    "ado_id": getattr(ticket_of_exec, "ado_id", None) if ticket_of_exec else None,
+                    "old_status": old_exec_status,
+                    "new_status": "error",
+                    "execution_id": exec_row.id,
+                    "agent_type": exec_row.agent_type,
+                    "kind": "heartbeat_timeout",
+                    "reason": age_msg,
+                    "trigger": trigger,
+                    "completion_source": "recovery",
+                    "heartbeat": status.to_dict(),
+                })
+                logger.warning(
+                    "reaper[%s]: exec_id=%d ticket_id=%d heartbeat_stale (%s)",
+                    trigger, exec_row.id, exec_row.ticket_id, age_msg,
+                )
+
     return details
 
 

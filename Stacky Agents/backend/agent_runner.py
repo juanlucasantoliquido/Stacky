@@ -4,6 +4,7 @@ la ejecución en thread separado, devolviendo el id de la fila persistida.
 """
 from __future__ import annotations
 
+import os
 import threading
 from datetime import datetime
 
@@ -125,6 +126,11 @@ def _run_in_background(
     log = log_streamer.logger_for(execution_id)
     agent = agents.get(agent_type)
     started = datetime.utcnow()
+    # Heartbeat thread (Fase 4) — el reaper detecta runs colgados leyendo
+    # heartbeat.json. Si el thread del agente muere o se cuelga, el heartbeat
+    # deja de actualizarse y el reaper lo marca error.
+    _hb_stop = threading.Event()
+    _hb_thread: threading.Thread | None = None
     try:
         with session_scope() as session:
             row = session.get(AgentExecution, execution_id)
@@ -133,6 +139,40 @@ def _run_in_background(
             ticket = session.get(Ticket, ticket_id) if ticket_id else None
             project = ticket.project if ticket else None
             ticket_ado_id = ticket.ado_id if ticket else None
+
+        # Arrancar heartbeat antes del trabajo pesado. Defensive: si la
+        # escritura inicial falla, seguimos sin heartbeat (el reaper aplicará
+        # timeout absoluto vía EXECUTION_TIMEOUT_MINUTES).
+        try:
+            from pathlib import Path as _Path
+            from services.manifest_watcher import write_heartbeat as _write_hb
+
+            _run_dir = (
+                _Path(__file__).resolve().parent / "data" / "codex_runs" / str(execution_id)
+            )
+            _hb_interval = float(os.getenv("STACKY_HEARTBEAT_INTERVAL_SECONDS", "30"))
+            _write_hb(_run_dir, execution_id=execution_id, pid=os.getpid(), phase="started")
+
+            def _hb_loop() -> None:
+                while not _hb_stop.wait(timeout=_hb_interval):
+                    try:
+                        _write_hb(
+                            _run_dir,
+                            execution_id=execution_id,
+                            pid=os.getpid(),
+                            phase="running",
+                        )
+                    except Exception:
+                        pass
+
+            _hb_thread = threading.Thread(
+                target=_hb_loop,
+                daemon=True,
+                name=f"agent-runner-hb-{execution_id}",
+            )
+            _hb_thread.start()
+        except Exception as _exc_hb:
+            log("warn", f"heartbeat thread no pudo arrancar: {_exc_hb}")
 
         # Functional agent — Epic structured context injection
         # Cuando el agente es "functional" y el ticket es un Epic, inyecta el
@@ -164,6 +204,45 @@ def _run_in_background(
                     log("info", f"ado-epic-structured inyectado para Epic ADO-{_epic_ticket.ado_id}")
                 else:
                     log("info", "ado-epic-structured ya presente, omitiendo inyección")
+
+        # Filesystem artifacts status — inyecta un bloque informando al agente
+        # qué artifacts (comment.html, pending-task.json, MANIFEST de runs
+        # previos) ya existen en disco para este ticket. Resuelve Bug #3 del
+        # plan de remediación: que el agente no pregunte "¿creo la task?"
+        # cuando los archivos ya están generados.
+        try:
+            from services import artifact_context
+
+            with session_scope() as _art_sess:
+                _art_ticket = _art_sess.get(Ticket, ticket_id) if ticket_id else None
+                _art_ado_id = _art_ticket.ado_id if _art_ticket else None
+                _art_type = _art_ticket.work_item_type if _art_ticket else None
+                _exec_rows = (
+                    _art_sess.query(AgentExecution.id)
+                    .filter(AgentExecution.ticket_id == ticket_id)
+                    .order_by(AgentExecution.id.desc())
+                    .limit(10)
+                    .all()
+                    if ticket_id
+                    else []
+                )
+                _exec_ids = [r[0] for r in _exec_rows]
+            raw_blocks, _art_info = artifact_context.inject_into_blocks(
+                raw_blocks,
+                ado_id=_art_ado_id,
+                work_item_type=_art_type,
+                execution_ids=_exec_ids,
+            )
+            if _art_info and _art_info.get("injected"):
+                log(
+                    "info",
+                    "filesystem-artifacts-status inyectado "
+                    f"(pending={_art_info.get('pending_count')}, "
+                    f"consumed={_art_info.get('consumed_count')}, "
+                    f"comment_html={_art_info.get('has_comment_html')})",
+                )
+        except Exception as _exc_art:
+            log("warn", f"artifact_context falló (continuando sin bloque): {_exc_art}")
 
         # ADO context enrichment — inyecta automáticamente comentarios y
         # adjuntos del ticket desde Azure DevOps al contexto que se envía al
@@ -399,6 +478,9 @@ def _run_in_background(
             error=str(exc),
         )
     finally:
+        _hb_stop.set()
+        if _hb_thread is not None and _hb_thread.is_alive():
+            _hb_thread.join(timeout=2)
         log_streamer.close(execution_id)
 
 

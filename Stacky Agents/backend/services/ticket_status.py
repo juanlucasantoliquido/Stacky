@@ -284,16 +284,28 @@ def _run_post_hooks(**kwargs: Any) -> None:
 # ── Startup recovery ───────────────────────────────────────────────────────────
 
 
-def recover_stale_running_tickets() -> int:
+def recover_stale_running_tickets(trigger: str = "startup") -> list[dict]:
     """Corrige tickets con stacky_status='running' cuya ejecución ya terminó.
 
-    Debe llamarse al iniciar la app para manejar crashes o reinicios abruptos.
-    Retorna la cantidad de tickets corregidos.
+    Extiende el comportamiento original (P1) con:
+    - Soporte para ejecuciones activas con timeout (EXECUTION_TIMEOUT_MINUTES).
+    - completion_source='recovery' en AgentExecution si el campo existe (P2).
+    - Detalle por ticket retornado como lista de dicts (compatibilidad §B-3).
+    - Trigger registrado en evento (startup | manual | reaper).
+
+    Retorna lista de dicts con detalle de cada corrección.
     """
+    import os as _os
+    from datetime import timedelta
     from models import AgentExecution  # import local para evitar ciclo
 
-    fixed = 0
+    timeout_minutes = int(_os.getenv("EXECUTION_TIMEOUT_MINUTES", "120"))
+    timeout_cutoff = datetime.utcnow() - timedelta(minutes=timeout_minutes)
+
+    details: list[dict] = []
+
     with session_scope() as session:
+        # --- Caso A: tickets marcados running pero con ejecuciones ya terminadas ---
         stale_tickets = (
             session.query(Ticket)
             .filter(Ticket.stacky_status == "running")  # type: ignore[attr-defined]
@@ -310,23 +322,36 @@ def recover_stale_running_tickets() -> int:
                 recovered_status = last_exec.status
                 ticket.stacky_status = recovered_status  # type: ignore[attr-defined]
 
+                # Marcar completion_source si el campo existe (P2)
+                if hasattr(last_exec, "completion_source") and not last_exec.completion_source:
+                    last_exec.completion_source = "recovery"
+
                 event = TicketStatusEvent(
                     ticket_id=ticket.id,
                     execution_id=last_exec.id,
                     agent_type=last_exec.agent_type,
                     old_status="running",
                     new_status=recovered_status,
-                    changed_by="system:recovery",
-                    reason="Recovered stale 'running' status after restart",
+                    changed_by=f"system:recovery:{trigger}",
+                    reason=f"Recovered stale 'running' status [{trigger}]",
                 )
                 session.add(event)
-                fixed += 1
+                details.append({
+                    "ticket_id": ticket.id,
+                    "ado_id": ticket.ado_id,
+                    "old_status": "running",
+                    "new_status": recovered_status,
+                    "execution_id": last_exec.id,
+                    "agent_type": last_exec.agent_type,
+                    "kind": "execution_ended",
+                    "reason": "Last execution was already terminal",
+                    "trigger": trigger,
+                })
                 logger.info(
-                    "startup recovery: ticket_id=%d → '%s' (last_exec=%d)",
-                    ticket.id,
-                    recovered_status,
-                    last_exec.id,
+                    "recovery[%s]: ticket_id=%d → '%s' (last_exec=%d)",
+                    trigger, ticket.id, recovered_status, last_exec.id,
                 )
+
             elif last_exec is None:
                 # Ticket marcado como running pero sin ejecuciones — resetear a idle
                 ticket.stacky_status = "idle"  # type: ignore[attr-defined]
@@ -334,13 +359,84 @@ def recover_stale_running_tickets() -> int:
                     ticket_id=ticket.id,
                     old_status="running",
                     new_status="idle",
-                    changed_by="system:recovery",
-                    reason="No executions found for ticket marked as running — reset to idle",
+                    changed_by=f"system:recovery:{trigger}",
+                    reason=f"No executions found for ticket marked as running [{trigger}]",
                 )
                 session.add(event)
-                fixed += 1
+                details.append({
+                    "ticket_id": ticket.id,
+                    "ado_id": ticket.ado_id,
+                    "old_status": "running",
+                    "new_status": "idle",
+                    "execution_id": None,
+                    "agent_type": None,
+                    "kind": "no_execution",
+                    "reason": "No executions found — reset to idle",
+                    "trigger": trigger,
+                })
                 logger.info(
-                    "startup recovery: ticket_id=%d sin ejecuciones → 'idle'", ticket.id
+                    "recovery[%s]: ticket_id=%d sin ejecuciones → 'idle'",
+                    trigger, ticket.id,
                 )
 
-    return fixed
+        # --- Caso B: ejecuciones activas con timeout (Reaper) ---
+        timed_out_execs = (
+            session.query(AgentExecution)
+            .filter(
+                AgentExecution.status.in_(["running", "queued"]),
+                AgentExecution.started_at < timeout_cutoff,
+            )
+            .all()
+        )
+        for exec_row in timed_out_execs:
+            old_exec_status = exec_row.status
+            exec_row.status = "error"
+            exec_row.completed_at = datetime.utcnow()
+            exec_row.error_message = (
+                f"Ejecución cerrada por timeout ({timeout_minutes} min) vía reaper [{trigger}]"
+            )
+            # Marcar completion_source='recovery' (P2)
+            if hasattr(exec_row, "completion_source"):
+                exec_row.completion_source = "recovery"
+
+            # También corregir stacky_status del ticket si está running
+            ticket_of_exec = session.get(Ticket, exec_row.ticket_id)
+            if ticket_of_exec and ticket_of_exec.stacky_status == "running":
+                ticket_of_exec.stacky_status = "error"
+                event = TicketStatusEvent(
+                    ticket_id=exec_row.ticket_id,
+                    execution_id=exec_row.id,
+                    agent_type=exec_row.agent_type,
+                    old_status="running",
+                    new_status="error",
+                    changed_by=f"system:reaper:{trigger}",
+                    reason=f"Execution timed out after {timeout_minutes} min [{trigger}]",
+                )
+                session.add(event)
+
+            details.append({
+                "ticket_id": exec_row.ticket_id,
+                "ado_id": getattr(ticket_of_exec, "ado_id", None) if ticket_of_exec else None,
+                "old_status": old_exec_status,
+                "new_status": "error",
+                "execution_id": exec_row.id,
+                "agent_type": exec_row.agent_type,
+                "kind": "execution_timeout",
+                "reason": f"Execution running for >{timeout_minutes} min",
+                "trigger": trigger,
+                "completion_source": "recovery",
+            })
+            logger.warning(
+                "reaper[%s]: exec_id=%d ticket_id=%d timed_out after %d min",
+                trigger, exec_row.id, exec_row.ticket_id, timeout_minutes,
+            )
+
+    return details
+
+
+def stop_stale_recovery() -> None:
+    """No-op compatibility shim — el recovery es on-demand, no hay thread que detener.
+
+    Existe para compatibilidad con tests que importan esta función.
+    """
+    pass

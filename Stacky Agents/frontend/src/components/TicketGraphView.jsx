@@ -2,6 +2,8 @@ import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tickets, Agents } from "../api/endpoints";
 import { getPinnedAgents } from "../services/preferences";
+import RecoverExecutionButton from "./RecoverExecutionButton";
+import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import styles from "./TicketGraphView.module.css";
 
 // Misma lógica que TicketBoard — infiere tipo de agente desde filename.
@@ -241,8 +243,12 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
   const next = isEpic ? summary.next_suggested : (inferResult?.next_suggested ?? summary?.next_suggested);
   const nextLabel = next && AGENT_LABELS[next] ? `${AGENT_LABELS[next].icon} ${AGENT_LABELS[next].label}` : null;
   const suggestedFilename = next ? findAgentFilenameByType(next, vsCodeAgents, getPinnedAgents()) : null;
-  const isRunning = runningByTicket.has(ticket.id);
+  const runningExecution = runningByTicket.get(ticket.id) ?? null;
+  const isRunning = !!runningExecution || runningByTicket.has(ticket.id);
   const isClosed = ["Done", "Closed", "Resolved", "Removed", "Completed"].includes(ticket.ado_state);
+
+  // Detección de INCONSISTENTE: stacky_status=completed + ejecución huérfana activa
+  const inconsistency = detectInconsistencyFromRunning(ticket.stacky_status, runningExecution);
 
   const handleLaunch = useCallback(async (note, filename) => {
     setIsLaunching(true);
@@ -266,7 +272,11 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
         style={{ background: colors.bg, borderColor: isRunning ? "#22c55e" : colors.border }}
         onClick={() => setExpanded(x => !x)}
       >
-        {isRunning && (
+        {inconsistency.isInconsistent ? (
+          <div className={styles.nodeRunningBanner} style={{ background: "rgba(245,158,11,0.18)", borderColor: "rgba(245,158,11,0.5)" }}>
+            <span className="badge-inconsistente">INCONSISTENTE</span>
+          </div>
+        ) : isRunning && (
           <div className={styles.nodeRunningBanner}>
             <span className={styles.runningPulse} /> EN EJECUCIÓN
           </div>
@@ -352,6 +362,18 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
               <a className={styles.adoLink} href={ticket.ado_url} target="_blank" rel="noreferrer">
                 Abrir en ADO ↗
               </a>
+            )}
+
+            {/* Botón de recuperación de inconsistencia */}
+            {!isEpic && inconsistency.isInconsistent && ticket.ado_id && (
+              <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
+                <RecoverExecutionButton
+                  adoId={ticket.ado_id}
+                  ticketId={ticket.id}
+                  orphanExecution={inconsistency.orphanExecution}
+                  compact
+                />
+              </div>
             )}
 
             {/* Botones Run expandidos */}

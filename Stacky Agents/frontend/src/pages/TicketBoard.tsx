@@ -4,9 +4,11 @@ import { Tickets, Agents, Executions } from "../api/endpoints";
 import type { Ticket, TicketNode, TicketHierarchy, PipelineInferenceResult, AgentExecution, VsCodeAgent } from "../types";
 import PipelineStatus from "../components/PipelineStatus";
 import TicketGraphView from "../components/TicketGraphView";
+import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { getPinnedAgents } from "../services/preferences";
 import { useWorkbench } from "../store/workbench";
+import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import styles from "./TicketBoard.module.css";
 
 // Infiere el tipo de agente desde el filename — misma lógica que EmployeeCard.
@@ -229,6 +231,9 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
   const isRunning = !isClosed && (!!runningExecution || ticket.stacky_status === "running");
   const runningAgentType = runningExecution?.agent_type ?? null;
 
+  // Detección de estado INCONSISTENTE: stacky_status=completed + ejecución huérfana activa
+  const inconsistency = detectInconsistencyFromRunning(ticket.stacky_status, runningExecution ?? null);
+
   const handleRunConfirm = useCallback(async (note: string, filename: string | null) => {
     setIsLaunching(true);
     try {
@@ -250,8 +255,15 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
     <>
       <div className={`${styles.card} ${expanded ? styles.cardExpanded : ""} ${isRunning ? styles.cardRunning : ""} ${indent ? styles.cardIndented : ""}`}>
 
-        {/* Banner de ejecución activa */}
-        {isRunning && (
+        {/* Banner: INCONSISTENTE (prioridad) o EN EJECUCIÓN */}
+        {inconsistency.isInconsistent ? (
+          <div className={styles.runningCardBanner} style={{ background: "rgba(245,158,11,0.18)", borderColor: "rgba(245,158,11,0.45)" }}>
+            <span className="badge-inconsistente">INCONSISTENTE</span>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginLeft: 6 }}>
+              ejecución #{inconsistency.orphanExecution.id} huérfana
+            </span>
+          </div>
+        ) : isRunning && (
           <div className={styles.runningCardBanner}>
             <span className={styles.runningPulse} />
             <span>EN EJECUCIÓN</span>
@@ -303,6 +315,17 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
             ) : (
               <div className={styles.noInference}>
                 {isLoading ? "Consultando ADO + LLM…" : "Analizando pipeline…"}
+              </div>
+            )}
+
+            {/* Botón de recuperación de inconsistencia (visible siempre que aplique) */}
+            {inconsistency.isInconsistent && ticket.ado_id && (
+              <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
+                <RecoverExecutionButton
+                  adoId={ticket.ado_id}
+                  ticketId={ticket.id}
+                  orphanExecution={inconsistency.orphanExecution}
+                />
               </div>
             )}
 

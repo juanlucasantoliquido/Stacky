@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 # Usar el truststore del SO (Windows / macOS) para SSL — necesario en redes con
@@ -126,11 +127,27 @@ def create_app() -> Flask:
     if fixed:
         logger.info("reconciled %d orphan executions", fixed)
 
-    # Corregir tickets que quedaron con stacky_status='running' por crash/reinicio
-    from services.ticket_status import recover_stale_running_tickets
-    stale_fixed = recover_stale_running_tickets()
-    if stale_fixed:
-        logger.info("startup recovery: corregidos %d tickets con status 'running' inconsistente", stale_fixed)
+    # ── Startup recovery (P5) ────────────────────────────────────────────────
+    # STACKY_RECOVERY_ON_STARTUP=true|false (default: true cuando gateway=on, false si no)
+    _gateway_mode = os.getenv("STACKY_COMPLETION_GATEWAY", "off").lower().strip()
+    _recovery_default = "true" if _gateway_mode == "on" else "false"
+    _recovery_on_startup = os.getenv("STACKY_RECOVERY_ON_STARTUP", _recovery_default).lower() == "true"
+
+    if _recovery_on_startup:
+        from services.ticket_status import recover_stale_running_tickets
+        stale_details = recover_stale_running_tickets(trigger="startup")
+        if stale_details:
+            logger.info(
+                "startup recovery: corregidos %d items (tickets stale + executions con timeout)",
+                len(stale_details),
+            )
+            for detail in stale_details:
+                logger.debug("recovery detail: %s", detail)
+    else:
+        logger.debug(
+            "startup recovery omitido: STACKY_RECOVERY_ON_STARTUP=false (gateway=%s)",
+            _gateway_mode,
+        )
 
     _startup_sync(logger)
 

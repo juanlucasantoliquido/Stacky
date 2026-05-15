@@ -770,7 +770,199 @@ def _compare_with_legacy(
     return divergence_fields
 
 
-# ── Gateway en modo on (P5 — no implementado) ─────────────────────────────────
+# ── Gateway en modo on (P5) ───────────────────────────────────────────────────
+
+
+def _close_execution(
+    execution: AgentExecution,
+    payload: CompletionPayload,
+    html_sha256: str | None,
+    correlation_id: str,
+    session,
+) -> None:
+    """Cierra la AgentExecution en base de datos (paso 3 del plan §4).
+
+    Muta directamente el objeto dentro de la sesión activa.
+    No persiste — el commit lo hace el llamador.
+    """
+    execution.status = payload.status
+    execution.completed_at = datetime.utcnow()
+
+    # Persistir completion_source si el campo existe (P2).
+    if hasattr(execution, "completion_source"):
+        execution.completion_source = "agent_gateway"
+
+    # Persistir html_output_path si el campo existe (P2).
+    if hasattr(execution, "html_output_path") and payload.html_output_path:
+        execution.html_output_path = payload.html_output_path
+
+    # Persistir sha256 en metadata
+    meta = {}
+    if hasattr(execution, "metadata_json") and execution.metadata_json:
+        try:
+            meta = json.loads(execution.metadata_json)
+        except (json.JSONDecodeError, TypeError):
+            meta = {}
+    meta["completion_gateway"] = {
+        "html_sha256": html_sha256,
+        "correlation_id": correlation_id,
+        "agent_version": payload.metadata.agent_version,
+        "duration_ms": payload.metadata.duration_ms,
+        "reason": payload.reason,
+    }
+    execution.metadata_json = json.dumps(meta, ensure_ascii=False, default=str)
+
+    logger.debug(
+        "gateway[on] close_execution: exec_id=%s status=%s sha256=%s corr=%s",
+        execution.id, payload.status,
+        html_sha256[:12] if html_sha256 else None,
+        correlation_id,
+    )
+
+
+def _publish_to_ado(
+    *,
+    execution: AgentExecution,
+    html_sha256: str | None,
+    correlation_id: str,
+    session,
+) -> dict:
+    """Publica el HTML en ADO mediante ado_publisher (paso 4 del plan §4).
+
+    Idempotente: si AgentHtmlPublish ya existe para (execution_id, sha256),
+    devuelve el registro existente sin republicar.
+
+    Returns:
+        dict con resultado de la publicación: {published: bool, idempotent: bool, ...}
+    """
+    try:
+        from services import ado_publisher  # noqa: PLC0415
+        result = ado_publisher.publish_from_execution(
+            execution.id,
+            triggered_by="agent_gateway",
+            html_sha256=html_sha256,
+        )
+        logger.info(
+            "gateway[on] ado_publish ok: exec_id=%s idempotent=%s corr=%s",
+            execution.id, result.get("idempotent", False), correlation_id,
+        )
+        return result
+    except Exception as exc:
+        logger.error(
+            "gateway[on] ado_publish failed: exec_id=%s error=%s corr=%s",
+            execution.id, exc, correlation_id,
+        )
+        # No re-raise: el reaper reintentará la publicación
+        return {"published": False, "error": str(exc), "idempotent": False}
+
+
+def _apply_workflow_transition(
+    *,
+    ticket: "Ticket",
+    execution: AgentExecution,
+    payload: CompletionPayload,
+    correlation_id: str,
+) -> dict:
+    """Aplica la transición de estado ADO declarativa (paso 5 del plan §4).
+
+    Lee workflow.json del proyecto. Si no existe el archivo de workflow,
+    usa fallback (sin cambio de estado ADO).
+
+    Returns:
+        dict con decision, target_ado_state, source.
+    """
+    try:
+        from services import ado_workflow  # noqa: PLC0415
+        project = getattr(ticket, "project", None) or "UNKNOWN"
+        current_ado_state = getattr(ticket, "ado_state", None) or "Active"
+        result = ado_workflow.apply_transition(
+            project=project,
+            agent_type=payload.agent_type,
+            current_state=current_ado_state,
+        )
+        logger.info(
+            "gateway[on] workflow_transition: project=%s agent_type=%s "
+            "current=%s target=%s decision=%s corr=%s",
+            project, payload.agent_type, current_ado_state,
+            result.target_state, result.decision, correlation_id,
+        )
+        return {
+            "target_ado_state": result.target_state,
+            "decision": result.decision,
+            "source": result.source,
+            "comment_template": result.comment_template,
+        }
+    except ImportError:
+        # ado_workflow no disponible (rama sin P3 mergeada)
+        logger.warning(
+            "gateway[on] ado_workflow not available — transition skipped corr=%s",
+            correlation_id,
+        )
+        return {"target_ado_state": None, "decision": "skipped", "source": "no_workflow_module"}
+    except Exception as exc:
+        logger.error(
+            "gateway[on] workflow_transition failed: error=%s corr=%s",
+            exc, correlation_id,
+        )
+        return {"target_ado_state": None, "decision": "error", "source": str(exc)}
+
+
+def _seal_audit(
+    *,
+    ticket_id: int,
+    execution: AgentExecution,
+    payload: CompletionPayload,
+    html_sha256: str | None,
+    workflow_decision: dict,
+    correlation_id: str,
+    user: str | None,
+) -> None:
+    """Sella la cadena de auditoría (paso 6 del plan §4).
+
+    Intenta llamar a audit_chain.seal si está disponible.
+    Si no, emite SystemLog como fallback.
+    """
+    try:
+        from services import audit_chain  # noqa: PLC0415
+        audit_chain.seal(
+            execution_id=execution.id,
+            kind="agent_completion",
+            metadata={
+                "correlation_id": correlation_id,
+                "agent_type": payload.agent_type,
+                "status": payload.status,
+                "html_sha256": html_sha256,
+                "workflow_decision": workflow_decision,
+                "completion_source": "agent_gateway",
+                "user": user,
+            },
+        )
+        logger.debug(
+            "gateway[on] audit_seal ok: exec_id=%s corr=%s",
+            execution.id, correlation_id,
+        )
+    except ImportError:
+        # audit_chain no disponible
+        _emit_system_log(
+            action="on.audit_seal_fallback",
+            level="INFO",
+            ticket_id=ticket_id,
+            execution_id=execution.id,
+            user=user,
+            correlation_id=correlation_id,
+            context={
+                "kind": "agent_completion",
+                "html_sha256": html_sha256,
+                "workflow_decision": workflow_decision,
+                "note": "audit_chain module not available",
+            },
+            tags=["completion_gateway", "on", "audit"],
+        )
+    except Exception as exc:
+        logger.error(
+            "gateway[on] audit_seal failed (non-fatal): exec_id=%s error=%s corr=%s",
+            execution.id, exc, correlation_id,
+        )
 
 
 def run_on(
@@ -780,5 +972,414 @@ def run_on(
     user: str | None,
     correlation_id: str,
 ) -> tuple[GatewayResult, int]:
-    """Placeholder para modo on (P5). Actualmente devuelve 501."""
-    raise NotImplementedError("Gateway mode 'on' will be implemented in P5.")
+    """Ejecuta el gateway en modo on: transacción real de cierre/publicación.
+
+    Pasos (plan §4):
+      1. resolve_execution() — prioridad documentada
+      2. validate_html()
+      3. close_execution() — muta AgentExecution en DB (dentro de sesión)
+      4. ado_publisher.publish_from_execution() — INSERT AgentHtmlPublish
+      5. ticket_status.on_execution_end() + workflow.apply_transition()
+      6. audit_chain.seal()
+
+    Idempotencia: si la ejecución ya está en estado terminal y el hash SHA256
+    coincide, se responde 200 idempotent_replay sin republicar.
+
+    Args:
+        ado_id: ID ADO del ticket.
+        payload: Payload v1 validado.
+        user: email del usuario/agente.
+        correlation_id: UUID de correlación para esta invocación.
+
+    Returns:
+        (GatewayResult, http_status_code)
+    """
+    t0 = time.monotonic()
+    errors: list[GatewayError] = []
+    plan: list[ClosurePlanStep] = []
+    execution: AgentExecution | None = None
+    agent_type_mismatch = False
+    html_sha256: str | None = None
+    ticket_id: int | None = None
+    is_synthetic = False
+    idempotent_replay = False
+
+    logger.info(
+        "gateway[on] start: ado_id=%s agent_type=%s execution_id=%s corr=%s",
+        ado_id, payload.agent_type, payload.execution_id, correlation_id,
+    )
+
+    # ── Fase 1: Resolución + validación HTML (READ) ────────────────────────────
+    with session_scope() as session:
+        # Resolver ticket
+        ticket = session.query(Ticket).filter(Ticket.ado_id == ado_id).first()
+        if ticket is None:
+            return _build_error_result(
+                mode="on",
+                error=GatewayError(
+                    http_status=404,
+                    code="ticket_not_found",
+                    message=f"No se encontró ticket con ado_id={ado_id}",
+                    detail={"ado_id": ado_id},
+                ),
+                correlation_id=correlation_id,
+                t0=t0,
+                user=user,
+                ado_id=ado_id,
+                payload=payload,
+            )
+        ticket_id = ticket.id
+        ticket_project = getattr(ticket, "project", None) or "UNKNOWN"
+        ticket_ado_state = getattr(ticket, "ado_state", None) or "Active"
+
+        # Resolver ejecución activa
+        execution, agent_type_mismatch, resolve_err = _resolve_execution(
+            ticket_id=ticket_id,
+            payload=payload,
+            correlation_id=correlation_id,
+            session=session,
+        )
+        if resolve_err is not None:
+            errors.append(resolve_err)
+        elif execution is None and payload.allow_synthetic_rescue:
+            is_synthetic = True
+
+        # Chequeo idempotente: si la execution ya está terminal con este sha256
+        if (
+            execution is not None
+            and execution.status in TERMINAL_STATUSES
+            and payload.metadata.html_sha256
+            and hasattr(execution, "html_sha256_cache")
+        ):
+            cached_sha256 = getattr(execution, "html_sha256_cache", None)
+            if cached_sha256 == payload.metadata.html_sha256:
+                idempotent_replay = True
+
+        # Validar HTML
+        _html_content, html_sha256, html_err = _validate_html(
+            ado_id=ado_id,
+            html_output_path=payload.html_output_path,
+            correlation_id=correlation_id,
+        )
+        if html_err is not None:
+            errors.append(html_err)
+
+    # Si hay errores irrecuperables, retornar antes de mutar
+    if errors:
+        result_error = errors[0]
+        _emit_system_log(
+            action="on.pre_flight_failed",
+            level="WARNING",
+            ticket_id=ticket_id,
+            execution_id=execution.id if execution else None,
+            user=user,
+            correlation_id=correlation_id,
+            context={
+                "ado_id": ado_id,
+                "errors": [e.code for e in errors],
+                "mode": "on",
+            },
+            tags=["completion_gateway", "on", "error"],
+        )
+        return _build_error_result(
+            mode="on",
+            error=result_error,
+            correlation_id=correlation_id,
+            t0=t0,
+            user=user,
+            ado_id=ado_id,
+            payload=payload,
+        )
+
+    if idempotent_replay:
+        logger.info(
+            "gateway[on] idempotent_replay: exec_id=%s sha256=%s corr=%s",
+            execution.id if execution else None,
+            html_sha256, correlation_id,
+        )
+        return _build_idempotent_result(
+            execution=execution,
+            html_sha256=html_sha256,
+            correlation_id=correlation_id,
+            ticket_id=ticket_id,
+            payload=payload,
+            t0=t0,
+        )
+
+    # ── Fase 2: Mutación (WRITE) — transacción única ───────────────────────────
+    publish_result: dict = {}
+    workflow_decision: dict = {}
+
+    with session_scope() as session:
+        # Re-cargar ticket y execution en esta sesión
+        ticket = session.query(Ticket).filter(Ticket.ado_id == ado_id).first()
+        if ticket is None:
+            return _build_error_result(
+                mode="on",
+                error=GatewayError(
+                    http_status=404,
+                    code="ticket_not_found",
+                    message=f"Ticket ADO-{ado_id} no encontrado",
+                    detail={"ado_id": ado_id},
+                ),
+                correlation_id=correlation_id,
+                t0=t0,
+                user=user,
+                ado_id=ado_id,
+                payload=payload,
+            )
+        ticket_id = ticket.id
+
+        if execution is not None:
+            # Re-cargar la execution en la nueva sesión
+            exec_fresh = session.get(AgentExecution, execution.id)
+            if exec_fresh is None:
+                return _build_error_result(
+                    mode="on",
+                    error=GatewayError(
+                        http_status=409,
+                        code="execution_state_invalid",
+                        message=f"execution_id={execution.id} desapareció entre fases",
+                        detail={"execution_id": execution.id},
+                    ),
+                    correlation_id=correlation_id,
+                    t0=t0,
+                    user=user,
+                    ado_id=ado_id,
+                    payload=payload,
+                )
+            # Verificar idempotencia real (ejecución ya terminal)
+            if exec_fresh.status in TERMINAL_STATUSES:
+                logger.info(
+                    "gateway[on] idempotent_replay (execution already terminal): "
+                    "exec_id=%s status=%s corr=%s",
+                    exec_fresh.id, exec_fresh.status, correlation_id,
+                )
+                idempotent_replay = True
+                # Responder sin mutar
+                plan = _build_closure_plan(
+                    execution=exec_fresh,
+                    payload=payload,
+                    html_sha256=html_sha256,
+                    agent_type_mismatch=agent_type_mismatch,
+                    is_synthetic=False,
+                )
+                # No necesitamos el session para más nada
+            else:
+                # Paso 3: cerrar execution
+                _close_execution(
+                    execution=exec_fresh,
+                    payload=payload,
+                    html_sha256=html_sha256,
+                    correlation_id=correlation_id,
+                    session=session,
+                )
+                plan = _build_closure_plan(
+                    execution=exec_fresh,
+                    payload=payload,
+                    html_sha256=html_sha256,
+                    agent_type_mismatch=agent_type_mismatch,
+                    is_synthetic=is_synthetic,
+                )
+                # session commit automático al salir del context manager
+
+    if not idempotent_replay:
+        # Paso 4: publicar en ADO (fuera de la sesión principal para independencia)
+        if execution is not None and html_sha256:
+            publish_result = _publish_to_ado(
+                execution=execution,
+                html_sha256=html_sha256,
+                correlation_id=correlation_id,
+                session=None,
+            )
+
+        # Paso 5: transición de estado del ticket
+        if execution is not None and payload.status in TERMINAL_STATUSES:
+            try:
+                from services import ticket_status as ts  # noqa: PLC0415
+                ts.on_execution_end(
+                    ticket_id=ticket_id,
+                    execution_id=execution.id,
+                    final_status=payload.status,
+                    agent_type=payload.agent_type,
+                )
+            except Exception as exc:
+                logger.error(
+                    "gateway[on] on_execution_end failed: exec_id=%s error=%s corr=%s",
+                    execution.id, exc, correlation_id,
+                )
+
+        # Obtener transición declarativa del workflow
+        if ticket is not None:
+            workflow_decision = _apply_workflow_transition(
+                ticket=ticket,
+                execution=execution,
+                payload=payload,
+                correlation_id=correlation_id,
+            )
+
+        # Paso 6: audit seal
+        if execution is not None:
+            _seal_audit(
+                ticket_id=ticket_id,
+                execution=execution,
+                payload=payload,
+                html_sha256=html_sha256,
+                workflow_decision=workflow_decision,
+                correlation_id=correlation_id,
+                user=user,
+            )
+
+    # ── Métricas ────────────────────────────────────────────────────────────────
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    exec_id_for_log = execution.id if execution else None
+    exec_agent_type_for_log = (
+        execution.agent_type if execution else payload.agent_type
+    )
+
+    _emit_system_log(
+        action="on.completion" if not idempotent_replay else "on.idempotent_replay",
+        level="INFO",
+        ticket_id=ticket_id,
+        execution_id=exec_id_for_log,
+        user=user,
+        correlation_id=correlation_id,
+        context={
+            "ado_id": ado_id,
+            "agent_type": payload.agent_type,
+            "status": payload.status,
+            "mode": "on",
+            "html_sha256": html_sha256,
+            "agent_type_mismatch": agent_type_mismatch,
+            "is_synthetic": is_synthetic,
+            "idempotent_replay": idempotent_replay,
+            "publish_result": publish_result,
+            "workflow_decision": workflow_decision,
+            "plan_steps": [s.step for s in plan],
+            "duration_ms": duration_ms,
+        },
+        tags=["completion_gateway", "on"],
+    )
+    _emit_system_log(
+        action="metric.completion_gateway",
+        level="INFO",
+        ticket_id=ticket_id,
+        execution_id=exec_id_for_log,
+        user=user,
+        correlation_id=correlation_id,
+        context={
+            "metric": "stacky_agent_completion_total",
+            "result": "idempotent_replay" if idempotent_replay else "success",
+            "agent_type": payload.agent_type,
+            "mode": "on",
+            "duration_ms": duration_ms,
+        },
+        tags=["metric", "completion_gateway"],
+    )
+
+    logger.info(
+        "gateway[on] done: ado_id=%s ticket_id=%s exec_id=%s status=%s "
+        "idempotent=%s publish=%s duration_ms=%d corr=%s",
+        ado_id, ticket_id, exec_id_for_log, payload.status,
+        idempotent_replay, publish_result.get("published", "N/A"),
+        duration_ms, correlation_id,
+    )
+
+    result = GatewayResult(
+        mode="on",
+        ok=True,
+        would_succeed=True,
+        correlation_id=correlation_id,
+        ticket_id=ticket_id,
+        execution_id=exec_id_for_log,
+        agent_type_resolved=exec_agent_type_for_log,
+        agent_type_mismatch=agent_type_mismatch,
+        html_sha256=html_sha256,
+        plan=plan,
+        errors=[],
+        discrepancies=[],
+        duration_ms=duration_ms,
+    )
+    # Agregar campos extra al dict de resultado para modo on
+    result_dict = result.to_dict()
+    result_dict["idempotent_replay"] = idempotent_replay
+    result_dict["publish_result"] = publish_result
+    result_dict["workflow_decision"] = workflow_decision
+
+    return result, 200
+
+
+# ── Helpers para run_on ───────────────────────────────────────────────────────
+
+
+def _build_error_result(
+    *,
+    mode: str,
+    error: GatewayError,
+    correlation_id: str,
+    t0: float,
+    user: str | None,
+    ado_id: int,
+    payload: "CompletionPayload",
+) -> tuple[GatewayResult, int]:
+    """Construye un GatewayResult de error y emite SystemLog."""
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    _emit_system_log(
+        action=f"on.error.{error.code}",
+        level="WARNING",
+        user=user,
+        correlation_id=correlation_id,
+        context={
+            "ado_id": ado_id,
+            "error_code": error.code,
+            "error_message": error.message,
+            "mode": mode,
+            "duration_ms": duration_ms,
+        },
+        tags=["completion_gateway", mode, "error"],
+    )
+    result = GatewayResult(
+        mode=mode,
+        ok=False,
+        would_succeed=False,
+        correlation_id=correlation_id,
+        ticket_id=None,
+        execution_id=None,
+        agent_type_resolved=payload.agent_type,
+        agent_type_mismatch=False,
+        html_sha256=None,
+        plan=[],
+        errors=[error],
+        discrepancies=[],
+        duration_ms=duration_ms,
+    )
+    return result, error.http_status
+
+
+def _build_idempotent_result(
+    *,
+    execution: "AgentExecution | None",
+    html_sha256: str | None,
+    correlation_id: str,
+    ticket_id: int | None,
+    payload: "CompletionPayload",
+    t0: float,
+) -> tuple[GatewayResult, int]:
+    """Construye respuesta de replay idempotente."""
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    result = GatewayResult(
+        mode="on",
+        ok=True,
+        would_succeed=True,
+        correlation_id=correlation_id,
+        ticket_id=ticket_id,
+        execution_id=execution.id if execution else None,
+        agent_type_resolved=execution.agent_type if execution else payload.agent_type,
+        agent_type_mismatch=False,
+        html_sha256=html_sha256,
+        plan=[],
+        errors=[],
+        discrepancies=[],
+        duration_ms=duration_ms,
+    )
+    return result, 200

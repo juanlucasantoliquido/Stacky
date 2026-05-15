@@ -1,4 +1,5 @@
-import { api, apiBase } from "./client";
+import { api, apiBase, rawPost, type RawResponse, type GatewayErrorBody } from "./client";
+export type { RawResponse, GatewayErrorBody };
 import type {
   ActiveProjectResponse,
   AgentDefinition,
@@ -1047,4 +1048,51 @@ export const QaUat = {
       "/api/qa-uat/data-lineage/build",
       payload
     ),
+};
+
+// ── P4: Gateway de finalización de agentes (recuperación de inconsistencias) ──
+
+export interface AgentCompletionPayload {
+  execution_id: number;
+  agent_type: string;
+  status: "completed";
+  html_output_path?: string | null;
+  metadata?: Record<string, unknown>;
+  reason: string;
+  force?: boolean;
+}
+
+export interface AgentCompletionSuccess {
+  ok: true;
+  result: string;          // ej. "agent_completed", "idempotent_replay"
+  execution_id: number;
+  publish_id?: number | null;
+  correlation_id?: string;
+}
+
+/**
+ * Gateway de finalización de agentes.
+ *
+ * Llama a POST /api/tickets/by-ado/{ado_id}/agent-completion.
+ *
+ * Devuelve RawResponse en vez de lanzar excepción para que el caller
+ * pueda diferenciar 409 html_already_published → diálogo force=true
+ * de otros errores → toast de error.
+ *
+ * Auth: X-Stacky-Agent-Token leído desde import.meta.env.VITE_STACKY_AGENT_TOKEN.
+ * Si no está configurado, se envía cadena vacía (el backend responderá 401).
+ */
+export const AgentCompletion = {
+  complete: (
+    adoId: number,
+    payload: AgentCompletionPayload
+  ): Promise<RawResponse<AgentCompletionSuccess>> => {
+    const token =
+      (import.meta as any).env?.VITE_STACKY_AGENT_TOKEN ?? "";
+    return rawPost<AgentCompletionSuccess>(
+      `/api/tickets/by-ado/${adoId}/agent-completion`,
+      payload,
+      token ? { "X-Stacky-Agent-Token": token } : {}
+    );
+  },
 };

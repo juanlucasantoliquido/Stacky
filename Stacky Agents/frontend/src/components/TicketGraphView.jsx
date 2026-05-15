@@ -4,6 +4,7 @@ import { Tickets, Agents } from "../api/endpoints";
 import { getPinnedAgents } from "../services/preferences";
 import RecoverExecutionButton from "./RecoverExecutionButton";
 import FinishWorkButton from "./FinishWorkButton";
+import CreateChildTaskButton from "./CreateChildTaskButton";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import styles from "./TicketGraphView.module.css";
 
@@ -385,6 +386,21 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
                 <FinishWorkButton
                   ticket={ticket}
                   onCompleted={() => {
+                    qc.invalidateQueries({ queryKey: ["tickets"] });
+                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Crear Tasks hijas en ADO desde pending-task.json (Fase 2).
+                Solo visible en Epics. El componente se auto-oculta si no hay pendientes. */}
+            {isEpic && (
+              <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
+                <CreateChildTaskButton
+                  epicAdoId={ticket.ado_id}
+                  disabled={isRunning}
+                  onTaskCreated={() => {
                     qc.invalidateQueries({ queryKey: ["tickets"] });
                     qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
                   }}

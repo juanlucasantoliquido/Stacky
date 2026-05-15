@@ -120,7 +120,85 @@ export const Tickets = {
       payload,
       { "X-Completion-Source": "manual_ui" }
     ),
+
+  // ── Fase 2: pending-tasks y create-child-task ──────────────────────────────
+
+  /**
+   * Lista los pending-task.json no consumidos para un Epic.
+   * GET /api/tickets/by-ado/{epic_ado_id}/pending-tasks
+   */
+  listPendingTasks: (epicAdoId: number): Promise<ListPendingTasksResponse> =>
+    api.get<ListPendingTasksResponse>(`/api/tickets/by-ado/${epicAdoId}/pending-tasks`),
+
+  /**
+   * Crea una Task hija del Epic en ADO consumiendo un pending-task.json.
+   * POST /api/tickets/by-ado/{epic_ado_id}/create-child-task
+   * Envía X-Completion-Source: manual_ui para trazabilidad.
+   */
+  createChildTask: (
+    epicAdoId: number,
+    payload: {
+      pending_task_path: string;
+      operator_reason?: string;
+      dry_run?: boolean;
+    }
+  ): Promise<CreateChildTaskResponse> =>
+    api.postWithHeaders<CreateChildTaskResponse>(
+      `/api/tickets/by-ado/${epicAdoId}/create-child-task`,
+      payload,
+      { "X-Completion-Source": "manual_ui" }
+    ),
 };
+
+// ── Fase 2: tipos para pending-tasks y create-child-task ──────────────────────
+
+export interface PendingTaskItem {
+  rf_id: string;
+  title: string;
+  pending_task_path: string;
+  generated_at: string;
+  plan_de_pruebas_path: string;
+  plan_exists: boolean;
+  status: "pending_manual_creation" | "consumed";
+}
+
+export interface ListPendingTasksResponse {
+  ok: boolean;
+  epic_ado_id: number;
+  pending_tasks: PendingTaskItem[];
+  total_pending: number;
+  total_consumed: number;
+}
+
+export interface CreateChildTaskAction {
+  action: string;
+  ok?: boolean;
+  task_ado_id?: number | null;
+  attachment_id?: string | null;
+  reason?: string | null;
+  detail?: string | null;
+  would_call?: string;
+  payload_preview?: Record<string, unknown>;
+  file_exists?: boolean;
+}
+
+export interface CreateChildTaskResponse {
+  ok: boolean;
+  dry_run: boolean;
+  epic_ado_id: number;
+  task_ado_id: number | null;
+  task_url: string | null;
+  attachment_id: string | null;
+  actions: CreateChildTaskAction[];
+  pending_task_consumed: boolean;
+  idempotent?: boolean;
+  reason?: string;
+  human_action_required?: string;
+  correlation_id: string;
+  error?: string;
+  missing_fields?: string[];
+  message?: string;
+}
 
 export interface AgentHistoryEntry {
   ticket_id: number;

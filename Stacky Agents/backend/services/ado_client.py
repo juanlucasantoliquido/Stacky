@@ -17,6 +17,8 @@ import json
 import logging
 import os
 import re
+import time
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,6 +30,12 @@ logger = logging.getLogger("stacky_agents.ado")
 
 _API_VERSION = "7.1"
 _TIMEOUT_SEC = 30
+
+# Retry configuration (CA-09)
+_MAX_RETRIES = 3
+_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+_RETRY_BACKOFF_BASE = 1.0   # seconds; doubles each attempt
+_RETRY_AFTER_MAX = 30.0     # clamp Retry-After header to 30 seconds
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 _TOOLS_ROOT = _BACKEND_ROOT.parent.parent
 
@@ -45,7 +53,11 @@ class AdoConfigError(RuntimeError):
 
 
 class AdoApiError(RuntimeError):
-    pass
+    """Error de API de ADO. Opcionalmente incluye correlation_id para trazabilidad."""
+
+    def __init__(self, message: str, correlation_id: str | None = None):
+        super().__init__(message)
+        self.correlation_id: str = correlation_id or str(uuid.uuid4())
 
 
 def _looks_preencoded(raw: str) -> bool:
@@ -248,3 +260,235 @@ class AdoClient:
                 "text_content": text_content,
             })
         return out
+
+    # ── Fase 2: extensiones para create_child_task ────────────────────────────
+
+    def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        body: dict | list | None = None,
+        content_type: str = "application/json",
+    ) -> dict:
+        """Como `_request`, pero con retry exponencial para 429/5xx (CA-09).
+
+        Reintentos: hasta _MAX_RETRIES intentos.
+        Backoff: 1s → 2s → 4s (base=1, exponencial).
+        Retry-After header: respetado, clampeado a _RETRY_AFTER_MAX.
+        Tras agotar reintentos: eleva AdoApiError con correlation_id.
+        """
+        correlation_id = str(uuid.uuid4())
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        headers = self._headers(content_type)
+
+        last_error: urllib.error.HTTPError | None = None
+
+        for attempt in range(1, _MAX_RETRIES + 1):
+            req = urllib.request.Request(url, data=data, headers=headers, method=method)
+            try:
+                with urllib.request.urlopen(req, timeout=_TIMEOUT_SEC) as resp:
+                    raw = resp.read().decode("utf-8", errors="replace")
+                    return json.loads(raw) if raw else {}
+            except urllib.error.HTTPError as e:
+                if e.code not in _RETRY_STATUS_CODES or attempt == _MAX_RETRIES:
+                    detail = ""
+                    try:
+                        detail = e.read().decode("utf-8", errors="replace")[:500]
+                    except Exception:
+                        pass
+                    if attempt == _MAX_RETRIES and e.code in _RETRY_STATUS_CODES:
+                        logger.warning(
+                            "ado_client: retry_exhausted method=%s url=%s code=%s corr=%s",
+                            method, url, e.code, correlation_id,
+                        )
+                        raise AdoApiError(
+                            f"ADO {method} {url} → {e.code}: {detail} (retries exhausted)",
+                            correlation_id=correlation_id,
+                        ) from e
+                    raise AdoApiError(
+                        f"ADO {method} {url} → {e.code}: {detail}",
+                        correlation_id=correlation_id,
+                    ) from e
+
+                last_error = e
+                # Calcular tiempo de espera
+                retry_after_raw = getattr(e.headers, "get", lambda k, d=None: None)("Retry-After")
+                if retry_after_raw:
+                    try:
+                        wait = min(float(retry_after_raw), _RETRY_AFTER_MAX)
+                    except (ValueError, TypeError):
+                        wait = _RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
+                else:
+                    wait = _RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
+
+                logger.warning(
+                    "ado_client: retry attempt=%d/%d code=%s wait=%.1fs corr=%s url=%s",
+                    attempt, _MAX_RETRIES, e.code, wait, correlation_id, url,
+                )
+                time.sleep(wait)
+
+            except urllib.error.URLError as e:
+                raise AdoApiError(
+                    f"ADO network error {method} {url}: {e.reason}",
+                    correlation_id=correlation_id,
+                ) from e
+
+        # Guardrail — no debería llegar aquí
+        raise AdoApiError(
+            f"ADO {method} {url}: retry loop exhausted unexpectedly",
+            correlation_id=correlation_id,
+        )
+
+    def create_work_item(
+        self,
+        work_item_type: str,
+        fields: dict[str, str],
+        parent_ado_id: int,
+    ) -> dict:
+        """Crea un work item hijo del Epic `parent_ado_id` via JSON Patch (CA-01).
+
+        POST _apis/wit/workitems/${type}?api-version={ver}
+        Content-Type: application/json-patch+json
+
+        El patch incluye los campos en `fields` más la relación Hierarchy-Reverse
+        que vincula el nuevo work item al Epic padre.
+
+        Returns: dict con al menos 'id' y 'url' del work item creado.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/"
+            f"${urllib.parse.quote(work_item_type)}"
+            f"?api-version={_API_VERSION}"
+        )
+        patch_ops: list[dict] = [
+            {"op": "add", "path": f"/fields/{field_name}", "value": value}
+            for field_name, value in fields.items()
+        ]
+        # Relación padre → Hierarchy-Reverse
+        parent_url = (
+            f"https://dev.azure.com/{urllib.parse.quote(self.org)}/"
+            f"{urllib.parse.quote(self.project)}/_apis/wit/workitems/{parent_ado_id}"
+        )
+        patch_ops.append({
+            "op": "add",
+            "path": "/relations/-",
+            "value": {
+                "rel": "System.LinkTypes.Hierarchy-Reverse",
+                "url": parent_url,
+                "attributes": {"comment": "Task hija del Epic creada por Stacky Agents"},
+            },
+        })
+        return self._request_with_retry(
+            "POST", url, body=patch_ops, content_type="application/json-patch+json"
+        )
+
+    def upload_attachment(self, file_path: Path, file_name: str) -> dict:
+        """Sube un archivo como adjunto a ADO (CA-02).
+
+        POST _apis/wit/attachments?fileName=...&api-version={ver}
+        Content-Type: application/octet-stream
+        Body: contenido binario del archivo
+
+        Returns: dict con 'id' (str UUID) y 'url' del adjunto en ADO.
+        """
+        file_path = Path(file_path)
+        content = file_path.read_bytes()
+
+        encoded_name = urllib.parse.quote(file_name, safe="")
+        url = (
+            f"{self._base_proj}/_apis/wit/attachments"
+            f"?fileName={encoded_name}&api-version={_API_VERSION}"
+        )
+        # Construir request manualmente para body binario
+        req = urllib.request.Request(
+            url,
+            data=content,
+            headers={
+                "Authorization": self._auth,
+                "Content-Type": "application/octet-stream",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        correlation_id = str(uuid.uuid4())
+        try:
+            with urllib.request.urlopen(req, timeout=_TIMEOUT_SEC) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                pass
+            raise AdoApiError(
+                f"ADO POST attachments → {e.code}: {detail}",
+                correlation_id=correlation_id,
+            ) from e
+        except urllib.error.URLError as e:
+            raise AdoApiError(
+                f"ADO network error uploading attachment: {e.reason}",
+                correlation_id=correlation_id,
+            ) from e
+
+    def link_attachment_to_work_item(
+        self,
+        work_item_id: int,
+        attachment_url: str,
+        comment: str = "",
+    ) -> dict:
+        """Vincula un adjunto ya subido a un work item via JSON Patch (CA-02).
+
+        PATCH _apis/wit/workitems/{id}?api-version={ver}
+        Content-Type: application/json-patch+json
+
+        Returns: dict del work item actualizado.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{work_item_id}"
+            f"?api-version={_API_VERSION}"
+        )
+        patch_ops = [
+            {
+                "op": "add",
+                "path": "/relations/-",
+                "value": {
+                    "rel": "AttachedFile",
+                    "url": attachment_url,
+                    "attributes": {"comment": comment or "Adjunto desde Stacky Agents"},
+                },
+            }
+        ]
+        return self._request_with_retry(
+            "PATCH", url, body=patch_ops, content_type="application/json-patch+json"
+        )
+
+    def post_comment(self, ado_id: int, text: str, fmt: str = "html") -> dict:
+        """Publica un comentario en un work item (CA-07).
+
+        POST _apis/wit/workitems/{id}/comments?api-version=7.1-preview.3
+        Si ADO no soporta la API preview, degrada silenciosamente.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}/comments"
+            f"?api-version=7.1-preview.3"
+        )
+        body = {"text": text}
+        try:
+            return self._request_with_retry("POST", url, body=body)
+        except AdoApiError as e:
+            logger.warning("post_comment(%s) falló (no crítico): %s", ado_id, e)
+            return {}
+
+    def update_work_item_state(self, ado_id: int, new_state: str) -> dict:
+        """Cambia el System.State de un work item en ADO."""
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}"
+            f"?api-version={_API_VERSION}"
+        )
+        patch_ops = [
+            {"op": "add", "path": "/fields/System.State", "value": new_state}
+        ]
+        return self._request_with_retry(
+            "PATCH", url, body=patch_ops, content_type="application/json-patch+json"
+        )

@@ -1,10 +1,15 @@
+import json
 import logging
+import os
+import uuid as _uuid_mod
+from datetime import datetime, timezone
+from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, request
 
 import fingerprint
 from db import session_scope
-from models import AgentExecution, Ticket
+from models import AgentExecution, SystemLog, Ticket
 from services import glossary
 from services.ado_sync import (
     AdoApiError,
@@ -14,10 +19,36 @@ from services.ado_sync import (
 )
 from services.pipeline_status import get_pipeline_status, get_pipeline_summary
 from services.ado_pipeline_inference import infer_pipeline, invalidate_cache
+from services.ado_client import AdoClient, AdoApiError as _AdoApiError, AdoConfigError as _AdoConfigError
 
 logger = logging.getLogger("stacky_agents.api.tickets")
 
 bp = Blueprint("tickets", __name__, url_prefix="/tickets")
+
+# ── Fase 2: constantes para create_child_task ─────────────────────────────────
+
+# Campos obligatorios en pending-task.json para que Stacky pueda procesarlo
+_PENDING_TASK_REQUIRED_FIELDS = {
+    "generated_at", "generated_by", "epic_id", "rf_id",
+    "title", "description_html", "plan_de_pruebas_path",
+    "parent_link_type", "status",
+}
+
+# Resuelve el root del repo (honra STACKY_REPO_ROOT para tests)
+def _repo_root() -> Path:
+    env = os.getenv("STACKY_REPO_ROOT")
+    if env:
+        return Path(env).resolve()
+    # api/tickets.py → api/ → backend/ → Stacky Agents/ → Stacky/ → Tools/ → <repo>
+    return Path(__file__).resolve().parents[5]
+
+# Exportado como módulo-level para que los tests puedan patchearlo
+REPO_ROOT: Path = _repo_root()
+
+
+def _resolve_repo_root() -> Path:
+    """Permite que los tests puedan sobreescribir REPO_ROOT vía patch."""
+    return REPO_ROOT
 
 
 @bp.get("/hierarchy")
@@ -1099,3 +1130,543 @@ def finish_work(ticket_id: int):
         "current_status": ts.get_current_status(ticket_id),
         "operator": operator,
     })
+
+
+# ── Fase 2: Create Child Task from pending-task.json ──────────────────────────
+
+
+@bp.get("/by-ado/<int:ado_id>/pending-tasks")
+def list_pending_tasks(ado_id: int):
+    """Lista los pending-task.json no consumidos para un Epic (CA-11).
+
+    Escanea `Agentes/outputs/epic-{ado_id}/*/pending-task.json`.
+    Retorna solo los que tienen status=pending_manual_creation (sin consumed_at).
+
+    Response:
+      {
+        "ok": true,
+        "epic_ado_id": 149,
+        "pending_tasks": [ { rf_id, title, pending_task_path, generated_at,
+                              plan_de_pruebas_path, plan_exists, status } ],
+        "total_pending": N,
+        "total_consumed": M
+      }
+    """
+    repo_root = _resolve_repo_root()
+    epic_dir = repo_root / "Agentes" / "outputs" / f"epic-{ado_id}"
+
+    pending: list[dict] = []
+    consumed_count = 0
+
+    if epic_dir.is_dir():
+        for rf_dir in sorted(epic_dir.iterdir()):
+            if not rf_dir.is_dir():
+                continue
+            pt_file = rf_dir / "pending-task.json"
+            if not pt_file.is_file():
+                continue
+            try:
+                payload = json.loads(pt_file.read_text(encoding="utf-8"))
+            except Exception as exc:
+                logger.warning("list_pending_tasks: no se pudo parsear %s: %s", pt_file, exc)
+                continue
+
+            if "consumed_at" in payload or payload.get("status") == "consumed":
+                consumed_count += 1
+                continue
+
+            # Verificar si existe el plan de pruebas
+            plan_rel = payload.get("plan_de_pruebas_path", "")
+            plan_path = repo_root / plan_rel if plan_rel else None
+            plan_exists = bool(plan_path and plan_path.is_file())
+
+            # Ruta relativa al repo para el cliente
+            try:
+                rel_path = str(pt_file.relative_to(repo_root)).replace("\\", "/")
+            except ValueError:
+                rel_path = str(pt_file)
+
+            pending.append({
+                "rf_id": payload.get("rf_id", ""),
+                "title": payload.get("title", ""),
+                "pending_task_path": rel_path,
+                "generated_at": payload.get("generated_at", ""),
+                "plan_de_pruebas_path": plan_rel,
+                "plan_exists": plan_exists,
+                "status": payload.get("status", "pending_manual_creation"),
+            })
+
+    return jsonify({
+        "ok": True,
+        "epic_ado_id": ado_id,
+        "pending_tasks": pending,
+        "total_pending": len(pending),
+        "total_consumed": consumed_count,
+    })
+
+
+@bp.post("/by-ado/<int:ado_id>/create-child-task")
+def create_child_task(ado_id: int):
+    """Crea una Task hija del Epic en ADO consumiendo un pending-task.json (Fase 2).
+
+    Cadena de acciones:
+      1. Leer y validar pending-task.json (schema + idempotencia).
+      2. AdoClient.create_work_item → JSON Patch con Hierarchy-Reverse al Epic.
+      3. AdoClient.upload_attachment → plan-de-pruebas.md como adjunto.
+      4. AdoClient.link_attachment_to_work_item → vincular adjunto a la Task.
+      5. AdoClient.post_comment → registrar operator_reason en la Task.
+      6. Marcar pending-task.json como consumed (bajo file lock).
+      7. Registrar SystemLog con auditoría completa.
+
+    Body:
+      { "pending_task_path": str, "operator_reason": str?, "dry_run": bool? }
+
+    Response (éxito):
+      { ok, dry_run, epic_ado_id, task_ado_id, task_url, attachment_id,
+        actions, pending_task_consumed, idempotent?, correlation_id }
+    """
+    correlation_id = str(_uuid_mod.uuid4())
+    body = request.get_json(silent=True) or {}
+    pending_task_path_str: str = (body.get("pending_task_path") or "").strip()
+    operator_reason: str = (body.get("operator_reason") or "").strip()
+    dry_run: bool = bool(body.get("dry_run", False))
+    completion_source: str = (
+        request.headers.get("X-Completion-Source")
+        or body.get("completion_source")
+        or "manual"
+    )
+    user = request.headers.get("X-User-Email") or "anonymous"
+
+    if not pending_task_path_str:
+        return jsonify({
+            "ok": False,
+            "error": "MISSING_PENDING_TASK_PATH",
+            "message": "El campo 'pending_task_path' es obligatorio",
+            "correlation_id": correlation_id,
+        }), 400
+
+    repo_root = _resolve_repo_root()
+    pt_file = repo_root / pending_task_path_str
+
+    # ── [1a] Verificar existencia del archivo ──────────────────────────────────
+    if not pt_file.is_file():
+        return jsonify({
+            "ok": False,
+            "error": "PENDING_TASK_FILE_NOT_FOUND",
+            "message": f"No se encontró el archivo: {pending_task_path_str}",
+            "correlation_id": correlation_id,
+        }), 400
+
+    # ── [1b] Parsear y validar schema ─────────────────────────────────────────
+    try:
+        pt_payload = json.loads(pt_file.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "error": "PENDING_TASK_PARSE_ERROR",
+            "message": f"No se pudo parsear el archivo JSON: {exc}",
+            "correlation_id": correlation_id,
+        }), 400
+
+    missing_fields = sorted(_PENDING_TASK_REQUIRED_FIELDS - set(pt_payload.keys()))
+    if missing_fields:
+        return jsonify({
+            "ok": False,
+            "error": "PENDING_TASK_SCHEMA_INVALID",
+            "missing_fields": missing_fields,
+            "message": f"Campos requeridos ausentes en pending-task.json: {missing_fields}",
+            "correlation_id": correlation_id,
+        }), 400
+
+    # ── [1c] Verificar que epic_id coincide con la URL ─────────────────────────
+    file_epic_id = str(pt_payload.get("epic_id", "")).strip()
+    if file_epic_id != str(ado_id):
+        return jsonify({
+            "ok": False,
+            "error": "PENDING_TASK_EPIC_MISMATCH",
+            "message": (
+                f"epic_id en el archivo ('{file_epic_id}') no coincide con "
+                f"epic_ado_id en la URL ({ado_id})"
+            ),
+            "file_epic_id": file_epic_id,
+            "url_epic_ado_id": ado_id,
+            "correlation_id": correlation_id,
+        }), 400
+
+    # ── [1d] Idempotencia: ¿ya fue consumido? ──────────────────────────────────
+    if "consumed_at" in pt_payload or pt_payload.get("status") == "consumed":
+        prev_task_id = pt_payload.get("task_ado_id")
+        prev_url = None
+        if prev_task_id:
+            try:
+                prev_url = AdoClient().work_item_url(int(prev_task_id))
+            except Exception:
+                pass
+        return jsonify({
+            "ok": True,
+            "dry_run": False,
+            "epic_ado_id": ado_id,
+            "task_ado_id": prev_task_id,
+            "task_url": prev_url,
+            "attachment_id": pt_payload.get("attachment_id"),
+            "actions": [],
+            "pending_task_consumed": True,
+            "idempotent": True,
+            "reason": "PENDING_TASK_ALREADY_CONSUMED",
+            "correlation_id": correlation_id,
+        })
+
+    # ── [dry_run] Retornar plan de acciones sin tocar ADO ─────────────────────
+    plan_rel = pt_payload.get("plan_de_pruebas_path", "")
+    plan_path = repo_root / plan_rel if plan_rel else None
+    plan_exists = bool(plan_path and plan_path.is_file())
+
+    if dry_run:
+        dry_actions = [
+            {
+                "action": "create_work_item",
+                "would_call": f"POST _apis/wit/workitems/$Task?api-version=7.1",
+                "payload_preview": {
+                    "title": pt_payload.get("title"),
+                    "parent": ado_id,
+                    "state": pt_payload.get("target_state", "Technical review"),
+                },
+            },
+            {
+                "action": "upload_attachment",
+                "would_call": "POST _apis/wit/attachments?fileName=plan-de-pruebas.md",
+                "file_exists": plan_exists,
+            },
+            {
+                "action": "link_attachment",
+                "would_call": "PATCH _apis/wit/workitems/{task_id}/relations/-",
+            },
+        ]
+        return jsonify({
+            "ok": True,
+            "dry_run": True,
+            "epic_ado_id": ado_id,
+            "task_ado_id": None,
+            "task_url": None,
+            "attachment_id": None,
+            "actions": dry_actions,
+            "pending_task_consumed": False,
+            "correlation_id": correlation_id,
+        })
+
+    # ── [2–7] Ejecución real ───────────────────────────────────────────────────
+    actions: list[dict] = []
+    task_ado_id: int | None = None
+    task_url: str | None = None
+    attachment_id: str | None = None
+    human_action_required: str | None = None
+
+    # Inicializar cliente ADO
+    try:
+        ado = AdoClient()
+    except _AdoConfigError as exc:
+        _audit_create_child_task(
+            correlation_id=correlation_id,
+            ado_id=ado_id,
+            user=user,
+            completion_source=completion_source,
+            operator_reason=operator_reason,
+            pt_path=pending_task_path_str,
+            ok=False,
+            actions=[],
+            error=str(exc),
+        )
+        return jsonify({
+            "ok": False,
+            "error": "ADO_CONFIG_MISSING",
+            "message": str(exc),
+            "correlation_id": correlation_id,
+        }), 503
+
+    # ── [2] create_work_item ───────────────────────────────────────────────────
+    try:
+        wi_result = ado.create_work_item(
+            work_item_type="Task",
+            fields={
+                "System.Title": pt_payload["title"],
+                "System.Description": pt_payload.get("description_html", ""),
+                "System.State": pt_payload.get("target_state", "Technical review"),
+            },
+            parent_ado_id=ado_id,
+        )
+        task_ado_id = int(wi_result["id"])
+        task_url = ado.work_item_url(task_ado_id)
+        actions.append({
+            "action": "create_work_item",
+            "ok": True,
+            "task_ado_id": task_ado_id,
+        })
+    except _AdoApiError as exc:
+        actions.append({
+            "action": "create_work_item",
+            "ok": False,
+            "reason": "ADO_CREATE_REJECTED_BY_POLICY" if "403" in str(exc) else str(type(exc).__name__),
+            "detail": str(exc)[:300],
+        })
+        _audit_create_child_task(
+            correlation_id=correlation_id,
+            ado_id=ado_id,
+            user=user,
+            completion_source=completion_source,
+            operator_reason=operator_reason,
+            pt_path=pending_task_path_str,
+            ok=False,
+            actions=actions,
+            error=str(exc),
+        )
+        return jsonify({
+            "ok": False,
+            "dry_run": False,
+            "epic_ado_id": ado_id,
+            "task_ado_id": None,
+            "task_url": None,
+            "attachment_id": None,
+            "actions": actions,
+            "pending_task_consumed": False,
+            "correlation_id": correlation_id,
+        })
+
+    # ── [3] upload_attachment ──────────────────────────────────────────────────
+    if plan_exists and plan_path is not None:
+        try:
+            attach_result = ado.upload_attachment(
+                file_path=plan_path,
+                file_name="plan-de-pruebas.md",
+            )
+            attachment_id = attach_result.get("id") or attach_result.get("url", "")
+            attach_url = attach_result.get("url", "")
+            actions.append({
+                "action": "upload_attachment",
+                "ok": True,
+                "attachment_id": attachment_id,
+            })
+
+            # ── [4] link_attachment_to_work_item ───────────────────────────────
+            try:
+                ado.link_attachment_to_work_item(
+                    work_item_id=task_ado_id,
+                    attachment_url=attach_url,
+                    comment=f"Plan de pruebas - {pt_payload.get('rf_id', '')}",
+                )
+                actions.append({"action": "link_attachment", "ok": True})
+            except _AdoApiError as exc:
+                actions.append({
+                    "action": "link_attachment",
+                    "ok": False,
+                    "reason": str(exc)[:300],
+                })
+
+        except _AdoApiError as exc:
+            # Fallo de upload — Task creada pero adjunto no subido (degraded state CA-06)
+            attachment_id = None
+            attach_url = None
+            actions.append({
+                "action": "upload_attachment",
+                "ok": False,
+                "reason": "ATTACHMENT_UPLOAD_FAILED",
+                "detail": str(exc)[:300],
+            })
+            human_action_required = (
+                f"Task ADO-{task_ado_id} creada; subida de adjunto falló. "
+                f"Reintentar o adjuntar plan-de-pruebas.md manualmente en ADO-{task_ado_id}."
+            )
+            # Registrar estado parcial en SystemLog con nivel WARNING
+            _audit_create_child_task(
+                correlation_id=correlation_id,
+                ado_id=ado_id,
+                user=user,
+                completion_source=completion_source,
+                operator_reason=operator_reason,
+                pt_path=pending_task_path_str,
+                ok=False,
+                actions=actions,
+                error=f"PARTIAL_FAILURE: Task {task_ado_id} creada, adjunto falló",
+                level="WARNING",
+            )
+            return jsonify({
+                "ok": False,
+                "dry_run": False,
+                "epic_ado_id": ado_id,
+                "task_ado_id": task_ado_id,
+                "task_url": task_url,
+                "attachment_id": None,
+                "actions": actions,
+                "pending_task_consumed": False,
+                "human_action_required": human_action_required,
+                "correlation_id": correlation_id,
+            })
+    else:
+        # Plan no existe — registrar como omitido
+        actions.append({
+            "action": "upload_attachment",
+            "ok": False,
+            "reason": "ATTACHMENT_FILE_NOT_FOUND",
+            "detail": f"plan-de-pruebas.md no encontrado en {plan_rel}",
+        })
+
+    # ── [5] post_comment con operator_reason ──────────────────────────────────
+    if operator_reason:
+        try:
+            comment_text = (
+                f"<p><b>Creado desde Stacky Agents.</b></p>"
+                f"<p><b>Motivo del operador:</b> {operator_reason}</p>"
+                f"<p><em>correlation_id: {correlation_id}</em></p>"
+            )
+            ado.post_comment(task_ado_id, comment_text, fmt="html")
+            actions.append({"action": "post_comment", "ok": True})
+        except Exception as exc:
+            logger.warning("create_child_task: post_comment falló (no crítico): %s", exc)
+            actions.append({
+                "action": "post_comment",
+                "ok": False,
+                "reason": str(exc)[:200],
+            })
+
+    # ── [6] Marcar pending-task.json como consumed ────────────────────────────
+    _mark_pending_task_consumed(
+        pt_file=pt_file,
+        task_ado_id=task_ado_id,
+        attachment_id=attachment_id,
+        operator_reason=operator_reason,
+    )
+    actions.append({"action": "mark_consumed", "ok": True})
+
+    # ── [7] Auditoría ─────────────────────────────────────────────────────────
+    _audit_create_child_task(
+        correlation_id=correlation_id,
+        ado_id=ado_id,
+        user=user,
+        completion_source=completion_source,
+        operator_reason=operator_reason,
+        pt_path=pending_task_path_str,
+        ok=True,
+        actions=actions,
+        task_ado_id=task_ado_id,
+    )
+
+    overall_ok = all(
+        a.get("ok") for a in actions
+        if a["action"] not in ("upload_attachment",)  # adjunto faltante no bloquea ok general
+        or a.get("reason") != "ATTACHMENT_FILE_NOT_FOUND"
+    )
+
+    return jsonify({
+        "ok": overall_ok,
+        "dry_run": False,
+        "epic_ado_id": ado_id,
+        "task_ado_id": task_ado_id,
+        "task_url": task_url,
+        "attachment_id": attachment_id,
+        "actions": actions,
+        "pending_task_consumed": True,
+        "idempotent": False,
+        "correlation_id": correlation_id,
+    })
+
+
+# ── Helpers privados para create_child_task ───────────────────────────────────
+
+def _mark_pending_task_consumed(
+    pt_file: Path,
+    task_ado_id: int,
+    attachment_id: str | None,
+    operator_reason: str,
+) -> None:
+    """Actualiza el pending-task.json en disco para marcarlo como consumido.
+
+    Usa un threading.Lock a nivel proceso para garantizar exclusión mutua
+    en Flask single-process. En multi-proceso (Gunicorn multi-worker) la
+    protección es a nivel de OS file lock si portalocker está disponible.
+    """
+    import threading
+    _FILE_LOCK = threading.Lock()
+
+    with _FILE_LOCK:
+        # Re-leer para detectar concurrent write (idempotencia defensiva)
+        try:
+            current = json.loads(pt_file.read_text(encoding="utf-8"))
+        except Exception:
+            current = {}
+
+        if "consumed_at" in current:
+            # Ya fue consumido por otra request concurrente — no sobreescribir
+            return
+
+        current["consumed_at"] = datetime.now(timezone.utc).isoformat()
+        current["task_ado_id"] = task_ado_id
+        current["attachment_id"] = attachment_id
+        current["status"] = "consumed"
+        if operator_reason:
+            current["operator_reason"] = operator_reason
+
+        pt_file.write_text(
+            json.dumps(current, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+
+def _audit_create_child_task(
+    *,
+    correlation_id: str,
+    ado_id: int,
+    user: str,
+    completion_source: str,
+    operator_reason: str,
+    pt_path: str,
+    ok: bool,
+    actions: list[dict],
+    task_ado_id: int | None = None,
+    error: str | None = None,
+    level: str = "INFO",
+) -> None:
+    """Persiste el evento de create_child_task en SystemLog (CA-07, CA-08)."""
+    ctx = {
+        "correlation_id": correlation_id,
+        "ado_id": ado_id,
+        "completion_source": completion_source,
+        "operator_reason": operator_reason,
+        "pending_task_path": pt_path,
+        "task_ado_id": task_ado_id,
+        "ok": ok,
+        "actions_summary": [
+            {"action": a["action"], "ok": a.get("ok")} for a in actions
+        ],
+    }
+    if error:
+        ctx["error"] = error[:500]
+
+    tags = ["create_child_task", completion_source]
+    if not ok:
+        tags.append("partial_failure" if task_ado_id else "failure")
+        if error:
+            level = level or "WARNING"
+
+    with session_scope() as session:
+        log = SystemLog(
+            level=level,
+            source="create_child_task",
+            action="create_child_task_succeeded" if ok else "create_child_task_failed",
+            trigger="create_child_task",
+            user=user,
+            context_json=json.dumps(ctx, ensure_ascii=False, default=str),
+            tags_json=json.dumps(tags),
+        ) if _system_log_has_trigger() else SystemLog(
+            level=level,
+            source="create_child_task",
+            action="create_child_task_succeeded" if ok else "create_child_task_failed",
+            user=user,
+            context_json=json.dumps(ctx, ensure_ascii=False, default=str),
+            tags_json=json.dumps(tags),
+        )
+        session.add(log)
+
+
+def _system_log_has_trigger() -> bool:
+    """Detecta si SystemLog tiene el campo 'trigger' (compatibilidad con versiones anteriores)."""
+    from models import SystemLog as _SL
+    return hasattr(_SL, "trigger")

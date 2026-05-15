@@ -134,6 +134,37 @@ def _run_in_background(
             project = ticket.project if ticket else None
             ticket_ado_id = ticket.ado_id if ticket else None
 
+        # Functional agent — Epic structured context injection
+        # Cuando el agente es "functional" y el ticket es un Epic, inyecta el
+        # context block "ado-epic-structured" con title y description del
+        # ticket local (sin llamada a ADO). El agente lo usa como fuente única
+        # de requerimientos en Modo A. Si el bloque ya existe (idempotencia),
+        # no se re-inyecta.
+        with session_scope() as _epic_sess:
+            _epic_ticket = _epic_sess.get(Ticket, ticket_id) if ticket_id else None
+            _is_epic = (
+                _epic_ticket is not None
+                and agent_type == "functional"
+                and (_epic_ticket.work_item_type or "").strip().lower() == "epic"
+            )
+            if _is_epic:
+                _existing_ids = {b.get("id") for b in (raw_blocks or []) if isinstance(b, dict)}
+                if "ado-epic-structured" not in _existing_ids:
+                    _epic_block: dict = {
+                        "kind": "text",
+                        "id": "ado-epic-structured",
+                        "title": f"Epic ADO-{_epic_ticket.ado_id}: {_epic_ticket.title}",
+                        "content": (
+                            f"epic_id: {_epic_ticket.ado_id}\n"
+                            f"epic_title: {_epic_ticket.title}\n"
+                            f"epic_description:\n{_epic_ticket.description or ''}"
+                        ),
+                    }
+                    raw_blocks = list(raw_blocks or []) + [_epic_block]
+                    log("info", f"ado-epic-structured inyectado para Epic ADO-{_epic_ticket.ado_id}")
+                else:
+                    log("info", "ado-epic-structured ya presente, omitiendo inyección")
+
         # ADO context enrichment — inyecta automáticamente comentarios y
         # adjuntos del ticket desde Azure DevOps al contexto que se envía al
         # chat de Copilot. Por defecto aplica a todos los agentes registrados;

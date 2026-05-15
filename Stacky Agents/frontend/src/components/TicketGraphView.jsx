@@ -231,6 +231,51 @@ function PipelineBar({ summary, isEpic, inferResult, compact = false }) {
   );
 }
 
+// ─── Error boundary por nodo ──────────────────────────────────────────────────
+// Si un TicketNodeCard lanza durante el render (p.ej. inferMap o runningByTicket
+// con shape inesperada), se aísla en su contenedor y muestra un fallback en
+// lugar de blanquear toda la graph view.
+
+class NodeErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    // eslint-disable-next-line no-console
+    console.error("[TicketGraphView] node render error:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      const adoId = this.props.adoId ?? "?";
+      const msg = this.state.error?.message || "error inesperado";
+      return (
+        <div
+          role="alert"
+          style={{
+            padding: "8px 10px",
+            background: "rgba(239,68,68,0.12)",
+            border: "1px solid rgba(239,68,68,0.45)",
+            borderRadius: 8,
+            color: "#fecaca",
+            fontSize: 12,
+            lineHeight: 1.4,
+            maxWidth: 240,
+          }}
+        >
+          <strong>Error al renderizar ADO-{adoId}</strong>
+          <div style={{ marginTop: 4, opacity: 0.85 }}>{msg}</div>
+          <div style={{ marginTop: 4, opacity: 0.6 }}>Recargá la página para reintentar.</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ─── TicketNode Card ──────────────────────────────────────────────────────────
 
 function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgents = [], runningByTicket = new Map() }) {
@@ -505,7 +550,9 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket }) {
 
       {/* Epic node */}
       <div data-role="epic-node" className={styles.epicNodeWrap}>
-        <TicketNodeCard ticket={epic} inferMap={inferMap} onInfer={onInfer} isEpic vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} />
+        <NodeErrorBoundary adoId={epic.ado_id}>
+          <TicketNodeCard ticket={epic} inferMap={inferMap} onInfer={onInfer} isEpic vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} />
+        </NodeErrorBoundary>
         <span className={styles.childrenCount}>{epic.children.length} ticket{epic.children.length !== 1 ? "s" : ""}</span>
       </div>
 
@@ -514,7 +561,9 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket }) {
         <div className={styles.childrenRow}>
           {epic.children.map(child => (
             <div data-role="child-node" key={child.id} className={styles.childNodeWrap}>
-              <TicketNodeCard ticket={child} inferMap={inferMap} onInfer={onInfer} vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} />
+              <NodeErrorBoundary adoId={child.ado_id}>
+                <TicketNodeCard ticket={child} inferMap={inferMap} onInfer={onInfer} vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} />
+              </NodeErrorBoundary>
             </div>
           ))}
         </div>
@@ -613,14 +662,15 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
           <h2 className={styles.sectionTitle}>📋 Tickets sin épica</h2>
           <div className={styles.orphansGrid}>
             {orphans.map(t => (
-              <TicketNodeCard
-                key={t.id}
-                ticket={t}
-                inferMap={inferMap}
-                onInfer={handleInfer}
-                vsCodeAgents={vsCodeAgents}
-                runningByTicket={runningByTicket}
-              />
+              <NodeErrorBoundary key={t.id} adoId={t.ado_id}>
+                <TicketNodeCard
+                  ticket={t}
+                  inferMap={inferMap}
+                  onInfer={handleInfer}
+                  vsCodeAgents={vsCodeAgents}
+                  runningByTicket={runningByTicket}
+                />
+              </NodeErrorBoundary>
             ))}
           </div>
         </section>

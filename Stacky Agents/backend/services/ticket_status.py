@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import threading
 from datetime import datetime
 from typing import Any, Callable
 
@@ -31,6 +33,11 @@ from models import Ticket
 logger = logging.getLogger("stacky.ticket_status")
 
 VALID_STATUSES = frozenset({"idle", "running", "completed", "error", "cancelled"})
+
+# Timeout (en minutos) tras el cual una AgentExecution en estado 'running' se
+# considera colgada y el reaper la fuerza a 'error'. Configurable por env.
+# El nombre tiene prefijo STACKY_ para coherencia con el resto de las variables.
+EXECUTION_TIMEOUT_MINUTES: int = int(os.getenv("STACKY_EXECUTION_TIMEOUT_MINUTES", "120"))
 
 
 # ── Modelo ORM ────────────────────────────────────────────────────────────────
@@ -295,11 +302,10 @@ def recover_stale_running_tickets(trigger: str = "startup") -> list[dict]:
 
     Retorna lista de dicts con detalle de cada corrección.
     """
-    import os as _os
     from datetime import timedelta
     from models import AgentExecution  # import local para evitar ciclo
 
-    timeout_minutes = int(_os.getenv("EXECUTION_TIMEOUT_MINUTES", "120"))
+    timeout_minutes = EXECUTION_TIMEOUT_MINUTES
     timeout_cutoff = datetime.utcnow() - timedelta(minutes=timeout_minutes)
 
     details: list[dict] = []
@@ -434,9 +440,57 @@ def recover_stale_running_tickets(trigger: str = "startup") -> list[dict]:
     return details
 
 
-def stop_stale_recovery() -> None:
-    """No-op compatibility shim — el recovery es on-demand, no hay thread que detener.
+_RECOVERY_LOCK = threading.Lock()
+_RECOVERY_THREAD: threading.Thread | None = None
+_RECOVERY_STOP: threading.Event = threading.Event()
 
-    Existe para compatibilidad con tests que importan esta función.
+
+def schedule_stale_recovery(interval_seconds: int = 120) -> threading.Thread:
+    """Lanza un daemon que invoca recover_stale_running_tickets() periódicamente.
+
+    Idempotente: si ya hay un thread vivo, retorna la misma instancia (el segundo
+    interval_seconds se ignora — para reconfigurar hay que stop_stale_recovery()
+    antes).
     """
-    pass
+    global _RECOVERY_THREAD
+    with _RECOVERY_LOCK:
+        if _RECOVERY_THREAD is not None and _RECOVERY_THREAD.is_alive():
+            return _RECOVERY_THREAD
+
+        _RECOVERY_STOP.clear()
+        stop_event = _RECOVERY_STOP
+
+        def _loop() -> None:
+            logger.info("stale-recovery guardian started (interval=%ds)", interval_seconds)
+            while not stop_event.wait(timeout=interval_seconds):
+                try:
+                    details = recover_stale_running_tickets(trigger="reaper")
+                    if details:
+                        logger.info(
+                            "stale-recovery reaper: corregidos %d items", len(details)
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("stale-recovery cycle failed: %s", exc)
+            logger.info("stale-recovery guardian stopped")
+
+        _RECOVERY_THREAD = threading.Thread(
+            target=_loop, daemon=True, name="stacky-stale-recovery"
+        )
+        _RECOVERY_THREAD.start()
+        return _RECOVERY_THREAD
+
+
+def stop_stale_recovery() -> None:
+    """Detiene el daemon de recovery iniciado por schedule_stale_recovery().
+
+    Es seguro llamarlo aun si el guardian no está activo.
+    """
+    global _RECOVERY_THREAD
+    with _RECOVERY_LOCK:
+        thread = _RECOVERY_THREAD
+        _RECOVERY_STOP.set()
+    if thread is not None and thread.is_alive():
+        thread.join(timeout=5)
+    with _RECOVERY_LOCK:
+        _RECOVERY_THREAD = None
+        _RECOVERY_STOP.clear()

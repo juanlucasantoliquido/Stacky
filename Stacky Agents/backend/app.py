@@ -149,6 +149,32 @@ def create_app() -> Flask:
             _gateway_mode,
         )
 
+    # ── Stale recovery guardian (reaper periódico) ───────────────────────────
+    # Daemon thread que re-ejecuta recover_stale_running_tickets cada N seg.
+    # STACKY_REAPER_ENABLED=true|false (default: true)
+    # STACKY_REAPER_INTERVAL_SECONDS=int (default: 120)
+    _reaper_enabled = os.getenv("STACKY_REAPER_ENABLED", "true").lower() == "true"
+    if _reaper_enabled:
+        from services.ticket_status import schedule_stale_recovery
+        _reaper_interval = int(os.getenv("STACKY_REAPER_INTERVAL_SECONDS", "120"))
+        schedule_stale_recovery(interval_seconds=_reaper_interval)
+        logger.info("stale recovery guardian armed (interval=%ds)", _reaper_interval)
+    else:
+        logger.debug("stale recovery guardian disabled (STACKY_REAPER_ENABLED=false)")
+
+    # ── Manifest watcher ─────────────────────────────────────────────────────
+    # Polea backend/data/codex_runs/<id>/MANIFEST.json y cierra runs huérfanos.
+    # STACKY_MANIFEST_WATCHER_ENABLED=true|false (default: true)
+    # STACKY_MANIFEST_WATCHER_INTERVAL_SECONDS=float (default: 2.0)
+    _watcher_enabled = os.getenv("STACKY_MANIFEST_WATCHER_ENABLED", "true").lower() == "true"
+    if _watcher_enabled:
+        from services.manifest_watcher import start_manifest_watcher
+        _watcher_interval = float(os.getenv("STACKY_MANIFEST_WATCHER_INTERVAL_SECONDS", "2.0"))
+        start_manifest_watcher(poll_interval=_watcher_interval)
+        logger.info("manifest watcher armed (interval=%.1fs)", _watcher_interval)
+    else:
+        logger.debug("manifest watcher disabled (STACKY_MANIFEST_WATCHER_ENABLED=false)")
+
     _startup_sync(logger)
 
     # ── Structured logging middleware ─────────────────────────────────────

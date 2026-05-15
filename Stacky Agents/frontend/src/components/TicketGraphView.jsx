@@ -378,10 +378,11 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
               </div>
             )}
 
-            {/* Botón de cierre manual: solo en nodo expandido, stacky_status='running'
-                y sin inconsistencia activa. Patrón coherente con TicketBoard y
-                con RecoverExecutionButton (que aparece solo en su caso específico). */}
-            {!isEpic && ticket.stacky_status === "running" && !inconsistency.isInconsistent && (
+            {/* Botón de cierre manual: solo en nodo expandido, ticket aparece como
+                "en ejecución" (dual-source con isRunning) y sin inconsistencia activa
+                ni ticket cerrado. Permite cerrar tickets que quedaron colgados aunque
+                stacky_status no esté en "running" exacto. */}
+            {!isEpic && !isClosed && isRunning && !inconsistency.isInconsistent && (
               <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
                 <FinishWorkButton
                   ticket={ticket}

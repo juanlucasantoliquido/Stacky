@@ -331,10 +331,11 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
               </div>
             )}
 
-            {/* Botón de cierre manual: visible solo cuando el nodo está expandido,
-                stacky_status='running' y no hay inconsistencia activa (esa ya la
-                maneja RecoverExecutionButton). Patrón consistente con RecoverExecutionButton. */}
-            {ticket.stacky_status === "running" && !inconsistency.isInconsistent && (
+            {/* Botón de cierre manual: visible cuando el ticket aparece "en ejecución"
+                (mismo criterio dual que el banner) y no hay inconsistencia activa.
+                Usa isRunning para cubrir el caso donde runningExecution existe pero
+                stacky_status quedó desincronizado (chat externo, race, reset). */}
+            {isRunning && !inconsistency.isInconsistent && (
               <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
                 <FinishWorkButton
                   ticket={ticket}

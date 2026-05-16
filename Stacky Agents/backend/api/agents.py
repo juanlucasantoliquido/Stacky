@@ -346,8 +346,9 @@ def open_chat():
     from datetime import datetime as _dt
     from models import AgentExecution
     exec_id: int | None = None
+    created_new_execution = False
+    inferred_type = _infer_agent_type_from_filename(vscode_agent_filename)
     try:
-        inferred_type = _infer_agent_type_from_filename(vscode_agent_filename)
         with session_scope() as _s2:
             already_running = (
                 _s2.query(AgentExecution)
@@ -366,10 +367,32 @@ def open_chat():
                 _s2.add(exec_record)
                 _s2.flush()
                 exec_id = exec_record.id
+                created_new_execution = True
             else:
                 exec_id = already_running.id
     except Exception as _track_exc:
         logger.warning("open_chat — no se pudo registrar ejecución: %s", _track_exc)
+
+    # Transicionar stacky_status del ticket a 'running' cuando arrancamos una
+    # nueva ejecución. Sin esto, un ticket que quedó en 'completed' por un run
+    # anterior se sigue mostrando como completed; combinado con la execution
+    # activa, el frontend lo marca como INCONSISTENTE en lugar de "en ejecución".
+    if created_new_execution and exec_id is not None:
+        try:
+            from services import ticket_status as _ticket_status
+            _ticket_status.set_status(
+                int(ticket_id),
+                "running",
+                changed_by="open_chat",
+                execution_id=exec_id,
+                agent_type=inferred_type,
+                reason="open_chat: nueva ejecución vía VS Code bridge",
+            )
+        except Exception as _status_exc:
+            logger.warning(
+                "open_chat — no se pudo transicionar stacky_status a 'running': %s",
+                _status_exc,
+            )
 
     return jsonify({"ok": True, "execution_id": exec_id})
 

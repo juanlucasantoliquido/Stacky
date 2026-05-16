@@ -152,7 +152,9 @@ class FakeAdoClientExt:
         self.upload_calls: list[dict] = []
         self.link_calls: list[dict] = []
         self.comment_calls: list[dict] = []
+        self.state_calls: list[dict] = []
         self._raise_on_upload: Exception | None = None
+        self._raise_on_state: Exception | None = None
 
     def create_work_item(self, work_item_type, fields, parent_ado_id):
         self.create_calls.append({
@@ -161,6 +163,12 @@ class FakeAdoClientExt:
             "parent": parent_ado_id,
         })
         return {"id": 5000, "url": "https://dev.azure.com/TestOrg/TestProject/_apis/wit/workitems/5000"}
+
+    def update_work_item_state(self, ado_id, new_state):
+        if self._raise_on_state:
+            raise self._raise_on_state
+        self.state_calls.append({"ado_id": ado_id, "new_state": new_state})
+        return {"id": ado_id, "state": new_state}
 
     def upload_attachment(self, file_path, file_name):
         if self._raise_on_upload:

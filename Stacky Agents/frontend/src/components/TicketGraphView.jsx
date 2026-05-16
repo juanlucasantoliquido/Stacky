@@ -340,8 +340,8 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
             {!isEpic && ticket.work_item_type && (
               <span className={styles.wiType}>{ticket.work_item_type}</span>
             )}
-            {/* Botón Run compacto siempre visible en no-épicas */}
-            {!isEpic && !isClosed && (
+            {/* Botón Run compacto visible en todos los nodos (épicas y tickets) */}
+            {!isClosed && (
               <button
                 className={styles.runBtnCompact}
                 title={nextLabel ? `Run sugerido: ${nextLabel}` : "Run personalizado"}
@@ -455,15 +455,15 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
             )}
 
             {/* Botones Run expandidos */}
-            {!isEpic && !isClosed && (
+            {!isClosed && (
               <div className={styles.runButtons}>
                 <button
                   className={styles.runSuggestedBtn}
                   disabled={!next}
                   onClick={() => setRunModal("suggested")}
-                  title={nextLabel ? `Correr: ${nextLabel}` : "Esperando inferencia…"}
+                  title={nextLabel ? `Correr: ${nextLabel}` : isEpic ? "Lanzar Analista Funcional" : "Esperando inferencia…"}
                 >
-                  ▶ Run Sugerido
+                  {isEpic ? "🔍 Lanzar Funcional" : "▶ Run Sugerido"}
                   {nextLabel && <span className={styles.runBtnHint}>{nextLabel}</span>}
                 </button>
                 <button

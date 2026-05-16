@@ -1433,13 +1433,18 @@ def create_child_task(ado_id: int):
         }), 503
 
     # ── [2] create_work_item ───────────────────────────────────────────────────
+    # No mandamos System.State en la creación: ADO rechaza con 400 cualquier
+    # valor que no esté en la lista de estados iniciales del process template
+    # (ej. "Technical review"). Dejamos que ADO use el estado por defecto
+    # ("To Do" en Agile / "New" en Scrum) y, si target_state es distinto,
+    # intentamos transicionarlo con un PATCH post-creación (paso [2b]).
+    target_state = (pt_payload.get("target_state") or "").strip()
     try:
         wi_result = ado.create_work_item(
             work_item_type="Task",
             fields={
                 "System.Title": pt_payload["title"],
                 "System.Description": pt_payload.get("description_html", ""),
-                "System.State": pt_payload.get("target_state", "Technical review"),
             },
             parent_ado_id=ado_id,
         )
@@ -1470,6 +1475,8 @@ def create_child_task(ado_id: int):
         )
         return jsonify({
             "ok": False,
+            "error": "ADO_CREATE_WORK_ITEM_FAILED",
+            "message": _extract_ado_error_message(str(exc)),
             "dry_run": False,
             "epic_ado_id": ado_id,
             "task_ado_id": None,
@@ -1479,6 +1486,34 @@ def create_child_task(ado_id: int):
             "pending_task_consumed": False,
             "correlation_id": correlation_id,
         })
+
+    # ── [2b] Transicionar al target_state si fue solicitado ────────────────────
+    # Ignoramos estados vacíos y los defaults típicos ("To Do" en Agile, "New"
+    # en Scrum). Si el PATCH falla (estado no válido o transición no permitida
+    # por el process), lo registramos como acción fallida pero NO revertimos
+    # la creación de la Task ni interrumpimos el flujo — la Task queda en su
+    # estado inicial y el operador puede ajustarlo manualmente en ADO.
+    if target_state and target_state.lower() not in ("to do", "new", "to-do", "todo"):
+        try:
+            ado.update_work_item_state(task_ado_id, target_state)
+            actions.append({
+                "action": "set_state",
+                "ok": True,
+                "to": target_state,
+            })
+        except Exception as exc:  # noqa: BLE001 — incluye _AdoApiError y errores inesperados
+            actions.append({
+                "action": "set_state",
+                "ok": False,
+                "reason": "ADO_STATE_TRANSITION_REJECTED",
+                "to": target_state,
+                "detail": str(exc)[:300],
+            })
+            human_action_required = (
+                f"Task ADO-{task_ado_id} creada en estado inicial; "
+                f"transición a '{target_state}' rechazada por ADO. "
+                f"Ajustar manualmente en ADO si corresponde."
+            )
 
     # ── [3] upload_attachment ──────────────────────────────────────────────────
     if plan_exists and plan_path is not None:
@@ -1604,7 +1639,7 @@ def create_child_task(ado_id: int):
         or a.get("reason") != "ATTACHMENT_FILE_NOT_FOUND"
     )
 
-    return jsonify({
+    response_payload = {
         "ok": overall_ok,
         "dry_run": False,
         "epic_ado_id": ado_id,
@@ -1615,10 +1650,43 @@ def create_child_task(ado_id: int):
         "pending_task_consumed": True,
         "idempotent": False,
         "correlation_id": correlation_id,
-    })
+    }
+    if human_action_required:
+        response_payload["human_action_required"] = human_action_required
+    return jsonify(response_payload)
 
 
 # ── Helpers privados para create_child_task ───────────────────────────────────
+
+def _extract_ado_error_message(raw: str) -> str:
+    """Extrae un mensaje human-readable del error envuelto que devuelve AdoClient.
+
+    Formato típico:
+        "ADO POST <url> → <status>: <json-body>"
+    donde <json-body> incluye un campo "ErrorMessage" o "Message" con el detalle
+    real del rechazo de ADO. Si no podemos parsear el JSON, devolvemos el raw
+    truncado para que el operador igual vea algo útil.
+    """
+    if not raw:
+        return "Error desconocido de ADO"
+    body_start = raw.find("{")
+    if body_start >= 0:
+        body = raw[body_start:]
+        try:
+            parsed = json.loads(body)
+            msg = (
+                parsed.get("ErrorMessage")
+                or parsed.get("Message")
+                or parsed.get("message")
+            )
+            if isinstance(parsed.get("customProperties"), dict):
+                msg = msg or parsed["customProperties"].get("ErrorMessage")
+            if msg:
+                return str(msg)[:400]
+        except (ValueError, TypeError):
+            pass
+    return raw[:400]
+
 
 def _mark_pending_task_consumed(
     pt_file: Path,

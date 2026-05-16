@@ -1,0 +1,38 @@
+{
+  "_eval_id": "rerun_guard_ok_verdict_changed",
+  "_description": "El último run fue FAIL funcional (APP), no BLOCKED/ENV. Debe permitir rerun inmediato.",
+  "_layer": "unit",
+  "_scenario": "latest_run_result.json tiene verdict=FAIL/category=APP (fallo real del producto). No activa cooldown.",
+  "input": {
+    "ticket_id": 122,
+    "force_rerun": false,
+    "current_fingerprint": null,
+    "mock_latest": {
+      "run_id": "uat-122-20260513T120000Z-def456",
+      "verdict": "FAIL",
+      "category": "APP",
+      "reason": "ASSERTION_FAILED_CAMPO_VACIO",
+      "finished_at": "__NOW_MINUS_120S__",
+      "deployment_fingerprint": "build-abc123",
+      "tool_version": "1.1.0"
+    },
+    "mock_cooldown_ttl_s": 600
+  },
+  "expected_output": {
+    "ok": true,
+    "verdict": "OK",
+    "reason": "VERDICT_NOT_ENV",
+    "cooldown_active": false,
+    "forced": false,
+    "previous_run_id": "uat-122-20260513T120000Z-def456",
+    "previous_verdict": "FAIL",
+    "previous_reason": "ASSERTION_FAILED_CAMPO_VACIO"
+  },
+  "assertions": [
+    "result.ok == True",
+    "result.verdict == 'OK'",
+    "result.reason == 'VERDICT_NOT_ENV'",
+    "result.cooldown_active == False",
+    "result.previous_verdict == 'FAIL'"
+  ]
+}

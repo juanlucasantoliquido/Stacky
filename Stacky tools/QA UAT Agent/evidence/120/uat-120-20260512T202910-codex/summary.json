@@ -1,0 +1,73 @@
+{
+  "ticket": 120,
+  "clcod": "4127924112345393",
+  "verdict": "PASS_STRUCTURAL",
+  "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx",
+  "checked_at": "2026-05-12T23:30:23.051Z",
+  "assertions": {
+    "judicial_header_absent": true,
+    "new_columns_present": [
+      {
+        "key": "OGCANAL",
+        "label": "Canal de venta",
+        "index": 21,
+        "text": "Canal de venta"
+      },
+      {
+        "key": "OGMEDIOPAGO",
+        "label": "Medio de cobro de ultimo pago",
+        "index": 22,
+        "text": "Medio cobro últ. pago"
+      },
+      {
+        "key": "OGDEBAUT_DESC",
+        "label": "Afiliado al Debito Automatico",
+        "index": 23,
+        "text": "Déb. Automático"
+      },
+      {
+        "key": "DESALDOFAVOR",
+        "label": "Saldo a favor disponible",
+        "index": 24,
+        "text": "Saldo a favor"
+      },
+      {
+        "key": "OGCUOTA",
+        "label": "Cuota",
+        "index": 25,
+        "text": "Cuota"
+      },
+      {
+        "key": "OGMONTOCUOTA",
+        "label": "Monto de la Cuota",
+        "index": 26,
+        "text": "Monto cuota"
+      },
+      {
+        "key": "OGCORREDOR",
+        "label": "Nombre del Corredor",
+        "index": 27,
+        "text": "Corredor"
+      },
+      {
+        "key": "OGNROCUOTAS",
+        "label": "Numero de Cuotas",
+        "index": 28,
+        "text": "Nro. cuotas"
+      }
+    ],
+    "readonly_columns": true,
+    "debito_auto_value_allowed": ""
+  },
+  "first_row_values": {
+    "OGCANAL": "20130322",
+    "OGMEDIOPAGO": "Compromiso de Pago Parcial",
+    "OGDEBAUT_DESC": "",
+    "DESALDOFAVOR": "",
+    "OGCUOTA": "-",
+    "OGMONTOCUOTA": "",
+    "OGCORREDOR": "",
+    "OGNROCUOTAS": ""
+  },
+  "evidence_dir": "N:\\GIT\\RS\\RSPacifico\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\120\\uat-120-20260512T202910-codex"
+}

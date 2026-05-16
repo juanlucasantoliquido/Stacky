@@ -1,0 +1,30 @@
+<!-- stacky-qa-uat:run ticket="120" -->
+<h2>QA UAT - Resultado ADO-120</h2>
+<p><strong>Veredicto:</strong> BLOCKED</p>
+<p><strong>Base URL:</strong> http://localhost:35017/AgendaWeb/</p>
+<p><strong>Usuario:</strong> PABLO</p>
+<p><strong>Comando ejecutado:</strong> <code>npx playwright test playwright/uat/ado120_obligaciones.spec.ts --config playwright.config.ts</code></p>
+
+<h3>Escenarios probados</h3>
+<ul>
+  <li>PASS estructural: navegacion real FrmBusqueda - GridPersonas - GridObligaciones - FrmDetalleClie.</li>
+  <li>PASS CA-01/CA-02: la columna Fecha de ingreso judicial no aparece en la grilla de obligaciones.</li>
+  <li>PASS CA-03: aparecen las 8 columnas nuevas: Canal de venta, Medio cobro ult. pago, Deb. Automatico, Saldo a favor, Cuota, Monto cuota, Corredor y Nro. cuotas.</li>
+  <li>PASS CA-05 parcial: valores sin dato renderizan vacio o guion sin error de pantalla.</li>
+  <li>PASS CA-08: las celdas de las 8 columnas nuevas no contienen inputs/selects/textareas/botones editables.</li>
+  <li>BLOCKED DATA: CA-04/CA-06/CA-07/CA-09/CA-10/CA-12 no se pudieron cerrar por falta de datos batch poblados en BD QA.</li>
+</ul>
+
+<h3>Evidencias</h3>
+<ul>
+  <li><code>N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260512T203128-codex\summary.json</code></li>
+  <li><code>N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260512T203128-codex\grid_headers.json</code></li>
+  <li><code>N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260512T203128-codex\data_readiness.json</code></li>
+  <li><code>N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260512T203128-codex\01_detalle_cliente_obligaciones.png</code></li>
+  <li><code>N:\GIT\RS\RSPacifico\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\120\uat-120-20260512T203128-codex\02_ado120_validado.png</code></li>
+</ul>
+
+<h3>Diagnostico</h3>
+<p><strong>Categoria:</strong> DATA</p>
+<p><strong>Detalle:</strong> La UI implementada se valida correctamente, pero la BD QA no tiene valores batch para OGCANAL, OGMEDIOPAGO, OGTIENEDEBITOAUTO ni DESALDOFAVOR; solo existen 2 obligaciones con OGCORREDOR. Por eso el UAT de valores completos queda bloqueado por datos, no por navegacion ni por bug funcional observado.</p>
+<p><strong>Publicacion ADO:</strong> No publicada por instruccion explicita de no cambiar estados externos ni publicar comentarios sin aprobacion humana.</p>

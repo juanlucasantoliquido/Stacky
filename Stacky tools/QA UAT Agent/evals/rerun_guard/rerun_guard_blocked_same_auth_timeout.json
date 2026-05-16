@@ -1,0 +1,44 @@
+{
+  "_eval_id": "rerun_guard_blocked_same_auth_timeout",
+  "_description": "Último run hace 4 min, BLOCKED/ENV/AUTH_LOGIN_TIMEOUT, sin cambio de fingerprint. Debe bloquear.",
+  "_layer": "unit",
+  "_scenario": "El operador relanza 240s después de un BLOCKED/ENV/AUTH_LOGIN_TIMEOUT. Cooldown TTL=600s, quedan ~360s.",
+  "input": {
+    "ticket_id": 122,
+    "force_rerun": false,
+    "current_fingerprint": null,
+    "mock_latest": {
+      "run_id": "uat-122-20260513T114500Z-pqr678",
+      "verdict": "BLOCKED",
+      "category": "ENV",
+      "reason": "AUTH_LOGIN_TIMEOUT",
+      "finished_at": "__NOW_MINUS_240S__",
+      "deployment_fingerprint": "NO_EXPECTED_BUILD_DEFINED",
+      "tool_version": "1.1.0"
+    },
+    "mock_cooldown_ttl_s": 600
+  },
+  "expected_output": {
+    "ok": false,
+    "verdict": "BLOCKED",
+    "category": "OPS",
+    "reason": "PREVIOUS_RUN_SAME_VERDICT",
+    "cooldown_active": true,
+    "forced": false,
+    "previous_run_id": "uat-122-20260513T114500Z-pqr678",
+    "previous_verdict": "BLOCKED",
+    "previous_reason": "AUTH_LOGIN_TIMEOUT"
+  },
+  "assertions": [
+    "result.ok == False",
+    "result.verdict == 'BLOCKED'",
+    "result.category == 'OPS'",
+    "result.reason == 'PREVIOUS_RUN_SAME_VERDICT'",
+    "result.cooldown_active == True",
+    "result.cooldown_remaining_s > 0",
+    "result.previous_reason == 'AUTH_LOGIN_TIMEOUT'",
+    "result.human_action_required is not None",
+    "'timeout' in result.human_action_required.lower() or 'AgendaWeb' in result.human_action_required",
+    "'--force-rerun' in result.human_action_required"
+  ]
+}

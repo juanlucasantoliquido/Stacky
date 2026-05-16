@@ -1,0 +1,35 @@
+{
+  "_eval_id": "rerun_guard_ok_forced",
+  "_description": "--force-rerun siempre permite, aunque haya cooldown activo. Debe retornar OK_OVERRIDE con forced=true.",
+  "_layer": "unit",
+  "_scenario": "Cooldown activo (último run hace 120s, BLOCKED/ENV), pero el operador pasó --force-rerun.",
+  "input": {
+    "ticket_id": 122,
+    "force_rerun": true,
+    "current_fingerprint": null,
+    "mock_latest": {
+      "run_id": "uat-122-20260513T110000Z-jkl012",
+      "verdict": "BLOCKED",
+      "category": "ENV",
+      "reason": "AUTH_LOGIN_TIMEOUT",
+      "finished_at": "__NOW_MINUS_120S__",
+      "deployment_fingerprint": "NO_EXPECTED_BUILD_DEFINED",
+      "tool_version": "1.1.0"
+    },
+    "mock_cooldown_ttl_s": 600
+  },
+  "expected_output": {
+    "ok": true,
+    "verdict": "OK_OVERRIDE",
+    "reason": "FORCED_RERUN",
+    "forced": true,
+    "cooldown_active": false,
+    "category": null
+  },
+  "assertions": [
+    "result.ok == True",
+    "result.verdict == 'OK_OVERRIDE'",
+    "result.reason == 'FORCED_RERUN'",
+    "result.forced == True"
+  ]
+}

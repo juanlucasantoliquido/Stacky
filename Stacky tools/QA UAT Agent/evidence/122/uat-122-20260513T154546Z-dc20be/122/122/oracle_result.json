@@ -1,0 +1,66 @@
+{
+  "schema_version": "oracle_result/1.0",
+  "ok": true,
+  "run_id": "122",
+  "ticket_id": 122,
+  "total_scenarios": 4,
+  "evaluated_scenarios": 4,
+  "pass_count": 0,
+  "fail_count": 0,
+  "no_oracle_count": 4,
+  "weak_only_count": 0,
+  "p0_blocked_count": 0,
+  "publish_blocked": false,
+  "scenario_results": [
+    {
+      "scenario_id": "P03",
+      "oracle_verdict": "NO_ORACLE",
+      "is_p0": false,
+      "oracle_count": 0,
+      "strong_count": 0,
+      "weak_count": 0,
+      "pass_count": 0,
+      "fail_count": 0,
+      "blocking": false,
+      "oracle_checks": []
+    },
+    {
+      "scenario_id": "P05",
+      "oracle_verdict": "NO_ORACLE",
+      "is_p0": false,
+      "oracle_count": 0,
+      "strong_count": 0,
+      "weak_count": 0,
+      "pass_count": 0,
+      "fail_count": 0,
+      "blocking": false,
+      "oracle_checks": []
+    },
+    {
+      "scenario_id": "P06",
+      "oracle_verdict": "NO_ORACLE",
+      "is_p0": false,
+      "oracle_count": 0,
+      "strong_count": 0,
+      "weak_count": 0,
+      "pass_count": 0,
+      "fail_count": 0,
+      "blocking": false,
+      "oracle_checks": []
+    },
+    {
+      "scenario_id": "P09",
+      "oracle_verdict": "NO_ORACLE",
+      "is_p0": false,
+      "oracle_count": 0,
+      "strong_count": 0,
+      "weak_count": 0,
+      "pass_count": 0,
+      "fail_count": 0,
+      "blocking": false,
+      "oracle_checks": []
+    }
+  ],
+  "evidence_path": null,
+  "evaluated_at": "2026-05-13T15:46:09.378225Z"
+}

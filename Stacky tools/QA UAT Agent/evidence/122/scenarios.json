@@ -1,0 +1,105 @@
+{
+  "ok": true,
+  "ticket_id": 122,
+  "compiled": 1,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": 122,
+      "pantalla": "FrmDetalleClie.aspx",
+      "playbook_id": "frm_detalle_clie_domicilios",
+      "titulo": "Verificar que el campo Provincia aparece en el formulario de alta de domicilio",
+      "precondiciones": [
+        "Login como usuario QA",
+        "Cliente 1000001118137685 con domicilios activos disponible",
+        "Datos requeridos: Cliente 1000001118137685"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "tab_relaciones",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btn_agregar_domicilio",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "dlg_alta_domicilio",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "body",
+          "valor": "Provincia"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "body",
+          "valor": "Departamento territorial"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "body",
+          "valor": "Ciudad"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RDIRE",
+          "filtro": "DTCOD='1000001118137685' AND DTVALIDO='1'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      },
+      "screen": "FrmDetalleClie.aspx",
+      "steps": [
+        {
+          "step_index": 1,
+          "action": "navigate",
+          "selector": "",
+          "alias_semantic": null,
+          "valor": null
+        },
+        {
+          "step_index": 2,
+          "action": "click",
+          "selector": "",
+          "alias_semantic": "tab_relaciones",
+          "valor": null
+        },
+        {
+          "step_index": 3,
+          "action": "click",
+          "selector": "",
+          "alias_semantic": "btn_agregar_domicilio",
+          "valor": null
+        },
+        {
+          "step_index": 4,
+          "action": "wait_visible",
+          "selector": "",
+          "alias_semantic": "dlg_alta_domicilio",
+          "valor": null
+        }
+      ],
+      "tags": [
+        "legacy_compatible",
+        "v2_schema"
+      ]
+    }
+  ],
+  "out_of_scope_items": []
+}

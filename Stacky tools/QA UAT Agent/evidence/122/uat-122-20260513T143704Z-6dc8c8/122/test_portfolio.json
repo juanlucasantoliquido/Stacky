@@ -1,0 +1,141 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 122,
+  "generated_at": "2026-05-13T14:37:15.100542Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "122-CA-01",
+      "description": "CA-01 Gestor abre formulario de alta de domicilio El formulario se renderiza El campo \"Provincia\" (Lookup sobre DTPROVINCIA) aparece inmediatamente después de \"Ciudad\"",
+      "layer": "uat",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": true,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "122-CA-02",
+      "description": "CA-02 Gestor abre formulario de alta de domicilio El formulario se renderiza El campo \"Departamento territorial\" (DTESTADO) aparece inmediatamente después de \"Provincia\"",
+      "layer": "uat",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": true,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "122-CA-03",
+      "description": "CA-03 Existe un domicilio con Provincia y Departamento territorial guardados Gestor abre ese domicilio en modo modificación Ambos campos muestran los valores previamente guardados precargados",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "122-CA-04",
+      "description": "CA-04 Provincia implementada como Lookup Gestor despliega el control de Provincia Solo se presentan valores del catálogo DTPROVINCIA; no permite texto libre fuera del catálogo",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "122-CA-05",
+      "description": "CA-05 Gestor completa formulario con Provincia y Departamento territorial y guarda El domicilio se guarda Al reabrir, ambos campos muestran los valores guardados (persistencia confirmada)",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    },
+    {
+      "id": "122-CA-06",
+      "description": "CA-06 Campos Provincia/Departamento son opcionales Gestor guarda domicilio sin informar esos campos Sin error; domicilio almacenado correctamente con esos campos vacíos",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "122-CA-07",
+      "description": "CA-07 Campos Provincia/Departamento son obligatorios Gestor intenta guardar sin completar alguno Sistema rechaza y muestra mensaje de validación indicando el campo faltante",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "122-CA-08",
+      "description": "CA-08 Formulario tiene los nuevos campos Gestor interactúa con campos preexistentes Todos los campos preexistentes funcionan igual que antes",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": null,
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "122-CA-09",
+      "description": "CA-09 Domicilio con Provincia y Departamento registrados Gestor ejecuta borrado lógico Domicilio marcado como no válido; valores de Provincia y Departamento conservados en BD",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    },
+    {
+      "id": "122-CA-10",
+      "description": "CA-10 Gestor con perfil estándar accede a Vista Relaciones Gestor abre Mantenedor de Domicilios Nuevos campos visibles y editables sin configuración adicional",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "uat": 3,
+    "manual_review": 5,
+    "integration": 2
+  }
+}

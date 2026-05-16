@@ -1,0 +1,30 @@
+{
+  "_eval_id": "auth_session_dry_run_verified",
+  "_description": "Modo dry-run — debe verificar configuración sin abrir browser y retornar OK.",
+  "_layer": "unit",
+  "_scenario": "Pipeline corriendo en mode=dry-run. Credenciales presentes. No se abre browser.",
+  "input": {
+    "mode": "dry-run",
+    "mock_credentials": {
+      "AGENDA_WEB_USER": "testuser",
+      "AGENDA_WEB_PASS": "testpass",
+      "AGENDA_WEB_BASE_URL": "http://localhost:35017/AgendaWeb/"
+    }
+  },
+  "expected_output": {
+    "ok": true,
+    "verdict": "OK",
+    "reason": "DRY_RUN_VERIFIED",
+    "dry_run": true,
+    "reused": false,
+    "category": null
+  },
+  "assertions": [
+    "result.ok == True",
+    "result.verdict == 'OK'",
+    "result.reason == 'DRY_RUN_VERIFIED'",
+    "result.dry_run == True",
+    "result.category is None",
+    "result.session_fingerprint is not None"
+  ]
+}

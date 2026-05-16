@@ -1,0 +1,36 @@
+{
+  "_eval_id": "auth_session_blocked_login_timeout",
+  "_description": "Timeout durante el login programático (app lenta o caída) — debe retornar AUTH_LOGIN_TIMEOUT.",
+  "_layer": "unit",
+  "_scenario": "Playwright lanzó TimeoutError al esperar la URL post-login (FrmAgenda/FrmMain).",
+  "input": {
+    "mode": "normal",
+    "mock_auth_file_exists": false,
+    "mock_credentials": {
+      "AGENDA_WEB_USER": "testuser",
+      "AGENDA_WEB_PASS": "testpass",
+      "AGENDA_WEB_BASE_URL": "http://localhost:35017/AgendaWeb/"
+    },
+    "mock_login_result": {
+      "ok": false,
+      "reason": "AUTH_LOGIN_TIMEOUT",
+      "error": "Timeout 25000ms exceeded while waiting for URL /FrmAgenda|FrmMain/"
+    }
+  },
+  "expected_output": {
+    "ok": false,
+    "verdict": "BLOCKED",
+    "reason": "AUTH_LOGIN_TIMEOUT",
+    "category": "ENV",
+    "dry_run": false,
+    "reused": false,
+    "human_action_required_contains": "30s"
+  },
+  "assertions": [
+    "result.ok == False",
+    "result.verdict == 'BLOCKED'",
+    "result.reason == 'AUTH_LOGIN_TIMEOUT'",
+    "result.category == 'ENV'",
+    "result.human_action_required is not None"
+  ]
+}

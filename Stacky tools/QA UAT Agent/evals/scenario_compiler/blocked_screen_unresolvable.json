@@ -1,0 +1,34 @@
+{
+  "_eval_id": "blocked_screen_unresolvable",
+  "_description": "El intake tiene solo un item con keywords de performance (out_of_scope). El compilador retorna ok=True con compiled=0 y el item en out_of_scope_items con razon=OUT_OF_SCOPE_NEEDS_HUMAN. No se emiten escenarios compilados.",
+  "_layer": "unit",
+  "input": {
+    "ticket_json": {
+      "ok": true,
+      "ticket": {"id": 999},
+      "analisis_tecnico": "",
+      "plan_pruebas": [
+        {
+          "id": "P01",
+          "descripcion": "Prueba de performance bajo carga de trabajo masiva con 10000 requests por segundo",
+          "datos": "users=10000",
+          "esperado": "Respuesta en menos de 200ms promedio bajo carga de trabajo"
+        }
+      ]
+    },
+    "ui_aliases": [],
+    "legacy_only_env": false
+  },
+  "expected_output": {
+    "ok": true,
+    "compiled": 0,
+    "out_of_scope": 1
+  },
+  "assertions": [
+    "result['ok'] == True",
+    "result['compiled'] == 0",
+    "result['out_of_scope'] == 1",
+    "len(result['scenarios']) == 0",
+    "result['out_of_scope_items'][0]['razon'] == 'OUT_OF_SCOPE_NEEDS_HUMAN'"
+  ]
+}

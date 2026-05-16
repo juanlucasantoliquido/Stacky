@@ -1,0 +1,30 @@
+{
+  "_eval_id": "ok_forced_skip",
+  "_description": "QA_UAT_SKIP_SELECTOR_CONTRACT=1 — el stage devuelve ok=true, skipped=true, forced_skip=true sin validar aliases.",
+  "_layer": "unit",
+  "input": {
+    "env_skip": true,
+    "scenarios": [
+      {
+        "id": "RF-008-CA-05",
+        "screen": "FrmDetalleClie.aspx",
+        "steps": [
+          {"alias_semantic": "aliasQueNoExiste", "action": "click"}
+        ]
+      }
+    ],
+    "mock_ui_map": null
+  },
+  "expected_output": {
+    "ok": true,
+    "skipped": true,
+    "forced_skip": true,
+    "reason": "QA_UAT_SKIP_SELECTOR_CONTRACT"
+  },
+  "assertions": [
+    "result['ok'] == True",
+    "result['skipped'] == True",
+    "result['forced_skip'] == True",
+    "result['reason'] == 'QA_UAT_SKIP_SELECTOR_CONTRACT'"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "_eval_id": "ok_dual_format_emitted",
+  "_description": "Escenario compilado exitosamente. Debe emitir pantalla+pasos (legacy) y screen+steps (v2). Todos los aliases inferidos porque ui_aliases incluye los targets.",
+  "_layer": "unit",
+  "input": {
+    "ticket_json": {
+      "ok": true,
+      "ticket": {"id": 122},
+      "analisis_tecnico": "Ticket de domicilios en FrmDetalleClie.aspx",
+      "plan_pruebas": [
+        {
+          "id": "P01",
+          "descripcion": "Verificar que el campo Provincia aparece en el formulario de alta de domicilio",
+          "datos": "Cliente 1000001118137685",
+          "esperado": "El campo Provincia es visible en el formulario"
+        }
+      ]
+    },
+    "ui_aliases": ["tab_relaciones", "btn_agregar_domicilio", "dlg_alta_domicilio"],
+    "legacy_only_env": false
+  },
+  "expected_output": {
+    "ok": true,
+    "compiled": 1
+  },
+  "assertions": [
+    "result['ok'] == True",
+    "result['compiled'] == 1",
+    "result['meta']['v2_schema_emitted'] == True",
+    "result['meta']['compiler_legacy_only'] == False",
+    "len(result['scenarios']) == 1",
+    "'screen' in result['scenarios'][0]",
+    "'steps' in result['scenarios'][0]",
+    "'pantalla' in result['scenarios'][0]",
+    "'pasos' in result['scenarios'][0]",
+    "result['scenarios'][0]['screen'] == result['scenarios'][0]['pantalla']",
+    "len(result['scenarios'][0]['steps']) == len(result['scenarios'][0]['pasos'])"
+  ]
+}

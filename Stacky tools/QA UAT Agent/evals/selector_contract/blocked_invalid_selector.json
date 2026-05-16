@@ -1,0 +1,36 @@
+{
+  "_eval_id": "blocked_invalid_selector",
+  "_description": "El alias msg_titulo es decorativo y se intenta hacer click. Debe retornar BLOCKED GEN DECORATIVE_ELEMENT_ACTION.",
+  "_layer": "unit",
+  "input": {
+    "scenarios": [
+      {
+        "id": "RF-008-CA-03",
+        "screen": "FrmDetalleClie.aspx",
+        "steps": [
+          {"alias_semantic": "btnBuscar", "action": "click"},
+          {"alias_semantic": "msg_titulo", "action": "click"}
+        ]
+      }
+    ],
+    "mock_ui_map": {
+      "screen": "FrmDetalleClie.aspx",
+      "elements": [
+        {"alias_semantic": "btnBuscar", "selector": "#c_btnBuscar", "is_decorative": false, "is_interactive": true, "role": "button"},
+        {"alias_semantic": "msg_titulo", "selector": "#c_lblTitulo", "is_decorative": true, "is_interactive": false, "role": "label"}
+      ],
+      "grids": []
+    }
+  },
+  "expected_output": {
+    "ok": false,
+    "blocked_count": 1,
+    "allow_count": 0,
+    "first_blocked_reason": "DECORATIVE_ELEMENT_ACTION"
+  },
+  "assertions": [
+    "result['ok'] == False",
+    "result['blocked_count'] == 1",
+    "result['first_blocked_reason'] == 'DECORATIVE_ELEMENT_ACTION'"
+  ]
+}

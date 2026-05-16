@@ -1,0 +1,20 @@
+{
+  "schema": "triage/1.0",
+  "triage_version": "1.0",
+  "ticket_id": 122,
+  "run_id": "122",
+  "timestamp": "2026-05-13T15:46:54Z",
+  "verdict": "BLOCKED",
+  "category": "ENV",
+  "reason": "LOGIN_PAGE_TIMEOUT",
+  "confidence": 1.0,
+  "evidence": [
+    "result_json.category=ENV reason=LOGIN_PAGE_TIMEOUT",
+    "runner_classification: BLOCKED/ENV/LOGIN_PAGE_TIMEOUT"
+  ],
+  "owner": "devops",
+  "next_action": "Verificar build activo y deployment en ambiente de pruebas",
+  "rerun_recommended": false,
+  "publish_recommended": false,
+  "human_approval_required": true
+}

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ArrivalAssertions/1.0",
+  "title": "ArrivalAssertions",
+  "description": "Per-run record of arrival_assertion evaluations after the final navigation step. Written by arrival_validator.ts via navigation_executor.ts (Sprint N5-06).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "ticket_id", "scenario_id", "target_screen", "navigation_strategy", "all_passed", "assertions", "timestamp"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "ticket_id": { "type": ["integer", "string"] },
+    "scenario_id": { "type": "string", "minLength": 1 },
+    "target_screen": { "type": "string", "minLength": 1 },
+    "navigation_strategy": {
+      "type": "string",
+      "enum": ["direct_entry", "deeplink", "human_path", "playbook"]
+    },
+    "all_passed": { "type": "boolean" },
+    "elapsed_ms": { "type": "integer", "minimum": 0 },
+    "timestamp": { "type": "string" },
+    "screenshot_path": { "type": ["string", "null"] },
+    "diagnostics": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "properties": {
+        "currentUrl": { "type": "string" },
+        "pageTitle": { "type": "string" },
+        "aspnetErrorDetected": { "type": "boolean" },
+        "loginRedirectDetected": { "type": "boolean" },
+        "httpStatus": { "type": ["integer", "null"] }
+      }
+    },
+    "assertions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/AssertionResult" }
+    }
+  },
+  "$defs": {
+    "AssertionResult": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["assertion_id", "type", "passed", "severity"],
+      "properties": {
+        "assertion_id": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": [
+            "url_contains",
+            "url_not_contains",
+            "dom_visible",
+            "dom_not_visible",
+            "dom_text_contains",
+            "page_title_contains",
+            "page_title_not_contains",
+            "no_aspnet_error",
+            "no_login_redirect",
+            "no_500_response"
+          ]
+        },
+        "expected": { "type": ["string", "null"] },
+        "actual": { "type": ["string", "null"] },
+        "passed": { "type": "boolean" },
+        "severity": { "type": "string", "enum": ["hard", "soft"] },
+        "category_on_fail": {
+          "type": ["string", "null"],
+          "enum": ["NAV", "ENV", "DATA", "APP", null]
+        },
+        "selector": { "type": ["string", "null"] },
+        "elapsed_ms": { "type": "integer", "minimum": 0 },
+        "detail": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

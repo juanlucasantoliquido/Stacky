@@ -1,0 +1,3128 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 4 tests using 1 worker
+
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":1,"method":"goto_direct","url_before":"about:blank","ts":"2026-05-13T15:29:15.106Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P03","step_index":1,"method":"goto_direct","ok":true,"attempts":1,"elapsed_ms":9627,"url_before":"about:blank","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:29:24.764Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":2,"method":"fill","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:29:24.764Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P03","step_index":2,"method":"fill","ok":true,"attempts":1,"elapsed_ms":1168,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:29:25.932Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":3,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:29:25.933Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P03","step_index":3,"method":"button_click","ok":true,"attempts":1,"elapsed_ms":3966,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:29:29.900Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":4,"method":"wait","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:29:29.900Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P03","step_index":4,"method":"wait","ok":true,"attempts":1,"elapsed_ms":587,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:29:30.488Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":5,"method":"row_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:29:30.488Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P03","step_index":5,"method":"row_click","ok":true,"attempts":1,"elapsed_ms":2933,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:29:33.421Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":6,"method":"row_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:29:33.421Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P03","step_index":6,"method":"row_click","ok":true,"attempts":1,"elapsed_ms":28250,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:30:01.672Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":7,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","ts":"2026-05-13T15:30:01.672Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P03","step_index":7,"method":"button_click","ok":true,"attempts":1,"elapsed_ms":17317,"url_before":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:30:18.989Z"}
+Advanced filters ready: [33mfalse[39m
+  ✘  1 evidence\122\uat-122-20260513T152816Z-610033\tests\P03_abrir_domicilio_existente_en_modificacion.spec.ts:139:7 › ADO-122 | P03 — Abrir domicilio existente en Modificación › p03 abrir_domicilio_existente_en_modificación (1.3m)
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":1,"method":"goto_direct","url_before":"about:blank","ts":"2026-05-13T15:30:38.394Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P05","step_index":1,"method":"goto_direct","ok":true,"attempts":1,"elapsed_ms":10727,"url_before":"about:blank","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:30:49.139Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":2,"method":"fill","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:30:49.142Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P05","step_index":2,"method":"fill","ok":true,"attempts":1,"elapsed_ms":1721,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:30:50.864Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":3,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:30:50.864Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P05","step_index":3,"method":"button_click","ok":true,"attempts":1,"elapsed_ms":5103,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:30:55.968Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":4,"method":"wait","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:30:55.968Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P05","step_index":4,"method":"wait","ok":true,"attempts":1,"elapsed_ms":520,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:30:56.490Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":5,"method":"row_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:30:56.491Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P05","step_index":5,"method":"row_click","ok":true,"attempts":1,"elapsed_ms":1855,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:30:58.348Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":6,"method":"row_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:30:58.349Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P05","step_index":6,"method":"row_click","ok":true,"attempts":1,"elapsed_ms":26462,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:31:24.811Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":7,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","ts":"2026-05-13T15:31:24.811Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P05","step_index":7,"method":"button_click","ok":true,"attempts":1,"elapsed_ms":16072,"url_before":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:31:40.883Z"}
+Advanced filters ready: [33mfalse[39m
+  ✓  2 evidence\122\uat-122-20260513T152816Z-610033\tests\P05_guardar_con_provincia_seleccionada_y_reabrir.spec.ts:139:7 › ADO-122 | P05 — Guardar con Provincia seleccionada y reabrir › p05 guardar_con_provincia_seleccionada_y_reabrir (1.1m)
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":1,"method":"goto_direct","url_before":"about:blank","ts":"2026-05-13T15:31:42.977Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P06","step_index":1,"method":"goto_direct","ok":true,"attempts":1,"elapsed_ms":10268,"url_before":"about:blank","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:31:53.246Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":2,"method":"fill","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:31:53.246Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P06","step_index":2,"method":"fill","ok":true,"attempts":1,"elapsed_ms":977,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:31:54.224Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":3,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:31:54.224Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P06","step_index":3,"method":"button_click","ok":true,"attempts":1,"elapsed_ms":3050,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:31:57.274Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":4,"method":"wait","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:31:57.275Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P06","step_index":4,"method":"wait","ok":true,"attempts":1,"elapsed_ms":466,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:31:57.741Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":5,"method":"row_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:31:57.742Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P06","step_index":5,"method":"row_click","ok":true,"attempts":1,"elapsed_ms":1942,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:31:59.684Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":6,"method":"row_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:31:59.684Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P06","step_index":6,"method":"row_click","ok":true,"attempts":1,"elapsed_ms":25151,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:32:24.835Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":7,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","ts":"2026-05-13T15:32:24.835Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P06","step_index":7,"method":"button_click","ok":true,"attempts":1,"elapsed_ms":16130,"url_before":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:32:40.966Z"}
+Advanced filters ready: [33mfalse[39m
+  ✓  3 evidence\122\uat-122-20260513T152816Z-610033\tests\P06_guardar_sin_informar_provincia.spec.ts:139:7 › ADO-122 | P06 — Guardar sin informar Provincia › p06 guardar_sin_informar_provincia (59.9s)
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":1,"method":"goto_direct","url_before":"about:blank","ts":"2026-05-13T15:32:43.040Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P09","step_index":1,"method":"goto_direct","ok":true,"attempts":1,"elapsed_ms":9867,"url_before":"about:blank","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:32:52.908Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":2,"method":"fill","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:32:52.908Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P09","step_index":2,"method":"fill","ok":true,"attempts":1,"elapsed_ms":872,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:32:53.780Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":3,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:32:53.780Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P09","step_index":3,"method":"button_click","ok":true,"attempts":1,"elapsed_ms":3295,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:32:57.075Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":4,"method":"wait","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:32:57.076Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P09","step_index":4,"method":"wait","ok":true,"attempts":1,"elapsed_ms":485,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:32:57.561Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":5,"method":"row_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:32:57.562Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P09","step_index":5,"method":"row_click","ok":true,"attempts":1,"elapsed_ms":1888,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:32:59.452Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":6,"method":"row_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:32:59.453Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P09","step_index":6,"method":"row_click","ok":true,"attempts":1,"elapsed_ms":25104,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:33:24.557Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":7,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","ts":"2026-05-13T15:33:24.558Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P09","step_index":7,"method":"button_click","ok":true,"attempts":1,"elapsed_ms":16719,"url_before":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:33:41.277Z"}
+Advanced filters ready: [33mfalse[39m
+  ✓  4 evidence\122\uat-122-20260513T152816Z-610033\tests\P09_borrado_logico_de_domicilio_con_provincia.spec.ts:139:7 › ADO-122 | P09 — Borrado lógico de domicilio con Provincia › p09 borrado_lógico_de_domicilio_con_provincia (1.0m)
+
+
+  1) evidence\122\uat-122-20260513T152816Z-610033\tests\P03_abrir_domicilio_existente_en_modificacion.spec.ts:139:7 › ADO-122 | P03 — Abrir domicilio existente en Modificación › p03 abrir_domicilio_existente_en_modificación 
+
+    Error: P03: página debe contener "Provincia"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 10000ms
+    [32m- Expected substring  -    1[39m
+    [31m+ Received string     + 1505[39m
+
+    [32m- Provincia[39m
+    [31m+[39m
+    [31m+     [39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ 	[39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+ 	[39m
+    [31m+         [39m
+    [31m+[39m
+    [31m+         [39m
+    [31m+                 [39m
+    [31m+             [39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+                 [39m
+    [31m+[39m
+    [31m+ 	[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+         menulogoutSalirDetalle de ClienteUsuario:USUARIO TESTPendiente de Hoy:0Pendiente de otros Días:3Realizado Hoy:0Total en Agenda:3Barrido Realizado:0%Clientes Asignados:10430Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [39m
+    [31m+         [39m
+    [31m+             [39m
+    [31m+ 	[39m
+    [31m+                     [39m
+    [31m+                         [39m
+    [31m+                             chevron_leftbúsqueda de clientes[39m
+    [31m+                         [39m
+    [31m+                         [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+                     [39m
+    [31m+                 [39m
+    [31m+[39m
+    [31m+             [39m
+    [31m+     [39m
+    [31m+ 	[39m
+    [31m+         [39m
+    [31m+ 		[39m
+    [31m+                 [39m
+    [31m+                     [39m
+    [31m+                         Apellidos y Nombre [39m
+    [31m+                         Usuario [39m
+    [31m+                         Documento [39m
+    [31m+                         Perfil [39m
+    [31m+                         Núm. Cliente [39m
+    [31m+                         Nivel de Mora [39m
+    [31m+                         Categoria Cliente [39m
+    [31m+                         Tipo Cliente [39m
+    [31m+                         [39m
+    [31m+                         Corredor Principal: [39m
+    [31m+                         Riesgo de Cliente: [39m
+    [31m+                     [39m
+    [31m+                     [39m
+    [31m+                         Atraso Total [39m
+    [31m+                     [39m
+    [31m+                     [39m
+    [31m+                         [39m
+    [31m+ 			[39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+                                         [39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						[39m
+    [31m+ 							Teléfono[39m
+    [31m+ 						[39m
+    [31m+ 					[39m
+    [31m+ 						[39m
+    [31m+ 							Fijo: 598  89095090[39m
+    [31m+ 						[39m
+    [31m+ 							Trabajo: 598 66 13213216[39m
+    [31m+ 						[39m
+    [31m+ 							Móvil: 598  [39m
+    [31m+ 						[39m
+    [31m+ 							Móvil: 598  123[39m
+    [31m+ 						[39m
+    [31m+ 							Móvil: 598  1111[39m
+    [31m+ 						[39m
+    [31m+ 							Móvil: 598  789[39m
+    [31m+ 						[39m
+    [31m+ 							Móvil: 598  123123[39m
+    [31m+ 						[39m
+    [31m+ 							Móvil: 598  123[39m
+    [31m+ 						[39m
+    [31m+ 							Fijo: 34 555 65465465465654[39m
+    [31m+ 						[39m
+    [31m+ 							Fijo: 34  [39m
+    [31m+ 						[39m
+    [31m+ 							Móvil: 34 55555[39m
+    [31m+ 						[39m
+    [31m+ 							No Identificado: 888 6665554442[39m
+    [31m+ 						[39m
+    [31m+ 							Trabajo: 34  666555444[39m
+    [31m+ 						[39m
+    [31m+ 					[39m
+    [31m+[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                             [39m
+    [31m+ 		[39m
+    [31m+                     [39m
+    [31m+                 [39m
+    [31m+                 [39m
+    [31m+                     [39m
+    [31m+                         COMPROMISOS[39m
+    [31m+                         Convenios[39m
+    [31m+                         ESTADOS ESPECIALES[39m
+    [31m+                         [39m
+    [31m+                         PASAR A JUDICIAL[39m
+    [31m+                         Judicial[39m
+    [31m+                         Documentación[39m
+    [31m+                         FICHA[39m
+    [31m+                         NOTAS[39m
+    [31m+                     [39m
+    [31m+                 [39m
+    [31m+             [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+[39m
+    [31m+     [39m
+    [31m+             [39m
+    [31m+                 [39m
+    [31m+ 	PVIG[39m
+    [31m+ 	PINC[39m
+    [31m+ 	DLOC[39m
+    [31m+ 	INAC[39m
+    [31m+ 	CREF[39m
+    [31m+ 	IATM[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+             [39m
+    [31m+         [39m
+    [31m+     [39m
+    [31m+ 	[39m
+    [31m+             [39m
+    [31m+         [39m
+    [31m+[39m
+    [31m+     [39m
+    [31m+         [39m
+    [31m+                 [39m
+    [31m+ 	Datos GeneralesRelacionesContactosPagosGarantíasScoringDatos Historicos[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+                         [39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Obligación *[39m
+    [31m+ 		[39m
+    [31m+                                     [39m
+    [31m+                                         grid_onExportar[39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						  Cód. ObligaciónProductoDías MoraMonedaRegiónOficinaFecha InicioFecha Venc.Fecha MoraFecha Últ. PagoMonto Últ. PagoFecha CastigoMonto CastigoFec. Prim. ImpagoTipo Cuenta DébitoCuenta DébitoEs JudicialFecha Prox VencImporte Prox VencFecha MoraMotivo No CobroCanal de ventaMedio cobro últ. pagoDéb. AutomáticoSaldo a favorCuotaMonto cuotaCorredorNro. cuotas[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						radio_button_checkedassignment V000000000218PTarjeta Visa0Pesos01 - REGIÓN 0101 - OFICINA 0125/06/1992  14/10/20150,00 0,00  0000000No000000000 Pase a Judicial  - 120.491,54 2[39m
+    [31m+ 					[39m
+    [31m+ 						radio_button_uncheckedassignment V000000000218DTarjeta Visa0Dolares USA01 - REGIÓN 0101 - OFICINA 0125/06/1992  14/10/20150,00 0,00  0000000No000000000 Revisar Convenio y Confirmar Caida  -    0[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Gestiones[39m
+    [31m+ 		[39m
+    [31m+                                     [39m
+    [31m+                                         event_noteVer Comentarios[39m
+    [31m+                                         grid_onGestiones[39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						FechaHoraTARNotaFiguraUsuarioObligación[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						30/03/202616:27:04RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218P[39m
+    [31m+ 					[39m
+    [31m+ 						30/03/202616:27:03RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						30/03/202616:27:03ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						23/02/202613:11:27RADP - Dice que pago prueba de nota[39m
+    [31m+ T01 - Titular PrincipalUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						27/11/202520:32:42RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						27/11/202520:32:41ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						13/01/202513:05:53RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218P[39m
+    [31m+ 					[39m
+    [31m+ 						13/01/202513:05:52RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						13/01/202513:05:52ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						08/11/202405:39:52ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						08/11/202405:20:51ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						08/11/202405:19:49ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						08/11/202405:18:51ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						08/11/202405:10:51ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						29/10/202409:29:09ACAT - Cliente ha añadido dato de teléfono NP - No ProcedeAIS VICTORA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						11/09/202414:00:29COTO - Compromiso de Pago Total T01 - Titular Principal22A Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						11/09/202413:37:30COPA - Compromiso de Pago Parcial T01 - Titular PrincipalUSUARIO TESTV000000000218P[39m
+    [31m+ 					[39m
+    [31m+ 						11/09/202413:37:27COPA - Compromiso de Pago Parcial T01 - Titular PrincipalUSUARIO TESTV000000000218P[39m
+    [31m+ 					[39m
+    [31m+ 						11/09/202413:37:26COEL - Compromiso Eliminado T01 - Titular PrincipalUSUARIO TESTV000000000218P[39m
+    [31m+ 					[39m
+    [31m+ 						11/09/202413:27:40COTO - Compromiso de Pago Total T01 - Titular PrincipalUSUARIO TESTV000000000218P[39m
+    [31m+ 					[39m
+    [31m+ 						12/07/202412:25:18CAT1 - Carta Tipo 1 T01 - Titular PrincipalAIS VICTORA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						18/06/202416:26:51RARA - Llamo en forma agresiva T01 - Titular PrincipalAIS VICTORA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						16/05/202416:06:15ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						16/05/202416:01:18ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						16/05/202415:53:37ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						10/04/202408:36:54ACAT - Cliente ha añadido dato de teléfono NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						10/04/202408:31:03ACAE - Cliente ha añadido dato de email NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						08/04/202408:15:37ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						10/03/2024 RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218P[39m
+    [31m+ 					[39m
+    [31m+ 						10/03/2024 RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						10/03/2024 RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218P[39m
+    [31m+ 					[39m
+    [31m+ 						10/03/2024 RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						10/03/202404:06:20ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						10/03/202403:50:10ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[39m
+    [31m+ 					[39m
+    [31m+ 						19/12/202310:35:59ACMT - Cliente ha modificado dato de teléfono NP - No ProcedeAIS VICTORA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						19/12/202309:24:11ACAT - Cliente ha añadido dato de teléfono NP - No ProcedeSANZ ALEJANDRA1A Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						18/12/202310:06:22ACAE - Cliente ha añadido dato de email NP - No ProcedeSANZ ALEJANDRA1A Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						18/12/202310:05:52ACAT - Cliente ha añadido dato de teléfono NP - No ProcedeSANZ ALEJANDRA1A Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202312:00:16ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202312:00:06ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:59:12ANOC - Asignación Operador Call Center NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:58:02ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:56:46ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:55:39ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:55:03ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:53:59ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:53:11ANOC - Asignación Operador Call Center NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:51:57ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:30:45ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:26:34ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:02:06ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:01:52ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:01:19ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:01:13ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 						21/09/202311:01:04ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Detalle Deuda[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+                                         [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Saldo Pasivo[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                         [39m
+    [31m+                                         [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Pasivo Vista[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			 [39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Pasivo No Vista[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			 [39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+                                                         [39m
+    [31m+ 			Deuda[39m
+    [31m+ 		[39m
+    [31m+                                                     [39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Fecha de Entrada[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			18/11/2015[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Fecha de Mora[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			 [39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Días de Mora[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			0[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Saldo Deuda[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			25.614,43[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Saldo Capital[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			25.482,98[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Atraso Total[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			250,00[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Atraso Total (Conv)[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			250,00[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Atraso Capital[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			0,00[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Atraso Int. Normal[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			0,00[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Atraso Int. Puniorio[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			0,00[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Atraso Gtos. Cobranza[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			0,00[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Atraso Seguro[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+                                                         [39m
+    [31m+ 			0,00[39m
+    [31m+ 		[39m
+    [31m+                                                     [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Atraso Impuesto[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			0,00[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Atraso Otros Conceptos[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			0,00[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			Monto mínimo a pagar[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                                 [39m
+    [31m+                                                     [39m
+    [31m+ 			0,00[39m
+    [31m+ 		[39m
+    [31m+                                                 [39m
+    [31m+                                             [39m
+    [31m+                                         [39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+                     [39m
+    [31m+ 	[39m
+    [31m+ 		[39m
+    [31m+                         [39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Relaciones[39m
+    [31m+ 		[39m
+    [31m+                                     [39m
+    [31m+                                         grid_onExportar[39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						 ObligaciónNúm. ClienteApellidos y NombreDocumentoSexoFigura[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						radio_button_checkedV000000000218D1000001118137685APELLIDO DE TEST  NOMBRE DE TEST10000011181376851000001118137685 T01 - Titular[39m
+    [31m+ 					[39m
+    [31m+ 						radio_button_uncheckedV000000000218P1000001118137685APELLIDO DE TEST  NOMBRE DE TEST10000011181376851000001118137685 T01 - Titular[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+                         [39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				arrow_drop_down[39m
+    [31m+ 					Teléfonos[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+                                         [39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+                                             [39m
+    [31m+ 					[39m
+    [31m+                                                     [39m
+    [31m+                                                         [39m
+    [31m+ 						Teléfonos[39m
+    [31m+ 					[39m
+    [31m+                                                         [39m
+    [31m+                                                             addAgregar[39m
+    [31m+                                                             createModificar[39m
+    [31m+                                                             deleteEliminar[39m
+    [31m+                                                         [39m
+    [31m+                                                     [39m
+    [31m+                                                     [39m
+    [31m+                                                         [39m
+    [31m+                                                             [39m
+    [31m+ 						[39m
+    [31m+ 							[39m
+    [31m+ 								[39m
+    [31m+ 									 Cod. ClienteTipo de TeléfonoTeléfonoContactoValido[39m
+    [31m+ 								[39m
+    [31m+ 							[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_checked1000001118137685Trabajo34666555444SiSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685No Identificado8886665554442SiSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo59889095090NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo5986613213216NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil598NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil598123NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil5981111NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo34NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil3455555NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil598789NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil598123123NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil598123NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo3455565465465465654NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo4449999789456123NoTelefono falso[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo1212121212121SiTelefono invalido[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo88896966123456789Si [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo99996966123456789Si [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo00096966123456789Si [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo11196966123456789Si [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo00096966123456789Si [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo22296966123456789Si [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo66696966123456789Si [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo34121000000SiTelefono inexistente[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo262252523336666336SiTelefono falso[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo262933526665SiTelefono falso[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo4444898989SiTelefono invalido[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil55566666789456123Si [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo252933526665No [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo262933526665No [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil3455599988NoTelefono invalido[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil598NoTelefono inexistente[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Trabajo5989999999NoTelefono inexistente[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Fijo598123123NoTelefono inexistente[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil No [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685Móvil NoTelefono inexistente[39m
+    [31m+ 								[39m
+    [31m+ 							[39m
+    [31m+[39m
+    [31m+ 							[39m
+    [31m+ 						[39m
+    [31m+ 					[39m
+    [31m+                                                         [39m
+    [31m+                                                     [39m
+    [31m+                                                 [39m
+    [31m+ 				[39m
+    [31m+                                         [39m
+    [31m+ 			[39m
+    [31m+ 				arrow_drop_down[39m
+    [31m+ 					eMails[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+                                         [39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+                                             [39m
+    [31m+ 					[39m
+    [31m+                                                     [39m
+    [31m+                                                         [39m
+    [31m+ 						eMails[39m
+    [31m+ 					[39m
+    [31m+                                                         [39m
+    [31m+                                                             addAgregar[39m
+    [31m+                                                             createModificar[39m
+    [31m+                                                             deleteEliminar[39m
+    [31m+                                                         [39m
+    [31m+                                                         [39m
+    [31m+                                                             [39m
+    [31m+                                                                 [39m
+    [31m+ 						[39m
+    [31m+ 							[39m
+    [31m+ 								[39m
+    [31m+ 									 Cód. ClienteCód. eMailTipoeMailContactoValido[39m
+    [31m+ 								[39m
+    [31m+ 							[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_checked1000001118137685AIS9Particularparticulares.pablo@ais.comNoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS12Comercial123NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS6Particularprocu@ais.comSiSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS8Particularmercedes@concesionario.comSiSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS11Comercialtest@test.comSiSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS5Comercialais@ais.comSiSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS7Comercialisaac-garcia@ais-int.comSiSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS2Particularemail@mail.comNo [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS10ComercialasdasdffNoE-mail inexistente[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS4Comercialais@ais.comNoE-mail inexistente[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS1Particularemail@mail.comSi [39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS3Comercialtest@test.comSiE-mail falso[39m
+    [31m+ 								[39m
+    [31m+ 							[39m
+    [31m+[39m
+    [31m+ 							[39m
+    [31m+ 						[39m
+    [31m+ 					[39m
+    [31m+                                                             [39m
+    [31m+                                                         [39m
+    [31m+                                                     [39m
+    [31m+                                                 [39m
+    [31m+ 				[39m
+    [31m+                                         [39m
+    [31m+ 			[39m
+    [31m+ 				arrow_drop_down[39m
+    [31m+ 					Direcciones[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+                                         [39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+                                             [39m
+    [31m+ 					[39m
+    [31m+                                                     [39m
+    [31m+                                                         [39m
+    [31m+ 						Domicilios[39m
+    [31m+ 					[39m
+    [31m+                                                         [39m
+    [31m+                                                             addAgregar Domicilio[39m
+    [31m+                                                             createModificar Domicilio[39m
+    [31m+                                                             deleteEliminar Domicilio[39m
+    [31m+                                                         [39m
+    [31m+                                                     [39m
+    [31m+                                                     [39m
+    [31m+                                                         [39m
+    [31m+                                                             [39m
+    [31m+ 						[39m
+    [31m+ 							[39m
+    [31m+ 								[39m
+    [31m+ 									 Cód. ClienteCód. DomicilioTipoDirecciónCiudadDepartamentoPaísContactoVálido[39m
+    [31m+ 								[39m
+    [31m+ 							[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_checked1000001118137685AIS13 calle falsa222SiSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS14 calle falsa   NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS11ContractualCalle Test 2   NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS6Contractualasdasdasd   NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS8ContractualCALLE PAU CLARIS  EspañaNoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS9ContractualCalle sin nombre  españaNoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS3Personaldireccion3LisboaLisboaPortugalNoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS10Tarjeta Visa1CALLE RONDA SAN ANTOINI   NoSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS5Tarjeta Visa1direccion5SantigagoSantoagpChileSiSi[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS4Tarjeta Marterdireccion4MontevideoMontevideoURUGUAYSiDomicilio falso[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS12Correspondenciasdf   NoDomicilio inexistente[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS2Correspondenciadireccion2Buenos AireBuenos AiresArgentinaSiDomicilio Invalido[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS7ContractualABAB  NoDomicilio inexistente[39m
+    [31m+ 								[39m
+    [31m+ 									radio_button_unchecked1000001118137685AIS1Contractualdireccion1BCNBCNESPNoSe mudo[39m
+    [31m+ 								[39m
+    [31m+ 							[39m
+    [31m+[39m
+    [31m+ 							[39m
+    [31m+ 						[39m
+    [31m+ 					[39m
+    [31m+                                                         [39m
+    [31m+                                                     [39m
+    [31m+                                                 [39m
+    [31m+ 				[39m
+    [31m+                                         [39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+                         [39m
+    [31m+ 			Datos Socios Económicos[39m
+    [31m+                             [39m
+    [31m+                                 Act. Económica [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                                 Sit. Laboral [39m
+    [31m+                                 Cargo [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                                 Profesión [39m
+    [31m+                                 Ingreso [39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+ 		[39m
+    [31m+                         [39m
+    [31m+ 			Datos Suplementarios[39m
+    [31m+                             [39m
+    [31m+                                 Ingreso [39m
+    [31m+                                 V.I.P [39m
+    [31m+                                 Mandante [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                                 Segmento [39m
+    [31m+                                 Fecha Nac. [39m
+    [31m+                                 Estado Civil [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                                 Nacionalidad [39m
+    [31m+                                 No. de Dependientes [39m
+    [31m+                                 Tipo Cliente [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                                 Empresa [39m
+    [31m+                                 Riesgo Sist. Finan. [39m
+    [31m+                                 Riesgo Entidad [39m
+    [31m+                             [39m
+    [31m+                             [39m
+    [31m+                                 Fecha Ingreso Empleado [39m
+    [31m+                                 Acreedita Haberes [39m
+    [31m+                                 Sucursal [39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+ 		[39m
+    [31m+                     [39m
+    [31m+ 	[39m
+    [31m+ 		[39m
+    [31m+                         [39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Contactos[39m
+    [31m+ 		[39m
+    [31m+                                     [39m
+    [31m+                                         addAgregar Contacto[39m
+    [31m+                                         createModificar Contacto[39m
+    [31m+                                         deleteEliminar Contacto[39m
+    [31m+                                         grid_onExportar[39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						 Núm. ClienteCód. ContactoApellidos y NombreTareaCargo[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+                         [39m
+    [31m+ 			Datos de Localización[39m
+    [31m+[39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 				[39m
+    [31m+ 					arrow_drop_down[39m
+    [31m+ 						Teléfonos[39m
+    [31m+ 					[39m
+    [31m+ 						[39m
+    [31m+                                             [39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+                                                 [39m
+    [31m+ 						[39m
+    [31m+                                                         [39m
+    [31m+                                                             [39m
+    [31m+ 							Teléfonos[39m
+    [31m+ 						[39m
+    [31m+                                                             [39m
+    [31m+                                                                 add[39m
+    [31m+                                                                 create[39m
+    [31m+                                                                 delete[39m
+    [31m+                                                             [39m
+    [31m+                                                         [39m
+    [31m+                                                         [39m
+    [31m+                                                             [39m
+    [31m+                                                                 [39m
+    [31m+ 							[39m
+    [31m+ 								[39m
+    [31m+ 									[39m
+    [31m+ 										 Cod. ClienteTipo de TelefénoTeléfonoContactoValido[39m
+    [31m+ 									[39m
+    [31m+ 								[39m
+    [31m+ 							[39m
+    [31m+ 						[39m
+    [31m+                                                             [39m
+    [31m+                                                         [39m
+    [31m+                                                     [39m
+    [31m+ 					[39m
+    [31m+                                             [39m
+    [31m+ 				[39m
+    [31m+ 					arrow_drop_down[39m
+    [31m+ 						eMails[39m
+    [31m+ 					[39m
+    [31m+ 						[39m
+    [31m+                                             [39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+                                                 [39m
+    [31m+ 						[39m
+    [31m+                                                         [39m
+    [31m+                                                             [39m
+    [31m+ 							Emails[39m
+    [31m+ 						[39m
+    [31m+                                                             [39m
+    [31m+                                                                 add[39m
+    [31m+                                                                 create[39m
+    [31m+                                                                 delete[39m
+    [31m+                                                             [39m
+    [31m+                                                             [39m
+    [31m+                                                                 [39m
+    [31m+                                                                     [39m
+    [31m+ 							[39m
+    [31m+ 								[39m
+    [31m+ 									[39m
+    [31m+ 										 Cód. ClienteCód. eMailTipoeMailContactoValido[39m
+    [31m+ 									[39m
+    [31m+ 								[39m
+    [31m+ 							[39m
+    [31m+ 						[39m
+    [31m+                                                                 [39m
+    [31m+                                                             [39m
+    [31m+                                                         [39m
+    [31m+                                                     [39m
+    [31m+ 					[39m
+    [31m+                                             [39m
+    [31m+ 				[39m
+    [31m+ 					arrow_drop_down[39m
+    [31m+ 						Direcciones[39m
+    [31m+ 					[39m
+    [31m+ 						[39m
+    [31m+                                             [39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+                                                 [39m
+    [31m+ 						[39m
+    [31m+                                                         [39m
+    [31m+                                                             [39m
+    [31m+ 							Domicilios[39m
+    [31m+ 						[39m
+    [31m+                                                             [39m
+    [31m+                                                                 add[39m
+    [31m+                                                                 create[39m
+    [31m+                                                                 delete[39m
+    [31m+                                                             [39m
+    [31m+                                                         [39m
+    [31m+                                                         [39m
+    [31m+                                                             [39m
+    [31m+                                                                 [39m
+    [31m+ 							[39m
+    [31m+ 								[39m
+    [31m+ 									[39m
+    [31m+ 										 Cód. ClienteCód. DomicilioTipoDirecciónCiudadDepartamentoPaísContactoVálido[39m
+    [31m+ 									[39m
+    [31m+ 								[39m
+    [31m+ 							[39m
+    [31m+ 						[39m
+    [31m+                                                             [39m
+    [31m+                                                         [39m
+    [31m+                                                     [39m
+    [31m+ 					[39m
+    [31m+                                             [39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+                                 [39m
+    [31m+                             [39m
+    [31m+[39m
+    [31m+                         [39m
+    [31m+ 		[39m
+    [31m+                     [39m
+    [31m+ 	[39m
+    [31m+ 		[39m
+    [31m+                         [39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Pagos[39m
+    [31m+ 		[39m
+    [31m+                                     [39m
+    [31m+                                         grid_onExportar[39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						ObligaciónMonedaFecha ValorFecha EntradaNivel MoraNro.CuotaFecha SistemaTotalCapitalInt. NormalInt. MoratorioImpuestos PagadosSeguros PagadoGtos. cobranza pag.OtrosUsuario[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+                     [39m
+    [31m+ 	[39m
+    [31m+ 		[39m
+    [31m+                         [39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Relaciones[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						 ObligaciónMonedaApellidos y NombreFiguraNúm. Cliente[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Garantías[39m
+    [31m+ 		[39m
+    [31m+                                     [39m
+    [31m+                                         addAgregar[39m
+    [31m+                                         visibilityConsultar[39m
+    [31m+                                         createModificar[39m
+    [31m+                                         deleteEliminar[39m
+    [31m+                                         [39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						 SecuenciaTipo GarantíaProductoValorVálidoMonedaDescripción[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+                     [39m
+    [31m+ 	[39m
+    [31m+ 		[39m
+    [31m+                         [39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Personas[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						 Núm. ClienteApellidos y Nombre[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Scoring[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						Cód. ClienteFecha EvaluaciónTipoGrupoProbabilidadPuntos[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+                     [39m
+    [31m+ 	[39m
+    [31m+ 		[39m
+    [31m+                         [39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Histórico Obligaciones[39m
+    [31m+ 		[39m
+    [31m+                                     [39m
+    [31m+                                         grid_onExportar[39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						ObligacónMonedaUlt. EntradaUlt. SalidaVeces MoraProm. PagoProm. Pago OKMax. Días MoraMed. Días Mora[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Histórico Pagos[39m
+    [31m+ 		[39m
+    [31m+                                     [39m
+    [31m+                                         grid_onExportar[39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						ObligacionFecha ValorFecha EntradaNivel MoraNro. CuotaFecha SistemaTotalCapitalInt. NormalInt. MoratorioImpuestos PagadosSeguros PagadoGtos. Cobranza Pag.OtrosUsuario[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Histórico Gestiones[39m
+    [31m+ 		[39m
+    [31m+                                     [39m
+    [31m+                                         [39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+ 			[39m
+    [31m+ 				[39m
+    [31m+ 					[39m
+    [31m+ 						FechaHoraTARObligaciónFiguraUsuarioNivel Mora Ant.Nivel Mora NuevaCostoNota[39m
+    [31m+ 					[39m
+    [31m+ 				[39m
+    [31m+ 			[39m
+    [31m+ 		[39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+                     [39m
+    [31m+ 	[39m
+    [31m+             [39m
+    [31m+     [39m
+    [31m+[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+ 			[39m
+    [31m+         [39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+         [39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+ 			[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+         [39m
+    [31m+ 		[39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+          [39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+ 			[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+         [39m
+    [31m+ 		[39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+          [39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+ 			[39m
+    [31m+         [39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+         [39m
+    [31m+[39m
+    [31m+ 			[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+     [39m
+    [31m+ 		[39m
+    [31m+             [39m
+    [31m+[39m
+    [31m+ 		[39m
+    [31m+         [39m
+    [31m+ 	[39m
+    [31m+[39m
+    [31m+         [39m
+    [31m+         [39m
+    [31m+     [39m
+    [31m+             [39m
+    [31m+             [39m
+    [31m+             [39m
+    [31m+                 [39m
+    [31m+ 	[39m
+    [31m+ 		settings[39m
+    [31m+ 			Acción / Agendar[39m
+    [31m+ 		[39m
+    [31m+ 			[39m
+    [31m+                         [39m
+    [31m+ 		[39m
+    [31m+ 	[39m
+    [31m+ 		[39m
+    [31m+                             [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Acción[39m
+    [31m+                                         [39m
+    [31m+                                             Acción Ejecutar * NingunoACAR - Asignar Gestor CartasAEMA - Asignar Gestor EmailANC5 - Asignacion Ciclo 5ANC6 - Asignacion Ciclo 6ANC7 - Asignacion Ciclo 7ANGC - Asignacion Gerente CobranzasARPU - Asignar al Rol de PruebasASMS - Asignar Gestor SMSCAT1 - Carta Tipo 1CAT3 - Carta Tipo 3EREC - Mail ReclamoIATM - Reclamo Via ATMIBUR - Cliente Informado en BureauICRE - Cliente RefinanciadoOACL - Cliente LocalizadoOAPJ - Analizar Pase a Gestion JudicialOARC - Refinanciacion CanceladaOATM - Reclamo vÃ­a ATMOBDL - Buscar Datos LocalizacionOBTC - Bloquear TC y pasar a GestionOCEN - Carpeta EnviadaOCNL - Carpeta No LocalizadaOCRE - Oferta de Convenio RechazadaOCSO - Carpeta SolicitadaODIN - Deudor InubicableODNL - Datos Localizacion No LocalizadosOECA - Cerrar Cuenta y Enviar Carpeta Recup ActOGRE - Generar RefinanciacionORAC - Refinanciacion AceptadaORAS - Revisar TC y ajustar saldosORRE - Refinanciacion RealizadaRADE - Cliente se contacto pero no defineRADP - Dice que pagoRANP - Deudor No Puede PagarRANQ - Deudor no quiere pagarRANR - Deudor no reconoce la deudaRARA - Llamo en forma agresivaRAVL - Pidio que se lo vuelva a llamarRPCD - R.Sis. Cobranza Judicial DesestimadaSREC - SMS ReclamoTACA - Contestador AutomaticoTADE - Deudor Contactado pero no resuelveTADP - Dice que pagoTAFA - Deudor ha fallecidoTAFX - Señal de FaxTAMO - ModemTAMP - Se Dejo Mensaje Que PagueTANC - Ocupado o No ContestaTANE - Numero ErroneoTANP - Deudor No Puede PagarTANQ - Deudor no quiere pagarTANR - Deudor no reconoce la deudaTARA - Respuesta AgresivaTATE - Telefono Fuera de ServicioTAVL - Pidio que se lo vuelva a llamarTINV - Telefonos Cliente InvalidosVADE - Cliente ContactadoVADP - Dice que pagoVAMP - Se Dejo Mensaje Que PagueVANQ - Deudor no quiere pagarVANR - Deudor no reconoce la deudaVARA - Respuesta AgresivaVAVL - Pidio que se lo vuelva a visitarNinguno  [39m
+    [31m+                                             Figura * Avalista PrincipalNo ProcedeTitular PrincipalTodas las FigurasTodos los AvalistasTodos los TitularesTitular Principal  [39m
+    [31m+                                         [39m
+    [31m+                                         [39m
+    [31m+                                             Obligación * Gestión a clienteV000000000218DV000000000218PGestión a cliente  [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                 event_noteNota Ejecutar[39m
+    [31m+                                             [39m
+    [31m+                                         [39m
+    [31m+                                     [39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+ 			Agendar[39m
+    [31m+                                         [39m
+    [31m+                                             Acción a Agendar * NingunoAlerta Compromiso de Pago IncumplidoAnalizar Pase a Gestion JudicialBloquear TC y pasar a GestionBuscar Datos LocalizacionCerrar Cuenta y Enviar Carpeta Recup ActCerrar CuentasConvenio Extrajudicial Realizado1easdasdassdasGenerar RefinanciacionGestión DigitalGestionar ImpagoGestionar SobregiroLista Castigo Mora 0Llamada advertencia pase a judicialLlamada por incumplimiento de promesaLlamada reclamo deuda tipo 1Llamada reclamo deuda tipo 2Llamada reclamo deuda tipo 3Llamada reclamo deuda tipo 5Mail ReclamoModelo FraudeOfrecer Convenio ExtrajudicialPropuesta refin. y adver. incl ClearingRefinan.: Advertencia incl en ClearingRefinan.: Advertencia pase a judicialRevisar CasoRevisar TC y ajustar saldosSuspensión PólizaVolver a Presentar BancoNinguno  [39m
+    [31m+                                             Fecha * [39m
+    [31m+                                             Hora * [39m
+    [31m+                                         [39m
+    [31m+                                         [39m
+    [31m+                                             Destino * DueñoBackoffice Tarjetas de CreditoBolson de Clientes Inubicables1Call Center ExternoCobrador SeniorComite JudicialControl TotalConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalJudicialMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasRol de TestSegurosSkip TraceSoporte AISSupervisor Call CenterDueño  [39m
+    [31m+                                             Usuarios * SOSA JUAN JOSESOSA JUAN JOSE  [39m
+    [31m+                                             Figura * Avalista PrincipalNo ProcedeTitular PrincipalTodas las FigurasTodos los AvalistasTodos los TitularesTitular Principal  [39m
+    [31m+                                             [39m
+    [31m+                                                 [39m
+    [31m+                                                 event_noteNota Agendar[39m
+    [31m+                                             [39m
+    [31m+                                         [39m
+    [31m+                                     [39m
+    [31m+ 		[39m
+    [31m+                                 [39m
+    [31m+                                 [39m
+    [31m+                                     [39m
+    [31m+                                         Ejecutar[39m
+    [31m+                                     [39m
+    [31m+                                 [39m
+    [31m+                             [39m
+    [31m+                         [39m
+    [31m+ 	[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+             [39m
+    [31m+         [39m
+    [31m+[39m
+    [31m+[39m
+    [31m+     [39m
+    [31m+ 	[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+     [39m
+    [31m+         [39m
+    [31m+         [39m
+    [31m+             [39m
+    [31m+                 [39m
+    [31m+                     [39m
+    [31m+                 [39m
+    [31m+                 [39m
+    [31m+                     [39m
+    [31m+                 [39m
+    [31m+                 [39m
+    [31m+                     [39m
+    [31m+                 [39m
+    [31m+             [39m
+    [31m+         [39m
+    [31m+     [39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+
+    Call log:
+    [2m  - P03: página debe contener "Provincia" with timeout 10000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    13 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m       - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirDetalle de ClienteUsuario:USUARIO TESTPendiente de Hoy:0Pendiente de otros Días:3Realizado Hoy:0Total en Agenda:3Barrido Realizado:0%Clientes Asignados:10430Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            chevron_leftbúsqueda de clientes[22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m        [22m
+    [2m		[22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                        Apellidos y Nombre [22m
+    [2m                        Usuario [22m
+    [2m                        Documento [22m
+    [2m                        Perfil [22m
+    [2m                        Núm. Cliente [22m
+    [2m                        Nivel de Mora [22m
+    [2m                        Categoria Cliente [22m
+    [2m                        Tipo Cliente [22m
+    [2m                        [22m
+    [2m                        Corredor Principal: [22m
+    [2m                        Riesgo de Cliente: [22m
+    [2m                    [22m
+    [2m                    [22m
+    [2m                        Atraso Total [22m
+    [2m                    [22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m                                        [22m
+    [2m				[22m
+    [2m					[22m
+    [2m						[22m
+    [2m							Teléfono[22m
+    [2m						[22m
+    [2m					[22m
+    [2m						[22m
+    [2m							Fijo: 598  89095090[22m
+    [2m						[22m
+    [2m							Trabajo: 598 66 13213216[22m
+    [2m						[22m
+    [2m							Móvil: 598  [22m
+    [2m						[22m
+    [2m							Móvil: 598  123[22m
+    [2m						[22m
+    [2m							Móvil: 598  1111[22m
+    [2m						[22m
+    [2m							Móvil: 598  789[22m
+    [2m						[22m
+    [2m							Móvil: 598  123123[22m
+    [2m						[22m
+    [2m							Móvil: 598  123[22m
+    [2m						[22m
+    [2m							Fijo: 34 555 65465465465654[22m
+    [2m						[22m
+    [2m							Fijo: 34  [22m
+    [2m						[22m
+    [2m							Móvil: 34 55555[22m
+    [2m						[22m
+    [2m							No Identificado: 888 6665554442[22m
+    [2m						[22m
+    [2m							Trabajo: 34  666555444[22m
+    [2m						[22m
+    [2m					[22m
+    [2m[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m		[22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                        COMPROMISOS[22m
+    [2m                        Convenios[22m
+    [2m                        ESTADOS ESPECIALES[22m
+    [2m                        [22m
+    [2m                        PASAR A JUDICIAL[22m
+    [2m                        Judicial[22m
+    [2m                        Documentación[22m
+    [2m                        FICHA[22m
+    [2m                        NOTAS[22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m	[22m
+    [2m    [22m
+    [2m[22m
+    [2m    [22m
+    [2m            [22m
+    [2m                [22m
+    [2m	PVIG[22m
+    [2m	PINC[22m
+    [2m	DLOC[22m
+    [2m	INAC[22m
+    [2m	CREF[22m
+    [2m	IATM[22m
+    [2m[22m
+    [2m[22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m        [22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m                [22m
+    [2m	Datos GeneralesRelacionesContactosPagosGarantíasScoringDatos Historicos[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m		[22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Obligación *[22m
+    [2m		[22m
+    [2m                                    [22m
+    [2m                                        grid_onExportar[22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						  Cód. ObligaciónProductoDías MoraMonedaRegiónOficinaFecha InicioFecha Venc.Fecha MoraFecha Últ. PagoMonto Últ. PagoFecha CastigoMonto CastigoFec. Prim. ImpagoTipo Cuenta DébitoCuenta DébitoEs JudicialFecha Prox VencImporte Prox VencFecha MoraMotivo No CobroCanal de ventaMedio cobro últ. pagoDéb. AutomáticoSaldo a favorCuotaMonto cuotaCorredorNro. cuotas[22m
+    [2m					[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						radio_button_checkedassignment V000000000218PTarjeta Visa0Pesos01 - REGIÓN 0101 - OFICINA 0125/06/1992  14/10/20150,00 0,00  0000000No000000000 Pase a Judicial  - 120.491,54 2[22m
+    [2m					[22m
+    [2m						radio_button_uncheckedassignment V000000000218DTarjeta Visa0Dolares USA01 - REGIÓN 0101 - OFICINA 0125/06/1992  14/10/20150,00 0,00  0000000No000000000 Revisar Convenio y Confirmar Caida  -    0[22m
+    [2m					[22m
+    [2m				[22m
+    [2m[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Gestiones[22m
+    [2m		[22m
+    [2m                                    [22m
+    [2m                                        event_noteVer Comentarios[22m
+    [2m                                        grid_onGestiones[22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						FechaHoraTARNotaFiguraUsuarioObligación[22m
+    [2m					[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						30/03/202616:27:04RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218P[22m
+    [2m					[22m
+    [2m						30/03/202616:27:03RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						30/03/202616:27:03ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						23/02/202613:11:27RADP - Dice que pago prueba de nota[22m
+    [2mT01 - Titular PrincipalUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						27/11/202520:32:42RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						27/11/202520:32:41ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						13/01/202513:05:53RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218P[22m
+    [2m					[22m
+    [2m						13/01/202513:05:52RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						13/01/202513:05:52ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						08/11/202405:39:52ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						08/11/202405:20:51ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						08/11/202405:19:49ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						08/11/202405:18:51ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						08/11/202405:10:51ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						29/10/202409:29:09ACAT - Cliente ha añadido dato de teléfono NP - No ProcedeAIS VICTORA Cliente[22m
+    [2m					[22m
+    [2m						11/09/202414:00:29COTO - Compromiso de Pago Total T01 - Titular Principal22A Cliente[22m
+    [2m					[22m
+    [2m						11/09/202413:37:30COPA - Compromiso de Pago Parcial T01 - Titular PrincipalUSUARIO TESTV000000000218P[22m
+    [2m					[22m
+    [2m						11/09/202413:37:27COPA - Compromiso de Pago Parcial T01 - Titular PrincipalUSUARIO TESTV000000000218P[22m
+    [2m					[22m
+    [2m						11/09/202413:37:26COEL - Compromiso Eliminado T01 - Titular PrincipalUSUARIO TESTV000000000218P[22m
+    [2m					[22m
+    [2m						11/09/202413:27:40COTO - Compromiso de Pago Total T01 - Titular PrincipalUSUARIO TESTV000000000218P[22m
+    [2m					[22m
+    [2m						12/07/202412:25:18CAT1 - Carta Tipo 1 T01 - Titular PrincipalAIS VICTORA Cliente[22m
+    [2m					[22m
+    [2m						18/06/202416:26:51RARA - Llamo en forma agresiva T01 - Titular PrincipalAIS VICTORA Cliente[22m
+    [2m					[22m
+    [2m						16/05/202416:06:15ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						16/05/202416:01:18ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						16/05/202415:53:37ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						10/04/202408:36:54ACAT - Cliente ha añadido dato de teléfono NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						10/04/202408:31:03ACAE - Cliente ha añadido dato de email NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						08/04/202408:15:37ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						10/03/2024 RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218P[22m
+    [2m					[22m
+    [2m						10/03/2024 RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						10/03/2024 RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218P[22m
+    [2m					[22m
+    [2m						10/03/2024 RSDJ - Pase a Judicial T01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						10/03/202404:06:20ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						10/03/202403:50:10ORCO - Revisar Convenio y Confirmar CaidaRemesa cortadaT01 - Titular PrincipalUSUARIO TESTV000000000218D[22m
+    [2m					[22m
+    [2m						19/12/202310:35:59ACMT - Cliente ha modificado dato de teléfono NP - No ProcedeAIS VICTORA Cliente[22m
+    [2m					[22m
+    [2m						19/12/202309:24:11ACAT - Cliente ha añadido dato de teléfono NP - No ProcedeSANZ ALEJANDRA1A Cliente[22m
+    [2m					[22m
+    [2m						18/12/202310:06:22ACAE - Cliente ha añadido dato de email NP - No ProcedeSANZ ALEJANDRA1A Cliente[22m
+    [2m					[22m
+    [2m						18/12/202310:05:52ACAT - Cliente ha añadido dato de teléfono NP - No ProcedeSANZ ALEJANDRA1A Cliente[22m
+    [2m					[22m
+    [2m						21/09/202312:00:16ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202312:00:06ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:59:12ANOC - Asignación Operador Call Center NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:58:02ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:56:46ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:55:39ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:55:03ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:53:59ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:53:11ANOC - Asignación Operador Call Center NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:51:57ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:30:45ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:26:34ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:02:06ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:01:52ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:01:19ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:01:13ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m						21/09/202311:01:04ANGC - Asignacion Gerente Cobranzas NP - No ProcedeUSUARIO TESTA Cliente[22m
+    [2m					[22m
+    [2m				[22m
+    [2m[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Detalle Deuda[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m                                        [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Saldo Pasivo[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                        [22m
+    [2m                                        [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Pasivo Vista[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			 [22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Pasivo No Vista[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			 [22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m                                                        [22m
+    [2m			Deuda[22m
+    [2m		[22m
+    [2m                                                    [22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Fecha de Entrada[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			18/11/2015[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Fecha de Mora[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			 [22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Días de Mora[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			0[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Saldo Deuda[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			25.614,43[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Saldo Capital[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			25.482,98[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Atraso Total[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			250,00[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Atraso Total (Conv)[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			250,00[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Atraso Capital[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			0,00[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Atraso Int. Normal[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			0,00[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Atraso Int. Puniorio[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			0,00[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Atraso Gtos. Cobranza[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			0,00[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Atraso Seguro[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m                                                        [22m
+    [2m			0,00[22m
+    [2m		[22m
+    [2m                                                    [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Atraso Impuesto[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			0,00[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Atraso Otros Conceptos[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			0,00[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			Monto mínimo a pagar[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                                [22m
+    [2m                                                    [22m
+    [2m			0,00[22m
+    [2m		[22m
+    [2m                                                [22m
+    [2m                                            [22m
+    [2m                                        [22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m	[22m
+    [2m		[22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Relaciones[22m
+    [2m		[22m
+    [2m                                    [22m
+    [2m                                        grid_onExportar[22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						 ObligaciónNúm. ClienteApellidos y NombreDocumentoSexoFigura[22m
+    [2m					[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						radio_button_checkedV000000000218D1000001118137685APELLIDO DE TEST  NOMBRE DE TEST10000011181376851000001118137685 T01 - Titular[22m
+    [2m					[22m
+    [2m						radio_button_uncheckedV000000000218P1000001118137685APELLIDO DE TEST  NOMBRE DE TEST10000011181376851000001118137685 T01 - Titular[22m
+    [2m					[22m
+    [2m				[22m
+    [2m[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				arrow_drop_down[22m
+    [2m					Teléfonos[22m
+    [2m				[22m
+    [2m					[22m
+    [2m                                        [22m
+    [2m				[22m
+    [2m			[22m
+    [2m				[22m
+    [2m                                            [22m
+    [2m					[22m
+    [2m                                                    [22m
+    [2m                                                        [22m
+    [2m						Teléfonos[22m
+    [2m					[22m
+    [2m                                                        [22m
+    [2m                                                            addAgregar[22m
+    [2m                                                            createModificar[22m
+    [2m                                                            deleteEliminar[22m
+    [2m                                                        [22m
+    [2m                                                    [22m
+    [2m                                                    [22m
+    [2m                                                        [22m
+    [2m                                                            [22m
+    [2m						[22m
+    [2m							[22m
+    [2m								[22m
+    [2m									 Cod. ClienteTipo de TeléfonoTeléfonoContactoValido[22m
+    [2m								[22m
+    [2m							[22m
+    [2m								[22m
+    [2m									radio_button_checked1000001118137685Trabajo34666555444SiSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685No Identificado8886665554442SiSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo59889095090NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo5986613213216NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil598NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil598123NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil5981111NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo34NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil3455555NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil598789NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil598123123NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil598123NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo3455565465465465654NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo4449999789456123NoTelefono falso[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo1212121212121SiTelefono invalido[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo88896966123456789Si [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo99996966123456789Si [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo00096966123456789Si [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo11196966123456789Si [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo00096966123456789Si [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo22296966123456789Si [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo66696966123456789Si [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo34121000000SiTelefono inexistente[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo262252523336666336SiTelefono falso[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo262933526665SiTelefono falso[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo4444898989SiTelefono invalido[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil55566666789456123Si [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo252933526665No [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo262933526665No [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil3455599988NoTelefono invalido[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil598NoTelefono inexistente[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Trabajo5989999999NoTelefono inexistente[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Fijo598123123NoTelefono inexistente[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil No [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685Móvil NoTelefono inexistente[22m
+    [2m								[22m
+    [2m							[22m
+    [2m[22m
+    [2m							[22m
+    [2m						[22m
+    [2m					[22m
+    [2m                                                        [22m
+    [2m                                                    [22m
+    [2m                                                [22m
+    [2m				[22m
+    [2m                                        [22m
+    [2m			[22m
+    [2m				arrow_drop_down[22m
+    [2m					eMails[22m
+    [2m				[22m
+    [2m					[22m
+    [2m                                        [22m
+    [2m				[22m
+    [2m			[22m
+    [2m				[22m
+    [2m                                            [22m
+    [2m					[22m
+    [2m                                                    [22m
+    [2m                                                        [22m
+    [2m						eMails[22m
+    [2m					[22m
+    [2m                                                        [22m
+    [2m                                                            addAgregar[22m
+    [2m                                                            createModificar[22m
+    [2m                                                            deleteEliminar[22m
+    [2m                                                        [22m
+    [2m                                                        [22m
+    [2m                                                            [22m
+    [2m                                                                [22m
+    [2m						[22m
+    [2m							[22m
+    [2m								[22m
+    [2m									 Cód. ClienteCód. eMailTipoeMailContactoValido[22m
+    [2m								[22m
+    [2m							[22m
+    [2m								[22m
+    [2m									radio_button_checked1000001118137685AIS9Particularparticulares.pablo@ais.comNoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS12Comercial123NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS6Particularprocu@ais.comSiSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS8Particularmercedes@concesionario.comSiSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS11Comercialtest@test.comSiSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS5Comercialais@ais.comSiSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS7Comercialisaac-garcia@ais-int.comSiSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS2Particularemail@mail.comNo [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS10ComercialasdasdffNoE-mail inexistente[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS4Comercialais@ais.comNoE-mail inexistente[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS1Particularemail@mail.comSi [22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS3Comercialtest@test.comSiE-mail falso[22m
+    [2m								[22m
+    [2m							[22m
+    [2m[22m
+    [2m							[22m
+    [2m						[22m
+    [2m					[22m
+    [2m                                                            [22m
+    [2m                                                        [22m
+    [2m                                                    [22m
+    [2m                                                [22m
+    [2m				[22m
+    [2m                                        [22m
+    [2m			[22m
+    [2m				arrow_drop_down[22m
+    [2m					Direcciones[22m
+    [2m				[22m
+    [2m					[22m
+    [2m                                        [22m
+    [2m				[22m
+    [2m			[22m
+    [2m				[22m
+    [2m                                            [22m
+    [2m					[22m
+    [2m                                                    [22m
+    [2m                                                        [22m
+    [2m						Domicilios[22m
+    [2m					[22m
+    [2m                                                        [22m
+    [2m                                                            addAgregar Domicilio[22m
+    [2m                                                            createModificar Domicilio[22m
+    [2m                                                            deleteEliminar Domicilio[22m
+    [2m                                                        [22m
+    [2m                                                    [22m
+    [2m                                                    [22m
+    [2m                                                        [22m
+    [2m                                                            [22m
+    [2m						[22m
+    [2m							[22m
+    [2m								[22m
+    [2m									 Cód. ClienteCód. DomicilioTipoDirecciónCiudadDepartamentoPaísContactoVálido[22m
+    [2m								[22m
+    [2m							[22m
+    [2m								[22m
+    [2m									radio_button_checked1000001118137685AIS13 calle falsa222SiSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS14 calle falsa   NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS11ContractualCalle Test 2   NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS6Contractualasdasdasd   NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS8ContractualCALLE PAU CLARIS  EspañaNoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS9ContractualCalle sin nombre  españaNoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS3Personaldireccion3LisboaLisboaPortugalNoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS10Tarjeta Visa1CALLE RONDA SAN ANTOINI   NoSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS5Tarjeta Visa1direccion5SantigagoSantoagpChileSiSi[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS4Tarjeta Marterdireccion4MontevideoMontevideoURUGUAYSiDomicilio falso[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS12Correspondenciasdf   NoDomicilio inexistente[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS2Correspondenciadireccion2Buenos AireBuenos AiresArgentinaSiDomicilio Invalido[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS7ContractualABAB  NoDomicilio inexistente[22m
+    [2m								[22m
+    [2m									radio_button_unchecked1000001118137685AIS1Contractualdireccion1BCNBCNESPNoSe mudo[22m
+    [2m								[22m
+    [2m							[22m
+    [2m[22m
+    [2m							[22m
+    [2m						[22m
+    [2m					[22m
+    [2m                                                        [22m
+    [2m                                                    [22m
+    [2m                                                [22m
+    [2m				[22m
+    [2m                                        [22m
+    [2m			[22m
+    [2m		[22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m			Datos Socios Económicos[22m
+    [2m                            [22m
+    [2m                                Act. Económica [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Sit. Laboral [22m
+    [2m                                Cargo [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Profesión [22m
+    [2m                                Ingreso [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m		[22m
+    [2m                        [22m
+    [2m			Datos Suplementarios[22m
+    [2m                            [22m
+    [2m                                Ingreso [22m
+    [2m                                V.I.P [22m
+    [2m                                Mandante [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Segmento [22m
+    [2m                                Fecha Nac. [22m
+    [2m                                Estado Civil [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Nacionalidad [22m
+    [2m                                No. de Dependientes [22m
+    [2m                                Tipo Cliente [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Empresa [22m
+    [2m                                Riesgo Sist. Finan. [22m
+    [2m                                Riesgo Entidad [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Fecha Ingreso Empleado [22m
+    [2m                                Acreedita Haberes [22m
+    [2m                                Sucursal [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m		[22m
+    [2m                    [22m
+    [2m	[22m
+    [2m		[22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Contactos[22m
+    [2m		[22m
+    [2m                                    [22m
+    [2m                                        addAgregar Contacto[22m
+    [2m                                        createModificar Contacto[22m
+    [2m                                        deleteEliminar Contacto[22m
+    [2m                                        grid_onExportar[22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						 Núm. ClienteCód. ContactoApellidos y NombreTareaCargo[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m			Datos de Localización[22m
+    [2m[22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m				[22m
+    [2m					arrow_drop_down[22m
+    [2m						Teléfonos[22m
+    [2m					[22m
+    [2m						[22m
+    [2m                                            [22m
+    [2m					[22m
+    [2m				[22m
+    [2m					[22m
+    [2m                                                [22m
+    [2m						[22m
+    [2m                                                        [22m
+    [2m                                                            [22m
+    [2m							Teléfonos[22m
+    [2m						[22m
+    [2m                                                            [22m
+    [2m                                                                add[22m
+    [2m                                                                create[22m
+    [2m                                                                delete[22m
+    [2m                                                            [22m
+    [2m                                                        [22m
+    [2m                                                        [22m
+    [2m                                                            [22m
+    [2m                                                                [22m
+    [2m							[22m
+    [2m								[22m
+    [2m									[22m
+    [2m										 Cod. ClienteTipo de TelefénoTeléfonoContactoValido[22m
+    [2m									[22m
+    [2m								[22m
+    [2m							[22m
+    [2m						[22m
+    [2m                                                            [22m
+    [2m                                                        [22m
+    [2m                                                    [22m
+    [2m					[22m
+    [2m                                            [22m
+    [2m				[22m
+    [2m					arrow_drop_down[22m
+    [2m						eMails[22m
+    [2m					[22m
+    [2m						[22m
+    [2m                                            [22m
+    [2m					[22m
+    [2m				[22m
+    [2m					[22m
+    [2m                                                [22m
+    [2m						[22m
+    [2m                                                        [22m
+    [2m                                                            [22m
+    [2m							Emails[22m
+    [2m						[22m
+    [2m                                                            [22m
+    [2m                                                                add[22m
+    [2m                                                                create[22m
+    [2m                                                                delete[22m
+    [2m                                                            [22m
+    [2m                                                            [22m
+    [2m                                                                [22m
+    [2m                                                                    [22m
+    [2m							[22m
+    [2m								[22m
+    [2m									[22m
+    [2m										 Cód. ClienteCód. eMailTipoeMailContactoValido[22m
+    [2m									[22m
+    [2m								[22m
+    [2m							[22m
+    [2m						[22m
+    [2m                                                                [22m
+    [2m                                                            [22m
+    [2m                                                        [22m
+    [2m                                                    [22m
+    [2m					[22m
+    [2m                                            [22m
+    [2m				[22m
+    [2m					arrow_drop_down[22m
+    [2m						Direcciones[22m
+    [2m					[22m
+    [2m						[22m
+    [2m                                            [22m
+    [2m					[22m
+    [2m				[22m
+    [2m					[22m
+    [2m                                                [22m
+    [2m						[22m
+    [2m                                                        [22m
+    [2m                                                            [22m
+    [2m							Domicilios[22m
+    [2m						[22m
+    [2m                                                            [22m
+    [2m                                                                add[22m
+    [2m                                                                create[22m
+    [2m                                                                delete[22m
+    [2m                                                            [22m
+    [2m                                                        [22m
+    [2m                                                        [22m
+    [2m                                                            [22m
+    [2m                                                                [22m
+    [2m							[22m
+    [2m								[22m
+    [2m									[22m
+    [2m										 Cód. ClienteCód. DomicilioTipoDirecciónCiudadDepartamentoPaísContactoVálido[22m
+    [2m									[22m
+    [2m								[22m
+    [2m							[22m
+    [2m						[22m
+    [2m                                                            [22m
+    [2m                                                        [22m
+    [2m                                                    [22m
+    [2m					[22m
+    [2m                                            [22m
+    [2m				[22m
+    [2m			[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m[22m
+    [2m                        [22m
+    [2m		[22m
+    [2m                    [22m
+    [2m	[22m
+    [2m		[22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Pagos[22m
+    [2m		[22m
+    [2m                                    [22m
+    [2m                                        grid_onExportar[22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						ObligaciónMonedaFecha ValorFecha EntradaNivel MoraNro.CuotaFecha SistemaTotalCapitalInt. NormalInt. MoratorioImpuestos PagadosSeguros PagadoGtos. cobranza pag.OtrosUsuario[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m	[22m
+    [2m		[22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Relaciones[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						 ObligaciónMonedaApellidos y NombreFiguraNúm. Cliente[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Garantías[22m
+    [2m		[22m
+    [2m                                    [22m
+    [2m                                        addAgregar[22m
+    [2m                                        visibilityConsultar[22m
+    [2m                                        createModificar[22m
+    [2m                                        deleteEliminar[22m
+    [2m                                        [22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						 SecuenciaTipo GarantíaProductoValorVálidoMonedaDescripción[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m	[22m
+    [2m		[22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Personas[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						 Núm. ClienteApellidos y Nombre[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Scoring[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						Cód. ClienteFecha EvaluaciónTipoGrupoProbabilidadPuntos[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m	[22m
+    [2m		[22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Histórico Obligaciones[22m
+    [2m		[22m
+    [2m                                    [22m
+    [2m                                        grid_onExportar[22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						ObligacónMonedaUlt. EntradaUlt. SalidaVeces MoraProm. PagoProm. Pago OKMax. Días MoraMed. Días Mora[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Histórico Pagos[22m
+    [2m		[22m
+    [2m                                    [22m
+    [2m                                        grid_onExportar[22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						ObligacionFecha ValorFecha EntradaNivel MoraNro. CuotaFecha SistemaTotalCapitalInt. NormalInt. MoratorioImpuestos PagadosSeguros PagadoGtos. Cobranza Pag.OtrosUsuario[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Histórico Gestiones[22m
+    [2m		[22m
+    [2m                                    [22m
+    [2m                                        [22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m			[22m
+    [2m				[22m
+    [2m					[22m
+    [2m						FechaHoraTARObligaciónFiguraUsuarioNivel Mora Ant.Nivel Mora NuevaCostoNota[22m
+    [2m					[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m    [22m
+    [2m[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m			[22m
+    [2m        [22m
+    [2m[22m
+    [2m			[22m
+    [2m    [22m
+    [2m		[22m
+    [2m[22m
+    [2m			[22m
+    [2m        [22m
+    [2m[22m
+    [2m			[22m
+    [2m    [22m
+    [2m		[22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m			[22m
+    [2m            [22m
+    [2m[22m
+    [2m			[22m
+    [2m        [22m
+    [2m		[22m
+    [2m[22m
+    [2m			[22m
+    [2m         [22m
+    [2m[22m
+    [2m			[22m
+    [2m    [22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m			[22m
+    [2m            [22m
+    [2m[22m
+    [2m			[22m
+    [2m        [22m
+    [2m		[22m
+    [2m[22m
+    [2m			[22m
+    [2m         [22m
+    [2m[22m
+    [2m			[22m
+    [2m    [22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m			[22m
+    [2m        [22m
+    [2m[22m
+    [2m			[22m
+    [2m    [22m
+    [2m		[22m
+    [2m[22m
+    [2m			[22m
+    [2m        [22m
+    [2m[22m
+    [2m			[22m
+    [2m    [22m
+    [2m		[22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m[22m
+    [2m		[22m
+    [2m        [22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m            [22m
+    [2m            [22m
+    [2m            [22m
+    [2m                [22m
+    [2m	[22m
+    [2m		settings[22m
+    [2m			Acción / Agendar[22m
+    [2m		[22m
+    [2m			[22m
+    [2m                        [22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Acción[22m
+    [2m                                        [22m
+    [2m                                            Acción Ejecutar * NingunoACAR - Asignar Gestor CartasAEMA - Asignar Gestor EmailANC5 - Asignacion Ciclo 5ANC6 - Asignacion Ciclo 6ANC7 - Asignacion Ciclo 7ANGC - Asignacion Gerente CobranzasARPU - Asignar al Rol de PruebasASMS - Asignar Gestor SMSCAT1 - Carta Tipo 1CAT3 - Carta Tipo 3EREC - Mail ReclamoIATM - Reclamo Via ATMIBUR - Cliente Informado en BureauICRE - Cliente RefinanciadoOACL - Cliente LocalizadoOAPJ - Analizar Pase a Gestion JudicialOARC - Refinanciacion CanceladaOATM - Reclamo vÃ­a ATMOBDL - Buscar Datos LocalizacionOBTC - Bloquear TC y pasar a GestionOCEN - Carpeta EnviadaOCNL - Carpeta No LocalizadaOCRE - Oferta de Convenio RechazadaOCSO - Carpeta SolicitadaODIN - Deudor InubicableODNL - Datos Localizacion No LocalizadosOECA - Cerrar Cuenta y Enviar Carpeta Recup ActOGRE - Generar RefinanciacionORAC - Refinanciacion AceptadaORAS - Revisar TC y ajustar saldosORRE - Refinanciacion RealizadaRADE - Cliente se contacto pero no defineRADP - Dice que pagoRANP - Deudor No Puede PagarRANQ - Deudor no quiere pagarRANR - Deudor no reconoce la deudaRARA - Llamo en forma agresivaRAVL - Pidio que se lo vuelva a llamarRPCD - R.Sis. Cobranza Judicial DesestimadaSREC - SMS ReclamoTACA - Contestador AutomaticoTADE - Deudor Contactado pero no resuelveTADP - Dice que pagoTAFA - Deudor ha fallecidoTAFX - Señal de FaxTAMO - ModemTAMP - Se Dejo Mensaje Que PagueTANC - Ocupado o No ContestaTANE - Numero ErroneoTANP - Deudor No Puede PagarTANQ - Deudor no quiere pagarTANR - Deudor no reconoce la deudaTARA - Respuesta AgresivaTATE - Telefono Fuera de ServicioTAVL - Pidio que se lo vuelva a llamarTINV - Telefonos Cliente InvalidosVADE - Cliente ContactadoVADP - Dice que pagoVAMP - Se Dejo Mensaje Que PagueVANQ - Deudor no quiere pagarVANR - Deudor no reconoce la deudaVARA - Respuesta AgresivaVAVL - Pidio que se lo vuelva a visitarNinguno  [22m
+    [2m                                            Figura * Avalista PrincipalNo ProcedeTitular PrincipalTodas las FigurasTodos los AvalistasTodos los TitularesTitular Principal  [22m
+    [2m                                        [22m
+    [2m                                        [22m
+    [2m                                            Obligación * Gestión a clienteV000000000218DV000000000218PGestión a cliente  [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                event_noteNota Ejecutar[22m
+    [2m                                            [22m
+    [2m                                        [22m
+    [2m                                    [22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m			Agendar[22m
+    [2m                                        [22m
+    [2m                                            Acción a Agendar * NingunoAlerta Compromiso de Pago IncumplidoAnalizar Pase a Gestion JudicialBloquear TC y pasar a GestionBuscar Datos LocalizacionCerrar Cuenta y Enviar Carpeta Recup ActCerrar CuentasConvenio Extrajudicial Realizado1easdasdassdasGenerar RefinanciacionGestión DigitalGestionar ImpagoGestionar SobregiroLista Castigo Mora 0Llamada advertencia pase a judicialLlamada por incumplimiento de promesaLlamada reclamo deuda tipo 1Llamada reclamo deuda tipo 2Llamada reclamo deuda tipo 3Llamada reclamo deuda tipo 5Mail ReclamoModelo FraudeOfrecer Convenio ExtrajudicialPropuesta refin. y adver. incl ClearingRefinan.: Advertencia incl en ClearingRefinan.: Advertencia pase a judicialRevisar CasoRevisar TC y ajustar saldosSuspensión PólizaVolver a Presentar BancoNinguno  [22m
+    [2m                                            Fecha * [22m
+    [2m                                            Hora * [22m
+    [2m                                        [22m
+    [2m                                        [22m
+    [2m                                            Destino * DueñoBackoffice Tarjetas de CreditoBolson de Clientes Inubicables1Call Center ExternoCobrador SeniorComite JudicialControl TotalConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalJudicialMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasRol de TestSegurosSkip TraceSoporte AISSupervisor Call CenterDueño  [22m
+    [2m                                            Usuarios * SOSA JUAN JOSESOSA JUAN JOSE  [22m
+    [2m                                            Figura * Avalista PrincipalNo ProcedeTitular PrincipalTodas las FigurasTodos los AvalistasTodos los TitularesTitular Principal  [22m
+    [2m                                            [22m
+    [2m                                                [22m
+    [2m                                                event_noteNota Agendar[22m
+    [2m                                            [22m
+    [2m                                        [22m
+    [2m                                    [22m
+    [2m		[22m
+    [2m                                [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m                                        Ejecutar[22m
+    [2m                                    [22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m	[22m
+    [2m[22m
+    [2m[22m
+    [2m            [22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m	[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m"[22m
+
+
+      210 |     
+      211 |     
+    > 212 |     await expect(page.locator('body'), 'P03: página debe contener "Provincia"').toContainText('Provincia');
+          |                                                                                 ^
+      213 |     
+      214 |     
+      215 |
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\122\uat-122-20260513T152816Z-610033\tests\P03_abrir_domicilio_existente_en_modificacion.spec.ts:212:81
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-9730f-o-existente-en-modificación\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-9730f-o-existente-en-modificación\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-122-uat-122-20260-9730f-o-existente-en-modificación\error-context.md
+
+  1 failed
+    evidence\122\uat-122-20260513T152816Z-610033\tests\P03_abrir_domicilio_existente_en_modificacion.spec.ts:139:7 › ADO-122 | P03 — Abrir domicilio existente en Modificación › p03 abrir_domicilio_existente_en_modificación 
+  3 passed (5.0m)
+
+To open last HTML report run:
+[36m[39m
+[36m  npx playwright show-report[39m
+[36m[39m

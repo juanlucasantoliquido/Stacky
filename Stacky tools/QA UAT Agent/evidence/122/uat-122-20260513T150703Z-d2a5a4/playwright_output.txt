@@ -1,0 +1,138 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 4 tests using 1 worker
+
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":1,"method":"goto_direct","url_before":"about:blank","ts":"2026-05-13T15:08:29.945Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P03","step_index":1,"method":"goto_direct","ok":true,"attempts":1,"elapsed_ms":11076,"url_before":"about:blank","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:08:41.052Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":2,"method":"fill","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:08:41.053Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P03","step_index":2,"method":"fill","ok":true,"attempts":1,"elapsed_ms":1164,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:08:42.217Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P03","step_index":3,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:08:42.218Z"}
+[nav-event] {"event":"navigation_step_failed","ticket_id":122,"scenario_id":"P03","step_index":3,"method":"button_click","ok":false,"attempts":1,"elapsed_ms":18891,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":"INTERMEDIATE_ASSERTION_FAILED","category":"DATA","reason":"SEARCH_RESULTS_EMPTY","ts":"2026-05-13T15:09:01.110Z"}
+  ✘  1 evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P03_abrir_domicilio_existente_en_modificacion.spec.ts:139:7 › ADO-122 | P03 — Abrir domicilio existente en Modificación › p03 abrir_domicilio_existente_en_modificación (40.3s)
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":1,"method":"goto_direct","url_before":"about:blank","ts":"2026-05-13T15:09:15.788Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P05","step_index":1,"method":"goto_direct","ok":true,"attempts":1,"elapsed_ms":10059,"url_before":"about:blank","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:09:25.886Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":2,"method":"fill","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:09:25.888Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P05","step_index":2,"method":"fill","ok":true,"attempts":1,"elapsed_ms":1263,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:09:27.152Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P05","step_index":3,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:09:27.152Z"}
+[nav-event] {"event":"navigation_step_failed","ticket_id":122,"scenario_id":"P05","step_index":3,"method":"button_click","ok":false,"attempts":1,"elapsed_ms":19076,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":"INTERMEDIATE_ASSERTION_FAILED","category":"DATA","reason":"SEARCH_RESULTS_EMPTY","ts":"2026-05-13T15:09:46.230Z"}
+  ✘  2 evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P05_guardar_con_provincia_seleccionada_y_reabrir.spec.ts:139:7 › ADO-122 | P05 — Guardar con Provincia seleccionada y reabrir › p05 guardar_con_provincia_seleccionada_y_reabrir (35.2s)
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":1,"method":"goto_direct","url_before":"about:blank","ts":"2026-05-13T15:10:00.047Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P06","step_index":1,"method":"goto_direct","ok":true,"attempts":1,"elapsed_ms":12196,"url_before":"about:blank","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:10:12.307Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":2,"method":"fill","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:10:12.307Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P06","step_index":2,"method":"fill","ok":true,"attempts":1,"elapsed_ms":7418,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:10:19.725Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P06","step_index":3,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:10:19.726Z"}
+[nav-event] {"event":"navigation_step_failed","ticket_id":122,"scenario_id":"P06","step_index":3,"method":"button_click","ok":false,"attempts":1,"elapsed_ms":19192,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":"INTERMEDIATE_ASSERTION_FAILED","category":"DATA","reason":"SEARCH_RESULTS_EMPTY","ts":"2026-05-13T15:10:38.918Z"}
+  ✘  3 evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P06_guardar_sin_informar_provincia.spec.ts:139:7 › ADO-122 | P06 — Guardar sin informar Provincia › p06 guardar_sin_informar_provincia (44.3s)
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":1,"method":"goto_direct","url_before":"about:blank","ts":"2026-05-13T15:10:50.317Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P09","step_index":1,"method":"goto_direct","ok":true,"attempts":1,"elapsed_ms":10722,"url_before":"about:blank","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:11:01.060Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":2,"method":"fill","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:11:01.063Z"}
+[nav-event] {"event":"navigation_step_completed","ticket_id":122,"scenario_id":"P09","step_index":2,"method":"fill","ok":true,"attempts":1,"elapsed_ms":3263,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":null,"category":null,"reason":null,"ts":"2026-05-13T15:11:04.326Z"}
+[nav-event] {"event":"navigation_step_started","ticket_id":122,"scenario_id":"P09","step_index":3,"method":"button_click","url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","ts":"2026-05-13T15:11:04.327Z"}
+[nav-event] {"event":"navigation_step_failed","ticket_id":122,"scenario_id":"P09","step_index":3,"method":"button_click","ok":false,"attempts":1,"elapsed_ms":17964,"url_before":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","url_after":"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx","error_code":"INTERMEDIATE_ASSERTION_FAILED","category":"DATA","reason":"SEARCH_RESULTS_EMPTY","ts":"2026-05-13T15:11:22.292Z"}
+  ✘  4 evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P09_borrado_logico_de_domicilio_con_provincia.spec.ts:139:7 › ADO-122 | P09 — Borrado lógico de domicilio con Provincia › p09 borrado_lógico_de_domicilio_con_provincia (36.7s)
+
+
+  1) evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P03_abrir_domicilio_existente_en_modificacion.spec.ts:139:7 › ADO-122 | P03 — Abrir domicilio existente en Modificación › p03 abrir_domicilio_existente_en_modificación 
+
+    Error: [NAV_PLAN_FAILED] Navigation to FrmDetalleClie.aspx could not be completed. strategy=human_path step=3 errorCode=INTERMEDIATE_ASSERTION_FAILED category=DATA detail=grid_has_results: not visible
+
+      125 |     });
+      126 |     if (!_navPlanResult.ok) {
+    > 127 |       throw new Error(
+          |             ^
+      128 |         `[NAV_PLAN_FAILED] Navigation to ${TARGET_SCREEN} could not be completed. ` +
+      129 |         `strategy=human_path ` +
+      130 |         `step=${_navPlanResult.failedStep} ` +
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P03_abrir_domicilio_existente_en_modificacion.spec.ts:127:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-4ec02-o-existente-en-modificación\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-4ec02-o-existente-en-modificación\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-122-uat-122-20260-4ec02-o-existente-en-modificación\error-context.md
+
+  2) evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P05_guardar_con_provincia_seleccionada_y_reabrir.spec.ts:139:7 › ADO-122 | P05 — Guardar con Provincia seleccionada y reabrir › p05 guardar_con_provincia_seleccionada_y_reabrir 
+
+    Error: [NAV_PLAN_FAILED] Navigation to FrmDetalleClie.aspx could not be completed. strategy=human_path step=3 errorCode=INTERMEDIATE_ASSERTION_FAILED category=DATA detail=grid_has_results: not visible
+
+      125 |     });
+      126 |     if (!_navPlanResult.ok) {
+    > 127 |       throw new Error(
+          |             ^
+      128 |         `[NAV_PLAN_FAILED] Navigation to ${TARGET_SCREEN} could not be completed. ` +
+      129 |         `strategy=human_path ` +
+      130 |         `step=${_navPlanResult.failedStep} ` +
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P05_guardar_con_provincia_seleccionada_y_reabrir.spec.ts:127:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-03650-ncia-seleccionada-y-reabrir\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-03650-ncia-seleccionada-y-reabrir\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-122-uat-122-20260-03650-ncia-seleccionada-y-reabrir\error-context.md
+
+  3) evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P06_guardar_sin_informar_provincia.spec.ts:139:7 › ADO-122 | P06 — Guardar sin informar Provincia › p06 guardar_sin_informar_provincia 
+
+    Error: [NAV_PLAN_FAILED] Navigation to FrmDetalleClie.aspx could not be completed. strategy=human_path step=3 errorCode=INTERMEDIATE_ASSERTION_FAILED category=DATA detail=grid_has_results: not visible
+
+      125 |     });
+      126 |     if (!_navPlanResult.ok) {
+    > 127 |       throw new Error(
+          |             ^
+      128 |         `[NAV_PLAN_FAILED] Navigation to ${TARGET_SCREEN} could not be completed. ` +
+      129 |         `strategy=human_path ` +
+      130 |         `step=${_navPlanResult.failedStep} ` +
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P06_guardar_sin_informar_provincia.spec.ts:127:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-aa74c-rdar-sin-informar-provincia\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-aa74c-rdar-sin-informar-provincia\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-122-uat-122-20260-aa74c-rdar-sin-informar-provincia\error-context.md
+
+  4) evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P09_borrado_logico_de_domicilio_con_provincia.spec.ts:139:7 › ADO-122 | P09 — Borrado lógico de domicilio con Provincia › p09 borrado_lógico_de_domicilio_con_provincia 
+
+    Error: [NAV_PLAN_FAILED] Navigation to FrmDetalleClie.aspx could not be completed. strategy=human_path step=3 errorCode=INTERMEDIATE_ASSERTION_FAILED category=DATA detail=grid_has_results: not visible
+
+      125 |     });
+      126 |     if (!_navPlanResult.ok) {
+    > 127 |       throw new Error(
+          |             ^
+      128 |         `[NAV_PLAN_FAILED] Navigation to ${TARGET_SCREEN} could not be completed. ` +
+      129 |         `strategy=human_path ` +
+      130 |         `step=${_navPlanResult.failedStep} ` +
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P09_borrado_logico_de_domicilio_con_provincia.spec.ts:127:13
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-d1630--de-domicilio-con-provincia\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-122-uat-122-20260-d1630--de-domicilio-con-provincia\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-122-uat-122-20260-d1630--de-domicilio-con-provincia\error-context.md
+
+  4 failed
+    evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P03_abrir_domicilio_existente_en_modificacion.spec.ts:139:7 › ADO-122 | P03 — Abrir domicilio existente en Modificación › p03 abrir_domicilio_existente_en_modificación 
+    evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P05_guardar_con_provincia_seleccionada_y_reabrir.spec.ts:139:7 › ADO-122 | P05 — Guardar con Provincia seleccionada y reabrir › p05 guardar_con_provincia_seleccionada_y_reabrir 
+    evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P06_guardar_sin_informar_provincia.spec.ts:139:7 › ADO-122 | P06 — Guardar sin informar Provincia › p06 guardar_sin_informar_provincia 
+    evidence\122\uat-122-20260513T150703Z-d2a5a4\tests\P09_borrado_logico_de_domicilio_con_provincia.spec.ts:139:7 › ADO-122 | P09 — Borrado lógico de domicilio con Provincia › p09 borrado_lógico_de_domicilio_con_provincia 
+
+To open last HTML report run:
+[36m[39m
+[36m  npx playwright show-report[39m
+[36m[39m

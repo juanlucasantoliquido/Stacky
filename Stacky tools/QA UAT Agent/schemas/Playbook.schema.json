@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "Playbook/1.0",
+  "title": "Playbook",
+  "description": "Executable playbook for QA UAT Agent (Sprint N5-04). A playbook is a navigation contract + business actions for a single goal on a single screen. The new schema is typed: navigation_steps follow NavigationPlan/1.0 NavigationStep shape, and arrival_assertions follow AssertionSpec.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "playbook_id",
+    "schema_version",
+    "target_screen",
+    "goal_slug",
+    "navigation_steps",
+    "action_steps",
+    "arrival_assertions"
+  ],
+  "properties": {
+    "playbook_id": { "type": "string", "minLength": 1 },
+    "schema_version": { "type": "string", "const": "1.0" },
+    "target_screen": { "type": "string", "minLength": 1 },
+    "goal_slug": { "type": "string", "minLength": 1 },
+    "goal_label": { "type": "string" },
+    "description": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "confidence_keywords": { "type": "array", "items": { "type": "string" } },
+    "created_at": { "type": "string" },
+    "created_from_recording": { "type": "boolean" },
+    "recording_session_id": { "type": ["string", "null"] },
+    "allowed_lanes": { "type": "array", "items": { "type": "string" } },
+    "required_data": { "type": "array", "items": { "type": "string" } },
+    "entry_screen": { "type": ["string", "null"] },
+    "navigation_steps": {
+      "type": "array",
+      "description": "Navigation steps to reach target_screen (typed NavigationStep — same shape as NavigationPlan/1.0).",
+      "items": { "$ref": "NavigationPlan/1.0#/$defs/NavigationStep" }
+    },
+    "action_steps": {
+      "type": "array",
+      "description": "Business interaction steps performed after target_screen is reached. Free-form to accommodate the existing legacy field shapes.",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "arrival_assertions": {
+      "type": "array",
+      "minItems": 2,
+      "description": "Mandatory assertions after the navigation phase (roadmap §5.4 + AP-07).",
+      "items": { "$ref": "NavigationPlan/1.0#/$defs/AssertionSpec" }
+    },
+    "parameterizable_fields": {
+      "type": "object",
+      "description": "Fields the calling scenario can override via data_bindings.",
+      "additionalProperties": true
+    }
+  }
+}

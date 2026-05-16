@@ -1,0 +1,32 @@
+{
+  "_eval_id": "ok_under_budget",
+  "_description": "4 escenarios × 7 pasos OK = 28 capturas solicitadas, max_total=25 por escenario. Todas bajo budget por escenario.",
+  "_layer": "unit",
+  "input": {
+    "budget": {
+      "on_success_per_step": 1,
+      "on_failure_per_step": 3,
+      "max_total_per_scenario": 25,
+      "disabled": false
+    },
+    "steps": [
+      {"step_ok": true, "capture_index": 0},
+      {"step_ok": true, "capture_index": 0},
+      {"step_ok": true, "capture_index": 0},
+      {"step_ok": true, "capture_index": 0},
+      {"step_ok": true, "capture_index": 0},
+      {"step_ok": true, "capture_index": 0},
+      {"step_ok": true, "capture_index": 0}
+    ]
+  },
+  "expected_output": {
+    "captured": 7,
+    "skipped": 0,
+    "exceeded": false
+  },
+  "assertions": [
+    "captured == 7",
+    "skipped == 0",
+    "exceeded == False"
+  ]
+}

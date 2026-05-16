@@ -1,0 +1,36 @@
+{
+  "_eval_id": "blocked_missing_alias",
+  "_description": "El escenario referencia ddl_provincia que no existe en el UI map. Debe retornar BLOCKED GEN SELECTOR_ALIAS_NOT_IN_UI_MAP.",
+  "_layer": "unit",
+  "input": {
+    "scenarios": [
+      {
+        "id": "RF-008-CA-02",
+        "screen": "FrmDetalleClie.aspx",
+        "steps": [
+          {"alias_semantic": "btnBuscar", "action": "click"},
+          {"alias_semantic": "ddl_provincia", "action": "select"}
+        ]
+      }
+    ],
+    "mock_ui_map": {
+      "screen": "FrmDetalleClie.aspx",
+      "elements": [
+        {"alias_semantic": "btnBuscar", "selector": "#c_btnBuscar", "is_decorative": false, "is_interactive": true, "role": "button"},
+        {"alias_semantic": "cmbProvincia", "selector": "#c_cmbProvincia", "is_decorative": false, "is_interactive": true, "role": "select"}
+      ],
+      "grids": []
+    }
+  },
+  "expected_output": {
+    "ok": false,
+    "blocked_count": 1,
+    "allow_count": 0,
+    "first_blocked_reason": "SELECTOR_ALIAS_NOT_IN_UI_MAP"
+  },
+  "assertions": [
+    "result['ok'] == False",
+    "result['blocked_count'] == 1",
+    "result['first_blocked_reason'] == 'SELECTOR_ALIAS_NOT_IN_UI_MAP'"
+  ]
+}

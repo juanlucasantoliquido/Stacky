@@ -1,0 +1,28 @@
+{
+  "schema_version": "screen_detection/1.0",
+  "run_id": "122",
+  "selected_screens": [
+    "FrmDetalleClie.aspx",
+    "FrmSegmentacion.aspx"
+  ],
+  "matches": [
+    {
+      "screen": "FrmDetalleClie.aspx",
+      "source": "screen_aliases.yml",
+      "match_type": "alias",
+      "confidence": 0.6
+    },
+    {
+      "screen": "FrmSegmentacion.aspx",
+      "source": "screen_aliases.yml",
+      "match_type": "alias",
+      "confidence": 0.6
+    }
+  ],
+  "fallback_used": false,
+  "ambiguous": false,
+  "blocked": false,
+  "block_reason": null,
+  "confidence": 0.6,
+  "supported_screens_version": "screen_aliases.yml"
+}

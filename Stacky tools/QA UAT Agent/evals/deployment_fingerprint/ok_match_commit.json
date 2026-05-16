@@ -1,0 +1,34 @@
+{
+  "_eval_id": "ok_match_commit",
+  "_description": "ticket_config.json define expected_build con commit_sha. El actual reportado por la fuente coincide. Debe retornar decision=ALLOW, matched=true.",
+  "_layer": "unit",
+  "input": {
+    "ticket_id": 122,
+    "ticket_config": {
+      "ticket_id": "122",
+      "expected_build": {
+        "commit_sha": "abc1234",
+        "build_number": null,
+        "deploy_timestamp": null
+      },
+      "match_strategy": "any",
+      "notes": "RF-008 fix en commit abc1234"
+    },
+    "mock_active": {
+      "build_id": null,
+      "commit": "abc1234",
+      "branch": null
+    },
+    "env_override": null
+  },
+  "expected_output": {
+    "decision": "ALLOW",
+    "matched": true,
+    "skipped": false
+  },
+  "assertions": [
+    "result['decision'] == 'ALLOW'",
+    "result['matched'] == True",
+    "result['skipped'] == False"
+  ]
+}

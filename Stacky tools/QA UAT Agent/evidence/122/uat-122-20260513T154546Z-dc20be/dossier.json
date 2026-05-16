@@ -1,0 +1,137 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.1",
+  "run_id": "uat-122-20260513T154546Z-dc20be",
+  "ticket_id": 0,
+  "ticket_title": "RF-008 — Incorporación de Campos Provincia y Departamento Territorial en el Mantenedor de Domicilios",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "BLOCKED",
+  "executive_summary": "Se ejecutaron 4 escenarios UAT para 'RF-008 — Incorporación de Campos Provincia y Departamento Territorial en el Mantenedor de Domicilios'. Resultado: BLOCKED. Escenarios con problemas: P03, P05, P06, P09. Se requiere revisión humana de los ítems marcados.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.3.0",
+    "total": 4,
+    "pass": 0,
+    "fail": 0,
+    "blocked": 4,
+    "not_tested": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P03",
+      "titulo": "Abrir domicilio existente en Modificación",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: Abrir domicilio existente en Modificación. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: BLOCKED.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "Guardar con Provincia seleccionada y reabrir",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: Guardar con Provincia seleccionada y reabrir. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: BLOCKED.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P06",
+      "titulo": "Guardar sin informar Provincia",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: Guardar sin informar Provincia. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: BLOCKED.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P09",
+      "titulo": "Borrado lógico de domicilio con Provincia",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: Borrado lógico de domicilio con Provincia. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: BLOCKED.",
+      "reason": "RUNTIME_ERROR"
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P03",
+      "titulo": "P03",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "P05",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P06",
+      "titulo": "P06",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P09",
+      "titulo": "P09",
+      "message": "RUNTIME_ERROR"
+    }
+  ],
+  "coverage_gaps": [],
+  "recommendation_for_human_qa": [
+    "[P03] Error de ejecución — verificar entorno (Node, Playwright, env vars).",
+    "[P05] Error de ejecución — verificar entorno (Node, Playwright, env vars).",
+    "[P06] Error de ejecución — verificar entorno (Node, Playwright, env vars).",
+    "[P09] Error de ejecución — verificar entorno (Node, Playwright, env vars)."
+  ],
+  "next_steps": [
+    "Resolver bloqueos de entorno antes de re-ejecutar.",
+    "Verificar configuración de env vars y base de datos."
+  ],
+  "generated_at": "2026-05-13T15:46:54Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.3.0",
+    "duration_ms": 157
+  },
+  "comment_hash": "c2aa165eb12ba2e65529eb1f380afdaf32db0a1433b28cfae5a4ece906fbc93b",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T154546Z-dc20be\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T154546Z-dc20be\\ado_comment.html"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "_eval_id": "ok_alias_explicit_in_intake",
+  "_description": "El intake tiene alias_semantic declarado explícitamente en los pasos (via LLM path). El compilador debe respetar el alias del intake y no sobrescribirlo. Verificamos que el steps[].alias_semantic coincide con el declarado.",
+  "_layer": "unit",
+  "input": {
+    "ticket_json": {
+      "ok": true,
+      "ticket": {"id": 122},
+      "analisis_tecnico": "FrmDetalleClie.aspx con grid de domicilios",
+      "plan_pruebas": [
+        {
+          "id": "P05",
+          "descripcion": "Verificar que el domicilio persiste tras guardar en FrmDetalleClie",
+          "datos": "Cliente 1000001118137685 con domicilios activos",
+          "esperado": "GridDomicilios muestra al menos una fila con el domicilio guardado"
+        }
+      ]
+    },
+    "ui_aliases": ["tab_relaciones", "GridDomicilios", "btn_agregar_domicilio"],
+    "legacy_only_env": false
+  },
+  "expected_output": {
+    "ok": true,
+    "compiled": 1
+  },
+  "assertions": [
+    "result['ok'] == True",
+    "result['compiled'] == 1",
+    "'steps' in result['scenarios'][0]",
+    "result['scenarios'][0]['screen'] == 'FrmDetalleClie.aspx'"
+  ]
+}

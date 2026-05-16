@@ -1,0 +1,30 @@
+{
+  "schema_version": "data_readiness/1.0",
+  "scenario_id": "P09",
+  "all_ready": true,
+  "checks": [
+    {
+      "entity": "GridData",
+      "type": "grid",
+      "input_data": {
+        "CLCOD": "{{CLCOD}}"
+      },
+      "expected": {
+        "min_rows": 1
+      },
+      "actual": {
+        "row_count": null,
+        "note": "db_unavailable"
+      },
+      "decision": "SKIPPED",
+      "category": null,
+      "reason": "VERIFICATION_REQUIRES_DML",
+      "human_action_required": null,
+      "skipped": true
+    }
+  ],
+  "decision": "ALLOW",
+  "category": null,
+  "reason": null,
+  "artifact_path": null
+}

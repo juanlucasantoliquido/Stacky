@@ -1,0 +1,89 @@
+{
+  "ticket": 120,
+  "checked_at": "2026-05-12T23:34:13Z",
+  "category": "DATA",
+  "decision": "BLOCKED_FOR_FULL_VALUE_ASSERTIONS",
+  "notes": [
+    "RIDIOMA/RCONTROLES for the 8 headers are present in QA DB.",
+    "QA DB does not contain populated batch values for several new fields, so value-specific CA cannot be fully asserted.",
+    "Instance exclusivity CA is intentionally ignored by user instruction."
+  ],
+  "ridioma_9305_9312": [
+    {
+      "IDTEXTO": "9305",
+      "CNT": 3
+    },
+    {
+      "IDTEXTO": "9306",
+      "CNT": 3
+    },
+    {
+      "IDTEXTO": "9307",
+      "CNT": 3
+    },
+    {
+      "IDTEXTO": "9308",
+      "CNT": 3
+    },
+    {
+      "IDTEXTO": "9309",
+      "CNT": 3
+    },
+    {
+      "IDTEXTO": "9310",
+      "CNT": 3
+    },
+    {
+      "IDTEXTO": "9311",
+      "CNT": 3
+    },
+    {
+      "IDTEXTO": "9312",
+      "CNT": 3
+    }
+  ],
+  "rcontroles_new_columns_count": [
+    {
+      "CNT": 8
+    }
+  ],
+  "global_data_counts": {
+    "roblg": {
+      "OGCANAL": 0,
+      "OGMEDIOPAGO": 0,
+      "OGTIENEDEBITOAUTO": 0,
+      "OGCORREDOR": 2
+    },
+    "rdeuda": {
+      "DESALDOFAVOR": 0
+    },
+    "rcuotas": {
+      "RCUOTAS_ROWS": 28064,
+      "OBLIG_CON_CUOTAS": 22442
+    }
+  },
+  "selected_client_rows": [
+    {
+      "OGLOTE": "4127924112345393",
+      "OGCOD": "MOR0024967",
+      "OGCANAL": null,
+      "OGMEDIOPAGO": null,
+      "OGTIENEDEBITOAUTO": null,
+      "OGDEBAUT_DESC": "-",
+      "DESALDOFAVOR": null,
+      "OGCORREDOR": "Corredor 1",
+      "OGNROCUOTAS": 0
+    },
+    {
+      "OGLOTE": "4127924112345393",
+      "OGCOD": "MOR0026973",
+      "OGCANAL": null,
+      "OGMEDIOPAGO": null,
+      "OGTIENEDEBITOAUTO": null,
+      "OGDEBAUT_DESC": "-",
+      "DESALDOFAVOR": null,
+      "OGCORREDOR": "Corredor 1",
+      "OGNROCUOTAS": 0
+    }
+  ]
+}

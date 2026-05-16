@@ -1,0 +1,41 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-05-13T14:34:32.364745+00:00",
+  "ticket_id": 122,
+  "run_id": "uat-122-20260513T143421Z-caffc5",
+  "verdict": "BLOCKED",
+  "category": "GEN",
+  "reason": "UI_MAP_MISSING",
+  "failed_stage": "ui_map",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'ui_map'. [GEN] UI_MAP_MISSING. UI map missing for screen(s): ['FrmSegmentacion.aspx']. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "human_action_required": "UI map missing for: FrmSegmentacion.aspx. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "exec_summary": {
+    "session_started_at": "2026-05-13T14:34:22.050063Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 20
+  },
+  "artifacts": {
+    "effective_config_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T143421Z-caffc5\\effective_config.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T143421Z-caffc5\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T143421Z-caffc5\\execution.jsonl",
+    "result_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T143421Z-caffc5\\result.json",
+    "run_manifest_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T143421Z-caffc5\\run_manifest.json",
+    "run_state_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T143421Z-caffc5\\run_state.json",
+    "ticket_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T143421Z-caffc5\\ticket.json",
+    "ui_map_resolution_json": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T143421Z-caffc5\\ui_map_resolution.json"
+  },
+  "evidence_refs": [
+    "effective_config.json",
+    "evidence_bundle_manifest.json",
+    "execution.jsonl",
+    "result.json",
+    "run_manifest.json",
+    "run_state.json",
+    "ticket.json",
+    "ui_map_resolution.json"
+  ],
+  "elapsed_build_ms": 0.0
+}

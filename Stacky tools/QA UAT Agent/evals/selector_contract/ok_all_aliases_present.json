@@ -1,0 +1,38 @@
+{
+  "_eval_id": "ok_all_aliases_present",
+  "_description": "Todos los aliases referenciados en los escenarios existen en el UI map. Debe retornar ok=true, decision=ALLOW.",
+  "_layer": "unit",
+  "input": {
+    "scenarios": [
+      {
+        "id": "RF-008-CA-01",
+        "screen": "FrmDetalleClie.aspx",
+        "steps": [
+          {"alias_semantic": "btnBuscar", "action": "click"},
+          {"alias_semantic": "gridObligaciones", "action": "visible"},
+          {"alias_semantic": "tabRelaciones", "action": "click"}
+        ]
+      }
+    ],
+    "mock_ui_map": {
+      "screen": "FrmDetalleClie.aspx",
+      "elements": [
+        {"alias_semantic": "btnBuscar", "selector": "#c_btnBuscar", "is_decorative": false, "is_interactive": true, "role": "button"},
+        {"alias_semantic": "tabRelaciones", "selector": "#c_tabRelaciones", "is_decorative": false, "is_interactive": true, "role": "tab"}
+      ],
+      "grids": [
+        {"alias_semantic": "gridObligaciones", "selector": "#c_GridObligaciones"}
+      ]
+    }
+  },
+  "expected_output": {
+    "ok": true,
+    "blocked_count": 0,
+    "allow_count": 1
+  },
+  "assertions": [
+    "result['ok'] == True",
+    "result['blocked_count'] == 0",
+    "result['allow_count'] == 1"
+  ]
+}

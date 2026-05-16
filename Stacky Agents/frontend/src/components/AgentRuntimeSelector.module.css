@@ -1,0 +1,68 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.55);
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.04);
+}
+
+.option,
+.optionActive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: none;
+  border-right: 1px solid var(--border, rgba(255,255,255,0.12));
+  background: transparent;
+  color: rgba(255,255,255,0.56);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.option:last-child,
+.optionActive:last-child {
+  border-right: none;
+}
+
+.option:hover:not(:disabled) {
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.82);
+}
+
+.optionActive {
+  background: rgba(99,102,241,0.24);
+  color: #c4b5fd;
+}
+
+.option:disabled,
+.optionActive:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 420px) {
+  .option,
+  .optionActive {
+    font-size: 11px;
+    padding-inline: 8px;
+  }
+}

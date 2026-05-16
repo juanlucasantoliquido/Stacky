@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "ticket_id": 122,
+  "scenario_id": "P06",
+  "target_screen": "FrmDetalleClie.aspx",
+  "strategy": "human_path",
+  "navigation_ok": false,
+  "elapsed_ms_total": 7502,
+  "failed_step": 1,
+  "error_code": "NAV_PLAYWRIGHT_ERROR",
+  "category": "NAV",
+  "reason": "PLAYWRIGHT_EXCEPTION",
+  "is_terminal": false,
+  "final_url": "about:blank",
+  "steps": [
+    {
+      "step_index": 1,
+      "method": "goto_direct",
+      "description": "Navigate to FrmBusqueda.aspx (entrypoint)",
+      "ok": false,
+      "attempts": 1,
+      "elapsed_ms": 7498,
+      "url_before": "about:blank",
+      "url_after": "about:blank",
+      "intermediate_assertions_passed": [],
+      "intermediate_assertions_failed": [],
+      "screenshots": [
+        "evidence\\122\\P06\\nav_step_01_pre.png"
+      ],
+      "error_code": "NAV_PLAYWRIGHT_ERROR",
+      "category": "NAV",
+      "reason": "PLAYWRIGHT_EXCEPTION",
+      "is_terminal": false,
+      "detail": "page.goto: net::ERR_ABORTED; maybe frame was detached?\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmBusqueda.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n"
+    }
+  ]
+}

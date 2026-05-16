@@ -1,0 +1,5 @@
+- [P0 ADO-122 rerun_guard](project_rerun_guard.md) — Stage 0 contra reruns BLOCKED/ENV repetidos, cooldown 10min, fail-open
+- [P1.A ADO-122 selector_contract](project_selector_contract.md) — Stage activado: BLOCKED/PIP cuando escenarios sin alias_semantic; override QA_UAT_SKIP_SELECTOR_CONTRACT=1
+- [P1.B ADO-122 screenshot_budget](project_screenshot_budget.md) — Budget capturas por step/escenario; override QA_UAT_SCREENSHOT_BUDGET_DISABLED=1
+- [P2.A ADO-122 compilador v1.3.0](project_compiler_v2.md) — Dual-format: screen+steps[alias_semantic] + legacy; override QA_UAT_COMPILER_LEGACY_ONLY=1
+- [P2.B ADO-122 fingerprint ticket_config](project_fingerprint_ticket_config.md) — resolve_expected_build: env JSON > ticket_config.json > WARN legacy; CLI set-expected

@@ -1,0 +1,337 @@
+{
+  "ok": true,
+  "ticket_id": 122,
+  "verdict": "BLOCKED",
+  "category": "ENV",
+  "reason": "LOGIN_PAGE_TIMEOUT",
+  "runner_summary": {
+    "verdict": "BLOCKED",
+    "category": "ENV",
+    "reason": "LOGIN_PAGE_TIMEOUT",
+    "total": 4,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 4,
+    "skipped": 0,
+    "retries": 0,
+    "duration_ms": 30601,
+    "artifacts": {
+      "junit": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+      "json_results": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+      "html_report": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+      "trace_count": 0,
+      "screenshots_count": 0,
+      "video_count": 0
+    },
+    "scenario_results": []
+  },
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "RF-008 — Incorporación de Campos Provincia y Departamento Territorial en el Mantenedor de Domicilios",
+      "plan_item_count": 5
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 10,
+      "layers": {
+        "uat": 3,
+        "manual_review": 5,
+        "integration": 2
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\122\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": true,
+      "skipped": false,
+      "screens": [
+        "FrmDetalleClie.aspx"
+      ]
+    },
+    "compiler": {
+      "ok": true,
+      "skipped": false,
+      "scenario_count": 4,
+      "out_of_scope_count": 1
+    },
+    "compiler_contract": {
+      "ok": true,
+      "skipped": false,
+      "decision": "ALLOW",
+      "violations": [],
+      "reason": null,
+      "score": 1.0
+    },
+    "preconditions": {
+      "ok": true,
+      "skipped": true,
+      "reason": "db_unreachable"
+    },
+    "selector_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_alias_contract_scenarios"
+    },
+    "data_readiness_check": {
+      "ok": true,
+      "skipped": false,
+      "results": [
+        {
+          "scenario_id": "P03",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\uat-122-20260513T151246Z-ef5a1b\\data_readiness.json"
+        },
+        {
+          "scenario_id": "P05",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\uat-122-20260513T151246Z-ef5a1b\\data_readiness.json"
+        },
+        {
+          "scenario_id": "P06",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\uat-122-20260513T151246Z-ef5a1b\\data_readiness.json"
+        },
+        {
+          "scenario_id": "P09",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\uat-122-20260513T151246Z-ef5a1b\\data_readiness.json"
+        }
+      ],
+      "blocked_count": 0
+    },
+    "data_contract_compile": {
+      "ok": true,
+      "skipped": false,
+      "contracts_compiled": 4,
+      "contracts_with_requirements": 4,
+      "total_blocking_requirements": 4
+    },
+    "data_readiness_v2": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_checked": 4,
+      "missing_count": 0,
+      "blocking_missing_count": 0,
+      "results": [
+        {
+          "scenario_id": "P03",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\122\\data_readiness_v2_P03.json"
+        },
+        {
+          "scenario_id": "P05",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\122\\data_readiness_v2_P05.json"
+        },
+        {
+          "scenario_id": "P06",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\122\\data_readiness_v2_P06.json"
+        },
+        {
+          "scenario_id": "P09",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\122\\data_readiness_v2_P09.json"
+        }
+      ]
+    },
+    "data_resolution_broker": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_blocking_missing_requirements"
+    },
+    "sql_seed_proposal": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_seed_decisions"
+    },
+    "catalog_readiness": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_catalogs_required"
+    },
+    "seed_cleanup": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_applied_seeds",
+      "cleanup_count": 0
+    },
+    "navigation_contract_validation": {
+      "ok": true,
+      "skipped": false,
+      "lane": "uat_human",
+      "scenarios_checked": 4,
+      "blocked_count": 0,
+      "allowed_count": 4
+    },
+    "navigation_plan_validation": {
+      "ok": true,
+      "skipped": false,
+      "validated": 4
+    },
+    "generator": {
+      "ok": true,
+      "skipped": false,
+      "generated": 4,
+      "blocked": 0,
+      "total": 4
+    },
+    "generator_contract": {
+      "ok": true,
+      "skipped": false,
+      "decision": "ALLOW",
+      "violations": [],
+      "reason": null,
+      "score": 1.0
+    },
+    "spec_linter": {
+      "ok": true,
+      "skipped": false,
+      "checked": 4,
+      "violations": []
+    },
+    "oracle_evaluation": {
+      "ok": true,
+      "skipped": false,
+      "oracle_publish_blocked": false,
+      "p0_blocked_count": 0,
+      "no_oracle_count": 4,
+      "weak_only_count": 0,
+      "oracle_fail_count": 0,
+      "weak_files": 4,
+      "weak_tests": 0,
+      "no_assertion_tests": 0,
+      "strong_tests": 4
+    },
+    "runner": {
+      "ok": true,
+      "skipped": false,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 4,
+      "total": 4,
+      "verdict": "BLOCKED",
+      "category": "ENV",
+      "reason": "LOGIN_PAGE_TIMEOUT",
+      "runner_summary": {
+        "verdict": "BLOCKED",
+        "category": "ENV",
+        "reason": "LOGIN_PAGE_TIMEOUT",
+        "artifacts": {
+          "junit": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+          "json_results": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+          "html_report": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+          "trace_count": 0,
+          "screenshots_count": 0,
+          "video_count": 0
+        }
+      }
+    },
+    "triage": {
+      "ok": true,
+      "skipped": false,
+      "verdict": "BLOCKED",
+      "category": "ENV",
+      "reason": "LOGIN_PAGE_TIMEOUT",
+      "confidence": 1.0,
+      "owner": "devops",
+      "human_approval_required": true,
+      "artifact_path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\triage.json"
+    },
+    "quarantine_check": {
+      "ok": true,
+      "skipped": true,
+      "checked_count": 0,
+      "quarantined_count": 0,
+      "results": []
+    },
+    "run_metrics_summary": {
+      "ok": true,
+      "skipped": false,
+      "unknown_count": 0,
+      "lane": null
+    },
+    "annotator": {
+      "ok": true,
+      "skipped": false,
+      "annotated": 0,
+      "errors": [
+        "pillow_not_available"
+      ]
+    },
+    "test_confidence": {
+      "ok": true,
+      "skipped": false,
+      "total_scenarios": 4,
+      "high_count": 0,
+      "medium_count": 0,
+      "low_count": 4,
+      "blocked_count": 4,
+      "publish_blocked": true,
+      "lineage_entries": 0,
+      "lineage_seeded": 0
+    },
+    "evaluator": {
+      "ok": true,
+      "skipped": false,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 4,
+      "review": 0
+    },
+    "failure_analyzer": {
+      "ok": true,
+      "skipped": true
+    },
+    "dossier": {
+      "ok": true,
+      "skipped": false,
+      "verdict": "BLOCKED",
+      "paths": {
+        "dossier_md": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\DOSSIER_UAT.md",
+        "ado_comment_html": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b\\ado_comment.html"
+      },
+      "run_id": "uat-122-20260513T151246Z-ef5a1b"
+    },
+    "publisher": {
+      "ok": true,
+      "skipped": false,
+      "publish_state": "preview_only",
+      "mode": "dry-run",
+      "requested_mode": "dry-run"
+    }
+  },
+  "elapsed_s": 60.51,
+  "run_id": "uat-122-20260513T151246Z-ef5a1b",
+  "artifact_root": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\122\\uat-122-20260513T151246Z-ef5a1b",
+  "_normalized": true
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "rollback_audit/1.0",
+  "ticket_id": 120,
+  "run_id": "uat-120-20260512T203128-codex",
+  "comment_id": 31509726,
+  "comment_hash": "706d99fa91d4ef002d2a1fdcf5abd9df2ee50de29be60a658b761c30fb776e3b",
+  "published_at": "2026-05-13T03:22:12.042482Z",
+  "dossier_path": "evidence\\120\\uat-120-20260512T203128-codex\\dossier.json",
+  "rollback_status": "not_rolled_back",
+  "rollback_instruction": "To roll back: delete ADO comment id=31509726 on work item #120, or replace with retraction notice. Use ado_evidence_publisher with mode=publish and replace_previous=True on the corrected dossier."
+}

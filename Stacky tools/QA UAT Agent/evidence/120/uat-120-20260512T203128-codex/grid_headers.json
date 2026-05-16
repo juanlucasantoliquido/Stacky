@@ -1,0 +1,161 @@
+{
+  "clcod": "4127924112345393",
+  "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx",
+  "headers": [
+    "Cód. Obligación",
+    "Producto",
+    "Días Mora",
+    "Moneda",
+    "Región",
+    "Oficina",
+    "Fecha Inicio",
+    "Fecha Venc.",
+    "Fecha Mora",
+    "Fecha Últ. Pago",
+    "Monto Últ. Pago",
+    "Fecha Castigo",
+    "Monto Castigo",
+    "Fec. Prim. Impago",
+    "Tipo Cuenta Débito",
+    "Cuenta Débito",
+    "Es Judicial",
+    "Fecha Prox Venc",
+    "Importe Prox Venc",
+    "Fecha Mora",
+    "Motivo No Cobro",
+    "Canal de venta",
+    "Medio cobro últ. pago",
+    "Déb. Automático",
+    "Saldo a favor",
+    "Cuota",
+    "Monto cuota",
+    "Corredor",
+    "Nro. cuotas"
+  ],
+  "header_records": [
+    {
+      "index": 0,
+      "text": ""
+    },
+    {
+      "index": 1,
+      "text": ""
+    },
+    {
+      "index": 2,
+      "text": "Cód. Obligación"
+    },
+    {
+      "index": 3,
+      "text": "Producto"
+    },
+    {
+      "index": 4,
+      "text": "Días Mora"
+    },
+    {
+      "index": 5,
+      "text": "Moneda"
+    },
+    {
+      "index": 6,
+      "text": "Región"
+    },
+    {
+      "index": 7,
+      "text": "Oficina"
+    },
+    {
+      "index": 8,
+      "text": "Fecha Inicio"
+    },
+    {
+      "index": 9,
+      "text": "Fecha Venc."
+    },
+    {
+      "index": 10,
+      "text": "Fecha Mora"
+    },
+    {
+      "index": 11,
+      "text": "Fecha Últ. Pago"
+    },
+    {
+      "index": 12,
+      "text": "Monto Últ. Pago"
+    },
+    {
+      "index": 13,
+      "text": "Fecha Castigo"
+    },
+    {
+      "index": 14,
+      "text": "Monto Castigo"
+    },
+    {
+      "index": 15,
+      "text": "Fec. Prim. Impago"
+    },
+    {
+      "index": 16,
+      "text": "Tipo Cuenta Débito"
+    },
+    {
+      "index": 17,
+      "text": "Cuenta Débito"
+    },
+    {
+      "index": 18,
+      "text": "Es Judicial"
+    },
+    {
+      "index": 19,
+      "text": "Fecha Prox Venc"
+    },
+    {
+      "index": 20,
+      "text": "Importe Prox Venc"
+    },
+    {
+      "index": 21,
+      "text": "Fecha Mora"
+    },
+    {
+      "index": 22,
+      "text": "Motivo No Cobro"
+    },
+    {
+      "index": 23,
+      "text": "Canal de venta"
+    },
+    {
+      "index": 24,
+      "text": "Medio cobro últ. pago"
+    },
+    {
+      "index": 25,
+      "text": "Déb. Automático"
+    },
+    {
+      "index": 26,
+      "text": "Saldo a favor"
+    },
+    {
+      "index": 27,
+      "text": "Cuota"
+    },
+    {
+      "index": 28,
+      "text": "Monto cuota"
+    },
+    {
+      "index": 29,
+      "text": "Corredor"
+    },
+    {
+      "index": 30,
+      "text": "Nro. cuotas"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "run_id": "uat-122-20260513T142212Z-1f505b",
+  "status": "blocked",
+  "current_stage": "environment_preflight",
+  "last_completed_stage": null,
+  "last_event_id": null,
+  "resume_from": "environment_preflight",
+  "blocked_reason": "MISSING_CREDENTIALS",
+  "waiting_for_human": false,
+  "updated_at": "2026-05-13T14:22:12.956Z"
+}

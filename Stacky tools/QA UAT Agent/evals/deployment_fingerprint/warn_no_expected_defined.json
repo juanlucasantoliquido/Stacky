@@ -1,0 +1,17 @@
+{
+  "_eval_id": "warn_no_expected_defined",
+  "_description": "Sin ticket_config.json, sin env var QA_UAT_EXPECTED_BUILD. resolve_expected_build debe retornar None. El fingerprint debe retornar decision=WARN, reason=NO_EXPECTED_BUILD_DEFINED.",
+  "_layer": "unit",
+  "input": {
+    "ticket_id": 999,
+    "ticket_config": null,
+    "mock_active": null,
+    "env_override": null
+  },
+  "expected_output": {
+    "resolve_result": null
+  },
+  "assertions": [
+    "result is None"
+  ]
+}

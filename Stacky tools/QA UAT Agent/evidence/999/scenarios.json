@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "ticket_id": 999,
+  "compiled": 0,
+  "out_of_scope": 1,
+  "scenarios": [],
+  "out_of_scope_items": [
+    {
+      "id": "P01",
+      "razon": "OUT_OF_SCOPE_NEEDS_HUMAN",
+      "descripcion": "Prueba de performance bajo carga de trabajo masiva con 10000 requests por segundo"
+    }
+  ]
+}

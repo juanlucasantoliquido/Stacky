@@ -1,0 +1,32 @@
+{
+  "_eval_id": "ok_alias_inference_miss",
+  "_description": "Un paso tiene target que no está en ui_aliases. alias_semantic debe ser null pero el compilador NO bloquea — el paso se emite con alias_semantic=null. El selector_contract decidirá.",
+  "_layer": "unit",
+  "input": {
+    "ticket_json": {
+      "ok": true,
+      "ticket": {"id": 122},
+      "analisis_tecnico": "",
+      "plan_pruebas": [
+        {
+          "id": "P03",
+          "descripcion": "Verificar precarga de Provincia en modificacion de domicilio existente",
+          "datos": "Cliente con domicilios activos",
+          "esperado": "GridDomicilios muestra al menos una fila"
+        }
+      ]
+    },
+    "ui_aliases": ["tab_relaciones"],
+    "legacy_only_env": false
+  },
+  "expected_output": {
+    "ok": true,
+    "compiled": 1
+  },
+  "assertions": [
+    "result['ok'] == True",
+    "result['compiled'] == 1",
+    "'steps' in result['scenarios'][0]",
+    "any(s.get('alias_semantic') is None for s in result['scenarios'][0]['steps'])"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "_eval_id": "blocked_missing_inputs",
+  "_description": "El UI map no existe en disco. Debe retornar BLOCKED GEN UI_MAP_MISSING.",
+  "_layer": "unit",
+  "input": {
+    "scenarios": [
+      {
+        "id": "RF-008-CA-04",
+        "screen": "FrmDetalleClie.aspx",
+        "steps": [
+          {"alias_semantic": "btnBuscar", "action": "click"}
+        ]
+      }
+    ],
+    "mock_ui_map": null
+  },
+  "expected_output": {
+    "ok": false,
+    "blocked_count": 1,
+    "allow_count": 0,
+    "first_blocked_reason": "UI_MAP_MISSING"
+  },
+  "assertions": [
+    "result['ok'] == False",
+    "result['blocked_count'] == 1",
+    "result['first_blocked_reason'] == 'UI_MAP_MISSING'"
+  ]
+}

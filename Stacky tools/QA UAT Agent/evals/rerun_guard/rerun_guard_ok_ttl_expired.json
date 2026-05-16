@@ -1,0 +1,37 @@
+{
+  "_eval_id": "rerun_guard_ok_ttl_expired",
+  "_description": "El último run fue BLOCKED/ENV hace 25 min (> 10 min TTL). Debe permitir.",
+  "_layer": "unit",
+  "_scenario": "latest_run_result.json existe con verdict=BLOCKED/ENV/MISSING_CREDENTIALS, finished_at hace 1500s.",
+  "input": {
+    "ticket_id": 122,
+    "force_rerun": false,
+    "current_fingerprint": null,
+    "mock_latest": {
+      "run_id": "uat-122-20260513T100000Z-abc123",
+      "verdict": "BLOCKED",
+      "category": "ENV",
+      "reason": "MISSING_CREDENTIALS",
+      "finished_at": "__NOW_MINUS_1500S__",
+      "deployment_fingerprint": "NO_EXPECTED_BUILD_DEFINED",
+      "tool_version": "1.1.0"
+    },
+    "mock_cooldown_ttl_s": 600
+  },
+  "expected_output": {
+    "ok": true,
+    "verdict": "OK",
+    "reason": "TTL_EXPIRED",
+    "cooldown_active": false,
+    "cooldown_remaining_s": 0,
+    "forced": false,
+    "previous_run_id": "uat-122-20260513T100000Z-abc123"
+  },
+  "assertions": [
+    "result.ok == True",
+    "result.verdict == 'OK'",
+    "result.reason == 'TTL_EXPIRED'",
+    "result.cooldown_active == False",
+    "result.previous_run_id == 'uat-122-20260513T100000Z-abc123'"
+  ]
+}

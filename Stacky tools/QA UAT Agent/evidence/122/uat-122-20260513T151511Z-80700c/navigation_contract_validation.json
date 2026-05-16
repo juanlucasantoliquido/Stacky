@@ -1,0 +1,45 @@
+{
+  "lane": "uat_human",
+  "allow_deeplink_override": false,
+  "scenarios": [
+    {
+      "scenario_id": "P03",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P05",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P06",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    },
+    {
+      "scenario_id": "P09",
+      "target_screen": "FrmDetalleClie.aspx",
+      "strategy": "human_path",
+      "decision": "ALLOW_GENERATION",
+      "category": null,
+      "reason": null,
+      "path_id": "open_from_busqueda"
+    }
+  ],
+  "blocked_count": 0,
+  "allowed_count": 4,
+  "decision": "ALLOW_GENERATION"
+}

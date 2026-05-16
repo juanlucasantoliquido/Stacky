@@ -1,0 +1,30 @@
+{
+  "_eval_id": "ok_env_override",
+  "_description": "QA_UAT_EXPECTED_BUILD (JSON) tiene prioridad sobre ticket_config.json. resolve_expected_build debe retornar el valor de la env var (_source=env_override), no el del archivo (commit=file_commit).",
+  "_layer": "unit",
+  "input": {
+    "ticket_id": 122,
+    "ticket_config": {
+      "ticket_id": "122",
+      "expected_build": {
+        "commit_sha": "file_commit",
+        "build_number": "file_build",
+        "deploy_timestamp": null
+      },
+      "match_strategy": "any",
+      "notes": ""
+    },
+    "env_override": "{\"commit_sha\": \"env_commit_override\", \"build_number\": \"env_build_override\", \"match_strategy\": \"commit_only\"}",
+    "mock_active": null
+  },
+  "expected_output": {
+    "commit": "env_commit_override",
+    "build_id": "env_build_override",
+    "_source": "env_override"
+  },
+  "assertions": [
+    "result['commit'] == 'env_commit_override'",
+    "result['build_id'] == 'env_build_override'",
+    "result['_source'] == 'env_override'"
+  ]
+}

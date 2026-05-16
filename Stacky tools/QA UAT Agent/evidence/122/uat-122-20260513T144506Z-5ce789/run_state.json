@@ -1,0 +1,11 @@
+{
+  "run_id": "uat-122-20260513T144506Z-5ce789",
+  "status": "blocked",
+  "current_stage": "navigation_plan_validation",
+  "last_completed_stage": null,
+  "last_event_id": null,
+  "resume_from": "navigation_plan_validation",
+  "blocked_reason": "INVALID_NAV_PLAN",
+  "waiting_for_human": false,
+  "updated_at": "2026-05-13T14:45:30.043Z"
+}

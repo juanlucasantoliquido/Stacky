@@ -1,0 +1,33 @@
+{
+  "_eval_id": "ok_legacy_intake_no_aliases",
+  "_description": "Intake legacy sin ui_aliases. El compilador emite v2 con alias_semantic=target (best-effort) ya que no hay alias_set para cruzar. El compilador NO bloquea; el selector_contract decidirá si los aliases son válidos.",
+  "_layer": "unit",
+  "input": {
+    "ticket_json": {
+      "ok": true,
+      "ticket": {"id": 116},
+      "analisis_tecnico": "",
+      "plan_pruebas": [
+        {
+          "id": "CA-01",
+          "descripcion": "Verificar que la columna Fecha de Ingreso Judicial no aparece en la grilla de obligaciones de FrmDetalleClie",
+          "datos": "Lote V000000201605P",
+          "esperado": "La columna Fecha de Ingreso Judicial no figura en la grilla"
+        }
+      ]
+    },
+    "ui_aliases": null,
+    "legacy_only_env": false
+  },
+  "expected_output": {
+    "ok": true,
+    "compiled": 1
+  },
+  "assertions": [
+    "result['ok'] == True",
+    "result['compiled'] == 1",
+    "'steps' in result['scenarios'][0]",
+    "'pantalla' in result['scenarios'][0]",
+    "result['meta']['v2_schema_emitted'] == True"
+  ]
+}

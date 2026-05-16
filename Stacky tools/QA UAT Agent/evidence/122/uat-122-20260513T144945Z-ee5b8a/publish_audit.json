@@ -1,0 +1,10 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "ticket_id": 122,
+  "run_id": "uat-122-20260513T144945Z-ee5b8a",
+  "verdict": "BLOCKED",
+  "reason": "ORACLE_CONTRACT_MISSING_OR_WEAK",
+  "content_hash": "5d898864cef67b24",
+  "generated_at": "2026-05-13T14:49:59.982105+00:00",
+  "idempotency_key": "uat-122-20260513T144945Z-ee5b8a|5d898864cef67b24"
+}

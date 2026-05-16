@@ -1,0 +1,35 @@
+{
+  "_eval_id": "rerun_guard_ok_fingerprint_changed",
+  "_description": "El build cambió desde el último run BLOCKED/ENV — fingerprint distinto. Debe permitir.",
+  "_layer": "unit",
+  "_scenario": "latest_run_result.json tiene BLOCKED/ENV/MISSING_CREDENTIALS con fingerprint='build-old', run actual tiene fingerprint='build-new'.",
+  "input": {
+    "ticket_id": 122,
+    "force_rerun": false,
+    "current_fingerprint": "build-new-xyz789",
+    "mock_latest": {
+      "run_id": "uat-122-20260513T090000Z-ghi789",
+      "verdict": "BLOCKED",
+      "category": "ENV",
+      "reason": "MISSING_CREDENTIALS",
+      "finished_at": "__NOW_MINUS_180S__",
+      "deployment_fingerprint": "build-old-abc123",
+      "tool_version": "1.1.0"
+    },
+    "mock_cooldown_ttl_s": 600
+  },
+  "expected_output": {
+    "ok": true,
+    "verdict": "OK",
+    "reason": "FINGERPRINT_CHANGED",
+    "cooldown_active": false,
+    "forced": false,
+    "previous_run_id": "uat-122-20260513T090000Z-ghi789"
+  },
+  "assertions": [
+    "result.ok == True",
+    "result.verdict == 'OK'",
+    "result.reason == 'FINGERPRINT_CHANGED'",
+    "result.cooldown_active == False"
+  ]
+}

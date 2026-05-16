@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "NavigationContracts/2.0",
+  "title": "NavigationContracts v2",
+  "description": "Schema for navigation_contracts.yml v2 — adds arrival_assertions, timeouts, aspnet_error_markers per screen. Used by navigation_plan_validator and migration tooling.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "version": { "type": "string" },
+        "schema": { "type": "string" },
+        "created_at": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    }
+  },
+  "patternProperties": {
+    "^[A-Za-z][A-Za-z0-9_]*\\.aspx$": { "$ref": "#/$defs/ScreenContract" }
+  },
+  "$defs": {
+    "ScreenContract": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schema_version": { "type": "string" },
+        "screen_type": {
+          "type": "string",
+          "enum": ["entrypoint", "detail", "list", "form", "popup", "report", "unknown"]
+        },
+        "direct_entry_allowed": { "type": "boolean" },
+        "deeplink_allowed": { "type": "boolean" },
+        "human_path_required_for_uat": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "arrival_assertions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AssertionSpec" }
+        },
+        "timeouts": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "navigation_timeout_ms": { "type": "integer", "minimum": 1 },
+            "arrival_assertion_timeout_ms": { "type": "integer", "minimum": 1 },
+            "updatepanel_settle_ms": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "aspnet_error_markers": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "title_contains": { "type": "array", "items": { "type": "string" } },
+            "url_contains": { "type": "array", "items": { "type": "string" } },
+            "body_contains": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "deeplink": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "pattern": { "type": "string" },
+            "required_params": { "type": "array", "items": { "type": "string" } },
+            "reconstructs_context": { "type": "array", "items": { "type": "string" } },
+            "required_assertions": { "type": "array", "items": { "type": "string" } },
+            "allowed_lanes": { "type": "array", "items": { "type": "string" } },
+            "forbidden_lanes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "human_paths": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "entrypoint": { "type": "string" },
+              "steps": { "type": "array" },
+              "required_data": { "type": "array", "items": { "type": "string" } },
+              "emits_context": { "type": "array", "items": { "type": "string" } },
+              "required_assertions": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "assertions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "AssertionSpec": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["assertion_id", "type", "description"],
+      "properties": {
+        "assertion_id": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": [
+            "url_contains",
+            "url_not_contains",
+            "dom_visible",
+            "dom_not_visible",
+            "dom_text_contains",
+            "page_title_contains",
+            "page_title_not_contains",
+            "no_aspnet_error",
+            "no_login_redirect",
+            "no_500_response"
+          ]
+        },
+        "description": { "type": "string" },
+        "selector": { "type": ["string", "null"] },
+        "expected_value": { "type": ["string", "null"] },
+        "timeout_ms": { "type": "integer", "minimum": 1, "default": 10000 },
+        "severity": {
+          "type": "string",
+          "enum": ["hard", "soft"],
+          "default": "hard"
+        },
+        "category_on_fail": {
+          "type": "string",
+          "enum": ["NAV", "ENV", "DATA", "APP"],
+          "default": "NAV"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "_eval_id": "ok_budget_exceeded_logged",
+  "_description": "Cuando taken_so_far >= max_total_per_scenario, should_capture retorna False. El run continúa — no se bloquea.",
+  "_layer": "unit",
+  "input": {
+    "budget": {
+      "on_success_per_step": 1,
+      "on_failure_per_step": 3,
+      "max_total_per_scenario": 3,
+      "disabled": false
+    },
+    "steps": [
+      {"step_ok": true, "capture_index": 0, "taken_before": 0},
+      {"step_ok": true, "capture_index": 0, "taken_before": 1},
+      {"step_ok": true, "capture_index": 0, "taken_before": 2},
+      {"step_ok": true, "capture_index": 0, "taken_before": 3},
+      {"step_ok": true, "capture_index": 0, "taken_before": 4}
+    ]
+  },
+  "expected_output": {
+    "captures": [true, true, true, false, false],
+    "reasons": ["ok", "ok", "ok", "max_total_per_scenario_exceeded", "max_total_per_scenario_exceeded"]
+  },
+  "assertions": [
+    "captures[0] == True",
+    "captures[1] == True",
+    "captures[2] == True",
+    "captures[3] == False",
+    "captures[4] == False",
+    "reasons[3] == 'max_total_per_scenario_exceeded'"
+  ]
+}

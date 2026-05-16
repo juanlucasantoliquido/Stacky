@@ -1,0 +1,10 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "ticket_id": 122,
+  "run_id": "uat-122-20260513T144506Z-5ce789",
+  "verdict": "BLOCKED",
+  "reason": "INVALID_NAV_PLAN",
+  "content_hash": "2dd9b19802610ba7",
+  "generated_at": "2026-05-13T14:45:30.008249+00:00",
+  "idempotency_key": "uat-122-20260513T144506Z-5ce789|2dd9b19802610ba7"
+}

@@ -1,0 +1,36 @@
+{
+  "_eval_id": "auth_session_ok_reused",
+  "_description": "Sesión existente válida y dentro del TTL — debe reutilizarse sin login.",
+  "_layer": "unit",
+  "_scenario": "El .auth/agenda.json existe, tiene cookies, tiene < 30min de antigüedad y el fingerprint coincide.",
+  "input": {
+    "mode": "normal",
+    "mock_auth_file_exists": true,
+    "mock_auth_file_age_s": 120,
+    "mock_auth_has_cookies": true,
+    "mock_fingerprint_matches": true,
+    "mock_credentials": {
+      "AGENDA_WEB_USER": "testuser",
+      "AGENDA_WEB_PASS": "testpass",
+      "AGENDA_WEB_BASE_URL": "http://localhost:35017/AgendaWeb/"
+    }
+  },
+  "expected_output": {
+    "ok": true,
+    "verdict": "OK",
+    "reason": "AUTH_OK",
+    "reused": true,
+    "dry_run": false,
+    "category": null
+  },
+  "assertions": [
+    "result.ok == True",
+    "result.verdict == 'OK'",
+    "result.reason == 'AUTH_OK'",
+    "result.reused == True",
+    "result.dry_run == False",
+    "result.category is None",
+    "result.session_fingerprint is not None",
+    "result.elapsed_ms >= 0"
+  ]
+}

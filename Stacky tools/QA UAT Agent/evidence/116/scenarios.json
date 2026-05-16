@@ -1,0 +1,59 @@
+{
+  "ok": true,
+  "ticket_id": 116,
+  "compiled": 1,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "CA-01",
+      "ticket_id": 116,
+      "pantalla": "FrmDetalleClie.aspx",
+      "playbook_id": "open_detalle_cliente_from_busqueda",
+      "titulo": "Verificar que la columna Fecha de Ingreso Judicial no aparece en la grilla de obligaciones de FrmDetalleClie",
+      "precondiciones": [
+        "Login como usuario QA",
+        "Lote V000000201605P disponible en la instancia",
+        "Datos requeridos: Lote V000000201605P"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_not_contains_text",
+          "target": "body",
+          "valor": "Ingreso Judicial"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "ROBLG",
+          "filtro": "OGCOD='V000000201605P'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "CA-01"
+      },
+      "screen": "FrmDetalleClie.aspx",
+      "steps": [
+        {
+          "step_index": 1,
+          "action": "navigate",
+          "selector": "",
+          "alias_semantic": "FrmDetalleClie.aspx",
+          "valor": null
+        }
+      ],
+      "tags": [
+        "legacy_compatible",
+        "v2_schema"
+      ]
+    }
+  ],
+  "out_of_scope_items": []
+}

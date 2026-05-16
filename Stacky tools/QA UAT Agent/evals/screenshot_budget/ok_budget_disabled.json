@@ -1,0 +1,28 @@
+{
+  "_eval_id": "ok_budget_disabled",
+  "_description": "Con disabled=True (QA_UAT_SCREENSHOT_BUDGET_DISABLED=1), should_capture siempre retorna True independientemente de los contadores.",
+  "_layer": "unit",
+  "input": {
+    "budget": {
+      "on_success_per_step": 1,
+      "on_failure_per_step": 3,
+      "max_total_per_scenario": 1,
+      "disabled": true
+    },
+    "steps": [
+      {"step_ok": true, "capture_index": 0, "taken_before": 0},
+      {"step_ok": true, "capture_index": 1, "taken_before": 1},
+      {"step_ok": true, "capture_index": 2, "taken_before": 2},
+      {"step_ok": true, "capture_index": 0, "taken_before": 3},
+      {"step_ok": true, "capture_index": 0, "taken_before": 999}
+    ]
+  },
+  "expected_output": {
+    "captured": 5,
+    "skipped": 0
+  },
+  "assertions": [
+    "all(c == True for c in captures)",
+    "all(r == 'budget_disabled' for r in reasons)"
+  ]
+}

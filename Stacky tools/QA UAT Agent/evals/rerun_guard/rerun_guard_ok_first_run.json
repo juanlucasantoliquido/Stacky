@@ -1,0 +1,29 @@
+{
+  "_eval_id": "rerun_guard_ok_first_run",
+  "_description": "No existe latest_run_result.json — primer run del ticket. Debe permitir.",
+  "_layer": "unit",
+  "_scenario": "El archivo evidence/999/latest_run_result.json no existe.",
+  "input": {
+    "ticket_id": 999,
+    "force_rerun": false,
+    "current_fingerprint": null,
+    "mock_latest": null
+  },
+  "expected_output": {
+    "ok": true,
+    "verdict": "OK",
+    "reason": "FIRST_RUN",
+    "cooldown_active": false,
+    "cooldown_remaining_s": 0,
+    "forced": false,
+    "previous_run_id": null,
+    "category": null
+  },
+  "assertions": [
+    "result.ok == True",
+    "result.verdict == 'OK'",
+    "result.reason == 'FIRST_RUN'",
+    "result.cooldown_active == False",
+    "result.forced == False"
+  ]
+}

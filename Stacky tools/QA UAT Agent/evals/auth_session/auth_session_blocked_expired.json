@@ -1,0 +1,39 @@
+{
+  "_eval_id": "auth_session_blocked_expired",
+  "_description": "Sesión existente pero vencida (> TTL) — debe invalidarla y generar nueva.",
+  "_layer": "unit",
+  "_scenario": "El .auth/agenda.json existe y tiene cookies pero tiene más de 1800s de antigüedad. El stage debe detectar AUTH_EXPIRED, invalidar el archivo y disparar un nuevo login.",
+  "input": {
+    "mode": "normal",
+    "mock_auth_file_exists": true,
+    "mock_auth_file_age_s": 3600,
+    "mock_auth_has_cookies": true,
+    "mock_fingerprint_matches": true,
+    "mock_credentials": {
+      "AGENDA_WEB_USER": "testuser",
+      "AGENDA_WEB_PASS": "testpass",
+      "AGENDA_WEB_BASE_URL": "http://localhost:35017/AgendaWeb/"
+    },
+    "mock_login_result": {
+      "ok": true,
+      "reason": "AUTH_LOGIN_OK",
+      "error": null
+    }
+  },
+  "expected_output": {
+    "ok": true,
+    "verdict": "OK",
+    "reason": "AUTH_OK",
+    "reused": false,
+    "dry_run": false,
+    "category": null,
+    "_note": "El stage detectó AUTH_EXPIRED, invalidó el archivo y generó nueva sesión. reused=false porque fue fresh login."
+  },
+  "assertions": [
+    "result.ok == True",
+    "result.verdict == 'OK'",
+    "result.reason == 'AUTH_OK'",
+    "result.reused == False",
+    "result.storage_state_path is not None"
+  ]
+}

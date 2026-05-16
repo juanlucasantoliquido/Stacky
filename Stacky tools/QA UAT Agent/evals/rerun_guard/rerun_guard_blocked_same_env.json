@@ -1,0 +1,44 @@
+{
+  "_eval_id": "rerun_guard_blocked_same_env",
+  "_description": "Último run hace 2 min, BLOCKED/ENV/MISSING_CREDENTIALS, sin cambio de fingerprint. Debe bloquear con cooldown activo.",
+  "_layer": "unit",
+  "_scenario": "El operador relanza 120s después de un BLOCKED/ENV/MISSING_CREDENTIALS. Cooldown TTL=600s, así que quedan ~480s.",
+  "input": {
+    "ticket_id": 122,
+    "force_rerun": false,
+    "current_fingerprint": "NO_EXPECTED_BUILD_DEFINED",
+    "mock_latest": {
+      "run_id": "uat-122-20260513T113000Z-mno345",
+      "verdict": "BLOCKED",
+      "category": "ENV",
+      "reason": "MISSING_CREDENTIALS",
+      "finished_at": "__NOW_MINUS_120S__",
+      "deployment_fingerprint": "NO_EXPECTED_BUILD_DEFINED",
+      "tool_version": "1.1.0"
+    },
+    "mock_cooldown_ttl_s": 600
+  },
+  "expected_output": {
+    "ok": false,
+    "verdict": "BLOCKED",
+    "category": "OPS",
+    "reason": "PREVIOUS_RUN_SAME_VERDICT",
+    "cooldown_active": true,
+    "forced": false,
+    "previous_run_id": "uat-122-20260513T113000Z-mno345",
+    "previous_verdict": "BLOCKED",
+    "previous_reason": "MISSING_CREDENTIALS"
+  },
+  "assertions": [
+    "result.ok == False",
+    "result.verdict == 'BLOCKED'",
+    "result.category == 'OPS'",
+    "result.reason == 'PREVIOUS_RUN_SAME_VERDICT'",
+    "result.cooldown_active == True",
+    "result.cooldown_remaining_s > 0",
+    "result.previous_run_id == 'uat-122-20260513T113000Z-mno345'",
+    "result.human_action_required is not None",
+    "'AGENDA_WEB_USER' in result.human_action_required",
+    "'--force-rerun' in result.human_action_required"
+  ]
+}

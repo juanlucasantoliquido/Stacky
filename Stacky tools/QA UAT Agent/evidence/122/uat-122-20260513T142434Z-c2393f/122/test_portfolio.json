@@ -1,0 +1,78 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 122,
+  "generated_at": "2026-05-13T14:24:47.355003Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "122-CA-01",
+      "description": "Abrir domicilio existente en Modificación ddlProvincia muestra el valor guardado previamente",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "122-CA-02",
+      "description": "Guardar con Provincia seleccionada y reabrir SELECT DTPROVINCIA FROM RDIRE = código guardado",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "122-CA-03",
+      "description": "Guardar sin informar Provincia Sin error; DTPROVINCIA = NULL en RDIRE",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "122-CA-04",
+      "description": "Guardar todos los campos (incluidos preexistentes) DTCALLE, DTESTADO, DTCIUDAD, DTPAIS + DTPROVINCIA persisten correctamente",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "122-CA-05",
+      "description": "Borrado lógico de domicilio con Provincia DTVALIDO='0'; DTPROVINCIA conservado en BD",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "manual_review": 4,
+    "integration": 1
+  }
+}

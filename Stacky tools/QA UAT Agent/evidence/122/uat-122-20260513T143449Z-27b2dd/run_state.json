@@ -1,0 +1,11 @@
+{
+  "run_id": "uat-122-20260513T143449Z-27b2dd",
+  "status": "blocked",
+  "current_stage": "unknown",
+  "last_completed_stage": null,
+  "last_event_id": null,
+  "resume_from": "unknown",
+  "blocked_reason": "no_test_plan_in_ticket",
+  "waiting_for_human": false,
+  "updated_at": "2026-05-13T14:35:00.450Z"
+}

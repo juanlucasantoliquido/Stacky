@@ -1,0 +1,11 @@
+{
+  "run_id": "uat-122-20260513T150703Z-d2a5a4",
+  "status": "completed",
+  "current_stage": "session_start",
+  "last_completed_stage": "publisher",
+  "last_event_id": null,
+  "resume_from": null,
+  "blocked_reason": null,
+  "waiting_for_human": false,
+  "updated_at": "2026-05-13T15:11:31.379Z"
+}

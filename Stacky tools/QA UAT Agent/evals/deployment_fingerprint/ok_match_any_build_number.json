@@ -1,0 +1,32 @@
+{
+  "_eval_id": "ok_match_any_build_number",
+  "_description": "ticket_config define expected_build con commit_sha y build_number. resolve_expected_build debe retornar dict normalizado con build_id=build_number, commit=commit_sha y match_strategy=any.",
+  "_layer": "unit",
+  "input": {
+    "ticket_id": 122,
+    "ticket_config": {
+      "ticket_id": "122",
+      "expected_build": {
+        "commit_sha": "aaabbb",
+        "build_number": "v1.2.3-rf008",
+        "deploy_timestamp": null
+      },
+      "match_strategy": "any",
+      "notes": ""
+    },
+    "mock_active": null,
+    "env_override": null
+  },
+  "expected_output": {
+    "build_id": "v1.2.3-rf008",
+    "commit": "aaabbb",
+    "match_strategy": "any",
+    "_source": "ticket_config"
+  },
+  "assertions": [
+    "result['build_id'] == 'v1.2.3-rf008'",
+    "result['commit'] == 'aaabbb'",
+    "result['match_strategy'] == 'any'",
+    "result['_source'] == 'ticket_config'"
+  ]
+}

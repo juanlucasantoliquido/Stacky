@@ -1,0 +1,34 @@
+{
+  "_eval_id": "blocked_mismatch",
+  "_description": "ticket_config define expected_build. El actual no coincide en ningún campo. Debe retornar decision=BLOCKED, reason=DEPLOYMENT_MISMATCH.",
+  "_layer": "unit",
+  "input": {
+    "ticket_id": 122,
+    "ticket_config": {
+      "ticket_id": "122",
+      "expected_build": {
+        "commit_sha": "abc1234",
+        "build_number": "v1.2.3-rf008",
+        "deploy_timestamp": null
+      },
+      "match_strategy": "all",
+      "notes": ""
+    },
+    "mock_active": {
+      "build_id": "v0.9.0-old",
+      "commit": "zzz9999",
+      "branch": null
+    },
+    "env_override": null
+  },
+  "expected_output": {
+    "decision": "BLOCKED",
+    "matched": false,
+    "reason": "DEPLOYMENT_MISMATCH"
+  },
+  "assertions": [
+    "result['decision'] == 'BLOCKED'",
+    "result['matched'] == False",
+    "result['reason'] == 'DEPLOYMENT_MISMATCH'"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "run_id": "uat-122-20260513T143449Z-27b2dd",
+  "ticket_id": 122,
+  "trace_id": "trace-uat-122-20260513T143449Z-27b2dd",
+  "schema_version": "1.0",
+  "started_at": "2026-05-13T14:34:49.987Z",
+  "tool_version": "1.1.0",
+  "mode": "dry-run",
+  "headed": true,
+  "operator": "system",
+  "env_summary": {
+    "AGENDA_WEB_PASS": "***REDACTED***",
+    "RS_QA_DB_USER": "RSPACIFICOREAD",
+    "AGENDA_WEB_BASE_URL": "http://localhost:35017/AgendaWeb/",
+    "RS_QA_DB_DSN": "Data Source=aisbddev02.cloud.ais-int.net;Pooling=True",
+    "AGENDA_WEB_USER": "PABLO",
+    "QA_UAT_REQUIRE_PLAYBOOK": "true",
+    "OS": "Windows_NT",
+    "RS_QA_DB_PASS": "***REDACTED***",
+    "COMPUTERNAME": "PT-C-0100",
+    "USERNAME": "juanluca"
+  }
+}

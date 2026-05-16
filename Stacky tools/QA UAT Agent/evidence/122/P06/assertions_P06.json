@@ -1,0 +1,12 @@
+{
+  "scenario_id": "P06",
+  "assertions": [
+    {
+      "oracle_id": 0,
+      "target": "GridDomicilios",
+      "tipo": "count_gt",
+      "expected": 0,
+      "capture_error": "locator.count: Target page, context or browser has been closed"
+    }
+  ]
+}

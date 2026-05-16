@@ -1,0 +1,29 @@
+{
+  "_eval_id": "blocked_actual_unresolvable",
+  "_description": "El expected_build está definido pero el servidor no responde (todas las fuentes fallan). Con mode=publish o policy=hard → BLOCKED/ENV/FINGERPRINT_SOURCE_MISSING.",
+  "_layer": "unit",
+  "input": {
+    "ticket_id": 122,
+    "ticket_config": {
+      "ticket_id": "122",
+      "expected_build": {
+        "commit_sha": "abc1234",
+        "build_number": "v1.2.3-rf008",
+        "deploy_timestamp": null
+      },
+      "match_strategy": "any",
+      "notes": ""
+    },
+    "mock_active": null,
+    "env_override": null,
+    "mode": "publish"
+  },
+  "expected_output": {
+    "decision": "BLOCKED",
+    "matched": false
+  },
+  "assertions": [
+    "result['decision'] == 'BLOCKED'",
+    "result['matched'] == False"
+  ]
+}

@@ -74,17 +74,10 @@ export default function CreateChildTaskButton({
   const totalPending = pendingData?.total_pending ?? 0;
   const pendingTasks: PendingTaskItem[] = pendingData?.pending_tasks ?? [];
 
-  // No renderizar si no hay pendientes (y no hay error de fetch)
-  if (!fetchError && totalPending === 0 && pendingData !== undefined) {
-    return null;
-  }
-
-  // Si hay error de fetch, no mostramos el botón tampoco (sin crashear el árbol)
-  if (fetchError && pendingData === undefined) {
-    return null;
-  }
-
   // ── Handlers ──────────────────────────────────────────────────────────────
+  // IMPORTANT: todos los hooks (incluidos los useCallback de abajo) deben
+  // ejecutarse en TODOS los renders. Los early returns van AL FINAL, justo
+  // antes del JSX, para no violar las Rules of Hooks.
 
   const handleOpen = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -181,6 +174,16 @@ export default function CreateChildTaskButton({
   }, [epicAdoId, isRunning, selected, pendingTasks, reason, dryRun, qc, onTaskCreated]);
 
   const canCreate = selected.size > 0 && !isRunning;
+
+  // ── Early returns (DESPUÉS de todos los hooks) ────────────────────────────
+  // No renderizar si no hay pendientes (y no hay error de fetch)
+  if (!fetchError && totalPending === 0 && pendingData !== undefined) {
+    return null;
+  }
+  // Si hay error de fetch, no mostramos el botón tampoco (sin crashear el árbol)
+  if (fetchError && pendingData === undefined) {
+    return null;
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
 

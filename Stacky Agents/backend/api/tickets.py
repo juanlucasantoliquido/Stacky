@@ -51,6 +51,37 @@ def _resolve_repo_root() -> Path:
     return REPO_ROOT
 
 
+def _check_finish_manifest_gate(execution_id: int | None) -> dict | None:
+    """Lee MANIFEST.json para una execution_id y retorna un resumen.
+
+    Retorna None si no hay execution o el manifest no existe / es inválido.
+    Caso contrario:
+      { "exists": True, "status": "...", "work_completed": bool,
+        "written_at": str|None, "execution_id": int }
+    """
+    if execution_id is None:
+        return None
+    from services.manifest_watcher import MANIFEST_FILENAME, default_runs_dir
+
+    path = default_runs_dir() / str(execution_id) / MANIFEST_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    signals = data.get("signals") or {}
+    return {
+        "exists": True,
+        "execution_id": execution_id,
+        "status": data.get("status"),
+        "work_completed": bool(signals.get("work_completed", False)),
+        "written_at": data.get("written_at"),
+    }
+
+
 @bp.get("/hierarchy")
 def get_hierarchy():
     """Devuelve todos los tickets organizados en jerarquía Epic → hijos.
@@ -914,6 +945,10 @@ def finish_work(ticket_id: int):
     html_output_path = body.get("html_output_path")
     target_ado_state = body.get("target_ado_state")
     force_publish = bool(body.get("force_publish", False))
+    # force_finish=true permite cerrar manualmente aunque el MANIFEST diga
+    # work_completed=false (caso: operador limpia un ticket conocido como
+    # roto). Sin este flag, el manifest gate devuelve 409.
+    force_finish = bool(body.get("force_finish", False))
     dry_run = bool(body.get("dry_run", False))
     operator = request.headers.get("X-User-Email") or "anonymous"
     # Trazabilidad de origen: el frontend UI envía "manual_ui"; agentes envían "agent" u omiten.
@@ -946,12 +981,37 @@ def finish_work(ticket_id: int):
             .first()
         )
         execution_id = last_exec.id if last_exec else None
-        exec_hint = last_exec.html_output_path if last_exec else None
+        # html_output_path se setea dinámicamente (no es columna); usamos
+        # getattr para no romper en runs que nunca lo recibieron.
+        exec_hint = getattr(last_exec, "html_output_path", None) if last_exec else None
 
     if current_stacky == "completed":
         return jsonify({
             "ok": False,
             "error": "ticket ya está en stacky_status='completed'",
+            "current_status": current_stacky,
+        }), 409
+
+    # ── 1b. Manifest gate (Fase 3/5) ──────────────────────────────────────────
+    # Si la última ejecución dejó un MANIFEST que dice work_completed=false, el
+    # cierre manual es probablemente prematuro. Devolvemos 409 con el manifest
+    # para que la UI muestre por qué; el operador puede pasar force_finish=true
+    # para override.
+    manifest_check = _check_finish_manifest_gate(execution_id)
+    if (
+        manifest_check is not None
+        and not manifest_check["work_completed"]
+        and not dry_run
+        and not force_finish
+    ):
+        return jsonify({
+            "ok": False,
+            "error": "manifest_work_not_completed",
+            "message": (
+                "La última ejecución dejó un MANIFEST con work_completed=false. "
+                "Si querés cerrar igual, mandá force_finish=true."
+            ),
+            "manifest": manifest_check,
             "current_status": current_stacky,
         }), 409
 

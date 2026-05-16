@@ -174,7 +174,9 @@ def test_mode_b_closes_running_execution_on_comment_html(client, repo_root_dir):
         assert e.completed_at is not None
 
 
-def test_mode_b_skips_when_no_running_execution(client, repo_root_dir):
+def test_mode_b_publishes_even_when_execution_already_terminal(client, repo_root_dir):
+    """Si la execution ya está terminal y aparece comment.html, igual publica
+    (cubre race Modo A → Modo B). El status no se re-abre."""
     from services.output_watcher import AdoOutputWatcher
     from db import session_scope
     from models import AgentExecution
@@ -185,12 +187,12 @@ def test_mode_b_skips_when_no_running_execution(client, repo_root_dir):
 
     w = AdoOutputWatcher(stable_delay_b=0.0)
     result = w.scan_once()
-    assert result["mode_b_closes"] == 0
-    assert result["mode_b_skipped"] == 1
+    # mode_b_closes ahora incluye publish-late (no solo transiciones)
+    assert result["mode_b_closes"] == 1
 
     with session_scope() as session:
         e = session.get(AgentExecution, exec_id)
-        assert e.status == "completed"  # sin cambio
+        assert e.status == "completed"  # NO se re-abre
 
 
 def test_mode_b_respects_stable_delay(client, repo_root_dir):
@@ -253,6 +255,43 @@ def test_mode_b_dedup_by_sha_does_not_double_close(client, repo_root_dir):
     r2 = w.scan_once()
     assert r2["mode_b_closes"] == 0
     assert r2["mode_b_skipped"] == 0  # cache mtime detecta sin re-stat
+
+
+def test_mode_b_publishes_late_when_execution_already_terminal(client, repo_root_dir):
+    """Race Modo A → Modo B: si la execution ya se cerró (p.ej. por Modo A),
+    Modo B aún debe publicar el comment.html cuando aparezca."""
+    from services.output_watcher import AdoOutputWatcher
+    from db import session_scope
+    from models import AgentExecution
+
+    ticket_id = _mk_ticket(40107)
+    exec_id = _mk_execution(ticket_id, status="completed")  # ya cerrada
+    _write_comment_html(repo_root_dir, 40107, "<p>late publish</p>")
+
+    w = AdoOutputWatcher(stable_delay_b=0.0)
+    result = w.scan_once()
+    # mode_b_closes cuenta el publish-only también (no es solo transiciones)
+    assert result["mode_b_closes"] == 1
+
+    # Verificar que se llamó publish (el fake_publish del fixture devuelve ok=True)
+    # — no podemos checkear DB directo porque el stub no escribe agent_html_publish.
+    # En su lugar, verificamos que la execution sigue completed (no se re-abrió).
+    with session_scope() as session:
+        e = session.get(AgentExecution, exec_id)
+        assert e.status == "completed"
+
+
+def test_mode_b_skips_when_no_execution_at_all(client, repo_root_dir):
+    """comment.html en disco para un ticket sin ninguna execution → skip."""
+    from services.output_watcher import AdoOutputWatcher
+
+    _mk_ticket(40108)  # ticket pero sin execution alguna
+    _write_comment_html(repo_root_dir, 40108)
+
+    w = AdoOutputWatcher(stable_delay_b=0.0)
+    r = w.scan_once()
+    assert r["mode_b_closes"] == 0
+    assert r["mode_b_skipped"] == 1
 
 
 def test_mode_b_ignores_dir_without_comment_html(client, repo_root_dir):

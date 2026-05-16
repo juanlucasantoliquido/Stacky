@@ -153,22 +153,22 @@ def close_execution_with_publish(
             )
 
     # ── Paso 3: decidir auto-publish ──────────────────────────────────────────
+    # Importante: el publish puede correr incluso si ya estaba terminal, siempre
+    # que se haya pasado un html_output_path nuevo y auto_publish esté habilitado.
+    # Esto cubre el race Modo A → Modo B del output_watcher: si Modo A cerró el
+    # Epic antes de que Modo B detectara comment.html, Modo B aún debe publicar.
+    # El dedup SHA-256 en agent_html_publish evita doble-publish.
     publish_result: dict
-    if already_terminal:
-        publish_result = {"skipped": True, "reason": "already_terminal"}
-        return CloseResult(
-            ok=True,
-            execution_id=execution_id,
-            ticket_id=ticket_id,
-            final_status=final_status,
-            already_terminal=True,
-            publish=publish_result,
-        )
 
     if final_status != "completed":
         publish_result = {"skipped": True, "reason": "status_not_completed"}
     elif not html_output_path:
-        publish_result = {"skipped": True, "reason": "html_output_path_missing"}
+        publish_result = {
+            "skipped": True,
+            "reason": "html_output_path_missing"
+            if not already_terminal
+            else "already_terminal_no_html",
+        }
     else:
         publish_enabled = _should_auto_publish(auto_publish)
         if not publish_enabled:
@@ -181,7 +181,7 @@ def close_execution_with_publish(
         execution_id=execution_id,
         ticket_id=ticket_id,
         final_status=final_status,
-        already_terminal=False,
+        already_terminal=already_terminal,
         publish=publish_result,
     )
 

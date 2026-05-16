@@ -243,18 +243,19 @@ class AdoOutputWatcher:
                 round_result.mode_b_skipped += 1
                 return
 
-            running_exec = (
+            # Tomar la LATEST execution (running o terminal). El publish puede
+            # disparar aunque la execution esté cerrada — esto cubre el race
+            # Modo A → Modo B cuando un Epic produce ambos artifacts y Modo A
+            # cerró antes. El dedup SHA en agent_html_publish evita doble-publish.
+            latest_exec = (
                 session.query(AgentExecution)
-                .filter(
-                    AgentExecution.ticket_id == ticket_id,
-                    AgentExecution.status == "running",
-                )
-                .order_by(AgentExecution.started_at.desc())
+                .filter(AgentExecution.ticket_id == ticket_id)
+                .order_by(AgentExecution.id.desc())
                 .first()
             )
-            if running_exec is None:
+            if latest_exec is None:
                 logger.debug(
-                    "output_watcher mode_b: comment.html para ADO-%s pero no hay execution running",
+                    "output_watcher mode_b: comment.html para ADO-%s pero no hay execution registrada",
                     ado_id,
                 )
                 self._seen_b[key] = (stat.st_mtime_ns, sha256)
@@ -262,18 +263,19 @@ class AdoOutputWatcher:
                 return
 
             # El archivo debe ser de esta execution (mtime ≥ started_at - margen)
-            cutoff = running_exec.started_at - timedelta(seconds=DEFAULT_STARTED_AT_GRACE_SECONDS)
+            cutoff = latest_exec.started_at - timedelta(seconds=DEFAULT_STARTED_AT_GRACE_SECONDS)
             if datetime.utcfromtimestamp(stat.st_mtime) < cutoff:
                 logger.debug(
                     "output_watcher mode_b: comment.html para ADO-%s es más viejo que la execution %d — skip",
-                    ado_id, running_exec.id,
+                    ado_id, latest_exec.id,
                 )
                 self._seen_b[key] = (stat.st_mtime_ns, sha256)
                 round_result.mode_b_skipped += 1
                 return
 
-            execution_id = running_exec.id
-            agent_type = running_exec.agent_type
+            execution_id = latest_exec.id
+            agent_type = latest_exec.agent_type
+            is_running = latest_exec.status == "running"
 
         # ── Cerrar y publicar (afuera del session_scope para no anidar) ───────
         try:
@@ -281,13 +283,19 @@ class AdoOutputWatcher:
         except Exception:
             html_rel = str(comment)
 
+        if is_running:
+            action = "cerrando+publicando"
+            triggered = "output_watcher_mode_b"
+        else:
+            action = "solo publicando (execution ya terminal)"
+            triggered = "output_watcher_mode_b_late"
         logger.info(
-            "output_watcher mode_b: cerrando exec=%d ADO-%s sha=%s",
-            execution_id, ado_id, sha256[:8],
+            "output_watcher mode_b: %s exec=%d ADO-%s sha=%s",
+            action, execution_id, ado_id, sha256[:8],
         )
         result = close_execution_with_publish(
             execution_id=execution_id,
-            triggered_by="output_watcher_mode_b",
+            triggered_by=triggered,
             final_status="completed",
             html_output_path=html_rel,
             user="system:output_watcher",
@@ -297,7 +305,10 @@ class AdoOutputWatcher:
         )
 
         self._seen_b[key] = (stat.st_mtime_ns, sha256)
-        if result.ok and not result.already_terminal:
+        # Cuenta como close si transicionamos estado; cuenta como publish-only
+        # cuando ya estaba terminal pero publicamos igual.
+        publish_ok = result.publish.get("ok") is True
+        if result.ok and (not result.already_terminal or publish_ok):
             round_result.mode_b_closes += 1
         else:
             round_result.mode_b_skipped += 1

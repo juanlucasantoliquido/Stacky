@@ -409,7 +409,25 @@ class AdoOutputWatcher:
             agent_type = running_exec.agent_type
             pending_count = len(pending_files)
 
-        # ── Cerrar (sin publish, sin crear tasks) ─────────────────────────────
+        # ── Auto-create Tasks en ADO (Fase W5) ─────────────────────────────────
+        # Si STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS != "false", para cada
+        # pending-task.json con status != "consumed" hacemos self-HTTP a
+        # /api/tickets/by-ado/{epic_id}/create-child-task. El endpoint tiene
+        # idempotencia (marca el archivo como consumed), por lo que llamadas
+        # repetidas son no-op.
+        auto_create_summary = _auto_create_pending_tasks(
+            epic_ado_id=epic_ado_id,
+            pending_files=pending_files,
+        )
+        if auto_create_summary["created"] > 0 or auto_create_summary["errors"] > 0:
+            logger.info(
+                "output_watcher mode_a: auto-create resumen — created=%d skipped=%d errors=%d",
+                auto_create_summary["created"],
+                auto_create_summary["skipped"],
+                auto_create_summary["errors"],
+            )
+
+        # ── Cerrar (sin publish, las tasks ya fueron creadas vía endpoint) ────
         logger.info(
             "output_watcher mode_a: cerrando exec=%d epic-%s (pending_tasks=%d, stable=%.0fs)",
             execution_id, epic_ado_id, pending_count, age_seconds,
@@ -465,6 +483,108 @@ def _rel_to_repo(path: Path) -> str:
         return str(path.relative_to(repo_root())).replace("\\", "/")
     except ValueError:
         return str(path)
+
+
+def _auto_create_pending_tasks(*, epic_ado_id: int, pending_files: list[Path]) -> dict:
+    """Para cada pending-task.json no consumido, llama al endpoint
+    `/api/tickets/by-ado/{epic}/create-child-task` vía self-HTTP.
+
+    Idempotente: el endpoint mismo skipea archivos con status=consumed.
+
+    Retorna {created, skipped, errors}.
+    """
+    import json as _json
+    import requests as _req
+
+    if os.getenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true").lower() == "false":
+        return {"created": 0, "skipped": len(pending_files), "errors": 0}
+
+    try:
+        from config import config as _config
+        port = _config.PORT
+    except Exception:
+        port = int(os.getenv("PORT", "5050"))
+
+    base_url = f"http://127.0.0.1:{port}/api/tickets/by-ado/{epic_ado_id}/create-child-task"
+
+    created = 0
+    skipped = 0
+    errors = 0
+
+    for pt_file in pending_files:
+        try:
+            pt_payload = _json.loads(pt_file.read_text(encoding="utf-8"))
+        except (OSError, _json.JSONDecodeError) as exc:
+            logger.warning(
+                "output_watcher mode_a: pending-task inválido en %s: %s",
+                pt_file, exc,
+            )
+            errors += 1
+            continue
+
+        if pt_payload.get("status") == "consumed" or "consumed_at" in pt_payload:
+            skipped += 1
+            continue
+
+        rf_id = pt_payload.get("rf_id", "?")
+        pt_rel = _rel_to_repo(pt_file)
+        body = {
+            "pending_task_path": pt_rel,
+            "operator_reason": (
+                f"output_watcher auto-create: pending-task estable detectado para "
+                f"epic-{epic_ado_id}/{rf_id}"
+            ),
+            "completion_source": "output_watcher_auto",
+        }
+        try:
+            resp = _req.post(base_url, json=body, timeout=60)
+        except _req.exceptions.ConnectionError as exc:
+            # El Flask todavía no acepta conexiones (raro: el watcher corre
+            # dentro del mismo proceso). Logueamos y dejamos para el próximo round.
+            logger.warning(
+                "output_watcher mode_a: auto-create connection error para rf=%s: %s",
+                rf_id, exc,
+            )
+            errors += 1
+            continue
+        except _req.exceptions.RequestException as exc:
+            logger.warning(
+                "output_watcher mode_a: auto-create request falló para rf=%s: %s",
+                rf_id, exc,
+            )
+            errors += 1
+            continue
+
+        if resp.status_code == 200:
+            try:
+                payload = resp.json()
+            except ValueError:
+                payload = {}
+            if payload.get("idempotent"):
+                skipped += 1
+                logger.info(
+                    "output_watcher mode_a: auto-create rf=%s ya estaba consumido (task_id=%s)",
+                    rf_id, payload.get("task_ado_id"),
+                )
+            else:
+                created += 1
+                logger.info(
+                    "output_watcher mode_a: auto-create rf=%s → task_ado_id=%s",
+                    rf_id, payload.get("task_ado_id"),
+                )
+        else:
+            errors += 1
+            try:
+                err_payload = resp.json()
+                err_msg = err_payload.get("error") or err_payload.get("message") or resp.text[:200]
+            except ValueError:
+                err_msg = resp.text[:200]
+            logger.warning(
+                "output_watcher mode_a: auto-create rf=%s falló (HTTP %d): %s",
+                rf_id, resp.status_code, err_msg,
+            )
+
+    return {"created": created, "skipped": skipped, "errors": errors}
 
 
 # ── Singleton global ──────────────────────────────────────────────────────────

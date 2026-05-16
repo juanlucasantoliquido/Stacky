@@ -347,17 +347,20 @@ def test_mode_a_respects_stable_delay(client, repo_root_dir):
     assert r2["mode_a_closes"] == 1
 
 
-def test_mode_a_does_not_create_child_tasks(client, repo_root_dir):
-    """El watcher cierra la execution pero NO crea tasks hijas en ADO."""
+def test_mode_a_does_not_create_child_tasks_when_flag_off(client, repo_root_dir, monkeypatch):
+    """Con STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS=false el watcher cierra el
+    Epic execution pero NO llama al endpoint create-child-task."""
     from services.output_watcher import AdoOutputWatcher
     from db import session_scope
     from models import Ticket
+
+    monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "false")
 
     ticket_id = _mk_ticket(40203, work_item_type="Epic")
     _mk_execution(ticket_id)
     _write_pending_task(repo_root_dir, 40203, "RF-001")
 
-    # Cuentita inicial de tickets — el watcher NO debe crear nuevos
+    # Cuentita inicial de tickets — con flag off, ningún ticket nuevo se crea
     with session_scope() as session:
         baseline = session.query(Ticket).count()
 
@@ -367,6 +370,45 @@ def test_mode_a_does_not_create_child_tasks(client, repo_root_dir):
     with session_scope() as session:
         after = session.query(Ticket).count()
     assert after == baseline  # cero tickets nuevos
+
+
+def test_mode_a_invokes_create_child_task_endpoint(client, repo_root_dir, monkeypatch):
+    """Con auto-create ON (default), el watcher llama al endpoint create-child-task
+    por cada pending-task.json no consumido."""
+    from services.output_watcher import AdoOutputWatcher
+    import services.output_watcher as ow_mod
+
+    calls: list[dict] = []
+
+    class _FakeResp:
+        status_code = 200
+        text = "{}"
+        def json(self):
+            return {"ok": True, "task_ado_id": 99999, "pending_task_consumed": True}
+
+    def _fake_post(url, json=None, timeout=None, **kw):
+        calls.append({"url": url, "body": json})
+        return _FakeResp()
+
+    # Monkey-patch requests dentro de _auto_create_pending_tasks
+    import requests as _req
+    monkeypatch.setattr(_req, "post", _fake_post)
+
+    monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+
+    ticket_id = _mk_ticket(40207, work_item_type="Epic")
+    _mk_execution(ticket_id)
+    _write_pending_task(repo_root_dir, 40207, "RF-001")
+    _write_pending_task(repo_root_dir, 40207, "RF-002")
+
+    w = AdoOutputWatcher(stable_delay_a=0.0)
+    w.scan_once()
+
+    # Debe haber 2 llamadas, una por pending-task
+    assert len(calls) == 2
+    for call in calls:
+        assert "/by-ado/40207/create-child-task" in call["url"]
+        assert call["body"]["completion_source"] == "output_watcher_auto"
 
 
 def test_mode_a_idempotent_does_not_double_close(client, repo_root_dir):

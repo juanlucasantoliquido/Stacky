@@ -479,12 +479,19 @@ def set_stacky_status_by_ado(ado_id: int):
         "status": "completed" | "error" | "cancelled" | "idle",
         "reason": "texto libre opcional",
         "agent_type": "developer" | "technical" | ... (opcional),
-        "html_output_path": "Agentes/outputs/<ADO_ID>/comment.html" (opcional)
+        "html_output_path": "Agentes/outputs/<ADO_ID>/comment.html" (opcional),
+        "target_ado_state": "To Do" | "Blocked" | "Done" | null (opcional)
       }
 
     Nota: el campo "auto_publish" es ignorado si está presente en el body —
     el comportamiento de publicación es server-side y no puede ser controlado
     por el agente.
+
+    Si `target_ado_state` se provee, Stacky cambia el System.State del work item
+    en ADO DESPUÉS de publicar exitosamente el comentario. Si el publish falló
+    o se saltó, el state change también se saltea (no queremos ticket "Done"
+    sin comentario publicado). Este flujo permite que TechnicalAnalyst delegue
+    la transición a "To Do" / "Blocked" sin tocar ADO directamente.
 
     Responde 200 aunque el ticket no esté en BD (para no romper al agente).
     """
@@ -498,6 +505,10 @@ def set_stacky_status_by_ado(ado_id: int):
     reason = body.get("reason")
     agent_type = body.get("agent_type")
     html_output_path = body.get("html_output_path")
+    # target_ado_state — opcional: transición del System.State del work item ADO
+    # post-publish. Útil para que el TechnicalAnalyst delegue el cambio a "To Do"
+    # o "Blocked" sin tocar ADO directamente. Si None, no se cambia el estado.
+    target_ado_state = (body.get("target_ado_state") or "").strip() or None
     user = request.headers.get("X-User-Email") or "agent"
     correlation_id = str(_uuid.uuid4())
 
@@ -648,6 +659,41 @@ def set_stacky_status_by_ado(ado_id: int):
                     ado_id, last_exec.id, close_result.publish.get("reason"), correlation_id,
                 )
 
+    # ── Transición de System.State en ADO (opcional, Fase TA-migration) ──────
+    # Solo si: target_ado_state explícito + publish ok + ado_id presente.
+    # Si el publish falló o se saltó, no cambiamos estado (no queremos un
+    # ticket en "Done" sin comentario publicado).
+    state_change_result: dict = {"skipped": True, "reason": "not_requested"}
+    if target_ado_state:
+        if ado_id is None:
+            state_change_result = {"skipped": True, "reason": "no_ado_id"}
+        elif not publish_result.get("ok"):
+            state_change_result = {
+                "skipped": True,
+                "reason": "publish_not_ok",
+                "publish_status": publish_result.get("reason") or publish_result.get("event"),
+            }
+        else:
+            try:
+                from services.ado_client import AdoClient
+                AdoClient().update_work_item_state(int(ado_id), target_ado_state)
+                state_change_result = {"ok": True, "to": target_ado_state}
+                logger.info(
+                    "set_stacky_status_by_ado: ado state changed → %s (ADO-%s corr=%s)",
+                    target_ado_state, ado_id, correlation_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception(
+                    "set_stacky_status_by_ado: update_work_item_state falló — ADO-%s target=%s corr=%s",
+                    ado_id, target_ado_state, correlation_id,
+                )
+                state_change_result = {
+                    "ok": False,
+                    "to": target_ado_state,
+                    "error": str(exc),
+                    "type": type(exc).__name__,
+                }
+
     return jsonify({
         "ok": True,
         "ado_id": ado_id,
@@ -658,6 +704,7 @@ def set_stacky_status_by_ado(ado_id: int):
         "correlation_id": correlation_id,
         "gateway_active_warning": gateway_mode == "on",
         "publish": publish_result,
+        "ado_state_change": state_change_result,
     })
 
 

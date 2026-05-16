@@ -175,6 +175,20 @@ def create_app() -> Flask:
     else:
         logger.debug("manifest watcher disabled (STACKY_MANIFEST_WATCHER_ENABLED=false)")
 
+    # ── Output watcher (Modo A + Modo B) ─────────────────────────────────────
+    # Cierre automático de runs VSCode (open-chat) cuando el agente deposita
+    # artifacts en Agentes/outputs/ pero no PATCHea stacky-status.
+    # STACKY_OUTPUT_WATCHER_ENABLED=true|false (default: true)
+    # STACKY_OUTPUT_WATCHER_INTERVAL_SECONDS=float (default: 3.0)
+    _output_watcher_enabled = os.getenv("STACKY_OUTPUT_WATCHER_ENABLED", "true").lower() == "true"
+    if _output_watcher_enabled:
+        from services.output_watcher import start_output_watcher
+        _output_watcher_interval = float(os.getenv("STACKY_OUTPUT_WATCHER_INTERVAL_SECONDS", "3.0"))
+        start_output_watcher(poll_interval=_output_watcher_interval)
+        logger.info("output watcher armed (interval=%.1fs)", _output_watcher_interval)
+    else:
+        logger.debug("output watcher disabled (STACKY_OUTPUT_WATCHER_ENABLED=false)")
+
     _startup_sync(logger)
 
     # ── Structured logging middleware ─────────────────────────────────────

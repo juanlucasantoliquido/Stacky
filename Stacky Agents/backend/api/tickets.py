@@ -566,98 +566,87 @@ def set_stacky_status_by_ado(ado_id: int):
         )
         session.add(audit_log)
 
-    try:
-        ts.set_status(
-            ticket_id,
-            new_status,
-            changed_by=user,
-            agent_type=agent_type,
-            reason=reason or f"Manual override via legacy endpoint (ADO-{ado_id}) corr={correlation_id}",
-            metadata={"html_output_path": html_output_path, "completion_source": "manual"} if html_output_path else {"completion_source": "manual"},
-        )
-    except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
-
-    # ── Auto-publish server-side ──────────────────────────────────────────────
-    # Decisión arquitectónica: el agente NO controla si se publica.
-    # Stacky publica automáticamente cuando se cumplen TODAS las precondiciones:
-    #   1. status == "completed"
-    #   2. html_output_path presente en el body (el agente siempre lo manda)
-    #   3. AgentExecution válida encontrada en BD
-    #   4. STACKY_LEGACY_AUTO_PUBLISH != "off" (default "on")
-    #
-    # Si STACKY_LEGACY_AUTO_PUBLISH="off" → publish.skipped(reason="legacy_auto_publish_disabled")
-    # Si falla → publish.failed registrado, PATCH response sigue siendo OK.
+    # ── Cierre unificado: ticket_status + auto-publish vía helper ────────────
+    # close_execution_with_publish reemplaza el bloque de ~70 líneas que antes
+    # vivía acá inline. Es el mismo path que usa el output_watcher para cerrar
+    # runs huérfanos automáticamente.
     publish_result: dict
-
-    if new_status != "completed":
-        publish_result = {"skipped": True, "reason": "status_not_completed"}
-    elif legacy_auto_publish == "off":
-        publish_result = {"skipped": True, "reason": "legacy_auto_publish_disabled"}
-        logger.info(
-            "set_stacky_status_by_ado: publish.skipped(legacy_auto_publish_disabled) — "
-            "ADO-%s corr=%s",
-            ado_id, correlation_id,
-        )
-    elif not html_output_path:
-        publish_result = {"skipped": True, "reason": "html_output_path_missing"}
-    elif last_exec is None:
-        publish_result = {"skipped": True, "reason": "no_execution_found"}
-        logger.warning(
-            "set_stacky_status_by_ado: publish.skipped(no_execution_found) — "
-            "ADO-%s html_output_path=%s corr=%s",
-            ado_id, html_output_path, correlation_id,
-        )
-    else:
-        logger.info(
-            "set_stacky_status_by_ado: publish.attempted — "
-            "ADO-%s exec=%d html=%s corr=%s",
-            ado_id, last_exec.id, html_output_path, correlation_id,
-        )
+    if last_exec is None:
+        # Caller pasó un ticket sin ejecuciones — sólo seteamos stacky_status manual,
+        # sin path de auto-publish posible (no hay execution_id).
         try:
-            from services.ado_publisher import publish_from_execution
-            pr = publish_from_execution(last_exec.id, triggered_by="legacy_auto_publish")
-            if pr.ok:
-                publish_result = {
-                    "ok": True,
-                    "status": pr.status,
-                    "ado_id": pr.ado_id,
-                    "execution_id": pr.execution_id,
-                    "html_sha256": pr.html_sha256,
-                    "ado_response": pr.ado_response,
-                    "record_id": pr.record_id,
-                    "event": "publish.succeeded",
-                }
-                logger.info(
-                    "set_stacky_status_by_ado: publish.succeeded — "
-                    "ADO-%s exec=%d status=%s corr=%s",
-                    ado_id, last_exec.id, pr.status, correlation_id,
-                )
-            else:
-                publish_result = {
-                    "ok": False,
-                    "status": pr.status,
-                    "reason": pr.reason,
-                    "execution_id": pr.execution_id,
-                    "event": "publish.failed",
-                }
-                logger.warning(
-                    "set_stacky_status_by_ado: publish.failed — "
-                    "ADO-%s exec=%d reason=%s corr=%s",
-                    ado_id, last_exec.id, pr.reason, correlation_id,
-                )
-        except Exception as pub_exc:
-            publish_result = {
-                "ok": False,
-                "reason": str(pub_exc),
-                "type": type(pub_exc).__name__,
-                "event": "publish.failed",
-            }
-            logger.exception(
-                "set_stacky_status_by_ado: publish raised exception — "
-                "ADO-%s exec=%d corr=%s",
-                ado_id, last_exec.id if last_exec else "?", correlation_id,
+            ts.set_status(
+                ticket_id,
+                new_status,
+                changed_by=user,
+                agent_type=agent_type,
+                reason=reason or f"Manual override via legacy endpoint (ADO-{ado_id}) corr={correlation_id}",
+                metadata={"html_output_path": html_output_path, "completion_source": "manual"} if html_output_path else {"completion_source": "manual"},
             )
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
+        if new_status != "completed":
+            publish_result = {"skipped": True, "reason": "status_not_completed"}
+        elif legacy_auto_publish == "off":
+            publish_result = {"skipped": True, "reason": "legacy_auto_publish_disabled"}
+        elif not html_output_path:
+            publish_result = {"skipped": True, "reason": "html_output_path_missing"}
+        else:
+            publish_result = {"skipped": True, "reason": "no_execution_found"}
+            logger.warning(
+                "set_stacky_status_by_ado: publish.skipped(no_execution_found) — "
+                "ADO-%s html_output_path=%s corr=%s",
+                ado_id, html_output_path, correlation_id,
+            )
+    else:
+        # Path normal: hay execution. Usar la helper unificada.
+        from services.agent_completion_internal import close_execution_with_publish
+
+        # Si estamos transicionando a estados no-terminal (p.ej. status=idle),
+        # la helper no aplica (es solo para terminal). Caemos al set_status manual.
+        if new_status not in {"completed", "error", "cancelled"}:
+            try:
+                ts.set_status(
+                    ticket_id,
+                    new_status,
+                    changed_by=user,
+                    agent_type=agent_type,
+                    reason=reason or f"Manual override via legacy endpoint (ADO-{ado_id}) corr={correlation_id}",
+                    metadata={"completion_source": "manual"},
+                )
+            except ValueError as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 400
+            publish_result = {"skipped": True, "reason": "status_not_completed"}
+        else:
+            close_result = close_execution_with_publish(
+                execution_id=last_exec.id,
+                triggered_by="legacy_auto_publish",
+                final_status=new_status,
+                html_output_path=html_output_path,
+                user=user,
+                reason=reason or f"Manual override via legacy endpoint (ADO-{ado_id}) corr={correlation_id}",
+                completion_source="manual",
+                agent_type_hint=agent_type,
+                # Si legacy_auto_publish=="off" forzamos disable; sino dejamos default (lee env).
+                auto_publish=False if legacy_auto_publish == "off" else None,
+            )
+            publish_result = close_result.publish
+            # Backward-compat con el contrato legacy: el reason del skip era
+            # "legacy_auto_publish_disabled" antes del refactor.
+            if publish_result.get("reason") == "auto_publish_disabled":
+                publish_result = dict(publish_result)
+                publish_result["reason"] = "legacy_auto_publish_disabled"
+            if close_result.publish.get("ok") is True:
+                logger.info(
+                    "set_stacky_status_by_ado: publish.succeeded — ADO-%s exec=%d corr=%s",
+                    ado_id, last_exec.id, correlation_id,
+                )
+            elif close_result.publish.get("ok") is False:
+                logger.warning(
+                    "set_stacky_status_by_ado: publish.failed — ADO-%s exec=%d reason=%s corr=%s",
+                    ado_id, last_exec.id, close_result.publish.get("reason"), correlation_id,
+                )
 
     return jsonify({
         "ok": True,

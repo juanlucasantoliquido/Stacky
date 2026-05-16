@@ -119,6 +119,60 @@ def diagnose_execution(execution_id: int):
     })
 
 
+@bp.post("/output-watcher/scan-now")
+def output_watcher_scan_now():
+    """Dispara una pasada manual del output_watcher.
+
+    Útil para cerrar runs huérfanos inmediatamente sin esperar el polling
+    interval. También sirve para troubleshooting: si un comment.html está en
+    disco pero el run sigue running, hacer scan-now y leer el `round` del
+    response.
+    """
+    from services.output_watcher import AdoOutputWatcher, get_output_watcher
+
+    # Si el singleton no está arrancado (caso watcher disabled vía env),
+    # creamos uno ad-hoc para esta pasada — la usabilidad lo justifica.
+    watcher = get_output_watcher()
+    ad_hoc = False
+    if watcher is None:
+        watcher = AdoOutputWatcher()
+        ad_hoc = True
+
+    round_result = watcher.scan_once()
+
+    return jsonify({
+        "ok": True,
+        "ad_hoc_watcher": ad_hoc,
+        "round": round_result,
+        "stats_total": watcher.stats.as_dict(),
+    })
+
+
+@bp.get("/output-watcher/stats")
+def output_watcher_stats():
+    """Stats acumuladas del output_watcher (solo lectura)."""
+    from services.output_watcher import get_output_watcher
+
+    watcher = get_output_watcher()
+    if watcher is None:
+        return jsonify({
+            "ok": True,
+            "running": False,
+            "stats": None,
+        })
+    return jsonify({
+        "ok": True,
+        "running": watcher._thread is not None and watcher._thread.is_alive(),
+        "stats": watcher.stats.as_dict(),
+        "config": {
+            "outputs_dir": str(watcher.outputs_dir),
+            "poll_interval": watcher.poll_interval,
+            "stable_delay_b": watcher.stable_delay_b,
+            "stable_delay_a": watcher.stable_delay_a,
+        },
+    })
+
+
 @bp.get("/metrics")
 def metrics():
     """Métricas operacionales del lifecycle de ejecuciones.

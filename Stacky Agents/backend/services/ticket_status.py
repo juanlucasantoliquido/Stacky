@@ -217,13 +217,35 @@ def on_execution_end(
     final_status: str,
     agent_type: str | None = None,
     error: str | None = None,
+    reason_override: str | None = None,
+    metadata_override: dict | None = None,
 ) -> None:
     """Hook post-ejecución: se llama al terminar el agente (cualquier outcome).
 
     Actualiza el estado del ticket y ejecuta hooks adicionales registrados.
+
+    Args:
+        reason_override: si está presente, se usa en lugar del reason default
+            (útil para que los callers especifiquen el origen, p.ej. el
+            output_watcher para auditar de dónde vino el cierre).
+        metadata_override: dict que se mergea con el metadata default.
     """
-    reason = error if error else f"Execution {execution_id} ended: {final_status}"
-    metadata = {"error": error} if error else None
+    if reason_override:
+        reason = reason_override
+    elif error:
+        reason = error
+    else:
+        reason = f"Execution {execution_id} ended: {final_status}"
+
+    metadata: dict | None
+    if error and metadata_override:
+        metadata = {"error": error, **metadata_override}
+    elif error:
+        metadata = {"error": error}
+    elif metadata_override:
+        metadata = dict(metadata_override)
+    else:
+        metadata = None
 
     set_status(
         ticket_id,

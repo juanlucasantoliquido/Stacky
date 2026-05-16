@@ -23,7 +23,7 @@ from db import session_scope
 from models import AgentExecution
 from services import ticket_status, vscode_agents
 from services.agent_env import build_agent_env
-from services.manifest_watcher import write_heartbeat, write_manifest
+from services.manifest_watcher import append_event, write_heartbeat, write_manifest
 from services.stacky_logger import logger as stacky_logger
 
 logger = logging.getLogger("stacky_agents.codex_cli")
@@ -290,6 +290,12 @@ def _run_in_background(
 
         # Heartbeat — el reconciler/Fase 4 lo consume para detectar runs colgados.
         write_heartbeat(run_dir, execution_id=execution_id, pid=proc.pid, phase="started")
+        append_event(
+            run_dir,
+            execution_id=execution_id,
+            event_type="process_started",
+            payload={"pid": proc.pid, "agent_type": agent_type},
+        )
         hb_interval = float(os.getenv("STACKY_HEARTBEAT_INTERVAL_SECONDS", "30"))
 
         def _heartbeat_loop() -> None:
@@ -366,6 +372,12 @@ def _run_in_background(
                 output_file=output_file,
                 prompt_file=prompt_file,
             )
+            append_event(
+                run_dir,
+                execution_id=execution_id,
+                event_type="completed",
+                payload={"exit_code": return_code, "duration_ms": duration_ms},
+            )
             log("info", f"codex cli completed ({duration_ms}ms)")
             ticket_status.on_execution_end(
                 ticket_id=ticket_id,
@@ -405,6 +417,12 @@ def _run_in_background(
                 output_file=output_file,
                 prompt_file=prompt_file,
             )
+            append_event(
+                run_dir,
+                execution_id=execution_id,
+                event_type="error",
+                payload={"exit_code": return_code, "duration_ms": duration_ms, "error": error},
+            )
             log("error", error)
             ticket_status.on_execution_end(
                 ticket_id=ticket_id,
@@ -440,6 +458,15 @@ def _run_in_background(
                 output_file=output_file,
                 prompt_file=prompt_file,
             )
+            try:
+                append_event(
+                    run_dir,
+                    execution_id=execution_id,
+                    event_type="exception",
+                    payload={"error": str(exc)},
+                )
+            except Exception:
+                pass
         try:
             with session_scope() as session:
                 row = session.get(AgentExecution, execution_id)

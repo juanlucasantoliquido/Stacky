@@ -26,7 +26,7 @@ from services.heartbeat_monitor import (
     is_execution_heartbeat_stale,
 )
 from services.manifest_watcher import MANIFEST_FILENAME, default_runs_dir
-from services.ticket_status import TicketStatusEvent
+from services.ticket_status import EXECUTION_TIMEOUT_MINUTES, TicketStatusEvent
 
 logger = logging.getLogger("stacky.api.diag")
 
@@ -119,7 +119,124 @@ def diagnose_execution(execution_id: int):
     })
 
 
+@bp.get("/metrics")
+def metrics():
+    """Métricas operacionales del lifecycle de ejecuciones.
+
+    Devuelve JSON con:
+      - executions_by_status: counter por status.
+      - duration_ms: p50 / p95 / p99 de runs completados (ventana últimas 200).
+      - recoveries: counter por kind (heartbeat_timeout, execution_timeout,
+        execution_ended, no_execution, manifest_orphan_detected).
+      - currently_running: cantidad de runs en status=running.
+      - oldest_running_age_seconds: edad de la ejecución running más vieja.
+      - thresholds: umbrales activos (timeouts, intervals).
+    """
+    from sqlalchemy import func
+
+    with session_scope() as session:
+        status_rows = (
+            session.query(AgentExecution.status, func.count(AgentExecution.id))
+            .group_by(AgentExecution.status)
+            .all()
+        )
+        executions_by_status = {s: int(n) for s, n in status_rows}
+
+        # Duraciones de los últimos 200 runs completados
+        completed_rows = (
+            session.query(AgentExecution.started_at, AgentExecution.completed_at)
+            .filter(
+                AgentExecution.status == "completed",
+                AgentExecution.completed_at.isnot(None),
+            )
+            .order_by(AgentExecution.id.desc())
+            .limit(200)
+            .all()
+        )
+        durations_ms = sorted(
+            int((c - s).total_seconds() * 1000)
+            for s, c in completed_rows
+            if s is not None and c is not None
+        )
+
+        # Recovery counters desde TicketStatusEvent: parsea el 'reason' o
+        # cuenta por changed_by prefix `system:reaper` / `system:recovery`.
+        recovery_rows = (
+            session.query(TicketStatusEvent.reason, TicketStatusEvent.changed_by)
+            .filter(
+                (TicketStatusEvent.changed_by.like("system:reaper%"))
+                | (TicketStatusEvent.changed_by.like("system:recovery%"))
+            )
+            .all()
+        )
+        recoveries: dict[str, int] = {}
+        for reason, _changed_by in recovery_rows:
+            kind = _classify_recovery_reason(reason)
+            recoveries[kind] = recoveries.get(kind, 0) + 1
+
+        currently_running = executions_by_status.get("running", 0)
+        oldest_age: float | None = None
+        if currently_running:
+            oldest = (
+                session.query(AgentExecution.started_at)
+                .filter(AgentExecution.status == "running")
+                .order_by(AgentExecution.started_at.asc())
+                .first()
+            )
+            if oldest and oldest[0]:
+                oldest_age = (datetime.utcnow() - oldest[0]).total_seconds()
+
+    return jsonify({
+        "ok": True,
+        "executions_by_status": executions_by_status,
+        "duration_ms": _percentiles(durations_ms),
+        "recoveries": recoveries,
+        "currently_running": currently_running,
+        "oldest_running_age_seconds": oldest_age,
+        "thresholds": {
+            "execution_timeout_minutes": EXECUTION_TIMEOUT_MINUTES,
+            "heartbeat_timeout_minutes": HEARTBEAT_TIMEOUT_MINUTES,
+            "startup_grace_seconds": STARTUP_GRACE_SECONDS,
+        },
+    })
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _percentiles(samples: list[int]) -> dict[str, int | None]:
+    """Calcula p50/p95/p99 sobre una lista YA ordenada. None si vacía."""
+    if not samples:
+        return {"count": 0, "p50": None, "p95": None, "p99": None, "max": None}
+    n = len(samples)
+
+    def at(p: float) -> int:
+        idx = min(n - 1, max(0, int(p * (n - 1))))
+        return samples[idx]
+
+    return {
+        "count": n,
+        "p50": at(0.50),
+        "p95": at(0.95),
+        "p99": at(0.99),
+        "max": samples[-1],
+    }
+
+
+def _classify_recovery_reason(reason: str | None) -> str:
+    """Mapea el texto libre del reason a una categoría enumerada."""
+    if not reason:
+        return "unknown"
+    r = reason.lower()
+    if "heartbeat" in r:
+        return "heartbeat_timeout"
+    if "timed out" in r or "timeout" in r:
+        return "execution_timeout"
+    if "last execution was already terminal" in r:
+        return "execution_ended"
+    if "no executions found" in r:
+        return "no_execution"
+    return "other"
 
 
 def _read_manifest(execution_id: int) -> dict | None:

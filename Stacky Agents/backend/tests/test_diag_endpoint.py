@@ -46,7 +46,10 @@ def runs_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def client(runs_dir):
+def client(runs_dir, monkeypatch):
+    monkeypatch.setenv("STACKY_REAPER_ENABLED", "false")
+    monkeypatch.setenv("STACKY_MANIFEST_WATCHER_ENABLED", "false")
+
     from app import create_app
     from services.ticket_status import stop_stale_recovery
     from services.manifest_watcher import stop_manifest_watcher

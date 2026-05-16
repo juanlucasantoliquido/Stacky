@@ -28,6 +28,7 @@ logger = logging.getLogger("stacky.manifest_watcher")
 
 MANIFEST_FILENAME = "MANIFEST.json"
 HEARTBEAT_FILENAME = "heartbeat.json"
+EVENTS_FILENAME = "events.jsonl"
 MANIFEST_SCHEMA_VERSION = "1"
 
 TERMINAL_STATUSES = frozenset({"completed", "error", "cancelled"})
@@ -74,6 +75,36 @@ def write_manifest(
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, path)
+    return path
+
+
+def append_event(
+    run_dir: Path,
+    *,
+    execution_id: int,
+    event_type: str,
+    payload: dict | None = None,
+) -> Path:
+    """Append una línea JSON al events.jsonl del run (audit trail forense).
+
+    Cada línea: {"ts": "...", "execution_id": N, "event_type": "...", "payload": {...}}
+
+    Best-effort: si la escritura falla, no propaga la excepción — el lifecycle
+    del runner no debe fallar por un event log.
+    """
+    run_dir.mkdir(parents=True, exist_ok=True)
+    path = run_dir / EVENTS_FILENAME
+    record = {
+        "ts": datetime.utcnow().isoformat() + "Z",
+        "execution_id": execution_id,
+        "event_type": event_type,
+        "payload": payload or {},
+    }
+    try:
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        logger.debug("append_event failed for %s: %s", path, exc)
     return path
 
 

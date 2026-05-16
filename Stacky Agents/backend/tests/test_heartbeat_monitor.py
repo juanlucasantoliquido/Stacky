@@ -147,9 +147,13 @@ def test_stale_respects_custom_timeout(runs_dir):
 
 @pytest.fixture
 def client(monkeypatch, runs_dir):
-    """App test client con DB en memoria + runs_dir redirigido."""
-    # Redirigir default_runs_dir también en ticket_status (importa heartbeat_monitor)
-    import services.ticket_status as ts
+    """App test client con DB en memoria + runs_dir redirigido.
+
+    Deshabilita el reaper y el manifest watcher ANTES de create_app() para
+    evitar daemons compitiendo por la DB en :memory: (causa 'table locked').
+    """
+    monkeypatch.setenv("STACKY_REAPER_ENABLED", "false")
+    monkeypatch.setenv("STACKY_MANIFEST_WATCHER_ENABLED", "false")
 
     from app import create_app
     from services.ticket_status import stop_stale_recovery
@@ -157,6 +161,7 @@ def client(monkeypatch, runs_dir):
 
     app = create_app()
     app.config.update(TESTING=True)
+    # Por si quedaron daemons de tests previos
     stop_stale_recovery()
     stop_manifest_watcher()
     with app.test_client() as c:
@@ -209,12 +214,15 @@ def test_reaper_closes_execution_with_stale_heartbeat(client, runs_dir):
     from models import AgentExecution
 
     ticket_id = _mk_ticket(ado_id=12001)
-    exec_id = _mk_running_execution(ticket_id, started_minutes_ago=30)
+    # 20 min ago — adentro del execution_timeout (30 min) pero con heartbeat stale
+    exec_id = _mk_running_execution(ticket_id, started_minutes_ago=20)
     _write_hb(runs_dir, exec_id, age_seconds=20 * 60)
 
     details = recover_stale_running_tickets(trigger="hb_test")
-    kinds = [d.get("kind") for d in details]
-    assert "heartbeat_timeout" in kinds
+    # Filtramos por nuestra execution para no depender de pollution global
+    our_details = [d for d in details if d.get("execution_id") == exec_id]
+    assert len(our_details) == 1, f"Expected one detail for exec {exec_id}, got {our_details!r}"
+    assert our_details[0]["kind"] == "heartbeat_timeout"
 
     with session_scope() as session:
         exec_ = session.get(AgentExecution, exec_id)

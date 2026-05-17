@@ -2,8 +2,9 @@
 
 Este documento describe los mecanismos de observación, recovery automático y
 diagnóstico forense agregados por el plan de remediación del lifecycle
-(Fases 0-5). Si una ejecución queda colgada o un ticket aparece "INCONSISTENTE"
-en la UI, esto es lo que tenés que mirar.
+(Fases 0-5) más los sprints posteriores (S1 — target_ado_state vía meta,
+S2 — ado-similar-tickets context block). Si una ejecución queda colgada o
+un ticket aparece "INCONSISTENTE" en la UI, esto es lo que tenés que mirar.
 
 ---
 
@@ -13,10 +14,12 @@ en la UI, esto es lo que tenés que mirar.
 |---|---|---|---|
 | **Stale recovery reaper** | cada 120s | Recorre `AgentExecution` en `running`/`queued` y cierra los huérfanos (Casos A/B/C) | `STACKY_REAPER_ENABLED=false` |
 | **Manifest watcher** | cada 2.0s | Polea `backend/data/codex_runs/<id>/MANIFEST.json`. Cierra runs cuyo manifest es terminal pero la DB sigue `running` | `STACKY_MANIFEST_WATCHER_ENABLED=false` |
+| **Output watcher** | cada 3.0s | Polea `Agentes/outputs/`. Modo B publica `comment.html` a ADO + transiciona estado; Modo A auto-crea Tasks hijas de Epics desde `pending-task.json` | `STACKY_OUTPUT_WATCHER_ENABLED=false` |
 | **Heartbeat thread** | cada 30s | Cada runner escribe `heartbeat.json` mientras vive | (no se apaga; lo emite el runner) |
+| **Similar tickets injector** | por agent run | Inyecta context block `ado-similar-tickets` para Functional/Technical antes de invocar al agente | `STACKY_SIMILAR_TICKETS_ENABLED=false` |
 
-Los tres se arman en `backend/app.create_app()`. Los flags se leen de variables
-de entorno; los defaults son seguros para producción (todo ON).
+Los daemons se arman en `backend/app.create_app()`. Los flags se leen de
+variables de entorno; los defaults son seguros para producción (todo ON).
 
 ---
 
@@ -54,10 +57,120 @@ Esto evita regresar runtimes legacy que no soportan heartbeat.
 | `STACKY_HEARTBEAT_TIMEOUT_MINUTES` | `10` | Edad máxima de heartbeat antes de stale |
 | `STACKY_HEARTBEAT_STARTUP_GRACE_SECONDS` | `60` | Periodo de gracia tras arranque sin heartbeat |
 | `STACKY_HEARTBEAT_INTERVAL_SECONDS` | `30` | Frecuencia con que el runner emite heartbeat |
+| `STACKY_OUTPUT_WATCHER_ENABLED` | `true` | Arranca el daemon de output watching |
+| `STACKY_OUTPUT_WATCHER_INTERVAL_SECONDS` | `3.0` | Polling interval |
+| `STACKY_OUTPUT_WATCHER_STABLE_DELAY_B` | `2.0` | Debounce Modo B (segundos sin escrituras antes de procesar) |
+| `STACKY_OUTPUT_WATCHER_STABLE_DELAY_A` | `30.0` | Debounce Modo A (Epic con varios RFs) |
+| `STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS` | `true` | Modo A llama auto a `/create-child-task` por cada pending-task.json |
+| `STACKY_SIMILAR_TICKETS_ENABLED` | `true` | Inyecta context block `ado-similar-tickets` para Functional/Technical |
+| `STACKY_LEGACY_AUTO_PUBLISH` | `on` | Habilita auto-publish HTML a ADO post `status=completed` |
 
 ---
 
-## 4. Endpoints
+## 4. Output watcher — recovery por filesystem
+
+El `output_watcher` cubre el flujo de agentes lanzados vía
+`/api/agents/open-chat` (Copilot Chat en VSCode), donde Stacky NO está en
+el proceso del agente y no recibe señales activas. El daemon polea
+`Agentes/outputs/` y dispara acciones según los artifacts que aparecen.
+
+### Modo B — comment.html → publish + transición de estado
+
+Trigger: aparece `Agentes/outputs/{ado_id}/comment.html` con SHA nuevo y
+estable hace ≥ 2s (configurable).
+
+Acciones:
+  1. Lee `comment.meta.json` adjunto (si existe) para extraer `target_ado_state`.
+  2. Si la última `AgentExecution` del ticket sigue `running` → cierra +
+     publica. Si ya está terminal → solo publica (cubre race Modo A→B).
+  3. Tras publish OK + `target_ado_state` presente → llama
+     `AdoClient.update_work_item_state` para transicionar el work item.
+  4. Idempotente: dedup DB-level por `UNIQUE(execution_id, html_sha256)`
+     en `agent_html_publish`.
+
+### Modo A — pending-task.json → auto-crear Tasks ADO
+
+Trigger: aparece `Agentes/outputs/epic-{ado_id}/{RF}/pending-task.json`
+estable hace ≥ 30s (configurable — debounce más largo porque un Epic
+con varios RFs tarda en estabilizar).
+
+Acciones:
+  1. Para cada `pending-task.json` con `status != consumed`, hace self-HTTP
+     a `POST /api/tickets/by-ado/{epic_ado_id}/create-child-task`.
+     El endpoint marca cada uno como `consumed_at` tras crear la Task en ADO.
+  2. Cierra el Epic execution (sin publish — Epic no tiene comment.html).
+  3. Idempotente: el endpoint en sí dedupea por `consumed` + el watcher
+     skipea archivos ya consumidos.
+
+Para volver al gate manual del operador: `STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS=false`.
+
+### comment.meta.json — contrato
+
+Path canónico: `Agentes/outputs/{ado_id}/comment.meta.json` (al lado de
+`comment.html`). Schema esperado:
+
+```json
+{
+  "schema_version": "1",
+  "ado_id": 27698,
+  "agent_type": "technical",
+  "status": "completed",
+  "target_ado_state": "To Do",
+  "generated_at": "2026-05-16T03:53:28Z",
+  "summary": "TechnicalAnalyst completó ADO-27698"
+}
+```
+
+`target_ado_state` es la única clave consumida hoy por Stacky (S1). El
+resto es metadata informativa para forense. Si el archivo falta o está
+malformado, el publish se ejecuta sin state change.
+
+### Endpoints diag del watcher
+
+| Método | Path | Uso |
+|---|---|---|
+| `POST` | `/api/diag/output-watcher/scan-now` | Dispara una pasada manual. Si el daemon está disabled, crea uno ad-hoc para la pasada. Útil para cerrar runs viejos sin esperar polling. |
+| `GET` | `/api/diag/output-watcher/stats` | Counters acumulados (`scans`, `mode_b_closes`, `mode_a_closes`, `errors`) + config activa |
+
+---
+
+## 5. Similar tickets context block
+
+Cuando se invoca un agente `functional` o `technical` sobre un ticket con
+`ado_id`, Stacky busca tickets ADO con título similar y los inyecta como
+context block antes del prompt.
+
+### Flujo
+
+1. `extract_keywords()` tokeniza el título y filtra stopwords ES/EN +
+   fragmentos < 4 chars (`"RF"`, `"el"`, `"de"`, etc.).
+2. WIQL `[System.Title] CONTAINS` con las 3 keywords más distintivas
+   (palabras más largas primero), excluyendo el `ado_id` actual.
+3. AdoClient ejecuta el WIQL (`fetch_open_work_items`).
+4. Si hay matches, inyecta block con `id: "ado-similar-tickets"`:
+
+```json
+{
+  "kind": "text",
+  "id": "ado-similar-tickets",
+  "title": "Tickets similares en ADO para ADO-149",
+  "content": "Tickets ADO con título similar... \n- ADO-148 [Task / Done] ...",
+  "metadata": { "count": 2, "tickets": [...] }
+}
+```
+
+5. El agente lee el block y referencia los existentes en su análisis en
+   vez de proponer crearlos.
+
+### Defensividad
+
+- AdoClient no configurado / falla → `[]` + warn log, agente sigue sin block.
+- Título sin keywords útiles → `[]` sin tocar ADO.
+- Idempotente: si el block ya está en raw_blocks, no re-inyecta.
+
+---
+
+## 6. Endpoints
 
 ### `GET /api/diag/execution/<id>`
 Snapshot forense completo de una ejecución. Devuelve:
@@ -109,7 +222,7 @@ deslizante, no all-time).
 
 ---
 
-## 5. SLOs y umbrales sugeridos
+## 7. SLOs y umbrales sugeridos
 
 | Métrica | SLO | Alerta cuando |
 |---|---|---|
@@ -126,7 +239,7 @@ nuevos sin soporte de heartbeat — investigar antes de subir el threshold.
 
 ---
 
-## 6. Artifacts en disco
+## 8. Artifacts en disco
 
 Cada run tiene su carpeta `backend/data/codex_runs/<execution_id>/`:
 
@@ -146,7 +259,7 @@ Cada run tiene su carpeta `backend/data/codex_runs/<execution_id>/`:
 
 ---
 
-## 7. Diagnóstico rápido — "¿por qué este run sigue en running?"
+## 9. Diagnóstico rápido — "¿por qué este run sigue en running?"
 
 1. `GET /api/diag/execution/<id>` y mirar `diagnosis` + `recommended_action`.
 2. Si `diagnosis == "alive"` → está vivo, esperar.
@@ -159,3 +272,24 @@ Cada run tiene su carpeta `backend/data/codex_runs/<execution_id>/`:
    `system_logs`.
 
 Para reconstruir la timeline forense sin DB, leer `events.jsonl` de la run dir.
+
+---
+
+## 10. Diagnóstico rápido — "agente terminó pero no se publicó en ADO"
+
+Aplica al flujo VSCode (`/api/agents/open-chat`):
+
+1. **Verificá si el agente escribió artifacts**:
+   ```bash
+   ls Agentes/outputs/{ADO_ID}/
+   # Esperás: comment.html, comment.meta.json (+ pending-task.json si Modo A)
+   ```
+2. **Si el agente PATCHeó** (mirá `system_logs WHERE endpoint LIKE '%stacky-status%' AND method='PATCH'`):
+   - Response debe incluir `publish.ok=true` y `ado_state_change.ok=true`.
+   - Si `publish.skipped` → posibles razones: `html_output_path_missing`, `auto_publish_disabled`, `no_execution_found`.
+3. **Si el agente NO PATCHeó** (cero entries en system_logs):
+   - El `output_watcher` debería levantarlo en ~3s. Verificá stats: `GET /api/diag/output-watcher/stats`.
+   - Si el watcher está disabled o roto, disparar manual: `POST /api/diag/output-watcher/scan-now`.
+4. **Si publicó pero no cambió estado**:
+   - Comprobá que existe `comment.meta.json` con `target_ado_state`.
+   - Si está, mirá logs del watcher: el log dice `target_state=(none)` cuando no encuentra meta.

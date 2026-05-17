@@ -236,7 +236,7 @@ function PipelineBar({ summary, isEpic, inferResult, compact = false }) {
 // con shape inesperada), se aísla en su contenedor y muestra un fallback en
 // lugar de blanquear toda la graph view.
 
-class NodeErrorBoundary extends React.Component {
+export class NodeErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
     this.state = { hasError: false, error: null };

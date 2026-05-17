@@ -244,6 +244,36 @@ def _run_in_background(
         except Exception as _exc_art:
             log("warn", f"artifact_context falló (continuando sin bloque): {_exc_art}")
 
+        # ADO similar tickets — inyecta tickets ADO con título parecido para
+        # que el agente NO proponga crear duplicados. Solo aplica a agentes
+        # que pueden sugerir creación de tickets (functional, technical).
+        # Configurable vía STACKY_SIMILAR_TICKETS_ENABLED (default "true").
+        if (
+            os.getenv("STACKY_SIMILAR_TICKETS_ENABLED", "true").lower() != "false"
+            and agent_type in {"functional", "technical"}
+            and ticket_ado_id is not None
+        ):
+            try:
+                from services import similar_tickets
+
+                with session_scope() as _sim_sess:
+                    _sim_ticket = _sim_sess.get(Ticket, ticket_id) if ticket_id else None
+                    _sim_title = _sim_ticket.title if _sim_ticket else ""
+                    _sim_project = _sim_ticket.project if _sim_ticket else "Strategist_Pacifico"
+                raw_blocks, _sim_info = similar_tickets.inject_into_blocks(
+                    raw_blocks,
+                    current_ado_id=ticket_ado_id,
+                    current_title=_sim_title,
+                    project=_sim_project or "Strategist_Pacifico",
+                )
+                if _sim_info and _sim_info.get("injected"):
+                    log(
+                        "info",
+                        f"ado-similar-tickets inyectado (count={_sim_info.get('count')})",
+                    )
+            except Exception as _exc_sim:
+                log("warn", f"similar_tickets falló (continuando sin bloque): {_exc_sim}")
+
         # ADO context enrichment — inyecta automáticamente comentarios y
         # adjuntos del ticket desde Azure DevOps al contexto que se envía al
         # chat de Copilot. Por defecto aplica a todos los agentes registrados;

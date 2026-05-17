@@ -48,6 +48,7 @@ from services.ticket_status import TicketStatusEvent
 logger = logging.getLogger("stacky.output_watcher")
 
 COMMENT_HTML_FILENAME = "comment.html"
+COMMENT_META_FILENAME = "comment.meta.json"
 PENDING_TASK_FILENAME = "pending-task.json"
 
 # Defaults (configurables vía env)
@@ -289,9 +290,15 @@ class AdoOutputWatcher:
         else:
             action = "solo publicando (execution ya terminal)"
             triggered = "output_watcher_mode_b_late"
+
+        # Leer comment.meta.json (si existe) para extraer target_ado_state. Esto
+        # permite que el watcher aplique el state change cuando recupera un run
+        # huérfano que el agente no PATCHeó (ver S1 del roadmap).
+        meta_target_state = _read_target_state_from_meta(ado_dir)
+
         logger.info(
-            "output_watcher mode_b: %s exec=%d ADO-%s sha=%s",
-            action, execution_id, ado_id, sha256[:8],
+            "output_watcher mode_b: %s exec=%d ADO-%s sha=%s target_state=%s",
+            action, execution_id, ado_id, sha256[:8], meta_target_state or "(none)",
         )
         result = close_execution_with_publish(
             execution_id=execution_id,
@@ -302,6 +309,7 @@ class AdoOutputWatcher:
             reason=f"output_watcher mode_b: comment.html detectado para ADO-{ado_id} sha={sha256[:8]}",
             completion_source="output_watcher",
             agent_type_hint=agent_type,
+            target_ado_state=meta_target_state,
         )
 
         self._seen_b[key] = (stat.st_mtime_ns, sha256)
@@ -483,6 +491,33 @@ def _rel_to_repo(path: Path) -> str:
         return str(path.relative_to(repo_root())).replace("\\", "/")
     except ValueError:
         return str(path)
+
+
+def _read_target_state_from_meta(ado_dir: Path) -> str | None:
+    """Lee `comment.meta.json` para extraer el target_ado_state que el agente
+    quiere aplicar tras el publish.
+
+    Defensivo:
+      - Si el archivo no existe → None (sin state change).
+      - Si está malformado / no es JSON → None + log debug.
+      - Si está OK pero no tiene `target_ado_state` → None.
+      - Si tiene un valor string no vacío → lo retorna.
+    """
+    meta = ado_dir / COMMENT_META_FILENAME
+    if not meta.is_file():
+        return None
+    try:
+        import json as _json
+        data = _json.loads(meta.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("output_watcher: comment.meta.json inválido en %s: %s", meta, exc)
+        return None
+    if not isinstance(data, dict):
+        return None
+    value = data.get("target_ado_state")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def _auto_create_pending_tasks(*, epic_ado_id: int, pending_files: list[Path]) -> dict:

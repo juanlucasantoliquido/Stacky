@@ -294,6 +294,91 @@ def test_mode_b_skips_when_no_execution_at_all(client, repo_root_dir):
     assert r["mode_b_skipped"] == 1
 
 
+def test_mode_b_applies_target_state_from_meta_json(client, repo_root_dir, monkeypatch):
+    """Si existe comment.meta.json con target_ado_state, el watcher lo aplica
+    al cerrar (vía AdoClient.update_work_item_state)."""
+    from services.output_watcher import AdoOutputWatcher
+    import services.agent_completion_internal as aci
+    import json as _json
+
+    ticket_id = _mk_ticket(40109)
+    _mk_execution(ticket_id)
+    _write_comment_html(repo_root_dir, 40109, "<p>con meta</p>")
+
+    # Escribir comment.meta.json con target_state
+    meta = repo_root_dir / "Agentes" / "outputs" / "40109" / "comment.meta.json"
+    meta.write_text(_json.dumps({"target_ado_state": "Reviewed by Dev"}), encoding="utf-8")
+
+    # Stub AdoClient.update_work_item_state para capturar la llamada sin red
+    calls: list[tuple] = []
+
+    class _FakeAdoClient:
+        def update_work_item_state(self, ado_id, state):
+            calls.append((ado_id, state))
+
+    import services.ado_client as _ado_client
+    monkeypatch.setattr(_ado_client, "AdoClient", _FakeAdoClient)
+
+    w = AdoOutputWatcher(stable_delay_b=0.0)
+    result = w.scan_once()
+    assert result["mode_b_closes"] == 1
+
+    # AdoClient.update_work_item_state debe haber sido llamado con (40109, "Reviewed by Dev")
+    assert calls == [(40109, "Reviewed by Dev")]
+
+
+def test_mode_b_no_meta_json_skips_state_change(client, repo_root_dir, monkeypatch):
+    """Sin comment.meta.json el watcher cierra/publica pero NO cambia estado."""
+    from services.output_watcher import AdoOutputWatcher
+
+    ticket_id = _mk_ticket(40110)
+    _mk_execution(ticket_id)
+    _write_comment_html(repo_root_dir, 40110)
+    # NO meta.json
+
+    calls: list[tuple] = []
+
+    class _FakeAdoClient:
+        def update_work_item_state(self, ado_id, state):
+            calls.append((ado_id, state))
+
+    import services.ado_client as _ado_client
+    monkeypatch.setattr(_ado_client, "AdoClient", _FakeAdoClient)
+
+    w = AdoOutputWatcher(stable_delay_b=0.0)
+    result = w.scan_once()
+    assert result["mode_b_closes"] == 1
+    assert calls == []  # cero llamadas de state change
+
+
+def test_mode_b_malformed_meta_json_tolerated(client, repo_root_dir, monkeypatch):
+    """comment.meta.json malformado → state change skipeado sin romper el publish."""
+    from services.output_watcher import AdoOutputWatcher
+
+    ticket_id = _mk_ticket(40111)
+    _mk_execution(ticket_id)
+    _write_comment_html(repo_root_dir, 40111)
+
+    # meta.json roto
+    meta = repo_root_dir / "Agentes" / "outputs" / "40111" / "comment.meta.json"
+    meta.write_text("{this is not json", encoding="utf-8")
+
+    calls: list[tuple] = []
+
+    class _FakeAdoClient:
+        def update_work_item_state(self, ado_id, state):
+            calls.append((ado_id, state))
+
+    import services.ado_client as _ado_client
+    monkeypatch.setattr(_ado_client, "AdoClient", _FakeAdoClient)
+
+    w = AdoOutputWatcher(stable_delay_b=0.0)
+    result = w.scan_once()
+    # Publish OK aunque meta esté roto
+    assert result["mode_b_closes"] == 1
+    assert calls == []  # state change skipeado
+
+
 def test_mode_b_ignores_dir_without_comment_html(client, repo_root_dir):
     from services.output_watcher import AdoOutputWatcher
 

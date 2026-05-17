@@ -43,6 +43,7 @@ class CloseResult:
     final_status: str
     already_terminal: bool = False
     publish: dict = field(default_factory=lambda: {"skipped": True, "reason": "not_attempted"})
+    ado_state_change: dict = field(default_factory=lambda: {"skipped": True, "reason": "not_requested"})
     error: str | None = None
 
     def to_dict(self) -> dict:
@@ -53,6 +54,7 @@ class CloseResult:
             "final_status": self.final_status,
             "already_terminal": self.already_terminal,
             "publish": self.publish,
+            "ado_state_change": self.ado_state_change,
             "error": self.error,
         }
 
@@ -68,6 +70,7 @@ def close_execution_with_publish(
     completion_source: str | None = None,
     agent_type_hint: str | None = None,
     auto_publish: bool | None = None,
+    target_ado_state: str | None = None,
 ) -> CloseResult:
     """Cierra una AgentExecution `running`/`queued` y dispara auto-publish si corresponde.
 
@@ -176,6 +179,26 @@ def close_execution_with_publish(
         else:
             publish_result = _attempt_publish(execution_id=execution_id, triggered_by=triggered_by)
 
+    # ── Paso 4: transición de System.State en ADO ────────────────────────────
+    # Solo si target_ado_state explícito + publish.ok + ticket tiene ado_id.
+    # Si publish falló/skipeó, NO cambiamos estado (evita ticket "Done" sin
+    # comentario publicado).
+    state_result: dict
+    if not target_ado_state:
+        state_result = {"skipped": True, "reason": "not_requested"}
+    elif not publish_result.get("ok"):
+        state_result = {
+            "skipped": True,
+            "reason": "publish_not_ok",
+            "publish_status": publish_result.get("reason") or publish_result.get("event"),
+        }
+    else:
+        state_result = _attempt_state_change(
+            ticket_id=ticket_id,
+            target_state=target_ado_state,
+            execution_id=execution_id,
+        )
+
     return CloseResult(
         ok=True,
         execution_id=execution_id,
@@ -183,6 +206,7 @@ def close_execution_with_publish(
         final_status=final_status,
         already_terminal=already_terminal,
         publish=publish_result,
+        ado_state_change=state_result,
     )
 
 
@@ -198,6 +222,60 @@ def _should_auto_publish(override: bool | None) -> bool:
     if override is not None:
         return override
     return os.getenv("STACKY_LEGACY_AUTO_PUBLISH", "on").lower().strip() != "off"
+
+
+def _attempt_state_change(
+    *, ticket_id: int | None, target_state: str, execution_id: int,
+) -> dict:
+    """Aplica `target_state` al System.State del work item ADO del ticket.
+
+    Cualquier excepción se convierte en `state_change.failed`.
+    """
+    if ticket_id is None:
+        return {"skipped": True, "reason": "no_ticket_id"}
+
+    # Necesitamos ado_id para llamar a AdoClient
+    ado_id: int | None = None
+    try:
+        with session_scope() as session:
+            ticket = session.get(Ticket, ticket_id)
+            if ticket is not None:
+                ado_id = getattr(ticket, "ado_id", None)
+    except Exception:
+        logger.exception("[exec=%s] no se pudo leer ado_id para state change", execution_id)
+        return {"skipped": True, "reason": "ticket_lookup_failed"}
+
+    if ado_id is None:
+        return {"skipped": True, "reason": "no_ado_id"}
+
+    try:
+        from services.ado_client import AdoClient
+    except ImportError as exc:
+        logger.warning(
+            "[exec=%s] AdoClient no disponible — state change skipped: %s",
+            execution_id, exc,
+        )
+        return {"skipped": True, "reason": "ado_client_unavailable"}
+
+    try:
+        AdoClient().update_work_item_state(int(ado_id), target_state)
+        logger.info(
+            "[exec=%s] ado state changed → %s (ADO-%s)",
+            execution_id, target_state, ado_id,
+        )
+        return {"ok": True, "to": target_state, "ado_id": ado_id}
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "[exec=%s] update_work_item_state falló — ADO-%s target=%s",
+            execution_id, ado_id, target_state,
+        )
+        return {
+            "ok": False,
+            "to": target_state,
+            "ado_id": ado_id,
+            "error": str(exc),
+            "type": type(exc).__name__,
+        }
 
 
 def _attempt_publish(*, execution_id: int, triggered_by: str) -> dict:

@@ -1,0 +1,24 @@
+{
+  "fixture_id": "sentiment_neutral_status",
+  "description": "Actualización neutral de estado — sin flags, sin sentimiento marcado",
+  "type": "comment_sentiment",
+  "input": {
+    "analyzer_input_version": "1.0",
+    "comments": [
+      {
+        "id": 4,
+        "text_plain": "En progreso, estimo terminar mañana."
+      }
+    ],
+    "context": {
+      "project": "TestProject",
+      "sprint_name": "Sprint Test"
+    }
+  },
+  "expected": {
+    "comment_id": 4,
+    "sentiment_label_one_of": ["neutral", "positive"],
+    "flags_required": [],
+    "flags_forbidden": ["BLOCKER_MENTIONED", "RISK_SIGNAL", "COMMITMENT_CHANGE"]
+  }
+}

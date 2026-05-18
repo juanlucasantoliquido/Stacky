@@ -184,3 +184,127 @@ class PmWorkItemComment(Base):
             "indexed_at": self.indexed_at.isoformat() if self.indexed_at else None,
         }
 
+
+class PmAiUsage(Base):
+    """Tracking de cada llamada IA — Fase 2.
+
+    Una fila por invocación al LLM. Permite al PM ver en vivo cuánto está
+    gastando y qué agentes/modelos consumen más, para ajustar pricing.
+
+    `advisory_only` queda en True por defecto y es controlado a nivel de
+    aplicación (no API): solo cambia manualmente vía DB admin cuando se
+    aprueba pasar a Fase 3 con publicación.
+    """
+
+    __tablename__ = "pm_ai_usage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    project: Mapped[str] = mapped_column(String(80), nullable=False)
+    agent_kind: Mapped[str] = mapped_column(String(30), nullable=False)  # sentiment | recommendation
+    prompt_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    model: Mapped[str] = mapped_column(String(60), nullable=False)
+    backend: Mapped[str] = mapped_column(String(30), nullable=False)     # mock | anthropic | copilot
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    success: Mapped[bool] = mapped_column(Boolean, default=True)
+    error: Mapped[str | None] = mapped_column(Text)
+    fixture_id: Mapped[str | None] = mapped_column(String(120))          # set cuando viene de evals
+    advisory_only: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(40))       # link al prompt_run / call concreto
+
+    __table_args__ = (
+        Index("ix_pm_ai_usage_project_ts", "project", "timestamp"),
+        Index("ix_pm_ai_usage_agent", "agent_kind", "timestamp"),
+        Index("ix_pm_ai_usage_model", "model"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "project": self.project,
+            "agent_kind": self.agent_kind,
+            "prompt_type": self.prompt_type,
+            "model": self.model,
+            "backend": self.backend,
+            "tokens_in": self.tokens_in,
+            "tokens_out": self.tokens_out,
+            "cost_usd": round(self.cost_usd, 6),
+            "latency_ms": self.latency_ms,
+            "success": self.success,
+            "error": self.error,
+            "fixture_id": self.fixture_id,
+            "advisory_only": self.advisory_only,
+            "correlation_id": self.correlation_id,
+        }
+
+
+class PmAiRecommendation(Base):
+    """Recomendación generada por LLM en modo advisory — Fase 2.
+
+    Las recomendaciones nunca se publican a ADO automáticamente. Para hacerlo
+    se necesita aprobación humana explícita (Fase 3, no implementada).
+
+    `advisory_only` y `publish_recommended` son inmutables a nivel de aplicación:
+    el servicio rechaza cualquier intento de cambiarlos vía la API.
+    """
+
+    __tablename__ = "pm_ai_recommendations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rec_id: Mapped[str] = mapped_column(String(60), unique=True, nullable=False)
+    project: Mapped[str] = mapped_column(String(80), nullable=False)
+    sprint_id: Mapped[str | None] = mapped_column(String(200))
+    priority: Mapped[str] = mapped_column(String(8), nullable=False)       # P0 | P1 | P2
+    category: Mapped[str] = mapped_column(String(30), nullable=False)
+    action: Mapped[str] = mapped_column(String(200), nullable=False)
+    rationale: Mapped[str | None] = mapped_column(Text)
+    supporting_data_json: Mapped[str | None] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    advisory_only: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    publish_recommended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    human_approval_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
+    acknowledged_by: Mapped[str | None] = mapped_column(String(200))
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime)
+    model: Mapped[str] = mapped_column(String(60), nullable=False)
+    usage_id: Mapped[int | None] = mapped_column(Integer)                  # FK soft a pm_ai_usage
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_pm_rec_project_sprint", "project", "sprint_id"),
+        Index("ix_pm_rec_generated", "generated_at"),
+    )
+
+    @property
+    def supporting_data(self) -> dict:
+        return _json_loads(self.supporting_data_json) or {}
+
+    @supporting_data.setter
+    def supporting_data(self, value: dict) -> None:
+        self.supporting_data_json = _json_dumps(value or {})
+
+    def to_dict(self) -> dict:
+        return {
+            "rec_id": self.rec_id,
+            "project": self.project,
+            "sprint_id": self.sprint_id,
+            "priority": self.priority,
+            "category": self.category,
+            "action": self.action,
+            "rationale": self.rationale,
+            "supporting_data": self.supporting_data,
+            "confidence": round(self.confidence, 4),
+            "advisory_only": self.advisory_only,
+            "publish_recommended": self.publish_recommended,
+            "human_approval_required": self.human_approval_required,
+            "acknowledged": self.acknowledged,
+            "acknowledged_by": self.acknowledged_by,
+            "acknowledged_at": self.acknowledged_at.isoformat() if self.acknowledged_at else None,
+            "model": self.model,
+            "usage_id": self.usage_id,
+            "generated_at": self.generated_at.isoformat() if self.generated_at else None,
+        }

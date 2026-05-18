@@ -1,0 +1,24 @@
+{
+  "fixture_id": "sentiment_scope_change",
+  "description": "Cambio de alcance mid-sprint — debe detectar COMMITMENT_CHANGE",
+  "type": "comment_sentiment",
+  "input": {
+    "analyzer_input_version": "1.0",
+    "comments": [
+      {
+        "id": 3,
+        "text_plain": "Necesitamos agregar 3 items nuevos al sprint que no estaban en el commitment original. PM acordó incluirlos."
+      }
+    ],
+    "context": {
+      "project": "TestProject",
+      "sprint_name": "Sprint Test"
+    }
+  },
+  "expected": {
+    "comment_id": 3,
+    "sentiment_label_one_of": ["neutral", "negative"],
+    "flags_required": ["COMMITMENT_CHANGE"],
+    "flags_forbidden": []
+  }
+}

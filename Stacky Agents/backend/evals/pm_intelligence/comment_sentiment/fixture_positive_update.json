@@ -1,0 +1,24 @@
+{
+  "fixture_id": "sentiment_positive_update",
+  "description": "Comentario que reporta avance positivo — debe ser positive, sin flags de bloqueo",
+  "type": "comment_sentiment",
+  "input": {
+    "analyzer_input_version": "1.0",
+    "comments": [
+      {
+        "id": 2,
+        "text_plain": "Terminé la implementación del endpoint. Tests verdes y deploy a staging completo."
+      }
+    ],
+    "context": {
+      "project": "TestProject",
+      "sprint_name": "Sprint Test"
+    }
+  },
+  "expected": {
+    "comment_id": 2,
+    "sentiment_label_one_of": ["positive"],
+    "flags_required": [],
+    "flags_forbidden": ["BLOCKER_MENTIONED", "RISK_SIGNAL"]
+  }
+}

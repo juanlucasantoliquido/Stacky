@@ -1,0 +1,31 @@
+{
+  "fixture_id": "rec_high_blocked_rate",
+  "description": "40% items bloqueados — debe recomendar reunión de desbloqueo o cambio de proceso",
+  "type": "recommendation_engine",
+  "input": {
+    "rec_input_version": "1.0",
+    "sprint_summary": {
+      "velocity_current": 12,
+      "velocity_avg": 20,
+      "completion_rate_pct": 55,
+      "days_remaining": 5,
+      "blocked_items_count": 4
+    },
+    "risk_feed": [
+      {
+        "risk_id": "RSK-test-2a",
+        "category": "BLOCKED",
+        "severity": "HIGH",
+        "rule": "aging_blocked_item",
+        "description": "4 items en estado blocked más de 5 días"
+      }
+    ],
+    "historical_sprints": []
+  },
+  "expected": {
+    "min_recommendations_count": 1,
+    "must_contain_category_at_least_one": ["PROCESS", "RISK_MITIGATION"],
+    "all_recommendations_must_have_advisory_only": true,
+    "must_not_contain_punitive_keywords": ["despedir", "incompetente"]
+  }
+}

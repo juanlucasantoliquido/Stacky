@@ -1,0 +1,30 @@
+{
+  "fixture_id": "rec_scope_creep_detected",
+  "description": "5 items agregados mid-sprint — debe alertar sobre control de scope",
+  "type": "recommendation_engine",
+  "input": {
+    "rec_input_version": "1.0",
+    "sprint_summary": {
+      "velocity_current": 18,
+      "velocity_avg": 21,
+      "completion_rate_pct": 60,
+      "days_remaining": 4,
+      "blocked_items_count": 1
+    },
+    "risk_feed": [
+      {
+        "risk_id": "RSK-test-3",
+        "category": "SCOPE_CREEP",
+        "severity": "HIGH",
+        "rule": "scope_creep_detected",
+        "description": "5 items creados después del inicio del sprint"
+      }
+    ],
+    "historical_sprints": []
+  },
+  "expected": {
+    "min_recommendations_count": 1,
+    "must_contain_category_at_least_one": ["SCOPE", "PROCESS"],
+    "all_recommendations_must_have_advisory_only": true
+  }
+}

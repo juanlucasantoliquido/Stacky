@@ -15,10 +15,10 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 
 from db import session_scope
 from project_manager import get_active_project, get_project_config
@@ -31,8 +31,16 @@ from services.pm.pm_normalizer import (
     normalize_work_item,
 )
 from services.pm.pm_comment_indexer import index_comments_bulk
+from services.pm.pm_evals import run_evals
+from services.pm.pm_recommendation_engine import (
+    acknowledge_recommendation,
+    generate_recommendations,
+)
 from services.pm.pm_risk_engine import detect_risks
+from services.pm.pm_sentiment import analyze_sentiment_for_comments
 from services.pm.models import (
+    PmAiRecommendation,
+    PmAiUsage,
     PmRiskItem,
     PmSprintSnapshot,
     PmWorkItemComment,
@@ -576,3 +584,392 @@ def index_comments():
         },
     })
 
+
+# ── AI usage tracking (Fase 2) ────────────────────────────────────────────────
+
+@bp.get("/ai/usage")
+def ai_usage():
+    """Agrega consumo de tokens y costo USD de las llamadas LLM PM.
+
+    Query params:
+      project: filtra por proyecto (opcional)
+      since_hours: ventana hacia atrás (default 24, max 168)
+      agent_kind: sentiment | recommendation (opcional)
+    """
+    project_param = (request.args.get("project") or "").strip() or None
+    agent_filter = (request.args.get("agent_kind") or "").strip().lower() or None
+    try:
+        since_hours = max(1, min(168, int(request.args.get("since_hours", "24"))))
+    except (TypeError, ValueError):
+        since_hours = 24
+
+    cutoff = datetime.utcnow() - timedelta(hours=since_hours)
+
+    with session_scope() as session:
+        q = session.query(PmAiUsage).filter(PmAiUsage.timestamp >= cutoff)
+        if project_param:
+            q = q.filter(PmAiUsage.project == project_param)
+        if agent_filter in {"sentiment", "recommendation"}:
+            q = q.filter(PmAiUsage.agent_kind == agent_filter)
+
+        rows = q.all()
+
+        total_calls = len(rows)
+        success_calls = sum(1 for r in rows if r.success)
+        tokens_in_total = sum(r.tokens_in for r in rows)
+        tokens_out_total = sum(r.tokens_out for r in rows)
+        cost_usd_total = round(sum(r.cost_usd for r in rows), 6)
+        latency_ms_avg = (
+            int(sum(r.latency_ms for r in rows) / total_calls) if total_calls else 0
+        )
+
+        by_model: dict[str, dict] = {}
+        by_agent: dict[str, dict] = {}
+        for r in rows:
+            for bucket, key in ((by_model, r.model), (by_agent, r.agent_kind)):
+                slot = bucket.setdefault(key, {
+                    "calls": 0, "tokens_in": 0, "tokens_out": 0,
+                    "cost_usd": 0.0, "success": 0,
+                })
+                slot["calls"] += 1
+                slot["tokens_in"] += r.tokens_in
+                slot["tokens_out"] += r.tokens_out
+                slot["cost_usd"] += r.cost_usd
+                if r.success:
+                    slot["success"] += 1
+        for bucket in (by_model, by_agent):
+            for slot in bucket.values():
+                slot["cost_usd"] = round(slot["cost_usd"], 6)
+
+        recent = [r.to_dict() for r in sorted(
+            rows, key=lambda x: x.timestamp, reverse=True
+        )[:20]]
+
+    return jsonify({
+        "ok": True,
+        "result": {
+            "project": project_param,
+            "since_hours": since_hours,
+            "window_start": cutoff.isoformat() + "Z",
+            "totals": {
+                "calls": total_calls,
+                "success": success_calls,
+                "success_rate_pct": round(100.0 * success_calls / total_calls, 2) if total_calls else 0.0,
+                "tokens_in": tokens_in_total,
+                "tokens_out": tokens_out_total,
+                "tokens_total": tokens_in_total + tokens_out_total,
+                "cost_usd": cost_usd_total,
+                "latency_ms_avg": latency_ms_avg,
+            },
+            "by_model": by_model,
+            "by_agent": by_agent,
+            "recent_calls": recent,
+            "advisory_only": True,
+        },
+    })
+
+
+# ── evals (Fase 2 gate) ───────────────────────────────────────────────────────
+
+_VALID_EVAL_COMPONENTS = {"comment_sentiment", "recommendation_engine"}
+
+
+@bp.post("/evals/run")
+def run_evals_endpoint():
+    """Ejecuta los eval fixtures de un componente IA y devuelve el reporte.
+
+    Body: {"component": "comment_sentiment"|"recommendation_engine", "model": optional}
+    """
+    body = request.get_json(silent=True) or {}
+    component = (body.get("component") or "").strip()
+    if component not in _VALID_EVAL_COMPONENTS:
+        return jsonify({
+            "ok": False,
+            "error": "INVALID_COMPONENT",
+            "message": f"component debe ser uno de: {sorted(_VALID_EVAL_COMPONENTS)}",
+        }), 400
+    model = (body.get("model") or "claude-haiku-4-5").strip()
+
+    start = time.monotonic()
+    try:
+        report = run_evals(component=component, model=model)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("evals/run falló")
+        return jsonify({
+            "ok": False,
+            "error": "EVAL_RUN_FAILED",
+            "message": str(e),
+        }), 500
+    duration_ms = int((time.monotonic() - start) * 1000)
+
+    stacky_logger.info(
+        "pm.evals",
+        "pm.evals_run",
+        duration_ms=duration_ms,
+        input_data={"component": component, "model": model},
+        output_data={
+            "gate_passed": report.gate_passed,
+            "passed": report.passed,
+            "total": report.total,
+            "cost_usd": round(report.cost_usd_total, 6),
+        },
+        tags=["pm", "evals"],
+    )
+
+    return jsonify({
+        "ok": True,
+        "result": {
+            **report.to_dict(),
+            "duration_ms": duration_ms,
+        },
+    })
+
+
+@bp.get("/evals/components")
+def list_eval_components():
+    """Devuelve la lista de componentes IA con eval fixtures definidos."""
+    from services.pm.pm_evals import load_fixtures
+    out = []
+    for comp in sorted(_VALID_EVAL_COMPONENTS):
+        fixtures = load_fixtures(comp)
+        out.append({
+            "component": comp,
+            "fixtures_count": len(fixtures),
+            "fixture_ids": [f.get("fixture_id") for f in fixtures],
+        })
+    return jsonify({"ok": True, "result": {"components": out}})
+
+
+# ── sentiment analyzer (Fase 2 advisory) ──────────────────────────────────────
+
+@bp.post("/sentiment/analyze")
+def sentiment_analyze():
+    """Analiza sentimientos de comentarios indexados.
+
+    Body: {
+      "project": optional,
+      "sprint_name": optional,
+      "comment_ids": [int, ...] REQUERIDO,
+      "model": optional (default claude-haiku-4-5),
+      "force_unsafe": false,
+      "skip_gate_check": false
+    }
+
+    Bloqueado por eval gate salvo force_unsafe=true.
+    """
+    body = request.get_json(silent=True) or {}
+    project_param = (body.get("project") or "").strip() or None
+    sprint_name = (body.get("sprint_name") or "unknown").strip()
+    raw_ids = body.get("comment_ids") or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({
+            "ok": False,
+            "error": "COMMENT_IDS_REQUIRED",
+            "message": "Body debe incluir comment_ids: [int, ...] no vacío.",
+        }), 400
+    try:
+        comment_ids = [int(x) for x in raw_ids]
+    except (TypeError, ValueError):
+        return jsonify({
+            "ok": False,
+            "error": "INVALID_COMMENT_IDS",
+            "message": "Todos los comment_ids deben ser enteros.",
+        }), 400
+
+    model = (body.get("model") or "claude-haiku-4-5").strip()
+    force_unsafe = bool(body.get("force_unsafe", False))
+    skip_gate = bool(body.get("skip_gate_check", False))
+
+    project, _cfg, tracker = _resolve_project(project_param)
+    if not project:
+        return jsonify({
+            "ok": False,
+            "error": "PROJECT_NOT_FOUND",
+            "message": "No hay proyecto activo ni se especificó uno en el body.",
+        }), 404
+    if tracker.get("type", "azure_devops") != "azure_devops":
+        err, code = _ado_only_error(project)
+        return jsonify(err), code
+
+    start = time.monotonic()
+    result = analyze_sentiment_for_comments(
+        project=project,
+        sprint_name=sprint_name,
+        comment_ids=comment_ids,
+        model=model,
+        force_unsafe=force_unsafe,
+        skip_gate_check=skip_gate,
+    )
+    duration_ms = int((time.monotonic() - start) * 1000)
+
+    if not result.gate_passed and not force_unsafe:
+        return jsonify({
+            "ok": False,
+            "error": "EVAL_GATE_NOT_PASSED",
+            "message": "El eval gate del componente comment_sentiment no pasó. "
+                       "Ejecutá POST /api/pm/evals/run primero, o forzá con force_unsafe=true.",
+            "result": {**result.to_dict(), "duration_ms": duration_ms},
+        }), 412  # 412 Precondition Failed
+
+    stacky_logger.info(
+        "pm.sentiment",
+        "pm.sentiment_analyzed",
+        duration_ms=duration_ms,
+        input_data={"project": project, "comment_ids_count": len(comment_ids), "model": model},
+        output_data=result.to_dict(),
+        tags=["pm", "sentiment"],
+    )
+
+    return jsonify({
+        "ok": True,
+        "result": {**result.to_dict(), "duration_ms": duration_ms},
+    })
+
+
+# ── recommendation engine (Fase 2 advisory) ───────────────────────────────────
+
+@bp.post("/recommendations/generate")
+def generate_recs_endpoint():
+    """Genera recomendaciones IA para el sprint dado (advisory, no publica).
+
+    Body: {
+      "project": optional,
+      "model": optional (default claude-sonnet-4-6),
+      "force_unsafe": false,
+      "skip_gate_check": false,
+      "history": optional [{name, velocity, completion_rate_pct}, ...]
+    }
+    """
+    body = request.get_json(silent=True) or {}
+    project_param = (body.get("project") or "").strip() or None
+    model = (body.get("model") or "claude-sonnet-4-6").strip()
+    force_unsafe = bool(body.get("force_unsafe", False))
+    skip_gate = bool(body.get("skip_gate_check", False))
+    history = body.get("history") or []
+    if not isinstance(history, list):
+        return jsonify({
+            "ok": False,
+            "error": "INVALID_HISTORY",
+            "message": "history debe ser lista de {name, velocity, completion_rate_pct}.",
+        }), 400
+
+    project, _cfg, tracker = _resolve_project(project_param)
+    if not project:
+        return jsonify({
+            "ok": False,
+            "error": "PROJECT_NOT_FOUND",
+            "message": "No hay proyecto activo ni se especificó uno.",
+        }), 404
+    if tracker.get("type", "azure_devops") != "azure_devops":
+        err, code = _ado_only_error(project)
+        return jsonify(err), code
+
+    start = time.monotonic()
+    result = generate_recommendations(
+        project=project,
+        history=history,
+        model=model,
+        force_unsafe=force_unsafe,
+        skip_gate_check=skip_gate,
+    )
+    duration_ms = int((time.monotonic() - start) * 1000)
+
+    if not result.gate_passed and not force_unsafe:
+        return jsonify({
+            "ok": False,
+            "error": "EVAL_GATE_NOT_PASSED",
+            "message": "El eval gate del componente recommendation_engine no pasó. "
+                       "Ejecutá POST /api/pm/evals/run primero, o forzá con force_unsafe=true.",
+            "result": {**result.to_dict(), "duration_ms": duration_ms},
+        }), 412
+
+    stacky_logger.info(
+        "pm.recommendations",
+        "pm.recommendations_generated",
+        duration_ms=duration_ms,
+        input_data={"project": project, "model": model},
+        output_data=result.to_dict(),
+        tags=["pm", "recommendations"],
+    )
+
+    return jsonify({
+        "ok": True,
+        "result": {**result.to_dict(), "duration_ms": duration_ms},
+    })
+
+
+@bp.get("/recommendations")
+def list_recommendations():
+    """Lista recomendaciones IA persistidas. Filtros: project, sprint_id, acknowledged, priority."""
+    project_param = (request.args.get("project") or "").strip() or None
+    sprint_id = (request.args.get("sprint_id") or "").strip() or None
+    priority = (request.args.get("priority") or "").strip().upper() or None
+    ack_param = (request.args.get("acknowledged") or "").strip().lower()
+
+    project, _cfg, tracker = _resolve_project(project_param)
+    if not project:
+        return jsonify({
+            "ok": False,
+            "error": "PROJECT_NOT_FOUND",
+            "message": "No hay proyecto activo ni se especificó uno.",
+        }), 404
+    if tracker.get("type", "azure_devops") != "azure_devops":
+        err, code = _ado_only_error(project)
+        return jsonify(err), code
+
+    with session_scope() as session:
+        q = session.query(PmAiRecommendation).filter(PmAiRecommendation.project == project)
+        if sprint_id:
+            q = q.filter(PmAiRecommendation.sprint_id == sprint_id)
+        if priority in {"P0", "P1", "P2"}:
+            q = q.filter(PmAiRecommendation.priority == priority)
+        if ack_param in {"true", "1"}:
+            q = q.filter(PmAiRecommendation.acknowledged.is_(True))
+        elif ack_param in {"false", "0"}:
+            q = q.filter(PmAiRecommendation.acknowledged.is_(False))
+        q = q.order_by(
+            PmAiRecommendation.priority,
+            desc(PmAiRecommendation.generated_at),
+        )
+        rows = q.limit(200).all()
+        recs = [r.to_dict() for r in rows]
+
+    return jsonify({
+        "ok": True,
+        "result": {
+            "project": project,
+            "count": len(recs),
+            "recommendations": recs,
+            "advisory_only": True,
+            "publishable": False,
+        },
+    })
+
+
+@bp.post("/recommendations/<rec_id>/acknowledge")
+def acknowledge_rec(rec_id: str):
+    """Marca una recomendación IA como reconocida por un humano."""
+    body = request.get_json(silent=True) or {}
+    actor = (
+        body.get("acknowledged_by")
+        or request.headers.get("X-User-Email")
+        or "anonymous"
+    ).strip()
+
+    updated = acknowledge_recommendation(rec_id, actor=actor)
+    if updated is None:
+        return jsonify({
+            "ok": False,
+            "error": "RECOMMENDATION_NOT_FOUND",
+            "message": f"No existe recomendación con rec_id={rec_id}",
+        }), 404
+
+    stacky_logger.info(
+        "pm.recommendations",
+        "pm.recommendation_acknowledged",
+        user=actor,
+        output_data={"rec_id": rec_id, "category": updated.get("category")},
+        tags=["pm", "rec_ack"],
+    )
+
+    return jsonify({"ok": True, "result": updated})

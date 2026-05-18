@@ -1,0 +1,24 @@
+{
+  "fixture_id": "sentiment_blocker_comment",
+  "description": "Comentario que menciona bloqueo explícito — debe detectar BLOCKER_MENTIONED",
+  "type": "comment_sentiment",
+  "input": {
+    "analyzer_input_version": "1.0",
+    "comments": [
+      {
+        "id": 1,
+        "text_plain": "Estamos bloqueados porque falta confirmación funcional. No podemos avanzar hasta que defina el comportamiento esperado."
+      }
+    ],
+    "context": {
+      "project": "TestProject",
+      "sprint_name": "Sprint Test"
+    }
+  },
+  "expected": {
+    "comment_id": 1,
+    "sentiment_label_one_of": ["negative", "blocking"],
+    "flags_required": ["BLOCKER_MENTIONED"],
+    "flags_forbidden": ["COMMITMENT_CHANGE"]
+  }
+}

@@ -352,4 +352,87 @@ export const PmApi = {
     );
     return res.result;
   },
+
+  aiUsage: async (input: {
+    project?: string;
+    since_hours?: number;
+    agent_kind?: "sentiment" | "recommendation";
+  } = {}) => {
+    const res = await api.get<OkResponse<PmAiUsageReport>>(
+      `/api/pm/ai/usage${qs(input)}`,
+    );
+    return res.result;
+  },
+
+  // ── Evals ─────────────────────────────────────────────────────────────────
+  evalComponents: async () => {
+    const res = await api.get<OkResponse<{ components: PmEvalComponentInfo[] }>>(
+      "/api/pm/evals/components",
+    );
+    return res.result.components;
+  },
+
+  runEvals: async (input: {
+    component: "comment_sentiment" | "recommendation_engine";
+    model?: string;
+  }) => {
+    const res = await api.post<OkResponse<PmEvalReport>>(
+      "/api/pm/evals/run",
+      input,
+    );
+    return res.result;
+  },
+
+  // ── Sentiment ─────────────────────────────────────────────────────────────
+  analyzeSentiment: async (input: {
+    project?: string;
+    sprint_name?: string;
+    comment_ids: number[];
+    model?: string;
+    force_unsafe?: boolean;
+  }) => {
+    const res = await api.post<OkResponse<PmSentimentResult>>(
+      "/api/pm/sentiment/analyze",
+      input,
+    );
+    return res.result;
+  },
+
+  // ── Recommendations ───────────────────────────────────────────────────────
+  generateRecommendations: async (input: {
+    project?: string;
+    model?: string;
+    force_unsafe?: boolean;
+    history?: Array<{ name: string; velocity: number; completion_rate_pct: number }>;
+  } = {}) => {
+    const res = await api.post<OkResponse<PmRecommendationRunResult>>(
+      "/api/pm/recommendations/generate",
+      input,
+    );
+    return res.result;
+  },
+
+  listRecommendations: async (input: {
+    project?: string;
+    sprint_id?: string;
+    priority?: "P0" | "P1" | "P2";
+    acknowledged?: boolean;
+  } = {}) => {
+    const res = await api.get<OkResponse<{
+      project: string;
+      count: number;
+      recommendations: PmRecommendation[];
+      advisory_only: boolean;
+      publishable: boolean;
+    }>>(`/api/pm/recommendations${qs(input)}`);
+    return res.result;
+  },
+
+  acknowledgeRecommendation: async (recId: string, acknowledgedBy?: string) => {
+    const res = await api.post<OkResponse<PmRecommendation>>(
+      `/api/pm/recommendations/${encodeURIComponent(recId)}/acknowledge`,
+      acknowledgedBy ? { acknowledged_by: acknowledgedBy } : {},
+    );
+    return res.result;
+  },
 };

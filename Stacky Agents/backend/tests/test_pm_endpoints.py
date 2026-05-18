@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -28,12 +28,13 @@ def _clean_pm_tables():
     import time
     from sqlalchemy.exc import OperationalError
     from db import init_db, session_scope
-    from services.pm.models import PmRiskItem, PmSprintSnapshot, PmWorkItemComment
+    from services.pm.models import PmAiUsage, PmRiskItem, PmSprintSnapshot, PmWorkItemComment
 
     init_db()
     for attempt in range(5):
         try:
             with session_scope() as session:
+                session.query(PmAiUsage).delete()
                 session.query(PmRiskItem).delete()
                 session.query(PmSprintSnapshot).delete()
                 session.query(PmWorkItemComment).delete()
@@ -87,11 +88,12 @@ def _cleanup_project(name: str = "TestPM"):
     from project_manager import PROJECTS_DIR, ACTIVE_FILE
     import shutil
     from db import session_scope
-    from services.pm.models import PmRiskItem, PmSprintSnapshot
+    from services.pm.models import PmAiUsage, PmRiskItem, PmSprintSnapshot
 
     with session_scope() as session:
         session.query(PmRiskItem).filter(PmRiskItem.project == name).delete()
         session.query(PmSprintSnapshot).filter(PmSprintSnapshot.project == name).delete()
+        session.query(PmAiUsage).filter(PmAiUsage.project == name).delete()
     try:
         shutil.rmtree(PROJECTS_DIR / name)
     except FileNotFoundError:
@@ -100,6 +102,28 @@ def _cleanup_project(name: str = "TestPM"):
         ACTIVE_FILE.unlink()
     except FileNotFoundError:
         pass
+
+
+def _insert_ai_usage(project: str, **overrides):
+    from db import session_scope
+    from services.pm.models import PmAiUsage
+
+    with session_scope() as session:
+        row = PmAiUsage(
+            project=project,
+            agent_kind=overrides.get("agent_kind", "sentiment"),
+            prompt_type=overrides.get("prompt_type", "test"),
+            model=overrides.get("model", "claude-haiku-4-5"),
+            backend=overrides.get("backend", "mock"),
+            tokens_in=overrides.get("tokens_in", 100),
+            tokens_out=overrides.get("tokens_out", 50),
+            cost_usd=overrides.get("cost_usd", 0.001),
+            latency_ms=overrides.get("latency_ms", 250),
+            success=overrides.get("success", True),
+            advisory_only=True,
+            correlation_id=overrides.get("correlation_id", "test-corr"),
+        )
+        session.add(row)
 
 
 def _insert_risk(project: str, risk_id: str, **overrides):
@@ -260,3 +284,86 @@ def test_pm_endpoints_reject_non_ado_projects(client):
     finally:
         _cleanup_project("TestPM")
 
+
+# ── /api/pm/ai/usage ──────────────────────────────────────────────────────────
+
+def test_ai_usage_empty_returns_zeros(client):
+    try:
+        _insert_test_project_config("TestPM")
+        r = client.get("/api/pm/ai/usage?project=TestPM")
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["ok"] is True
+        assert body["result"]["totals"]["calls"] == 0
+        assert body["result"]["totals"]["cost_usd"] == 0.0
+        assert body["result"]["advisory_only"] is True
+    finally:
+        _cleanup_project("TestPM")
+
+
+def test_ai_usage_aggregates_totals_and_breakdowns(client):
+    try:
+        _insert_test_project_config("TestPM")
+        _insert_ai_usage("TestPM", model="claude-haiku-4-5", agent_kind="sentiment",
+                         tokens_in=100, tokens_out=50, cost_usd=0.001)
+        _insert_ai_usage("TestPM", model="claude-haiku-4-5", agent_kind="sentiment",
+                         tokens_in=200, tokens_out=100, cost_usd=0.002)
+        _insert_ai_usage("TestPM", model="claude-sonnet-4-6", agent_kind="recommendation",
+                         tokens_in=500, tokens_out=200, cost_usd=0.0045)
+        _insert_ai_usage("TestPM", model="claude-haiku-4-5", agent_kind="sentiment",
+                         success=False, tokens_in=10, tokens_out=0, cost_usd=0.00001)
+
+        r = client.get("/api/pm/ai/usage?project=TestPM")
+        assert r.status_code == 200
+        body = r.get_json()["result"]
+
+        totals = body["totals"]
+        assert totals["calls"] == 4
+        assert totals["success"] == 3
+        assert totals["success_rate_pct"] == 75.0
+        assert totals["tokens_in"] == 100 + 200 + 500 + 10
+        assert totals["tokens_out"] == 50 + 100 + 200 + 0
+        assert totals["cost_usd"] == pytest.approx(0.001 + 0.002 + 0.0045 + 0.00001, rel=1e-3)
+
+        # breakdown by model
+        assert "claude-haiku-4-5" in body["by_model"]
+        assert body["by_model"]["claude-haiku-4-5"]["calls"] == 3
+        assert body["by_model"]["claude-sonnet-4-6"]["calls"] == 1
+
+        # breakdown by agent
+        assert body["by_agent"]["sentiment"]["calls"] == 3
+        assert body["by_agent"]["recommendation"]["calls"] == 1
+    finally:
+        _cleanup_project("TestPM")
+
+
+def test_ai_usage_filters_by_agent_kind(client):
+    try:
+        _insert_test_project_config("TestPM")
+        _insert_ai_usage("TestPM", agent_kind="sentiment")
+        _insert_ai_usage("TestPM", agent_kind="sentiment")
+        _insert_ai_usage("TestPM", agent_kind="recommendation")
+
+        r = client.get("/api/pm/ai/usage?project=TestPM&agent_kind=sentiment")
+        assert r.status_code == 200
+        assert r.get_json()["result"]["totals"]["calls"] == 2
+
+        r = client.get("/api/pm/ai/usage?project=TestPM&agent_kind=recommendation")
+        assert r.get_json()["result"]["totals"]["calls"] == 1
+    finally:
+        _cleanup_project("TestPM")
+
+
+def test_ai_usage_recent_calls_sorted_desc(client):
+    try:
+        _insert_test_project_config("TestPM")
+        for i in range(5):
+            _insert_ai_usage("TestPM", correlation_id=f"corr-{i}")
+        r = client.get("/api/pm/ai/usage?project=TestPM")
+        recent = r.get_json()["result"]["recent_calls"]
+        assert len(recent) == 5
+        # debe estar ordenado por timestamp descendente
+        ts_list = [c["timestamp"] for c in recent]
+        assert ts_list == sorted(ts_list, reverse=True)
+    finally:
+        _cleanup_project("TestPM")

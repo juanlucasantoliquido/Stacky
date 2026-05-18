@@ -4,8 +4,14 @@
 - Tracking automático de tokens consumidos y costo USD en `pm_ai_usage`.
 - Verificación de PII pre-envío (rechaza si detecta tokens PII sin enmascarar).
 - `advisory_only=True` inmutable a nivel de aplicación.
-- Backend `mock` para tests determinísticos sin red ni API key.
-- Backend `anthropic` cuando el SDK está disponible.
+
+Backends soportados (vía env `STACKY_PM_LLM_BACKEND`):
+- `mock`: respuestas predecibles, sin red ni API key. Para tests y evals.
+- `anthropic`: Claude vía SDK oficial (`pip install anthropic` + API key).
+- `copilot`: GitHub Copilot Pro vía `copilot_bridge.invoke()` reusando el
+  token OAuth de `gh auth`. Cero costo adicional para usuarios Copilot Pro
+  (entra en la suscripción mensual). Tokens reportados son los reales del
+  API de Copilot.
 
 Uso:
 
@@ -15,7 +21,7 @@ Uso:
         project="RSPacifico",
         agent_kind="sentiment",
         prompt_type="comment_sentiment_v1",
-        model="claude-haiku-4-5",
+        model="claude-haiku-4-5",     # o "gpt-4o" si backend=copilot
         system="Eres un clasificador...",
         user="Comentario: ...",
         max_output_tokens=512,
@@ -36,13 +42,30 @@ from typing import Any
 
 logger = logging.getLogger("stacky_agents.pm.llm_client")
 
-# Pricing en USD por 1M tokens — alineado con services/cost_estimator.py
+# Pricing en USD por 1M tokens — alineado con services/cost_estimator.py.
+# Para backend=copilot el costo real al usuario es $0 (entra en la suscripción
+# de Copilot Pro). Estos números son list prices de referencia para reporting:
+# permiten ver "cuánto te habrías gastado si llamabas al API directo".
 PRICING: dict[str, dict[str, float]] = {
-    "claude-haiku-4-5":  {"input": 1.00,  "output": 5.00},
-    "claude-sonnet-4-6": {"input": 3.00,  "output": 15.00},
-    "claude-opus-4-7":   {"input": 15.00, "output": 75.00},
-    "mock-1.0":          {"input": 0.00,  "output": 0.00},
+    # Claude (anthropic backend o copilot con modelos Claude expuestos)
+    "claude-haiku-4-5":     {"input": 1.00,  "output": 5.00},
+    "claude-sonnet-4-6":    {"input": 3.00,  "output": 15.00},
+    "claude-opus-4-7":      {"input": 15.00, "output": 75.00},
+    "claude-3.5-sonnet":    {"input": 3.00,  "output": 15.00},
+    "claude-3.7-sonnet":    {"input": 3.00,  "output": 15.00},
+    # OpenAI vía Copilot
+    "gpt-4o":               {"input": 2.50,  "output": 10.00},
+    "gpt-4o-mini":          {"input": 0.15,  "output": 0.60},
+    "o1":                   {"input": 15.00, "output": 60.00},
+    "o1-mini":              {"input": 3.00,  "output": 12.00},
+    # Otros expuestos por Copilot
+    "gemini-2.0-flash-001": {"input": 0.10,  "output": 0.40},
+    # Mock para tests
+    "mock-1.0":             {"input": 0.00,  "output": 0.00},
 }
+
+# Backends válidos
+_VALID_BACKENDS = {"mock", "anthropic", "copilot"}
 
 # Patrón para detectar que el texto ya pasó por pii_masker (tokens ZZZ_PII_*)
 _PII_TOKEN_RE = re.compile(r"ZZZ_PII_(EMAIL|PHONE|DNI|CUIT|CBU|CARD)_\d+")
@@ -112,11 +135,14 @@ def _backend_name() -> str:
     """Selecciona backend: env STACKY_PM_LLM_BACKEND tiene prioridad,
     si no usa config.LLM_BACKEND, default mock."""
     explicit = os.environ.get("STACKY_PM_LLM_BACKEND", "").strip().lower()
-    if explicit in {"mock", "anthropic"}:
+    if explicit in _VALID_BACKENDS:
         return explicit
     try:
         from config import config
-        return (config.LLM_BACKEND or "mock").lower()
+        global_backend = (config.LLM_BACKEND or "mock").lower()
+        if global_backend in _VALID_BACKENDS:
+            return global_backend
+        return "mock"
     except Exception:
         return "mock"
 
@@ -186,6 +212,54 @@ def _call_anthropic(spec: LLMCallSpec) -> tuple[str, int, int]:
     return text, int(tokens_in), int(tokens_out)
 
 
+def _call_copilot(spec: LLMCallSpec) -> tuple[str, int, int]:
+    """Llama a Copilot Pro via `copilot_bridge.invoke()`.
+
+    Reusa el token OAuth de `gh auth` que Stacky ya tiene configurado para
+    otros agentes. Cero gasto adicional para usuarios Copilot Pro (entra en
+    la suscripción mensual). Los tokens devueltos son los REALES del API
+    de Copilot (campo `usage.prompt_tokens` / `completion_tokens`).
+
+    El parámetro `temperature` del LLMCallSpec se respeta solo si el modelo
+    lo soporta — copilot_bridge maneja modelos de razonamiento (o1, o3) que
+    no aceptan `temperature` ni `max_tokens` y los re-mapea internamente.
+    """
+    try:
+        import copilot_bridge  # type: ignore
+    except ImportError as e:
+        raise LLMBackendError(
+            "Backend 'copilot' requiere copilot_bridge.py en el backend. "
+            "Verificá que `Stacky Agents/backend/copilot_bridge.py` existe."
+        ) from e
+
+    # copilot_bridge.invoke expone un on_log callback; lo reemplazamos por un
+    # logger silencioso porque PM persiste eventos en pm_ai_usage, no en logs.
+    def _noop_log(_level: str, _msg: str) -> None:
+        logger.debug("copilot_bridge: %s %s", _level, _msg)
+
+    try:
+        # IMPORTANTE: copilot_bridge.invoke despacha según config.LLM_BACKEND
+        # global, NO según un argumento explícito. Para forzar el path copilot
+        # cuando STACKY_PM_LLM_BACKEND=copilot pero LLM_BACKEND≠copilot,
+        # llamamos directamente a _invoke_copilot.
+        response = copilot_bridge._invoke_copilot(
+            agent_type=spec.agent_kind,
+            system=spec.system,
+            user=spec.user,
+            on_log=_noop_log,
+            execution_id=None,
+            model=spec.model,
+        )
+    except RuntimeError as e:
+        raise LLMBackendError(f"Copilot bridge falló: {e}") from e
+
+    text = response.text or ""
+    metadata = response.metadata or {}
+    tokens_in = int(metadata.get("tokens_in") or 0)
+    tokens_out = int(metadata.get("tokens_out") or 0)
+    return text, tokens_in, tokens_out
+
+
 # ── pricing ────────────────────────────────────────────────────────────────────
 
 def _compute_cost_usd(model: str, tokens_in: int, tokens_out: int) -> float:
@@ -222,9 +296,12 @@ def call_llm(spec: LLMCallSpec) -> LLMCallResult:
     try:
         if backend == "anthropic":
             text, tokens_in, tokens_out = _call_anthropic(spec)
+        elif backend == "copilot":
+            text, tokens_in, tokens_out = _call_copilot(spec)
+        elif backend == "mock":
+            text, tokens_in, tokens_out = _call_mock(spec)
         else:
-            # Default: mock (también para backend == "copilot" en F2,
-            # que aún no exponemos por PM).
+            # Backend desconocido: fallback a mock para no romper.
             backend = "mock"
             text, tokens_in, tokens_out = _call_mock(spec)
     except (LLMBackendError, Exception) as e:  # noqa: BLE001

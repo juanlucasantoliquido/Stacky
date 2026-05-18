@@ -129,9 +129,14 @@ def close_execution_with_publish(
                 exec_row.completed_at = datetime.utcnow()
             if final_status == "error" and reason and not exec_row.error_message:
                 exec_row.error_message = reason
-            if html_output_path and hasattr(exec_row, "html_output_path"):
+            # html_output_path y completion_source son atributos DINÁMICOS (no
+            # columnas SQL). El check hasattr() del código viejo siempre daba
+            # False y bloqueaba el set — bug raíz del 'comment no se publica'.
+            # Setting dynamic attributes in Python instances funciona sin
+            # importar el schema de la clase.
+            if html_output_path:
                 exec_row.html_output_path = html_output_path
-            if completion_source and hasattr(exec_row, "completion_source"):
+            if completion_source:
                 exec_row.completion_source = completion_source
 
     # ── Paso 2: stacky_status + TicketStatusEvent (no-op si idempotente) ──────

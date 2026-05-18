@@ -197,7 +197,10 @@ def publish_from_execution(
             )
         ado_id = int(ticket.ado_id)
         ticket_id = ticket.id
-        hint = exec_row.html_output_path
+        # html_output_path es atributo dinámico (no columna SQL). Si nunca se
+        # seteó vía PATCH /stacky-status, será None y read_and_validate cae a
+        # la convención `Agentes/outputs/{ado_id}/comment.html`.
+        hint = getattr(exec_row, "html_output_path", None)
 
     # ── 2-3. Resolver y validar HTML ──────────────────────────────────────────
     try:

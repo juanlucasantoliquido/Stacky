@@ -544,11 +544,14 @@ def set_stacky_status_by_ado(ado_id: int):
                 q = q.filter(AgentExecution.agent_type == agent_type)
             last_exec = q.order_by(AgentExecution.started_at.desc()).first()
             if last_exec is not None:
-                if html_output_path and hasattr(last_exec, "html_output_path"):
+                # html_output_path y completion_source son atributos DINÁMICOS
+                # (no columnas SQL). El check hasattr() del código viejo siempre
+                # daba False y bloqueaba el set — bug raíz del 'comment no se
+                # publica'. Setting dynamic attrs funciona en Python sin
+                # importar el schema de la clase.
+                if html_output_path:
                     last_exec.html_output_path = html_output_path
-                # Marcar como override manual (campo de P2)
-                if hasattr(last_exec, "completion_source"):
-                    last_exec.completion_source = "manual"
+                last_exec.completion_source = "manual"
 
         # Emitir SystemLog de override manual auditado
         log_ctx = {

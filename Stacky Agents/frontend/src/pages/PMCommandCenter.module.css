@@ -514,6 +514,48 @@
 
 .ctrlSubtitle { color: #94a3b8; font-size: 11px; }
 
+.modelSelectorBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+
+.modelSelect {
+  background: #1a1a24;
+  color: #e2e8f0;
+  border: 1px solid #2a2a3a;
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 280px;
+  font-family: "JetBrains Mono", "Courier New", monospace;
+}
+.modelSelect:focus { outline: none; border-color: #6366f1; }
+.modelSelect:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.modelBackend {
+  font-size: 11px;
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.1);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-family: "JetBrains Mono", "Courier New", monospace;
+}
+
+.modelWarning {
+  font-size: 11px;
+  color: #fde68a;
+  margin-left: auto;
+  cursor: help;
+}
+
 .gateGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;

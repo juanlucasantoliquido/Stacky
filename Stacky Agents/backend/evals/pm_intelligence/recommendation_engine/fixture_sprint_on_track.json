@@ -1,0 +1,26 @@
+{
+  "fixture_id": "rec_sprint_on_track",
+  "description": "Sprint saludable: velocity OK, sin riesgos — NO debe recomendar acciones urgentes",
+  "type": "recommendation_engine",
+  "input": {
+    "rec_input_version": "1.0",
+    "sprint_summary": {
+      "velocity_current": 22,
+      "velocity_avg": 21,
+      "completion_rate_pct": 82,
+      "days_remaining": 4,
+      "blocked_items_count": 0
+    },
+    "risk_feed": [],
+    "historical_sprints": [
+      {"name": "Sprint 40", "velocity": 20, "completion_rate_pct": 88},
+      {"name": "Sprint 41", "velocity": 21, "completion_rate_pct": 85}
+    ]
+  },
+  "expected": {
+    "max_recommendations_count": 1,
+    "must_not_contain_priority": ["P0"],
+    "all_recommendations_must_have_advisory_only": true,
+    "all_recommendations_must_have_publish_recommended_false": true
+  }
+}

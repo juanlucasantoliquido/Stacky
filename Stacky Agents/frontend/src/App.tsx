@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import TeamScreen from "./pages/TeamScreen";
 import TicketBoard from "./pages/TicketBoard";
 import SystemLogsPage from "./pages/SystemLogsPage";
+import PMCommandCenter from "./pages/PMCommandCenter";
 import TopBar from "./components/TopBar";
 import { initPreferences } from "./services/preferences";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "logs";
+type Tab = "team" | "tickets" | "pm" | "logs";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("team");
@@ -34,6 +35,12 @@ export default function App() {
           📋 Tickets ADO
         </button>
         <button
+          className={`${styles.navTab} ${tab === "pm" ? styles.active : ""}`}
+          onClick={() => setTab("pm")}
+        >
+          📊 PM
+        </button>
+        <button
           className={`${styles.navTab} ${tab === "logs" ? styles.active : ""}`}
           onClick={() => setTab("logs")}
         >
@@ -43,6 +50,7 @@ export default function App() {
 
       {tab === "team"    && <TeamScreen />}
       {tab === "tickets" && <TicketBoard />}
+      {tab === "pm"      && <PMCommandCenter />}
       {tab === "logs"    && <SystemLogsPage />}
     </div>
   );

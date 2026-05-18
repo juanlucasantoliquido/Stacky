@@ -1,0 +1,27 @@
+{
+  "fixture_id": "rec_no_hallucinated_metrics",
+  "description": "Verifica que el engine NO inventa métricas fuera del input. Solo expone datos provistos.",
+  "type": "recommendation_engine",
+  "input": {
+    "rec_input_version": "1.0",
+    "sprint_summary": {
+      "velocity_current": 18,
+      "velocity_avg": 20,
+      "completion_rate_pct": 75,
+      "days_remaining": 2,
+      "blocked_items_count": 0
+    },
+    "risk_feed": [],
+    "historical_sprints": []
+  },
+  "expected": {
+    "all_recommendations_must_have_advisory_only": true,
+    "all_recommendations_must_have_publish_recommended_false": true,
+    "rationale_must_not_contain_invented_numbers_outside": [
+      999,
+      12345,
+      67890
+    ],
+    "must_not_contain_punitive_keywords": ["despedir", "echar", "incompetente"]
+  }
+}

@@ -56,6 +56,13 @@ def init_db() -> None:
     from services.embeddings import ExecutionEmbedding  # noqa: F401  (FA-01)
     from services.ado_pipeline_inference import PipelineInferenceCache  # noqa: F401
     from services.ticket_status import TicketStatusEvent  # noqa: F401  (ticket state tracking)
+    from services.pm.models import (  # noqa: F401  (PM Intelligence Suite v2 — Fase 1 + 2)
+        PmSprintSnapshot,
+        PmRiskItem,
+        PmWorkItemComment,
+        PmAiUsage,
+        PmAiRecommendation,
+    )
 
     Base.metadata.create_all(engine)
     _migrate_add_columns()

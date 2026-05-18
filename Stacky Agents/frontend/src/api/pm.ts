@@ -126,6 +126,24 @@ export interface PmIndexCommentsResult {
   duration_ms: number;
 }
 
+// ── AI models discovery (Fase 2) ─────────────────────────────────────────────
+
+export interface PmAiModel {
+  id: string;
+  name: string;
+  vendor: string;
+  is_premium: boolean;
+  preview: boolean;
+  pricing_per_1m_usd?: { input: number; output: number };
+}
+
+export interface PmAiModelsReport {
+  backend: "mock" | "anthropic" | "copilot";
+  default_model: string;
+  models: PmAiModel[];
+  error: string | null;
+}
+
 // ── AI usage tracking (Fase 2) ───────────────────────────────────────────────
 
 export interface PmAiUsageRow {
@@ -361,6 +379,11 @@ export const PmApi = {
     const res = await api.get<OkResponse<PmAiUsageReport>>(
       `/api/pm/ai/usage${qs(input)}`,
     );
+    return res.result;
+  },
+
+  aiModels: async () => {
+    const res = await api.get<OkResponse<PmAiModelsReport>>("/api/pm/ai/models");
     return res.result;
   },
 

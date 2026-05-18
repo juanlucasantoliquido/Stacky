@@ -1,7 +1,9 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   PmApi,
+  type PmAiModel,
+  type PmAiModelsReport,
   type PmAiUsageBreakdown,
   type PmAiUsageReport,
   type PmComment,
@@ -411,6 +413,10 @@ interface AIControlPanelProps {
   runningEvals: EvalComponent | null;
   generatingRecs: boolean;
   lastRecRun: PmRecommendationRunResult | null;
+  modelsReport: PmAiModelsReport | null;
+  modelsLoading: boolean;
+  selectedModel: string;
+  onModelChange: (model: string) => void;
 }
 
 function gateBadge(report: PmEvalReport | null): { label: string; cls: string } {
@@ -420,14 +426,25 @@ function gateBadge(report: PmEvalReport | null): { label: string; cls: string } 
     : { label: "failed", cls: styles.gateFail };
 }
 
+function fmtPricing(m: PmAiModel): string {
+  if (!m.pricing_per_1m_usd) return "";
+  const p = m.pricing_per_1m_usd;
+  if (p.input === 0 && p.output === 0) return " (mock)";
+  return ` ($${p.input.toFixed(2)}/${p.output.toFixed(2)} per 1M)`;
+}
+
 function AIControlPanel({
   sentimentReport, recReport,
   onRunEvals, onGenerateRecs, runningEvals, generatingRecs, lastRecRun,
+  modelsReport, modelsLoading, selectedModel, onModelChange,
 }: AIControlPanelProps) {
   const sentimentBadge = gateBadge(sentimentReport);
   const recBadge = gateBadge(recReport);
 
   const recGateFailed = recReport ? !recReport.gate_passed : false;
+  const models = modelsReport?.models ?? [];
+  const backendLabel = modelsReport?.backend ?? "?";
+  const modelsError = modelsReport?.error ?? null;
 
   return (
     <section className={styles.ctrlPanel}>
@@ -437,6 +454,30 @@ function AIControlPanel({
         <span className={styles.ctrlSubtitle}>
           Los componentes IA solo se habilitan si pasan sus eval fixtures
         </span>
+      </div>
+
+      <div className={styles.modelSelectorBar}>
+        <span className={styles.filterLabel}>Modelo:</span>
+        <select
+          className={styles.modelSelect}
+          value={selectedModel}
+          onChange={(e) => onModelChange(e.target.value)}
+          disabled={modelsLoading || models.length === 0}
+          title="Modelo usado para evals, sentiment y recommendations"
+        >
+          {models.length === 0 && <option value="">Cargando modelos...</option>}
+          {models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}{m.is_premium ? " ⭐" : ""}{m.preview ? " (preview)" : ""}{fmtPricing(m)}
+            </option>
+          ))}
+        </select>
+        <span className={styles.modelBackend}>backend: {backendLabel}</span>
+        {modelsError && (
+          <span className={styles.modelWarning} title={modelsError}>
+            ⚠ catálogo offline (usando fallback)
+          </span>
+        )}
       </div>
 
       <div className={styles.gateGrid}>
@@ -758,12 +799,59 @@ function CommentsExplorer({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const MODEL_LS_KEY = "pm.selectedModel";
+
+function readPersistedModel(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = window.localStorage.getItem(MODEL_LS_KEY);
+    return v && v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistModel(model: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MODEL_LS_KEY, model);
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function PMCommandCenter() {
   const qc = useQueryClient();
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("ALL");
   const [showAcked, setShowAcked] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [aiWindow, setAiWindow] = useState<number>(24);
+  const [selectedModel, setSelectedModel] = useState<string | null>(readPersistedModel());
+
+  const modelsQuery = useQuery({
+    queryKey: ["pm.ai.models"],
+    queryFn: () => PmApi.aiModels(),
+    staleTime: 5 * 60_000,
+  });
+
+  // Cuando llega la lista de modelos: si no hay selección o la persistida ya
+  // no existe en la lista, caer al default que reporta el backend.
+  React.useEffect(() => {
+    const report = modelsQuery.data;
+    if (!report) return;
+    const availableIds = new Set(report.models.map((m) => m.id));
+    if (!selectedModel || !availableIds.has(selectedModel)) {
+      setSelectedModel(report.default_model);
+      persistModel(report.default_model);
+    }
+  }, [modelsQuery.data, selectedModel]);
+
+  const activeModel = selectedModel ?? modelsQuery.data?.default_model ?? "mock-1.0";
+
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
+    persistModel(model);
+  };
 
   const sprintQuery = useQuery({
     queryKey: ["pm.sprint.current"],
@@ -824,7 +912,7 @@ export default function PMCommandCenter() {
 
   const evalsMutation = useMutation({
     mutationFn: (component: EvalComponent) =>
-      PmApi.runEvals({ component, model: "mock-1.0" }),
+      PmApi.runEvals({ component, model: activeModel }),
     onSuccess: (report) => {
       if (report.component === "comment_sentiment") setSentimentReport(report);
       else if (report.component === "recommendation_engine") setRecReport(report);
@@ -834,7 +922,7 @@ export default function PMCommandCenter() {
 
   const generateRecsMutation = useMutation({
     mutationFn: (forceUnsafe: boolean) =>
-      PmApi.generateRecommendations({ force_unsafe: forceUnsafe, model: "mock-1.0" }),
+      PmApi.generateRecommendations({ force_unsafe: forceUnsafe, model: activeModel }),
     onSuccess: (result) => {
       setLastRecRun(result);
       qc.invalidateQueries({ queryKey: ["pm.recommendations"] });
@@ -892,7 +980,7 @@ export default function PMCommandCenter() {
     mutationFn: ({ ids, force }: { ids: number[]; force: boolean }) =>
       PmApi.analyzeSentiment({
         comment_ids: ids,
-        model: "mock-1.0",
+        model: activeModel,
         force_unsafe: force,
       }),
     onSuccess: (result) => {
@@ -1020,6 +1108,10 @@ export default function PMCommandCenter() {
           }
           generatingRecs={generateRecsMutation.isPending}
           lastRecRun={lastRecRun}
+          modelsReport={modelsQuery.data ?? null}
+          modelsLoading={modelsQuery.isLoading}
+          selectedModel={activeModel}
+          onModelChange={handleModelChange}
         />
 
         <section className={styles.recPanel}>

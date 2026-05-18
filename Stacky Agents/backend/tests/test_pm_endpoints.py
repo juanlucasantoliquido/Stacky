@@ -285,6 +285,104 @@ def test_pm_endpoints_reject_non_ado_projects(client):
         _cleanup_project("TestPM")
 
 
+# ── /api/pm/ai/models ─────────────────────────────────────────────────────────
+
+def test_ai_models_returns_mock_when_backend_mock(client, monkeypatch):
+    monkeypatch.setenv("STACKY_PM_LLM_BACKEND", "mock")
+    r = client.get("/api/pm/ai/models")
+    assert r.status_code == 200
+    body = r.get_json()["result"]
+    assert body["backend"] == "mock"
+    assert body["default_model"] == "mock-1.0"
+    ids = {m["id"] for m in body["models"]}
+    assert ids == {"mock-1.0"}
+    assert body["error"] is None
+
+
+def test_ai_models_returns_anthropic_list_when_backend_anthropic(client, monkeypatch):
+    monkeypatch.setenv("STACKY_PM_LLM_BACKEND", "anthropic")
+    r = client.get("/api/pm/ai/models")
+    assert r.status_code == 200
+    body = r.get_json()["result"]
+    assert body["backend"] == "anthropic"
+    assert body["default_model"] == "claude-haiku-4-5"
+    ids = [m["id"] for m in body["models"]]
+    assert "claude-haiku-4-5" in ids
+    assert "claude-sonnet-4-6" in ids
+    assert "claude-opus-4-7" in ids
+    # Pricing anotado
+    haiku = next(m for m in body["models"] if m["id"] == "claude-haiku-4-5")
+    assert haiku["pricing_per_1m_usd"]["input"] == 1.00
+    # Opus marcado como premium
+    opus = next(m for m in body["models"] if m["id"] == "claude-opus-4-7")
+    assert opus["is_premium"] is True
+
+
+def test_ai_models_uses_fallback_when_copilot_unavailable(client, monkeypatch):
+    """Si Copilot está offline, el endpoint devuelve la lista curada de fallback
+    en lugar de fallar — el selector del frontend nunca queda vacío."""
+    monkeypatch.setenv("STACKY_PM_LLM_BACKEND", "copilot")
+
+    import copilot_bridge
+
+    def fake_list(*_a, **_kw):
+        raise RuntimeError("simulated copilot offline")
+
+    monkeypatch.setattr(copilot_bridge, "list_copilot_models", fake_list)
+
+    r = client.get("/api/pm/ai/models")
+    assert r.status_code == 200
+    body = r.get_json()["result"]
+    assert body["backend"] == "copilot"
+    # Lista curada como fallback
+    ids = {m["id"] for m in body["models"]}
+    assert "gpt-4o-mini" in ids
+    assert "gpt-4o" in ids
+    assert body["default_model"] == "gpt-4o-mini"
+    assert body["error"] and "copilot_models_unavailable" in body["error"]
+
+
+def test_ai_models_returns_copilot_catalog_when_available(client, monkeypatch):
+    monkeypatch.setenv("STACKY_PM_LLM_BACKEND", "copilot")
+
+    import copilot_bridge
+
+    def fake_list(*_a, **_kw):
+        return [
+            {"id": "gpt-4o", "name": "GPT-4o", "publisher": "openai", "preview": False},
+            {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "publisher": "openai", "preview": False},
+            {"id": "o1", "name": "o1", "publisher": "openai", "preview": True},
+            {"id": "claude-3.5-sonnet", "name": "Claude 3.5 Sonnet", "publisher": "anthropic", "preview": False},
+        ]
+
+    monkeypatch.setattr(copilot_bridge, "list_copilot_models", fake_list)
+
+    r = client.get("/api/pm/ai/models")
+    assert r.status_code == 200
+    body = r.get_json()["result"]
+    assert body["backend"] == "copilot"
+    # Default es el primer recomendado disponible
+    assert body["default_model"] == "gpt-4o-mini"
+    # o1 marcado premium, gpt-4o-mini no
+    o1 = next(m for m in body["models"] if m["id"] == "o1")
+    assert o1["is_premium"] is True
+    assert o1["preview"] is True
+    mini = next(m for m in body["models"] if m["id"] == "gpt-4o-mini")
+    assert mini["is_premium"] is False
+    # No error porque la API respondió
+    assert body["error"] is None
+
+
+def test_ai_models_default_is_in_returned_list(client, monkeypatch):
+    """Invariante: default_model siempre debe estar presente en models."""
+    for backend in ("mock", "anthropic"):
+        monkeypatch.setenv("STACKY_PM_LLM_BACKEND", backend)
+        r = client.get("/api/pm/ai/models")
+        body = r.get_json()["result"]
+        ids = {m["id"] for m in body["models"]}
+        assert body["default_model"] in ids, f"default not in list for backend={backend}"
+
+
 # ── /api/pm/ai/usage ──────────────────────────────────────────────────────────
 
 def test_ai_usage_empty_returns_zeros(client):

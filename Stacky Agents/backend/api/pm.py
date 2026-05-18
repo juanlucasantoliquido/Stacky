@@ -585,6 +585,142 @@ def index_comments():
     })
 
 
+# ── AI models discovery (Fase 2) ──────────────────────────────────────────────
+
+# Modelos curados que el endpoint marca como "buena opción default" para PM.
+# El orden indica preferencia (primero el default). El frontend puede usar
+# esta lista para sugerir defaults sensatos cuando Copilot expone muchos modelos.
+_RECOMMENDED_DEFAULTS_COPILOT = [
+    "gpt-4o-mini",      # barato, rápido — primer default
+    "gpt-4o",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-5-mini",
+    "claude-3.5-sonnet",
+    "claude-3.7-sonnet",
+    "gemini-2.0-flash-001",
+]
+
+# Modelos marcados como "premium" (suelen consumir multiplicador de Copilot Pro).
+# Lista best-effort — Copilot no siempre expone is_premium en su catálogo.
+_PREMIUM_HINTS = {
+    "claude-opus", "claude-3-opus", "o1", "o3", "gpt-5", "gpt-4.5",
+}
+
+
+def _is_premium_hint(model_id: str) -> bool:
+    lower = (model_id or "").lower()
+    return any(hint in lower for hint in _PREMIUM_HINTS)
+
+
+@bp.get("/ai/models")
+def list_ai_models():
+    """Devuelve los modelos disponibles según el backend PM activo.
+
+    Response:
+      {
+        "ok": true,
+        "result": {
+          "backend": "copilot" | "anthropic" | "mock",
+          "default_model": "gpt-4o-mini",
+          "models": [
+            {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "vendor": "openai",
+             "is_premium": false, "preview": false}
+          ],
+          "error": null
+        }
+      }
+    """
+    from services.pm.pm_llm_client import _backend_name, PRICING
+
+    backend = _backend_name()
+    models: list[dict] = []
+    error: str | None = None
+
+    if backend == "mock":
+        models = [{
+            "id": "mock-1.0",
+            "name": "Mock (testing)",
+            "vendor": "stacky",
+            "is_premium": False,
+            "preview": False,
+        }]
+        default_model = "mock-1.0"
+
+    elif backend == "anthropic":
+        models = [
+            {"id": "claude-haiku-4-5",  "name": "Claude Haiku 4.5",  "vendor": "anthropic", "is_premium": False, "preview": False},
+            {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6", "vendor": "anthropic", "is_premium": False, "preview": False},
+            {"id": "claude-opus-4-7",   "name": "Claude Opus 4.7",   "vendor": "anthropic", "is_premium": True,  "preview": False},
+        ]
+        default_model = "claude-haiku-4-5"
+
+    elif backend == "copilot":
+        try:
+            import copilot_bridge
+            raw = copilot_bridge.list_copilot_models()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("list_copilot_models falló: %s", e)
+            error = f"copilot_models_unavailable: {e}"
+            raw = []
+
+        for m in raw:
+            mid = m.get("id") or ""
+            if not mid:
+                continue
+            models.append({
+                "id": mid,
+                "name": m.get("name") or mid,
+                "vendor": m.get("vendor") or "",
+                "is_premium": _is_premium_hint(mid),
+                "preview": bool(m.get("preview")),
+            })
+
+        # Default: primer modelo de _RECOMMENDED_DEFAULTS_COPILOT presente en la lista.
+        available_ids = {m["id"] for m in models}
+        default_model = next(
+            (mid for mid in _RECOMMENDED_DEFAULTS_COPILOT if mid in available_ids),
+            (models[0]["id"] if models else "mock-1.0"),
+        )
+
+        # Fallback robusto: si Copilot está offline pero el usuario tiene
+        # STACKY_PM_LLM_BACKEND=copilot, exponemos la lista curada para que el
+        # selector no quede vacío y pueda intentar usar gpt-4o-mini etc.
+        if not models:
+            models = [
+                {"id": mid, "name": mid, "vendor": "openai" if "gpt" in mid else "anthropic",
+                 "is_premium": _is_premium_hint(mid), "preview": False}
+                for mid in _RECOMMENDED_DEFAULTS_COPILOT
+            ]
+            default_model = _RECOMMENDED_DEFAULTS_COPILOT[0]
+            if error:
+                error += " (usando lista curada como fallback)"
+
+    else:
+        models = []
+        default_model = "mock-1.0"
+        error = f"unknown_backend: {backend}"
+
+    # Anotar pricing de referencia (USD/1M tokens) si lo tenemos.
+    for m in models:
+        price = PRICING.get(m["id"])
+        if price:
+            m["pricing_per_1m_usd"] = {
+                "input": price["input"],
+                "output": price["output"],
+            }
+
+    return jsonify({
+        "ok": True,
+        "result": {
+            "backend": backend,
+            "default_model": default_model,
+            "models": models,
+            "error": error,
+        },
+    })
+
+
 # ── AI usage tracking (Fase 2) ────────────────────────────────────────────────
 
 @bp.get("/ai/usage")

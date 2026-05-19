@@ -1189,6 +1189,47 @@ export const QaUat = {
     ),
 };
 
+// ── Feature #4: FlowConfig — mapeo determinístico ado_state → agent_type ─────
+
+export interface FlowConfigRule {
+  id: string;
+  ado_state: string;
+  agent_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FlowConfigListResponse {
+  ok: boolean;
+  rules: FlowConfigRule[];
+}
+
+export interface FlowConfigResolveResponse {
+  ok: boolean;
+  found: boolean;
+  ado_state: string;
+  agent_type: string | null;
+}
+
+export const FlowConfig = {
+  list: (): Promise<FlowConfigListResponse> =>
+    api.get<FlowConfigListResponse>("/api/flow-config"),
+
+  create: (body: { ado_state: string; agent_type: string }): Promise<FlowConfigRule> =>
+    api.post<FlowConfigRule>("/api/flow-config", body),
+
+  update: (id: string, body: { ado_state?: string; agent_type?: string }): Promise<FlowConfigRule> =>
+    api.put<FlowConfigRule>(`/api/flow-config/${id}`, body),
+
+  delete: (id: string): Promise<{ ok: boolean }> =>
+    api.delete<{ ok: boolean }>(`/api/flow-config/${id}`),
+
+  resolve: (adoState: string): Promise<FlowConfigResolveResponse> =>
+    api.get<FlowConfigResolveResponse>(
+      `/api/flow-config/resolve?ado_state=${encodeURIComponent(adoState)}`
+    ),
+};
+
 // ── P4: Gateway de finalización de agentes (recuperación de inconsistencias) ──
 
 export interface AgentCompletionPayload {

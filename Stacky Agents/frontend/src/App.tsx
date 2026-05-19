@@ -3,11 +3,12 @@ import TeamScreen from "./pages/TeamScreen";
 import TicketBoard from "./pages/TicketBoard";
 import SystemLogsPage from "./pages/SystemLogsPage";
 import PMCommandCenter from "./pages/PMCommandCenter";
+import FlowConfigPage from "./pages/FlowConfigPage";
 import TopBar from "./components/TopBar";
 import { initPreferences } from "./services/preferences";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "pm" | "logs";
+type Tab = "team" | "tickets" | "pm" | "logs" | "flow-config";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("team");
@@ -46,12 +47,19 @@ export default function App() {
         >
           🔍 System Logs
         </button>
+        <button
+          className={`${styles.navTab} ${tab === "flow-config" ? styles.active : ""}`}
+          onClick={() => setTab("flow-config")}
+        >
+          ⚙️ Config de Flujo
+        </button>
       </nav>
 
-      {tab === "team"    && <TeamScreen />}
-      {tab === "tickets" && <TicketBoard />}
-      {tab === "pm"      && <PMCommandCenter />}
-      {tab === "logs"    && <SystemLogsPage />}
+      {tab === "team"        && <TeamScreen />}
+      {tab === "tickets"     && <TicketBoard />}
+      {tab === "pm"          && <PMCommandCenter />}
+      {tab === "logs"        && <SystemLogsPage />}
+      {tab === "flow-config" && <FlowConfigPage />}
     </div>
   );
 }

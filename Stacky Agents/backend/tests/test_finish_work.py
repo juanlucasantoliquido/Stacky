@@ -274,3 +274,202 @@ def test_finish_work_skips_publish_when_publish_to_ado_false(client, fake_ado, t
     assert "publish_ado_comment" not in actions_by
     assert actions_by["update_stacky_status"]["ok"] is True
     assert FakeAdoClient.post_comment_calls == []
+
+
+# ── Feature #5 — TerminarTrabajo: tests de cancelación ───────────────────────
+
+
+def _mk_ticket_with_active_exec(ado_id: int, exec_status: str = "running") -> tuple[int, int]:
+    """Crea un ticket con una AgentExecution de status=exec_status.
+    Retorna (ticket_id, execution_id)."""
+    from db import session_scope
+    from models import Ticket, AgentExecution
+
+    with session_scope() as session:
+        t = Ticket(
+            ado_id=ado_id, project="RSPacifico",
+            title=f"t-cancel-{ado_id}", ado_state="In Progress",
+            stacky_status="running",
+        )
+        session.add(t)
+        session.flush()
+        e = AgentExecution(
+            ticket_id=t.id,
+            agent_type="developer",
+            status=exec_status,
+            input_context_json="[]",
+            started_by="test",
+            started_at=datetime.utcnow(),
+        )
+        session.add(e)
+        session.flush()
+        return t.id, e.id
+
+
+def test_finish_work_with_active_execution_calls_cancel(client, fake_ado, tmp_repo, monkeypatch):
+    """CA-5.2: con ejecución activa, cancel_and_wait se invoca y cancel_result
+    aparece en la respuesta con cancel_ok=True."""
+    ticket_id, exec_id = _mk_ticket_with_active_exec(ado_id=5001)
+    _write_html(tmp_repo, 5001, "<p>ok</p>")
+
+    cancel_called: list[int] = []
+
+    def fake_cancel_and_wait(execution_id: int, timeout_seconds: float = 5.0) -> dict:
+        cancel_called.append(execution_id)
+        # Simular que la ejecución paró correctamente
+        from db import session_scope
+        from models import AgentExecution
+        with session_scope() as session:
+            row = session.get(AgentExecution, execution_id)
+            if row:
+                row.status = "cancelled"
+        return {"cancel_ok": True, "cancel_reason": None, "final_status": "cancelled"}
+
+    import agent_runner
+    monkeypatch.setattr(agent_runner, "cancel_and_wait", fake_cancel_and_wait)
+
+    r = client.post(
+        f"/api/tickets/{ticket_id}/finish-work",
+        json={
+            "operator_reason": "terminar con ejecución activa",
+            "publish_to_ado": False,
+            "cancel_active_execution": True,
+        },
+    )
+    assert r.status_code == 200, r.get_data(as_text=True)
+    body = r.get_json()
+
+    # cancel_and_wait fue invocado con el execution_id correcto
+    assert cancel_called == [exec_id]
+
+    # cancel_result presente con ok=True
+    cr = body["cancel_result"]
+    assert cr is not None
+    assert cr["cancel_ok"] is True
+    assert cr["execution_id"] == exec_id
+    assert cr["agent_type"] == "developer"
+    assert cr["cancel_reason"] is None
+
+    # El cierre se completó igualmente
+    actions_by = {a["action"]: a for a in body["actions"]}
+    assert actions_by["update_stacky_status"]["ok"] is True
+    assert body["current_status"] == "completed"
+
+
+def test_finish_work_without_active_execution_cancel_result_is_none(client, fake_ado, tmp_repo, monkeypatch):
+    """CA-5.4: sin ejecución activa, cancel_result es null y flujo es idéntico
+    al cierre normal."""
+    from db import session_scope
+    from models import Ticket, AgentExecution
+
+    # Ticket sin ejecución running (la única ejecución tiene status='completed')
+    with session_scope() as session:
+        t = Ticket(
+            ado_id=5002, project="RSPacifico",
+            title="t-no-active", ado_state="In Progress",
+            stacky_status="running",
+        )
+        session.add(t)
+        session.flush()
+        e = AgentExecution(
+            ticket_id=t.id,
+            agent_type="developer",
+            status="completed",  # no está running
+            input_context_json="[]",
+            started_by="test",
+            started_at=datetime.utcnow(),
+        )
+        session.add(e)
+        session.flush()
+        ticket_id = t.id
+
+    _write_html(tmp_repo, 5002, "<p>ok</p>")
+
+    cancel_called: list[int] = []
+
+    def fake_cancel_and_wait(execution_id: int, timeout_seconds: float = 5.0) -> dict:
+        cancel_called.append(execution_id)
+        return {"cancel_ok": True, "cancel_reason": None, "final_status": "cancelled"}
+
+    import agent_runner
+    monkeypatch.setattr(agent_runner, "cancel_and_wait", fake_cancel_and_wait)
+
+    r = client.post(
+        f"/api/tickets/{ticket_id}/finish-work",
+        json={
+            "operator_reason": "cierre sin ejecucion activa",
+            "publish_to_ado": False,
+        },
+    )
+    assert r.status_code == 200, r.get_data(as_text=True)
+    body = r.get_json()
+
+    # cancel_and_wait NO fue invocado
+    assert cancel_called == []
+    # cancel_result es null
+    assert body["cancel_result"] is None
+
+    actions_by = {a["action"]: a for a in body["actions"]}
+    assert actions_by["update_stacky_status"]["ok"] is True
+
+
+def test_finish_work_cancel_timeout_continues_close(client, fake_ado, tmp_repo, monkeypatch):
+    """CA-5.3: cuando cancel_and_wait retorna cancel_ok=False (timeout),
+    el cierre continúa igualmente y cancel_result refleja el fallo."""
+    ticket_id, exec_id = _mk_ticket_with_active_exec(ado_id=5003)
+    _write_html(tmp_repo, 5003, "<p>ok</p>")
+
+    def fake_cancel_and_wait(execution_id: int, timeout_seconds: float = 5.0) -> dict:
+        # Simular timeout: la ejecución sigue running
+        return {"cancel_ok": False, "cancel_reason": "timeout", "final_status": "running"}
+
+    import agent_runner
+    monkeypatch.setattr(agent_runner, "cancel_and_wait", fake_cancel_and_wait)
+
+    r = client.post(
+        f"/api/tickets/{ticket_id}/finish-work",
+        json={
+            "operator_reason": "cancelacion fallara",
+            "publish_to_ado": False,
+            "cancel_active_execution": True,
+        },
+    )
+    assert r.status_code == 200, r.get_data(as_text=True)
+    body = r.get_json()
+
+    # cancel_result presente con cancel_ok=False
+    cr = body["cancel_result"]
+    assert cr is not None
+    assert cr["cancel_ok"] is False
+    assert cr["cancel_reason"] == "timeout"
+    assert cr["execution_id"] == exec_id
+
+    # A pesar del fallo de cancelación, el cierre se ejecutó
+    actions_by = {a["action"]: a for a in body["actions"]}
+    assert actions_by["update_stacky_status"]["ok"] is True
+    assert body["current_status"] == "completed"
+
+
+def test_finish_work_dry_run_shows_active_execution_in_preconditions(client, fake_ado, tmp_repo):
+    """CA-5.1: dry_run muestra la ejecución activa en preconditions.active_execution."""
+    ticket_id, exec_id = _mk_ticket_with_active_exec(ado_id=5004)
+    _write_html(tmp_repo, 5004, "<p>ok</p>")
+
+    r = client.post(
+        f"/api/tickets/{ticket_id}/finish-work",
+        json={
+            "operator_reason": "dry run con activa",
+            "dry_run": True,
+            "cancel_active_execution": True,
+        },
+    )
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["dry_run"] is True
+    assert body["cancel_result"] is None  # dry_run no ejecuta cancelación
+
+    ae = body["preconditions"]["active_execution"]
+    assert ae is not None
+    assert ae["execution_id"] == exec_id
+    assert ae["agent_type"] == "developer"
+    assert ae["will_cancel"] is True

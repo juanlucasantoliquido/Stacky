@@ -112,6 +112,63 @@ def cancel(execution_id: int) -> bool:
     return True
 
 
+def cancel_and_wait(execution_id: int, timeout_seconds: float = 5.0) -> dict:
+    """Cancela una ejecución y espera hasta timeout_seconds a que el status deje
+    de ser 'running' en la BD.
+
+    Retorna un dict con:
+      {
+        "cancel_ok": bool,
+        "cancel_reason": str | None,   # presente si cancel_ok=False
+        "final_status": str | None,    # status de la ejecución al terminar la espera
+      }
+
+    Si el timeout se agota y el status sigue en 'running', retorna cancel_ok=False
+    con cancel_reason='timeout'. El caller debe continuar el flujo igualmente y
+    registrar el fallo.
+
+    Nota: copilot_bridge.cancel() es un flag in-memory. La ejecución puede
+    demorar en leer ese flag y actualizar la BD. Este helper da 5s de margen.
+    """
+    import time
+
+    cancel(execution_id)
+
+    deadline = time.monotonic() + timeout_seconds
+    poll_interval = 0.25  # segundos
+
+    while time.monotonic() < deadline:
+        try:
+            with session_scope() as session:
+                row = session.get(AgentExecution, execution_id)
+                final_status = row.status if row else None
+        except Exception:
+            final_status = None
+
+        if final_status != "running":
+            return {
+                "cancel_ok": True,
+                "cancel_reason": None,
+                "final_status": final_status,
+            }
+
+        time.sleep(poll_interval)
+
+    # Timeout agotado — status aún 'running' (o no pudo leer BD)
+    try:
+        with session_scope() as session:
+            row = session.get(AgentExecution, execution_id)
+            final_status = row.status if row else None
+    except Exception:
+        final_status = None
+
+    return {
+        "cancel_ok": False,
+        "cancel_reason": "timeout",
+        "final_status": final_status,
+    }
+
+
 def _run_in_background(
     agent_type: str,
     execution_id: int,

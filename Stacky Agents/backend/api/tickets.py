@@ -989,6 +989,9 @@ def finish_work(ticket_id: int):
     # roto). Sin este flag, el manifest gate devuelve 409.
     force_finish = bool(body.get("force_finish", False))
     dry_run = bool(body.get("dry_run", False))
+    # cancel_active_execution=true (default) instruye al endpoint a cancelar
+    # la AgentExecution activa antes de ejecutar el cierre. Si false, se omite.
+    cancel_active_execution = bool(body.get("cancel_active_execution", True))
     operator = request.headers.get("X-User-Email") or "anonymous"
     # Trazabilidad de origen: el frontend UI envía "manual_ui"; agentes envían "agent" u omiten.
     # Backward-compat: si no viene el header ni el campo, default "manual".
@@ -1023,6 +1026,21 @@ def finish_work(ticket_id: int):
         # html_output_path se setea dinámicamente (no es columna); usamos
         # getattr para no romper en runs que nunca lo recibieron.
         exec_hint = getattr(last_exec, "html_output_path", None) if last_exec else None
+
+        # Ejecución activa (status=running) — puede diferir de last_exec si
+        # la última terminó pero stacky_status no se actualizó aún.
+        active_exec = (
+            session.query(AgentExecution)
+            .filter(
+                AgentExecution.ticket_id == ticket_id,
+                AgentExecution.status == "running",
+            )
+            .first()
+        )
+        active_execution_id: int | None = active_exec.id if active_exec else None
+        active_execution_agent_type: str | None = (
+            active_exec.agent_type if active_exec else None
+        )
 
     if current_stacky == "completed":
         return jsonify({
@@ -1083,6 +1101,17 @@ def finish_work(ticket_id: int):
         "current_stacky_status": current_stacky,
         "execution_id": execution_id,
         "ado_id": ado_id,
+        # Ejecución activa detectada al momento del request (dry_run o real).
+        # El frontend la muestra como precondición antes de confirmar el cierre.
+        "active_execution": (
+            {
+                "execution_id": active_execution_id,
+                "agent_type": active_execution_agent_type,
+                "will_cancel": cancel_active_execution,
+            }
+            if active_execution_id is not None
+            else None
+        ),
     }
 
     if dry_run:
@@ -1091,6 +1120,7 @@ def finish_work(ticket_id: int):
             "dry_run": True,
             "ticket_id": ticket_id,
             "ado_id": ado_id,
+            "cancel_result": None,
             "preconditions": preconditions,
             "actions": [],
             "current_status": current_stacky,
@@ -1098,6 +1128,49 @@ def finish_work(ticket_id: int):
         })
 
     actions: list[dict] = []
+
+    # ── 2b. Cancelar ejecución activa (bloqueante, timeout 5s) ───────────────
+    cancel_result: dict | None = None
+    if active_execution_id is not None and cancel_active_execution:
+        import agent_runner as _ar
+        try:
+            wait_result = _ar.cancel_and_wait(active_execution_id, timeout_seconds=5.0)
+            cancel_result = {
+                "execution_id": active_execution_id,
+                "agent_type": active_execution_agent_type,
+                "cancel_ok": wait_result["cancel_ok"],
+                "cancel_reason": wait_result.get("cancel_reason"),
+            }
+            if not wait_result["cancel_ok"]:
+                # Fallo no bloquea el cierre — registrar en system_logs y continuar.
+                logger.warning(
+                    "finish_work: cancel_and_wait timeout para execution_id=%s (ticket=%s) — cierre continúa",
+                    active_execution_id,
+                    ticket_id,
+                )
+                try:
+                    from services.stacky_logger import logger as slog
+                    slog.warning(
+                        "tickets",
+                        "finish_work_cancel_failed",
+                        ticket_id=ticket_id,
+                        execution_id=active_execution_id,
+                        context_data={
+                            "error": wait_result.get("cancel_reason", "timeout"),
+                            "final_status": wait_result.get("final_status"),
+                        },
+                        tags=["ticket", "finish_work", "cancel_failed"],
+                    )
+                except Exception:
+                    logger.exception("emit finish_work_cancel_failed falló (no crítico)")
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("finish_work: cancel_and_wait lanzó excepción inesperada")
+            cancel_result = {
+                "execution_id": active_execution_id,
+                "agent_type": active_execution_agent_type,
+                "cancel_ok": False,
+                "cancel_reason": f"{type(exc).__name__}: {exc}",
+            }
 
     # ── 3. Publicar en ADO ────────────────────────────────────────────────────
     if publish_to_ado_flag and ado_id is not None:
@@ -1198,6 +1271,9 @@ def finish_work(ticket_id: int):
     # ── 6. Evento estructurado para audit ─────────────────────────────────────
     try:
         from services.stacky_logger import logger as slog
+        _tags = ["ticket", "finish_work", "manual", completion_source]
+        if cancel_result is not None:
+            _tags.append("cancel_active")
         slog.info(
             "tickets",
             "manual_finish_work",
@@ -1212,8 +1288,14 @@ def finish_work(ticket_id: int):
                 "preconditions": preconditions,
                 "actions": actions,
                 "dry_run": False,
+                # Campos nuevos Feature #5 — TerminarTrabajo
+                "cancel_attempted": cancel_result is not None,
+                "cancel_execution_id": (
+                    cancel_result["execution_id"] if cancel_result else None
+                ),
+                "cancel_ok": cancel_result["cancel_ok"] if cancel_result else None,
             },
-            tags=["ticket", "finish_work", "manual", completion_source],
+            tags=_tags,
         )
     except Exception:
         logger.exception("emit manual_finish_work falló (no crítico)")
@@ -1224,6 +1306,7 @@ def finish_work(ticket_id: int):
         "dry_run": False,
         "ticket_id": ticket_id,
         "ado_id": ado_id,
+        "cancel_result": cancel_result,
         "preconditions": preconditions,
         "actions": actions,
         "current_status": ts.get_current_status(ticket_id),

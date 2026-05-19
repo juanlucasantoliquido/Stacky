@@ -1,6 +1,7 @@
 from flask import Blueprint
 
 from .agents import bp as agents_bp
+from .flow_config import bp as flow_config_bp
 from .anti_patterns import bp as anti_patterns_bp
 from .decisions import bp as decisions_bp
 from .diag import bp as diag_bp
@@ -44,6 +45,7 @@ api_bp.register_blueprint(projects_bp)
 api_bp.register_blueprint(qa_uat_bp)
 api_bp.register_blueprint(metrics_bp)
 api_bp.register_blueprint(diag_bp)
+api_bp.register_blueprint(flow_config_bp)
 
 
 @api_bp.get("/health")

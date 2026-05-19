@@ -123,6 +123,16 @@ def create_app() -> Flask:
 
     init_db()
     install_console_log_handler()
+
+    # Seed inicial de flow_config.json (Feature #4 — DO-4.4).
+    # No regenera si el operador ya tiene reglas configuradas.
+    try:
+        from services.flow_config_store import seed_defaults_if_empty
+        seeded = seed_defaults_if_empty()
+        if seeded:
+            logger.info("flow_config seed: %d reglas iniciales creadas", seeded)
+    except Exception:
+        logger.exception("flow_config seed falló (continuando sin reglas iniciales)")
     fixed = reconcile_orphans()
     if fixed:
         logger.info("reconciled %d orphan executions", fixed)

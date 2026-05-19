@@ -1,6 +1,14 @@
 """
 FA-42 — Suggested next agent (markov chain on agent transitions).
 
+DEPRECATED — Feature #4 FlowConfig (SDD-2026-05-19).
+Reemplazado por services/flow_config_store.py para la recomendación
+determinística del botón "Run Sugerido" en TicketBoard.tsx.
+Este módulo sigue usado por el endpoint GET /api/agents/next-suggestion
+(también deprecated, preservado para rollback) y por NextAgentSuggestion.tsx
+(sugerencias post-aprobación en OutputPanel). No eliminar — preservado para
+rollback. Ver SDD-2026-05-19 Feature #4.
+
 Después de aprobar un Run, sugerir cuál es el agente que históricamente
 los operadores corren a continuación, con qué frecuencia. Aprende de los
 caminos populares sin imponer pipeline rígido.

@@ -14,6 +14,18 @@ Flujo:
   5. Cachea resultado en BD local (SQLite) con TTL configurable
 
 Modelo SQLAlchemy: PipelineInferenceCache (tabla pipeline_inference_cache)
+
+NOTA Feature #4 (SDD-2026-05-19):
+El campo `next_suggested` en PipelineInferenceResult.to_dict() ya NO es
+consumido por el frontend como fuente de recomendación de próximo agente.
+A partir de la Fase 4.C, TicketBoard.tsx usa FlowConfig (services/flow_config_store)
+para la sugerencia determinística del botón "Run Sugerido".
+El campo `next_suggested` se preserva en el resultado para:
+  - Rollback: restaurar TicketBoard al comportamiento anterior sin cambios backend.
+  - TicketGraphView.jsx (vista grafo): sigue usándolo para colorear chips de progreso
+    visual (no es el botón Run Sugerido — es visualización de etapas).
+  - PipelineStatus.tsx: el campo llega pero ya no se renderiza como "Próximo:" (4.C).
+NO eliminar en v1.
 """
 from __future__ import annotations
 

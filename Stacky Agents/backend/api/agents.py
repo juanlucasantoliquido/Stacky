@@ -213,12 +213,24 @@ def system_prompt(agent_type: str):
 
 @bp.get("/next-suggestion")
 def next_suggestion():
-    """FA-42 — sugerencia de siguiente agente después de aprobar uno."""
+    """FA-42 — sugerencia de siguiente agente después de aprobar uno.
+
+    DEPRECATED — Feature #4 FlowConfig (SDD-2026-05-19).
+    La recomendación del botón "Run Sugerido" en TicketBoard ya no consume
+    este endpoint. Fue reemplazada por GET /api/flow-config/resolve que
+    devuelve la regla determinística configurada por el operador.
+    Este endpoint se preserva para rollback y para NextAgentSuggestion.tsx
+    (sugerencias post-aprobación en OutputPanel). No eliminar en v1.
+    Response incluye header Deprecation: true.
+    """
     after = request.args.get("after_agent")
     if not after:
         abort(400, "after_agent is required")
     suggestions = next_agent.suggest(after_agent=after, k=2)
-    return jsonify([s.to_dict() for s in suggestions])
+    resp = jsonify([s.to_dict() for s in suggestions])
+    resp.headers["Deprecation"] = "true"
+    resp.headers["Sunset"] = "Feature #4 FlowConfig — ver SDD-2026-05-19"
+    return resp
 
 
 @bp.post("/cancel/<int:execution_id>")

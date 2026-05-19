@@ -1,0 +1,200 @@
+/* DocsPage.module.css — Página principal de documentación (Feature #3) */
+
+.page {
+  display: flex;
+  height: calc(100vh - 96px); /* restar TopBar + nav tabs */
+  overflow: hidden;
+  background: var(--color-bg, #0f0f0f);
+}
+
+/* ── Panel izquierdo ───────────────────────────────────────────────────────── */
+
+.sidePanel {
+  width: 280px;
+  min-width: 200px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border, #2a2a2a);
+  background: var(--color-surface, #141414);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Caja de búsqueda */
+.searchBox {
+  position: relative;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--color-border, #2a2a2a);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-surface-2, #1a1a1a);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  color: var(--color-text, #ccc);
+  font-size: 0.82rem;
+  padding: 6px 28px 6px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.searchInput:focus {
+  border-color: var(--color-accent, #4a9eff);
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-muted, #555);
+}
+
+.clearSearch {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-text-muted, #666);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.clearSearch:hover {
+  color: var(--color-text, #ccc);
+}
+
+/* Árbol */
+.treeContainer {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Footer del panel */
+.sideFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-top: 1px solid var(--color-border, #2a2a2a);
+  flex-shrink: 0;
+}
+
+.indexedAt,
+.docCount {
+  font-size: 0.68rem;
+  color: var(--color-text-muted, #555);
+}
+
+/* ── Panel derecho ─────────────────────────────────────────────────────────── */
+
+.viewerPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg, #0f0f0f);
+}
+
+/* ── Estado vacío ──────────────────────────────────────────────────────────── */
+
+.emptyState {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--color-text-muted, #555);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/* ── Estado de bienvenida ──────────────────────────────────────────────────── */
+
+.welcomeState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: var(--color-text-muted, #555);
+  padding: 32px;
+  text-align: center;
+}
+
+.welcomeIcon {
+  font-size: 3rem;
+  opacity: 0.4;
+}
+
+.welcomeTitle {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text, #888);
+}
+
+.welcomeSubtitle {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #555);
+  max-width: 300px;
+}
+
+/* ── Estado de carga ───────────────────────────────────────────────────────── */
+
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: var(--color-text-muted, #666);
+  font-size: 0.85rem;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--color-border, #333);
+  border-top-color: var(--color-accent, #4a9eff);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Estado de error ───────────────────────────────────────────────────────── */
+
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+  padding: 32px;
+  text-align: center;
+}
+
+.errorTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-error, #ff6b6b);
+}
+
+.errorDetail {
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #888);
+  font-family: monospace;
+}
+
+.errorHint {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #666);
+  margin-top: 8px;
+}

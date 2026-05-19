@@ -1,0 +1,176 @@
+/* DocTree.module.css — Árbol de documentación (Feature #3) */
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-size: 0.85rem;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* ── Sección raíz ──────────────────────────────────────────────────────────── */
+
+.rootSection {
+  border-bottom: 1px solid var(--color-border, #2a2a2a);
+}
+
+.rootHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  background: var(--color-surface-2, #1a1a1a);
+  user-select: none;
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted, #888);
+  transition: background 0.15s;
+}
+
+.rootHeader:hover {
+  background: var(--color-surface-3, #222);
+  color: var(--color-text, #ccc);
+}
+
+.rootToggle {
+  font-size: 0.7rem;
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.rootLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rootCount {
+  font-size: 0.7rem;
+  background: var(--color-surface-3, #222);
+  border-radius: 10px;
+  padding: 1px 6px;
+  color: var(--color-text-muted, #666);
+}
+
+/* ── Lista de documentos ───────────────────────────────────────────────────── */
+
+.docList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.emptyNote {
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #666);
+  font-style: italic;
+}
+
+/* ── Documento individual ──────────────────────────────────────────────────── */
+
+.docItem {
+  list-style: none;
+  border-bottom: 1px solid var(--color-border, #1f1f1f);
+}
+
+.docItemHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px 6px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+  color: var(--color-text, #ccc);
+}
+
+.docItemHeader:hover {
+  background: var(--color-surface-hover, #1e2a3a);
+  color: var(--color-text-bright, #eee);
+}
+
+.docItem.selected > .docItemHeader {
+  background: var(--color-accent-bg, #1a3a5c);
+  color: var(--color-accent, #4a9eff);
+  font-weight: 500;
+}
+
+.expandIcon {
+  font-size: 0.65rem;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--color-text-muted, #666);
+}
+
+.docLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.82rem;
+}
+
+.headingCount {
+  font-size: 0.68rem;
+  color: var(--color-text-muted, #555);
+  flex-shrink: 0;
+}
+
+/* ── Lista de headings ─────────────────────────────────────────────────────── */
+
+.headingList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.headingItem {
+  padding: 4px 12px 4px 36px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #777);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.1s, color 0.1s;
+  user-select: none;
+}
+
+.headingItem:hover {
+  background: var(--color-surface-hover, #1e2a3a);
+  color: var(--color-text, #bbb);
+}
+
+.headingItem.h1 {
+  padding-left: 28px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #999);
+}
+
+.headingItem.h2 {
+  padding-left: 40px;
+  font-size: 0.74rem;
+}
+
+.headingItem.filterMatch {
+  background: var(--color-warning-bg, #2a2000);
+  color: var(--color-warning, #ffcc44);
+}
+
+/* ── Estado vacío ──────────────────────────────────────────────────────────── */
+
+.emptyState {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--color-text-muted, #666);
+  font-size: 0.85rem;
+  font-style: italic;
+}

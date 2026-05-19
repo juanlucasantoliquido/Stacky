@@ -1189,6 +1189,55 @@ export const QaUat = {
     ),
 };
 
+// ── Feature #3: Docs — árbol de documentación ────────────────────────────────
+
+export interface DocHeading {
+  level: 1 | 2;
+  text: string;
+  anchor: string;
+}
+
+export interface DocNode {
+  id: string;
+  label: string;
+  path: string;
+  size_bytes: number;
+  headings: DocHeading[];
+  /** Presente solo en la sección "agents" cuando _absolute_path está disponible en el servidor. */
+  _absolute_path?: string;
+}
+
+export interface DocRoot {
+  id: "technical-docs" | "agents" | "roadmaps";
+  label: string;
+  children: DocNode[];
+  /** Nota informativa cuando la sección está vacía por configuración. */
+  note?: string;
+}
+
+export interface DocsIndexResponse {
+  ok: boolean;
+  indexed_at: string;
+  roots: DocRoot[];
+}
+
+export interface DocsContentResponse {
+  ok: boolean;
+  path: string;
+  content: string;
+  encoding: string;
+}
+
+export const Docs = {
+  /** Devuelve el árbol completo de documentos indexados. */
+  getIndex: (): Promise<DocsIndexResponse> =>
+    api.get<DocsIndexResponse>("/api/docs/index"),
+
+  /** Devuelve el contenido raw de un documento por su path relativo. */
+  getContent: (path: string): Promise<DocsContentResponse> =>
+    api.get<DocsContentResponse>(`/api/docs/content?path=${encodeURIComponent(path)}`),
+};
+
 // ── Feature #4: FlowConfig — mapeo determinístico ado_state → agent_type ─────
 
 export interface FlowConfigRule {

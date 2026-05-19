@@ -179,6 +179,37 @@
   border-radius: 4px;
 }
 
+/* Fase 5.B: advertencia de ejecución activa */
+.activeExecWarning {
+  font-size: 12px;
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  background: rgba(251, 191, 36, 0.08);
+  border-left: 3px solid #fbbf24;
+  border-radius: 4px;
+  color: #fbbf24;
+}
+
+/* Fase 5.B: resultado de cancelación post-cierre */
+.cancelResultOk {
+  font-size: 12px;
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  background: rgba(74, 222, 128, 0.07);
+  border-left: 3px solid #4ade80;
+  border-radius: 4px;
+  color: #4ade80;
+}
+.cancelResultFail {
+  font-size: 12px;
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border-left: 3px solid #f87171;
+  border-radius: 4px;
+  color: #fca5a5;
+}
+
 .footer {
   display: flex;
   justify-content: flex-end;

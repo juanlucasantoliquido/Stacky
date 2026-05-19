@@ -43,8 +43,15 @@ export interface FinishWorkResponse {
     html_exists: boolean;
     html_invalid_reason: string | null;
     current_stacky_status: string;
+    /** @deprecated use active_execution instead */
     execution_id: number | null;
     ado_id: number | null;
+    /** Ejecución activa al momento del dry-run (Fase 5.B). */
+    active_execution: {
+      execution_id: number;
+      agent_type: string;
+      will_cancel: boolean;
+    } | null;
   };
   actions: {
     action: string;
@@ -57,6 +64,13 @@ export interface FinishWorkResponse {
   }[];
   current_status: string;
   operator: string;
+  /** Resultado de la cancelación de la ejecución activa (Fase 5.B). null si no había ejecución activa. */
+  cancel_result: {
+    execution_id: number;
+    agent_type: string;
+    cancel_ok: boolean;
+    cancel_reason: string | null;
+  } | null;
 }
 
 export const Tickets = {
@@ -113,6 +127,8 @@ export const Tickets = {
       target_ado_state?: string | null;
       force_publish?: boolean;
       dry_run?: boolean;
+      /** Si true (default server-side), cancela la ejecución activa antes del cierre (Fase 5.B). */
+      cancel_active_execution?: boolean;
     }
   ): Promise<FinishWorkResponse> =>
     api.postWithHeaders<FinishWorkResponse>(

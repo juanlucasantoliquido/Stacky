@@ -54,6 +54,7 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
         target_ado_state: targetState.trim() || null,
         force_publish: forcePublish,
         dry_run: false,
+        cancel_active_execution: true,
       }),
     onSuccess: (data) => {
       setLastResult(data);
@@ -149,6 +150,13 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
                   </li>
                 </ul>
               )}
+              {/* CA-5.1: advertencia de ejecución activa detectada en dry-run */}
+              {lastResult?.preconditions.active_execution && (
+                <p className={styles.activeExecWarning}>
+                  Ejecucion activa: #{lastResult.preconditions.active_execution.execution_id}{" "}
+                  ({lastResult.preconditions.active_execution.agent_type}) — se cancelara antes del cierre
+                </p>
+              )}
             </section>
 
             {/* Formulario */}
@@ -220,6 +228,21 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
                     </li>
                   ))}
                 </ul>
+                {/* CA-5.2 / CA-5.3: resultado de cancelación de ejecución activa */}
+                {lastResult.cancel_result != null && (
+                  lastResult.cancel_result.cancel_ok ? (
+                    <p className={styles.cancelResultOk}>
+                      Cancelacion: OK (ejecucion #{lastResult.cancel_result.execution_id}{" "}
+                      — {lastResult.cancel_result.agent_type})
+                    </p>
+                  ) : (
+                    <p className={styles.cancelResultFail}>
+                      Cancelacion fallo: {lastResult.cancel_result.cancel_reason ?? "razon desconocida"}.
+                      El cierre se ejecuto igualmente.
+                    </p>
+                  )
+                )}
+                {/* CA-5.4: si cancel_result es null, no se muestra nada (sin ejecución activa) */}
               </section>
             )}
 

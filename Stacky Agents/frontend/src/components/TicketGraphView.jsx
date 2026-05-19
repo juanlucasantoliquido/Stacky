@@ -1,12 +1,12 @@
-import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Agents } from "../api/endpoints";
+import React, { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Agents, FlowConfig } from "../api/endpoints";
 import { getPinnedAgents } from "../services/preferences";
 
 // Feature #4 (mejora post-SDD): la inferencia LLM (Tickets.adoPipelineStatus)
 // fue removida del consumo del frontend. Los chips muestran progreso a partir
 // de pipeline_summary (datos BD locales). next_suggested para tickets normales
-// queda null — el botón "Run Sugerido" usa FlowConfig vía TicketBoard.
+// se resuelve desde FlowConfig (mapping determinístico ado_state → agent_type).
 import RecoverExecutionButton from "./RecoverExecutionButton";
 import FinishWorkButton from "./FinishWorkButton";
 import CreateChildTaskButton from "./CreateChildTaskButton";
@@ -143,7 +143,7 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
 
 // ─── PipelineBar ──────────────────────────────────────────────────────────────
 
-function PipelineBar({ summary, isEpic, inferResult, compact = false }) {
+function PipelineBar({ summary, isEpic, inferResult, compact = false, flowNext = null }) {
   if (isEpic) {
     const { done_stages, next_suggested } = summary;
     const stages = [
@@ -173,7 +173,10 @@ function PipelineBar({ summary, isEpic, inferResult, compact = false }) {
   const done = inferResult
     ? Object.entries(inferResult.stages || {}).filter(([, v]) => v.done).map(([k]) => k)
     : (summary?.done_stages || []);
-  const next = inferResult?.next_suggested ?? summary?.next_suggested ?? null;
+  // Sugerencia determinística desde FlowConfig (override). Si no se pasa,
+  // cae a la lógica heredada (BD/LLM) — pero el caller principal siempre
+  // pasa flowNext en este flujo.
+  const next = flowNext ?? inferResult?.next_suggested ?? summary?.next_suggested ?? null;
 
   return (
     <div className={styles.pipelineBar}>
@@ -249,7 +252,7 @@ export class NodeErrorBoundary extends React.Component {
 
 // ─── TicketNode Card ──────────────────────────────────────────────────────────
 
-function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgents = [], runningByTicket = new Map() }) {
+function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgents = [], runningByTicket = new Map(), flowConfigMap = new Map() }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [runModal, setRunModal] = useState(null); // null | "suggested" | "custom"
@@ -258,7 +261,16 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
   const inferResult = inferMap[ticket.id] || null;
   const colors = isEpic ? EPIC_COLORS : (STATE_COLORS[ticket.ado_state] || STATE_COLORS["New"]);
   const summary = isEpic ? epicPipelineSummary(ticket) : ticket.pipeline_summary;
-  const next = isEpic ? summary.next_suggested : (inferResult?.next_suggested ?? summary?.next_suggested);
+  // Feature #4: sugerencia determinística desde FlowConfig en lugar de
+  // summary.next_suggested (BD local que siempre devuelve la primera etapa
+  // no completada → "business" para tickets sin progreso).
+  const isTask = (ticket.work_item_type || "").toLowerCase() === "task";
+  const flowAgentType = !isEpic && ticket.ado_state
+    ? (flowConfigMap.get(ticket.ado_state.trim().toLowerCase()) ?? null)
+    : null;
+  // Regla #7/#8: Tasks y Épicas nunca proponen Negocio
+  const flowNext = (isTask && flowAgentType === "business") ? null : flowAgentType;
+  const next = isEpic ? summary.next_suggested : flowNext;
   const nextLabel = next && AGENT_LABELS[next] ? `${AGENT_LABELS[next].icon} ${AGENT_LABELS[next].label}` : null;
   const suggestedFilename = next ? findAgentFilenameByType(next, vsCodeAgents, getPinnedAgents()) : null;
   const runningExecution = runningByTicket.get(ticket.id) ?? null;
@@ -330,6 +342,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
             isEpic={isEpic}
             inferResult={inferResult}
             compact
+            flowNext={isEpic ? null : flowNext}
           />
 
           {/* Next agent prominente */}
@@ -462,7 +475,7 @@ function computeLines(containerRef) {
   return newLines;
 }
 
-function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket }) {
+function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flowConfigMap }) {
   const containerRef = useRef(null);
   const [lines, setLines] = useState([]);
 
@@ -495,7 +508,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket }) {
       {/* Epic node */}
       <div data-role="epic-node" className={styles.epicNodeWrap}>
         <NodeErrorBoundary adoId={epic.ado_id}>
-          <TicketNodeCard ticket={epic} inferMap={inferMap} onInfer={onInfer} isEpic vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} />
+          <TicketNodeCard ticket={epic} inferMap={inferMap} onInfer={onInfer} isEpic vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} />
         </NodeErrorBoundary>
         <span className={styles.childrenCount}>{epic.children.length} ticket{epic.children.length !== 1 ? "s" : ""}</span>
       </div>
@@ -506,7 +519,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket }) {
           {epic.children.map(child => (
             <div data-role="child-node" key={child.id} className={styles.childNodeWrap}>
               <NodeErrorBoundary adoId={child.ado_id}>
-                <TicketNodeCard ticket={child} inferMap={inferMap} onInfer={onInfer} vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} />
+                <TicketNodeCard ticket={child} inferMap={inferMap} onInfer={onInfer} vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} />
               </NodeErrorBoundary>
             </div>
           ))}
@@ -525,6 +538,21 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
   // para mantener la firma de props de los componentes hijos sin reescribirlos.
   const inferMap = {};
   const handleInfer = useCallback(() => {}, []);
+
+  // Feature #4 — FlowConfig: cargar reglas una vez y construir map ado_state→agent_type.
+  // Mismo patrón que TicketBoard. Keys lowercased para resolución case-insensitive.
+  const { data: flowConfigData } = useQuery({
+    queryKey: ["flow-config"],
+    queryFn: FlowConfig.list,
+    staleTime: 5 * 60 * 1000,
+  });
+  const flowConfigMap = useMemo(() => {
+    const map = new Map();
+    for (const rule of flowConfigData?.rules ?? []) {
+      map.set(rule.ado_state.trim().toLowerCase(), rule.agent_type);
+    }
+    return map;
+  }, [flowConfigData]);
 
   if (!hierarchy) {
     return <div className={styles.empty}>Sincronizá los tickets primero.</div>;
@@ -563,6 +591,7 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
                 onInfer={handleInfer}
                 vsCodeAgents={vsCodeAgents}
                 runningByTicket={runningByTicket}
+                flowConfigMap={flowConfigMap}
               />
             ))}
           </div>
@@ -582,6 +611,7 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
                   onInfer={handleInfer}
                   vsCodeAgents={vsCodeAgents}
                   runningByTicket={runningByTicket}
+                  flowConfigMap={flowConfigMap}
                 />
               </NodeErrorBoundary>
             ))}

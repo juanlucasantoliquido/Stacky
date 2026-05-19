@@ -165,6 +165,23 @@
   color: var(--color-warning, #ffcc44);
 }
 
+/* ── Resaltado de texto filtrado (Fase 3.C) ────────────────────────────────── */
+
+.highlight {
+  background: var(--color-warning, #ffcc44);
+  color: #111;
+  border-radius: 2px;
+  padding: 0 1px;
+  font-weight: 600;
+}
+
+.headingPrefix {
+  font-size: 0.62rem;
+  color: var(--color-text-muted, #555);
+  font-family: monospace;
+  margin-right: 2px;
+}
+
 /* ── Estado vacío ──────────────────────────────────────────────────────────── */
 
 .emptyState {

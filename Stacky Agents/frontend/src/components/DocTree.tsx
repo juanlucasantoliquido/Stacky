@@ -4,7 +4,12 @@
  * Recibe roots: DocRoot[] y onSelect(node: DocNode).
  * Expand/collapse por sección raíz.
  * Lista los headings de cada documento como subitems navegables.
- * Acepta filterText para filtrar nodos (Fase 3.C).
+ * Acepta filterText para filtrar nodos (Fase 3.C):
+ *   - Búsqueda vacía → árbol completo.
+ *   - Búsqueda con texto → solo nodos cuyo label o algún heading.text matchea
+ *     (case-insensitive). Nodos no coincidentes ocultos (no griseados).
+ *   - Secciones raíz sin matches → ocultas.
+ *   - Resaltado visual del texto matcheado en labels y headings.
  */
 import { useState } from "react";
 import type { DocRoot, DocNode, DocHeading } from "../api/endpoints";
@@ -28,6 +33,26 @@ function nodeMatchesFilter(node: DocNode, filter: string): boolean {
   return node.headings.some((h) => h.text.toLowerCase().includes(lower));
 }
 
+/**
+ * Resalta las ocurrencias de `filter` en `text` devolviendo spans.
+ * Si no hay match o filtro vacío, devuelve el texto plano.
+ */
+function HighlightedText({ text, filter }: { text: string; filter: string }) {
+  if (!filter) return <>{text}</>;
+
+  const lower = filter.toLowerCase();
+  const idx = text.toLowerCase().indexOf(lower);
+  if (idx === -1) return <>{text}</>;
+
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className={styles.highlight}>{text.slice(idx, idx + filter.length)}</mark>
+      {text.slice(idx + filter.length)}
+    </>
+  );
+}
+
 // ── sub-component: HeadingItem ────────────────────────────────────────────────
 
 interface HeadingItemProps {
@@ -38,7 +63,7 @@ interface HeadingItemProps {
 
 function HeadingItem({ heading, onClick, filterText }: HeadingItemProps) {
   const isMatch =
-    filterText && heading.text.toLowerCase().includes(filterText.toLowerCase());
+    !!filterText && heading.text.toLowerCase().includes(filterText.toLowerCase());
   return (
     <li
       className={`${styles.headingItem} ${styles[`h${heading.level}`]} ${isMatch ? styles.filterMatch : ""}`}
@@ -48,7 +73,8 @@ function HeadingItem({ heading, onClick, filterText }: HeadingItemProps) {
       }}
       title={heading.text}
     >
-      {heading.level === 1 ? "H1" : "H2"} {heading.text}
+      <span className={styles.headingPrefix}>{heading.level === 1 ? "H1" : "H2"}</span>{" "}
+      <HighlightedText text={heading.text} filter={filterText} />
     </li>
   );
 }
@@ -88,7 +114,9 @@ function DocItem({ node, onSelect, filterText, isSelected }: DocItemProps) {
           </span>
         )}
         {!hasHeadings && <span className={styles.expandIcon}>&nbsp;&nbsp;</span>}
-        <span className={styles.docLabel}>{node.label}</span>
+        <span className={styles.docLabel}>
+          <HighlightedText text={node.label} filter={filterText} />
+        </span>
         <span className={styles.headingCount}>
           {node.headings.length > 0 ? `${node.headings.length}h` : ""}
         </span>

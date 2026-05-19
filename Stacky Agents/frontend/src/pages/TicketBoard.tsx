@@ -8,13 +8,16 @@ import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import { useRunningStatus } from "../hooks/useRunningStatus";
-import { getPinnedAgents } from "../services/preferences";
+import { getPinnedAgents, getAgentType } from "../services/preferences";
 import { useWorkbench } from "../store/workbench";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import styles from "./TicketBoard.module.css";
 
-// Infiere el tipo de agente desde el filename — misma lógica que EmployeeCard.
+// Resuelve el tipo del agente. Prioriza el override explícito que el operador
+// fija en EmployeeEditDrawer; cae a heurística sobre el filename si no hay override.
 function inferType(filename: string): string {
+  const override = getAgentType(filename);
+  if (override) return override;
   const f = filename.toLowerCase();
   if (f.includes("business") || f.includes("negocio")) return "business";
   if (f.includes("functional") || f.includes("funcional")) return "functional";

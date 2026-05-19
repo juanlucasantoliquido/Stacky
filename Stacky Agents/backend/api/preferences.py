@@ -13,7 +13,13 @@ bp = Blueprint("preferences", __name__, url_prefix="/preferences")
 
 _PREFS_FILE = Path("data/preferences.json")
 
-_ALLOWED_KEYS = {"pinnedAgents", "agentAvatars", "agentNicknames", "agentRoles"}
+_ALLOWED_KEYS = {
+    "pinnedAgents",
+    "agentAvatars",
+    "agentNicknames",
+    "agentRoles",
+    "agentTypes",
+}
 
 
 def _read() -> dict:

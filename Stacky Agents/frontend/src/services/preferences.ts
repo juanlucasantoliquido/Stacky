@@ -5,6 +5,7 @@ const KEYS = {
   agentAvatars:    "stacky:agentAvatars",
   agentNicknames:  "stacky:agentNicknames",
   agentRoles:      "stacky:agentRoles",
+  agentTypes:      "stacky:agentTypes",
 } as const;
 
 const _API_BASE = (import.meta as any).env?.VITE_API_BASE ?? "http://localhost:5050";
@@ -44,6 +45,7 @@ export async function initPreferences(): Promise<void> {
       [KEYS.agentAvatars,   "agentAvatars"],
       [KEYS.agentNicknames, "agentNicknames"],
       [KEYS.agentRoles,     "agentRoles"],
+      [KEYS.agentTypes,     "agentTypes"],
     ];
     for (const [lsKey, backendKey] of mapping) {
       if (backendKey in data) {
@@ -62,6 +64,7 @@ function _pushToBackend(): void {
     agentAvatars:   getAgentAvatars(),
     agentNicknames: getAgentNicknames(),
     agentRoles:     getAgentRoles(),
+    agentTypes:     getAgentTypes(),
   };
   fetch(_PREFS_URL, {
     method: "PUT",
@@ -137,6 +140,28 @@ export function setAgentRole(filename: string, role: string): void {
 
 export function getAgentRole(filename: string): string | null {
   return getAgentRoles()[filename] ?? null;
+}
+
+// ─── Agent types (override explícito del agent_type) ──────────
+// Cuando está seteado, prevalece sobre la heurística inferType(filename).
+// Valores válidos: business | functional | technical | developer | qa.
+export function getAgentTypes(): Record<string, string> {
+  return read<Record<string, string>>(KEYS.agentTypes, {});
+}
+
+export function setAgentType(filename: string, type: string): void {
+  const current = getAgentTypes();
+  if (!type) {
+    const { [filename]: _drop, ...rest } = current;
+    write(KEYS.agentTypes, rest);
+  } else {
+    write(KEYS.agentTypes, { ...current, [filename]: type });
+  }
+  _pushToBackend();
+}
+
+export function getAgentType(filename: string): string | null {
+  return getAgentTypes()[filename] ?? null;
 }
 
 // ─── Bulk clear (for dev / reset) ─────────────────────────────

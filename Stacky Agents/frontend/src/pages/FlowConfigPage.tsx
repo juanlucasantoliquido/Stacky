@@ -9,8 +9,9 @@
  */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FlowConfig } from "../api/endpoints";
+import { FlowConfig, Projects } from "../api/endpoints";
 import type { FlowConfigRule } from "../api/endpoints";
+import { useWorkbench } from "../store/workbench";
 import styles from "./FlowConfigPage.module.css";
 
 const VALID_AGENT_TYPES = ["business", "functional", "technical", "developer", "qa"] as const;
@@ -45,13 +46,26 @@ function extractErrorMessage(err: unknown): string {
 
 interface CreateFormProps {
   onCreated: () => void;
+  trackerStates: string[];
+  loadingStates: boolean;
+  usedStates: Set<string>;
+  activeProjectName: string | null;
 }
 
-function CreateForm({ onCreated }: CreateFormProps) {
-  const [adoState, setAdoState] = useState("");
+function CreateForm({ onCreated, trackerStates, loadingStates, usedStates, activeProjectName }: CreateFormProps) {
+  const availableStates = trackerStates.filter((s) => !usedStates.has(s));
+  const [adoState, setAdoState] = useState<string>(availableStates[0] ?? "");
   const [agentType, setAgentType] = useState<ValidAgentType>("business");
   const [error, setError] = useState<string | null>(null);
   const qc = useQueryClient();
+
+  // Mantener el select sincronizado con la lista filtrada si cambia (ej. al crear/borrar reglas).
+  if (adoState && !availableStates.includes(adoState) && availableStates.length > 0) {
+    setAdoState(availableStates[0]);
+  }
+  if (!adoState && availableStates.length > 0) {
+    setAdoState(availableStates[0]);
+  }
 
   const mutation = useMutation({
     mutationFn: () => FlowConfig.create({ ado_state: adoState.trim(), agent_type: agentType }),
@@ -67,7 +81,11 @@ function CreateForm({ onCreated }: CreateFormProps) {
     },
   });
 
-  const canSubmit = adoState.trim().length > 0 && !mutation.isPending;
+  const noProject = !activeProjectName;
+  const noStates = !loadingStates && trackerStates.length === 0;
+  const allUsed = !loadingStates && trackerStates.length > 0 && availableStates.length === 0;
+  const canSubmit =
+    adoState.trim().length > 0 && !mutation.isPending && !noProject && !noStates && !allUsed;
 
   return (
     <div className={styles.formCard}>
@@ -75,15 +93,21 @@ function CreateForm({ onCreated }: CreateFormProps) {
       <div className={styles.formRow}>
         <div className={styles.fieldGroup}>
           <label className={styles.label} htmlFor="fc-ado-state">Estado ADO</label>
-          <input
+          <select
             id="fc-ado-state"
-            className={styles.input}
-            type="text"
-            placeholder="ej. New, Active, Resolved..."
+            className={styles.select}
             value={adoState}
             onChange={(e) => { setAdoState(e.target.value); setError(null); }}
-            onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) mutation.mutate(); }}
-          />
+            disabled={noProject || loadingStates || noStates || allUsed}
+          >
+            {loadingStates && <option value="">Cargando estados…</option>}
+            {!loadingStates && noProject && <option value="">Sin proyecto activo</option>}
+            {!loadingStates && noStates && <option value="">No hay estados disponibles</option>}
+            {!loadingStates && allUsed && <option value="">Todos los estados ya tienen regla</option>}
+            {!loadingStates && availableStates.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
         <div className={styles.fieldGroup}>
           <label className={styles.label} htmlFor="fc-agent-type">Tipo de agente</label>
@@ -115,9 +139,11 @@ function CreateForm({ onCreated }: CreateFormProps) {
 
 interface RuleRowProps {
   rule: FlowConfigRule;
+  trackerStates: string[];
+  otherUsedStates: Set<string>; // estados ocupados por otras reglas (excluye el propio)
 }
 
-function RuleRow({ rule }: RuleRowProps) {
+function RuleRow({ rule, trackerStates, otherUsedStates }: RuleRowProps) {
   const [editing, setEditing] = useState(false);
   const [editAdoState, setEditAdoState] = useState(rule.ado_state);
   const [editAgentType, setEditAgentType] = useState<ValidAgentType>(
@@ -168,16 +194,31 @@ function RuleRow({ rule }: RuleRowProps) {
   const isLoading = updateMutation.isPending || deleteMutation.isPending;
 
   if (editing) {
+    // Opciones disponibles: estados del tracker que no estén ocupados por OTRAS reglas
+    // + el estado actual de esta regla (para no autoexcluirse).
+    const selectableStates = trackerStates.filter(
+      (s) => !otherUsedStates.has(s) || s === rule.ado_state
+    );
+    // Si el estado actual no está en el tracker (por ejemplo, regla creada antes del dropdown),
+    // lo incluimos como opción para permitir editarlo sin perderlo.
+    if (!selectableStates.includes(editAdoState) && editAdoState) {
+      selectableStates.unshift(editAdoState);
+    }
     return (
       <>
         <tr className={`${styles.tr} ${styles.trEditing}`}>
           <td className={styles.td}>
-            <input
-              className={styles.inlineInput}
+            <select
+              className={styles.inlineSelect}
               value={editAdoState}
               onChange={(e) => { setEditAdoState(e.target.value); setError(null); }}
               autoFocus
-            />
+            >
+              {selectableStates.length === 0 && <option value="">Sin estados disponibles</option>}
+              {selectableStates.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
           </td>
           <td className={styles.td}>
             <select
@@ -261,13 +302,24 @@ function RuleRow({ rule }: RuleRowProps) {
 // ── main page ─────────────────────────────────────────────────────────────────
 
 export default function FlowConfigPage() {
+  const activeProject = useWorkbench((s) => s.activeProject);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["flow-config"],
     queryFn: () => FlowConfig.list(),
     staleTime: 30_000,
   });
 
+  const trackerStatesQuery = useQuery({
+    queryKey: ["tracker-states", activeProject?.name],
+    queryFn: () => Projects.trackerStates(activeProject!.name),
+    enabled: !!activeProject,
+    staleTime: 5 * 60_000,
+  });
+
   const rules = data?.rules ?? [];
+  const trackerStates = trackerStatesQuery.data?.states ?? [];
+  const usedStates = new Set(rules.map((r) => r.ado_state));
 
   return (
     <div className={styles.root}>
@@ -279,7 +331,19 @@ export default function FlowConfigPage() {
         </p>
       </div>
 
-      <CreateForm onCreated={() => {}} />
+      {!activeProject && (
+        <div className={styles.empty} style={{ marginBottom: 16 }}>
+          Sin proyecto activo. Seleccioná un proyecto en el TopBar para ver los estados ADO disponibles.
+        </div>
+      )}
+
+      <CreateForm
+        onCreated={() => {}}
+        trackerStates={trackerStates}
+        loadingStates={trackerStatesQuery.isLoading}
+        usedStates={usedStates}
+        activeProjectName={activeProject?.name ?? null}
+      />
 
       <div className={styles.tableCard}>
         <div className={styles.tableHeader}>
@@ -312,9 +376,19 @@ export default function FlowConfigPage() {
               </tr>
             </thead>
             <tbody>
-              {rules.map((rule) => (
-                <RuleRow key={rule.id} rule={rule} />
-              ))}
+              {rules.map((rule) => {
+                const otherUsedStates = new Set(
+                  rules.filter((r) => r.id !== rule.id).map((r) => r.ado_state)
+                );
+                return (
+                  <RuleRow
+                    key={rule.id}
+                    rule={rule}
+                    trackerStates={trackerStates}
+                    otherUsedStates={otherUsedStates}
+                  />
+                );
+              })}
             </tbody>
           </table>
         )}

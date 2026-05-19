@@ -7,7 +7,29 @@ import {
   setAgentNickname,
   getAgentRole,
   setAgentRole,
+  getAgentType,
+  setAgentType,
 } from "../services/preferences";
+
+const VALID_AGENT_TYPES = [
+  "business",
+  "functional",
+  "technical",
+  "developer",
+  "qa",
+] as const;
+type AgentTypeOption = (typeof VALID_AGENT_TYPES)[number] | "";
+
+// Heurística usada cuando el operador no fijó un tipo explícito.
+function inferTypeFromFilename(filename: string): AgentTypeOption {
+  const f = filename.toLowerCase();
+  if (f.includes("business") || f.includes("negocio")) return "business";
+  if (f.includes("functional") || f.includes("funcional")) return "functional";
+  if (f.includes("technical") || f.includes("tecnico") || f.includes("técnico")) return "technical";
+  if (f.includes("dev") || f.includes("developer")) return "developer";
+  if (f.includes("qa") || f.includes("test")) return "qa";
+  return "";
+}
 import { Projects } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
 import AgentWorkflowForm from "./AgentWorkflowForm";
@@ -30,6 +52,10 @@ export default function EmployeeEditDrawer({ filename, agent, onClose, onRemoved
   const [nickname, setNickname] = useState(getAgentNickname(filename) ?? "");
   const [role, setRole] = useState(getAgentRole(filename) ?? "");
   const [avatar, setAvatar] = useState<string | null>(getAgentAvatar(filename));
+  const [agentTypeValue, setAgentTypeValue] = useState<AgentTypeOption>(
+    (getAgentType(filename) as AgentTypeOption) ?? ""
+  );
+  const inferredType = inferTypeFromFilename(filename);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   // Workflow config
@@ -98,6 +124,7 @@ export default function EmployeeEditDrawer({ filename, agent, onClose, onRemoved
     if (avatar) setAgentAvatar(filename, avatar);
     setAgentNickname(filename, nickname.trim() || defaultName);
     setAgentRole(filename, role.trim() || defaultRole);
+    setAgentType(filename, agentTypeValue);
     onClose();
   }
 
@@ -141,6 +168,28 @@ export default function EmployeeEditDrawer({ filename, agent, onClose, onRemoved
               value={role}
               onChange={(e) => setRole(e.target.value)}
             />
+          </div>
+
+          {/* Tipo de agente — override explícito sobre la heurística del filename */}
+          <div className={styles.field}>
+            <label className={styles.label}>Tipo de agente</label>
+            <select
+              className={styles.input}
+              value={agentTypeValue}
+              onChange={(e) => setAgentTypeValue(e.target.value as AgentTypeOption)}
+            >
+              <option value="">
+                {inferredType
+                  ? `Auto (${inferredType})`
+                  : "Auto (sin detectar)"}
+              </option>
+              {VALID_AGENT_TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4, display: "block" }}>
+              Usado por "Config de Flujo" para resolver el agente sugerido por estado ADO.
+            </span>
           </div>
 
           {/* Avatar picker */}

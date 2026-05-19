@@ -7,6 +7,7 @@ import {
   setAgentNickname,
   setAgentRole,
   setAgentAvatar,
+  getAgentType,
 } from "../services/preferences";
 import { Agents } from "../api/endpoints";
 import PixelAvatar from "./PixelAvatar";
@@ -32,7 +33,11 @@ const AGENT_TYPE_COLORS: Record<string, string> = {
   custom:     "var(--agent-custom)",
 };
 
+// Resuelve el tipo del agente. Prioriza el override explícito que el operador
+// fija en EmployeeEditDrawer; cae a heurística sobre el filename si no hay override.
 function inferType(filename: string): string {
+  const override = getAgentType(filename);
+  if (override) return override;
   const f = filename.toLowerCase();
   if (f.includes("business") || f.includes("negocio")) return "business";
   if (f.includes("functional") || f.includes("funcional")) return "functional";

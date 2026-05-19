@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Tickets, Agents, Executions } from "../api/endpoints";
+import { Tickets, Agents, Executions, FlowConfig } from "../api/endpoints";
 import type { Ticket, TicketNode, TicketHierarchy, PipelineInferenceResult, AgentExecution, VsCodeAgent } from "../types";
 import PipelineStatus from "../components/PipelineStatus";
 import TicketGraphView from "../components/TicketGraphView";
@@ -172,10 +172,12 @@ interface TicketCardProps {
   ticket: Ticket;
   runningExecution: AgentExecution | null;
   vsCodeAgents: VsCodeAgent[];
+  /** Feature #4 — mapa determinístico ado_state → agent_type cargado una vez en TicketBoard raíz */
+  flowConfigMap: Map<string, string>;
   indent?: boolean;
 }
 
-function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCardProps) {
+function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, indent }: TicketCardProps) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [runModal, setRunModal] = useState<"suggested" | "custom" | null>(null);
@@ -213,13 +215,18 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
 
   const isLoading = isFetching || inferMutation.isPending;
   const result = inference ?? (inferMutation.data ?? null);
-  const rawNextSuggested = result?.next_suggested ?? null;
   // #7: Tasks nunca proponen Negocio — ya tienen análisis funcional
   // #8: Épicas nunca proponen Negocio — tienen su propio botón Funcional
   const isTask  = (ticket.work_item_type ?? "").toLowerCase() === "task";
   const isEpic  = (ticket.work_item_type ?? "").toLowerCase() === "epic";
+
+  // Feature #4 — recomendación determinística desde FlowConfig (DO-4.1: clave agent_type).
+  // Se resuelve desde el map cargado una vez en TicketBoard raíz; no hay llamada por ticket.
+  // Si el estado ADO no tiene regla configurada, nextSuggested es null → botón deshabilitado.
+  const rawFlowAgentType = ticket.ado_state ? (flowConfigMap.get(ticket.ado_state) ?? null) : null;
+  // Preservar regla de negocio #7/#8: Tasks y Épicas nunca proponen Negocio
   const nextSuggested =
-    ((isTask || isEpic) && rawNextSuggested === "business") ? "functional" : rawNextSuggested;
+    ((isTask || isEpic) && rawFlowAgentType === "business") ? null : rawFlowAgentType;
   const nextLabel = nextSuggested ? (NEXT_AGENT_LABELS[nextSuggested] ?? nextSuggested) : null;
 
   // Resuelve el filename del agente del equipo que corresponde al tipo sugerido.
@@ -373,7 +380,9 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, indent }: TicketCa
                     ? "Hay un agente corriendo sobre este ticket — esperá a que termine"
                     : nextSuggested
                     ? `Correr agente sugerido: ${nextLabel}`
-                    : "Esperando inferencia de pipeline…"
+                    : ticket.ado_state
+                    ? `No hay agente configurado para el estado '${ticket.ado_state}'. Configurá el flujo en la pestaña Config de Flujo.`
+                    : "El ticket no tiene estado ADO asignado."
                 }
               >
                 ▶ Run Sugerido
@@ -433,9 +442,11 @@ interface EpicGroupProps {
   epic: TicketNode;
   runningByTicket: Map<number, AgentExecution>;
   vsCodeAgents: VsCodeAgent[];
+  /** Feature #4 — propagado desde TicketBoard raíz */
+  flowConfigMap: Map<string, string>;
 }
 
-function EpicGroup({ epic, runningByTicket, vsCodeAgents }: EpicGroupProps) {
+function EpicGroup({ epic, runningByTicket, vsCodeAgents, flowConfigMap }: EpicGroupProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
   const isClosed = CLOSED_STATES.includes(epic.ado_state ?? "");
@@ -517,6 +528,7 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents }: EpicGroupProps) {
                 ticket={child}
                 runningExecution={runningByTicket.get(child.id) ?? null}
                 vsCodeAgents={vsCodeAgents}
+                flowConfigMap={flowConfigMap}
                 indent
               />
             ))
@@ -564,6 +576,21 @@ export default function TicketBoard() {
     queryFn: Agents.vsCodeAgents,
     staleTime: 5 * 60 * 1000,
   });
+
+  // Feature #4 — FlowConfig: cargar reglas una vez y construir map ado_state→agent_type.
+  // La lista completa de reglas es chica (4-10 en práctica), no se llama resolve por ticket.
+  const { data: flowConfigData } = useQuery({
+    queryKey: ["flow-config"],
+    queryFn: FlowConfig.list,
+    staleTime: 5 * 60 * 1000,
+  });
+  const flowConfigMap = useMemo<Map<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const rule of flowConfigData?.rules ?? []) {
+      map.set(rule.ado_state, rule.agent_type);
+    }
+    return map;
+  }, [flowConfigData]);
 
   // Estado de error para mostrar feedback de sync
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -740,6 +767,7 @@ export default function TicketBoard() {
                   epic={epic}
                   runningByTicket={runningByTicket}
                   vsCodeAgents={vsCodeAgents ?? []}
+                  flowConfigMap={flowConfigMap}
                 />
               ))}
               {filteredOrphans.length > 0 && (
@@ -755,6 +783,7 @@ export default function TicketBoard() {
                         ticket={t as Ticket}
                         runningExecution={runningByTicket.get(t.id) ?? null}
                         vsCodeAgents={vsCodeAgents ?? []}
+                        flowConfigMap={flowConfigMap}
                       />
                     ))}
                   </div>

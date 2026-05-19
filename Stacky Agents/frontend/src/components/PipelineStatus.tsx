@@ -37,14 +37,14 @@ export default function PipelineStatus({ result, compact = false }: Props) {
         {STAGE_ORDER.map((stage) => {
           const s = result.stages[stage];
           if (!s) return null;
-          const isNext = stage === result.next_suggested;
+          // Feature #4: isNext eliminado — next_suggested ya no es fuente de recomendación.
+          // La sugerencia de próximo agente proviene de FlowConfig (determinístico).
           return (
             <div
               key={stage}
               className={[
                 styles.stage,
                 s.done ? styles.done : styles.pending,
-                isNext ? styles.next : "",
               ].join(" ")}
               title={s.evidence || s.label}
             >
@@ -54,9 +54,6 @@ export default function PipelineStatus({ result, compact = false }: Props) {
               )}
               {s.done && (
                 <span className={styles.checkmark}>✓</span>
-              )}
-              {!s.done && isNext && (
-                <span className={styles.arrow}>→</span>
               )}
             </div>
           );
@@ -70,11 +67,9 @@ export default function PipelineStatus({ result, compact = false }: Props) {
       {!compact && (
         <div className={styles.meta}>
           <span>{pct}% completado</span>
-          {result.next_suggested && (
-            <span className={styles.nextLabel}>
-              Próximo: <strong>{STAGE_SHORT[result.next_suggested] ?? result.next_suggested}</strong>
-            </span>
-          )}
+          {/* Feature #4: sección "Próximo:" eliminada — next_suggested del LLM
+              ya no determina la recomendación. El operador configura el flujo
+              explícitamente en la pestaña Config de Flujo (FlowConfig). */}
           <span className={styles.source}>
             {result.source === "cache" ? "⚡ cache" : "🤖 LLM"}
             {" · "}

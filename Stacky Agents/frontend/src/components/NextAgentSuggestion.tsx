@@ -1,8 +1,14 @@
 /*
- * FA-42 — Suggested next agent.
- * Después de aprobar una exec, sugiere qué agente correr a continuación
- * basado en transiciones históricas (markov). Si no hay datos, usa la
- * cadena clásica del pipeline como fallback.
+ * FA-42 — Suggested next agent (Markov / cadena histórica).
+ *
+ * DEPRECATED — Feature #4 FlowConfig (SDD-2026-05-19).
+ * La recomendación del botón "Run Sugerido" en TicketBoard ya NO usa este
+ * componente. Fue reemplazada por el mapa determinístico FlowConfig
+ * (ado_state → agent_type), cargado una vez en TicketBoard raíz.
+ *
+ * Este componente SIGUE en uso en OutputPanel.tsx para mostrar sugerencias
+ * de cadena post-aprobación (después de que el operador aprueba una ejecución).
+ * NO eliminar — preservado para rollback. Ver SDD-2026-05-19 Feature #4.
  */
 import { useQuery } from "@tanstack/react-query";
 

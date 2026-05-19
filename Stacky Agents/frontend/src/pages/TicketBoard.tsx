@@ -1,8 +1,7 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tickets, Agents, Executions, FlowConfig } from "../api/endpoints";
-import type { Ticket, TicketNode, TicketHierarchy, PipelineInferenceResult, AgentExecution, VsCodeAgent } from "../types";
-import PipelineStatus from "../components/PipelineStatus";
+import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
 import TicketGraphView from "../components/TicketGraphView";
 import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import FinishWorkButton from "../components/FinishWorkButton";
@@ -186,38 +185,11 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
   const [runModal, setRunModal] = useState<"suggested" | "custom" | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
 
-  const inferenceKey = ["ado-pipeline", ticket.id];
+  // Feature #4: la inferencia LLM (Tickets.adoPipelineStatus) fue removida del
+  // consumo del frontend porque devolvía sugerencias poco confiables. La
+  // recomendación viene 100% de FlowConfig (mapping determinístico). El
+  // endpoint backend sigue existiendo para rollback.
 
-  const { data: inference, isFetching, isError } = useQuery<PipelineInferenceResult>({
-    queryKey: inferenceKey,
-    queryFn: () => Tickets.adoPipelineStatus(ticket.id),
-    staleTime: 55 * 60 * 1000,
-    retry: false,
-    enabled: false,
-  });
-
-  const inferMutation = useMutation({
-    mutationFn: (force: boolean) => Tickets.adoPipelineStatus(ticket.id, force),
-    onSuccess: (data) => {
-      qc.setQueryData(inferenceKey, data);
-    },
-  });
-
-  const handleRefresh = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    inferMutation.mutate(true);
-  }, [inferMutation]);
-
-  // Auto-trigger inference when card first expands and no result exists yet
-  useEffect(() => {
-    if (expanded && !result && !inferMutation.isPending && !isFetching) {
-      inferMutation.mutate(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded]);
-
-  const isLoading = isFetching || inferMutation.isPending;
-  const result = inference ?? (inferMutation.data ?? null);
   // #7: Tasks nunca proponen Negocio — ya tienen análisis funcional
   // #8: Épicas nunca proponen Negocio — tienen su propio botón Funcional
   const isTask  = (ticket.work_item_type ?? "").toLowerCase() === "task";
@@ -226,7 +198,9 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
   // Feature #4 — recomendación determinística desde FlowConfig (DO-4.1: clave agent_type).
   // Se resuelve desde el map cargado una vez en TicketBoard raíz; no hay llamada por ticket.
   // Si el estado ADO no tiene regla configurada, nextSuggested es null → botón deshabilitado.
-  const rawFlowAgentType = ticket.ado_state ? (flowConfigMap.get(ticket.ado_state) ?? null) : null;
+  const rawFlowAgentType = ticket.ado_state
+    ? (flowConfigMap.get(ticket.ado_state.trim().toLowerCase()) ?? null)
+    : null;
   // Preservar regla de negocio #7/#8: Tasks y Épicas nunca proponen Negocio
   const nextSuggested =
     ((isTask || isEpic) && rawFlowAgentType === "business") ? null : rawFlowAgentType;
@@ -301,35 +275,14 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
           </div>
           <p className={styles.cardTitle}>{ticket.title}</p>
 
-          {result && !expanded && (
-            <div className={styles.pipelineInline}>
-              <PipelineStatus result={result} compact />
-            </div>
-          )}
-
           <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
-            {isLoading && <span className={styles.inferring}>⏳ Analizando…</span>}
-            {result && !isLoading && (
-              <>
-                {nextLabel && <span className={styles.nextTag}>→ {nextLabel}</span>}
-                <button className={styles.refreshBtn} onClick={handleRefresh} title="Re-inferir ignorando cache">⟳</button>
-              </>
-            )}
-            {isError && <span className={styles.errorTag}>⚠ Error al inferir</span>}
+            {nextLabel && <span className={styles.nextTag}>→ {nextLabel}</span>}
           </div>
         </div>
 
         {/* Detalle expandido */}
         {expanded && (
           <div className={styles.cardBody}>
-            {result ? (
-              <PipelineStatus result={result} />
-            ) : (
-              <div className={styles.noInference}>
-                {isLoading ? "Consultando ADO + LLM…" : "Analizando pipeline…"}
-              </div>
-            )}
-
             {/* Botón de recuperación de inconsistencia (visible siempre que aplique) */}
             {inconsistency.isInconsistent && ticket.ado_id && (
               <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
@@ -587,10 +540,12 @@ export default function TicketBoard() {
     queryFn: FlowConfig.list,
     staleTime: 5 * 60 * 1000,
   });
+  // Keys normalizadas a lowercase para que la resolución no dependa del casing
+  // del estado ADO sincronizado (ej. "Technical review" vs "Technical Review").
   const flowConfigMap = useMemo<Map<string, string>>(() => {
     const map = new Map<string, string>();
     for (const rule of flowConfigData?.rules ?? []) {
-      map.set(rule.ado_state, rule.agent_type);
+      map.set(rule.ado_state.trim().toLowerCase(), rule.agent_type);
     }
     return map;
   }, [flowConfigData]);

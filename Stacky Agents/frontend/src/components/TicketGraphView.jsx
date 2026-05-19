@@ -1,7 +1,12 @@
 import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Tickets, Agents } from "../api/endpoints";
+import { useQueryClient } from "@tanstack/react-query";
+import { Agents } from "../api/endpoints";
 import { getPinnedAgents } from "../services/preferences";
+
+// Feature #4 (mejora post-SDD): la inferencia LLM (Tickets.adoPipelineStatus)
+// fue removida del consumo del frontend. Los chips muestran progreso a partir
+// de pipeline_summary (datos BD locales). next_suggested para tickets normales
+// queda null — el botón "Run Sugerido" usa FlowConfig vía TicketBoard.
 import RecoverExecutionButton from "./RecoverExecutionButton";
 import FinishWorkButton from "./FinishWorkButton";
 import CreateChildTaskButton from "./CreateChildTaskButton";
@@ -49,40 +54,6 @@ const AGENT_LABELS = {
   developer:  { icon: "🚀", label: "Dev" },
   qa:         { icon: "✅", label: "QA" },
 };
-
-const LS_KEY = "stacky_pipeline_v1";
-
-// ─── LocalStorage helpers ──────────────────────────────────────────────────────
-
-function lsLoad(ticketId) {
-  try {
-    const raw = localStorage.getItem(`${LS_KEY}_${ticketId}`);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function lsSave(ticketId, result) {
-  try {
-    localStorage.setItem(`${LS_KEY}_${ticketId}`, JSON.stringify(result));
-  } catch {}
-}
-
-function lsLoadAll() {
-  const map = {};
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(`${LS_KEY}_`)) {
-        const id = parseInt(key.replace(`${LS_KEY}_`, ""));
-        if (!isNaN(id)) {
-          const v = lsLoad(id);
-          if (v) map[id] = v;
-        }
-      }
-    }
-  } catch {}
-  return map;
-}
 
 // ─── Epic pipeline: 2 etapas locales ──────────────────────────────────────────
 
@@ -367,24 +338,6 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
               <span className={styles.nextAgentLabel}>
                 Próximo: {AGENT_LABELS[next]?.icon} <strong style={{ color: "#fbbf24" }}>{AGENT_LABELS[next]?.label}</strong>
               </span>
-              {!inferResult && (
-                <button
-                  className={styles.inferBtn}
-                  onClick={e => { e.stopPropagation(); onInfer(ticket.id, false); }}
-                >
-                  🤖 Inferir
-                </button>
-              )}
-            </div>
-          )}
-          {!inferResult && !isEpic && (
-            <div className={styles.inferRowInline} onClick={e => e.stopPropagation()}>
-              <button
-                className={styles.inferBtnSmall}
-                onClick={e => { e.stopPropagation(); onInfer(ticket.id, false); }}
-              >
-                🤖 Inferir estado
-              </button>
             </div>
           )}
         </div>
@@ -392,16 +345,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
         {/* Expandido */}
         {expanded && (
           <div className={styles.nodeBody} onClick={e => e.stopPropagation()}>
-            {inferResult && !isEpic && (
-              <>
-                <PipelineBar summary={summary} isEpic={false} inferResult={inferResult} />
-                <p className={styles.inferSummary}>{inferResult.summary}</p>
-                <div className={styles.inferMeta}>
-                  <span>{inferResult.source === "cache" ? "⚡ cache" : "🤖 LLM"} · {inferResult.model_used}</span>
-                  <button className={styles.refreshBtn} onClick={() => onInfer(ticket.id, true)}>⟳ Refrescar</button>
-                </div>
-              </>
-            )}
+
             {ticket.description && (
               <p className={styles.nodeDesc}>{ticket.description.slice(0, 300)}{ticket.description.length > 300 ? "…" : ""}</p>
             )}
@@ -577,38 +521,10 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket }) {
 export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncError, vsCodeAgents = [], runningByTicket = new Map() }) {
   const qc = useQueryClient();
 
-  // Cargar inferencias previas desde localStorage al montar
-  const [inferMap, setInferMap] = useState(() => lsLoadAll());
-  const [loadingIds, setLoadingIds] = useState(new Set());
-
-  const inferMutation = useMutation({
-    mutationFn: ({ ticketId, force }) => Tickets.adoPipelineStatus(ticketId, force),
-    onSuccess: (data, { ticketId }) => {
-      lsSave(ticketId, data);
-      setInferMap(prev => ({ ...prev, [ticketId]: data }));
-      setLoadingIds(prev => { const s = new Set(prev); s.delete(ticketId); return s; });
-    },
-    onError: (_, { ticketId }) => {
-      setLoadingIds(prev => { const s = new Set(prev); s.delete(ticketId); return s; });
-    },
-  });
-
-  const handleInfer = useCallback((ticketId, force) => {
-    setLoadingIds(prev => new Set([...prev, ticketId]));
-    inferMutation.mutate({ ticketId, force });
-  }, [inferMutation]);
-
-  const handleInferAll = useCallback(() => {
-    const allTickets = [
-      ...(hierarchy?.epics?.flatMap(e => e.children) || []),
-      ...(hierarchy?.orphans || []),
-    ];
-    allTickets.forEach(t => {
-      if (!inferMap[t.id]) {
-        setTimeout(() => handleInfer(t.id, false), Math.random() * 2000);
-      }
-    });
-  }, [hierarchy, inferMap, handleInfer]);
+  // LLM inference removida: inferMap queda vacío, los handlers son no-op
+  // para mantener la firma de props de los componentes hijos sin reescribirlos.
+  const inferMap = {};
+  const handleInfer = useCallback(() => {}, []);
 
   if (!hierarchy) {
     return <div className={styles.empty}>Sincronizá los tickets primero.</div>;
@@ -622,9 +538,6 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
       {/* Toolbar */}
       <div className={styles.toolbar}>
         <span className={styles.toolbarCount}>{totalTickets} tickets · {epics.length} épicas</span>
-        <button className={styles.inferAllBtn} onClick={handleInferAll}>
-          🤖 Inferir pendientes
-        </button>
         {/* Error visual de sync */}
         {syncError && (
           <div style={{ color: "#fff", background: "#b91c1c", padding: "6px 12px", borderRadius: 6, margin: "0 12px 0 0", maxWidth: 340, fontSize: 15, fontWeight: 500, display: "inline-block", verticalAlign: "middle" }}>

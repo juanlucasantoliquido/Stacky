@@ -377,6 +377,12 @@ export const Agents = {
     fingerprint_complexity?: string | null;
     /** Runtime de ejecución: github_copilot | codex_cli | claude_code_cli */
     runtime?: import("../types").AgentRuntime;
+    /**
+     * Requerido cuando runtime=codex_cli. Nombre del archivo .agent.md del
+     * agente VS Code seleccionado (ej: "DevPacifico.agent.md"). El backend
+     * devuelve HTTP 400 con error=missing_vscode_agent_filename si se omite.
+     */
+    vscode_agent_filename?: string;
   }) => api.post<{ execution_id: number; status: string }>("/api/agents/run", payload),
   openChat: (payload: {
     ticket_id: number;
@@ -1299,43 +1305,92 @@ export interface DocHeading {
 
 export interface DocNode {
   id: string;
+  kind?: "file" | "folder";
   label: string;
   path: string;
+  display_path?: string;
+  source_id?: string;
   size_bytes: number;
   headings: DocHeading[];
+  children?: DocNode[];
   /** Presente solo en la sección "agents" cuando _absolute_path está disponible en el servidor. */
   _absolute_path?: string;
 }
 
 export interface DocRoot {
-  id: "technical-docs" | "agents" | "roadmaps";
+  id: "technical-docs" | "agents" | "roadmaps" | "project-docs";
   label: string;
+  path?: string;
+  display_path?: string;
+  source_id?: string;
   children: DocNode[];
   /** Nota informativa cuando la sección está vacía por configuración. */
   note?: string;
 }
 
+export interface DocSource {
+  id: string;
+  kind: "stacky" | "project-docs";
+  label: string;
+  relative_path: string;
+  absolute_path?: string;
+  project?: string | null;
+  workspace_root?: string | null;
+}
+
+export interface DocsSourcesResponse {
+  ok: boolean;
+  active_project: string | null;
+  project_display_name?: string | null;
+  workspace_root?: string | null;
+  default_source_id: string;
+  sources: DocSource[];
+  note?: string | null;
+}
+
 export interface DocsIndexResponse {
   ok: boolean;
   indexed_at: string;
+  source_id?: string;
+  active_project?: string | null;
+  workspace_root?: string | null;
   roots: DocRoot[];
 }
 
 export interface DocsContentResponse {
   ok: boolean;
   path: string;
+  source_id?: string;
   content: string;
   encoding: string;
 }
 
 export const Docs = {
+  /** Devuelve las fuentes de documentación disponibles para el proyecto activo. */
+  getSources: (project?: string): Promise<DocsSourcesResponse> => {
+    const qs = project ? `?project=${encodeURIComponent(project)}` : "";
+    return api.get<DocsSourcesResponse>(`/api/docs/sources${qs}`);
+  },
+
   /** Devuelve el árbol completo de documentos indexados. */
-  getIndex: (): Promise<DocsIndexResponse> =>
-    api.get<DocsIndexResponse>("/api/docs/index"),
+  getIndex: (params?: { project?: string; sourceId?: string }): Promise<DocsIndexResponse> => {
+    const query = new URLSearchParams();
+    if (params?.project) query.set("project", params.project);
+    if (params?.sourceId) query.set("source_id", params.sourceId);
+    const qs = query.toString();
+    return api.get<DocsIndexResponse>(`/api/docs/index${qs ? `?${qs}` : ""}`);
+  },
 
   /** Devuelve el contenido raw de un documento por su path relativo. */
-  getContent: (path: string): Promise<DocsContentResponse> =>
-    api.get<DocsContentResponse>(`/api/docs/content?path=${encodeURIComponent(path)}`),
+  getContent: (
+    path: string,
+    params?: { project?: string; sourceId?: string }
+  ): Promise<DocsContentResponse> => {
+    const query = new URLSearchParams({ path });
+    if (params?.project) query.set("project", params.project);
+    if (params?.sourceId) query.set("source_id", params.sourceId);
+    return api.get<DocsContentResponse>(`/api/docs/content?${query.toString()}`);
+  },
 };
 
 // ── Feature #4: FlowConfig — mapeo determinístico ado_state → agent_type ─────

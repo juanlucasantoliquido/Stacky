@@ -41,6 +41,7 @@ def run_agent(
     delta_prefix: str | None = None,
     previous_execution_id: int | None = None,
     runtime: str = "github_copilot",
+    vscode_agent_filename: str | None = None,
 ) -> int:
     agent = agents.get(agent_type)
     if agent is None:
@@ -90,28 +91,41 @@ def run_agent(
         },
     )
 
+    import logging as _dispatch_log
+    _runner_logger = _dispatch_log.getLogger("stacky_agents.agent_runner")
+    _runner_logger.info(
+        "agent_run dispatch runtime=%s agent=%s execution_id=%s",
+        runtime, agent_type, execution_id,
+    )
+
     # Despachar al runner correcto según el runtime seleccionado por el operador.
-    # github_copilot: runner estándar (copilot_bridge + LLM router).
-    # codex_cli: Codex CLI runner (subprocess + streaming JSON).
-    # claude_code_cli: Claude Code CLI runner (subprocess + streaming JSON).
-    #
-    # Los runners CLI crean su propio thread interno y devuelven execution_id
-    # directamente; no pasan por _run_in_background del github_copilot path.
-    # Si el CLI no está instalado (FileNotFoundError) o el runner lanza
-    # NotImplementedError, se hace fallback a github_copilot con warning
-    # estructurado — nunca se crashea la ejecución.
+    # Regla: NO hay fallback silencioso entre runtimes.
+    # - github_copilot / ausente: runner estándar (copilot_bridge + LLM router).
+    # - codex_cli: Codex CLI runner. Requiere vscode_agent_filename (validado en endpoint).
+    #              Si el CLI no está instalado, el error llega al operador como "error" de ejecución,
+    #              no como fallback silencioso.
+    # - claude_code_cli: bloqueado en endpoint (HTTP 501). Nunca debería llegar aquí.
+    #              Si llega (p.ej. llamada directa al runner), se marca la ejecución como error.
     if runtime == "codex_cli":
-        import logging as _log_codex
-        _runner_logger = _log_codex.getLogger("stacky_agents.agent_runner")
         try:
             from services.codex_cli_runner import start_codex_cli_run
 
             with session_scope() as _cs:
                 _ct = _cs.get(Ticket, ticket_id)
-                _vscode_filename = (
-                    (agent.filename if hasattr(agent, "filename") else None)
-                    or f"{agent_type}.agent.md"
-                )
+                # vscode_agent_filename viene del payload (validado en endpoint).
+                # Como fallback defensivo: si el runner se llama sin él (tests directos,
+                # packs), intenta resolverlo desde el agente, pero logea warning.
+                _vscode_filename = vscode_agent_filename
+                if not _vscode_filename:
+                    _vscode_filename = (
+                        (agent.filename if hasattr(agent, "filename") else None)
+                        or f"{agent_type}.agent.md"
+                    )
+                    _runner_logger.warning(
+                        "execution_id=%s: vscode_agent_filename no provisto explícitamente "
+                        "para codex_cli; usando '%s' inferido del agente",
+                        execution_id, _vscode_filename,
+                    )
                 _ticket_message = _ct.title if _ct else f"ticket_id={ticket_id}"
 
             log_streamer.close(execution_id)  # codex_cli_runner abre su propio log_streamer
@@ -135,74 +149,38 @@ def run_agent(
                     _orig.error_message = f"replaced_by={_new_exec_id} (codex_cli)"
                     _orig.completed_at = datetime.utcnow()
             return _new_exec_id
-        except FileNotFoundError as _fnf:
-            _runner_logger.warning(
-                "execution_id=%s: codex CLI no encontrado en PATH (%s). "
-                "Fallback a github_copilot.",
-                execution_id, _fnf,
+        except Exception as _codex_exc:
+            # Sin fallback: cualquier error de codex_cli es error real.
+            # Incluye FileNotFoundError (CLI no instalado), NotImplementedError,
+            # o cualquier fallo de arranque del runner.
+            _runner_logger.error(
+                "execution_id=%s: codex_cli runner falló sin fallback: %s",
+                execution_id, _codex_exc,
             )
-            log_streamer.push(execution_id, "warn",
-                f"codex CLI no instalado ({_fnf}) — fallback a github_copilot")
-        except NotImplementedError as _nie:
-            _runner_logger.warning(
-                "execution_id=%s: codex_cli_runner NotImplementedError (%s). "
-                "Fallback a github_copilot.",
-                execution_id, _nie,
-            )
-            log_streamer.push(execution_id, "warn",
-                f"codex_cli runner no disponible — fallback a github_copilot")
-        # Si llegamos aquí: continúa hacia el thread github_copilot abajo.
+            log_streamer.push(execution_id, "error",
+                f"codex_cli runner error: {_codex_exc}")
+            _mark_terminal(execution_id, status="error", error=f"codex_cli: {_codex_exc}")
+            log_streamer.close(execution_id)
+            return execution_id
 
     elif runtime == "claude_code_cli":
-        import logging as _log_claude
-        _runner_logger = _log_claude.getLogger("stacky_agents.agent_runner")
-        try:
-            from services.claude_code_cli_runner import start_claude_code_cli_run
+        # Nunca debería llegar aquí: el endpoint /api/agents/run devuelve HTTP 501
+        # antes de llamar a run_agent. Si llega (llamada directa al runner, packs),
+        # se marca como error explícito sin fallback.
+        _runner_logger.error(
+            "execution_id=%s: claude_code_cli no implementado — no se acepta esta ejecución",
+            execution_id,
+        )
+        log_streamer.push(execution_id, "error",
+            "claude_code_cli runtime no implementado. Usá github_copilot o codex_cli.")
+        _mark_terminal(
+            execution_id,
+            status="error",
+            error="claude_code_cli runtime adapter pendiente (not_implemented)",
+        )
+        log_streamer.close(execution_id)
+        return execution_id
 
-            with session_scope() as _cs:
-                _ct = _cs.get(Ticket, ticket_id)
-                _vscode_filename = (
-                    (agent.filename if hasattr(agent, "filename") else None)
-                    or f"{agent_type}.agent.md"
-                )
-                _ticket_message = _ct.title if _ct else f"ticket_id={ticket_id}"
-
-            log_streamer.close(execution_id)  # claude_code_cli_runner abre su propio log_streamer
-            _new_exec_id = start_claude_code_cli_run(
-                ticket_id=ticket_id,
-                agent_type=agent_type,
-                context_blocks=context_blocks,
-                user=user,
-                vscode_agent_filename=_vscode_filename,
-                ticket_message=_ticket_message,
-                workspace_root=None,
-                model_override=model_override,
-            )
-            # Misma lógica que codex_cli: la fila original queda marcada.
-            with session_scope() as _cs2:
-                _orig = _cs2.get(AgentExecution, execution_id)
-                if _orig is not None:
-                    _orig.status = "cancelled"
-                    _orig.error_message = f"replaced_by={_new_exec_id} (claude_code_cli)"
-                    _orig.completed_at = datetime.utcnow()
-            return _new_exec_id
-        except FileNotFoundError as _fnf:
-            _runner_logger.warning(
-                "execution_id=%s: Claude Code CLI no encontrado en PATH (%s). "
-                "Fallback a github_copilot.",
-                execution_id, _fnf,
-            )
-            log_streamer.push(execution_id, "warn",
-                f"Claude Code CLI no instalado ({_fnf}) — fallback a github_copilot")
-        except NotImplementedError as _nie:
-            _runner_logger.warning(
-                "execution_id=%s: claude_code_cli_runner NotImplementedError (%s). "
-                "Fallback a github_copilot.",
-                execution_id, _nie,
-            )
-            log_streamer.push(execution_id, "warn",
-                f"claude_code_cli runner no disponible — fallback a github_copilot")
-        # Si llegamos aquí: continúa hacia el thread github_copilot abajo.
     # else: github_copilot → flujo estándar sin cambios.
 
     thread = threading.Thread(

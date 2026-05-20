@@ -96,16 +96,83 @@ _VALID_RUNTIMES = {"github_copilot", "codex_cli", "claude_code_cli"}
 
 @bp.post("/run")
 def run():
+    import json as _json
+
     payload = request.get_json(force=True, silent=True) or {}
     agent_type = payload.get("agent_type")
     ticket_id = payload.get("ticket_id")
     context_blocks = payload.get("context_blocks") or []
     chain_from = payload.get("chain_from") or []
     # Runtime seleccionado por el operador — default github_copilot para retrocompatibilidad
-    runtime: str = payload.get("runtime") or "github_copilot"
-    if runtime not in _VALID_RUNTIMES:
-        logger.warning("runtime desconocido '%s', usando github_copilot por defecto", runtime)
-        runtime = "github_copilot"
+    runtime_raw: str | None = payload.get("runtime")
+    runtime: str = runtime_raw or "github_copilot"
+
+    # Validación de runtime ANTES de cualquier procesamiento.
+    # Reglas:
+    #   - runtime ausente o null → github_copilot (retro-compat)
+    #   - runtime en _VALID_RUNTIMES → continuar
+    #   - cualquier otro valor → 400 explícito, no fallback silencioso
+    if runtime_raw is not None and runtime not in _VALID_RUNTIMES:
+        logger.warning(
+            "runtime desconocido '%s' rechazado (válidos: %s)",
+            runtime_raw,
+            sorted(_VALID_RUNTIMES),
+        )
+        from flask import make_response
+        return make_response(
+            _json.dumps({
+                "ok": False,
+                "error": "unknown_runtime",
+                "message": (
+                    f"runtime '{runtime_raw}' no es válido. "
+                    f"Valores permitidos: {sorted(_VALID_RUNTIMES)}"
+                ),
+            }),
+            400,
+            {"Content-Type": "application/json"},
+        )
+
+    # claude_code_cli: adapter pendiente. Devuelve 501 explícito sin fallback.
+    if runtime == "claude_code_cli":
+        logger.info("runtime=claude_code_cli rechazado: adapter pendiente (AL-01)")
+        from flask import make_response
+        return make_response(
+            _json.dumps({
+                "ok": False,
+                "error": "not_implemented",
+                "message": (
+                    "claude_code_cli runtime adapter pendiente. "
+                    "Usá github_copilot o codex_cli."
+                ),
+            }),
+            501,
+            {"Content-Type": "application/json"},
+        )
+
+    # codex_cli: requiere vscode_agent_filename en el payload.
+    vscode_agent_filename: str | None = payload.get("vscode_agent_filename") or None
+    if runtime == "codex_cli" and not vscode_agent_filename:
+        logger.warning(
+            "runtime=codex_cli rechazado: vscode_agent_filename ausente en payload"
+        )
+        from flask import make_response
+        return make_response(
+            _json.dumps({
+                "ok": False,
+                "error": "missing_vscode_agent_filename",
+                "message": (
+                    "runtime=codex_cli requiere vscode_agent_filename en el payload "
+                    "(ej: 'DevPacifico.agent.md')."
+                ),
+            }),
+            400,
+            {"Content-Type": "application/json"},
+        )
+
+    logger.info(
+        "agent_run dispatch runtime=%s agent=%s ticket=%s",
+        runtime, agent_type, ticket_id,
+    )
 
     if not agent_type:
         abort(400, "agent_type is required")
@@ -143,6 +210,7 @@ def run():
             delta_prefix=delta_system_prefix,                           # FA-32
             previous_execution_id=int(prev_exec_id) if prev_exec_id else None,
             runtime=runtime,
+            vscode_agent_filename=vscode_agent_filename,
         )
     except agent_runner.UnknownAgentError:
         abort(400, f"unknown agent_type: {agent_type}")

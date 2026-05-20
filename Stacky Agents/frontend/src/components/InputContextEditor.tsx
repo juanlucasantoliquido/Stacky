@@ -32,6 +32,10 @@ export default function InputContextEditor() {
 
   const tokens = useMemo(() => estimateTokens(blocks), [blocks]);
 
+  // codex_cli requiere un agente VS Code seleccionado para poder pasar
+  // vscode_agent_filename al endpoint (validación backend: HTTP 400 si falta).
+  const codexNeedsAgent = agentRuntime === "codex_cli" && vsCodeAgent == null;
+
   const canRun =
     activeTicketId != null &&
     activeAgentType != null &&
@@ -39,6 +43,7 @@ export default function InputContextEditor() {
     tokens < TOKEN_LIMIT &&
     runningExecutionId == null &&
     !run.isPending &&
+    !codexNeedsAgent &&
     (activeAgentType !== "custom" || vsCodeAgent != null);
 
   const canOpenChat =
@@ -131,17 +136,25 @@ export default function InputContextEditor() {
               {openChat.isPending ? "Abriendo…" : "↗ Abrir en Chat"}
             </button>
           )}
-          <RunButton
-            state={run.isPending || runningExecutionId != null ? "running" : "idle"}
-            disabled={!canRun}
-            onClick={() => {
-              run.mutate({
-                agent_type: activeAgentType,
-                ticket_id: activeTicketId,
-                context_blocks: blocks,
-              });
-            }}
-          />
+          <span
+            title={
+              codexNeedsAgent
+                ? "Codex CLI requiere seleccionar un agente VS Code (.agent.md) antes de ejecutar"
+                : undefined
+            }
+          >
+            <RunButton
+              state={run.isPending || runningExecutionId != null ? "running" : "idle"}
+              disabled={!canRun}
+              onClick={() => {
+                run.mutate({
+                  agent_type: activeAgentType,
+                  ticket_id: activeTicketId,
+                  context_blocks: blocks,
+                });
+              }}
+            />
+          </span>
         </div>
       </footer>
     </div>

@@ -2,6 +2,8 @@ import React, { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tickets, Agents, Executions, FlowConfig } from "../api/endpoints";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
+import { useTicketSync } from "../hooks/useTicketSync";
+import { SyncStatusBar } from "../components/SyncStatusBar";
 import TicketGraphView from "../components/TicketGraphView";
 import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import FinishWorkButton from "../components/FinishWorkButton";
@@ -513,16 +515,29 @@ export default function TicketBoard() {
   // Hook centralizado de estado running (fuente dual: stacky_status + executions polling)
   const { runningByTicket, runningTicketIds, getRunningTickets } = useRunningStatus();
 
+  // P7: hook de auto-refresh con Page Visibility API y backoff
+  const {
+    lastSyncedAt,
+    secondsSinceSync,
+    isSyncing: isSyncingV2,
+    syncError: syncErrorV2,
+    triggerSync,
+    isStale,
+  } = useTicketSync({ intervalMs: 45_000, syncOnMount: true });
+
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
     queryKey: ["tickets"],
     queryFn: Tickets.list,
-    refetchInterval: 60_000,
+    refetchInterval: 45_000,
+    staleTime: 22_500,
+    refetchOnWindowFocus: true,
   });
 
   const { data: hierarchy, isLoading: isHierarchyLoading } = useQuery<TicketHierarchy>({
     queryKey: ["tickets-hierarchy"],
     queryFn: Tickets.hierarchy,
-    refetchInterval: 60_000,
+    refetchInterval: 45_000,
+    staleTime: 22_500,
     enabled: viewMode === "tree" || viewMode === "graph",
   });
 
@@ -550,8 +565,8 @@ export default function TicketBoard() {
     return map;
   }, [flowConfigData]);
 
-  // Estado de error para mostrar feedback de sync
-  const [syncError, setSyncError] = useState<string | null>(null);
+  // syncMutation legacy — se mantiene para el boton manual existente en la UI
+  const [syncError, setSyncError] = useState<string | null>(syncErrorV2);
   const syncMutation = useMutation({
     mutationFn: Tickets.sync,
     onSuccess: () => {
@@ -560,7 +575,6 @@ export default function TicketBoard() {
       qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
     },
     onError: (err: any) => {
-      // err puede ser Error lanzado por api.client.ts
       let msg = "Error al sincronizar con ADO.";
       if (err && typeof err.message === "string") {
         msg = err.message;
@@ -661,6 +675,17 @@ export default function TicketBoard() {
           </button>
         </div>
       </header>
+
+      {/* P7: barra de estado de sincronizacion */}
+      <SyncStatusBar
+        lastSyncedAt={lastSyncedAt}
+        secondsSinceSync={secondsSinceSync}
+        isSyncing={isSyncingV2}
+        syncError={syncErrorV2}
+        onSyncClick={triggerSync}
+        isStale={isStale}
+        intervalMs={45_000}
+      />
 
       {/* Banner global de tickets en ejecución */}
       {runningTickets.length > 0 && (

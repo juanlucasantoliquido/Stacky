@@ -1920,3 +1920,424 @@ def _system_log_has_trigger() -> bool:
     """Detecta si SystemLog tiene el campo 'trigger' (compatibilidad con versiones anteriores)."""
     from models import SystemLog as _SL
     return hasattr(_SL, "trigger")
+
+
+# ── P6: Recomendador de Asignacion ────────────────────────────────────────────
+
+@bp.post("/<int:ticket_id>/assignment-recommendations")
+def assignment_recommendations(ticket_id: int):
+    """Genera recomendaciones de asignacion para un ticket.
+
+    POST /api/tickets/{ticket_id}/assignment-recommendations
+
+    Payload opcional (filtros):
+      {
+        "max_load_pct": 80,
+        "only_skill": "frontend",
+        "only_area_path": "Strategist_Pacifico\\\\UI",
+        "exclude_ado_unique_names": ["admin@ubimia.com"]
+      }
+
+    advisory_only y publish_requires_human_approval son siempre true.
+    """
+    import time as _time
+    from services.ticket_assigner import compute_recommendations
+    from services.stacky_logger import logger as stacky_logger
+
+    filters = request.get_json(silent=True) or {}
+    t_start = _time.monotonic()
+
+    with session_scope() as session:
+        ticket = session.query(Ticket).filter_by(id=ticket_id).first()
+        if ticket is None:
+            return jsonify({
+                "ok": False,
+                "error": "ticket_not_found",
+                "message": f"Ticket {ticket_id} no existe en BD local",
+            }), 404
+
+        # Verificar si hay usuarios configurados
+        from models import User
+        has_users = session.query(User).filter(User.ado_unique_name.isnot(None)).first() is not None
+        if not has_users:
+            return jsonify({
+                "ok": False,
+                "error": "no_users_configured",
+                "message": "No hay usuarios con ado_unique_name configurado. Usa POST /api/users/sync-from-ado primero.",
+            }), 400
+
+        result = compute_recommendations(ticket, filters)
+
+    duration_ms = int((_time.monotonic() - t_start) * 1000)
+    result["ticket_id"] = ticket_id
+    result["duration_ms"] = duration_ms
+
+    stacky_logger.info(
+        "ticket_assigner",
+        "assignment_recommendation_generated",
+        ticket_id=ticket_id,
+        context={
+            "ticket_ado_id": result.get("ticket_ado_id"),
+            "candidates_count": len(result.get("candidates") or []),
+            "top_score": result["candidates"][0]["score"] if result.get("candidates") else None,
+            "filters_applied": filters,
+            "duration_ms": duration_ms,
+        }
+    )
+
+    return jsonify(result)
+
+
+@bp.post("/<int:ticket_id>/assign")
+def assign_ticket(ticket_id: int):
+    """Aplica una asignacion en ADO con doble confirmacion (human-in-the-loop).
+
+    POST /api/tickets/{ticket_id}/assign
+
+    Payload:
+      {
+        "ado_unique_name": "jluca@ubimia.com",   // requerido
+        "dry_run": true,                           // default: true — NUNCA escribe sin dry_run=false explicito
+        "reason": "Asignado por recomendacion"    // opcional
+      }
+
+    Con dry_run=true: devuelve lo que haria sin ejecutar nada en ADO.
+    Con dry_run=false: llama a AdoClient.update_work_item_assigned_to().
+    """
+    from services.stacky_logger import logger as stacky_logger
+
+    body = request.get_json(silent=True) or {}
+    ado_unique_name = (body.get("ado_unique_name") or "").strip()
+    dry_run = body.get("dry_run", True)  # default siempre True
+    reason = body.get("reason") or "Asignacion manual desde Stacky"
+    operator = request.headers.get("X-User-Email") or "unknown"
+
+    if not ado_unique_name:
+        return jsonify({
+            "ok": False,
+            "error": "missing_field",
+            "message": "Campo 'ado_unique_name' requerido",
+        }), 400
+
+    with session_scope() as session:
+        ticket = session.query(Ticket).filter_by(id=ticket_id).first()
+        if ticket is None:
+            return jsonify({
+                "ok": False,
+                "error": "ticket_not_found",
+                "message": f"Ticket {ticket_id} no existe en BD local",
+            }), 404
+
+        # Validar que el usuario exista en BD local (no permitir emails arbitrarios)
+        from models import User
+        user_row = session.query(User).filter_by(ado_unique_name=ado_unique_name).first()
+        if user_row is None:
+            return jsonify({
+                "ok": False,
+                "error": "user_not_found",
+                "message": f"Usuario '{ado_unique_name}' no encontrado en BD local. Ejecuta sync-from-ado primero.",
+            }), 404
+
+        ado_id = ticket.ado_id
+        current_assigned = ticket.assigned_to_ado
+
+        if dry_run:
+            stacky_logger.info(
+                "ticket_assigner",
+                "assignment_dry_run",
+                ticket_id=ticket_id,
+                context={
+                    "ado_id": ado_id,
+                    "ado_unique_name": ado_unique_name,
+                    "current_assigned": current_assigned,
+                    "operator": operator,
+                }
+            )
+            return jsonify({
+                "ok": True,
+                "dry_run": True,
+                "ticket_id": ticket_id,
+                "ticket_ado_id": ado_id,
+                "would_assign_to": ado_unique_name,
+                "current_assigned": current_assigned,
+                "reason": reason,
+                "actions": [
+                    {"action": "ado_patch_assigned_to", "would_call": f"PATCH ADO WI {ado_id} System.AssignedTo={ado_unique_name}"},
+                    {"action": "local_db_update_assigned_to", "would_call": f"UPDATE tickets SET assigned_to_ado='{ado_unique_name}' WHERE id={ticket_id}"},
+                ],
+                "advisory_only": True,
+                "message": "Preview de asignacion. Enviá dry_run=false para confirmar.",
+            })
+
+        # dry_run=false: aplicar asignacion real
+        ado_ok = False
+        ado_error = None
+        try:
+            client = AdoClient()
+            client.update_work_item_assigned_to(ado_id, ado_unique_name)
+            ado_ok = True
+        except Exception as e:
+            ado_error = str(e)
+            logger.error("assign_ticket: fallo ADO — %s", e)
+
+        local_ok = False
+        if ado_ok:
+            try:
+                ticket.assigned_to_ado = ado_unique_name
+                local_ok = True
+            except Exception as e:
+                logger.error("assign_ticket: fallo BD local — %s", e)
+
+        stacky_logger.info(
+            "ticket_assigner",
+            "assignment_applied" if ado_ok else "assignment_failed",
+            ticket_id=ticket_id,
+            context={
+                "ado_id": ado_id,
+                "ado_unique_name": ado_unique_name,
+                "ado_ok": ado_ok,
+                "local_ok": local_ok,
+                "ado_error": ado_error,
+                "operator": operator,
+            }
+        )
+
+        if not ado_ok:
+            return jsonify({
+                "ok": False,
+                "dry_run": False,
+                "ticket_id": ticket_id,
+                "ticket_ado_id": ado_id,
+                "error": "ado_api_error",
+                "message": ado_error or "Error desconocido al llamar a ADO",
+                "rollback_needed": False,
+                "ado_updated": False,
+                "local_db_updated": False,
+            }), 502
+
+        return jsonify({
+            "ok": True,
+            "dry_run": False,
+            "ticket_id": ticket_id,
+            "ticket_ado_id": ado_id,
+            "assigned_to": ado_unique_name,
+            "ado_updated": ado_ok,
+            "local_db_updated": local_ok,
+            "operator": operator,
+            "actions": [
+                {"action": "ado_patch_assigned_to", "ok": ado_ok},
+                {"action": "local_db_update_assigned_to", "ok": local_ok},
+            ],
+        })
+
+
+# ── P6: Panel de estadisticas por usuario ────────────────────────────────────
+
+@bp.get("/user-stats")
+def user_stats():
+    """Devuelve estadisticas de tickets por usuario.
+
+    GET /api/tickets/user-stats?user=jluca@ubimia.com
+
+    Incluye tickets actuales y historicos por estado.
+    """
+    from services.ticket_assigner import get_user_stats
+
+    ado_unique_name = request.args.get("user") or None
+    result = get_user_stats(ado_unique_name)
+    return jsonify({
+        "ok": True,
+        "users": result,
+        "total": len(result),
+    })
+
+
+# ── P6: Auto-poblado de usuarios desde historial ADO ─────────────────────────
+
+@bp.post("/users/sync-from-ado")
+def sync_users_from_ado():
+    """Puebla la tabla users con los asignados encontrados en tickets.
+
+    POST /api/tickets/users/sync-from-ado
+
+    No sobreescribe campos ya configurados manualmente.
+    """
+    from services.ticket_assigner import sync_users_from_ado_history
+    from services.stacky_logger import logger as stacky_logger
+
+    result = sync_users_from_ado_history()
+
+    stacky_logger.info(
+        "user_sync",
+        "users_synced_from_ado_history",
+        context=result,
+    )
+
+    return jsonify({"ok": True, **result})
+
+
+# ── Feature B: Diagnosticos causales de bloqueos ─────────────────────────────
+
+@bp.get("/<int:ticket_id>/diagnostics")
+def ticket_diagnostics(ticket_id: int):
+    """Genera un diagnostico causal sobre por que un ticket no avanza.
+
+    GET /api/tickets/{ticket_id}/diagnostics
+
+    Respeta cache de 60 minutos. Invalida con DELETE.
+    """
+    from services.ticket_diagnostics import generate_diagnostics
+
+    result = generate_diagnostics(ticket_id)
+    status = 200 if result.get("ok") else 404
+    return jsonify(result), status
+
+
+@bp.delete("/<int:ticket_id>/diagnostics/cache")
+def invalidate_diagnostics_cache(ticket_id: int):
+    """Invalida la cache de diagnostico para un ticket.
+
+    DELETE /api/tickets/{ticket_id}/diagnostics/cache
+    """
+    from services.ticket_diagnostics import invalidate_cache
+
+    removed = invalidate_cache(ticket_id)
+    return jsonify({"ok": True, "ticket_id": ticket_id, "cache_removed": removed})
+
+
+# ── P7: Endpoints extendidos de sync ─────────────────────────────────────────
+
+# Rate limiting simple en memoria (P7)
+import time as _sync_time
+_SYNC_MIN_INTERVAL_SEC = 15
+_last_sync_ts: float = 0.0
+_sync_in_progress: bool = False
+
+
+@bp.post("/sync-v2")
+def sync_from_ado_v2():
+    """Sync con rate limiting, observabilidad y campos extendidos de respuesta.
+
+    POST /api/tickets/sync-v2
+
+    Diferencias vs /sync:
+    - Rate limiting: minimo 15s entre syncs (configurable STACKY_SYNC_MIN_INTERVAL_SEC)
+    - Campo duration_ms en respuesta
+    - Campo idempotent: true si no hubo cambios
+    - Header X-Stacky-Trigger registrado en system_logs
+    - Flag sync_in_progress para evitar syncs concurrentes
+    """
+    global _last_sync_ts, _sync_in_progress
+
+    min_interval = int(os.environ.get("STACKY_SYNC_MIN_INTERVAL_SEC", _SYNC_MIN_INTERVAL_SEC))
+    now = _sync_time.time()
+    triggered_by = request.headers.get("X-Stacky-Trigger", "manual")
+
+    # Rate limiting
+    if now - _last_sync_ts < min_interval:
+        remaining = int(min_interval - (now - _last_sync_ts))
+        return jsonify({
+            "ok": False,
+            "error": "rate_limited",
+            "message": f"Sync demasiado frecuente. Espera {remaining}s.",
+            "retry_after_sec": remaining,
+        }), 429
+
+    # Evitar syncs concurrentes
+    if _sync_in_progress:
+        return jsonify({
+            "ok": False,
+            "error": "sync_in_progress",
+            "message": "Ya hay un sync en curso. Intentá en unos segundos.",
+        }), 409
+
+    _last_sync_ts = now
+    _sync_in_progress = True
+    t_start = _sync_time.monotonic()
+
+    try:
+        result = sync_tickets()
+    except AdoConfigError as e:
+        _sync_in_progress = False
+        logger.warning("ADO sync-v2 — config: %s", e)
+        return jsonify({"ok": False, "error": "config", "message": str(e)}), 400
+    except AdoApiError as e:
+        _sync_in_progress = False
+        logger.warning("ADO sync-v2 — api: %s", e)
+        return jsonify({"ok": False, "error": "ado_api", "message": str(e)}), 502
+    except Exception as e:
+        _sync_in_progress = False
+        logger.exception("ADO sync-v2 — fallo inesperado")
+        return jsonify({"ok": False, "error": "unexpected", "message": str(e)}), 500
+    finally:
+        _sync_in_progress = False
+
+    duration_ms = int((_sync_time.monotonic() - t_start) * 1000)
+    idempotent = result.get("created", 0) == 0 and result.get("updated", 0) == 0 and result.get("removed", 0) == 0
+
+    from services.stacky_logger import logger as stacky_logger
+    stacky_logger.info(
+        "ado_sync",
+        "sync_completed",
+        context={
+            "fetched": result.get("fetched"),
+            "created": result.get("created"),
+            "updated": result.get("updated"),
+            "removed": result.get("removed"),
+            "duration_ms": duration_ms,
+            "triggered_by": triggered_by,
+            "idempotent": idempotent,
+        }
+    )
+
+    return jsonify({
+        "ok": True,
+        **result,
+        "duration_ms": duration_ms,
+        "idempotent": idempotent,
+        "triggered_by": triggered_by,
+    })
+
+
+@bp.get("/sync/status-v2")
+def sync_status_v2():
+    """Devuelve el estado extendido de la ultima sincronizacion.
+
+    GET /api/tickets/sync/status-v2
+
+    Incluye:
+    - last_synced_at
+    - seconds_since_sync
+    - is_stale
+    - stale_threshold_sec
+    - sync_in_progress
+    """
+    stale_threshold = int(os.environ.get("STACKY_STALE_THRESHOLD_SEC", 120))
+    last = get_last_sync_at()
+    seconds_since = None
+    is_stale = False
+
+    if last:
+        seconds_since = int((datetime.utcnow() - last).total_seconds())
+        is_stale = seconds_since > stale_threshold
+
+    return jsonify({
+        "last_synced_at": last.isoformat() if last else None,
+        "seconds_since_sync": seconds_since,
+        "is_stale": is_stale,
+        "stale_threshold_sec": stale_threshold,
+        "sync_in_progress": _sync_in_progress,
+    })
+
+
+@bp.get("/config/frontend")
+def frontend_config():
+    """Devuelve la configuracion del frontend relevante para auto-refresh.
+
+    GET /api/tickets/config/frontend
+    """
+    return jsonify({
+        "ticket_sync_interval_ms": int(os.environ.get("STACKY_TICKET_SYNC_INTERVAL_MS", 45000)),
+        "sync_min_interval_sec": int(os.environ.get("STACKY_SYNC_MIN_INTERVAL_SEC", _SYNC_MIN_INTERVAL_SEC)),
+        "stale_threshold_sec": int(os.environ.get("STACKY_STALE_THRESHOLD_SEC", 120)),
+    })

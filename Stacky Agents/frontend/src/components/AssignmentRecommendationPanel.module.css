@@ -1,0 +1,228 @@
+.panel {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface, #f9fafb);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.body {
+  padding: 14px;
+}
+
+.loading {
+  color: var(--text-secondary, #6b7280);
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.candidateList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.candidateCard {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.candidateCard:hover {
+  background: var(--hover, #f3f4f6);
+}
+
+.candidateCard.selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.candidateCard.overloaded {
+  opacity: 0.7;
+}
+
+.candidateInfo {
+  flex: 1;
+}
+
+.candidateName {
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.candidateMeta {
+  font-size: 11px;
+  color: var(--text-secondary, #6b7280);
+  margin-top: 2px;
+}
+
+.candidateReason {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.scoreBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.scoreValue {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1d4ed8;
+  min-width: 40px;
+  text-align: right;
+}
+
+.badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badgeWarn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.rank {
+  font-size: 11px;
+  color: var(--text-secondary, #6b7280);
+  text-align: center;
+}
+
+.confirmBox {
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 12px;
+  background: #eff6ff;
+  font-size: 13px;
+}
+
+.confirmTitle {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.confirmDetail {
+  color: #374151;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.confirmActions {
+  display: flex;
+  gap: 8px;
+}
+
+.btnPrimary {
+  padding: 6px 14px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.btnPrimary:hover {
+  background: #2563eb;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btnSecondary {
+  padding: 6px 14px;
+  background: transparent;
+  color: #374151;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btnSecondary:hover {
+  background: var(--hover, #f3f4f6);
+}
+
+.btnDanger {
+  padding: 6px 14px;
+  background: transparent;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.success {
+  color: #16a34a;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 0;
+}
+
+.error {
+  color: #b91c1c;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.openBtn {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--text-secondary, #6b7280);
+}
+
+.openBtn:hover {
+  background: var(--hover, #f3f4f6);
+}
+
+.noUsers {
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.advisory {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, #f3f4f6);
+}

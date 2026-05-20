@@ -39,7 +39,7 @@ class Base(DeclarativeBase):
 
 
 def init_db() -> None:
-    from models import AgentExecution, ExecutionLog, PackRun, SystemLog, Ticket, User  # noqa: F401
+    from models import AgentExecution, ExecutionLog, PackRun, SystemLog, Ticket, User, TicketStateHistory  # noqa: F401
     from services.output_cache import OutputCache  # noqa: F401  (FA-31)
     from services.anti_patterns import AntiPattern  # noqa: F401  (FA-11)
     from services.webhooks import Webhook  # noqa: F401  (FA-52)
@@ -76,6 +76,14 @@ def _migrate_add_columns() -> None:
         ("tickets", "work_item_type", "VARCHAR(40)"),
         ("tickets", "parent_ado_id", "INTEGER"),
         ("tickets", "stacky_status", "VARCHAR(30)"),
+        # P6: campo de asignacion ADO en tickets
+        ("tickets", "assigned_to_ado", "VARCHAR(200)"),
+        # P6: campos de perfil ADO en usuarios
+        ("users", "ado_unique_name", "VARCHAR(200)"),
+        ("users", "ado_display_name", "VARCHAR(200)"),
+        ("users", "skills_json", "TEXT"),
+        ("users", "area_paths_json", "TEXT"),
+        ("users", "max_active_tickets", "INTEGER DEFAULT 5"),
     ]
     with engine.connect() as conn:
         for table, col, col_type in migrations:

@@ -52,6 +52,9 @@ class Ticket(Base):
     # Estado interno de Stacky (independiente de ado_state).
     # Valores: idle | running | completed | error | cancelled
     stacky_status: Mapped[str | None] = mapped_column(String(30), default="idle")
+    # P6: asignado en ADO (uniqueName del campo System.AssignedTo).
+    # Se sincroniza en cada sync_tickets(). Puede ser NULL si no hay asignado.
+    assigned_to_ado: Mapped[str | None] = mapped_column(String(200))
 
     executions: Mapped[list["AgentExecution"]] = relationship(back_populates="ticket")
 
@@ -71,6 +74,7 @@ class Ticket(Base):
             "parent_ado_id": self.parent_ado_id,
             "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
             "stacky_status": self.stacky_status or "idle",
+            "assigned_to_ado": self.assigned_to_ado,
         }
 
 
@@ -81,6 +85,65 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     name: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # P6: campos de identidad ADO y perfil de asignacion
+    ado_unique_name: Mapped[str | None] = mapped_column(String(200), unique=True)
+    ado_display_name: Mapped[str | None] = mapped_column(String(200))
+    # JSON: ["bug", "frontend", "refactor"] — configurables por el operador
+    skills_json: Mapped[str | None] = mapped_column(Text)
+    # JSON: ["Strategist_Pacifico\\UI"] — areas donde ha trabajado historicamente
+    area_paths_json: Mapped[str | None] = mapped_column(Text)
+    # Limite maximo de tickets activos que el operador configura por persona
+    max_active_tickets: Mapped[int] = mapped_column(Integer, default=5)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "email": self.email,
+            "name": self.name,
+            "ado_unique_name": self.ado_unique_name,
+            "ado_display_name": self.ado_display_name,
+            "skills": _json_loads(self.skills_json) or [],
+            "area_paths": _json_loads(self.area_paths_json) or [],
+            "max_active_tickets": self.max_active_tickets,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class TicketStateHistory(Base):
+    """Historial de transiciones de estado de tickets sincronizados desde ADO.
+
+    Cada vez que sync_tickets() detecta un cambio en ado_state, se registra
+    aqui la transicion. Permite calcular estadisticas historicas de estados
+    sin depender de llamadas on-demand a ADO.
+
+    P6-Panel: fuente de verdad para el panel de estadisticas por usuario.
+    """
+    __tablename__ = "ticket_state_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    ado_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    old_state: Mapped[str | None] = mapped_column(String(40))
+    new_state: Mapped[str] = mapped_column(String(40), nullable=False)
+    assigned_to_ado: Mapped[str | None] = mapped_column(String(200))
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_tsh_ticket_id", "ticket_id"),
+        Index("ix_tsh_assigned_to", "assigned_to_ado"),
+        Index("ix_tsh_recorded_at", "recorded_at"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "ticket_id": self.ticket_id,
+            "ado_id": self.ado_id,
+            "old_state": self.old_state,
+            "new_state": self.new_state,
+            "assigned_to_ado": self.assigned_to_ado,
+            "recorded_at": self.recorded_at.isoformat() if self.recorded_at else None,
+        }
 
 
 class PackRun(Base):

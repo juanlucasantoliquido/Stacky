@@ -492,3 +492,38 @@ class AdoClient:
         return self._request_with_retry(
             "PATCH", url, body=patch_ops, content_type="application/json-patch+json"
         )
+
+    def update_work_item_assigned_to(self, ado_id: int, ado_unique_name: str) -> dict:
+        """Cambia System.AssignedTo de un work item en ADO.
+
+        P6: Se usa para asignar un ticket a una persona real desde el recomendador.
+        ado_unique_name: uniqueName del usuario en ADO (ej. "jluca@ubimia.com").
+        Requiere que el PAT tenga scope vso.work_write.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}"
+            f"?api-version={_API_VERSION}"
+        )
+        patch_ops = [
+            {"op": "add", "path": "/fields/System.AssignedTo", "value": ado_unique_name}
+        ]
+        return self._request_with_retry(
+            "PATCH", url, body=patch_ops, content_type="application/json-patch+json"
+        )
+
+    def fetch_work_item_updates(self, ado_id: int, top: int = 50) -> list[dict]:
+        """Devuelve el historial de revisiones de un work item (System.State, System.AssignedTo, etc.).
+
+        Usado opcionalmente para diagnosticos. No se usa en el sync normal (Opcion B es la elegida).
+        Si ADO no soporta el endpoint, devuelve lista vacia silenciosamente.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}/updates"
+            f"?api-version={_API_VERSION}&$top={top}"
+        )
+        try:
+            data = self._request("GET", url)
+        except AdoApiError as e:
+            logger.warning("fetch_work_item_updates(%s) falló: %s", ado_id, e)
+            return []
+        return data.get("value") or []

@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from typing import Iterable
 
 from db import session_scope
-from models import AgentExecution, ExecutionLog, PackRun, Ticket
+from models import AgentExecution, ExecutionLog, PackRun, Ticket, TicketStateHistory
 from services.ado_client import AdoClient, AdoApiError, AdoConfigError
 
 logger = logging.getLogger("stacky_agents.ado_sync")
@@ -91,33 +91,67 @@ def sync_tickets(client: AdoClient | None = None) -> dict:
             except (TypeError, ValueError):
                 parent_ado_id = None
 
+            # P6: extraer uniqueName del asignado (System.AssignedTo puede ser dict u objeto)
+            assigned_raw = fields.get("System.AssignedTo") or {}
+            if isinstance(assigned_raw, dict):
+                assigned_to_ado = assigned_raw.get("uniqueName") or assigned_raw.get("displayName") or None
+            else:
+                assigned_to_ado = str(assigned_raw).strip() if assigned_raw else None
+            if assigned_to_ado == "":
+                assigned_to_ado = None
+
+            new_state = str(fields.get("System.State") or "")
+
             existing = session.query(Ticket).filter_by(ado_id=ado_id).first()
             if existing is None:
-                session.add(
-                    Ticket(
-                        ado_id=ado_id,
-                        project=client.project,
-                        title=str(fields.get("System.Title") or f"WI-{ado_id}"),
-                        description=description,
-                        ado_state=str(fields.get("System.State") or ""),
-                        ado_url=client.work_item_url(ado_id),
-                        priority=priority_int,
-                        work_item_type=work_item_type or None,
-                        parent_ado_id=parent_ado_id,
-                        last_synced_at=now,
-                    )
+                new_ticket = Ticket(
+                    ado_id=ado_id,
+                    project=client.project,
+                    title=str(fields.get("System.Title") or f"WI-{ado_id}"),
+                    description=description,
+                    ado_state=new_state,
+                    ado_url=client.work_item_url(ado_id),
+                    priority=priority_int,
+                    work_item_type=work_item_type or None,
+                    parent_ado_id=parent_ado_id,
+                    last_synced_at=now,
+                    assigned_to_ado=assigned_to_ado,
                 )
+                session.add(new_ticket)
+                session.flush()  # Necesario para obtener new_ticket.id antes del commit
+                # Registrar primera aparicion en historial de estados
+                if new_state:
+                    session.add(TicketStateHistory(
+                        ticket_id=new_ticket.id,
+                        ado_id=ado_id,
+                        old_state=None,
+                        new_state=new_state,
+                        assigned_to_ado=assigned_to_ado,
+                        recorded_at=now,
+                    ))
                 created += 1
             else:
+                prev_state = existing.ado_state
                 existing.project = client.project
                 existing.title = str(fields.get("System.Title") or existing.title)
                 existing.description = description or existing.description
-                existing.ado_state = str(fields.get("System.State") or existing.ado_state)
+                existing.ado_state = new_state or existing.ado_state
                 existing.ado_url = client.work_item_url(ado_id)
                 existing.priority = priority_int if priority_int is not None else existing.priority
                 existing.work_item_type = work_item_type or existing.work_item_type
                 existing.parent_ado_id = parent_ado_id if parent_ado_id is not None else existing.parent_ado_id
                 existing.last_synced_at = now
+                existing.assigned_to_ado = assigned_to_ado
+                # P6-Panel: registrar transicion de estado si cambio
+                if new_state and new_state != prev_state:
+                    session.add(TicketStateHistory(
+                        ticket_id=existing.id,
+                        ado_id=ado_id,
+                        old_state=prev_state,
+                        new_state=new_state,
+                        assigned_to_ado=assigned_to_ado,
+                        recorded_at=now,
+                    ))
                 updated += 1
 
         removed = _purge_orphans(session, client.project, fetched_ids)

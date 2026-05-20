@@ -1,0 +1,2 @@
+- [Feature #3 DocTree — COMPLETA](project_feature3_doctree.md) — 3.A f4a68f4, 3.B 998af7f, 3.C ff9d071; filtro client-side label+headings
+- [Feature #4 FlowConfig — estado y decisiones](project_feature4_flow_config.md) — Fase 4.A backend completa; clave es agent_type (DO-4.1)

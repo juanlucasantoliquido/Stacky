@@ -49,6 +49,36 @@ export interface ContextBlock {
   source?: { type: string; [k: string]: unknown };
 }
 
+// P6: tipos para el recomendador de asignacion
+export interface AssignmentCandidate {
+  ado_unique_name: string;
+  display_name: string;
+  score: number;
+  rank: number;
+  overloaded: boolean;
+  load_pct: number;
+  active_tickets: number;
+  active_tickets_detail: { ado_id: number; priority: number; state: string }[];
+  reason: string;
+  recommendation_flags: string[];
+  type_affinity: { score: number; top_types: string[]; match: boolean };
+  area_affinity: { score: number; matched_areas: string[] };
+  throughput_score: number;
+}
+
+export interface AssignmentRecommendationResponse {
+  ok: boolean;
+  ticket_id: number;
+  ticket_ado_id: number;
+  scored_at: string;
+  candidates: AssignmentCandidate[];
+  excluded: { ado_unique_name: string; reason: string; load_pct: number }[];
+  advisory_only: true;
+  publish_requires_human_approval: true;
+  duration_ms?: number;
+  warning?: string;
+}
+
 export interface Ticket {
   id: number;
   ado_id: number;
@@ -59,6 +89,8 @@ export interface Ticket {
   ado_url?: string;
   priority?: number;
   work_item_type?: string;      // "Epic" | "Task" | "Bug" | etc.
+  // P6: asignado en ADO
+  assigned_to_ado?: string | null;
   parent_ado_id?: number | null;
   last_synced_at?: string;
   // Estado interno de Stacky (independiente de ado_state).

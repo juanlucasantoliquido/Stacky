@@ -73,6 +73,21 @@ export interface FinishWorkResponse {
   } | null;
 }
 
+// P7: tipo extendido de sync status
+export interface SyncStatusV2 {
+  last_synced_at: string | null;
+  seconds_since_sync: number | null;
+  is_stale: boolean;
+  stale_threshold_sec: number;
+  sync_in_progress: boolean;
+}
+
+export interface FrontendConfig {
+  ticket_sync_interval_ms: number;
+  sync_min_interval_sec: number;
+  stale_threshold_sec: number;
+}
+
 export const Tickets = {
   list: () => api.get<Ticket[]>("/api/tickets"),
   byId: (id: number) => api.get<Ticket & { executions: AgentExecution[] }>(`/api/tickets/${id}`),
@@ -92,7 +107,54 @@ export const Tickets = {
   invalidatePipelineCache: (id: number) =>
     api.delete<{ ok: boolean }>(`/api/tickets/${id}/ado-pipeline-cache`),
   sync: () => api.post<TicketSyncResult>("/api/tickets/sync"),
+  // P7: sync con rate limiting y campos extendidos
+  syncV2: (trigger: "manual" | "auto_poll" | "startup" = "manual") =>
+    fetch(`${apiBase}/api/tickets/sync-v2`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Stacky-Trigger": trigger },
+    }).then(r => r.json()) as Promise<TicketSyncResult & { duration_ms?: number; idempotent?: boolean }>,
   syncStatus: () => api.get<{ last_synced_at: string | null }>("/api/tickets/sync/status"),
+  // P7: sync status extendido
+  syncStatusV2: () => api.get<SyncStatusV2>("/api/tickets/sync/status-v2"),
+  // P7: config del frontend
+  frontendConfig: () => api.get<FrontendConfig>("/api/tickets/config/frontend"),
+  // P6: recomendador de asignacion
+  assignmentRecommendations: (
+    ticketId: number,
+    filters?: { max_load_pct?: number; only_skill?: string; exclude_ado_unique_names?: string[] }
+  ) => api.post<import("../types").AssignmentRecommendationResponse>(
+    `/api/tickets/${ticketId}/assignment-recommendations`,
+    filters || {}
+  ),
+  // P6: aplicar asignacion (siempre dry_run=true por defecto)
+  assignTicket: (
+    ticketId: number,
+    payload: { ado_unique_name: string; dry_run?: boolean; reason?: string }
+  ) => api.post<{
+    ok: boolean; dry_run: boolean; ticket_id: number; ticket_ado_id: number;
+    ado_updated?: boolean; local_db_updated?: boolean;
+    assigned_to?: string; would_assign_to?: string; actions: unknown[];
+  }>(`/api/tickets/${ticketId}/assign`, payload),
+  // P6: estadisticas por usuario
+  userStats: (user?: string) =>
+    api.get<{ ok: boolean; users: unknown[]; total: number }>(
+      `/api/tickets/user-stats${user ? `?user=${encodeURIComponent(user)}` : ""}`
+    ),
+  // P6: sincronizar usuarios desde ADO
+  syncUsersFromAdo: () =>
+    api.post<{ ok: boolean; created: number; updated: number; total: number }>(
+      "/api/tickets/users/sync-from-ado",
+      {}
+    ),
+  // Feature B: diagnosticos causales
+  diagnostics: (ticketId: number) =>
+    api.get<{
+      ok: boolean; ticket_id: number; ticket_ado_id: number; aging_days: number;
+      probable_causes: { category: string; description: string; confidence: number; evidence: string[] }[];
+      suggested_actions: string[]; advisory_only: boolean; from_cache: boolean;
+    }>(`/api/tickets/${ticketId}/diagnostics`),
+  invalidateDiagnosticsCache: (ticketId: number) =>
+    api.delete<{ ok: boolean; cache_removed: boolean }>(`/api/tickets/${ticketId}/diagnostics/cache`),
   /** Devuelve el stacky_status actual + historial de transiciones del ticket */
   stackyStatus: (id: number, limit = 20) =>
     api.get<{
@@ -424,6 +486,42 @@ export interface QaUatRunStatus {
 }
 
 // QaUat namespace — see full definition below (Sprint 9+)
+
+// Feature C: Comparador de Agentes
+export interface AgentComparisonEntry {
+  filename: string;
+  agent_type: string;
+  total_runs: number;
+  approved_count: number;
+  discarded_count: number;
+  error_count: number;
+  cancelled_count: number;
+  approval_rate: number;
+  avg_duration_ms: number | null;
+  p95_duration_ms: number | null;
+  tickets_completed: number;
+  low_sample_warning: boolean;
+  is_best?: boolean;
+}
+
+export interface AgentComparisonResponse {
+  ok: boolean;
+  generated_at: string;
+  period_days: number;
+  agent_type: string | null;
+  agents: AgentComparisonEntry[];
+  total_executions: number;
+}
+
+export const Metrics = {
+  agentComparison: (params?: { days?: number; agent_type?: string }) => {
+    const p = new URLSearchParams();
+    if (params?.days) p.set("days", String(params.days));
+    if (params?.agent_type) p.set("agent_type", params.agent_type);
+    const qs = p.toString();
+    return api.get<AgentComparisonResponse>(`/api/metrics/agent-comparison${qs ? `?${qs}` : ""}`);
+  },
+};
 
 // FA-13
 export const Decisions = {
@@ -1323,5 +1421,32 @@ export const AgentCompletion = {
       payload,
       token ? { "X-Stacky-Agent-Token": token } : {}
     );
+  },
+};
+
+// Feature A: Sprint Board
+export const PM = {
+  sprintBoard: (project?: string) => {
+    const qs = project ? `?project=${encodeURIComponent(project)}` : "";
+    return api.get<{
+      ok: boolean;
+      sprint: {
+        id: string; name: string; path: string;
+        start: string | null; end: string | null; time_frame: string | null;
+      } | null;
+      groups: Record<string, {
+        ado_id: number; title: string; state: string; work_item_type: string;
+        priority: number | null; story_points: number; assigned_to: string | null;
+        assigned_unique_name: string | null; tags: string[]; days_in_state: number | null;
+      }[]>;
+      totals: {
+        story_points_committed: number;
+        story_points_done: number;
+        items_total: number;
+        items_done: number;
+      };
+      stale_warning: boolean;
+      message?: string;
+    }>(`/api/pm/sprint/board${qs}`);
   },
 };

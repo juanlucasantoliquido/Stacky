@@ -232,3 +232,90 @@ class TestReadContent:
         """Path vacío → ValueError."""
         with pytest.raises(ValueError):
             indexer.read_content("")
+
+
+# ── Tests: project docs sources ───────────────────────────────────────────────
+
+class TestProjectDocs:
+    def _patch_project(self, monkeypatch, cfg: dict):
+        monkeypatch.setattr(
+            indexer,
+            "_project_manager",
+            lambda: (
+                lambda: cfg["name"],
+                lambda name: cfg if name == cfg["name"] else None,
+            ),
+        )
+
+    def test_lists_project_docs_source(self, tmp_path, monkeypatch):
+        """workspace_root/docs aparece como fuente seleccionable del proyecto."""
+        workspace = tmp_path / "workspace"
+        _write_md(workspace / "docs" / "guide.md", "# Guide\n")
+        cfg = {
+            "name": "ACME",
+            "display_name": "ACME App",
+            "workspace_root": str(workspace),
+        }
+        self._patch_project(monkeypatch, cfg)
+
+        result = indexer.list_doc_sources(project_name="ACME")
+        assert result["default_source_id"] == "project-docs:docs"
+        assert any(s["id"] == "project-docs:docs" for s in result["sources"])
+
+    def test_project_docs_index_is_nested(self, tmp_path, monkeypatch):
+        """Los docs del proyecto se devuelven como árbol de carpetas."""
+        workspace = tmp_path / "workspace"
+        _write_md(workspace / "docs" / "api" / "contracts.md", "# Contracts\n\n## V1\n")
+        cfg = {
+            "name": "ACME",
+            "display_name": "ACME App",
+            "workspace_root": str(workspace),
+        }
+        self._patch_project(monkeypatch, cfg)
+
+        result = indexer.build_project_docs_index(
+            project_name="ACME",
+            source_id="project-docs:docs",
+        )
+        root = result["roots"][0]
+        api_folder = root["children"][0]
+        assert api_folder["kind"] == "folder"
+        assert api_folder["label"] == "api"
+        assert api_folder["children"][0]["label"] == "contracts.md"
+        assert api_folder["children"][0]["headings"][0]["text"] == "Contracts"
+
+    def test_read_project_doc_content(self, tmp_path, monkeypatch):
+        """Lee contenido desde la carpeta docs seleccionada del proyecto."""
+        workspace = tmp_path / "workspace"
+        _write_md(workspace / "docs" / "guide.md", "# Guide\n\nContenido proyecto.")
+        cfg = {
+            "name": "ACME",
+            "display_name": "ACME App",
+            "workspace_root": str(workspace),
+        }
+        self._patch_project(monkeypatch, cfg)
+
+        content = indexer.read_project_doc_content(
+            "guide.md",
+            project_name="ACME",
+            source_id="project-docs:docs",
+        )
+        assert "Contenido proyecto." in content
+
+    def test_project_doc_traversal_blocked(self, tmp_path, monkeypatch):
+        """La lectura de docs del proyecto bloquea path traversal."""
+        workspace = tmp_path / "workspace"
+        _write_md(workspace / "docs" / "guide.md", "# Guide\n")
+        cfg = {
+            "name": "ACME",
+            "display_name": "ACME App",
+            "workspace_root": str(workspace),
+        }
+        self._patch_project(monkeypatch, cfg)
+
+        with pytest.raises(ValueError, match="path_traversal_blocked"):
+            indexer.read_project_doc_content(
+                "../secret.md",
+                project_name="ACME",
+                source_id="project-docs:docs",
+            )

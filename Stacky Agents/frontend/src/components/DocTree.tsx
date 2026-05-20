@@ -1,41 +1,61 @@
 /**
- * DocTree.tsx — Árbol navegable de documentación (Feature #3)
+ * DocTree.tsx - Arbol navegable de documentacion (Feature #3)
  *
- * Recibe roots: DocRoot[] y onSelect(node: DocNode).
- * Expand/collapse por sección raíz.
- * Lista los headings de cada documento como subitems navegables.
- * Acepta filterText para filtrar nodos (Fase 3.C):
- *   - Búsqueda vacía → árbol completo.
- *   - Búsqueda con texto → solo nodos cuyo label o algún heading.text matchea
- *     (case-insensitive). Nodos no coincidentes ocultos (no griseados).
- *   - Secciones raíz sin matches → ocultas.
- *   - Resaltado visual del texto matcheado en labels y headings.
+ * Soporta secciones planas legacy y carpetas recursivas para los docs del
+ * proyecto activo. Los archivos se pueden seleccionar; las carpetas expanden
+ * o contraen sus hijos.
  */
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { DocRoot, DocNode, DocHeading } from "../api/endpoints";
 import styles from "./DocTree.module.css";
 
 interface DocTreeProps {
   roots: DocRoot[];
   onSelect: (node: DocNode, heading?: DocHeading) => void;
-  /** Texto de filtro (Fase 3.C). Vacío = sin filtro. */
+  /** Texto de filtro. Vacio = sin filtro. */
   filterText?: string;
   /** Nodo actualmente seleccionado (para resaltar). */
   selectedNodeId?: string;
 }
 
-// ── helpers de filtro ─────────────────────────────────────────────────────────
+// -- helpers de filtro ---------------------------------------------------------
 
-function nodeMatchesFilter(node: DocNode, filter: string): boolean {
+function isFolder(node: DocNode): boolean {
+  return node.kind === "folder";
+}
+
+function countFiles(nodes: DocNode[] = []): number {
+  return nodes.reduce((acc, node) => {
+    if (isFolder(node)) return acc + countFiles(node.children ?? []);
+    return acc + 1;
+  }, 0);
+}
+
+function nodeOwnMatchesFilter(node: DocNode, filter: string): boolean {
   if (!filter) return true;
   const lower = filter.toLowerCase();
   if (node.label.toLowerCase().includes(lower)) return true;
-  return node.headings.some((h) => h.text.toLowerCase().includes(lower));
+  return (node.headings ?? []).some((h) => h.text.toLowerCase().includes(lower));
+}
+
+function filterNode(node: DocNode, filter: string): DocNode | null {
+  if (!filter) return node;
+
+  const children = node.children ?? [];
+  if (isFolder(node)) {
+    if (nodeOwnMatchesFilter(node, filter)) return node;
+    const filteredChildren = children
+      .map((child) => filterNode(child, filter))
+      .filter((child): child is DocNode => child !== null);
+    return filteredChildren.length > 0 ? { ...node, children: filteredChildren } : null;
+  }
+
+  return nodeOwnMatchesFilter(node, filter) ? node : null;
 }
 
 /**
  * Resalta las ocurrencias de `filter` en `text` devolviendo spans.
- * Si no hay match o filtro vacío, devuelve el texto plano.
+ * Si no hay match o filtro vacio, devuelve el texto plano.
  */
 function HighlightedText({ text, filter }: { text: string; filter: string }) {
   if (!filter) return <>{text}</>;
@@ -53,20 +73,24 @@ function HighlightedText({ text, filter }: { text: string; filter: string }) {
   );
 }
 
-// ── sub-component: HeadingItem ────────────────────────────────────────────────
+// -- sub-component: HeadingItem ------------------------------------------------
 
 interface HeadingItemProps {
   heading: DocHeading;
   onClick: () => void;
   filterText: string;
+  depth: number;
 }
 
-function HeadingItem({ heading, onClick, filterText }: HeadingItemProps) {
+function HeadingItem({ heading, onClick, filterText, depth }: HeadingItemProps) {
   const isMatch =
     !!filterText && heading.text.toLowerCase().includes(filterText.toLowerCase());
+  const paddingLeft = heading.level === 1 ? 28 + depth * 14 : 40 + depth * 14;
+
   return (
     <li
       className={`${styles.headingItem} ${styles[`h${heading.level}`]} ${isMatch ? styles.filterMatch : ""}`}
+      style={{ paddingLeft } as CSSProperties}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
@@ -79,56 +103,95 @@ function HeadingItem({ heading, onClick, filterText }: HeadingItemProps) {
   );
 }
 
-// ── sub-component: DocItem ────────────────────────────────────────────────────
+// -- sub-component: DocItem ----------------------------------------------------
 
 interface DocItemProps {
   node: DocNode;
   onSelect: (node: DocNode, heading?: DocHeading) => void;
   filterText: string;
   isSelected: boolean;
+  selectedNodeId?: string;
+  depth?: number;
 }
 
-function DocItem({ node, onSelect, filterText, isSelected }: DocItemProps) {
+function DocItem({
+  node,
+  onSelect,
+  filterText,
+  isSelected,
+  selectedNodeId,
+  depth = 0,
+}: DocItemProps) {
   const [expanded, setExpanded] = useState(false);
-  const hasHeadings = node.headings.length > 0;
+  const folder = isFolder(node);
+  const children = node.children ?? [];
+  const hasHeadings = !folder && (node.headings ?? []).length > 0;
+  const hasChildren = folder && children.length > 0;
 
-  // Con filtro activo, expandir automáticamente si matchea heading
-  const autoExpand =
+  const autoExpandHeadings =
+    !folder &&
     filterText.length > 0 &&
-    node.headings.some((h) => h.text.toLowerCase().includes(filterText.toLowerCase()));
-  const showHeadings = expanded || autoExpand;
+    (node.headings ?? []).some((h) => h.text.toLowerCase().includes(filterText.toLowerCase()));
+
+  const showChildren = folder && (expanded || filterText.length > 0);
+  const showHeadings = !folder && (expanded || autoExpandHeadings);
+  const headerPaddingLeft = 12 + depth * 14;
 
   return (
-    <li className={`${styles.docItem} ${isSelected ? styles.selected : ""}`}>
+    <li
+      className={`${styles.docItem} ${folder ? styles.folderItem : ""} ${isSelected ? styles.selected : ""}`}
+    >
       <div
         className={styles.docItemHeader}
+        style={{ paddingLeft: headerPaddingLeft } as CSSProperties}
         onClick={() => {
+          if (folder) {
+            if (hasChildren) setExpanded((v) => !v);
+            return;
+          }
           onSelect(node);
           if (hasHeadings) setExpanded((v) => !v);
         }}
-        title={node.path}
+        title={node.display_path ?? node.path}
       >
-        {hasHeadings && (
+        {(hasHeadings || hasChildren) && (
           <span className={styles.expandIcon}>
-            {showHeadings ? "▾" : "▸"}
+            {(folder ? showChildren : showHeadings) ? "▾" : "▸"}
           </span>
         )}
-        {!hasHeadings && <span className={styles.expandIcon}>&nbsp;&nbsp;</span>}
-        <span className={styles.docLabel}>
+        {!hasHeadings && !hasChildren && <span className={styles.expandIcon}>&nbsp;&nbsp;</span>}
+        <span className={`${styles.docLabel} ${folder ? styles.folderLabel : ""}`}>
           <HighlightedText text={node.label} filter={filterText} />
         </span>
         <span className={styles.headingCount}>
-          {node.headings.length > 0 ? `${node.headings.length}h` : ""}
+          {folder ? countFiles(children) : (node.headings ?? []).length > 0 ? `${node.headings.length}h` : ""}
         </span>
       </div>
 
+      {showChildren && (
+        <ul className={styles.docList}>
+          {children.map((child) => (
+            <DocItem
+              key={child.id}
+              node={child}
+              onSelect={onSelect}
+              filterText={filterText}
+              isSelected={selectedNodeId === child.id}
+              selectedNodeId={selectedNodeId}
+              depth={depth + 1}
+            />
+          ))}
+        </ul>
+      )}
+
       {showHeadings && (
         <ul className={styles.headingList}>
-          {node.headings.map((h, i) => (
+          {(node.headings ?? []).map((h, i) => (
             <HeadingItem
               key={i}
               heading={h}
               filterText={filterText}
+              depth={depth}
               onClick={() => onSelect(node, h)}
             />
           ))}
@@ -138,7 +201,7 @@ function DocItem({ node, onSelect, filterText, isSelected }: DocItemProps) {
   );
 }
 
-// ── sub-component: RootSection ────────────────────────────────────────────────
+// -- sub-component: RootSection ------------------------------------------------
 
 interface RootSectionProps {
   root: DocRoot;
@@ -156,17 +219,18 @@ function RootSection({
   selectedNodeId,
 }: RootSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const fileCount = countFiles(visibleChildren);
 
   return (
     <div className={styles.rootSection}>
       <div
         className={styles.rootHeader}
         onClick={() => setCollapsed((v) => !v)}
-        title={`${root.label} — ${visibleChildren.length} documentos`}
+        title={`${root.label} - ${fileCount} documentos`}
       >
         <span className={styles.rootToggle}>{collapsed ? "▸" : "▾"}</span>
         <span className={styles.rootLabel}>{root.label}</span>
-        <span className={styles.rootCount}>{visibleChildren.length}</span>
+        <span className={styles.rootCount}>{fileCount}</span>
       </div>
 
       {!collapsed && (
@@ -181,6 +245,7 @@ function RootSection({
               onSelect={onSelect}
               filterText={filterText}
               isSelected={selectedNodeId === node.id}
+              selectedNodeId={selectedNodeId}
             />
           ))}
         </ul>
@@ -189,7 +254,7 @@ function RootSection({
   );
 }
 
-// ── DocTree principal ─────────────────────────────────────────────────────────
+// -- DocTree principal ---------------------------------------------------------
 
 export default function DocTree({
   roots,
@@ -197,16 +262,17 @@ export default function DocTree({
   filterText = "",
   selectedNodeId,
 }: DocTreeProps) {
-  // Filtrar secciones y documentos por filterText
   const filteredRoots = roots
     .map((root) => ({
       root,
       visibleChildren: filterText
-        ? root.children.filter((node) => nodeMatchesFilter(node, filterText))
+        ? root.children
+            .map((node) => filterNode(node, filterText))
+            .filter((node): node is DocNode => node !== null)
         : root.children,
     }))
     .filter(({ visibleChildren, root }) =>
-      filterText ? visibleChildren.length > 0 : true || root.note
+      filterText ? visibleChildren.length > 0 : visibleChildren.length > 0 || !!root.note
     );
 
   if (roots.length === 0) {

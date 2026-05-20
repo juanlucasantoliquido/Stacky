@@ -80,6 +80,10 @@
   border-bottom: 1px solid var(--color-border, #1f1f1f);
 }
 
+.folderItem {
+  border-bottom: none;
+}
+
 .docItemHeader {
   display: flex;
   align-items: center;
@@ -102,6 +106,15 @@
   font-weight: 500;
 }
 
+.folderItem > .docItemHeader {
+  color: var(--color-text-secondary, #aaa);
+  font-weight: 500;
+}
+
+.folderItem > .docItemHeader:hover {
+  color: var(--color-text-bright, #eee);
+}
+
 .expandIcon {
   font-size: 0.65rem;
   width: 14px;
@@ -116,6 +129,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 0.82rem;
+}
+
+.folderLabel {
+  color: inherit;
 }
 
 .headingCount {

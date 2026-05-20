@@ -10,15 +10,60 @@
 /* ── Panel izquierdo ───────────────────────────────────────────────────────── */
 
 .sidePanel {
-  width: 280px;
-  min-width: 200px;
-  max-width: 360px;
+  width: 320px;
+  min-width: 240px;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--color-border, #2a2a2a);
   background: var(--color-surface, #141414);
   overflow: hidden;
   flex-shrink: 0;
+}
+
+/* Selector de fuente/carpeta */
+.sourceBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid var(--color-border, #2a2a2a);
+  flex-shrink: 0;
+}
+
+.sourceLabel {
+  font-size: 0.68rem;
+  color: var(--color-text-muted, #777);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.sourceSelect {
+  width: 100%;
+  min-height: 30px;
+  box-sizing: border-box;
+  background: var(--color-surface-2, #1a1a1a);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  color: var(--color-text, #ccc);
+  font-size: 0.8rem;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.sourceSelect:focus {
+  border-color: var(--color-accent, #4a9eff);
+}
+
+.sourceMeta {
+  min-height: 16px;
+  color: var(--color-text-muted, #666);
+  font-family: monospace;
+  font-size: 0.68rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Caja de búsqueda */

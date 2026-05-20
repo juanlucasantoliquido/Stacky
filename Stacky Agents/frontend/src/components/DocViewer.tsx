@@ -92,7 +92,7 @@ export default function DocViewer({ node, content, isLoading, error }: DocViewer
   return (
     <article className={styles.viewer}>
       <header className={styles.docHeader}>
-        <span className={styles.docPath}>{node.path}</span>
+        <span className={styles.docPath}>{node.display_path ?? node.path}</span>
         <span className={styles.docSize}>
           {node.size_bytes > 1024
             ? `${(node.size_bytes / 1024).toFixed(1)} KB`

@@ -1,67 +1,102 @@
 /**
- * DocsPage.tsx — Página principal de documentación (Feature #3)
+ * DocsPage.tsx - Página principal de documentación (Feature #3)
  *
  * Layout dos paneles:
- *   - Panel izquierdo: campo de búsqueda + DocTree (árbol navegable)
- *   - Panel derecho: DocViewer (renderizado markdown del nodo seleccionado)
- *
- * Datos:
- *   - useQuery para getIndex() → cargado una vez, con cache de react-query
- *   - getContent() → cargado al seleccionar un nodo
- *
- * Estados:
- *   - loading inicial del índice
- *   - empty: sin documentos
- *   - error: fallo de red
- *   - sin selección: mensaje de bienvenida
- *
- * Nota sobre filtro (Fase 3.C):
- *   El estado filterText se mantiene aquí y se pasa a DocTree.
- *   El filtro opera solo sobre títulos y headings (client-side),
- *   sin re-fetch de contenido completo (v1).
+ *   - Panel izquierdo: selector de fuente/carpeta, búsqueda y DocTree
+ *   - Panel derecho: DocViewer con el markdown seleccionado
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DocTree from "../components/DocTree";
 import DocViewer from "../components/DocViewer";
 import { Docs } from "../api/endpoints";
 import type { DocNode, DocHeading } from "../api/endpoints";
+import { useWorkbench } from "../store/workbench";
 import styles from "./DocsPage.module.css";
 
+function countDocFiles(nodes: DocNode[] = []): number {
+  return nodes.reduce((acc, node) => {
+    if (node.kind === "folder") return acc + countDocFiles(node.children ?? []);
+    return acc + 1;
+  }, 0);
+}
+
 export default function DocsPage() {
+  const activeProject = useWorkbench((s) => s.activeProject);
+  const projectName = activeProject?.name;
   const [selectedNode, setSelectedNode] = useState<DocNode | null>(null);
   const [filterText, setFilterText] = useState("");
+  const [selectedSourceId, setSelectedSourceId] = useState("");
 
-  // ── Cargar índice ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    setSelectedNode(null);
+    setFilterText("");
+    setSelectedSourceId("");
+  }, [projectName]);
+
+  // -- Fuentes/carpeta docs del proyecto activo -------------------------------
+  const {
+    data: sourcesData,
+    isLoading: sourcesLoading,
+    error: sourcesError,
+  } = useQuery({
+    queryKey: ["docs-sources", projectName ?? "active"],
+    queryFn: () => Docs.getSources(projectName),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+
+  const sources = sourcesData?.sources ?? [];
+  const selectedSource = sources.find((source) => source.id === selectedSourceId) ?? null;
+
+  useEffect(() => {
+    if (!sourcesData) return;
+    const nextSourceId =
+      sourcesData.default_source_id || sourcesData.sources[0]?.id || "stacky";
+    const currentStillExists = sourcesData.sources.some((source) => source.id === selectedSourceId);
+    if (!selectedSourceId || !currentStillExists) {
+      setSelectedSourceId(nextSourceId);
+    }
+  }, [sourcesData, selectedSourceId]);
+
+  useEffect(() => {
+    setSelectedNode(null);
+  }, [selectedSourceId]);
+
+  // -- Cargar índice ----------------------------------------------------------
   const {
     data: indexData,
     isLoading: indexLoading,
     error: indexError,
   } = useQuery({
-    queryKey: ["docs-index"],
-    queryFn: () => Docs.getIndex(),
-    staleTime: 5 * 60 * 1000, // 5 min (alineado con el TTL del backend)
+    queryKey: ["docs-index", projectName ?? "active", selectedSourceId],
+    queryFn: () => Docs.getIndex({ project: projectName, sourceId: selectedSourceId }),
+    enabled: selectedSourceId.length > 0,
+    staleTime: 5 * 60 * 1000,
     retry: 2,
   });
 
-  // ── Cargar contenido del nodo seleccionado ─────────────────────────────────
+  // -- Cargar contenido del nodo seleccionado ---------------------------------
+  const selectedContentSourceId = selectedNode?.source_id ?? selectedSourceId;
   const {
     data: contentData,
     isLoading: contentLoading,
     error: contentError,
   } = useQuery({
-    queryKey: ["docs-content", selectedNode?.path],
-    queryFn: () => Docs.getContent(selectedNode!.path),
-    enabled: selectedNode !== null,
+    queryKey: ["docs-content", projectName ?? "active", selectedContentSourceId, selectedNode?.path],
+    queryFn: () =>
+      Docs.getContent(selectedNode!.path, {
+        project: projectName,
+        sourceId: selectedContentSourceId,
+      }),
+    enabled: selectedNode !== null && selectedNode.kind !== "folder",
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
 
-  // ── Selección de nodo ──────────────────────────────────────────────────────
+  // -- Selección de nodo ------------------------------------------------------
   const handleSelect = useCallback((node: DocNode, heading?: DocHeading) => {
     setSelectedNode(node);
-    // Si hay heading, scroll después de que el viewer cargue
-    // (se implementa mediante ancla en el DOM; el LinkRenderer del DocViewer maneja el scroll)
     if (heading) {
       setTimeout(() => {
         const el = document.getElementById(heading.anchor);
@@ -70,14 +105,14 @@ export default function DocsPage() {
     }
   }, []);
 
-  // ── Render: error de carga del índice ──────────────────────────────────────
-  if (indexError) {
+  const loadError = sourcesError || indexError;
+  if (loadError) {
     return (
       <div className={styles.page}>
         <div className={styles.errorState}>
           <p className={styles.errorTitle}>Error al cargar la documentación</p>
           <p className={styles.errorDetail}>
-            {indexError instanceof Error ? indexError.message : "Error de red"}
+            {loadError instanceof Error ? loadError.message : "Error de red"}
           </p>
           <p className={styles.errorHint}>
             Verificá que el backend esté corriendo en localhost:5050.
@@ -87,8 +122,7 @@ export default function DocsPage() {
     );
   }
 
-  // ── Render: cargando índice ────────────────────────────────────────────────
-  if (indexLoading) {
+  if (sourcesLoading || indexLoading || !selectedSourceId) {
     return (
       <div className={styles.page}>
         <div className={styles.loadingState}>
@@ -100,12 +134,38 @@ export default function DocsPage() {
   }
 
   const roots = indexData?.roots ?? [];
-  const totalDocs = roots.reduce((acc, r) => acc + r.children.length, 0);
+  const totalDocs = roots.reduce((acc, root) => acc + countDocFiles(root.children), 0);
+  const selectedProjectLabel =
+    sourcesData?.project_display_name || sourcesData?.active_project || activeProject?.display_name || "Proyecto";
 
   return (
     <div className={styles.page}>
-      {/* Panel izquierdo: búsqueda + árbol */}
       <aside className={styles.sidePanel}>
+        <div className={styles.sourceBox}>
+          <label className={styles.sourceLabel} htmlFor="docs-source">
+            Carpeta docs
+          </label>
+          <select
+            id="docs-source"
+            className={styles.sourceSelect}
+            value={selectedSourceId}
+            onChange={(e) => setSelectedSourceId(e.target.value)}
+          >
+            {sources.map((source) => (
+              <option key={source.id} value={source.id}>
+                {source.kind === "project-docs"
+                  ? `${selectedProjectLabel} / ${source.relative_path}`
+                  : source.label}
+              </option>
+            ))}
+          </select>
+          <div className={styles.sourceMeta} title={selectedSource?.absolute_path ?? ""}>
+            {selectedSource?.kind === "project-docs"
+              ? selectedSource.relative_path
+              : sourcesData?.note ?? "Documentación interna de Stacky"}
+          </div>
+        </div>
+
         <div className={styles.searchBox}>
           <input
             type="search"
@@ -130,7 +190,7 @@ export default function DocsPage() {
         <div className={styles.treeContainer}>
           {totalDocs === 0 ? (
             <div className={styles.emptyState}>
-              No se encontró documentación. Verificá la ruta configurada.
+              {sourcesData?.note ?? "No se encontró documentación. Verificá la ruta configurada."}
             </div>
           ) : (
             <DocTree
@@ -152,7 +212,6 @@ export default function DocsPage() {
         </div>
       </aside>
 
-      {/* Panel derecho: viewer */}
       <main className={styles.viewerPanel}>
         {selectedNode ? (
           <DocViewer
@@ -172,8 +231,7 @@ export default function DocsPage() {
             <div className={styles.welcomeIcon}>&#128196;</div>
             <p className={styles.welcomeTitle}>Seleccioná un documento</p>
             <p className={styles.welcomeSubtitle}>
-              {totalDocs} documento{totalDocs !== 1 ? "s" : ""} disponible{totalDocs !== 1 ? "s" : ""}.
-              Hacé click en un nodo del árbol para leerlo.
+              {totalDocs} documento{totalDocs !== 1 ? "s" : ""} disponible{totalDocs !== 1 ? "s" : ""} en la carpeta seleccionada.
             </p>
           </div>
         )}

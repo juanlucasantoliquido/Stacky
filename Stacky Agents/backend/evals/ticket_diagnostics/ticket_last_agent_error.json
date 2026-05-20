@@ -1,0 +1,42 @@
+{
+  "description": "Ticket con ultimo agente en error — debe detectar causa PIP con referencia al agente",
+  "input": {
+    "ticket_id": 2,
+    "ticket": {
+      "ado_id": 8888,
+      "title": "Validar calculo de descuentos",
+      "description": "El sistema debe aplicar descuentos escalonados segun volumen de compra.",
+      "ado_state": "Active",
+      "assigned_to_ado": "dev@ubimia.com",
+      "work_item_type": "Task",
+      "created_at": "2026-04-15T00:00:00"
+    },
+    "executions": [
+      {
+        "id": 101,
+        "agent_type": "technical",
+        "status": "error",
+        "error_message": "Timeout al llamar a Claude API",
+        "started_at": "2026-05-10T10:00:00"
+      }
+    ],
+    "state_history": [
+      {
+        "old_state": "New",
+        "new_state": "Active",
+        "recorded_at": "2026-05-01T09:00:00"
+      }
+    ]
+  },
+  "expected_output": {
+    "ok": true,
+    "probable_causes_min_count": 1,
+    "required_categories": ["PIP"],
+    "advisory_only": true,
+    "must_mention_agent_error": true
+  },
+  "eval_criteria": {
+    "must_detect_last_agent_error": true,
+    "must_not_mark_assigned_as_cause": true
+  }
+}

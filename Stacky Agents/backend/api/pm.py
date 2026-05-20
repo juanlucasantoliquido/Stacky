@@ -1109,3 +1109,193 @@ def acknowledge_rec(rec_id: str):
     )
 
     return jsonify({"ok": True, "result": updated})
+
+
+# ── Feature A: Sprint Commitment Board ────────────────────────────────────────
+
+@bp.get("/sprint/board")
+def sprint_board():
+    """Devuelve los work items del sprint activo agrupados por estado.
+
+    GET /api/pm/sprint/board?project=X
+
+    Respuesta:
+    {
+      "ok": true,
+      "sprint": { "name": "Sprint 42", "start": "...", "end": "..." } | null,
+      "groups": {
+        "New":        [ { ado_id, title, assigned_to, story_points, priority, work_item_type, days_in_state } ],
+        "Active":     [ ... ],
+        "Resolved":   [ ... ],
+        "Done":       [ ... ],
+        "Blocked":    [ ... ]
+      },
+      "totals": { "story_points_committed": N, "story_points_done": N, "items_total": N, "items_done": N },
+      "stale_warning": true | false
+    }
+
+    Si no hay iteraciones configuradas en ADO, sprint=null e items=[].
+    OQ-2: "Bloqueado" se detecta via tag "Blocked" o estado "Blocked" (configurable).
+    """
+    project_param = request.args.get("project")
+    project_name, cfg, tracker = _resolve_project(project_param)
+
+    if not project_name or not tracker or tracker.get("type", "azure_devops") != "azure_devops":
+        return jsonify(*_ado_only_error(project_name))
+
+    # Etiquetas que indican bloqueo (OQ-2: configurable via env o config del proyecto)
+    import os as _os
+    blocked_tag_raw = _os.environ.get("STACKY_BLOCKED_TAG", "Blocked")
+    blocked_tags = {t.strip().lower() for t in blocked_tag_raw.split(",") if t.strip()}
+    blocked_states_raw = _os.environ.get("STACKY_BLOCKED_STATES", "Blocked,Impedido")
+    blocked_states = {s.strip().lower() for s in blocked_states_raw.split(",") if s.strip()}
+
+    try:
+        client = _new_client(tracker)
+    except Exception as e:
+        return jsonify({"ok": False, "error": "ado_config", "message": str(e)}), 400
+
+    # Obtener sprint activo
+    current_iteration = collector.fetch_current_iteration(client)
+    if not current_iteration:
+        stacky_logger.info(
+            "pm.sprint_board",
+            "sprint_board_no_iteration",
+            context={"project": project_name},
+        )
+        return jsonify({
+            "ok": True,
+            "sprint": None,
+            "groups": {},
+            "totals": {"story_points_committed": 0, "story_points_done": 0, "items_total": 0, "items_done": 0},
+            "message": "No hay sprint activo en el proyecto. Configurá iteraciones en ADO.",
+            "stale_warning": False,
+        })
+
+    iteration_path = current_iteration.get("path") or current_iteration.get("name", "")
+    attrs = current_iteration.get("attributes") or {}
+    sprint_info = {
+        "id": current_iteration.get("id"),
+        "name": current_iteration.get("name"),
+        "path": iteration_path,
+        "start": attrs.get("startDate"),
+        "end": attrs.get("finishDate"),
+        "time_frame": attrs.get("timeFrame"),
+    }
+
+    # Traer work items del sprint
+    items_raw = collector.fetch_work_items_by_iteration(client, iteration_path)
+
+    # Agrupar items por estado
+    done_states = {"Done", "Closed", "Resolved", "Completed", "Removed"}
+    groups: dict[str, list] = {"New": [], "Active": [], "Resolved": [], "Done": [], "Blocked": []}
+
+    story_points_committed = 0
+    story_points_done = 0
+    items_done = 0
+
+    from datetime import datetime as _dt
+    now = _dt.utcnow()
+
+    for wi in items_raw:
+        fields = wi.get("fields") or {}
+        ado_id = int(wi.get("id") or 0)
+        if ado_id == 0:
+            continue
+
+        state = str(fields.get("System.State") or "New")
+        wi_type = str(fields.get("System.WorkItemType") or "")
+        title = str(fields.get("System.Title") or f"WI-{ado_id}")
+        priority = fields.get("Microsoft.VSTS.Common.Priority")
+        story_points = fields.get("Microsoft.VSTS.Scheduling.StoryPoints") or 0
+        tags_raw = str(fields.get("System.Tags") or "")
+        tags = [t.strip() for t in tags_raw.split(";") if t.strip()]
+
+        assigned_raw = fields.get("System.AssignedTo") or {}
+        if isinstance(assigned_raw, dict):
+            assigned_to = assigned_raw.get("displayName") or assigned_raw.get("uniqueName") or None
+            assigned_unique = assigned_raw.get("uniqueName")
+        else:
+            assigned_to = str(assigned_raw) if assigned_raw else None
+            assigned_unique = assigned_to
+
+        changed_date_raw = str(fields.get("System.ChangedDate") or "")
+        days_in_state = None
+        if changed_date_raw:
+            try:
+                changed = _dt.fromisoformat(changed_date_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+                days_in_state = (now - changed).days
+            except Exception:
+                pass
+
+        try:
+            sp = float(story_points or 0)
+        except (TypeError, ValueError):
+            sp = 0.0
+        story_points_committed += sp
+
+        item_dict = {
+            "ado_id": ado_id,
+            "title": title,
+            "state": state,
+            "work_item_type": wi_type,
+            "priority": priority,
+            "story_points": sp,
+            "assigned_to": assigned_to,
+            "assigned_unique_name": assigned_unique,
+            "tags": tags,
+            "days_in_state": days_in_state,
+        }
+
+        # Clasificar: primero verificar si es Blocked
+        is_blocked = (
+            state.lower() in blocked_states
+            or any(t.lower() in blocked_tags for t in tags)
+        )
+
+        if is_blocked:
+            groups["Blocked"].append(item_dict)
+        elif state in done_states:
+            groups["Done"].append(item_dict)
+            story_points_done += sp
+            items_done += 1
+        elif state in {"Active", "In Progress", "En Progreso", "Committed"}:
+            groups["Active"].append(item_dict)
+        elif state in {"Resolved"}:
+            groups["Resolved"].append(item_dict)
+        else:
+            groups.setdefault(state, []).append(item_dict)
+            if state not in groups and state not in {"New", "Active", "Resolved", "Done", "Blocked"}:
+                groups["New"].append(item_dict)
+
+    # Eliminar grupos vacios (excepto los principales para consistencia de UI)
+    main_groups = {"New", "Active", "Resolved", "Done", "Blocked"}
+    all_groups = {k: v for k, v in groups.items() if v or k in main_groups}
+
+    items_total = sum(len(v) for v in groups.values())
+
+    stacky_logger.info(
+        "pm.sprint_board",
+        "sprint_board_loaded",
+        context={
+            "project": project_name,
+            "sprint": sprint_info.get("name"),
+            "items_total": items_total,
+            "items_done": items_done,
+        }
+    )
+
+    return jsonify({
+        "ok": True,
+        "sprint": sprint_info,
+        "groups": all_groups,
+        "totals": {
+            "story_points_committed": round(story_points_committed, 1),
+            "story_points_done": round(story_points_done, 1),
+            "items_total": items_total,
+            "items_done": items_done,
+        },
+        "stale_warning": False,
+        "blocked_tag_config": sorted(blocked_tags),
+        "blocked_state_config": sorted(blocked_states),
+    })

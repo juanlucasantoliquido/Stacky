@@ -373,6 +373,9 @@ def _run_in_background(
                 md["pii_masked"] = bool(mask_map)
                 if ado_enrich_stats is not None:
                     md["ado_context"] = ado_enrich_stats
+                # Feature C: persistir agent_filename para el comparador de agentes
+                if "agent_filename" not in md and hasattr(agent, "filename"):
+                    md["agent_filename"] = agent.filename
                 row.metadata_dict = md
                 row.contract_result = cached.get("contract_result")
                 row.status = "completed"
@@ -476,6 +479,9 @@ def _run_in_background(
             md["pii_masked"] = bool(mask_map)
             if ado_enrich_stats is not None:
                 md["ado_context"] = ado_enrich_stats
+            # Feature C: persistir agent_filename para el comparador de agentes
+            if "agent_filename" not in md and hasattr(agent, "filename"):
+                md["agent_filename"] = agent.filename
             row.metadata_dict = md
             row.contract_result = cv_result.to_dict()
             row.status = "completed"

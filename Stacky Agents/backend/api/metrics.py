@@ -214,3 +214,134 @@ def agent_completion_metrics():
         "result_breakdown": result_breakdown,
         "last_events": last_events,
     })
+
+
+# ── Feature C: Comparador de Agentes ─────────────────────────────────────────
+
+@bp.get("/agent-comparison")
+def agent_comparison():
+    """Compara el rendimiento de agentes por filename en un periodo dado.
+
+    GET /api/metrics/agent-comparison?days=30&agent_type=developer
+
+    Agrega por agent_filename (desde metadata_json) y calcula:
+      - total_runs, approved_count, discarded_count, error_count
+      - approval_rate, avg_duration_ms, p95_duration_ms
+      - tickets_completed
+
+    agent_filename puede ser "unknown" para ejecuciones sin metadata.
+    Se muestra badge de advertencia si total_runs < 10 (baja significancia estadistica).
+    """
+    from models import AgentExecution
+    from sqlalchemy import func
+
+    try:
+        days = int(request.args.get("days", 30))
+    except (ValueError, TypeError):
+        days = 30
+    agent_type_filter = request.args.get("agent_type") or None
+
+    since_dt = datetime.utcnow() - timedelta(days=days)
+
+    with session_scope() as session:
+        q = session.query(AgentExecution).filter(
+            AgentExecution.started_at >= since_dt,
+            AgentExecution.status.in_(["completed", "error", "cancelled", "discarded"]),
+        )
+        if agent_type_filter:
+            q = q.filter(AgentExecution.agent_type == agent_type_filter)
+
+        executions = q.all()
+
+    # Agrupar por agent_filename desde metadata_json
+    grouped: dict[str, dict] = {}
+    for ex in executions:
+        md = _parse_context(ex.metadata_json)
+        filename = md.get("agent_filename") or md.get("vscode_agent_filename") or "unknown"
+        agent_type = ex.agent_type or "unknown"
+
+        key = filename
+        if key not in grouped:
+            grouped[key] = {
+                "filename": filename,
+                "agent_type": agent_type,
+                "total_runs": 0,
+                "approved_count": 0,
+                "discarded_count": 0,
+                "error_count": 0,
+                "cancelled_count": 0,
+                "tickets_completed": set(),
+                "duration_ms_values": [],
+            }
+
+        grouped[key]["total_runs"] += 1
+
+        verdict = (ex.verdict or "").lower()
+        status = (ex.status or "").lower()
+
+        if verdict == "approved":
+            grouped[key]["approved_count"] += 1
+        elif verdict == "discarded" or status == "discarded":
+            grouped[key]["discarded_count"] += 1
+        elif status == "error":
+            grouped[key]["error_count"] += 1
+        elif status == "cancelled":
+            grouped[key]["cancelled_count"] += 1
+
+        # Contar tickets completados (ejecuciones que derivaron en status completado)
+        if status == "completed":
+            grouped[key]["tickets_completed"].add(ex.ticket_id)
+
+        dur = ex.duration_ms()
+        if dur is not None:
+            grouped[key]["duration_ms_values"].append(dur)
+
+    # Calcular metricas finales
+    agents_result = []
+    for key, g in grouped.items():
+        total = g["total_runs"]
+        durations = sorted(g["duration_ms_values"])
+        avg_dur = round(sum(durations) / len(durations), 0) if durations else None
+
+        # Estimacion p95 (percentil 95)
+        if len(durations) >= 5:
+            idx = int(len(durations) * 0.95)
+            p95_dur = durations[min(idx, len(durations) - 1)]
+        else:
+            p95_dur = max(durations) if durations else None
+
+        approval_rate = round(g["approved_count"] / total, 4) if total > 0 else 0.0
+
+        agents_result.append({
+            "filename": g["filename"],
+            "agent_type": g["agent_type"],
+            "total_runs": total,
+            "approved_count": g["approved_count"],
+            "discarded_count": g["discarded_count"],
+            "error_count": g["error_count"],
+            "cancelled_count": g["cancelled_count"],
+            "approval_rate": approval_rate,
+            "avg_duration_ms": avg_dur,
+            "p95_duration_ms": p95_dur,
+            "tickets_completed": len(g["tickets_completed"]),
+            # Advertencia de baja significancia estadistica
+            "low_sample_warning": total < 10,
+        })
+
+    # Ordenar por approval_rate descendente
+    agents_result.sort(key=lambda a: a["approval_rate"], reverse=True)
+
+    # Marcar el mejor
+    if agents_result:
+        agents_result[0]["is_best"] = True
+        for a in agents_result[1:]:
+            a["is_best"] = False
+
+    return jsonify({
+        "ok": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "period_days": days,
+        "agent_type": agent_type_filter,
+        "agents": agents_result,
+        "total_executions": sum(a["total_runs"] for a in agents_result),
+    })

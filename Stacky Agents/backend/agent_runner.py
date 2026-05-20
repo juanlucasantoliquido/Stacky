@@ -40,6 +40,7 @@ def run_agent(
     fingerprint_complexity: str | None = None,
     delta_prefix: str | None = None,
     previous_execution_id: int | None = None,
+    runtime: str = "github_copilot",
 ) -> int:
     agent = agents.get(agent_type)
     if agent is None:
@@ -85,8 +86,124 @@ def run_agent(
             "pack_step": pack_step,
             "model_override": model_override,
             "chain_from": chain_from,
+            "runtime": runtime,
         },
     )
+
+    # Despachar al runner correcto según el runtime seleccionado por el operador.
+    # github_copilot: runner estándar (copilot_bridge + LLM router).
+    # codex_cli: Codex CLI runner (subprocess + streaming JSON).
+    # claude_code_cli: Claude Code CLI runner (subprocess + streaming JSON).
+    #
+    # Los runners CLI crean su propio thread interno y devuelven execution_id
+    # directamente; no pasan por _run_in_background del github_copilot path.
+    # Si el CLI no está instalado (FileNotFoundError) o el runner lanza
+    # NotImplementedError, se hace fallback a github_copilot con warning
+    # estructurado — nunca se crashea la ejecución.
+    if runtime == "codex_cli":
+        import logging as _log_codex
+        _runner_logger = _log_codex.getLogger("stacky_agents.agent_runner")
+        try:
+            from services.codex_cli_runner import start_codex_cli_run
+
+            with session_scope() as _cs:
+                _ct = _cs.get(Ticket, ticket_id)
+                _vscode_filename = (
+                    (agent.filename if hasattr(agent, "filename") else None)
+                    or f"{agent_type}.agent.md"
+                )
+                _ticket_message = _ct.title if _ct else f"ticket_id={ticket_id}"
+
+            log_streamer.close(execution_id)  # codex_cli_runner abre su propio log_streamer
+            _new_exec_id = start_codex_cli_run(
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                context_blocks=context_blocks,
+                user=user,
+                vscode_agent_filename=_vscode_filename,
+                ticket_message=_ticket_message,
+                workspace_root=None,
+                model_override=model_override,
+            )
+            # start_codex_cli_run crea su propia fila de ejecución; la fila
+            # original creada aquí queda marcada como reemplazada para evitar
+            # rows huérfanas.
+            with session_scope() as _cs2:
+                _orig = _cs2.get(AgentExecution, execution_id)
+                if _orig is not None:
+                    _orig.status = "cancelled"
+                    _orig.error_message = f"replaced_by={_new_exec_id} (codex_cli)"
+                    _orig.completed_at = datetime.utcnow()
+            return _new_exec_id
+        except FileNotFoundError as _fnf:
+            _runner_logger.warning(
+                "execution_id=%s: codex CLI no encontrado en PATH (%s). "
+                "Fallback a github_copilot.",
+                execution_id, _fnf,
+            )
+            log_streamer.push(execution_id, "warn",
+                f"codex CLI no instalado ({_fnf}) — fallback a github_copilot")
+        except NotImplementedError as _nie:
+            _runner_logger.warning(
+                "execution_id=%s: codex_cli_runner NotImplementedError (%s). "
+                "Fallback a github_copilot.",
+                execution_id, _nie,
+            )
+            log_streamer.push(execution_id, "warn",
+                f"codex_cli runner no disponible — fallback a github_copilot")
+        # Si llegamos aquí: continúa hacia el thread github_copilot abajo.
+
+    elif runtime == "claude_code_cli":
+        import logging as _log_claude
+        _runner_logger = _log_claude.getLogger("stacky_agents.agent_runner")
+        try:
+            from services.claude_code_cli_runner import start_claude_code_cli_run
+
+            with session_scope() as _cs:
+                _ct = _cs.get(Ticket, ticket_id)
+                _vscode_filename = (
+                    (agent.filename if hasattr(agent, "filename") else None)
+                    or f"{agent_type}.agent.md"
+                )
+                _ticket_message = _ct.title if _ct else f"ticket_id={ticket_id}"
+
+            log_streamer.close(execution_id)  # claude_code_cli_runner abre su propio log_streamer
+            _new_exec_id = start_claude_code_cli_run(
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                context_blocks=context_blocks,
+                user=user,
+                vscode_agent_filename=_vscode_filename,
+                ticket_message=_ticket_message,
+                workspace_root=None,
+                model_override=model_override,
+            )
+            # Misma lógica que codex_cli: la fila original queda marcada.
+            with session_scope() as _cs2:
+                _orig = _cs2.get(AgentExecution, execution_id)
+                if _orig is not None:
+                    _orig.status = "cancelled"
+                    _orig.error_message = f"replaced_by={_new_exec_id} (claude_code_cli)"
+                    _orig.completed_at = datetime.utcnow()
+            return _new_exec_id
+        except FileNotFoundError as _fnf:
+            _runner_logger.warning(
+                "execution_id=%s: Claude Code CLI no encontrado en PATH (%s). "
+                "Fallback a github_copilot.",
+                execution_id, _fnf,
+            )
+            log_streamer.push(execution_id, "warn",
+                f"Claude Code CLI no instalado ({_fnf}) — fallback a github_copilot")
+        except NotImplementedError as _nie:
+            _runner_logger.warning(
+                "execution_id=%s: claude_code_cli_runner NotImplementedError (%s). "
+                "Fallback a github_copilot.",
+                execution_id, _nie,
+            )
+            log_streamer.push(execution_id, "warn",
+                f"claude_code_cli runner no disponible — fallback a github_copilot")
+        # Si llegamos aquí: continúa hacia el thread github_copilot abajo.
+    # else: github_copilot → flujo estándar sin cambios.
 
     thread = threading.Thread(
         target=_run_in_background,
@@ -98,6 +215,7 @@ def run_agent(
             "use_anti_patterns": use_anti_patterns,
             "fingerprint_complexity": fingerprint_complexity,
             "delta_prefix": delta_prefix,
+            "runtime": runtime,
         },
         daemon=True,
     )
@@ -179,6 +297,7 @@ def _run_in_background(
     use_anti_patterns: bool = True,
     fingerprint_complexity: str | None = None,
     delta_prefix: str | None = None,
+    runtime: str = "github_copilot",
 ) -> None:
     log = log_streamer.logger_for(execution_id)
     agent = agents.get(agent_type)
@@ -371,6 +490,7 @@ def _run_in_background(
                 md["from_cache"] = True
                 md["cache_key"] = cached["cache_key"]
                 md["pii_masked"] = bool(mask_map)
+                md["runtime"] = runtime
                 if ado_enrich_stats is not None:
                     md["ado_context"] = ado_enrich_stats
                 # Feature C: persistir agent_filename para el comparador de agentes
@@ -477,6 +597,7 @@ def _run_in_background(
             md["confidence"] = conf.to_dict()
             md["routing_reason"] = decision.reason
             md["pii_masked"] = bool(mask_map)
+            md["runtime"] = runtime
             if ado_enrich_stats is not None:
                 md["ado_context"] = ado_enrich_stats
             # Feature C: persistir agent_filename para el comparador de agentes

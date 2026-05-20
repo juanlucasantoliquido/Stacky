@@ -6,7 +6,7 @@ import type { AgentType, ContextBlock } from "../types";
 
 export function useAgentRun() {
   const qc = useQueryClient();
-  const { setRunningExecution, setActiveExecution, modelOverride, systemPromptOverride } =
+  const { setRunningExecution, setActiveExecution, modelOverride, systemPromptOverride, agentRuntime } =
     useWorkbench();
 
   return useMutation({
@@ -20,6 +20,7 @@ export function useAgentRun() {
         ...payload,
         model_override: modelOverride,
         system_prompt_override: systemPromptOverride,
+        runtime: agentRuntime,
       }),
     onSuccess: (data) => {
       setRunningExecution(data.execution_id);

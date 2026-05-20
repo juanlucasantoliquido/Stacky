@@ -1,4 +1,4 @@
-import { Github, TerminalSquare } from "lucide-react";
+import { Github, TerminalSquare, Terminal } from "lucide-react";
 import type { AgentRuntime } from "../types";
 import styles from "./AgentRuntimeSelector.module.css";
 
@@ -20,6 +20,12 @@ const OPTIONS: { value: AgentRuntime; label: string; title: string; icon: typeof
     label: "Codex CLI",
     title: "Ejecutar el agente con Codex CLI y logs en Stacky",
     icon: TerminalSquare,
+  },
+  {
+    value: "claude_code_cli",
+    label: "Claude Code",
+    title: "Ejecutar el agente con Claude Code CLI y logs en Stacky",
+    icon: Terminal,
   },
 ];
 

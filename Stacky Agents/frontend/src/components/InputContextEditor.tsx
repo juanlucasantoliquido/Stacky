@@ -4,6 +4,7 @@ import { useAgentRun } from "../hooks/useAgentRun";
 import { useOpenChat } from "../hooks/useOpenChat";
 import { useWorkbench } from "../store/workbench";
 import type { ContextBlock } from "../types";
+import AgentRuntimeSelector from "./AgentRuntimeSelector";
 import CostPreview from "./CostPreview";
 import ModelPicker from "./ModelPicker";
 import RunButton from "./RunButton";
@@ -23,6 +24,8 @@ export default function InputContextEditor() {
     removeBlock,
     runningExecutionId,
     vsCodeAgent,
+    agentRuntime,
+    setAgentRuntime,
   } = useWorkbench();
   const run = useAgentRun();
   const openChat = useOpenChat();
@@ -108,6 +111,11 @@ export default function InputContextEditor() {
           <CostPreview agentType={activeAgentType} blocks={blocks} />
         </div>
         <div className={styles.footRight}>
+          <AgentRuntimeSelector
+            value={agentRuntime}
+            onChange={setAgentRuntime}
+            disabled={run.isPending || runningExecutionId != null}
+          />
           {vsCodeAgent && (
             <button
               className={styles.chatBtn}

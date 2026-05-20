@@ -49,6 +49,12 @@ class Config:
     CODEX_CLI_MODEL = os.getenv("CODEX_CLI_MODEL", "")
     CODEX_CLI_SANDBOX = os.getenv("CODEX_CLI_SANDBOX", "danger-full-access")
     CODEX_CLI_APPROVAL = os.getenv("CODEX_CLI_APPROVAL", "never")
+
+    # Claude Code CLI runtime
+    CLAUDE_CODE_CLI_BIN = os.getenv("CLAUDE_CODE_CLI_BIN", "claude")
+    CLAUDE_CODE_CLI_MODEL = os.getenv("CLAUDE_CODE_CLI_MODEL", "")
+    # Timeout en segundos para una ejecución completa de Claude Code CLI.
+    CLAUDE_CODE_CLI_TIMEOUT = int(os.getenv("CLAUDE_CODE_CLI_TIMEOUT", "600"))
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",

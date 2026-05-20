@@ -375,6 +375,8 @@ export const Agents = {
     use_few_shot?: boolean;
     use_anti_patterns?: boolean;
     fingerprint_complexity?: string | null;
+    /** Runtime de ejecución: github_copilot | codex_cli | claude_code_cli */
+    runtime?: import("../types").AgentRuntime;
   }) => api.post<{ execution_id: number; status: string }>("/api/agents/run", payload),
   openChat: (payload: {
     ticket_id: number;

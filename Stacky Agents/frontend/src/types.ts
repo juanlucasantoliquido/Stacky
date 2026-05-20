@@ -6,6 +6,9 @@ export type AgentType =
   | "qa"
   | "custom";
 
+/** Runtime de ejecución del agente. Controla cómo se lanza la corrida. */
+export type AgentRuntime = "github_copilot" | "codex_cli" | "claude_code_cli";
+
 export interface VsCodeAgent {
   name: string;
   filename: string;

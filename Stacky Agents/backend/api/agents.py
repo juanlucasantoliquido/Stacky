@@ -91,6 +91,9 @@ def vscode_agent_history(filename: str):
         return jsonify(result)
 
 
+_VALID_RUNTIMES = {"github_copilot", "codex_cli", "claude_code_cli"}
+
+
 @bp.post("/run")
 def run():
     payload = request.get_json(force=True, silent=True) or {}
@@ -98,6 +101,11 @@ def run():
     ticket_id = payload.get("ticket_id")
     context_blocks = payload.get("context_blocks") or []
     chain_from = payload.get("chain_from") or []
+    # Runtime seleccionado por el operador — default github_copilot para retrocompatibilidad
+    runtime: str = payload.get("runtime") or "github_copilot"
+    if runtime not in _VALID_RUNTIMES:
+        logger.warning("runtime desconocido '%s', usando github_copilot por defecto", runtime)
+        runtime = "github_copilot"
 
     if not agent_type:
         abort(400, "agent_type is required")
@@ -134,11 +142,12 @@ def run():
             fingerprint_complexity=payload.get("fingerprint_complexity"),
             delta_prefix=delta_system_prefix,                           # FA-32
             previous_execution_id=int(prev_exec_id) if prev_exec_id else None,
+            runtime=runtime,
         )
     except agent_runner.UnknownAgentError:
         abort(400, f"unknown agent_type: {agent_type}")
 
-    return jsonify({"execution_id": execution_id, "status": "running"}), 202
+    return jsonify({"execution_id": execution_id, "status": "running", "runtime": runtime}), 202
 
 
 @bp.post("/route")

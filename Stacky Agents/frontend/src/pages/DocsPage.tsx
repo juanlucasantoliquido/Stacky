@@ -153,14 +153,18 @@ export default function DocsPage() {
           >
             {sources.map((source) => (
               <option key={source.id} value={source.id}>
-                {source.kind === "project-docs"
+                {source.configured
+                  ? source.label
+                  : source.kind === "project-docs"
                   ? `${selectedProjectLabel} / ${source.relative_path}`
                   : source.label}
               </option>
             ))}
           </select>
           <div className={styles.sourceMeta} title={selectedSource?.absolute_path ?? ""}>
-            {selectedSource?.kind === "project-docs"
+            {selectedSource?.configured
+              ? selectedSource.absolute_path
+              : selectedSource?.kind === "project-docs"
               ? selectedSource.relative_path
               : sourcesData?.note ?? "Documentación interna de Stacky"}
           </div>

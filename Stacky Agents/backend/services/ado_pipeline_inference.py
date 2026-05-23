@@ -172,12 +172,18 @@ def _strip_html(html: str) -> str:
 # Construcción del contexto ADO
 # ---------------------------------------------------------------------------
 
-def _build_ticket_context(ado_id: int) -> str:
+def _build_ticket_context(
+    ado_id: int,
+    *,
+    project_name: str | None = None,
+    tracker_project: str | None = None,
+) -> str:
     """Fetches full ticket data from ADO and returns a text block for the LLM."""
-    from services.ado_client import AdoClient, AdoApiError
+    from services.ado_client import AdoApiError
+    from services.project_context import build_ado_client
 
     try:
-        client = AdoClient()
+        client = build_ado_client(project_name=project_name, tracker_project=tracker_project)
     except Exception as e:
         raise RuntimeError(f"No se pudo crear AdoClient: {e}") from e
 
@@ -314,6 +320,8 @@ def infer_pipeline(
     ado_id: int,
     force_refresh: bool = False,
     model: str | None = None,
+    project_name: str | None = None,
+    tracker_project: str | None = None,
 ) -> PipelineInferenceResult:
     """
     Infiere el estado del pipeline para un ticket ADO.
@@ -346,7 +354,11 @@ def infer_pipeline(
 
     # 2. Fetch context from ADO
     logger.info("Pipeline inference: fetching ADO-%s context", ado_id)
-    ticket_context = _build_ticket_context(ado_id)
+    ticket_context = _build_ticket_context(
+        ado_id,
+        project_name=project_name,
+        tracker_project=tracker_project,
+    )
 
     # 3. Call LLM
     logger.info("Pipeline inference: calling LLM (%s) for ADO-%s", effective_model, ado_id)

@@ -17,6 +17,7 @@ export default function TeamScreen() {
 
   // ─── Fuente de verdad: store, no localStorage ──────────────────────────────
   const activeProject = useWorkbench((s) => s.activeProject);
+  const activeProjectName = activeProject?.name ?? null;
   const pinned = useWorkbench((s) => s.pinnedAgents);
   const setPinnedAgents = useWorkbench((s) => s.setPinnedAgents);
   const teamLoading = useWorkbench((s) => s.teamLoading);
@@ -39,8 +40,8 @@ export default function TeamScreen() {
   // Running status — quién está trabajando ahora
   const { runningByTicket } = useRunningStatus();
   const { data: tickets } = useQuery<Ticket[]>({
-    queryKey: ["tickets"],
-    queryFn: Tickets.list,
+    queryKey: ["tickets", activeProjectName],
+    queryFn: () => Tickets.list(activeProjectName),
     staleTime: 60_000,
   });
   const ticketById = useMemo<Map<number, Ticket>>(

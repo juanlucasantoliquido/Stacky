@@ -513,6 +513,16 @@
 .modalTextarea::placeholder { color: rgba(255,255,255,0.25); }
 .modalTextarea:focus { border-color: rgba(99,102,241,0.6); }
 .modalEmpty { font-size: 12px; color: rgba(255,255,255,0.35); font-style: italic; margin: 0; }
+.modalError {
+  margin: 14px 20px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(248,113,113,0.35);
+  background: rgba(248,113,113,0.1);
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .modalActions {
   display: flex; justify-content: flex-end; gap: 10px;
   padding: 16px 20px 18px;

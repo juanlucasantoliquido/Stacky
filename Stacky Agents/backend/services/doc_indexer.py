@@ -382,6 +382,49 @@ def _source_id_for_project_docs(relative_path: str) -> str:
     return f"{PROJECT_DOC_SOURCE_PREFIX}{relative_path}"
 
 
+def _configured_project_doc_sources(project_cfg: dict[str, Any] | None) -> tuple[list[dict[str, Any]], str | None]:
+    """Devuelve fuentes explícitas docs_paths si fueron configuradas."""
+    if not project_cfg:
+        return [], None
+
+    docs_paths = project_cfg.get("docs_paths") or {}
+    if not isinstance(docs_paths, dict):
+        return [], None
+
+    specs = (
+        ("technical", "📐 Técnica"),
+        ("functional", "📋 Funcional / Manual"),
+    )
+    sources: list[dict[str, Any]] = []
+    for key, label in specs:
+        raw_path = str(docs_paths.get(key) or "").strip()
+        if not raw_path:
+            continue
+        try:
+            resolved = Path(raw_path).expanduser().resolve()
+        except OSError:
+            resolved = Path(raw_path).expanduser().absolute()
+        sources.append(
+            {
+                "id": _source_id_for_project_docs(key),
+                "kind": "project-docs",
+                "label": label,
+                "relative_path": key,
+                "display_prefix": label,
+                "absolute_path": str(resolved),
+                "project": project_cfg.get("name"),
+                "workspace_root": project_cfg.get("workspace_root"),
+                "configured": True,
+                "docs_path_kind": key,
+                "available": resolved.is_dir(),
+            }
+        )
+
+    if not sources:
+        return [], None
+    return sources, None
+
+
 def _discover_project_doc_sources(project_cfg: dict[str, Any] | None) -> tuple[list[dict[str, Any]], str | None]:
     """Descubre carpetas llamadas docs dentro del workspace del proyecto."""
     workspace = _workspace_from_project_config(project_cfg)
@@ -469,7 +512,9 @@ def list_doc_sources(project_name: str | None = None) -> dict[str, Any]:
         "workspace_root": str(STACKY_AGENTS_ROOT.resolve()),
     }
 
-    project_sources, note = _discover_project_doc_sources(project_cfg)
+    project_sources, note = _configured_project_doc_sources(project_cfg)
+    if not project_sources:
+        project_sources, note = _discover_project_doc_sources(project_cfg)
     default_source_id = project_sources[0]["id"] if project_sources else STACKY_SOURCE_ID
 
     return {
@@ -502,27 +547,33 @@ def build_project_docs_index(
     """Construye un arbol recursivo para una carpeta docs de proyecto."""
     source, sources_info = _resolve_project_doc_source(project_name, source_id)
     selected_source_id = source["id"]
-    cache_key = ("project-docs", sources_info.get("active_project") or "", selected_source_id)
+    cache_key = (
+        "project-docs",
+        sources_info.get("active_project") or "",
+        selected_source_id,
+        source.get("absolute_path") or "",
+    )
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
     root_dir = Path(source["absolute_path"]).resolve()
     rel = source["relative_path"]
+    display_prefix = source.get("display_prefix") or rel
     children = _index_markdown_tree(
         root_dir,
         source_id=selected_source_id,
-        display_prefix=rel,
+        display_prefix=display_prefix,
     )
     file_count = _count_files(children)
 
     label_project = sources_info.get("project_display_name") or sources_info.get("active_project") or "Proyecto"
     root = {
         "id": "project-docs",
-        "label": f"{label_project} / {rel}",
+        "label": source.get("label") or f"{label_project} / {rel}",
         "source_id": selected_source_id,
         "path": rel,
-        "display_path": rel,
+        "display_path": display_prefix,
         "children": children,
     }
     if file_count == 0:

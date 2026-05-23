@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { VsCodeAgent, Ticket } from "../types";
-import { Agents, Tickets } from "../api/endpoints";
+import { Projects, Tickets } from "../api/endpoints";
+import { useWorkbench } from "../store/workbench";
+import {
+  humanizeAgentLaunchError,
+  launchAgentWithRuntime,
+  launchInProgressLabel,
+} from "../services/agentLaunch";
+import AgentRuntimeSelector from "./AgentRuntimeSelector";
 import PixelAvatar from "./PixelAvatar";
 import styles from "./AgentLaunchModal.module.css";
 
 interface TicketComment { author: string; date: string; text: string; }
-
-// Endpoint del bridge de la extensión VS Code (Stacky Agents).
-// Solo lo usamos para el health-check informativo: la llamada real a /open-chat
-// va por el backend Flask vía `Agents.openChat()`.
-const BRIDGE_BASE = "http://localhost:5052";
 
 type BridgeStatus = "unknown" | "checking" | "ready" | "down";
 
@@ -31,31 +33,28 @@ interface AgentLaunchModalProps {
 /**
  * Health-check del bridge de la extensión VS Code.
  *
- * Pega a `GET http://localhost:5052/health` (CORS abierto en la extensión).
- * Devuelve `true` solo si el bridge responde 200 — diferenciamos esto
+ * Consulta el estado del bridge del proyecto activo vía backend.
+ * Devuelve `true` solo si el bridge responde healthy — diferenciamos esto
  * explícitamente del flujo de POST /open-chat para evitar falsos positivos
  * del banner "extensión no está activa" cuando el problema real es otro
  * (CORS, timeout puntual, payload mal armado, ticket inexistente, etc.).
  *
- * Timeout corto (1.5s) — si no responde rápido, asumimos que está caído.
  * No expone errores: cualquier fallo → false.
  */
-async function checkBridgeHealth(): Promise<boolean> {
+async function checkBridgeHealth(projectName: string | null): Promise<boolean> {
+  if (!projectName) return false;
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 1500);
-    const res = await fetch(`${BRIDGE_BASE}/health`, {
-      method: "GET",
-      signal: ctrl.signal,
-    });
-    clearTimeout(t);
-    return res.ok;
+    const status = await Projects.vscodeStatus(projectName);
+    return status.ready === true;
   } catch {
     return false;
   }
 }
 
 export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentLaunchModalProps) {
+  const agentRuntime = useWorkbench((s) => s.agentRuntime);
+  const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
+  const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
   const [query, setQuery] = useState("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [filtered, setFiltered] = useState<Ticket[]>([]);
@@ -72,7 +71,7 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
 
   // load tickets once + initial bridge health probe (informativo, no bloqueante)
   useEffect(() => {
-    Tickets.list().then((t) => {
+    Tickets.list(activeProjectName).then((t) => {
       setTickets(t);
       setFiltered(t.slice(0, 20));
     }).catch(() => {});
@@ -82,10 +81,10 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
     // que NO bloquea seleccionar ticket ni escribir mensaje. El usuario puede
     // levantar VS Code mientras prepara la asignación.
     setBridgeStatus("checking");
-    checkBridgeHealth().then((ok) => {
+    checkBridgeHealth(activeProjectName).then((ok) => {
       setBridgeStatus(ok ? "ready" : "down");
     });
-  }, []);
+  }, [activeProjectName]);
 
   // debounced filter
   useEffect(() => {
@@ -125,7 +124,7 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
    */
   async function retryBridgeProbe() {
     setBridgeStatus("checking");
-    const ok = await checkBridgeHealth();
+    const ok = await checkBridgeHealth(activeProjectName);
     setBridgeStatus(ok ? "ready" : "down");
     if (ok) setError(null);
   }
@@ -179,14 +178,6 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
     setError(null);
 
     try {
-      // Routing correcto: vamos al backend Flask, NO directo al bridge.
-      // El backend (`/api/agents/open-chat`) ya:
-      //   1. Levanta el ticket de la DB con todos los metadatos
-      //   2. Enriquece con comentarios + adjuntos de ADO
-      //   3. Llama al bridge desde el server (sin CORS browser)
-      //   4. Devuelve errores HTTP granulares (503/504/502)
-      // El message adicional opcional se manda como un context_block libre
-      // siguiendo el shape de `ContextBlock` (ver `frontend/src/types.ts`).
       const contextBlocks = message.trim()
         ? [
             {
@@ -199,20 +190,29 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
           ]
         : [];
 
-      await Agents.openChat({
-        ticket_id: selected.id,
-        context_blocks: contextBlocks,
-        vscode_agent_filename: agent.filename,
+      await launchAgentWithRuntime({
+        ticketId: selected.id,
+        projectName: activeProjectName,
+        runtime: agentRuntime,
+        contextBlocks,
+        vscodeAgent: agent,
       });
       setSuccess(true);
-      // Bridge respondió OK → confirmamos status para el banner
-      setBridgeStatus("ready");
+      if (agentRuntime === "github_copilot") {
+        setBridgeStatus("ready");
+      }
       setTimeout(onClose, 1200);
     } catch (e) {
-      setError(mapBackendError(String(e)));
-      // Si el backend dijo 503, también marcamos el bridge como down
-      // para que el banner permanezco hasta el próximo retry.
-      if (String(e).includes("503")) {
+      if (agentRuntime === "github_copilot") {
+        setError(mapBackendError(String(e)));
+      } else {
+        setError({
+          kind: "unknown",
+          message: humanizeAgentLaunchError(e),
+          detail: String(e),
+        });
+      }
+      if (agentRuntime === "github_copilot" && String(e).includes("503")) {
         setBridgeStatus("down");
       }
     } finally {
@@ -240,8 +240,16 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
           <button className={styles.closeBtn} onClick={onClose} title="Cerrar">✕</button>
         </div>
 
+        <div className={styles.runtimeSection}>
+          <AgentRuntimeSelector
+            value={agentRuntime}
+            onChange={setAgentRuntime}
+            disabled={loading || success}
+          />
+        </div>
+
         {/* Aviso suave si el bridge está caído (no bloquea selección) */}
-        {bridgeStatus === "down" && !error && (
+        {agentRuntime === "github_copilot" && bridgeStatus === "down" && !error && (
           <div className={styles.warning} role="status">
             <span>
               VS Code no está conectado al bridge de Stacky. Podés seleccionar el ticket; cuando abras VS Code reintentá.
@@ -320,7 +328,13 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
             onClick={handleLaunch}
             disabled={!selected || loading || success}
           >
-            {success ? "✓ Abriendo…" : loading ? "Enviando…" : "OK — Abrir en VS Code Chat"}
+            {success
+              ? "✓ Iniciado"
+              : loading
+              ? launchInProgressLabel(agentRuntime)
+              : agentRuntime === "github_copilot"
+              ? "OK — Abrir en GitHub Copilot"
+              : "▶ Lanzar ejecución"}
           </button>
         </div>
       </div>

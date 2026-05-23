@@ -60,6 +60,10 @@ const EXTENSION_VERSION = "0.3.4";
 let statusBar;
 let _bridgeServer;
 let _bridgeStartedAt = 0;
+function currentWorkspaceRoot() {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    return folder?.uri?.fsPath ?? null;
+}
 function api() {
     return vscode.workspace.getConfiguration("stackyAgents").get("apiBase", "http://localhost:5050");
 }
@@ -273,9 +277,7 @@ async function _handleOpenChat(body, res) {
                 try {
                     await Promise.race([
                         vscode.commands.executeCommand(cmd),
-                        new Promise((_, reject) =>
-                            setTimeout(() => reject(new Error(`timeout: ${cmd}`)), 3000)
-                        ),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout: ${cmd}`)), 3000)),
                     ]);
                     console.log(`[Stacky] /open-chat new chat OK: ${cmd}`);
                     break;
@@ -349,6 +351,8 @@ function _startBridgeServer() {
                 version: EXTENSION_VERSION,
                 copilotChatVersion: copilotExt?.packageJSON?.version ?? null,
                 uptimeSeconds: Math.round((Date.now() - _bridgeStartedAt) / 1000),
+                bridgePort: port,
+                workspace_root: currentWorkspaceRoot(),
             }));
             return;
         }

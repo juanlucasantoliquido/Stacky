@@ -45,49 +45,57 @@ export function SyncStatusBar({
 
   if (isSyncing) {
     return (
-      <div className={styles.bar}>
-        <span className={styles.spinner} />
-        <span className={styles.label}>Sincronizando con ADO...</span>
+      <div className={styles.wrap}>
+        <div className={`${styles.bar} ${styles.toneNeutral}`}>
+          <span className={styles.spinner} />
+          <span className={styles.label}>Sincronizando con ADO…</span>
+        </div>
       </div>
     );
   }
 
   if (syncError) {
     return (
-      <div className={styles.bar}>
-        <span className={`${styles.dot} ${styles.red}`} />
-        <span className={`${styles.label} ${styles.labelError}`}>
-          Error de sincronizacion: {syncError.slice(0, 80)}
-        </span>
-        <button className={styles.btn} onClick={onSyncClick}>
-          Reintentar
-        </button>
+      <div className={styles.wrap}>
+        <div className={`${styles.bar} ${styles.toneDanger}`}>
+          <span className={`${styles.dot} ${styles.red}`} />
+          <span className={`${styles.label} ${styles.labelError}`} title={syncError}>
+            Error de sincronización
+          </span>
+          <button className={styles.btn} onClick={onSyncClick}>
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }
 
   if (!lastSyncedAt || secondsSinceSync === null) {
     return (
-      <div className={styles.bar}>
-        <span className={`${styles.dot} ${styles.yellow}`} />
-        <span className={styles.label}>Sin sincronizar</span>
-        <button className={styles.btn} onClick={onSyncClick}>
-          Sincronizar ADO
-        </button>
+      <div className={styles.wrap}>
+        <div className={`${styles.bar} ${styles.toneNeutral}`}>
+          <span className={`${styles.dot} ${styles.yellow}`} />
+          <span className={styles.label}>Sin sincronizar</span>
+          <button className={styles.btn} onClick={onSyncClick}>
+            Sincronizar
+          </button>
+        </div>
       </div>
     );
   }
 
   if (isStale) {
     return (
-      <div className={styles.bar}>
-        <span className={`${styles.dot} ${styles.red}`} />
-        <span className={`${styles.label} ${styles.labelStale}`}>
-          Sin actualizar hace {formatSeconds(secondsSinceSync)} — datos pueden estar desactualizados
-        </span>
-        <button className={styles.btn} onClick={onSyncClick}>
-          Sincronizar ahora
-        </button>
+      <div className={styles.wrap}>
+        <div className={`${styles.bar} ${styles.toneWarning}`}>
+          <span className={`${styles.dot} ${styles.red}`} />
+          <span className={`${styles.label} ${styles.labelStale}`}>
+            Sin actualizar hace {formatSeconds(secondsSinceSync)}
+          </span>
+          <button className={styles.btn} onClick={onSyncClick}>
+            Actualizar
+          </button>
+        </div>
       </div>
     );
   }
@@ -95,14 +103,16 @@ export function SyncStatusBar({
   const dotColor = secondsSinceSync < agingThresholdSec ? styles.green : styles.yellow;
 
   return (
-    <div className={styles.bar}>
-      <span className={`${styles.dot} ${dotColor}`} />
-      <span className={styles.label}>
-        Sincronizado hace {formatSeconds(secondsSinceSync)}
-      </span>
-      <button className={styles.btn} onClick={onSyncClick}>
-        Sincronizar
-      </button>
+    <div className={styles.wrap}>
+      <div className={`${styles.bar} ${styles.toneNeutral}`}>
+        <span className={`${styles.dot} ${dotColor}`} />
+        <span className={styles.label}>
+          Sincronizado hace {formatSeconds(secondsSinceSync)}
+        </span>
+        <button className={styles.btn} onClick={onSyncClick}>
+          Sincronizar
+        </button>
+      </div>
     </div>
   );
 }

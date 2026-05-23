@@ -38,8 +38,14 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    ado_id: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
+    ado_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    # ID externo genérico del tracker. En ADO hoy coincide con ado_id.
+    external_id: Mapped[int | None] = mapped_column(Integer)
+    # Compatibilidad temporal: este campo sigue guardando el tracker_project
+    # (ej. Strategist_Pacifico / UCollect_Strategist).
     project: Mapped[str] = mapped_column(String(80), nullable=False)
+    stacky_project_name: Mapped[str | None] = mapped_column(String(80))
+    tracker_type: Mapped[str | None] = mapped_column(String(40), default="azure_devops")
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     ado_state: Mapped[str | None] = mapped_column(String(40))
@@ -58,13 +64,26 @@ class Ticket(Base):
 
     executions: Mapped[list["AgentExecution"]] = relationship(back_populates="ticket")
 
-    __table_args__ = (Index("ix_tickets_project_state", "project", "ado_state"),)
+    __table_args__ = (
+        Index("ix_tickets_project_state", "project", "ado_state"),
+        Index("ix_tickets_stacky_project", "stacky_project_name"),
+        Index(
+            "ux_tickets_stacky_tracker_external",
+            "stacky_project_name",
+            "tracker_type",
+            "external_id",
+            unique=True,
+        ),
+    )
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "ado_id": self.ado_id,
+            "external_id": self.external_id,
             "project": self.project,
+            "stacky_project_name": self.stacky_project_name,
+            "tracker_type": self.tracker_type,
             "title": self.title,
             "description": self.description,
             "ado_state": self.ado_state,
@@ -123,6 +142,7 @@ class TicketStateHistory(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
     ado_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    stacky_project_name: Mapped[str | None] = mapped_column(String(80))
     old_state: Mapped[str | None] = mapped_column(String(40))
     new_state: Mapped[str] = mapped_column(String(40), nullable=False)
     assigned_to_ado: Mapped[str | None] = mapped_column(String(200))
@@ -130,6 +150,7 @@ class TicketStateHistory(Base):
 
     __table_args__ = (
         Index("ix_tsh_ticket_id", "ticket_id"),
+        Index("ix_tsh_stacky_project_recorded", "stacky_project_name", "recorded_at"),
         Index("ix_tsh_assigned_to", "assigned_to_ado"),
         Index("ix_tsh_recorded_at", "recorded_at"),
     )
@@ -139,6 +160,7 @@ class TicketStateHistory(Base):
             "id": self.id,
             "ticket_id": self.ticket_id,
             "ado_id": self.ado_id,
+            "stacky_project_name": self.stacky_project_name,
             "old_state": self.old_state,
             "new_state": self.new_state,
             "assigned_to_ado": self.assigned_to_ado,

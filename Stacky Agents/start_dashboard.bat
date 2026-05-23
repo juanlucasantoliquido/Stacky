@@ -5,8 +5,7 @@ cd /d "%~dp0"
 echo.
 echo  ============================================================
 echo   Stacky Agents — Agent Workbench
-echo   Backend  http://localhost:5050
-echo   Frontend http://localhost:5173
+echo   App http://localhost:5050
 echo  ============================================================
 echo.
 
@@ -19,22 +18,29 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: ── Verificar Node / npm ──────────────────────────────────────
-where npm >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] npm no encontrado en el PATH.
-    echo         Instala Node.js 18+ y vuelve a intentar.
-    pause
-    exit /b 1
+:: ── Verificar Node / npm solo si falta el bundle ──────────────
+if not exist "frontend\dist\index.html" (
+    where npm >nul 2>&1
+    if errorlevel 1 (
+        echo [ERROR] npm no encontrado en el PATH.
+        echo         Instala Node.js 18+ o genera frontend\dist antes de iniciar.
+        pause
+        exit /b 1
+    )
 )
 
 :: ── Instalar extensión VS Code si hay nueva versión ─────────
 set "CODE_CMD=%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd"
 if not exist "%CODE_CMD%" set "CODE_CMD=code"
 
-if exist "vscode_extension\stacky-agents-0.3.2.vsix" (
+set "LATEST_VSIX="
+for /f "delims=" %%i in ('dir /b /o-d "vscode_extension\stacky-agents-*.vsix" 2^>nul') do (
+    if not defined LATEST_VSIX set "LATEST_VSIX=vscode_extension\%%i"
+)
+
+if defined LATEST_VSIX (
     echo [INFO] Instalando/actualizando extension Stacky Agents en VS Code...
-    start "" /b cmd /c ""%CODE_CMD%" --install-extension "vscode_extension\stacky-agents-0.3.2.vsix" --force >nul 2>&1"
+    start "" /b cmd /c ""%CODE_CMD%" --install-extension "%LATEST_VSIX%" --force >nul 2>&1"
     echo [OK]  Instalacion de extension lanzada en background.
 )
 echo.
@@ -106,11 +112,11 @@ if errorlevel 1 (
     echo.
 )
 
-:: ── Instalar deps frontend si falta node_modules ────────────
-if not exist "frontend\node_modules" (
-    echo [INFO] Instalando dependencias del frontend ^(puede tardar^)...
+:: ── Build frontend si falta dist ─────────────────────────────
+if not exist "frontend\dist\index.html" (
+    echo [INFO] Compilando frontend ^(puede tardar^)...
     cd frontend
-    npm install --silent
+    if not exist "node_modules" npm install --silent
     if errorlevel 1 (
         cd ..
         echo [ERROR] Fallo la instalacion de dependencias del frontend.
@@ -118,8 +124,16 @@ if not exist "frontend\node_modules" (
         pause
         exit /b 1
     )
+    npm run build
+    if errorlevel 1 (
+        cd ..
+        echo [ERROR] Fallo la compilacion del frontend.
+        echo         Ejecuta manualmente: cd frontend ^&^& npm run build
+        pause
+        exit /b 1
+    )
     cd ..
-    echo [OK]  Frontend listo.
+    echo [OK]  Frontend compilado.
     echo.
 )
 
@@ -133,26 +147,16 @@ if errorlevel 1 (
     echo [OK]  Backend ya esta corriendo en http://localhost:5050
 )
 
-:: ── Lanzar frontend en ventana separada ──────────────────────
-netstat -ano -p tcp 2>nul | findstr ":5173" | findstr "LISTENING" >nul 2>&1
-if errorlevel 1 (
-    echo [INFO] Iniciando frontend (http://localhost:5173^) ...
-    start "Stacky Agents — Frontend" cmd /k "title Stacky Agents Frontend && cd /d ""%~dp0frontend"" && npm run dev"
-    timeout /t 4 /nobreak >nul
-) else (
-    echo [OK]  Frontend ya esta corriendo en http://localhost:5173
-)
-
 :: ── Abrir en el browser default ──────────────────────────────
-echo [INFO] Abriendo http://localhost:5173 en el navegador...
-start "" "http://localhost:5173"
+echo [INFO] Abriendo http://localhost:5050 en el navegador...
+start "" "http://localhost:5050"
 
 echo.
 echo  ============================================================
 echo   Stacky Agents corriendo.
 echo.
-echo   Backend  -^> http://localhost:5050/api/health
-echo   Frontend -^> http://localhost:5173
+echo   App      -^> http://localhost:5050
+echo   Health   -^> http://localhost:5050/api/health
 echo.
 echo   Para detener: cerra las ventanas Backend y Frontend.
 echo  ============================================================

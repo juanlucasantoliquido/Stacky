@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import json
 import logging
+import io
 from datetime import datetime
 from pathlib import Path
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, send_file
 
 from db import session_scope
 from models import AgentExecution, Ticket
@@ -253,6 +254,36 @@ def metrics():
             "startup_grace_seconds": STARTUP_GRACE_SECONDS,
         },
     })
+
+
+@bp.get("/local")
+def local_diagnostics():
+    """Diagnóstico operativo local de la instalación del operador."""
+    from services.local_diagnostics import run_local_diagnostics
+
+    return jsonify(run_local_diagnostics())
+
+
+@bp.post("/backup/run")
+def run_db_backup():
+    """Fuerza una verificación/backup semanal de la DB local."""
+    from services.db_backup import ensure_weekly_backup
+
+    return jsonify(ensure_weekly_backup())
+
+
+@bp.get("/logs/export")
+def export_local_logs():
+    """Exporta los últimos 3 días de logs locales rotativos como ZIP."""
+    from services.local_file_logging import build_logs_zip, export_filename
+
+    payload = build_logs_zip(days=3)
+    return send_file(
+        io.BytesIO(payload),
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=export_filename(),
+    )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

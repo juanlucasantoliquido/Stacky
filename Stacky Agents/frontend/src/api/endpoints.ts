@@ -89,9 +89,11 @@ export interface FrontendConfig {
 }
 
 export const Tickets = {
-  list: () => api.get<Ticket[]>("/api/tickets"),
+  list: (project?: string | null) =>
+    api.get<Ticket[]>(`/api/tickets${project ? `?project=${encodeURIComponent(project)}` : ""}`),
   byId: (id: number) => api.get<Ticket & { executions: AgentExecution[] }>(`/api/tickets/${id}`),
-  hierarchy: () => api.get<TicketHierarchy>("/api/tickets/hierarchy"),
+  hierarchy: (project?: string | null) =>
+    api.get<TicketHierarchy>(`/api/tickets/hierarchy${project ? `?project=${encodeURIComponent(project)}` : ""}`),
   fingerprint: (id: number) => api.get<TicketFingerprint>(`/api/tickets/${id}/fingerprint`),  // N3
   glossary: (id: number) => api.get<ContextBlock | null>(`/api/tickets/${id}/glossary`),  // FA-09
   comments: (id: number) => api.get<{ comments: { author: string; date: string; text: string }[] }>(`/api/tickets/${id}/comments`),
@@ -106,16 +108,20 @@ export const Tickets = {
     }),
   invalidatePipelineCache: (id: number) =>
     api.delete<{ ok: boolean }>(`/api/tickets/${id}/ado-pipeline-cache`),
-  sync: () => api.post<TicketSyncResult>("/api/tickets/sync"),
+  sync: (project?: string | null) =>
+    api.post<TicketSyncResult>("/api/tickets/sync", project ? { project } : {}),
   // P7: sync con rate limiting y campos extendidos
-  syncV2: (trigger: "manual" | "auto_poll" | "startup" = "manual") =>
+  syncV2: (trigger: "manual" | "auto_poll" | "startup" = "manual", project?: string | null) =>
     fetch(`${apiBase}/api/tickets/sync-v2`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Stacky-Trigger": trigger },
+      body: JSON.stringify(project ? { project } : {}),
     }).then(r => r.json()) as Promise<TicketSyncResult & { duration_ms?: number; idempotent?: boolean }>,
-  syncStatus: () => api.get<{ last_synced_at: string | null }>("/api/tickets/sync/status"),
+  syncStatus: (project?: string | null) =>
+    api.get<{ last_synced_at: string | null }>(`/api/tickets/sync/status${project ? `?project=${encodeURIComponent(project)}` : ""}`),
   // P7: sync status extendido
-  syncStatusV2: () => api.get<SyncStatusV2>("/api/tickets/sync/status-v2"),
+  syncStatusV2: (project?: string | null) =>
+    api.get<SyncStatusV2>(`/api/tickets/sync/status-v2${project ? `?project=${encodeURIComponent(project)}` : ""}`),
   // P7: config del frontend
   frontendConfig: () => api.get<FrontendConfig>("/api/tickets/config/frontend"),
   // P6: recomendador de asignacion
@@ -314,6 +320,7 @@ export const Agents = {
     ticket_id: number;
     context_blocks: ContextBlock[];
     chain_from?: number[];
+    project?: string;
   }) => api.post<{ execution_id: number; status: string }>("/api/agents/run", payload),
   cancel: (executionId: number) =>
     api.post<{ ok: true }>(`/api/agents/cancel/${executionId}`),
@@ -370,6 +377,7 @@ export const Agents = {
     ticket_id: number;
     context_blocks: ContextBlock[];
     chain_from?: number[];
+    project?: string;
     model_override?: string | null;
     system_prompt_override?: string | null;
     use_few_shot?: boolean;
@@ -387,6 +395,7 @@ export const Agents = {
   openChat: (payload: {
     ticket_id: number;
     context_blocks: ContextBlock[];
+    project?: string;
     vscode_agent_filename?: string;
     model_override?: string | null;
   }) => api.post<{ ok: boolean }>("/api/agents/open-chat", payload),
@@ -422,11 +431,12 @@ export const Webhooks = {
 };
 
 export const Executions = {
-  list: (q: { ticket_id?: number; agent_type?: AgentType; status?: string }) => {
+  list: (q: { ticket_id?: number; agent_type?: AgentType; status?: string; project?: string | null }) => {
     const params = new URLSearchParams();
     if (q.ticket_id) params.set("ticket_id", String(q.ticket_id));
     if (q.agent_type) params.set("agent_type", q.agent_type);
     if (q.status) params.set("status", q.status);
+    if (q.project) params.set("project", q.project);
     const qs = params.toString();
     return api.get<AgentExecution[]>(`/api/executions${qs ? `?${qs}` : ""}`);
   },
@@ -435,6 +445,11 @@ export const Executions = {
   discard: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/discard`),
   publish: (id: number, target: "comment" | "task" = "comment") =>
     api.post<{ ok: true; ado_url: string }>(`/api/executions/${id}/publish-to-ado`, { target }),
+  sendCodexInput: (id: number, text: string) =>
+    api.post<{ ok: boolean; mode: "stdin" | "resume"; execution_id: number; session_id?: string }>(
+      `/api/executions/${id}/input`,
+      { text }
+    ),
   diff: (a: number, b: number) =>
     api.get<{ left: AgentExecution; right: AgentExecution }>(
       `/api/executions/${a}/diff/${b}`
@@ -477,21 +492,6 @@ export const Packs = {
   resume: (id: number) => api.post<PackRun>(`/api/packs/runs/${id}/resume`),
   abandon: (id: number) => api.delete<{ ok: true }>(`/api/packs/runs/${id}`),
 };
-
-// QA UAT Pipeline
-export interface QaUatRunStatus {
-  ok: boolean;
-  execution_id: string;
-  status: "queued" | "running" | "completed" | "error";
-  pipeline_result?: {
-    ok: boolean;
-    ticket_id: number;
-    verdict?: "PASS" | "FAIL" | "BLOCKED" | "MIXED";
-    elapsed_s?: number;
-    stages?: Record<string, { ok: boolean; skipped?: boolean; [k: string]: unknown }>;
-  };
-  error?: string;
-}
 
 // QaUat namespace — see full definition below (Sprint 9+)
 
@@ -741,6 +741,23 @@ export const Projects = {
     api.post<{ ok: boolean; project: Project }>("/api/init_project", payload),
   update: (name: string, payload: Partial<InitProjectPayload>) =>
     api.patch<{ ok: boolean; project: Project }>(`/api/projects/${name}`, payload),
+  testDocsPaths: (name: string, payload: Partial<InitProjectPayload>) =>
+    api.post<{
+      ok: boolean;
+      docs_paths: { technical: string; functional: string };
+      counts: Record<"technical" | "functional", {
+        path: string;
+        exists: boolean;
+        readable: boolean;
+        md: number;
+        pdf: number;
+        total: number;
+        error?: string;
+      }>;
+      error?: string;
+    }>(`/api/projects/${name}/test_docs_paths`, payload),
+  browseFolder: (payload?: { title?: string; initial_dir?: string }) =>
+    api.post<{ ok: boolean; path: string; error?: string }>("/api/browse_folder", payload ?? {}),
   remove: (name: string) =>
     api.delete<{ ok: boolean; deleted: string }>(`/api/projects/${name}`),
   byName: (name: string) =>
@@ -753,6 +770,8 @@ export const Projects = {
     api.get<{ ok: boolean; tracker_type: string; has_credentials: boolean; jira_user: string | null; ado_user: string | null; mantis_token_saved?: boolean; mantis_username_saved?: boolean; mantis_project_id?: string; mantis_protocol?: string }>(`/api/projects/${name}/credentials`),
   launchVsCode: (name: string) =>
     api.post<{ ok: boolean; port: number; already_running: boolean; launching?: boolean; workspace_root: string }>(`/api/projects/${name}/launch-vscode`),
+  vscodeStatus: (name: string) =>
+    api.get<{ ok: boolean; port: number | null; ready: boolean; workspace_root: string | null; project_name: string }>(`/api/projects/${name}/vscode-status`),
   trackerStates: (name: string) =>
     api.get<{ ok: boolean; states: string[]; tracker_type: string }>(`/api/projects/${name}/tracker-states`),
   getAgentWorkflow: (projectName: string, filename: string) =>
@@ -868,6 +887,49 @@ export interface QaUatRunStatus {
     data_resolution_requests?: unknown[];
   };
   metadata?: Record<string, unknown>;
+}
+
+export interface QaBrowserUsedSource {
+  kind?: string | null;
+  title?: string | null;
+  source_id?: string | number | null;
+  confidence?: number | null;
+  reason?: string | null;
+}
+
+export interface QaBrowserRunSpec {
+  schema_version?: string;
+  created_at?: string;
+  scenarios: Array<Record<string, unknown>>;
+  plan_source: {
+    used_sources: QaBrowserUsedSource[];
+    candidate_count?: number;
+    source_policy?: string;
+  };
+  ticket?: Record<string, unknown>;
+  context_stats?: Record<string, unknown>;
+  runner_contract?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface QaBrowserRunResponse {
+  ok: boolean;
+  execution_id: number;
+  ticket_id: number;
+  ado_id: number;
+  spec: QaBrowserRunSpec;
+  runner_prompt: string;
+  stream_url: string;
+  status: "queued" | "running";
+}
+
+export interface QaBrowserStartPayload {
+  ticket_id: number;
+  allowed_base_url: string;
+  operator_note?: string;
+  max_scenarios?: number;
+  auto_start?: boolean;
+  model_override?: string | null;
 }
 
 // ── QA UAT — Sprint 10: SQL Seed Proposal types ───────────────────────────────
@@ -1295,6 +1357,58 @@ export const QaUat = {
     ),
 };
 
+export const QaBrowser = {
+  startRun: (payload: QaBrowserStartPayload) =>
+    api.post<QaBrowserRunResponse>("/api/qa-browser/runs", payload),
+};
+
+// ── Operación local: diagnóstico, logs rotativos y backup ───────────────────
+
+export type LocalDiagnosticStatus = "ok" | "warning" | "error";
+
+export interface LocalDiagnosticCheck {
+  id: string;
+  label: string;
+  status: LocalDiagnosticStatus;
+  message: string;
+  detail?: unknown;
+}
+
+export interface LocalDiagnosticsResponse {
+  ok: boolean;
+  checked_at: string;
+  duration_ms: number;
+  summary: Record<LocalDiagnosticStatus, number>;
+  checks: LocalDiagnosticCheck[];
+  logs: {
+    directory: string;
+    recent_files: string[];
+  };
+  backups: {
+    path: string;
+    filename: string;
+    size_bytes: number;
+    created_at: string;
+  }[];
+}
+
+export interface BackupRunResponse {
+  ok: boolean;
+  skipped: boolean;
+  reason: string | null;
+  backup_path: string | null;
+}
+
+export const LocalDiagnostics = {
+  get: (): Promise<LocalDiagnosticsResponse> =>
+    api.get<LocalDiagnosticsResponse>("/api/diag/local"),
+
+  runBackup: (): Promise<BackupRunResponse> =>
+    api.post<BackupRunResponse>("/api/diag/backup/run", {}),
+
+  exportLogsUrl: () => `${apiBase}/api/diag/logs/export`,
+};
+
 // ── Feature #3: Docs — árbol de documentación ────────────────────────────────
 
 export interface DocHeading {
@@ -1333,9 +1447,13 @@ export interface DocSource {
   kind: "stacky" | "project-docs";
   label: string;
   relative_path: string;
+  display_prefix?: string;
   absolute_path?: string;
   project?: string | null;
   workspace_root?: string | null;
+  configured?: boolean;
+  docs_path_kind?: "technical" | "functional";
+  available?: boolean;
 }
 
 export interface DocsSourcesResponse {
@@ -1416,22 +1534,41 @@ export interface FlowConfigResolveResponse {
 }
 
 export const FlowConfig = {
-  list: (): Promise<FlowConfigListResponse> =>
-    api.get<FlowConfigListResponse>("/api/flow-config"),
+  list: (project?: string | null): Promise<FlowConfigListResponse> =>
+    api.get<FlowConfigListResponse>(`/api/flow-config${project ? `?project=${encodeURIComponent(project)}` : ""}`),
 
-  create: (body: { ado_state: string; agent_type: string }): Promise<FlowConfigRule> =>
+  create: (body: { ado_state: string; agent_type: string; project?: string | null }): Promise<FlowConfigRule> =>
     api.post<FlowConfigRule>("/api/flow-config", body),
 
-  update: (id: string, body: { ado_state?: string; agent_type?: string }): Promise<FlowConfigRule> =>
+  update: (id: string, body: { ado_state?: string; agent_type?: string; project?: string | null }): Promise<FlowConfigRule> =>
     api.put<FlowConfigRule>(`/api/flow-config/${id}`, body),
 
-  delete: (id: string): Promise<{ ok: boolean }> =>
-    api.delete<{ ok: boolean }>(`/api/flow-config/${id}`),
+  delete: (id: string, project?: string | null): Promise<{ ok: boolean }> =>
+    api.delete<{ ok: boolean }>(`/api/flow-config/${id}${project ? `?project=${encodeURIComponent(project)}` : ""}`),
 
-  resolve: (adoState: string): Promise<FlowConfigResolveResponse> =>
+  resolve: (adoState: string, project?: string | null): Promise<FlowConfigResolveResponse> =>
     api.get<FlowConfigResolveResponse>(
-      `/api/flow-config/resolve?ado_state=${encodeURIComponent(adoState)}`
+      `/api/flow-config/resolve?ado_state=${encodeURIComponent(adoState)}${project ? `&project=${encodeURIComponent(project)}` : ""}`
     ),
+};
+
+// ── UI Sections — visibilidad de pestañas opcionales (pm / logs / docs) ─────
+
+export interface UiSectionsState {
+  [section: string]: { visible: boolean };
+}
+
+export interface UiSectionsResponse {
+  ok: boolean;
+  sections: UiSectionsState;
+}
+
+export const UiSections = {
+  list: (): Promise<UiSectionsResponse> =>
+    api.get<UiSectionsResponse>("/api/ui-sections"),
+
+  set: (section: string, visible: boolean): Promise<UiSectionsResponse> =>
+    api.put<UiSectionsResponse>(`/api/ui-sections/${encodeURIComponent(section)}`, { visible }),
 };
 
 // ── P4: Gateway de finalización de agentes (recuperación de inconsistencias) ──

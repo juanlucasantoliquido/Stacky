@@ -93,6 +93,7 @@ def find_similar_tickets(
     current_ado_id: int | None,
     current_title: str,
     project: str,
+    project_name: str | None = None,
     top_keywords: int = 3,
     max_results: int = MAX_RESULTS,
 ) -> list[SimilarTicket]:
@@ -123,8 +124,9 @@ def find_similar_tickets(
     )
 
     try:
-        from services.ado_client import AdoClient
-        client = AdoClient()
+        from services.project_context import build_ado_client
+
+        client = build_ado_client(project_name=project_name, tracker_project=project)
     except Exception as exc:
         logger.warning("similar_tickets: AdoClient no disponible: %s", exc)
         return []
@@ -160,12 +162,14 @@ def build_similar_tickets_block(
     current_ado_id: int | None,
     current_title: str,
     project: str,
+    project_name: str | None = None,
 ) -> dict | None:
     """Construye el context block `ado-similar-tickets` o None si no hay match."""
     similars = find_similar_tickets(
         current_ado_id=current_ado_id,
         current_title=current_title,
         project=project,
+        project_name=project_name,
     )
     if not similars:
         return None
@@ -199,6 +203,7 @@ def inject_into_blocks(
     current_ado_id: int | None,
     current_title: str,
     project: str,
+    project_name: str | None = None,
 ) -> tuple[list[dict], dict | None]:
     """Idempotente: si ya hay un bloque con id `ado-similar-tickets`, no re-inyecta.
 
@@ -213,6 +218,7 @@ def inject_into_blocks(
         current_ado_id=current_ado_id,
         current_title=current_title,
         project=project,
+        project_name=project_name,
     )
     if block is None:
         return blocks, None

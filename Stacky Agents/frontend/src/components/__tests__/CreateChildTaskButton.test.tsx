@@ -1,9 +1,8 @@
 /**
  * Tests de componente para CreateChildTaskButton (Fase 2 — SDD).
  *
- * NOTA: Requiere Vitest + @testing-library/react + @testing-library/user-event.
- * Setup: npm install -D vitest @testing-library/react @testing-library/user-event
- *        @testing-library/jest-dom jsdom
+ * NOTA: Requiere Vitest + @testing-library/react.
+ * Setup: npm install -D vitest @testing-library/react @testing-library/jest-dom jsdom
  * Y agregar en vite.config.ts: test: { environment: 'jsdom', setupFiles: ['./src/test-setup.ts'] }
  *
  * TU-11e  No renderiza el botón cuando total_pending=0.
@@ -16,7 +15,6 @@
  */
 
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import CreateChildTaskButton from "../CreateChildTaskButton";
@@ -149,7 +147,7 @@ describe("CreateChildTaskButton", () => {
 
     await waitFor(() => screen.getByRole("button", { name: /crear tasks en ado/i }));
 
-    await userEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
+    fireEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
 
     // El modal debe mostrar el RF-001
     await waitFor(() => {
@@ -166,7 +164,7 @@ describe("CreateChildTaskButton", () => {
     wrap(<CreateChildTaskButton epicAdoId={EPIC_ADO_ID} />);
 
     await waitFor(() => screen.getByRole("button", { name: /crear tasks en ado/i }));
-    await userEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
+    fireEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
 
     await waitFor(() => {
       const dryRunCheckbox = screen.getByRole("checkbox", { name: /dry.run/i });
@@ -188,15 +186,15 @@ describe("CreateChildTaskButton", () => {
     wrap(<CreateChildTaskButton epicAdoId={EPIC_ADO_ID} />, qc);
 
     await waitFor(() => screen.getByRole("button", { name: /crear tasks en ado/i }));
-    await userEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
+    fireEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
 
     // Seleccionar el RF en el modal y confirmar
     await waitFor(() => screen.getByText(/RF-001/));
     const rfCheckbox = screen.getByRole("checkbox", { name: /RF-001/i });
-    await userEvent.click(rfCheckbox);
+    fireEvent.click(rfCheckbox);
 
     const createBtn = screen.getByRole("button", { name: /crear task en ado/i });
-    await userEvent.click(createBtn);
+    fireEvent.click(createBtn);
 
     await waitFor(() => {
       // Verificar invalidación de queries
@@ -224,14 +222,14 @@ describe("CreateChildTaskButton", () => {
     wrap(<CreateChildTaskButton epicAdoId={EPIC_ADO_ID} />);
 
     await waitFor(() => screen.getByRole("button", { name: /crear tasks en ado/i }));
-    await userEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
+    fireEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
 
     await waitFor(() => screen.getByText(/RF-001/));
     const rfCheckbox = screen.getByRole("checkbox", { name: /RF-001/i });
-    await userEvent.click(rfCheckbox);
+    fireEvent.click(rfCheckbox);
 
     const createBtn = screen.getByRole("button", { name: /crear task en ado/i });
-    await userEvent.click(createBtn);
+    fireEvent.click(createBtn);
 
     // El componente no debe crashear — debe mostrar error
     await waitFor(() => {
@@ -258,14 +256,14 @@ describe("CreateChildTaskButton", () => {
     wrap(<CreateChildTaskButton epicAdoId={EPIC_ADO_ID} />);
 
     await waitFor(() => screen.getByRole("button", { name: /crear tasks en ado/i }));
-    await userEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
+    fireEvent.click(screen.getByRole("button", { name: /crear tasks en ado/i }));
 
     await waitFor(() => screen.getByText(/RF-001/));
     const rfCheckbox = screen.getByRole("checkbox", { name: /RF-001/i });
-    await userEvent.click(rfCheckbox);
+    fireEvent.click(rfCheckbox);
 
     const createBtn = screen.getByRole("button", { name: /crear task en ado/i });
-    await userEvent.click(createBtn);
+    fireEvent.click(createBtn);
 
     // El botón debe estar deshabilitado (o con indicador de carga)
     await waitFor(() => {

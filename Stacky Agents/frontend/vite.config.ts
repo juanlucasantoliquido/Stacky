@@ -5,10 +5,14 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     preserveSymlinks: true,
+    extensions: [".tsx", ".ts", ".jsx", ".js", ".mjs", ".json"],
   },
   server: {
     port: 5173,
     strictPort: true,
+    proxy: {
+      "/api": "http://localhost:5050",
+    },
     fs: {
       allow: [".."],
     },

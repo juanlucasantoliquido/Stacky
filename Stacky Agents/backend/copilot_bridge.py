@@ -136,13 +136,24 @@ def invoke(
     on_log: LogFn,
     execution_id: int | None = None,
     model: str | None = None,
+    project_name: str | None = None,
+    workspace_root: str | None = None,
+    bridge_port: int | None = None,
 ) -> BridgeResponse:
     backend = config.LLM_BACKEND.lower()
     if backend == "mock":
         return _invoke_mock(agent_type=agent_type, on_log=on_log, execution_id=execution_id, model=model)
     if backend == "vscode_bridge":
         return _invoke_vscode_bridge(
-            agent_type=agent_type, system=system, user=user, on_log=on_log, execution_id=execution_id, model=model
+            agent_type=agent_type,
+            system=system,
+            user=user,
+            on_log=on_log,
+            execution_id=execution_id,
+            model=model,
+            project_name=project_name,
+            workspace_root=workspace_root,
+            bridge_port=bridge_port,
         )
     if backend == "copilot":
         return _invoke_copilot(
@@ -153,22 +164,98 @@ def invoke(
 
 # ── VS Code Bridge ────────────────────────────────────────────────────────────
 
-VSCODE_BRIDGE_URL = "http://127.0.0.1:5052"
+def _fallback_bridge_url() -> str:
+    return f"http://127.0.0.1:{config.VSCODE_BRIDGE_PORT}"
 
 
-def _vscode_bridge_health() -> bool:
-    """Verifica que la extensión Stacky Agents esté corriendo y tenga Copilot Chat."""
+VSCODE_BRIDGE_URL = _fallback_bridge_url()
+
+
+def _bridge_target(
+    *,
+    project_name: str | None = None,
+    workspace_root: str | None = None,
+    bridge_port: int | None = None,
+    ensure_ready: bool = False,
+) -> tuple[str, dict]:
+    metadata = {
+        "project_name": project_name,
+        "workspace_root": workspace_root,
+        "bridge_port": bridge_port,
+    }
+
+    if bridge_port:
+        return f"http://127.0.0.1:{bridge_port}", metadata
+
     try:
-        r = requests.get(f"{VSCODE_BRIDGE_URL}/health", timeout=3)
+        from services.project_context import ensure_project_vscode, resolve_project_context
+        from services.vscode_instance_manager import get_or_assign_port
+
+        ctx = None
+        if ensure_ready and project_name:
+            ctx = ensure_project_vscode(project_name)
+        else:
+            ctx = resolve_project_context(project_name=project_name) if project_name else resolve_project_context()
+        if ctx is not None:
+            port = ctx.vscode_port
+            if port is None and ctx.workspace_root:
+                port = get_or_assign_port(ctx.stacky_project_name, ctx.workspace_root)
+            if ensure_ready and project_name and port is not None and ctx.vscode_port != port:
+                ctx = ctx.with_vscode_port(port)
+            if port is not None:
+                metadata.update(
+                    {
+                        "project_name": ctx.stacky_project_name,
+                        "workspace_root": ctx.workspace_root,
+                        "bridge_port": port,
+                    }
+                )
+                return f"http://127.0.0.1:{port}", metadata
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "No se pudo resolver bridge target project-aware (project=%s, workspace_root=%s): %s",
+            project_name,
+            workspace_root,
+            exc,
+        )
+
+    metadata["bridge_port"] = config.VSCODE_BRIDGE_PORT
+    return _fallback_bridge_url(), metadata
+
+
+def _vscode_bridge_health(
+    project_name: str | None = None,
+    workspace_root: str | None = None,
+    bridge_port: int | None = None,
+) -> bool:
+    """Verifica que la extensión Stacky Agents esté corriendo y tenga Copilot Chat."""
+    bridge_url, _ = _bridge_target(
+        project_name=project_name,
+        workspace_root=workspace_root,
+        bridge_port=bridge_port,
+    )
+    try:
+        r = requests.get(f"{bridge_url}/health", timeout=3)
         return r.status_code == 200 and r.json().get("ok") is True
     except Exception:
         return False
 
 
-def list_vscode_bridge_models(timeout_sec: int = 5) -> list[dict]:
+def list_vscode_bridge_models(
+    timeout_sec: int = 5,
+    *,
+    project_name: str | None = None,
+    workspace_root: str | None = None,
+    bridge_port: int | None = None,
+) -> list[dict]:
     """Lista los modelos disponibles en VS Code (vía vscode.lm API)."""
+    bridge_url, _ = _bridge_target(
+        project_name=project_name,
+        workspace_root=workspace_root,
+        bridge_port=bridge_port,
+    )
     try:
-        r = requests.get(f"{VSCODE_BRIDGE_URL}/models", timeout=timeout_sec)
+        r = requests.get(f"{bridge_url}/models", timeout=timeout_sec)
         if r.status_code == 200:
             return r.json().get("models", [])
     except Exception:
@@ -184,6 +271,9 @@ def _invoke_vscode_bridge(
     on_log: LogFn,
     execution_id: int | None,
     model: str | None = None,
+    project_name: str | None = None,
+    workspace_root: str | None = None,
+    bridge_port: int | None = None,
 ) -> BridgeResponse:
     """Invoca el modelo de lenguaje de VS Code (Copilot) via el bridge HTTP de la extensión.
 
@@ -196,16 +286,36 @@ def _invoke_vscode_bridge(
     if _is_cancelled(execution_id):
         raise CancelledError("cancelled by user")
 
+    bridge_url, bridge_meta = _bridge_target(
+        project_name=project_name,
+        workspace_root=workspace_root,
+        bridge_port=bridge_port,
+        ensure_ready=bool(project_name),
+    )
+    target_port = bridge_meta.get("bridge_port")
+    target_workspace = bridge_meta.get("workspace_root") or workspace_root
+
     on_log("info", "verificando VS Code bridge")
-    if not _vscode_bridge_health():
+    if not _vscode_bridge_health(
+        project_name=project_name,
+        workspace_root=workspace_root,
+        bridge_port=bridge_meta.get("bridge_port"),
+    ):
         raise RuntimeError(
-            "VS Code bridge no responde en 127.0.0.1:5052. "
+            f"VS Code bridge no responde en 127.0.0.1:{target_port}. "
             "Asegurate de tener la extensión Stacky Agents instalada y VS Code abierto. "
             "Si acabas de instalar la extensión, recargá VS Code (Ctrl+Shift+P → Developer: Reload Window)."
         )
 
     chosen_model = model or config.COPILOT_MODEL
-    on_log("info", f"invocando Copilot via VS Code bridge (model={chosen_model}, system={len(system)}c user={len(user)}c)")
+    on_log(
+        "info",
+        "invocando Copilot via VS Code bridge "
+        f"(project={bridge_meta.get('project_name') or project_name or 'default'}, "
+        f"workspace_root={target_workspace or '(unknown)'}, "
+        f"bridge_port={target_port}, model={chosen_model}, "
+        f"system={len(system)}c user={len(user)}c)",
+    )
 
     # Timeout de invocación: 4 minutos para requests complejos
     INVOKE_TIMEOUT = 300
@@ -220,7 +330,7 @@ def _invoke_vscode_bridge(
 
     try:
         r = requests.post(
-            f"{VSCODE_BRIDGE_URL}/invoke",
+            f"{bridge_url}/invoke",
             json=payload,
             timeout=INVOKE_TIMEOUT,
         )
@@ -254,6 +364,9 @@ def _invoke_vscode_bridge(
             "duration_ms": elapsed,
             "sub_agents": [],
             "vscode_bridge": True,
+            "bridge_port": target_port,
+            "workspace_root": target_workspace,
+            "stacky_project_name": bridge_meta.get("project_name") or project_name,
         },
     )
 

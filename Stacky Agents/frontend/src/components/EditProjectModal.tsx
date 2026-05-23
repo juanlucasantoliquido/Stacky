@@ -14,6 +14,9 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   const [form, setForm] = useState<Partial<InitProjectPayload>>({
     display_name:         project.display_name,
     workspace_root:       project.workspace_root,
+    docs_technical_path:  project.docs_paths?.technical ?? project.docs_technical_path ?? "",
+    docs_functional_path: project.docs_paths?.functional ?? project.docs_functional_path ?? "",
+    docs_paths:           project.docs_paths ?? { technical: "", functional: "" },
     tracker_type:         project.tracker_type,
     organization:         project.organization ?? "",
     ado_project:          project.ado_project ?? "",
@@ -36,6 +39,8 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadedUser, setLoadedUser] = useState<string | null>(null);
+  const [docsChecking, setDocsChecking] = useState(false);
+  const [docsCheckMessage, setDocsCheckMessage] = useState<string | null>(null);
 
   // Mantis: listar proyectos disponibles
   const [mantisProjects, setMantisProjects] = useState<MantisProject[]>([]);
@@ -166,6 +171,59 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
 
   function patch(key: keyof InitProjectPayload, value: unknown) {
     setForm((f) => ({ ...f, [key]: value }));
+    if (key === "docs_technical_path" || key === "docs_functional_path") {
+      setDocsCheckMessage(null);
+    }
+  }
+
+  function buildPayload(): Partial<InitProjectPayload> {
+    const docs_paths = {
+      technical: String(form.docs_technical_path ?? "").trim(),
+      functional: String(form.docs_functional_path ?? "").trim(),
+    };
+    return { ...form, docs_paths };
+  }
+
+  async function browseDocsPath(kind: "technical" | "functional") {
+    setError(null);
+    const currentPath = kind === "technical" ? form.docs_technical_path : form.docs_functional_path;
+    try {
+      const res = await Projects.browseFolder({
+        title: kind === "technical" ? "Seleccionar documentación técnica" : "Seleccionar documentación funcional / manual",
+        initial_dir: String(currentPath || form.workspace_root || ""),
+      });
+      if (res.ok && res.path) {
+        patch(kind === "technical" ? "docs_technical_path" : "docs_functional_path", res.path);
+      } else if (!res.ok) {
+        setError(res.error || "No se pudo abrir el selector de carpeta");
+      }
+    } catch (e: any) {
+      setError(e?.message || "No se pudo abrir el selector de carpeta");
+    }
+  }
+
+  async function testDocsPaths() {
+    setError(null);
+    setDocsCheckMessage(null);
+    const payload = buildPayload();
+    if (!payload.docs_paths?.technical && !payload.docs_paths?.functional) {
+      setDocsCheckMessage("Sin rutas configuradas: Stacky usará autodiscovery en workspace_root/docs.");
+      return;
+    }
+    setDocsChecking(true);
+    try {
+      const res = await Projects.testDocsPaths(project.name, payload);
+      const tech = res.counts.technical;
+      const functional = res.counts.functional;
+      setDocsCheckMessage(
+        `Técnica: ${tech.total} archivos (${tech.md} .md, ${tech.pdf} .pdf). ` +
+        `Funcional: ${functional.total} archivos (${functional.md} .md, ${functional.pdf} .pdf).`
+      );
+    } catch (e: any) {
+      setError(e?.message || "No se pudieron validar las rutas de documentación");
+    } finally {
+      setDocsChecking(false);
+    }
   }
 
   const isAdo    = form.tracker_type === "azure_devops";
@@ -174,9 +232,13 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
 
   async function handleSubmit() {
     setError(null);
+    if (!String(form.workspace_root ?? "").trim()) {
+      setError("Ingresá el workspace root");
+      return;
+    }
     setSaving(true);
     try {
-      const res = await Projects.update(project.name, form);
+      const res = await Projects.update(project.name, buildPayload());
       if (res.ok) {
         onSaved();
       } else {
@@ -207,10 +269,52 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
           <input
             className={styles.input}
             type="text"
-            placeholder="Ej: N:\GIT\RS\RSPacifico\trunk"
+            placeholder="Ej: C:\Repos\MiProyecto\trunk"
             value={form.workspace_root ?? ""}
             onChange={(e) => patch("workspace_root", e.target.value)}
           />
+
+          <div className={styles.docsPathSection}>
+            <span className={styles.trackerHeading}>Documentación del proyecto (opcional)</span>
+            <p className={styles.note}>
+              Estas rutas reemplazan el autodiscovery de <code>docs/</code> para el panel Docs.
+            </p>
+
+            <label className={styles.label}>Documentación técnica</label>
+            <div className={styles.pathRow}>
+              <input
+                className={styles.input}
+                type="text"
+                placeholder="Ej: C:\Docs\MiProyecto\tecnica"
+                value={form.docs_technical_path ?? ""}
+                onChange={(e) => patch("docs_technical_path", e.target.value)}
+              />
+              <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("technical")}>
+                Examinar...
+              </button>
+            </div>
+
+            <label className={styles.label}>Documentación funcional / manual</label>
+            <div className={styles.pathRow}>
+              <input
+                className={styles.input}
+                type="text"
+                placeholder="Ej: C:\Docs\MiProyecto\funcional"
+                value={form.docs_functional_path ?? ""}
+                onChange={(e) => patch("docs_functional_path", e.target.value)}
+              />
+              <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("functional")}>
+                Examinar...
+              </button>
+            </div>
+
+            <div className={styles.docsActions}>
+              <button type="button" className={styles.btnLoadProjects} onClick={testDocsPaths} disabled={docsChecking}>
+                {docsChecking ? "Validando..." : "Probar rutas docs"}
+              </button>
+              {docsCheckMessage && <span className={styles.docsCheckOk}>{docsCheckMessage}</span>}
+            </div>
+          </div>
 
           <hr className={styles.divider} />
 

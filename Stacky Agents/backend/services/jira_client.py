@@ -24,6 +24,12 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from services.secrets_store import (
+    load_json_file,
+    resolve_secret_in_payload,
+    write_json_file,
+)
+
 logger = logging.getLogger("stacky_agents.jira")
 
 _TIMEOUT_SEC = 30
@@ -63,10 +69,22 @@ def _resolve_credentials(auth_file: str, base_url: str) -> tuple[str, str, str]:
     for path in candidates:
         if path.is_file():
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
+                data = load_json_file(path)
+                token_secret = resolve_secret_in_payload(
+                    data,
+                    "token",
+                    format_field="token_format",
+                )
+                password_secret = resolve_secret_in_payload(
+                    data,
+                    "password",
+                    format_field="password_format",
+                )
+                if token_secret.migrated or password_secret.migrated:
+                    write_json_file(path, data)
                 file_url   = (data.get("url")   or base_url or "").strip().rstrip("/")
                 file_user  = (data.get("user")  or data.get("email") or "").strip()
-                file_token = (data.get("token") or data.get("password") or "").strip()
+                file_token = (token_secret.value or password_secret.value or "").strip()
                 if file_user and file_token:
                     return file_url or base_url.rstrip("/"), file_user, file_token
             except Exception as e:

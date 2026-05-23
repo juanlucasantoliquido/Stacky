@@ -2,10 +2,13 @@ import json
 from datetime import datetime
 
 from flask import Blueprint, Response, abort, jsonify, request
+from sqlalchemy import and_, or_
 
 import log_streamer
 from db import session_scope
-from models import AgentExecution
+from models import AgentExecution, Ticket
+from ._helpers import current_user
+from services.project_context import resolve_project_context
 
 bp = Blueprint("executions", __name__, url_prefix="/executions")
 
@@ -15,10 +18,23 @@ def list_executions():
     ticket_id = request.args.get("ticket_id", type=int)
     agent_type = request.args.get("agent_type")
     status = request.args.get("status")
+    project_name = (request.args.get("project") or "").strip() or None
     limit = request.args.get("limit", default=50, type=int)
+
+    project_ctx = resolve_project_context(project_name=project_name) if project_name else resolve_project_context()
 
     with session_scope() as session:
         q = session.query(AgentExecution)
+        if project_ctx is not None:
+            q = q.join(Ticket, Ticket.id == AgentExecution.ticket_id).filter(
+                or_(
+                    Ticket.stacky_project_name == project_ctx.stacky_project_name,
+                    and_(
+                        Ticket.stacky_project_name.is_(None),
+                        Ticket.project == project_ctx.tracker_project,
+                    ),
+                )
+            )
         if ticket_id:
             q = q.filter(AgentExecution.ticket_id == ticket_id)
         if agent_type:
@@ -41,6 +57,25 @@ def get_execution(execution_id: int):
 @bp.get("/<int:execution_id>/logs")
 def get_logs(execution_id: int):
     return jsonify(log_streamer.snapshot(execution_id))
+
+
+@bp.post("/<int:execution_id>/input")
+def send_execution_input(execution_id: int):
+    payload = request.get_json(silent=True) or {}
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        abort(400, "text is required")
+
+    from services.codex_cli_runner import send_input
+
+    try:
+        result = send_input(execution_id, text, user=current_user())
+    except ValueError as exc:
+        abort(400, str(exc))
+    except RuntimeError as exc:
+        abort(409, str(exc))
+
+    return jsonify(result)
 
 
 @bp.get("/<int:execution_id>/logs/stream")

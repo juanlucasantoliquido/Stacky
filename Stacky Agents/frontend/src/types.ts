@@ -192,10 +192,18 @@ export interface PipelineBatchResponse {
 
 export type TrackerType = "azure_devops" | "jira" | "mantis";
 
+export interface DocsPaths {
+  technical: string;
+  functional: string;
+}
+
 export interface Project {
   name: string;
   display_name: string;
   workspace_root: string;
+  docs_paths?: DocsPaths;
+  docs_technical_path?: string;
+  docs_functional_path?: string;
   tracker_type: TrackerType;
   /** Azure DevOps fields */
   organization?: string;
@@ -231,6 +239,9 @@ export interface InitProjectPayload {
   name: string;
   display_name?: string;
   workspace_root: string;
+  docs_paths?: DocsPaths;
+  docs_technical_path?: string;
+  docs_functional_path?: string;
   tracker_type: TrackerType;
   // ADO
   organization?: string;

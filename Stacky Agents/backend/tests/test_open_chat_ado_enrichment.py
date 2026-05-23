@@ -42,6 +42,20 @@ class _FakeAdoClient:
         return list(self._attachments)
 
 
+def _fake_project_context():
+    from services.project_context import ProjectContext
+
+    return ProjectContext(
+        stacky_project_name="RSPACIFICO",
+        tracker_type="azure_devops",
+        tracker_project="RSPacifico",
+        organization="FakeOrg",
+        workspace_root="N:/GIT/RS/RSPACIFICO",
+        auth_path="N:/GIT/RS/RSPACIFICO/ado_auth.json",
+        vscode_port=5060,
+    )
+
+
 # ── _format_attachment_size ─────────────────────────────────────────────────
 
 
@@ -265,8 +279,8 @@ def test_open_chat_message_includes_ado_sections(client):
         return _FakeBridgeResponse()
 
     with patch("services.ado_client.AdoClient", return_value=fake), patch(
-        "requests.post", side_effect=_fake_post
-    ):
+        "api.agents.ensure_project_vscode", return_value=_fake_project_context()
+    ), patch("requests.post", side_effect=_fake_post):
         r = client.post(
             "/api/agents/open-chat",
             json={"ticket_id": ticket_id, "context_blocks": [], "vscode_agent_filename": "X.agent.md"},
@@ -318,6 +332,8 @@ def test_open_chat_works_when_ado_unavailable(client):
     with patch(
         "services.ado_client.AdoClient",
         side_effect=RuntimeError("ADO_PAT missing"),
+    ), patch(
+        "api.agents.ensure_project_vscode", return_value=_fake_project_context()
     ), patch("requests.post", side_effect=_fake_post):
         r = client.post(
             "/api/agents/open-chat",
@@ -374,6 +390,8 @@ def test_open_chat_returns_503_when_bridge_unreachable(client):
     with patch(
         "services.ado_client.AdoClient",
         side_effect=RuntimeError("ADO disabled"),
+    ), patch(
+        "api.agents.ensure_project_vscode", return_value=_fake_project_context()
     ), patch("requests.post", side_effect=_raise_conn):
         r = client.post(
             "/api/agents/open-chat",
@@ -398,6 +416,8 @@ def test_open_chat_returns_504_when_bridge_times_out(client):
     with patch(
         "services.ado_client.AdoClient",
         side_effect=RuntimeError("ADO disabled"),
+    ), patch(
+        "api.agents.ensure_project_vscode", return_value=_fake_project_context()
     ), patch("requests.post", side_effect=_raise_timeout):
         r = client.post(
             "/api/agents/open-chat",
@@ -419,6 +439,8 @@ def test_open_chat_returns_502_on_other_request_exceptions(client):
     with patch(
         "services.ado_client.AdoClient",
         side_effect=RuntimeError("ADO disabled"),
+    ), patch(
+        "api.agents.ensure_project_vscode", return_value=_fake_project_context()
     ), patch("requests.post", side_effect=_raise_other):
         r = client.post(
             "/api/agents/open-chat",

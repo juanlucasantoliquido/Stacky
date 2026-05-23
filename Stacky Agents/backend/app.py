@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from pathlib import Path
 
 # Usar el truststore del SO (Windows / macOS) para SSL — necesario en redes con
 # inspección TLS corporativa (Zscaler, etc.) que firman con un root no presente
@@ -11,7 +12,7 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, g, jsonify, request
+from flask import Flask, g, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from api import api_bp
@@ -27,6 +28,8 @@ from services.ado_sync import (
 )
 from services.stacky_logger import logger as stacky_logger
 from services.console_log_handler import install_console_log_handler
+from services.local_file_logging import install_file_log_handler
+from runtime_paths import frontend_dist_dir
 
 # Endpoints whose request body should NOT be logged (may contain credentials)
 _NO_LOG_BODY_PATHS: frozenset[str] = frozenset({"/api/logs/frontend"})
@@ -86,8 +89,17 @@ def _startup_sync(logger) -> None:
 
     else:
         # Azure DevOps
+        active_ctx = None
+        if active:
+            try:
+                from services.project_context import resolve_project_context
+
+                active_ctx = resolve_project_context(project_name=active)
+            except Exception:
+                active_ctx = None
         target_project = (
-            tracker.get("project")
+            (active_ctx.tracker_project if active_ctx else None)
+            or tracker.get("project")
             or config.ADO_PROJECT
             or "Strategist_Pacifico"
         ).strip()
@@ -95,11 +107,10 @@ def _startup_sync(logger) -> None:
         if purged:
             logger.info("purgados %d tickets ajenos al proyecto %s", purged, target_project)
         try:
-            from services.ado_client import AdoClient
-            kw: dict = {}
-            if tracker.get("organization") and tracker.get("project"):
-                kw = {"org": tracker["organization"], "project": tracker["project"]}
-            result = _ado_sync(client=AdoClient(**kw))
+            from services.project_context import build_ado_client
+
+            client = build_ado_client(project_name=active) if active else None
+            result = _ado_sync(client=client)
             logger.info(
                 "sync ADO ok: project=%s fetched=%d created=%d updated=%d removed=%d",
                 result["project"], result["fetched"], result["created"],
@@ -114,15 +125,28 @@ def _startup_sync(logger) -> None:
 
 
 def create_app() -> Flask:
+    dist_dir = frontend_dist_dir()
     app = Flask(__name__)
-    CORS(app, resources={r"/api/*": {"origins": config.ALLOWED_ORIGINS}})
+    if dist_dir is None or config.ENABLE_CORS:
+        CORS(app, resources={r"/api/*": {"origins": config.ALLOWED_ORIGINS}})
     app.register_blueprint(api_bp)
 
     logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, logging.INFO))
+    install_file_log_handler()
     logger = logging.getLogger("stacky_agents.app")
 
     init_db()
     install_console_log_handler()
+    try:
+        from services.db_backup import ensure_weekly_backup
+
+        backup = ensure_weekly_backup()
+        if backup.get("skipped"):
+            logger.info("db backup omitido: %s", backup.get("reason"))
+        else:
+            logger.info("db backup creado: %s", backup.get("backup_path"))
+    except Exception:
+        logger.exception("db backup automático falló (continuando)")
 
     # Seed inicial de flow_config.json (Feature #4 — DO-4.4).
     # No regenera si el operador ya tiene reglas configuradas.
@@ -261,6 +285,24 @@ def create_app() -> Flask:
         )
         logger.exception("unhandled exception in %s %s", request.method, request.path)
         return jsonify({"error": "Internal server error", "request_id": g.get("request_id", "")}), 500
+
+    if dist_dir is not None:
+        dist_path = Path(dist_dir)
+
+        @app.get("/")
+        def _serve_spa_index():
+            return send_from_directory(dist_path, "index.html")
+
+        @app.get("/<path:asset_path>")
+        def _serve_spa_asset(asset_path: str):
+            if asset_path == "api" or asset_path.startswith("api/"):
+                return jsonify({"error": "Not found"}), 404
+
+            candidate = dist_path / asset_path
+            if candidate.exists() and candidate.is_file():
+                return send_from_directory(dist_path, asset_path)
+
+            return send_from_directory(dist_path, "index.html")
 
     return app
 

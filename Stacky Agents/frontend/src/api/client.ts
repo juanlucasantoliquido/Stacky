@@ -1,4 +1,4 @@
-const BASE = (import.meta as any).env?.VITE_API_BASE ?? "http://localhost:5050";
+const BASE = (import.meta as any).env?.VITE_API_BASE ?? "";
 
 /**
  * Respuesta estructurada del gateway que preserva el cuerpo JSON

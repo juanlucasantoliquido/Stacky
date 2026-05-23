@@ -1,0 +1,13 @@
+﻿{
+    "app":  "Stacky Agents",
+    "generated_at":  "2026-05-22 16:23:17",
+    "release_name":  "stacky-agents-smoke",
+    "version":  "0.1.0",
+    "source_commit":  "e60f577",
+    "frontend_dist":  "frontend/dist",
+    "backend_entrypoint":  "backend/stacky-backend.exe",
+    "data_dir":  "data",
+    "projects_dir":  "projects",
+    "installer":  "INSTALL.ps1",
+    "launcher":  "START.bat"
+}

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, request
+from sqlalchemy import and_, or_
 
 import fingerprint
 from db import session_scope
@@ -20,6 +21,7 @@ from services.ado_sync import (
 from services.pipeline_status import get_pipeline_status, get_pipeline_summary
 from services.ado_pipeline_inference import infer_pipeline, invalidate_cache
 from services.ado_client import AdoClient, AdoApiError as _AdoApiError, AdoConfigError as _AdoConfigError
+from services.project_context import build_ado_client, resolve_project_context
 
 logger = logging.getLogger("stacky_agents.api.tickets")
 
@@ -49,6 +51,84 @@ REPO_ROOT: Path = _repo_root()
 def _resolve_repo_root() -> Path:
     """Permite que los tests puedan sobreescribir REPO_ROOT vía patch."""
     return REPO_ROOT
+
+
+def _request_project_name() -> str | None:
+    project = (request.args.get("project") or "").strip()
+    if project:
+        return project
+    if request.method in {"POST", "PUT", "PATCH"}:
+        body = request.get_json(silent=True) or {}
+        body_project = (body.get("project") or "").strip()
+        return body_project or None
+    return None
+
+
+def _ado_sync_error_response(
+    exc: AdoApiError,
+    *,
+    route_label: str,
+    project_name: str | None,
+):
+    ctx = resolve_project_context(project_name=project_name)
+    status_code = getattr(exc, "status_code", None)
+    if status_code not in {401, 403}:
+        logger.warning("ADO %s — api: %s", route_label, exc)
+        return jsonify({"ok": False, "error": "ado_api", "message": str(exc)}), 502
+
+    auth_path = ctx.auth_path if ctx else None
+    auth_exists = bool(auth_path and Path(auth_path).exists())
+    logger.warning(
+        "ADO %s — auth failed (project_name=%s tracker_project=%s org=%s auth_path=%s auth_exists=%s status_code=%s)",
+        route_label,
+        ctx.stacky_project_name if ctx else project_name,
+        ctx.tracker_project if ctx else None,
+        ctx.organization if ctx else None,
+        auth_path,
+        auth_exists,
+        status_code,
+    )
+    message = (
+        f"ADO auth failed for project "
+        f"{(ctx.stacky_project_name if ctx else project_name) or '<unknown>'} "
+        f"(org={(ctx.organization if ctx else None) or '?'} "
+        f"project={(ctx.tracker_project if ctx else None) or '?'}). "
+        f"Verificá backend/projects/{(ctx.stacky_project_name if ctx else project_name) or '<project>'}/auth/ado_auth.json "
+        f"o renová el PAT."
+    )
+    return jsonify({
+        "ok": False,
+        "error": "ado_auth_invalid",
+        "message": message,
+        "project_name": ctx.stacky_project_name if ctx else project_name,
+        "organization": ctx.organization if ctx else None,
+        "tracker_project": ctx.tracker_project if ctx else None,
+        "auth_path": auth_path,
+        "auth_exists": auth_exists,
+        "ado_status_code": status_code,
+    }), 502
+
+
+def _ticket_project_filter(project_name: str | None):
+    ctx = resolve_project_context(project_name=project_name) if project_name else resolve_project_context()
+    if not ctx:
+        return None
+    return or_(
+        Ticket.stacky_project_name == ctx.stacky_project_name,
+        and_(Ticket.stacky_project_name.is_(None), Ticket.project == ctx.tracker_project),
+    )
+
+
+def _ado_client_for_ticket(ticket: Ticket | None = None, project_name: str | None = None) -> AdoClient:
+    if ticket is not None:
+        return build_ado_client(
+            project_name=project_name or ticket.stacky_project_name,
+            tracker_project=ticket.project,
+            ticket=ticket,
+        )
+    if project_name:
+        return build_ado_client(project_name=project_name)
+    return build_ado_client()
 
 
 def _check_finish_manifest_gate(execution_id: int | None) -> dict | None:
@@ -94,11 +174,11 @@ def get_hierarchy():
 
     Incluye pipeline_summary (solo BD local, sin LLM) para cada ticket.
     """
-    project = request.args.get("project")
+    project_filter = _ticket_project_filter(_request_project_name())
     with session_scope() as session:
         q = session.query(Ticket)
-        if project:
-            q = q.filter(Ticket.project == project)
+        if project_filter is not None:
+            q = q.filter(project_filter)
         all_tickets = q.order_by(Ticket.ado_id).all()
 
         ado_id_to_ticket: dict[int, dict] = {}
@@ -128,12 +208,12 @@ def get_hierarchy():
 
 @bp.get("")
 def list_tickets():
-    project = request.args.get("project")
+    project_filter = _ticket_project_filter(_request_project_name())
     search = request.args.get("search", "").strip().lower()
     with session_scope() as session:
         q = session.query(Ticket)
-        if project:
-            q = q.filter(Ticket.project == project)
+        if project_filter is not None:
+            q = q.filter(project_filter)
         rows = q.order_by(Ticket.last_synced_at.desc().nulls_last(), Ticket.id.desc()).limit(500).all()
         out = []
         for t in rows:
@@ -155,14 +235,14 @@ def list_tickets():
 @bp.post("/sync")
 def sync_from_ado():
     """Trae los work items abiertos desde Azure DevOps y actualiza la BD local."""
+    project_name = _request_project_name()
     try:
-        result = sync_tickets()
+        result = sync_tickets(client=_ado_client_for_ticket(project_name=project_name))
     except AdoConfigError as e:
         logger.warning("ADO sync — config: %s", e)
         return jsonify({"ok": False, "error": "config", "message": str(e)}), 400
     except AdoApiError as e:
-        logger.warning("ADO sync — api: %s", e)
-        return jsonify({"ok": False, "error": "ado_api", "message": str(e)}), 502
+        return _ado_sync_error_response(e, route_label="sync", project_name=project_name)
     except Exception as e:
         logger.exception("ADO sync — fallo inesperado")
         return jsonify({"ok": False, "error": "unexpected", "message": str(e)}), 500
@@ -171,8 +251,12 @@ def sync_from_ado():
 
 @bp.get("/sync/status")
 def sync_status():
-    last = get_last_sync_at()
-    return jsonify({"last_synced_at": last.isoformat() if last else None})
+    project_name = _request_project_name()
+    last = get_last_sync_at(project_name=project_name)
+    return jsonify({
+        "project": project_name or (resolve_project_context().stacky_project_name if resolve_project_context() else None),
+        "last_synced_at": last.isoformat() if last else None,
+    })
 
 
 @bp.get("/<int:ticket_id>")
@@ -211,8 +295,7 @@ def get_pipeline_status_endpoint(ticket_id: int):
     ado_comments = None
     if request.args.get("include_ado_comments", "").lower() in ("1", "true", "yes"):
         try:
-            from services.ado_client import AdoClient
-            client = AdoClient()
+            client = _ado_client_for_ticket(ticket=t)
             ado_comments = client.fetch_comments(ado_id, top=30)
         except Exception as e:
             logger.warning("pipeline-status: no se pudo leer comentarios ADO para %s: %s", ado_id, e)
@@ -242,7 +325,13 @@ def get_ado_pipeline_status(ticket_id: int):
     model = request.args.get("model") or None
 
     try:
-        result = infer_pipeline(ado_id=ado_id, force_refresh=force, model=model)
+        result = infer_pipeline(
+            ado_id=ado_id,
+            force_refresh=force,
+            model=model,
+            project_name=t.stacky_project_name,
+            tracker_project=t.project,
+        )
         return jsonify(result.to_dict())
     except Exception as e:
         logger.exception("ado-pipeline-status falló para ticket %s (ADO-%s)", ticket_id, ado_id)
@@ -269,19 +358,25 @@ def ado_pipeline_batch():
     # Resolver ado_ids desde BD
     with session_scope() as session:
         tickets = session.query(Ticket).filter(Ticket.id.in_(ticket_ids)).all()
-        id_to_ado = {t.id: t.ado_id for t in tickets}
+        ticket_by_id = {t.id: t for t in tickets}
 
     results: dict[str, dict] = {}
     for tid in ticket_ids:
-        ado_id = id_to_ado.get(tid)
-        if ado_id is None:
+        ticket = ticket_by_id.get(tid)
+        if ticket is None:
             results[str(tid)] = {"error": "not_found"}
             continue
         try:
-            r = infer_pipeline(ado_id=ado_id, force_refresh=force, model=model)
+            r = infer_pipeline(
+                ado_id=ticket.ado_id,
+                force_refresh=force,
+                model=model,
+                project_name=ticket.stacky_project_name,
+                tracker_project=ticket.project,
+            )
             results[str(tid)] = r.to_dict()
         except Exception as e:
-            logger.warning("batch inference falló para ticket %s (ADO-%s): %s", tid, ado_id, e)
+            logger.warning("batch inference falló para ticket %s (ADO-%s): %s", tid, ticket.ado_id, e)
             results[str(tid)] = {"error": str(e)}
 
     return jsonify({"results": results})
@@ -344,7 +439,7 @@ def get_comments(ticket_id: int):
         ado_id = t.ado_id
 
     try:
-        client = AdoClient()
+        client = _ado_client_for_ticket(ticket=t)
     except AdoConfigError as e:
         return jsonify({"comments": [], "error": str(e)}), 200
 
@@ -377,7 +472,7 @@ def get_attachments(ticket_id: int):
         ado_id = t.ado_id
 
     try:
-        client = AdoClient()
+        client = _ado_client_for_ticket(ticket=t)
     except AdoConfigError as e:
         return jsonify({"attachments": [], "error": str(e)}), 200
 
@@ -678,8 +773,7 @@ def set_stacky_status_by_ado(ado_id: int):
             }
         else:
             try:
-                from services.ado_client import AdoClient
-                AdoClient().update_work_item_state(int(ado_id), target_ado_state)
+                _ado_client_for_ticket(ticket=t).update_work_item_state(int(ado_id), target_ado_state)
                 state_change_result = {"ok": True, "to": target_ado_state}
                 logger.info(
                     "set_stacky_status_by_ado: ado state changed → %s (ADO-%s corr=%s)",
@@ -1191,13 +1285,12 @@ def finish_work(ticket_id: int):
         else:
             # No hay HTML — publicar nota de cierre manual textual
             try:
-                from services.ado_client import AdoClient
                 fallback_html = (
                     "<p><b>Cierre manual desde Stacky Agents.</b></p>"
                     f"<p>Operador: {operator}</p>"
                     f"<p>Motivo: {operator_reason}</p>"
                 )
-                AdoClient().post_comment(int(ado_id), fallback_html, "html")
+                _ado_client_for_ticket(ticket=ticket).post_comment(int(ado_id), fallback_html, "html")
                 actions.append({
                     "action": "publish_ado_comment",
                     "ok": True,
@@ -1220,8 +1313,7 @@ def finish_work(ticket_id: int):
     # ── 4. Cambiar estado en ADO ──────────────────────────────────────────────
     if target_ado_state and ado_id is not None:
         try:
-            from services.ado_client import AdoClient
-            AdoClient().update_work_item_state(int(ado_id), target_ado_state)
+            _ado_client_for_ticket(ticket=ticket).update_work_item_state(int(ado_id), target_ado_state)
             actions.append({
                 "action": "update_ado_state",
                 "ok": True,
@@ -1481,7 +1573,7 @@ def create_child_task(ado_id: int):
         prev_url = None
         if prev_task_id:
             try:
-                prev_url = AdoClient().work_item_url(int(prev_task_id))
+                prev_url = _ado_client_for_ticket(project_name=_request_project_name()).work_item_url(int(prev_task_id))
             except Exception:
                 pass
         return jsonify({
@@ -1545,7 +1637,7 @@ def create_child_task(ado_id: int):
 
     # Inicializar cliente ADO
     try:
-        ado = AdoClient()
+        ado = _ado_client_for_ticket(project_name=_request_project_name())
     except _AdoConfigError as exc:
         _audit_create_child_task(
             correlation_id=correlation_id,
@@ -2073,8 +2165,7 @@ def assign_ticket(ticket_id: int):
         ado_ok = False
         ado_error = None
         try:
-            client = AdoClient()
-            client.update_work_item_assigned_to(ado_id, ado_unique_name)
+            _ado_client_for_ticket(ticket=ticket).update_work_item_assigned_to(ado_id, ado_unique_name)
             ado_ok = True
         except Exception as e:
             ado_error = str(e)
@@ -2210,8 +2301,8 @@ def invalidate_diagnostics_cache(ticket_id: int):
 # Rate limiting simple en memoria (P7)
 import time as _sync_time
 _SYNC_MIN_INTERVAL_SEC = 15
-_last_sync_ts: float = 0.0
-_sync_in_progress: bool = False
+_last_sync_ts_by_project: dict[str, float] = {}
+_sync_in_progress_by_project: set[str] = set()
 
 
 @bp.post("/sync-v2")
@@ -2227,50 +2318,53 @@ def sync_from_ado_v2():
     - Header X-Stacky-Trigger registrado en system_logs
     - Flag sync_in_progress para evitar syncs concurrentes
     """
-    global _last_sync_ts, _sync_in_progress
-
     min_interval = int(os.environ.get("STACKY_SYNC_MIN_INTERVAL_SEC", _SYNC_MIN_INTERVAL_SEC))
     now = _sync_time.time()
     triggered_by = request.headers.get("X-Stacky-Trigger", "manual")
+    project_name = _request_project_name()
+    ctx = resolve_project_context(project_name=project_name)
+    sync_scope = ctx.stacky_project_name if ctx else "__global__"
+    last_sync_ts = _last_sync_ts_by_project.get(sync_scope, 0.0)
 
     # Rate limiting
-    if now - _last_sync_ts < min_interval:
-        remaining = int(min_interval - (now - _last_sync_ts))
+    if now - last_sync_ts < min_interval:
+        remaining = int(min_interval - (now - last_sync_ts))
         return jsonify({
             "ok": False,
             "error": "rate_limited",
             "message": f"Sync demasiado frecuente. Espera {remaining}s.",
             "retry_after_sec": remaining,
+            "project": ctx.stacky_project_name if ctx else project_name,
         }), 429
 
     # Evitar syncs concurrentes
-    if _sync_in_progress:
+    if sync_scope in _sync_in_progress_by_project:
         return jsonify({
             "ok": False,
             "error": "sync_in_progress",
             "message": "Ya hay un sync en curso. Intentá en unos segundos.",
+            "project": ctx.stacky_project_name if ctx else project_name,
         }), 409
 
-    _last_sync_ts = now
-    _sync_in_progress = True
+    _last_sync_ts_by_project[sync_scope] = now
+    _sync_in_progress_by_project.add(sync_scope)
     t_start = _sync_time.monotonic()
 
     try:
-        result = sync_tickets()
+        result = sync_tickets(client=_ado_client_for_ticket(project_name=project_name))
     except AdoConfigError as e:
-        _sync_in_progress = False
+        _sync_in_progress_by_project.discard(sync_scope)
         logger.warning("ADO sync-v2 — config: %s", e)
         return jsonify({"ok": False, "error": "config", "message": str(e)}), 400
     except AdoApiError as e:
-        _sync_in_progress = False
-        logger.warning("ADO sync-v2 — api: %s", e)
-        return jsonify({"ok": False, "error": "ado_api", "message": str(e)}), 502
+        _sync_in_progress_by_project.discard(sync_scope)
+        return _ado_sync_error_response(e, route_label="sync-v2", project_name=project_name)
     except Exception as e:
-        _sync_in_progress = False
+        _sync_in_progress_by_project.discard(sync_scope)
         logger.exception("ADO sync-v2 — fallo inesperado")
         return jsonify({"ok": False, "error": "unexpected", "message": str(e)}), 500
     finally:
-        _sync_in_progress = False
+        _sync_in_progress_by_project.discard(sync_scope)
 
     duration_ms = int((_sync_time.monotonic() - t_start) * 1000)
     idempotent = result.get("created", 0) == 0 and result.get("updated", 0) == 0 and result.get("removed", 0) == 0
@@ -2287,6 +2381,7 @@ def sync_from_ado_v2():
             "duration_ms": duration_ms,
             "triggered_by": triggered_by,
             "idempotent": idempotent,
+            "project_name": result.get("stacky_project_name") or (ctx.stacky_project_name if ctx else project_name),
         }
     )
 
@@ -2296,6 +2391,7 @@ def sync_from_ado_v2():
         "duration_ms": duration_ms,
         "idempotent": idempotent,
         "triggered_by": triggered_by,
+        "project_name": result.get("stacky_project_name") or (ctx.stacky_project_name if ctx else project_name),
     })
 
 
@@ -2313,7 +2409,10 @@ def sync_status_v2():
     - sync_in_progress
     """
     stale_threshold = int(os.environ.get("STACKY_STALE_THRESHOLD_SEC", 120))
-    last = get_last_sync_at()
+    project_name = _request_project_name()
+    ctx = resolve_project_context(project_name=project_name)
+    sync_scope = ctx.stacky_project_name if ctx else "__global__"
+    last = get_last_sync_at(project_name=project_name)
     seconds_since = None
     is_stale = False
 
@@ -2322,11 +2421,12 @@ def sync_status_v2():
         is_stale = seconds_since > stale_threshold
 
     return jsonify({
+        "project_name": ctx.stacky_project_name if ctx else project_name,
         "last_synced_at": last.isoformat() if last else None,
         "seconds_since_sync": seconds_since,
         "is_stale": is_stale,
         "stale_threshold_sec": stale_threshold,
-        "sync_in_progress": _sync_in_progress,
+        "sync_in_progress": sync_scope in _sync_in_progress_by_project,
     })
 
 

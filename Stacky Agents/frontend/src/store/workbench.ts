@@ -5,6 +5,8 @@ interface WorkbenchState {
   activeTicketId: number | null;
   activeAgentType: AgentType | null;
   activeExecutionId: number | null;
+  codexConsoleExecutionId: number | null;
+  codexConsoleMinimized: boolean;
   blocks: ContextBlock[];
   runningExecutionId: number | null;
   // FA-04 — modelo override (null = router decide)
@@ -28,6 +30,8 @@ interface WorkbenchState {
   setActiveTicket: (id: number | null) => void;
   setActiveAgent: (t: AgentType | null) => void;
   setActiveExecution: (id: number | null) => void;
+  setCodexConsoleExecution: (id: number | null, minimized?: boolean) => void;
+  setCodexConsoleMinimized: (value: boolean) => void;
   setBlocks: (b: ContextBlock[]) => void;
   patchBlock: (id: string, patch: Partial<ContextBlock>) => void;
   removeBlock: (id: string) => void;
@@ -47,6 +51,8 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   activeTicketId: null,
   activeAgentType: null,
   activeExecutionId: null,
+  codexConsoleExecutionId: null,
+  codexConsoleMinimized: false,
   blocks: [],
   runningExecutionId: null,
   modelOverride: null,
@@ -69,6 +75,12 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
       vsCodeAgent: null,
     }),
   setActiveExecution: (id) => set({ activeExecutionId: id }),
+  setCodexConsoleExecution: (id, minimized = false) =>
+    set({
+      codexConsoleExecutionId: id,
+      codexConsoleMinimized: id == null ? false : minimized,
+    }),
+  setCodexConsoleMinimized: (value) => set({ codexConsoleMinimized: value }),
   setBlocks: (b) => set({ blocks: b }),
   patchBlock: (id, patch) =>
     set((s) => ({

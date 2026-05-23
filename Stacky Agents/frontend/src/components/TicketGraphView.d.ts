@@ -1,13 +1,14 @@
-import type { TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
+import * as React from "react";
 
-interface TicketGraphViewProps {
-  hierarchy: TicketHierarchy | null;
-  onSync: () => void;
-  isSyncing: boolean;
-  syncError?: string | null;
-  vsCodeAgents?: VsCodeAgent[];
-  runningByTicket?: Map<number, AgentExecution>;
+export interface NodeErrorBoundaryProps {
+  adoId?: number;
+  children?: React.ReactNode;
 }
 
-declare const TicketGraphView: (props: TicketGraphViewProps) => JSX.Element;
+export class NodeErrorBoundary extends React.Component<
+  NodeErrorBoundaryProps,
+  { hasError: boolean; error: Error | null }
+> {}
+
+declare const TicketGraphView: React.ComponentType<any>;
 export default TicketGraphView;

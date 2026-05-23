@@ -12,8 +12,8 @@ Body de POST /api/init_project (campos comunes):
   {
     "name":           "RSPACIFICO",
     "display_name":   "RS Pacífico",
-    "workspace_root": "N:/GIT/RS/RSPacifico/trunk",
-    "tracker_type":   "azure_devops" | "jira"
+    "workspace_root": "C:/Repos/RSPacifico/trunk",
+    "tracker_type":   "azure_devops" | "jira" | "mantis"
   }
 
 Campos adicionales para Azure DevOps:
@@ -31,8 +31,10 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 
 from flask import Blueprint, jsonify, request
+from sqlalchemy import or_
 
 from project_manager import (
     PROJECTS_DIR,
@@ -48,10 +50,13 @@ from project_manager import (
     set_active_project,
     set_agent_workflow_config,
     set_project_pinned_agents,
+    validate_docs_paths,
+    validate_workspace_root,
     write_ado_auth,
     write_jira_auth,
     write_mantis_auth,
 )
+from services.secrets_store import load_json_file, read_secret_from_file, write_json_file
 
 logger = logging.getLogger("stacky_agents.api.projects")
 
@@ -74,10 +79,17 @@ def _has_credentials(name: str, tracker_type: str) -> bool:
 def _project_to_dict(cfg: dict, active_name: str | None) -> dict:
     tracker = cfg.get("issue_tracker") or {}
     t_type  = tracker.get("type", "azure_devops")
+    docs_paths = cfg.get("docs_paths") or {}
     return {
         "name":              cfg["name"],
         "display_name":      cfg.get("display_name", cfg["name"]),
         "workspace_root":    cfg.get("workspace_root", ""),
+        "docs_paths":        {
+            "technical":      docs_paths.get("technical", ""),
+            "functional":     docs_paths.get("functional", ""),
+        },
+        "docs_technical_path":  docs_paths.get("technical", ""),
+        "docs_functional_path": docs_paths.get("functional", ""),
         "tracker_type":      t_type,
         # ADO fields
         "organization":      tracker.get("organization", ""),
@@ -94,6 +106,69 @@ def _project_to_dict(cfg: dict, active_name: str | None) -> dict:
         "initialized":       True,
         "has_credentials":   _has_credentials(cfg["name"], t_type),
     }
+
+
+def _resolve_workspace_root(data: dict, cfg: dict | None = None) -> str:
+    if cfg is None:
+        return (data.get("workspace_root") or "").strip()
+    if "workspace_root" in data:
+        return (data.get("workspace_root") or "").strip()
+    return (cfg.get("workspace_root") or "").strip()
+
+
+def _resolve_docs_paths(data: dict, cfg: dict | None = None) -> dict:
+    """Lee docs_paths desde payload nuevo o campos planos legacy del modal."""
+    current = (cfg or {}).get("docs_paths") or {}
+    has_nested = "docs_paths" in data
+    has_flat = "docs_technical_path" in data or "docs_functional_path" in data
+
+    if not has_nested and not has_flat:
+        return {
+            "technical": current.get("technical", ""),
+            "functional": current.get("functional", ""),
+        }
+
+    nested = data.get("docs_paths") if isinstance(data.get("docs_paths"), dict) else {}
+    return {
+        "technical": (
+            data.get("docs_technical_path")
+            if "docs_technical_path" in data
+            else nested.get("technical", current.get("technical", ""))
+        ),
+        "functional": (
+            data.get("docs_functional_path")
+            if "docs_functional_path" in data
+            else nested.get("functional", current.get("functional", ""))
+        ),
+    }
+
+
+def _count_docs_files(root: str) -> dict:
+    """Cuenta archivos soportados para feedback del modal sin indexar contenido."""
+    raw = (root or "").strip()
+    result = {"path": raw, "exists": False, "readable": False, "md": 0, "pdf": 0, "total": 0}
+    if not raw:
+        return result
+
+    path = Path(raw).expanduser()
+    if not path.exists() or not path.is_dir():
+        return result
+
+    result["exists"] = True
+    try:
+        for file_path in path.rglob("*"):
+            if not file_path.is_file():
+                continue
+            suffix = file_path.suffix.lower()
+            if suffix == ".md":
+                result["md"] += 1
+            elif suffix == ".pdf":
+                result["pdf"] += 1
+        result["readable"] = True
+        result["total"] = result["md"] + result["pdf"]
+    except (OSError, PermissionError) as exc:
+        result["error"] = str(exc)
+    return result
 
 
 # ── GET /api/projects ─────────────────────────────────────────────────────────
@@ -151,7 +226,8 @@ def init_project():
     data           = request.get_json(force=True, silent=True) or {}
     name           = (data.get("name") or "").strip()
     display_name   = (data.get("display_name") or "").strip()
-    workspace_root = (data.get("workspace_root") or "").strip()
+    workspace_root = _resolve_workspace_root(data)
+    docs_paths     = _resolve_docs_paths(data)
     tracker_type   = (data.get("tracker_type") or "azure_devops").strip().lower()
 
     if not name:
@@ -160,6 +236,9 @@ def init_project():
         return jsonify({"ok": False, "error": "workspace_root requerido"}), 400
 
     try:
+        workspace_root = validate_workspace_root(workspace_root)
+        docs_paths = validate_docs_paths(docs_paths)
+
         if tracker_type == "jira":
             jira_url    = (data.get("jira_url") or "").strip()
             jira_key    = (data.get("jira_key") or "").strip()
@@ -184,6 +263,7 @@ def init_project():
                 jql=jql,
                 verify_ssl=bool(verify_ssl),
                 auth_file="auth/jira_auth.json",
+                docs_paths=docs_paths,
             )
             if jira_user and jira_token:
                 write_jira_auth(name=name, url=jira_url, user=jira_user, token=jira_token)
@@ -213,6 +293,7 @@ def init_project():
                 protocol=mantis_protocol,
                 verify_ssl=bool(verify_ssl),
                 auth_file="auth/mantis_auth.json",
+                docs_paths=docs_paths,
             )
             if mantis_protocol == "soap" and mantis_username:
                 write_mantis_auth(
@@ -245,6 +326,7 @@ def init_project():
                 ado_project=ado_project,
                 area_path=area_path,
                 auth_file="auth/ado_auth.json",
+                docs_paths=docs_paths,
             )
             if pat:
                 write_ado_auth(name=name, pat=pat)
@@ -252,6 +334,8 @@ def init_project():
         active_name = get_active_project()
         return jsonify({"ok": True, "project": _project_to_dict(cfg, active_name)})
 
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         logger.exception("Error al inicializar proyecto %s", name)
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -282,6 +366,9 @@ def update_project(project_name: str):
     tracker_type = (data.get("tracker_type") or cfg.get("issue_tracker", {}).get("type", "azure_devops")).lower()
 
     try:
+        workspace_root = validate_workspace_root(_resolve_workspace_root(data, cfg))
+        docs_paths = validate_docs_paths(_resolve_docs_paths(data, cfg))
+
         if tracker_type == "jira":
             tracker   = cfg.get("issue_tracker") or {}
             jira_url  = (data.get("jira_url") or tracker.get("url", "")).strip()
@@ -289,13 +376,14 @@ def update_project(project_name: str):
             new_cfg   = initialize_jira_project(
                 name=project_name,
                 display_name=(data.get("display_name") or cfg.get("display_name", project_name)).strip(),
-                workspace_root=(data.get("workspace_root") or cfg.get("workspace_root", "")).strip(),
+                workspace_root=workspace_root,
                 url=jira_url,
                 project_key=jira_key,
                 api_version=str(data.get("api_version") or tracker.get("api_version", "3")),
                 jql=(data.get("jql") or tracker.get("jql", "")),
                 verify_ssl=data.get("verify_ssl", tracker.get("verify_ssl", True)),
                 auth_file="auth/jira_auth.json",
+                docs_paths=docs_paths,
             )
             jira_user  = (data.get("jira_user") or "").strip()
             jira_token = (data.get("jira_token") or "").strip()
@@ -304,13 +392,17 @@ def update_project(project_name: str):
                 write_jira_auth(name=project_name, url=auth_url, user=jira_user, token=jira_token)
             elif jira_user:
                 auth_path = PROJECTS_DIR / project_name / "auth" / "jira_auth.json"
-                existing_token = ""
-                if auth_path.exists():
-                    try:
-                        existing_creds = json.loads(auth_path.read_text(encoding="utf-8"))
-                        existing_token = existing_creds.get("token", "")
-                    except Exception:
-                        pass
+                existing_token = read_secret_from_file(
+                    auth_path,
+                    "token",
+                    format_field="token_format",
+                ).value
+                if not existing_token:
+                    existing_token = read_secret_from_file(
+                        auth_path,
+                        "password",
+                        format_field="password_format",
+                    ).value
                 if existing_token:
                     write_jira_auth(name=project_name, url=auth_url, user=jira_user, token=existing_token)
 
@@ -326,13 +418,14 @@ def update_project(project_name: str):
             new_cfg = initialize_mantis_project(
                 name=project_name,
                 display_name=(data.get("display_name") or cfg.get("display_name", project_name)).strip(),
-                workspace_root=(data.get("workspace_root") or cfg.get("workspace_root", "")).strip(),
+                workspace_root=workspace_root,
                 url=mantis_url,
                 project_id=mantis_project_id,
                 project_name=mantis_project_name,
                 protocol=mantis_protocol,
                 verify_ssl=data.get("verify_ssl", tracker.get("verify_ssl", True)),
                 auth_file="auth/mantis_auth.json",
+                docs_paths=docs_paths,
             )
             auth_path = PROJECTS_DIR / project_name / "auth" / "mantis_auth.json"
             if mantis_protocol == "soap" and mantis_username:
@@ -348,12 +441,9 @@ def update_project(project_name: str):
                 )
             elif mantis_project_id and auth_path.exists():
                 try:
-                    existing_auth = json.loads(auth_path.read_text(encoding="utf-8"))
+                    existing_auth = load_json_file(auth_path)
                     existing_auth["project_id"] = mantis_project_id
-                    auth_path.write_text(
-                        json.dumps(existing_auth, indent=2, ensure_ascii=False),
-                        encoding="utf-8",
-                    )
+                    write_json_file(auth_path, existing_auth)
                 except Exception:
                     pass
 
@@ -364,11 +454,12 @@ def update_project(project_name: str):
             new_cfg      = initialize_ado_project(
                 name=project_name,
                 display_name=(data.get("display_name") or cfg.get("display_name", project_name)).strip(),
-                workspace_root=(data.get("workspace_root") or cfg.get("workspace_root", "")).strip(),
+                workspace_root=workspace_root,
                 organization=organization,
                 ado_project=ado_project,
                 area_path=(data.get("area_path") or tracker.get("area_path", "")),
                 auth_file="auth/ado_auth.json",
+                docs_paths=docs_paths,
             )
             pat = (data.get("pat") or "").strip()
             if pat:
@@ -377,6 +468,8 @@ def update_project(project_name: str):
         active_name = get_active_project()
         return jsonify({"ok": True, "project": _project_to_dict(new_cfg, active_name)})
 
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         logger.exception("Error al actualizar proyecto %s", project_name)
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -440,6 +533,66 @@ def get_project_credentials(project_name: str):
             pass
 
     return jsonify(result)
+
+
+@bp.post("/projects/<string:project_name>/test_docs_paths")
+def test_docs_paths(project_name: str):
+    """
+    Valida/cuenta rutas de documentación sin guardar cambios.
+    Body opcional:
+      { "docs_paths": { "technical": "...", "functional": "..." } }
+      o { "docs_technical_path": "...", "docs_functional_path": "..." }
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    cfg = get_project_config(project_name) or {"name": project_name, "docs_paths": {}}
+    docs_paths = _resolve_docs_paths(data, cfg)
+    try:
+        normalized = validate_docs_paths(docs_paths)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc), "docs_paths": docs_paths}), 400
+
+    counts = {
+        "technical": _count_docs_files(normalized.get("technical", "")),
+        "functional": _count_docs_files(normalized.get("functional", "")),
+    }
+    return jsonify({"ok": True, "docs_paths": normalized, "counts": counts})
+
+
+@bp.post("/browse_folder")
+def browse_folder():
+    """
+    Abre un selector nativo de carpeta en la máquina local del operador.
+
+    Este endpoint existe porque el file picker web no puede entregar rutas
+    absolutas reales, y Stacky Agents corre localmente junto al backend.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    title = (data.get("title") or "Seleccionar carpeta").strip()
+    initial_dir = (data.get("initial_dir") or "").strip()
+
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        kwargs = {"title": title}
+        if initial_dir and Path(initial_dir).expanduser().is_dir():
+            kwargs["initialdir"] = str(Path(initial_dir).expanduser())
+        selected = filedialog.askdirectory(**kwargs)
+        root.destroy()
+    except Exception as exc:
+        logger.warning("No se pudo abrir selector de carpeta: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 501
+
+    if not selected:
+        return jsonify({"ok": True, "path": ""})
+    try:
+        selected_path = Path(selected).resolve(strict=True)
+    except Exception:
+        selected_path = Path(selected).absolute()
+    return jsonify({"ok": True, "path": str(selected_path).replace("\\", "/")})
 
 
 # ── POST /api/mantis/projects — listar proyectos de una instancia Mantis ──────
@@ -517,7 +670,8 @@ def put_project_agents(project_name: str):
 def get_tracker_states(project_name: str):
     """Devuelve los estados disponibles para el tracker del proyecto."""
     from db import session_scope
-    from models import Ticket
+    from models import Ticket, TicketStateHistory
+    from services.flow_config_store import list_rules
 
     cfg = get_project_config(project_name)
     if not cfg:
@@ -535,13 +689,44 @@ def get_tracker_states(project_name: str):
         tracker_project = tracker.get("project") or project_name
 
     with session_scope() as session:
-        rows = (
+        current_rows = (
             session.query(Ticket.ado_state)
-            .filter(Ticket.project == tracker_project, Ticket.ado_state.isnot(None))
+            .filter(
+                Ticket.ado_state.isnot(None),
+                or_(
+                    Ticket.stacky_project_name == project_name,
+                    Ticket.project == tracker_project,
+                ),
+            )
             .distinct()
             .all()
         )
-    db_states = [r[0] for r in rows if r[0]]
+        history_rows = (
+            session.query(TicketStateHistory.new_state)
+            .filter(
+                TicketStateHistory.stacky_project_name == project_name,
+                TicketStateHistory.new_state.isnot(None),
+            )
+            .distinct()
+            .all()
+        )
+    db_states = [r[0] for r in current_rows if r[0]]
+    history_states = [r[0] for r in history_rows if r[0]]
+
+    workflow_states: list[str] = []
+    for workflow in (cfg.get("agent_workflow_configs") or {}).values():
+        for state in workflow.get("allowed_states") or []:
+            if isinstance(state, str) and state.strip():
+                workflow_states.append(state.strip())
+        transition_state = (workflow.get("transition_state") or "").strip()
+        if transition_state:
+            workflow_states.append(transition_state)
+
+    flow_config_states = [
+        state.strip()
+        for state in (rule.get("ado_state") or "" for rule in list_rules(project_name=project_name))
+        if state.strip()
+    ]
 
     defaults: list[str] = []
     if t_type == "azure_devops":
@@ -551,7 +736,12 @@ def get_tracker_states(project_name: str):
     elif t_type == "mantis":
         defaults = ["new", "feedback", "acknowledged", "confirmed", "assigned", "resolved", "closed"]
 
-    combined = db_states + [s for s in defaults if s not in db_states]
+    combined: list[str] = []
+    seen: set[str] = set()
+    for state in db_states + history_states + workflow_states + flow_config_states + defaults:
+        if state not in seen:
+            seen.add(state)
+            combined.append(state)
     return jsonify({"ok": True, "states": combined, "tracker_type": t_type})
 
 
@@ -597,12 +787,8 @@ def launch_vscode_for_project(project_name: str):
     Asigna un puerto dedicado por proyecto (rango 5060-5099) para el bridge HTTP
     de la extensión Stacky, permitiendo ejecuciones paralelas e independientes.
     """
-    from services.vscode_instance_manager import (
-        get_or_assign_port,
-        is_alive,
-        launch_vscode,
-        write_vscode_settings,
-    )
+    from services.project_context import ensure_project_vscode
+    from services.vscode_instance_manager import get_instance_info, is_alive
 
     cfg = get_project_config(project_name)
     if not cfg:
@@ -612,33 +798,48 @@ def launch_vscode_for_project(project_name: str):
     if not workspace_root:
         return jsonify({"ok": False, "error": "El proyecto no tiene workspace_root configurado"}), 400
 
+    instance_info = get_instance_info(project_name)
+    current_port = instance_info.get("port") if isinstance(instance_info, dict) else None
+    already_running = (
+        is_alive(int(current_port), workspace_root=workspace_root)
+        if isinstance(current_port, int)
+        else False
+    )
+
     try:
-        port = get_or_assign_port(project_name, workspace_root)
+        ctx = ensure_project_vscode(project_name)
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 503
 
-    if is_alive(port):
-        return jsonify({
-            "ok":             True,
-            "port":           port,
-            "already_running": True,
-            "workspace_root": workspace_root,
-        })
+    return jsonify({
+        "ok": True,
+        "port": ctx.vscode_port,
+        "already_running": already_running,
+        "launching": not already_running,
+        "workspace_root": ctx.workspace_root,
+    })
 
-    try:
-        write_vscode_settings(workspace_root, port)
-    except Exception as e:
-        logger.warning("No se pudo escribir .vscode/settings.json en %s: %s", workspace_root, e)
 
-    try:
-        launch_vscode(workspace_root)
-    except RuntimeError as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+@bp.get("/projects/<string:project_name>/vscode-status")
+def vscode_status_for_project(project_name: str):
+    from services.project_context import resolve_project_context
+    from services.vscode_instance_manager import get_instance_info, health_details
+
+    ctx = resolve_project_context(project_name=project_name)
+    if ctx is None:
+        return jsonify({"ok": False, "error": f"Proyecto '{project_name}' no encontrado"}), 404
+
+    instance_info = get_instance_info(project_name)
+    port = instance_info.get("port") if isinstance(instance_info, dict) else ctx.vscode_port
+    ready = False
+    if isinstance(port, int):
+        health = health_details(port)
+        ready = bool(health and health.get("ok") is True)
 
     return jsonify({
-        "ok":             True,
-        "port":           port,
-        "already_running": False,
-        "launching":      True,
-        "workspace_root": workspace_root,
+        "ok": True,
+        "project_name": ctx.stacky_project_name,
+        "port": port,
+        "ready": ready,
+        "workspace_root": ctx.workspace_root,
     })

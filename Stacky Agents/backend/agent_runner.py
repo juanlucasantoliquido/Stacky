@@ -17,6 +17,7 @@ from config import config
 from db import session_scope
 from models import AgentExecution, Ticket
 from services import audit_chain, confidence, egress_policies, embeddings, llm_router, output_cache, pii_masker, webhooks
+from services.project_context import ensure_project_vscode, resolve_project_context
 from services.stacky_logger import logger as stacky_logger
 
 
@@ -42,6 +43,7 @@ def run_agent(
     previous_execution_id: int | None = None,
     runtime: str = "github_copilot",
     vscode_agent_filename: str | None = None,
+    project_name: str | None = None,
 ) -> int:
     agent = agents.get(agent_type)
     if agent is None:
@@ -110,8 +112,14 @@ def run_agent(
         try:
             from services.codex_cli_runner import start_codex_cli_run
 
+            workspace_root: str | None = None
+            stacky_project_name: str | None = project_name
             with session_scope() as _cs:
                 _ct = _cs.get(Ticket, ticket_id)
+                _project_ctx = resolve_project_context(project_name=project_name, ticket=_ct)
+                if _project_ctx:
+                    workspace_root = _project_ctx.workspace_root
+                    stacky_project_name = _project_ctx.stacky_project_name
                 # vscode_agent_filename viene del payload (validado en endpoint).
                 # Como fallback defensivo: si el runner se llama sin él (tests directos,
                 # packs), intenta resolverlo desde el agente, pero logea warning.
@@ -136,7 +144,7 @@ def run_agent(
                 user=user,
                 vscode_agent_filename=_vscode_filename,
                 ticket_message=_ticket_message,
-                workspace_root=None,
+                workspace_root=workspace_root,
                 model_override=model_override,
             )
             # start_codex_cli_run crea su propia fila de ejecución; la fila
@@ -148,6 +156,11 @@ def run_agent(
                     _orig.status = "cancelled"
                     _orig.error_message = f"replaced_by={_new_exec_id} (codex_cli)"
                     _orig.completed_at = datetime.utcnow()
+                    md = dict(_orig.metadata_dict or {})
+                    md["runtime"] = runtime
+                    md["stacky_project_name"] = stacky_project_name
+                    md["workspace_root"] = workspace_root
+                    _orig.metadata_dict = md
             return _new_exec_id
         except Exception as _codex_exc:
             # Sin fallback: cualquier error de codex_cli es error real.
@@ -194,6 +207,7 @@ def run_agent(
             "fingerprint_complexity": fingerprint_complexity,
             "delta_prefix": delta_prefix,
             "runtime": runtime,
+            "project_name": project_name,
         },
         daemon=True,
     )
@@ -276,6 +290,7 @@ def _run_in_background(
     fingerprint_complexity: str | None = None,
     delta_prefix: str | None = None,
     runtime: str = "github_copilot",
+    project_name: str | None = None,
 ) -> None:
     log = log_streamer.logger_for(execution_id)
     agent = agents.get(agent_type)
@@ -293,6 +308,27 @@ def _run_in_background(
             ticket = session.get(Ticket, ticket_id) if ticket_id else None
             project = ticket.project if ticket else None
             ticket_ado_id = ticket.ado_id if ticket else None
+            project_ctx = resolve_project_context(project_name=project_name, ticket=ticket)
+
+        if (
+            (config.LLM_BACKEND or "").lower() == "vscode_bridge"
+            and runtime == "github_copilot"
+            and project_ctx is not None
+        ):
+            try:
+                project_ctx = ensure_project_vscode(project_ctx.stacky_project_name)
+                log(
+                    "info",
+                    "vscode bridge listo "
+                    f"(project={project_ctx.stacky_project_name}, "
+                    f"workspace_root={project_ctx.workspace_root}, "
+                    f"bridge_port={project_ctx.vscode_port})",
+                )
+            except Exception as exc:  # noqa: BLE001
+                log("error", f"no se pudo preparar VS Code del proyecto: {exc}")
+                _mark_terminal(execution_id, status="error", error=str(exc))
+                log_streamer.close(execution_id)
+                return
 
         # Arrancar heartbeat antes del trabajo pesado. Defensive: si la
         # escritura inicial falla, seguimos sin heartbeat (el reaper aplicará
@@ -419,6 +455,7 @@ def _run_in_background(
                     current_ado_id=ticket_ado_id,
                     current_title=_sim_title,
                     project=_sim_project or "Strategist_Pacifico",
+                    project_name=project_ctx.stacky_project_name if project_ctx else None,
                 )
                 if _sim_info and _sim_info.get("injected"):
                     log(
@@ -441,6 +478,9 @@ def _run_in_background(
                     agent_type=agent_type,
                     existing_blocks=raw_blocks or [],
                     ado_id=ticket_ado_id,
+                    project_name=project_ctx.stacky_project_name if project_ctx else None,
+                    tracker_project=project_ctx.tracker_project if project_ctx else project,
+                    ticket=ticket,
                     log=log,
                     return_stats=True,
                 )
@@ -534,6 +574,9 @@ def _run_in_background(
         run_ctx = RunContext(
             ticket_id=ticket_id,
             project=project,
+            stacky_project_name=project_ctx.stacky_project_name if project_ctx else project_name,
+            workspace_root=project_ctx.workspace_root if project_ctx else None,
+            bridge_port=project_ctx.vscode_port if project_ctx else None,
             model_override=decision.model,
             system_prompt_override=system_prompt_override,
             use_few_shot=use_few_shot,

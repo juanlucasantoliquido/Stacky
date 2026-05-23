@@ -1,5 +1,9 @@
 auth/auth.json
 auth/ado_auth.json
+Stacky Agents/backend/.env
+Stacky Agents/backend/.env.local
+Stacky Agents/backend/projects/*/auth/*.json
+!Stacky Agents/backend/.env.example
 
 # Credenciales y secrets del agente QA UAT (y otros agentes)
 .secrets/*.env

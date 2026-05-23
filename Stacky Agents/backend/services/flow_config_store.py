@@ -38,10 +38,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from project_manager import PROJECTS_DIR, get_active_project, get_project_config
+
 _log = logging.getLogger("stacky_agents.flow_config_store")
 
 # Path relativo al directorio de trabajo (backend/), igual que preferences.py
-_CONFIG_FILE = Path("data/flow_config.json")
+_DEFAULT_CONFIG_FILE = Path("data/flow_config.json")
+_CONFIG_FILE = _DEFAULT_CONFIG_FILE
 
 # Tipos de agente válidos — sincronizados con DEFAULT_NEXT en next_agent.py
 VALID_AGENT_TYPES: frozenset[str] = frozenset(
@@ -85,26 +88,84 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _read_raw() -> dict:
+def _normalize_project_name(project_name: str | None) -> str | None:
+    raw = (project_name or "").strip()
+    return raw.upper() if raw else None
+
+
+def _config_file_for(project_name: str | None = None) -> Path:
+    if _CONFIG_FILE != _DEFAULT_CONFIG_FILE:
+        return _CONFIG_FILE
+
+    normalized = _normalize_project_name(project_name)
+    if normalized and get_project_config(normalized):
+        return PROJECTS_DIR / normalized / "flow_config.json"
+
+    active = _normalize_project_name(get_active_project())
+    if active and get_project_config(active):
+        return PROJECTS_DIR / active / "flow_config.json"
+
+    return _CONFIG_FILE
+
+
+def _legacy_fallback_file_for(config_file: Path) -> Path | None:
+    """Retorna el archivo global legacy si aplica como fallback de lectura."""
+    if config_file == _DEFAULT_CONFIG_FILE:
+        return None
+    if not _DEFAULT_CONFIG_FILE.exists():
+        return None
+    return _DEFAULT_CONFIG_FILE
+
+
+def _empty_config() -> dict:
+    return {"version": "1.0", "updated_at": _now_iso(), "rules": []}
+
+
+def _read_json_file(config_file: Path) -> dict:
+    text = config_file.read_text(encoding="utf-8")
+    data = json.loads(text)
+    if not isinstance(data, dict) or "rules" not in data:
+        raise ValueError("formato inesperado — falta campo 'rules'")
+    return data
+
+
+def _read_raw(project_name: str | None = None) -> dict:
     """Lee el archivo JSON. Ante cualquier error devuelve estructura vacía y loguea."""
+    config_file = _config_file_for(project_name)
     try:
-        text = _CONFIG_FILE.read_text(encoding="utf-8")
-        data = json.loads(text)
-        if not isinstance(data, dict) or "rules" not in data:
-            raise ValueError("formato inesperado — falta campo 'rules'")
-        return data
+        return _read_json_file(config_file)
     except FileNotFoundError:
-        _log.warning("flow_config.json no encontrado — iniciando con reglas vacías")
-        return {"version": "1.0", "updated_at": _now_iso(), "rules": []}
+        legacy_file = _legacy_fallback_file_for(config_file)
+        if legacy_file is not None:
+            try:
+                data = _read_json_file(legacy_file)
+                _log.info(
+                    "flow_config.json no encontrado en %s — usando fallback legacy %s",
+                    config_file,
+                    legacy_file,
+                )
+                return data
+            except FileNotFoundError:
+                pass
+            except (json.JSONDecodeError, ValueError) as exc:
+                _log.warning(
+                    "flow_config legacy inválido en %s (%s) — iniciando con reglas vacías",
+                    legacy_file,
+                    exc,
+                )
+                return _empty_config()
+        _log.warning("flow_config.json no encontrado en %s — iniciando con reglas vacías", config_file)
+        return _empty_config()
     except (json.JSONDecodeError, ValueError) as exc:
-        _log.warning("flow_config.json inválido (%s) — iniciando con reglas vacías", exc)
-        return {"version": "1.0", "updated_at": _now_iso(), "rules": []}
+        _log.warning("flow_config.json inválido en %s (%s) — iniciando con reglas vacías", config_file, exc)
+        return _empty_config()
 
 
-def _write(data: dict) -> None:
-    _CONFIG_FILE.parent.mkdir(exist_ok=True)
+def _write(data: dict, project_name: str | None = None) -> None:
+    config_file = _config_file_for(project_name)
+    config_file.parent.mkdir(parents=True, exist_ok=True)
     data["updated_at"] = _now_iso()
-    _CONFIG_FILE.write_text(
+    config_file.write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
@@ -125,20 +186,20 @@ def _validate_fields(ado_state: Any, agent_type: Any) -> None:
 # ── API pública ────────────────────────────────────────────────────────────
 
 
-def list_rules() -> list[dict]:
+def list_rules(project_name: str | None = None) -> list[dict]:
     """Devuelve todas las reglas como lista de dicts."""
-    return _read_raw().get("rules", [])
+    return _read_raw(project_name).get("rules", [])
 
 
-def get_rule(rule_id: str) -> dict | None:
+def get_rule(rule_id: str, project_name: str | None = None) -> dict | None:
     """Devuelve una regla por ID o None si no existe."""
-    for rule in list_rules():
+    for rule in list_rules(project_name):
         if rule.get("id") == rule_id:
             return rule
     return None
 
 
-def create_rule(ado_state: str, agent_type: str) -> dict:
+def create_rule(ado_state: str, agent_type: str, project_name: str | None = None) -> dict:
     """
     Crea una nueva regla.
 
@@ -150,7 +211,7 @@ def create_rule(ado_state: str, agent_type: str) -> dict:
     ado_state = ado_state.strip()
     agent_type = agent_type.strip()
 
-    data = _read_raw()
+    data = _read_raw(project_name)
     rules: list[dict] = data.get("rules", [])
 
     # Comprobar duplicado
@@ -168,11 +229,16 @@ def create_rule(ado_state: str, agent_type: str) -> dict:
     }
     rules.append(rule)
     data["rules"] = rules
-    _write(data)
+    _write(data, project_name)
     return rule
 
 
-def update_rule(rule_id: str, ado_state: str, agent_type: str) -> dict:
+def update_rule(
+    rule_id: str,
+    ado_state: str,
+    agent_type: str,
+    project_name: str | None = None,
+) -> dict:
     """
     Actualiza una regla existente.
 
@@ -185,7 +251,7 @@ def update_rule(rule_id: str, ado_state: str, agent_type: str) -> dict:
     ado_state = ado_state.strip()
     agent_type = agent_type.strip()
 
-    data = _read_raw()
+    data = _read_raw(project_name)
     rules: list[dict] = data.get("rules", [])
 
     # Verificar que no haya otro con el mismo ado_state
@@ -206,18 +272,18 @@ def update_rule(rule_id: str, ado_state: str, agent_type: str) -> dict:
         raise RuleNotFoundError(rule_id)
 
     data["rules"] = rules
-    _write(data)
+    _write(data, project_name)
     return updated
 
 
-def delete_rule(rule_id: str) -> None:
+def delete_rule(rule_id: str, project_name: str | None = None) -> None:
     """
     Elimina una regla.
 
     Raises:
         RuleNotFoundError: regla no encontrada.
     """
-    data = _read_raw()
+    data = _read_raw(project_name)
     rules: list[dict] = data.get("rules", [])
 
     original_len = len(rules)
@@ -227,17 +293,26 @@ def delete_rule(rule_id: str) -> None:
         raise RuleNotFoundError(rule_id)
 
     data["rules"] = rules
-    _write(data)
+    _write(data, project_name)
 
 
-def seed_defaults_if_empty() -> int:
+def seed_defaults_if_empty(project_name: str | None = None) -> int:
     """
     Si ``data/flow_config.json`` no existe, lo crea con las reglas semilla
     de ``_DEFAULT_RULES_SEED``. Si ya existe (con o sin reglas), no toca nada.
 
     Returns el número de reglas creadas (0 si ya había archivo).
     """
-    if _CONFIG_FILE.exists():
+    config_file = _config_file_for(project_name)
+    if config_file.exists():
+        return 0
+    legacy_file = _legacy_fallback_file_for(config_file)
+    if legacy_file is not None:
+        _log.info(
+            "flow_config seed omitido para %s — existe fallback legacy en %s",
+            config_file,
+            legacy_file,
+        )
         return 0
     now = _now_iso()
     rules = [
@@ -250,12 +325,12 @@ def seed_defaults_if_empty() -> int:
         }
         for ado_state, agent_type in _DEFAULT_RULES_SEED
     ]
-    _write({"version": "1.0", "rules": rules})
+    _write({"version": "1.0", "rules": rules}, project_name)
     _log.info("flow_config seed: %d reglas iniciales escritas", len(rules))
     return len(rules)
 
 
-def resolve(ado_state: str) -> dict:
+def resolve(ado_state: str, project_name: str | None = None) -> dict:
     """
     Dado un estado ADO, retorna el agente mapeado.
 
@@ -269,7 +344,7 @@ def resolve(ado_state: str) -> dict:
 
         o bien ``{"found": False, "ado_state": "In Review", "agent_type": None}``
     """
-    for rule in list_rules():
+    for rule in list_rules(project_name):
         if rule.get("ado_state") == ado_state:
             return {
                 "found": True,

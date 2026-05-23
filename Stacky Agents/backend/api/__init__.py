@@ -22,6 +22,7 @@ from .qa_uat import bp as qa_uat_bp
 from .similarity import bp as similarity_bp
 from .metrics import bp as metrics_bp
 from .tickets import bp as tickets_bp
+from .ui_sections import bp as ui_sections_bp
 from .webhooks import bp as webhooks_bp
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -48,6 +49,7 @@ api_bp.register_blueprint(metrics_bp)
 api_bp.register_blueprint(diag_bp)
 api_bp.register_blueprint(docs_bp)
 api_bp.register_blueprint(flow_config_bp)
+api_bp.register_blueprint(ui_sections_bp)
 
 
 @api_bp.get("/health")

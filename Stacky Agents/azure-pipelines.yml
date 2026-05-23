@@ -1,0 +1,86 @@
+trigger:
+  branches:
+    exclude:
+      - "*"
+  tags:
+    include:
+      - "v*"
+
+pr: none
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  NODE_VERSION: "20.x"
+  PYTHON_VERSION: "3.11"
+  TIMESTAMP_SERVER: "http://timestamp.digicert.com"
+  SIGN_CERT_THUMBPRINT: ""
+  SIGN_CERT_PATH: ""
+  SIGN_CERT_PASSWORD: ""
+  SIGNTOOL_PATH: ""
+
+steps:
+  - checkout: self
+    clean: true
+
+  - task: NodeTool@0
+    displayName: "Use Node.js $(NODE_VERSION)"
+    inputs:
+      versionSpec: "$(NODE_VERSION)"
+
+  - task: UsePythonVersion@0
+    displayName: "Use Python $(PYTHON_VERSION)"
+    inputs:
+      versionSpec: "$(PYTHON_VERSION)"
+      architecture: "x64"
+
+  - powershell: |
+      choco install innosetup -y --no-progress
+    displayName: "Install Inno Setup"
+
+  - powershell: |
+      $tag = "$(Build.SourceBranchName)"
+      if ($tag -notmatch "^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$") {
+        throw "Release tags must look like vX.Y.Z. Received: $tag"
+      }
+      $version = $tag -replace "^v", ""
+      Write-Host "##vso[task.setvariable variable=ReleaseVersion]$version"
+      Write-Host "Release version: $version"
+    displayName: "Resolve release version"
+
+  - powershell: |
+      $args = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "$(Build.SourcesDirectory)\Stacky Agents\deployment\build_release.ps1",
+        "-OutputRoot", "$(Build.ArtifactStagingDirectory)",
+        "-ReleaseName", "stacky-agents-$(ReleaseVersion)",
+        "-Version", "$(ReleaseVersion)",
+        "-TimestampServer", "$(TIMESTAMP_SERVER)",
+        "-RequireInstaller",
+        "-RequireSigning"
+      )
+
+      if ("$(SIGN_CERT_THUMBPRINT)") {
+        $args += @("-CertificateThumbprint", "$(SIGN_CERT_THUMBPRINT)")
+      }
+      if ("$(SIGN_CERT_PATH)") {
+        $args += @("-CertificatePath", "$(SIGN_CERT_PATH)")
+      }
+      if ("$(SIGN_CERT_PASSWORD)") {
+        $args += @("-CertificatePassword", "$(SIGN_CERT_PASSWORD)")
+      }
+      if ("$(SIGNTOOL_PATH)") {
+        $args += @("-SignToolPath", "$(SIGNTOOL_PATH)")
+      }
+
+      & powershell.exe @args
+      if ($LASTEXITCODE -ne 0) {
+        throw "build_release.ps1 failed with exit code $LASTEXITCODE"
+      }
+    displayName: "Build, smoke-test, sign and package"
+
+  - publish: "$(Build.ArtifactStagingDirectory)"
+    artifact: "stacky-agents-release"
+    displayName: "Publish release artifacts"

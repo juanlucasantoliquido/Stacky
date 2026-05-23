@@ -40,6 +40,7 @@ def tmp_config(tmp_path, monkeypatch):
     import services.flow_config_store as store
 
     tmp_file = tmp_path / "flow_config.json"
+    monkeypatch.setattr(store, "_DEFAULT_CONFIG_FILE", tmp_path / "legacy-unused.json")
     monkeypatch.setattr(store, "_CONFIG_FILE", tmp_file)
     yield tmp_file
 
@@ -289,6 +290,58 @@ class TestCorruptJsonFallback:
 
         rules = store.list_rules()
         assert rules == []
+
+
+class TestLegacyProjectFallback:
+    def test_project_reads_legacy_global_and_migrates_on_write(self, tmp_path, monkeypatch):
+        import services.flow_config_store as store
+
+        legacy_file = tmp_path / "data" / "flow_config.json"
+        legacy_file.parent.mkdir(parents=True, exist_ok=True)
+        legacy_file.write_text(
+            json.dumps(
+                {
+                    "version": "1.0",
+                    "updated_at": "2026-05-21T00:00:00+00:00",
+                    "rules": [
+                        {
+                            "id": "legacy-rule",
+                            "ado_state": "Technical review",
+                            "agent_type": "technical",
+                            "created_at": "2026-05-21T00:00:00+00:00",
+                            "updated_at": "2026-05-21T00:00:00+00:00",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        projects_dir = tmp_path / "projects"
+        (projects_dir / "RSPACIFICO").mkdir(parents=True, exist_ok=True)
+
+        monkeypatch.setattr(store, "_DEFAULT_CONFIG_FILE", legacy_file)
+        monkeypatch.setattr(store, "_CONFIG_FILE", legacy_file)
+        monkeypatch.setattr(store, "PROJECTS_DIR", projects_dir)
+        monkeypatch.setattr(
+            store,
+            "get_project_config",
+            lambda name: {"name": name} if name == "RSPACIFICO" else None,
+        )
+        monkeypatch.setattr(store, "get_active_project", lambda: "RSPACIFICO")
+
+        rules = store.list_rules(project_name="RSPACIFICO")
+        assert [r["ado_state"] for r in rules] == ["Technical review"]
+
+        created = store.create_rule("Reviewed by Dev", "qa", project_name="RSPACIFICO")
+        assert created["ado_state"] == "Reviewed by Dev"
+
+        project_file = projects_dir / "RSPACIFICO" / "flow_config.json"
+        raw = json.loads(project_file.read_text(encoding="utf-8"))
+        assert [r["ado_state"] for r in raw["rules"]] == [
+            "Technical review",
+            "Reviewed by Dev",
+        ]
 
     def test_missing_rules_key_falls_back(self, tmp_config, monkeypatch):
         tmp_config.write_text('{"version": "1.0"}', encoding="utf-8")

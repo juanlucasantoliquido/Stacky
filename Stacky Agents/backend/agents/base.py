@@ -19,6 +19,9 @@ class RunContext:
     """Datos transversales al Run que afectan armado del prompt y elección de modelo."""
     ticket_id: int | None = None
     project: str | None = None
+    stacky_project_name: str | None = None
+    workspace_root: str | None = None
+    bridge_port: int | None = None
     model_override: str | None = None
     system_prompt_override: str | None = None  # FA-50
     use_few_shot: bool = True                  # FA-12
@@ -186,6 +189,9 @@ class BaseAgent(ABC):
             on_log=log,
             execution_id=execution_id,
             model=ctx.model_override,
+            project_name=ctx.stacky_project_name,
+            workspace_root=ctx.workspace_root,
+            bridge_port=ctx.bridge_port,
         )
         log("info", f"agent {self.type} done")
 

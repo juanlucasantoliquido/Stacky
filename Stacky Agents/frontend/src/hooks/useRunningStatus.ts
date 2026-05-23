@@ -18,6 +18,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Tickets, Executions } from "../api/endpoints";
+import { useWorkbench } from "../store/workbench";
 import type { AgentExecution, Ticket } from "../types";
 
 export interface RunningStatusResult {
@@ -40,12 +41,13 @@ const EXEC_POLL_INTERVAL = 5_000;
 const TICKETS_ACTIVE_POLL_INTERVAL = 8_000;
 
 export function useRunningStatus(): RunningStatusResult {
+  const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
   // ── Fuente 1: stacky_status desde el listado de tickets ──────────────────
   // Cuando hay actividad, refrescamos más frecuentemente.
   // En reposo, el intervalo normal de Tickets.list (60s) aplica.
   const { data: tickets } = useQuery<Ticket[]>({
-    queryKey: ["tickets"],
-    queryFn: Tickets.list,
+    queryKey: ["tickets", activeProjectName],
+    queryFn: () => Tickets.list(activeProjectName),
     // No sobreescribir staleTime global — usar el existente. Solo
     // refetcharemos más rápido si ya tenemos tickets corriendo.
     refetchInterval: (query) => {
@@ -57,15 +59,15 @@ export function useRunningStatus(): RunningStatusResult {
 
   // ── Fuente 2: polling de ejecuciones activas (metadata + fallback) ────────
   const { data: activeExecs } = useQuery<AgentExecution[]>({
-    queryKey: ["executions-active"],
-    queryFn: () => Executions.list({ status: "running" }),
+    queryKey: ["executions-active", activeProjectName],
+    queryFn: () => Executions.list({ status: "running", project: activeProjectName }),
     refetchInterval: EXEC_POLL_INTERVAL,
     staleTime: 0,
   });
 
   const { data: queuedExecs } = useQuery<AgentExecution[]>({
-    queryKey: ["executions-queued"],
-    queryFn: () => Executions.list({ status: "queued" }),
+    queryKey: ["executions-queued", activeProjectName],
+    queryFn: () => Executions.list({ status: "queued", project: activeProjectName }),
     refetchInterval: EXEC_POLL_INTERVAL,
     staleTime: 0,
   });

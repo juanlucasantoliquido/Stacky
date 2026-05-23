@@ -1,29 +1,14 @@
-import sqlite3
-import os
+"""Compatibility wrapper for the in-app diagnostics screen.
 
-db_path = os.path.join(os.path.dirname(__file__), "data", "stacky_agents.db")
-conn = sqlite3.connect(db_path)
-cur = conn.cursor()
+The production diagnostic surface is GET /api/diag/local. This script remains
+only as a small CLI fallback for support sessions launched from the backend dir.
+"""
+from __future__ import annotations
 
-# All 502 responses ever
-cur.execute("SELECT * FROM system_logs WHERE status_code = 502 ORDER BY timestamp DESC LIMIT 20")
-rows = cur.fetchall()
-print(f"--- 502 responses ({len(rows)} rows) ---")
-for r in rows:
-    print(r)
+import json
 
-# All sync endpoint calls
-cur.execute("SELECT id, timestamp, status_code, duration_ms, error_json FROM system_logs WHERE endpoint LIKE '%sync%' ORDER BY timestamp DESC LIMIT 30")
-rows = cur.fetchall()
-print(f"\n--- Sync endpoint calls ({len(rows)} rows) ---")
-for r in rows:
-    print(r)
+from services.local_diagnostics import run_local_diagnostics
 
-# Error-level logs related to ADO
-cur.execute("SELECT * FROM system_logs WHERE level = 'ERROR' OR (error_json IS NOT NULL AND error_json != 'null') ORDER BY timestamp DESC LIMIT 20")
-rows = cur.fetchall()
-print(f"\n--- Error logs ({len(rows)} rows) ---")
-for r in rows:
-    print(r[:8])  # first 8 cols to keep readable
 
-conn.close()
+if __name__ == "__main__":
+    print(json.dumps(run_local_diagnostics(), indent=2, ensure_ascii=False))

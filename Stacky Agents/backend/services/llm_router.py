@@ -118,7 +118,7 @@ def _pick_copilot_default(agent_type: str, available: list[str]) -> str:
         from config import config as _cfg
         if (_cfg.LLM_BACKEND or "").lower() == "vscode_bridge":
             raise RuntimeError(
-                "El bridge de VS Code no responde en 127.0.0.1:5052. "
+                "El bridge de VS Code no responde para el proyecto activo. "
                 "Recargá VS Code: Ctrl+Shift+P → 'Developer: Reload Window'"
             )
         raise RuntimeError(
@@ -167,7 +167,7 @@ def decide(
         from copilot_bridge import _vscode_bridge_health
         if not _vscode_bridge_health():
             raise RuntimeError(
-                "El bridge de VS Code no responde en 127.0.0.1:5052. "
+                "El bridge de VS Code no responde para el proyecto activo. "
                 "Recargá VS Code: Ctrl+Shift+P → 'Developer: Reload Window'"
             )
 

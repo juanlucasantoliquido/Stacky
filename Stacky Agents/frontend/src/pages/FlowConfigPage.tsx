@@ -68,12 +68,16 @@ function CreateForm({ onCreated, trackerStates, loadingStates, usedStates, activ
   }
 
   const mutation = useMutation({
-    mutationFn: () => FlowConfig.create({ ado_state: adoState.trim(), agent_type: agentType }),
+    mutationFn: () => FlowConfig.create({
+      ado_state: adoState.trim(),
+      agent_type: agentType,
+      project: activeProjectName,
+    }),
     onSuccess: () => {
       setAdoState("");
       setAgentType("business");
       setError(null);
-      qc.invalidateQueries({ queryKey: ["flow-config"] });
+      qc.invalidateQueries({ queryKey: ["flow-config", activeProjectName] });
       onCreated();
     },
     onError: (err) => {
@@ -141,9 +145,10 @@ interface RuleRowProps {
   rule: FlowConfigRule;
   trackerStates: string[];
   otherUsedStates: Set<string>; // estados ocupados por otras reglas (excluye el propio)
+  activeProjectName: string | null;
 }
 
-function RuleRow({ rule, trackerStates, otherUsedStates }: RuleRowProps) {
+function RuleRow({ rule, trackerStates, otherUsedStates, activeProjectName }: RuleRowProps) {
   const [editing, setEditing] = useState(false);
   const [editAdoState, setEditAdoState] = useState(rule.ado_state);
   const [editAgentType, setEditAgentType] = useState<ValidAgentType>(
@@ -159,11 +164,12 @@ function RuleRow({ rule, trackerStates, otherUsedStates }: RuleRowProps) {
       FlowConfig.update(rule.id, {
         ado_state: editAdoState.trim(),
         agent_type: editAgentType,
+        project: activeProjectName,
       }),
     onSuccess: () => {
       setEditing(false);
       setError(null);
-      qc.invalidateQueries({ queryKey: ["flow-config"] });
+      qc.invalidateQueries({ queryKey: ["flow-config", activeProjectName] });
     },
     onError: (err) => {
       setError(extractErrorMessage(err));
@@ -171,9 +177,9 @@ function RuleRow({ rule, trackerStates, otherUsedStates }: RuleRowProps) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => FlowConfig.delete(rule.id),
+    mutationFn: () => FlowConfig.delete(rule.id, activeProjectName),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["flow-config"] });
+      qc.invalidateQueries({ queryKey: ["flow-config", activeProjectName] });
     },
     onError: (err) => {
       setError(extractErrorMessage(err));
@@ -303,10 +309,11 @@ function RuleRow({ rule, trackerStates, otherUsedStates }: RuleRowProps) {
 
 export default function FlowConfigPage() {
   const activeProject = useWorkbench((s) => s.activeProject);
+  const activeProjectName = activeProject?.name ?? null;
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["flow-config"],
-    queryFn: () => FlowConfig.list(),
+    queryKey: ["flow-config", activeProjectName],
+    queryFn: () => FlowConfig.list(activeProjectName),
     staleTime: 30_000,
   });
 
@@ -342,7 +349,7 @@ export default function FlowConfigPage() {
         trackerStates={trackerStates}
         loadingStates={trackerStatesQuery.isLoading}
         usedStates={usedStates}
-        activeProjectName={activeProject?.name ?? null}
+        activeProjectName={activeProjectName}
       />
 
       <div className={styles.tableCard}>
@@ -386,6 +393,7 @@ export default function FlowConfigPage() {
                     rule={rule}
                     trackerStates={trackerStates}
                     otherUsedStates={otherUsedStates}
+                    activeProjectName={activeProjectName}
                   />
                 );
               })}

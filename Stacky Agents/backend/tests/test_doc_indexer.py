@@ -319,3 +319,50 @@ class TestProjectDocs:
                 project_name="ACME",
                 source_id="project-docs:docs",
             )
+
+    def test_configured_docs_paths_override_autodiscovery(self, tmp_path, monkeypatch):
+        """docs_paths explícitos se exponen como Técnica / Funcional y evitan autodiscovery."""
+        workspace = tmp_path / "workspace"
+        technical = tmp_path / "client-docs" / "technical"
+        functional = tmp_path / "client-docs" / "functional"
+        _write_md(workspace / "docs" / "legacy.md", "# Legacy\n")
+        _write_md(technical / "architecture.md", "# Architecture\n")
+        _write_md(functional / "manual.md", "# Manual\n")
+        cfg = {
+            "name": "ACME",
+            "display_name": "ACME App",
+            "workspace_root": str(workspace),
+            "docs_paths": {
+                "technical": str(technical),
+                "functional": str(functional),
+            },
+        }
+        self._patch_project(monkeypatch, cfg)
+
+        result = indexer.list_doc_sources(project_name="ACME")
+        source_ids = [s["id"] for s in result["sources"]]
+        assert result["default_source_id"] == "project-docs:technical"
+        assert "project-docs:technical" in source_ids
+        assert "project-docs:functional" in source_ids
+        assert "project-docs:docs" not in source_ids
+
+    def test_configured_docs_index_uses_backend_label(self, tmp_path, monkeypatch):
+        """El root del índice usa el label de la fuente configurada."""
+        workspace = tmp_path / "workspace"
+        technical = tmp_path / "client-docs" / "technical"
+        _write_md(technical / "architecture.md", "# Architecture\n")
+        cfg = {
+            "name": "ACME",
+            "display_name": "ACME App",
+            "workspace_root": str(workspace),
+            "docs_paths": {"technical": str(technical), "functional": ""},
+        }
+        self._patch_project(monkeypatch, cfg)
+
+        result = indexer.build_project_docs_index(
+            project_name="ACME",
+            source_id="project-docs:technical",
+        )
+        root = result["roots"][0]
+        assert root["label"] == "📐 Técnica"
+        assert root["children"][0]["label"] == "architecture.md"

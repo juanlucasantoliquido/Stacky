@@ -8,7 +8,7 @@ const KEYS = {
   agentTypes:      "stacky:agentTypes",
 } as const;
 
-const _API_BASE = (import.meta as any).env?.VITE_API_BASE ?? "http://localhost:5050";
+const _API_BASE = (import.meta as any).env?.VITE_API_BASE ?? "";
 const _PREFS_URL = `${_API_BASE}/api/preferences`;
 
 // ─── localStorage helpers ─────────────────────────────────────────────────

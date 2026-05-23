@@ -1,17 +1,42 @@
-.bar {
+.wrap {
   display: flex;
+  justify-content: flex-end;
+  padding: 8px 24px 0;
+}
+
+.bar {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
-  font-size: 12px;
-  border-bottom: 1px solid var(--border, #e5e7eb);
-  background: var(--surface, #f9fafb);
-  min-height: 32px;
+  padding: 7px 10px;
+  font-size: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.34);
+  backdrop-filter: blur(10px);
+  min-height: 0;
+  max-width: min(100%, 520px);
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.14);
+}
+
+.toneNeutral {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.toneWarning {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(120, 53, 15, 0.18);
+}
+
+.toneDanger {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(127, 29, 29, 0.18);
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -21,10 +46,10 @@
 .dot.red    { background: #ef4444; }
 
 .spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--border, #d1d5db);
-  border-top-color: #3b82f6;
+  width: 11px;
+  height: 11px;
+  border: 2px solid rgba(148, 163, 184, 0.24);
+  border-top-color: #60a5fa;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   flex-shrink: 0;
@@ -35,30 +60,51 @@
 }
 
 .label {
-  color: var(--text-secondary, #6b7280);
-  flex: 1;
+  color: rgba(226, 232, 240, 0.88);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .labelStale {
-  color: #ef4444;
-  font-weight: 500;
+  color: #fdba74;
 }
 
 .labelError {
-  color: #ef4444;
+  color: #fca5a5;
 }
 
 .btn {
-  padding: 2px 8px;
-  font-size: 11px;
-  border: 1px solid var(--border, #d1d5db);
-  border-radius: 4px;
-  background: transparent;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
   cursor: pointer;
-  color: var(--text-secondary, #6b7280);
-  transition: background 0.15s;
+  color: rgba(241, 245, 249, 0.88);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
 }
 
 .btn:hover {
-  background: var(--hover, #f3f4f6);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+@media (max-width: 720px) {
+  .wrap {
+    padding: 8px 16px 0;
+  }
+
+  .bar {
+    width: 100%;
+    justify-content: space-between;
+    max-width: none;
+  }
+
+  .label {
+    white-space: normal;
+  }
 }

@@ -21,16 +21,17 @@ import { rawPost } from "../../api/client";
 // ─── Mock global de fetch ─────────────────────────────────────────────────────
 
 function mockFetch(status: number, body: unknown) {
-  global.fetch = vi.fn().mockResolvedValue({
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
     status,
     ok: status >= 200 && status < 300,
     text: () => Promise.resolve(JSON.stringify(body)),
-  } as Response);
+  } as Response));
 }
 
 describe("rawPost — gateway de agent-completion", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("TC-01: 200 → ok=true y data con result", async () => {
@@ -133,11 +134,11 @@ describe("rawPost — gateway de agent-completion", () => {
   });
 
   it("TC-08: body vacío en respuesta de error → errorBody con message del texto", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       status: 503,
       ok: false,
       text: () => Promise.resolve("Service Unavailable"),
-    } as Response);
+    } as Response));
 
     const response = await rawPost("/api/tickets/by-ado/149/agent-completion", {}, {});
 

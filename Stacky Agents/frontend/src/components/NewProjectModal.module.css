@@ -98,6 +98,53 @@
   margin: 4px 0;
 }
 
+.docsPathSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.pathRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pathRow .input {
+  flex: 1;
+}
+
+.btnPath {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btnPath:hover {
+  border-color: var(--text-muted);
+}
+
+.docsActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.docsCheckOk {
+  font-size: 11px;
+  color: #86efac;
+}
+
 /* ── Tracker selector ── */
 
 .trackerRow {

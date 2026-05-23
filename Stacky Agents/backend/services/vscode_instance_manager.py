@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -31,6 +32,17 @@ PORT_BASE    = 5060   # primer puerto del rango
 MAX_PROJECTS = 40     # soporta hasta 40 proyectos simultáneos (5060–5099)
 
 PROJECTS_DIR = Path(__file__).resolve().parent.parent / "projects"
+
+
+def _normalize_project_name(project_name: str) -> str:
+    return (project_name or "").strip().upper()
+
+
+def _normalize_workspace_root(path: str | None) -> str | None:
+    raw = (path or "").strip()
+    if not raw:
+        return None
+    return str(Path(raw).expanduser().resolve(strict=False)).replace("\\", "/").lower()
 
 
 # ── Asignación de puertos ─────────────────────────────────────────────────────
@@ -56,7 +68,8 @@ def get_or_assign_port(project_name: str, workspace_root: str) -> int:
     Devuelve el puerto ya asignado al proyecto o asigna uno nuevo.
     El resultado se persiste en projects/<name>/vscode_instance.json.
     """
-    instance_file = PROJECTS_DIR / project_name / "vscode_instance.json"
+    normalized_project = _normalize_project_name(project_name)
+    instance_file = PROJECTS_DIR / normalized_project / "vscode_instance.json"
 
     # Intentar leer puerto existente
     if instance_file.exists():
@@ -90,7 +103,7 @@ def get_or_assign_port(project_name: str, workspace_root: str) -> int:
                 json.dumps(info, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-            logger.info("Proyecto %s → puerto %d asignado", project_name, candidate)
+            logger.info("Proyecto %s → puerto %d asignado", normalized_project, candidate)
             return candidate
 
     raise RuntimeError(
@@ -101,7 +114,7 @@ def get_or_assign_port(project_name: str, workspace_root: str) -> int:
 
 def get_instance_info(project_name: str) -> dict | None:
     """Lee la info de instancia persistida o devuelve None."""
-    f = PROJECTS_DIR / project_name / "vscode_instance.json"
+    f = PROJECTS_DIR / _normalize_project_name(project_name) / "vscode_instance.json"
     if not f.exists():
         return None
     try:
@@ -112,19 +125,51 @@ def get_instance_info(project_name: str) -> dict | None:
 
 # ── Liveness check ────────────────────────────────────────────────────────────
 
-def is_alive(port: int, timeout: float = 2.0) -> bool:
-    """
-    Devuelve True si el bridge HTTP de la extensión Stacky responde en ese puerto.
-    """
+def health_details(port: int, timeout: float = 2.0) -> dict | None:
     try:
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/health",
             headers={"Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status == 200
+            if resp.status != 200:
+                return None
+            raw = resp.read().decode("utf-8", errors="replace")
+            data = json.loads(raw) if raw else {}
+            return data if isinstance(data, dict) else None
     except Exception:
+        return None
+
+
+def is_alive(port: int, workspace_root: str | None = None, timeout: float = 2.0) -> bool:
+    """Devuelve True si el bridge responde y, opcionalmente, coincide el workspace."""
+    data = health_details(port, timeout=timeout)
+    if not data or data.get("ok") is not True:
         return False
+    expected_workspace = _normalize_workspace_root(workspace_root)
+    if expected_workspace is None:
+        return True
+    actual_workspace = _normalize_workspace_root(data.get("workspace_root"))
+    return actual_workspace == expected_workspace
+
+
+def wait_until_healthy(
+    port: int,
+    *,
+    workspace_root: str | None = None,
+    timeout_sec: float = 45.0,
+    poll_interval_sec: float = 1.0,
+) -> dict | None:
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        details = health_details(port, timeout=min(3.0, poll_interval_sec + 1.0))
+        if details and details.get("ok") is True:
+            expected_workspace = _normalize_workspace_root(workspace_root)
+            actual_workspace = _normalize_workspace_root(details.get("workspace_root"))
+            if expected_workspace is None or actual_workspace == expected_workspace:
+                return details
+        time.sleep(poll_interval_sec)
+    return None
 
 
 # ── Workspace settings ────────────────────────────────────────────────────────
@@ -178,7 +223,7 @@ def launch_vscode(workspace_root: str | Path) -> None:
 
     def _spawn(code_cmd: str) -> None:
         subprocess.Popen(
-            [code_cmd, path_str],
+            [code_cmd, "-n", path_str],
             creationflags=flags,
             close_fds=True,
             stdout=subprocess.DEVNULL,

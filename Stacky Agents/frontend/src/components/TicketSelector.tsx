@@ -10,18 +10,19 @@ import styles from "./TicketSelector.module.css";
 export default function TicketSelector() {
   const [search, setSearch] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
-  const { activeTicketId, setActiveTicket } = useWorkbench();
+  const { activeTicketId, setActiveTicket, activeProject } = useWorkbench();
+  const activeProjectName = activeProject?.name ?? null;
   const queryClient = useQueryClient();
   const { isTicketRunning } = useRunningStatus();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["tickets"],
-    queryFn: Tickets.list,
+  const { data = [], isLoading } = useQuery<Ticket[]>({
+    queryKey: ["tickets", activeProjectName],
+    queryFn: () => Tickets.list(activeProjectName),
     refetchInterval: 60_000,
   });
 
   const sync = useMutation({
-    mutationFn: Tickets.sync,
+    mutationFn: () => Tickets.sync(activeProjectName),
     onSuccess: (res: TicketSyncResult) => {
       if (res.ok) {
         setFeedback(
@@ -30,14 +31,14 @@ export default function TicketSelector() {
       } else {
         setFeedback(res.message ?? "Error al sincronizar");
       }
-      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
     },
     onError: (err: Error) => {
       setFeedback(err.message || "Error al sincronizar");
     },
   });
 
-  const tickets = (data ?? []).filter((t) => {
+  const tickets = data.filter((t) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return t.title.toLowerCase().includes(q) || String(t.ado_id).includes(q);

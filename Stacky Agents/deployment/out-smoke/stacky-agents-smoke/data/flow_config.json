@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "id": "5dce7063-0bbe-4d04-97d8-d1095be79a29",
+      "ado_state": "New",
+      "agent_type": "business",
+      "created_at": "2026-05-22T19:23:33+00:00",
+      "updated_at": "2026-05-22T19:23:33+00:00"
+    },
+    {
+      "id": "340260f8-9aa4-460f-ab9a-e615e7b707ca",
+      "ado_state": "Active",
+      "agent_type": "developer",
+      "created_at": "2026-05-22T19:23:33+00:00",
+      "updated_at": "2026-05-22T19:23:33+00:00"
+    },
+    {
+      "id": "e1409dad-4d79-4d5c-ab02-b85fb04a82ac",
+      "ado_state": "Code Review",
+      "agent_type": "qa",
+      "created_at": "2026-05-22T19:23:33+00:00",
+      "updated_at": "2026-05-22T19:23:33+00:00"
+    },
+    {
+      "id": "101e05a2-2e5b-4ffd-a10b-499c19771472",
+      "ado_state": "Resolved",
+      "agent_type": "qa",
+      "created_at": "2026-05-22T19:23:33+00:00",
+      "updated_at": "2026-05-22T19:23:33+00:00"
+    }
+  ],
+  "updated_at": "2026-05-22T19:23:33+00:00"
+}

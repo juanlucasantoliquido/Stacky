@@ -1,0 +1,201 @@
+/**
+ * useTicketSync — Hook de sincronizacion automatica con ADO.
+ *
+ * P7: Encapsula la logica de polling, forzado de sync en mount,
+ * Page Visibility API y backoff exponencial ante errores.
+ *
+ * Caracteristicas:
+ * - intervalMs configurable (default: 45_000 ms)
+ * - Pausa el polling cuando la tab esta oculta (Page Visibility API)
+ * - Al volver a la tab, si pasaron mas de intervalMs, hace sync inmediato
+ * - Backoff exponencial si ADO devuelve error (hasta 5 minutos)
+ * - triggerSync() para sync manual (respeta rate limit del backend)
+ * - isStale: true si lastSyncedAt > 2 * intervalMs
+ */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Tickets } from "../api/endpoints";
+import { apiBase } from "../api/client";
+import { useWorkbench } from "../store/workbench";
+const DEFAULT_INTERVAL_MS = 45_000;
+const MAX_BACKOFF_MS = 5 * 60_000; // 5 minutos
+export function useTicketSync(options = {}) {
+    const { intervalMs = DEFAULT_INTERVAL_MS, syncOnMount = true, respectVisibility = true, } = options;
+    const queryClient = useQueryClient();
+    const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
+    const [lastSyncedAt, setLastSyncedAt] = useState(null);
+    const [syncError, setSyncError] = useState(null);
+    const [consecutiveErrors, setConsecutiveErrors] = useState(0);
+    const [showForegroundSync, setShowForegroundSync] = useState(false);
+    const [statusReady, setStatusReady] = useState(false);
+    const [, setTick] = useState(0); // para forzar re-render del reloj
+    // Refs para evitar closures obsoletas en los efectos
+    const consecutiveErrorsRef = useRef(0);
+    const lastSyncedAtRef = useRef(null);
+    const intervalMsRef = useRef(intervalMs);
+    const lastTriggerRef = useRef("auto_poll");
+    intervalMsRef.current = intervalMs;
+    // Calculo de segundos desde el ultimo sync (con re-render cada segundo)
+    useEffect(() => {
+        const ticker = setInterval(() => setTick(t => t + 1), 1000);
+        return () => clearInterval(ticker);
+    }, []);
+    const secondsSinceSync = lastSyncedAt
+        ? Math.floor((Date.now() - new Date(lastSyncedAt).getTime()) / 1000)
+        : null;
+    const isStale = secondsSinceSync !== null && secondsSinceSync * 1000 > intervalMs * 2;
+    const shouldRefreshTicketQueries = (data) => {
+        if (data.idempotent === true)
+            return false;
+        return Boolean((data.created ?? 0) || (data.updated ?? 0) || (data.removed ?? 0));
+    };
+    // Mutacion de sync
+    const syncMutation = useMutation({
+        mutationFn: (trigger = "auto_poll") => {
+            const headers = {
+                "X-Stacky-Trigger": trigger,
+            };
+            return fetch(`${apiBase}/api/tickets/sync-v2`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(activeProjectName ? { project: activeProjectName } : {}),
+            }).then(async (r) => {
+                const text = await r.text().catch(() => "");
+                if (!text)
+                    return { ok: r.ok, status: r.status };
+                try {
+                    return JSON.parse(text);
+                }
+                catch {
+                    throw new Error(`Respuesta no-JSON del servidor (HTTP ${r.status})`);
+                }
+            });
+        },
+        onSuccess: (data) => {
+            if (data.ok || data.synced_at) {
+                const syncedAt = data.synced_at ?? new Date().toISOString();
+                setLastSyncedAt(syncedAt);
+                lastSyncedAtRef.current = syncedAt;
+                setSyncError(null);
+                consecutiveErrorsRef.current = 0;
+                setConsecutiveErrors(0);
+                if (shouldRefreshTicketQueries(data)) {
+                    queryClient.invalidateQueries({ queryKey: ["ticket-sync", activeProjectName] });
+                    queryClient.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
+                    queryClient.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
+                }
+            }
+            else if (data.error === "rate_limited") {
+                // Rate limited — no es error, solo esperar
+                setSyncError(null);
+            }
+            else {
+                const msg = data.message || "Error de sincronizacion";
+                setSyncError(msg);
+                consecutiveErrorsRef.current += 1;
+                setConsecutiveErrors(consecutiveErrorsRef.current);
+            }
+        },
+        onError: (err) => {
+            setSyncError(err.message || "Error de red al sincronizar");
+            consecutiveErrorsRef.current += 1;
+            setConsecutiveErrors(consecutiveErrorsRef.current);
+        },
+        onSettled: () => {
+            setShowForegroundSync(false);
+        },
+    });
+    const requestSync = useCallback((trigger, foreground = false) => {
+        if (syncMutation.isPending)
+            return;
+        lastTriggerRef.current = trigger;
+        setShowForegroundSync(foreground);
+        syncMutation.mutate(trigger);
+    }, [syncMutation]);
+    const triggerSync = useCallback(() => {
+        requestSync("manual", true);
+    }, [requestSync]);
+    // Cargar lastSyncedAt inicial desde el endpoint de status
+    useEffect(() => {
+        setLastSyncedAt(null);
+        lastSyncedAtRef.current = null;
+        setSyncError(null);
+        setShowForegroundSync(false);
+        setStatusReady(false);
+        consecutiveErrorsRef.current = 0;
+        setConsecutiveErrors(0);
+        Tickets.syncStatus(activeProjectName)
+            .then((data) => {
+            if (data.last_synced_at) {
+                setLastSyncedAt(data.last_synced_at);
+                lastSyncedAtRef.current = data.last_synced_at;
+            }
+        })
+            .catch(() => { })
+            .finally(() => setStatusReady(true));
+    }, [activeProjectName]);
+    // Sync en mount
+    useEffect(() => {
+        if (!syncOnMount || !statusReady)
+            return;
+        const last = lastSyncedAtRef.current;
+        const shouldSync = !last ||
+            (Date.now() - new Date(last).getTime()) > intervalMsRef.current;
+        if (!shouldSync)
+            return;
+        const t = setTimeout(() => {
+            requestSync("startup", false);
+        }, 1500);
+        return () => clearTimeout(t);
+    }, [activeProjectName, requestSync, statusReady, syncOnMount]);
+    // Polling con backoff exponencial
+    useEffect(() => {
+        const getEffectiveInterval = () => {
+            const errors = consecutiveErrorsRef.current;
+            if (errors === 0)
+                return intervalMsRef.current;
+            return Math.min(intervalMsRef.current * Math.pow(2, errors), MAX_BACKOFF_MS);
+        };
+        let timerId;
+        const scheduleNext = () => {
+            const delay = getEffectiveInterval();
+            timerId = setTimeout(() => {
+                // Si la tab esta oculta y respectVisibility activo, no hacer sync
+                if (respectVisibility && document.visibilityState === "hidden") {
+                    scheduleNext();
+                    return;
+                }
+                requestSync("auto_poll", false);
+                scheduleNext();
+            }, delay);
+        };
+        scheduleNext();
+        return () => clearTimeout(timerId);
+    }, [requestSync, respectVisibility]);
+    // Page Visibility API: sync inmediato al volver a la tab si estuvo oculta
+    useEffect(() => {
+        if (!respectVisibility)
+            return;
+        const onVisibility = () => {
+            if (document.visibilityState === "visible") {
+                const secs = lastSyncedAtRef.current
+                    ? Math.floor((Date.now() - new Date(lastSyncedAtRef.current).getTime()) / 1000)
+                    : null;
+                if (secs === null || secs * 1000 > intervalMsRef.current) {
+                    requestSync("auto_poll", false);
+                }
+            }
+        };
+        document.addEventListener("visibilitychange", onVisibility);
+        return () => document.removeEventListener("visibilitychange", onVisibility);
+    }, [requestSync, respectVisibility]);
+    return {
+        lastSyncedAt,
+        secondsSinceSync,
+        isSyncing: syncMutation.isPending && showForegroundSync,
+        syncError,
+        triggerSync,
+        isStale,
+        consecutiveErrors,
+    };
+}

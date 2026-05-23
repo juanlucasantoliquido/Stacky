@@ -25,6 +25,7 @@ import urllib.request
 from pathlib import Path
 
 from config import config
+from services.secrets_store import read_secret_from_file
 
 logger = logging.getLogger("stacky_agents.ado")
 
@@ -46,6 +47,7 @@ _DEFAULT_WIQL = (
 )
 
 _B64_RE = re.compile(r"^[A-Za-z0-9+/=]+$")
+_JSON_CONTENT_TYPES = ("application/json", "application/json;", "text/json")
 
 
 class AdoConfigError(RuntimeError):
@@ -55,9 +57,32 @@ class AdoConfigError(RuntimeError):
 class AdoApiError(RuntimeError):
     """Error de API de ADO. Opcionalmente incluye correlation_id para trazabilidad."""
 
-    def __init__(self, message: str, correlation_id: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        correlation_id: str | None = None,
+        *,
+        status_code: int | None = None,
+        method: str | None = None,
+        url: str | None = None,
+        detail: str | None = None,
+    ):
         super().__init__(message)
         self.correlation_id: str = correlation_id or str(uuid.uuid4())
+        self.status_code: int | None = status_code
+        self.method: str | None = method
+        self.url: str | None = url
+        self.detail: str | None = detail
+
+
+def _is_signin_html(content_type: str | None, final_url: str | None, raw: str) -> bool:
+    ct = (content_type or "").lower()
+    url = (final_url or "").lower()
+    snippet = (raw or "")[:400].lower()
+    return (
+        "text/html" in ct
+        and ("/_signin" in url or "azure devops services | sign in" in snippet)
+    )
 
 
 def _looks_preencoded(raw: str) -> bool:
@@ -68,20 +93,71 @@ def _read_pat_file(path: Path) -> str | None:
     try:
         if not path.is_file():
             return None
-        data = json.loads(path.read_text(encoding="utf-8"))
+        resolved = read_secret_from_file(
+            path,
+            "pat",
+            format_field="pat_format",
+            allow_preencoded=True,
+            detect_preencoded=True,
+        )
     except Exception as e:
         logger.debug("No se pudo leer %s: %s", path, e)
         return None
-    raw = (data.get("pat") or "").strip()
+    raw = resolved.value.strip()
     if not raw:
         return None
-    fmt = (data.get("pat_format") or "").strip().lower()
-    if fmt == "preencoded" or _looks_preencoded(raw):
+    if resolved.is_preencoded:
+        return raw
+    if _looks_preencoded(raw):
         return raw
     return base64.b64encode(f":{raw}".encode("utf-8")).decode("ascii")
 
 
-def _resolve_auth_header() -> str:
+def _resolve_active_project_defaults(
+    org: str | None,
+    project: str | None,
+    auth_path: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    try:
+        from project_manager import find_project_for_tracker, get_active_project, get_project_config
+    except Exception:
+        return org, project, auth_path
+
+    cfg: dict | None = None
+    stacky_name: str | None = None
+
+    if project:
+        stacky_name, cfg = find_project_for_tracker(project)
+
+    if cfg is None:
+        active = get_active_project()
+        if active:
+            cfg = get_project_config(active)
+            stacky_name = active
+
+    if not cfg:
+        return org, project, auth_path
+
+    tracker = cfg.get("issue_tracker") or {}
+    if (tracker.get("type") or "azure_devops").strip().lower() != "azure_devops":
+        return org, project, auth_path
+
+    resolved_org = (tracker.get("organization") or "").strip() or org
+    resolved_project = (tracker.get("project") or "").strip() or project
+    resolved_auth = auth_path
+    if not resolved_auth and stacky_name:
+        auth_rel = (tracker.get("auth_file") or "auth/ado_auth.json").strip()
+        resolved_auth = str((_BACKEND_ROOT / "projects" / stacky_name.upper() / auth_rel).resolve(strict=False))
+    return resolved_org, resolved_project, resolved_auth
+
+
+def _resolve_auth_header(auth_path: str | Path | None = None) -> str:
+    explicit_auth = Path(auth_path).expanduser() if auth_path else None
+    if explicit_auth:
+        token = _read_pat_file(explicit_auth)
+        if token:
+            return f"Basic {token}"
+
     raw_env = (os.environ.get("ADO_PAT") or config.ADO_PAT or "").strip()
     if raw_env:
         if _looks_preencoded(raw_env):
@@ -103,12 +179,23 @@ def _resolve_auth_header() -> str:
 
 
 class AdoClient:
-    def __init__(self, org: str | None = None, project: str | None = None):
-        self.org = (org or config.ADO_ORG or "UbimiaPacifico").strip()
-        self.project = (project or config.ADO_PROJECT or "Strategist_Pacifico").strip()
+    def __init__(
+        self,
+        org: str | None = None,
+        project: str | None = None,
+        auth_path: str | None = None,
+    ):
+        resolved_org, resolved_project, resolved_auth_path = _resolve_active_project_defaults(
+            org,
+            project,
+            auth_path,
+        )
+        self.org = (resolved_org or config.ADO_ORG or "UbimiaPacifico").strip()
+        self.project = (resolved_project or config.ADO_PROJECT or "Strategist_Pacifico").strip()
+        self.auth_path = (resolved_auth_path or "").strip() or None
         if not self.org or not self.project:
             raise AdoConfigError("ADO_ORG y ADO_PROJECT son obligatorios.")
-        self._auth = _resolve_auth_header()
+        self._auth = _resolve_auth_header(self.auth_path)
         self._base_proj = (
             f"https://dev.azure.com/{urllib.parse.quote(self.org)}/"
             f"{urllib.parse.quote(self.project)}"
@@ -127,16 +214,49 @@ class AdoClient:
         try:
             with urllib.request.urlopen(req, timeout=_TIMEOUT_SEC) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
+                final_url = resp.geturl()
+                content_type = resp.headers.get("Content-Type")
+                if _is_signin_html(content_type, final_url, raw):
+                    raise AdoApiError(
+                        f"ADO auth redirected to sign-in for {url}. "
+                        "El PAT configurado para este proyecto es inválido, expiró o no tiene acceso.",
+                        status_code=401,
+                        method=method,
+                        url=url,
+                        detail=f"content_type={content_type}; final_url={final_url}",
+                    )
+                if raw and not any(token in (content_type or "").lower() for token in _JSON_CONTENT_TYPES):
+                    raise AdoApiError(
+                        f"ADO devolvió una respuesta no JSON para {url} "
+                        f"(content_type={content_type or 'unknown'}).",
+                        status_code=getattr(resp, "status", None),
+                        method=method,
+                        url=url,
+                        detail=raw[:300],
+                    )
                 return json.loads(raw) if raw else {}
+        except AdoApiError:
+            raise
         except urllib.error.HTTPError as e:
             detail = ""
             try:
                 detail = e.read().decode("utf-8", errors="replace")[:500]
             except Exception:
                 pass
-            raise AdoApiError(f"ADO {method} {url} → {e.code}: {detail}") from e
+            raise AdoApiError(
+                f"ADO {method} {url} → {e.code}: {detail}",
+                status_code=e.code,
+                method=method,
+                url=url,
+                detail=detail or None,
+            ) from e
         except urllib.error.URLError as e:
-            raise AdoApiError(f"ADO network error {method} {url}: {e.reason}") from e
+            raise AdoApiError(
+                f"ADO network error {method} {url}: {e.reason}",
+                method=method,
+                url=url,
+                detail=str(e.reason),
+            ) from e
 
     def fetch_open_work_items(self, wiql: str | None = None) -> list[dict]:
         ids = self._wiql_ids(wiql or _DEFAULT_WIQL)

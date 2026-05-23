@@ -9,7 +9,7 @@ El formato de config.json es compatible con el de Stacky, sección issue_tracker
   {
     "name": "RSPACIFICO",
     "display_name": "RS Pacífico",
-    "workspace_root": "N:/GIT/RS/RSPacifico/trunk",
+    "workspace_root": "C:/Repos/RSPacifico/trunk",
     "issue_tracker": {
       "type": "azure_devops",       ← o "jira"
       "organization": "UbimiaPacifico",
@@ -25,9 +25,12 @@ import json
 import shutil
 from pathlib import Path
 
+from runtime_paths import data_dir, projects_dir
+from services.secrets_store import set_encrypted_secret, write_json_file
+
 BASE_DIR     = Path(__file__).resolve().parent
-PROJECTS_DIR = BASE_DIR / "projects"
-ACTIVE_FILE  = BASE_DIR / "data" / "active_project.json"
+PROJECTS_DIR = projects_dir()
+ACTIVE_FILE  = data_dir() / "active_project.json"
 
 
 # ── Lectura ───────────────────────────────────────────────────────────────────
@@ -103,6 +106,7 @@ def initialize_project(
     display_name: str = "",
     workspace_root: str = "",
     issue_tracker: dict | None = None,
+    docs_paths: dict | None = None,
 ) -> dict:
     """
     Crea la estructura de carpetas y el config.json para un nuevo proyecto.
@@ -112,7 +116,7 @@ def initialize_project(
                    initialize_jira_project para helpers de alto nivel.
     """
     name = name.upper()
-    ws   = workspace_root.replace("\\", "/") if workspace_root else ""
+    ws   = validate_workspace_root(workspace_root) if workspace_root else ""
     base = PROJECTS_DIR / name
     base.mkdir(parents=True, exist_ok=True)
 
@@ -128,11 +132,21 @@ def initialize_project(
         except Exception:
             existing = {}
 
+    if docs_paths is None:
+        existing_docs = existing.get("docs_paths") if isinstance(existing.get("docs_paths"), dict) else {}
+        docs = {
+            "technical": str(existing_docs.get("technical") or ""),
+            "functional": str(existing_docs.get("functional") or ""),
+        }
+    else:
+        docs = validate_docs_paths(docs_paths)
+
     config = {
-        **{k: v for k, v in existing.items() if k not in ("name", "display_name", "workspace_root", "issue_tracker")},
+        **{k: v for k, v in existing.items() if k not in ("name", "display_name", "workspace_root", "issue_tracker", "docs_paths")},
         "name":           name,
         "display_name":   display_name or name,
         "workspace_root": ws,
+        "docs_paths":     docs,
         "issue_tracker":  issue_tracker,
     }
 
@@ -149,6 +163,64 @@ def initialize_project(
     return config
 
 
+def validate_workspace_root(workspace_root: str) -> str:
+    """Normaliza y valida que `workspace_root` exista y sea un directorio."""
+    raw = (workspace_root or "").strip()
+    if not raw:
+        raise ValueError("workspace_root requerido")
+
+    candidate = Path(raw).expanduser()
+    if not candidate.exists():
+        raise ValueError(f"workspace_root no existe: {raw}")
+    if not candidate.is_dir():
+        raise ValueError(f"workspace_root no es una carpeta: {raw}")
+
+    try:
+        candidate = candidate.resolve(strict=True)
+    except Exception:
+        candidate = candidate.absolute()
+    return str(candidate).replace("\\", "/")
+
+
+def validate_docs_paths(docs_paths: dict | None) -> dict:
+    """
+    Normaliza y valida las rutas opcionales de documentación del proyecto.
+
+    Si technical/functional están vacías, se guardan como cadena vacía para
+    mantener una forma estable de config.json y permitir fallback al autodiscovery.
+    """
+    raw = docs_paths or {}
+    if not isinstance(raw, dict):
+        raise ValueError("docs_paths debe ser un objeto")
+
+    normalized: dict[str, str] = {}
+    for key, label in (("technical", "docs_paths.technical"), ("functional", "docs_paths.functional")):
+        value = str(raw.get(key) or "").strip()
+        if not value:
+            normalized[key] = ""
+            continue
+
+        candidate = Path(value).expanduser()
+        if not candidate.exists():
+            raise ValueError(f"{label} no existe: {value}")
+        if not candidate.is_dir():
+            raise ValueError(f"{label} no es una carpeta: {value}")
+        try:
+            next(candidate.iterdir(), None)
+        except PermissionError:
+            raise ValueError(f"{label} no es legible: {value}")
+        except OSError as exc:
+            raise ValueError(f"{label} no se puede leer: {value} ({exc})")
+
+        try:
+            candidate = candidate.resolve(strict=True)
+        except Exception:
+            candidate = candidate.absolute()
+        normalized[key] = str(candidate).replace("\\", "/")
+
+    return normalized
+
+
 def initialize_ado_project(
     name: str,
     organization: str,
@@ -159,6 +231,7 @@ def initialize_ado_project(
     wiql: str = "",
     state_mapping: dict | None = None,
     auth_file: str = "auth/ado_auth.json",
+    docs_paths: dict | None = None,
 ) -> dict:
     """
     Helper de alto nivel para dar de alta un proyecto Azure DevOps.
@@ -168,7 +241,7 @@ def initialize_ado_project(
             name="RSPACIFICO",
             organization="UbimiaPacifico",
             ado_project="Strategist_Pacifico",
-            workspace_root="N:/GIT/RS/RSPacifico/trunk",
+            workspace_root="C:/Repos/RSPacifico/trunk",
         )
     """
     tracker: dict = {
@@ -189,6 +262,7 @@ def initialize_ado_project(
         display_name=display_name or name,
         workspace_root=workspace_root,
         issue_tracker=tracker,
+        docs_paths=docs_paths,
     )
 
 
@@ -202,6 +276,7 @@ def initialize_jira_project(
     jql: str = "",
     verify_ssl: bool = True,
     auth_file: str = "auth/jira_auth.json",
+    docs_paths: dict | None = None,
 ) -> dict:
     """
     Helper de alto nivel para dar de alta un proyecto Jira.
@@ -211,7 +286,7 @@ def initialize_jira_project(
             name="B2IMPACT",
             url="https://empresa.atlassian.net",
             project_key="B2IM",
-            workspace_root="N:/SVN/RS/B2Impact/trunk",
+            workspace_root="C:/Repos/B2Impact/trunk",
         )
 
     Ejemplo (Server/DC):
@@ -219,7 +294,7 @@ def initialize_jira_project(
             name="MIPROYECTO",
             url="https://jira.intranet.com",
             project_key="PROJ",
-            workspace_root="N:/GIT/RS/MiRepo/trunk",
+            workspace_root="C:/Repos/MiRepo/trunk",
             api_version="2",
         )
     """
@@ -239,6 +314,7 @@ def initialize_jira_project(
         display_name=display_name or name,
         workspace_root=workspace_root,
         issue_tracker=tracker,
+        docs_paths=docs_paths,
     )
 
 
@@ -324,16 +400,15 @@ def find_project_for_tracker(tracker_project: str) -> tuple[str | None, dict]:
 def write_ado_auth(name: str, pat: str) -> Path:
     """
     Escribe backend/projects/{NAME}/auth/ado_auth.json con el PAT proporcionado.
-    El PAT se guarda en crudo (pat_format=raw); el cliente lo encodea a Basic.
+    El PAT se guarda cifrado con DPAPI y ligado al usuario local de Windows.
     Retorna la ruta del archivo escrito.
     """
     auth_dir = PROJECTS_DIR / name.upper() / "auth"
     auth_dir.mkdir(parents=True, exist_ok=True)
     auth_file = auth_dir / "ado_auth.json"
-    auth_file.write_text(
-        json.dumps({"pat": pat, "pat_format": "raw"}, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    payload: dict = {}
+    set_encrypted_secret(payload, "pat", pat, format_field="pat_format")
+    write_json_file(auth_file, payload)
     return auth_file
 
 
@@ -345,14 +420,9 @@ def write_jira_auth(name: str, url: str, user: str, token: str) -> Path:
     auth_dir = PROJECTS_DIR / name.upper() / "auth"
     auth_dir.mkdir(parents=True, exist_ok=True)
     auth_file = auth_dir / "jira_auth.json"
-    auth_file.write_text(
-        json.dumps(
-            {"url": url.rstrip("/"), "user": user, "token": token},
-            indent=2,
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
+    payload = {"url": url.rstrip("/"), "user": user}
+    set_encrypted_secret(payload, "token", token, format_field="token_format")
+    write_json_file(auth_file, payload)
     return auth_file
 
 
@@ -386,6 +456,7 @@ def initialize_mantis_project(
     protocol: str = "rest",
     verify_ssl: bool = True,
     auth_file: str = "auth/mantis_auth.json",
+    docs_paths: dict | None = None,
 ) -> dict:
     """
     Helper de alto nivel para dar de alta un proyecto Mantis BT.
@@ -408,6 +479,7 @@ def initialize_mantis_project(
         display_name=display_name or name,
         workspace_root=workspace_root,
         issue_tracker=tracker,
+        docs_paths=docs_paths,
     )
 
 
@@ -431,15 +503,12 @@ def write_mantis_auth(
     payload: dict = {"url": url.rstrip("/"), "protocol": protocol.lower()}
     if protocol.lower() == "soap":
         payload["username"] = username
-        payload["password"] = password
+        set_encrypted_secret(payload, "password", password, format_field="password_format")
     else:
-        payload["token"] = token
+        set_encrypted_secret(payload, "token", token, format_field="token_format")
     if project_id:
         payload["project_id"] = str(project_id)
-    auth_file.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    write_json_file(auth_file, payload)
     return auth_file
 
 
@@ -454,6 +523,8 @@ __all__ = [
     "initialize_ado_project",
     "initialize_jira_project",
     "initialize_mantis_project",
+    "validate_workspace_root",
+    "validate_docs_paths",
     "write_ado_auth",
     "write_jira_auth",
     "write_mantis_auth",

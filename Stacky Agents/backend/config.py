@@ -2,23 +2,34 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-BACKEND_ROOT = Path(__file__).resolve().parent
+from runtime_paths import backend_root, data_dir, runtime_config
+
+BACKEND_ROOT = backend_root()
 load_dotenv(BACKEND_ROOT / ".env")
+load_dotenv(Path.cwd() / ".env")
+_RUNTIME_CONFIG = runtime_config()
 
 
 class Config:
-    PORT = int(os.getenv("PORT", "5050"))
+    PORT = int(os.getenv("PORT") or _RUNTIME_CONFIG.get("port") or "5050")
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
     DATABASE_URL = os.getenv(
-        "DATABASE_URL", f"sqlite:///{BACKEND_ROOT / 'data' / 'stacky_agents.db'}"
+        "DATABASE_URL", f"sqlite:///{data_dir() / 'stacky_agents.db'}"
     )
 
+    _runtime_allowed_origins = _RUNTIME_CONFIG.get("allowed_origins") or []
+    if isinstance(_runtime_allowed_origins, str):
+        _runtime_allowed_origins = [_runtime_allowed_origins]
     ALLOWED_ORIGINS = [
         o.strip()
-        for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+        for o in os.getenv(
+            "ALLOWED_ORIGINS",
+            ",".join(_runtime_allowed_origins) or "http://localhost:5173",
+        ).split(",")
         if o.strip()
     ]
+    ENABLE_CORS = os.getenv("STACKY_ENABLE_CORS", "").lower() in {"1", "true", "yes", "on"}
 
     LLM_BACKEND = os.getenv("LLM_BACKEND", "vscode_bridge")
     LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4.5")

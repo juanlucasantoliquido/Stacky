@@ -15,7 +15,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Tickets } from "../api/endpoints";
+import { Tickets, type TicketSyncResult } from "../api/endpoints";
+import { apiBase } from "../api/client";
+import { useWorkbench } from "../store/workbench";
 
 export interface UseTicketSyncOptions {
   intervalMs?: number;
@@ -44,15 +46,19 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
   } = options;
 
   const queryClient = useQueryClient();
+  const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);
+  const [showForegroundSync, setShowForegroundSync] = useState(false);
+  const [statusReady, setStatusReady] = useState(false);
   const [, setTick] = useState(0); // para forzar re-render del reloj
 
   // Refs para evitar closures obsoletas en los efectos
   const consecutiveErrorsRef = useRef(0);
   const lastSyncedAtRef = useRef<string | null>(null);
   const intervalMsRef = useRef(intervalMs);
+  const lastTriggerRef = useRef<"manual" | "auto_poll" | "startup">("auto_poll");
   intervalMsRef.current = intervalMs;
 
   // Calculo de segundos desde el ultimo sync (con re-render cada segundo)
@@ -67,18 +73,34 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
 
   const isStale = secondsSinceSync !== null && secondsSinceSync * 1000 > intervalMs * 2;
 
+  const shouldRefreshTicketQueries = (
+    data: TicketSyncResult & { idempotent?: boolean }
+  ): boolean => {
+    if (data.idempotent === true) return false;
+    return Boolean((data.created ?? 0) || (data.updated ?? 0) || (data.removed ?? 0));
+  };
+
   // Mutacion de sync
   const syncMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (trigger: "manual" | "auto_poll" | "startup" = "auto_poll") => {
       const headers: Record<string, string> = {
-        "X-Stacky-Trigger": "auto_poll",
+        "X-Stacky-Trigger": trigger,
       };
       return fetch(
-        `${(window as any).__STACKY_API_BASE__ ?? ""}/api/tickets/sync-v2`,
-        { method: "POST", headers }
-      ).then(r => r.json());
+        `${apiBase}/api/tickets/sync-v2`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(activeProjectName ? { project: activeProjectName } : {}),
+        }
+      ).then(async r => {
+        const text = await r.text().catch(() => "");
+        if (!text) return { ok: r.ok, status: r.status };
+        try { return JSON.parse(text); }
+        catch { throw new Error(`Respuesta no-JSON del servidor (HTTP ${r.status})`); }
+      });
     },
-    onSuccess: (data) => {
+    onSuccess: (data: TicketSyncResult & { idempotent?: boolean }) => {
       if (data.ok || data.synced_at) {
         const syncedAt = data.synced_at ?? new Date().toISOString();
         setLastSyncedAt(syncedAt);
@@ -86,9 +108,11 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
         setSyncError(null);
         consecutiveErrorsRef.current = 0;
         setConsecutiveErrors(0);
-        // Invalidar queries de tickets para que se refresquen
-        queryClient.invalidateQueries({ queryKey: ["tickets"] });
-        queryClient.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+        if (shouldRefreshTicketQueries(data)) {
+          queryClient.invalidateQueries({ queryKey: ["ticket-sync", activeProjectName] });
+          queryClient.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
+          queryClient.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
+        }
       } else if (data.error === "rate_limited") {
         // Rate limited — no es error, solo esperar
         setSyncError(null);
@@ -104,34 +128,61 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
       consecutiveErrorsRef.current += 1;
       setConsecutiveErrors(consecutiveErrorsRef.current);
     },
+    onSettled: () => {
+      setShowForegroundSync(false);
+    },
   });
 
-  const triggerSync = useCallback(() => {
-    if (!syncMutation.isPending) {
-      syncMutation.mutate();
-    }
+  const requestSync = useCallback((
+    trigger: "manual" | "auto_poll" | "startup",
+    foreground = false,
+  ) => {
+    if (syncMutation.isPending) return;
+    lastTriggerRef.current = trigger;
+    setShowForegroundSync(foreground);
+    syncMutation.mutate(trigger);
   }, [syncMutation]);
+
+  const triggerSync = useCallback(() => {
+    requestSync("manual", true);
+  }, [requestSync]);
 
   // Cargar lastSyncedAt inicial desde el endpoint de status
   useEffect(() => {
-    Tickets.syncStatus()
+    setLastSyncedAt(null);
+    lastSyncedAtRef.current = null;
+    setSyncError(null);
+    setShowForegroundSync(false);
+    setStatusReady(false);
+    consecutiveErrorsRef.current = 0;
+    setConsecutiveErrors(0);
+    Tickets.syncStatus(activeProjectName)
       .then((data) => {
         if (data.last_synced_at) {
           setLastSyncedAt(data.last_synced_at);
           lastSyncedAtRef.current = data.last_synced_at;
         }
       })
-      .catch(() => {/* ignorar — no critico */});
-  }, []);
+      .catch(() => {/* ignorar — no critico */})
+      .finally(() => setStatusReady(true));
+  }, [activeProjectName]);
 
   // Sync en mount
   useEffect(() => {
-    if (syncOnMount) {
-      // Delay minimo para evitar colision con mount inicial
-      const t = setTimeout(() => triggerSync(), 500);
-      return () => clearTimeout(t);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!syncOnMount || !statusReady) return;
+
+    const last = lastSyncedAtRef.current;
+    const shouldSync =
+      !last ||
+      (Date.now() - new Date(last).getTime()) > intervalMsRef.current;
+
+    if (!shouldSync) return;
+
+    const t = setTimeout(() => {
+      requestSync("startup", false);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [activeProjectName, requestSync, statusReady, syncOnMount]);
 
   // Polling con backoff exponencial
   useEffect(() => {
@@ -151,7 +202,7 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
           scheduleNext();
           return;
         }
-        triggerSync();
+        requestSync("auto_poll", false);
         scheduleNext();
       }, delay);
     };
@@ -159,7 +210,7 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
     scheduleNext();
 
     return () => clearTimeout(timerId);
-  }, [respectVisibility, triggerSync]);
+  }, [requestSync, respectVisibility]);
 
   // Page Visibility API: sync inmediato al volver a la tab si estuvo oculta
   useEffect(() => {
@@ -171,19 +222,19 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
           ? Math.floor((Date.now() - new Date(lastSyncedAtRef.current).getTime()) / 1000)
           : null;
         if (secs === null || secs * 1000 > intervalMsRef.current) {
-          triggerSync();
+          requestSync("auto_poll", false);
         }
       }
     };
 
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [respectVisibility, triggerSync]);
+  }, [requestSync, respectVisibility]);
 
   return {
     lastSyncedAt,
     secondsSinceSync,
-    isSyncing: syncMutation.isPending,
+    isSyncing: syncMutation.isPending && showForegroundSync,
     syncError,
     triggerSync,
     isStale,

@@ -1,7 +1,16 @@
-import React, { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from "react";
+import React, { useState, useCallback, useRef, useLayoutEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Agents, FlowConfig } from "../api/endpoints";
-import { getPinnedAgents } from "../services/preferences";
+import { FlowConfig } from "../api/endpoints";
+import {
+  findVsCodeAgent,
+  humanizeAgentLaunchError,
+  inferAgentTypeFromFilename,
+  launchAgentWithRuntime,
+  launchInProgressLabel,
+  runtimeRequiresVsCodeAgent,
+} from "../services/agentLaunch";
+import { useWorkbench } from "../store/workbench";
+import AgentRuntimeSelector from "./AgentRuntimeSelector";
 
 // Feature #4 (mejora post-SDD): la inferencia LLM (Tickets.adoPipelineStatus)
 // fue removida del consumo del frontend. Los chips muestran progreso a partir
@@ -15,13 +24,7 @@ import styles from "./TicketGraphView.module.css";
 
 // Misma lógica que TicketBoard — infiere tipo de agente desde filename.
 function inferType(filename) {
-  const f = (filename || "").toLowerCase();
-  if (f.includes("business") || f.includes("negocio")) return "business";
-  if (f.includes("functional") || f.includes("funcional")) return "functional";
-  if (f.includes("technical") || f.includes("tecnic")) return "technical";
-  if (f.includes("dev") || f.includes("desarrollador")) return "developer";
-  if (f.includes("qa") || f.includes("test")) return "qa";
-  return "custom";
+  return inferAgentTypeFromFilename(filename);
 }
 
 function findAgentFilenameByType(agentType, vsCodeAgents, pinnedFilenames) {
@@ -68,10 +71,15 @@ function epicPipelineSummary(epicNode) {
 
 // ─── RunModal (grafo) ─────────────────────────────────────────────────────────
 
-function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgents, isLaunching, onConfirm, onClose }) {
+function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgents, isLaunching, errorMessage, onConfirm, onClose }) {
+  const agentRuntime = useWorkbench((s) => s.agentRuntime);
+  const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
   const [note, setNote] = useState("");
   const [selectedFilename, setSelectedFilename] = useState(vsCodeAgents[0]?.filename ?? "");
-  const canConfirm = mode === "suggested" ? !!suggestedLabel : !!selectedFilename;
+  const resolvedFilename = mode === "custom" ? (selectedFilename || null) : suggestedFilename;
+  const canConfirm =
+    (mode === "suggested" ? !!suggestedLabel : !!selectedFilename) &&
+    (!runtimeRequiresVsCodeAgent(agentRuntime) || !!resolvedFilename);
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
@@ -115,6 +123,19 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
         )}
 
         <div className={styles.modalSection}>
+          <AgentRuntimeSelector
+            value={agentRuntime}
+            onChange={setAgentRuntime}
+            disabled={isLaunching}
+          />
+          {runtimeRequiresVsCodeAgent(agentRuntime) && !resolvedFilename && (
+            <p className={styles.modalEmpty}>
+              Este runtime necesita un agente VS Code asignado para el ticket seleccionado.
+            </p>
+          )}
+        </div>
+
+        <div className={styles.modalSection}>
           <label className={styles.modalLabel}>Nota para el agente <span className={styles.modalOptional}>(opcional)</span></label>
           <textarea
             className={styles.modalTextarea}
@@ -126,6 +147,12 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
           />
         </div>
 
+        {errorMessage && (
+          <div className={styles.modalError} role="alert">
+            {errorMessage}
+          </div>
+        )}
+
         <div className={styles.modalActions}>
           <button className={styles.modalCancel} onClick={onClose} disabled={isLaunching}>Cancelar</button>
           <button
@@ -133,7 +160,7 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
             onClick={() => onConfirm(note.trim(), mode === "custom" ? selectedFilename || null : suggestedFilename)}
             disabled={isLaunching || !canConfirm}
           >
-            {isLaunching ? "⏳ Abriendo chat…" : "▶ Ejecutar"}
+            {isLaunching ? launchInProgressLabel(agentRuntime) : "▶ Ejecutar"}
           </button>
         </div>
       </div>
@@ -254,9 +281,13 @@ export class NodeErrorBoundary extends React.Component {
 
 function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgents = [], runningByTicket = new Map(), flowConfigMap = new Map() }) {
   const qc = useQueryClient();
+  const agentRuntime = useWorkbench((s) => s.agentRuntime);
+  const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
+  const pinnedAgents = useWorkbench((s) => s.pinnedAgents);
   const [expanded, setExpanded] = useState(false);
   const [runModal, setRunModal] = useState(null); // null | "suggested" | "custom"
   const [isLaunching, setIsLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState(null);
 
   const inferResult = inferMap[ticket.id] || null;
   const colors = isEpic ? EPIC_COLORS : (STATE_COLORS[ticket.ado_state] || STATE_COLORS["New"]);
@@ -272,7 +303,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
   const flowNext = (isTask && flowAgentType === "business") ? null : flowAgentType;
   const next = isEpic ? summary.next_suggested : flowNext;
   const nextLabel = next && AGENT_LABELS[next] ? `${AGENT_LABELS[next].icon} ${AGENT_LABELS[next].label}` : null;
-  const suggestedFilename = next ? findAgentFilenameByType(next, vsCodeAgents, getPinnedAgents()) : null;
+  const suggestedFilename = next ? findAgentFilenameByType(next, vsCodeAgents, pinnedAgents) : null;
   const runningExecution = runningByTicket.get(ticket.id) ?? null;
   const isRunning = !!runningExecution || runningByTicket.has(ticket.id);
   const isClosed = ["Done", "Closed", "Resolved", "Removed", "Completed"].includes(ticket.ado_state);
@@ -282,18 +313,31 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
 
   const handleLaunch = useCallback(async (note, filename) => {
     setIsLaunching(true);
+    setLaunchError(null);
     try {
       const contextBlocks = note
         ? [{ id: "operator-note", kind: "editable", title: "Nota del operador", content: note }]
         : [];
-      await Agents.openChat({ ticket_id: ticket.id, context_blocks: contextBlocks, vscode_agent_filename: filename ?? undefined });
-      qc.invalidateQueries({ queryKey: ["executions-active"] });
-      qc.invalidateQueries({ queryKey: ["executions-queued"] });
+      await launchAgentWithRuntime({
+        ticketId: ticket.id,
+        projectName: activeProjectName,
+        runtime: agentRuntime,
+        contextBlocks,
+        vscodeAgent: findVsCodeAgent(vsCodeAgents, filename),
+      });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["executions-active", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["executions-queued", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
+      ]);
       setRunModal(null);
+    } catch (error) {
+      setLaunchError(humanizeAgentLaunchError(error));
     } finally {
       setIsLaunching(false);
     }
-  }, [ticket.id, qc]);
+  }, [activeProjectName, agentRuntime, pinnedAgents, qc, ticket.id, vsCodeAgents]);
 
   return (
     <>
@@ -328,7 +372,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
               <button
                 className={styles.runBtnCompact}
                 title={nextLabel ? `Run sugerido: ${nextLabel}` : "Run personalizado"}
-                onClick={e => { e.stopPropagation(); setRunModal(next ? "suggested" : "custom"); }}
+                onClick={e => { e.stopPropagation(); setLaunchError(null); setRunModal(next ? "suggested" : "custom"); }}
               >
                 ▶
               </button>
@@ -389,8 +433,8 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
                 <FinishWorkButton
                   ticket={ticket}
                   onCompleted={() => {
-                    qc.invalidateQueries({ queryKey: ["tickets"] });
-                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+                    qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
+                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
                   }}
                 />
               </div>
@@ -404,8 +448,8 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
                   epicAdoId={ticket.ado_id}
                   disabled={isRunning}
                   onTaskCreated={() => {
-                    qc.invalidateQueries({ queryKey: ["tickets"] });
-                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+                    qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
+                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
                   }}
                 />
               </div>
@@ -417,7 +461,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
                 <button
                   className={styles.runSuggestedBtn}
                   disabled={!next}
-                  onClick={() => setRunModal("suggested")}
+                  onClick={() => { setLaunchError(null); setRunModal("suggested"); }}
                   title={nextLabel ? `Correr: ${nextLabel}` : isEpic ? "Lanzar Analista Funcional" : "Esperando inferencia…"}
                 >
                   {isEpic ? "🔍 Lanzar Funcional" : "▶ Run Sugerido"}
@@ -425,7 +469,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
                 </button>
                 <button
                   className={styles.runCustomBtn}
-                  onClick={() => setRunModal("custom")}
+                  onClick={() => { setLaunchError(null); setRunModal("custom"); }}
                 >
                   ⚙ Run Custom
                 </button>
@@ -443,6 +487,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
           suggestedFilename={suggestedFilename}
           vsCodeAgents={vsCodeAgents}
           isLaunching={isLaunching}
+          errorMessage={launchError}
           onConfirm={handleLaunch}
           onClose={() => setRunModal(null)}
         />
@@ -532,7 +577,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flo
 // ─── TicketGraphView (exportado) ──────────────────────────────────────────────
 
 export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncError, vsCodeAgents = [], runningByTicket = new Map() }) {
-  const qc = useQueryClient();
+  const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
 
   // LLM inference removida: inferMap queda vacío, los handlers son no-op
   // para mantener la firma de props de los componentes hijos sin reescribirlos.
@@ -542,8 +587,8 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
   // Feature #4 — FlowConfig: cargar reglas una vez y construir map ado_state→agent_type.
   // Mismo patrón que TicketBoard. Keys lowercased para resolución case-insensitive.
   const { data: flowConfigData } = useQuery({
-    queryKey: ["flow-config"],
-    queryFn: FlowConfig.list,
+    queryKey: ["flow-config", activeProjectName],
+    queryFn: () => FlowConfig.list(activeProjectName),
     staleTime: 5 * 60 * 1000,
   });
   const flowConfigMap = useMemo(() => {

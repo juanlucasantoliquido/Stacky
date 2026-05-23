@@ -23,12 +23,13 @@ export default function QaBrowserRunModal({ ticket, onClose }: QaBrowserRunModal
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [error, setError] = useState<string | null>(null);
   const [run, setRun] = useState<QaBrowserRunResponse | null>(null);
+  const activeProjectName = useWorkbench((state) => state.activeProject?.name ?? null);
   const setCodexConsoleExecution = useWorkbench((state) => state.setCodexConsoleExecution);
 
   useEffect(() => {
     if (ticket) return;
-    Tickets.list().then(setTickets).catch(() => setTickets([]));
-  }, [ticket]);
+    Tickets.list(activeProjectName).then(setTickets).catch(() => setTickets([]));
+  }, [activeProjectName, ticket]);
 
   const filteredTickets = useMemo(() => {
     if (ticket) return [];

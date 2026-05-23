@@ -13,6 +13,7 @@ export function useAgentRun() {
     systemPromptOverride,
     agentRuntime,
     vsCodeAgent,
+    activeProject,
   } = useWorkbench();
 
   return useMutation({
@@ -24,6 +25,7 @@ export function useAgentRun() {
     }) =>
       Agents.runWithOptions({
         ...payload,
+        project: activeProject?.name ?? undefined,
         model_override: modelOverride,
         system_prompt_override: systemPromptOverride,
         runtime: agentRuntime,

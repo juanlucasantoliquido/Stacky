@@ -6,6 +6,7 @@ import agent_runner
 import agents
 import contract_validator
 from config import config
+from services.project_context import build_ado_client, ensure_project_vscode, resolve_project_context
 from services import (
     agent_history,
     cost_estimator,
@@ -106,6 +107,7 @@ def run():
     # Runtime seleccionado por el operador — default github_copilot para retrocompatibilidad
     runtime_raw: str | None = payload.get("runtime")
     runtime: str = runtime_raw or "github_copilot"
+    project_name = (payload.get("project") or "").strip() or None
 
     # Validación de runtime ANTES de cualquier procesamiento.
     # Reglas:
@@ -211,6 +213,7 @@ def run():
             previous_execution_id=int(prev_exec_id) if prev_exec_id else None,
             runtime=runtime,
             vscode_agent_filename=vscode_agent_filename,
+            project_name=project_name,
         )
     except agent_runner.UnknownAgentError:
         abort(400, f"unknown agent_type: {agent_type}")
@@ -361,6 +364,7 @@ def open_chat():
     context_blocks = payload.get("context_blocks") or []
     vscode_agent_filename = payload.get("vscode_agent_filename") or ""
     model_override = payload.get("model_override") or ""
+    project_name = (payload.get("project") or "").strip() or None
 
     if not ticket_id:
         abort(400, "ticket_id is required")
@@ -369,13 +373,19 @@ def open_chat():
     import prompt_builder
     ticket_header_parts: list[str] = []
     ado_id_for_enrich: int | None = None
+    local_ticket_id: int | None = None
+    resolved_project_name = project_name
+    resolved_ticket = None
     with session_scope() as _s:
         ticket = _s.query(Ticket).filter_by(id=int(ticket_id)).first()
         if ticket is None:
             # Intentar buscar por ado_id en caso de que se haya pasado el ADO id
             ticket = _s.query(Ticket).filter_by(ado_id=int(ticket_id)).first()
+        resolved_ticket = ticket
 
         if ticket:
+            local_ticket_id = ticket.id
+            resolved_project_name = ticket.stacky_project_name or resolved_project_name
             ado_label = f"ADO-{ticket.ado_id}" if ticket.ado_id else f"Ticket #{ticket_id}"
             header = f"# {ado_label} — {ticket.title}"
             meta_parts: list[str] = []
@@ -394,10 +404,24 @@ def open_chat():
         else:
             ticket_header_parts.append(f"# Ticket #{ticket_id}")
 
+    project_ctx = resolve_project_context(project_name=resolved_project_name, ticket=resolved_ticket)
+    if project_ctx is None:
+        abort(400, "No se pudo resolver el proyecto para abrir GitHub Copilot.")
+
+    try:
+        project_ctx = ensure_project_vscode(project_ctx.stacky_project_name)
+    except Exception as exc:  # noqa: BLE001
+        abort(503, f"No se pudo preparar VS Code del proyecto '{project_ctx.stacky_project_name}': {exc}")
+
     # Enriquecimiento ADO on-demand: comentarios + adjuntos del work item.
     # Mismo patrón que api/tickets.py — silencia errores para no romper el flujo.
     if ado_id_for_enrich:
-        ado_sections = _build_ado_enrichment_sections(int(ado_id_for_enrich))
+        ado_sections = _build_ado_enrichment_sections(
+            int(ado_id_for_enrich),
+            project_name=project_ctx.stacky_project_name,
+            tracker_project=project_ctx.tracker_project,
+            ticket=resolved_ticket,
+        )
         if ado_sections:
             ticket_header_parts.extend(ado_sections)
 
@@ -412,7 +436,15 @@ def open_chat():
     if agent_name.lower().endswith(".agent.md"):
         agent_name = agent_name[: -len(".agent.md")]
 
-    bridge_url = f"http://127.0.0.1:{config.VSCODE_BRIDGE_PORT}/open-chat"
+    bridge_url = f"http://127.0.0.1:{project_ctx.vscode_port}/open-chat"
+    logger.info(
+        "open_chat launch project_name=%s workspace_root=%s bridge_port=%s ticket_id=%s ado_id=%s",
+        project_ctx.stacky_project_name,
+        project_ctx.workspace_root,
+        project_ctx.vscode_port,
+        local_ticket_id or ticket_id,
+        ado_id_for_enrich,
+    )
     try:
         bridge_resp = req_lib.post(
             bridge_url,
@@ -421,7 +453,12 @@ def open_chat():
         )
         bridge_resp.raise_for_status()
     except req_lib.exceptions.ConnectionError:
-        abort(503, "VS Code bridge no disponible (puerto 5052). Verificá que la extensión Stacky esté activa.")
+        abort(
+            503,
+            "VS Code bridge no disponible "
+            f"(proyecto={project_ctx.stacky_project_name}, puerto={project_ctx.vscode_port}). "
+            "Verificá que la extensión Stacky esté activa.",
+        )
     except req_lib.exceptions.Timeout:
         abort(504, "VS Code bridge tardó demasiado en responder.")
     except req_lib.exceptions.RequestException as exc:
@@ -437,40 +474,47 @@ def open_chat():
     exec_id: int | None = None
     created_new_execution = False
     inferred_type = _infer_agent_type_from_filename(vscode_agent_filename)
-    try:
-        with session_scope() as _s2:
-            already_running = (
-                _s2.query(AgentExecution)
-                .filter_by(ticket_id=int(ticket_id), status="running")
-                .first()
-            )
-            if not already_running:
-                exec_record = AgentExecution(
-                    ticket_id=int(ticket_id),
-                    agent_type=inferred_type,
-                    status="running",
-                    input_context_json=_json.dumps(context_blocks, ensure_ascii=False),
-                    started_by="open_chat",
-                    started_at=_dt.utcnow(),
+    if local_ticket_id is not None:
+        try:
+            with session_scope() as _s2:
+                already_running = (
+                    _s2.query(AgentExecution)
+                    .filter_by(ticket_id=int(local_ticket_id), status="running")
+                    .first()
                 )
-                _s2.add(exec_record)
-                _s2.flush()
-                exec_id = exec_record.id
-                created_new_execution = True
-            else:
-                exec_id = already_running.id
-    except Exception as _track_exc:
-        logger.warning("open_chat — no se pudo registrar ejecución: %s", _track_exc)
+                if not already_running:
+                    exec_record = AgentExecution(
+                        ticket_id=int(local_ticket_id),
+                        agent_type=inferred_type,
+                        status="running",
+                        input_context_json=_json.dumps(context_blocks, ensure_ascii=False),
+                        started_by="open_chat",
+                        started_at=_dt.utcnow(),
+                    )
+                    exec_record.metadata_dict = {
+                        "runtime": "github_copilot",
+                        "stacky_project_name": project_ctx.stacky_project_name,
+                        "workspace_root": project_ctx.workspace_root,
+                        "bridge_port": project_ctx.vscode_port,
+                    }
+                    _s2.add(exec_record)
+                    _s2.flush()
+                    exec_id = exec_record.id
+                    created_new_execution = True
+                else:
+                    exec_id = already_running.id
+        except Exception as _track_exc:
+            logger.warning("open_chat — no se pudo registrar ejecución: %s", _track_exc)
 
     # Transicionar stacky_status del ticket a 'running' cuando arrancamos una
     # nueva ejecución. Sin esto, un ticket que quedó en 'completed' por un run
     # anterior se sigue mostrando como completed; combinado con la execution
     # activa, el frontend lo marca como INCONSISTENTE en lugar de "en ejecución".
-    if created_new_execution and exec_id is not None:
+    if created_new_execution and exec_id is not None and local_ticket_id is not None:
         try:
             from services import ticket_status as _ticket_status
             _ticket_status.set_status(
-                int(ticket_id),
+                int(local_ticket_id),
                 "running",
                 changed_by="open_chat",
                 execution_id=exec_id,
@@ -483,7 +527,13 @@ def open_chat():
                 _status_exc,
             )
 
-    return jsonify({"ok": True, "execution_id": exec_id})
+    return jsonify({
+        "ok": True,
+        "execution_id": exec_id,
+        "project_name": project_ctx.stacky_project_name,
+        "workspace_root": project_ctx.workspace_root,
+        "bridge_port": project_ctx.vscode_port,
+    })
 
 
 def _infer_agent_type_from_filename(filename: str) -> str:
@@ -503,7 +553,13 @@ def _infer_agent_type_from_filename(filename: str) -> str:
     return "custom"
 
 
-def _build_ado_enrichment_sections(ado_id: int) -> list[str]:
+def _build_ado_enrichment_sections(
+    ado_id: int,
+    *,
+    project_name: str | None = None,
+    tracker_project: str | None = None,
+    ticket=None,
+) -> list[str]:
     """Construye secciones markdown con comentarios + adjuntos del work item ADO.
 
     Misma lógica que `api/tickets.py` (`get_comments` / `get_attachments`):
@@ -519,9 +575,12 @@ def _build_ado_enrichment_sections(ado_id: int) -> list[str]:
 
     # Cliente ADO — si no se puede instanciar (config faltante), salir limpio.
     try:
-        from services.ado_client import AdoClient
         from services.ado_sync import _html_to_text
-        client = AdoClient()
+        client = build_ado_client(
+            project_name=project_name,
+            tracker_project=tracker_project,
+            ticket=ticket,
+        )
     except Exception as exc:
         logger.warning("open_chat — AdoClient no disponible para ADO-%s: %s", ado_id, exc)
         return sections

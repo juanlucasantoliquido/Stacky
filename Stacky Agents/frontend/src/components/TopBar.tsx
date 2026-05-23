@@ -95,8 +95,14 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
       const res = await Projects.setActive(name);
       if (res.project) setActiveProject(res.project);
       await loadProjectAgents(name);
-      // Invalidar caché de tickets para que se recarguen del proyecto nuevo
-      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      // Limpiar caches sensibles al proyecto para no mostrar datos viejos
+      queryClient.removeQueries({ queryKey: ["tickets"] });
+      queryClient.removeQueries({ queryKey: ["tickets-hierarchy"] });
+      queryClient.removeQueries({ queryKey: ["flow-config"] });
+      queryClient.removeQueries({ queryKey: ["ticket-sync"] });
+      queryClient.removeQueries({ queryKey: ["executions-active"] });
+      queryClient.removeQueries({ queryKey: ["executions-queued"] });
+      queryClient.invalidateQueries({ queryKey: ["vscode-agents"] });
     } catch {
       // ignore
     }

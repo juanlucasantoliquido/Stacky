@@ -31,6 +31,12 @@ import urllib.request
 from pathlib import Path
 from typing import Union
 
+from services.secrets_store import (
+    load_json_file,
+    resolve_secret_in_payload,
+    write_json_file,
+)
+
 logger = logging.getLogger("stacky_agents.mantis")
 
 _TIMEOUT_SEC  = 30
@@ -88,9 +94,26 @@ def _resolve_auth_dict(auth_file: str) -> dict:
     for path in candidates:
         if path.is_file():
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
+                data = load_json_file(path)
+                token_secret = resolve_secret_in_payload(
+                    data,
+                    "token",
+                    format_field="token_format",
+                )
+                password_secret = resolve_secret_in_payload(
+                    data,
+                    "password",
+                    format_field="password_format",
+                )
+                if token_secret.migrated or password_secret.migrated:
+                    write_json_file(path, data)
                 if data.get("url"):
-                    return data
+                    resolved = dict(data)
+                    if token_secret.value:
+                        resolved["token"] = token_secret.value
+                    if password_secret.value:
+                        resolved["password"] = password_secret.value
+                    return resolved
             except Exception as e:
                 logger.debug("No se pudo leer %s: %s", path, e)
 

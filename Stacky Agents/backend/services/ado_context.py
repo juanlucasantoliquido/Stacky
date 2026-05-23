@@ -186,6 +186,9 @@ def build_ado_context_blocks(
     ado_id: int,
     *,
     max_text_attachments: int | None = None,
+    project_name: str | None = None,
+    tracker_project: str | None = None,
+    ticket=None,
 ) -> tuple[list[dict], dict]:
     """Construye los context blocks con comentarios y adjuntos de un work item ADO.
 
@@ -204,8 +207,13 @@ def build_ado_context_blocks(
     }
 
     try:
-        from services.ado_client import AdoClient
-        client = AdoClient()
+        from services.project_context import build_ado_client
+
+        client = build_ado_client(
+            project_name=project_name,
+            tracker_project=tracker_project,
+            ticket=ticket,
+        )
     except Exception as e:
         logger.warning("ado_context — no se pudo instanciar AdoClient: %s", e)
         stats["errors"].append(f"ado_client_init_failed: {e}")
@@ -302,6 +310,9 @@ def enrich(
     log=None,
     *,
     return_stats: bool = False,
+    project_name: str | None = None,
+    tracker_project: str | None = None,
+    ticket=None,
 ) -> list[dict] | tuple[list[dict], dict]:
     """Punto de entrada principal llamado por agent_runner.
 
@@ -340,7 +351,12 @@ def enrich(
     if log:
         log("info", f"ado_context — enriqueciendo con comentarios y adjuntos ADO ({ado_id})")
 
-    ado_blocks, build_stats = build_ado_context_blocks(ado_id)
+    ado_blocks, build_stats = build_ado_context_blocks(
+        ado_id,
+        project_name=project_name,
+        tracker_project=tracker_project,
+        ticket=ticket,
+    )
     stats.update({
         "comments_count": build_stats.get("comments_count", 0),
         "attachments_count": build_stats.get("attachments_count", 0),

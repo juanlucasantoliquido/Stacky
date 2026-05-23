@@ -26,6 +26,11 @@ let statusBar: vscode.StatusBarItem;
 let _bridgeServer: http.Server | undefined;
 let _bridgeStartedAt = 0;
 
+function currentWorkspaceRoot(): string | null {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  return folder?.uri?.fsPath ?? null;
+}
+
 function api(): string {
   return vscode.workspace.getConfiguration("stackyAgents").get("apiBase",
     "http://localhost:5050");
@@ -352,6 +357,8 @@ function _startBridgeServer(): void {
         version: EXTENSION_VERSION,
         copilotChatVersion: copilotExt?.packageJSON?.version ?? null,
         uptimeSeconds: Math.round((Date.now() - _bridgeStartedAt) / 1000),
+        bridgePort: port,
+        workspace_root: currentWorkspaceRoot(),
       }));
       return;
     }

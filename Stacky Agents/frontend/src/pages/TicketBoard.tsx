@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Tickets, Agents, Executions, FlowConfig } from "../api/endpoints";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Tickets, Agents, FlowConfig } from "../api/endpoints";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
+import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
 import { useTicketSync } from "../hooks/useTicketSync";
 import { SyncStatusBar } from "../components/SyncStatusBar";
 import TicketGraphView from "../components/TicketGraphView";
@@ -9,7 +10,14 @@ import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import { useRunningStatus } from "../hooks/useRunningStatus";
-import { getPinnedAgents, getAgentType } from "../services/preferences";
+import { getAgentType } from "../services/preferences";
+import {
+  findVsCodeAgent,
+  humanizeAgentLaunchError,
+  launchAgentWithRuntime,
+  launchInProgressLabel,
+  runtimeRequiresVsCodeAgent,
+} from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import styles from "./TicketBoard.module.css";
@@ -78,17 +86,31 @@ interface RunModalProps {
   suggestedFilename: string | null;
   vsCodeAgents: VsCodeAgent[];
   isLaunching: boolean;
+  errorMessage?: string | null;
   onConfirm: (note: string, filename: string | null) => void;
   onClose: () => void;
 }
 
-function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgents, isLaunching, onConfirm, onClose }: RunModalProps) {
+function RunModal({
+  ticket,
+  mode,
+  suggestedLabel,
+  suggestedFilename,
+  vsCodeAgents,
+  isLaunching,
+  errorMessage,
+  onConfirm,
+  onClose,
+}: RunModalProps) {
+  const agentRuntime = useWorkbench((s) => s.agentRuntime);
+  const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
   const [note, setNote] = useState("");
   const [selectedFilename, setSelectedFilename] = useState<string>(vsCodeAgents[0]?.filename ?? "");
+  const resolvedFilename = mode === "custom" ? (selectedFilename || null) : suggestedFilename;
 
-  const canConfirm = mode === "suggested"
-    ? !!suggestedLabel
-    : !!selectedFilename;
+  const canConfirm =
+    (mode === "suggested" ? !!suggestedLabel : !!selectedFilename) &&
+    (!runtimeRequiresVsCodeAgent(agentRuntime) || !!resolvedFilename);
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
@@ -140,6 +162,19 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
         )}
 
         <div className={styles.modalSection}>
+          <AgentRuntimeSelector
+            value={agentRuntime}
+            onChange={setAgentRuntime}
+            disabled={isLaunching}
+          />
+          {runtimeRequiresVsCodeAgent(agentRuntime) && !resolvedFilename && (
+            <p className={styles.modalEmpty}>
+              Este runtime necesita un agente VS Code asignado para el ticket seleccionado.
+            </p>
+          )}
+        </div>
+
+        <div className={styles.modalSection}>
           <label className={styles.modalLabel}>
             Nota para el agente <span className={styles.modalOptional}>(opcional)</span>
           </label>
@@ -153,6 +188,12 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
           />
         </div>
 
+        {errorMessage && (
+          <div className={styles.modalError} role="alert">
+            {errorMessage}
+          </div>
+        )}
+
         <div className={styles.modalActions}>
           <button className={styles.modalCancel} onClick={onClose} disabled={isLaunching}>
             Cancelar
@@ -162,7 +203,7 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
             onClick={() => onConfirm(note.trim(), mode === "custom" ? selectedFilename || null : suggestedFilename)}
             disabled={isLaunching || !canConfirm}
           >
-            {isLaunching ? "⏳ Abriendo chat…" : "▶ Ejecutar"}
+            {isLaunching ? launchInProgressLabel(agentRuntime) : "▶ Ejecutar"}
           </button>
         </div>
       </div>
@@ -183,9 +224,13 @@ interface TicketCardProps {
 
 function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, indent }: TicketCardProps) {
   const qc = useQueryClient();
+  const agentRuntime = useWorkbench((s) => s.agentRuntime);
+  const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
+  const pinnedAgents = useWorkbench((s) => s.pinnedAgents);
   const [expanded, setExpanded] = useState(false);
   const [runModal, setRunModal] = useState<"suggested" | "custom" | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
 
   // Feature #4: la inferencia LLM (Tickets.adoPipelineStatus) fue removida del
   // consumo del frontend porque devolvía sugerencias poco confiables. La
@@ -211,7 +256,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
   // Resuelve el filename del agente del equipo que corresponde al tipo sugerido.
   // Prioriza agentes pinneados ("Tu Equipo") sobre cualquier agente disponible.
   const suggestedFilename = nextSuggested
-    ? findAgentFilenameByType(nextSuggested, vsCodeAgents, getPinnedAgents())
+    ? findAgentFilenameByType(nextSuggested, vsCodeAgents, pinnedAgents)
     : null;
 
   const isClosed = CLOSED_STATES.includes(ticket.ado_state ?? "");
@@ -224,20 +269,30 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
 
   const handleRunConfirm = useCallback(async (note: string, filename: string | null) => {
     setIsLaunching(true);
+    setLaunchError(null);
     try {
       const contextBlocks = note
         ? [{ id: "operator-note", kind: "editable" as const, title: "Nota del operador", content: note }]
         : [];
-      await Agents.openChat({
-        ticket_id: ticket.id,
-        context_blocks: contextBlocks,
-        vscode_agent_filename: filename ?? undefined,
+      await launchAgentWithRuntime({
+        ticketId: ticket.id,
+        projectName: activeProjectName,
+        runtime: agentRuntime,
+        contextBlocks,
+        vscodeAgent: findVsCodeAgent(vsCodeAgents, filename),
       });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["executions"] }),
+      ]);
       setRunModal(null);
+    } catch (error) {
+      setLaunchError(humanizeAgentLaunchError(error));
     } finally {
       setIsLaunching(false);
     }
-  }, [ticket.id]);
+  }, [activeProjectName, agentRuntime, pinnedAgents, qc, ticket.id, vsCodeAgents]);
 
   return (
     <>
@@ -305,8 +360,8 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
                 <FinishWorkButton
                   ticket={ticket}
                   onCompleted={() => {
-                    qc.invalidateQueries({ queryKey: ["tickets"] });
-                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+                    qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
+                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
                   }}
                 />
               </div>
@@ -320,8 +375,8 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
                   epicAdoId={ticket.ado_id}
                   disabled={isRunning}
                   onTaskCreated={() => {
-                    qc.invalidateQueries({ queryKey: ["tickets"] });
-                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
+                    qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
+                    qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
                   }}
                 />
               </div>
@@ -331,7 +386,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
             <div className={styles.runButtons}>
               <button
                 className={styles.runSuggestedBtn}
-                onClick={(e) => { e.stopPropagation(); setRunModal("suggested"); }}
+                onClick={(e) => { e.stopPropagation(); setLaunchError(null); setRunModal("suggested"); }}
                 disabled={!nextSuggested || isRunning}
                 title={
                   isRunning
@@ -348,7 +403,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
               </button>
               <button
                 className={styles.runCustomBtn}
-                onClick={(e) => { e.stopPropagation(); setRunModal("custom"); }}
+                onClick={(e) => { e.stopPropagation(); setLaunchError(null); setRunModal("custom"); }}
                 disabled={isRunning}
                 title={isRunning ? "Hay un agente corriendo sobre este ticket" : undefined}
               >
@@ -386,6 +441,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
           suggestedFilename={suggestedFilename}
           vsCodeAgents={vsCodeAgents}
           isLaunching={isLaunching}
+          errorMessage={launchError}
           onConfirm={handleRunConfirm}
           onClose={() => setRunModal(null)}
         />
@@ -405,27 +461,42 @@ interface EpicGroupProps {
 }
 
 function EpicGroup({ epic, runningByTicket, vsCodeAgents, flowConfigMap }: EpicGroupProps) {
+  const qc = useQueryClient();
+  const agentRuntime = useWorkbench((s) => s.agentRuntime);
+  const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
+  const pinnedAgents = useWorkbench((s) => s.pinnedAgents);
   const [collapsed, setCollapsed] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const isClosed = CLOSED_STATES.includes(epic.ado_state ?? "");
   const runningExec = runningByTicket.get(epic.id) ?? null;
   const isRunning = !isClosed && !!runningExec;
-  const functionalFilename = findAgentFilenameByType("functional", vsCodeAgents, getPinnedAgents());
+  const functionalFilename = findAgentFilenameByType("functional", vsCodeAgents, pinnedAgents);
 
   const handleRunFunctional = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!functionalFilename) return;
     setIsLaunching(true);
+    setLaunchError(null);
     try {
-      await Agents.openChat({
-        ticket_id: epic.id,
-        context_blocks: [],
-        vscode_agent_filename: functionalFilename,
+      await launchAgentWithRuntime({
+        ticketId: epic.id,
+        projectName: activeProjectName,
+        runtime: agentRuntime,
+        contextBlocks: [],
+        vscodeAgent: findVsCodeAgent(vsCodeAgents, functionalFilename),
       });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["executions"] }),
+      ]);
+    } catch (error) {
+      setLaunchError(humanizeAgentLaunchError(error));
     } finally {
       setIsLaunching(false);
     }
-  }, [epic.id, functionalFilename]);
+  }, [activeProjectName, agentRuntime, epic.id, functionalFilename, pinnedAgents, qc, vsCodeAgents]);
 
   return (
     <div className={styles.epicGroup}>
@@ -473,6 +544,11 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, flowConfigMap }: EpicG
           </button>
         )}
       </div>
+      {launchError && (
+        <div style={{ marginTop: 8, fontSize: 11, color: "#fca5a5" }}>
+          {launchError}
+        </div>
+      )}
 
       {/* Children */}
       {!collapsed && (
@@ -508,6 +584,10 @@ export default function TicketBoard() {
   // #3: Filtro de estados por agente activo
   const vsCodeAgent = useWorkbench((s) => s.vsCodeAgent);
   const agentWorkflows = useWorkbench((s) => s.agentWorkflows);
+  const agentRuntime = useWorkbench((s) => s.agentRuntime);
+  const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
+  const activeProject = useWorkbench((s) => s.activeProject);
+  const activeProjectName = activeProject?.name ?? null;
   const activeAllowedStates: string[] = vsCodeAgent
     ? (agentWorkflows[vsCodeAgent.filename]?.allowed_states ?? [])
     : [];
@@ -526,16 +606,16 @@ export default function TicketBoard() {
   } = useTicketSync({ intervalMs: 45_000, syncOnMount: true });
 
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
-    queryKey: ["tickets"],
-    queryFn: Tickets.list,
+    queryKey: ["tickets", activeProjectName],
+    queryFn: () => Tickets.list(activeProjectName),
     refetchInterval: 45_000,
     staleTime: 22_500,
     refetchOnWindowFocus: true,
   });
 
   const { data: hierarchy, isLoading: isHierarchyLoading } = useQuery<TicketHierarchy>({
-    queryKey: ["tickets-hierarchy"],
-    queryFn: Tickets.hierarchy,
+    queryKey: ["tickets-hierarchy", activeProjectName],
+    queryFn: () => Tickets.hierarchy(activeProjectName),
     refetchInterval: 45_000,
     staleTime: 22_500,
     enabled: viewMode === "tree" || viewMode === "graph",
@@ -551,8 +631,8 @@ export default function TicketBoard() {
   // Feature #4 — FlowConfig: cargar reglas una vez y construir map ado_state→agent_type.
   // La lista completa de reglas es chica (4-10 en práctica), no se llama resolve por ticket.
   const { data: flowConfigData } = useQuery({
-    queryKey: ["flow-config"],
-    queryFn: FlowConfig.list,
+    queryKey: ["flow-config", activeProjectName],
+    queryFn: () => FlowConfig.list(activeProjectName),
     staleTime: 5 * 60 * 1000,
   });
   // Keys normalizadas a lowercase para que la resolución no dependa del casing
@@ -564,24 +644,6 @@ export default function TicketBoard() {
     }
     return map;
   }, [flowConfigData]);
-
-  // syncMutation legacy — se mantiene para el boton manual existente en la UI
-  const [syncError, setSyncError] = useState<string | null>(syncErrorV2);
-  const syncMutation = useMutation({
-    mutationFn: Tickets.sync,
-    onSuccess: () => {
-      setSyncError(null);
-      qc.invalidateQueries({ queryKey: ["tickets"] });
-      qc.invalidateQueries({ queryKey: ["tickets-hierarchy"] });
-    },
-    onError: (err: any) => {
-      let msg = "Error al sincronizar con ADO.";
-      if (err && typeof err.message === "string") {
-        msg = err.message;
-      }
-      setSyncError(msg);
-    },
-  });
 
   // Filtrado para vista jerárquica (filtra dentro de epics + orphans)
   function filterNode(node: TicketNode): boolean {
@@ -650,6 +712,7 @@ export default function TicketBoard() {
               🔗 Grafo
             </button>
           </div>
+          <AgentRuntimeSelector value={agentRuntime} onChange={setAgentRuntime} />
           <label className={styles.filterToggle}>
             <input
               type="checkbox"
@@ -659,19 +722,19 @@ export default function TicketBoard() {
             Solo abiertos
           </label>
           {/* Error visual de sync */}
-          {syncError && (
+          {syncErrorV2 && (
             <div style={{ color: "#fff", background: "#b91c1c", padding: "6px 12px", borderRadius: 6, marginBottom: 8, maxWidth: 340, fontSize: 15, fontWeight: 500 }}>
               <span style={{ marginRight: 8 }}>⚠️</span>
-              {syncError}
+              {syncErrorV2}
             </div>
           )}
           <button
             className={styles.syncBtn}
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending}
+            onClick={triggerSync}
+            disabled={isSyncingV2}
             title="Sincronizar tickets desde ADO"
           >
-            {syncMutation.isPending ? "↻ Sincronizando…" : "⟳ Sincronizar ADO"}
+            {isSyncingV2 ? "↻ Sincronizando…" : "⟳ Sincronizar ADO"}
           </button>
         </div>
       </header>
@@ -783,9 +846,9 @@ export default function TicketBoard() {
             {!isHierarchyLoading && (
               <TicketGraphView
                 hierarchy={hierarchy ?? null}
-                onSync={() => syncMutation.mutate()}
-                isSyncing={syncMutation.isPending}
-                syncError={syncError}
+                onSync={triggerSync}
+                isSyncing={isSyncingV2}
+                syncError={syncErrorV2}
                 vsCodeAgents={vsCodeAgents ?? []}
                 runningByTicket={runningByTicket}
               />

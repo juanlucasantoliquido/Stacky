@@ -148,6 +148,14 @@ def create_app() -> Flask:
     except Exception:
         logger.exception("db backup automático falló (continuando)")
 
+    # Demo seed (C2 PLAN_ADOPCION_DEVS) — idempotente, sólo crea tickets si faltan.
+    try:
+        from services.demo_seed import seed_demo_project
+        if os.getenv("STACKY_DEMO_SEED_ENABLED", "true").lower() == "true":
+            seed_demo_project()
+    except Exception:
+        logger.exception("demo seed falló (continuando sin demo)")
+
     # Seed inicial de flow_config.json (Feature #4 — DO-4.4).
     # No regenera si el operador ya tiene reglas configuradas.
     try:

@@ -1,0 +1,47 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  gap: 10px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px dashed rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+}
+
+.icon {
+  font-size: 48px;
+  opacity: 0.85;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.message {
+  margin: 0;
+  max-width: 420px;
+  font-size: 13px;
+  color: var(--text-muted, #777);
+  line-height: 1.5;
+}
+
+.action {
+  margin-top: 12px;
+  background: rgb(91, 132, 240);
+  color: white;
+  border: none;
+  padding: 9px 18px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.action:hover {
+  background: rgb(75, 116, 224);
+}

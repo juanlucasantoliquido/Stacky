@@ -1,5 +1,6 @@
 from flask import Blueprint
 
+from .adoption import bp as adoption_bp
 from .agents import bp as agents_bp
 from .docs import bp as docs_bp
 from .flow_config import bp as flow_config_bp
@@ -50,6 +51,7 @@ api_bp.register_blueprint(diag_bp)
 api_bp.register_blueprint(docs_bp)
 api_bp.register_blueprint(flow_config_bp)
 api_bp.register_blueprint(ui_sections_bp)
+api_bp.register_blueprint(adoption_bp)
 
 
 @api_bp.get("/health")

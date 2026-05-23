@@ -1,0 +1,49 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 18px;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 215, 0, 0.2),
+    rgba(255, 215, 0, 0.2) 10px,
+    rgba(255, 215, 0, 0.35) 10px,
+    rgba(255, 215, 0, 0.35) 20px
+  );
+  color: #6a4d00;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 165, 0, 0.4);
+}
+
+.dots {
+  letter-spacing: 0.3em;
+  font-weight: 700;
+}
+
+.label {
+  flex: 1;
+}
+
+.exitBtn {
+  background: transparent;
+  border: 1px solid #6a4d00;
+  color: inherit;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.exitBtn:hover {
+  background: rgba(255, 215, 0, 0.4);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}

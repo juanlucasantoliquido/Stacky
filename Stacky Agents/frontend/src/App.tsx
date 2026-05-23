@@ -7,6 +7,12 @@ import SettingsPage from "./pages/SettingsPage";
 import DocsPage from "./pages/DocsPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
 import TopBar from "./components/TopBar";
+import HealthBanner from "./components/HealthBanner";
+import CommandPalette from "./components/CommandPalette";
+import DailyStandupModal from "./components/DailyStandupModal";
+import OnboardingTour from "./components/OnboardingTour";
+import ShortcutsCheatsheet from "./components/ShortcutsCheatsheet";
+import DemoModeBanner from "./components/DemoModeBanner";
 import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
@@ -32,11 +38,21 @@ function tabFromPath(pathname: string): Tab {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>(() => tabFromPath(window.location.pathname));
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const sections = useUiSectionsStore((s) => s.sections);
 
   const selectTab = (next: Tab) => {
     setTab(next);
     const path = TAB_PATHS[next];
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, "", path);
+    }
+  };
+
+  const navigateTo = (path: string) => {
+    const targetTab = tabFromPath(path);
+    setTab(targetTab);
     if (window.location.pathname !== path) {
       window.history.pushState({}, "", path);
     }
@@ -53,6 +69,33 @@ export default function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  useEffect(() => {
+    const onKeyDown = (ev: KeyboardEvent) => {
+      const target = ev.target as HTMLElement | null;
+      const editable =
+        target &&
+        (["INPUT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable);
+      const isPaletteShortcut =
+        (ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k";
+      const isCheatsheet = !editable && ev.key === "?" && !ev.ctrlKey && !ev.metaKey;
+      const isToggleNav = (ev.ctrlKey || ev.metaKey) && ev.key === "/";
+      if (isPaletteShortcut) {
+        ev.preventDefault();
+        setPaletteOpen((v) => !v);
+      } else if (isCheatsheet) {
+        ev.preventDefault();
+        setCheatsheetOpen((v) => !v);
+      } else if (isToggleNav) {
+        ev.preventDefault();
+        setTab((t) => (t === "team" ? "tickets" : "team"));
+        const path = TAB_PATHS[tab === "team" ? "tickets" : "team"];
+        window.history.pushState({}, "", path);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   // Si el usuario tenía seleccionado un tab opcional que acaba de ocultarse,
   // fallback a "team" para no quedar en blanco.
   useEffect(() => {
@@ -63,7 +106,9 @@ export default function App() {
 
   return (
     <div className={styles.appRoot}>
+      <DemoModeBanner />
       <TopBar onGoToTeam={() => selectTab("team")} />
+      <HealthBanner />
 
       {/* Tabs de navegación principal */}
       <nav className={styles.nav}>
@@ -124,6 +169,18 @@ export default function App() {
       {tab === "settings" && <SettingsPage />}
       {tab === "docs"     && sections.docs && <DocsPage />}
       {tab === "diagnostics" && <DiagnosticsPage />}
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={navigateTo}
+      />
+      <ShortcutsCheatsheet
+        open={cheatsheetOpen}
+        onClose={() => setCheatsheetOpen(false)}
+      />
+      <DailyStandupModal />
+      <OnboardingTour />
     </div>
   );
 }

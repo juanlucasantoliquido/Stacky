@@ -5,6 +5,8 @@ import { Projects } from "../api/endpoints";
 import type { AgentWorkflowConfig, Project } from "../types";
 import NewProjectModal from "./NewProjectModal";
 import EditProjectModal from "./EditProjectModal";
+import StreakBadge from "./StreakBadge";
+import CostCapIndicator from "./CostCapIndicator";
 import styles from "./TopBar.module.css";
 
 interface TopBarProps {
@@ -183,6 +185,8 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
               Agente trabajando…
             </span>
           )}
+          <CostCapIndicator projectName={activeProjectName || null} />
+          <StreakBadge />
           <span>dev@local</span>
         </div>
       </div>

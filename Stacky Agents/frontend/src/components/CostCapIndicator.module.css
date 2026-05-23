@@ -1,0 +1,44 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 14px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  user-select: none;
+}
+
+.ok {
+  background: rgba(40, 167, 69, 0.1);
+  color: rgb(40, 130, 60);
+  border: 1px solid rgba(40, 167, 69, 0.25);
+}
+
+.alert {
+  background: rgba(255, 165, 0, 0.12);
+  color: rgb(180, 100, 0);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+}
+
+.over {
+  background: rgba(220, 53, 69, 0.12);
+  color: rgb(180, 30, 50);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+.bar {
+  display: inline-block;
+  width: 60px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  transition: width 0.4s;
+}

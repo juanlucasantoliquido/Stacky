@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { Executions } from "../api/endpoints";
 import type { LogLine } from "../types";
+import { notifyExecutionFinished } from "../services/executionNotifier";
 
 interface StreamState {
   lines: LogLine[];
@@ -68,10 +69,22 @@ export function useExecutionStream(executionId: number | null): StreamState {
       setState((s) => ({ ...s, lines: [...s.lines, data!] }));
     };
 
-    const onCompleted = () => {
+    const onCompleted = (ev?: MessageEvent) => {
       setState((s) => ({ ...s, done: true }));
       qc.invalidateQueries({ queryKey: ["execution", executionId] });
       qc.invalidateQueries({ queryKey: ["executions"] });
+      let agentType = "agente";
+      let status: "completed" | "error" | "cancelled" = "completed";
+      try {
+        if (ev?.data) {
+          const parsed = JSON.parse(ev.data);
+          if (parsed?.agent_type) agentType = String(parsed.agent_type);
+          if (parsed?.status) status = parsed.status;
+        }
+      } catch {
+        // ignore
+      }
+      notifyExecutionFinished({ agent_type: agentType, status });
       closed = true;
       es?.close();
     };

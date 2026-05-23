@@ -7,6 +7,8 @@ import { useRunningStatus } from "../hooks/useRunningStatus";
 import EmployeeCard from "../components/EmployeeCard";
 import TeamManageDrawer from "../components/TeamManageDrawer";
 import EmployeeEditDrawer from "../components/EmployeeEditDrawer";
+import ResumeCard from "../components/ResumeCard";
+import SavingsCard from "../components/SavingsCard";
 import styles from "./TeamScreen.module.css";
 
 export default function TeamScreen() {
@@ -100,6 +102,16 @@ export default function TeamScreen() {
           </button>
         </div>
       </header>
+
+      {/* ─── Adoption widgets: Resume + Savings ─── */}
+      <ResumeCard
+        projectName={activeProjectName}
+        onResume={(ticketId) => {
+          window.history.pushState({}, "", `/tickets?ticket=${ticketId}`);
+          window.dispatchEvent(new PopStateEvent("popstate"));
+        }}
+      />
+      <SavingsCard />
 
       {/* ─── Grid ─── */}
       <main className={styles.main}>

@@ -17,28 +17,40 @@ interface Step {
 
 const STEPS: Step[] = [
   {
+    target: "body",
+    title: "1 / 6 — Bienvenido a Stacky Agents",
+    body: "Tu equipo de agentes IA para cerrar tickets más rápido. Te muestro los puntos clave en 6 pasos.",
+    position: "bottom",
+  },
+  {
+    target: '[data-tour="agents"]',
+    title: "2 / 6 — Tu Equipo",
+    body: "Estos son tus agentes — pensálos como empleados. Cada uno hace una cosa: Business, Functional, Technical, Developer, QA.",
+    position: "right",
+  },
+  {
     target: '[data-tour="tickets"]',
-    title: "1 / 4 — Tickets",
+    title: "3 / 6 — Tickets",
     body: "Elegí el ticket sobre el que vas a trabajar. Podés buscar por ID o por texto.",
     position: "right",
   },
   {
-    target: '[data-tour="agents"]',
-    title: "2 / 4 — Agentes",
-    body: "Elegí qué agente querés correr. Podés hacerlo en cualquier orden — no hay pipeline obligatorio.",
-    position: "right",
-  },
-  {
     target: '[data-tour="editor"]',
-    title: "3 / 4 — Editor de contexto",
+    title: "4 / 6 — Editor de contexto",
     body: "Esto es lo que el agente va a recibir. Podés editar, agregar bloques o sacar los que no necesitás.",
     position: "bottom",
   },
   {
     target: '[data-tour="run"]',
-    title: "4 / 4 — Run",
-    body: "Cuando el contexto está listo, hacé click. El output aparece a la derecha. ¡Eso es todo!",
+    title: "5 / 6 — Run",
+    body: "Cuando el contexto está listo, hacé click. El output aparece a la derecha.",
     position: "left",
+  },
+  {
+    target: "body",
+    title: "6 / 6 — Ctrl+K es tu amigo",
+    body: "Apretá Ctrl+K en cualquier momento para buscar tickets, agentes, packs o saltar entre pantallas con el teclado. Probá ahora.",
+    position: "bottom",
   },
 ];
 

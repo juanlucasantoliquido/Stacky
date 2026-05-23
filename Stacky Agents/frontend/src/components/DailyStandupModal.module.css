@@ -1,0 +1,86 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+}
+
+.modal {
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #fff);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.header {
+  padding: 18px 22px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted, #888);
+  font-size: 13px;
+}
+
+.content {
+  flex: 1;
+  margin: 0;
+  padding: 14px 22px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 14px 22px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.primaryBtn {
+  background: rgb(91, 132, 240);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.primaryBtn:hover {
+  background: rgb(75, 116, 224);
+}
+
+.secondaryBtn {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: var(--text, inherit);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.secondaryBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+}

@@ -539,6 +539,7 @@ def _run_in_background(
             fingerprint_complexity=fingerprint_complexity,
             override=model_override,
             backend=backend,
+            project_name=project_name,
         )
         log("info", f"router → {decision.model} ({decision.reason})")
 

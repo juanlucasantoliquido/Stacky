@@ -55,7 +55,28 @@ FrmLogin.aspx:
   direct_entry_allowed: true
   deeplink_allowed: false
   human_path_required_for_uat: false
-  notes: "Entry point. Always accessible directly. Auth managed by globalSetup."
+  notes: "Entry point. Always accessible directly. Auth típicamente manejado por globalSetup; los playbooks explícitos sirven para escenarios que validan el flujo de login (regresiones de FrmLogin, smoke de autenticación, tests negativos de credenciales)."
+
+  human_paths:
+    open_direct:
+      entrypoint: FrmLogin.aspx
+      steps:
+        - "Navigate directly to FrmLogin.aspx"
+      required_data: []
+      emits_context:
+        - login_form_visible
+      required_assertions:
+        - login_form_visible
+
+  assertions:
+    login_form_visible: "abfUsuario / abfContrasena / btnOk visibles e interactuables"
+
+  # Sub-flow playbooks (audit 2026-05-26 against trunk/OnLine/AgendaWeb/FrmLogin.aspx*)
+  related_playbooks:
+    happy_path:
+      - login_explicit                          # btnOk con credenciales válidas → redirige a home (FrmAgenda / FrmBusqueda / FrmAdministrador)
+    negative_path:
+      - login_fail                              # credenciales inválidas → divError visible, sin redirección
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BÚSQUEDA (search / list)
@@ -79,6 +100,17 @@ FrmBusqueda.aspx:
 
   assertions:
     search_form_visible: "Search form is rendered and filters are interactable"
+
+  # Sub-flow playbooks (audit 2026-05-26 against trunk/OnLine/AgendaWeb/FrmBusqueda.aspx)
+  related_playbooks:
+    smoke:
+      - open_busqueda_directa                   # solo abre la pantalla
+    by_filter:
+      - busqueda_por_apellido                   # fill abfApellido1 (+ opcionales) → btnOk → GridPersonas
+      - busqueda_por_dni                        # ddlTipoDocumento + abfDocumento → btnOk → GridPersonas
+      - busqueda_detalle_cliente                # fill CLCOD exacto + navegar a detalle (encadenado)
+    chained:
+      - open_detalle_cliente_from_busqueda      # wrapper end-to-end: busqueda → fila → FrmDetalleClie
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DETALLE CLIENTE (session-dependent detail screen)
@@ -137,6 +169,57 @@ FrmDetalleClie.aspx:
     no_server_error: "No ASP.NET yellow screen of death or unhandled exception visible"
     search_results_visible: "Search results grid shows at least one row matching CLCOD"
 
+  # Sub-flow playbooks (audit 2026-05-26 against trunk/OnLine/AgendaWeb/FrmDetalleClie.aspx)
+  # The QA UAT agent must select the appropriate sub-playbook via index.json confidence_keywords
+  # rather than reconstructing navigation steps from scratch.
+  related_playbooks:
+    tabs:
+      - open_detalle_clie_tab_relaciones        # Telefonos/Emails/Domicilios del titular
+      - open_detalle_clie_tab_contactos         # Terceros vinculados + sub-CRUD
+      - open_detalle_clie_tab_pagos             # Histórico de pagos (read-only)
+      - open_detalle_clie_tab_garantias         # CRUD de garantías
+      - open_detalle_clie_tab_scorings          # Scoring (read-only) — ⚠ GridPersonas ID colisiona con FrmBusqueda
+      - open_detalle_clie_tab_historicos        # Datos historicos x3 grids
+      - frm_detalle_clie_domicilios             # Foco específico ADO-122 RF-007 Provincia/Departamento (sub-flow del tab Relaciones)
+    modals_top_bar:
+      - open_detalle_clie_modal_compromisos     # btnCompromisos → dlgCompromisos (gestión de promesas)
+      - open_detalle_clie_modal_estados         # btnEstado → dlgEstadosEspeciales (read-only)
+      - open_detalle_clie_modal_cheques         # btnChequesProtestados → dlgCheques (read-only)
+      - open_detalle_clie_modal_pasaje_judicial # btnPasajeJudicial → dlgPasaje (judicializar = mutates_data)
+      - open_detalle_clie_modal_notas           # btnNotas → dialogNotas
+      - open_detalle_clie_modal_documento       # btnDocumento → GestionDocumentosUpload
+    modals_row_triggered:
+      - open_detalle_clie_modal_prestamos       # GridObligaciones row (tipo Préstamo) → dlgPrestamos
+      - open_detalle_clie_modal_tarjetas        # GridObligaciones row (tipo Tarjeta) → dlgtarjetas
+      - open_detalle_clie_modal_cuentas         # GridObligaciones row (tipo CtaCte) → dlgCuentas
+      - open_detalle_clie_modal_gestiones       # GridGestiones row → dlgGestiones
+    modals_indirect:
+      - open_detalle_clie_modal_medio_contacto  # ADO-148 RF-013 — disparado desde gestiones tel/mail/dom
+    static_maps:
+      - frm_detalle_clie_actions                # Mapa estático global de acciones (no ejecutable directo)
+    deprecated:
+      - open_detalle_clie_modal_convenios_DEPRECATED  # ADO-146 RF-011: btnConvenios redirige a portal externo
+
+  # Recent ADO tickets affecting selectors of this screen (informational — do not invent selectors
+  # for fields/handlers not present in trunk).
+  trunk_change_log:
+    - ticket: ADO-119
+      release: RF-008
+      date: "2026-05-06"
+      affects: "Header identity adds abfCorredorPrincipal + abfRiesgoCliente"
+    - ticket: ADO-146
+      release: RF-011
+      date: "2026-05-14"
+      affects: "btnConvenios.OnClick removed; redirects to external portal via injected OnClientClick"
+    - ticket: ADO-148
+      release: RF-013
+      date: "2026-05-18"
+      affects: "New modal dlgMedioContacto for gestiones tel/mail/dom"
+    - ticket: ADO-162
+      release: RF-015
+      date: "2026-05-20"
+      affects: "Detalle Deuda panel asegurador: lblPrimaNeta, lblIntereses, lblMontoCubierto + valores"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # AGENDA (personal calendar)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -183,6 +266,14 @@ FrmAgendaEquipo.aspx:
   assertions:
     team_agenda_visible: "Team agenda component is rendered"
 
+  related_playbooks:
+    smoke:
+      - open_agenda_equipo                      # goto_direct → grillas auto-pobladas en Page_Load
+    by_filter:
+      - open_agenda_equipo                      # expandir colapsable → ddlUsuarios (AutoPostBack) → ddlRoles → btnOk
+    chained:
+      - open_agenda_equipo                      # row-click GridAgendaUsu/GridAgendaAut → FrmDetalleClie (Session lote)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # AGENDA JUDICIAL
 # ─────────────────────────────────────────────────────────────────────────────
@@ -206,36 +297,127 @@ FrmAgendaJudicial.aspx:
   assertions:
     judicial_agenda_visible: "Judicial agenda component is rendered"
 
+  related_playbooks:
+    smoke:
+      - open_agenda_judicial                    # goto_direct → grillas auto-pobladas en Page_Load (btnBuscar_Click con abfHasta=hoy)
+    by_filter:
+      - open_agenda_judicial                    # expandir colapsable → filtros (ddlTipoDeDemanda AutoPostBack → ddlEtapaActual) → btnBuscar
+    chained:
+      - open_agenda_judicial                    # row-click GridAgendaUsu/GridAgendaWorkFlow → FrmJDemanda.aspx?NumeroDeDemanda
+
 # ─────────────────────────────────────────────────────────────────────────────
-# DETALLE OBLIGACION (session-dependent)
+# BUSQUEDA JUDICIAL (separate screen from FrmBusqueda, distinct fields)
 # ─────────────────────────────────────────────────────────────────────────────
-FrmDetalleObligacion.aspx:
-  screen_type: detail
-  direct_entry_allowed: false
+FrmBusquedaJudicial.aspx:
+  screen_type: list
+  direct_entry_allowed: true
   deeplink_allowed: false
-  human_path_required_for_uat: true
+  human_path_required_for_uat: false
+  notes: "Pantalla separada de FrmBusqueda.aspx. Comparte IDs (abfApellido1, abfDocumento, ddlTipoDocumento, ddlRol, abfCodObligacion, btnOk, btnLimpiar, GridPersonas) con el hub general — el dispatcher debe usar siempre wait_url_contains='FrmBusquedaJudicial' para diferenciar contexto antes de hacer assertions."
 
   human_paths:
-    open_from_detalle_cliente:
-      entrypoint: FrmDetalleClie.aspx
+    open_direct:
+      entrypoint: FrmBusquedaJudicial.aspx
       steps:
-        - "Navigate to FrmDetalleClie.aspx with CLCOD (via human_path open_from_busqueda)"
-        - "Locate the obligaciones grid"
-        - "Click on the target obligacion row"
-        - "Verify FrmDetalleObligacion.aspx is loaded"
-      required_data:
-        - CLCOD
-        - OBLCOD
+        - "Navigate directly to FrmBusquedaJudicial.aspx"
+      required_data: []
       emits_context:
-        - selected_client
-        - selected_obligacion
+        - judicial_search_form_visible
       required_assertions:
-        - obligacion_detail_visible
-        - no_server_error
+        - judicial_search_form_visible
 
   assertions:
-    obligacion_detail_visible: "Obligacion detail form is rendered with expected fields"
-    no_server_error: "No ASP.NET yellow screen of death or unhandled exception visible"
+    judicial_search_form_visible: "Formulario de búsqueda judicial renderizado con btnOk visible"
+
+  related_playbooks:
+    by_filter:
+      - busqueda_judicial                       # fill filtros (apellido/causa/fechas/etc.) → btnOk → GridPersonas
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DETALLE DEMANDA JUDICIAL (FrmJDemanda — param-dependent, chained entry)
+# ─────────────────────────────────────────────────────────────────────────────
+FrmJDemanda.aspx:
+  screen_type: detail
+  direct_entry_allowed: false
+  deeplink_allowed: true
+  human_path_required_for_uat: true
+  notes: "PARAM-DEPENDENT: Page_Load lee Request.QueryString['NumeroDeDemanda'] SIN null-check (línea 62) — entrar sin ese query param produce YSOD. También depende de Session['logUsuario'] y Session['lote']. Entry canónico: row-click en las grillas de FrmAgendaJudicial → FrmJDemanda.aspx?NumeroDeDemanda=<demanda> (Session PadreDemanda). Entry alternativo: btnJudicial/pasaje judicial desde FrmDetalleClie. Deeplink directo permitido SÓLO con NumeroDeDemanda y sesión ya válida."
+
+  human_paths:
+    open_from_agenda:
+      entrypoint: FrmAgendaJudicial.aspx
+      steps:
+        - "Navigate to FrmAgendaJudicial.aspx (grids auto-populated)"
+        - "Row-click on a demanda → redirects to FrmJDemanda.aspx?NumeroDeDemanda=<n>"
+      required_data: []
+      emits_context:
+        - jdemanda_detail_visible
+      required_assertions:
+        - jdemanda_detail_visible
+    open_deeplink:
+      entrypoint: "FrmJDemanda.aspx?NumeroDeDemanda={JDEM_NUMERO_DEMANDA}"
+      steps:
+        - "Deeplink to FrmJDemanda.aspx with NumeroDeDemanda (requires valid session)"
+      required_data:
+        - JDEM_NUMERO_DEMANDA
+      emits_context:
+        - jdemanda_detail_visible
+      required_assertions:
+        - jdemanda_detail_visible
+
+  assertions:
+    jdemanda_detail_visible: "AISTabControl de la demanda (TabControl) renderizado con el header poblado"
+
+  related_playbooks:
+    chained:
+      - open_jdemanda                           # entry chained desde FrmAgendaJudicial (row-click → ?NumeroDeDemanda)
+    deeplink:
+      - open_jdemanda                           # deeplink con JDEM_NUMERO_DEMANDA + sesión válida
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DETALLE OBLIGACION — REMOVED (phantom contract, 2026-05-26)
+# ─────────────────────────────────────────────────────────────────────────────
+# FrmDetalleObligacion.aspx NO existe en trunk/OnLine/AgendaWeb/. El detalle
+# por tipo de obligación se renderiza in-page dentro de FrmDetalleClie.aspx
+# mediante tres modales row-triggered desde GridObligaciones:
+#   - dlgPrestamos  → playbook open_detalle_clie_modal_prestamos
+#   - dlgtarjetas   → playbook open_detalle_clie_modal_tarjetas
+#   - dlgCuentas    → playbook open_detalle_clie_modal_cuentas
+# El row-click in-page (seleccionar_obligacion en frm_detalle_clie_actions)
+# sólo actualiza el panel de deuda y el toggle de btnJudicial; no navega.
+# Si en el futuro se crea una pantalla dedicada, reincorporar el contrato aquí.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GESTION DE FLUJOS (Workflow editor hub — direct entry, treeview)
+# ─────────────────────────────────────────────────────────────────────────────
+FrmGestionFlujos.aspx:
+  screen_type: list
+  direct_entry_allowed: true
+  deeplink_allowed: false
+  human_path_required_for_uat: false
+  notes: "Hub del editor de Workflow judicial. Page_Load puebla el árbol treeviewWF (GetFlujoList) y auto-selecciona el primer nodo. No depende de Session para entrar. btnEditor navega a FrmEditorWorkflow.aspx (Session IdModelo/IdVersion/AccessMode). Acciones que mutan: btnGuardar/btnNewVersion/btnCopiarVesion/btnGuardarVersion/btnProduccion/btnEliminar — sólo en UAT con flujos de prueba."
+
+  human_paths:
+    open_direct:
+      entrypoint: FrmGestionFlujos.aspx
+      steps:
+        - "Navigate directly to FrmGestionFlujos.aspx"
+      required_data: []
+      emits_context:
+        - flujos_tree_visible
+      required_assertions:
+        - flujos_tree_visible
+
+  assertions:
+    flujos_tree_visible: "Árbol de procedimientos (AISTreeView treeviewWF) renderizado"
+
+  related_playbooks:
+    smoke:
+      - open_gestion_flujos                     # goto_direct → árbol auto-poblado + primer nodo seleccionado en Page_Load
+    by_filter:
+      - open_gestion_flujos                     # checkHistoricos/checkObsoletos (AutoPostBack) reincorporan flujos estado 4/5
+    chained:
+      - open_gestion_flujos                     # btnEditor → FrmEditorWorkflow.aspx (Session IdModelo/IdVersion/AccessMode)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DEFAULT (catch-all for unknown screens)
@@ -257,6 +439,28 @@ FrmAdministrador.aspx:
   direct_entry_allowed: true
   deeplink_allowed: false
   human_path_required_for_uat: false
+  notes: "Hub administrativo post-login (Permisos.Nucleo_Estrategico). Menú 100% data-driven generado en code-behind (RenderMenuAdministrador → GetArbolAdministrador) en el UpdatePanel vacío PanelCards. Opciones filtradas por permisos del usuario; IDs de links data-driven (NO estables) — matchear por clase (.rs-btn-action-admin) + texto. RenderMenuAdministrador traga excepciones: sin Session['logUsuario'] el menú sale vacío sin YSOD."
+
+  human_paths:
+    open_direct:
+      entrypoint: FrmAdministrador.aspx
+      steps:
+        - "Navigate directly to FrmAdministrador.aspx (menu cards rendered from user permissions)"
+      required_data: []
+      emits_context:
+        - admin_menu_visible
+      required_assertions:
+        - admin_menu_visible
+
+  assertions:
+    admin_menu_visible: "Al menos una card del menú administrativo (.rs-card-admin) renderizada"
+
+  related_playbooks:
+    smoke:
+      - open_administrador                      # goto_direct → cards del menú según permisos
+    chained:
+      - open_administrador                      # click opción (a.rs-btn-action-admin, NavigateUrl=Redirect) → pantalla destino
+      - agregar_usuario_nuevo                   # 'Administracion de Usuarios' (#c_251) → FrmGestionUsuarios.aspx
 
 FrmLiquidaciones.aspx:
   screen_type: list

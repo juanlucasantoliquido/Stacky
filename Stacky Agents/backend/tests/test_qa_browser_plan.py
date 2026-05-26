@@ -98,9 +98,12 @@ def test_browser_spec_uses_description_comments_and_attachments():
     assert any("descripcion" in title.lower() for title in titles)
     assert source_kinds == {"ticket_description", "ado_comment", "ado_attachment"}
     assert spec["guardrails"]["browser"] == "codex_browser"
-    assert spec["guardrails"]["ado_comment_policy"] == "always_publish_on_complete"
-    assert spec["runner_contract"]["must_publish_ado_comment"] is True
+    assert spec["guardrails"]["ado_comment_policy"] == "browser_runner_never_publishes"
+    assert spec["runner_contract"]["must_publish_ado_comment"] is False
+    assert spec["runner_contract"]["must_leave_stacky_artifacts"] is True
     assert "/api/qa-browser/runs/{execution_id}/complete" in spec["codex_browser_prompt"]
+    assert "No publiques en ADO ni llames APIs de ADO" in spec["codex_browser_prompt"]
+    assert "publique el comentario en ADO" not in spec["codex_browser_prompt"]
 
 
 def test_ado_comment_contains_marker_sources_and_result_detail():
@@ -152,10 +155,11 @@ def test_ado_comment_contains_marker_sources_and_result_detail():
     assert "Comentario ADO - QA" in html
     assert "QA-UAT-001" in html
     assert "captura final" in html
-    assert "Comentario publicado automaticamente" in html
+    assert "handoff local a Stacky Agents" in html
+    assert "publicado por Stacky Agents" not in html
 
 
-def test_complete_endpoint_always_attempts_ado_comment(qa_browser_client, monkeypatch):
+def test_complete_endpoint_delegates_ado_publish_to_stacky(qa_browser_client, monkeypatch, tmp_path):
     from db import session_scope
     from models import AgentExecution, Ticket
     from services.qa_browser_plan import BrowserRunInput, build_guarded_browser_spec
@@ -215,6 +219,7 @@ def test_complete_endpoint_always_attempts_ado_comment(qa_browser_client, monkey
             calls.append({"ado_id": received_ado_id, "text": text, "fmt": fmt})
             return {"id": 1234, "text": "ok"}
 
+    monkeypatch.setenv("STACKY_REPO_ROOT", str(tmp_path))
     monkeypatch.setattr("services.ado_client.AdoClient", FakeAdoClient)
     monkeypatch.setattr("api.qa_browser.ticket_status.on_execution_end", lambda **kwargs: None)
 
@@ -237,16 +242,19 @@ def test_complete_endpoint_always_attempts_ado_comment(qa_browser_client, monkey
 
     assert response.status_code == 200
     assert response.get_json()["ado_comment"]["ok"] is True
+    assert response.get_json()["ado_comment"]["html_output_path"] == f"Agentes/outputs/{ado_id}/comment.html"
     assert calls
     assert calls[0]["ado_id"] == ado_id
     assert calls[0]["fmt"] == "html"
     assert "stacky-qa-browser-uat:run" in calls[0]["text"]
     assert "screenshot final" in calls[0]["text"]
+    assert (tmp_path / "Agentes" / "outputs" / str(ado_id) / "comment.html").is_file()
 
     with session_scope() as session:
         row = session.get(AgentExecution, execution_id)
         assert row.status == "completed"
         assert row.metadata_dict["ado_comment"]["attempted"] is True
+        assert row.metadata_dict["ado_comment"]["delegated_to_stacky"] is True
 
 
 def test_create_run_auto_starts_codex_runner_and_marks_ticket_running(qa_browser_client, monkeypatch):

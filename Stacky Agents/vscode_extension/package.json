@@ -2,7 +2,7 @@
   "name": "stacky-agents",
   "displayName": "Stacky Agents",
   "description": "Run Stacky Agents directly from VS Code",
-  "version": "0.3.4",
+  "version": "0.3.9",
   "publisher": "ubimia",
   "engines": {
     "vscode": "^1.85.0"

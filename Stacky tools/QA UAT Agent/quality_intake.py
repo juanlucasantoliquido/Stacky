@@ -124,7 +124,7 @@ _LAYER_RULES: list[tuple[str, bool, str, str]] = [
     # --- uat (visual/browser interaction) ---
     (
         "uat", True,
-        r"validar\s+que\s+al\s+hacer\s+clic|navegar\s+a\b|seleccionar\s+en\s+pantalla|formulari[oa]\b|grilla\b|visualmente|pantalla\b|tabla\b|bot[oó]n\b|campo\s+de\s+texto|desplegable\b|combo\b|dropdown\b|modal\b|popup\b|filtrar?\b|filtros?\s+de\b|columna\b|columnas\b|pesta[nñ]a\b|lista\s+de\b|se\s+(?:filtr|muestr|cargu|actualiz)",
+        r"validar\s+que\s+al\s+hacer\s+clic|navegar\s+a\b|seleccionar\s+en\s+pantalla|formulari[oa]\b|grilla\b|visualmente|pantalla\b|tabla\b|bot[oó]n\b|campo\s+de\s+texto|desplegable\b|combo\b|dropdown\b|ddl\b|modal\b|popup\b|filtrar?\b|filtros?\s+de\b|columna\b|columnas\b|pesta[nñ]a\b|lista\s+de\b|se\s+(?:filtr|muestr|cargu|actualiz)|abrir\s+(?:el\s+)?(?:formulari[oa]|domicilio|registro|pesta[nñ]a)|guardar\b|reabrir\b|seleccionad[ao]\b|modificaci[oó]n\b|dar\s+de\s+alta|mantenedor\b|alta\s+de\b",
         "criterio implica interacción visual o navegación de negocio en pantalla",
     ),
 ]

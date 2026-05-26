@@ -259,10 +259,17 @@ def purge_non_project_tickets(keep_project: str) -> int:
     """Borra tickets locales de proyectos distintos al configurado y sin ejecuciones.
 
     Sirve para limpiar restos del seed mock (__sandbox__) sin tocar tickets reales.
+    Preserva siempre el proyecto __demo__ (C2 PLAN_ADOPCION_DEVS): es un sandbox
+    intencional que NO debe ser barrido por el sync ADO.
     """
     removed = 0
     with session_scope() as session:
-        rows = session.query(Ticket).filter(Ticket.project != keep_project).all()
+        rows = (
+            session.query(Ticket)
+            .filter(Ticket.project != keep_project)
+            .filter(Ticket.project != "__demo__")
+            .all()
+        )
         for t in rows:
             has_exec = (
                 session.query(AgentExecution.id)

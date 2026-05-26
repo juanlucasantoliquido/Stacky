@@ -54,6 +54,7 @@ def init_db() -> None:
     from services.macros import Macro  # noqa: F401  (FA-51)
     from services.embeddings import ExecutionEmbedding  # noqa: F401  (FA-01)
     from services.ado_pipeline_inference import PipelineInferenceCache  # noqa: F401
+    from services.ado_publisher import AgentHtmlPublish  # noqa: F401
     from services.ticket_status import TicketStatusEvent  # noqa: F401  (ticket state tracking)
     from services.pm.models import (  # noqa: F401  (PM Intelligence Suite v2 — Fase 1 + 2)
         PmSprintSnapshot,
@@ -62,6 +63,7 @@ def init_db() -> None:
         PmAiUsage,
         PmAiRecommendation,
     )
+    from services.docs_rag import DocChunk  # noqa: F401  (P1.1 — tabla docs_index)
 
     Base.metadata.create_all(engine)
     _migrate_add_columns()

@@ -1,7 +1,7 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -13,74 +13,78 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg, #fff);
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius, 10px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
   overflow: hidden;
 }
 
 .header {
-  padding: 18px 22px 8px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 16px 22px 10px;
+  border-bottom: 1px solid var(--border-muted);
 }
 
 .title {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
+  color: var(--text-primary);
 }
 
 .subtitle {
   margin: 4px 0 0;
-  color: var(--text-muted, #888);
-  font-size: 13px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .content {
   flex: 1;
   margin: 0;
   padding: 14px 22px;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
   overflow: auto;
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
 .footer {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  padding: 14px 22px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 12px 22px;
+  border-top: 1px solid var(--border-muted);
 }
 
 .primaryBtn {
-  background: rgb(91, 132, 240);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 13px;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
   cursor: pointer;
   font-family: inherit;
 }
 
 .primaryBtn:hover {
-  background: rgb(75, 116, 224);
+  background: var(--accent-hot);
 }
 
 .secondaryBtn {
   background: transparent;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  color: var(--text, inherit);
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 13px;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
   cursor: pointer;
   font-family: inherit;
 }
 
 .secondaryBtn:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--bg-elev);
 }

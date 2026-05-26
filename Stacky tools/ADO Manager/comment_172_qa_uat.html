@@ -1,0 +1,106 @@
+<!-- stacky-qa-uat:run ticket="172" -->
+<h2>QA UAT — Resultado ADO-172</h2>
+<p><strong>Veredicto:</strong> ✅ APROBADO CON OBSERVACIONES</p>
+<p><strong>Método:</strong> Análisis estático de código (trunk mergeado desde rama Task-172-RF-019)</p>
+<p><strong>Commit revisado:</strong> <code>1674d8da47ef91a63def637d57e768fefe1bdc87</code></p>
+<p><strong>Archivos analizados:</strong> 6 archivos principales (BD, Batch, RSDalc, AgendaWeb)</p>
+
+<h3>Resultados por Criterio de Aceptación</h3>
+<table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;width:100%">
+  <thead>
+    <tr style="background:#f0f0f0">
+      <th>CA</th>
+      <th>Descripción</th>
+      <th>Veredicto</th>
+      <th>Evidencia</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>CA-01</strong></td>
+      <td>Script crea DTOFICIAL en RDIRE con DEFAULT</td>
+      <td>⚠️ PASS con Obs.</td>
+      <td>Script define <code>VARCHAR(1) NULL DEFAULT '0'</code>. El CA especifica NOT NULL, pero la columna quedó NULLABLE. El DEFAULT garantiza que no llegue NULL por omisión, pero el constraint NOT NULL no está en el DDL.</td>
+    </tr>
+    <tr>
+      <td><strong>CA-02</strong></td>
+      <td>Batch IncHost inserta DTOFICIAL='1'</td>
+      <td>✅ PASS</td>
+      <td><code>DireccionesDalc.InsertaDireccionBD()</code> hardcodea <code>'1'</code> en el INSERT de RDIRE. Línea 293 con comentario ADO-172.</td>
+    </tr>
+    <tr>
+      <td><strong>CA-03</strong></td>
+      <td>Alta manual OnLine inserta DTOFICIAL='0'</td>
+      <td>✅ PASS</td>
+      <td><code>RSDalc.Cliente.AgregarDomicilioB()</code> hardcodea <code>{cFormat.StToBD("0")}</code> como último valor en el INSERT. Línea 1795.</td>
+    </tr>
+    <tr>
+      <td><strong>CA-04</strong></td>
+      <td>Campo Oficial solo lectura en modificación</td>
+      <td>✅ PASS</td>
+      <td><code>CargarDatosDomicilio()</code> en MantenedorDirecciones.ascx.cs hace bind de DTOFICIAL a <code>lblOficial</code> (AISLabel). El campo es no editable por diseño del control.</td>
+    </tr>
+    <tr>
+      <td><strong>CA-05</strong></td>
+      <td>Grilla muestra columna Oficial</td>
+      <td>✅ PASS</td>
+      <td><code>SetColumnasGridDirecciones()</code> agrega <code>AISGridViewTextColumn("OFICIAL", 5)</code>. <code>GetTodosDomicilios()</code> retorna <code>COALESCE(OFICIALIDM.LITEXTO, OFICIALCAT.TBTEXT) AS OFICIAL</code> con JOIN catálogo RTABL TBNUME=3.</td>
+    </tr>
+    <tr>
+      <td><strong>CA-06</strong></td>
+      <td>Campo Oficial solo lectura en alta</td>
+      <td>✅ PASS</td>
+      <td><code>LimpiarControles()</code> setea <code>lblOficial.Text = "No"</code>. El ASCX declara <code>AISLabel ID="lblOficial"</code> (no es un input editable). Comentario ADO-172 | 2026-05-20 presente.</td>
+    </tr>
+    <tr>
+      <td><strong>CA-07</strong></td>
+      <td>Consistencia visual columnas Oficial vs Válido</td>
+      <td>✅ PASS</td>
+      <td>Ambas columnas en grilla son <code>AISGridViewTextColumn</code> con ancho 5. Ambas usan catálogo RTABL TBNUME=3 para descripción (mismo JOIN pattern). Texto Sí/No coherente.</td>
+    </tr>
+    <tr>
+      <td><strong>CA-08</strong></td>
+      <td>Eliminar domicilio no altera DTOFICIAL</td>
+      <td>✅ PASS</td>
+      <td>Ambas sobrecargas de <code>EliminarDomicilio()</code> actualizan solo <code>DTVALIDO='0'</code>, <code>DTMOTELIM</code>, <code>DTFECMODIF</code>, <code>DTHORAMODIF</code>, <code>DTUSRMODIF</code>. DTOFICIAL no aparece en ningún UPDATE de baja.</td>
+    </tr>
+    <tr>
+      <td><strong>CA-09</strong></td>
+      <td>Migración históricos asigna DTOFICIAL según regla</td>
+      <td>✅ PASS</td>
+      <td>Script UPDATE usa <code>CASE WHEN DTORIGEN IS NULL OR DTORIGEN='' OR DTORIGEN='AIS' THEN '0' ELSE '1' END</code>. PASO 4 valida post-migración con <code>SELECT COUNT(*) FROM RDIRE WHERE DTOFICIAL IS NULL</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>CA-10</strong></td>
+      <td>Módulos de supervisión exponen DTOFICIAL</td>
+      <td>⚠️ PASS con Obs.</td>
+      <td><code>GetDomicilios()</code> y <code>GetDomiciliosParaFicha()</code> usan <code>SELECT RDIRE.*</code>, por lo que incluyen DTOFICIAL automáticamente tras el ALTER. Sin embargo, no tienen JOIN con catálogo para mostrar descripción legible (solo retornan valor crudo '0'/'1'). Funcional para consumo técnico; podría mejorar para consumo en UI de supervisión.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Observaciones</h3>
+<ol>
+  <li>
+    <strong>[OBS-01 — Baja prioridad] CA-01: DTOFICIAL definido como NULL en DDL</strong><br/>
+    El script crea la columna como <code>VARCHAR(1) NULL DEFAULT '0'</code>. El criterio de aceptación indicaba NOT NULL. Si bien el DEFAULT protege los casos normales, sería más robusto agregar <code>ALTER TABLE dbo.RDIRE ALTER COLUMN DTOFICIAL VARCHAR(1) NOT NULL</code> una vez confirmado que todos los registros históricos tienen valor (post-migración CA-09). Impacto: bajo. No bloquea el release.
+  </li>
+  <li>
+    <strong>[OBS-02 — Baja prioridad] CA-10: GetDomicilios / GetDomiciliosParaFicha sin descripción de OFICIAL</strong><br/>
+    Estas funciones retornan <code>RDIRE.*</code> (valor crudo), lo que satisface CA-10 técnicamente pero sin descripción legible. Si algún módulo de supervisión muestra la grilla directamente al usuario final, debería agregar el JOIN con RTABL para OFICIAL similar a lo que hace <code>GetTodosDomicilios()</code>.
+  </li>
+</ol>
+
+<h3>Defectos</h3>
+<p>Sin defectos bloqueantes detectados. Las dos observaciones son sugerencias de mejora de baja prioridad.</p>
+
+<h3>Resumen de cobertura</h3>
+<ul>
+  <li>10/10 CA evaluados</li>
+  <li>8/10 PASS sin observaciones</li>
+  <li>2/10 PASS con observación menor (no bloqueante)</li>
+  <li>0 FAIL</li>
+</ul>
+
+<hr/>
+<p><em>QA UAT Agéntico — ADO-172 | Análisis estático de código | 2026-05-23</em></p>

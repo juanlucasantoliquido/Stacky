@@ -10,14 +10,18 @@
     "grep": {},
     "grepInvert": null,
     "maxFailures": 0,
-    "metadata": {},
+    "metadata": {
+      "actualWorkers": 1
+    },
     "preserveOutput": "always",
     "projects": [
       {
         "outputDir": "N:/GIT/RS/RSPACIFICO/Tools/Stacky/Stacky tools/QA UAT Agent/test-results",
         "repeatEach": 1,
         "retries": 1,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 1
+        },
         "id": "",
         "name": "",
         "testDir": "N:/GIT/RS/RSPACIFICO/Tools/Stacky/Stacky tools/QA UAT Agent",
@@ -25,7 +29,7 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 90000
+        "timeout": 60000
       }
     ],
     "quiet": false,
@@ -66,25 +70,956 @@
     "workers": 1,
     "webServer": null
   },
-  "suites": [],
-  "errors": [
+  "suites": [
     {
-      "message": "TimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n",
-      "stack": "TimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:35017/AgendaWeb/FrmLogin.aspx\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at globalSetup (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:140:16)",
-      "location": {
-        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts",
-        "column": 16,
-        "line": 140
-      },
-      "snippet": "\u001b[90m   at \u001b[39mplaywright\\global.setup.ts:140\n\n\u001b[0m \u001b[90m 138 |\u001b[39m\n \u001b[90m 139 |\u001b[39m     \u001b[36mconst\u001b[39m loginURL \u001b[33m=\u001b[39m \u001b[32m`${baseURL}FrmLogin.aspx`\u001b[39m\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 140 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(loginURL\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m timeout\u001b[33m:\u001b[39m \u001b[35m30\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 141 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[33mLOGIN_USER_SEL\u001b[39m\u001b[33m,\u001b[39m user\u001b[33m,\u001b[39m  { timeout\u001b[33m:\u001b[39m \u001b[35m10\u001b[39m_000 })\u001b[33m;\u001b[39m\n \u001b[90m 142 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[33mLOGIN_PASS_SEL\u001b[39m\u001b[33m,\u001b[39m pass)\u001b[33m;\u001b[39m\n \u001b[90m 143 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[33mLOGIN_BTN_SEL\u001b[39m)\u001b[33m.\u001b[39mclick({ noWaitAfter\u001b[33m:\u001b[39m \u001b[36mtrue\u001b[39m })\u001b[33m;\u001b[39m\u001b[0m"
+      "title": "playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+      "file": "playwright/uat/ado122_provincia_domicilio.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios",
+          "file": "playwright/uat/ado122_provincia_domicilio.spec.ts",
+          "line": 131,
+          "column": 6,
+          "specs": [
+            {
+              "title": "P01 — Campo Provincia visible en formulario de alta",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39458,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:135:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:135:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-24T16:13:14.116Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    },
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 38739,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:135:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:135:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-24T16:13:57.071Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75263673f6d8ccc8d886-95edea171016f06e2876",
+              "file": "playwright/uat/ado122_provincia_domicilio.spec.ts",
+              "line": 134,
+              "column": 7
+            },
+            {
+              "title": "P02 — Campo Departamento territorial visible y orden correcto (Ciudad → Provincia → Departamento)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 23297,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n  navigated to \"http://localhost:35017/AgendaWeb/FrmAgenda.aspx\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n  navigated to \"http://localhost:35017/AgendaWeb/FrmAgenda.aspx\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:174:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n  navigated to \"http://localhost:35017/AgendaWeb/FrmAgenda.aspx\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:174:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-24T16:14:37.763Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento-\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento-\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    },
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 38989,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:174:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:174:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-24T16:15:03.288Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75263673f6d8ccc8d886-66846405ee317045fa42",
+              "file": "playwright/uat/ado122_provincia_domicilio.spec.ts",
+              "line": 173,
+              "column": 7
+            },
+            {
+              "title": "P03 — Modificación precarga Provincia guardada (CLCOD=4127924112345393, AIS4=Arequipa/0401)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 38657,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:233:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:233:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-24T16:15:44.598Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401-\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401-\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    },
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 20777,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[id$=\"btnIngresar\"], button[id$=\"btnIngresar\"], [id$=\"btnIngresar\"], [id$=\"btnOk\"]')\u001b[22m\n\u001b[2m    - locator resolved to <a id=\"c_btnOk\" data-tooltip=\"Entrar\" data-position=\"bottom\" class=\"waves-effect waves-light tooltipped btn\" href=\"javascript:__doPostBack('ctl00$c$btnOk','')\">Entrar</a>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - performing click action\u001b[22m\n\u001b[2m    - click action done\u001b[22m\n\u001b[2m    - waiting for scheduled navigations to finish\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[id$=\"btnIngresar\"], button[id$=\"btnIngresar\"], [id$=\"btnIngresar\"], [id$=\"btnOk\"]')\u001b[22m\n\u001b[2m    - locator resolved to <a id=\"c_btnOk\" data-tooltip=\"Entrar\" data-position=\"bottom\" class=\"waves-effect waves-light tooltipped btn\" href=\"javascript:__doPostBack('ctl00$c$btnOk','')\">Entrar</a>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - performing click action\u001b[22m\n\u001b[2m    - click action done\u001b[22m\n\u001b[2m    - waiting for scheduled navigations to finish\u001b[22m\n\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:31:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:233:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 31
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 29 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(userSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_USER\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 31
+                          },
+                          "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[id$=\"btnIngresar\"], button[id$=\"btnIngresar\"], [id$=\"btnIngresar\"], [id$=\"btnOk\"]')\u001b[22m\n\u001b[2m    - locator resolved to <a id=\"c_btnOk\" data-tooltip=\"Entrar\" data-position=\"bottom\" class=\"waves-effect waves-light tooltipped btn\" href=\"javascript:__doPostBack('ctl00$c$btnOk','')\">Entrar</a>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - performing click action\u001b[22m\n\u001b[2m    - click action done\u001b[22m\n\u001b[2m    - waiting for scheduled navigations to finish\u001b[22m\n\n\n  29 |   await page.fill(userSel, process.env.AGENDA_WEB_USER || 'PABLO');\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n> 31 |   await page.click(btnSel);\n     |              ^\n  32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n  33 | }\n  34 |\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:31:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:233:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-24T16:16:25.669Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 31
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75263673f6d8ccc8d886-9c475700e97f9e223db1",
+              "file": "playwright/uat/ado122_provincia_domicilio.spec.ts",
+              "line": 232,
+              "column": 7
+            },
+            {
+              "title": "P05 — Guardar domicilio con Provincia y verificar persistencia",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 38508,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:284:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:284:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-24T16:16:49.406Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    },
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 38808,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:284:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:284:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-24T16:17:30.331Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75263673f6d8ccc8d886-ff97f926a118b5cbed41",
+              "file": "playwright/uat/ado122_provincia_domicilio.spec.ts",
+              "line": 283,
+              "column": 7
+            },
+            {
+              "title": "P06 — Guardar domicilio sin Provincia (campo opcional, no debe fallar)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39528,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:394:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:394:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-24T16:18:11.571Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar-\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar-\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    },
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39154,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:394:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:394:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-24T16:18:53.172Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75263673f6d8ccc8d886-3cceeb16cda1da012263",
+              "file": "playwright/uat/ado122_provincia_domicilio.spec.ts",
+              "line": 393,
+              "column": 7
+            },
+            {
+              "title": "P08 — Campos preexistentes (Calle, Número, País, Ciudad) no afectados",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39251,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:453:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:453:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-24T16:19:35.115Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    },
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 38822,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:453:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:453:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-24T16:20:17.385Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75263673f6d8ccc8d886-05ee05456963f84f0eaf",
+              "file": "playwright/uat/ado122_provincia_domicilio.spec.ts",
+              "line": 452,
+              "column": 7
+            },
+            {
+              "title": "P09 — Borrado lógico conserva Provincia en BD (verificación SQL directa)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 12,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 38614,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:496:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:496:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-24T16:20:58.251Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa-\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa-\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    },
+                    {
+                      "workerIndex": 13,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39426,
+                      "error": {
+                        "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+                        "stack": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:496:5",
+                        "location": {
+                          "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(passSel\u001b[33m,\u001b[39m process\u001b[33m.\u001b[39menv\u001b[33m.\u001b[39m\u001b[33mAGENDA_WEB_PASS\u001b[39m \u001b[33m||\u001b[39m \u001b[32m'PABLO'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(btnSel)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForURL(\u001b[35m/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/\u001b[39m\u001b[33m,\u001b[39m { timeout\u001b[33m:\u001b[39m \u001b[35m20000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m }\n \u001b[90m 34 |\u001b[39m\n \u001b[90m 35 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m navigateToDetalleCliente(page\u001b[33m:\u001b[39m \u001b[33mPage\u001b[39m\u001b[33m,\u001b[39m clcod\u001b[33m:\u001b[39m string) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "TimeoutError: page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n\n  30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');\n  31 |   await page.click(btnSel);\n> 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });\n     |              ^\n  33 | }\n  34 |\n  35 | async function navigateToDetalleCliente(page: Page, clcod: string) {\n    at freshLogin (N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:32:14)\n    at N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts:496:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-05-24T16:21:39.241Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\test-results\\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "N:\\GIT\\RS\\RSPACIFICO\\Tools\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\uat\\ado122_provincia_domicilio.spec.ts",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75263673f6d8ccc8d886-51d9ae2e182efb5dcde9",
+              "file": "playwright/uat/ado122_provincia_domicilio.spec.ts",
+              "line": 490,
+              "column": 7
+            }
+          ]
+        }
+      ]
     }
   ],
+  "errors": [],
   "stats": {
-    "startTime": "2026-05-10T02:08:20.133Z",
-    "duration": 36283.933,
+    "startTime": "2026-05-24T16:12:53.974Z",
+    "duration": 566190.214,
     "expected": 0,
     "skipped": 0,
-    "unexpected": 0,
+    "unexpected": 7,
     "flaky": 0
   }
 }

@@ -40,8 +40,8 @@ _TOOL_VERSION = "1.3.0"
 _EXEC_SUMMARY_MAX_LEN = 600
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 # Token format used inside ado_comment.html for image src/href placeholders.
-# The publisher swaps {{ATTACH:<scenario>:<filename>}} with the real attachment
-# URL once each PNG has been uploaded to ADO.
+# Stacky backend swaps {{ATTACH:<scenario>:<filename>}} with the real
+# attachment URL once each PNG has been uploaded centrally to ADO.
 _ATTACH_TOKEN_FMT = "{{{{ATTACH:{scenario}:{filename}}}}}"
 
 # Regex de patrones de fallas TECNICAS del runner Playwright que NO deben

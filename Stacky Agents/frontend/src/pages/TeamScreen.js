@@ -7,6 +7,8 @@ import { useRunningStatus } from "../hooks/useRunningStatus";
 import EmployeeCard from "../components/EmployeeCard";
 import TeamManageDrawer from "../components/TeamManageDrawer";
 import EmployeeEditDrawer from "../components/EmployeeEditDrawer";
+import ResumeCard from "../components/ResumeCard";
+import SavingsCard from "../components/SavingsCard";
 import styles from "./TeamScreen.module.css";
 export default function TeamScreen() {
     const [allAgents, setAllAgents] = useState([]);
@@ -75,7 +77,10 @@ export default function TeamScreen() {
             return "qa";
         return "custom";
     }
-    return (_jsxs("div", { className: styles.root, children: [_jsxs("header", { className: styles.header, children: [_jsxs("div", { className: styles.headerLeft, children: [_jsx("span", { className: styles.logo, children: "\u26A1" }), _jsx("h1", { className: styles.title, children: "Tu Equipo" }), pinned.length > 0 && (_jsxs("span", { className: styles.count, children: [pinned.length, " agente", pinned.length !== 1 ? "s" : ""] }))] }), _jsx("div", { className: styles.headerActions, children: _jsx("button", { className: styles.addBtn, onClick: () => setManageOpen(true), disabled: !activeProject, title: !activeProject ? "Seleccioná un proyecto primero" : undefined, children: "+ Agregar empleado" }) })] }), _jsxs("main", { className: styles.main, children: [removeError && (_jsxs("div", { className: styles.errorBanner, role: "alert", children: ["\u26A0 ", removeError] })), getAgentsError && (_jsxs("div", { className: styles.errorBanner, role: "alert", children: ["\u26A0 ", getAgentsError] })), loading || teamLoading ? (_jsx("div", { className: styles.loadingGrid, children: [...Array(4)].map((_, i) => (_jsx("div", { className: styles.skeletonCard, "aria-hidden": "true" }, i))) })) : !activeProject ? (_jsx(NoProjectState, {})) : pinned.length === 0 ? (_jsx(EmptyState, { onAdd: () => setManageOpen(true) })) : (_jsx("div", { className: styles.grid, children: pinned.map((filename) => {
+    return (_jsxs("div", { className: styles.root, children: [_jsxs("header", { className: styles.header, children: [_jsxs("div", { className: styles.headerLeft, children: [_jsx("span", { className: styles.logo, children: "\u26A1" }), _jsx("h1", { className: styles.title, children: "Tu Equipo" }), pinned.length > 0 && (_jsxs("span", { className: styles.count, children: [pinned.length, " agente", pinned.length !== 1 ? "s" : ""] }))] }), _jsx("div", { className: styles.headerActions, children: _jsx("button", { className: styles.addBtn, onClick: () => setManageOpen(true), disabled: !activeProject, title: !activeProject ? "Seleccioná un proyecto primero" : undefined, children: "+ Agregar empleado" }) })] }), _jsx(ResumeCard, { projectName: activeProjectName, onResume: (ticketId) => {
+                    window.history.pushState({}, "", `/tickets?ticket=${ticketId}`);
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                } }), _jsx(SavingsCard, {}), _jsxs("main", { className: styles.main, children: [removeError && (_jsxs("div", { className: styles.errorBanner, role: "alert", children: ["\u26A0 ", removeError] })), getAgentsError && (_jsxs("div", { className: styles.errorBanner, role: "alert", children: ["\u26A0 ", getAgentsError] })), loading || teamLoading ? (_jsx("div", { className: styles.loadingGrid, children: [...Array(4)].map((_, i) => (_jsx("div", { className: styles.skeletonCard, "aria-hidden": "true" }, i))) })) : !activeProject ? (_jsx(NoProjectState, {})) : pinned.length === 0 ? (_jsx(EmptyState, { onAdd: () => setManageOpen(true) })) : (_jsx("div", { className: styles.grid, children: pinned.map((filename) => {
                             const agentType = inferAgentType(filename);
                             const runningExec = runningByAgentType.get(agentType) ?? null;
                             const runningAdoId = runningExec

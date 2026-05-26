@@ -1,38 +1,39 @@
 .wrap {
   margin: 6px 0;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .chip {
-  background: rgba(91, 132, 240, 0.1);
-  color: rgb(60, 90, 180);
-  border: 1px solid rgba(91, 132, 240, 0.25);
+  background: rgba(56, 139, 253, 0.12);
+  color: var(--accent-hot);
+  border: 1px solid rgba(56, 139, 253, 0.35);
   padding: 3px 9px;
   border-radius: 12px;
   cursor: pointer;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.chip:hover {
-  background: rgba(91, 132, 240, 0.18);
-}
+.chip:hover { background: rgba(56, 139, 253, 0.22); }
 
 .detail {
   margin-top: 6px;
   padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.025);
-  border-radius: 6px;
-  border-left: 3px solid rgba(91, 132, 240, 0.4);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
 }
 
 .reason {
   margin: 0 0 8px;
   font-size: 12px;
   line-height: 1.5;
+  color: var(--text-primary);
 }
 
 .rerunRow {
@@ -43,21 +44,22 @@
 }
 
 .rerunLabel {
-  font-size: 12px;
-  color: var(--text-muted, #777);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .rerunBtn {
   background: transparent;
-  border: 1px solid rgba(91, 132, 240, 0.35);
-  color: rgb(60, 90, 180);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   padding: 3px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
   cursor: pointer;
   font-family: inherit;
 }
 
 .rerunBtn:hover {
-  background: rgba(91, 132, 240, 0.1);
+  background: var(--bg-elev);
+  border-color: var(--accent);
 }

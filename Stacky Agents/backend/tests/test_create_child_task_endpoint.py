@@ -156,11 +156,22 @@ class FakeAdoClientExt:
         self._raise_on_upload: Exception | None = None
         self._raise_on_state: Exception | None = None
 
-    def create_work_item(self, work_item_type, fields, parent_ado_id):
+    def create_work_item(
+        self,
+        work_item_type: str,
+        title: str = "",
+        description: str = "",
+        initial_state: str = "",
+        parent_id=None,
+        fields: dict | None = None,
+        parent_ado_id=None,
+    ):
+        # Firma unificada WS1+WS2: acepta tanto keywords nuevos como alias de compatibilidad.
+        effective_parent = parent_ado_id if parent_ado_id is not None else parent_id
         self.create_calls.append({
             "type": work_item_type,
             "fields": fields,
-            "parent": parent_ado_id,
+            "parent": effective_parent,
         })
         return {"id": 5000, "url": "https://dev.azure.com/TestOrg/TestProject/_apis/wit/workitems/5000"}
 
@@ -213,7 +224,7 @@ def test_create_child_task_success(client, epic_ticket, tmp_repo):
 
     fake_ado = FakeAdoClientExt()
 
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         resp = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": rel_path, "operator_reason": "Aprobado en daily"},
@@ -252,7 +263,7 @@ def test_pending_task_marked_consumed(client, epic_ticket, tmp_repo):
     rel_path = _rel_path(tmp_repo, pt_path)
     fake_ado = FakeAdoClientExt()
 
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         resp = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": rel_path},
@@ -282,7 +293,7 @@ def test_idempotency_already_consumed(client, epic_ticket, tmp_repo):
     fake_ado = FakeAdoClientExt()
 
     # Primera invocación
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         r1 = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": rel_path},
@@ -293,7 +304,7 @@ def test_idempotency_already_consumed(client, epic_ticket, tmp_repo):
     fake_ado2 = FakeAdoClientExt()
 
     # Segunda invocación
-    with patch("api.tickets.AdoClient", return_value=fake_ado2), \
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado2), \
          patch("api.tickets.REPO_ROOT", tmp_repo):
         r2 = client.post(
             "/api/tickets/by-ado/149/create-child-task",
@@ -365,7 +376,7 @@ def test_partial_failure_attachment_upload(client, epic_ticket, tmp_repo):
     fake_ado = FakeAdoClientExt()
     fake_ado._raise_on_upload = AdoApiError("ADO _apis/wit/attachments → 503: Service Unavailable")
 
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         resp = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": rel_path},

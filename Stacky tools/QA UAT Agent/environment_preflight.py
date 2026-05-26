@@ -32,12 +32,15 @@ Usage
 """
 from __future__ import annotations
 
+import logging
 import os
 import time
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -53,7 +56,10 @@ _CHECK_TIMEOUT_S: float = 5.0
 # HTTP status codes that prove the server is running even if they indicate
 # auth/redirect (e.g., 302→login, 401, 403).  We only care that the process
 # is alive and serving HTTP, not that the response is 200.
-_ALIVE_STATUS_CODES = frozenset({200, 301, 302, 401, 403})
+# 400 is included because IIS/IIS-Express may return it when the HTTP request
+# uses 127.0.0.1 as the Host header instead of "localhost" (host-binding
+# mismatch), which still proves the server process is running.
+_ALIVE_STATUS_CODES = frozenset({200, 301, 302, 400, 401, 403})
 
 
 # ── URL helper ─────────────────────────────────────────────────────────────────
@@ -222,25 +228,47 @@ def _http_get(url: str, timeout_s: float = 5.0) -> dict:
     Returns {"ok": bool, "status": int|None, "error": str}.
     Never raises — all exceptions are caught and mapped to ok=False.
 
-    Considers 2xx, 3xx, 401, 403 as "app is running" (ok=True) because
-    IIS Express returns these immediately when alive.  Only network errors
+    Considers 2xx, 3xx, 400, 401, 403 as "app is running" (ok=True) because
+    IIS/IIS Express returns these immediately when alive.  Only network errors
     and 5xx (server crash) are treated as ok=False.
+
+    IPv4 fallback: if ``url`` uses the hostname ``localhost`` and the initial
+    request times-out (Python may resolve localhost to ::1 on some systems),
+    retries once using 127.0.0.1 to force an IPv4 connection.
     """
-    try:
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            return {"ok": True, "status": resp.getcode(), "error": ""}
-    except urllib.error.HTTPError as exc:
-        if exc.code in _ALIVE_STATUS_CODES:
-            return {"ok": True, "status": exc.code, "error": ""}
-        return {"ok": False, "status": exc.code,
-                "error": f"HTTP {exc.code}: {exc.reason}"}
-    except urllib.error.URLError as exc:
-        return {"ok": False, "status": None, "error": f"URLError: {exc.reason}"}
-    except OSError as exc:
-        return {"ok": False, "status": None, "error": f"OSError: {exc}"}
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "status": None, "error": f"Unexpected: {exc}"}
+    last_error: str = ""
+
+    def _attempt(attempt_url: str, attempt_timeout: float) -> dict:
+        try:
+            req = urllib.request.Request(attempt_url, method="GET")
+            with urllib.request.urlopen(req, timeout=attempt_timeout) as resp:
+                return {"ok": True, "status": resp.getcode(), "error": ""}
+        except urllib.error.HTTPError as exc:
+            if exc.code in _ALIVE_STATUS_CODES:
+                return {"ok": True, "status": exc.code, "error": ""}
+            return {"ok": False, "status": exc.code,
+                    "error": f"HTTP {exc.code}: {exc.reason}"}
+        except urllib.error.URLError as exc:
+            return {"ok": False, "status": None, "error": f"URLError: {exc.reason}"}
+        except OSError as exc:
+            return {"ok": False, "status": None, "error": f"OSError: {exc}"}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "status": None, "error": f"Unexpected: {exc}"}
+
+    result = _attempt(url, timeout_s)
+    if result["ok"]:
+        return result
+
+    # IPv4 fallback: if localhost timed-out, retry with 127.0.0.1.
+    # Some Windows configurations resolve localhost to ::1 (IPv6), which may
+    # timeout even when the server is listening on 127.0.0.1 (IPv4).
+    if "localhost" in url and ("timed out" in result["error"] or "TimeoutError" in result["error"]):
+        fallback_url = url.replace("localhost", "127.0.0.1", 1)
+        fallback = _attempt(fallback_url, timeout_s)
+        if fallback["ok"]:
+            return fallback  # Server IS running; original URL fine for Playwright (Chromium handles IPv6)
+
+    return result
 
 
 # ── CLI (for manual testing) ───────────────────────────────────────────────────

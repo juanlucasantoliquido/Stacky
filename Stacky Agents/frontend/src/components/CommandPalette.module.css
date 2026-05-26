@@ -1,7 +1,7 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -14,9 +14,11 @@
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg, #fff);
-  border-radius: 12px;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius, 10px);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
   overflow: hidden;
 }
 
@@ -25,12 +27,12 @@
   align-items: center;
   gap: 10px;
   padding: 14px 18px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--border-muted);
 }
 
 .searchIcon {
-  font-size: 18px;
-  opacity: 0.6;
+  font-size: 16px;
+  color: var(--text-muted);
 }
 
 .input {
@@ -38,9 +40,14 @@
   background: transparent;
   border: none;
   outline: none;
-  font-size: 16px;
-  color: var(--text, inherit);
+  font-size: 15px;
+  color: var(--text-primary);
   font-family: inherit;
+  padding: 0;
+}
+
+.input::placeholder {
+  color: var(--text-faint);
 }
 
 .list {
@@ -57,15 +64,16 @@
   gap: 12px;
   padding: 9px 18px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  color: var(--text-primary);
 }
 
 .item.selected {
-  background: rgba(91, 132, 240, 0.15);
+  background: var(--bg-elev);
 }
 
 .itemIcon {
-  font-size: 16px;
+  font-size: 14px;
   width: 22px;
   text-align: center;
   flex-shrink: 0;
@@ -79,15 +87,15 @@
 }
 
 .itemHint {
-  font-size: 12px;
-  color: var(--text-muted, #888);
+  font-size: 11px;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .empty {
   padding: 24px 18px;
   text-align: center;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -95,8 +103,8 @@
   display: flex;
   gap: 16px;
   padding: 8px 18px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid var(--border-muted);
   font-size: 11px;
-  color: var(--text-muted, #888);
-  background: rgba(0, 0, 0, 0.02);
+  color: var(--text-faint);
+  background: var(--bg-base);
 }

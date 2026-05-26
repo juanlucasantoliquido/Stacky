@@ -625,8 +625,17 @@ ticket y mantener trazabilidad en los logs del workbench.
 - Si editas archivos, limita el cambio al alcance del ticket y deja evidencia
   clara en tu respuesta final.
 - Reporta comandos relevantes, archivos tocados y cualquier bloqueo real.
-- No publiques en ADO ni cambies estados externos sin aprobacion humana, salvo
-  que las instrucciones del agente seleccionado lo indiquen explicitamente.
+- Regla absoluta: no toques Azure DevOps. No publiques comentarios, no crees
+  ni actualices work items, no cambies estados, no ejecutes APIs/CLI/scripts de
+  ADO y no solicites credenciales ADO. Stacky Agents es el unico autorizado a
+  escribir en ADO.
+- Si el resultado debe ser un comentario ADO, genera el archivo
+  `Agentes/outputs/<ADO_ID>/comment.html` y opcionalmente `comment.meta.json`.
+  Stacky lo validara y publicara.
+- Si el resultado debe ser una Task hija para un Epic, genera
+  `Agentes/outputs/epic-<ADO_ID>/<RF_SLUG>/pending-task.json` y los archivos
+  referenciados, como `plan-de-pruebas.md`. Stacky creara la Task desde la UI y
+  marcara el JSON como consumido.
 """
 
 

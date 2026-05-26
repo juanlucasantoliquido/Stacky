@@ -459,47 +459,99 @@ class AdoClient:
             correlation_id=correlation_id,
         )
 
-    def create_work_item(
+    def create_work_item(  # Unificado WS1+WS2 (2026-05-23)
         self,
         work_item_type: str,
-        fields: dict[str, str],
-        parent_ado_id: int,
+        title: str = "",
+        description: str = "",
+        initial_state: str = "",
+        parent_id: int | None = None,
+        # Alias de compatibilidad con la firma original de WS1
+        fields: dict | None = None,
+        parent_ado_id: int | None = None,
     ) -> dict:
-        """Crea un work item hijo del Epic `parent_ado_id` via JSON Patch (CA-01).
+        """Crea un work item en Azure DevOps y retorna el dict completo de la respuesta.
 
-        POST _apis/wit/workitems/${type}?api-version={ver}
-        Content-Type: application/json-patch+json
+        Portado desde WS2 (2026-05-23) — acepta tanto la firma de WS2 (title/description/
+        initial_state/parent_id) como la firma original de WS1 (fields/parent_ado_id).
 
-        El patch incluye los campos en `fields` más la relación Hierarchy-Reverse
-        que vincula el nuevo work item al Epic padre.
+        Args:
+            work_item_type: Tipo de work item (ej. "Task", "Bug", "User Story").
+            title:          Título del work item (nueva firma WS2).
+            description:    Descripción en HTML.
+            initial_state:  Estado inicial.
+            parent_id:      ID del padre para relación jerárquica (nueva firma WS2).
+            fields:         Dict de campos ya construidos (firma original WS1 — deprecated).
+            parent_ado_id:  ID del padre — alias de parent_id (firma original WS1).
 
-        Returns: dict con al menos 'id' y 'url' del work item creado.
+        Raises:
+            AdoApiError: si la API devuelve un error HTTP.
         """
+        # Compatibilidad backward con la firma original (fields + parent_ado_id)
+        if fields is not None:
+            patch_ops: list[dict] = [
+                {"op": "add", "path": f"/fields/{field_name}", "value": value}
+                for field_name, value in fields.items()
+            ]
+            effective_parent = parent_ado_id if parent_ado_id is not None else parent_id
+            if effective_parent is not None:
+                parent_url = (
+                    f"https://dev.azure.com/{urllib.parse.quote(self.org)}/"
+                    f"{urllib.parse.quote(self.project)}/_apis/wit/workitems/{effective_parent}"
+                )
+                patch_ops.append({
+                    "op": "add",
+                    "path": "/relations/-",
+                    "value": {
+                        "rel": "System.LinkTypes.Hierarchy-Reverse",
+                        "url": parent_url,
+                        "attributes": {"comment": "Task hija del Epic creada por Stacky Agents"},
+                    },
+                })
+            url = (
+                f"{self._base_proj}/_apis/wit/workitems/"
+                f"${urllib.parse.quote(work_item_type)}"
+                f"?api-version={_API_VERSION}"
+            )
+            return self._request_with_retry(
+                "POST", url, body=patch_ops, content_type="application/json-patch+json"
+            )
+
+        # Nueva firma WS2: parámetros individuales
         url = (
             f"{self._base_proj}/_apis/wit/workitems/"
-            f"${urllib.parse.quote(work_item_type)}"
-            f"?api-version={_API_VERSION}"
+            f"${urllib.parse.quote(work_item_type)}?api-version={_API_VERSION}"
         )
-        patch_ops: list[dict] = [
-            {"op": "add", "path": f"/fields/{field_name}", "value": value}
-            for field_name, value in fields.items()
+        html_desc = (
+            description if description.strip().startswith("<")
+            else f"<p>{description}</p>"
+        ) if description else ""
+
+        patch: list[dict] = [
+            {"op": "add", "path": "/fields/System.Title", "value": title},
         ]
-        # Relación padre → Hierarchy-Reverse
-        parent_url = (
-            f"https://dev.azure.com/{urllib.parse.quote(self.org)}/"
-            f"{urllib.parse.quote(self.project)}/_apis/wit/workitems/{parent_ado_id}"
-        )
-        patch_ops.append({
-            "op": "add",
-            "path": "/relations/-",
-            "value": {
-                "rel": "System.LinkTypes.Hierarchy-Reverse",
-                "url": parent_url,
-                "attributes": {"comment": "Task hija del Epic creada por Stacky Agents"},
-            },
-        })
+        if html_desc:
+            patch.append({"op": "add", "path": "/fields/System.Description", "value": html_desc})
+        if initial_state:
+            patch.append({"op": "add", "path": "/fields/System.State", "value": initial_state})
+
+        effective_parent = parent_id if parent_id is not None else parent_ado_id
+        if effective_parent is not None:
+            patch.append({
+                "op": "add",
+                "path": "/relations/-",
+                "value": {
+                    "rel": "System.LinkTypes.Hierarchy-Reverse",
+                    "url": (
+                        f"https://dev.azure.com/{urllib.parse.quote(self.org)}/"
+                        f"{urllib.parse.quote(self.project)}/_apis/wit/workitems/{effective_parent}"
+                    ),
+                    "attributes": {"comment": "Padre del work item"},
+                },
+            })
+
         return self._request_with_retry(
-            "POST", url, body=patch_ops, content_type="application/json-patch+json"
+            "POST", url, body=patch, content_type="application/json-patch+json"
         )
 
     def upload_attachment(self, file_path: Path, file_name: str) -> dict:

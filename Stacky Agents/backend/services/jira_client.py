@@ -35,6 +35,16 @@ logger = logging.getLogger("stacky_agents.jira")
 _TIMEOUT_SEC = 30
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
+_TEXT_EXTENSIONS = {
+    ".txt", ".log", ".md", ".csv", ".json", ".xml", ".yaml", ".yml",
+    ".py", ".js", ".ts", ".cs", ".java", ".sql", ".html", ".htm",
+    ".sh", ".bat", ".ps1", ".rb", ".go", ".rs", ".php", ".tf",
+}
+
+
+def _is_text_attachment(filename: str) -> bool:
+    return Path(filename).suffix.lower() in _TEXT_EXTENSIONS
+
 
 class JiraConfigError(RuntimeError):
     pass
@@ -211,6 +221,43 @@ class JiraClient:
     def issue_url(self, issue_key: str) -> str:
         return f"{self.base_url}/browse/{issue_key}"
 
+    def fetch_issue_ids_for_jql(self, jql: str) -> set[int]:
+        """Retorna el conjunto de IDs internos de Jira que coinciden con el JQL dado.
+        Solo solicita el campo ``id`` para minimizar la carga de red.
+
+        Portado de WS2 (Sprint 3 — P1.4).
+        """
+        import urllib.parse as _up
+        url_base = f"{self._api_base}/search"
+        ids: set[int] = set()
+        start_at = 0
+        page_size = 200
+
+        while True:
+            params = _up.urlencode({
+                "jql":        jql,
+                "fields":     "id",
+                "maxResults": page_size,
+                "startAt":    start_at,
+            })
+            try:
+                resp = self._request("GET", f"{url_base}?{params}")
+            except Exception as exc:
+                logger.warning("fetch_issue_ids_for_jql fallo en startAt=%s: %s", start_at, exc)
+                break
+            issues = resp.get("issues") or []
+            for issue in issues:
+                try:
+                    ids.add(int(issue["id"]))
+                except (KeyError, ValueError, TypeError):
+                    pass
+            total     = resp.get("total", 0)
+            start_at += len(issues)
+            if not issues or start_at >= total:
+                break
+
+        return ids
+
     def fetch_comments(self, issue_key: str, top: int = 20) -> list[dict]:
         """Retorna los últimos `top` comentarios de un issue."""
         url = f"{self._api_base}/issue/{issue_key}/comment?maxResults={top}&orderBy=-created"
@@ -267,6 +314,267 @@ class JiraClient:
             logger.warning("transition_issue(%s, %r) falló: %s", issue_key, status_name, e)
             return False
 
+    # ── Métodos portados desde WS2 (2026-05-23) ───────────────────────────────
+
+    def fetch_attachments(self, issue_key: str) -> list[dict]:
+        """Retorna los adjuntos de un issue de Jira.
+
+        Llama a GET /issue/{key}?fields=attachment para obtener la lista.
+        Para archivos de texto pequeños (<= 100 KB) descarga el contenido.
+
+        Retorna lista de dicts: { "id", "name", "size", "url", "created", "text_content" }
+        """
+        url = f"{self._api_base}/issue/{issue_key}?fields=attachment"
+        try:
+            data = self._request("GET", url)
+        except JiraApiError as e:
+            logger.warning("fetch_attachments(%s) falló: %s", issue_key, e)
+            return []
+
+        out: list[dict] = []
+        for att in ((data.get("fields") or {}).get("attachment") or []):
+            name = (att.get("filename") or "(sin nombre)").strip()
+            att_id = str(att.get("id") or "").strip()
+            size = int(att.get("size") or 0)
+            content_url = (att.get("content") or "").strip()
+            mime = (att.get("mimeType") or "").lower()
+            created = (att.get("created") or "")[:19]
+
+            text_content: str | None = None
+            is_text = _is_text_attachment(name) or mime.startswith("text/")
+            if content_url and is_text and 0 < size <= 102_400:
+                try:
+                    text_content = self._download_text(content_url)
+                except Exception as _e:
+                    logger.debug("fetch_attachments: no se pudo leer '%s': %s", name, _e)
+
+            out.append({
+                "id": att_id, "name": name, "size": size, "url": content_url,
+                "created": created, "text_content": text_content,
+            })
+        return out
+
+    def delete_attachment(self, attachment_id: str) -> bool:
+        """Elimina un adjunto de Jira por su ID.
+
+        Usa DELETE /rest/api/{v}/attachment/{id}.
+        Retorna True si tuvo éxito, False en caso de error.
+        """
+        url = f"{self._api_base}/attachment/{attachment_id}"
+        try:
+            self._request("DELETE", url)
+            logger.debug("delete_attachment OK: id=%s", attachment_id)
+            return True
+        except JiraApiError as e:
+            logger.warning("delete_attachment(%s) falló: %s", attachment_id, e)
+            return False
+
+    def _download_text(self, url: str) -> str:
+        """Descarga el contenido de una URL usando credenciales Jira y lo retorna como texto."""
+        req = urllib.request.Request(url, headers=self._headers(), method="GET")
+        ctx = self._ssl_context()
+        kw: dict = {"timeout": _TIMEOUT_SEC}
+        if ctx:
+            kw["context"] = ctx
+        with urllib.request.urlopen(req, **kw) as resp:
+            raw = resp.read()
+        return raw.decode("utf-8", errors="replace")
+
+    def upload_attachment(self, issue_key: str, file_name: str, content_bytes: bytes) -> bool:
+        """Adjunta un fichero a un issue de Jira via multipart/form-data.
+
+        Jira requiere el header X-Atlassian-Token: no-check para desactivar la
+        protección XSRF en el endpoint de adjuntos.
+        Retorna True si tuvo éxito, False en caso de error.
+        """
+        url = f"{self._api_base}/issue/{issue_key}/attachments"
+        boundary = "StackyJiraBoundary12345"
+        body = (
+            (
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'
+                f"Content-Type: application/octet-stream\r\n\r\n"
+            ).encode("utf-8")
+            + content_bytes
+            + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        )
+        headers = {
+            "Authorization": self._auth,
+            "X-Atlassian-Token": "no-check",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Accept": "application/json",
+        }
+        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        ctx = self._ssl_context()
+        try:
+            kw: dict = {"timeout": _TIMEOUT_SEC}
+            if ctx:
+                kw["context"] = ctx
+            with urllib.request.urlopen(req, **kw) as resp:
+                resp.read()
+            logger.debug("upload_attachment OK: %s → %s", file_name, issue_key)
+            return True
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8", errors="replace")[:300]
+            except Exception:
+                pass
+            logger.warning(
+                "upload_attachment(%s, %r) HTTP %s: %s", issue_key, file_name, e.code, detail
+            )
+            return False
+        except urllib.error.URLError as e:
+            logger.warning(
+                "upload_attachment(%s, %r) network error: %s", issue_key, file_name, e.reason
+            )
+            return False
+
+    def get_project_statuses(self) -> list[str]:
+        """Retorna los nombres únicos de todos los estados del proyecto Jira.
+
+        Usa GET /rest/api/{v}/project/{projectKey}/statuses.
+        Retorna lista de nombres únicos en orden de primera aparición.
+        Si falla, retorna lista vacía.
+        """
+        url = f"{self._api_base}/project/{self.project_key}/statuses"
+        try:
+            data = self._request("GET", url)
+        except JiraApiError as e:
+            logger.warning("get_project_statuses(%s) falló: %s", self.project_key, e)
+            return []
+
+        seen: set[str] = set()
+        result: list[str] = []
+        for issue_type in (data if isinstance(data, list) else []):
+            for status in (issue_type.get("statuses") or []):
+                name = (status.get("name") or "").strip()
+                if name and name not in seen:
+                    seen.add(name)
+                    result.append(name)
+        return result
+
+    def create_issue(
+        self,
+        issue_type: str,
+        summary: str,
+        description: str = "",
+        initial_status: str = "",
+        parent_key: str | None = None,
+        assignee_id: str | None = None,
+        extra_fields: dict | None = None,
+    ) -> dict:
+        """Crea un issue en Jira y retorna el dict completo de la respuesta.
+
+        Args:
+            issue_type:     Tipo de issue (ej. "Tarea", "Trabajo").
+            summary:        Título / resumen del issue.
+            description:    Texto descriptivo. Se convierte a ADF para v3 o texto plano para v2.
+            initial_status: Estado inicial. Si se indica, se aplica una transición tras la creación.
+            parent_key:     Clave del issue padre para subtareas (opcional).
+            assignee_id:    accountId del usuario al que asignar el issue (opcional).
+            extra_fields:   Campos adicionales a incluir en el payload de creación (opcional).
+
+        Returns:
+            Dict con al menos {"key": "PROJ-123", "id": "...", "self": "..."}.
+
+        Raises:
+            JiraApiError: si la API devuelve un error HTTP.
+        """
+        url = f"{self._api_base}/issue"
+
+        fields: dict = {
+            "project": {"key": self.project_key},
+            "issuetype": {"name": issue_type},
+            "summary": summary,
+        }
+
+        if description:
+            if self.api_version == "3":
+                fields["description"] = {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [{"type": "text", "text": description}],
+                        }
+                    ],
+                }
+            else:
+                fields["description"] = description
+
+        if parent_key:
+            fields["parent"] = {"key": parent_key}
+
+        if assignee_id:
+            fields["assignee"] = {"accountId": assignee_id}
+
+        if extra_fields:
+            fields.update(extra_fields)
+
+        result = self._request("POST", url, {"fields": fields})
+
+        # Si se indica estado inicial, transicionar después de crear
+        if initial_status and result.get("key"):
+            self.transition_issue(result["key"], initial_status)
+
+        return result
+
+    def get_issue_types(self) -> list[str]:
+        """Retorna los nombres de los tipos de issue disponibles para el proyecto Jira."""
+        try:
+            url = (
+                f"{self._api_base}/issue/createmeta"
+                f"?projectKeys={self.project_key}&expand=projects.issuetypes"
+            )
+            data = self._request("GET", url)
+            types: list[str] = []
+            for proj in (data.get("projects") or []):
+                for it in (proj.get("issuetypes") or []):
+                    name = (it.get("name") or "").strip()
+                    if name:
+                        types.append(name)
+            return types
+        except JiraApiError as e:
+            logger.warning("get_issue_types: %s", e)
+            return []
+
+    def update_issue_fields(self, issue_key: str, fields: dict) -> bool:
+        """Actualiza campos de un issue existente via PUT.
+
+        Args:
+            issue_key: Clave del issue a actualizar (ej. "B2IM-132").
+            fields:    Dict de campos en formato Jira API.
+
+        Returns:
+            True si tuvo éxito, False si hubo error.
+        """
+        url = f"{self._api_base}/issue/{issue_key}"
+        try:
+            self._request("PUT", url, {"fields": fields})
+            return True
+        except JiraApiError as e:
+            logger.warning("update_issue_fields(%s) falló: %s", issue_key, e)
+            return False
+
+    @staticmethod
+    def normalize_field_for_update(value: object) -> object:
+        """Normaliza un valor de campo de la respuesta GET para uso en PUT/POST.
+
+        - Lista de dicts con 'value' (multi-select) → [{"value": ...}]
+        - Dict con 'value' (single-select) → {"value": ...}
+        - Lista de strings (labels) → sin cambios
+        - Otros → sin cambios
+        """
+        if isinstance(value, list):
+            if value and isinstance(value[0], dict) and "value" in value[0]:
+                return [{"value": v["value"]} for v in value if "value" in v]
+            return value
+        if isinstance(value, dict) and "value" in value:
+            return {"value": value["value"]}
+        return value
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -321,4 +629,5 @@ __all__ = [
     "JiraConfigError",
     "JiraApiError",
     "strip_jira_wiki_markup",
+    "_is_text_attachment",
 ]

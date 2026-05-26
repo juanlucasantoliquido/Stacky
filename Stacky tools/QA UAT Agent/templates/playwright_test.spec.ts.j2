@@ -367,32 +367,38 @@ async function __checkScreenAfterStep(
 }
 {% endif %}
 
-// TARGET_SCREEN for this spec (declared by scenario — not inferred at runtime).
-// The runner validates that the playbook/navigation arrives at this exact screen.
+// TARGET_SCREEN — final screen the scenario must reach after all navigation steps.
+// ENTRY_SCREEN — first screen the spec lands on (entrypoint of the human path).
+// For session-dependent target screens (e.g. FrmDetalleClie.aspx), ENTRY_SCREEN
+// is the playbook's entry_screen (e.g. FrmBusqueda.aspx) and the action_steps
+// walk from there to TARGET_SCREEN. When no playbook is involved (entrypoint
+// screens like FrmAgenda.aspx), ENTRY_SCREEN == TARGET_SCREEN.
 const TARGET_SCREEN = '{{ pantalla }}';
+const ENTRY_SCREEN = '{{ entry_screen | default(pantalla, true) }}';
 
 test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => {
 
   test.beforeEach(async ({ page }) => {
     // Auth is restored from storageState (written by playwright/global.setup.ts).
     // NO login here — the session is already established.
-    // beforeEach navigates to the DECLARED target screen (not a hardcoded fallback).
-    // If we are redirected to login, the session expired — fail immediately.
-    await page.goto(`${BASE_URL}${TARGET_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    // beforeEach navigates to the ENTRY screen (NOT the target screen directly).
+    // For session-dependent targets, hitting them with page.goto crashes the
+    // ASP.NET app pool. The action_steps below walk the human path from entry.
+    await page.goto(`${BASE_URL}${ENTRY_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
     await waitForAgendaStable(page);
     const beforeEachUrl = page.url().toLowerCase();
     if (beforeEachUrl.includes('frmlogin')) {
       throw new Error(
-        `[${TARGET_SCREEN}] Session expired before test start. ` +
+        `[${ENTRY_SCREEN}] Session expired before test start. ` +
         'Re-run the pipeline to refresh auth (global.setup.ts). ' +
         'DO NOT re-run login in specs.',
       );
     }
-    // Verify we actually reached the target screen (not a redirect to another page).
-    if (!beforeEachUrl.includes(TARGET_SCREEN.toLowerCase().replace('.aspx', ''))) {
+    // Verify we actually reached the entry screen (not a redirect to another page).
+    if (!beforeEachUrl.includes(ENTRY_SCREEN.toLowerCase().replace('.aspx', ''))) {
       throw new Error(
-        `[WRONG_SCREEN] Expected to reach ${TARGET_SCREEN} but landed on: ${page.url()}. ` +
-        'Verify the playbook navigation steps and the declared target_screen.',
+        `[WRONG_SCREEN] Expected to reach entry ${ENTRY_SCREEN} but landed on: ${page.url()}. ` +
+        'Verify the playbook entry_screen and navigation contract.',
       );
     }
   });
@@ -414,28 +420,37 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     await __installExceptionListeners(page, _stepRef);
 {% endif %}
 
-    // SETUP
-    await page.goto(`${BASE_URL}{{ pantalla }}`, { waitUntil: 'domcontentloaded' });
-    await waitForAgendaStable(page);
+    // SETUP — beforeEach already navigated to ENTRY_SCREEN. Re-affirm and screenshot
+    // ONLY if we somehow drifted off it (e.g. an UpdatePanel redirected us). Hitting
+    // page.goto on a session-dependent TARGET_SCREEN here would crash the app pool,
+    // so we navigate to ENTRY_SCREEN, not pantalla.
+    {
+      const currentUrl0 = page.url().toLowerCase();
+      if (!currentUrl0.includes(ENTRY_SCREEN.toLowerCase().replace('.aspx', ''))) {
+        await page.goto(`${BASE_URL}${ENTRY_SCREEN}`, { waitUntil: 'domcontentloaded' });
+        await waitForAgendaStable(page);
+      }
+    }
 {% if detect_screen_errors %}
-    // Verificar excepción ASP.NET inmediatamente tras la navegación inicial.
+    // Verificar excepción ASP.NET inmediatamente tras el setup.
     await __checkAspNetExceptionAfterNav(page, 0);
 {% endif %}
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_00_setup.png' });
 
-    // TARGET SCREEN VALIDATION — fail fast if wrong screen reached after navigation.
+    // ENTRY SCREEN VALIDATION — fail fast if we're not on the expected entrypoint.
+    // The action_steps below are responsible for walking from ENTRY_SCREEN to TARGET_SCREEN.
     {
       const setupUrl = page.url().toLowerCase();
       if (setupUrl.includes('frmlogin')) {
         throw new Error(
-          `[BLOCKED_LOGIN_FAILED] Navigation to ${TARGET_SCREEN} redirected to login page. ` +
+          `[BLOCKED_LOGIN_FAILED] Navigation to ${ENTRY_SCREEN} redirected to login page. ` +
           'Session is invalid. Re-run the pipeline (do NOT add login logic to specs).',
         );
       }
-      if (!setupUrl.includes(TARGET_SCREEN.toLowerCase().replace('.aspx', ''))) {
+      if (!setupUrl.includes(ENTRY_SCREEN.toLowerCase().replace('.aspx', ''))) {
         throw new Error(
-          `[BLOCKED_WRONG_SCREEN] Expected: ${TARGET_SCREEN} — Got: ${page.url()}. ` +
-          'Check the playbook navigation steps or the declared target_screen.',
+          `[BLOCKED_WRONG_SCREEN] Expected entrypoint: ${ENTRY_SCREEN} — Got: ${page.url()}. ` +
+          'Check the playbook entry_screen and navigation contract.',
         );
       }
     }
@@ -642,6 +657,28 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
     {% endif %}
     {% endfor %}
+
+    // TARGET ARRIVAL ASSERTION — after walking the human path the URL must contain
+    // TARGET_SCREEN. This decouples the entry-vs-target navigation: tests fail
+    // here with a clear error if the playbook steps did not reach destination,
+    // instead of mis-categorising a navigation defect as a product assertion failure.
+    {
+      const finalNavUrl = page.url().toLowerCase();
+      const targetNeedle = TARGET_SCREEN.toLowerCase().replace('.aspx', '');
+      if (finalNavUrl.includes('frmlogin')) {
+        throw new Error(
+          `[ARRIVAL_LOGIN_REDIRECT] Walking from ${ENTRY_SCREEN} to ${TARGET_SCREEN} ` +
+          `was redirected to login. Session expired mid-test or playbook broke the session.`,
+        );
+      }
+      if (TARGET_SCREEN !== ENTRY_SCREEN && !finalNavUrl.includes(targetNeedle)) {
+        throw new Error(
+          `[ARRIVAL_WRONG_SCREEN] After action_steps expected ${TARGET_SCREEN} ` +
+          `— Got: ${page.url()}. Likely cause: a playbook step failed to navigate ` +
+          `or the playbook is missing the final transition.`,
+        );
+      }
+    }
 
     // ASSERTIONS
     {% for oracle in oraculos %}

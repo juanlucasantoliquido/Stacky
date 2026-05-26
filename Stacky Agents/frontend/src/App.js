@@ -8,6 +8,12 @@ import SettingsPage from "./pages/SettingsPage";
 import DocsPage from "./pages/DocsPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
 import TopBar from "./components/TopBar";
+import HealthBanner from "./components/HealthBanner";
+import CommandPalette from "./components/CommandPalette";
+import DailyStandupModal from "./components/DailyStandupModal";
+import OnboardingTour from "./components/OnboardingTour";
+import ShortcutsCheatsheet from "./components/ShortcutsCheatsheet";
+import DemoModeBanner from "./components/DemoModeBanner";
 import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
@@ -28,10 +34,19 @@ function tabFromPath(pathname) {
 }
 export default function App() {
     const [tab, setTab] = useState(() => tabFromPath(window.location.pathname));
+    const [paletteOpen, setPaletteOpen] = useState(false);
+    const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
     const sections = useUiSectionsStore((s) => s.sections);
     const selectTab = (next) => {
         setTab(next);
         const path = TAB_PATHS[next];
+        if (window.location.pathname !== path) {
+            window.history.pushState({}, "", path);
+        }
+    };
+    const navigateTo = (path) => {
+        const targetTab = tabFromPath(path);
+        setTab(targetTab);
         if (window.location.pathname !== path) {
             window.history.pushState({}, "", path);
         }
@@ -45,6 +60,32 @@ export default function App() {
         window.addEventListener("popstate", onPopState);
         return () => window.removeEventListener("popstate", onPopState);
     }, []);
+    useEffect(() => {
+        const onKeyDown = (ev) => {
+            const target = ev.target;
+            const editable = target &&
+                (["INPUT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable);
+            const isPaletteShortcut = (ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k";
+            const isCheatsheet = !editable && ev.key === "?" && !ev.ctrlKey && !ev.metaKey;
+            const isToggleNav = (ev.ctrlKey || ev.metaKey) && ev.key === "/";
+            if (isPaletteShortcut) {
+                ev.preventDefault();
+                setPaletteOpen((v) => !v);
+            }
+            else if (isCheatsheet) {
+                ev.preventDefault();
+                setCheatsheetOpen((v) => !v);
+            }
+            else if (isToggleNav) {
+                ev.preventDefault();
+                setTab((t) => (t === "team" ? "tickets" : "team"));
+                const path = TAB_PATHS[tab === "team" ? "tickets" : "team"];
+                window.history.pushState({}, "", path);
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, []);
     // Si el usuario tenía seleccionado un tab opcional que acaba de ocultarse,
     // fallback a "team" para no quedar en blanco.
     useEffect(() => {
@@ -55,5 +96,5 @@ export default function App() {
         else if (tab === "docs" && !sections.docs)
             selectTab("team");
     }, [tab, sections.pm, sections.logs, sections.docs]);
-    return (_jsxs("div", { className: styles.appRoot, children: [_jsx(TopBar, { onGoToTeam: () => selectTab("team") }), _jsxs("nav", { className: styles.nav, children: [_jsx("button", { className: `${styles.navTab} ${tab === "team" ? styles.active : ""}`, onClick: () => selectTab("team"), children: "\u26A1 Mi Equipo" }), _jsx("button", { className: `${styles.navTab} ${tab === "tickets" ? styles.active : ""}`, onClick: () => selectTab("tickets"), children: "\uD83D\uDCCB Tickets ADO" }), sections.pm && (_jsx("button", { className: `${styles.navTab} ${tab === "pm" ? styles.active : ""}`, onClick: () => selectTab("pm"), children: "\uD83D\uDCCA PM" })), sections.logs && (_jsx("button", { className: `${styles.navTab} ${tab === "logs" ? styles.active : ""}`, onClick: () => selectTab("logs"), children: "\uD83D\uDD0D System Logs" })), _jsx("button", { className: `${styles.navTab} ${tab === "settings" ? styles.active : ""}`, onClick: () => selectTab("settings"), children: "\u2699\uFE0F Configuraci\u00F3n" }), sections.docs && (_jsx("button", { className: `${styles.navTab} ${tab === "docs" ? styles.active : ""}`, onClick: () => selectTab("docs"), children: "\uD83D\uDCC4 Docs" })), _jsx("button", { className: `${styles.navTab} ${tab === "diagnostics" ? styles.active : ""}`, onClick: () => selectTab("diagnostics"), children: "\uD83E\uDE7A Diagn\u00F3stico" })] }), tab === "team" && _jsx(TeamScreen, {}), tab === "tickets" && _jsx(TicketBoard, {}), tab === "pm" && sections.pm && _jsx(PMCommandCenter, {}), tab === "logs" && sections.logs && _jsx(SystemLogsPage, {}), tab === "settings" && _jsx(SettingsPage, {}), tab === "docs" && sections.docs && _jsx(DocsPage, {}), tab === "diagnostics" && _jsx(DiagnosticsPage, {})] }));
+    return (_jsxs("div", { className: styles.appRoot, children: [_jsx(DemoModeBanner, {}), _jsx(TopBar, { onGoToTeam: () => selectTab("team") }), _jsx(HealthBanner, {}), _jsxs("nav", { className: styles.nav, children: [_jsx("button", { className: `${styles.navTab} ${tab === "team" ? styles.active : ""}`, onClick: () => selectTab("team"), children: "\u26A1 Mi Equipo" }), _jsx("button", { className: `${styles.navTab} ${tab === "tickets" ? styles.active : ""}`, onClick: () => selectTab("tickets"), children: "\uD83D\uDCCB Tickets ADO" }), sections.pm && (_jsx("button", { className: `${styles.navTab} ${tab === "pm" ? styles.active : ""}`, onClick: () => selectTab("pm"), children: "\uD83D\uDCCA PM" })), sections.logs && (_jsx("button", { className: `${styles.navTab} ${tab === "logs" ? styles.active : ""}`, onClick: () => selectTab("logs"), children: "\uD83D\uDD0D System Logs" })), _jsx("button", { className: `${styles.navTab} ${tab === "settings" ? styles.active : ""}`, onClick: () => selectTab("settings"), children: "\u2699\uFE0F Configuraci\u00F3n" }), sections.docs && (_jsx("button", { className: `${styles.navTab} ${tab === "docs" ? styles.active : ""}`, onClick: () => selectTab("docs"), children: "\uD83D\uDCC4 Docs" })), _jsx("button", { className: `${styles.navTab} ${tab === "diagnostics" ? styles.active : ""}`, onClick: () => selectTab("diagnostics"), children: "\uD83E\uDE7A Diagn\u00F3stico" })] }), tab === "team" && _jsx(TeamScreen, {}), tab === "tickets" && _jsx(TicketBoard, {}), tab === "pm" && sections.pm && _jsx(PMCommandCenter, {}), tab === "logs" && sections.logs && _jsx(SystemLogsPage, {}), tab === "settings" && _jsx(SettingsPage, {}), tab === "docs" && sections.docs && _jsx(DocsPage, {}), tab === "diagnostics" && _jsx(DiagnosticsPage, {}), _jsx(CommandPalette, { open: paletteOpen, onClose: () => setPaletteOpen(false), onNavigate: navigateTo }), _jsx(ShortcutsCheatsheet, { open: cheatsheetOpen, onClose: () => setCheatsheetOpen(false) }), _jsx(DailyStandupModal, {}), _jsx(OnboardingTour, {})] }));
 }

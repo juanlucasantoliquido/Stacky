@@ -120,9 +120,10 @@ FrmMandantes.aspx:
 
 FrmSegmentacion.aspx:
   aliases:
-    - segmentación
+    - pantalla de segmentacion
     - segmentacion de clientes
-    - segmentar
+    - segmentar clientes
+    - vista de segmentacion
 
 FrmGestionUsuarios.aspx:
   aliases:

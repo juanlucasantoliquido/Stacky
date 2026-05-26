@@ -232,6 +232,21 @@ export const Tickets = {
       payload,
       { "X-Completion-Source": "manual_ui" }
     ),
+
+  // P2.3 — adjuntos del ticket (portado de WS2)
+  attachments: (id: number) =>
+    api.get<{ attachments: TicketAttachment[]; error?: string }>(`/api/tickets/${id}/attachments`),
+  attachmentContent: (id: number, url: string, name: string) =>
+    api.get<{ content: string | null; ok: boolean; binary?: boolean; error?: string }>(
+      `/api/tickets/${id}/attachments/content?url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`
+    ),
+  deleteAttachments: (id: number, attachments: { id: string; url: string; name: string }[]) =>
+    api.delete<{ deleted: string[]; errors: { id: string; name: string; error: string }[] }>(
+      `/api/tickets/${id}/attachments`,
+      { attachments }
+    ),
+  uploadAttachment: (id: number, name: string, content: string) =>
+    api.post<{ ok: boolean; error?: string }>(`/api/tickets/${id}/attachments`, { name, content }),
 };
 
 // ── Fase 2: tipos para pending-tasks y create-child-task ──────────────────────
@@ -284,6 +299,15 @@ export interface CreateChildTaskResponse {
   message?: string;
 }
 
+export interface TicketAttachment {
+  id: string;
+  name: string;
+  url: string;
+  size: number;
+  created_by?: string;
+  created_at?: string;
+}
+
 export interface AgentHistoryEntry {
   ticket_id: number;
   ado_id: number;
@@ -311,10 +335,13 @@ export interface AgentHistoryResponse {
 export const Agents = {
   list: () => api.get<AgentDefinition[]>("/api/agents"),
   vsCodeAgents: () => api.get<VsCodeAgent[]>("/api/agents/vscode"),
-  history: (filename: string, limit = 50) =>
-    api.get<AgentHistoryResponse>(
-      `/api/agents/vscode/${encodeURIComponent(filename)}/history?limit=${limit}`
-    ),
+  history: (filename: string, limit = 50, project?: string | null) => {
+    const p = new URLSearchParams({ limit: String(limit) });
+    if (project) p.set("project", project);
+    return api.get<AgentHistoryResponse>(
+      `/api/agents/vscode/${encodeURIComponent(filename)}/history?${p.toString()}`
+    );
+  },
   run: (payload: {
     agent_type: AgentType;
     ticket_id: number;
@@ -431,12 +458,23 @@ export const Webhooks = {
 };
 
 export const Executions = {
-  list: (q: { ticket_id?: number; agent_type?: AgentType; status?: string; project?: string | null }) => {
+  list: (q: {
+    ticket_id?: number;
+    agent_type?: AgentType;
+    agent_filename?: string;
+    status?: string;
+    project?: string | null;
+    include_output?: boolean;
+    limit?: number;
+  }) => {
     const params = new URLSearchParams();
     if (q.ticket_id) params.set("ticket_id", String(q.ticket_id));
     if (q.agent_type) params.set("agent_type", q.agent_type);
+    if (q.agent_filename) params.set("agent_filename", q.agent_filename);
     if (q.status) params.set("status", q.status);
     if (q.project) params.set("project", q.project);
+    if (q.include_output) params.set("include_output", "true");
+    if (q.limit) params.set("limit", String(q.limit));
     const qs = params.toString();
     return api.get<AgentExecution[]>(`/api/executions${qs ? `?${qs}` : ""}`);
   },
@@ -455,6 +493,19 @@ export const Executions = {
       `/api/executions/${a}/diff/${b}`
     ),
   streamUrl: (id: number) => `${apiBase}/api/executions/${id}/logs/stream`,
+  // P2.3 — endpoints portados de WS2
+  forceTransition: (id: number) =>
+    api.post<{ ok: boolean; logs?: string[]; error?: string }>(`/api/executions/${id}/force-transition`),
+  reattach: (id: number) =>
+    api.post<{ ok: boolean; message?: string; tracker?: string; out_prefix?: string; dir?: string; error?: string }>(
+      `/api/executions/${id}/reattach`
+    ),
+  deleteOne: (id: number) =>
+    api.delete<{ ok: boolean; deleted_id: number }>(`/api/executions/${id}`),
+  deleteByTicket: (ticketId: number, agentFilename: string) =>
+    api.delete<{ ok: boolean; deleted: number[]; skipped: number[] }>(
+      `/api/executions/bulk-by-ticket?ticket_id=${ticketId}&agent_filename=${encodeURIComponent(agentFilename)}`
+    ),
 };
 
 export interface SimilarHit {
@@ -776,8 +827,13 @@ export const Projects = {
     api.get<{ ok: boolean; states: string[]; tracker_type: string }>(`/api/projects/${name}/tracker-states`),
   getAgentWorkflow: (projectName: string, filename: string) =>
     api.get<AgentWorkflowConfig & { ok: boolean }>(`/api/projects/${projectName}/agent-workflow/${encodeURIComponent(filename)}`),
+  getAllAgentWorkflows: (projectName: string) =>
+    api.get<{ ok: boolean; workflows: Record<string, AgentWorkflowConfig> }>(`/api/projects/${encodeURIComponent(projectName)}/agent-workflows`),
   putAgentWorkflow: (projectName: string, filename: string, workflow: Partial<AgentWorkflowConfig>) =>
     api.put<AgentWorkflowConfig & { ok: boolean }>(`/api/projects/${projectName}/agent-workflow/${encodeURIComponent(filename)}`, workflow),
+  // P1.1 ChatDrawer: bootstrap del workspace_root del proyecto activo
+  agentBootstrap: () =>
+    api.get<{ ok: boolean; project_name: string; tracker_type: string; workspace_root: string; auth_header: string; tracker: Record<string, string> }>("/api/agent_bootstrap"),
 };
 
 export interface MantisProject {
@@ -1616,6 +1672,110 @@ export const AgentCompletion = {
       token ? { "X-Stacky-Agent-Token": token } : {}
     );
   },
+};
+
+// ── P2.1 Agent Roles (portado de WS2, Sprint 3) ──────────────────────────────
+// Soporta AgentConfigModal.tsx — flags stacky/utilitario/vscode por agente.
+export interface AgentRoleEntry {
+  stacky: boolean;
+  utilitario: boolean;
+  vscode: boolean;
+  name?: string;
+  description?: string;
+}
+
+export const AgentRoles = {
+  list: () =>
+    api.get<{ ok: boolean; roles: Record<string, AgentRoleEntry> }>("/api/agent-roles"),
+  update: (patch: Record<string, Partial<Omit<AgentRoleEntry, "name" | "description">>>) =>
+    api.put<{ ok: boolean }>("/api/agent-roles", patch),
+};
+
+// ── P1.1/P1.2 Chat libre + Docs RAG (portado desde WS2, Sprint 4) ─────────────
+
+export interface ChatTurnMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface ChatToolLog {
+  tool: string;
+  args: string;
+  output: string;
+  ok: boolean;
+}
+
+export interface ChatTurnResponse {
+  ok: boolean;
+  text: string;
+  tool_log: ChatToolLog[];
+  turns: number;
+  model_used: string;
+  logs: string[];
+  error?: string;
+}
+
+export const Chat = {
+  turn: (payload: {
+    agent_filename: string;
+    model: string | null;
+    messages: ChatTurnMessage[];
+    workspace_dir?: string | null;
+    runtime?: string | null;
+    project_name?: string | null;
+  }) => api.post<ChatTurnResponse>("/api/chat/turn", payload),
+};
+
+export interface DocsRagSource {
+  file_path: string;
+  section: string;
+  score: number;
+}
+
+export interface DocsRagChatResponse {
+  ok: boolean;
+  text: string;
+  sources: DocsRagSource[];
+  chunks_used: number;
+  model_used: string;
+  logs: string[];
+  error?: string;
+}
+
+export interface DocsRagIndexResponse {
+  ok: boolean;
+  project_name: string;
+  chunks_indexed: number;
+  files_scanned: number;
+  warning?: string;
+  error?: string;
+}
+
+export interface DocsRagStatsResponse {
+  ok: boolean;
+  project_name: string;
+  chunks: number;
+  files: number;
+  last_indexed: string | null;
+}
+
+export const DocsRag = {
+  index: (payload: { project_name?: string; docs_subpath?: string }) =>
+    api.post<DocsRagIndexResponse>("/api/docs-rag/index", payload),
+
+  stats: (projectName?: string) =>
+    api.get<DocsRagStatsResponse>(
+      `/api/docs-rag/stats${projectName ? `?project_name=${encodeURIComponent(projectName)}` : ""}`
+    ),
+
+  chat: (payload: {
+    messages: ChatTurnMessage[];
+    project_name?: string;
+    agent_filename?: string;
+    model?: string | null;
+    top_k?: number;
+    workspace_dir?: string | null;
+  }) => api.post<DocsRagChatResponse>("/api/docs-rag/chat", payload),
 };
 
 // Feature A: Sprint Board

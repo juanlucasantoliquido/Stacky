@@ -202,6 +202,7 @@ def run(
             pid, desc, datos, esperado, ticket_id,
             ui_aliases=ui_aliases, ui_elements=ui_elements, verbose=verbose,
             analisis_tecnico=analisis_tecnico,
+            scope_screen=scope_screen,
         )
         if spec is None:
             out_of_scope.append({
@@ -296,6 +297,7 @@ def _compile_scenario(
     ticket_id: int, ui_aliases: Optional[list] = None,
     ui_elements: Optional[list] = None, verbose: bool = False,
     analisis_tecnico: str = "",
+    scope_screen: Optional[str] = None,
 ) -> Optional[dict]:
     """
     Compile a single P0N item into a ScenarioSpec.
@@ -306,12 +308,13 @@ def _compile_scenario(
         pid, desc, datos, esperado, ticket_id,
         ui_aliases=ui_aliases, ui_elements=ui_elements, verbose=verbose,
         analisis_tecnico=analisis_tecnico,
+        scope_screen=scope_screen,
     )
     if spec:
         return spec
 
     # Fallback: heuristic extraction
-    return _compile_via_heuristic(pid, desc, datos, esperado, ticket_id)
+    return _compile_via_heuristic(pid, desc, datos, esperado, ticket_id, scope_screen=scope_screen)
 
 
 def _compile_via_llm(
@@ -319,6 +322,7 @@ def _compile_via_llm(
     ticket_id: int, ui_aliases: Optional[list] = None,
     ui_elements: Optional[list] = None, verbose: bool = False,
     analisis_tecnico: str = "",
+    scope_screen: Optional[str] = None,
 ) -> Optional[dict]:
     """Attempt to compile via LLM. Return None on failure."""
     try:
@@ -408,7 +412,15 @@ pasos must have at least 1 item. oraculos must have at least 1 item.
             f"Technical context (use this to determine the target screen and fields):\n{analisis_tecnico}\n\n"
             if analisis_tecnico else ""
         )
+        # Hint the LLM to use the pipeline's detected scope screen
+        scope_hint = (
+            f"IMPORTANT: The screen detector has determined that all scenarios for this run target "
+            f"'{scope_screen}'. You MUST set 'pantalla' to '{scope_screen}' unless this specific test "
+            f"case description explicitly names a different screen.\n\n"
+            if scope_screen else ""
+        )
         user_prompt = (
+            f"{scope_hint}"
             f"{technical_context}"
             f"Test case {pid}: {desc}\n"
             f"Test data: {datos or 'none'}\n"
@@ -546,7 +558,8 @@ def _find_decorative_oracle_targets(spec: dict, ui_elements: list) -> Optional[d
 
 
 def _compile_via_heuristic(
-    pid: str, desc: str, datos: str, esperado: str, ticket_id: int
+    pid: str, desc: str, datos: str, esperado: str, ticket_id: int,
+    scope_screen: Optional[str] = None,
 ) -> Optional[dict]:
     """Heuristic fallback for scenario compilation.
 
@@ -567,6 +580,18 @@ def _compile_via_heuristic(
     elif "frmAgenda" in desc or "agenda aut" in lower_desc or "agenda autom" in lower_desc:
         # Only use FrmAgenda when explicitly mentioned
         pantalla = "FrmAgenda.aspx"
+    elif "domicilio" in lower_desc or "provincia" in lower_desc or "mantenedor" in lower_desc:
+        # Domain: Mantenedor de Domicilios lives in FrmDetalleClie
+        pantalla = "FrmDetalleClie.aspx"
+
+    if not pantalla and scope_screen:
+        # Last resort: use the pipeline-detected scope screen so we don't block
+        # on a trivially correct screen assignment.
+        logger.debug(
+            "Heuristic compiler for %s: no keyword match — using pipeline scope_screen=%s",
+            pid, scope_screen,
+        )
+        pantalla = scope_screen
 
     if not pantalla:
         logger.warning(

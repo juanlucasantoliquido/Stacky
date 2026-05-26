@@ -27,6 +27,14 @@ interface WorkbenchState {
   /** Runtime de ejecución seleccionado por el operador */
   agentRuntime: AgentRuntime;
 
+  // P1.1 ChatDrawer state
+  chatDrawerOpen: boolean;
+  chatDrawerModel: string | null;
+  chatDrawerTicketId: number | null;
+  setChatDrawerOpen: (open: boolean) => void;
+  setChatDrawerModel: (model: string | null) => void;
+  setChatDrawerTicketId: (id: number | null) => void;
+
   setActiveTicket: (id: number | null) => void;
   setActiveAgent: (t: AgentType | null) => void;
   setActiveExecution: (id: number | null) => void;
@@ -64,6 +72,11 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   teamLoading: false,
   getAgentsError: null,
   agentRuntime: "github_copilot",
+
+  // P1.1 ChatDrawer state
+  chatDrawerOpen: false,
+  chatDrawerModel: null,
+  chatDrawerTicketId: null,
 
   setActiveTicket: (id) =>
     set({ activeTicketId: id, activeExecutionId: null, blocks: [] }),
@@ -104,4 +117,9 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   setTeamLoading: (loading) => set({ teamLoading: loading }),
   setGetAgentsError: (err) => set({ getAgentsError: err }),
   setAgentRuntime: (r) => set({ agentRuntime: r }),
+
+  // P1.1 ChatDrawer actions
+  setChatDrawerOpen: (open) => set({ chatDrawerOpen: open }),
+  setChatDrawerModel: (model) => set({ chatDrawerModel: model }),
+  setChatDrawerTicketId: (id) => set({ chatDrawerTicketId: id }),
 }));

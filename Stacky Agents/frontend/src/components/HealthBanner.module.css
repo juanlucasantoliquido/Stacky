@@ -4,26 +4,25 @@
   gap: 12px;
   padding: 10px 14px;
   margin: 8px 12px 0;
-  border-radius: 8px;
-  border-left: 4px solid currentColor;
-  font-size: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 3px solid currentColor;
+  font-size: 13px;
   line-height: 1.4;
-  background: rgba(255, 165, 0, 0.08);
-  color: #b35900;
 }
 
 .banner.error {
-  background: rgba(220, 53, 69, 0.08);
-  color: #a02029;
+  background: rgba(248, 81, 73, 0.08);
+  color: var(--danger);
 }
 
 .banner.warning {
-  background: rgba(255, 165, 0, 0.08);
-  color: #b35900;
+  background: rgba(210, 153, 34, 0.08);
+  color: var(--warn);
 }
 
 .icon {
-  font-size: 18px;
+  font-size: 16px;
   flex-shrink: 0;
 }
 
@@ -33,24 +32,31 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  color: var(--text-primary);
 }
 
 .title {
   font-weight: 600;
+  color: inherit;
 }
 
+.banner.error .title { color: var(--danger); }
+.banner.warning .title { color: var(--warn); }
+
 .msg {
-  color: inherit;
-  opacity: 0.92;
+  color: var(--text-muted);
   word-wrap: break-word;
 }
 
 .detail {
   margin: 6px 0 0;
-  padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 4px;
-  font-size: 12px;
+  padding: 8px 10px;
+  background: var(--mono-bg);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
   max-height: 240px;
   overflow: auto;
   white-space: pre-wrap;
@@ -64,28 +70,33 @@
 }
 
 .fixBtn,
-.detailBtn,
-.dismissBtn {
-  border: 1px solid currentColor;
+.detailBtn {
   background: transparent;
+  border: 1px solid currentColor;
   color: inherit;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-family: inherit;
-  transition: background 0.15s;
+  transition: background 0.12s;
 }
 
 .fixBtn:hover,
-.detailBtn:hover,
-.dismissBtn:hover {
-  background: rgba(0, 0, 0, 0.06);
+.detailBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .dismissBtn {
+  background: transparent;
   border: none;
+  color: var(--text-faint);
   padding: 2px 8px;
   font-size: 18px;
   line-height: 1;
+  cursor: pointer;
+}
+
+.dismissBtn:hover {
+  color: var(--text-primary);
 }

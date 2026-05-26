@@ -135,6 +135,8 @@ export interface AgentExecution {
   pack_run_id?: number | null;
   pack_step?: number | null;
   contract_result?: ContractResult | null;  // N1
+  // P2.3: campo portado de WS2 — nombre del .agent.md asociado a la ejecucion
+  agent_filename?: string | null;
 }
 
 // N1 — Contract Validator

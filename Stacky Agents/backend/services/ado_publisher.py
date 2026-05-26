@@ -24,9 +24,12 @@ Observabilidad:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
@@ -38,6 +41,10 @@ from models import AgentExecution, Ticket
 from services import agent_html_output as html_io
 
 logger = logging.getLogger("stacky.ado_publisher")
+
+ATTACHMENTS_MANIFEST_FILENAME = "attachments.json"
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+_ATTACH_TOKEN_RE = re.compile(r"\{\{ATTACH:[^}]+\}\}")
 
 
 # ── Modelo de registro (idempotencia + audit) ─────────────────────────────────
@@ -113,6 +120,10 @@ class PublishResult:
     html_sha256: str | None
     ado_response: dict | None
     record_id: int | None
+
+
+class AttachmentPublishError(RuntimeError):
+    """Raised when inline artifacts cannot be uploaded safely."""
 
 
 # ── API pública ───────────────────────────────────────────────────────────────
@@ -223,7 +234,7 @@ def publish_from_execution(
             triggered_by=triggered_by,
         )
 
-    html_sha = hashlib.sha256(output.html.encode("utf-8")).hexdigest()
+    html_sha = _output_publish_fingerprint(output)
 
     # ── 4. Dedupe pre-ADO (idempotencia aplicativa + DB) ─────────────────────
     # force=True omite este check para permitir un HTML distinto (sha diferente).
@@ -254,7 +265,26 @@ def publish_from_execution(
     # ── 5. Publicar en ADO (única invocación autorizada) ──────────────────────
     try:
         client = (client_factory or _default_client)()
-        ado_response = client.post_comment(ado_id, output.html, "html")
+        html_to_publish, attachment_summary = _prepare_html_attachments(
+            output=output,
+            client=client,
+            ado_id=ado_id,
+        )
+        ado_response = client.post_comment(ado_id, html_to_publish, "html")
+        if isinstance(ado_response, dict) and attachment_summary is not None:
+            ado_response = dict(ado_response)
+            ado_response["_stacky_attachments"] = attachment_summary
+    except AttachmentPublishError as exc:
+        result = PublishResult(
+            ok=False, status="failed",
+            reason=f"attachment publish failed: {exc}",
+            ado_id=ado_id, execution_id=execution_id,
+            html_sha256=html_sha, ado_response=None, record_id=None,
+        )
+        return _emit_and_persist(
+            result, ticket_id=ticket_id, ado_id=ado_id,
+            html_path=str(output.path), triggered_by=triggered_by,
+        )
     except Exception as exc:  # noqa: BLE001
         result = PublishResult(
             ok=False, status="failed",
@@ -371,6 +401,187 @@ def _default_client():
     """Construye el AdoClient real. Tests inyectan client_factory."""
     from services.ado_client import AdoClient
     return AdoClient()
+
+
+def _prepare_html_attachments(
+    *,
+    output: html_io.HtmlOutput,
+    client: Any,
+    ado_id: int,
+) -> tuple[str, dict | None]:
+    """Upload inline artifacts declared by attachments.json and rewrite tokens.
+
+    Contract:
+      Agentes/outputs/<ADO_ID>/comment.html
+      Agentes/outputs/<ADO_ID>/attachments.json
+      Agentes/outputs/<ADO_ID>/attachments/<files>
+
+    The agent only writes files. Stacky owns the ADO upload/link/comment flow.
+    """
+    html = output.html
+    manifest_path = output.path.parent / ATTACHMENTS_MANIFEST_FILENAME
+
+    if not manifest_path.is_file():
+        unresolved = sorted(set(_ATTACH_TOKEN_RE.findall(html)))
+        if unresolved:
+            raise AttachmentPublishError(
+                "comment.html contains ATTACH tokens but attachments.json is missing"
+            )
+        return html, None
+
+    attachments = _load_attachments_manifest(manifest_path)
+    if not attachments:
+        unresolved = sorted(set(_ATTACH_TOKEN_RE.findall(html)))
+        if unresolved:
+            raise AttachmentPublishError(
+                "comment.html contains ATTACH tokens but attachments.json has no attachments"
+            )
+        return html, {"uploaded": 0, "linked": 0, "items": []}
+
+    summary: dict[str, Any] = {"uploaded": 0, "linked": 0, "items": []}
+    replacements: dict[str, str] = {}
+
+    for index, item in enumerate(attachments, start=1):
+        if not isinstance(item, dict):
+            raise AttachmentPublishError(f"attachments[{index}] must be an object")
+
+        token = _normalize_attach_token(item.get("token"))
+        file_path = _resolve_attachment_file(output.path.parent, item, index)
+        size = file_path.stat().st_size
+        if size > MAX_ATTACHMENT_BYTES:
+            raise AttachmentPublishError(
+                f"{file_path.name} exceeds {MAX_ATTACHMENT_BYTES} bytes"
+            )
+
+        upload_name = _safe_upload_name(
+            str(item.get("upload_name") or item.get("name") or file_path.name)
+        )
+        comment = str(
+            item.get("comment")
+            or item.get("label")
+            or f"Stacky QA evidence: {upload_name}"
+        )
+
+        upload_result = client.upload_attachment(file_path, file_name=upload_name)
+        attachment_url = (
+            upload_result.get("url")
+            if isinstance(upload_result, dict)
+            else str(upload_result or "")
+        )
+        if not attachment_url:
+            raise AttachmentPublishError(f"upload returned no URL for {upload_name}")
+
+        linked = False
+        link_fn = getattr(client, "link_attachment_to_work_item", None)
+        if callable(link_fn):
+            link_fn(ado_id, attachment_url, comment=comment)
+            linked = True
+
+        if token:
+            replacements[token] = attachment_url
+
+        summary["uploaded"] += 1
+        if linked:
+            summary["linked"] += 1
+        summary["items"].append(
+            {
+                "token": token,
+                "name": upload_name,
+                "path": str(file_path),
+                "url": attachment_url,
+                "linked": linked,
+            }
+        )
+
+    for token, url in replacements.items():
+        html = html.replace(token, url)
+
+    unresolved = sorted(set(_ATTACH_TOKEN_RE.findall(html)))
+    if unresolved:
+        sample = ", ".join(unresolved[:5])
+        raise AttachmentPublishError(f"unresolved ATTACH token(s): {sample}")
+
+    return html, summary
+
+
+def _output_publish_fingerprint(output: html_io.HtmlOutput) -> str:
+    """Hash the publish payload, including declared attachment contents."""
+    h = hashlib.sha256()
+    h.update(output.html.encode("utf-8"))
+    manifest_path = output.path.parent / ATTACHMENTS_MANIFEST_FILENAME
+    if not manifest_path.is_file():
+        return h.hexdigest()
+
+    try:
+        manifest_bytes = manifest_path.read_bytes()
+        h.update(b"\n--attachments.json--\n")
+        h.update(manifest_bytes)
+        for item in _load_attachments_manifest(manifest_path):
+            if not isinstance(item, dict):
+                continue
+            try:
+                file_path = _resolve_attachment_file(output.path.parent, item, index=0)
+                h.update(b"\n--attachment--\n")
+                h.update(str(file_path.name).encode("utf-8", errors="replace"))
+                h.update(hashlib.sha256(file_path.read_bytes()).hexdigest().encode("ascii"))
+            except Exception as exc:  # noqa: BLE001
+                h.update(f"\n--attachment-error:{exc}--\n".encode("utf-8", errors="replace"))
+    except Exception as exc:  # noqa: BLE001
+        h.update(f"\n--manifest-error:{exc}--\n".encode("utf-8", errors="replace"))
+    return h.hexdigest()
+
+
+def _load_attachments_manifest(path: Path) -> list[dict]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        raise AttachmentPublishError(f"invalid attachments.json: {exc}") from exc
+
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        rows = payload.get("attachments") or []
+        if isinstance(rows, list):
+            return rows
+    raise AttachmentPublishError("attachments.json must contain an attachments array")
+
+
+def _normalize_attach_token(value: Any) -> str | None:
+    if value is None:
+        return None
+    token = str(value).strip()
+    if not token:
+        return None
+    if token.startswith("{{ATTACH:") and token.endswith("}}"):
+        return token
+    if token.startswith("ATTACH:"):
+        return "{{" + token + "}}"
+    raise AttachmentPublishError(f"invalid attachment token: {token[:80]}")
+
+
+def _resolve_attachment_file(base_dir: Path, item: dict, index: int) -> Path:
+    raw = item.get("path") or item.get("file") or item.get("file_path")
+    if not raw:
+        raise AttachmentPublishError(f"attachments[{index}] missing path")
+    candidate = Path(str(raw))
+    if not candidate.is_absolute():
+        candidate = base_dir / candidate
+    resolved = candidate.resolve()
+    allowed_root = base_dir.resolve()
+    try:
+        resolved.relative_to(allowed_root)
+    except ValueError as exc:
+        raise AttachmentPublishError(
+            f"attachment path escapes output dir: {resolved}"
+        ) from exc
+    if not resolved.is_file():
+        raise AttachmentPublishError(f"attachment file not found: {resolved}")
+    return resolved
+
+
+def _safe_upload_name(name: str) -> str:
+    cleaned = re.sub(r"[\\/:\*\?\"<>\|]+", "_", name).strip(" .")
+    return cleaned[:180] or "stacky-attachment"
 
 
 def _emit_and_persist(

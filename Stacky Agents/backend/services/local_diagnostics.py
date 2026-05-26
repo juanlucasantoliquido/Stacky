@@ -187,14 +187,42 @@ def _find_vsix_files() -> list[Path]:
 
 
 def _check_vscode_bridge() -> dict:
-    url = f"http://127.0.0.1:{config.VSCODE_BRIDGE_PORT}/health"
-    try:
-        with urllib.request.urlopen(url, timeout=2) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-        payload = json.loads(raw) if raw else {}
-        return _result("vscode_bridge", "Bridge VS Code", "ok", f"Bridge respondió en :{config.VSCODE_BRIDGE_PORT}.", payload)
-    except Exception as exc:
-        return _result("vscode_bridge", "Bridge VS Code", "error", f"No responde {url}: {exc}")
+    from services.vscode_instance_manager import get_instance_info, health_details
+
+    # Resolver puerto: primero intentar por proyecto activo, luego fallback global.
+    active = get_active_project()
+    port: int = config.VSCODE_BRIDGE_PORT
+    port_origin: str = "global"
+
+    if active:
+        info = get_instance_info(active)
+        if info and isinstance(info.get("port"), int):
+            port = info["port"]
+            port_origin = f"proyecto '{active}'"
+
+    payload = health_details(port, timeout=2.0)
+    if payload is not None:
+        return _result(
+            "vscode_bridge",
+            "Bridge VS Code",
+            "ok",
+            f"Bridge respondió en :{port} (origen: {port_origin}).",
+            {**payload, "port": port, "port_origin": port_origin},
+        )
+
+    # No responde — mensaje accionable con puerto real y origen
+    return _result(
+        "vscode_bridge",
+        "Bridge VS Code",
+        "error",
+        (
+            f"El bridge no responde en :{port} (origen: {port_origin}). "
+            "Acciones: 1) Abrí VS Code con el workspace del proyecto. "
+            "2) Si ya está abierto: Ctrl+Shift+P → 'Developer: Reload Window'. "
+            "3) Verificá que la extensión Stacky Agents esté instalada y habilitada."
+        ),
+        {"port": port, "port_origin": port_origin},
+    )
 
 
 def _check_database_storage() -> dict:

@@ -28,6 +28,19 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+_LEGACY_BRIDGE_WARNED = False
+
+
+def _warn_legacy_bridge_once() -> None:
+    global _LEGACY_BRIDGE_WARNED
+    if not _LEGACY_BRIDGE_WARNED:
+        logger.warning(
+            "Bridge VS Code no expone 'workspace_root' en /health "
+            "(extensión Stacky desactualizada). Asumiendo match por settings.json. "
+            "Recompilá e instalá la extensión desde vscode_extension/ para validación estricta."
+        )
+        _LEGACY_BRIDGE_WARNED = True
+
 PORT_BASE    = 5060   # primer puerto del rango
 MAX_PROJECTS = 40     # soporta hasta 40 proyectos simultáneos (5060–5099)
 
@@ -149,6 +162,10 @@ def is_alive(port: int, workspace_root: str | None = None, timeout: float = 2.0)
     expected_workspace = _normalize_workspace_root(workspace_root)
     if expected_workspace is None:
         return True
+    # Extensión vieja: key ausente → asumir match (ver _warn_legacy_bridge_once).
+    if "workspace_root" not in data:
+        _warn_legacy_bridge_once()
+        return True
     actual_workspace = _normalize_workspace_root(data.get("workspace_root"))
     return actual_workspace == expected_workspace
 
@@ -165,8 +182,14 @@ def wait_until_healthy(
         details = health_details(port, timeout=min(3.0, poll_interval_sec + 1.0))
         if details and details.get("ok") is True:
             expected_workspace = _normalize_workspace_root(workspace_root)
+            if expected_workspace is None:
+                return details
+            # Extensión vieja: key ausente → asumir match.
+            if "workspace_root" not in details:
+                _warn_legacy_bridge_once()
+                return details
             actual_workspace = _normalize_workspace_root(details.get("workspace_root"))
-            if expected_workspace is None or actual_workspace == expected_workspace:
+            if actual_workspace == expected_workspace:
                 return details
         time.sleep(poll_interval_sec)
     return None

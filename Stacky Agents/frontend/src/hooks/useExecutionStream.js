@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Executions } from "../api/endpoints";
+import { notifyExecutionFinished } from "../services/executionNotifier";
 // Reconnect backoff: 1s → 30s. Después de eso emitimos error definitivo.
 const RECONNECT_INITIAL_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
@@ -52,10 +53,25 @@ export function useExecutionStream(executionId) {
             seenKeys.current.add(key);
             setState((s) => ({ ...s, lines: [...s.lines, data] }));
         };
-        const onCompleted = () => {
+        const onCompleted = (ev) => {
             setState((s) => ({ ...s, done: true }));
             qc.invalidateQueries({ queryKey: ["execution", executionId] });
             qc.invalidateQueries({ queryKey: ["executions"] });
+            let agentType = "agente";
+            let status = "completed";
+            try {
+                if (ev?.data) {
+                    const parsed = JSON.parse(ev.data);
+                    if (parsed?.agent_type)
+                        agentType = String(parsed.agent_type);
+                    if (parsed?.status)
+                        status = parsed.status;
+                }
+            }
+            catch {
+                // ignore
+            }
+            notifyExecutionFinished({ agent_type: agentType, status });
             closed = true;
             es?.close();
         };

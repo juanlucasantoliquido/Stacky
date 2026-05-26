@@ -51,6 +51,71 @@ _TOOL_VERSION = "1.3.0"
 _DEFAULT_TEMPLATE = Path(__file__).resolve().parent / "templates" / "playwright_test.spec.ts.j2"
 _DISCOVERED_SELECTORS_PATH = Path(__file__).resolve().parent / "cache" / "discovered_selectors.json"
 _PLAYBOOKS_DIR = Path(__file__).resolve().parent / "cache" / "playbooks"
+_NAV_CONTRACTS_PATH = Path(__file__).resolve().parent / "navigation_contracts.yml"
+
+
+_NAV_CONTRACTS_CACHE: Optional[dict] = None
+
+
+def _load_nav_contracts() -> dict:
+    """Load navigation_contracts.yml once per process. Returns {} on failure."""
+    global _NAV_CONTRACTS_CACHE
+    if _NAV_CONTRACTS_CACHE is not None:
+        return _NAV_CONTRACTS_CACHE
+    if not _NAV_CONTRACTS_PATH.is_file():
+        _NAV_CONTRACTS_CACHE = {}
+        return _NAV_CONTRACTS_CACHE
+    try:
+        import yaml  # type: ignore
+    except Exception:
+        logger.warning("PyYAML missing — entry_screen falls back to target_screen")
+        _NAV_CONTRACTS_CACHE = {}
+        return _NAV_CONTRACTS_CACHE
+    try:
+        _NAV_CONTRACTS_CACHE = yaml.safe_load(_NAV_CONTRACTS_PATH.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("navigation_contracts.yml unparseable (%s) — using target_screen", exc)
+        _NAV_CONTRACTS_CACHE = {}
+    return _NAV_CONTRACTS_CACHE
+
+
+def _resolve_entry_screen(target_screen: str, _seen: Optional[set] = None) -> str:
+    """Resolve the entrypoint screen for a target via navigation_contracts.yml.
+
+    Walks the contract chain transitively: if the declared entrypoint is itself
+    session-dependent (e.g. FrmDetalleObligacion → FrmDetalleClie → FrmBusqueda),
+    keeps resolving until reaching a screen that allows direct entry. This
+    makes the fix reusable for any session-dependent screen whose chain
+    eventually grounds at an entrypoint.
+
+    Falls back to target_screen when:
+      - contracts file missing or unparseable
+      - target not present in contracts
+      - target allows direct entry (no further resolution needed)
+      - a cycle is detected (broken contract — emit warning)
+    """
+    if not target_screen:
+        return target_screen
+    if _seen is None:
+        _seen = set()
+    if target_screen in _seen:
+        logger.warning("navigation_contracts.yml has cycle at %s — returning as-is", target_screen)
+        return target_screen
+    _seen.add(target_screen)
+
+    contracts = _load_nav_contracts()
+    screen_spec = contracts.get(target_screen) or {}
+
+    if screen_spec.get("direct_entry_allowed") is True \
+            and not screen_spec.get("human_path_required_for_uat", False):
+        return target_screen
+
+    human_paths = screen_spec.get("human_paths") or {}
+    for _name, path_spec in human_paths.items():
+        entry = (path_spec or {}).get("entrypoint")
+        if entry and entry != target_screen:
+            return _resolve_entry_screen(entry, _seen)
+    return target_screen
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -308,12 +373,18 @@ def run(
         filename = f"{sid}_{title_slug}.spec.ts"
         spec_path = out_dir / filename
 
+        # Entry screen — see _resolve_entry_screen docstring. For UI-map-only
+        # specs (no playbook) we still honor navigation_contracts.yml so that
+        # session-dependent screens are entered via their human_path entrypoint.
+        ui_map_entry_screen = _resolve_entry_screen(pantalla)
+
         try:
             rendered = template.render(
                 ticket_id=ticket_id,
                 scenario_id=sid,
                 titulo=scenario.get("titulo", ""),
                 pantalla=pantalla,
+                entry_screen=ui_map_entry_screen,
                 precondiciones=scenario.get("precondiciones", []),
                 pasos=formatted_pasos,
                 oraculos=normalized_oraculos,
@@ -815,12 +886,24 @@ def _render_from_playbook(
         if o.get("tipo") in _selector_free_types or o.get("target") in synthetic_ui_map
     ]
 
+    # Entry screen — first screen the test lands on. For human-path playbooks
+    # (e.g. open_detalle_cliente_from_busqueda) this is FrmBusqueda.aspx, NOT
+    # the target_screen (which is session-dependent and crashes the app pool
+    # on direct page.goto). Resolution order:
+    #   1. playbook.entry_screen (explicit playbook declaration)
+    #   2. navigation_contracts.yml human_path entrypoint (for session-dependent screens)
+    #   3. target_screen (safe default for true entrypoint screens like FrmAgenda)
+    entry_screen = (playbook.get("entry_screen") or "").strip()
+    if not entry_screen:
+        entry_screen = _resolve_entry_screen(pantalla)
+
     try:
         rendered = template.render(
             ticket_id=scenario.get("ticket_id", -1),
             scenario_id=sid,
             titulo=scenario.get("titulo", playbook.get("goal_label", "")),
             pantalla=pantalla,
+            entry_screen=entry_screen,
             precondiciones=scenario.get("precondiciones", []),
             pasos=aliased_pasos,
             oraculos=filtered_oraculos,
@@ -868,36 +951,104 @@ def _parse_datos(datos_str: str) -> dict[str, str]:
     return result
 
 
+# Typed NavigationStep methods (NavigationPlan/1.0) that map to a click on `selector`.
+_PLAYBOOK_CLICK_METHODS = {
+    "button_click", "link_click", "menu_click", "row_click", "tab_click",
+    "form_submit", "dopostback",
+}
+
+
+def _playbook_step_should_skip(step: dict, resolved_fields: dict[str, str]) -> bool:
+    """Honor skip_if_empty_data on a typed navigation step.
+
+    A step marked skip_if_empty_data is dropped when the data it depends on is
+    empty. The relevant keys are skip_if_empty_data_keys when present, otherwise
+    the single key bound via data_bindings.value. The step is skipped only when
+    ALL relevant keys resolve empty (so a filter step with no data is omitted
+    from a smoke run instead of executing against blank inputs).
+    """
+    if not step.get("skip_if_empty_data"):
+        return False
+    keys = step.get("skip_if_empty_data_keys")
+    if not keys:
+        bound_key = (step.get("data_bindings") or {}).get("value", "")
+        keys = [bound_key] if bound_key else []
+    if not keys:
+        return False
+    return all(not (resolved_fields.get(k, "") or "").strip() for k in keys)
+
+
 def _playbook_steps_to_pasos(steps: list[dict], resolved_fields: dict[str, str]) -> list[dict]:
-    """Convert playbook action_steps to template-compatible pasos dicts."""
+    """Convert playbook steps to template-compatible pasos dicts.
+
+    Supports two step shapes:
+      * Legacy recording-based shape: {"action": "goto|click|fill|select|..."}.
+      * Typed NavigationStep shape (NavigationPlan/1.0): {"method": "goto_direct|
+        button_click|row_click|fill|select|check|wait|...", "data_bindings": {...}}.
+
+    Typed action_steps (catalog entries with action_id/trigger and neither
+    `action` nor `method`) are intentionally NOT converted — they document
+    available business actions (many mutating/destructive) and must not be
+    auto-executed by the generated smoke/navigation spec.
+    """
     pasos = []
     for step in steps:
         action = step.get("action", "")
         selector = step.get("selector", "")
-        if not action:
+
+        if action:
+            # ── Legacy recording-based shape ──────────────────────────────
+            if action == "goto":
+                pasos.append({"accion": "navigate", "target": step.get("screen", ""), "valor": ""})
+            elif action == "click":
+                pasos.append({"accion": "click", "target": selector, "valor": ""})
+            elif action == "fill":
+                field_key = step.get("field", "")
+                val = resolved_fields.get(field_key, step.get("valor", ""))
+                pasos.append({"accion": "fill", "target": selector, "valor": val})
+            elif action == "check":
+                pasos.append({"accion": "check_checkbox", "target": selector, "valor": "true"})
+            elif action == "uncheck":
+                pasos.append({"accion": "check_checkbox", "target": selector, "valor": "false"})
+            elif action == "waitFor":
+                timeout_ms = step.get("timeout_ms", 10000)
+                pasos.append({"accion": "wait_visible", "target": selector, "valor": "", "timeout_ms": timeout_ms})
+            elif action == "select":
+                field_key = step.get("field", "")
+                val = resolved_fields.get(field_key, step.get("valor", ""))
+                pasos.append({"accion": "select", "target": selector, "valor": val})
+            elif action == "wait":
+                pasos.append({"accion": "wait_networkidle", "target": "", "valor": ""})
+            # skip _note-only legacy steps
             continue
-        if action == "goto":
-            pasos.append({"accion": "navigate", "target": step.get("screen", ""), "valor": ""})
-        elif action == "click":
+
+        method = step.get("method", "")
+        if not method:
+            # Neither legacy action nor typed method → catalog action_step or
+            # _note-only entry. Not executable; skip.
+            continue
+
+        # ── Typed NavigationStep shape (method-based) ─────────────────────
+        if _playbook_step_should_skip(step, resolved_fields):
+            continue
+
+        bound_key = (step.get("data_bindings") or {}).get("value", "")
+        bound_val = resolved_fields.get(bound_key, "") if bound_key else ""
+
+        if method in ("goto_direct", "goto_deeplink"):
+            target = step.get("target_url") or selector or ""
+            pasos.append({"accion": "navigate", "target": target, "valor": ""})
+        elif method in _PLAYBOOK_CLICK_METHODS:
             pasos.append({"accion": "click", "target": selector, "valor": ""})
-        elif action == "fill":
-            field_key = step.get("field", "")
-            val = resolved_fields.get(field_key, step.get("valor", ""))
-            pasos.append({"accion": "fill", "target": selector, "valor": val})
-        elif action == "check":
-            pasos.append({"accion": "check_checkbox", "target": selector, "valor": "true"})
-        elif action == "uncheck":
-            pasos.append({"accion": "check_checkbox", "target": selector, "valor": "false"})
-        elif action == "waitFor":
-            timeout_ms = step.get("timeout_ms", 10000)
-            pasos.append({"accion": "wait_visible", "target": selector, "valor": "", "timeout_ms": timeout_ms})
-        elif action == "select":
-            field_key = step.get("field", "")
-            val = resolved_fields.get(field_key, step.get("valor", ""))
-            pasos.append({"accion": "select", "target": selector, "valor": val})
-        elif action == "wait":
+        elif method == "fill":
+            pasos.append({"accion": "fill", "target": selector, "valor": bound_val})
+        elif method == "select":
+            pasos.append({"accion": "select", "target": selector, "valor": bound_val})
+        elif method == "check":
+            pasos.append({"accion": "check_checkbox", "target": selector, "valor": bound_val or "true"})
+        elif method == "wait":
             pasos.append({"accion": "wait_networkidle", "target": "", "valor": ""})
-        # skip _note-only steps
+        # unknown method → skip silently
     return pasos
 
 

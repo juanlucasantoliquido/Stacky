@@ -1,2 +1,4 @@
 out/
 .build/
+.prepare-out/
+.zip-staging/

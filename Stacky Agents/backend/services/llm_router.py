@@ -158,16 +158,29 @@ def decide(
     fingerprint_complexity: str | None = None,
     override: str | None = None,
     backend: str | None = None,
+    project_name: str | None = None,
 ) -> RoutingDecision:
     """Devuelve qué modelo usar y por qué."""
     backend = (backend or config.LLM_BACKEND or "anthropic").lower()
 
-    # Para vscode_bridge: verificar que el bridge esté activo antes de routear
+    # Para vscode_bridge: verificar que el bridge esté activo antes de routear,
+    # usando el puerto del proyecto si está disponible.
     if backend == "vscode_bridge":
         from copilot_bridge import _vscode_bridge_health
-        if not _vscode_bridge_health():
+        from services.vscode_instance_manager import get_instance_info
+
+        bridge_port: int | None = None
+        port_origin = "global"
+        if project_name:
+            info = get_instance_info(project_name)
+            if info and isinstance(info.get("port"), int):
+                bridge_port = info["port"]
+                port_origin = f"proyecto '{project_name}'"
+
+        if not _vscode_bridge_health(project_name=project_name, bridge_port=bridge_port):
+            port_label = f":{bridge_port}" if bridge_port else f":{config.VSCODE_BRIDGE_PORT} (global fallback)"
             raise RuntimeError(
-                "El bridge de VS Code no responde para el proyecto activo. "
+                f"El bridge de VS Code no responde en {port_label} (origen: {port_origin}). "
                 "Recargá VS Code: Ctrl+Shift+P → 'Developer: Reload Window'"
             )
 

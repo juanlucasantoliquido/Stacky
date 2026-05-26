@@ -35,7 +35,9 @@ _TOOL_VERSION = "1.0.0"
 _TOOL_ROOT = Path(__file__).parent
 _AUTH_FILE = _TOOL_ROOT / ".auth" / "agenda.json"
 _CHECK_TIMEOUT_S: float = 5.0
-_ALIVE_STATUS_CODES = frozenset({200, 301, 302, 401, 403})
+# 400 is included because IIS may return it when using 127.0.0.1 as Host header
+# (host-binding mismatch) — still proves the server process is running.
+_ALIVE_STATUS_CODES = frozenset({200, 301, 302, 400, 401, 403})
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -123,23 +125,40 @@ def run_smoke_path(
 # ── Internal checks ───────────────────────────────────────────────────────────
 
 def _check_http(url: str, label: str = "url") -> dict:
-    """HTTP GET check with short timeout."""
-    try:
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=_CHECK_TIMEOUT_S) as resp:
-            return {"ok": True, "label": label, "status": resp.getcode(), "error": ""}
-    except urllib.error.HTTPError as exc:
-        if exc.code in _ALIVE_STATUS_CODES:
-            return {"ok": True, "label": label, "status": exc.code, "error": ""}
-        return {"ok": False, "label": label, "status": exc.code,
-                "error": f"HTTP {exc.code}: {exc.reason}"}
-    except urllib.error.URLError as exc:
-        return {"ok": False, "label": label, "status": None,
-                "error": f"URLError: {exc.reason}"}
-    except OSError as exc:
-        return {"ok": False, "label": label, "status": None, "error": f"OSError: {exc}"}
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "label": label, "status": None, "error": str(exc)}
+    """HTTP GET check with short timeout.
+
+    IPv4 fallback: if ``url`` contains ``localhost`` and the request times out,
+    retries once using 127.0.0.1 (Python may resolve localhost to ::1 on some
+    Windows configurations, causing spurious timeouts when IIS listens on IPv4).
+    """
+    def _attempt(attempt_url: str) -> dict:
+        try:
+            req = urllib.request.Request(attempt_url, method="GET")
+            with urllib.request.urlopen(req, timeout=_CHECK_TIMEOUT_S) as resp:
+                return {"ok": True, "label": label, "status": resp.getcode(), "error": ""}
+        except urllib.error.HTTPError as exc:
+            if exc.code in _ALIVE_STATUS_CODES:
+                return {"ok": True, "label": label, "status": exc.code, "error": ""}
+            return {"ok": False, "label": label, "status": exc.code,
+                    "error": f"HTTP {exc.code}: {exc.reason}"}
+        except urllib.error.URLError as exc:
+            return {"ok": False, "label": label, "status": None,
+                    "error": f"URLError: {exc.reason}"}
+        except OSError as exc:
+            return {"ok": False, "label": label, "status": None, "error": f"OSError: {exc}"}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "label": label, "status": None, "error": str(exc)}
+
+    result = _attempt(url)
+    if result["ok"]:
+        return result
+    # IPv4 fallback for localhost timeout
+    if "localhost" in url and ("timed out" in result["error"] or "TimeoutError" in result["error"]):
+        fallback_url = url.replace("localhost", "127.0.0.1", 1)
+        fallback = _attempt(fallback_url)
+        if fallback["ok"]:
+            return fallback
+    return result
 
 
 def _check_auth_file() -> dict:

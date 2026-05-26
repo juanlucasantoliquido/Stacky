@@ -61,7 +61,8 @@ def build_guarded_browser_spec(data: BrowserRunInput) -> dict[str, Any]:
                 "evidence": "/api/qa-browser/runs/{execution_id}/evidence",
                 "complete": "/api/qa-browser/runs/{execution_id}/complete",
             },
-            "must_publish_ado_comment": True,
+            "must_publish_ado_comment": False,
+            "must_leave_stacky_artifacts": True,
             "completion_payload": {
                 "verdict": "PASS | FAIL | BLOCKED | MIXED",
                 "summary": "texto corto",
@@ -72,7 +73,14 @@ def build_guarded_browser_spec(data: BrowserRunInput) -> dict[str, Any]:
                         "steps_executed": [],
                         "expected": "",
                         "actual": "",
-                        "evidence": [],
+                        "evidence": [
+                            "texto libre",
+                            {
+                                "kind": "screenshot",
+                                "label": "captura final",
+                                "path": "ruta local del PNG si existe",
+                            },
+                        ],
                     }
                 ],
             },
@@ -100,7 +108,7 @@ def render_spec_markdown(spec: dict[str, Any]) -> str:
         "- Cada accion visible debe estar asociada a un `scenario_id` y `step_id`.",
         "- Si la pantalla no coincide con el plan, detener y marcar BLOCKED.",
         "- Si aparece login, permisos, modal inesperado o navegacion externa, detener.",
-        "- No publicar en ADO desde el browser; Stacky publica al completar.",
+        "- No publicar en ADO desde el browser; al completar deja evidencia local para Stacky Agents.",
         "",
         "## Escenarios",
         "",
@@ -120,10 +128,10 @@ def render_spec_markdown(spec: dict[str, Any]) -> str:
         lines.append("")
     lines.extend(
         [
-            "## Publicacion ADO",
+            "## Handoff Stacky Agents",
             "",
-            "Al cerrar el run, Stacky debe publicar SIEMPRE un comentario en ADO con",
-            "pruebas realizadas, resultado por escenario y evidencia.",
+            "Al cerrar el run, Stacky escribira `comment.html` y `attachments.json`",
+            "en `Agentes/outputs/<ADO_ID>/`. Cualquier accion externa queda fuera del browser runner.",
         ]
     )
     return "\n".join(lines)
@@ -149,7 +157,9 @@ Contrato obligatorio:
 - No modifiques archivos del repo ni datos fuera de las acciones explicitamente pedidas por el plan.
 - Registra eventos en Stacky despues de cada accion relevante.
 - Captura evidencia suficiente por escenario.
-- Al terminar, llama al endpoint de complete para que Stacky publique SIEMPRE el comentario en ADO.
+- Si tomas screenshots, guardalos como PNG en `spec.evidence_dir` si esta informado y reporta la ruta local con `kind="screenshot"`.
+- No publiques en ADO ni llames APIs de ADO. El runner solo registra eventos, evidencia y resultado.
+- Al terminar, llama al endpoint de complete para que Stacky genere los artefactos locales. No intentes publicar, comentar, adjuntar ni cambiar estados.
 
 Run Stacky: `{execution_id}`
 
@@ -193,9 +203,8 @@ def build_ado_comment_html(
         expected = html.escape(str(item.get("expected") or ""))
         actual = html.escape(str(item.get("actual") or ""))
         evidence = item.get("evidence") or []
-        evidence_html = "".join(
-            f"<li>{html.escape(str(ev))}</li>" for ev in evidence[:20]
-        ) or "<li>Sin evidencia declarada</li>"
+        evidence_html = "".join(_render_evidence_item(ev) for ev in evidence[:20])
+        evidence_html = evidence_html or "<li>Sin evidencia declarada</li>"
         rows.append(
             "<tr>"
             f"<td><strong>{sid}</strong></td>"
@@ -249,8 +258,30 @@ def build_ado_comment_html(
     {''.join(rows)}
   </tbody>
 </table>
-<p><em>Comentario publicado automaticamente por Stacky Agents al cerrar TEST QA UAT CODEX.</em></p>
+<p><em>Comentario preparado por QA Browser para handoff local a Stacky Agents.</em></p>
 """.strip()
+
+
+def _render_evidence_item(item: Any) -> str:
+    if isinstance(item, dict):
+        label = html.escape(str(item.get("label") or item.get("kind") or "evidencia"))
+        token = item.get("attachment_token") or item.get("token")
+        if token:
+            token_text = html.escape(str(token), quote=True)
+            return (
+                "<li>"
+                f"{label}<br/>"
+                f"<a href=\"{token_text}\" target=\"_blank\">"
+                f"<img src=\"{token_text}\" alt=\"{label}\" "
+                "style=\"max-width:720px;border:1px solid #ddd;border-radius:4px\"/>"
+                "</a>"
+                "</li>"
+            )
+        value = item.get("value") or item.get("path") or item.get("url") or ""
+        if value:
+            return f"<li>{label}: <code>{html.escape(str(value))}</code></li>"
+        return f"<li>{label}</li>"
+    return f"<li>{html.escape(str(item))}</li>"
 
 
 def dumps_spec(spec: dict[str, Any]) -> str:
@@ -271,7 +302,7 @@ def _build_guardrails(allowed_base_url: str) -> dict[str, Any]:
         "stop_on_unexpected_modal": True,
         "stop_on_auth_or_permission_prompt": True,
         "stop_on_external_navigation": True,
-        "ado_comment_policy": "always_publish_on_complete",
+        "ado_comment_policy": "browser_runner_never_publishes",
         "forbidden_actions": [
             "publish_to_ado_from_browser",
             "change_ado_state",

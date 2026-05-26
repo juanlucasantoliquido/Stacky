@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from flask import Blueprint, abort, jsonify, request
@@ -13,6 +16,8 @@ from config import config
 from db import session_scope
 from models import AgentExecution, Ticket
 from services import qa_browser_runner, ticket_status
+from services.agent_completion_internal import close_execution_with_publish
+from services.agent_html_output import outputs_dir, repo_root
 from services.qa_browser_context import build_qa_browser_context, render_context_markdown
 from services.qa_browser_plan import (
     BrowserRunInput,
@@ -28,6 +33,7 @@ logger = logging.getLogger("stacky_agents.api.qa_browser")
 bp = Blueprint("qa_browser", __name__, url_prefix="/qa-browser")
 
 _AGENT_TYPE = "qa-browser"
+_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 @bp.post("/runs")
@@ -100,7 +106,7 @@ def create_run():
             "feature": "qa_browser_uat_codex",
             "runtime": "codex_browser",
             "allowed_base_url": allowed_base_url,
-            "publish_ado_comment": "always_on_complete",
+            "publish_ado_comment": "stacky_delegated_on_complete",
             "context_stats": context.get("stats"),
             "spec": spec,
             "events": [],
@@ -111,6 +117,8 @@ def create_run():
         execution_id = exec_row.id
         spec["execution_id"] = execution_id
         spec["stacky_api_base_url"] = stacky_api_base_url
+        spec["evidence_dir"] = str(_qa_browser_evidence_dir(execution_id))
+        _qa_browser_evidence_dir(execution_id).mkdir(parents=True, exist_ok=True)
         spec["codex_browser_prompt"] = build_codex_browser_prompt(spec)
         exec_row.input_context = [
             exec_row.input_context[0],
@@ -291,36 +299,33 @@ def complete_run(execution_id: int):
         result.setdefault("evidence", md.get("evidence") or [])
         ado_id = ticket.ado_id
 
-    publish_error: str | None = None
-    publish_result: dict[str, Any] | None = None
+    if ado_id is None:
+        abort(400, "ticket has no ado_id")
+
+    prepared_result, attachment_manifest = _prepare_result_evidence_for_stacky(
+        execution_id=execution_id,
+        ado_id=int(ado_id),
+        result=result,
+    )
+    result = prepared_result
     comment_html = build_ado_comment_html(
         execution_id=execution_id,
         spec=spec,
         result=result,
     )
-    try:
-        from services.ado_client import AdoClient
-
-        publish_result = AdoClient().post_comment(ado_id, comment_html, fmt="html")
-    except Exception as exc:  # noqa: BLE001
-        publish_error = str(exc)
-        logger.exception("qa_browser complete: ADO comment publish failed")
-
-    final_status = "completed" if publish_error is None else "error"
-    if publish_error:
-        comment_html = build_ado_comment_html(
-            execution_id=execution_id,
-            spec=spec,
-            result=result,
-            publish_error=publish_error,
-        )
+    artifact_result = _write_stacky_comment_artifacts(
+        execution_id=execution_id,
+        ado_id=int(ado_id),
+        comment_html=comment_html,
+        attachments=attachment_manifest,
+    )
 
     output = _render_result_markdown(
         execution_id=execution_id,
         spec=spec,
         result=result,
-        publish_error=publish_error,
-        publish_result=publish_result,
+        publish_error=None,
+        publish_result=None,
     )
 
     with session_scope() as session:
@@ -329,46 +334,243 @@ def complete_run(execution_id: int):
         md["result"] = result
         md["ado_comment"] = {
             "attempted": True,
-            "ok": publish_error is None,
-            "error": publish_error,
-            "response": publish_result,
+            "delegated_to_stacky": True,
+            "ok": None,
+            "error": None,
+            "response": None,
             "html": comment_html,
+            "html_output_path": artifact_result["html_output_path"],
+            "attachments": attachment_manifest,
         }
         row.metadata_dict = md
         row.output = output
         row.output_format = "markdown"
-        row.status = final_status
-        row.error_message = publish_error
-        row.completed_at = datetime.utcnow()
-        ticket_id = row.ticket_id
 
     log_streamer.push(execution_id, "info", f"veredicto final={result['verdict']}", group="codex-browser")
-    if publish_error:
-        log_streamer.push(execution_id, "error", f"ADO comment failed: {publish_error}", group="ado")
-    else:
-        log_streamer.push(execution_id, "info", "comentario ADO publicado", group="ado")
-    log_streamer.close(execution_id)
-    ticket_status.on_execution_end(
-        ticket_id=ticket_id,
-        execution_id=execution_id,
-        final_status=final_status,
-        agent_type=_AGENT_TYPE,
-        error=publish_error,
+    log_streamer.push(
+        execution_id,
+        "info",
+        f"artefactos ADO listos: {artifact_result['html_output_path']}",
+        group="ado",
     )
+
+    close_result = close_execution_with_publish(
+        execution_id=execution_id,
+        triggered_by="qa_browser_complete",
+        final_status="completed",
+        html_output_path=artifact_result["html_output_path"],
+        user=current_user(),
+        reason=f"QA Browser completado para ADO-{ado_id}",
+        completion_source="qa_browser_complete",
+        agent_type_hint=_AGENT_TYPE,
+        auto_publish=True,
+    )
+
+    publish_result = close_result.publish
+    publish_ok = publish_result.get("ok") is True
+    publish_error = None if publish_ok else (
+        publish_result.get("reason")
+        or publish_result.get("publish_status")
+        or publish_result.get("event")
+        or "stacky_publish_failed"
+    )
+
+    with session_scope() as session:
+        row = _get_qa_run(session, execution_id)
+        md = row.metadata_dict
+        ado_comment = dict(md.get("ado_comment") or {})
+        ado_comment.update(
+            {
+                "ok": publish_ok,
+                "error": publish_error,
+                "response": publish_result,
+            }
+        )
+        md["ado_comment"] = ado_comment
+        row.metadata_dict = md
+
+    if publish_ok:
+        log_streamer.push(execution_id, "info", "comentario ADO publicado por Stacky", group="ado")
+    else:
+        log_streamer.push(execution_id, "error", f"Stacky ADO publish failed: {publish_error}", group="ado")
+    log_streamer.close(execution_id)
 
     return jsonify(
         {
-            "ok": publish_error is None,
+            "ok": publish_ok,
             "execution_id": execution_id,
-            "status": final_status,
+            "status": "completed",
             "result": result,
             "ado_comment": {
-                "ok": publish_error is None,
+                "ok": publish_ok,
                 "error": publish_error,
                 "response": publish_result,
+                "html_output_path": artifact_result["html_output_path"],
             },
         }
-    ), 200 if publish_error is None else 502
+    ), 200 if publish_ok else 502
+
+
+def _qa_browser_evidence_dir(execution_id: int) -> Path:
+    return Path(__file__).resolve().parents[1] / "data" / "qa_browser_evidence" / str(execution_id)
+
+
+def _write_stacky_comment_artifacts(
+    *,
+    execution_id: int,
+    ado_id: int,
+    comment_html: str,
+    attachments: list[dict[str, Any]],
+) -> dict[str, Any]:
+    out_dir = outputs_dir() / str(ado_id)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    comment_path = out_dir / "comment.html"
+    comment_path.write_text(comment_html, encoding="utf-8")
+
+    meta_path = out_dir / "comment.meta.json"
+    meta_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "stacky.comment.meta.v1",
+                "source": "qa_browser",
+                "execution_id": execution_id,
+                "agent_type": _AGENT_TYPE,
+                "ado_id": ado_id,
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    manifest_path = out_dir / "attachments.json"
+    if attachments:
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "stacky.agent_attachments.v1",
+                    "source": "qa_browser",
+                    "execution_id": execution_id,
+                    "attachments": attachments,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    else:
+        manifest_path.unlink(missing_ok=True)
+
+    rel_html = str(comment_path.relative_to(repo_root())).replace("\\", "/")
+    return {
+        "output_dir": str(out_dir),
+        "html_output_path": rel_html,
+        "attachments_count": len(attachments),
+    }
+
+
+def _prepare_result_evidence_for_stacky(
+    *,
+    execution_id: int,
+    ado_id: int,
+    result: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Copy local screenshots into Agentes/outputs and replace them with tokens."""
+    prepared = json.loads(json.dumps(result, ensure_ascii=False, default=str))
+    out_dir = outputs_dir() / str(ado_id)
+    attachments_dir = out_dir / "attachments"
+    attachments_dir.mkdir(parents=True, exist_ok=True)
+    manifest: list[dict[str, Any]] = []
+
+    for scenario in prepared.get("scenarios") or []:
+        sid = str(scenario.get("scenario_id") or "scenario")
+        new_evidence: list[Any] = []
+        for index, item in enumerate(scenario.get("evidence") or [], start=1):
+            source_path = _evidence_local_image_path(item)
+            if source_path is None:
+                new_evidence.append(item)
+                continue
+
+            safe_sid = _safe_file_part(sid)
+            suffix = source_path.suffix.lower() or ".png"
+            dest_name = f"qa-browser-{execution_id}-{safe_sid}-{index:02d}{suffix}"
+            dest_path = attachments_dir / dest_name
+            if source_path.resolve() != dest_path.resolve():
+                shutil.copy2(source_path, dest_path)
+
+            token = f"{{{{ATTACH:qa-browser-{execution_id}:{dest_name}}}}}"
+            label = _evidence_label(item) or f"{sid} evidencia {index}"
+            rel_path = str(dest_path.relative_to(out_dir)).replace("\\", "/")
+            manifest.append(
+                {
+                    "token": token,
+                    "path": rel_path,
+                    "upload_name": f"ADO-{ado_id}_{dest_name}",
+                    "comment": f"QA Browser {sid}: {label}",
+                }
+            )
+            new_evidence.append(
+                {
+                    "kind": "screenshot",
+                    "label": label,
+                    "attachment_token": token,
+                    "file_name": dest_name,
+                }
+            )
+        scenario["evidence"] = new_evidence
+
+    return prepared, manifest
+
+
+def _evidence_local_image_path(item: Any) -> Path | None:
+    raw: Any = None
+    if isinstance(item, dict):
+        kind = str(item.get("kind") or "").lower()
+        raw = item.get("path") or item.get("file_path") or item.get("value")
+        if kind and kind not in {"screenshot", "image", "png", "jpg", "jpeg", "webp"}:
+            return None
+    elif isinstance(item, str):
+        raw = item
+    if not raw:
+        return None
+
+    text = str(raw).strip().strip('"')
+    if not text:
+        return None
+    candidate = Path(text)
+    candidates = [candidate]
+    if not candidate.is_absolute():
+        candidates.append(repo_root() / candidate)
+        candidates.append(Path.cwd() / candidate)
+
+    root = repo_root().resolve()
+    for path in candidates:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if resolved.suffix.lower() not in _IMAGE_EXTS or not resolved.is_file():
+            continue
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            logger.warning("qa_browser evidence outside repo ignored: %s", resolved)
+            return None
+        return resolved
+    return None
+
+
+def _evidence_label(item: Any) -> str:
+    if isinstance(item, dict):
+        return str(item.get("label") or item.get("title") or item.get("kind") or "").strip()
+    return ""
+
+
+def _safe_file_part(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._-")
+    return cleaned[:80] or "item"
 
 
 def _resolve_ticket(session: Any, ticket_id: int) -> Ticket | None:
@@ -483,7 +685,12 @@ def _render_result_markdown(
         "",
         "## Publicacion ADO",
         "",
-        "Estado: " + ("OK" if publish_error is None else f"ERROR - {publish_error}"),
+        "Estado: "
+        + (
+            "DELEGADO_A_STACKY"
+            if publish_error is None and publish_result is None
+            else ("OK" if publish_error is None else f"ERROR - {publish_error}")
+        ),
     ]
     if publish_result:
         lines.append("")

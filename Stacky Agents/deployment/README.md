@@ -33,3 +33,16 @@ Stacky Agents/deployment/out/StackyAgents-<version>-Setup.exe
 1. Enviar el `.exe` del instalador o el `.zip` generado.
 2. Si se usa `.zip`, ejecutar `INSTALL.ps1` una vez.
 3. Ejecutar `START.bat`.
+
+## Flujo recomendado local
+
+Desde `Stacky Agents\`:
+
+```bat
+Instalador Dependencias.bat
+PrepararPublicacion.bat
+```
+
+`PrepararPublicacion.bat` genera `DeployStackyAgents\`, respalda el deploy
+anterior en `DeployStackyAgents\backups\`, incrementa version desde `1.0.0`
+y crea `DeployStackyAgents-<version>.zip`.

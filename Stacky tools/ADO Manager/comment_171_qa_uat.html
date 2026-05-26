@@ -1,0 +1,133 @@
+<!-- stacky-qa-uat:run ticket="171" -->
+<h2>QA UAT — ADO-171 — RF-018 — Marca Oficial en el Mantenedor de Emails</h2>
+
+<p><strong>Veredicto:</strong> ❌ RECHAZADO — Código UI no mergeado a trunk</p>
+<p><strong>Fecha ejecución:</strong> 2026-05-23</p>
+<p><strong>Base URL:</strong> http://localhost:35017/AgendaWeb/</p>
+<p><strong>Usuario:</strong> PABLO</p>
+<p><strong>Rama del desarrollo:</strong> <code>origin/Task171-RF018</code> (commit <code>c1a165d</code>)</p>
+<p><strong>Entorno desplegado:</strong> trunk (sin cambios UI de ADO-171)</p>
+<p><strong>Comando ejecutado:</strong></p>
+<ul>
+  <li><code>python check_ado171_db.py</code> → verificación directa de BD</li>
+  <li><code>npx playwright test playwright/uat/ado171_emails_oficial.spec.ts</code> → tests UI</li>
+  <li><code>git show c1a165d --stat</code> → análisis de rama</li>
+</ul>
+
+<h3>Resultados por criterio de aceptación</h3>
+<table border="1" cellpadding="4" cellspacing="0">
+  <thead>
+    <tr>
+      <th>CA</th>
+      <th>Test</th>
+      <th>Resultado</th>
+      <th>Evidencia</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CA-01</td>
+      <td>P01 — EMOFICIAL en INFORMATION_SCHEMA.COLUMNS</td>
+      <td>✅ OK</td>
+      <td>COLUMN_NAME=EMOFICIAL, DATA_TYPE=varchar, LENGTH=1, IS_NULLABLE=NO</td>
+    </tr>
+    <tr>
+      <td>CA-02</td>
+      <td>P02 — Batch InsertaMailBD incluye EMOFICIAL='1'</td>
+      <td>✅ OK (código)</td>
+      <td>git show c1a165d:trunk/Batch/Negocio/BusInchost/MailsDalc.cs — EMOFICIAL confirmado en INSERT con valor '1'</td>
+    </tr>
+    <tr>
+      <td>CA-03</td>
+      <td>P03 — Alta manual → EMOFICIAL='0'</td>
+      <td>⚠️ NO TESTEABLE</td>
+      <td>AgregarEmail() en trunk NO incluye EMOFICIAL en INSERT. Código correcto existe en rama Task171-RF018 (no mergeada)</td>
+    </tr>
+    <tr>
+      <td>CA-04</td>
+      <td>P04 — Campo Oficial solo lectura en modificación</td>
+      <td>❌ KO — APP</td>
+      <td>Playwright: abfOficial no renderiza en el form de modificación. Causa: MantenedorEmails.ascx no tiene el campo en trunk</td>
+    </tr>
+    <tr>
+      <td>CA-05</td>
+      <td>P05 — Columna Oficial en grilla</td>
+      <td>❌ KO — APP</td>
+      <td>Playwright: columna OFICIAL ausente en GridEmails y gridMailsContactos. SetColumnasGridEmails() en trunk no agrega "OFICIAL"</td>
+    </tr>
+    <tr>
+      <td>CA-06</td>
+      <td>P06 — Campo Oficial en alta (ReadOnly, valor "No")</td>
+      <td>❌ KO — APP</td>
+      <td>Playwright: abfOficial no renderiza en el form de alta. LimpiarControles() en trunk no inicializa abfOficial</td>
+    </tr>
+    <tr>
+      <td>CA-07</td>
+      <td>P07 — Consistencia visual OFICIAL vs VALIDO</td>
+      <td>❌ KO — APP</td>
+      <td>Playwright: columna OFICIAL no presente en grilla. No se puede validar consistencia</td>
+    </tr>
+    <tr>
+      <td>CA-08</td>
+      <td>P08 — Eliminación no altera EMOFICIAL</td>
+      <td>⚠️ NO TESTEABLE</td>
+      <td>Sin columna OFICIAL visible en UI no es posible validar el comportamiento post-eliminación de forma integrada</td>
+    </tr>
+    <tr>
+      <td>CA-09</td>
+      <td>P09 — Migración histórica sin NULL</td>
+      <td>✅ OK</td>
+      <td>SELECT COUNT(*) FROM RMAILS WHERE EMOFICIAL IS NULL = 0 | Total registros = 186.964</td>
+    </tr>
+    <tr>
+      <td>CA-10</td>
+      <td>P10 — Columna Oficial en FrmJDemanda</td>
+      <td>❌ KO — APP</td>
+      <td>SetColumnasGridEmails() en FrmJDemanda.aspx.cs (trunk) no agrega columna OFICIAL. Cambio existe en rama Task171-RF018</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Diagnóstico — Causa raíz</h3>
+<p><strong>Categoría:</strong> APP</p>
+<p>
+  La rama <code>origin/Task171-RF018</code> (commit <code>c1a165d</code>, autor: Victor Munoz, 2026-05-20)
+  contiene todos los cambios descritos en el ticket, pero <strong>NO fue mergeada a trunk</strong>.
+  El AgendaWeb desplegado en <code>localhost:35017</code> sirve desde <code>trunk\OnLine\AgendaWeb</code>
+  que no contiene las modificaciones UI de ADO-171.
+</p>
+<p><strong>Archivos con cambios en rama (PRESENTES) pero ausentes en trunk:</strong></p>
+<ul>
+  <li><code>trunk/BD/ADO-171_ALTER_RMAILS_EMOFICIAL.sql</code> — ✅ EJECUTADO en BD (columna existe)</li>
+  <li><code>trunk/OnLine/AgendaWeb/includes/MantenedorEmails.ascx</code> — ❌ abfOficial no en trunk</li>
+  <li><code>trunk/OnLine/AgendaWeb/includes/MantenedorEmails.ascx.cs</code> — ❌ CargaDatosEmail/LimpiarControles sin abfOficial</li>
+  <li><code>trunk/OnLine/AgendaWeb/includes/MantenedorEmails.ascx.designer.cs</code> — ❌ declaración abfOficial ausente</li>
+  <li><code>trunk/OnLine/AgendaWeb/FrmDetalleClie.aspx.cs</code> — ❌ SetColumnasGridEmails sin columna OFICIAL</li>
+  <li><code>trunk/OnLine/AgendaWeb/FrmJDemanda.aspx.cs</code> — ❌ SetColumnasGridEmails sin columna OFICIAL</li>
+  <li><code>trunk/OnLine/Negocio/RSDalc/Cliente.cs</code> — ❌ GetEmails/GetTodosEmails sin EMOFICIAL; AgregarEmail sin EMOFICIAL='0'</li>
+  <li><code>trunk/Batch/Negocio/BusInchost/MailsDalc.cs</code> — ❌ tyMail sin EMOFICIAL; InsertaMailBD sin EMOFICIAL</li>
+  <li><code>trunk/Batch/Negocio/BusRSAgExtIN/RetroDalc.cs</code> — ❌ InsertarMail sin EMOFICIAL</li>
+</ul>
+<p><strong>Observación importante:</strong> La BD sí tiene la columna aplicada (CA-01 ✅ y CA-09 ✅).
+El script DDL fue ejecutado independientemente del merge de la rama de código.</p>
+
+<h3>Datos de prueba (cliente EMCOD=1000001118137685)</h3>
+<p>12 emails encontrados. AIS6 (EMVALIDO=1), AIS8 (EMVALIDO=1), AIS9 (EMVALIDO=1) activos. 
+Todos con EMOFICIAL='0' (migración aplicó DEFAULT '0' a históricos).</p>
+
+<h3>Pasos para re-test</h3>
+<ol>
+  <li>Mergear rama <code>origin/Task171-RF018</code> a trunk (o a la rama de release)</li>
+  <li>Rebuild y restart del App Pool de AgendaWeb en IIS Express</li>
+  <li>Re-ejecutar <code>npx playwright test playwright/uat/ado171_emails_oficial.spec.ts</code></li>
+</ol>
+
+<h3>Evidencias</h3>
+<ul>
+  <li><code>Tools/Stacky/Stacky tools/QA UAT Agent/check_ado171_db.py</code> — script verificación BD</li>
+  <li><code>Tools/Stacky/Stacky tools/QA UAT Agent/playwright/uat/ado171_emails_oficial.spec.ts</code> — spec Playwright</li>
+  <li>BD: <code>SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='RMAILS' AND COLUMN_NAME='EMOFICIAL'</code> → 1 fila: varchar(1) NOT NULL</li>
+  <li>BD: <code>SELECT COUNT(*) FROM RMAILS WHERE EMOFICIAL IS NULL</code> → 0</li>
+  <li>BD: Total RMAILS = 186.964 registros con EMOFICIAL definido</li>
+  <li>Git: <code>git show c1a165d --stat</code> → 11 archivos modificados en rama Task171-RF018</li>
+</ul>

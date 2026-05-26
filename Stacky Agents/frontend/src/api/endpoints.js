@@ -56,11 +56,21 @@ export const Tickets = {
      * Envía X-Completion-Source: manual_ui para trazabilidad.
      */
     createChildTask: (epicAdoId, payload) => api.postWithHeaders(`/api/tickets/by-ado/${epicAdoId}/create-child-task`, payload, { "X-Completion-Source": "manual_ui" }),
+    // P2.3 — adjuntos del ticket (portado de WS2)
+    attachments: (id) => api.get(`/api/tickets/${id}/attachments`),
+    attachmentContent: (id, url, name) => api.get(`/api/tickets/${id}/attachments/content?url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`),
+    deleteAttachments: (id, attachments) => api.delete(`/api/tickets/${id}/attachments`, { attachments }),
+    uploadAttachment: (id, name, content) => api.post(`/api/tickets/${id}/attachments`, { name, content }),
 };
 export const Agents = {
     list: () => api.get("/api/agents"),
     vsCodeAgents: () => api.get("/api/agents/vscode"),
-    history: (filename, limit = 50) => api.get(`/api/agents/vscode/${encodeURIComponent(filename)}/history?limit=${limit}`),
+    history: (filename, limit = 50, project) => {
+        const p = new URLSearchParams({ limit: String(limit) });
+        if (project)
+            p.set("project", project);
+        return api.get(`/api/agents/vscode/${encodeURIComponent(filename)}/history?${p.toString()}`);
+    },
     run: (payload) => api.post("/api/agents/run", payload),
     cancel: (executionId) => api.post(`/api/agents/cancel/${executionId}`),
     estimate: (payload) => api.post("/api/agents/estimate", payload),
@@ -89,10 +99,16 @@ export const Executions = {
             params.set("ticket_id", String(q.ticket_id));
         if (q.agent_type)
             params.set("agent_type", q.agent_type);
+        if (q.agent_filename)
+            params.set("agent_filename", q.agent_filename);
         if (q.status)
             params.set("status", q.status);
         if (q.project)
             params.set("project", q.project);
+        if (q.include_output)
+            params.set("include_output", "true");
+        if (q.limit)
+            params.set("limit", String(q.limit));
         const qs = params.toString();
         return api.get(`/api/executions${qs ? `?${qs}` : ""}`);
     },
@@ -103,6 +119,11 @@ export const Executions = {
     sendCodexInput: (id, text) => api.post(`/api/executions/${id}/input`, { text }),
     diff: (a, b) => api.get(`/api/executions/${a}/diff/${b}`),
     streamUrl: (id) => `${apiBase}/api/executions/${id}/logs/stream`,
+    // P2.3 — endpoints portados de WS2
+    forceTransition: (id) => api.post(`/api/executions/${id}/force-transition`),
+    reattach: (id) => api.post(`/api/executions/${id}/reattach`),
+    deleteOne: (id) => api.delete(`/api/executions/${id}`),
+    deleteByTicket: (ticketId, agentFilename) => api.delete(`/api/executions/bulk-by-ticket?ticket_id=${ticketId}&agent_filename=${encodeURIComponent(agentFilename)}`),
 };
 export const Similarity = {
     // FA-45
@@ -236,7 +257,10 @@ export const Projects = {
     vscodeStatus: (name) => api.get(`/api/projects/${name}/vscode-status`),
     trackerStates: (name) => api.get(`/api/projects/${name}/tracker-states`),
     getAgentWorkflow: (projectName, filename) => api.get(`/api/projects/${projectName}/agent-workflow/${encodeURIComponent(filename)}`),
+    getAllAgentWorkflows: (projectName) => api.get(`/api/projects/${encodeURIComponent(projectName)}/agent-workflows`),
     putAgentWorkflow: (projectName, filename, workflow) => api.put(`/api/projects/${projectName}/agent-workflow/${encodeURIComponent(filename)}`, workflow),
+    // P1.1 ChatDrawer: bootstrap del workspace_root del proyecto activo
+    agentBootstrap: () => api.get("/api/agent_bootstrap"),
 };
 export const Mantis = {
     listProjects: (params) => api.post("/api/mantis/projects", params),
@@ -355,6 +379,18 @@ export const AgentCompletion = {
         const token = import.meta.env?.VITE_STACKY_AGENT_TOKEN ?? "";
         return rawPost(`/api/tickets/by-ado/${adoId}/agent-completion`, payload, token ? { "X-Stacky-Agent-Token": token } : {});
     },
+};
+export const AgentRoles = {
+    list: () => api.get("/api/agent-roles"),
+    update: (patch) => api.put("/api/agent-roles", patch),
+};
+export const Chat = {
+    turn: (payload) => api.post("/api/chat/turn", payload),
+};
+export const DocsRag = {
+    index: (payload) => api.post("/api/docs-rag/index", payload),
+    stats: (projectName) => api.get(`/api/docs-rag/stats${projectName ? `?project_name=${encodeURIComponent(projectName)}` : ""}`),
+    chat: (payload) => api.post("/api/docs-rag/chat", payload),
 };
 // Feature A: Sprint Board
 export const PM = {

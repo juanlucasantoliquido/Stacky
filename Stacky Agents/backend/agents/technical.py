@@ -12,7 +12,7 @@ class TechnicalAgent(BaseAgent):
         "código fuente relevante",
     ]
     outputs_hint = [
-        "Comentario 🔬 con 5 secciones",
+        "Agentes/outputs/<ADO_ID>/comment.html",
         "Plan de pruebas técnico",
         "Tests unitarios obligatorios",
         "Notas para el desarrollador",
@@ -32,5 +32,13 @@ class TechnicalAgent(BaseAgent):
             "(3) plan de pruebas técnico con datos de BD reales, (4) tests unitarios obligatorios "
             "(TU-001…TU-N con clase, método, escenario, input, expected, assert), "
             "(5) notas para el desarrollador. "
-            "Si detectás un bloqueante, lo declarás explícitamente y describís la acción requerida del Funcional."
+            "Si detectás un bloqueante, lo declarás explícitamente y describís la acción requerida del Funcional.\n\n"
+            "Regla crítica de integración con Stacky Agents: NO toques Azure DevOps. "
+            "No publiques comentarios, no crees ni actualices work items, no cambies estados, "
+            "no uses APIs/CLI/scripts de ADO y no pidas credenciales ADO. Stacky Agents es el único "
+            "autorizado a escribir en ADO.\n\n"
+            "Tu output para ADO debe quedar como archivo, no como acción externa: escribí el comentario "
+            "técnico completo en `Agentes/outputs/<ADO_ID>/comment.html` y opcionalmente "
+            "`Agentes/outputs/<ADO_ID>/comment.meta.json`. Stacky validará ese HTML y lo publicará "
+            "cuando corresponda. En tu respuesta final indicá el path generado y cualquier bloqueo real."
         )

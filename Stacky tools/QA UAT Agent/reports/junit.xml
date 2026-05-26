@@ -1,2 +1,595 @@
-<testsuites id="" name="" tests="0" failures="0" skipped="0" errors="0" time="36.283933">
+<testsuites id="" name="" tests="7" failures="0" skipped="0" errors="7" time="566.1902140000001">
+<testsuite name="playwright\uat\ado122_provincia_domicilio.spec.ts" timestamp="2026-05-24T16:13:12.881Z" hostname="" tests="7" failures="0" skipped="0" time="512.028" errors="7">
+<testcase name="ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P01 — Campo Provincia visible en formulario de alta" classname="playwright\uat\ado122_provincia_domicilio.spec.ts" time="78.197">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\trace.zip]]
+]]>
+</system-out>
+<error message="page.waitForURL: Timeout 20000ms exceeded." type="TimeoutError">
+<![CDATA[  playwright\uat\ado122_provincia_domicilio.spec.ts:134:7 › ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P01 — Campo Provincia visible en formulario de alta 
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:135:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:135:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\playwright-uat-ado122_prov-076e3-sible-en-formulario-de-alta-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</error>
+</testcase>
+<testcase name="ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P02 — Campo Departamento territorial visible y orden correcto (Ciudad → Provincia → Departamento)" classname="playwright\uat\ado122_provincia_domicilio.spec.ts" time="62.286">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento-\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento-\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento-\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\trace.zip]]
+]]>
+</system-out>
+<error message="page.waitForURL: Timeout 20000ms exceeded." type="TimeoutError">
+<![CDATA[  playwright\uat\ado122_provincia_domicilio.spec.ts:173:7 › ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P02 — Campo Departamento territorial visible y orden correcto (Ciudad → Provincia → Departamento) 
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+      navigated to "http://localhost:35017/AgendaWeb/FrmAgenda.aspx"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:174:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento-\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento-\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento-\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:174:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\playwright-uat-ado122_prov-ec5ef-→-Provincia-→-Departamento--retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</error>
+</testcase>
+<testcase name="ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P03 — Modificación precarga Provincia guardada (CLCOD=4127924112345393, AIS4=Arequipa/0401)" classname="playwright\uat\ado122_provincia_domicilio.spec.ts" time="59.434">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401-\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401-\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401-\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\trace.zip]]
+]]>
+</system-out>
+<error message="page.waitForURL: Timeout 20000ms exceeded." type="TimeoutError">
+<![CDATA[  playwright\uat\ado122_provincia_domicilio.spec.ts:232:7 › ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P03 — Modificación precarga Provincia guardada (CLCOD=4127924112345393, AIS4=Arequipa/0401) 
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:233:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401-\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401-\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401-\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: page.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for locator('input[id$="btnIngresar"], button[id$="btnIngresar"], [id$="btnIngresar"], [id$="btnOk"]')
+        - locator resolved to <a id="c_btnOk" data-tooltip="Entrar" data-position="bottom" class="waves-effect waves-light tooltipped btn" href="javascript:__doPostBack('ctl00$c$btnOk','')">Entrar</a>
+      - attempting click action
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - performing click action
+        - click action done
+        - waiting for scheduled navigations to finish
+
+
+      29 |   await page.fill(userSel, process.env.AGENDA_WEB_USER || 'PABLO');
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+    > 31 |   await page.click(btnSel);
+         |              ^
+      32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+      33 | }
+      34 |
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:31:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:233:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\playwright-uat-ado122_prov-86f9b-2345393-AIS4-Arequipa-0401--retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</error>
+</testcase>
+<testcase name="ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P05 — Guardar domicilio con Provincia y verificar persistencia" classname="playwright\uat\ado122_provincia_domicilio.spec.ts" time="77.316">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\trace.zip]]
+]]>
+</system-out>
+<error message="page.waitForURL: Timeout 20000ms exceeded." type="TimeoutError">
+<![CDATA[  playwright\uat\ado122_provincia_domicilio.spec.ts:283:7 › ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P05 — Guardar domicilio con Provincia y verificar persistencia 
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:284:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:284:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\playwright-uat-ado122_prov-897da-ia-y-verificar-persistencia-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</error>
+</testcase>
+<testcase name="ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P06 — Guardar domicilio sin Provincia (campo opcional, no debe fallar)" classname="playwright\uat\ado122_provincia_domicilio.spec.ts" time="78.682">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar-\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar-\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar-\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\trace.zip]]
+]]>
+</system-out>
+<error message="page.waitForURL: Timeout 20000ms exceeded." type="TimeoutError">
+<![CDATA[  playwright\uat\ado122_provincia_domicilio.spec.ts:393:7 › ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P06 — Guardar domicilio sin Provincia (campo opcional, no debe fallar) 
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:394:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar-\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar-\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar-\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:394:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\playwright-uat-ado122_prov-f5063-po-opcional-no-debe-fallar--retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</error>
+</testcase>
+<testcase name="ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P08 — Campos preexistentes (Calle, Número, País, Ciudad) no afectados" classname="playwright\uat\ado122_provincia_domicilio.spec.ts" time="78.073">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\trace.zip]]
+]]>
+</system-out>
+<error message="page.waitForURL: Timeout 20000ms exceeded." type="TimeoutError">
+<![CDATA[  playwright\uat\ado122_provincia_domicilio.spec.ts:452:7 › ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P08 — Campos preexistentes (Calle, Número, País, Ciudad) no afectados 
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:453:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:453:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\playwright-uat-ado122_prov-8c39a-ro-País-Ciudad-no-afectados-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</error>
+</testcase>
+<testcase name="ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P09 — Borrado lógico conserva Provincia en BD (verificación SQL directa)" classname="playwright\uat\ado122_provincia_domicilio.spec.ts" time="78.04">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa-\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa-\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa-\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\test-failed-1.png]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\video.webm]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\error-context.md]]
+
+[[ATTACHMENT|..\test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\trace.zip]]
+]]>
+</system-out>
+<error message="page.waitForURL: Timeout 20000ms exceeded." type="TimeoutError">
+<![CDATA[  playwright\uat\ado122_provincia_domicilio.spec.ts:490:7 › ADO-122 RF-008 — Provincia y Departamento Territorial en Domicilios › P09 — Borrado lógico conserva Provincia en BD (verificación SQL directa) 
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:496:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa-\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa-\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa-\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      30 |   await page.fill(passSel, process.env.AGENDA_WEB_PASS || 'PABLO');
+      31 |   await page.click(btnSel);
+    > 32 |   await page.waitForURL(/FrmMenu|FrmPrincipal|FrmDetalleClie|FrmBusqueda/, { timeout: 20000 });
+         |              ^
+      33 | }
+      34 |
+      35 | async function navigateToDetalleCliente(page: Page, clcod: string) {
+        at freshLogin (N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:32:14)
+        at N:\GIT\RS\RSPACIFICO\Tools\Stacky\Stacky tools\QA UAT Agent\playwright\uat\ado122_provincia_domicilio.spec.ts:496:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\playwright-uat-ado122_prov-17bbb-D-verificación-SQL-directa--retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</error>
+</testcase>
+</testsuite>
 </testsuites>

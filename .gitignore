@@ -36,6 +36,9 @@ dist/
 build/
 *.zip
 
+# Deploys locales de Stacky Agents
+Stacky Agents/DeployStackyAgents/
+
 
 # VS Code
 .vscode/

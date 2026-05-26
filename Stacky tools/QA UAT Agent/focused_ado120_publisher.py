@@ -1,9 +1,9 @@
 """
-focused_ado120_publisher.py - canonical publish step for the focused ADO-120 spec.
+focused_ado120_publisher.py - canonical handoff step for the focused ADO-120 spec.
 
 It converts the standalone Playwright evidence directory into the same
-ado_comment.html + dossier.json contract consumed by ado_evidence_publisher.py.
-ADO comments may auto-publish via QA_UAT_AUTO_PUBLISH=true; ADO state changes
+ado_comment.html + dossier.json contract consumed by Stacky handoff.
+ADO comments are published only by Stacky Agents backend; ADO state changes
 and DB DML remain out of scope.
 """
 from __future__ import annotations
@@ -19,14 +19,10 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 
-from ado_evidence_publisher import run as publish_run
+from stacky_handoff import export_stacky_handoff
 
 _TOOL_ROOT = Path(__file__).resolve().parent
 _MARKER_TEMPLATE = '<!-- stacky-qa-uat:run id="{run_id}" hash="{comment_hash}" -->'
-
-
-def _env_flag(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "y", "on")
 
 
 def _now() -> str:
@@ -152,20 +148,31 @@ def run(
         encoding="utf-8",
     )
 
-    effective_mode = "publish" if (mode == "publish" or (mode == "auto" and _env_flag("QA_UAT_AUTO_PUBLISH"))) else "dry-run"
-    publish_result = publish_run(
-        ticket_id=ticket_id,
-        dossier_path=evidence_dir / "dossier.json",
-        mode=effective_mode,
-        verbose=verbose,
-    )
-    publish_result["focused_run"] = {
+    if mode == "dry-run":
+        handoff_result = {
+            "ok": True,
+            "publish_state": "dry-run",
+            "ticket_id": ticket_id,
+            "html_output_path": None,
+            "output_dir": None,
+            "attachments_count": len(pngs),
+            "message": "DRY-RUN: generated local dossier only; no Stacky output handoff.",
+        }
+    else:
+        handoff_result = export_stacky_handoff(
+            ticket_id=ticket_id,
+            dossier_path=evidence_dir / "dossier.json",
+            html_path=evidence_dir / "ado_comment.html",
+            source="focused_ado120_publisher",
+        )
+    handoff_result["mode"] = "dry-run" if mode == "dry-run" else "stacky_handoff"
+    handoff_result["focused_run"] = {
         "evidence_dir": str(evidence_dir),
         "canonical_comment": str(evidence_dir / "ado_comment.html"),
-        "mode": effective_mode,
+        "mode": handoff_result["mode"],
         "data_readiness": data_readiness,
     }
-    return publish_result
+    return handoff_result
 
 
 def _render_comment_body(
@@ -214,7 +221,7 @@ def _render_comment_body(
   </table>
   <h3>Evidencias adjuntas</h3>
   {shots}
-  <p><strong>Postura:</strong> comentario de evidencia publicado por QA UAT. No cambia estado ADO ni ejecuta DML.</p>
+  <p><strong>Postura:</strong> comentario de evidencia preparado por QA UAT para publicación centralizada por Stacky. No cambia estado ADO ni ejecuta DML.</p>
 </div>
 """.strip()
 
@@ -253,7 +260,12 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-dir", required=True)
     parser.add_argument("--ticket-id", type=int, default=120)
-    parser.add_argument("--mode", choices=["auto", "dry-run", "publish"], default="auto")
+    parser.add_argument(
+        "--mode",
+        choices=["auto", "dry-run", "publish"],
+        default="auto",
+        help="dry-run keeps local files only; auto/publish write Stacky handoff artifacts.",
+    )
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
 

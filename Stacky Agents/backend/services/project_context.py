@@ -24,6 +24,19 @@ from services.vscode_instance_manager import (
 
 logger = logging.getLogger("stacky_agents.project_context")
 
+_LEGACY_BRIDGE_WARNED = False
+
+
+def _warn_legacy_bridge_once() -> None:
+    global _LEGACY_BRIDGE_WARNED
+    if not _LEGACY_BRIDGE_WARNED:
+        logger.warning(
+            "Bridge VS Code no expone 'workspace_root' en /health "
+            "(extensión Stacky desactualizada). Asumiendo match por settings.json. "
+            "Recompilá e instalá la extensión desde vscode_extension/ para validación estricta."
+        )
+        _LEGACY_BRIDGE_WARNED = True
+
 
 class ProjectContextError(RuntimeError):
     pass
@@ -266,6 +279,12 @@ def ensure_project_vscode(project_name: str, timeout_sec: float = 45.0) -> Proje
 def _workspace_matches(health_payload: dict, workspace_root: str | None) -> bool:
     expected = _normalize_workspace_root(workspace_root)
     if not expected:
+        return True
+    # Extensión vieja: no expone workspace_root en /health → asumir match.
+    # El binding workspace↔puerto está garantizado por .vscode/settings.json
+    # (stackyAgents.bridgePort), así que el bridge responde solo desde ese workspace.
+    if "workspace_root" not in health_payload:
+        _warn_legacy_bridge_once()
         return True
     actual = _normalize_workspace_root(health_payload.get("workspace_root"))
     return actual == expected

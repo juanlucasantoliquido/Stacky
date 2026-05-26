@@ -28,7 +28,8 @@ DELETE /api/qa-uat/quarantine/<id>       — resolve a quarantine entry
 SAFETY RULES (same as all uat_*.py):
   - FORBIDDEN: ado.py state / update_state subcommands
   - Default mode is dry-run
-  - Never publish without explicit mode=publish in request body
+  - QA UAT never publishes directly.
+  - With explicit mode=publish, Stacky publishes centrally from Agentes/outputs.
 """
 from __future__ import annotations
 
@@ -78,7 +79,7 @@ def run_pipeline():
 
     Request body (JSON):
         ticket_id   int     required  — ADO work item ID
-        mode        str     optional  — "dry-run" (default) or "publish"
+        mode        str     optional  — "dry-run" (default) or "publish" via Stacky
         headed      bool    optional  — run Playwright headed (default: false)
         timeout_ms  int     optional  — per-step timeout ms (default: 30000)
 
@@ -223,13 +224,16 @@ def _run_pipeline_in_background(
         log("info", f"pipeline root: {_PIPELINE_ROOT}")
         log("info", f"ticket_id={ticket_id} mode={mode} headed={headed} timeout_ms={timeout_ms}")
 
+        pipeline_mode = "dry-run" if mode == "publish" else mode
         result = qa_uat_pipeline.run(
             ticket_id=ticket_id,
-            mode=mode,
+            mode=pipeline_mode,
             headed=headed,
             timeout_ms=timeout_ms,
             verbose=True,
         )
+        result["requested_mode"] = mode
+        result["pipeline_mode"] = pipeline_mode
 
         verdict = result.get("verdict", "UNKNOWN")
         status = "completed"
@@ -253,17 +257,20 @@ def _run_pipeline_in_background(
         with session_scope() as session:
             row = session.get(AgentExecution, execution_id)
             if row is not None:
-                row.status = status
-                row.completed_at = datetime.utcnow()
                 row.output = json.dumps(result, ensure_ascii=False)
                 meta = row.metadata_dict or {}
                 meta["verdict"] = verdict
                 meta["elapsed_s"] = result.get("elapsed_s")
+                meta["requested_mode"] = mode
+                meta["pipeline_mode"] = result.get("pipeline_mode")
                 # Sprint 1 — store run_id and artifact_root for UI navigation
                 if result.get("run_id"):
                     meta["run_id"] = result["run_id"]
                 if result.get("artifact_root"):
                     meta["artifact_root"] = result["artifact_root"]
+                handoff = result.get("stacky_handoff") or {}
+                if handoff.get("html_output_path"):
+                    meta["html_output_path"] = handoff["html_output_path"]
                 # Sprint 6 — store governance metadata for historial + policy enforcement
                 _s6_fields = {
                     "category":              result.get("category"),
@@ -284,6 +291,42 @@ def _run_pipeline_in_background(
                     _s6_fields["confidence"] = result["confidence"]
                 meta.update({k: v for k, v in _s6_fields.items() if v is not None})
                 row.metadata_dict = meta
+
+        handoff_path = ((result.get("stacky_handoff") or {}).get("html_output_path"))
+        should_publish = status == "completed" and mode == "publish" and bool(handoff_path)
+        try:
+            from services.agent_completion_internal import close_execution_with_publish
+            close_result = close_execution_with_publish(
+                execution_id=execution_id,
+                triggered_by="qa_uat_pipeline",
+                final_status="completed" if status == "completed" else "error",
+                html_output_path=handoff_path,
+                user="qa_uat_pipeline",
+                reason=f"QA UAT pipeline finalizado para ADO-{ticket_id}",
+                completion_source="qa_uat_pipeline",
+                agent_type_hint=_AGENT_TYPE,
+                auto_publish=True if should_publish else False,
+            )
+            result["stacky_publish"] = close_result.publish
+            with session_scope() as session:
+                row = session.get(AgentExecution, execution_id)
+                if row is not None:
+                    row.output = json.dumps(result, ensure_ascii=False)
+                    meta = row.metadata_dict or {}
+                    meta["stacky_publish"] = close_result.publish
+                    row.metadata_dict = meta
+            if should_publish and close_result.publish.get("ok"):
+                log("info", "comentario ADO publicado por Stacky")
+            elif should_publish:
+                log("error", f"Stacky publish failed: {close_result.publish}")
+        except Exception as close_exc:  # noqa: BLE001
+            log("error", f"close/publish failed: {close_exc}")
+            with session_scope() as session:
+                row = session.get(AgentExecution, execution_id)
+                if row is not None:
+                    row.status = "failed"
+                    row.error_message = str(close_exc)
+                    row.completed_at = datetime.utcnow()
 
         log_streamer.close(execution_id)
 

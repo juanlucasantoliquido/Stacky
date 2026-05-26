@@ -745,6 +745,39 @@ def get_tracker_states(project_name: str):
     return jsonify({"ok": True, "states": combined, "tracker_type": t_type})
 
 
+@bp.get("/projects/<string:project_name>/agent-workflows")
+def list_agent_workflows(project_name: str):
+    """Retorna todos los workflows de agentes configurados en el proyecto.
+
+    Responde con { "ok": true, "workflows": { filename: { ...workflow_config } } }.
+    Portado desde WS2 — necesario para AgentHistoryPage.tsx (Projects.getAllAgentWorkflows).
+    """
+    cfg = get_project_config(project_name)
+    if not cfg:
+        from project_manager import find_project_for_tracker
+        resolved_name, _ = find_project_for_tracker(project_name)
+        if resolved_name:
+            project_name = resolved_name
+            cfg = get_project_config(project_name) or {}
+        else:
+            return jsonify({"ok": False, "error": f"Proyecto '{project_name}' no encontrado"}), 404
+    raw_map: dict = cfg.get("agent_workflow_configs") or {}
+    result: dict = {}
+    for fn, wf in raw_map.items():
+        result[fn] = {
+            "allowed_states":        wf.get("allowed_states") or [],
+            "transition_state":      wf.get("transition_state") or "",
+            "requires_prior_output": bool(wf.get("requires_prior_output", False)),
+            "auto_publish":          bool(wf.get("auto_publish", False)),
+            "input_mode":            wf.get("input_mode") or "description",
+            "input_file_prefix":     wf.get("input_file_prefix") or "",
+            "output_type":           wf.get("output_type") or "note",
+            "output_file_prefix":    wf.get("output_file_prefix") or "AT_",
+            "jql":                   wf.get("jql") or "",
+        }
+    return jsonify({"ok": True, "workflows": result})
+
+
 @bp.get("/projects/<string:project_name>/agent-workflow/<path:filename>")
 def get_agent_workflow(project_name: str, filename: str):
     """Retorna la config de workflow de un agente en el proyecto."""
@@ -753,23 +786,46 @@ def get_agent_workflow(project_name: str, filename: str):
     wf = get_agent_workflow_config(project_name, filename)
     return jsonify({
         "ok": True,
-        "allowed_states": wf.get("allowed_states") or [],
-        "transition_state": wf.get("transition_state") or "",
+        "allowed_states":        wf.get("allowed_states") or [],
+        "transition_state":      wf.get("transition_state") or "",
         "requires_prior_output": bool(wf.get("requires_prior_output", False)),
+        "auto_publish":          bool(wf.get("auto_publish", False)),
+        "input_mode":            wf.get("input_mode") or "description",
+        "input_file_prefix":     wf.get("input_file_prefix") or "",
+        "output_type":           wf.get("output_type") or "note",
+        "output_file_prefix":    wf.get("output_file_prefix") or "AT_",
+        "jql":                   wf.get("jql") or "",
     })
 
 
 @bp.put("/projects/<string:project_name>/agent-workflow/<path:filename>")
 def put_agent_workflow(project_name: str, filename: str):
-    """Guarda la config de workflow de un agente en el proyecto."""
+    """Guarda la config de workflow de un agente en el proyecto.
+
+    Expandido con campos adicionales de WS2: auto_publish, input_mode,
+    input_file_prefix, output_type, output_file_prefix, jql, task_creation.
+    """
     if not get_project_config(project_name):
         return jsonify({"ok": False, "error": f"Proyecto '{project_name}' no encontrado"}), 404
     data = request.get_json(force=True, silent=True) or {}
     workflow = {
-        "allowed_states":       data.get("allowed_states") or [],
-        "transition_state":     (data.get("transition_state") or "").strip(),
+        "allowed_states":        data.get("allowed_states") or [],
+        "transition_state":      (data.get("transition_state") or "").strip(),
         "requires_prior_output": bool(data.get("requires_prior_output", False)),
+        "auto_publish":          bool(data.get("auto_publish", False)),
+        "input_mode":            (data.get("input_mode") or "description").strip(),
+        "input_file_prefix":     (data.get("input_file_prefix") or "").strip(),
+        "output_type":           (data.get("output_type") or "note").strip(),
+        "output_file_prefix":    (data.get("output_file_prefix") or "AT_").strip(),
+        "jql":                   (data.get("jql") or "").strip(),
     }
+    # Preservar task_creation si viene en el body
+    raw_tc = data.get("task_creation") or {}
+    if raw_tc:
+        workflow["task_creation"] = {
+            "work_item_type": (raw_tc.get("work_item_type") or "").strip(),
+            "initial_state":  (raw_tc.get("initial_state") or "").strip(),
+        }
     try:
         set_agent_workflow_config(project_name, filename, workflow)
         return jsonify({"ok": True, **workflow})

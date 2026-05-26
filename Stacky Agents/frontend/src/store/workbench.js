@@ -16,6 +16,10 @@ export const useWorkbench = create((set) => ({
     teamLoading: false,
     getAgentsError: null,
     agentRuntime: "github_copilot",
+    // P1.1 ChatDrawer state
+    chatDrawerOpen: false,
+    chatDrawerModel: null,
+    chatDrawerTicketId: null,
     setActiveTicket: (id) => set({ activeTicketId: id, activeExecutionId: null, blocks: [] }),
     setActiveAgent: (t) => set({
         activeAgentType: t,
@@ -49,4 +53,8 @@ export const useWorkbench = create((set) => ({
     setTeamLoading: (loading) => set({ teamLoading: loading }),
     setGetAgentsError: (err) => set({ getAgentsError: err }),
     setAgentRuntime: (r) => set({ agentRuntime: r }),
+    // P1.1 ChatDrawer actions
+    setChatDrawerOpen: (open) => set({ chatDrawerOpen: open }),
+    setChatDrawerModel: (model) => set({ chatDrawerModel: model }),
+    setChatDrawerTicketId: (id) => set({ chatDrawerTicketId: id }),
 }));

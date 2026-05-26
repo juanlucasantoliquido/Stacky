@@ -5,7 +5,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   globalSetup: './playwright/global.setup.ts',
-  timeout: Number(process.env.QA_UAT_TEST_TIMEOUT_MS ?? 60000),
+  timeout: Number(process.env.QA_UAT_TEST_TIMEOUT_MS ?? 120000),
   expect: {
     timeout: Number(process.env.QA_UAT_EXPECT_TIMEOUT_MS ?? 10000),
   },

@@ -134,6 +134,20 @@ SUPPORTED_SCREENS: "frozenset[str]" = frozenset({
     "FrmBase.aspx",
 
     # ── PopUps (Materialize) ──────────────────────────────────────────────
+    # NOTA (audit 2026-05-26): estos PopUp*.aspx existen SOLO en
+    # branches/Materialize/, NO en trunk/ (rama canónica). En trunk la misma
+    # funcionalidad se renderiza como modales in-page (AISDialog) y
+    # user-controls .ascx dentro de las pantallas padre. NO mapear playbooks
+    # contra branches/Materialize (sus selectores no matchean el runtime de
+    # trunk). Cobertura real en trunk:
+    #   PopUpAgendar         -> footer gbAgendar/btnEjecutar (open_jdemanda) + modal compromisos
+    #   PopUpCompromisos     -> open_detalle_clie_modal_compromisos
+    #   PopUpConvenios       -> DEPRECATED (ADO-146) open_detalle_clie_modal_convenios_DEPRECATED
+    #   PopUpDomicilios      -> MantenedorDirecciones.ascx (frm_detalle_clie_domicilios)
+    #   PopUpContactos       -> open_detalle_clie_tab_contactos / ModalMantenedorContactos
+    #   PopUpGastosJudicial  -> ModalGestionGastosJudiciales (tab Gastos de open_jdemanda)
+    #   PopUpNotasGestiones  -> dlgGestionesJudicial (open_jdemanda) / open_detalle_clie_modal_gestiones
+    # Se mantienen en el catálogo para detección/triage de URLs legacy, no como targets de mapeo.
     "PopAnCtaCte.aspx",
     "PopAnPrestamos.aspx",
     "PopAnTarjetas.aspx",

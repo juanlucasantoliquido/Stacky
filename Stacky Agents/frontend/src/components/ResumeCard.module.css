@@ -4,9 +4,10 @@
   gap: 14px;
   padding: 14px 18px;
   margin: 12px 0;
-  background: linear-gradient(135deg, rgba(91, 132, 240, 0.08), rgba(91, 132, 240, 0.02));
-  border: 1px solid rgba(91, 132, 240, 0.25);
-  border-radius: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--card-radius, 10px);
 }
 
 .iconCol {
@@ -14,7 +15,7 @@
 }
 
 .icon {
-  font-size: 26px;
+  font-size: 22px;
 }
 
 .body {
@@ -23,18 +24,19 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  color: var(--text-primary);
 }
 
 .header {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .muted {
-  color: var(--text-muted, #888);
-  font-size: 12px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .ticketLine {
@@ -45,24 +47,26 @@
 }
 
 .ticketId {
-  font-family: monospace;
-  font-size: 13px;
-  background: rgba(91, 132, 240, 0.15);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-elev);
+  color: var(--accent-hot);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 
 .ticketTitle {
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-primary);
 }
 
 .metaLine {
-  font-size: 12px;
-  color: var(--text-muted, #888);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .actions {
@@ -72,18 +76,18 @@
 }
 
 .primaryBtn {
-  background: rgb(91, 132, 240);
-  color: white;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 13px;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
   cursor: pointer;
   font-family: inherit;
 }
 
 .primaryBtn:hover:not(:disabled) {
-  background: rgb(75, 116, 224);
+  background: var(--accent-hot);
 }
 
 .primaryBtn:disabled {
@@ -93,15 +97,16 @@
 
 .secondaryBtn {
   background: transparent;
-  color: var(--text, inherit);
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 13px;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
   cursor: pointer;
   font-family: inherit;
 }
 
 .secondaryBtn:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--bg-elev);
+  border-color: var(--text-faint);
 }

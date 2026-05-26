@@ -1,61 +1,66 @@
 .card {
-  padding: 16px 18px;
+  padding: 14px 18px;
   margin: 12px 0;
-  background: rgba(40, 167, 69, 0.05);
-  border: 1px solid rgba(40, 167, 69, 0.2);
-  border-radius: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius, 10px);
+  color: var(--text-primary);
 }
 
 .title {
   margin: 0 0 12px;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .loading {
   opacity: 0.6;
-  font-size: 13px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .empty {
-  font-size: 13px;
-  color: var(--text-muted, #777);
+  font-size: 12px;
+  color: var(--text-muted);
   margin: 0;
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .table td {
   padding: 4px 0;
+  color: var(--text-muted);
 }
 
 .value {
   text-align: right;
-  font-family: monospace;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
 }
 
-.savedRow {
-  color: rgb(40, 167, 69);
-  border-top: 1px solid rgba(40, 167, 69, 0.2);
+.savedRow td {
+  color: var(--success);
+  border-top: 1px solid var(--border-muted);
   padding-top: 6px;
 }
 
-.lossRow {
-  color: rgb(220, 53, 69);
-  border-top: 1px solid rgba(220, 53, 69, 0.2);
+.lossRow td {
+  color: var(--danger);
+  border-top: 1px solid var(--border-muted);
   padding-top: 6px;
 }
 
 .note {
   margin: 10px 0 0;
   padding-top: 10px;
-  border-top: 1px dashed rgba(0, 0, 0, 0.1);
-  font-size: 11px;
-  color: var(--text-muted, #888);
-  line-height: 1.4;
+  border-top: 1px dashed var(--border-muted);
+  font-size: 10px;
+  color: var(--text-faint);
+  line-height: 1.5;
 }

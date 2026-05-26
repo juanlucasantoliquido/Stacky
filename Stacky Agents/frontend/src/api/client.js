@@ -55,7 +55,7 @@ export const api = {
     post: (path, body) => request(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
     put: (path, body) => request(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
     patch: (path, body) => request(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-    delete: (path) => request(path, { method: "DELETE" }),
+    delete: (path, body) => request(path, { method: "DELETE", body: body ? JSON.stringify(body) : undefined }),
     /** POST con headers adicionales (ej. X-Stacky-Agent-Token para el gateway). */
     postWithHeaders: (path, body, extraHeaders) => request(path, {
         method: "POST",

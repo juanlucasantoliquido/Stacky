@@ -1,8 +1,13 @@
 from flask import Blueprint
 
+from .ado_manager import bp as ado_manager_bp
+from .docs_rag import bp as docs_rag_bp
 from .adoption import bp as adoption_bp
+from .agent_roles import bp as agent_roles_bp
 from .agents import bp as agents_bp
+from .chat import bp as chat_bp
 from .docs import bp as docs_bp
+from .global_config import bp as global_config_bp
 from .flow_config import bp as flow_config_bp
 from .anti_patterns import bp as anti_patterns_bp
 from .decisions import bp as decisions_bp
@@ -19,6 +24,7 @@ from .phase6 import bp as phase6_bp
 from .pm import bp as pm_bp
 from .preferences import bp as preferences_bp
 from .projects import bp as projects_bp
+from .qa_browser import bp as qa_browser_bp
 from .qa_uat import bp as qa_uat_bp
 from .similarity import bp as similarity_bp
 from .metrics import bp as metrics_bp
@@ -27,7 +33,10 @@ from .ui_sections import bp as ui_sections_bp
 from .webhooks import bp as webhooks_bp
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
+api_bp.register_blueprint(ado_manager_bp)
+api_bp.register_blueprint(agent_roles_bp)
 api_bp.register_blueprint(agents_bp)
+api_bp.register_blueprint(chat_bp)
 api_bp.register_blueprint(executions_bp)
 api_bp.register_blueprint(tickets_bp)
 api_bp.register_blueprint(packs_bp)
@@ -45,13 +54,16 @@ api_bp.register_blueprint(phase6_bp)
 api_bp.register_blueprint(pm_bp)
 api_bp.register_blueprint(preferences_bp)
 api_bp.register_blueprint(projects_bp)
+api_bp.register_blueprint(qa_browser_bp)
 api_bp.register_blueprint(qa_uat_bp)
 api_bp.register_blueprint(metrics_bp)
 api_bp.register_blueprint(diag_bp)
 api_bp.register_blueprint(docs_bp)
 api_bp.register_blueprint(flow_config_bp)
+api_bp.register_blueprint(global_config_bp)
 api_bp.register_blueprint(ui_sections_bp)
 api_bp.register_blueprint(adoption_bp)
+api_bp.register_blueprint(docs_rag_bp)
 
 
 @api_bp.get("/health")

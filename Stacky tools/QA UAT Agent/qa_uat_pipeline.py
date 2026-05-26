@@ -4,7 +4,7 @@ qa_uat_pipeline.py — Orchestrator for the full QA UAT pipeline.
 Connects all 8 tools in sequence:
   B1 uat_ticket_reader → B3 ui_map_builder (per screen) → B4 uat_scenario_compiler
   → B5 playwright_test_generator → B6 uat_test_runner
-  → B7 uat_dossier_builder → B8 ado_evidence_publisher
+  → B7 uat_dossier_builder → B8 Stacky handoff artifacts
 
 Fase 9 — Multi-round replanning:
   After runner stage, if failures are detected and --replan is set, the pipeline
@@ -20,7 +20,7 @@ CLI:
 
 Options:
     --ticket         ADO work item ID (required unless --intent-file)
-    --mode           dry-run (default) or publish — controls ado_evidence_publisher
+    --mode           dry-run (default) or publish — publish is delegated to Stacky
     --headed         Run Playwright in headed mode (shows browser)
     --timeout-ms     Playwright per-test timeout in ms (default: 90000).
                      Cubre login ASP.NET + 2-3 navegaciones + steps + screenshots.
@@ -774,7 +774,7 @@ def _run_dossier_and_publisher(
 ) -> dict:
     """Stages 6 (dossier) and 7 (publisher) — shared by main flow and blocked shortcut."""
     from uat_dossier_builder import run as dossier_run
-    from ado_evidence_publisher import run as publisher_run
+    from stacky_handoff import export_stacky_handoff
 
     # ── Stage 6: dossier ─────────────────────────────────────────────────────
     _log_stage("dossier")
@@ -837,12 +837,11 @@ def _run_dossier_and_publisher(
         # Non-fatal — proceed to publisher and let it decide
         logger.warning("Sprint5: publish readiness gate error (non-fatal): %s", _pub_gate_err)
 
-    publisher_result = publisher_run(
+    publisher_result = export_stacky_handoff(
         ticket_id=ticket_id,
         dossier_path=dossier_path,
-        mode=mode,
-        ado_path=ado_path,
-        verbose=verbose,
+        html_path=evidence_dir / "ado_comment.html",
+        source="qa_uat_pipeline",
     )
     stages["publisher"] = _summarise_publisher(publisher_result, mode)
     if not publisher_result.get("ok"):
@@ -883,6 +882,11 @@ def _run_dossier_and_publisher(
         # Sprint 5 — expose runner_summary artifact links in pipeline output
         "runner_summary": _runner_summary,
         "stages": stages,
+        "stacky_handoff": {
+            "html_output_path": publisher_result.get("html_output_path"),
+            "output_dir": publisher_result.get("output_dir"),
+            "attachments_count": publisher_result.get("attachments_count", 0),
+        },
         "elapsed_s": round(time.time() - started, 2),
     }
 
@@ -4184,6 +4188,8 @@ def _summarise_publisher(r: dict, mode: str) -> dict:
     if r.get("ok"):
         base["publish_state"] = r.get("publish_state", "dry-run")
         base["mode"] = mode
+        base["html_output_path"] = r.get("html_output_path")
+        base["attachments_count"] = r.get("attachments_count", 0)
     else:
         base["error"] = r.get("error")
         base["message"] = r.get("message")
@@ -4328,7 +4334,7 @@ def _parse_args() -> argparse.Namespace:
         "--mode",
         choices=["dry-run", "publish"],
         default="dry-run",
-        help="dry-run (default): no ADO write. publish: post comment to ADO.",
+        help="dry-run (default): no ADO write. publish: delegate Stacky central publish.",
     )
     p.add_argument("--headed", action="store_true",
                    help="Run Playwright in headed mode (shows browser window).")

@@ -618,7 +618,7 @@ def _try_html_meta(url: str) -> Optional[dict]:
             if k in (_META_BUILD_ID, _META_BUILD_HASH, _META_BRANCH)
         }
         return relevant if relevant else None
-    except (urllib.error.URLError, OSError, html.parser.HTMLParseError):
+    except (urllib.error.URLError, OSError, Exception):
         return None
 
 

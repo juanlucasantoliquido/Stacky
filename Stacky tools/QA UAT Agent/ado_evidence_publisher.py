@@ -1,5 +1,5 @@
 """
-ado_evidence_publisher.py — Publish UAT dossier as an ADO comment (with idempotence).
+ado_evidence_publisher.py — Legacy UAT dossier preview.
 
 SPEC: SPEC/ado_evidence_publisher.md
 CLI:
@@ -8,26 +8,18 @@ CLI:
         --dossier evidence/70/dossier.json \
         [--mode dry-run | publish] \
         [--ado-path <path>] \
-        [--no-attach] \
-        [--replace-previous] \
         [--verbose]
 
 SAFETY RULES:
-  1. Default mode is DRY-RUN. Never publish without explicit --mode publish.
-  2. FORBIDDEN: ado.py state / update_state subcommands in all uat_*.py files.
+  1. Default mode is DRY-RUN.
+  2. Direct ADO publish is forbidden. QA UAT must leave Stacky handoff files
+     under Agentes/outputs/<ADO_ID>/ and Stacky publishes centrally.
+  3. FORBIDDEN: ado.py state / update_state subcommands in all uat_*.py files.
      (enforced by test_no_state_subcommand_in_codebase).
-  3. Idempotence: Check existing comments for the stacky-qa-uat marker.
-     - Same hash → skip (already published).
-     - Different hash → update comment.
   4. Audit log written on EVERY invocation (dry-run and publish).
 
-EVIDENCE EMBEDDING (v1.1+):
-  When publish mode runs and the HTML comment contains tokens of the form
-  {{ATTACH:<scenario_id>:<filename>}}, the publisher will:
-    a) Upload each referenced PNG via `ado.py attach` (relation AttachedFile).
-    b) Replace the tokens with the returned attachment URL.
-    c) Post the rewritten HTML so screenshots render inline in the ADO UI.
-  Pass --no-attach to disable this step (legacy text-only behavior).
+EVIDENCE EMBEDDING:
+  Handled by Stacky backend services.ado_publisher from attachments.json.
 
 Output: JSON to stdout.
 """
@@ -165,6 +157,27 @@ def run(
         _write_audit(ticket_id, mode, result, dossier_path)
         return result
 
+    # Direct publish is intentionally blocked. The backend service
+    # services.ado_publisher is the only authorized ADO write surface.
+    result = _err(
+        "direct_publish_forbidden",
+        "QA UAT no publica directo en ADO. Genera Agentes/outputs/<ADO_ID>/"
+        "comment.html + attachments.json y deja que Stacky publique.",
+    )
+    result.update(
+        {
+            "mode": mode,
+            "ticket_id": ticket_id,
+            "run_id": run_id,
+            "comment_hash": comment_hash,
+            "verdict": dossier.get("verdict"),
+            "action": "delegated_to_stacky",
+        }
+    )
+    _write_audit(ticket_id, mode, result, dossier_path)
+    return result
+
+    # Legacy publish implementation kept below for archaeology only.
     # Publish mode: check idempotence
     existing = _get_existing_comment(ticket_id, ado_path)
     if existing is None:
@@ -399,7 +412,11 @@ def _attach_file(
     comment: str,
     ado_path: Path,
 ) -> dict:
-    """Call `python ado.py attach <id> <file> --name ... --comment ...`."""
+    """Disabled legacy write path; Stacky backend owns ADO attachments."""
+    return _err(
+        "direct_publish_forbidden",
+        "QA UAT no puede adjuntar archivos directo en ADO; Stacky publica attachments.json.",
+    )
     try:
         proc = subprocess.run(
             [
@@ -428,7 +445,13 @@ def _attach_file(
 
 
 def _delete_comment(ticket_id: int, comment_id: int, ado_path: Path) -> bool:
-    """Best-effort delete of a previous Stacky comment. Returns True on success."""
+    """Disabled legacy write path; QA UAT must not mutate ADO comments."""
+    logger.warning(
+        "QA UAT direct delete-comment blocked for ticket=%s comment=%s",
+        ticket_id,
+        comment_id,
+    )
+    return False
     try:
         proc = subprocess.run(
             [sys.executable, str(ado_path), "delete-comment",
@@ -458,10 +481,15 @@ def _delete_comment(ticket_id: int, comment_id: int, ado_path: Path) -> bool:
 
 def _post_comment(ticket_id: int, html_content: str, ado_path: Path) -> dict:
     """
-    Call `python ado.py comment <id> --html --file <tmpfile>`.
-    Uses a temp file to avoid Windows command-line length limits (WinError 206).
-    Returns the ADO Manager JSON response.
+    Disabled legacy write path.
+
+    QA UAT must write Stacky handoff artifacts only; services.ado_publisher is
+    the single ADO comment writer.
     """
+    return _err(
+        "direct_publish_forbidden",
+        "QA UAT no puede publicar comentarios directo en ADO; Stacky publica comment.html.",
+    )
     import tempfile
     try:
         with tempfile.NamedTemporaryFile(
@@ -574,7 +602,7 @@ def _err(code: str, message: str) -> dict:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="ado_evidence_publisher — Publish UAT dossier to ADO"
+        description="ado_evidence_publisher — legacy preview only; Stacky publishes ADO"
     )
     parser.add_argument("--ticket-id", required=True, type=int, dest="ticket_id")
     parser.add_argument("--dossier", required=True, help="Path to dossier.json")
@@ -582,17 +610,15 @@ def _parse_args() -> argparse.Namespace:
         "--mode",
         choices=["dry-run", "publish"],
         default="dry-run",
-        help="dry-run (default) or publish",
+        help="dry-run (default) or publish (blocked; Stacky publishes centrally)",
     )
     parser.add_argument("--ado-path", default=None, dest="ado_path",
                         help="Path to ado.py (default: auto-detect)")
     parser.add_argument("--no-attach", action="store_true", dest="no_attach",
-                        help="Skip uploading screenshots as ADO attachments "
-                             "(legacy text-only behavior).")
+                        help="Legacy no-op; attachments are handled by Stacky.")
     parser.add_argument("--replace-previous", action="store_true",
                         dest="replace_previous",
-                        help="When a previous Stacky comment is detected, "
-                             "delete it before posting the new one (best-effort).")
+                        help="Legacy no-op; QA UAT cannot delete or replace ADO comments.")
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
 

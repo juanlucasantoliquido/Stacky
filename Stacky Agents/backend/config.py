@@ -2,12 +2,19 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-from runtime_paths import backend_root, data_dir, runtime_config
+from runtime_paths import app_root, backend_root, data_dir, runtime_config
 
 BACKEND_ROOT = backend_root()
 load_dotenv(BACKEND_ROOT / ".env")
 load_dotenv(Path.cwd() / ".env")
 _RUNTIME_CONFIG = runtime_config()
+
+
+def _default_vscode_prompts_dir() -> str:
+    bundled_agents_dir = app_root() / "github_copilot_agents"
+    if bundled_agents_dir.is_dir():
+        return str(bundled_agents_dir)
+    return str(Path.home() / "AppData" / "Roaming" / "Code" / "User" / "prompts")
 
 
 class Config:
@@ -52,7 +59,7 @@ class Config:
     VSCODE_BRIDGE_PORT = int(os.getenv("VSCODE_BRIDGE_PORT", "5052"))
     VSCODE_PROMPTS_DIR = os.getenv(
         "VSCODE_PROMPTS_DIR",
-        str(Path.home() / "AppData" / "Roaming" / "Code" / "User" / "prompts"),
+        _default_vscode_prompts_dir(),
     )
 
     # Codex CLI runtime

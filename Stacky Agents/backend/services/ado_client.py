@@ -147,7 +147,12 @@ def _resolve_active_project_defaults(
     resolved_auth = auth_path
     if not resolved_auth and stacky_name:
         auth_rel = (tracker.get("auth_file") or "auth/ado_auth.json").strip()
-        resolved_auth = str((_BACKEND_ROOT / "projects" / stacky_name.upper() / auth_rel).resolve(strict=False))
+        try:
+            from project_manager import PROJECTS_DIR
+
+            resolved_auth = str((PROJECTS_DIR / stacky_name.upper() / auth_rel).resolve(strict=False))
+        except Exception:
+            resolved_auth = str((_BACKEND_ROOT / "projects" / stacky_name.upper() / auth_rel).resolve(strict=False))
     return resolved_org, resolved_project, resolved_auth
 
 
@@ -297,6 +302,29 @@ class AdoClient:
 
     def work_item_url(self, ado_id: int) -> str:
         return f"{self._base_proj}/_workitems/edit/{ado_id}"
+
+    def fetch_states(self) -> list[str]:
+        """Devuelve todos los estados definidos en el proceso del proyecto ADO.
+
+        Recorre los work item types del proyecto y junta sus estados en el orden
+        que ADO los reporta. Incluye estados que todavía no tiene asignado ningún
+        work item (ej. "Technical Review"), porque consulta la definición del
+        proceso y no los tickets existentes.
+        """
+        url = (
+            f"{self._base_proj}/_apis/wit/workitemtypes"
+            f"?api-version={_API_VERSION}"
+        )
+        data = self._request("GET", url)
+        states: list[str] = []
+        seen: set[str] = set()
+        for wit in (data.get("value") or []):
+            for st in (wit.get("states") or []):
+                name = (st.get("name") or "").strip()
+                if name and name not in seen:
+                    seen.add(name)
+                    states.append(name)
+        return states
 
     def fetch_comments(self, ado_id: int, top: int = 20) -> list[dict]:
         """Devuelve los últimos `top` comentarios de un work item.

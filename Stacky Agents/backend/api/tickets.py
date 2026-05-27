@@ -36,13 +36,14 @@ _PENDING_TASK_REQUIRED_FIELDS = {
     "parent_link_type", "status",
 }
 
-# Resuelve el root del repo (honra STACKY_REPO_ROOT para tests)
+# Resuelve el root del repo donde viven Agentes/outputs.
+# Delega en runtime_paths.repo_root() (frozen-aware): honra STACKY_REPO_ROOT,
+# luego el workspace_root del proyecto activo en deploy congelado, luego el
+# layout de fuentes. Antes usaba parents[5], que en el .exe apuntaba fuera del
+# repo del cliente y hacía fallar la lectura del pending-task.json.
 def _repo_root() -> Path:
-    env = os.getenv("STACKY_REPO_ROOT")
-    if env:
-        return Path(env).resolve()
-    # api/tickets.py → api/ → backend/ → Stacky Agents/ → Stacky/ → Tools/ → <repo>
-    return Path(__file__).resolve().parents[5]
+    from runtime_paths import repo_root as _runtime_repo_root
+    return _runtime_repo_root()
 
 # Exportado como módulo-level para que los tests puedan patchearlo
 REPO_ROOT: Path = _repo_root()

@@ -713,6 +713,21 @@ def get_tracker_states(project_name: str):
     db_states = [r[0] for r in current_rows if r[0]]
     history_states = [r[0] for r in history_rows if r[0]]
 
+    # Estados definidos en el proceso del tracker (incluye estados sin tickets,
+    # ej. "Technical Review"). Best-effort: si la consulta falla, caemos a las
+    # fuentes derivadas de la BD + defaults.
+    tracker_def_states: list[str] = []
+    if t_type == "azure_devops":
+        try:
+            from services.project_context import build_ado_client
+
+            tracker_def_states = build_ado_client(project_name=project_name).fetch_states()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "tracker-states: no se pudieron leer los estados de ADO para '%s': %s",
+                project_name, exc,
+            )
+
     workflow_states: list[str] = []
     for workflow in (cfg.get("agent_workflow_configs") or {}).values():
         for state in workflow.get("allowed_states") or []:
@@ -738,7 +753,7 @@ def get_tracker_states(project_name: str):
 
     combined: list[str] = []
     seen: set[str] = set()
-    for state in db_states + history_states + workflow_states + flow_config_states + defaults:
+    for state in tracker_def_states + db_states + history_states + workflow_states + flow_config_states + defaults:
         if state not in seen:
             seen.add(state)
             combined.append(state)

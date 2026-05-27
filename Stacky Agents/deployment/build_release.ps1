@@ -14,6 +14,7 @@ param(
     [string]$OutputRoot = "",
     [string]$ReleaseName = "",
     [string]$Version = "",
+    [string]$GitHubCopilotAgentsRepo = "",
     [string]$CertificateThumbprint = "",
     [string]$CertificatePath = "",
     [string]$CertificatePassword = "",
@@ -22,6 +23,7 @@ param(
     [switch]$SkipZip,
     [switch]$SkipInstaller,
     [switch]$SkipSmokeTest,
+    [switch]$ExportConfig,
     [switch]$RequireInstaller,
     [switch]$RequireSigning
 )
@@ -177,12 +179,90 @@ function Assert-CleanReleasePayload {
     }
 }
 
+function Resolve-GitHubCopilotAgentsSource {
+    if ($GitHubCopilotAgentsRepo) {
+        return $GitHubCopilotAgentsRepo
+    }
+
+    if ($env:GITHUB_COPILOT_AGENTS_REPO) {
+        return $env:GITHUB_COPILOT_AGENTS_REPO
+    }
+
+    if ($env:STACKY_GITHUB_COPILOT_AGENTS_REPO) {
+        return $env:STACKY_GITHUB_COPILOT_AGENTS_REPO
+    }
+
+    if ($env:APPDATA) {
+        $defaultPromptsDir = Join-Path $env:APPDATA "Code\User\prompts"
+        if (Test-Path $defaultPromptsDir) {
+            return $defaultPromptsDir
+        }
+    }
+
+    return ""
+}
+
+function Copy-GitHubCopilotAgents {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot
+    )
+
+    if (-not $SourceRoot) {
+        Write-Warn "No se configuro repo/carpeta de agentes GitHub Copilot. Se omite github_copilot_agents."
+        return 0
+    }
+
+    if (-not (Test-Path $SourceRoot)) {
+        Write-Warn "No existe la fuente de agentes GitHub Copilot: $SourceRoot"
+        return 0
+    }
+
+    $sourceFull = [System.IO.Path]::GetFullPath($SourceRoot)
+    $agentFiles = @(Get-ChildItem -LiteralPath $sourceFull -Filter "*.agent.md" -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch "\\(node_modules|\.git|outputs|__pycache__)($|\\)" } |
+        Sort-Object FullName)
+
+    if ($agentFiles.Count -eq 0) {
+        Write-Warn "No se encontraron *.agent.md en: $sourceFull"
+        return 0
+    }
+
+    New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
+    $manifest = @()
+    $usedNames = @{}
+
+    foreach ($file in $agentFiles) {
+        $targetName = $file.Name
+        if ($usedNames.ContainsKey($targetName.ToLowerInvariant())) {
+            $relativeParent = $file.DirectoryName.Substring($sourceFull.Length).TrimStart("\", "/")
+            $prefix = ($relativeParent -replace "[\\/:*?`"<>| ]+", "_").Trim("_")
+            if ($prefix) {
+                $targetName = "$prefix-$($file.Name)"
+            }
+        }
+        $usedNames[$targetName.ToLowerInvariant()] = $true
+
+        $target = Join-Path $DestinationRoot $targetName
+        Copy-Item -LiteralPath $file.FullName -Destination $target -Force
+        $manifest += [ordered]@{
+            filename = $targetName
+            source_relative_path = $file.FullName.Substring($sourceFull.Length).TrimStart("\", "/")
+            source_root = $sourceFull
+        }
+    }
+
+    $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $DestinationRoot "manifest.json") -Encoding UTF8
+    return $agentFiles.Count
+}
+
 $deploymentDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $appRoot = Split-Path -Parent $deploymentDir
 $frontendDir = Join-Path $appRoot "frontend"
 $backendDir = Join-Path $appRoot "backend"
 $vsixDir = Join-Path $appRoot "vscode_extension"
 $buildRoot = Join-Path $deploymentDir ".build"
+$exportConfigScript = Join-Path $deploymentDir "export_config_for_release.py"
 
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path $deploymentDir "out"
@@ -292,6 +372,7 @@ New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
 $releaseBackendDir = Join-Path $releaseDir "backend"
 $releaseFrontendDir = Join-Path $releaseDir "frontend"
 $releaseVsixDir = Join-Path $releaseDir "vscode_extension"
+$releaseGitHubCopilotAgentsDir = Join-Path $releaseDir "github_copilot_agents"
 $releaseDataDir = Join-Path $releaseDir "data"
 $releaseProjectsDir = Join-Path $releaseDir "projects"
 
@@ -319,6 +400,30 @@ if ($latestVsix) {
     Write-Warn "No se encontro .vsix para incluir en el release."
 }
 
+Write-Step "Copiando agentes GitHub Copilot"
+$githubCopilotAgentsSource = Resolve-GitHubCopilotAgentsSource
+$githubCopilotAgentsCount = Copy-GitHubCopilotAgents -SourceRoot $githubCopilotAgentsSource -DestinationRoot $releaseGitHubCopilotAgentsDir
+if ($githubCopilotAgentsCount -gt 0) {
+    Write-OK "Agentes incluidos: $githubCopilotAgentsCount desde $githubCopilotAgentsSource"
+}
+
+if ($ExportConfig) {
+    Write-Step "Exportando configuracion local de proyectos y credenciales"
+    if (-not (Test-Path $exportConfigScript)) {
+        throw "No se encontro export_config_for_release.py"
+    }
+    Invoke-BuildPython -PythonArgs @(
+        $exportConfigScript,
+        "--source-projects", (Join-Path $backendDir "projects"),
+        "--source-data", (Join-Path $backendDir "data"),
+        "--release-root", $releaseDir
+    )
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fallo la exportacion de configuracion local."
+    }
+    Write-OK "Configuracion local exportada al release"
+}
+
 Write-Step "Copiando scripts de release"
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\INSTALL.ps1") -Destination (Join-Path $releaseDir "INSTALL.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\START.bat") -Destination (Join-Path $releaseDir "START.bat") -Force
@@ -343,6 +448,9 @@ $manifest = [ordered]@{
     source_commit = $gitSha
     frontend_dist = "frontend/dist"
     backend_entrypoint = "backend/stacky-backend.exe"
+    github_copilot_agents_dir = "github_copilot_agents"
+    github_copilot_agents_count = $githubCopilotAgentsCount
+    config_exported = [bool]$ExportConfig
     data_dir = "data"
     projects_dir = "projects"
     installer = "INSTALL.ps1"

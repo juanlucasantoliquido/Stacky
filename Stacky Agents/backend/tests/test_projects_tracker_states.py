@@ -140,3 +140,45 @@ def test_tracker_states_include_db_history_workflow_and_flow_config(harness):
     assert "To Do" in states
     assert "Reviewed by Dev" in states
     assert "Active" in states
+
+
+def test_tracker_states_include_ado_process_states(harness, monkeypatch):
+    """Estados definidos en el proceso de ADO aparecen aunque no haya tickets."""
+    import services.project_context as project_context
+
+    client = harness["client"]
+    projects_dir = harness["projects_dir"]
+
+    project_dir = projects_dir / "RSPACIFICO"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "name": "RSPACIFICO",
+                "display_name": "RSPACIFICO",
+                "issue_tracker": {
+                    "type": "azure_devops",
+                    "organization": "UbimiaPacifico",
+                    "project": "Strategist_Pacifico",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class _FakeClient:
+        def fetch_states(self):
+            return ["New", "Technical Review", "Done"]
+
+    monkeypatch.setattr(
+        project_context, "build_ado_client", lambda **kwargs: _FakeClient()
+    )
+
+    response = client.get("/api/projects/RSPACIFICO/tracker-states")
+    assert response.status_code == 200
+
+    states = response.get_json()["states"]
+    assert "Technical Review" in states
+    # Orden: los estados del proceso de ADO van primero.
+    assert states[:3] == ["New", "Technical Review", "Done"]

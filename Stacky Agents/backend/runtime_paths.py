@@ -47,6 +47,60 @@ def projects_dir() -> Path:
     return backend_root() / "projects"
 
 
+def _active_workspace_root() -> Path | None:
+    """workspace_root del proyecto activo, leído directo de projects/<active>/config.json.
+
+    Self-contained (sólo usa projects_dir/data_dir) para no depender de
+    project_manager y evitar el ciclo project_manager → runtime_paths.
+    """
+    try:
+        pdir = projects_dir()
+        active_name: str | None = None
+        active_file = data_dir() / "active_project.json"
+        if active_file.exists():
+            data = json.loads(active_file.read_text(encoding="utf-8"))
+            active_name = (data.get("active") or "").strip() or None
+        if not active_name and pdir.exists():
+            # Sin marcador explícito: primer proyecto con config.json.
+            for d in sorted(pdir.iterdir()):
+                if (d / "config.json").exists():
+                    active_name = d.name
+                    break
+        if not active_name:
+            return None
+        cfg_file = pdir / active_name / "config.json"
+        if not cfg_file.exists():
+            return None
+        cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
+        ws = (cfg.get("workspace_root") or "").strip()
+        if ws:
+            return Path(ws).expanduser().resolve()
+    except Exception:
+        return None
+    return None
+
+
+def repo_root() -> Path:
+    """Root del repo donde el agente escribe `Agentes/outputs`.
+
+    Prioridad:
+      1. `STACKY_REPO_ROOT` — override explícito (tests y deploys).
+      2. Congelado (deploy portable): `workspace_root` del proyecto activo. El
+         exe vive fuera del repo del cliente, así que contar `parents` desde
+         el módulo empaquetado no aplica.
+      3. Layout de fuentes: `backend/runtime_paths.py` → parents[4] = `<repo>`
+         (`<repo>/Tools/Stacky/Stacky Agents/backend/runtime_paths.py`).
+    """
+    env = os.getenv("STACKY_REPO_ROOT", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    if is_frozen():
+        ws = _active_workspace_root()
+        if ws is not None:
+            return ws
+    return Path(__file__).resolve().parents[4]
+
+
 def frontend_dist_dir() -> Path | None:
     configured = os.getenv("STACKY_FRONTEND_DIST", "").strip()
     candidates: list[Path] = []

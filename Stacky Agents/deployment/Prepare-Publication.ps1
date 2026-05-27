@@ -13,10 +13,12 @@ param(
     [ValidateSet("major", "minor", "patch", "none")]
     [string]$Bump = "patch",
     [string]$DeployRoot = "",
+    [string]$GitHubCopilotAgentsRepo = "",
     [switch]$SkipDependencyInstall,
     [switch]$SkipInstallerExe,
     [switch]$RequireInstallerExe,
     [switch]$SkipSmokeTest,
+    [switch]$ExportConfig,
     [switch]$NoPause
 )
 
@@ -270,6 +272,7 @@ Entrega:
 Notas:
 - backend\stacky-backend.exe ya incluye las dependencias Python.
 - frontend\dist ya esta compilado.
+- github_copilot_agents contiene los .agent.md incluidos en el deploy, si se configuro la fuente.
 - data y projects se preservan entre actualizaciones.
 - Si existe StackyAgents-$ReleaseVersion-Setup.exe, tambien puede usarse como instalador.
 "@
@@ -360,6 +363,9 @@ try {
         "-ReleaseName", $releaseName,
         "-Version", $releaseVersion
     )
+    if ($GitHubCopilotAgentsRepo) {
+        $buildArgs += @("-GitHubCopilotAgentsRepo", $GitHubCopilotAgentsRepo)
+    }
     if ($SkipInstallerExe) {
         $buildArgs += "-SkipInstaller"
     }
@@ -368,6 +374,9 @@ try {
     }
     if ($SkipSmokeTest) {
         $buildArgs += "-SkipSmokeTest"
+    }
+    if ($ExportConfig) {
+        $buildArgs += "-ExportConfig"
     }
 
     Invoke-PowerShellScript -ScriptPath $buildRelease -Arguments $buildArgs

@@ -84,16 +84,16 @@ class ValidationError(Exception):
 
 
 def repo_root() -> Path:
-    """Resuelve el root del repo (`<repo>/Tools/Stacky/Stacky Agents/backend` → `<repo>`).
+    """Root del repo donde viven `Agentes/outputs`.
 
-    Permite override vía env `STACKY_REPO_ROOT` (útil para tests).
+    Delega en `runtime_paths.repo_root()`, que es frozen-aware (honra
+    `STACKY_REPO_ROOT`, luego el `workspace_root` del proyecto activo en deploy
+    congelado, luego el layout de fuentes). Antes resolvía con `parents[5]`
+    desde este módulo, lo que en el .exe de PyInstaller aterrizaba fuera del
+    repo del cliente y dejaba al output_watcher mirando un directorio inexistente.
     """
-    env = os.getenv("STACKY_REPO_ROOT")
-    if env:
-        return Path(env).resolve()
-    here = Path(__file__).resolve()
-    # services/ → backend/ → Stacky Agents/ → Stacky/ → Tools/ → <repo>
-    return here.parents[5]
+    from runtime_paths import repo_root as _runtime_repo_root
+    return _runtime_repo_root()
 
 
 def outputs_dir() -> Path:

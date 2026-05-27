@@ -39,6 +39,21 @@
   height: 22px;
   flex-shrink: 0;
   display: block;
+  image-rendering: pixelated;
+}
+
+.ubimiaLogo {
+  height: 20px;
+  width: auto;
+  flex-shrink: 0;
+  display: block;
+}
+
+.brandDivider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  flex-shrink: 0;
 }
 
 .project {

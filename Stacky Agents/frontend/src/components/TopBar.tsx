@@ -135,7 +135,14 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
             </button>
           )}
           <img
-            src="/stacky-logo.svg"
+            src="/Logo_ubimia_verde_u.png"
+            alt="Ubimia"
+            className={styles.ubimiaLogo}
+            height={20}
+          />
+          <span className={styles.brandDivider} aria-hidden="true" />
+          <img
+            src="/stacky-pixel.svg"
             alt="Stacky"
             className={styles.logoImg}
             width={22}

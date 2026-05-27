@@ -488,6 +488,8 @@ export const Executions = {
       `/api/executions/${id}/input`,
       { text }
     ),
+  cancel: (id: number) =>
+    api.post<{ ok: boolean; execution_id: number }>(`/api/executions/${id}/cancel`),
   diff: (a: number, b: number) =>
     api.get<{ left: AgentExecution; right: AgentExecution }>(
       `/api/executions/${a}/diff/${b}`
@@ -858,6 +860,50 @@ export const Mantis = {
       "/api/mantis/projects",
       params
     ),
+};
+
+// ── Claude Code CLI — configuración y autenticación ──────────────────────────
+
+export interface ClaudeTestResult {
+  ok: boolean;
+  bin: string;
+  version?: string;
+  error?: string;
+}
+
+export interface ClaudeSessionStatus {
+  exists: boolean;
+  bin: string;
+  logged_in: boolean;
+  auth_method?: string | null;
+  email?: string | null;
+  org_name?: string | null;
+  subscription_type?: string | null;
+  error?: string;
+}
+
+export const ClaudeCli = {
+  /** Verifica el binario `claude` y devuelve la versión. */
+  test: (claudeBin?: string) =>
+    api.post<ClaudeTestResult>("/api/global-config/test-claude", {
+      claude_bin: claudeBin ?? "",
+    }),
+  /** Estado de autenticación (claude auth status --json). */
+  session: () => api.get<ClaudeSessionStatus>("/api/global-config/claude-session"),
+  /** Lanza `claude auth login` (OAuth en navegador). Puede tardar. */
+  login: (claudeBin?: string) =>
+    api.post<{ ok: boolean; output?: string; error?: string }>(
+      "/api/global-config/claude-login",
+      { claude_bin: claudeBin ?? "" }
+    ),
+  /** Cierra la sesión (claude auth logout). */
+  logout: () =>
+    api.delete<{ ok: boolean; note?: string; error?: string }>(
+      "/api/global-config/claude-session"
+    ),
+  /** Persiste la ruta del binario y el modelo por defecto en el .env del backend. */
+  saveConfig: (cfg: { CLAUDE_CODE_CLI_BIN?: string; CLAUDE_CODE_CLI_MODEL?: string }) =>
+    api.put<{ ok: boolean }>("/api/global-config", cfg),
 };
 
 // ── QA UAT — Sprint 9 types ───────────────────────────────────────────────────

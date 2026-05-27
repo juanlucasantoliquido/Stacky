@@ -145,6 +145,61 @@
   color: #fca5a5;
 }
 
+/* Mensajes del operador (vos / sistema): acento azul a la izquierda. */
+.lineOperator {
+  border-left: 2px solid rgba(96,165,250,0.55);
+  padding-left: 6px;
+  margin-left: -8px;
+  background: rgba(37,99,235,0.07);
+}
+
+.lineOperator .group {
+  color: #93c5fd;
+}
+
+/* Mensajes del agente CLI: acento verde, como "lo que dice Claude". */
+.lineAgent {
+  border-left: 2px solid rgba(34,197,94,0.5);
+  padding-left: 6px;
+  margin-left: -8px;
+}
+
+.lineAgent .group {
+  color: #86efac;
+}
+
+/* Banner de fase "en vivo" mientras la ejecución trabaja. */
+.phase {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 4px 0;
+  color: rgba(226,232,240,0.7);
+  font-style: italic;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(148,163,184,0.3);
+  border-top-color: #93c5fd;
+  animation: codexSpin 0.7s linear infinite;
+  flex: none;
+}
+
+@keyframes codexSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .inputBar {
   display: grid;
   grid-template-columns: 1fr 36px;

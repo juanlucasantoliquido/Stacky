@@ -50,6 +50,11 @@ logger = logging.getLogger("stacky.output_watcher")
 COMMENT_HTML_FILENAME = "comment.html"
 COMMENT_META_FILENAME = "comment.meta.json"
 PENDING_TASK_FILENAME = "pending-task.json"
+# Señal de finalización determinista (Fase P3): el agente la escribe como último
+# paso. Su presencia dispara el cierre inmediato del Modo A sin esperar el
+# debounce heurístico de mtime (que queda como fallback si el agente no la
+# escribe). Ver _find_done_marker.
+DONE_MARKER_FILENAME = ".stacky-done.json"
 
 # Defaults (configurables vía env)
 DEFAULT_POLL_INTERVAL_SECONDS = 3.0
@@ -118,7 +123,17 @@ class AdoOutputWatcher:
         stable_delay_b: float | None = None,
         stable_delay_a: float | None = None,
     ) -> None:
-        self.outputs_dir = outputs_dir if outputs_dir is not None else _outputs_dir()
+        # `outputs_dir` se resuelve **lazy** (ver property abajo) cuando no se
+        # pasa override explícito. Resolverlo acá, en __init__, lo congelaba al
+        # valor de arranque del proceso — y en deploy el watcher arranca ANTES
+        # de que haya proyecto activo, así que repo_root() caía al fallback
+        # parents[4] (que en el .exe empaquetado dentro del repo apunta a
+        # <repo>/Tools/Stacky en vez de <repo>) y el watcher quedaba poleando
+        # un directorio inexistente para siempre. Resolver en cada scan permite
+        # tomar el workspace_root del proyecto cuando se activa y seguir
+        # cambios de proyecto en runtime.
+        self._outputs_dir_override = outputs_dir
+        self._last_scanned_dir: Path | None = None
         self.poll_interval = poll_interval if poll_interval is not None else _default_poll_interval()
         self.stable_delay_b = stable_delay_b if stable_delay_b is not None else _default_stable_delay_b()
         self.stable_delay_a = stable_delay_a if stable_delay_a is not None else _default_stable_delay_a()
@@ -130,6 +145,18 @@ class AdoOutputWatcher:
         # cache (epic_dir, last_max_mtime_ns) — para Modo A
         self._seen_a: dict[str, int] = {}
 
+    @property
+    def outputs_dir(self) -> Path:
+        """Directorio `Agentes/outputs` a vigilar.
+
+        Si se construyó con un override explícito (tests, diag) lo respeta;
+        si no, lo resuelve en cada acceso vía `_outputs_dir()` para reflejar el
+        proyecto activo aunque éste se haya seteado después del arranque.
+        """
+        if self._outputs_dir_override is not None:
+            return self._outputs_dir_override
+        return _outputs_dir()
+
     # — Lifecycle —
 
     def start(self) -> threading.Thread:
@@ -139,7 +166,7 @@ class AdoOutputWatcher:
 
         def _loop() -> None:
             logger.info(
-                "output watcher started (dir=%s interval=%.1fs)",
+                "output watcher started (dir=%s interval=%.1fs, dir resuelto dinámicamente por scan)",
                 self.outputs_dir, self.poll_interval,
             )
             while not self._stop.wait(timeout=self.poll_interval):
@@ -167,10 +194,16 @@ class AdoOutputWatcher:
         """Una pasada manual. Retorna dict con counts del round."""
         self.stats.scans += 1
         round_result = _ScanRoundResult()
-        if not self.outputs_dir.exists():
+        outputs_dir = self.outputs_dir  # resuelto lazy: snapshot por scan
+        # Log cuando cambia el dir vigilado (p.ej. al activarse un proyecto
+        # luego del arranque). Clave para diagnosticar runs huérfanos.
+        if outputs_dir != self._last_scanned_dir:
+            logger.info("output_watcher: dir vigilado → %s (existe=%s)", outputs_dir, outputs_dir.exists())
+            self._last_scanned_dir = outputs_dir
+        if not outputs_dir.exists():
             return round_result.__dict__
 
-        for entry in self.outputs_dir.iterdir():
+        for entry in outputs_dir.iterdir():
             if not entry.is_dir():
                 continue
             name = entry.name
@@ -351,11 +384,20 @@ class AdoOutputWatcher:
         if max_mtime_dt is None:
             return
 
-        # Debounce: si algún archivo se modificó hace menos de stable_delay_a, esperar
         age_seconds = (datetime.utcnow() - max_mtime_dt).total_seconds()
-        if age_seconds < self.stable_delay_a:
+
+        # Señal determinista (P3): si el agente escribió el done-marker, cerramos
+        # de inmediato — declaró que terminó. Sin marker, caemos al debounce
+        # heurístico por estabilidad de mtime (fallback).
+        done_marker = _find_done_marker(epic_dir)
+        if done_marker is not None:
+            logger.info(
+                "output_watcher mode_a: done-marker detectado (%s) — cierre inmediato (sin esperar debounce)",
+                done_marker,
+            )
+        elif age_seconds < self.stable_delay_a:
             logger.debug(
-                "output_watcher mode_a: epic-%s estable hace %.0fs (< %.0fs) — esperando",
+                "output_watcher mode_a: epic-%s estable hace %.0fs (< %.0fs) y sin done-marker — esperando",
                 epic_ado_id, age_seconds, self.stable_delay_a,
             )
             return
@@ -436,9 +478,14 @@ class AdoOutputWatcher:
             )
 
         # ── Cerrar (sin publish, las tasks ya fueron creadas vía endpoint) ────
+        trigger_desc = (
+            "done-marker explícito"
+            if done_marker is not None
+            else f"estables hace {int(age_seconds)}s (debounce)"
+        )
         logger.info(
-            "output_watcher mode_a: cerrando exec=%d epic-%s (pending_tasks=%d, stable=%.0fs)",
-            execution_id, epic_ado_id, pending_count, age_seconds,
+            "output_watcher mode_a: cerrando exec=%d epic-%s (pending_tasks=%d, disparador=%s)",
+            execution_id, epic_ado_id, pending_count, trigger_desc,
         )
         result = close_execution_with_publish(
             execution_id=execution_id,
@@ -448,7 +495,7 @@ class AdoOutputWatcher:
             user=MODE_A_CHANGED_BY_PREFIX,
             reason=(
                 f"output_watcher mode_a: epic-{epic_ado_id} análisis completado "
-                f"({pending_count} pending-task.json estables hace {int(age_seconds)}s)"
+                f"({pending_count} pending-task.json, {trigger_desc})"
             ),
             completion_source="output_watcher",
             agent_type_hint=agent_type,
@@ -491,6 +538,39 @@ def _rel_to_repo(path: Path) -> str:
         return str(path.relative_to(repo_root())).replace("\\", "/")
     except ValueError:
         return str(path)
+
+
+def _find_done_marker(epic_dir: Path) -> Path | None:
+    """Busca el done-marker explícito (`.stacky-done.json`) del Modo A.
+
+    El agente lo escribe como último paso para declarar que terminó (Fase P3).
+    Se acepta tanto a nivel del epic (`epic-<id>/.stacky-done.json`) como por RF
+    (`epic-<id>/<RF>/.stacky-done.json`).
+
+    Devuelve el Path del primer marker válido (JSON dict que NO declare un estado
+    no-terminal como `running`/`in_progress`/`pending`); None si no hay ninguno o
+    todos son inválidos. Defensivo: un marker malformado se ignora (cae al
+    fallback por debounce), nunca rompe el scan.
+    """
+    candidates = [epic_dir / DONE_MARKER_FILENAME]
+    candidates.extend(sorted(epic_dir.glob("*/" + DONE_MARKER_FILENAME)))
+    for marker in candidates:
+        if not marker.is_file():
+            continue
+        try:
+            import json as _json
+            data = _json.loads(marker.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("output_watcher mode_a: done-marker inválido en %s: %s", marker, exc)
+            continue
+        if not isinstance(data, dict):
+            continue
+        status = str(data.get("status", "")).strip().lower()
+        if status in {"running", "in_progress", "in-progress", "pending"}:
+            # Marker prematuro/no-terminal: no dispara cierre.
+            continue
+        return marker
+    return None
 
 
 def _read_target_state_from_meta(ado_dir: Path) -> str | None:

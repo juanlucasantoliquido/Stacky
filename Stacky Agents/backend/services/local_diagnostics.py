@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from config import config
@@ -28,6 +29,7 @@ def run_local_diagnostics() -> dict:
         _check_vscode_installation(),
         _check_vscode_bridge(),
         _check_database_storage(),
+        _check_orphan_runs(),
     ]
     summary = {
         "ok": sum(1 for c in checks if c["status"] == "ok"),
@@ -249,6 +251,79 @@ def _check_database_storage() -> dict:
         status,
         message,
         {"database_path": str(db_path), "free_bytes": usage.free},
+    )
+
+
+def _check_orphan_runs() -> dict:
+    """Detecta posibles runs huérfanos (Fase P5).
+
+    Señal temprana para el operador: ejecuciones `running` más viejas que el
+    umbral de alerta, especialmente del flujo open-chat. Si además el directorio
+    que vigila el output_watcher no existe, el cierre automático no va a ocurrir
+    (causa raíz C1) — se eleva a warning con mensaje accionable.
+    """
+    alert_minutes = int(os.getenv("STACKY_RUNNING_ALERT_MINUTES", "30"))
+    try:
+        from db import session_scope
+        from models import AgentExecution
+
+        cutoff = datetime.utcnow() - timedelta(minutes=alert_minutes)
+        with session_scope() as session:
+            stale = (
+                session.query(AgentExecution)
+                .filter(
+                    AgentExecution.status == "running",
+                    AgentExecution.started_at < cutoff,
+                )
+                .count()
+            )
+    except Exception as exc:  # noqa: BLE001
+        return _result(
+            "orphan_runs", "Runs huérfanos", "ok",
+            f"No se pudo evaluar (no crítico): {exc}",
+        )
+
+    # ¿El watcher está mirando un dir que existe?
+    watcher_dir: str | None = None
+    watcher_dir_exists = True
+    try:
+        from services.output_watcher import get_output_watcher
+
+        ow = get_output_watcher()
+        if ow is not None:
+            watcher_dir = str(ow.outputs_dir)
+            watcher_dir_exists = ow.outputs_dir.exists()
+    except Exception:
+        pass
+
+    if stale == 0 and watcher_dir_exists:
+        return _result("orphan_runs", "Runs huérfanos", "ok", "Sin ejecuciones running estancadas.")
+
+    detail = {
+        "running_over_threshold": stale,
+        "alert_minutes": alert_minutes,
+        "watcher_dir": watcher_dir,
+        "watcher_dir_exists": watcher_dir_exists,
+    }
+    if not watcher_dir_exists:
+        return _result(
+            "orphan_runs", "Runs huérfanos", "warning",
+            (
+                f"{stale} ejecución(es) running > {alert_minutes} min y el directorio "
+                f"vigilado por el watcher no existe ({watcher_dir}). El cierre automático "
+                "no ocurrirá: revisá el proyecto activo / STACKY_REPO_ROOT en Diagnóstico, "
+                "o usá scan-now."
+            ),
+            detail,
+        )
+    return _result(
+        "orphan_runs", "Runs huérfanos", "warning",
+        (
+            f"{stale} ejecución(es) llevan más de {alert_minutes} min en 'running'. "
+            "Posible run huérfano — revisá Diagnóstico (GET /api/diag/metrics) o forzá "
+            "el cierre con scan-now."
+        ),
+        detail,
     )
 
 

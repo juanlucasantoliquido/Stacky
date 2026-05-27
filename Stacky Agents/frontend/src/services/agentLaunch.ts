@@ -27,8 +27,57 @@ export function runtimeRequiresVsCodeAgent(runtime: AgentRuntime): boolean {
   return runtime !== "github_copilot";
 }
 
+/** Runtimes CLI que streamean por SSE a la consola in-page (dock interactivo). */
+export function isCliRuntime(runtime: AgentRuntime): boolean {
+  return runtime === "codex_cli" || runtime === "claude_code_cli";
+}
+
+/** Extrae el execution_id del resultado de un launch, si vino. */
+export function extractExecutionId(result: unknown): number | null {
+  if (result && typeof result === "object" && "execution_id" in result) {
+    const id = (result as { execution_id: unknown }).execution_id;
+    return typeof id === "number" ? id : null;
+  }
+  return null;
+}
+
+/**
+ * Abre la consola in-page si el runtime es CLI y el launch devolvió execution_id.
+ * Centraliza la lógica que comparten TicketBoard (Run de tarjeta y run funcional
+ * del epic) y AgentLaunchModal, para que ningún punto de lanzamiento descarte el
+ * execution_id y deje la actividad sólo en la consola del backend.
+ *
+ * `openConsole` recibe el setter del store (useWorkbench.setCodexConsoleExecution);
+ * se inyecta para no acoplar este servicio al store. Devuelve true si abrió el dock.
+ */
+export function openConsoleIfCliRuntime(
+  runtime: AgentRuntime,
+  result: unknown,
+  openConsole: (executionId: number) => void
+): boolean {
+  if (!isCliRuntime(runtime)) return false;
+  const executionId = extractExecutionId(result);
+  if (executionId == null) return false;
+  openConsole(executionId);
+  return true;
+}
+
 export function launchInProgressLabel(runtime: AgentRuntime): string {
   return runtime === "github_copilot" ? "⏳ Abriendo chat…" : "⏳ Lanzando…";
+}
+
+/** Nombre legible del runtime, para badges e indicadores de lanzamiento. */
+export function runtimeDisplayLabel(runtime: AgentRuntime): string {
+  switch (runtime) {
+    case "github_copilot":
+      return "GitHub Copilot";
+    case "codex_cli":
+      return "Codex CLI";
+    case "claude_code_cli":
+      return "Claude Code CLI";
+    default:
+      return runtime;
+  }
 }
 
 export function humanizeAgentLaunchError(error: unknown): string {
@@ -38,7 +87,7 @@ export function humanizeAgentLaunchError(error: unknown): string {
     return "Este runtime necesita un agente VS Code (.agent.md) seleccionado.";
   }
   if (raw.includes("not_implemented")) {
-    return "Claude Code CLI todavía no está habilitado en este flujo.";
+    return "Este runtime no está habilitado en este flujo.";
   }
   if (raw.includes("unknown_runtime")) {
     return "El runtime seleccionado no es válido.";

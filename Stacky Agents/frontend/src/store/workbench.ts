@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { AgentRuntime, AgentType, AgentWorkflowConfig, ContextBlock, Project, VsCodeAgent } from "../types";
 
 interface WorkbenchState {
@@ -55,7 +56,9 @@ interface WorkbenchState {
   setAgentRuntime: (r: AgentRuntime) => void;
 }
 
-export const useWorkbench = create<WorkbenchState>((set) => ({
+export const useWorkbench = create<WorkbenchState>()(
+  persist(
+    (set) => ({
   activeTicketId: null,
   activeAgentType: null,
   activeExecutionId: null,
@@ -122,4 +125,14 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   setChatDrawerOpen: (open) => set({ chatDrawerOpen: open }),
   setChatDrawerModel: (model) => set({ chatDrawerModel: model }),
   setChatDrawerTicketId: (id) => set({ chatDrawerTicketId: id }),
-}));
+    }),
+    {
+      name: "stacky-workbench",
+      storage: createJSONStorage(() => localStorage),
+      // Solo persistimos la preferencia de runtime: el resto del estado
+      // (ticket activo, ejecuciones, bloques) es efímero por sesión y no
+      // debe sobrevivir a una recarga.
+      partialize: (state) => ({ agentRuntime: state.agentRuntime }),
+    }
+  )
+);

@@ -188,6 +188,25 @@ def test_metrics_includes_thresholds(client):
     assert "startup_grace_seconds" in th
 
 
+def test_metrics_running_over_threshold_alert(client, monkeypatch):
+    """Fase P5: las ejecuciones running más viejas que el umbral aparecen como
+    sospechosas de run huérfano."""
+    monkeypatch.setenv("STACKY_RUNNING_ALERT_MINUTES", "10")
+
+    t = _mk_ticket(30010)
+    old_exec = _mk_execution(t, status="running", started_minutes_ago=30)  # > umbral
+    _mk_execution(t, status="running", started_minutes_ago=2)              # < umbral
+
+    body = client.get("/api/diag/metrics").get_json()
+    assert body["thresholds"]["running_alert_minutes"] == 10
+    suspects = {s["execution_id"] for s in body["running_over_threshold"]}
+    assert old_exec in suspects
+    assert body["running_over_threshold_count"] >= 1
+    # El joven NO debe estar entre los sospechosos
+    young = [s for s in body["running_over_threshold"] if s["age_seconds"] < 10 * 60]
+    assert young == []
+
+
 # ── Helper append_event ──────────────────────────────────────────────────────
 
 

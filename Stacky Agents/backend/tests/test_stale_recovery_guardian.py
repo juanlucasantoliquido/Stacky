@@ -161,6 +161,33 @@ def test_recovery_timeout_running_exec_to_error(client):
         assert "timeout" in (exec_.error_message or "").lower()
 
 
+def test_recovery_timeout_covers_open_chat_flow(client):
+    """Fase P5: el reaper cubre el flujo open-chat (no sólo CLI).
+
+    Una ejecución open-chat (agent_type='functional') no escribe MANIFEST ni
+    heartbeat; igual debe cerrarse por timeout duro como red de seguridad cuando
+    el output_watcher no llegó a cerrarla (artifacts incompletos)."""
+    from services.ticket_status import (
+        recover_stale_running_tickets,
+        get_current_status,
+        EXECUTION_TIMEOUT_MINUTES,
+    )
+
+    ticket_id = _mk_ticket(ado_id=9009)
+    _mk_execution(
+        ticket_id,
+        status="running",
+        started_minutes_ago=EXECUTION_TIMEOUT_MINUTES + 5,
+        agent_type="functional",  # open-chat analyst — sin heartbeat/manifest
+    )
+
+    details = recover_stale_running_tickets(trigger="timeout_guardian")
+    assert len(details) == 1
+    assert details[0]["kind"] == "execution_timeout"
+    assert details[0]["agent_type"] == "functional"
+    assert get_current_status(ticket_id) == "error"
+
+
 def test_recovery_running_exec_within_timeout_is_left_alone(client):
     """Ejecución en 'running' pero dentro del timeout NO se debe tocar."""
     from services.ticket_status import (

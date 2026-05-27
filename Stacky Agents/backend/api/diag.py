@@ -14,7 +14,8 @@ from __future__ import annotations
 import json
 import logging
 import io
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Blueprint, jsonify, send_file
@@ -231,15 +232,30 @@ def metrics():
 
         currently_running = executions_by_status.get("running", 0)
         oldest_age: float | None = None
+
+        # Alerta (Fase P5): ejecuciones running más viejas que el umbral. Sirve
+        # de señal temprana de runs huérfanos (el banner de la UI la consume)
+        # antes de que el reaper las cierre por timeout duro.
+        alert_minutes = int(os.getenv("STACKY_RUNNING_ALERT_MINUTES", "30"))
+        alert_cutoff = datetime.utcnow() - timedelta(minutes=alert_minutes)
+        stale_suspects: list[dict] = []
         if currently_running:
-            oldest = (
-                session.query(AgentExecution.started_at)
+            running_rows = (
+                session.query(AgentExecution)
                 .filter(AgentExecution.status == "running")
                 .order_by(AgentExecution.started_at.asc())
-                .first()
+                .all()
             )
-            if oldest and oldest[0]:
-                oldest_age = (datetime.utcnow() - oldest[0]).total_seconds()
+            if running_rows and running_rows[0].started_at:
+                oldest_age = (datetime.utcnow() - running_rows[0].started_at).total_seconds()
+            for r in running_rows:
+                if r.started_at and r.started_at < alert_cutoff:
+                    stale_suspects.append({
+                        "execution_id": r.id,
+                        "ticket_id": r.ticket_id,
+                        "agent_type": r.agent_type,
+                        "age_seconds": int((datetime.utcnow() - r.started_at).total_seconds()),
+                    })
 
     return jsonify({
         "ok": True,
@@ -248,11 +264,97 @@ def metrics():
         "recoveries": recoveries,
         "currently_running": currently_running,
         "oldest_running_age_seconds": oldest_age,
+        "running_over_threshold_count": len(stale_suspects),
+        "running_over_threshold": stale_suspects,
         "thresholds": {
             "execution_timeout_minutes": EXECUTION_TIMEOUT_MINUTES,
             "heartbeat_timeout_minutes": HEARTBEAT_TIMEOUT_MINUTES,
             "startup_grace_seconds": STARTUP_GRACE_SECONDS,
+            "running_alert_minutes": alert_minutes,
         },
+    })
+
+
+@bp.get("/health")
+def health():
+    """Health de configuración del deploy (preflight, Fase P2).
+
+    Responde las preguntas que importan para diagnosticar runs huérfanos del
+    flujo open-chat de un vistazo:
+      - repo_root / outputs_dir resueltos + existencia (causa raíz C1).
+      - active_project (si no hay → el watcher congelado no resuelve repo_root).
+      - ado_pat_present (causa raíz C2: sin PAT no se crean Tasks).
+      - estado de los watchers (output / manifest) y flags relevantes.
+
+    Solo lectura: no muta nada. Pensado para troubleshooting y monitoreo.
+    """
+    from runtime_paths import repo_root as _repo_root
+    from services.agent_html_output import outputs_dir as _outputs_dir
+
+    try:
+        repo_root_path = _repo_root()
+    except Exception as exc:  # noqa: BLE001
+        repo_root_path = None
+        repo_root_err = str(exc)
+    else:
+        repo_root_err = None
+
+    try:
+        outputs_path = _outputs_dir()
+        outputs_exists = outputs_path.exists()
+    except Exception as exc:  # noqa: BLE001
+        outputs_path = None
+        outputs_exists = False
+        repo_root_err = repo_root_err or str(exc)
+
+    try:
+        from project_manager import get_active_project
+        active_project = get_active_project()
+    except Exception:
+        active_project = None
+
+    try:
+        from services.ado_client import ado_pat_present
+        pat_present = ado_pat_present()
+    except Exception:
+        pat_present = False
+
+    auto_create_tasks = (
+        os.getenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true").lower() != "false"
+    )
+
+    # Estado de watchers (sin arrancar nada ad-hoc).
+    from services.output_watcher import get_output_watcher
+    ow = get_output_watcher()
+    output_watcher_info = {
+        "running": bool(ow and ow._thread and ow._thread.is_alive()),
+        "watching_dir": str(ow.outputs_dir) if ow else None,
+    }
+
+    # Señales de salud "dura": condiciones que romperían el cierre automático.
+    warnings: list[str] = []
+    if outputs_path is None or not outputs_exists:
+        warnings.append(
+            "outputs_dir no existe — el output_watcher no encontrará artifacts "
+            "(¿proyecto activo? ¿STACKY_REPO_ROOT?)"
+        )
+    if active_project is None:
+        warnings.append("sin proyecto activo — repo_root puede no resolver en deploy congelado")
+    if auto_create_tasks and not pat_present:
+        warnings.append("auto-create de Tasks habilitado pero ADO PAT ausente → las Tasks no se crearán")
+
+    return jsonify({
+        "ok": True,
+        "healthy": not warnings,
+        "repo_root": str(repo_root_path) if repo_root_path else None,
+        "repo_root_error": repo_root_err,
+        "outputs_dir": str(outputs_path) if outputs_path else None,
+        "outputs_dir_exists": outputs_exists,
+        "active_project": active_project,
+        "ado_pat_present": pat_present,
+        "auto_create_tasks_enabled": auto_create_tasks,
+        "watchers": {"output_watcher": output_watcher_info},
+        "warnings": warnings,
     })
 
 

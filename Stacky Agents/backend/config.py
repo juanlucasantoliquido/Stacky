@@ -71,8 +71,28 @@ class Config:
     # Claude Code CLI runtime
     CLAUDE_CODE_CLI_BIN = os.getenv("CLAUDE_CODE_CLI_BIN", "claude")
     CLAUDE_CODE_CLI_MODEL = os.getenv("CLAUDE_CODE_CLI_MODEL", "")
-    # Timeout en segundos para una ejecución completa de Claude Code CLI.
-    CLAUDE_CODE_CLI_TIMEOUT = int(os.getenv("CLAUDE_CODE_CLI_TIMEOUT", "600"))
+    # Cap de sesión en segundos para una ejecución interactiva de Claude Code CLI.
+    # 0 = ilimitado: la sesión vive hasta que el operador la cierra/cancela desde
+    # la consola, o Claude termina por su cuenta. >0 = mata la sesión tras N seg.
+    CLAUDE_CODE_CLI_TIMEOUT = int(os.getenv("CLAUDE_CODE_CLI_TIMEOUT", "0"))
+    # Modo de permisos para tool calls en modo non-interactive (-p).
+    # Choices del CLI: acceptEdits | auto | bypassPermissions | default | dontAsk | plan.
+    # "acceptEdits" auto-acepta ediciones de archivos sin prompts (el equivalente
+    # razonable para un agente autónomo; en -p no hay forma de aprobar interactivo).
+    CLAUDE_CODE_CLI_PERMISSION_MODE = os.getenv("CLAUDE_CODE_CLI_PERMISSION_MODE", "acceptEdits")
+    # Si true, pasa --dangerously-skip-permissions (bypass total, equivalente a
+    # danger-full-access de Codex). Tiene prioridad sobre el permission mode.
+    CLAUDE_CODE_CLI_SKIP_PERMISSIONS = os.getenv(
+        "CLAUDE_CODE_CLI_SKIP_PERMISSIONS", "false"
+    ).lower() in ("1", "true", "yes")
+    # Cómo se inyecta la persona del agente (.agent.md) al CLI:
+    #   "append" (default): vía --append-system-prompt-file → Claude ADOPTA la persona
+    #                       (system prompt real). El user message lleva solo ticket+contexto.
+    #   "user_message":     comportamiento viejo — la persona va embebida en el primer
+    #                       mensaje de usuario (rollback si --append-system-prompt diera problemas).
+    CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE = os.getenv(
+        "CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE", "append"
+    ).strip().lower()
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",

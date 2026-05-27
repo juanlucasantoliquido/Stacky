@@ -30,7 +30,7 @@ class FunctionalAgent(BaseAgent):
             "`Agentes/outputs/epic-<ADO_ID>/<RF_SLUG>/pending-task.json` y, al lado, "
             "`plan-de-pruebas.md`. El JSON debe incluir como mínimo: generated_at, generated_by, "
             "epic_id, rf_id, title, description_html, plan_de_pruebas_path, parent_link_type y status. "
-            "Usá status=`pending` y parent_link_type=`System.LinkTypes.Hierarchy-Reverse`. "
+            "Usá status=`pending_manual_creation` y parent_link_type=`System.LinkTypes.Hierarchy-Reverse`. "
             "Nunca marques el archivo como consumed ni inventes un task_ado_id; eso lo completa Stacky "
             "cuando el operador crea la Task desde la UI.\n\n"
             "Si el output es solo un comentario funcional para el Epic, escribilo como HTML en "

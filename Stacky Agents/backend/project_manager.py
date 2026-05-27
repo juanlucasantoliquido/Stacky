@@ -21,6 +21,7 @@ El formato de config.json es compatible con el de Stacky, sección issue_tracker
 
 from __future__ import annotations
 
+import base64
 import json
 import shutil
 from pathlib import Path
@@ -397,17 +398,59 @@ def find_project_for_tracker(tracker_project: str) -> tuple[str | None, dict]:
 
 # ── Credenciales ─────────────────────────────────────────────────────────────
 
+# Firma DPAPI en base64: bytes 01 00 00 00 D0 8C 9D DF (CryptProtectData blob).
+_DPAPI_B64_PREFIX = "AQAAANCMnd8"
+
+
+def _normalize_ado_pat(pat: str) -> str:
+    """Normaliza lo que el usuario pega a una credencial Basic canónica `base64(":"+PAT)`.
+
+    Robusto frente a los errores de pegado que rompían el auth:
+      - "Basic <token>" → se descarta el prefijo.
+      - Blob DPAPI ya cifrado (pegado desre otro ado_auth.json) → se rechaza con
+        mensaje claro, en vez de cifrarlo de nuevo (doble cifrado → 401).
+      - Credencial Basic ya pre-encoded (base64 de "algo:token" imprimible) → se
+        usa tal cual.
+      - PAT crudo (incluidos los PATs largos ~84 chars que el heurístico de longitud
+        confundía con pre-encoded) → se envuelve como base64(":"+PAT).
+
+    El resultado se guarda con pat_format=dpapi_preencoded, así el lector lo envía
+    tal cual sin tener que adivinar el formato.
+    """
+    p = (pat or "").strip()
+    if not p:
+        return p
+    if p.lower().startswith("basic "):
+        p = p[6:].strip()
+    if p.startswith(_DPAPI_B64_PREFIX):
+        raise ValueError(
+            "El valor pegado es un PAT ya cifrado (blob DPAPI), no un PAT crudo. "
+            "Pegá el Personal Access Token tal como lo entrega Azure DevOps."
+        )
+    # ¿Ya es una credencial Basic? base64 que decodifica a texto imprimible con ':'.
+    try:
+        decoded = base64.b64decode(p, validate=True)
+        if b":" in decoded and all(32 <= b < 127 for b in decoded):
+            return p
+    except Exception:
+        pass
+    return base64.b64encode(f":{p}".encode("utf-8")).decode("ascii")
+
+
 def write_ado_auth(name: str, pat: str) -> Path:
     """
     Escribe backend/projects/{NAME}/auth/ado_auth.json con el PAT proporcionado.
-    El PAT se guarda cifrado con DPAPI y ligado al usuario local de Windows.
-    Retorna la ruta del archivo escrito.
+
+    El PAT se normaliza a una credencial Basic canónica (ver `_normalize_ado_pat`)
+    y se guarda cifrado con DPAPI (ligado al usuario local de Windows) con formato
+    `dpapi_preencoded`. Retorna la ruta del archivo escrito.
     """
     auth_dir = PROJECTS_DIR / name.upper() / "auth"
     auth_dir.mkdir(parents=True, exist_ok=True)
     auth_file = auth_dir / "ado_auth.json"
+    normalized = _normalize_ado_pat(pat)
     payload: dict = {}
-    set_encrypted_secret(payload, "pat", pat, format_field="pat_format")
+    set_encrypted_secret(payload, "pat", normalized, format_field="pat_format", preencoded=True)
     write_json_file(auth_file, payload)
     return auth_file
 

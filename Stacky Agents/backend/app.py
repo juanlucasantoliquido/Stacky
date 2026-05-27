@@ -124,6 +124,46 @@ def _startup_sync(logger) -> None:
             logger.exception("sync ADO error inesperado en arranque")
 
 
+def _log_completion_preflight(logger) -> None:
+    """Loguea (y advierte) sobre la salud del cierre automático al arrancar.
+
+    Cubre la Fase P2 del PLAN_FIX_REGISTRO_COMPLETION_OPENCHAT: el deploy debe
+    gritar temprano en vez de fallar silencioso. Nunca lanza — el arranque no
+    debe abortar por esto.
+    """
+    try:
+        from runtime_paths import repo_root
+        from services.agent_html_output import outputs_dir
+        from services.ado_client import ado_pat_present
+        from project_manager import get_active_project
+
+        rr = repo_root()
+        od = outputs_dir()
+        od_exists = od.exists()
+        active = get_active_project()
+        logger.info(
+            "preflight cierre open-chat: repo_root=%s outputs_dir=%s (existe=%s) active_project=%s",
+            rr, od, od_exists, active or "(ninguno)",
+        )
+        if not od_exists:
+            logger.warning(
+                "preflight: outputs_dir NO existe (%s) — el output_watcher no "
+                "encontrará artifacts. Revisá proyecto activo / STACKY_REPO_ROOT.",
+                od,
+            )
+
+        auto_create = (
+            os.getenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true").lower() != "false"
+        )
+        if auto_create and not ado_pat_present():
+            logger.warning(
+                "preflight: auto-create de Tasks habilitado pero ADO PAT ausente "
+                "→ las Tasks NO se crearán. Setea ADO_PAT en .env o llena Tools/PAT-ADO."
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("preflight de cierre open-chat falló (continuando)")
+
+
 def create_app() -> Flask:
     dist_dir = frontend_dist_dir()
     app = Flask(__name__)
@@ -230,6 +270,11 @@ def create_app() -> Flask:
         logger.info("output watcher armed (interval=%.1fs)", _output_watcher_interval)
     else:
         logger.debug("output watcher disabled (STACKY_OUTPUT_WATCHER_ENABLED=false)")
+
+    # ── Preflight de configuración (Fase P2) ─────────────────────────────────
+    # Gritar temprano si el cierre automático del flujo open-chat no va a
+    # funcionar: directorio vigilado inexistente (C1) o PAT ausente (C2).
+    _log_completion_preflight(logger)
 
     _startup_sync(logger)
 

@@ -151,6 +151,21 @@ def _write_pending_task(repo_root: Path, epic_ado_id: int, rf_id: str, *, mtime_
     return p
 
 
+def _write_done_marker(repo_root: Path, epic_ado_id: int, *, status: str = "completed", rf_id: str | None = None):
+    """Crea el done-marker .stacky-done.json a nivel epic (o por RF si rf_id)."""
+    import json as _json
+    base = repo_root / "Agentes" / "outputs" / f"epic-{epic_ado_id}"
+    if rf_id:
+        base = base / rf_id
+    base.mkdir(parents=True, exist_ok=True)
+    p = base / ".stacky-done.json"
+    p.write_text(_json.dumps({
+        "status": status, "rf_id": rf_id or "ALL",
+        "finished_at": "2026-05-27T01:00:00Z",
+    }), encoding="utf-8")
+    return p
+
+
 # ── Modo B ───────────────────────────────────────────────────────────────────
 
 
@@ -414,6 +429,43 @@ def test_mode_a_closes_epic_execution_on_stable_pending_tasks(client, repo_root_
         assert e.status == "completed"
 
 
+def test_mode_a_done_marker_fires_immediately_bypassing_debounce(client, repo_root_dir):
+    """Con done-marker, el cierre dispara YA aunque el mtime esté dentro del
+    debounce (stable_delay_a alto). Señal determinista P3."""
+    from services.output_watcher import AdoOutputWatcher
+    from db import session_scope
+    from models import AgentExecution
+
+    ticket_id = _mk_ticket(40220, work_item_type="Epic")
+    exec_id = _mk_execution(ticket_id)
+    # pending-task recién escrito (mtime ahora) → normalmente esperaría el debounce
+    _write_pending_task(repo_root_dir, 40220, "RF-001", mtime_offset=0.0)
+    _write_done_marker(repo_root_dir, 40220)
+
+    # stable_delay_a alto: sin marker NO cerraría; con marker sí.
+    w = AdoOutputWatcher(stable_delay_a=999.0)
+    result = w.scan_once()
+    assert result["mode_a_closes"] == 1
+
+    with session_scope() as session:
+        e = session.get(AgentExecution, exec_id)
+        assert e.status == "completed"
+
+
+def test_mode_a_non_terminal_marker_does_not_fire(client, repo_root_dir):
+    """Un done-marker con status=running NO dispara; cae al fallback (debounce)."""
+    from services.output_watcher import AdoOutputWatcher
+
+    ticket_id = _mk_ticket(40221, work_item_type="Epic")
+    _mk_execution(ticket_id)
+    _write_pending_task(repo_root_dir, 40221, "RF-001", mtime_offset=0.0)
+    _write_done_marker(repo_root_dir, 40221, status="running")
+
+    w = AdoOutputWatcher(stable_delay_a=999.0)
+    result = w.scan_once()
+    assert result["mode_a_closes"] == 0  # marker no-terminal + dentro del debounce
+
+
 def test_mode_a_respects_stable_delay(client, repo_root_dir):
     """pending-task.json recién escritos NO disparan hasta estabilizar."""
     from services.output_watcher import AdoOutputWatcher
@@ -550,6 +602,38 @@ def test_mode_a_skips_when_no_running_execution(client, repo_root_dir):
 
 
 # ── Robustez ─────────────────────────────────────────────────────────────────
+
+
+def test_outputs_dir_re_resolves_lazily_between_scans(client, repo_root_dir, monkeypatch, tmp_path):
+    """El watcher (sin override) resuelve outputs_dir en cada scan, así que si
+    repo_root cambia tras el arranque (p.ej. al activarse el proyecto) lo refleja.
+
+    Reproduce C1: watcher construido apuntando a un root sin Agentes/outputs
+    (scan no-op), luego el root correcto aparece → el scan siguiente dispara.
+    """
+    from services.output_watcher import AdoOutputWatcher
+
+    # Root inicial SIN Agentes/outputs → outputs_dir no existe → scan no-op.
+    other_root = tmp_path / "sin_proyecto"
+    other_root.mkdir()
+    monkeypatch.setenv("STACKY_REPO_ROOT", str(other_root))
+
+    w = AdoOutputWatcher(stable_delay_a=0.0)
+    assert not w.outputs_dir.exists()
+    r1 = w.scan_once()
+    assert r1["mode_a_closes"] == 0
+
+    # Preparar el root correcto (repo_root_dir ya tiene Agentes/outputs) con un
+    # epic listo para cerrar, y "activar" ese root cambiando el env.
+    ticket_id = _mk_ticket(40210, work_item_type="Epic")
+    _mk_execution(ticket_id)
+    _write_pending_task(repo_root_dir, 40210, "RF-001")
+    monkeypatch.setenv("STACKY_REPO_ROOT", str(repo_root_dir))
+
+    # El mismo watcher, sin reconstruir, ahora ve el dir correcto.
+    assert w.outputs_dir.exists()
+    r2 = w.scan_once()
+    assert r2["mode_a_closes"] == 1
 
 
 def test_scan_handles_malformed_dir_names(client, repo_root_dir):

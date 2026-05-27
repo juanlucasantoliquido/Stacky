@@ -13,6 +13,7 @@ import DailyStandupModal from "./components/DailyStandupModal";
 import OnboardingTour from "./components/OnboardingTour";
 import ShortcutsCheatsheet from "./components/ShortcutsCheatsheet";
 import DemoModeBanner from "./components/DemoModeBanner";
+import CodexConsoleDock from "./components/CodexConsoleDock";
 import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
@@ -181,6 +182,10 @@ export default function App() {
       />
       <DailyStandupModal />
       <OnboardingTour />
+
+      {/* Consola flotante de runtimes CLI (Codex / Claude): muestra la actividad
+          en vivo y permite responderle al agente. Se activa al lanzar un run CLI. */}
+      <CodexConsoleDock />
     </div>
   );
 }

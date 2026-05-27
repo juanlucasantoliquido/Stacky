@@ -36,6 +36,16 @@ _PENDING_TASK_REQUIRED_FIELDS = {
     "parent_link_type", "status",
 }
 
+# Contrato de `status` del pending-task.json (Fase P4 — consistencia C3).
+# Valor canónico que el agente debe escribir (ver agents/functional.py y el
+# .agent.md del Analista Funcional). `pending` se acepta como alias legacy para
+# no romper archivos en vuelo generados por prompts viejos. `consumed` marca un
+# archivo ya procesado (idempotencia).
+PENDING_TASK_STATUS_CANONICAL = "pending_manual_creation"
+PENDING_TASK_STATUS_CONSUMED = "consumed"
+_PENDING_TASK_STATUS_PENDING_ALIASES = {PENDING_TASK_STATUS_CANONICAL, "pending"}
+_PENDING_TASK_STATUS_ALLOWED = _PENDING_TASK_STATUS_PENDING_ALIASES | {PENDING_TASK_STATUS_CONSUMED}
+
 # Resuelve el root del repo donde viven Agentes/outputs.
 # Delega en runtime_paths.repo_root() (frozen-aware): honra STACKY_REPO_ROOT,
 # luego el workspace_root del proyecto activo en deploy congelado, luego el
@@ -45,13 +55,25 @@ def _repo_root() -> Path:
     from runtime_paths import repo_root as _runtime_repo_root
     return _runtime_repo_root()
 
-# Exportado como módulo-level para que los tests puedan patchearlo
-REPO_ROOT: Path = _repo_root()
+# Override opcional para tests (Path). En producción queda None y
+# _resolve_repo_root() resuelve en vivo. NO cachear acá el resultado de
+# _repo_root(): el backend importa este módulo ANTES de que el operador active
+# el proyecto, y congelar el valor dejaba REPO_ROOT apuntando a un repo_root
+# inexistente → create-child-task fallaba con PENDING_TASK_FILE_NOT_FOUND aunque
+# el archivo existiera (misma clase de bug que P1 resolvió en el output_watcher).
+REPO_ROOT: Path | None = None
 
 
 def _resolve_repo_root() -> Path:
-    """Permite que los tests puedan sobreescribir REPO_ROOT vía patch."""
-    return REPO_ROOT
+    """Root del repo donde viven Agentes/outputs — resuelto **lazy** por request.
+
+    Si un test fijó `REPO_ROOT` explícito, se respeta. Si no (None, producción),
+    se resuelve en vivo vía runtime_paths.repo_root() en CADA request, reflejando
+    el proyecto activo aunque se haya activado después del import.
+    """
+    if REPO_ROOT is not None:
+        return REPO_ROOT
+    return _repo_root()
 
 
 def _request_project_name() -> str | None:
@@ -1550,6 +1572,22 @@ def create_child_task(ado_id: int):
             "error": "PENDING_TASK_SCHEMA_INVALID",
             "missing_fields": missing_fields,
             "message": f"Campos requeridos ausentes en pending-task.json: {missing_fields}",
+            "correlation_id": correlation_id,
+        }), 400
+
+    # ── [1b] Validar el valor de `status` (Fase P4 — consistencia C3) ──────────
+    pt_status = str(pt_payload.get("status", "")).strip()
+    if pt_status not in _PENDING_TASK_STATUS_ALLOWED:
+        return jsonify({
+            "ok": False,
+            "error": "PENDING_TASK_STATUS_INVALID",
+            "status_found": pt_status,
+            "status_allowed": sorted(_PENDING_TASK_STATUS_ALLOWED),
+            "message": (
+                f"status='{pt_status}' no es válido. Usá "
+                f"'{PENDING_TASK_STATUS_CANONICAL}' (canónico) — valores aceptados: "
+                f"{sorted(_PENDING_TASK_STATUS_ALLOWED)}."
+            ),
             "correlation_id": correlation_id,
         }), 400
 

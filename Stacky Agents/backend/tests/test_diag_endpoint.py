@@ -240,3 +240,51 @@ def test_payload_includes_recovery_history(client, runs_dir):
     assert len(body["recovery_history"]) == 1
     assert body["recovery_history"][0]["new_status"] == "error"
     assert body["recovery_history"][0]["changed_by"].startswith("system:reaper")
+
+
+# ── GET /api/diag/health (Fase P2) ──────────────────────────────────────────
+
+
+def test_health_reports_outputs_dir_and_pat(client, monkeypatch, tmp_path):
+    """health expone repo_root/outputs_dir/existencia/pat y marca healthy."""
+    monkeypatch.setenv("STACKY_REPO_ROOT", str(tmp_path))
+    (tmp_path / "Agentes" / "outputs").mkdir(parents=True)
+    # PAT presente vía env.
+    monkeypatch.setenv("ADO_PAT", "x" * 20)
+
+    body = client.get("/api/diag/health").get_json()
+    assert body["ok"] is True
+    assert body["outputs_dir_exists"] is True
+    assert body["ado_pat_present"] is True
+    assert body["repo_root"] == str(tmp_path.resolve())
+    assert "auto_create_tasks_enabled" in body
+    assert "output_watcher" in body["watchers"]
+
+
+def test_health_warns_when_pat_absent_and_autocreate_on(client, monkeypatch, tmp_path):
+    """Sin PAT + auto-create ON → warning explícito y healthy=False."""
+    monkeypatch.setenv("STACKY_REPO_ROOT", str(tmp_path))
+    (tmp_path / "Agentes" / "outputs").mkdir(parents=True)
+    from config import config as _config
+    monkeypatch.delenv("ADO_PAT", raising=False)
+    monkeypatch.setattr(_config, "ADO_PAT", "", raising=False)
+    monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+    # Evitar que un Tools/PAT-ADO real del entorno dé un falso positivo: el
+    # endpoint importa ado_pat_present desde services.ado_client en tiempo de
+    # request, así que parcheamos ahí.
+    import services.ado_client as _ac
+    monkeypatch.setattr(_ac, "ado_pat_present", lambda *a, **k: False)
+
+    body = client.get("/api/diag/health").get_json()
+    assert body["ado_pat_present"] is False
+    assert body["healthy"] is False
+    assert any("PAT" in w for w in body["warnings"])
+
+
+def test_health_warns_when_outputs_dir_missing(client, monkeypatch, tmp_path):
+    """outputs_dir inexistente → warning + healthy=False (cubre C1)."""
+    monkeypatch.setenv("STACKY_REPO_ROOT", str(tmp_path))  # sin crear Agentes/outputs
+    body = client.get("/api/diag/health").get_json()
+    assert body["outputs_dir_exists"] is False
+    assert body["healthy"] is False
+    assert any("outputs_dir" in w for w in body["warnings"])

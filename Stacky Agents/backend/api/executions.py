@@ -75,7 +75,17 @@ def send_execution_input(execution_id: int):
     if not text:
         abort(400, "text is required")
 
-    from services.codex_cli_runner import send_input
+    # Enrutar al runner correcto según el runtime de la ejecución.
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            abort(404, "execution not found")
+        runtime = (row.metadata_dict or {}).get("runtime")
+
+    if runtime == "claude_code_cli":
+        from services.claude_code_cli_runner import send_input
+    else:
+        from services.codex_cli_runner import send_input
 
     try:
         result = send_input(execution_id, text, user=current_user())
@@ -180,11 +190,14 @@ def cancel_execution(execution_id: int):
         row.status = "cancelled"
         row.completed_at = datetime.utcnow()
         meta = row.metadata_dict or {}
-        is_codex = meta.get("runtime") == "codex_cli"
+        runtime = meta.get("runtime")
 
-    if is_codex:
+    if runtime == "codex_cli":
         from services import codex_cli_runner
         codex_cli_runner.cancel(execution_id)
+    elif runtime == "claude_code_cli":
+        from services import claude_code_cli_runner
+        claude_code_cli_runner.cancel(execution_id)
 
     logger.info("execution cancelled manually exec=%s", execution_id)
     return jsonify({"ok": True, "execution_id": execution_id})

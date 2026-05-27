@@ -47,9 +47,10 @@ from typing import Any
 import log_streamer
 from config import config
 from db import session_scope
-from models import AgentExecution
-from services import ticket_status, vscode_agents
+from models import AgentExecution, Ticket
+from services import context_enrichment, pii_masker, ticket_status, vscode_agents
 from services.agent_env import build_agent_env
+from services.project_context import resolve_project_context
 from services.manifest_watcher import append_event, write_heartbeat, write_manifest
 from services.stacky_logger import logger as stacky_logger
 
@@ -59,6 +60,9 @@ RUNTIME = "claude_code_cli"
 
 _PROCESSES: dict[int, subprocess.Popen[str]] = {}
 _PROCESSES_LOCK = threading.Lock()
+# Lock por ejecución para serializar escrituras al stdin del proceso (el operador
+# puede enviar varias respuestas concurrentes desde la consola).
+_STDIN_LOCKS: dict[int, threading.Lock] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -143,19 +147,95 @@ def start_claude_code_cli_run(
     return execution_id
 
 
-def cancel(execution_id: int) -> bool:
-    """Termina el proceso Claude Code CLI si Stacky lo inició para esta ejecución."""
+def cancel(execution_id: int, *, grace_seconds: float = 8.0) -> bool:
+    """Cierra la sesión Claude Code CLI de forma ordenada.
+
+    Cerrar stdin hace que Claude termine el turno en curso y salga limpio
+    (exit 0 → 'completed'). Si no muere dentro de `grace_seconds`, un watcher
+    lo termina/mata. La llamada retorna de inmediato (no bloquea el request).
+    """
     with _PROCESSES_LOCK:
         proc = _PROCESSES.get(execution_id)
     if proc is None:
         return False
-    _push(execution_id, "warn", "claude code cli cancel requested")
+    _push(execution_id, "warn", "claude code cli cierre solicitado (cerrando stdin)", group="operator")
     try:
-        proc.terminate()
-        return True
-    except Exception as exc:  # noqa: BLE001
-        _push(execution_id, "error", f"claude code cli cancel failed: {exc}")
-        return False
+        if proc.stdin is not None and not proc.stdin.closed:
+            proc.stdin.close()
+    except Exception:
+        pass
+
+    def _grace_watch() -> None:
+        try:
+            proc.wait(timeout=grace_seconds)
+            return  # salió limpio
+        except Exception:
+            pass
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    threading.Thread(target=_grace_watch, daemon=True, name=f"claude-cli-cancel-{execution_id}").start()
+    return True
+
+
+def _user_message_line(text: str) -> str:
+    """Codifica un mensaje de usuario en el formato stream-json de Claude Code.
+
+    Una línea JSONL por mensaje:
+      {"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}}
+    """
+    payload = {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [{"type": "text", "text": text}],
+        },
+    }
+    return json.dumps(payload, ensure_ascii=False) + "\n"
+
+
+def send_input(execution_id: int, text: str, *, user: str | None = None) -> dict[str, Any]:
+    """Envía texto del operador a una ejecución Claude Code CLI viva.
+
+    Escribe un mensaje de usuario stream-json en el stdin del proceso. Claude
+    procesa el turno y continúa la misma conversación (stdin permanece abierto
+    para multi-turno). Si el proceso ya no acepta stdin devuelve HTTP 409 vía
+    RuntimeError.
+    """
+    message = (text or "").strip()
+    if not message:
+        raise ValueError("text is required")
+
+    with _PROCESSES_LOCK:
+        proc = _PROCESSES.get(execution_id)
+    if proc is None or proc.poll() is not None:
+        raise RuntimeError(
+            "La ejecución de Claude ya terminó; no se puede enviar más texto."
+        )
+    if proc.stdin is None or proc.stdin.closed:
+        raise RuntimeError("El stdin de Claude no está disponible para esta ejecución.")
+
+    lock = _STDIN_LOCKS.setdefault(execution_id, threading.Lock())
+    with lock:
+        try:
+            proc.stdin.write(_user_message_line(message))
+            proc.stdin.flush()
+        except (BrokenPipeError, OSError) as exc:
+            raise RuntimeError(f"No se pudo escribir en Claude: {exc}") from exc
+
+    _push(
+        execution_id,
+        "info",
+        f"operator → claude: {message[:2000]}",
+        group="operator",
+    )
+    return {"ok": True, "mode": "stdin", "execution_id": execution_id}
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +264,7 @@ def _run_in_background(
     heartbeat_thread: threading.Thread | None = None
     agent_type: str | None = None
     ticket_id: int | None = None
+    mask_map: dict[str, str] = {}
 
     try:
         with session_scope() as session:
@@ -192,6 +273,13 @@ def _run_in_background(
                 raise RuntimeError(f"execution_id={execution_id} not found")
             ticket_id = row.ticket_id
             agent_type = row.agent_type
+            raw_blocks = list(row.input_context or [])
+            ticket = session.get(Ticket, ticket_id) if ticket_id else None
+            t_ado_id = ticket.ado_id if ticket else None
+            t_title = ticket.title if ticket else None
+            t_desc = ticket.description if ticket else None
+            t_wit = ticket.work_item_type if ticket else None
+            project_ctx = resolve_project_context(ticket=ticket)
 
         selected_agent = vscode_agents.get_agent_by_filename(
             config.VSCODE_PROMPTS_DIR, vscode_agent_filename
@@ -212,16 +300,72 @@ def _run_in_background(
         output_file = run_dir / "last_message.md"
         prompt_file = run_dir / "prompt.md"
 
-        prompt = _build_claude_code_prompt(
-            selected_agent=selected_agent,
-            all_agents=all_agents,
-            ticket_message=ticket_message,
+        # Fase B — enriquecimiento de contexto (épica + artifacts + similares +
+        # comentarios/adjuntos ADO). Corre acá, en el thread de background, para no
+        # bloquear el request de lanzamiento (el dock ya abrió con execution_id).
+        log("info", "enriqueciendo contexto del ticket…")
+        enriched_blocks, _ado_stats = context_enrichment.enrich_blocks(
+            ticket_id=ticket_id,
+            agent_type=agent_type or "",
+            raw_blocks=raw_blocks,
+            project_ctx=project_ctx,
+            log=log,
         )
+        rich_message = context_enrichment.build_ticket_context_text(
+            ado_id=t_ado_id,
+            title=t_title,
+            description=t_desc,
+            work_item_type=t_wit,
+            blocks=enriched_blocks,
+        )
+        # Fallback: si no se pudo armar nada (ticket sin datos), usar el mensaje
+        # title-only que vino del dispatcher.
+        if not rich_message.strip():
+            rich_message = ticket_message
+        # Fase B — PII masking ANTES de mandar el prompt al CLI (paridad con
+        # github_copilot). Se guarda el mask_map para re-hidratar el output.
+        masked_message, mask_map = pii_masker.mask_text(rich_message)
+        if mask_map:
+            log("info", f"PII masking: {len(mask_map)} ocurrencias enmascaradas")
+
+        # Fase C — cómo se inyecta la persona del agente.
+        #   "append" (default): persona = system prompt real (--append-system-prompt-file).
+        #                       El primer mensaje de usuario lleva solo ticket + contexto.
+        #   "user_message":     persona embebida en el primer mensaje (rollback).
+        system_prompt_mode = (config.CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE or "append")
+        system_prompt_file: Path | None = None
+        if system_prompt_mode == "append":
+            system_prompt_text = _build_system_prompt(selected_agent)
+            system_prompt_file = run_dir / "system_prompt.md"
+            system_prompt_file.write_text(system_prompt_text, encoding="utf-8")
+            prompt = _build_user_message(
+                all_agents=all_agents,
+                ticket_message=masked_message,
+            )
+            log(
+                "info",
+                f"adoptando agente {selected_agent.name} ({selected_agent.filename}) "
+                "vía system prompt (--append-system-prompt-file)",
+                group="operator",
+            )
+        else:
+            # Rollback: todo en el primer mensaje de usuario.
+            prompt = _build_claude_code_prompt(
+                selected_agent=selected_agent,
+                all_agents=all_agents,
+                ticket_message=masked_message,
+            )
+            log(
+                "info",
+                f"agente {selected_agent.name} ({selected_agent.filename}) embebido en el "
+                "primer mensaje (CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE=user_message)",
+                group="operator",
+            )
         prompt_file.write_text(prompt, encoding="utf-8")
 
         cmd = _build_command(
-            prompt=prompt,
             model_override=model_override,
+            system_prompt_file=system_prompt_file,
         )
         log("info", f"claude code cli cwd={cwd}")
         log("info", "claude code cli command: " + _display_command(cmd))
@@ -234,12 +378,14 @@ def _run_in_background(
         if os.name == "nt":
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-        timeout = config.CLAUDE_CODE_CLI_TIMEOUT
+        # Cap de sesión (segundos). 0 = ilimitado: la sesión interactiva vive
+        # hasta que el operador la cierra/cancela o Claude termina por su cuenta.
+        session_timeout = config.CLAUDE_CODE_CLI_TIMEOUT if config.CLAUDE_CODE_CLI_TIMEOUT > 0 else None
 
         proc = subprocess.Popen(
             cmd,
             cwd=str(cwd),
-            stdin=subprocess.DEVNULL,   # Claude Code CLI no usa stdin; prompt va en -p
+            stdin=subprocess.PIPE,      # interactivo: prompt + respuestas del operador
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -252,6 +398,17 @@ def _run_in_background(
         log("info", f"claude code cli process started pid={proc.pid}")
         with _PROCESSES_LOCK:
             _PROCESSES[execution_id] = proc
+
+        # Enviar el prompt inicial como primer mensaje de usuario (stream-json).
+        # NO cerramos stdin: queda abierto para que el operador responda desde la
+        # consola in-page (send_input).
+        try:
+            proc.stdin.write(_user_message_line(prompt))
+            proc.stdin.flush()
+            log("info", f"prompt inicial enviado a claude por stdin ({len(prompt)} chars)", group="operator")
+        except Exception as exc:  # noqa: BLE001
+            log("error", f"no se pudo enviar el prompt inicial a claude: {exc}")
+            raise
 
         write_heartbeat(run_dir, execution_id=execution_id, pid=proc.pid, phase="started")
         append_event(
@@ -294,16 +451,31 @@ def _run_in_background(
         for reader in readers:
             reader.start()
 
-        try:
-            return_code = proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            log("error", f"claude code cli timeout after {timeout}s — terminating")
-            proc.terminate()
+        # Sesión interactiva: esperamos en bucle hasta que el proceso termine
+        # (operador cierra/cancela stdin, o Claude finaliza). El heartbeat sigue
+        # latiendo en su propio thread, así que el reaper no lo marca colgado.
+        import time as _time
+        session_deadline = (_time.monotonic() + session_timeout) if session_timeout else None
+        while True:
             try:
-                return_code = proc.wait(timeout=10)
+                return_code = proc.wait(timeout=5)
+                break
             except subprocess.TimeoutExpired:
-                proc.kill()
-                return_code = proc.wait()
+                if session_deadline is not None and _time.monotonic() > session_deadline:
+                    log("warn", f"claude code cli cap de sesión alcanzado ({session_timeout}s) — terminando")
+                    try:
+                        if proc.stdin and not proc.stdin.closed:
+                            proc.stdin.close()
+                    except Exception:
+                        pass
+                    proc.terminate()
+                    try:
+                        return_code = proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        return_code = proc.wait()
+                    break
+                continue
 
         heartbeat_stop.set()
         for reader in readers:
@@ -313,11 +485,15 @@ def _run_in_background(
 
         with _PROCESSES_LOCK:
             _PROCESSES.pop(execution_id, None)
+        _STDIN_LOCKS.pop(execution_id, None)
 
         duration_ms = int((datetime.utcnow() - started).total_seconds() * 1000)
 
-        # Escribir output final al archivo para trazabilidad
+        # Escribir output final al archivo para trazabilidad.
+        # Re-hidratar PII enmascarada para que el operador vea los datos reales.
         output = _extract_output(final_output, stdout_tail)
+        if output and mask_map:
+            output = pii_masker.unmask(output, mask_map)
         if output:
             output_file.write_text(output, encoding="utf-8")
 
@@ -332,6 +508,10 @@ def _run_in_background(
             "output_file": str(output_file),
             "prompt_file": str(prompt_file),
             "agent_count": len(all_agents),
+            "system_prompt_mode": system_prompt_mode,
+            "system_prompt_file": str(system_prompt_file) if system_prompt_file else None,
+            "agent_name": selected_agent.name,
+            "pii_masked": bool(mask_map),
         }
 
         if return_code == 0:
@@ -422,6 +602,7 @@ def _run_in_background(
         heartbeat_stop.set()
         with _PROCESSES_LOCK:
             _PROCESSES.pop(execution_id, None)
+        _STDIN_LOCKS.pop(execution_id, None)
         logger.exception("[exec=%s] claude code cli runtime failed", execution_id)
         log("error", f"claude code cli runtime failed: {exc}")
         _mark_terminal(execution_id, status="error", error=str(exc))
@@ -470,31 +651,52 @@ def _run_in_background(
 
 def _build_command(
     *,
-    prompt: str,
     model_override: str | None,
+    system_prompt_file: Path | None = None,
 ) -> list[str]:
-    """Construye el comando CLI para Claude Code en modo non-interactive.
+    """Construye el comando CLI para Claude Code en modo interactivo (streaming).
 
-    Supuestos sobre flags (verificar con `claude --help` en el host):
-      -p / --print         : non-interactive, prompt como argumento posicional
-      --output-format      : stream-json para streaming línea a línea
-      --verbose            : incluye eventos de tool calls y token usage
-      --model              : modelo específico (opcional)
+    El prompt NO va como argumento posicional: se envía como mensaje de usuario
+    stream-json por stdin (ver _user_message_line). Esto permite mantener stdin
+    abierto y enviar respuestas del operador en turnos sucesivos.
+
+    Flags:
+      -p / --print              : modo print (no abre UI interactiva de terminal)
+      --input-format stream-json: lee mensajes de usuario JSONL desde stdin
+      --output-format stream-json --verbose : eventos JSONL en stdout
+      --append-system-prompt-file : persona del .agent.md como system prompt real
+                                    (Fase C); usa archivo para no chocar con el
+                                    límite de longitud de línea en Windows.
+      --model                   : modelo específico (opcional)
     """
     claude_bin = _resolve_claude_code_cli_bin()
     model = model_override or config.CLAUDE_CODE_CLI_MODEL
 
     cmd = [
         claude_bin,
-        "-p",               # non-interactive print mode
-        prompt,
+        "-p",
+        "--input-format",
+        "stream-json",
         "--output-format",
         "stream-json",
-        "--verbose",        # TODO: verificar si --verbose es soportado en versión instalada
+        "--verbose",        # stream-json requiere --verbose
     ]
 
+    # Fase C — inyectar la persona del agente como system prompt real.
+    if system_prompt_file is not None:
+        cmd.extend(["--append-system-prompt-file", str(system_prompt_file)])
+
+    # Permisos: en modo -p no hay forma de aprobar tool calls interactivamente,
+    # así que el agente queda bloqueado salvo que se configure un modo permisivo.
+    if config.CLAUDE_CODE_CLI_SKIP_PERMISSIONS:
+        cmd.append("--dangerously-skip-permissions")
+    else:
+        permission_mode = (config.CLAUDE_CODE_CLI_PERMISSION_MODE or "acceptEdits").strip()
+        if permission_mode:
+            cmd.extend(["--permission-mode", permission_mode])
+
     if model:
-        cmd.extend(["--model", model])  # TODO: verificar flag --model vs -m en versión instalada
+        cmd.extend(["--model", model])
 
     return cmd
 
@@ -548,19 +750,10 @@ def _resolve_claude_code_cli_bin() -> str:
 
 
 def _display_command(cmd: list[str]) -> str:
-    """Versión segura del comando para logs: trunca el prompt a 120 chars."""
+    """Versión legible del comando para logs (el prompt va por stdin, no acá)."""
     safe: list[str] = []
-    skip_next = False
     for part in cmd:
-        if skip_next:
-            truncated = part[:120].replace("\n", "\\n")
-            safe.append(f'"<prompt:{len(part)}chars:{truncated}...>"')
-            skip_next = False
-            continue
-        if part == "-p":
-            safe.append(part)
-            skip_next = True
-        elif any(ch.isspace() for ch in part):
+        if any(ch.isspace() for ch in part):
             safe.append(f'"{part}"')
         else:
             safe.append(part)
@@ -571,17 +764,29 @@ def _display_command(cmd: list[str]) -> str:
 # Construcción del prompt
 # ---------------------------------------------------------------------------
 
-def _build_claude_code_prompt(
-    *,
-    selected_agent: vscode_agents.VsCodeAgent,
-    all_agents: list[vscode_agents.VsCodeAgent],
-    ticket_message: str,
-) -> str:
-    """Construye el prompt para Claude Code CLI.
+# Reglas duras de Stacky: definen *cómo* actúa el agente (no *qué* hacer). Van
+# al canal de system prompt junto con la persona del .agent.md.
+_STACKY_RULES = """## Reglas de ejecución (Stacky Agents)
 
-    A diferencia de Codex, el prompt se pasa como argumento de -p, no por stdin.
-    Se incluye el system prompt del agente seleccionado inline.
-    """
+- Trabajá en el workspace configurado para el proyecto.
+- Mantené el comportamiento esperado por el agente que estás adoptando.
+- Si editás archivos, limitá el cambio al alcance del ticket y dejá evidencia
+  clara en tu respuesta final.
+- Reportá comandos relevantes, archivos tocados y cualquier bloqueo real.
+- Regla absoluta: no toques Azure DevOps. No publiques comentarios, no crees
+  ni actualices work items, no cambies estados, no ejecutes APIs/CLI/scripts de
+  ADO y no solicites credenciales ADO. Stacky Agents es el único autorizado a
+  escribir en ADO.
+- Si el resultado debe ser un comentario ADO, generá el archivo
+  `Agentes/outputs/<ADO_ID>/comment.html` y opcionalmente `comment.meta.json`.
+  Stacky lo validará y publicará.
+- Si el resultado debe ser una Task hija para un Epic, generá
+  `Agentes/outputs/epic-<ADO_ID>/<RF_SLUG>/pending-task.json` y los archivos
+  referenciados, como `plan-de-pruebas.md`. Stacky creará la Task desde la UI y
+  marcará el JSON como consumido."""
+
+
+def _build_agent_inventory(all_agents: list[vscode_agents.VsCodeAgent]) -> str:
     inventory_lines: list[str] = []
     for agent in all_agents:
         desc = (agent.description or "").replace("\n", " ").strip()
@@ -590,8 +795,61 @@ def _build_claude_code_prompt(
         inventory_lines.append(
             f"- {agent.name} (`{agent.filename}`): {desc or 'sin descripcion'}"
         )
-    inventory = "\n".join(inventory_lines) if inventory_lines else "- (no se encontraron agentes)"
+    return "\n".join(inventory_lines) if inventory_lines else "- (no se encontraron agentes)"
 
+
+def _build_system_prompt(selected_agent: vscode_agents.VsCodeAgent) -> str:
+    """System prompt real para --append-system-prompt-file (Fase C).
+
+    Inyecta la PERSONA del agente GitHub Copilot Pro (el `.agent.md`) + las reglas
+    duras de Stacky. Esto define *cómo* actúa el agente; Claude lo adopta como su
+    rol en vez de leerlo como información en un turno de usuario.
+    """
+    return f"""Adoptá la identidad y el comportamiento del siguiente agente GitHub Copilot Pro.
+Sos ese agente — no Claude Code genérico. Stacky te lanzó desde Claude Code CLI
+para trabajar sobre un ticket y mantener trazabilidad en los logs del workbench.
+
+# Agente que estás adoptando: {selected_agent.name} ({selected_agent.filename})
+
+{selected_agent.system_prompt}
+
+{_STACKY_RULES}
+"""
+
+
+def _build_user_message(
+    *,
+    all_agents: list[vscode_agents.VsCodeAgent],
+    ticket_message: str,
+) -> str:
+    """Primer mensaje de usuario (Fase C): define *qué* hacer — ticket + contexto.
+
+    La persona ya viaja por el canal de system prompt (ver _build_system_prompt),
+    así que acá solo van el catálogo de agentes (referencia) y el ticket/contexto.
+    """
+    inventory = _build_agent_inventory(all_agents)
+    return f"""## Catálogo de agentes GitHub Copilot Pro disponibles (referencia)
+
+{inventory}
+
+## Ticket y contexto
+
+{ticket_message}
+"""
+
+
+def _build_claude_code_prompt(
+    *,
+    selected_agent: vscode_agents.VsCodeAgent,
+    all_agents: list[vscode_agents.VsCodeAgent],
+    ticket_message: str,
+) -> str:
+    """Prompt monolítico (modo rollback `user_message`): persona + contexto en el
+    primer mensaje de usuario. Es el comportamiento previo a Fase C, disponible vía
+    CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE=user_message si --append-system-prompt diera
+    problemas.
+    """
+    inventory = _build_agent_inventory(all_agents)
     return f"""# Stacky Agents Claude Code CLI runtime
 
 Actua como el agente GitHub Copilot Pro seleccionado por el operador.
@@ -618,24 +876,7 @@ ticket y mantener trazabilidad en los logs del workbench.
 
 {ticket_message}
 
-## Instrucciones de ejecucion
-
-- Trabaja en el workspace configurado para el proyecto.
-- Mantene el comportamiento esperado por el agente seleccionado.
-- Si editas archivos, limita el cambio al alcance del ticket y deja evidencia
-  clara en tu respuesta final.
-- Reporta comandos relevantes, archivos tocados y cualquier bloqueo real.
-- Regla absoluta: no toques Azure DevOps. No publiques comentarios, no crees
-  ni actualices work items, no cambies estados, no ejecutes APIs/CLI/scripts de
-  ADO y no solicites credenciales ADO. Stacky Agents es el unico autorizado a
-  escribir en ADO.
-- Si el resultado debe ser un comentario ADO, genera el archivo
-  `Agentes/outputs/<ADO_ID>/comment.html` y opcionalmente `comment.meta.json`.
-  Stacky lo validara y publicara.
-- Si el resultado debe ser una Task hija para un Epic, genera
-  `Agentes/outputs/epic-<ADO_ID>/<RF_SLUG>/pending-task.json` y los archivos
-  referenciados, como `plan-de-pruebas.md`. Stacky creara la Task desde la UI y
-  marcara el JSON como consumido.
+{_STACKY_RULES}
 """
 
 

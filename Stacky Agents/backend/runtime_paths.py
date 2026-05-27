@@ -1,10 +1,26 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("stacky.runtime_paths")
+
+# Sentinel devuelto por repo_root() cuando NO se puede resolver en un deploy
+# congelado sin proyecto activo. Es un path inexistente a propósito: los
+# consumidores que arman `<repo_root>/Agentes/outputs` verán un directorio
+# inexistente y harán no-op, en vez de escanear basura bajo `<repo>/Tools/Stacky`
+# (el viejo fallback `parents[4]`, que en el .exe empaquetado dentro del repo
+# apuntaba ahí y dejaba al output_watcher poleando un dir equivocado).
+_UNRESOLVED_REPO_ROOT = Path(__file__).resolve().parent / "__stacky_repo_root_unresolved__"
+
+# Throttle del WARNING: repo_root() se llama en cada scan del watcher (~3s); sin
+# esto el log se inundaría mientras no haya proyecto activo. Se rearma cuando la
+# resolución vuelve a funcionar, para que un nuevo período no-resuelto sí avise.
+_warned_unresolved_repo_root = False
 
 
 def is_frozen() -> bool:
@@ -88,16 +104,35 @@ def repo_root() -> Path:
       2. Congelado (deploy portable): `workspace_root` del proyecto activo. El
          exe vive fuera del repo del cliente, así que contar `parents` desde
          el módulo empaquetado no aplica.
-      3. Layout de fuentes: `backend/runtime_paths.py` → parents[4] = `<repo>`
-         (`<repo>/Tools/Stacky/Stacky Agents/backend/runtime_paths.py`).
+      3. Congelado **sin** proyecto activo: sentinel inexistente
+         (`_UNRESOLVED_REPO_ROOT`) + WARNING. NO se cae a `parents[4]`: en un
+         deploy embebido (`<repo>/Tools/Stacky/.../backend/_internal/`) ese path
+         apunta a `<repo>/Tools/Stacky`, no a `<repo>`, y el watcher terminaba
+         escaneando un directorio equivocado para siempre (causa raíz C1).
+      4. Layout de fuentes (no congelado): `backend/runtime_paths.py` →
+         parents[4] = `<repo>` (`<repo>/Tools/Stacky/Stacky Agents/backend/`).
     """
+    global _warned_unresolved_repo_root
     env = os.getenv("STACKY_REPO_ROOT", "").strip()
     if env:
         return Path(env).expanduser().resolve()
     if is_frozen():
         ws = _active_workspace_root()
         if ws is not None:
+            _warned_unresolved_repo_root = False  # rearmar el warning
             return ws
+        # Deploy congelado sin proyecto activo: no resoluble todavía. Devolver un
+        # sentinel inexistente en lugar de parents[4] (ver punto 3 del docstring).
+        if not _warned_unresolved_repo_root:
+            logger.warning(
+                "repo_root() no resoluble: deploy congelado sin proyecto activo. "
+                "Devuelvo sentinel inexistente (%s); los watchers no escanearán "
+                "hasta que se active un proyecto con workspace_root. Seteá "
+                "STACKY_REPO_ROOT para forzar la resolución.",
+                _UNRESOLVED_REPO_ROOT,
+            )
+            _warned_unresolved_repo_root = True
+        return _UNRESOLVED_REPO_ROOT
     return Path(__file__).resolve().parents[4]
 
 

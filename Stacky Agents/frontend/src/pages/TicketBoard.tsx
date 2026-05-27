@@ -16,6 +16,8 @@ import {
   humanizeAgentLaunchError,
   launchAgentWithRuntime,
   launchInProgressLabel,
+  openConsoleIfCliRuntime,
+  runtimeDisplayLabel,
   runtimeRequiresVsCodeAgent,
 } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
@@ -167,6 +169,9 @@ function RunModal({
             onChange={setAgentRuntime}
             disabled={isLaunching}
           />
+          <p className={styles.runtimeBadge}>
+            Lanzará con: <strong>{runtimeDisplayLabel(agentRuntime)}</strong>
+          </p>
           {runtimeRequiresVsCodeAgent(agentRuntime) && !resolvedFilename && (
             <p className={styles.modalEmpty}>
               Este runtime necesita un agente VS Code asignado para el ticket seleccionado.
@@ -227,6 +232,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
   const pinnedAgents = useWorkbench((s) => s.pinnedAgents);
+  const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
   const [expanded, setExpanded] = useState(false);
   const [runModal, setRunModal] = useState<"suggested" | "custom" | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
@@ -274,13 +280,16 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
       const contextBlocks = note
         ? [{ id: "operator-note", kind: "editable" as const, title: "Nota del operador", content: note }]
         : [];
-      await launchAgentWithRuntime({
+      const result = await launchAgentWithRuntime({
         ticketId: ticket.id,
         projectName: activeProjectName,
         runtime: agentRuntime,
         contextBlocks,
         vscodeAgent: findVsCodeAgent(vsCodeAgents, filename),
       });
+      // Runtimes CLI (Codex / Claude): abrir la consola in-page con el
+      // execution_id para ver el streaming en vivo y poder responderle al agente.
+      openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
         qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
@@ -292,7 +301,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
     } finally {
       setIsLaunching(false);
     }
-  }, [activeProjectName, agentRuntime, pinnedAgents, qc, ticket.id, vsCodeAgents]);
+  }, [activeProjectName, agentRuntime, pinnedAgents, qc, setCodexConsoleExecution, ticket.id, vsCodeAgents]);
 
   return (
     <>
@@ -465,6 +474,7 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, flowConfigMap }: EpicG
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
   const pinnedAgents = useWorkbench((s) => s.pinnedAgents);
+  const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
   const [collapsed, setCollapsed] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
@@ -479,13 +489,15 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, flowConfigMap }: EpicG
     setIsLaunching(true);
     setLaunchError(null);
     try {
-      await launchAgentWithRuntime({
+      const result = await launchAgentWithRuntime({
         ticketId: epic.id,
         projectName: activeProjectName,
         runtime: agentRuntime,
         contextBlocks: [],
         vscodeAgent: findVsCodeAgent(vsCodeAgents, functionalFilename),
       });
+      // Runtimes CLI: abrir la consola in-page para ver el streaming en vivo.
+      openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
         qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
@@ -496,7 +508,7 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, flowConfigMap }: EpicG
     } finally {
       setIsLaunching(false);
     }
-  }, [activeProjectName, agentRuntime, epic.id, functionalFilename, pinnedAgents, qc, vsCodeAgents]);
+  }, [activeProjectName, agentRuntime, epic.id, functionalFilename, pinnedAgents, qc, setCodexConsoleExecution, vsCodeAgents]);
 
   return (
     <div className={styles.epicGroup}>

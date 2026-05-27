@@ -177,22 +177,70 @@ def run_agent(
             return execution_id
 
     elif runtime == "claude_code_cli":
-        # Nunca debería llegar aquí: el endpoint /api/agents/run devuelve HTTP 501
-        # antes de llamar a run_agent. Si llega (llamada directa al runner, packs),
-        # se marca como error explícito sin fallback.
-        _runner_logger.error(
-            "execution_id=%s: claude_code_cli no implementado — no se acepta esta ejecución",
-            execution_id,
-        )
-        log_streamer.push(execution_id, "error",
-            "claude_code_cli runtime no implementado. Usá github_copilot o codex_cli.")
-        _mark_terminal(
-            execution_id,
-            status="error",
-            error="claude_code_cli runtime adapter pendiente (not_implemented)",
-        )
-        log_streamer.close(execution_id)
-        return execution_id
+        try:
+            from services.claude_code_cli_runner import start_claude_code_cli_run
+
+            workspace_root: str | None = None
+            stacky_project_name: str | None = project_name
+            with session_scope() as _cs:
+                _ct = _cs.get(Ticket, ticket_id)
+                _project_ctx = resolve_project_context(project_name=project_name, ticket=_ct)
+                if _project_ctx:
+                    workspace_root = _project_ctx.workspace_root
+                    stacky_project_name = _project_ctx.stacky_project_name
+                # vscode_agent_filename viene del payload (validado en endpoint).
+                # Fallback defensivo para llamadas directas (tests, packs).
+                _vscode_filename = vscode_agent_filename
+                if not _vscode_filename:
+                    _vscode_filename = (
+                        (agent.filename if hasattr(agent, "filename") else None)
+                        or f"{agent_type}.agent.md"
+                    )
+                    _runner_logger.warning(
+                        "execution_id=%s: vscode_agent_filename no provisto explícitamente "
+                        "para claude_code_cli; usando '%s' inferido del agente",
+                        execution_id, _vscode_filename,
+                    )
+                _ticket_message = _ct.title if _ct else f"ticket_id={ticket_id}"
+
+            log_streamer.close(execution_id)  # claude_code_cli_runner abre su propio log_streamer
+            _new_exec_id = start_claude_code_cli_run(
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                context_blocks=context_blocks,
+                user=user,
+                vscode_agent_filename=_vscode_filename,
+                ticket_message=_ticket_message,
+                workspace_root=workspace_root,
+                model_override=model_override,
+            )
+            # start_claude_code_cli_run crea su propia fila de ejecución; la fila
+            # original creada aquí queda marcada como reemplazada para evitar
+            # rows huérfanas.
+            with session_scope() as _cs2:
+                _orig = _cs2.get(AgentExecution, execution_id)
+                if _orig is not None:
+                    _orig.status = "cancelled"
+                    _orig.error_message = f"replaced_by={_new_exec_id} (claude_code_cli)"
+                    _orig.completed_at = datetime.utcnow()
+                    md = dict(_orig.metadata_dict or {})
+                    md["runtime"] = runtime
+                    md["stacky_project_name"] = stacky_project_name
+                    md["workspace_root"] = workspace_root
+                    _orig.metadata_dict = md
+            return _new_exec_id
+        except Exception as _claude_exc:
+            # Sin fallback: cualquier error de claude_code_cli es error real.
+            # Incluye FileNotFoundError (CLI no instalado) o fallo de arranque.
+            _runner_logger.error(
+                "execution_id=%s: claude_code_cli runner falló sin fallback: %s",
+                execution_id, _claude_exc,
+            )
+            log_streamer.push(execution_id, "error",
+                f"claude_code_cli runner error: {_claude_exc}")
+            _mark_terminal(execution_id, status="error", error=f"claude_code_cli: {_claude_exc}")
+            log_streamer.close(execution_id)
+            return execution_id
 
     # else: github_copilot → flujo estándar sin cambios.
 
@@ -364,129 +412,19 @@ def _run_in_background(
         except Exception as _exc_hb:
             log("warn", f"heartbeat thread no pudo arrancar: {_exc_hb}")
 
-        # Functional agent — Epic structured context injection
-        # Cuando el agente es "functional" y el ticket es un Epic, inyecta el
-        # context block "ado-epic-structured" con title y description del
-        # ticket local (sin llamada a ADO). El agente lo usa como fuente única
-        # de requerimientos en Modo A. Si el bloque ya existe (idempotencia),
-        # no se re-inyecta.
-        with session_scope() as _epic_sess:
-            _epic_ticket = _epic_sess.get(Ticket, ticket_id) if ticket_id else None
-            _is_epic = (
-                _epic_ticket is not None
-                and agent_type == "functional"
-                and (_epic_ticket.work_item_type or "").strip().lower() == "epic"
-            )
-            if _is_epic:
-                _existing_ids = {b.get("id") for b in (raw_blocks or []) if isinstance(b, dict)}
-                if "ado-epic-structured" not in _existing_ids:
-                    _epic_block: dict = {
-                        "kind": "text",
-                        "id": "ado-epic-structured",
-                        "title": f"Epic ADO-{_epic_ticket.ado_id}: {_epic_ticket.title}",
-                        "content": (
-                            f"epic_id: {_epic_ticket.ado_id}\n"
-                            f"epic_title: {_epic_ticket.title}\n"
-                            f"epic_description:\n{_epic_ticket.description or ''}"
-                        ),
-                    }
-                    raw_blocks = list(raw_blocks or []) + [_epic_block]
-                    log("info", f"ado-epic-structured inyectado para Epic ADO-{_epic_ticket.ado_id}")
-                else:
-                    log("info", "ado-epic-structured ya presente, omitiendo inyección")
+        # Pipeline de enriquecimiento de contexto (épica + artifacts + similares
+        # + comentarios/adjuntos ADO). Extraído a services/context_enrichment.py
+        # para que los runtimes CLI (codex_cli / claude_code_cli) inyecten el mismo
+        # contexto. El comportamiento aquí es idéntico al histórico inline.
+        from services import context_enrichment
 
-        # Filesystem artifacts status — inyecta un bloque informando al agente
-        # qué artifacts (comment.html, pending-task.json, MANIFEST de runs
-        # previos) ya existen en disco para este ticket. Resuelve Bug #3 del
-        # plan de remediación: que el agente no pregunte "¿creo la task?"
-        # cuando los archivos ya están generados.
-        try:
-            from services import artifact_context
-
-            with session_scope() as _art_sess:
-                _art_ticket = _art_sess.get(Ticket, ticket_id) if ticket_id else None
-                _art_ado_id = _art_ticket.ado_id if _art_ticket else None
-                _art_type = _art_ticket.work_item_type if _art_ticket else None
-                _exec_rows = (
-                    _art_sess.query(AgentExecution.id)
-                    .filter(AgentExecution.ticket_id == ticket_id)
-                    .order_by(AgentExecution.id.desc())
-                    .limit(10)
-                    .all()
-                    if ticket_id
-                    else []
-                )
-                _exec_ids = [r[0] for r in _exec_rows]
-            raw_blocks, _art_info = artifact_context.inject_into_blocks(
-                raw_blocks,
-                ado_id=_art_ado_id,
-                work_item_type=_art_type,
-                execution_ids=_exec_ids,
-            )
-            if _art_info and _art_info.get("injected"):
-                log(
-                    "info",
-                    "filesystem-artifacts-status inyectado "
-                    f"(pending={_art_info.get('pending_count')}, "
-                    f"consumed={_art_info.get('consumed_count')}, "
-                    f"comment_html={_art_info.get('has_comment_html')})",
-                )
-        except Exception as _exc_art:
-            log("warn", f"artifact_context falló (continuando sin bloque): {_exc_art}")
-
-        # ADO similar tickets — inyecta tickets ADO con título parecido para
-        # que el agente NO proponga crear duplicados. Solo aplica a agentes
-        # que pueden sugerir creación de tickets (functional, technical).
-        # Configurable vía STACKY_SIMILAR_TICKETS_ENABLED (default "true").
-        if (
-            os.getenv("STACKY_SIMILAR_TICKETS_ENABLED", "true").lower() != "false"
-            and agent_type in {"functional", "technical"}
-            and ticket_ado_id is not None
-        ):
-            try:
-                from services import similar_tickets
-
-                with session_scope() as _sim_sess:
-                    _sim_ticket = _sim_sess.get(Ticket, ticket_id) if ticket_id else None
-                    _sim_title = _sim_ticket.title if _sim_ticket else ""
-                    _sim_project = _sim_ticket.project if _sim_ticket else "Strategist_Pacifico"
-                raw_blocks, _sim_info = similar_tickets.inject_into_blocks(
-                    raw_blocks,
-                    current_ado_id=ticket_ado_id,
-                    current_title=_sim_title,
-                    project=_sim_project or "Strategist_Pacifico",
-                    project_name=project_ctx.stacky_project_name if project_ctx else None,
-                )
-                if _sim_info and _sim_info.get("injected"):
-                    log(
-                        "info",
-                        f"ado-similar-tickets inyectado (count={_sim_info.get('count')})",
-                    )
-            except Exception as _exc_sim:
-                log("warn", f"similar_tickets falló (continuando sin bloque): {_exc_sim}")
-
-        # ADO context enrichment — inyecta automáticamente comentarios y
-        # adjuntos del ticket desde Azure DevOps al contexto que se envía al
-        # chat de Copilot. Por defecto aplica a todos los agentes registrados;
-        # configurable vía env ADO_CONTEXT_ENRICH_AGENTS.
-        ado_enrich_stats: dict | None = None
-        if ticket_ado_id is not None:
-            try:
-                from services import ado_context
-                raw_blocks, ado_enrich_stats = ado_context.enrich(
-                    ticket_id=ticket_id,
-                    agent_type=agent_type,
-                    existing_blocks=raw_blocks or [],
-                    ado_id=ticket_ado_id,
-                    project_name=project_ctx.stacky_project_name if project_ctx else None,
-                    tracker_project=project_ctx.tracker_project if project_ctx else project,
-                    ticket=ticket,
-                    log=log,
-                    return_stats=True,
-                )
-            except Exception as _exc_ado:
-                log("warn", f"ado_context enrich falló (continuando sin enrichment): {_exc_ado}")
-                ado_enrich_stats = {"error": str(_exc_ado)}
+        raw_blocks, ado_enrich_stats = context_enrichment.enrich_blocks(
+            ticket_id=ticket_id,
+            agent_type=agent_type,
+            raw_blocks=raw_blocks,
+            project_ctx=project_ctx,
+            log=log,
+        )
 
         # FA-37 — PII masking ANTES de cualquier procesamiento (cache, prompt, etc.)
         masked_blocks, mask_map = pii_masker.mask_blocks(raw_blocks)

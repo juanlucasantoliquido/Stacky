@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { Agents } from "../api/endpoints";
+import { openConsoleIfCliRuntime } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
 import type { AgentType, ContextBlock } from "../types";
 
@@ -9,6 +10,7 @@ export function useAgentRun() {
   const {
     setRunningExecution,
     setActiveExecution,
+    setCodexConsoleExecution,
     modelOverride,
     systemPromptOverride,
     agentRuntime,
@@ -37,6 +39,13 @@ export function useAgentRun() {
     onSuccess: (data) => {
       setRunningExecution(data.execution_id);
       setActiveExecution(data.execution_id);
+      // Para runtimes CLI (codex_cli / claude_code_cli) abrimos la consola
+      // in-page con el execution_id recién creado. Centralizar acá cubre a
+      // InputContextEditor y a cualquier consumidor futuro del hook, evitando
+      // que un punto de lanzamiento lance sin mostrar la consola en vivo.
+      openConsoleIfCliRuntime(agentRuntime, data, (id) =>
+        setCodexConsoleExecution(id, false)
+      );
       qc.invalidateQueries({ queryKey: ["executions"] });
     },
   });

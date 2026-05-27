@@ -183,6 +183,42 @@ def _resolve_auth_header(auth_path: str | Path | None = None) -> str:
     )
 
 
+def ado_pat_present(auth_path: str | Path | None = None) -> bool:
+    """¿Hay un PAT de ADO resoluble? No lanza — devuelve bool.
+
+    Útil para preflight de arranque y diag/health: el auto-create de Tasks del
+    output_watcher requiere PAT; sin él la Task no se crea (causa raíz C2 del
+    PLAN_FIX_REGISTRO_COMPLETION_OPENCHAT).
+
+    Resuelve en dos niveles para no dar falsos negativos:
+      1. Cadena global de `_resolve_auth_header` (env ADO_PAT, Tools/PAT-ADO, …).
+      2. Auth del **proyecto activo** (`projects/<activo>/auth/ado_auth.json`), que
+         es la que realmente usa el auto-create vía build_ado_client. Sin este
+         segundo nivel, el health reportaba "sin PAT" aunque el proyecto sí lo
+         tuviera.
+    """
+    try:
+        _resolve_auth_header(auth_path)
+        return True
+    except AdoConfigError:
+        pass
+    except Exception:  # noqa: BLE001 — defensivo: cualquier fallo = "no presente"
+        return False
+
+    # Nivel 2: auth del proyecto activo (sólo si no se pidió un auth_path explícito).
+    if auth_path is None:
+        try:
+            from services.project_context import resolve_project_context
+
+            ctx = resolve_project_context()
+            if ctx and ctx.auth_path:
+                _resolve_auth_header(ctx.auth_path)
+                return True
+        except Exception:  # noqa: BLE001
+            return False
+    return False
+
+
 class AdoClient:
     def __init__(
         self,

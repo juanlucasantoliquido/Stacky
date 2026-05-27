@@ -4,7 +4,8 @@ Tests de runtime dispatch (AL-01 / Fase 0 — Preflight runtime).
 Cubren el endpoint POST /api/agents/run para los casos:
   - runtime=codex_cli con vscode_agent_filename válido → delega a start_codex_cli_run
   - runtime=codex_cli sin vscode_agent_filename → HTTP 400 missing_vscode_agent_filename
-  - runtime=claude_code_cli → HTTP 501 not_implemented
+  - runtime=claude_code_cli con vscode_agent_filename válido → delega a start_claude_code_cli_run
+  - runtime=claude_code_cli sin vscode_agent_filename → HTTP 400 missing_vscode_agent_filename
   - runtime=foo (desconocido) → HTTP 400 unknown_runtime
   - runtime=github_copilot → path existente intacto (smoke)
   - runtime ausente → path existente intacto (smoke, retrocompat)
@@ -172,27 +173,57 @@ def test_codex_cli_empty_filename_returns_400(client, ticket_id):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Test AL-01-3: runtime=claude_code_cli → HTTP 501
+# Test AL-01-3: runtime=claude_code_cli ahora operativo (dispatch al runner)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_claude_code_cli_returns_501(client, ticket_id):
+def test_claude_code_cli_valid_dispatches_to_runner(client, ticket_id):
     """
-    runtime=claude_code_cli → HTTP 501 not_implemented.
-    No se ejecuta nada, no hay fallback.
+    runtime=claude_code_cli + vscode_agent_filename presente → el endpoint
+    llama agent_runner.run_agent con runtime=claude_code_cli y este delega a
+    services.claude_code_cli_runner.start_claude_code_cli_run.
+    No se cae a github_copilot ni devuelve 501.
+    """
+    fake_exec_id = 99
+
+    with patch(
+        "services.claude_code_cli_runner.start_claude_code_cli_run",
+        return_value=fake_exec_id,
+    ) as mock_start:
+        r = client.post(
+            "/api/agents/run",
+            json=_base_payload(
+                ticket_id,
+                runtime="claude_code_cli",
+                vscode_agent_filename="DevPacifico.agent.md",
+            ),
+        )
+
+    assert r.status_code == 202, f"Esperado 202, got {r.status_code}: {r.data}"
+    data = r.get_json()
+    assert data["runtime"] == "claude_code_cli"
+    assert data["execution_id"] == fake_exec_id
+
+    mock_start.assert_called_once()
+    call_kwargs = mock_start.call_args.kwargs
+    assert call_kwargs["vscode_agent_filename"] == "DevPacifico.agent.md"
+    assert call_kwargs["ticket_id"] == ticket_id
+    assert call_kwargs["agent_type"] == "functional"
+
+
+def test_claude_code_cli_missing_filename_returns_400(client, ticket_id):
+    """
+    runtime=claude_code_cli sin vscode_agent_filename → HTTP 400
+    con error=missing_vscode_agent_filename (igual que codex_cli).
     """
     r = client.post(
         "/api/agents/run",
-        json=_base_payload(
-            ticket_id,
-            runtime="claude_code_cli",
-            vscode_agent_filename="DevPacifico.agent.md",
-        ),
+        json=_base_payload(ticket_id, runtime="claude_code_cli"),
     )
 
-    assert r.status_code == 501, f"Esperado 501, got {r.status_code}: {r.data}"
+    assert r.status_code == 400, f"Esperado 400, got {r.status_code}: {r.data}"
     data = r.get_json()
     assert data["ok"] is False
-    assert data["error"] == "not_implemented"
+    assert data["error"] == "missing_vscode_agent_filename"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

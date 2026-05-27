@@ -134,28 +134,12 @@ def run():
             {"Content-Type": "application/json"},
         )
 
-    # claude_code_cli: adapter pendiente. Devuelve 501 explícito sin fallback.
-    if runtime == "claude_code_cli":
-        logger.info("runtime=claude_code_cli rechazado: adapter pendiente (AL-01)")
-        from flask import make_response
-        return make_response(
-            _json.dumps({
-                "ok": False,
-                "error": "not_implemented",
-                "message": (
-                    "claude_code_cli runtime adapter pendiente. "
-                    "Usá github_copilot o codex_cli."
-                ),
-            }),
-            501,
-            {"Content-Type": "application/json"},
-        )
-
-    # codex_cli: requiere vscode_agent_filename en el payload.
+    # codex_cli y claude_code_cli: requieren vscode_agent_filename en el payload.
+    # Ambos runtimes CLI ejecutan el system prompt del agente .agent.md seleccionado.
     vscode_agent_filename: str | None = payload.get("vscode_agent_filename") or None
-    if runtime == "codex_cli" and not vscode_agent_filename:
+    if runtime in ("codex_cli", "claude_code_cli") and not vscode_agent_filename:
         logger.warning(
-            "runtime=codex_cli rechazado: vscode_agent_filename ausente en payload"
+            "runtime=%s rechazado: vscode_agent_filename ausente en payload", runtime
         )
         from flask import make_response
         return make_response(
@@ -163,7 +147,7 @@ def run():
                 "ok": False,
                 "error": "missing_vscode_agent_filename",
                 "message": (
-                    "runtime=codex_cli requiere vscode_agent_filename en el payload "
+                    f"runtime={runtime} requiere vscode_agent_filename en el payload "
                     "(ej: 'DevPacifico.agent.md')."
                 ),
             }),

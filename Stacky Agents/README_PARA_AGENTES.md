@@ -22,6 +22,7 @@
 14. [Rollback de acciones ADO](#14-rollback-de-acciones-ado)
 15. [Extensión VS Code](#15-extensión-vs-code)
 16. [Pendientes y backlog](#16-pendientes-y-backlog)
+17. [Cierre de ejecuciones del flujo open-chat (done-marker)](#17-cierre-de-ejecuciones-del-flujo-open-chat-done-marker)
 
 ---
 
@@ -1014,6 +1015,51 @@ code --install-extension stacky-agents-0.1.0.vsix
 | FA-34 | Token/cost budgets con enforcement | Backlog — diseñado, tabla `budgets` pendiente |
 | FA-38 | Prompt injection detection | Backlog — heurísticas diseñadas |
 | FA-30 | CLI `stacky-agents` | Backlog — `pipx install stacky-agents-cli` |
+
+---
+
+## 17. Cierre de ejecuciones del flujo open-chat (done-marker)
+
+El flujo **open-chat** (`POST /api/agents/open-chat`, GitHub Copilot en VS Code)
+no tiene callback fiable: el agente sólo escribe archivos en disco. Stacky cierra
+esas ejecuciones con el **`output_watcher`**, que tiene dos disparadores:
+
+| Modo | Disparador en disco | Acción |
+|------|---------------------|--------|
+| **A — análisis de Epic** | `Agentes/outputs/epic-{id}/{RF}/pending-task.json` | cierra la ejecución (sin publish) y auto-crea Tasks en ADO si hay PAT |
+| **B — comentario** | `Agentes/outputs/{ado_id}/comment.html` | cierra la ejecución y publica el comentario en ADO |
+
+### Señal determinista: `.stacky-done.json` (Modo A)
+
+Para que el cierre del Modo A sea **inmediato** y no dependa de heurística de
+estabilidad de mtime, el agente debe escribir, **como último paso**, un
+done-marker:
+
+```
+Agentes/outputs/epic-{EPIC_ID}/.stacky-done.json
+```
+
+```json
+{ "status": "completed", "epic_id": "206", "rf_ids": ["RF-021"], "finished_at": "2026-05-27T01:00:00Z" }
+```
+
+- El `output_watcher` cierra la ejecución del Epic **apenas detecta el marker**.
+- `status` debe ser terminal (`completed`); valores `running`/`in_progress`/`pending`
+  se ignoran (no cierran).
+- Si el marker falta, el watcher cae al **fallback** por estabilidad de artifacts
+  (`STACKY_OUTPUT_WATCHER_STABLE_DELAY_A`, default 30s) — más lento pero garantiza
+  que la ejecución no quede colgada.
+- El marker se acepta a nivel epic (`epic-{id}/.stacky-done.json`) o por RF
+  (`epic-{id}/{RF}/.stacky-done.json`).
+
+### Preflight y diagnóstico
+
+- `GET /api/diag/health` reporta `repo_root`, `outputs_dir`, `outputs_dir_exists`,
+  `active_project`, `ado_pat_present` y `warnings`. Si `healthy=false`, el cierre
+  automático no va a funcionar (revisar proyecto activo / `STACKY_REPO_ROOT` / PAT).
+- `POST /api/diag/output-watcher/scan-now` fuerza una pasada manual del watcher.
+- Al arrancar, el backend loguea un preflight y **avisa** (WARNING) si el
+  `outputs_dir` no existe o si el auto-create de Tasks está habilitado sin PAT.
 
 ---
 

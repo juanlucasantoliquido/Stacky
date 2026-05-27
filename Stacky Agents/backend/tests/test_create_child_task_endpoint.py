@@ -645,3 +645,64 @@ def test_list_pending_tasks_plan_exists_false(client, epic_ticket, tmp_repo):
     items_rf11d = [item for item in data["pending_tasks"] if item["rf_id"] == "RF-011d"]
     assert len(items_rf11d) > 0
     assert items_rf11d[0]["plan_exists"] is False
+
+
+# ---------------------------------------------------------------------------
+# Fase P4 — Consistencia del valor de `status`
+# ---------------------------------------------------------------------------
+
+def test_resolve_repo_root_is_lazy_when_not_overridden(monkeypatch, tmp_path):
+    """Con REPO_ROOT=None, _resolve_repo_root() resuelve en vivo (no congela en
+    import). Regresión: create-child-task fallaba con FILE_NOT_FOUND porque
+    REPO_ROOT quedaba cacheado en import antes de activarse el proyecto."""
+    import api.tickets as tickets_mod
+
+    monkeypatch.setattr(tickets_mod, "REPO_ROOT", None)
+    monkeypatch.setenv("STACKY_REPO_ROOT", str(tmp_path))
+    assert tickets_mod._resolve_repo_root() == tmp_path.resolve()
+
+    # Y si un test fija REPO_ROOT explícito, se respeta.
+    other = tmp_path / "explicit"
+    monkeypatch.setattr(tickets_mod, "REPO_ROOT", other)
+    assert tickets_mod._resolve_repo_root() == other
+
+
+def test_create_child_task_rejects_invalid_status(client, epic_ticket, tmp_repo):
+    """status no canónico (ni alias legacy ni consumed) → 400 con mensaje claro."""
+    pt_path = _write_pending_task(
+        tmp_repo, epic_id="149", rf_id="RF-BADST",
+        extra_fields={"status": "lo_que_sea"},
+    )
+    rel_path = _rel_path(tmp_repo, pt_path)
+
+    resp = client.post(
+        "/api/tickets/by-ado/149/create-child-task",
+        json={"pending_task_path": rel_path},
+    )
+
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["error"] == "PENDING_TASK_STATUS_INVALID"
+    assert data["status_found"] == "lo_que_sea"
+    assert "pending_manual_creation" in data["status_allowed"]
+
+
+def test_create_child_task_accepts_legacy_pending_status(client, epic_ticket, tmp_repo):
+    """El alias legacy status='pending' sigue siendo aceptado (no rompe en vuelo)."""
+    pt_path = _write_pending_task(
+        tmp_repo, epic_id="149", rf_id="RF-LEGACY",
+        extra_fields={"status": "pending"},
+    )
+    rel_path = _rel_path(tmp_repo, pt_path)
+
+    fake_ado = FakeAdoClientExt()
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    # No debe rechazarse por status; procede a crear la Task.
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True

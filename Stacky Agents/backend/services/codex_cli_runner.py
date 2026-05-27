@@ -20,10 +20,11 @@ from typing import Any
 import log_streamer
 from config import config
 from db import session_scope
-from models import AgentExecution
-from services import ticket_status, vscode_agents
+from models import AgentExecution, Ticket
+from services import context_enrichment, pii_masker, ticket_status, vscode_agents
 from services.agent_env import build_agent_env
 from services.manifest_watcher import append_event, write_heartbeat, write_manifest
+from services.project_context import resolve_project_context
 from services.stacky_logger import logger as stacky_logger
 
 logger = logging.getLogger("stacky_agents.codex_cli")
@@ -220,6 +221,7 @@ def _run_in_background(
     heartbeat_thread: threading.Thread | None = None
     agent_type: str | None = None
     ticket_id: int | None = None
+    mask_map: dict[str, str] = {}
 
     try:
         with session_scope() as session:
@@ -228,6 +230,13 @@ def _run_in_background(
                 raise RuntimeError(f"execution_id={execution_id} not found")
             ticket_id = row.ticket_id
             agent_type = row.agent_type
+            raw_blocks = list(row.input_context or [])
+            ticket = session.get(Ticket, ticket_id) if ticket_id else None
+            t_ado_id = ticket.ado_id if ticket else None
+            t_title = ticket.title if ticket else None
+            t_desc = ticket.description if ticket else None
+            t_wit = ticket.work_item_type if ticket else None
+            project_ctx = resolve_project_context(ticket=ticket)
 
         selected_agent = vscode_agents.get_agent_by_filename(
             config.VSCODE_PROMPTS_DIR, vscode_agent_filename
@@ -244,10 +253,35 @@ def _run_in_background(
         run_dir.mkdir(parents=True, exist_ok=True)
         output_file = run_dir / "last_message.md"
         agent_bundle_dir, agent_manifest_file = _materialize_agent_prompts(run_dir, all_agents)
+
+        # Fase B — enriquecimiento de contexto (paridad con claude_code_cli /
+        # github_copilot). Corre acá, en background, para no bloquear el lanzamiento.
+        log("info", "enriqueciendo contexto del ticket…")
+        enriched_blocks, _ado_stats = context_enrichment.enrich_blocks(
+            ticket_id=ticket_id,
+            agent_type=agent_type or "",
+            raw_blocks=raw_blocks,
+            project_ctx=project_ctx,
+            log=log,
+        )
+        rich_message = context_enrichment.build_ticket_context_text(
+            ado_id=t_ado_id,
+            title=t_title,
+            description=t_desc,
+            work_item_type=t_wit,
+            blocks=enriched_blocks,
+        )
+        if not rich_message.strip():
+            rich_message = ticket_message
+        # Fase B — PII masking antes de mandar el prompt; se re-hidrata el output.
+        masked_message, mask_map = pii_masker.mask_text(rich_message)
+        if mask_map:
+            log("info", f"PII masking: {len(mask_map)} ocurrencias enmascaradas")
+
         prompt = _build_codex_prompt(
             selected_agent=selected_agent,
             all_agents=all_agents,
-            ticket_message=ticket_message,
+            ticket_message=masked_message,
             agent_bundle_dir=agent_bundle_dir,
             agent_manifest_file=agent_manifest_file,
         )
@@ -341,6 +375,9 @@ def _run_in_background(
 
         duration_ms = int((datetime.utcnow() - started).total_seconds() * 1000)
         output = _read_output(output_file, stdout_tail)
+        # Re-hidratar PII enmascarada antes de persistir / mostrar.
+        if output and mask_map:
+            output = pii_masker.unmask(output, mask_map)
         metadata = {
             "runtime": RUNTIME,
             "vscode_agent_filename": vscode_agent_filename,

@@ -58,6 +58,11 @@ _MANAGED_KEYS = [
     "CODEX_AGENTS_DIR",
     "CODEX_AUTH_MODE",
     "OPENAI_API_KEY",
+    # Claude Code CLI
+    "CLAUDE_CODE_CLI_BIN",
+    "CLAUDE_CODE_CLI_MODEL",
+    "CLAUDE_CODE_CLI_PERMISSION_MODE",
+    "CLAUDE_CODE_CLI_SKIP_PERMISSIONS",
 ]
 
 # Claves que contienen secrets -- no se devuelven en GET
@@ -72,6 +77,11 @@ _CODEX_DEFAULTS = {
     "CODEX_AGENTS_DIR": "",
     "CODEX_AUTH_MODE": "apikey",
     "OPENAI_API_KEY": "",
+    # Claude Code CLI
+    "CLAUDE_CODE_CLI_BIN": "",
+    "CLAUDE_CODE_CLI_MODEL": "",
+    "CLAUDE_CODE_CLI_PERMISSION_MODE": "acceptEdits",
+    "CLAUDE_CODE_CLI_SKIP_PERMISSIONS": "false",
 }
 
 
@@ -624,3 +634,243 @@ def delete_codex_session():
                 return jsonify({"ok": False, "error": str(exc), "path": str(path)})
 
     return jsonify({"ok": False, "error": "No se encontro archivo de sesion para eliminar."})
+
+
+# ===========================================================================
+# Claude Code CLI -- deteccion de binario, version y sesion de autenticacion
+# ===========================================================================
+
+def _resolve_claude_bin(explicit: str | None = None) -> str:
+    """Resuelve la ruta del binario `claude`.
+
+    Orden: argumento explicito > .env (CLAUDE_CODE_CLI_BIN) > PATH > rutas
+    conocidas de instalacion en Windows (winget, npm global). Devuelve "claude"
+    como ultimo recurso para que el caller reporte FileNotFoundError con un
+    mensaje util.
+    """
+    import shutil
+    import sys
+
+    candidate = (explicit or "").strip().strip('"')
+    if not candidate:
+        candidate = _read_env().get("CLAUDE_CODE_CLI_BIN", "").strip()
+
+    if candidate:
+        found = shutil.which(candidate)
+        if found:
+            return found
+        if Path(candidate).exists():
+            return candidate
+
+    found = shutil.which("claude")
+    if found:
+        return found
+
+    if sys.platform == "win32":
+        local_app = os.environ.get("LOCALAPPDATA", "")
+        app_data = os.environ.get("APPDATA", "")
+        winget_root = (
+            Path(local_app) / "Microsoft" / "WinGet" / "Packages" if local_app else None
+        )
+        known: list[Path] = []
+        if winget_root and winget_root.exists():
+            # winget instala en una carpeta con sufijo aleatorio; buscamos claude.exe
+            try:
+                for pkg in winget_root.glob("Anthropic.ClaudeCode_*"):
+                    exe = pkg / "claude.exe"
+                    if exe.exists():
+                        known.append(exe)
+            except Exception:
+                pass
+        if local_app:
+            known.append(Path(local_app) / "AnthropicClaude" / "claude.exe")
+        if app_data:
+            known.append(Path(app_data) / "npm" / "claude.cmd")
+            known.append(Path(app_data) / "npm" / "claude.exe")
+        for path in known:
+            if path.exists():
+                return str(path)
+    else:
+        for path in (
+            Path("/usr/local/bin/claude"),
+            Path.home() / ".local" / "bin" / "claude",
+            Path.home() / ".claude" / "local" / "claude",
+        ):
+            if path.exists():
+                return str(path)
+
+    return "claude"
+
+
+def _claude_cmd_prefix(claude_bin: str) -> list[str]:
+    """Prefijo de comando que respeta .cmd/.bat en Windows."""
+    import sys
+
+    bin_lower = claude_bin.lower()
+    if sys.platform == "win32" and (bin_lower.endswith(".cmd") or bin_lower.endswith(".bat")):
+        return ["cmd", "/c", claude_bin]
+    return [claude_bin]
+
+
+@bp.post("/global-config/test-claude")
+def test_claude_connection():
+    """Verifica el binario de Claude Code CLI y devuelve la version.
+
+    Body (opcional): { claude_bin: str }
+    Respuesta: { ok, bin, version, debug_log?, error? }
+    """
+    import subprocess
+    import sys
+
+    data = request.get_json(force=True, silent=True) or {}
+    claude_bin = _resolve_claude_bin(data.get("claude_bin"))
+    create_no_window = 0x08000000 if sys.platform == "win32" else 0
+    cmd = _claude_cmd_prefix(claude_bin) + ["--version"]
+
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=20,
+            creationflags=create_no_window,
+        )
+        version_raw = (proc.stdout or proc.stderr or "").strip()
+        version = version_raw.splitlines()[0] if version_raw else "OK"
+        if proc.returncode != 0 and not version_raw:
+            return jsonify({"ok": False, "bin": claude_bin,
+                            "error": f"El binario respondio con codigo {proc.returncode}."})
+        logger.info("test-claude: bin=%s version=%s", claude_bin, version)
+        return jsonify({"ok": True, "bin": claude_bin, "version": version})
+    except FileNotFoundError:
+        return jsonify({
+            "ok": False,
+            "bin": claude_bin,
+            "error": (
+                f"Binario no encontrado: '{claude_bin}'. "
+                "Instala Claude Code con:  npm install -g @anthropic-ai/claude-code  "
+                "(o winget install Anthropic.ClaudeCode) o configura la ruta completa."
+            ),
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "bin": claude_bin, "error": "Timeout al ejecutar claude --version."})
+    except Exception as exc:
+        return jsonify({"ok": False, "bin": claude_bin, "error": str(exc)})
+
+
+@bp.get("/global-config/claude-session")
+def get_claude_session_status():
+    """Estado de autenticacion de Claude Code CLI via `claude auth status --json`.
+
+    Respuesta: {
+      exists, bin, logged_in, auth_method?, email?, org_name?,
+      subscription_type?, error?
+    }
+    """
+    import subprocess
+    import sys
+
+    claude_bin = _resolve_claude_bin()
+    create_no_window = 0x08000000 if sys.platform == "win32" else 0
+    cmd = _claude_cmd_prefix(claude_bin) + ["auth", "status", "--json"]
+
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=20,
+            creationflags=create_no_window,
+        )
+    except FileNotFoundError:
+        return jsonify({"exists": False, "bin": claude_bin,
+                        "error": f"Binario no encontrado: '{claude_bin}'."})
+    except subprocess.TimeoutExpired:
+        return jsonify({"exists": False, "bin": claude_bin, "error": "Timeout en claude auth status."})
+    except Exception as exc:
+        return jsonify({"exists": False, "bin": claude_bin, "error": str(exc)})
+
+    raw = (proc.stdout or "").strip()
+    # `claude auth status --json` imprime JSON; tomamos el primer objeto valido.
+    info: dict = {}
+    if raw:
+        try:
+            info = json.loads(raw)
+        except json.JSONDecodeError:
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                try:
+                    info = json.loads(raw[start:end + 1])
+                except json.JSONDecodeError:
+                    info = {}
+
+    logged_in = bool(info.get("loggedIn"))
+    return jsonify({
+        "exists": logged_in,
+        "bin": claude_bin,
+        "logged_in": logged_in,
+        "auth_method": info.get("authMethod"),
+        "email": info.get("email"),
+        "org_name": info.get("orgName"),
+        "subscription_type": info.get("subscriptionType"),
+    })
+
+
+@bp.post("/global-config/claude-login")
+def claude_login():
+    """Ejecuta `claude auth login` para autenticar via OAuth (subscripcion/cuenta).
+
+    Abre el navegador y completa via callback local, igual que codex login.
+    Body (opcional): { claude_bin: str }
+    Respuesta: { ok, output?, error? }
+    """
+    import subprocess
+
+    data = request.get_json(force=True, silent=True) or {}
+    claude_bin = _resolve_claude_bin(data.get("claude_bin"))
+    cmd = _claude_cmd_prefix(claude_bin) + ["auth", "login"]
+    logger.info("claude-login: launching %s", cmd)
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+        )
+        output = (proc.stdout or proc.stderr or "").strip()
+        if proc.returncode == 0:
+            logger.info("claude-login: exito")
+            return jsonify({"ok": True, "output": output})
+        logger.warning("claude-login fallo (rc=%d): %s", proc.returncode, output[:200])
+        return jsonify({"ok": False, "error": output or f"El proceso termino con codigo {proc.returncode}."})
+    except FileNotFoundError:
+        return jsonify({"ok": False, "error": f"Binario no encontrado: '{claude_bin}'."})
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "Timeout: el login no se completo en 5 minutos."})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)})
+
+
+@bp.delete("/global-config/claude-session")
+def delete_claude_session():
+    """Cierra la sesion de Claude Code CLI via `claude auth logout`.
+
+    Respuesta: { ok, note?, error? }
+    """
+    import subprocess
+    import sys
+
+    claude_bin = _resolve_claude_bin()
+    create_no_window = 0x08000000 if sys.platform == "win32" else 0
+    cmd = _claude_cmd_prefix(claude_bin) + ["auth", "logout"]
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=20,
+            creationflags=create_no_window,
+        )
+        combined = (result.stdout + result.stderr).strip()
+        logger.info("claude logout: %s", combined)
+        return jsonify({"ok": True, "note": combined or "Sesion cerrada"})
+    except FileNotFoundError:
+        return jsonify({"ok": False, "error": f"Binario no encontrado: '{claude_bin}'."})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)})

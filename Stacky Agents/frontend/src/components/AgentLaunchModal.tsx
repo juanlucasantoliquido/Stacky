@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { VsCodeAgent, Ticket } from "../types";
-import { Projects, Tickets } from "../api/endpoints";
+import { Projects, Tickets, ClaudeCli, type ClaudeSessionStatus } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
 import {
   humanizeAgentLaunchError,
   launchAgentWithRuntime,
   launchInProgressLabel,
+  openConsoleIfCliRuntime,
 } from "../services/agentLaunch";
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
+import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import PixelAvatar from "./PixelAvatar";
 import styles from "./AgentLaunchModal.module.css";
 
@@ -54,6 +56,7 @@ async function checkBridgeHealth(projectName: string | null): Promise<boolean> {
 export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentLaunchModalProps) {
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
+  const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
   const [query, setQuery] = useState("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -66,8 +69,40 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>("unknown");
   const [error, setError] = useState<BridgeError | null>(null);
   const [success, setSuccess] = useState(false);
+  // Estado de configuración de Claude Code CLI (binario + sesión).
+  const [claudeSession, setClaudeSession] = useState<ClaudeSessionStatus | null>(null);
+  const [claudeChecking, setClaudeChecking] = useState(false);
+  const [showClaudeConfig, setShowClaudeConfig] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const claudeReady = claudeSession?.logged_in === true;
+  const claudeNeedsConfig = agentRuntime === "claude_code_cli" && !claudeReady;
+
+  // Sondea el estado de Claude Code (binario + sesión). Devuelve si quedó listo.
+  async function probeClaude(): Promise<boolean> {
+    setClaudeChecking(true);
+    try {
+      const s = await ClaudeCli.session();
+      setClaudeSession(s);
+      return s.logged_in === true;
+    } catch {
+      setClaudeSession(null);
+      return false;
+    } finally {
+      setClaudeChecking(false);
+    }
+  }
+
+  // Al elegir un runtime; si es Claude Code y no está configurado, abre el modal.
+  async function handleRuntimeChange(rt: typeof agentRuntime) {
+    setAgentRuntime(rt);
+    setError(null);
+    if (rt === "claude_code_cli") {
+      const ready = claudeSession ? claudeReady : await probeClaude();
+      if (!ready) setShowClaudeConfig(true);
+    }
+  }
 
   // load tickets once + initial bridge health probe (informativo, no bloqueante)
   useEffect(() => {
@@ -84,6 +119,13 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
     checkBridgeHealth(activeProjectName).then((ok) => {
       setBridgeStatus(ok ? "ready" : "down");
     });
+
+    // Si el runtime persistido ya es Claude Code, sondear su estado al abrir
+    // para mostrar el badge/banner de configuración sin esperar al clic.
+    if (agentRuntime === "claude_code_cli") {
+      void probeClaude();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectName]);
 
   // debounced filter
@@ -190,7 +232,7 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
           ]
         : [];
 
-      await launchAgentWithRuntime({
+      const result = await launchAgentWithRuntime({
         ticketId: selected.id,
         projectName: activeProjectName,
         runtime: agentRuntime,
@@ -200,6 +242,10 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
       setSuccess(true);
       if (agentRuntime === "github_copilot") {
         setBridgeStatus("ready");
+      } else {
+        // Runtimes CLI (Codex / Claude): abrir la consola in-page para ver la
+        // actividad en vivo y poder responderle al agente.
+        openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
       }
       setTimeout(onClose, 1200);
     } catch (e) {
@@ -243,10 +289,33 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
         <div className={styles.runtimeSection}>
           <AgentRuntimeSelector
             value={agentRuntime}
-            onChange={setAgentRuntime}
+            onChange={handleRuntimeChange}
             disabled={loading || success}
+            claudeNeedsConfig={claudeNeedsConfig}
           />
         </div>
+
+        {/* Aviso de configuración de Claude Code (no bloquea seleccionar ticket) */}
+        {agentRuntime === "claude_code_cli" && !claudeReady && !claudeChecking && (
+          <div className={styles.warning} role="status">
+            <span>
+              Claude Code no está configurado
+              {claudeSession?.error ? ` (${claudeSession.error})` : " (falta iniciar sesión o instalar el CLI)"}.
+            </span>
+            <button
+              className={styles.retryBtn}
+              onClick={() => setShowClaudeConfig(true)}
+              type="button"
+            >
+              ⚙ Configurar
+            </button>
+          </div>
+        )}
+        {agentRuntime === "claude_code_cli" && claudeChecking && (
+          <div className={styles.warning} role="status">
+            <span>Verificando Claude Code…</span>
+          </div>
+        )}
 
         {/* Aviso suave si el bridge está caído (no bloquea selección) */}
         {agentRuntime === "github_copilot" && bridgeStatus === "down" && !error && (
@@ -326,7 +395,12 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
           <button
             className={styles.launchBtn}
             onClick={handleLaunch}
-            disabled={!selected || loading || success}
+            disabled={!selected || loading || success || (agentRuntime === "claude_code_cli" && !claudeReady)}
+            title={
+              agentRuntime === "claude_code_cli" && !claudeReady
+                ? "Configurá Claude Code antes de lanzar"
+                : undefined
+            }
           >
             {success
               ? "✓ Iniciado"
@@ -338,6 +412,15 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
           </button>
         </div>
       </div>
+
+      {showClaudeConfig && (
+        <ClaudeCliConfigModal
+          onClose={() => setShowClaudeConfig(false)}
+          onConfigured={() => {
+            void probeClaude();
+          }}
+        />
+      )}
     </div>
   );
 }

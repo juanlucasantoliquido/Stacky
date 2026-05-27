@@ -6,6 +6,8 @@ interface AgentRuntimeSelectorProps {
   value: AgentRuntime;
   onChange: (runtime: AgentRuntime) => void;
   disabled?: boolean;
+  /** Si true, marca Claude Code como pendiente de configurar (badge ⚙). */
+  claudeNeedsConfig?: boolean;
 }
 
 interface RuntimeOption {
@@ -13,8 +15,6 @@ interface RuntimeOption {
   label: string;
   title: string;
   icon: typeof Github;
-  /** Si true, la opción se muestra pero no es seleccionable (pendiente de implementación). */
-  notImplemented?: boolean;
 }
 
 const OPTIONS: RuntimeOption[] = [
@@ -33,12 +33,8 @@ const OPTIONS: RuntimeOption[] = [
   {
     value: "claude_code_cli",
     label: "Claude Code",
-    // Tooltip explícito: el adapter no existe todavía. El botón permanece
-    // visible pero deshabilitado para que el operador sepa que la opción
-    // está en el roadmap y no la busque en otro lugar.
-    title: "Claude Code CLI (no implementado — pendiente AL-01 Fase 1)",
+    title: "Ejecutar el agente con Claude Code CLI y logs en Stacky",
     icon: Terminal,
-    notImplemented: true,
   },
 ];
 
@@ -46,6 +42,7 @@ export default function AgentRuntimeSelector({
   value,
   onChange,
   disabled = false,
+  claudeNeedsConfig = false,
 }: AgentRuntimeSelectorProps) {
   return (
     <div className={styles.root}>
@@ -54,23 +51,22 @@ export default function AgentRuntimeSelector({
         {OPTIONS.map((option) => {
           const Icon = option.icon;
           const active = option.value === value;
-          const isDisabled = disabled || option.notImplemented;
+          const needsConfig = option.value === "claude_code_cli" && claudeNeedsConfig;
           return (
             <button
               key={option.value}
               type="button"
               className={active ? styles.optionActive : styles.option}
-              onClick={() => !option.notImplemented && onChange(option.value)}
-              disabled={isDisabled}
-              title={option.title}
+              onClick={() => onChange(option.value)}
+              disabled={disabled}
+              title={needsConfig ? "Claude Code — falta configurar (clic para configurar)" : option.title}
               aria-pressed={active}
-              aria-disabled={option.notImplemented ?? false}
             >
               <Icon size={14} strokeWidth={2.2} />
               <span>{option.label}</span>
-              {option.notImplemented && (
-                <span className={styles.badge} aria-label="no implementado">
-                  pronto
+              {needsConfig && (
+                <span className={styles.badge} aria-label="requiere configuración">
+                  ⚙ configurar
                 </span>
               )}
             </button>

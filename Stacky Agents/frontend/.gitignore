@@ -4,3 +4,9 @@ dist/
 .env.local
 *.log
 .vite/
+
+# Artefactos de compilación TS dentro de src/. La fuente de verdad son los
+# .ts/.tsx; Vite emite el bundle a dist/. No deben volver a versionarse.
+src/**/*.js
+src/**/*.js.map
+*.tsbuildinfo

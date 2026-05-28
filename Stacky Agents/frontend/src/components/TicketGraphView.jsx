@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useLayoutEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FlowConfig } from "../api/endpoints";
 import {
@@ -81,7 +82,7 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
     (mode === "suggested" ? !!suggestedLabel : !!selectedFilename) &&
     (!runtimeRequiresVsCodeAgent(agentRuntime) || !!resolvedFilename);
 
-  return (
+  const modalContent = (
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
@@ -166,6 +167,8 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 
 // ─── PipelineBar ──────────────────────────────────────────────────────────────

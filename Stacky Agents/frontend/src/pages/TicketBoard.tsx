@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tickets, Agents, FlowConfig } from "../api/endpoints";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
@@ -114,7 +115,7 @@ function RunModal({
     (mode === "suggested" ? !!suggestedLabel : !!selectedFilename) &&
     (!runtimeRequiresVsCodeAgent(agentRuntime) || !!resolvedFilename);
 
-  return (
+  const modalContent = (
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
@@ -214,6 +215,8 @@ function RunModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 
 // ─── TicketCard ───────────────────────────────────────────────────────────────

@@ -1,0 +1,174 @@
+.page {
+  padding: 16px 20px 48px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.sub {
+  margin: 0;
+  color: var(--text-muted, #94a3b8);
+  font-size: 13px;
+  max-width: 720px;
+}
+
+.refreshBtn {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #334155);
+  background: var(--surface-2, #1e293b);
+  color: var(--text, #e2e8f0);
+  font-size: 13px;
+  cursor: pointer;
+}
+.refreshBtn:hover:not(:disabled) { background: var(--surface-3, #334155); }
+.refreshBtn:disabled { opacity: 0.6; cursor: default; }
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+.counts span {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #334155);
+}
+.countTask { color: #4ade80; border-color: #166534 !important; }
+.countComment { color: #60a5fa; border-color: #1e40af !important; }
+.countWaiting { color: #fbbf24; border-color: #92400e !important; }
+.countError { color: #f87171; border-color: #991b1b !important; }
+.countRunning { color: #a78bfa; border-color: #5b21b6 !important; }
+
+.state { color: var(--text-muted, #94a3b8); font-size: 14px; }
+.stateError { color: #f87171; font-size: 14px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.card {
+  border: 1px solid var(--border, #334155);
+  border-radius: 10px;
+  background: var(--surface, #0f172a);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.card[data-readiness="task_ready"] { border-left: 4px solid #4ade80; }
+.card[data-readiness="comment_ready"] { border-left: 4px solid #60a5fa; }
+.card[data-readiness="waiting_files"] { border-left: 4px solid #fbbf24; }
+.card[data-readiness="artifacts_idle"] { border-left: 4px solid #64748b; }
+.card[data-readiness="files_error"] { border-left: 4px solid #f87171; }
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.titleRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.adoTag {
+  font-weight: 700;
+  font-size: 12px;
+  color: #38bdf8;
+  text-decoration: none;
+}
+.adoTag:hover { text-decoration: underline; }
+
+.typeTag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-2, #1e293b);
+  color: var(--text-muted, #94a3b8);
+}
+
+.runningDot { font-size: 11px; color: #a78bfa; }
+
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badgeTask { background: #052e16; color: #4ade80; }
+.badgeComment { background: #082f49; color: #60a5fa; }
+.badgeWaiting { background: #422006; color: #fbbf24; }
+.badgeIdle { background: #1e293b; color: #94a3b8; }
+.badgeError { background: #450a0a; color: #f87171; }
+
+.cardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.fileList, .rfList, .blockers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.fileOk { color: #4ade80; }
+.fileMissing { color: #64748b; }
+
+.rfList {
+  border-top: 1px dashed var(--border, #334155);
+  padding-top: 6px;
+  color: var(--text, #cbd5e1);
+}
+.planOk { color: #4ade80; font-size: 11px; }
+.planMissing { color: #f87171; font-size: 11px; }
+
+.blockers { color: #fbbf24; }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, #334155);
+}
+
+.noAction { font-size: 12px; color: var(--text-muted, #94a3b8); font-style: italic; }

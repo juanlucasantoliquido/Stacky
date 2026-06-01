@@ -60,11 +60,22 @@ export default function TeamScreen() {
   }, [runningByTicket]);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     Agents.vsCodeAgents()
-      .then(setAllAgents)
-      .catch(() => setAllAgents([]))
-      .finally(() => setLoading(false));
-  }, []);
+      .then((agents) => {
+        if (!cancelled) setAllAgents(agents);
+      })
+      .catch(() => {
+        if (!cancelled) setAllAgents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectName, manageOpen]);
 
   function agentByFilename(filename: string): VsCodeAgent | undefined {
     return allAgents.find((a) => a.filename === filename);

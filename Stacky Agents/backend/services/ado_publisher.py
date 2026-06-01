@@ -56,6 +56,8 @@ class AgentHtmlPublish(Base):
     Sirve para:
       1. Detectar duplicados antes de tocar ADO (idempotencia).
       2. Permitir auditoría de qué se publicó y cuándo desde Stacky Agents.
+      3. Trazabilidad del comment_id de ADO para verificacion post-publish
+         (Fase 1 plan creacion-tareas-comentarios-100-efectiva, 2026-05-29).
     """
 
     __tablename__ = "agent_html_publish"
@@ -77,6 +79,10 @@ class AgentHtmlPublish(Base):
     published_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+    # Fase 1: comment_id devuelto por ADO; permite verificacion idempotente
+    # via GET comments + busqueda por marcador en pasos de reconciliacion.
+    comment_id: Mapped[int | None] = mapped_column(Integer)
+    marker: Mapped[str | None] = mapped_column(String(200))
 
     __table_args__ = (
         Index("ix_ahp_execution", "execution_id"),
@@ -104,6 +110,8 @@ class AgentHtmlPublish(Base):
             "error_message": self.error_message,
             "triggered_by": self.triggered_by,
             "published_at": self.published_at.isoformat(),
+            "comment_id": self.comment_id,
+            "marker": self.marker,
         }
 
 
@@ -120,6 +128,9 @@ class PublishResult:
     html_sha256: str | None
     ado_response: dict | None
     record_id: int | None
+    # Fase 1: trazabilidad de la verificacion ADO del comentario publicado.
+    comment_id: int | None = None
+    marker: str | None = None
 
 
 class AttachmentPublishError(RuntimeError):
@@ -263,6 +274,9 @@ def publish_from_execution(
                 return result
 
     # ── 5. Publicar en ADO (única invocación autorizada) ──────────────────────
+    # Fase 1: agregamos un marcador Stacky invisible al final del HTML para
+    # permitir verificacion idempotente post-publish via fetch_comments.
+    marker = _stacky_comment_marker(execution_id=execution_id, html_sha=html_sha)
     try:
         client = (client_factory or _default_client)()
         html_to_publish, attachment_summary = _prepare_html_attachments(
@@ -270,10 +284,21 @@ def publish_from_execution(
             client=client,
             ado_id=ado_id,
         )
+        html_to_publish = _inject_stacky_marker(html_to_publish, marker)
         ado_response = client.post_comment(ado_id, html_to_publish, "html")
         if isinstance(ado_response, dict) and attachment_summary is not None:
             ado_response = dict(ado_response)
             ado_response["_stacky_attachments"] = attachment_summary
+        # post_comment ahora exige comment_id en la respuesta o levanta error.
+        # Igual hacemos un check defensivo.
+        comment_id_value = None
+        if isinstance(ado_response, dict):
+            comment_id_value = ado_response.get("id")
+        if comment_id_value is None:
+            raise RuntimeError(
+                f"ADO acepto el comment pero la respuesta no tiene id: "
+                f"{str(ado_response)[:200]}"
+            )
     except AttachmentPublishError as exc:
         result = PublishResult(
             ok=False, status="failed",
@@ -304,6 +329,8 @@ def publish_from_execution(
         html_sha256=html_sha,
         ado_response=ado_response if isinstance(ado_response, dict) else None,
         record_id=None,
+        comment_id=int(comment_id_value) if isinstance(comment_id_value, (int, str)) and str(comment_id_value).isdigit() else None,
+        marker=marker,
     )
     try:
         return _emit_and_persist(
@@ -401,6 +428,36 @@ def _default_client():
     """Construye el AdoClient real. Tests inyectan client_factory."""
     from services.ado_client import AdoClient
     return AdoClient()
+
+
+def _stacky_comment_marker(*, execution_id: int | None, html_sha: str) -> str:
+    """Marcador invisible que se inyecta en cada comentario publicado por Stacky.
+
+    Permite que el job de reconciliacion identifique comentarios ya publicados
+    sin depender exclusivamente del comment_id (Fase 1 plan creacion-tareas-
+    comentarios-100-efectiva). Formato: comentario HTML estandar para no
+    contaminar el render visual.
+    """
+    sha_short = (html_sha or "")[:16] if html_sha else "nohash"
+    exec_part = execution_id if execution_id is not None else "noexec"
+    return f"stacky-comment:exec={exec_part}:sha={sha_short}"
+
+
+def _inject_stacky_marker(html: str, marker: str) -> str:
+    """Agrega el marcador Stacky al final del HTML.
+
+    Lo agregamos como comentario HTML (`<!-- -->`) y tambien como string en
+    un span con visibility:hidden. ADO conserva comentarios HTML en la
+    mayoria de los proyectos; el span es backup para los que los strippean.
+    """
+    if not marker:
+        return html
+    safe = marker.replace("--", "")
+    return (
+        f"{html}\n"
+        f"<!-- {safe} -->\n"
+        f"<span style=\"display:none\" data-stacky-marker=\"{safe}\"></span>"
+    )
 
 
 def _prepare_html_attachments(
@@ -612,6 +669,8 @@ def _emit_and_persist(
                 ),
                 error_message=result.reason if result.status != "ok" else None,
                 triggered_by=triggered_by,
+                comment_id=result.comment_id,
+                marker=result.marker,
             )
             session.add(row)
             session.flush()
@@ -627,6 +686,7 @@ def _emit_and_persist(
         ado_id=result.ado_id, execution_id=result.execution_id,
         html_sha256=result.html_sha256, ado_response=result.ado_response,
         record_id=record_id,
+        comment_id=result.comment_id, marker=result.marker,
     )
     _emit_event(final, triggered_by=triggered_by, html_path=html_path)
     return final

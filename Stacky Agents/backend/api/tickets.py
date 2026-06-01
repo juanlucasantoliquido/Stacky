@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -45,6 +46,30 @@ PENDING_TASK_STATUS_CANONICAL = "pending_manual_creation"
 PENDING_TASK_STATUS_CONSUMED = "consumed"
 _PENDING_TASK_STATUS_PENDING_ALIASES = {PENDING_TASK_STATUS_CANONICAL, "pending"}
 _PENDING_TASK_STATUS_ALLOWED = _PENDING_TASK_STATUS_PENDING_ALIASES | {PENDING_TASK_STATUS_CONSUMED}
+
+# Fase 0 plan creacion-tareas-comentarios-100-efectiva (2026-05-29):
+# Campos que el endpoint create-child-task agrega al archivo cuando lo marca
+# como consumed. Para calcular el hash "logico" del payload del agente
+# excluimos estas claves, asi `payload_sha256` (el que persistimos al consumir)
+# y `payload_sha256_current` (el que reportamos en /artifact-status) refieren
+# al mismo dominio: el contenido producido por el agente.
+_CONSUMED_METADATA_KEYS = {
+    "consumed_at", "task_ado_id", "attachment_id", "status", "operator_reason",
+    "operation_id", "payload_sha256",
+}
+
+
+def _payload_logical_sha256(payload: dict) -> str:
+    """Hash del pending-task.json ignorando los campos agregados al consumir.
+
+    Permite detectar si el agente regenero el contenido (refresh) aun cuando el
+    archivo ya tenga marcadores de consume. Si el agente cambia algun campo
+    propio, este hash cambia; los campos de consumo no afectan.
+    """
+    clean = {k: v for k, v in payload.items() if k not in _CONSUMED_METADATA_KEYS}
+    canonical = json.dumps(clean, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
 
 # Resuelve el root del repo donde viven Agentes/outputs.
 # Delega en runtime_paths.repo_root() (frozen-aware): honra STACKY_REPO_ROOT,
@@ -154,6 +179,27 @@ def _ado_client_for_ticket(ticket: Ticket | None = None, project_name: str | Non
     return build_ado_client()
 
 
+def _resolve_me_unique_name(project_name: str | None) -> str:
+    """uniqueName ADO del operador para el filtro 'Mis tareas'.
+
+    Prefiere el mapeo persistido (rápido); si no existe, lo resuelve vía PAT y
+    lo cachea. Si no se puede resolver, devuelve "" (el filtro queda inerte y se
+    muestran todas las tareas, evitando una lista vacía confusa)."""
+    from services.ado_identity import get_cached_identity, save_identity
+
+    cached = get_cached_identity(project_name or "")
+    if cached and cached.get("ado_unique_name"):
+        return cached["ado_unique_name"]
+    try:
+        identity = _ado_client_for_ticket(project_name=project_name).get_authenticated_user()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo resolver identidad ADO para 'me': %s", exc)
+        return ""
+    if identity.get("unique_name"):
+        save_identity(project_name or "", identity)
+    return identity.get("unique_name") or ""
+
+
 def _check_finish_manifest_gate(execution_id: int | None) -> dict | None:
     """Lee MANIFEST.json para una execution_id y retorna un resumen.
 
@@ -231,12 +277,23 @@ def get_hierarchy():
 
 @bp.get("")
 def list_tickets():
-    project_filter = _ticket_project_filter(_request_project_name())
+    project_name = _request_project_name()
+    project_filter = _ticket_project_filter(project_name)
     search = request.args.get("search", "").strip().lower()
+
+    # Requerimiento B: filtro por usuario asignado. `assigned_to=me` resuelve la
+    # identidad ADO del operador (mapeo persistido o, en su defecto, vía PAT).
+    # Cualquier otro valor se compara literal contra Ticket.assigned_to_ado.
+    assigned_to = (request.args.get("assigned_to") or "").strip()
+    if assigned_to.lower() == "me":
+        assigned_to = _resolve_me_unique_name(project_name)
+
     with session_scope() as session:
         q = session.query(Ticket)
         if project_filter is not None:
             q = q.filter(project_filter)
+        if assigned_to:
+            q = q.filter(Ticket.assigned_to_ado == assigned_to)
         rows = q.order_by(Ticket.last_synced_at.desc().nulls_last(), Ticket.id.desc()).limit(500).all()
         out = []
         for t in rows:
@@ -1450,11 +1507,66 @@ def list_pending_tasks(ado_id: int):
       }
     """
     repo_root = _resolve_repo_root()
+    # Escanea ambas bases conocidas (Agentes/outputs y output/tickets) — el
+    # agente funcional a veces co-loca el pending-task.json con el análisis.
+    pending, consumed_count, parse_errors = _scan_pending_tasks_for_epic(repo_root, ado_id)
+
+    return jsonify({
+        "ok": True,
+        "epic_ado_id": ado_id,
+        "pending_tasks": pending,
+        "total_pending": len(pending),
+        "total_consumed": consumed_count,
+        "parse_errors": parse_errors,
+        "total_errors": len(parse_errors),
+    })
+
+
+@bp.get("/by-ado/<int:ado_id>/artifact-status")
+def artifact_status(ado_id: int):
+    """Diagnostico end-to-end del estado de artifacts para un Epic ADO.
+
+    Fase 0 plan creacion-tareas-comentarios-100-efectiva (2026-05-29).
+
+    Permite responder rapidamente "el ticket X ya tiene Task hija creada?" sin
+    abrir multiples herramientas: muestra los pending-task.json detectados,
+    su status (consumed/pending), el task_ado_id si fue consumido, el
+    payload_sha256 que el endpoint computaria ahora (para detectar refresh
+    silenciosos), y los ultimos events de system_logs relevantes.
+
+    Response:
+      {
+        "ok": true,
+        "epic_ado_id": 167,
+        "repo_root": "C:/.../RSPACIFICO",
+        "epic_outputs_dir": "C:/.../Agentes/outputs/epic-167",
+        "epic_outputs_exists": true,
+        "artifacts": [
+          {
+            "rf_id": "RF-019",
+            "pending_task_path": "Agentes/outputs/epic-167/rf-019-.../pending-task.json",
+            "status": "consumed",
+            "task_ado_id": 172,
+            "task_url": "https://dev.azure.com/.../172",
+            "consumed_at": "2026-05-19T18:50:28Z",
+            "payload_sha256_current": "abc123...",
+            "payload_sha256_at_consume": "abc123..." | null,
+            "payload_hash_diverged": false,
+            "plan_de_pruebas_path": "...",
+            "plan_exists": true,
+            "operation_id": "uuid..." | null
+          }
+        ],
+        "recent_system_logs": [
+          { id, level, action, context: {...}, created_at }
+        ]
+      }
+    """
+    project_name = _request_project_name()
+    repo_root = _resolve_repo_root()
     epic_dir = repo_root / "Agentes" / "outputs" / f"epic-{ado_id}"
 
-    pending: list[dict] = []
-    consumed_count = 0
-
+    artifacts: list[dict] = []
     if epic_dir.is_dir():
         for rf_dir in sorted(epic_dir.iterdir()):
             if not rf_dir.is_dir():
@@ -1463,42 +1575,394 @@ def list_pending_tasks(ado_id: int):
             if not pt_file.is_file():
                 continue
             try:
-                payload = json.loads(pt_file.read_text(encoding="utf-8"))
+                pt_bytes = pt_file.read_bytes()
+                payload = json.loads(pt_bytes.decode("utf-8"))
             except Exception as exc:
-                logger.warning("list_pending_tasks: no se pudo parsear %s: %s", pt_file, exc)
+                artifacts.append({
+                    "rf_id": rf_dir.name,
+                    "pending_task_path": str(pt_file.relative_to(repo_root)).replace("\\", "/"),
+                    "status": "parse_error",
+                    "error": str(exc)[:200],
+                })
                 continue
 
-            if "consumed_at" in payload or payload.get("status") == "consumed":
-                consumed_count += 1
-                continue
+            # payload_sha256_current usa el hash logico (sin campos de consume)
+            # para que sea comparable contra payload_sha256_at_consume (registrado
+            # con el mismo dominio en _payload_logical_sha256).
+            payload_sha256_current = _payload_logical_sha256(payload)
+            payload_sha256_at_consume = payload.get("payload_sha256")
+            task_ado_id = payload.get("task_ado_id")
+            task_url = None
+            if task_ado_id:
+                try:
+                    task_url = _ado_client_for_ticket(project_name=project_name).work_item_url(int(task_ado_id))
+                except Exception:
+                    pass
 
-            # Verificar si existe el plan de pruebas
             plan_rel = payload.get("plan_de_pruebas_path", "")
             plan_path = repo_root / plan_rel if plan_rel else None
             plan_exists = bool(plan_path and plan_path.is_file())
 
-            # Ruta relativa al repo para el cliente
             try:
                 rel_path = str(pt_file.relative_to(repo_root)).replace("\\", "/")
             except ValueError:
                 rel_path = str(pt_file)
 
-            pending.append({
-                "rf_id": payload.get("rf_id", ""),
-                "title": payload.get("title", ""),
+            artifacts.append({
+                "rf_id": payload.get("rf_id") or rf_dir.name,
                 "pending_task_path": rel_path,
-                "generated_at": payload.get("generated_at", ""),
+                "status": payload.get("status"),
+                "task_ado_id": task_ado_id,
+                "task_url": task_url,
+                "consumed_at": payload.get("consumed_at"),
+                "payload_sha256_current": payload_sha256_current,
+                "payload_sha256_at_consume": payload_sha256_at_consume,
+                "payload_hash_diverged": bool(
+                    payload_sha256_at_consume
+                    and payload_sha256_at_consume != payload_sha256_current
+                ),
                 "plan_de_pruebas_path": plan_rel,
                 "plan_exists": plan_exists,
-                "status": payload.get("status", "pending_manual_creation"),
+                "operation_id": payload.get("operation_id"),
+                "operator_reason": payload.get("operator_reason"),
+                "attachment_id": payload.get("attachment_id"),
             })
+
+    # Ultimos system_logs de create_child_task para este ADO id
+    recent_logs: list[dict] = []
+    try:
+        with session_scope() as session:
+            rows = (
+                session.query(SystemLog)
+                .filter(SystemLog.source == "create_child_task")
+                .order_by(SystemLog.id.desc())
+                .limit(30)
+                .all()
+            )
+            for r in rows:
+                ctx = {}
+                try:
+                    ctx = json.loads(r.context_json or "{}")
+                except Exception:
+                    pass
+                if int(ctx.get("ado_id") or 0) != int(ado_id):
+                    continue
+                recent_logs.append({
+                    "id": r.id,
+                    "level": r.level,
+                    "action": r.action,
+                    "ok": ctx.get("ok"),
+                    "task_ado_id": ctx.get("task_ado_id"),
+                    "operation_id": ctx.get("operation_id") or ctx.get("correlation_id"),
+                    "payload_sha256": ctx.get("payload_sha256"),
+                    "error": ctx.get("error"),
+                    "timestamp": r.timestamp.isoformat() if getattr(r, "timestamp", None) else None,
+                })
+                if len(recent_logs) >= 10:
+                    break
+    except Exception as exc:
+        logger.warning("artifact_status: fallo leyendo system_logs: %s", exc)
 
     return jsonify({
         "ok": True,
         "epic_ado_id": ado_id,
-        "pending_tasks": pending,
-        "total_pending": len(pending),
-        "total_consumed": consumed_count,
+        "repo_root": str(repo_root),
+        "epic_outputs_dir": str(epic_dir),
+        "epic_outputs_exists": epic_dir.is_dir(),
+        "artifacts": artifacts,
+        "artifact_count": len(artifacts),
+        "recent_system_logs": recent_logs,
+    })
+
+
+# Bases donde puede vivir un pending-task.json de un Epic. La canónica es
+# `Agentes/outputs/epic-{id}/`, pero el agente funcional a veces lo co-loca junto
+# al análisis y el plan en `output/tickets/epic-{id}/` (su prompt mezcla ambas
+# rutas). Escaneamos las dos para no perder archivos reales en disco.
+_EPIC_OUTPUT_BASES: tuple[tuple[str, ...], ...] = (
+    ("Agentes", "outputs"),
+    ("output", "tickets"),
+)
+
+
+def iter_epic_pending_task_files(repo_root: Path, ado_id: int) -> list[Path]:
+    """Devuelve los pending-task.json de un Epic en cualquiera de las bases.
+
+    Incluye el archivo directamente bajo `epic-{id}/` y bajo subcarpetas RF
+    (`epic-{id}/<rf>/`). Deduplica por path resuelto.
+    """
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for base in _EPIC_OUTPUT_BASES:
+        epic_dir = repo_root.joinpath(*base) / f"epic-{ado_id}"
+        if not epic_dir.is_dir():
+            continue
+        candidates = sorted(epic_dir.glob("pending-task.json")) + sorted(
+            epic_dir.glob("*/pending-task.json")
+        )
+        for pt in candidates:
+            try:
+                key = pt.resolve()
+            except OSError:
+                key = pt
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(pt)
+    return found
+
+
+def _scan_pending_tasks_for_epic(repo_root: Path, ado_id: int) -> tuple[list[dict], int, list[dict]]:
+    """Escanea los pending-task.json de un Epic en ambas bases conocidas.
+
+    Devuelve `(pending, consumed_count, parse_errors)`:
+      - `pending`: pending-task.json NO consumidos, con readiness de plan.
+      - `consumed_count`: cuántos ya fueron consumidos (Task creada).
+      - `parse_errors`: archivos que EXISTEN en disco pero NO parsean como JSON.
+        Causa típica: el agente metió comillas dobles sin escapar en
+        `description_html` (JSON inválido). Antes se descartaban en silencio →
+        el ticket quedaba "atascado" sin señal visible y la Task nunca se creaba.
+        Ahora se reportan para que el board/list los muestre.
+
+    Helper compartido por el board desatascador y por list_pending_tasks.
+    """
+    pending: list[dict] = []
+    parse_errors: list[dict] = []
+    consumed_count = 0
+
+    for pt_file in iter_epic_pending_task_files(repo_root, ado_id):
+        try:
+            # utf-8-sig tolera un BOM accidental (otra causa común de parse fallido).
+            payload = json.loads(pt_file.read_text(encoding="utf-8-sig"))
+        except Exception as exc:
+            try:
+                rel_err = str(pt_file.relative_to(repo_root)).replace("\\", "/")
+            except ValueError:
+                rel_err = str(pt_file)
+            logger.warning("pending-task: no se pudo parsear %s: %s", pt_file, exc)
+            parse_errors.append({
+                "rf_id": pt_file.parent.name,
+                "pending_task_path": rel_err,
+                "error": str(exc)[:300],
+            })
+            continue
+
+        if "consumed_at" in payload or payload.get("status") == PENDING_TASK_STATUS_CONSUMED:
+            consumed_count += 1
+            continue
+
+        plan_rel = payload.get("plan_de_pruebas_path", "")
+        plan_path = repo_root / plan_rel if plan_rel else None
+        plan_exists = bool(plan_path and plan_path.is_file())
+        try:
+            rel_path = str(pt_file.relative_to(repo_root)).replace("\\", "/")
+        except ValueError:
+            rel_path = str(pt_file)
+
+        pending.append({
+            "rf_id": payload.get("rf_id") or pt_file.parent.name,
+            "title": payload.get("title", ""),
+            "pending_task_path": rel_path,
+            "generated_at": payload.get("generated_at", ""),
+            "plan_de_pruebas_path": plan_rel,
+            "plan_exists": plan_exists,
+            "status": payload.get("status", PENDING_TASK_STATUS_CANONICAL),
+        })
+
+    return pending, consumed_count, parse_errors
+
+
+@bp.get("/unblocker-board")
+def unblocker_board():
+    """Vista 'Desatascador': tickets en ejecución + readiness de artifacts.
+
+    Agrega, a nivel board (cross-ticket / cross-epic), todo lo que el copilot
+    está trabajando o dejó listo en disco, para que el operador pueda destrabar
+    el flujo manualmente sin frenar al dev:
+
+      - Detecta `Agentes/outputs/{ado_id}/comment.html` → listo para publicar
+        comentario en ADO (botón "Generar comentario").
+      - Detecta `Agentes/outputs/epic-{ado_id}/*/pending-task.json` pendientes →
+        listo para crear Task(s) hija(s) (botón "Crear Tasks").
+      - Marca tickets `running` sin archivos todavía como `waiting_files` con
+        `blockers` legibles.
+
+    Query params:
+      ?project=<nombre>  filtra por proyecto Stacky activo.
+
+    Response:
+      {
+        "ok": true,
+        "repo_root": "...",
+        "items": [ {
+          ticket_id, ado_id, title, work_item_type, ado_state, stacky_status,
+          ado_url, running, readiness, blockers: [...],
+          comment: { exists, path, size_bytes },
+          pending_tasks: [...], total_pending, total_consumed,
+          last_execution: { id, agent_type, status, started_at } | null
+        } ],
+        "total": N,
+        "counts": { running, comment_ready, task_ready, waiting_files }
+      }
+    """
+    project_name = _request_project_name()
+    repo_root = _resolve_repo_root()
+    outputs_dir = repo_root / "Agentes" / "outputs"
+
+    items: list[dict] = []
+    counts = {"running": 0, "comment_ready": 0, "task_ready": 0, "waiting_files": 0, "files_error": 0}
+
+    with session_scope() as session:
+        # Ejecuciones en curso → set de ticket_ids + última ejecución por ticket.
+        running_ticket_ids: set[int] = set()
+        last_exec_by_ticket: dict[int, AgentExecution] = {}
+        running_execs = (
+            session.query(AgentExecution)
+            .filter(AgentExecution.status == "running")
+            .all()
+        )
+        for ex in running_execs:
+            running_ticket_ids.add(ex.ticket_id)
+
+        q = session.query(Ticket)
+        if project_name:
+            q = q.filter(Ticket.stacky_project_name == project_name)
+        tickets = q.all()
+
+        # Última ejecución (cualquier estado) por ticket para mostrar contexto.
+        ticket_ids = [t.id for t in tickets]
+        if ticket_ids:
+            for ex in (
+                session.query(AgentExecution)
+                .filter(AgentExecution.ticket_id.in_(ticket_ids))
+                .order_by(AgentExecution.id.asc())
+                .all()
+            ):
+                last_exec_by_ticket[ex.ticket_id] = ex  # asc → last wins = más reciente
+
+        for t in tickets:
+            ado_id = t.ado_id
+            running = (t.stacky_status == "running") or (t.id in running_ticket_ids)
+
+            # ── Artifact 1: comment.html ──────────────────────────────────────
+            comment_info = {"exists": False, "path": None, "size_bytes": 0}
+            if ado_id:
+                comment_path = outputs_dir / str(ado_id) / "comment.html"
+                if comment_path.is_file():
+                    try:
+                        size = comment_path.stat().st_size
+                    except OSError:
+                        size = 0
+                    if size > 0:
+                        try:
+                            rel = str(comment_path.relative_to(repo_root)).replace("\\", "/")
+                        except ValueError:
+                            rel = str(comment_path)
+                        comment_info = {"exists": True, "path": rel, "size_bytes": size}
+
+            # ── Artifact 2: pending-task.json (Epics) ─────────────────────────
+            pending, consumed_count, parse_errors = ([], 0, [])
+            if ado_id:
+                pending, consumed_count, parse_errors = _scan_pending_tasks_for_epic(repo_root, ado_id)
+            total_pending = len(pending)
+            total_errors = len(parse_errors)
+
+            # Un pending-task.json malformado (JSON inválido) cuenta como artifact:
+            # el archivo está en disco pero ningún consumidor puede usarlo. Hay que
+            # mostrarlo, no esconderlo.
+            has_artifacts = comment_info["exists"] or total_pending > 0 or total_errors > 0
+
+            # Sólo incluir tickets relevantes para el desatascador.
+            if not (running or has_artifacts):
+                continue
+
+            # ── Readiness + blockers ──────────────────────────────────────────
+            blockers: list[str] = []
+            # Surface SIEMPRE los pending-task.json malformados (causa silenciosa
+            # de "ticket atascado / desatascador no encuentra los archivos").
+            for e in parse_errors:
+                blockers.append(
+                    f"pending-task.json MALFORMADO (JSON inválido) en {e['pending_task_path']}: "
+                    f"{e['error']} — regéneralo con FunctionalAnalyst (v2.0.2+, que escapa las "
+                    f"comillas en description_html) o corregí el JSON a mano."
+                )
+            if total_pending > 0:
+                readiness = "task_ready"
+                missing_plans = [p["rf_id"] for p in pending if not p["plan_exists"]]
+                if missing_plans:
+                    blockers.append(
+                        "Plan de pruebas no encontrado para: "
+                        + ", ".join(missing_plans)
+                        + " (se omitirá el adjunto)."
+                    )
+            elif comment_info["exists"]:
+                readiness = "comment_ready"
+            elif total_errors > 0:
+                # Hay archivo(s) pero ninguno parsea: estado accionable distinto de
+                # "esperando" (el agente ya terminó, sólo produjo JSON inválido).
+                readiness = "files_error"
+            elif running:
+                readiness = "waiting_files"
+                blockers.append(
+                    "El agente está en ejecución pero todavía no escribió "
+                    "comment.html ni pending-task.json. Esperar a que termine "
+                    "o revisar la consola del runtime."
+                )
+            else:
+                readiness = "artifacts_idle"
+
+            if running:
+                counts["running"] += 1
+            if readiness == "comment_ready":
+                counts["comment_ready"] += 1
+            elif readiness == "task_ready":
+                counts["task_ready"] += 1
+            elif readiness == "waiting_files":
+                counts["waiting_files"] += 1
+            elif readiness == "files_error":
+                counts["files_error"] += 1
+
+            ex = last_exec_by_ticket.get(t.id)
+            last_execution = None
+            if ex is not None:
+                last_execution = {
+                    "id": ex.id,
+                    "agent_type": ex.agent_type,
+                    "status": ex.status,
+                    "started_at": ex.started_at.isoformat() if ex.started_at else None,
+                }
+
+            items.append({
+                "ticket_id": t.id,
+                "ado_id": ado_id,
+                "title": t.title,
+                "work_item_type": t.work_item_type,
+                "ado_state": t.ado_state,
+                "stacky_status": t.stacky_status or "idle",
+                "ado_url": t.ado_url,
+                "running": running,
+                "readiness": readiness,
+                "blockers": blockers,
+                "comment": comment_info,
+                "pending_tasks": pending,
+                "total_pending": total_pending,
+                "total_consumed": consumed_count,
+                "parse_errors": parse_errors,
+                "total_errors": total_errors,
+                "last_execution": last_execution,
+            })
+
+    # Orden: primero lo que requiere acción del operador (archivo malformado y
+    # task lista), luego comment/running/idle.
+    _order = {"files_error": 0, "task_ready": 1, "comment_ready": 2, "waiting_files": 3, "artifacts_idle": 4}
+    items.sort(key=lambda it: (_order.get(it["readiness"], 9), -(it["ado_id"] or 0)))
+
+    return jsonify({
+        "ok": True,
+        "repo_root": str(repo_root),
+        "items": items,
+        "total": len(items),
+        "counts": counts,
     })
 
 
@@ -1523,6 +1987,10 @@ def create_child_task(ado_id: int):
         actions, pending_task_consumed, idempotent?, correlation_id }
     """
     correlation_id = str(_uuid_mod.uuid4())
+    # Fase 0 plan creacion-tareas-comentarios-100-efectiva: operation_id es el
+    # identificador trazable de este intento de escritura ADO. correlation_id se
+    # mantiene como alias de compatibilidad con consumidores actuales.
+    operation_id = correlation_id
     body = request.get_json(silent=True) or {}
     pending_task_path_str: str = (body.get("pending_task_path") or "").strip()
     operator_reason: str = (body.get("operator_reason") or "").strip()
@@ -1535,35 +2003,80 @@ def create_child_task(ado_id: int):
     user = request.headers.get("X-User-Email") or "anonymous"
 
     if not pending_task_path_str:
+        logger.warning(
+            "create_child_task: missing pending_task_path operation_id=%s ado_id=%s user=%s",
+            operation_id, ado_id, user,
+        )
         return jsonify({
             "ok": False,
             "error": "MISSING_PENDING_TASK_PATH",
             "message": "El campo 'pending_task_path' es obligatorio",
             "correlation_id": correlation_id,
+            "operation_id": operation_id,
         }), 400
 
     repo_root = _resolve_repo_root()
     pt_file = repo_root / pending_task_path_str
 
+    logger.info(
+        "create_child_task: start operation_id=%s ado_id=%s repo_root=%s "
+        "pending_task_path=%s user=%s completion_source=%s dry_run=%s",
+        operation_id, ado_id, str(repo_root), pending_task_path_str,
+        user, completion_source, dry_run,
+    )
+
     # ── [1a] Verificar existencia del archivo ──────────────────────────────────
     if not pt_file.is_file():
+        # Fase 0: diagnostico claro de repo_root cuando el archivo no existe.
+        # Contamos cuantos pending-task.json hay debajo para distinguir
+        # "ningun output" de "repo_root incorrecto".
+        outputs_root = repo_root / "Agentes" / "outputs"
+        try:
+            artifact_count = sum(1 for _ in outputs_root.rglob("pending-task.json"))
+        except Exception:
+            artifact_count = -1
+        logger.warning(
+            "create_child_task: PENDING_TASK_FILE_NOT_FOUND operation_id=%s "
+            "ado_id=%s repo_root=%s expected_path=%s outputs_artifact_count=%s",
+            operation_id, ado_id, str(repo_root), str(pt_file), artifact_count,
+        )
         return jsonify({
             "ok": False,
             "error": "PENDING_TASK_FILE_NOT_FOUND",
             "message": f"No se encontró el archivo: {pending_task_path_str}",
             "correlation_id": correlation_id,
+            "operation_id": operation_id,
+            "repo_root": str(repo_root),
+            "expected_absolute_path": str(pt_file),
+            "outputs_artifact_count": artifact_count,
         }), 400
 
     # ── [1b] Parsear y validar schema ─────────────────────────────────────────
     try:
-        pt_payload = json.loads(pt_file.read_text(encoding="utf-8"))
+        pt_bytes = pt_file.read_bytes()
+        pt_payload = json.loads(pt_bytes.decode("utf-8"))
     except Exception as exc:
+        logger.warning(
+            "create_child_task: PENDING_TASK_PARSE_ERROR operation_id=%s ado_id=%s path=%s err=%s",
+            operation_id, ado_id, pending_task_path_str, exc,
+        )
         return jsonify({
             "ok": False,
             "error": "PENDING_TASK_PARSE_ERROR",
             "message": f"No se pudo parsear el archivo JSON: {exc}",
             "correlation_id": correlation_id,
+            "operation_id": operation_id,
         }), 400
+
+    # Fase 0: hash logico del payload (excluye campos agregados al consumir).
+    # Trazabilidad y futura deteccion de "refresh sin re-publicar" (Fase 2 outbox).
+    payload_sha256 = _payload_logical_sha256(pt_payload)
+    logger.info(
+        "create_child_task: payload_loaded operation_id=%s ado_id=%s "
+        "payload_sha256=%s rf_id=%s status=%s",
+        operation_id, ado_id, payload_sha256,
+        pt_payload.get("rf_id"), pt_payload.get("status"),
+    )
 
     missing_fields = sorted(_PENDING_TASK_REQUIRED_FIELDS - set(pt_payload.keys()))
     if missing_fields:
@@ -1615,6 +2128,15 @@ def create_child_task(ado_id: int):
                 prev_url = _ado_client_for_ticket(project_name=_request_project_name()).work_item_url(int(prev_task_id))
             except Exception:
                 pass
+        # Fase 0: hash del payload al momento del consume (si lo guardamos
+        # en algun paso futuro). Por ahora informamos el sha actual; permite
+        # que el operador y la UI detecten "refresh sin re-publicar" comparando
+        # contra system_logs previos.
+        logger.info(
+            "create_child_task: PENDING_TASK_ALREADY_CONSUMED operation_id=%s "
+            "ado_id=%s task_ado_id=%s payload_sha256=%s",
+            operation_id, ado_id, prev_task_id, payload_sha256,
+        )
         return jsonify({
             "ok": True,
             "dry_run": False,
@@ -1627,6 +2149,8 @@ def create_child_task(ado_id: int):
             "idempotent": True,
             "reason": "PENDING_TASK_ALREADY_CONSUMED",
             "correlation_id": correlation_id,
+            "operation_id": operation_id,
+            "payload_sha256": payload_sha256,
         })
 
     # ── [dry_run] Retornar plan de acciones sin tocar ADO ─────────────────────
@@ -1678,6 +2202,10 @@ def create_child_task(ado_id: int):
     try:
         ado = _ado_client_for_ticket(project_name=_request_project_name())
     except _AdoConfigError as exc:
+        logger.warning(
+            "create_child_task: ADO_CONFIG_MISSING operation_id=%s ado_id=%s err=%s",
+            operation_id, ado_id, exc,
+        )
         _audit_create_child_task(
             correlation_id=correlation_id,
             ado_id=ado_id,
@@ -1688,12 +2216,17 @@ def create_child_task(ado_id: int):
             ok=False,
             actions=[],
             error=str(exc),
+            operation_id=operation_id,
+            payload_sha256=payload_sha256,
+            repo_root=str(repo_root),
         )
         return jsonify({
             "ok": False,
             "error": "ADO_CONFIG_MISSING",
             "message": str(exc),
             "correlation_id": correlation_id,
+            "operation_id": operation_id,
+            "payload_sha256": payload_sha256,
         }), 503
 
     # ── [2] create_work_item ───────────────────────────────────────────────────
@@ -1720,6 +2253,11 @@ def create_child_task(ado_id: int):
             "task_ado_id": task_ado_id,
         })
     except _AdoApiError as exc:
+        logger.warning(
+            "create_child_task: ADO_CREATE_WORK_ITEM_FAILED operation_id=%s "
+            "ado_id=%s payload_sha256=%s err=%s",
+            operation_id, ado_id, payload_sha256, str(exc)[:200],
+        )
         actions.append({
             "action": "create_work_item",
             "ok": False,
@@ -1736,6 +2274,9 @@ def create_child_task(ado_id: int):
             ok=False,
             actions=actions,
             error=str(exc),
+            operation_id=operation_id,
+            payload_sha256=payload_sha256,
+            repo_root=str(repo_root),
         )
         return jsonify({
             "ok": False,
@@ -1749,6 +2290,8 @@ def create_child_task(ado_id: int):
             "actions": actions,
             "pending_task_consumed": False,
             "correlation_id": correlation_id,
+            "operation_id": operation_id,
+            "payload_sha256": payload_sha256,
         })
 
     # ── [2b] Transicionar al target_state si fue solicitado ────────────────────
@@ -1835,6 +2378,10 @@ def create_child_task(ado_id: int):
                 actions=actions,
                 error=f"PARTIAL_FAILURE: Task {task_ado_id} creada, adjunto falló",
                 level="WARNING",
+                task_ado_id=task_ado_id,
+                operation_id=operation_id,
+                payload_sha256=payload_sha256,
+                repo_root=str(repo_root),
             )
             return jsonify({
                 "ok": False,
@@ -1847,6 +2394,8 @@ def create_child_task(ado_id: int):
                 "pending_task_consumed": False,
                 "human_action_required": human_action_required,
                 "correlation_id": correlation_id,
+                "operation_id": operation_id,
+                "payload_sha256": payload_sha256,
             })
     else:
         # Plan no existe — registrar como omitido
@@ -1858,17 +2407,29 @@ def create_child_task(ado_id: int):
         })
 
     # ── [5] post_comment con operator_reason ──────────────────────────────────
+    # Fase 1: post_comment ya no degrada silencioso — devuelve dict con id o
+    # levanta AdoApiError. Aqui es no-critico (la Task ya fue creada): si falla
+    # registramos la accion como ok=false con detalle visible, pero NO bloqueamos
+    # el mark_consumed ni alteramos el overall_ok del flujo principal de Task.
     if operator_reason:
+        comment_text = (
+            f"<p><b>Creado desde Stacky Agents.</b></p>"
+            f"<p><b>Motivo del operador:</b> {operator_reason}</p>"
+            f"<p><em>correlation_id: {correlation_id}</em></p>"
+            f"<!-- stacky-comment:create_child_task:operation_id={operation_id} -->"
+        )
         try:
-            comment_text = (
-                f"<p><b>Creado desde Stacky Agents.</b></p>"
-                f"<p><b>Motivo del operador:</b> {operator_reason}</p>"
-                f"<p><em>correlation_id: {correlation_id}</em></p>"
-            )
-            ado.post_comment(task_ado_id, comment_text, fmt="html")
-            actions.append({"action": "post_comment", "ok": True})
+            resp = ado.post_comment(task_ado_id, comment_text, fmt="html")
+            actions.append({
+                "action": "post_comment",
+                "ok": True,
+                "comment_id": resp.get("id") if isinstance(resp, dict) else None,
+            })
         except Exception as exc:
-            logger.warning("create_child_task: post_comment falló (no crítico): %s", exc)
+            logger.warning(
+                "create_child_task: post_comment fallo operation_id=%s task_ado_id=%s err=%s",
+                operation_id, task_ado_id, exc,
+            )
             actions.append({
                 "action": "post_comment",
                 "ok": False,
@@ -1881,6 +2442,8 @@ def create_child_task(ado_id: int):
         task_ado_id=task_ado_id,
         attachment_id=attachment_id,
         operator_reason=operator_reason,
+        operation_id=operation_id,
+        payload_sha256=payload_sha256,
     )
     actions.append({"action": "mark_consumed", "ok": True})
 
@@ -1895,6 +2458,15 @@ def create_child_task(ado_id: int):
         ok=True,
         actions=actions,
         task_ado_id=task_ado_id,
+        operation_id=operation_id,
+        payload_sha256=payload_sha256,
+        repo_root=str(repo_root),
+    )
+    logger.info(
+        "create_child_task: succeeded operation_id=%s ado_id=%s task_ado_id=%s "
+        "payload_sha256=%s actions=%s",
+        operation_id, ado_id, task_ado_id, payload_sha256,
+        [{"a": a.get("action"), "ok": a.get("ok")} for a in actions],
     )
 
     overall_ok = all(
@@ -1914,6 +2486,8 @@ def create_child_task(ado_id: int):
         "pending_task_consumed": True,
         "idempotent": False,
         "correlation_id": correlation_id,
+        "operation_id": operation_id,
+        "payload_sha256": payload_sha256,
     }
     if human_action_required:
         response_payload["human_action_required"] = human_action_required
@@ -1957,12 +2531,19 @@ def _mark_pending_task_consumed(
     task_ado_id: int,
     attachment_id: str | None,
     operator_reason: str,
+    operation_id: str | None = None,
+    payload_sha256: str | None = None,
 ) -> None:
     """Actualiza el pending-task.json en disco para marcarlo como consumido.
 
     Usa un threading.Lock a nivel proceso para garantizar exclusión mutua
     en Flask single-process. En multi-proceso (Gunicorn multi-worker) la
     protección es a nivel de OS file lock si portalocker está disponible.
+
+    Fase 0 plan creacion-tareas-comentarios-100-efectiva (2026-05-29):
+    persiste operation_id y payload_sha256 en el archivo para que la
+    auditoria local pueda correlacionar el archivo con la operacion ADO
+    aun si el SystemLog se pierde o el operador re-genera el JSON.
     """
     import threading
     _FILE_LOCK = threading.Lock()
@@ -1984,6 +2565,10 @@ def _mark_pending_task_consumed(
         current["status"] = "consumed"
         if operator_reason:
             current["operator_reason"] = operator_reason
+        if operation_id:
+            current["operation_id"] = operation_id
+        if payload_sha256:
+            current["payload_sha256"] = payload_sha256
 
         pt_file.write_text(
             json.dumps(current, ensure_ascii=False, indent=2),
@@ -2004,10 +2589,21 @@ def _audit_create_child_task(
     task_ado_id: int | None = None,
     error: str | None = None,
     level: str = "INFO",
+    operation_id: str | None = None,
+    payload_sha256: str | None = None,
+    repo_root: str | None = None,
 ) -> None:
-    """Persiste el evento de create_child_task en SystemLog (CA-07, CA-08)."""
+    """Persiste el evento de create_child_task en SystemLog (CA-07, CA-08).
+
+    Fase 0 plan creacion-tareas-comentarios-100-efectiva (2026-05-29):
+    incluye operation_id, payload_sha256 y repo_root para diagnostico
+    end-to-end y permitir reconciliacion con el pending-task.json.
+    """
     ctx = {
         "correlation_id": correlation_id,
+        "operation_id": operation_id or correlation_id,
+        "payload_sha256": payload_sha256,
+        "repo_root": repo_root,
         "ado_id": ado_id,
         "completion_source": completion_source,
         "operator_reason": operator_reason,
@@ -2304,6 +2900,74 @@ def sync_users_from_ado():
     )
 
     return jsonify({"ok": True, **result})
+
+
+# ── Requerimiento B (plan 2026-05-27): identidad ADO del operador ────────────
+
+@bp.get("/ado-user")
+def get_ado_user():
+    """Resuelve y cachea la identidad ADO del operador para 'Mis tareas'.
+
+    GET /api/tickets/ado-user?project=RSPACIFICO[&refresh=1]
+
+    - Sin refresh: devuelve el mapeo cacheado si existe; si no, lo resuelve.
+    - Con refresh=1: fuerza re-resolución vía PAT y re-cachea.
+
+    Respuesta: { ok, linked, ado_unique_name, ado_display_name, verified_at,
+                 stacky_user, project, source }
+    """
+    from services.ado_identity import (
+        current_stacky_user,
+        get_cached_identity,
+        save_identity,
+    )
+
+    project_name = _request_project_name()
+    refresh = request.args.get("refresh", "0") in {"1", "true", "yes"}
+    stacky_user = current_stacky_user()
+
+    cached = get_cached_identity(project_name or "")
+    if cached and cached.get("ado_unique_name") and not refresh:
+        return jsonify({
+            "ok": True,
+            "linked": True,
+            "source": "cache",
+            "ado_unique_name": cached.get("ado_unique_name"),
+            "ado_display_name": cached.get("ado_display_name"),
+            "verified_at": cached.get("verified_at"),
+            "stacky_user": cached.get("stacky_user", stacky_user),
+            "project": cached.get("project"),
+        })
+
+    try:
+        identity = _ado_client_for_ticket(project_name=project_name).get_authenticated_user()
+    except (AdoConfigError, _AdoConfigError) as exc:
+        return jsonify({"ok": False, "linked": False, "error": "config", "message": str(exc)}), 400
+    except (AdoApiError, _AdoApiError) as exc:
+        return _ado_sync_error_response(exc, route_label="ado-user", project_name=project_name)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("ado-user — fallo inesperado")
+        return jsonify({"ok": False, "linked": False, "error": "unexpected", "message": str(exc)}), 500
+
+    if not identity.get("unique_name"):
+        return jsonify({
+            "ok": True, "linked": False, "source": "ado",
+            "message": "ADO no devolvió un identificador de usuario para el PAT configurado.",
+            "ado_display_name": identity.get("display_name"),
+            "stacky_user": stacky_user,
+        })
+
+    entry = save_identity(project_name or "", identity, stacky_user=stacky_user)
+    return jsonify({
+        "ok": True,
+        "linked": True,
+        "source": "ado",
+        "ado_unique_name": entry["ado_unique_name"],
+        "ado_display_name": entry["ado_display_name"],
+        "verified_at": entry["verified_at"],
+        "stacky_user": entry["stacky_user"],
+        "project": entry["project"],
+    })
 
 
 # ── Feature B: Diagnosticos causales de bloqueos ─────────────────────────────

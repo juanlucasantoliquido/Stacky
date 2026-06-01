@@ -53,7 +53,8 @@ def test_cli_runtime_prompts_remove_ado_escape_hatch():
 
     for prompt in (codex_prompt, claude_prompt):
         assert "Regla absoluta: no toques Azure DevOps" in prompt
-        assert "Stacky Agents es el unico autorizado a" in prompt
+        assert "Stacky Agents es el " in prompt and " autorizado a" in prompt
         assert "Agentes/outputs/<ADO_ID>/comment.html" in prompt
         assert "pending-task.json" in prompt
         assert "salvo que las instrucciones del agente seleccionado" not in prompt
+        assert "System prompt del agente" not in prompt

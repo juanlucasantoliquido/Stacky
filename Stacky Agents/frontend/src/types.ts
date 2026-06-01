@@ -203,6 +203,7 @@ export interface Project {
   name: string;
   display_name: string;
   workspace_root: string;
+  agents_dir?: string;
   docs_paths?: DocsPaths;
   docs_technical_path?: string;
   docs_functional_path?: string;
@@ -222,6 +223,8 @@ export interface Project {
   active: boolean;
   initialized: boolean;
   has_credentials?: boolean;
+  /** Plan 16 — multi-cliente: true si el proyecto tiene client_profile en config.json. */
+  has_client_profile?: boolean;
 }
 
 export interface ProjectsResponse {
@@ -241,6 +244,7 @@ export interface InitProjectPayload {
   name: string;
   display_name?: string;
   workspace_root: string;
+  agents_dir?: string;
   docs_paths?: DocsPaths;
   docs_technical_path?: string;
   docs_functional_path?: string;

@@ -6,6 +6,9 @@ from .adoption import bp as adoption_bp
 from .agent_roles import bp as agent_roles_bp
 from .agents import bp as agents_bp
 from .chat import bp as chat_bp
+from .client_profile import bp as client_profile_bp
+from .config_transfer import bp as config_transfer_bp
+from .db_query import bp as db_query_bp
 from .docs import bp as docs_bp
 from .global_config import bp as global_config_bp
 from .flow_config import bp as flow_config_bp
@@ -64,6 +67,9 @@ api_bp.register_blueprint(global_config_bp)
 api_bp.register_blueprint(ui_sections_bp)
 api_bp.register_blueprint(adoption_bp)
 api_bp.register_blueprint(docs_rag_bp)
+api_bp.register_blueprint(config_transfer_bp)
+api_bp.register_blueprint(client_profile_bp)
+api_bp.register_blueprint(db_query_bp)
 
 
 @api_bp.get("/health")

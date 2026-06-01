@@ -18,8 +18,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: ── Verificar Node / npm solo si falta el bundle ──────────────
-if not exist "frontend\dist\index.html" (
+:: ── Detectar si el frontend necesita recompilarse ─────────────
+set "FRONTEND_NEEDS_BUILD=0"
+if not exist "frontend\dist\index.html" set "FRONTEND_NEEDS_BUILD=1"
+
+if "%FRONTEND_NEEDS_BUILD%"=="0" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$dist='frontend\dist\index.html'; $distTime=(Get-Item $dist).LastWriteTimeUtc; $paths=@('frontend\src','frontend\public'); $newer=Get-ChildItem $paths -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTimeUtc -gt $distTime } | Select-Object -First 1; if(-not $newer){ foreach($f in @('frontend\package.json','frontend\package-lock.json','frontend\vite.config.ts','frontend\tsconfig.json')){ if((Test-Path $f) -and ((Get-Item $f).LastWriteTimeUtc -gt $distTime)){ $newer=$f; break } } }; if($newer){ exit 0 } exit 1" >nul 2>&1
+    if not errorlevel 1 set "FRONTEND_NEEDS_BUILD=1"
+)
+
+:: ── Verificar Node / npm solo si hace falta compilar ──────────
+if "%FRONTEND_NEEDS_BUILD%"=="1" (
     where npm >nul 2>&1
     if errorlevel 1 (
         echo [ERROR] npm no encontrado en el PATH.
@@ -112,9 +121,9 @@ if errorlevel 1 (
     echo.
 )
 
-:: ── Build frontend si falta dist ─────────────────────────────
-if not exist "frontend\dist\index.html" (
-    echo [INFO] Compilando frontend ^(puede tardar^)...
+:: ── Build frontend si falta dist o hay fuentes mas nuevos ────
+if "%FRONTEND_NEEDS_BUILD%"=="1" (
+    echo [INFO] Compilando frontend ^(dist ausente o desactualizado^)...
     cd frontend
     if not exist "node_modules" npm install --silent
     if errorlevel 1 (

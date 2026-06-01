@@ -155,6 +155,54 @@ def frontend_dist_dir() -> Path | None:
     return None
 
 
+def stacky_home() -> Path:
+    """Carpeta canónica `Stacky` dentro del runtime activo.
+
+    Prioridad:
+      1. `STACKY_HOME` — override explícito (deploys que apuntan a otra ruta).
+      2. `<app_root>/Stacky` — comportamiento por defecto. En un deploy frozen
+         esto resuelve a `<execution_root>/Stacky`; en dev queda dentro del
+         backend, lo cual es aceptable porque el dir está gitignorado.
+
+    El directorio NO se crea acá: usá `ensure_stacky_home()` cuando necesités
+    que exista. Mantener la función pura permite testear la resolución sin
+    side-effects.
+    """
+    configured = os.getenv("STACKY_HOME", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return (app_root() / "Stacky").resolve()
+
+
+def stacky_agents_dir() -> Path:
+    """Carpeta canónica `Stacky/agents` con los `.agent.md` bundleados.
+
+    Prioridad:
+      1. `STACKY_AGENTS_DIR` — override explícito.
+      2. `<stacky_home>/agents` — default.
+
+    Plan: plan-agentes-bundled-en-stacky-2026-05-29.md §2.2.
+    """
+    configured = os.getenv("STACKY_AGENTS_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return (stacky_home() / "agents").resolve()
+
+
+def ensure_stacky_home() -> Path:
+    """Crea `stacky_home()` si no existe y devuelve el path resuelto."""
+    home = stacky_home()
+    home.mkdir(parents=True, exist_ok=True)
+    return home
+
+
+def ensure_stacky_agents_dir() -> Path:
+    """Crea `stacky_agents_dir()` si no existe y devuelve el path resuelto."""
+    agents = stacky_agents_dir()
+    agents.mkdir(parents=True, exist_ok=True)
+    return agents
+
+
 def runtime_config() -> dict[str, Any]:
     configured = os.getenv("STACKY_RUNTIME_CONFIG", "").strip()
     candidates = []

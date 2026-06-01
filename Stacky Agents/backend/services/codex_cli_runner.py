@@ -21,7 +21,13 @@ import log_streamer
 from config import config
 from db import session_scope
 from models import AgentExecution, Ticket
-from services import context_enrichment, pii_masker, ticket_status, vscode_agents
+from services import (
+    context_enrichment,
+    pii_masker,
+    stacky_agents as stacky_agents_svc,
+    ticket_status,
+    vscode_agents,
+)
 from services.agent_env import build_agent_env
 from services.manifest_watcher import append_event, write_heartbeat, write_manifest
 from services.project_context import resolve_project_context
@@ -243,9 +249,19 @@ def _run_in_background(
         )
         all_agents = vscode_agents.list_agents(config.VSCODE_PROMPTS_DIR)
         if selected_agent is None:
+            # Fail-fast con el contexto del canonical para diagnosticar deploys
+            # que llegan sin Stacky/agents materializado.
             raise RuntimeError(
                 f"agent prompt not found: {vscode_agent_filename} "
-                f"(VSCODE_PROMPTS_DIR={config.VSCODE_PROMPTS_DIR})"
+                f"(VSCODE_PROMPTS_DIR={config.VSCODE_PROMPTS_DIR}, "
+                f"stacky_agents_dir={stacky_agents_svc.stacky_agents_dir()})"
+            )
+
+        selected_path = Path(config.VSCODE_PROMPTS_DIR) / vscode_agent_filename
+        agent_entry = stacky_agents_svc.build_entry_from_path(selected_path)
+        if agent_entry is None:
+            raise RuntimeError(
+                f"agent prompt not found on disk: {selected_path}"
             )
 
         cwd = _resolve_cwd(workspace_root)
@@ -278,12 +294,17 @@ def _run_in_background(
         if mask_map:
             log("info", f"PII masking: {len(mask_map)} ocurrencias enmascaradas")
 
+        invocation_block = stacky_agents_svc.build_invocation_block(
+            entry=agent_entry,
+            workspace_root=cwd,
+        )
         prompt = _build_codex_prompt(
             selected_agent=selected_agent,
             all_agents=all_agents,
             ticket_message=masked_message,
             agent_bundle_dir=agent_bundle_dir,
             agent_manifest_file=agent_manifest_file,
+            invocation_block=invocation_block,
         )
         prompt_file = run_dir / "prompt.md"
         prompt_file.write_text(prompt, encoding="utf-8")
@@ -378,6 +399,10 @@ def _run_in_background(
         # Re-hidratar PII enmascarada antes de persistir / mostrar.
         if output and mask_map:
             output = pii_masker.unmask(output, mask_map)
+        invocation_meta = stacky_agents_svc.invocation_metadata(
+            entry=agent_entry,
+            workspace_root=cwd,
+        )
         metadata = {
             "runtime": RUNTIME,
             "vscode_agent_filename": vscode_agent_filename,
@@ -391,6 +416,7 @@ def _run_in_background(
             "agent_bundle_dir": str(agent_bundle_dir),
             "agent_manifest_file": str(agent_manifest_file),
             "agent_count": len(all_agents),
+            **invocation_meta,
         }
 
         if return_code == 0:
@@ -690,15 +716,20 @@ def _build_codex_prompt(
     ticket_message: str,
     agent_bundle_dir: Path,
     agent_manifest_file: Path,
+    invocation_block: str = "",
 ) -> str:
     inventory = _format_agent_inventory(all_agents, agent_bundle_dir)
     selected_path = str(Path(config.VSCODE_PROMPTS_DIR) / selected_agent.filename)
 
     return f"""# Stacky Agents Codex CLI runtime
 
-Actua como el agente GitHub Copilot Pro seleccionado por el operador.
-Stacky te esta lanzando desde Codex CLI para trabajar sobre el mismo ticket y
-mantener trazabilidad en los logs del workbench.
+{invocation_block}
+
+Stacky te esta lanzando desde Codex CLI para trabajar sobre el ticket y mantener
+trazabilidad en los logs del workbench. No se inyecta el contenido del
+`.agent.md` seleccionado en este mensaje: debes leerlo desde la ruta indicada en
+el bloque "Agente Stacky seleccionado" y usar ese archivo como fuente de rol,
+criterio, tono, restricciones y forma de trabajo.
 
 ## Agente seleccionado
 
@@ -706,12 +737,6 @@ mantener trazabilidad en los logs del workbench.
 - Archivo: {selected_agent.filename}
 - Path: {selected_path}
 - Descripcion: {selected_agent.description or "(sin descripcion)"}
-
-## System prompt del agente seleccionado
-
-```markdown
-{selected_agent.system_prompt}
-```
 
 ## Catalogo de agentes GitHub Copilot Pro disponibles
 

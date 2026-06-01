@@ -62,6 +62,10 @@ def enrich_blocks(
 
     project_name = project_ctx.stacky_project_name if project_ctx else None
 
+    # Plan 16: inyectar primero el client-profile (si está disponible y el
+    # feature flag lo permite) para que todos los pasos siguientes puedan
+    # leerlo si lo necesitan.
+    blocks = _inject_client_profile_block(blocks, project_name, log)
     blocks = _inject_epic_structured(ticket_id, agent_type, blocks, log)
     blocks = _inject_artifact_context(ticket_id, blocks, log)
     blocks = _inject_similar_tickets(
@@ -84,6 +88,63 @@ def enrich_blocks(
 # ---------------------------------------------------------------------------
 # Pasos individuales (cada uno best-effort)
 # ---------------------------------------------------------------------------
+
+def _inject_client_profile_block(
+    blocks: list[dict], project_name: str | None, log: LogFn
+) -> list[dict]:
+    """Inyecta un bloque `client-profile` con el perfil del cliente del
+    proyecto activo. Plan 16, Fase 2.
+
+    Feature flag: `STACKY_INJECT_CLIENT_PROFILE` (default `true`). Si está OFF
+    la inyección se omite incluso si hay perfil.
+
+    Best-effort: cualquier excepción degrada en warning y no bloquea.
+    """
+    if os.getenv("STACKY_INJECT_CLIENT_PROFILE", "true").lower() in {"0", "false", "off"}:
+        return blocks
+    if not project_name:
+        return blocks
+    try:
+        from services.client_profile import load_client_profile
+
+        profile = load_client_profile(project_name)
+        if not profile:
+            return blocks
+
+        existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
+        if "client-profile" in existing_ids:
+            log("info", "client-profile ya presente, omitiendo inyección")
+            return blocks
+
+        # Render legible — YAML-ish para humanos, pero el contenido es plain text
+        # (el LLM lo parsea como texto). Usamos json.dumps con indent porque es
+        # determinístico y libre de dependencias adicionales.
+        import json as _json
+
+        terminology = profile.get("terminology") or {}
+        client_label = (terminology.get("client_label") or "").strip()
+        product = (terminology.get("product_name") or "").strip()
+        title_suffix = ""
+        if client_label or product:
+            title_suffix = " — " + " · ".join([s for s in (client_label, product) if s])
+
+        content = _json.dumps(profile, ensure_ascii=False, indent=2, sort_keys=True)
+        block = {
+            "kind": "text",
+            "id": "client-profile",
+            "title": f"Perfil del cliente: {project_name}{title_suffix}",
+            "content": content,
+        }
+        log(
+            "info",
+            f"client-profile inyectado para proyecto={project_name} "
+            f"(schema_version={profile.get('schema_version')})",
+        )
+        return list(blocks) + [block]
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"client-profile no se pudo inyectar (continuando): {exc}")
+        return blocks
+
 
 def _inject_epic_structured(
     ticket_id: int | None, agent_type: str, blocks: list[dict], log: LogFn

@@ -50,6 +50,7 @@ from project_manager import (
     set_active_project,
     set_agent_workflow_config,
     set_project_pinned_agents,
+    validate_agents_dir,
     validate_docs_paths,
     validate_workspace_root,
     write_ado_auth,
@@ -84,6 +85,7 @@ def _project_to_dict(cfg: dict, active_name: str | None) -> dict:
         "name":              cfg["name"],
         "display_name":      cfg.get("display_name", cfg["name"]),
         "workspace_root":    cfg.get("workspace_root", ""),
+        "agents_dir":        cfg.get("agents_dir", ""),
         "docs_paths":        {
             "technical":      docs_paths.get("technical", ""),
             "functional":     docs_paths.get("functional", ""),
@@ -105,6 +107,7 @@ def _project_to_dict(cfg: dict, active_name: str | None) -> dict:
         "active":            cfg["name"] == active_name,
         "initialized":       True,
         "has_credentials":   _has_credentials(cfg["name"], t_type),
+        "has_client_profile": isinstance(cfg.get("client_profile"), dict),
     }
 
 
@@ -141,6 +144,14 @@ def _resolve_docs_paths(data: dict, cfg: dict | None = None) -> dict:
             else nested.get("functional", current.get("functional", ""))
         ),
     }
+
+
+def _resolve_agents_dir(data: dict, cfg: dict | None = None) -> str:
+    if cfg is None:
+        return (data.get("agents_dir") or "").strip()
+    if "agents_dir" in data:
+        return (data.get("agents_dir") or "").strip()
+    return (cfg.get("agents_dir") or "").strip()
 
 
 def _count_docs_files(root: str) -> dict:
@@ -228,6 +239,7 @@ def init_project():
     display_name   = (data.get("display_name") or "").strip()
     workspace_root = _resolve_workspace_root(data)
     docs_paths     = _resolve_docs_paths(data)
+    agents_dir     = _resolve_agents_dir(data)
     tracker_type   = (data.get("tracker_type") or "azure_devops").strip().lower()
 
     if not name:
@@ -238,6 +250,7 @@ def init_project():
     try:
         workspace_root = validate_workspace_root(workspace_root)
         docs_paths = validate_docs_paths(docs_paths)
+        agents_dir = validate_agents_dir(agents_dir)
 
         if tracker_type == "jira":
             jira_url    = (data.get("jira_url") or "").strip()
@@ -264,6 +277,7 @@ def init_project():
                 verify_ssl=bool(verify_ssl),
                 auth_file="auth/jira_auth.json",
                 docs_paths=docs_paths,
+                agents_dir=agents_dir,
             )
             if jira_user and jira_token:
                 write_jira_auth(name=name, url=jira_url, user=jira_user, token=jira_token)
@@ -294,6 +308,7 @@ def init_project():
                 verify_ssl=bool(verify_ssl),
                 auth_file="auth/mantis_auth.json",
                 docs_paths=docs_paths,
+                agents_dir=agents_dir,
             )
             if mantis_protocol == "soap" and mantis_username:
                 write_mantis_auth(
@@ -327,6 +342,7 @@ def init_project():
                 area_path=area_path,
                 auth_file="auth/ado_auth.json",
                 docs_paths=docs_paths,
+                agents_dir=agents_dir,
             )
             if pat:
                 write_ado_auth(name=name, pat=pat)
@@ -368,6 +384,7 @@ def update_project(project_name: str):
     try:
         workspace_root = validate_workspace_root(_resolve_workspace_root(data, cfg))
         docs_paths = validate_docs_paths(_resolve_docs_paths(data, cfg))
+        agents_dir = validate_agents_dir(_resolve_agents_dir(data, cfg))
 
         if tracker_type == "jira":
             tracker   = cfg.get("issue_tracker") or {}
@@ -384,6 +401,7 @@ def update_project(project_name: str):
                 verify_ssl=data.get("verify_ssl", tracker.get("verify_ssl", True)),
                 auth_file="auth/jira_auth.json",
                 docs_paths=docs_paths,
+                agents_dir=agents_dir,
             )
             jira_user  = (data.get("jira_user") or "").strip()
             jira_token = (data.get("jira_token") or "").strip()
@@ -426,6 +444,7 @@ def update_project(project_name: str):
                 verify_ssl=data.get("verify_ssl", tracker.get("verify_ssl", True)),
                 auth_file="auth/mantis_auth.json",
                 docs_paths=docs_paths,
+                agents_dir=agents_dir,
             )
             auth_path = PROJECTS_DIR / project_name / "auth" / "mantis_auth.json"
             if mantis_protocol == "soap" and mantis_username:
@@ -460,6 +479,7 @@ def update_project(project_name: str):
                 area_path=(data.get("area_path") or tracker.get("area_path", "")),
                 auth_file="auth/ado_auth.json",
                 docs_paths=docs_paths,
+                agents_dir=agents_dir,
             )
             pat = (data.get("pat") or "").strip()
             if pat:

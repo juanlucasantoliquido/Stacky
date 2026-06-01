@@ -48,7 +48,13 @@ import log_streamer
 from config import config
 from db import session_scope
 from models import AgentExecution, Ticket
-from services import context_enrichment, pii_masker, ticket_status, vscode_agents
+from services import (
+    context_enrichment,
+    pii_masker,
+    stacky_agents as stacky_agents_svc,
+    ticket_status,
+    vscode_agents,
+)
 from services.agent_env import build_agent_env
 from services.project_context import resolve_project_context
 from services.manifest_watcher import append_event, write_heartbeat, write_manifest
@@ -288,7 +294,15 @@ def _run_in_background(
         if selected_agent is None:
             raise RuntimeError(
                 f"agent prompt not found: {vscode_agent_filename} "
-                f"(VSCODE_PROMPTS_DIR={config.VSCODE_PROMPTS_DIR})"
+                f"(VSCODE_PROMPTS_DIR={config.VSCODE_PROMPTS_DIR}, "
+                f"stacky_agents_dir={stacky_agents_svc.stacky_agents_dir()})"
+            )
+
+        selected_path = Path(config.VSCODE_PROMPTS_DIR) / vscode_agent_filename
+        agent_entry = stacky_agents_svc.build_entry_from_path(selected_path)
+        if agent_entry is None:
+            raise RuntimeError(
+                f"agent prompt not found on disk: {selected_path}"
             )
 
         cwd = _resolve_cwd(workspace_root)
@@ -328,24 +342,35 @@ def _run_in_background(
         if mask_map:
             log("info", f"PII masking: {len(mask_map)} ocurrencias enmascaradas")
 
-        # Fase C — cómo se inyecta la persona del agente.
-        #   "append" (default): persona = system prompt real (--append-system-prompt-file).
-        #                       El primer mensaje de usuario lleva solo ticket + contexto.
-        #   "user_message":     persona embebida en el primer mensaje (rollback).
+        invocation_block = stacky_agents_svc.build_invocation_block(
+            entry=agent_entry,
+            workspace_root=cwd,
+        )
+
+        # Fase C — cómo se referencia la persona del agente.
+        #   "append" (default): system prompt real con el contrato de invocación
+        #                       y la ruta del .agent.md, sin copiar su contenido.
+        #                       El primer mensaje de usuario lleva ticket + contexto.
+        #   "user_message":     contrato de invocación en el primer mensaje (rollback),
+        #                       también sin copiar el contenido del .agent.md.
         system_prompt_mode = (config.CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE or "append")
         system_prompt_file: Path | None = None
         if system_prompt_mode == "append":
-            system_prompt_text = _build_system_prompt(selected_agent)
+            system_prompt_text = _build_system_prompt(
+                selected_agent,
+                invocation_block=invocation_block,
+            )
             system_prompt_file = run_dir / "system_prompt.md"
             system_prompt_file.write_text(system_prompt_text, encoding="utf-8")
             prompt = _build_user_message(
                 all_agents=all_agents,
                 ticket_message=masked_message,
+                invocation_block=invocation_block,
             )
             log(
                 "info",
                 f"adoptando agente {selected_agent.name} ({selected_agent.filename}) "
-                "vía system prompt (--append-system-prompt-file)",
+                "vía referencia a .agent.md (--append-system-prompt-file)",
                 group="operator",
             )
         else:
@@ -354,6 +379,7 @@ def _run_in_background(
                 selected_agent=selected_agent,
                 all_agents=all_agents,
                 ticket_message=masked_message,
+                invocation_block=invocation_block,
             )
             log(
                 "info",
@@ -497,6 +523,10 @@ def _run_in_background(
         if output:
             output_file.write_text(output, encoding="utf-8")
 
+        invocation_meta = stacky_agents_svc.invocation_metadata(
+            entry=agent_entry,
+            workspace_root=cwd,
+        )
         metadata = {
             "runtime": RUNTIME,
             "vscode_agent_filename": vscode_agent_filename,
@@ -512,6 +542,7 @@ def _run_in_background(
             "system_prompt_file": str(system_prompt_file) if system_prompt_file else None,
             "agent_name": selected_agent.name,
             "pii_masked": bool(mask_map),
+            **invocation_meta,
         }
 
         if return_code == 0:
@@ -664,9 +695,10 @@ def _build_command(
       -p / --print              : modo print (no abre UI interactiva de terminal)
       --input-format stream-json: lee mensajes de usuario JSONL desde stdin
       --output-format stream-json --verbose : eventos JSONL en stdout
-      --append-system-prompt-file : persona del .agent.md como system prompt real
-                                    (Fase C); usa archivo para no chocar con el
-                                    límite de longitud de línea en Windows.
+      --append-system-prompt-file : contrato/ruta del .agent.md como system
+                                    prompt real (Fase C); no copia el contenido
+                                    del agente. Usa archivo para no chocar con
+                                    el límite de longitud de línea en Windows.
       --model                   : modelo específico (opcional)
     """
     claude_bin = _resolve_claude_code_cli_bin()
@@ -682,7 +714,7 @@ def _build_command(
         "--verbose",        # stream-json requiere --verbose
     ]
 
-    # Fase C — inyectar la persona del agente como system prompt real.
+    # Fase C — referenciar la persona del agente sin copiar su prompt.
     if system_prompt_file is not None:
         cmd.extend(["--append-system-prompt-file", str(system_prompt_file)])
 
@@ -798,20 +830,23 @@ def _build_agent_inventory(all_agents: list[vscode_agents.VsCodeAgent]) -> str:
     return "\n".join(inventory_lines) if inventory_lines else "- (no se encontraron agentes)"
 
 
-def _build_system_prompt(selected_agent: vscode_agents.VsCodeAgent) -> str:
+def _build_system_prompt(
+    selected_agent: vscode_agents.VsCodeAgent,
+    *,
+    invocation_block: str = "",
+) -> str:
     """System prompt real para --append-system-prompt-file (Fase C).
 
-    Inyecta la PERSONA del agente GitHub Copilot Pro (el `.agent.md`) + las reglas
-    duras de Stacky. Esto define *cómo* actúa el agente; Claude lo adopta como su
-    rol en vez de leerlo como información en un turno de usuario.
+    Declara dónde está el `.agent.md` seleccionado y las reglas duras de Stacky,
+    pero no copia el contenido del agente dentro del prompt.
     """
-    return f"""Adoptá la identidad y el comportamiento del siguiente agente GitHub Copilot Pro.
-Sos ese agente — no Claude Code genérico. Stacky te lanzó desde Claude Code CLI
-para trabajar sobre un ticket y mantener trazabilidad en los logs del workbench.
+    invocation_section = f"{invocation_block}\n\n" if invocation_block else ""
+    return f"""Stacky te lanzó desde Claude Code CLI para trabajar sobre un ticket y mantener
+trazabilidad en los logs del workbench. No se inyecta el contenido del `.agent.md`
+seleccionado en este system prompt: leelo desde la ruta indicada abajo y usá ese
+archivo como fuente de rol, criterio, tono, restricciones y forma de trabajo.
 
-# Agente que estás adoptando: {selected_agent.name} ({selected_agent.filename})
-
-{selected_agent.system_prompt}
+{invocation_section}# Agente que estás adoptando: {selected_agent.name} ({selected_agent.filename})
 
 {_STACKY_RULES}
 """
@@ -821,6 +856,7 @@ def _build_user_message(
     *,
     all_agents: list[vscode_agents.VsCodeAgent],
     ticket_message: str,
+    invocation_block: str = "",
 ) -> str:
     """Primer mensaje de usuario (Fase C): define *qué* hacer — ticket + contexto.
 
@@ -828,7 +864,8 @@ def _build_user_message(
     así que acá solo van el catálogo de agentes (referencia) y el ticket/contexto.
     """
     inventory = _build_agent_inventory(all_agents)
-    return f"""## Catálogo de agentes GitHub Copilot Pro disponibles (referencia)
+    invocation_section = f"{invocation_block}\n\n" if invocation_block else ""
+    return f"""{invocation_section}## Catálogo de agentes GitHub Copilot Pro disponibles (referencia)
 
 {inventory}
 
@@ -843,6 +880,7 @@ def _build_claude_code_prompt(
     selected_agent: vscode_agents.VsCodeAgent,
     all_agents: list[vscode_agents.VsCodeAgent],
     ticket_message: str,
+    invocation_block: str = "",
 ) -> str:
     """Prompt monolítico (modo rollback `user_message`): persona + contexto en el
     primer mensaje de usuario. Es el comportamiento previo a Fase C, disponible vía
@@ -850,23 +888,20 @@ def _build_claude_code_prompt(
     problemas.
     """
     inventory = _build_agent_inventory(all_agents)
+    invocation_section = f"{invocation_block}\n\n" if invocation_block else ""
     return f"""# Stacky Agents Claude Code CLI runtime
 
-Actua como el agente GitHub Copilot Pro seleccionado por el operador.
-Stacky te esta lanzando desde Claude Code CLI para trabajar sobre el mismo
-ticket y mantener trazabilidad en los logs del workbench.
+{invocation_section}Stacky te esta lanzando desde Claude Code CLI para trabajar sobre el ticket y
+mantener trazabilidad en los logs del workbench. No se inyecta el contenido del
+`.agent.md` seleccionado en este mensaje: debes leerlo desde la ruta indicada en
+el bloque "Agente Stacky seleccionado" y usar ese archivo como fuente de rol,
+criterio, tono, restricciones y forma de trabajo.
 
 ## Agente seleccionado
 
 - Nombre: {selected_agent.name}
 - Archivo: {selected_agent.filename}
 - Descripcion: {selected_agent.description or "(sin descripcion)"}
-
-## System prompt del agente seleccionado
-
-```markdown
-{selected_agent.system_prompt}
-```
 
 ## Catalogo de agentes GitHub Copilot Pro disponibles
 

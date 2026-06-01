@@ -108,6 +108,7 @@ def initialize_project(
     workspace_root: str = "",
     issue_tracker: dict | None = None,
     docs_paths: dict | None = None,
+    agents_dir: str | None = None,
 ) -> dict:
     """
     Crea la estructura de carpetas y el config.json para un nuevo proyecto.
@@ -142,12 +143,18 @@ def initialize_project(
     else:
         docs = validate_docs_paths(docs_paths)
 
+    if agents_dir is None:
+        agents = str(existing.get("agents_dir") or "")
+    else:
+        agents = validate_agents_dir(agents_dir)
+
     config = {
-        **{k: v for k, v in existing.items() if k not in ("name", "display_name", "workspace_root", "issue_tracker", "docs_paths")},
+        **{k: v for k, v in existing.items() if k not in ("name", "display_name", "workspace_root", "issue_tracker", "docs_paths", "agents_dir")},
         "name":           name,
         "display_name":   display_name or name,
         "workspace_root": ws,
         "docs_paths":     docs,
+        "agents_dir":     agents,
         "issue_tracker":  issue_tracker,
     }
 
@@ -222,6 +229,34 @@ def validate_docs_paths(docs_paths: dict | None) -> dict:
     return normalized
 
 
+def validate_agents_dir(agents_dir: str | None) -> str:
+    """Normaliza la carpeta opcional de agentes del proyecto.
+
+    Vacío significa: usar la fuente canónica de Stacky Agents.
+    """
+    raw = (agents_dir or "").strip()
+    if not raw:
+        return ""
+
+    candidate = Path(raw).expanduser()
+    if not candidate.exists():
+        raise ValueError(f"agents_dir no existe: {raw}")
+    if not candidate.is_dir():
+        raise ValueError(f"agents_dir no es una carpeta: {raw}")
+    try:
+        next(candidate.iterdir(), None)
+    except PermissionError:
+        raise ValueError(f"agents_dir no es legible: {raw}")
+    except OSError as exc:
+        raise ValueError(f"agents_dir no se puede leer: {raw} ({exc})")
+
+    try:
+        candidate = candidate.resolve(strict=True)
+    except Exception:
+        candidate = candidate.absolute()
+    return str(candidate).replace("\\", "/")
+
+
 def initialize_ado_project(
     name: str,
     organization: str,
@@ -233,6 +268,7 @@ def initialize_ado_project(
     state_mapping: dict | None = None,
     auth_file: str = "auth/ado_auth.json",
     docs_paths: dict | None = None,
+    agents_dir: str | None = None,
 ) -> dict:
     """
     Helper de alto nivel para dar de alta un proyecto Azure DevOps.
@@ -264,6 +300,7 @@ def initialize_ado_project(
         workspace_root=workspace_root,
         issue_tracker=tracker,
         docs_paths=docs_paths,
+        agents_dir=agents_dir,
     )
 
 
@@ -278,6 +315,7 @@ def initialize_jira_project(
     verify_ssl: bool = True,
     auth_file: str = "auth/jira_auth.json",
     docs_paths: dict | None = None,
+    agents_dir: str | None = None,
 ) -> dict:
     """
     Helper de alto nivel para dar de alta un proyecto Jira.
@@ -316,6 +354,7 @@ def initialize_jira_project(
         workspace_root=workspace_root,
         issue_tracker=tracker,
         docs_paths=docs_paths,
+        agents_dir=agents_dir,
     )
 
 
@@ -500,6 +539,7 @@ def initialize_mantis_project(
     verify_ssl: bool = True,
     auth_file: str = "auth/mantis_auth.json",
     docs_paths: dict | None = None,
+    agents_dir: str | None = None,
 ) -> dict:
     """
     Helper de alto nivel para dar de alta un proyecto Mantis BT.
@@ -523,6 +563,7 @@ def initialize_mantis_project(
         workspace_root=workspace_root,
         issue_tracker=tracker,
         docs_paths=docs_paths,
+        agents_dir=agents_dir,
     )
 
 
@@ -568,6 +609,7 @@ __all__ = [
     "initialize_mantis_project",
     "validate_workspace_root",
     "validate_docs_paths",
+    "validate_agents_dir",
     "write_ado_auth",
     "write_jira_auth",
     "write_mantis_auth",

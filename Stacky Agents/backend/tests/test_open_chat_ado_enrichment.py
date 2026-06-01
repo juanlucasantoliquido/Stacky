@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +22,20 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("LLM_BACKEND", "mock")
+
+
+@pytest.fixture(autouse=True)
+def _fake_stacky_agent_prompt():
+    def _fake_get_agent(prompts_dir, filename):
+        return SimpleNamespace(
+            name=Path(filename).name.removesuffix(".agent.md"),
+            filename=Path(filename).name,
+            description="Agente Stacky de prueba",
+            system_prompt="PROMPT STACKY LOCAL DESDE .agent.md",
+        )
+
+    with patch("services.vscode_agents.get_agent_by_filename", side_effect=_fake_get_agent):
+        yield
 
 
 class _FakeAdoClient:
@@ -287,7 +302,11 @@ def test_open_chat_message_includes_ado_sections(client):
         )
 
     assert r.status_code == 200
+    assert captured["json"]["agent_name"] == ""
     msg = captured["json"]["message"]
+    assert "## Agente Stacky" in msg
+    assert "PROMPT STACKY LOCAL DESDE .agent.md" not in msg
+    assert "Ruta agent.md" in msg
     assert "## Comentarios ADO" in msg
     assert "QA" in msg
     assert "repro paso 1" in msg

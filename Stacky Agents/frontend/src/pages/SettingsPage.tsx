@@ -1,5 +1,7 @@
 import { useState } from "react";
 import FlowConfigPage from "./FlowConfigPage";
+import ConfigTransferPanel from "../components/ConfigTransferPanel";
+import ClientProfileEditor from "../components/ClientProfileEditor";
 import {
   LOCKED_SECTIONS,
   OPTIONAL_SECTIONS,
@@ -9,7 +11,7 @@ import {
 import { useUiSectionsStore } from "../store/uiSectionsStore";
 import styles from "./SettingsPage.module.css";
 
-type SubTab = "flow" | "sections";
+type SubTab = "flow" | "sections" | "client-profile" | "transfer";
 
 const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> = {
   pm:   { title: "📊 PM",          hint: "Tablero de Project Management y métricas de sprint." },
@@ -106,11 +108,25 @@ export default function SettingsPage() {
         >
           Vista / Secciones
         </button>
+        <button
+          className={`${styles.subTab} ${sub === "client-profile" ? styles.active : ""}`}
+          onClick={() => setSub("client-profile")}
+        >
+          Perfil del cliente
+        </button>
+        <button
+          className={`${styles.subTab} ${sub === "transfer" ? styles.active : ""}`}
+          onClick={() => setSub("transfer")}
+        >
+          Exportar / Importar
+        </button>
       </div>
 
       <div className={styles.content}>
         {sub === "flow" && <FlowConfigPage />}
         {sub === "sections" && <SectionsVisibilityPanel />}
+        {sub === "client-profile" && <ClientProfileEditor />}
+        {sub === "transfer" && <ConfigTransferPanel />}
       </div>
     </div>
   );

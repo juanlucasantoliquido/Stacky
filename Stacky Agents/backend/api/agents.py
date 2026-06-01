@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, request
 
@@ -14,6 +15,7 @@ from services import (
     llm_router,
     next_agent,
     output_cache,
+    stacky_agents as stacky_agents_svc,
     vscode_agents,
 )
 from ._helpers import current_user
@@ -33,6 +35,93 @@ def list_vscode_agents():
     """Devuelve los .agent.md del directorio de prompts de VS Code (GitHub Copilot)."""
     found = vscode_agents.list_agents(config.VSCODE_PROMPTS_DIR)
     return jsonify([a.to_dict() for a in found])
+
+
+@bp.get("/stacky/manifest")
+def stacky_manifest():
+    """Devuelve el manifest canónico ``<stacky_home>/agents/manifest.json``.
+
+    Si no existe lo materializa primero (idempotente). Útil para que la UI
+    muestre qué `.agent.md` salen del canonical, su `@mention`, ruta absoluta,
+    checksum y `source` (bundled, imported, legacy).
+
+    Plan: plan-agentes-bundled-en-stacky-2026-05-29.md §3.3 + §4.
+    """
+    from pathlib import Path as _Path
+    from runtime_paths import stacky_agents_dir as _stacky_agents_dir
+    from runtime_paths import stacky_home as _stacky_home
+
+    manifest = stacky_agents_svc.read_manifest()
+    if manifest is None:
+        # primera vez o se borró: materializar y reintentar
+        stacky_agents_svc.materialize_agents()
+        manifest = stacky_agents_svc.read_manifest() or {}
+    entries = stacky_agents_svc.list_canonical_agents()
+    effective_agents_dir = config.VSCODE_PROMPTS_DIR
+    return jsonify({
+        "stacky_home": str(_stacky_home()),
+        "agents_dir": str(_stacky_agents_dir()),
+        "effective_agents_dir": effective_agents_dir,
+        "manifest_path": str(_Path(_stacky_agents_dir()) / "manifest.json"),
+        "manifest": manifest,
+        "agents": [e.to_manifest_dict() for e in entries],
+        "count": len(entries),
+    })
+
+
+@bp.post("/stacky/materialize")
+def stacky_materialize():
+    """Refresca ``<stacky_home>/agents`` desde las fuentes externas.
+
+    Body opcional::
+
+        { "force": true }
+
+    Si ``force=true`` sobrescribe los archivos existentes; por defecto se
+    preservan ediciones del operador en el deploy. Devuelve el manifest
+    actualizado.
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    force = bool(payload.get("force"))
+    entries = stacky_agents_svc.materialize_agents(force=force)
+    return jsonify({
+        "ok": True,
+        "force": force,
+        "count": len(entries),
+        "agents": [e.to_manifest_dict() for e in entries],
+    })
+
+
+@bp.post("/stacky/import")
+def stacky_import_agent():
+    """Importa un ``.agent.md`` arbitrario al canonical.
+
+    Body::
+
+        {
+          "source_path": "C:/ruta/Externa/Foo.agent.md",
+          "overwrite": false
+        }
+
+    Devuelve la entry materializada. 404 si la fuente no existe; 409 si ya
+    existe en el canonical y ``overwrite`` es ``false``.
+    """
+    from pathlib import Path as _Path
+    payload = request.get_json(force=True, silent=True) or {}
+    source_path = (payload.get("source_path") or "").strip()
+    overwrite = bool(payload.get("overwrite"))
+    if not source_path:
+        abort(400, "source_path es requerido")
+    src = _Path(source_path).expanduser()
+    try:
+        entry = stacky_agents_svc.import_agent_from_path(src, overwrite=overwrite)
+    except FileNotFoundError:
+        abort(404, f"no existe: {src}")
+    except FileExistsError:
+        abort(409, f"ya existe en canonical: {src.name} (usar overwrite=true para reemplazar)")
+    except ValueError as exc:
+        abort(400, str(exc))
+    return jsonify({"ok": True, "agent": entry.to_manifest_dict()})
 
 
 @bp.get("/vscode/<path:filename>/history")
@@ -415,24 +504,77 @@ def open_chat():
 
     message = "\n\n".join(ticket_header_parts)
 
-    # agent_name = filename sin la extensión .agent.md (ej: "TechnicalAnalyst")
-    agent_name = vscode_agent_filename
-    if agent_name.lower().endswith(".agent.md"):
-        agent_name = agent_name[: -len(".agent.md")]
+    selected_agent = None
+    selected_agent_path = None
+    if vscode_agent_filename:
+        selected_agent = vscode_agents.get_agent_by_filename(
+            config.VSCODE_PROMPTS_DIR,
+            vscode_agent_filename,
+        )
+        selected_agent_path = Path(config.VSCODE_PROMPTS_DIR) / Path(vscode_agent_filename).name
+        if selected_agent is None:
+            abort(
+                400,
+                "No se encontró el .agent.md seleccionado en la fuente efectiva "
+                f"({config.VSCODE_PROMPTS_DIR}): {vscode_agent_filename}",
+            )
+
+    # Importante: no mandamos `@Developer` al chat de VS Code. Ese prefijo hace
+    # que GitHub Copilot use su agente propio por nombre, saltándose el archivo
+    # .agent.md que Stacky acaba de resolver. El mensaje solo declara dónde está
+    # el .agent.md elegido; el contenido no se inyecta en el chat.
+    bridge_agent_name = ""
+    if selected_agent is not None and selected_agent_path is not None:
+        entry = stacky_agents_svc.build_entry_from_path(selected_agent_path)
+        invocation = ""
+        if entry is not None:
+            invocation = stacky_agents_svc.build_invocation_block(
+                entry=entry,
+                workspace_root=project_ctx.workspace_root,
+            )
+        else:
+            agents_dir = selected_agent_path.parent
+            invocation = (
+                "## Agente Stacky seleccionado\n"
+                "\n"
+                f"- Nombre: {selected_agent.name}\n"
+                f"- Archivo agent.md: {selected_agent.filename}\n"
+                f"- Ruta agent.md: {selected_agent_path}\n"
+                f"- Carpeta de agentes configurada: {agents_dir}\n"
+                f"- Workspace de trabajo: {project_ctx.workspace_root or '(no resuelto)'}\n"
+                "\n"
+                f"Regla: tomá como prompt/persona únicamente el archivo `{selected_agent_path}`.\n"
+                "No uses otro `.agent.md` aunque exista en rutas externas. Si el archivo\n"
+                "no existe, detené la ejecución y reportá el bloqueo.\n"
+            )
+        message = (
+            f"{invocation}\n"
+            "## Agente Stacky\n"
+            "\n"
+            "No se incluye el contenido del `.agent.md` en este mensaje. "
+            "Usá únicamente el archivo indicado arriba como fuente de rol, "
+            "criterio, tono, restricciones y forma de trabajo.\n"
+            "\n"
+            "## Tarea\n"
+            "\n"
+            f"{message}"
+        )
 
     bridge_url = f"http://127.0.0.1:{project_ctx.vscode_port}/open-chat"
     logger.info(
-        "open_chat launch project_name=%s workspace_root=%s bridge_port=%s ticket_id=%s ado_id=%s",
+        "open_chat launch project_name=%s workspace_root=%s bridge_port=%s ticket_id=%s ado_id=%s agent_file=%s agent_path=%s",
         project_ctx.stacky_project_name,
         project_ctx.workspace_root,
         project_ctx.vscode_port,
         local_ticket_id or ticket_id,
         ado_id_for_enrich,
+        vscode_agent_filename,
+        selected_agent_path,
     )
     try:
         bridge_resp = req_lib.post(
             bridge_url,
-            json={"message": message, "agent_name": agent_name, "model": model_override},
+            json={"message": message, "agent_name": bridge_agent_name, "model": model_override},
             timeout=10,
         )
         bridge_resp.raise_for_status()

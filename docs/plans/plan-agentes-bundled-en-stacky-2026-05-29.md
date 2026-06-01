@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Fecha | 2026-05-29 |
-| Estado | Propuesto |
+| Estado | Implementado (2026-05-30) |
 | Alcance | StackyAgent, deploy portable y runtimes que invocan agentes `.agent.md` |
 | Objetivo | Que todos los agentes usados por StackyAgent vivan dentro de la carpeta `Stacky` generada desde la ruta de ejecución, y que cada invocación declare explícitamente `@nombre`, ruta y archivo `.agent.md` seleccionado. |
 
@@ -222,13 +222,13 @@ detén la ejecución y reporta el bloqueo.
 
 ## 6. Criterios de aceptación
 
-- [ ] Al ejecutar StackyAgent desde cualquier carpeta, se crea o usa `<execution_root>/Stacky/agents`.
-- [ ] Todos los agentes seleccionables en producción salen de `Stacky/agents`.
-- [ ] El deploy contiene los `.agent.md` y `manifest.json` dentro de la carpeta `Stacky`.
-- [ ] Cada ejecución registra `@nombre`, `agent_filename`, `agent_path`, `agents_dir`, `stacky_home` y `workspace_root`.
-- [ ] El prompt enviado al runtime indica explícitamente la ruta y el `.agent.md` a elegir.
-- [ ] Si falta el archivo `.agent.md` seleccionado, la ejecución falla temprano con un mensaje claro.
-- [ ] `VSCODE_PROMPTS_DIR` queda documentado como fallback legacy, no como fuente canónica de producción.
+- [x] Al ejecutar StackyAgent desde cualquier carpeta, se crea o usa `<execution_root>/Stacky/agents`. — `runtime_paths.stacky_home()/stacky_agents_dir()` + bootstrap `materialize_agents()` en `app.py`.
+- [x] Todos los agentes seleccionables en producción salen de `Stacky/agents`. — `config.VSCODE_PROMPTS_DIR` prioriza el canonical; legacy sólo con `STACKY_ALLOW_VSCODE_PROMPTS_OVERRIDE`.
+- [x] El deploy contiene los `.agent.md` y `manifest.json` dentro de la carpeta `Stacky`. — `build_release.ps1` materializa `Stacky/agents` + `check_deploy_agents.py`.
+- [x] Cada ejecución registra `@nombre`, `agent_filename`, `agent_path`, `agents_dir`, `stacky_home` y `workspace_root`. — `stacky_agents.invocation_metadata()` persistido en `metadata_dict` de ambos runners CLI.
+- [x] El prompt enviado al runtime indica explícitamente la ruta y el `.agent.md` a elegir. — `stacky_agents.build_invocation_block()` inyectado en codex_cli, claude_code_cli y open-chat bridge.
+- [x] Si falta el archivo `.agent.md` seleccionado, la ejecución falla temprano con un mensaje claro. — `RuntimeError` en los runners cuando `selected_agent`/`agent_entry` es `None`.
+- [x] `VSCODE_PROMPTS_DIR` queda documentado como fallback legacy, no como fuente canónica de producción. — docstrings en `config._default_vscode_prompts_dir()` y warnings al usar legacy.
 
 ## 7. Riesgos y mitigaciones
 
@@ -265,3 +265,23 @@ detén la ejecución y reporta el bloqueo.
 ## 10. Definición de terminado
 
 La iniciativa se considera terminada cuando se pueda entregar un deploy portable que incluya la carpeta `Stacky/agents`, arrancar StackyAgent en una máquina limpia, seleccionar cualquier agente, y comprobar en logs/prompt/metadata que la invocación declara explícitamente `@nombre`, ruta de trabajo y archivo `.agent.md` elegido dentro de la carpeta `Stacky`.
+
+## 11. Estado de implementación (2026-05-30)
+
+Mapa fase → código entregado:
+
+| Fase | Entregado en |
+|---|---|
+| 1 — `STACKY_HOME` / `STACKY_AGENTS_DIR` | `backend/runtime_paths.py`: `stacky_home()`, `stacky_agents_dir()`, `ensure_stacky_home()`, `ensure_stacky_agents_dir()` (env overrides incluidos). |
+| 2 — Materializar agentes + manifest | `backend/services/stacky_agents.py`: `materialize_agents()`, `write_manifest()`; bootstrap automático en `backend/app.py` con log `stacky_home=… stacky_agents_dir=… materialized=N`. |
+| 3 — Carga/listado + import + UI | `config.VSCODE_PROMPTS_DIR` (canonical-first); endpoints `GET /agents/stacky/manifest`, `POST /agents/stacky/materialize`, `POST /agents/stacky/import`; `TeamManageDrawer.tsx` muestra la carpeta fuente efectiva **y la ruta absoluta del `.agent.md` por agente** (desde `manifest.agents[].path`, con fallback a `agentsDir + filename` para overrides por proyecto). |
+| 4 — Prompt + logs + metadata | `build_invocation_block()` + `invocation_metadata()` inyectados en `codex_cli_runner.py`, `claude_code_cli_runner.py` y `api/agents.py` (open-chat bridge). |
+| 5 — Deploy portable | `deployment/build_release.ps1` materializa `Stacky/agents`, genera `manifest.json` y bloquea release vacío; `deployment/check_deploy_agents.py` valida manifest + checksums pre-release. |
+
+Tests (`backend/tests/`):
+
+- `test_stacky_agents.py` — resolución, materialización, manifest, contrato de invocación, import fail-fast y **validación de deploy** (`test_deploy_package_contains_stacky_agents`, empty-dir y checksum-mismatch).
+- `test_config_agent_source.py` — canonical-first, override por proyecto y flag legacy explícito.
+- `test_claude_code_cli_prompt.py` — el prompt del runner incluye el bloque "Agente Stacky seleccionado".
+
+Todos en verde (`pytest tests/test_stacky_agents.py tests/test_config_agent_source.py tests/test_claude_code_cli_prompt.py` → 50 passed con dispatch/ADO incluidos). Frontend: `tsc --noEmit` sin errores.

@@ -218,6 +218,116 @@ def sync_tickets(client: AdoClient | None = None, project_name: str | None = Non
     }
 
 
+def upsert_single_work_item(client: AdoClient, ado_id: int) -> dict | None:
+    """Trae un work item puntual de ADO y lo upsertea en `tickets` de inmediato.
+
+    Fase 2 plan creacion-tareas-comentarios-100-efectiva (§4 / §7 ado_sync):
+    "Tras crear Task, upsert inmediato en tickets". Sin esto, una Task recien
+    creada por Stacky no aparece en la UI local hasta el proximo sync general
+    (que es incierto y puede no traerla si el WIQL no la incluye).
+
+    No depende del sync masivo: hace un GET puntual del work item y mapea los
+    mismos campos que sync_tickets. Idempotente: si el ticket ya existe, lo
+    actualiza. Devuelve el dict del ticket upserteado o None si ADO falla.
+    """
+    try:
+        wi = client.get_work_item(
+            int(ado_id),
+            fields=[
+                "System.Id", "System.Title", "System.State", "System.Description",
+                "System.WorkItemType", "System.Parent", "System.AssignedTo",
+                "Microsoft.VSTS.Common.Priority",
+            ],
+        )
+    except Exception as exc:  # noqa: BLE001 — el upsert es best-effort
+        logger.warning("upsert_single_work_item(%s) — GET falló: %s", ado_id, exc)
+        return None
+
+    fields = wi.get("fields") or {}
+    now = datetime.utcnow()
+    stacky_project_name, tracker_project = _client_project_metadata(client)
+    tracker_type = getattr(client, "tracker_type", None) or "azure_devops"
+
+    description = _html_to_text(str(fields.get("System.Description") or ""))
+    priority = fields.get("Microsoft.VSTS.Common.Priority")
+    try:
+        priority_int = int(priority) if priority is not None else None
+    except (TypeError, ValueError):
+        priority_int = None
+    work_item_type = str(fields.get("System.WorkItemType") or "")
+    parent_raw = fields.get("System.Parent")
+    try:
+        parent_ado_id = int(parent_raw) if parent_raw else None
+    except (TypeError, ValueError):
+        parent_ado_id = None
+    assigned_raw = fields.get("System.AssignedTo") or {}
+    if isinstance(assigned_raw, dict):
+        assigned_to_ado = assigned_raw.get("uniqueName") or assigned_raw.get("displayName") or None
+    else:
+        assigned_to_ado = str(assigned_raw).strip() or None
+    new_state = str(fields.get("System.State") or "")
+
+    with session_scope() as session:
+        existing = (
+            session.query(Ticket)
+            .filter(Ticket.external_id == int(ado_id))
+            .filter(Ticket.tracker_type == tracker_type)
+            .filter(_legacy_ticket_match(stacky_project_name, tracker_project))
+            .first()
+        )
+        if existing is None:
+            existing = (
+                session.query(Ticket)
+                .filter(Ticket.ado_id == int(ado_id))
+                .filter(_legacy_ticket_match(stacky_project_name, tracker_project))
+                .first()
+            )
+        if existing is None:
+            ticket = Ticket(
+                ado_id=int(ado_id),
+                external_id=int(ado_id),
+                project=tracker_project,
+                stacky_project_name=stacky_project_name,
+                tracker_type=tracker_type,
+                title=str(fields.get("System.Title") or f"WI-{ado_id}"),
+                description=description,
+                ado_state=new_state,
+                ado_url=client.work_item_url(int(ado_id)),
+                priority=priority_int,
+                work_item_type=work_item_type or None,
+                parent_ado_id=parent_ado_id,
+                last_synced_at=now,
+                assigned_to_ado=assigned_to_ado,
+            )
+            session.add(ticket)
+            session.flush()
+            if new_state:
+                session.add(TicketStateHistory(
+                    ticket_id=ticket.id,
+                    ado_id=int(ado_id),
+                    stacky_project_name=stacky_project_name,
+                    old_state=None,
+                    new_state=new_state,
+                    assigned_to_ado=assigned_to_ado,
+                    recorded_at=now,
+                ))
+            result = ticket.to_dict()
+        else:
+            existing.title = str(fields.get("System.Title") or existing.title)
+            existing.description = description or existing.description
+            existing.ado_state = new_state or existing.ado_state
+            existing.ado_url = client.work_item_url(int(ado_id))
+            existing.priority = priority_int if priority_int is not None else existing.priority
+            existing.work_item_type = work_item_type or existing.work_item_type
+            existing.parent_ado_id = parent_ado_id if parent_ado_id is not None else existing.parent_ado_id
+            existing.last_synced_at = now
+            if assigned_to_ado is not None:
+                existing.assigned_to_ado = assigned_to_ado
+            result = existing.to_dict()
+    logger.info("upsert_single_work_item(%s): ticket upserteado en BD local", ado_id)
+    return result
+
+
 def _purge_orphans(session, project: str, fetched_ids: Iterable[int]) -> int:
     fetched = set(fetched_ids)
     locals_ = (

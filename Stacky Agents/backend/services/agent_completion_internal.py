@@ -129,11 +129,10 @@ def close_execution_with_publish(
                 exec_row.completed_at = datetime.utcnow()
             if final_status == "error" and reason and not exec_row.error_message:
                 exec_row.error_message = reason
-            # html_output_path y completion_source son atributos DINÁMICOS (no
-            # columnas SQL). El check hasattr() del código viejo siempre daba
-            # False y bloqueaba el set — bug raíz del 'comment no se publica'.
-            # Setting dynamic attributes in Python instances funciona sin
-            # importar el schema de la clase.
+            # html_output_path y completion_source ahora son columnas reales
+            # (Fase 1 plan creacion-tareas-comentarios-100-efectiva). Antes eran
+            # atributos dinamicos que no persistian; el comentario los seteaba en
+            # memoria pero ado_publisher no los veia tras un restart.
             if html_output_path:
                 exec_row.html_output_path = html_output_path
             if completion_source:

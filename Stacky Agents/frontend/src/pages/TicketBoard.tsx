@@ -11,6 +11,7 @@ import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import { useRunningStatus } from "../hooks/useRunningStatus";
+import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { getAgentType } from "../services/preferences";
 import {
   findVsCodeAgent,
@@ -592,9 +593,14 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, flowConfigMap }: EpicG
 
 export default function TicketBoard() {
   const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [onlyPending, setOnlyPending] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("graph");
+  // Persistencia local de UX (plan 2026-05-27): filtros/checkboxes/preferencias
+  // de la vista se rehidratan desde localStorage sin reconfiguración manual.
+  const [search, setSearch] = useLocalStorageState<string>("ticketBoard.search", "");
+  const [onlyPending, setOnlyPending] = useLocalStorageState<boolean>("ticketBoard.onlyPending", false);
+  const [viewMode, setViewMode] = useLocalStorageState<ViewMode>("ticketBoard.viewMode", "graph");
+  // Requerimiento B: "Mostrar todas las tareas" — arranca MARCADO por defecto
+  // (decisión de negocio). Al desmarcar se filtra a "solo asignadas a mí".
+  const [showAll, setShowAll] = useLocalStorageState<boolean>("ticketBoard.showAll", true);
 
   // #3: Filtro de estados por agente activo
   const vsCodeAgent = useWorkbench((s) => s.vsCodeAgent);
@@ -635,6 +641,32 @@ export default function TicketBoard() {
     staleTime: 22_500,
     enabled: viewMode === "tree" || viewMode === "graph",
   });
+
+  // Requerimiento B: identidad ADO del operador. Solo se resuelve cuando el
+  // operador desmarca "Mostrar todas" (modo "Mis tareas"), para no golpear ADO
+  // de más. linked=false ⇒ no filtramos (mostramos todo) para evitar lista vacía.
+  const { data: adoUser } = useQuery({
+    queryKey: ["ado-user", activeProjectName],
+    queryFn: () => Tickets.adoUser(activeProjectName),
+    enabled: !showAll && !!activeProjectName,
+    staleTime: 10 * 60 * 1000,
+  });
+  const myUniqueName = adoUser?.linked ? (adoUser.ado_unique_name ?? null) : null;
+
+  // Jerarquía a renderizar: cuando "Mis tareas" está activo y conocemos la
+  // identidad ADO, podamos los nodos no asignados al operador. Una épica se
+  // conserva si está asignada a mí o si tiene alguna tarea asignada a mí.
+  const displayHierarchy = useMemo<TicketHierarchy | null>(() => {
+    if (!hierarchy) return null;
+    if (showAll || !myUniqueName) return hierarchy;
+    const mine = (t: { assigned_to_ado?: string | null }) =>
+      (t.assigned_to_ado ?? null) === myUniqueName;
+    const epics = hierarchy.epics
+      .map((e) => ({ ...e, children: e.children.filter(mine) }))
+      .filter((e) => mine(e) || e.children.length > 0);
+    const orphans = hierarchy.orphans.filter((o) => mine(o));
+    return { epics, orphans };
+  }, [hierarchy, showAll, myUniqueName]);
 
   // VsCode agents para el dropdown de Run Custom
   const { data: vsCodeAgents } = useQuery<VsCodeAgent[]>({
@@ -678,8 +710,8 @@ export default function TicketBoard() {
     return true;
   }
 
-  const filteredEpics = (hierarchy?.epics ?? []).filter(filterNode);
-  const filteredOrphans = (hierarchy?.orphans ?? []).filter((n) => filterNode(n as TicketNode));
+  const filteredEpics = (displayHierarchy?.epics ?? []).filter(filterNode);
+  const filteredOrphans = (displayHierarchy?.orphans ?? []).filter((n) => filterNode(n as TicketNode));
   const totalHierarchy = filteredEpics.length + filteredOrphans.length;
 
   // Tickets activos (no cerrados) con ejecución en curso
@@ -697,9 +729,9 @@ export default function TicketBoard() {
           {viewMode === "tree" && (
             <span className={styles.count}>{totalHierarchy} grupos</span>
           )}
-          {viewMode === "graph" && hierarchy && (
+          {viewMode === "graph" && displayHierarchy && (
             <span className={styles.count}>
-              {hierarchy.epics.length} épicas · {hierarchy.epics.reduce((a, e) => a + e.children.length, 0) + hierarchy.orphans.length} tareas
+              {displayHierarchy.epics.length} épicas · {displayHierarchy.epics.reduce((a, e) => a + e.children.length, 0) + displayHierarchy.orphans.length} tareas
             </span>
           )}
           {runningTicketIds.size > 0 && (
@@ -735,6 +767,28 @@ export default function TicketBoard() {
               onChange={(e) => setOnlyPending(e.target.checked)}
             />
             Solo abiertos
+          </label>
+          <label
+            className={styles.filterToggle}
+            title={
+              showAll
+                ? "Mostrando todas las tareas del proyecto. Desmarcá para ver solo las asignadas a vos en ADO."
+                : myUniqueName
+                ? `Mostrando solo tareas asignadas a ${adoUser?.ado_display_name || myUniqueName}.`
+                : "No se pudo resolver tu identidad ADO; se muestran todas las tareas. Verificá el PAT del proyecto."
+            }
+          >
+            <input
+              type="checkbox"
+              checked={showAll}
+              onChange={(e) => setShowAll(e.target.checked)}
+            />
+            Mostrar todas las tareas
+            {!showAll && adoUser && !adoUser.linked && (
+              <span style={{ marginLeft: 6, color: "#fbbf24", fontSize: 11 }}>
+                ⚠ ADO no vinculado
+              </span>
+            )}
           </label>
           {/* Error visual de sync */}
           {syncErrorV2 && (
@@ -860,7 +914,7 @@ export default function TicketBoard() {
             {isHierarchyLoading && <div className={styles.loading}>Cargando grafo…</div>}
             {!isHierarchyLoading && (
               <TicketGraphView
-                hierarchy={hierarchy ?? null}
+                hierarchy={displayHierarchy}
                 onSync={triggerSync}
                 isSyncing={isSyncingV2}
                 syncError={syncErrorV2}

@@ -177,6 +177,31 @@ def create_app() -> Flask:
 
     init_db()
     install_console_log_handler()
+
+    # ── Bootstrap canonical Stacky/agents ───────────────────────────────────
+    # Plan: plan-agentes-bundled-en-stacky-2026-05-29.md — Fase 1+2.
+    # Materializa los .agent.md externos (bundle + legacy) dentro de
+    # <STACKY_HOME>/agents y regenera manifest.json para que el resto del
+    # backend lea siempre desde el canonical.
+    try:
+        from runtime_paths import stacky_agents_dir, stacky_home
+        from services import stacky_agents as _stacky_agents_svc
+
+        _materialized = _stacky_agents_svc.materialize_agents()
+        logger.info(
+            "stacky_home=%s stacky_agents_dir=%s materialized=%d",
+            stacky_home(), stacky_agents_dir(), len(_materialized),
+        )
+        if not _materialized:
+            logger.warning(
+                "Stacky/agents está vacío tras el bootstrap. "
+                "Importá agentes con POST /api/agents/import o copiá .agent.md "
+                "a %s antes de despachar runs CLI.",
+                stacky_agents_dir(),
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("bootstrap stacky_agents falló (continuando)")
+
     try:
         from services.db_backup import ensure_weekly_backup
 

@@ -9,7 +9,7 @@ import {
   getAgentRole,
   setAgentRole,
 } from "../services/preferences";
-import { Projects } from "../api/endpoints";
+import { Agents, Projects } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
 import AgentWorkflowForm from "./AgentWorkflowForm";
 import type { AgentWorkflowFormValue } from "./AgentWorkflowForm";
@@ -33,6 +33,7 @@ interface PendingAdd {
 export default function TeamManageDrawer({ allAgents, onClose }: TeamManageDrawerProps) {
   // ─── Fuente de verdad: store por proyecto ──────────────────────────────────
   const activeProject = useWorkbench((s) => s.activeProject);
+  const setActiveProject = useWorkbench((s) => s.setActiveProject);
   const pinned = useWorkbench((s) => s.pinnedAgents);
   const setPinnedAgents = useWorkbench((s) => s.setPinnedAgents);
   const agentWorkflows = useWorkbench((s) => s.agentWorkflows);
@@ -41,6 +42,84 @@ export default function TeamManageDrawer({ allAgents, onClose }: TeamManageDrawe
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Fuente canónica resuelta dinámicamente desde el backend (plan
+  // plan-agentes-bundled-en-stacky-2026-05-29): muestra dónde vive realmente
+  // el .agent.md que el operador está viendo. Reemplaza el texto hardcoded
+  // a `%APPDATA%/Code/User/prompts` que mentía en deploys nuevos.
+  const [agentsDir, setAgentsDir] = useState<string>("");
+  const [displayAgents, setDisplayAgents] = useState<VsCodeAgent[]>(allAgents);
+  const [loadingAgents, setLoadingAgents] = useState(false);
+  const [savingSource, setSavingSource] = useState(false);
+  // filename → ruta absoluta del .agent.md según el manifest canónico. La UI la
+  // muestra por agente para que el operador confirme qué archivo usará el runner
+  // (plan-agentes-bundled-en-stacky-2026-05-29 §3.4).
+  const [agentPaths, setAgentPaths] = useState<Record<string, string>>({});
+
+  // Ruta efectiva del .agent.md para `filename`. Prefiere el `path` exacto del
+  // manifest (carpeta canónica) y cae a `agentsDir + filename` cuando hay un
+  // override de carpeta por proyecto que el manifest canónico no refleja.
+  function pathForAgent(filename: string): string {
+    const fromManifest = agentPaths[filename];
+    if (fromManifest) return fromManifest;
+    if (!agentsDir) return filename;
+    const sep = agentsDir.includes("\\") ? "\\" : "/";
+    const base = agentsDir.endsWith(sep) ? agentsDir.slice(0, -sep.length) : agentsDir;
+    return `${base}${sep}${filename}`;
+  }
+
+  function applyManifest(manifest: Awaited<ReturnType<typeof Agents.stackyManifest>> | null) {
+    setAgentsDir(manifest?.effective_agents_dir || manifest?.agents_dir || "");
+    const map: Record<string, string> = {};
+    for (const a of manifest?.agents ?? []) {
+      if (a.filename && a.path) map[a.filename] = a.path;
+    }
+    setAgentPaths(map);
+  }
+
+  async function reloadAgentsSource() {
+    setLoadingAgents(true);
+    try {
+      const [manifest, agents] = await Promise.all([
+        Agents.stackyManifest().catch(() => null),
+        Agents.vsCodeAgents(),
+      ]);
+      applyManifest(manifest);
+      setDisplayAgents(agents);
+    } catch {
+      setDisplayAgents([]);
+      setAgentsDir("");
+      setAgentPaths({});
+    } finally {
+      setLoadingAgents(false);
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingAgents(true);
+    Promise.all([
+      Agents.stackyManifest().catch(() => null),
+      Agents.vsCodeAgents(),
+    ])
+      .then(([manifest, agents]) => {
+        if (cancelled) return;
+        applyManifest(manifest);
+        setDisplayAgents(agents);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAgentsDir("");
+        setAgentPaths({});
+        setDisplayAgents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAgents(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ─── Workflow state para el modal de alta ─────────────────────────────
   const [pendingWorkflow, setPendingWorkflow] = useState<AgentWorkflowFormValue>({
@@ -111,6 +190,34 @@ export default function TeamManageDrawer({ allAgents, onClose }: TeamManageDrawe
     }
   }
 
+  async function handleChangeAgentsDir() {
+    if (!activeProject || savingSource) return;
+    setSavingSource(true);
+    setSaveError(null);
+    try {
+      const picked = await Projects.browseFolder({
+        title: "Seleccionar carpeta de agentes",
+        initial_dir: agentsDir || activeProject.agents_dir || activeProject.workspace_root || "",
+      });
+      if (!picked.ok || !picked.path) {
+        setSaveError(picked.error || "No se pudo seleccionar la carpeta de agentes.");
+        return;
+      }
+      const saved = await Projects.update(activeProject.name, { agents_dir: picked.path });
+      if (!saved.ok) {
+        setSaveError("No se pudo guardar la carpeta de agentes del proyecto.");
+        return;
+      }
+      setActiveProject(saved.project);
+      setAgentsDir(saved.project.agents_dir || picked.path);
+      await reloadAgentsSource();
+    } catch {
+      setSaveError("No se pudo cambiar la carpeta de agentes. Reintentá o revisá logs.");
+    } finally {
+      setSavingSource(false);
+    }
+  }
+
   async function handleConfirmAdd() {
     if (!pendingAdd || !activeProject || saving) return;
 
@@ -164,13 +271,23 @@ export default function TeamManageDrawer({ allAgents, onClose }: TeamManageDrawe
         <div className={styles.drawer}>
 
           <div className={styles.header}>
-            <h2 className={styles.title}>Agentes disponibles en VS Code</h2>
+            <h2 className={styles.title}>Agentes Stacky disponibles</h2>
             <button className={styles.closeBtn} onClick={onClose} title="Cerrar">✕</button>
           </div>
 
-          <p className={styles.hint}>
-            📁 Fuente: <code>%APPDATA%/Code/User/prompts</code>
-          </p>
+          <div className={styles.hint}>
+            <span className={styles.hintText}>
+              📁 Fuente: <code>{agentsDir || "Stacky/agents (resolviendo…)"}</code>
+            </span>
+            <button
+              type="button"
+              className={styles.sourceBtn}
+              onClick={handleChangeAgentsDir}
+              disabled={!activeProject || savingSource}
+            >
+              {savingSource ? "Guardando..." : "Cambiar"}
+            </button>
+          </div>
 
           {!activeProject && (
             <div className={styles.empty}>
@@ -184,15 +301,22 @@ export default function TeamManageDrawer({ allAgents, onClose }: TeamManageDrawe
             </div>
           )}
 
-          {allAgents.length === 0 ? (
+          {loadingAgents ? (
             <div className={styles.empty}>
-              No se encontraron agentes. Verificá que VS Code esté corriendo con la extensión Stacky.
+              Cargando agentes desde <code>{agentsDir || "la fuente configurada"}</code>...
+            </div>
+          ) : displayAgents.length === 0 ? (
+            <div className={styles.empty}>
+              No se encontraron agentes en <code>{agentsDir || "Stacky/agents"}</code>.
+              Importá los <code>.agent.md</code> desde el panel de configuración o
+              colocá los archivos directamente en esa carpeta.
             </div>
           ) : (
             <div className={styles.list}>
-              {allAgents.map((agent) => {
+              {displayAgents.map((agent) => {
                 const inTeam = isInTeam(agent.filename);
                 const avatar = getAgentAvatar(agent.filename);
+                const agentPath = pathForAgent(agent.filename);
 
                 return (
                   <div key={agent.filename} className={inTeam ? styles.agentRowDone : styles.agentRow}>
@@ -201,6 +325,10 @@ export default function TeamManageDrawer({ allAgents, onClose }: TeamManageDrawe
                       <span className={styles.agentName}>{agent.name}</span>
                       <span className={styles.agentDesc}>
                         {agent.description?.slice(0, 80) ?? agent.filename}
+                      </span>
+                      <span className={styles.agentPath} title={agentPath}>
+                        {/* bidi isolate: la ruta es LTR dentro de un contenedor rtl */}
+                        <bdi>{agentPath}</bdi>
                       </span>
                     </div>
                     {inTeam && <span className={styles.inTeamBadge}>✓</span>}

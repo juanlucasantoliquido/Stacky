@@ -1,20 +1,98 @@
+import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-from runtime_paths import app_root, backend_root, data_dir, runtime_config
+from runtime_paths import (
+    app_root,
+    backend_root,
+    data_dir,
+    runtime_config,
+    stacky_agents_dir,
+)
 
 BACKEND_ROOT = backend_root()
 load_dotenv(BACKEND_ROOT / ".env")
 load_dotenv(Path.cwd() / ".env")
 _RUNTIME_CONFIG = runtime_config()
+_config_logger = logging.getLogger("stacky.config")
 
 
 def _default_vscode_prompts_dir() -> str:
+    """Resolución por defecto del directorio de `.agent.md`.
+
+    Tras el plan ``plan-agentes-bundled-en-stacky-2026-05-29.md`` la fuente
+    canónica es ``<STACKY_HOME>/agents``. Mantenemos las fuentes legacy como
+    fallback temporal — sólo si el canonical no existe o está vacío.
+    """
+    canonical = stacky_agents_dir()
+    if canonical.is_dir() and any(canonical.glob("*.agent.md")):
+        return str(canonical)
+
+    # Compatibilidad: bundle directo del deploy (todavía soportado).
     bundled_agents_dir = app_root() / "github_copilot_agents"
     if bundled_agents_dir.is_dir():
         return str(bundled_agents_dir)
-    return str(Path.home() / "AppData" / "Roaming" / "Code" / "User" / "prompts")
+
+    # Dev / source checkout: fuente in-repo
+    in_repo_dir = backend_root().parent / "DeployStackyAgents" / "github_copilot_agents"
+    if in_repo_dir.is_dir():
+        return str(in_repo_dir)
+
+    # Último recurso: el prompts dir de VS Code del usuario.
+    legacy = Path.home() / "AppData" / "Roaming" / "Code" / "User" / "prompts"
+    if legacy.is_dir():
+        _config_logger.warning(
+            "VSCODE_PROMPTS_DIR cayó al directorio legacy de VS Code (%s). "
+            "Importá estos agentes a Stacky/agents antes de producción.",
+            legacy,
+        )
+        return str(legacy)
+
+    # Fallback final: devolver el canonical aunque esté vacío, así
+    # `materialize_agents()` puede poblarlo en el primer arranque.
+    return str(canonical)
+
+
+def _canonical_agents_dir_if_ready() -> Path | None:
+    canonical = stacky_agents_dir()
+    if canonical.is_dir() and any(canonical.glob("*.agent.md")):
+        return canonical
+    return None
+
+
+def _project_agents_dir_if_configured() -> Path | None:
+    try:
+        from project_manager import get_active_project, get_project_config
+
+        active = get_active_project()
+        cfg = get_project_config(active) if active else None
+    except Exception:  # noqa: BLE001
+        return None
+
+    raw = ((cfg or {}).get("agents_dir") or "").strip()
+    if not raw:
+        return None
+
+    candidate = Path(raw).expanduser()
+    if candidate.is_dir():
+        return candidate.resolve()
+
+    _config_logger.warning(
+        "agents_dir configurado para el proyecto activo no existe o no es carpeta: %s. "
+        "Uso la fuente canónica de Stacky Agents.",
+        raw,
+    )
+    return None
+
+
+def _legacy_prompts_override_enabled() -> bool:
+    return os.getenv("STACKY_ALLOW_VSCODE_PROMPTS_OVERRIDE", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 class Config:
@@ -57,10 +135,37 @@ class Config:
 
     # Puerto del bridge HTTP de la extensión VS Code
     VSCODE_BRIDGE_PORT = int(os.getenv("VSCODE_BRIDGE_PORT", "5052"))
-    VSCODE_PROMPTS_DIR = os.getenv(
-        "VSCODE_PROMPTS_DIR",
-        _default_vscode_prompts_dir(),
-    )
+
+    # VSCODE_PROMPTS_DIR es property para que el lookup se re-evalúe cada vez.
+    # Si fuese atributo de clase quedaría congelado al primer import de
+    # `config.py`, que sucede ANTES del bootstrap de Stacky/agents. En ese
+    # momento el canonical está vacío y el fallback lo manda al bundle legacy;
+    # como el atributo es estático no se actualiza cuando el bootstrap pobla
+    # el canonical, y la UI sigue listando los .agent.md viejos.
+    # Plan: plan-agentes-bundled-en-stacky-2026-05-29.md §2.2.
+    @property
+    def VSCODE_PROMPTS_DIR(self) -> str:
+        project_agents_dir = _project_agents_dir_if_configured()
+        if project_agents_dir is not None:
+            return str(project_agents_dir)
+
+        canonical = _canonical_agents_dir_if_ready()
+        if canonical is not None and not _legacy_prompts_override_enabled():
+            env_val = os.getenv("VSCODE_PROMPTS_DIR")
+            if env_val and Path(env_val).expanduser().resolve() != canonical.resolve():
+                _config_logger.warning(
+                    "VSCODE_PROMPTS_DIR=%s ignorado: Stacky/agents es la fuente "
+                    "canónica (%s). Para forzar legacy, seteá "
+                    "STACKY_ALLOW_VSCODE_PROMPTS_OVERRIDE=true.",
+                    env_val,
+                    canonical,
+                )
+            return str(canonical)
+
+        env_val = os.getenv("VSCODE_PROMPTS_DIR")
+        if env_val:
+            return env_val
+        return _default_vscode_prompts_dir()
 
     # Codex CLI runtime
     CODEX_CLI_BIN = os.getenv("CODEX_CLI_BIN", "codex")
@@ -85,11 +190,12 @@ class Config:
     CLAUDE_CODE_CLI_SKIP_PERMISSIONS = os.getenv(
         "CLAUDE_CODE_CLI_SKIP_PERMISSIONS", "false"
     ).lower() in ("1", "true", "yes")
-    # Cómo se inyecta la persona del agente (.agent.md) al CLI:
-    #   "append" (default): vía --append-system-prompt-file → Claude ADOPTA la persona
-    #                       (system prompt real). El user message lleva solo ticket+contexto.
-    #   "user_message":     comportamiento viejo — la persona va embebida en el primer
-    #                       mensaje de usuario (rollback si --append-system-prompt diera problemas).
+    # Cómo se referencia la persona del agente (.agent.md) al CLI:
+    #   "append" (default): vía --append-system-prompt-file se envía solo el
+    #                       contrato/ruta del .agent.md. El contenido del agente
+    #                       no se copia al prompt; el user message lleva ticket+contexto.
+    #   "user_message":     rollback: el contrato/ruta va en el primer mensaje de
+    #                       usuario, también sin copiar el contenido del .agent.md.
     CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE = os.getenv(
         "CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE", "append"
     ).strip().lower()

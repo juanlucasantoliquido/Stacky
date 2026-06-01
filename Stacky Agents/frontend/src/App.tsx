@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import TeamScreen from "./pages/TeamScreen";
 import TicketBoard from "./pages/TicketBoard";
+import UnblockerPage from "./pages/UnblockerPage";
 import SystemLogsPage from "./pages/SystemLogsPage";
 import PMCommandCenter from "./pages/PMCommandCenter";
 import SettingsPage from "./pages/SettingsPage";
@@ -19,11 +20,12 @@ import { initUiSections } from "./services/uiSections";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "pm" | "logs" | "settings" | "docs" | "diagnostics";
+type Tab = "team" | "tickets" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "diagnostics";
 
 const TAB_PATHS: Record<Tab, string> = {
   team: "/",
   tickets: "/tickets",
+  unblocker: "/unblocker",
   pm: "/pm",
   logs: "/logs",
   settings: "/settings",
@@ -125,6 +127,12 @@ export default function App() {
         >
           📋 Tickets ADO
         </button>
+        <button
+          className={`${styles.navTab} ${tab === "unblocker" ? styles.active : ""}`}
+          onClick={() => selectTab("unblocker")}
+        >
+          🧹 Desatascador
+        </button>
         {sections.pm && (
           <button
             className={`${styles.navTab} ${tab === "pm" ? styles.active : ""}`}
@@ -165,6 +173,7 @@ export default function App() {
 
       {tab === "team"     && <TeamScreen />}
       {tab === "tickets"  && <TicketBoard />}
+      {tab === "unblocker" && <UnblockerPage />}
       {tab === "pm"       && sections.pm   && <PMCommandCenter />}
       {tab === "logs"     && sections.logs && <SystemLogsPage />}
       {tab === "settings" && <SettingsPage />}

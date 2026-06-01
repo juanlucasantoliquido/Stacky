@@ -33,6 +33,15 @@ $ErrorActionPreference = "Stop"
 function Write-Step { param([string]$Message) Write-Host "`n>> $Message" -ForegroundColor Cyan }
 function Write-OK { param([string]$Message) Write-Host "   [OK] $Message" -ForegroundColor Green }
 function Write-Warn { param([string]$Message) Write-Host "   [WARN] $Message" -ForegroundColor Yellow }
+function Write-Utf8NoBom {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Value
+    )
+
+    $encoding = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($Path, $Value, $encoding)
+}
 
 function Require-Command {
     param(
@@ -192,6 +201,28 @@ function Resolve-GitHubCopilotAgentsSource {
         return $env:STACKY_GITHUB_COPILOT_AGENTS_REPO
     }
 
+    if ($PSScriptRoot) {
+        $repoAppRoot = Split-Path -Parent $PSScriptRoot
+
+        # Fuente AUTORIZADA: los .agent.md editables viven en backend/Stacky/agents
+        # (stacky_home de dev). El build DEBE tomarlos de aquí para que los edits
+        # (p.ej. FunctionalAnalyst v2.0.1, fix de sobre-división) lleguen al
+        # release. Antes la fuente era DeployStackyAgents/github_copilot_agents
+        # (self-referencial): el build se copiaba a sí mismo y los edits de
+        # backend/Stacky/agents NUNCA se deployaban → el agente quedaba stale en
+        # v2.0.0 (causa raíz del over-split que seguía en runtime).
+        $authoredSource = Join-Path $repoAppRoot "backend\Stacky\agents"
+        if (Test-Path $authoredSource) {
+            return $authoredSource
+        }
+
+        # Fallback legacy: la carpeta del deploy anterior (self-referencial).
+        $inRepoSource = Join-Path $repoAppRoot "DeployStackyAgents\github_copilot_agents"
+        if (Test-Path $inRepoSource) {
+            return $inRepoSource
+        }
+    }
+
     if ($env:APPDATA) {
         $defaultPromptsDir = Join-Path $env:APPDATA "Code\User\prompts"
         if (Test-Path $defaultPromptsDir) {
@@ -252,7 +283,134 @@ function Copy-GitHubCopilotAgents {
         }
     }
 
-    $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $DestinationRoot "manifest.json") -Encoding UTF8
+    Write-Utf8NoBom -Path (Join-Path $DestinationRoot "manifest.json") -Value ($manifest | ConvertTo-Json -Depth 5)
+    return $agentFiles.Count
+}
+
+function Get-AgentName {
+    param([Parameter(Mandatory = $true)][string]$Filename)
+    if ($Filename -match "^(.*)\.agent\.md$") {
+        return $Matches[1]
+    }
+    if ($Filename -match "^(.*)\.prompt\.md$") {
+        return $Matches[1]
+    }
+    if ($Filename -match "^(.*)\.md$") {
+        return $Matches[1]
+    }
+    return $Filename
+}
+
+function Get-AgentDescription {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    try {
+        $content = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    } catch {
+        return ""
+    }
+    if (-not $content) { return "" }
+    # frontmatter YAML mínimo: ---\n description: ... \n---
+    if ($content -match "(?s)^---\s*\r?\n(.*?)\r?\n---") {
+        $front = $Matches[1]
+        foreach ($line in ($front -split "\r?\n")) {
+            if ($line -match "^\s*description\s*:\s*(.+)$") {
+                return ($Matches[1].Trim().Trim('"').Trim("'"))
+            }
+        }
+    }
+    foreach ($line in ($content -split "\r?\n")) {
+        $stripped = $line.Trim()
+        if ($stripped -and -not $stripped.StartsWith("#")) {
+            if ($stripped.Length -gt 240) {
+                return $stripped.Substring(0, 240)
+            }
+            return $stripped
+        }
+    }
+    return ""
+}
+
+function Get-FileSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Copy-StackyAgents {
+    <#
+    .SYNOPSIS
+        Materializa los .agent.md dentro de <release>/Stacky/agents y genera
+        manifest.json con el formato del plan plan-agentes-bundled-en-stacky.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$StackyHomeDir
+    )
+
+    $stackyAgentsDir = Join-Path $StackyHomeDir "agents"
+    New-Item -ItemType Directory -Path $stackyAgentsDir -Force | Out-Null
+
+    if (-not $SourceRoot -or -not (Test-Path $SourceRoot)) {
+        Write-Warn "Sin fuente para Stacky/agents. Queda vacío (el backend lo poblará en runtime si tiene fuentes locales)."
+        return 0
+    }
+
+    $sourceFull = [System.IO.Path]::GetFullPath($SourceRoot)
+    $agentFiles = @(Get-ChildItem -LiteralPath $sourceFull -Filter "*.agent.md" -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch "\\(node_modules|\.git|outputs|__pycache__)($|\\)" } |
+        Sort-Object FullName)
+
+    if ($agentFiles.Count -eq 0) {
+        Write-Warn "No se encontraron *.agent.md en: $sourceFull"
+        return 0
+    }
+
+    $manifestAgents = @()
+    $usedNames = @{}
+
+    foreach ($file in $agentFiles) {
+        $targetName = $file.Name
+        if ($usedNames.ContainsKey($targetName.ToLowerInvariant())) {
+            $relativeParent = $file.DirectoryName.Substring($sourceFull.Length).TrimStart("\", "/")
+            $prefix = ($relativeParent -replace "[\\/:*?`"<>| ]+", "_").Trim("_")
+            if ($prefix) {
+                $targetName = "$prefix-$($file.Name)"
+            }
+        }
+        $usedNames[$targetName.ToLowerInvariant()] = $true
+
+        $target = Join-Path $stackyAgentsDir $targetName
+        Copy-Item -LiteralPath $file.FullName -Destination $target -Force
+
+        $name = Get-AgentName -Filename $targetName
+        $description = Get-AgentDescription -Path $target
+        $checksum = Get-FileSha256 -Path $target
+
+        $relativePath = "agents/{0}" -f $targetName
+        $absolutePath = ($target -replace "\\", "/")
+
+        $manifestAgents += [ordered]@{
+            name = $name
+            mention = "@$name"
+            filename = $targetName
+            path = $absolutePath
+            relative_path = $relativePath
+            description = $description
+            checksum_sha256 = $checksum
+            source = "bundled"
+        }
+    }
+
+    $stackyHomeForward = ($StackyHomeDir -replace "\\", "/")
+    $stackyAgentsForward = ($stackyAgentsDir -replace "\\", "/")
+    $manifest = [ordered]@{
+        schema_version = 1
+        generated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        stacky_home = $stackyHomeForward
+        agents_dir = $stackyAgentsForward
+        agents = $manifestAgents
+    }
+
+    Write-Utf8NoBom -Path (Join-Path $stackyAgentsDir "manifest.json") -Value ($manifest | ConvertTo-Json -Depth 6)
     return $agentFiles.Count
 }
 
@@ -373,6 +531,8 @@ $releaseBackendDir = Join-Path $releaseDir "backend"
 $releaseFrontendDir = Join-Path $releaseDir "frontend"
 $releaseVsixDir = Join-Path $releaseDir "vscode_extension"
 $releaseGitHubCopilotAgentsDir = Join-Path $releaseDir "github_copilot_agents"
+$releaseStackyHomeDir = Join-Path $releaseDir "Stacky"
+$releaseStackyAgentsDir = Join-Path $releaseStackyHomeDir "agents"
 $releaseDataDir = Join-Path $releaseDir "data"
 $releaseProjectsDir = Join-Path $releaseDir "projects"
 
@@ -400,11 +560,34 @@ if ($latestVsix) {
     Write-Warn "No se encontro .vsix para incluir en el release."
 }
 
-Write-Step "Copiando agentes GitHub Copilot"
+Write-Step "Copiando agentes GitHub Copilot (carpeta legacy github_copilot_agents)"
 $githubCopilotAgentsSource = Resolve-GitHubCopilotAgentsSource
 $githubCopilotAgentsCount = Copy-GitHubCopilotAgents -SourceRoot $githubCopilotAgentsSource -DestinationRoot $releaseGitHubCopilotAgentsDir
 if ($githubCopilotAgentsCount -gt 0) {
     Write-OK "Agentes incluidos: $githubCopilotAgentsCount desde $githubCopilotAgentsSource"
+}
+
+Write-Step "Materializando Stacky/agents (canonical)"
+$stackyAgentsCount = Copy-StackyAgents -SourceRoot $githubCopilotAgentsSource -StackyHomeDir $releaseStackyHomeDir
+if ($stackyAgentsCount -gt 0) {
+    Write-OK "Stacky/agents incluidos: $stackyAgentsCount agentes (con manifest.json + checksum)"
+
+    Write-Step "Validando Stacky/agents (check_deploy_agents.py)"
+    $checkScript = Join-Path $deploymentDir "check_deploy_agents.py"
+    if (Test-Path $checkScript) {
+        Invoke-BuildPython -PythonArgs @($checkScript, "--stacky-home", $releaseStackyHomeDir)
+        if ($LASTEXITCODE -ne 0) {
+            throw "check_deploy_agents.py reportó problemas en Stacky/agents. Cancelo el release."
+        }
+        Write-OK "Stacky/agents validado (manifest + checksums)"
+    } else {
+        Write-Warn "check_deploy_agents.py no encontrado; omitiendo validación canonical."
+    }
+} else {
+    if ($RequireInstaller) {
+        throw "Stacky/agents está vacío y RequireInstaller=true. Cancelo el release."
+    }
+    Write-Warn "Stacky/agents quedó vacío. El backend intentará materializar desde otras fuentes en runtime."
 }
 
 if ($ExportConfig) {
@@ -450,6 +633,9 @@ $manifest = [ordered]@{
     backend_entrypoint = "backend/stacky-backend.exe"
     github_copilot_agents_dir = "github_copilot_agents"
     github_copilot_agents_count = $githubCopilotAgentsCount
+    stacky_home_dir = "Stacky"
+    stacky_agents_dir = "Stacky/agents"
+    stacky_agents_count = $stackyAgentsCount
     config_exported = [bool]$ExportConfig
     data_dir = "data"
     projects_dir = "projects"
@@ -459,7 +645,7 @@ $manifest = [ordered]@{
     operator_guide = "OPERATOR_GUIDE.md"
 }
 
-$manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $releaseDir "release-manifest.json") -Encoding UTF8
+Write-Utf8NoBom -Path (Join-Path $releaseDir "release-manifest.json") -Value ($manifest | ConvertTo-Json -Depth 5)
 Write-OK "Metadata generada"
 
 Write-Step "Validando limpieza del payload"

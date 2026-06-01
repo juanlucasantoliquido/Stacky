@@ -14,6 +14,7 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   const [form, setForm] = useState<Partial<InitProjectPayload>>({
     display_name:         project.display_name,
     workspace_root:       project.workspace_root,
+    agents_dir:           project.agents_dir ?? "",
     docs_technical_path:  project.docs_paths?.technical ?? project.docs_technical_path ?? "",
     docs_functional_path: project.docs_paths?.functional ?? project.docs_functional_path ?? "",
     docs_paths:           project.docs_paths ?? { technical: "", functional: "" },
@@ -184,6 +185,23 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
     return { ...form, docs_paths };
   }
 
+  async function browseAgentsDir() {
+    setError(null);
+    try {
+      const res = await Projects.browseFolder({
+        title: "Seleccionar carpeta de agentes",
+        initial_dir: String(form.agents_dir || form.workspace_root || ""),
+      });
+      if (res.ok && res.path) {
+        patch("agents_dir", res.path);
+      } else if (!res.ok) {
+        setError(res.error || "No se pudo abrir el selector de carpeta");
+      }
+    } catch (e: any) {
+      setError(e?.message || "No se pudo abrir el selector de carpeta");
+    }
+  }
+
   async function browseDocsPath(kind: "technical" | "functional") {
     setError(null);
     const currentPath = kind === "technical" ? form.docs_technical_path : form.docs_functional_path;
@@ -273,6 +291,20 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
             value={form.workspace_root ?? ""}
             onChange={(e) => patch("workspace_root", e.target.value)}
           />
+
+          <label className={styles.label}>Carpeta de agentes</label>
+          <div className={styles.pathRow}>
+            <input
+              className={styles.input}
+              type="text"
+              placeholder="Vacío = Stacky/agents"
+              value={form.agents_dir ?? ""}
+              onChange={(e) => patch("agents_dir", e.target.value)}
+            />
+            <button type="button" className={styles.btnPath} onClick={browseAgentsDir}>
+              Examinar...
+            </button>
+          </div>
 
           <div className={styles.docsPathSection}>
             <span className={styles.trackerHeading}>Documentación del proyecto (opcional)</span>

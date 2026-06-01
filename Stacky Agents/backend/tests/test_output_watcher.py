@@ -166,6 +166,25 @@ def _write_done_marker(repo_root: Path, epic_ado_id: int, *, status: str = "comp
     return p
 
 
+def _write_pending_task_alt(repo_root: Path, epic_ado_id: int, rf_id: str, *, mtime_offset: float = -60.0):
+    """Crea el pending-task.json en la base ALTERNATIVA `output/tickets/epic-{id}/{rf}/`.
+
+    Es donde el agente funcional co-loca el pending junto al análisis/plan cuando
+    NO usa la canónica `Agentes/outputs/epic-{id}/`.
+    """
+    import json as _json
+    d = repo_root / "output" / "tickets" / f"epic-{epic_ado_id}" / rf_id
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / "pending-task.json"
+    p.write_text(_json.dumps({
+        "rf_id": rf_id, "title": "test-alt", "status": "pending_manual_creation",
+        "generated_at": "2026-06-01T00:00:00Z",
+    }), encoding="utf-8")
+    past = time.time() + mtime_offset
+    os.utime(p, (past, past))
+    return p
+
+
 # ── Modo B ───────────────────────────────────────────────────────────────────
 
 
@@ -546,6 +565,90 @@ def test_mode_a_invokes_create_child_task_endpoint(client, repo_root_dir, monkey
     for call in calls:
         assert "/by-ado/40207/create-child-task" in call["url"]
         assert call["body"]["completion_source"] == "output_watcher_auto"
+
+
+def test_mode_a_auto_creates_without_running_execution(client, repo_root_dir, monkeypatch):
+    """Regresión (ask 2026-06-01): la auto-creación de Tasks NO debe depender de
+    una AgentExecution 'running'. Aunque el agente haya corrido fuera del tracking
+    de Stacky (execution completed/inexistente), el watcher igual llama a
+    create-child-task. El cierre del run se omite (no hay run vivo) pero las Tasks
+    se crean automáticamente — la vista Desatascador queda sólo como fallback."""
+    from services.output_watcher import AdoOutputWatcher
+
+    calls: list[dict] = []
+
+    class _FakeResp:
+        status_code = 200
+        text = "{}"
+        def json(self):
+            return {"ok": True, "task_ado_id": 88888, "pending_task_consumed": True}
+
+    def _fake_post(url, json=None, timeout=None, **kw):
+        calls.append({"url": url, "body": json})
+        return _FakeResp()
+
+    import requests as _req
+    monkeypatch.setattr(_req, "post", _fake_post)
+    monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+
+    # Execution COMPLETED (no running) — antes esto bloqueaba el auto-create.
+    ticket_id = _mk_ticket(40299, work_item_type="Epic", stacky_status="completed")
+    _mk_execution(ticket_id, status="completed")
+    _write_pending_task(repo_root_dir, 40299, "RF-001")
+
+    w = AdoOutputWatcher(stable_delay_a=0.0)
+    r = w.scan_once()
+
+    # Auto-create SÍ se intentó pese a no haber execution running.
+    assert len(calls) == 1
+    assert "/by-ado/40299/create-child-task" in calls[0]["url"]
+    # No hay run vivo que cerrar → no cuenta como close.
+    assert r["mode_a_closes"] == 0
+
+
+def test_mode_a_auto_creates_from_alt_base_when_canonical_missing(client, repo_root_dir, monkeypatch):
+    """Regresión (incidente 2026-06-01, proyecto RSSICREA): el agente escribió el
+    pending-task.json SÓLO en `output/tickets/epic-{id}/` y NUNCA creó el dir
+    canónico `Agentes/outputs`. scan_once hacía `return` temprano al no existir el
+    canónico y jamás escaneaba la base alternativa → el auto-create quedaba muerto
+    y la Task atascada. Tras el fix, scan_once igual escanea `output/tickets`
+    aunque `Agentes/outputs` no exista."""
+    import shutil
+    from services.output_watcher import AdoOutputWatcher
+
+    calls: list[dict] = []
+
+    class _FakeResp:
+        status_code = 200
+        text = "{}"
+        def json(self):
+            return {"ok": True, "task_ado_id": 77777, "pending_task_consumed": True}
+
+    def _fake_post(url, json=None, timeout=None, **kw):
+        calls.append({"url": url, "body": json})
+        return _FakeResp()
+
+    import requests as _req
+    monkeypatch.setattr(_req, "post", _fake_post)
+    monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+
+    # El dir canónico NO debe existir: replica el caso RSSICREA real.
+    shutil.rmtree(repo_root_dir / "Agentes", ignore_errors=True)
+    assert not (repo_root_dir / "Agentes" / "outputs").exists()
+
+    # Sin ticket ni execution en DB: el agente corrió fuera del tracking (Copilot
+    # directo) y el auto-create igual debe dispararse desde el scan de disco
+    # (ocurre antes del gate de execution en _process_mode_a). No tocar la DB acá
+    # también evita contaminar la in-memory compartida de otros tests.
+    _write_pending_task_alt(repo_root_dir, 40301, "RF-001")
+
+    w = AdoOutputWatcher(stable_delay_a=0.0)
+    w.scan_once()
+
+    # El auto-create se invocó pese a que `Agentes/outputs` no existe.
+    assert len(calls) == 1, f"esperaba 1 call al endpoint, hubo {len(calls)}"
+    assert "/by-ado/40301/create-child-task" in calls[0]["url"]
+    assert calls[0]["body"]["completion_source"] == "output_watcher_auto"
 
 
 def test_mode_a_idempotent_does_not_double_close(client, repo_root_dir):

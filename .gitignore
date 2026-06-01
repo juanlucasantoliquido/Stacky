@@ -39,6 +39,9 @@ build/
 # Deploys locales de Stacky Agents
 Stacky Agents/DeployStackyAgents/
 
+# Bootstrap canonical en dev (se materializa al arrancar; ver plan
+# plan-agentes-bundled-en-stacky-2026-05-29.md)
+Stacky Agents/backend/Stacky/
 
 # VS Code
 .vscode/

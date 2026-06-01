@@ -19,9 +19,12 @@ Cubre dos casuísticas:
   Modo A — análisis de Epic
     Disparador: `Agentes/outputs/epic-{ado_id}/{RF}/pending-task.json` con
     contenidos del Epic (analisis + plan + pending) sin escrituras en los
-    últimos 30s.
-    Acción: close_execution_with_publish(completed) **sin** publish (Epics
-    no llevan comment.html). NO crea Tasks en ADO (gate del operador).
+    últimos 30s (o done-marker explícito).
+    Acción: **auto-crea** las Tasks hijas en ADO (self-HTTP idempotente a
+    create-child-task) — NO depende de una AgentExecution running, así que
+    cubre también agentes corridos fuera del tracking de Stacky. Luego cierra
+    la execution trackeada si existe (sin publish: los Epics no llevan
+    comment.html). Re-deshabilitable con STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS=false.
 
 Idempotencia:
   - Modo B: dedup DB-level por (execution_id, html_sha256) en agent_html_publish.
@@ -157,6 +160,18 @@ class AdoOutputWatcher:
             return self._outputs_dir_override
         return _outputs_dir()
 
+    @property
+    def _alt_epic_base(self) -> Path | None:
+        """Base alternativa `<repo>/output/tickets` donde el agente a veces
+        co-loca el pending-task.json. Derivada del repo_root (o del override,
+        que es `<repo>/Agentes/outputs` → subimos dos niveles)."""
+        base = self.outputs_dir
+        try:
+            repo = base.parent.parent
+        except Exception:
+            return None
+        return repo / "output" / "tickets"
+
     # — Lifecycle —
 
     def start(self) -> threading.Thread:
@@ -200,24 +215,50 @@ class AdoOutputWatcher:
         if outputs_dir != self._last_scanned_dir:
             logger.info("output_watcher: dir vigilado → %s (existe=%s)", outputs_dir, outputs_dir.exists())
             self._last_scanned_dir = outputs_dir
-        if not outputs_dir.exists():
-            return round_result.__dict__
+        # NO retornar temprano si el dir canónico no existe: el agente funcional
+        # a veces sólo escribe el pending-task.json en la base alternativa
+        # `<repo>/output/tickets/epic-{id}/` y nunca crea `Agentes/outputs`. El
+        # `return` temprano de antes dejaba el Modo A (auto-create) muerto en ese
+        # caso (causa raíz del "termina la task y queda atascada": el watcher
+        # nunca escaneaba la base alternativa). Escaneamos la canónica sólo si
+        # existe y SIEMPRE intentamos la alternativa más abajo.
+        if outputs_dir.exists():
+            for entry in outputs_dir.iterdir():
+                if not entry.is_dir():
+                    continue
+                name = entry.name
+                try:
+                    if name.startswith("epic-"):
+                        epic_part = name[5:]
+                        if not epic_part.isdigit():
+                            continue
+                        self._process_mode_a(epic_ado_id=int(epic_part), epic_dir=entry, round_result=round_result)
+                    elif name.isdigit():
+                        self._process_mode_b(ado_id=int(name), ado_dir=entry, round_result=round_result)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("output_watcher: error procesando %s: %s", entry, exc)
+                    self.stats.errors += 1
 
-        for entry in outputs_dir.iterdir():
-            if not entry.is_dir():
-                continue
-            name = entry.name
-            try:
-                if name.startswith("epic-"):
-                    epic_part = name[5:]
-                    if not epic_part.isdigit():
-                        continue
-                    self._process_mode_a(epic_ado_id=int(epic_part), epic_dir=entry, round_result=round_result)
-                elif name.isdigit():
-                    self._process_mode_b(ado_id=int(name), ado_dir=entry, round_result=round_result)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("output_watcher: error procesando %s: %s", entry, exc)
-                self.stats.errors += 1
+        # Base alternativa: el agente funcional a veces co-loca el
+        # pending-task.json en `<repo>/output/tickets/epic-{id}/` junto al
+        # análisis y el plan, en vez de la canónica `Agentes/outputs/epic-{id}/`.
+        # Escaneamos también esa base para Modo A (auto-create + cierre). Modo B
+        # (comentarios) vive sólo en la canónica.
+        alt_base = self._alt_epic_base
+        if alt_base is not None and alt_base.exists() and alt_base != outputs_dir:
+            for entry in alt_base.iterdir():
+                if not entry.is_dir() or not entry.name.startswith("epic-"):
+                    continue
+                epic_part = entry.name[5:]
+                if not epic_part.isdigit():
+                    continue
+                try:
+                    self._process_mode_a(
+                        epic_ado_id=int(epic_part), epic_dir=entry, round_result=round_result
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("output_watcher: error procesando alt %s: %s", entry, exc)
+                    self.stats.errors += 1
 
         self.stats.mode_b_closes += round_result.mode_b_closes
         self.stats.mode_b_skipped += round_result.mode_b_skipped
@@ -357,8 +398,11 @@ class AdoOutputWatcher:
     # — Modo A —
 
     def _process_mode_a(self, *, epic_ado_id: int, epic_dir: Path, round_result: _ScanRoundResult) -> None:
-        # Recolectar pending-task.json del Epic.
-        pending_files = list(epic_dir.glob("*/" + PENDING_TASK_FILENAME))
+        # Recolectar pending-task.json del Epic (en subcarpetas RF y, por las
+        # dudas, directamente bajo el epic dir).
+        pending_files = list(epic_dir.glob(PENDING_TASK_FILENAME)) + list(
+            epic_dir.glob("*/" + PENDING_TASK_FILENAME)
+        )
         if not pending_files:
             return
 
@@ -407,12 +451,51 @@ class AdoOutputWatcher:
         if prev_mtime == max_mtime_ns:
             return
 
-        # ── Consultar DB ──────────────────────────────────────────────────────
+        trigger_desc = (
+            "done-marker explícito"
+            if done_marker is not None
+            else f"estables hace {int(age_seconds)}s (debounce)"
+        )
+        pending_count = len(pending_files)
+
+        # ── Auto-create Tasks en ADO (Fase W5 + W6) ───────────────────────────
+        # IMPORTANTE: la auto-creación NO depende de que exista una
+        # AgentExecution "running". El agente puede haber corrido fuera del
+        # tracking de Stacky (Copilot directo) o su execution puede haberse
+        # cerrado ya. Igual auto-creamos las Tasks desde los pending-task.json
+        # estables: el endpoint create-child-task es idempotente (marca el
+        # archivo como consumed), así que esto es seguro y la vista
+        # "Desatascador" queda sólo como fallback manual puntual.
+        #
+        # Si STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS == "false", el helper
+        # devuelve todo como skipped (gate del operador re-habilitable).
+        auto_create_summary = _auto_create_pending_tasks(
+            epic_ado_id=epic_ado_id,
+            pending_files=pending_files,
+        )
+        if auto_create_summary["created"] > 0 or auto_create_summary["errors"] > 0:
+            logger.info(
+                "output_watcher mode_a: auto-create resumen — created=%d skipped=%d errors=%d",
+                auto_create_summary["created"],
+                auto_create_summary["skipped"],
+                auto_create_summary["errors"],
+            )
+
+        # La auto-creación es best-effort y NUNCA bloquea el cierre del run. Si
+        # hubo errores transitorios (Flask no listo, ADO 5xx) y además no hay
+        # execution que cerrar, dejamos el mtime sin cachear para reintentar.
+        auto_create_had_errors = auto_create_summary["errors"] > 0
+
+        # ── Cerrar la execution trackeada (si la hay) ─────────────────────────
+        # El cierre del run sí requiere una AgentExecution running. Si no hay
+        # (agente fuera de tracking), las Tasks ya quedaron creadas arriba y no
+        # hay nada que cerrar.
         with session_scope() as session:
             ticket = session.query(Ticket).filter(Ticket.ado_id == epic_ado_id).first()
             if ticket is None:
                 logger.debug("output_watcher mode_a: ADO-%s no existe en DB", epic_ado_id)
-                self._seen_a[str(epic_dir)] = max_mtime_ns
+                if not auto_create_had_errors:
+                    self._seen_a[str(epic_dir)] = max_mtime_ns
                 round_result.mode_a_skipped += 1
                 return
             ticket_id = ticket.id
@@ -428,10 +511,13 @@ class AdoOutputWatcher:
             )
             if running_exec is None:
                 logger.debug(
-                    "output_watcher mode_a: epic-%s sin execution running — skip",
+                    "output_watcher mode_a: epic-%s sin execution running — "
+                    "Tasks auto-creadas, nada que cerrar",
                     epic_ado_id,
                 )
-                self._seen_a[str(epic_dir)] = max_mtime_ns
+                # Reintentar el auto-create en el próximo scan si hubo errores.
+                if not auto_create_had_errors:
+                    self._seen_a[str(epic_dir)] = max_mtime_ns
                 round_result.mode_a_skipped += 1
                 return
 
@@ -457,32 +543,7 @@ class AdoOutputWatcher:
 
             execution_id = running_exec.id
             agent_type = running_exec.agent_type
-            pending_count = len(pending_files)
 
-        # ── Auto-create Tasks en ADO (Fase W5) ─────────────────────────────────
-        # Si STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS != "false", para cada
-        # pending-task.json con status != "consumed" hacemos self-HTTP a
-        # /api/tickets/by-ado/{epic_id}/create-child-task. El endpoint tiene
-        # idempotencia (marca el archivo como consumed), por lo que llamadas
-        # repetidas son no-op.
-        auto_create_summary = _auto_create_pending_tasks(
-            epic_ado_id=epic_ado_id,
-            pending_files=pending_files,
-        )
-        if auto_create_summary["created"] > 0 or auto_create_summary["errors"] > 0:
-            logger.info(
-                "output_watcher mode_a: auto-create resumen — created=%d skipped=%d errors=%d",
-                auto_create_summary["created"],
-                auto_create_summary["skipped"],
-                auto_create_summary["errors"],
-            )
-
-        # ── Cerrar (sin publish, las tasks ya fueron creadas vía endpoint) ────
-        trigger_desc = (
-            "done-marker explícito"
-            if done_marker is not None
-            else f"estables hace {int(age_seconds)}s (debounce)"
-        )
         logger.info(
             "output_watcher mode_a: cerrando exec=%d epic-%s (pending_tasks=%d, disparador=%s)",
             execution_id, epic_ado_id, pending_count, trigger_desc,

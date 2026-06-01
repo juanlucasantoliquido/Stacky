@@ -223,6 +223,12 @@ class AgentExecution(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
     pack_run_id: Mapped[int | None] = mapped_column(ForeignKey("pack_runs.id"))
     pack_step: Mapped[int | None] = mapped_column(Integer)
+    # Fase 1 (plan creacion-tareas-comentarios-100-efectiva): columnas operativas
+    # que antes se seteaban como atributos dinamicos y no persistian en DB.
+    # html_output_path: ruta relativa al repo del comment.html generado por el agente.
+    # completion_source: origen del cierre (agent_gateway | manual | output_watcher | rescue | ...).
+    html_output_path: Mapped[str | None] = mapped_column(String(500))
+    completion_source: Mapped[str | None] = mapped_column(String(40))
 
     ticket: Mapped[Ticket] = relationship(back_populates="executions")
 

@@ -27,10 +27,34 @@ def render_blocks(blocks: list[dict]) -> str:
     return "\n".join(out).strip()
 
 
-def with_project_header(prompt: str, agent_type: str) -> str:
+def _resolve_active_display_name() -> str:
+    """Lee `display_name` del proyecto activo. Best-effort: si Stacky aún no
+    tiene proyecto activo, devuelve un placeholder genérico en vez de hardcoded
+    'RSPacifico'."""
+    try:
+        from project_manager import get_active_project, get_project_config
+
+        name = get_active_project()
+        if not name:
+            return "(sin proyecto activo)"
+        cfg = get_project_config(name) or {}
+        display = (cfg.get("display_name") or name or "").strip()
+        return display or name or "(sin proyecto activo)"
+    except Exception:
+        return "(sin proyecto activo)"
+
+
+def with_project_header(prompt: str, agent_type: str, project_display_name: str | None = None) -> str:
+    """Antepone un header identificando agente + proyecto activo.
+
+    `project_display_name` permite que el caller pase un nombre explícito
+    (útil cuando el caller ya conoce el proyecto del ticket). Si se omite,
+    se resuelve via `project_manager.get_active_project()`.
+    """
+    display = (project_display_name or "").strip() or _resolve_active_display_name()
     return (
         f"# Stacky Agents — agente: {agent_type}\n"
-        f"# Proyecto: RSPacifico\n\n"
+        f"# Proyecto: {display}\n\n"
         f"{prompt}"
     )
 

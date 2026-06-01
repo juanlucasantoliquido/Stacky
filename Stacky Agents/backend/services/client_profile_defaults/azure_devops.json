@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "code_layout": {
+    "online_path": "trunk/OnLine",
+    "batch_path": "trunk/Batch",
+    "db_scripts_path": "trunk/BD/1 - Inicializacion BD",
+    "lib_path": "trunk/lib",
+    "test_path": "trunk/Tests",
+    "file_extensions": {
+      "ui": ".aspx",
+      "ui_code_behind": ".aspx.cs",
+      "code": ".cs"
+    },
+    "architecture_layers": ["UI", "RSBus (BLL)", "RSDalc (DAL)", "BD"]
+  },
+  "language": {
+    "primary": "csharp",
+    "comment_traceability": "// {ticket_token} | {YYYY-MM-DD} | {description}",
+    "ticket_token_pattern": "ADO-{id}",
+    "languages_in_ridioma": ["ESP", "ENG", "POR"]
+  },
+  "database": {
+    "type": "sqlserver",
+    "server": "",
+    "readonly_auth_ref": "auth/db_readonly.json",
+    "readonly_user_hint": "",
+    "connection_kind": "windows_sqlcmd",
+    "dml_policy": "prohibited_runtime_must_emit_sql",
+    "catalog_master_files": {},
+    "naming_conventions": {
+      "table_prefix": "R",
+      "column_prefix_len": 2
+    }
+  },
+  "build": {
+    "tool": "msbuild",
+    "msbuild_path": "C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe",
+    "configuration": "Release",
+    "online_solutions": [],
+    "batch_proj_glob": "Batch/*/*.csproj"
+  },
+  "conventions": {
+    "ridioma_helper": "RSFac.Idioma",
+    "ridioma_message_const": "coMens.m{id}",
+    "string_sanitizer": "cFormat.StToBD()",
+    "error_helpers": ["Error.Agregar", "msgd.Show"]
+  },
+  "docs_indexes": {
+    "technical_master": "trunk/docs/agentic_manual/tecnica/00_INDICE_MAESTRO.md",
+    "functional_online": "trunk/docs/agentic_manual/funcional/ONLINE/INDEX.md",
+    "functional_batch": "trunk/docs/agentic_manual/funcional/BATCH/00_INDICE_FUNCIONAL_BATCH.md"
+  },
+  "tracker_state_machine": {
+    "functional": {
+      "input_states": ["To Do", "New", "Active"],
+      "blocked_state": "Blocked",
+      "next_state_ok": "Technical review"
+    },
+    "technical": {
+      "input_states": ["Technical review"],
+      "blocked_state": "Blocked",
+      "next_state_ok": "To Do"
+    },
+    "developer": {
+      "input_states": ["To Do"],
+      "in_progress": "Doing",
+      "blocked_state": "Blocked",
+      "next_state_ok": "Reviewed by Dev"
+    }
+  },
+  "terminology": {
+    "product_name": "",
+    "client_label": "",
+    "domain_glossary_ref": ""
+  },
+  "extensions": {}
+}

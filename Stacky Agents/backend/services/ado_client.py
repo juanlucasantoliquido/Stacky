@@ -339,6 +339,40 @@ class AdoClient:
     def work_item_url(self, ado_id: int) -> str:
         return f"{self._base_proj}/_workitems/edit/{ado_id}"
 
+    def get_authenticated_user(self) -> dict:
+        """Resuelve la identidad ADO del PAT configurado (usuario sincronizado).
+
+        Usa el endpoint org-scoped `_apis/connectionData`, que devuelve el
+        `authenticatedUser` asociado al token. El `unique_name` (normalmente el
+        email) es el valor que se compara contra `Ticket.assigned_to_ado`
+        (uniqueName de System.AssignedTo) para el filtro "Mis tareas".
+
+        Retorna: { display_name, unique_name, id, descriptor }.
+        Lanza AdoApiError si el PAT es inválido o ADO no responde JSON.
+        """
+        base_org = f"https://dev.azure.com/{urllib.parse.quote(self.org)}"
+        url = f"{base_org}/_apis/connectionData?api-version={_API_VERSION}"
+        data = self._request("GET", url)
+        user = data.get("authenticatedUser") or {}
+        props = user.get("properties") or {}
+        account = props.get("Account")
+        if isinstance(account, dict):
+            email = account.get("$value") or ""
+        else:
+            email = account or ""
+        unique_name = (
+            email
+            or user.get("uniqueName")
+            or user.get("providerDisplayName")
+            or ""
+        )
+        return {
+            "display_name": user.get("providerDisplayName") or unique_name or "",
+            "unique_name": (unique_name or "").strip(),
+            "id": user.get("id") or "",
+            "descriptor": user.get("subjectDescriptor") or user.get("descriptor") or "",
+        }
+
     def fetch_states(self) -> list[str]:
         """Devuelve todos los estados definidos en el proceso del proyecto ADO.
 
@@ -703,18 +737,111 @@ class AdoClient:
         """Publica un comentario en un work item (CA-07).
 
         POST _apis/wit/workitems/{id}/comments?api-version=7.1-preview.3
-        Si ADO no soporta la API preview, degrada silenciosamente.
+
+        Fase 1 plan creacion-tareas-comentarios-100-efectiva (2026-05-29):
+        ya NO degrada silenciosamente devolviendo {}. Si ADO falla, propaga
+        AdoApiError. Si responde sin id, levanta AdoApiError tambien para
+        que los callers no traten "sin id" como exito. Los callers son
+        responsables de decidir si esa falla es bloqueante o degradada,
+        pero deben verla explicitamente.
         """
         url = (
             f"{self._base_proj}/_apis/wit/workitems/{ado_id}/comments"
             f"?api-version=7.1-preview.3"
         )
         body = {"text": text}
+        response = self._request_with_retry("POST", url, body=body)
+        if not isinstance(response, dict) or not response.get("id"):
+            raise AdoApiError(
+                f"ADO post_comment({ado_id}) no devolvio comment_id. "
+                f"respuesta={str(response)[:200]}",
+                method="POST",
+                url=url,
+                detail=str(response)[:300],
+            )
+        return response
+
+    def comment_exists(self, ado_id: int, marker: str, top: int = 50) -> dict | None:
+        """Busca un comentario que contenga el marcador Stacky dado.
+
+        Util para verificacion idempotente post-publicacion (Fase 1).
+        Retorna el dict del comentario (con keys de fetch_comments) o None.
+        No lanza: si la API preview falla, devuelve None.
+        """
+        if not marker:
+            return None
         try:
-            return self._request_with_retry("POST", url, body=body)
-        except AdoApiError as e:
-            logger.warning("post_comment(%s) falló (no crítico): %s", ado_id, e)
-            return {}
+            comments = self.fetch_comments(ado_id, top=top)
+        except Exception:  # noqa: BLE001 — defensivo
+            return None
+        for c in comments:
+            text_html = (c.get("text") or "")
+            if marker in text_html:
+                return c
+        return None
+
+    def get_work_item(self, ado_id: int, fields: list[str] | None = None) -> dict:
+        """Lee un work item por ID. Util para verificacion post-creacion (Fase 1).
+
+        Lanza AdoApiError si ADO falla o el item no existe.
+        """
+        fields_qs = ",".join(fields or [
+            "System.Id", "System.Title", "System.State", "System.WorkItemType",
+            "System.Parent", "System.AssignedTo", "System.ChangedDate",
+        ])
+        url = (
+            f"{self._base_proj}/_apis/wit/workitems/{ado_id}"
+            f"?fields={urllib.parse.quote(fields_qs)}&api-version={_API_VERSION}"
+        )
+        return self._request("GET", url)
+
+    def find_child_by_marker(self, parent_ado_id: int, marker: str) -> dict | None:
+        """Busca una Task hija de `parent_ado_id` cuya descripcion contenga el marcador Stacky.
+
+        Idempotencia de creacion (Fase 2 plan creacion-tareas-comentarios-100-efectiva):
+        antes de crear una Task hija, Stacky inserta un marcador invisible
+        `<!-- stacky-task:{idempotency_key} -->` en System.Description. Si una
+        ejecucion anterior ya creo la Task pero el receipt local se perdio, este
+        metodo la reencuentra leyendo los hijos del Epic en ADO, evitando duplicar.
+
+        Estrategia:
+          1. WIQL: hijos directos del padre (System.Parent = parent_ado_id).
+          2. batch GET de sus System.Description.
+          3. match exacto del marcador.
+
+        Devuelve el dict del work item hijo (campos basicos + System.Description) o
+        None. No lanza: ante cualquier fallo de ADO devuelve None (el caller cae al
+        flujo de creacion normal, que es seguro porque ADO igual rechaza duplicados
+        logicos solo si hay otra barrera; el marcador es la barrera principal).
+        """
+        if not marker:
+            return None
+        try:
+            wiql = (
+                "SELECT [System.Id] FROM WorkItems "
+                f"WHERE [System.Parent] = {int(parent_ado_id)}"
+            )
+            child_ids = self._wiql_ids(wiql)
+            if not child_ids:
+                return None
+            for i in range(0, len(child_ids), 200):
+                chunk = child_ids[i : i + 200]
+                ids_qs = ",".join(str(x) for x in chunk)
+                fields_qs = "System.Id,System.Title,System.State,System.Description,System.Parent"
+                url = (
+                    f"{self._base_proj}/_apis/wit/workitems"
+                    f"?ids={ids_qs}&fields={urllib.parse.quote(fields_qs)}"
+                    f"&api-version={_API_VERSION}"
+                )
+                data = self._request("GET", url)
+                for wi in (data.get("value") or []):
+                    desc = str((wi.get("fields") or {}).get("System.Description") or "")
+                    if marker in desc:
+                        return wi
+        except Exception as exc:  # noqa: BLE001 — defensivo: cualquier fallo = "no encontrado"
+            logger.warning("find_child_by_marker(parent=%s) falló: %s", parent_ado_id, exc)
+            return None
+        return None
 
     def update_work_item_state(self, ado_id: int, new_state: str) -> dict:
         """Cambia el System.State de un work item en ADO."""

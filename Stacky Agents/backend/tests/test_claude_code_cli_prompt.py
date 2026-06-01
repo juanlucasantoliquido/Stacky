@@ -68,7 +68,7 @@ def test_prompt_includes_rich_ticket_context():
     assert "priorizá el alta" in prompt
 
 
-def test_prompt_includes_agent_inventory_and_system_prompt():
+def test_prompt_includes_agent_inventory_without_system_prompt_body():
     from services import claude_code_cli_runner
 
     prompt = claude_code_cli_runner._build_claude_code_prompt(
@@ -78,20 +78,22 @@ def test_prompt_includes_agent_inventory_and_system_prompt():
     )
     assert "Funcional Pacifico" in prompt
     assert "FuncionalPacifico.agent.md" in prompt
-    assert "Generá criterios de aceptación." in prompt
+    assert "Generá criterios de aceptación." not in prompt
 
 
 # ---------------------------------------------------------------------------
 # Fase C — persona vía system prompt (separación system vs user)
 # ---------------------------------------------------------------------------
 
-def test_system_prompt_carries_persona_and_stacky_rules():
+def test_system_prompt_carries_agent_locator_and_stacky_rules():
     from services import claude_code_cli_runner
 
     sp = claude_code_cli_runner._build_system_prompt(_selected())
-    # Persona del .agent.md
-    assert "Sos el analista funcional. Generá criterios de aceptación." in sp
+    # Referencia al .agent.md, sin inyectar su contenido.
+    assert "Sos el analista funcional. Generá criterios de aceptación." not in sp
     assert "Funcional Pacifico" in sp
+    assert "FuncionalPacifico.agent.md" in sp
+    assert "No se inyecta el contenido" in sp
     # Reglas duras de Stacky (definen el cómo)
     assert "no toques Azure DevOps" in sp
     assert "comment.html" in sp
@@ -128,3 +130,49 @@ def test_build_command_omits_system_prompt_file_when_none():
 
     cmd = claude_code_cli_runner._build_command(model_override=None, system_prompt_file=None)
     assert "--append-system-prompt-file" not in cmd
+
+
+# ---------------------------------------------------------------------------
+# Invocation contract (plan-agentes-bundled-en-stacky-2026-05-29)
+# ---------------------------------------------------------------------------
+
+def test_system_prompt_includes_invocation_block_when_provided():
+    from services import claude_code_cli_runner
+
+    invocation = (
+        "## Agente Stacky seleccionado\n"
+        "- Mention: @Developer\n"
+        "- Archivo agent.md: Developer.agent.md\n"
+        "- Workspace de trabajo: C:/proyecto\n"
+    )
+    sp = claude_code_cli_runner._build_system_prompt(_selected(), invocation_block=invocation)
+    assert "Agente Stacky seleccionado" in sp
+    assert "@Developer" in sp
+    assert "Workspace de trabajo: C:/proyecto" in sp
+
+
+def test_user_message_includes_invocation_block_when_provided():
+    from services import claude_code_cli_runner
+
+    invocation = "## Agente Stacky seleccionado\n- Mention: @Funcional\n"
+    um = claude_code_cli_runner._build_user_message(
+        all_agents=[_selected()],
+        ticket_message="ADO-1",
+        invocation_block=invocation,
+    )
+    assert "Agente Stacky seleccionado" in um
+    assert "@Funcional" in um
+
+
+def test_legacy_prompt_includes_invocation_block_when_provided():
+    from services import claude_code_cli_runner
+
+    invocation = "## Agente Stacky seleccionado\n- Mention: @Developer\n"
+    prompt = claude_code_cli_runner._build_claude_code_prompt(
+        selected_agent=_selected(),
+        all_agents=[_selected()],
+        ticket_message="ADO-1",
+        invocation_block=invocation,
+    )
+    assert "Agente Stacky seleccionado" in prompt
+    assert "@Developer" in prompt

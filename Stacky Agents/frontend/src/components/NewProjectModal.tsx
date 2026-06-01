@@ -12,6 +12,7 @@ const EMPTY: InitProjectPayload = {
   name: "",
   display_name: "",
   workspace_root: "",
+  agents_dir: "",
   docs_technical_path: "",
   docs_functional_path: "",
   docs_paths: { technical: "", functional: "" },
@@ -61,6 +62,23 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
       functional: (form.docs_functional_path || "").trim(),
     };
     return { ...form, docs_paths };
+  }
+
+  async function browseAgentsDir() {
+    setError(null);
+    try {
+      const res = await Projects.browseFolder({
+        title: "Seleccionar carpeta de agentes",
+        initial_dir: form.agents_dir || form.workspace_root || "",
+      });
+      if (res.ok && res.path) {
+        patch("agents_dir", res.path);
+      } else if (!res.ok) {
+        setError(res.error || "No se pudo abrir el selector de carpeta");
+      }
+    } catch (e: any) {
+      setError(e?.message || "No se pudo abrir el selector de carpeta");
+    }
   }
 
   async function browseDocsPath(kind: "technical" | "functional") {
@@ -233,6 +251,20 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
             value={form.workspace_root}
             onChange={(e) => patch("workspace_root", e.target.value)}
           />
+
+          <label className={styles.label}>Carpeta de agentes</label>
+          <div className={styles.pathRow}>
+            <input
+              className={styles.input}
+              type="text"
+              placeholder="Vacío = Stacky/agents"
+              value={form.agents_dir ?? ""}
+              onChange={(e) => patch("agents_dir", e.target.value)}
+            />
+            <button type="button" className={styles.btnPath} onClick={browseAgentsDir}>
+              Examinar...
+            </button>
+          </div>
 
           <div className={styles.docsPathSection}>
             <span className={styles.trackerHeading}>Documentación del proyecto (opcional)</span>

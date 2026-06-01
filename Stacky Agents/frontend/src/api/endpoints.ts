@@ -89,8 +89,31 @@ export interface FrontendConfig {
 }
 
 export const Tickets = {
-  list: (project?: string | null) =>
-    api.get<Ticket[]>(`/api/tickets${project ? `?project=${encodeURIComponent(project)}` : ""}`),
+  list: (project?: string | null, assignedTo?: string | null) => {
+    const params = new URLSearchParams();
+    if (project) params.set("project", project);
+    if (assignedTo) params.set("assigned_to", assignedTo);
+    const qs = params.toString();
+    return api.get<Ticket[]>(`/api/tickets${qs ? `?${qs}` : ""}`);
+  },
+  // Requerimiento B: identidad ADO del operador (para filtro "Mis tareas").
+  adoUser: (project?: string | null, refresh = false) => {
+    const params = new URLSearchParams();
+    if (project) params.set("project", project);
+    if (refresh) params.set("refresh", "1");
+    const qs = params.toString();
+    return api.get<{
+      ok: boolean;
+      linked: boolean;
+      source?: string;
+      ado_unique_name?: string;
+      ado_display_name?: string;
+      verified_at?: string;
+      stacky_user?: string;
+      project?: string;
+      message?: string;
+    }>(`/api/tickets/ado-user${qs ? `?${qs}` : ""}`);
+  },
   byId: (id: number) => api.get<Ticket & { executions: AgentExecution[] }>(`/api/tickets/${id}`),
   hierarchy: (project?: string | null) =>
     api.get<TicketHierarchy>(`/api/tickets/hierarchy${project ? `?project=${encodeURIComponent(project)}` : ""}`),
@@ -233,6 +256,16 @@ export const Tickets = {
       { "X-Completion-Source": "manual_ui" }
     ),
 
+  /**
+   * Vista "Desatascador": tickets en ejecución + readiness de artifacts
+   * (comment.html / pending-task.json) a nivel board.
+   * GET /api/tickets/unblocker-board
+   */
+  unblockerBoard: (project?: string | null): Promise<UnblockerBoardResponse> => {
+    const qs = project ? `?project=${encodeURIComponent(project)}` : "";
+    return api.get<UnblockerBoardResponse>(`/api/tickets/unblocker-board${qs}`);
+  },
+
   // P2.3 — adjuntos del ticket (portado de WS2)
   attachments: (id: number) =>
     api.get<{ attachments: TicketAttachment[]; error?: string }>(`/api/tickets/${id}/attachments`),
@@ -267,6 +300,8 @@ export interface ListPendingTasksResponse {
   pending_tasks: PendingTaskItem[];
   total_pending: number;
   total_consumed: number;
+  parse_errors?: { rf_id: string; pending_task_path: string; error: string }[];
+  total_errors?: number;
 }
 
 export interface CreateChildTaskAction {
@@ -297,6 +332,60 @@ export interface CreateChildTaskResponse {
   error?: string;
   missing_fields?: string[];
   message?: string;
+}
+
+// ── Desatascador: unblocker-board ─────────────────────────────────────────────
+
+export type UnblockerReadiness =
+  | "task_ready"
+  | "comment_ready"
+  | "waiting_files"
+  | "artifacts_idle"
+  | "files_error";
+
+export interface UnblockerParseError {
+  rf_id: string;
+  pending_task_path: string;
+  error: string;
+}
+
+export interface UnblockerItem {
+  ticket_id: number;
+  ado_id: number | null;
+  title: string;
+  work_item_type: string | null;
+  ado_state: string | null;
+  stacky_status: string;
+  ado_url: string | null;
+  running: boolean;
+  readiness: UnblockerReadiness;
+  blockers: string[];
+  comment: { exists: boolean; path: string | null; size_bytes: number };
+  pending_tasks: PendingTaskItem[];
+  total_pending: number;
+  total_consumed: number;
+  parse_errors: UnblockerParseError[];
+  total_errors: number;
+  last_execution: {
+    id: number;
+    agent_type: string | null;
+    status: string;
+    started_at: string | null;
+  } | null;
+}
+
+export interface UnblockerBoardResponse {
+  ok: boolean;
+  repo_root: string;
+  items: UnblockerItem[];
+  total: number;
+  counts: {
+    running: number;
+    comment_ready: number;
+    task_ready: number;
+    waiting_files: number;
+    files_error: number;
+  };
 }
 
 export interface TicketAttachment {
@@ -332,9 +421,36 @@ export interface AgentHistoryResponse {
   total_executions: number;
 }
 
+export interface StackyManifestAgent {
+  name: string;
+  mention: string;
+  filename: string;
+  path: string;
+  relative_path: string;
+  description: string;
+  checksum_sha256: string;
+  source: string;
+}
+
+export interface StackyManifestResponse {
+  stacky_home: string;
+  agents_dir: string;
+  effective_agents_dir?: string;
+  manifest_path: string;
+  manifest: Record<string, unknown> | null;
+  agents: StackyManifestAgent[];
+  count: number;
+}
+
 export const Agents = {
   list: () => api.get<AgentDefinition[]>("/api/agents"),
   vsCodeAgents: () => api.get<VsCodeAgent[]>("/api/agents/vscode"),
+  stackyManifest: () => api.get<StackyManifestResponse>("/api/agents/stacky/manifest"),
+  stackyMaterialize: (force = false) =>
+    api.post<{ ok: true; count: number; agents: StackyManifestAgent[] }>(
+      "/api/agents/stacky/materialize",
+      { force }
+    ),
   history: (filename: string, limit = 50, project?: string | null) => {
     const p = new URLSearchParams({ limit: String(limit) });
     if (project) p.set("project", project);
@@ -836,6 +952,202 @@ export const Projects = {
   // P1.1 ChatDrawer: bootstrap del workspace_root del proyecto activo
   agentBootstrap: () =>
     api.get<{ ok: boolean; project_name: string; tracker_type: string; workspace_root: string; auth_header: string; tracker: Record<string, string> }>("/api/agent_bootstrap"),
+};
+
+// ── Requerimiento A (plan 2026-05-27): export/import de configuración ─────────
+
+export interface ConfigBundle {
+  meta: {
+    schemaVersion: number;
+    appVersion?: string;
+    projectId?: string;
+    scope?: string;
+    activeProject?: string | null;
+    projectCount?: number;
+    exportedAt?: string;
+    checksum?: string;
+    sections?: string[];
+  };
+  [section: string]: unknown;
+}
+
+export interface ConfigValidation {
+  ok: boolean;
+  schema_version: number | null;
+  app_version: string | null;
+  project_id: string | null;
+  checksum_ok: boolean;
+  errors: string[];
+  warnings: string[];
+  migration_notes: string[];
+}
+
+export interface ConfigChange {
+  section: string;
+  field: string;
+  action: "add" | "update" | "remove";
+  old: unknown;
+  new: unknown;
+}
+
+export interface ConfigSecretRequired {
+  tracker_type?: string;
+  auth_file: string;
+  fields: string[];
+}
+
+export interface ConfigImportResult {
+  ok: boolean;
+  mode: "dry-run" | "merge" | "overwrite";
+  applied?: boolean;
+  idempotent?: boolean;
+  changes?: ConfigChange[];
+  secrets_required?: ConfigSecretRequired[];
+  projects?: Array<{
+    project: string;
+    applied?: boolean;
+    idempotent?: boolean;
+    changes?: ConfigChange[];
+    secrets_required?: ConfigSecretRequired[];
+  }>;
+  validation?: ConfigValidation;
+  error?: string;
+}
+
+export interface ConfigTransferEvent {
+  ts: string;
+  action: string;
+  project: string;
+  result: string;
+  actor: string;
+  schema_version: number | null;
+  app_version: string | null;
+  mode: string | null;
+  checksum: string | null;
+  sections: string[];
+  detail: Record<string, unknown>;
+}
+
+// ── Client Profile (plan 16 — generalización multi-cliente) ──────────────────
+
+export interface ClientProfileTrackerRole {
+  input_states?: string[];
+  in_progress?: string;
+  blocked_state?: string;
+  next_state_ok?: string;
+}
+
+export interface ClientProfile {
+  schema_version: number;
+  code_layout?: Record<string, unknown>;
+  language?: Record<string, unknown>;
+  database?: Record<string, unknown>;
+  build?: Record<string, unknown>;
+  conventions?: Record<string, unknown>;
+  docs_indexes?: Record<string, unknown>;
+  terminology?: Record<string, unknown>;
+  tracker_state_machine?: {
+    functional?: ClientProfileTrackerRole;
+    technical?: ClientProfileTrackerRole;
+    developer?: ClientProfileTrackerRole;
+  };
+  extensions?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ClientProfileValidation {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+  normalized: ClientProfile | null;
+}
+
+export interface ClientProfileGetResponse {
+  ok: boolean;
+  project: string;
+  tracker_type: string;
+  has_profile: boolean;
+  profile: ClientProfile | null;
+  default_template: ClientProfile;
+  validation: ClientProfileValidation | null;
+  error?: string;
+}
+
+export interface ClientProfileSaveResponse {
+  ok: boolean;
+  profile?: ClientProfile;
+  warnings?: string[];
+  error?: string;
+}
+
+export interface DbReadonlyAuthMeta {
+  ok: boolean;
+  has_credentials: boolean;
+  server?: string;
+  database?: string;
+  user?: string;
+  warning?: string;
+  error?: string;
+}
+
+export const ClientProfileApi = {
+  get: (project: string) =>
+    api.get<ClientProfileGetResponse>(
+      `/api/projects/${encodeURIComponent(project)}/client-profile`
+    ),
+  save: (project: string, profile: ClientProfile) =>
+    api.put<ClientProfileSaveResponse>(
+      `/api/projects/${encodeURIComponent(project)}/client-profile`,
+      { profile }
+    ),
+  clear: (project: string) =>
+    api.delete<{ ok: boolean; cleared: boolean; error?: string }>(
+      `/api/projects/${encodeURIComponent(project)}/client-profile`
+    ),
+  defaultTemplate: (trackerType: string) =>
+    api.get<{ ok: boolean; tracker_type: string; template: ClientProfile }>(
+      `/api/client-profile/default?tracker_type=${encodeURIComponent(trackerType)}`
+    ),
+};
+
+export const DbReadonlyAuth = {
+  meta: (project: string) =>
+    api.get<DbReadonlyAuthMeta>(
+      `/api/projects/${encodeURIComponent(project)}/db-readonly-auth`
+    ),
+  save: (
+    project: string,
+    payload: { server?: string; database?: string; user?: string; password: string }
+  ) =>
+    api.post<{ ok: boolean; auth_file?: string; saved_fields?: string[]; error?: string }>(
+      `/api/projects/${encodeURIComponent(project)}/db-readonly-auth`,
+      payload
+    ),
+};
+
+export const ConfigTransfer = {
+  sections: () => api.get<{ ok: boolean; sections: string[] }>("/api/config/sections"),
+  exportAll: (sections?: string[]) =>
+    api.post<{ ok: boolean; bundle: ConfigBundle; filename: string; error?: string }>(
+      "/api/config/export",
+      sections ? { sections } : {}
+    ),
+  importAll: (bundle: ConfigBundle, mode: "dry-run" | "merge" | "overwrite") =>
+    api.post<ConfigImportResult>(`/api/config/import?mode=${mode}`, { bundle }),
+  export: (project: string, sections?: string[]) =>
+    api.post<{ ok: boolean; bundle: ConfigBundle; filename: string; error?: string }>(
+      `/api/projects/${encodeURIComponent(project)}/config/export`,
+      sections ? { sections } : {}
+    ),
+  import: (project: string, bundle: ConfigBundle, mode: "dry-run" | "merge" | "overwrite") =>
+    api.post<ConfigImportResult>(
+      `/api/projects/${encodeURIComponent(project)}/config/import?mode=${mode}`,
+      { bundle }
+    ),
+  events: (project: string, limit = 100) =>
+    api.get<{ ok: boolean; events: ConfigTransferEvent[] }>(
+      `/api/projects/${encodeURIComponent(project)}/config/transfer-events?limit=${limit}`
+    ),
 };
 
 export interface MantisProject {

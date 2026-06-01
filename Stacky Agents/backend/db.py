@@ -55,6 +55,7 @@ def init_db() -> None:
     from services.embeddings import ExecutionEmbedding  # noqa: F401  (FA-01)
     from services.ado_pipeline_inference import PipelineInferenceCache  # noqa: F401
     from services.ado_publisher import AgentHtmlPublish  # noqa: F401
+    from services.ado_write_outbox import AdoWriteOperation  # noqa: F401  (Fase 2 — outbox ADO)
     from services.ticket_status import TicketStatusEvent  # noqa: F401  (ticket state tracking)
     from services.pm.models import (  # noqa: F401  (PM Intelligence Suite v2 — Fase 1 + 2)
         PmSprintSnapshot,
@@ -89,6 +90,15 @@ def _migrate_add_columns() -> None:
         ("users", "skills_json", "TEXT"),
         ("users", "area_paths_json", "TEXT"),
         ("users", "max_active_tickets", "INTEGER DEFAULT 5"),
+        # Fase 1 plan creacion-tareas-comentarios-100-efectiva (2026-05-29):
+        # Mapeo explicito de columnas operativas en agent_executions que antes
+        # se seteaban como atributos dinamicos y no persistian al cerrar la sesion.
+        ("agent_executions", "html_output_path", "VARCHAR(500)"),
+        ("agent_executions", "completion_source", "VARCHAR(40)"),
+        # Fase 1: trazabilidad de la publicacion ADO del comentario para
+        # verificacion y reconciliacion idempotente.
+        ("agent_html_publish", "comment_id", "INTEGER"),
+        ("agent_html_publish", "marker", "VARCHAR(200)"),
     ]
     with engine.connect() as conn:
         for table, col, col_type in migrations:

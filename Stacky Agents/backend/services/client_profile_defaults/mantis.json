@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "code_layout": {
+    "online_path": "src",
+    "batch_path": "scripts",
+    "db_scripts_path": "db",
+    "lib_path": "lib",
+    "test_path": "tests",
+    "file_extensions": {
+      "ui": "",
+      "ui_code_behind": "",
+      "code": ""
+    },
+    "architecture_layers": ["UI", "Service", "DB"]
+  },
+  "language": {
+    "primary": "",
+    "comment_traceability": "// {ticket_token} | {YYYY-MM-DD} | {description}",
+    "ticket_token_pattern": "MANTIS-{id}",
+    "languages_in_ridioma": ["ESP"]
+  },
+  "database": {
+    "type": "mysql",
+    "server": "",
+    "readonly_auth_ref": "auth/db_readonly.json",
+    "readonly_user_hint": "",
+    "connection_kind": "mysql_cli",
+    "dml_policy": "prohibited_runtime_must_emit_sql",
+    "catalog_master_files": {},
+    "naming_conventions": {
+      "table_prefix": "",
+      "column_prefix_len": 0
+    }
+  },
+  "build": {
+    "tool": "",
+    "command": "",
+    "configuration": "Release",
+    "online_solutions": []
+  },
+  "conventions": {
+    "ridioma_helper": "",
+    "ridioma_message_const": "",
+    "string_sanitizer": "",
+    "error_helpers": []
+  },
+  "docs_indexes": {
+    "technical_master": "docs/tech/INDEX.md",
+    "functional_online": "docs/functional/INDEX.md",
+    "functional_batch": ""
+  },
+  "tracker_state_machine": {
+    "functional": {
+      "input_states": ["new", "acknowledged"],
+      "blocked_state": "feedback",
+      "next_state_ok": "confirmed"
+    },
+    "technical": {
+      "input_states": ["confirmed"],
+      "blocked_state": "feedback",
+      "next_state_ok": "assigned"
+    },
+    "developer": {
+      "input_states": ["assigned"],
+      "in_progress": "assigned",
+      "blocked_state": "feedback",
+      "next_state_ok": "resolved"
+    }
+  },
+  "terminology": {
+    "product_name": "",
+    "client_label": "",
+    "domain_glossary_ref": ""
+  },
+  "extensions": {}
+}

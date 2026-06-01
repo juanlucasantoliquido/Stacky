@@ -49,13 +49,20 @@
 
 /* ─── Hint ─────────────────────────────────── */
 .hint {
-  margin: 0;
   padding: 10px 20px;
   font-size: 11px;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border-muted);
   background: var(--bg-base);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+.hintText {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .hint code {
   font-family: var(--font-mono);
@@ -64,6 +71,18 @@
   padding: 1px 4px;
   border-radius: 3px;
 }
+.sourceBtn {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.sourceBtn:hover { border-color: var(--accent); color: var(--accent); }
+.sourceBtn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* ─── List ─────────────────────────────────── */
 .empty {
@@ -122,6 +141,21 @@
 .agentDesc {
   font-size: 11px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ruta absoluta del .agent.md que el runner usará para este agente
+   (plan-agentes-bundled-en-stacky-2026-05-29 §3.4). direction: rtl mantiene
+   visible el final de la ruta — el nombre de archivo — cuando se trunca. */
+.agentPath {
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  color: var(--text-muted);
+  opacity: 0.75;
+  direction: rtl;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

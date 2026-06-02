@@ -1062,6 +1062,14 @@ export interface ClientProfileValidation {
   normalized: ClientProfile | null;
 }
 
+export interface ClientProfilePathCheck {
+  section: string;
+  key: string;
+  rel: string;
+  abs: string;
+  exists: boolean;
+}
+
 export interface ClientProfileGetResponse {
   ok: boolean;
   project: string;
@@ -1069,6 +1077,8 @@ export interface ClientProfileGetResponse {
   has_profile: boolean;
   profile: ClientProfile | null;
   default_template: ClientProfile;
+  prefilled_profile?: ClientProfile;
+  path_check?: ClientProfilePathCheck[];
   validation: ClientProfileValidation | null;
   error?: string;
 }

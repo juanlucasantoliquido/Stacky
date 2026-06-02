@@ -261,3 +261,120 @@ def test_db_readonly_auth_get_meta_after_save(client):
     assert body["user"] == "READER"
     # El password NUNCA se expone en el metadata.
     assert "password" not in body
+
+
+# ── prefilled_profile y path_check (plan 17) ─────────────────────────────────
+
+def test_get_profile_returns_prefilled_profile(client):
+    """GET devuelve `prefilled_profile` con secciones no-BD pobladas."""
+    r = client.get("/api/projects/RSPACIFICO/client-profile")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert "prefilled_profile" in body
+    pf = body["prefilled_profile"]
+    # Secciones no-BD presentes y con valores del template ADO.
+    assert pf["code_layout"]["online_path"] == "trunk/OnLine"
+    assert "language" in pf
+    assert "tracker_state_machine" in pf
+    # database NO se inyecta desde el template.
+    assert "database" not in pf
+
+
+def test_get_profile_prefilled_does_not_override_saved_value(client):
+    """Si el operador guardó una ruta custom, prefilled_profile la respeta."""
+    profile = {
+        "schema_version": 1,
+        "code_layout": {"online_path": "src/custom"},
+        "language": {"primary": "csharp"},
+        "tracker_state_machine": {
+            "functional": {"next_state_ok": "Technical review"},
+            "technical": {"next_state_ok": "To Do"},
+            "developer": {"next_state_ok": "Reviewed by Dev"},
+        },
+    }
+    client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
+    r = client.get("/api/projects/RSPACIFICO/client-profile")
+    body = r.get_json()
+    # La ruta del operador gana sobre el default.
+    assert body["prefilled_profile"]["code_layout"]["online_path"] == "src/custom"
+
+
+def test_get_profile_prefilled_database_from_saved_profile(client):
+    """Si el perfil guardado tiene database, prefilled_profile lo conserva."""
+    profile = {
+        "schema_version": 1,
+        "code_layout": {"online_path": "trunk/OnLine"},
+        "language": {"primary": "csharp"},
+        "tracker_state_machine": {
+            "functional": {"next_state_ok": "Technical review"},
+            "technical": {"next_state_ok": "To Do"},
+            "developer": {"next_state_ok": "Reviewed by Dev"},
+        },
+        "database": {"connection_kind": "odbc"},
+    }
+    client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
+    r = client.get("/api/projects/RSPACIFICO/client-profile")
+    body = r.get_json()
+    assert body["prefilled_profile"]["database"]["connection_kind"] == "odbc"
+
+
+def test_get_profile_returns_path_check_field(client):
+    """GET devuelve `path_check` (puede ser lista vacía si no hay workspace_root)."""
+    r = client.get("/api/projects/RSPACIFICO/client-profile")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert "path_check" in body
+    # Sin workspace_root configurado, path_check debe ser lista vacía.
+    assert body["path_check"] == []
+
+
+def test_get_profile_path_check_with_workspace_root(tmp_path, monkeypatch):
+    """Con workspace_root configurado, path_check incluye las rutas del layout."""
+    import json as _json
+    import project_manager
+    import services.client_profile as cp_mod
+    import api.client_profile as api_cp
+
+    projects_dir = tmp_path / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(project_manager, "PROJECTS_DIR", projects_dir)
+    monkeypatch.setattr(cp_mod, "projects_dir", lambda: projects_dir)
+    monkeypatch.setattr(api_cp, "PROJECTS_DIR", projects_dir)
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    # Crear directorio trunk/OnLine para que exista.
+    (workspace / "trunk" / "OnLine").mkdir(parents=True)
+
+    pdir = projects_dir / "PROJ"
+    pdir.mkdir(parents=True, exist_ok=True)
+    (pdir / "config.json").write_text(_json.dumps({
+        "name": "PROJ",
+        "issue_tracker": {"type": "azure_devops"},
+        "workspace_root": str(workspace).replace("\\", "/"),
+    }), encoding="utf-8")
+
+    from app import create_app
+    app = create_app()
+    app.config.update(TESTING=True)
+    with app.test_client() as c:
+        r = c.get("/api/projects/PROJ/client-profile")
+    body = r.get_json()
+    assert "path_check" in body
+    checks = {f"{e['section']}.{e['key']}": e for e in body["path_check"]}
+    # trunk/OnLine existe → exists=True
+    assert checks["code_layout.online_path"]["exists"] is True
+    # trunk/Batch no existe → exists=False
+    assert checks["code_layout.batch_path"]["exists"] is False
+
+
+def test_get_profile_regression_existing_fields_intact(client):
+    """Regresión: profile, default_template, has_profile, validation siguen presentes."""
+    r = client.get("/api/projects/RSPACIFICO/client-profile")
+    body = r.get_json()
+    assert "profile" in body
+    assert "default_template" in body
+    assert "has_profile" in body
+    assert "tracker_type" in body
+    # validation solo se incluye cuando has_profile es True.
+    assert "validation" in body

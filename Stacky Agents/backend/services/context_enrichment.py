@@ -89,32 +89,64 @@ def enrich_blocks(
 # Pasos individuales (cada uno best-effort)
 # ---------------------------------------------------------------------------
 
-def _inject_client_profile_block(
-    blocks: list[dict], project_name: str | None, log: LogFn
-) -> list[dict]:
-    """Inyecta un bloque `client-profile` con el perfil del cliente del
-    proyecto activo. Plan 16, Fase 2.
+def build_client_profile_block(
+    project_name: str | None, log: LogFn | None = None
+) -> dict | None:
+    """Construye el bloque `client-profile` del proyecto activo (o None).
+
+    Es el seam ÚNICO de armado del bloque: lo usan tanto el pipeline batch
+    (`_inject_client_profile_block`, vía `enrich_blocks` para los runtimes
+    github_copilot/codex_cli/claude_code_cli) como el flujo interactivo
+    (`api/agents.open_chat`, que abre GitHub Copilot Chat y antes NO pasaba por
+    `enrich_blocks` → el agente cliente-agnóstico arrancaba sin perfil). Tener un
+    solo armador garantiza que el Developer reciba EXACTAMENTE el mismo perfil en
+    ambos caminos.
+
+    Garantía (plan "client profile siempre presente"): se devuelve un bloque
+    SIEMPRE que haya proyecto — si el operador configuró un perfil se usa tal
+    cual; si no, se cae al template default del tracker (marcado como "sin
+    configurar") para que ningún agente arranque a ciegas.
 
     Feature flag: `STACKY_INJECT_CLIENT_PROFILE` (default `true`). Si está OFF
-    la inyección se omite incluso si hay perfil.
+    devuelve None aunque haya perfil.
 
-    Best-effort: cualquier excepción degrada en warning y no bloquea.
+    Best-effort: cualquier excepción degrada en warning y devuelve None.
     """
+    log = log or _noop_log
     if os.getenv("STACKY_INJECT_CLIENT_PROFILE", "true").lower() in {"0", "false", "off"}:
-        return blocks
+        return None
     if not project_name:
-        return blocks
+        return None
+
     try:
-        from services.client_profile import load_client_profile
+        from services.client_profile import (
+            get_project_tracker_type,
+            load_client_profile,
+            merge_with_defaults,
+        )
 
-        profile = load_client_profile(project_name)
+        persisted = load_client_profile(project_name)
+        # "Configurado" = el operador guardó algo con contenido real. Un perfil
+        # vacío (`{"schema_version": 1}`, p. ej. sembrado por un build viejo que
+        # no traía templates) cuenta como NO configurado: igual lo completamos
+        # con el layout estándar y lo marcamos como defaults.
+        has_real_profile = isinstance(persisted, dict) and bool(
+            set(persisted.keys()) - {"schema_version"}
+        )
+        tracker_type = get_project_tracker_type(project_name)
+        # Completar SIEMPRE con el template default del tracker para que el
+        # agente reciba rutas/estados/BD aunque el perfil guardado esté parcial
+        # o vacío (plan 17 §3.5). `merge_with_defaults` incluye `database` —a
+        # diferencia de `complete_client_profile`, usado por el editor— porque el
+        # agente necesita type/dml_policy/naming (no hay secretos: el server va
+        # vacío en el default y la credencial vive cifrada fuera del perfil).
+        profile = merge_with_defaults(
+            persisted if isinstance(persisted, dict) else {}, tracker_type
+        )
+        using_defaults = not has_real_profile
         if not profile:
-            return blocks
-
-        existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
-        if "client-profile" in existing_ids:
-            log("info", "client-profile ya presente, omitiendo inyección")
-            return blocks
+            # Sin template default disponible: no hay nada útil que inyectar.
+            return None
 
         # Render legible — YAML-ish para humanos, pero el contenido es plain text
         # (el LLM lo parsea como texto). Usamos json.dumps con indent porque es
@@ -128,22 +160,49 @@ def _inject_client_profile_block(
         if client_label or product:
             title_suffix = " — " + " · ".join([s for s in (client_label, product) if s])
 
+        marker = " (defaults sin configurar)" if using_defaults else ""
         content = _json.dumps(profile, ensure_ascii=False, indent=2, sort_keys=True)
+        if using_defaults:
+            content = (
+                "// NOTA: perfil no configurado por el operador. Estos son los "
+                "defaults del tracker; confirmá rutas/estados antes de usarlos.\n"
+                + content
+            )
         block = {
             "kind": "text",
             "id": "client-profile",
-            "title": f"Perfil del cliente: {project_name}{title_suffix}",
+            "title": f"Perfil del cliente: {project_name}{title_suffix}{marker}",
             "content": content,
         }
         log(
             "info",
             f"client-profile inyectado para proyecto={project_name} "
-            f"(schema_version={profile.get('schema_version')})",
+            f"(schema_version={profile.get('schema_version')}, "
+            f"using_defaults={using_defaults})",
         )
-        return list(blocks) + [block]
+        return block
     except Exception as exc:  # noqa: BLE001
         log("warn", f"client-profile no se pudo inyectar (continuando): {exc}")
+        return None
+
+
+def _inject_client_profile_block(
+    blocks: list[dict], project_name: str | None, log: LogFn
+) -> list[dict]:
+    """Inyecta un bloque `client-profile` en `blocks`. Plan 16, Fase 2.
+
+    Delega el armado del bloque en `build_client_profile_block` (seam único) y
+    sólo agrega la deduplicación contra un bloque ya presente en la lista.
+    """
+    existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
+    if "client-profile" in existing_ids:
+        log("info", "client-profile ya presente, omitiendo inyección")
         return blocks
+
+    block = build_client_profile_block(project_name, log)
+    if block is None:
+        return blocks
+    return list(blocks) + [block]
 
 
 def _inject_epic_structured(

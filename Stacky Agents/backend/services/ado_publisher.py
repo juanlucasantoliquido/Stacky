@@ -219,6 +219,12 @@ def publish_from_execution(
             )
         ado_id = int(ticket.ado_id)
         ticket_id = ticket.id
+        # Proyecto del ticket (multi-tenant): el comentario se publica SIEMPRE en
+        # el ADO del proyecto al que pertenece el ticket, no en el proyecto
+        # activo global. Capturamos ambos identificadores dentro de la sesión
+        # para resolver el AdoClient correcto en el paso 5.
+        ticket_stacky_project = getattr(ticket, "stacky_project_name", None)
+        ticket_tracker_project = getattr(ticket, "project", None)
         # html_output_path es atributo dinámico (no columna SQL). Si nunca se
         # seteó vía PATCH /stacky-status, será None y read_and_validate cae a
         # la convención `Agentes/outputs/{ado_id}/comment.html`.
@@ -278,7 +284,13 @@ def publish_from_execution(
     # permitir verificacion idempotente post-publish via fetch_comments.
     marker = _stacky_comment_marker(execution_id=execution_id, html_sha=html_sha)
     try:
-        client = (client_factory or _default_client)()
+        if client_factory is not None:
+            client = client_factory()
+        else:
+            client = _client_for_ticket_project(
+                stacky_project_name=ticket_stacky_project,
+                tracker_project=ticket_tracker_project,
+            )
         html_to_publish, attachment_summary = _prepare_html_attachments(
             output=output,
             client=client,
@@ -428,6 +440,42 @@ def _default_client():
     """Construye el AdoClient real. Tests inyectan client_factory."""
     from services.ado_client import AdoClient
     return AdoClient()
+
+
+def _client_for_ticket_project(
+    *, stacky_project_name: str | None, tracker_project: str | None
+):
+    """Construye el AdoClient del PROYECTO DEL TICKET (fix multi-tenant).
+
+    Bug: usar `AdoClient()` pelado (vía `_default_client`) resolvía org/project
+    desde el PROYECTO ACTIVO global (`get_active_project`), no desde el proyecto
+    del ticket. En un deploy multi-cliente (p.ej. RSSICREA org=Ubimia-STAB-SAAS
+    project=UCollect_Strategist conviviendo con RSPACIFICO), publicar el
+    comentario de un ticket de un proyecto NO-activo enviaba el POST al ADO
+    equivocado o fallaba — el work item correcto (p.ej. ADO 12 de SICREA) nunca
+    recibía el comentario.
+
+    Resolvemos el cliente igual que `api/tickets._ado_client_for_ticket`:
+    por `stacky_project_name` + `tracker_project` del ticket.
+
+    - Sin `stacky_project_name` en el ticket → fallback a `_default_client()`
+      (comportamiento previo idéntico: deploys single-tenant y tickets legacy
+      sin estampar el proyecto Stacky resuelven desde el activo global, igual
+      que antes; blast-radius cero para esos casos).
+    - Con `stacky_project_name` → resolución estricta por el proyecto del
+      ticket (es la autoridad multi-tenant, igual que
+      `api/tickets._ado_client_for_ticket`). Si `build_ado_client` falla
+      (auth faltante, proyecto mal configurado), NO caemos al default: dejamos
+      propagar la excepción para que el paso 5 la registre como `failed` con
+      motivo visible. Publicar en el proyecto equivocado es peor que fallar.
+    """
+    if not stacky_project_name:
+        return _default_client()
+    from services.project_context import build_ado_client
+    return build_ado_client(
+        project_name=stacky_project_name,
+        tracker_project=tracker_project,
+    )
 
 
 def _stacky_comment_marker(*, execution_id: int | None, html_sha: str) -> str:

@@ -234,6 +234,51 @@ def test_client_profile_section_round_trip(env):
     assert again.get("idempotent") is True
 
 
+def test_client_profile_merge_idempotent_when_target_has_extra_keys(env):
+    """Regresión (revisión adversarial): el destino sembrado tiene secciones que
+    el perfil entrante (parcial) no trae. El diff debe compararse contra el
+    resultado real del shallow-merge — comparar el perfil entrante crudo reportaba
+    cambios fantasma e idempotent=False en cada re-aplicación. Amplificado ahora
+    que todo proyecto arranca con el template default sembrado."""
+    ct = env["ct"]
+    full_profile = {
+        "schema_version": 1,
+        "code_layout": {"online_path": "trunk/OnLine"},
+        "language": {"primary": "csharp"},
+        "build": {"tool": "msbuild"},               # el entrante NO trae estas
+        "conventions": {"string_sanitizer": "cFormat.StToBD()"},  # secciones
+        "tracker_state_machine": {"developer": {"next_state_ok": "Reviewed by Dev"}},
+    }
+    _write_project(env["projects_dir"], "TARGET", {
+        "name": "TARGET",
+        "display_name": "TARGET",
+        "workspace_root": "",
+        "docs_paths": {"technical": "", "functional": ""},
+        "issue_tracker": {"type": "azure_devops", "auth_file": "auth/ado_auth.json"},
+        "client_profile": full_profile,
+    })
+    partial = {
+        "schema_version": 1,
+        "code_layout": {"online_path": "trunk/Nuevo"},
+        "language": {"primary": "csharp"},
+    }
+    bundle = {"meta": {"schemaVersion": 1}, "clientProfile": {"profile": partial}}
+
+    first = ct.apply_import("TARGET", bundle, mode="merge")
+    assert first["applied"] is True
+    target_cfg = json.loads(
+        (env["projects_dir"] / "TARGET" / "config.json").read_text(encoding="utf-8")
+    )
+    # shallow-merge: lo entrante pisa, lo extra del destino se preserva.
+    assert target_cfg["client_profile"]["code_layout"]["online_path"] == "trunk/Nuevo"
+    assert target_cfg["client_profile"]["build"]["tool"] == "msbuild"
+
+    # Re-aplicar el mismo bundle parcial: idempotente (sin cambios fantasma).
+    again = ct.apply_import("TARGET", bundle, mode="merge")
+    assert again.get("idempotent") is True
+    assert again["changes"] == []
+
+
 def test_export_rejects_secret_in_client_profile(env):
     ct = env["ct"]
     src_cfg = dict(SOURCE_CFG)

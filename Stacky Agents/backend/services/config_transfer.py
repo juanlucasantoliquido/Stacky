@@ -562,13 +562,25 @@ def compute_diff(name: str, bundle: dict, *, overwrite: bool) -> dict:
     if "clientProfile" in bundle:
         inc_profile = (bundle["clientProfile"] or {}).get("profile")
         cur_profile = cfg.get("client_profile")
-        if inc_profile is None and overwrite and cur_profile is not None:
-            changes.append({"section": "clientProfile", "field": "profile",
-                            "action": "remove", "old": cur_profile, "new": None})
-        elif inc_profile is not None and inc_profile != cur_profile:
-            changes.append({"section": "clientProfile", "field": "profile",
-                            "action": "update" if cur_profile is not None else "add",
-                            "old": cur_profile, "new": inc_profile})
+        if inc_profile is None:
+            if overwrite and cur_profile is not None:
+                changes.append({"section": "clientProfile", "field": "profile",
+                                "action": "remove", "old": cur_profile, "new": None})
+        else:
+            # El diff debe comparar contra lo que apply_import realmente escribirá.
+            # En merge eso es un shallow-merge ({**cur, **inc}); comparar el perfil
+            # entrante crudo contra el actual reportaba cambios fantasma (e
+            # idempotent=False) en cada re-aplicación cuando el destino tenía claves
+            # top-level que el entrante no trae — el caso común ahora que todo
+            # proyecto arranca con el template default sembrado.
+            if not overwrite and isinstance(cur_profile, dict) and isinstance(inc_profile, dict):
+                effective = {**cur_profile, **inc_profile}
+            else:
+                effective = inc_profile
+            if effective != cur_profile:
+                changes.append({"section": "clientProfile", "field": "profile",
+                                "action": "update" if cur_profile is not None else "add",
+                                "old": cur_profile, "new": effective})
 
     if "uiPreferences" in bundle:
         cur_prefs = _load_ui_preferences()

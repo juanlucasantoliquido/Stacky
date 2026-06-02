@@ -9,7 +9,7 @@ El formato de config.json es compatible con el de Stacky, sección issue_tracker
   {
     "name": "RSPACIFICO",
     "display_name": "RS Pacífico",
-    "workspace_root": "C:/Repos/RSPacifico/trunk",
+    "workspace_root": "C:/Repos/RSPacifico",
     "issue_tracker": {
       "type": "azure_devops",       ← o "jira"
       "organization": "UbimiaPacifico",
@@ -158,6 +158,16 @@ def initialize_project(
         "issue_tracker":  issue_tracker,
     }
 
+    # Seed del client_profile en la creación: todo proyecto arranca con el
+    # template default de su tracker, de modo que ningún agente quede sin perfil.
+    # Idempotente: si ya existía (preservado del spread de `existing`) no se toca,
+    # así una actualización/PATCH nunca pisa lo que configuró el operador.
+    if "client_profile" not in config:
+        from services.client_profile import get_default_client_profile
+
+        tracker_type = (issue_tracker.get("type") or "azure_devops").strip().lower()
+        config["client_profile"] = get_default_client_profile(tracker_type)
+
     cfg_file.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # Copiar docs/ al workspace si no existe
@@ -278,7 +288,7 @@ def initialize_ado_project(
             name="RSPACIFICO",
             organization="UbimiaPacifico",
             ado_project="Strategist_Pacifico",
-            workspace_root="C:/Repos/RSPacifico/trunk",
+            workspace_root="C:/Repos/RSPacifico",  # raíz del repo (contiene trunk/)
         )
     """
     tracker: dict = {
@@ -325,7 +335,7 @@ def initialize_jira_project(
             name="B2IMPACT",
             url="https://empresa.atlassian.net",
             project_key="B2IM",
-            workspace_root="C:/Repos/B2Impact/trunk",
+            workspace_root="C:/Repos/B2Impact",  # raíz del repo (contiene trunk/)
         )
 
     Ejemplo (Server/DC):
@@ -333,7 +343,7 @@ def initialize_jira_project(
             name="MIPROYECTO",
             url="https://jira.intranet.com",
             project_key="PROJ",
-            workspace_root="C:/Repos/MiRepo/trunk",
+            workspace_root="C:/Repos/MiRepo",  # raíz del repo (contiene trunk/)
             api_version="2",
         )
     """

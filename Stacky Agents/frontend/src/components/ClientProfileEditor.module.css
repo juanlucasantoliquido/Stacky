@@ -1,0 +1,458 @@
+/* ClientProfileEditor — formulario estructurado del perfil del cliente.
+   Espeja AgentWorkflowForm.module.css y consume los tokens de theme.css. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── Cards / secciones ───────────────────────────────────────── */
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.requiredTag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+
+.intro {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.intro code {
+  font-family: var(--font-mono);
+  background: var(--mono-bg);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+/* ─── Header card (título + estado + acciones) ────────────────── */
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.metaItem {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.metaItem strong {
+  color: var(--text-primary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 2px 9px;
+  border: 1px solid transparent;
+}
+
+.badgeOk {
+  color: var(--success);
+  border-color: var(--success);
+  background: rgba(63, 185, 80, 0.12);
+}
+
+.badgeDefault {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: rgba(210, 153, 34, 0.12);
+}
+
+.badgePrefilled {
+  color: var(--accent-hot);
+  border-color: var(--accent-hot);
+  background: rgba(56, 139, 253, 0.12);
+}
+
+/* ─── View toggle (Formulario / JSON) ─────────────────────────── */
+.viewToggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.toggleBtn {
+  padding: 5px 14px;
+  font-size: 12px;
+  border: none;
+  border-radius: 0;
+  background: var(--bg-elev);
+  color: var(--text-muted);
+}
+
+.toggleBtnActive {
+  composes: toggleBtn;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ─── Fields ──────────────────────────────────────────────────── */
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldFull {
+  grid-column: 1 / -1;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.1s;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--accent);
+}
+
+.hint {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin: 0;
+}
+
+/* ─── Chips (string arrays) ───────────────────────────────────── */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  border: 1.5px solid var(--accent);
+  background: rgba(56, 139, 253, 0.12);
+  color: var(--accent-hot);
+  font-weight: 600;
+}
+
+.chipRemove {
+  border: none;
+  background: transparent;
+  color: var(--accent-hot);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 50%;
+}
+
+.chipRemove:hover {
+  background: rgba(248, 81, 73, 0.2);
+  color: var(--danger);
+  border-color: transparent;
+}
+
+.chipInput {
+  flex: 1;
+  min-width: 120px;
+  padding: 4px 8px;
+  background: var(--bg-elev);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.chipInput:focus {
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+/* ─── Key/value maps ──────────────────────────────────────────── */
+.kvList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kvRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.kvKey {
+  flex: 0 0 32%;
+}
+
+.kvVal {
+  flex: 1;
+}
+
+.iconBtn {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  font-size: 13px;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  color: var(--text-muted);
+}
+
+.iconBtn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--bg-panel);
+}
+
+.addBtn {
+  align-self: flex-start;
+  padding: 4px 12px;
+  font-size: 11px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.addBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent-hot);
+}
+
+/* ─── Tracker roles ───────────────────────────────────────────── */
+.roleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.roleCard {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.roleName {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-hot);
+  margin: 0;
+}
+
+/* ─── Buttons / actions ───────────────────────────────────────── */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.btnPrimary {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--accent-hot);
+  border-color: var(--accent-hot);
+}
+
+.btnGhost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.btnGhost:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--text-faint);
+}
+
+.btnDanger {
+  composes: btnGhost;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.btnDanger:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.12);
+  color: var(--danger);
+}
+
+/* ─── Messages ────────────────────────────────────────────────── */
+.error {
+  font-size: 12px;
+  color: var(--danger);
+  margin: 8px 0 0;
+}
+
+.notice {
+  font-size: 12px;
+  color: var(--success);
+  margin: 8px 0 0;
+}
+
+.warningsBox {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(210, 153, 34, 0.1);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+}
+
+.warningsTitle {
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.warningsList {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+/* ─── Path check (resolución de rutas ✓/⚠) ───────────────────── */
+.pathCheckList {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pathCheckRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.pathCheckOk {
+  color: var(--success);
+  background: rgba(63, 185, 80, 0.08);
+}
+
+.pathCheckWarn {
+  color: var(--warn);
+  background: rgba(210, 153, 34, 0.1);
+}
+
+.pathCheckIcon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.pathCheckRel {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.pathCheckAbs {
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── JSON view ───────────────────────────────────────────────── */
+.jsonArea {
+  width: 100%;
+  min-height: 420px;
+  background: var(--mono-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.jsonArea:focus {
+  border-color: var(--accent);
+}

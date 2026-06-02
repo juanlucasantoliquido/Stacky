@@ -1,7 +1,21 @@
 import logging
+import mimetypes
 import os
 import time
 from pathlib import Path
+
+# En Windows, `mimetypes` deriva las asociaciones del registro
+# (HKEY_CLASSES_ROOT\.js -> "Content Type"). Si una máquina tiene `.js` mapeado a
+# text/plain o text/html — algo que pisan varios instaladores — Flask sirve los
+# módulos ES con el Content-Type equivocado y el navegador los rechaza
+# ("Failed to load module script: Expected a JavaScript module script..."),
+# dejando la pantalla en negro. Forzamos los tipos correctos para que el release
+# funcione igual en todas las máquinas, sin depender del registro del SO.
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("application/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("application/json", ".json")
+mimetypes.add_type("image/svg+xml", ".svg")
 
 # Usar el truststore del SO (Windows / macOS) para SSL — necesario en redes con
 # inspección TLS corporativa (Zscaler, etc.) que firman con un root no presente
@@ -367,6 +381,20 @@ def create_app() -> Flask:
     if dist_dir is not None:
         dist_path = Path(dist_dir)
 
+        # Content-Type explícito por extensión. No dependemos de `mimetypes` ni
+        # del registro de Windows: en algunas máquinas `.js` queda mapeado a
+        # text/plain y el navegador rechaza los módulos ES ("Expected a
+        # JavaScript module script..."), dejando la pantalla en negro.
+        _ASSET_CONTENT_TYPES = {
+            ".js": "text/javascript",
+            ".mjs": "text/javascript",
+            ".css": "text/css",
+            ".json": "application/json",
+            ".svg": "image/svg+xml",
+            ".wasm": "application/wasm",
+            ".map": "application/json",
+        }
+
         @app.get("/")
         def _serve_spa_index():
             return send_from_directory(dist_path, "index.html")
@@ -378,7 +406,11 @@ def create_app() -> Flask:
 
             candidate = dist_path / asset_path
             if candidate.exists() and candidate.is_file():
-                return send_from_directory(dist_path, asset_path)
+                response = send_from_directory(dist_path, asset_path)
+                forced = _ASSET_CONTENT_TYPES.get(candidate.suffix.lower())
+                if forced is not None:
+                    response.headers["Content-Type"] = forced
+                return response
 
             return send_from_directory(dist_path, "index.html")
 

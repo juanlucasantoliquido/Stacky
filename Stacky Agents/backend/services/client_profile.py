@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime_paths import projects_dir
+from services.client_profile_default_templates import DEFAULT_TEMPLATES
 
 
 SCHEMA_VERSION = 1
@@ -85,19 +86,34 @@ class ValidationResult:
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
 def _read_default_template(tracker_type: str) -> dict:
-    """Carga un template default desde el directorio de defaults.
+    """Devuelve el template default del tracker.
 
-    Si el tracker no tiene template específico, devuelve `azure_devops` como
-    fallback (es el más completo y conocido).
+    Orden de resolución:
+      1. JSON en disco (`client_profile_defaults/{tracker}.json`) — mirror
+         editable en dev; permite override por proyecto/máquina sin tocar código.
+      2. Template embebido en `client_profile_default_templates.py` — fallback
+         canónico. CRÍTICO para el deploy congelado (PyInstaller): los `*.json`
+         no se empaquetan, pero el módulo `.py` sí (import estático), así que el
+         default nunca queda vacío. Ver el docstring de ese módulo.
+
+    Si el tracker no tiene template específico, cae a `azure_devops` (el más
+    completo y conocido).
     """
     key = (tracker_type or "azure_devops").strip().lower()
-    candidate = _DEFAULTS_DIR / f"{key}.json"
-    if not candidate.exists():
-        candidate = _DEFAULTS_DIR / "azure_devops.json"
-    try:
-        return json.loads(candidate.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+
+    # 1. JSON en disco (dev / overrides). Si el archivo del tracker no existe,
+    #    probamos azure_devops como en el comportamiento histórico.
+    for name in (f"{key}.json", "azure_devops.json"):
+        candidate = _DEFAULTS_DIR / name
+        if candidate.exists():
+            try:
+                return json.loads(candidate.read_text(encoding="utf-8"))
+            except Exception:
+                break  # JSON corrupto → caer al embebido
+
+    # 2. Embebido (deploy congelado u otra falla de disco). Nunca vacío.
+    template = DEFAULT_TEMPLATES.get(key) or DEFAULT_TEMPLATES["azure_devops"]
+    return copy.deepcopy(template)
 
 
 def get_default_client_profile(tracker_type: str | None = None) -> dict:
@@ -228,6 +244,25 @@ def validate_client_profile(profile: Any) -> ValidationResult:
 
 # ── Lectura ──────────────────────────────────────────────────────────────────
 
+def _read_project_config_raw(project_name: str) -> dict | None:
+    """Lee el `config.json` crudo del proyecto vía `projects_dir()`.
+
+    Es el seam único de acceso a disco (el mismo que monkeypatchean los tests):
+    cualquier lectura de la config del proyecto en runtime debe pasar por acá y
+    NO por `project_manager.get_project_config` (que captura su propio
+    `PROJECTS_DIR` en import-time y no respeta el monkeypatch de los tests).
+    """
+    if not project_name:
+        return None
+    cfg_file = projects_dir() / project_name.upper() / "config.json"
+    if not cfg_file.exists():
+        return None
+    try:
+        return json.loads(cfg_file.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 def load_client_profile(project_name: str) -> dict | None:
     """Carga el client_profile desde `projects/<NAME>/config.json`.
 
@@ -236,14 +271,8 @@ def load_client_profile(project_name: str) -> dict | None:
     validación es responsabilidad del caller — los endpoints validan antes de
     persistir; los consumidores en runtime degradan elegante).
     """
-    if not project_name:
-        return None
-    cfg_file = projects_dir() / project_name.upper() / "config.json"
-    if not cfg_file.exists():
-        return None
-    try:
-        cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
-    except Exception:
+    cfg = _read_project_config_raw(project_name)
+    if cfg is None:
         return None
     profile = cfg.get("client_profile")
     if not isinstance(profile, dict):
@@ -253,6 +282,32 @@ def load_client_profile(project_name: str) -> dict | None:
 
 def has_client_profile(project_name: str) -> bool:
     return load_client_profile(project_name) is not None
+
+
+def get_project_tracker_type(project_name: str) -> str:
+    """Tipo de tracker del proyecto (azure_devops|jira|mantis), leído del
+    `config.json` vía el mismo seam que `load_client_profile`. Fallback a
+    `azure_devops` si la config falta o no declara tracker."""
+    cfg = _read_project_config_raw(project_name) or {}
+    tracker = cfg.get("issue_tracker") or {}
+    return (tracker.get("type") or "azure_devops").strip().lower()
+
+
+def load_effective_client_profile(project_name: str) -> dict:
+    """Devuelve SIEMPRE un client_profile usable (nunca None).
+
+    - Si el proyecto tiene `client_profile` configurado → se devuelve tal cual.
+    - Si no → se devuelve el template default del tracker del proyecto.
+
+    Garantiza que ningún agente quede sin perfil: la fuente de verdad sigue
+    siendo el perfil configurado, pero los proyectos sin configurar (legacy o
+    recién creados antes del primer guardado) caen al default del tracker en vez
+    de no recibir nada.
+    """
+    profile = load_client_profile(project_name)
+    if isinstance(profile, dict):
+        return profile
+    return get_default_client_profile(get_project_tracker_type(project_name))
 
 
 # ── Escritura ────────────────────────────────────────────────────────────────
@@ -326,15 +381,87 @@ def merge_with_defaults(profile: dict, tracker_type: str | None = None) -> dict:
     return _deep_merge(get_default_client_profile(tracker_type), profile)
 
 
+# ── Auto-llenado de layout estándar (plan 17) ─────────────────────────────────
+
+PREFILL_SKIP_SECTIONS: frozenset[str] = frozenset({"database"})
+
+_LAYOUT_PATH_KEYS: tuple[tuple[str, str], ...] = (
+    ("code_layout", "online_path"),
+    ("code_layout", "batch_path"),
+    ("code_layout", "db_scripts_path"),
+    ("code_layout", "lib_path"),
+    ("code_layout", "test_path"),
+    ("docs_indexes", "technical_master"),
+    ("docs_indexes", "functional_online"),
+    ("docs_indexes", "functional_batch"),
+)
+
+
+def complete_client_profile(
+    profile: dict | None,
+    tracker_type: str | None = None,
+    skip_sections: frozenset[str] = PREFILL_SKIP_SECTIONS,
+) -> dict:
+    """Devuelve el perfil con todas las secciones pobladas desde el template
+    default del tracker, excepto las de `skip_sections` (por defecto `database`).
+
+    - Merge no destructivo: lo que ya trae `profile` gana sobre el default.
+    - Las secciones en `skip_sections` se devuelven tal cual vienen en `profile`
+      (no se les inyecta el default): así `database` nunca recibe un server por
+      defecto equivocado.
+    - Idempotente: completar dos veces da el mismo resultado.
+    """
+    default = get_default_client_profile(tracker_type)
+    base = {k: v for k, v in (default or {}).items() if k not in skip_sections}
+    completed = _deep_merge(base, profile or {})
+    # Restaurar las secciones skip tal como venían en el perfil original (no del default).
+    for section in skip_sections:
+        original_value = (profile or {}).get(section)
+        if original_value is not None:
+            completed[section] = copy.deepcopy(original_value)
+        elif section in completed:
+            del completed[section]
+    completed["schema_version"] = SCHEMA_VERSION
+    return completed
+
+
+def resolve_layout_paths(profile: dict, workspace_root: str) -> list[dict]:
+    """Para cada ruta del layout, devuelve {section, key, rel, abs, exists}.
+
+    No lanza; rutas vacías se omiten. `exists` permite que la UI avise al
+    operador sobre rutas que no existen en disco (doble-trunk, typos, etc.).
+    """
+    out: list[dict] = []
+    root = Path(workspace_root) if workspace_root else None
+    for section, key in _LAYOUT_PATH_KEYS:
+        rel = ((profile.get(section) or {}).get(key) or "").strip()
+        if not rel:
+            continue
+        abs_path = (root / rel) if root else None
+        out.append({
+            "section": section,
+            "key": key,
+            "rel": rel,
+            "abs": str(abs_path).replace("\\", "/") if abs_path else "",
+            "exists": bool(abs_path and abs_path.exists()),
+        })
+    return out
+
+
 __all__ = [
+    "PREFILL_SKIP_SECTIONS",
     "SCHEMA_VERSION",
     "ClientProfileError",
     "ValidationResult",
     "clear_client_profile",
+    "complete_client_profile",
     "get_default_client_profile",
+    "get_project_tracker_type",
     "has_client_profile",
     "load_client_profile",
+    "load_effective_client_profile",
     "merge_with_defaults",
+    "resolve_layout_paths",
     "save_client_profile",
     "validate_client_profile",
 ]

@@ -490,6 +490,12 @@ $pySpec = Join-Path $buildRoot "pyinstaller-spec"
 Remove-Item -LiteralPath $pyDist, $pyWork, $pySpec -Recurse -Force -ErrorAction SilentlyContinue
 Push-Location $backendDir
 try {
+    # --collect-data services: empaqueta los archivos de DATOS dentro del paquete
+    # `services` (p. ej. `client_profile_defaults/*.json`). `--collect-submodules`
+    # solo trae los `.py`; sin esto los JSON no llegaban al deploy congelado y
+    # get_default_client_profile() devolvía un template vacío (perfiles sembrados
+    # incompletos + "client-profile no inyectado"). El fallback embebido en
+    # services/client_profile_default_templates.py cubre el caso aunque esto falle.
     & $venvPython -m PyInstaller `
         --noconfirm `
         --clean `
@@ -507,6 +513,7 @@ try {
         --collect-submodules win32crypt `
         --collect-submodules win32api `
         --collect-submodules pythonjsonlogger `
+        --collect-data services `
         app.py
 } finally {
     Pop-Location
@@ -611,6 +618,8 @@ Write-Step "Copiando scripts de release"
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\INSTALL.ps1") -Destination (Join-Path $releaseDir "INSTALL.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\START.bat") -Destination (Join-Path $releaseDir "START.bat") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\smoke_test.ps1") -Destination (Join-Path $releaseDir "smoke_test.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\Setup-Copilot.ps1") -Destination (Join-Path $releaseDir "Setup-Copilot.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\SETUP-COPILOT.bat") -Destination (Join-Path $releaseDir "SETUP-COPILOT.bat") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\INSTALLER.md") -Destination (Join-Path $releaseDir "INSTALLER.md") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\OPERATOR_GUIDE.md") -Destination (Join-Path $releaseDir "OPERATOR_GUIDE.md") -Force
 Write-OK "Scripts copiados"

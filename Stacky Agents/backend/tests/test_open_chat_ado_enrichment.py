@@ -368,6 +368,147 @@ def test_open_chat_works_when_ado_unavailable(client):
     assert "## Adjuntos" not in msg
 
 
+# ── /open-chat — inyección del client-profile (paridad con enrich_blocks) ────
+#
+# Antes, /open-chat NO pasaba por `context_enrichment.enrich_blocks`, así que el
+# bloque `client-profile` no llegaba al prompt. El Developer cliente-agnóstico
+# depende de ese bloque (rutas, build, estados) y arrancaba "a ciegas" (el Técnico
+# no lo notaba porque su .agent.md tiene los datos de Pacífico hardcodeados).
+# Estos tests blindan que el flujo interactivo inyecte el MISMO perfil.
+
+
+def test_open_chat_message_includes_client_profile(client, monkeypatch, tmp_path):
+    """El message enviado al bridge incluye el bloque `client-profile` del
+    proyecto (perfil configurado por el operador)."""
+    import json as _json
+
+    import services.client_profile as cp
+    from db import session_scope
+    from models import Ticket
+
+    pdir = tmp_path / "projects"
+    (pdir / "RSPACIFICO").mkdir(parents=True)
+    profile = {
+        "schema_version": 1,
+        "code_layout": {"online_path": "trunk/OnLineXYZ"},
+        "language": {"primary": "csharp"},
+        "tracker_state_machine": {"developer": {"next_state_ok": "Reviewed by Dev"}},
+        "terminology": {"client_label": "Pacífico", "product_name": "Strategist"},
+    }
+    (pdir / "RSPACIFICO" / "config.json").write_text(
+        _json.dumps({"name": "RSPACIFICO", "client_profile": profile}), encoding="utf-8"
+    )
+    monkeypatch.setattr(cp, "projects_dir", lambda: pdir)
+
+    with session_scope() as session:
+        t = Ticket(
+            ado_id=12,
+            project="RSPacifico",
+            title="dev ticket",
+            ado_state="To Do",
+            description="implementar X",
+        )
+        session.add(t)
+        session.flush()
+        ticket_id = t.id
+
+    captured: dict = {}
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+    def _fake_post(url, json=None, timeout=None):
+        captured["json"] = json
+        return _Resp()
+
+    # ADO apagado para aislar: sólo nos interesa el bloque client-profile.
+    with patch(
+        "services.ado_client.AdoClient", side_effect=RuntimeError("ADO off")
+    ), patch(
+        "api.agents.ensure_project_vscode", return_value=_fake_project_context()
+    ), patch("requests.post", side_effect=_fake_post):
+        r = client.post(
+            "/api/agents/open-chat",
+            json={
+                "ticket_id": ticket_id,
+                "context_blocks": [],
+                "vscode_agent_filename": "Developer.agent.md",
+            },
+        )
+
+    assert r.status_code == 200
+    msg = captured["json"]["message"]
+    # El bloque del perfil llegó al prompt con los datos del proyecto.
+    assert "Perfil del cliente: RSPACIFICO" in msg
+    assert "trunk/OnLineXYZ" in msg  # ruta específica del perfil configurado
+    assert "Reviewed by Dev" in msg  # estado destino del developer
+    # El encabezado del ticket sigue intacto.
+    assert "ADO-12" in msg
+
+
+def test_open_chat_skips_client_profile_when_flag_off(client, monkeypatch, tmp_path):
+    """Con STACKY_INJECT_CLIENT_PROFILE=false, el bloque no se inyecta (gate del
+    operador respetado), sin romper el resto del flujo."""
+    import json as _json
+
+    import services.client_profile as cp
+    from db import session_scope
+    from models import Ticket
+
+    monkeypatch.setenv("STACKY_INJECT_CLIENT_PROFILE", "false")
+    pdir = tmp_path / "projects"
+    (pdir / "RSPACIFICO").mkdir(parents=True)
+    (pdir / "RSPACIFICO" / "config.json").write_text(
+        _json.dumps(
+            {"name": "RSPACIFICO", "client_profile": {"schema_version": 1, "code_layout": {"online_path": "trunk/Z"}}}
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cp, "projects_dir", lambda: pdir)
+
+    with session_scope() as session:
+        t = Ticket(ado_id=13, project="RSPacifico", title="dev ticket 2", ado_state="To Do", description="y")
+        session.add(t)
+        session.flush()
+        ticket_id = t.id
+
+    captured: dict = {}
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+    def _fake_post(url, json=None, timeout=None):
+        captured["json"] = json
+        return _Resp()
+
+    with patch(
+        "services.ado_client.AdoClient", side_effect=RuntimeError("ADO off")
+    ), patch(
+        "api.agents.ensure_project_vscode", return_value=_fake_project_context()
+    ), patch("requests.post", side_effect=_fake_post):
+        r = client.post(
+            "/api/agents/open-chat",
+            json={
+                "ticket_id": ticket_id,
+                "context_blocks": [],
+                "vscode_agent_filename": "Developer.agent.md",
+            },
+        )
+
+    assert r.status_code == 200
+    msg = captured["json"]["message"]
+    assert "Perfil del cliente" not in msg
+    assert "trunk/Z" not in msg
+    # El flujo base sigue intacto.
+    assert "ADO-13" in msg
+
+
 # ── /open-chat — códigos de error granulares (contrato con el frontend) ─────
 #
 # El frontend (`AgentLaunchModal.tsx`) discrimina por status code para mostrar

@@ -34,8 +34,11 @@ from project_manager import PROJECTS_DIR, get_project_config
 from services.client_profile import (
     ClientProfileError,
     clear_client_profile,
+    complete_client_profile,
     get_default_client_profile,
+    get_project_tracker_type,
     load_client_profile,
+    resolve_layout_paths,
     save_client_profile,
     validate_client_profile,
 )
@@ -60,6 +63,17 @@ def _tracker_type_for(project_name: str) -> str:
     return (tracker.get("type") or "azure_devops").lower()
 
 
+def _build_path_check(project_name: str, profile: dict | None) -> list[dict]:
+    """Llama a resolve_layout_paths con el workspace_root del proyecto."""
+    if not profile:
+        return []
+    cfg = get_project_config(project_name) or {}
+    workspace_root = cfg.get("workspace_root") or ""
+    if not workspace_root:
+        return []
+    return resolve_layout_paths(profile, workspace_root)
+
+
 # ── GET /api/client-profile/default ──────────────────────────────────────────
 
 @bp.get("/client-profile/default")
@@ -82,9 +96,12 @@ def get_client_profile(project_name: str):
     tracker_type = _tracker_type_for(project_name)
     has_profile = profile is not None
 
+    prefilled = complete_client_profile(profile, tracker_type)
+    path_check = _build_path_check(project_name, prefilled)
+
     validation_dict = None
     if has_profile:
-        validation = validate_client_profile(profile)
+        validation = validate_client_profile(prefilled)
         validation_dict = validation.to_dict()
 
     return jsonify({
@@ -94,6 +111,8 @@ def get_client_profile(project_name: str):
         "has_profile": has_profile,
         "profile": profile,
         "default_template": get_default_client_profile(tracker_type),
+        "prefilled_profile": prefilled,
+        "path_check": path_check,
         "validation": validation_dict,
     })
 
@@ -134,7 +153,8 @@ def put_client_profile(project_name: str):
         },
     )
 
-    validation = validate_client_profile(normalized)
+    tracker_type = _tracker_type_for(project_name)
+    validation = validate_client_profile(complete_client_profile(normalized, tracker_type))
     return jsonify({
         "ok": True,
         "profile": normalized,

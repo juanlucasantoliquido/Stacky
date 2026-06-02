@@ -486,6 +486,31 @@ def open_chat():
     except Exception as exc:  # noqa: BLE001
         abort(503, f"No se pudo preparar VS Code del proyecto '{project_ctx.stacky_project_name}': {exc}")
 
+    # Client-profile: el flujo interactivo (open_chat) NO pasa por
+    # `context_enrichment.enrich_blocks`, así que históricamente el bloque
+    # `client-profile` no llegaba al prompt. Los agentes cliente-agnósticos
+    # (p.ej. Developer) dependen de ese bloque para conocer rutas/build/estados;
+    # sin él arrancaban "a ciegas" (el Técnico no lo notaba porque su .agent.md
+    # tiene los datos de Pacífico hardcodeados). Inyectamos el MISMO bloque que
+    # arma el pipeline batch, usando el seam único `build_client_profile_block`,
+    # para que ambos caminos entreguen idéntico perfil. Best-effort: si no hay
+    # proyecto/perfil o el flag está OFF, se omite sin romper el flujo.
+    try:
+        from services.context_enrichment import build_client_profile_block
+
+        cp_block = build_client_profile_block(
+            project_ctx.stacky_project_name,
+            log=lambda _lvl, _msg: logger.info("open_chat client-profile: %s", _msg),
+        )
+        if cp_block:
+            ticket_header_parts.append(
+                f"## {cp_block['title']}\n\n{cp_block['content']}"
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "open_chat — no se pudo inyectar client-profile (continuando): %s", exc
+        )
+
     # Enriquecimiento ADO on-demand: comentarios + adjuntos del work item.
     # Mismo patrón que api/tickets.py — silencia errores para no romper el flujo.
     if ado_id_for_enrich:

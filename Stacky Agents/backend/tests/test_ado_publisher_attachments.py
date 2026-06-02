@@ -102,3 +102,72 @@ def test_publish_from_execution_uploads_and_embeds_attachments(tmp_path, monkeyp
     assert len(fake.comments) == 1
     assert token not in fake.comments[0][1]
     assert "https://ado.test/ADO-771234_final.png" in fake.comments[0][1]
+
+
+def test_publish_resolves_ado_client_from_ticket_project(tmp_path, monkeypatch):
+    """Regresión multi-tenant: sin client_factory, el publish debe construir el
+    AdoClient con el PROYECTO DEL TICKET (build_ado_client) y NO con
+    _default_client (proyecto activo global). Sin este fix, el comentario de un
+    ticket de un proyecto no-activo (p.ej. SICREA) se publicaba en el ADO
+    equivocado o no se publicaba.
+    """
+    import services.ado_publisher as publisher
+    import services.project_context as project_context
+    from db import init_db, session_scope
+    from models import AgentExecution, Ticket
+
+    monkeypatch.setenv("STACKY_REPO_ROOT", str(tmp_path))
+    init_db()
+
+    ado_id = 12
+    out_dir = tmp_path / "Agentes" / "outputs" / str(ado_id)
+    out_dir.mkdir(parents=True)
+    (out_dir / "comment.html").write_text("<p>SICREA ADO-12</p>", encoding="utf-8")
+
+    with session_scope() as session:
+        ticket = Ticket(
+            ado_id=ado_id,
+            project="UCollect_Strategist",   # tracker_project de SICREA
+            stacky_project_name="RSSICREA",  # proyecto Stacky del ticket
+            title="SICREA publish",
+            ado_state="Active",
+        )
+        session.add(ticket)
+        session.flush()
+        execution = AgentExecution(
+            ticket_id=ticket.id,
+            agent_type="analyst",
+            status="running",
+            started_by="pytest",
+            started_at=datetime.utcnow(),
+        )
+        execution.input_context = []
+        session.add(execution)
+        session.flush()
+        execution_id = execution.id
+
+    captured: dict = {}
+
+    class FakeClient:
+        def post_comment(self, received_ado_id, text, fmt="html"):
+            captured["ado_id"] = received_ado_id
+            return {"id": 99}
+
+    def fake_build_ado_client(project_name=None, *, tracker_project=None, ticket=None):
+        captured["project_name"] = project_name
+        captured["tracker_project"] = tracker_project
+        return FakeClient()
+
+    # _default_client NO debe ser usado cuando el ticket tiene proyecto.
+    def _boom():
+        raise AssertionError("_default_client no debe usarse para tickets con proyecto")
+
+    monkeypatch.setattr(project_context, "build_ado_client", fake_build_ado_client)
+    monkeypatch.setattr(publisher, "_default_client", _boom)
+
+    result = publisher.publish_from_execution(execution_id, triggered_by="pytest")
+
+    assert result.ok is True
+    assert captured["ado_id"] == ado_id
+    assert captured["project_name"] == "RSSICREA"
+    assert captured["tracker_project"] == "UCollect_Strategist"

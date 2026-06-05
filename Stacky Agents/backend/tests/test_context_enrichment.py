@@ -126,6 +126,9 @@ def test_enrich_blocks_injects_epic_structured_for_functional_epic(app_ctx):
     assert "ado-epic-structured" in ids
     epic_block = next(b for b in blocks if b.get("id") == "ado-epic-structured")
     assert "Epic de prueba" in epic_block["title"]
+    assert "epic_ado_id:" in epic_block["content"]
+    assert "epic_output_dir: Agentes/outputs/epic-" in epic_block["content"]
+    assert "no uses etiquetas humanas" in epic_block["content"]
     assert "cuerpo" in epic_block["content"]
     # ado_context deshabilitado por env → stats marca skipped, sin llamada de red
     assert ado_stats is not None and ado_stats.get("skipped") is True

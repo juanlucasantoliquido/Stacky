@@ -205,8 +205,6 @@ export interface Project {
   workspace_root: string;
   agents_dir?: string;
   docs_paths?: DocsPaths;
-  docs_technical_path?: string;
-  docs_functional_path?: string;
   tracker_type: TrackerType;
   /** Azure DevOps fields */
   organization?: string;
@@ -246,8 +244,6 @@ export interface InitProjectPayload {
   workspace_root: string;
   agents_dir?: string;
   docs_paths?: DocsPaths;
-  docs_technical_path?: string;
-  docs_functional_path?: string;
   tracker_type: TrackerType;
   // ADO
   organization?: string;

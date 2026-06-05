@@ -270,6 +270,14 @@ def run():
                 if diff.is_delta_eligible:
                     delta_system_prefix = delta_prompt.build_delta_prompt(prev.output, diff)
 
+    # B3 — Auto-asignar el ticket al operador si está sin responsable. Best-effort:
+    # nunca bloquea el lanzamiento del agente (el helper traga sus excepciones).
+    try:
+        from services.ticket_assigner import auto_assign_on_run
+        auto_assign_on_run(int(ticket_id), project_name=project_name)
+    except Exception:  # noqa: BLE001
+        logger.warning("auto_assign_on_run falló (no bloquea el run)", exc_info=True)
+
     try:
         execution_id = agent_runner.run_agent(
             agent_type=agent_type,
@@ -480,6 +488,15 @@ def open_chat():
     project_ctx = resolve_project_context(project_name=resolved_project_name, ticket=resolved_ticket)
     if project_ctx is None:
         abort(400, "No se pudo resolver el proyecto para abrir GitHub Copilot.")
+
+    # B3 — Auto-asignar el ticket al operador si está sin responsable (path GitHub
+    # Copilot). Best-effort: nunca bloquea la apertura del chat.
+    if local_ticket_id is not None:
+        try:
+            from services.ticket_assigner import auto_assign_on_run
+            auto_assign_on_run(int(local_ticket_id), project_name=project_ctx.stacky_project_name)
+        except Exception:  # noqa: BLE001
+            logger.warning("open_chat — auto_assign_on_run falló (no bloquea)", exc_info=True)
 
     try:
         project_ctx = ensure_project_vscode(project_ctx.stacky_project_name)

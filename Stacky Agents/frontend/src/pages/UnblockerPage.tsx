@@ -11,7 +11,7 @@
  *
  * Datos: GET /api/tickets/unblocker-board (Tickets.unblockerBoard).
  */
-import { useCallback } from "react";
+import { useCallback, useState, type DragEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Tickets,
@@ -21,7 +21,6 @@ import {
 import type { Ticket } from "../types";
 import { useWorkbench } from "../store/workbench";
 import FinishWorkButton from "../components/FinishWorkButton";
-import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import styles from "./UnblockerPage.module.css";
 
 const READINESS_LABEL: Record<UnblockerReadiness, string> = {
@@ -43,10 +42,18 @@ const READINESS_CLASS: Record<UnblockerReadiness, string> = {
 function UnblockerCard({
   item,
   onChanged,
+  artifactRoot,
+  activeProjectName,
 }: {
   item: UnblockerItem;
   onChanged: () => void;
+  artifactRoot: string | null;
+  activeProjectName: string | null;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+
   // Ticket mínimo para FinishWorkButton (sólo usa id / ado_id / title).
   const ticketShim: Ticket = {
     id: item.ticket_id,
@@ -62,8 +69,109 @@ function UnblockerCard({
   const isEpicWithPending = item.total_pending > 0 && item.ado_id != null;
   const canPublishComment = item.comment.exists && item.ado_id != null;
 
+  const createDetectedTasks = useCallback(async () => {
+    if (!item.ado_id || item.pending_tasks.length === 0) return;
+    setBusy(true);
+    setActionMessage("Creando Task(s) detectadas...");
+    try {
+      for (const pt of item.pending_tasks) {
+        const result = await Tickets.createChildTask(item.ado_id, {
+          pending_task_path: pt.pending_task_path,
+          operator_reason: "Desatascador: creación manual desde artifact detectado",
+          project: activeProjectName,
+          repo_root: artifactRoot,
+        });
+        if (!result.ok) {
+          throw new Error(result.message || result.error || "create-child-task falló");
+        }
+      }
+      setActionMessage("Task(s) creadas.");
+      onChanged();
+    } catch (err) {
+      setActionMessage((err as Error)?.message ?? "No se pudo crear la Task.");
+    } finally {
+      setBusy(false);
+    }
+  }, [item.ado_id, item.pending_tasks, activeProjectName, artifactRoot, onChanged]);
+
+  const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDropActive(false);
+    if (!item.ado_id) return;
+    const dropped = Array.from(event.dataTransfer.files || []);
+    if (dropped.length === 0) return;
+
+    setBusy(true);
+    setActionMessage("Leyendo archivo(s)...");
+    try {
+      const files = await Promise.all(
+        dropped.map(async (file) => ({
+          name: file.name,
+          content: await file.text(),
+        }))
+      );
+      const hasPending = files.some((f) => f.name.toLowerCase() === "pending-task.json");
+      const hasComment = files.some((f) => f.name.toLowerCase().endsWith(".html"));
+      const rescueRoot = hasComment && !hasPending ? null : artifactRoot;
+      const rescue = await Tickets.rescueArtifact(item.ado_id, {
+        artifact_type: "auto",
+        files,
+        project: activeProjectName,
+        repo_root: rescueRoot,
+      });
+      if (!rescue.ok) {
+        throw new Error(rescue.message || rescue.error || "No se pudo preparar el artifact.");
+      }
+
+      if (rescue.artifact_type === "pending_task" && rescue.pending_task_path) {
+        setActionMessage("Artifact preparado. Creando Task...");
+        const created = await Tickets.createChildTask(item.ado_id, {
+          pending_task_path: rescue.pending_task_path,
+          operator_reason: "Desatascador: creación desde archivo arrastrado",
+          project: activeProjectName,
+          repo_root: rescue.repo_root || rescueRoot,
+        });
+        if (!created.ok) {
+          throw new Error(created.message || created.error || "create-child-task falló");
+        }
+        setActionMessage(`Task creada: ADO-${created.task_ado_id}`);
+      } else if (rescue.artifact_type === "comment" && rescue.html_output_path) {
+        setActionMessage("Comentario preparado. Publicando...");
+        const published = await Tickets.finishWork(item.ticket_id, {
+          operator_reason: "Desatascador: publicación desde comment.html arrastrado",
+          publish_to_ado: true,
+          html_output_path: rescue.html_output_path,
+          force_publish: true,
+          force_finish: true,
+          cancel_active_execution: true,
+        });
+        if (!published.ok) {
+          throw new Error("finish-work no pudo completar la publicación.");
+        }
+        setActionMessage("Comentario publicado.");
+      } else {
+        throw new Error("El backend no reconoció pending-task.json ni comment.html.");
+      }
+      onChanged();
+    } catch (err) {
+      setActionMessage((err as Error)?.message ?? "No se pudo procesar el drop.");
+    } finally {
+      setBusy(false);
+    }
+  }, [item.ado_id, item.ticket_id, activeProjectName, artifactRoot, onChanged]);
+
   return (
-    <article className={styles.card} data-readiness={item.readiness}>
+    <article
+      className={`${styles.card} ${dropActive ? styles.cardDropActive : ""}`}
+      data-readiness={item.readiness}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDropActive(true);
+      }}
+      onDragLeave={() => setDropActive(false)}
+      onDrop={handleDrop}
+    >
       <header className={styles.cardHeader}>
         <div className={styles.titleRow}>
           {item.ado_url ? (
@@ -124,13 +232,14 @@ function UnblockerCard({
       {item.pending_tasks.length > 0 && (
         <ul className={styles.rfList}>
           {item.pending_tasks.map((pt) => (
-            <li key={pt.rf_id}>
+            <li key={`${pt.rf_id}-${pt.pending_task_path}`}>
               <strong>{pt.rf_id}</strong> — {pt.title}{" "}
               {pt.plan_exists ? (
                 <span className={styles.planOk}>plan ✓</span>
               ) : (
                 <span className={styles.planMissing}>plan ✗</span>
               )}
+              <code className={styles.pathCode}>{pt.pending_task_path}</code>
             </li>
           ))}
         </ul>
@@ -147,10 +256,9 @@ function UnblockerCard({
       {/* Acciones de desatasco */}
       <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
         {isEpicWithPending && (
-          <CreateChildTaskButton
-            epicAdoId={item.ado_id as number}
-            onTaskCreated={onChanged}
-          />
+          <button className={styles.actionBtn} onClick={createDetectedTasks} disabled={busy}>
+            {busy ? "Procesando..." : "Crear Task(s) detectadas"}
+          </button>
         )}
         {canPublishComment && (
           <FinishWorkButton ticket={ticketShim} onCompleted={onChanged} />
@@ -161,6 +269,10 @@ function UnblockerCard({
           </span>
         )}
       </div>
+      <div className={styles.dropZone}>
+        Arrastrá pending-task.json, plan-de-pruebas.md o comment.html para rescatar este ADO.
+      </div>
+      {actionMessage && <p className={styles.actionMessage}>{actionMessage}</p>}
     </article>
   );
 }
@@ -168,10 +280,12 @@ function UnblockerCard({
 export default function UnblockerPage() {
   const qc = useQueryClient();
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
+  const [rootDraft, setRootDraft] = useState("");
+  const [artifactRoot, setArtifactRoot] = useState<string | null>(null);
 
   const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
-    queryKey: ["unblocker-board", activeProjectName],
-    queryFn: () => Tickets.unblockerBoard(activeProjectName),
+    queryKey: ["unblocker-board", activeProjectName, artifactRoot],
+    queryFn: () => Tickets.unblockerBoard(activeProjectName, artifactRoot),
     refetchOnWindowFocus: false,
   });
 
@@ -183,6 +297,7 @@ export default function UnblockerPage() {
 
   const items = data?.items ?? [];
   const counts = data?.counts;
+  const scan = data?.scan;
 
   return (
     <div className={styles.page}>
@@ -204,6 +319,55 @@ export default function UnblockerPage() {
           {isFetching ? "Refrescando…" : "↻ Refrescar"}
         </button>
       </header>
+
+      <form
+        className={styles.pathBar}
+        onSubmit={(event) => {
+          event.preventDefault();
+          setArtifactRoot(rootDraft.trim() || null);
+        }}
+      >
+        <label>
+          Ruta de artifacts
+          <input
+            value={rootDraft}
+            onChange={(event) => setRootDraft(event.target.value)}
+            placeholder={scan?.outputs_dir || "N:\\GIT\\RS\\RSPACIFICO o ...\\Agentes\\outputs"}
+          />
+        </label>
+        <button className={styles.refreshBtn} type="submit">Aplicar ruta</button>
+        <button
+          className={styles.refreshBtn}
+          type="button"
+          onClick={() => {
+            setRootDraft("");
+            setArtifactRoot(null);
+          }}
+        >
+          Usar actual
+        </button>
+      </form>
+
+      {scan && (
+        <div className={styles.scanInfo}>
+          <div><strong>Desatascador lee:</strong> <code>{scan.outputs_dir}</code> ({scan.outputs_dir_exists ? "existe" : "no existe"})</div>
+          <div><strong>Repo root:</strong> <code>{scan.repo_root}</code></div>
+          {scan.watcher && (
+            <div>
+              <strong>Watcher runtime:</strong>{" "}
+              <code>{scan.watcher.outputs_dir ?? "no iniciado"}</code>{" "}
+              {scan.watcher.running ? "(corriendo)" : "(detenido/ad-hoc)"}
+            </div>
+          )}
+          <div className={styles.scanRoots}>
+            {scan.roots.map((root) => (
+              <span key={root.path} className={root.exists ? styles.rootOk : styles.rootMissing}>
+                {root.label}: {root.exists ? "ok" : "no existe"}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {counts && (
         <div className={styles.counts}>
@@ -231,7 +395,13 @@ export default function UnblockerPage() {
 
       <div className={styles.grid}>
         {items.map((item) => (
-          <UnblockerCard key={item.ticket_id} item={item} onChanged={handleChanged} />
+          <UnblockerCard
+            key={item.ticket_id}
+            item={item}
+            onChanged={handleChanged}
+            artifactRoot={artifactRoot}
+            activeProjectName={activeProjectName}
+          />
         ))}
       </div>
     </div>

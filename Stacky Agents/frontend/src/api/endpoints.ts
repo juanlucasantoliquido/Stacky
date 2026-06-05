@@ -215,8 +215,10 @@ export const Tickets = {
     payload: {
       operator_reason: string;
       publish_to_ado?: boolean;
+      html_output_path?: string | null;
       target_ado_state?: string | null;
       force_publish?: boolean;
+      force_finish?: boolean;
       dry_run?: boolean;
       /** Si true (default server-side), cancela la ejecución activa antes del cierre (Fase 5.B). */
       cancel_active_execution?: boolean;
@@ -248,6 +250,9 @@ export const Tickets = {
       pending_task_path: string;
       operator_reason?: string;
       dry_run?: boolean;
+      project?: string | null;
+      repo_root?: string | null;
+      outputs_root?: string | null;
     }
   ): Promise<CreateChildTaskResponse> =>
     api.postWithHeaders<CreateChildTaskResponse>(
@@ -261,10 +266,26 @@ export const Tickets = {
    * (comment.html / pending-task.json) a nivel board.
    * GET /api/tickets/unblocker-board
    */
-  unblockerBoard: (project?: string | null): Promise<UnblockerBoardResponse> => {
-    const qs = project ? `?project=${encodeURIComponent(project)}` : "";
-    return api.get<UnblockerBoardResponse>(`/api/tickets/unblocker-board${qs}`);
+  unblockerBoard: (project?: string | null, artifactRoot?: string | null): Promise<UnblockerBoardResponse> => {
+    const params = new URLSearchParams();
+    if (project) params.set("project", project);
+    if (artifactRoot) params.set("outputs_root", artifactRoot);
+    const qs = params.toString();
+    return api.get<UnblockerBoardResponse>(`/api/tickets/unblocker-board${qs ? `?${qs}` : ""}`);
   },
+
+  rescueArtifact: (
+    adoId: number,
+    payload: {
+      artifact_type?: "auto" | "pending_task" | "task" | "comment";
+      files: { name: string; content: string }[];
+      project?: string | null;
+      repo_root?: string | null;
+      outputs_root?: string | null;
+      rf_id?: string | null;
+    }
+  ): Promise<RescueArtifactResponse> =>
+    api.post<RescueArtifactResponse>(`/api/tickets/by-ado/${adoId}/rescue-artifact`, payload),
 
   // P2.3 — adjuntos del ticket (portado de WS2)
   attachments: (id: number) =>
@@ -320,10 +341,22 @@ export interface CreateChildTaskResponse {
   ok: boolean;
   dry_run: boolean;
   epic_ado_id: number;
+  task_parent_ado_id?: number | null;
   task_ado_id: number | null;
   task_url: string | null;
   attachment_id: string | null;
   actions: CreateChildTaskAction[];
+  hierarchy_bridge?: {
+    root_parent_ado_id?: number;
+    process_template?: string;
+    path?: string[];
+    steps?: {
+      type: string;
+      ado_id: number;
+      parent_ado_id: number;
+      reused?: boolean;
+    }[];
+  } | null;
   pending_task_consumed: boolean;
   idempotent?: boolean;
   reason?: string;
@@ -374,9 +407,34 @@ export interface UnblockerItem {
   } | null;
 }
 
+export interface UnblockerScanRoot {
+  label: string;
+  path: string;
+  exists: boolean;
+}
+
+export interface UnblockerScanInfo {
+  override?: string | null;
+  repo_root: string;
+  repo_root_exists: boolean;
+  outputs_dir: string;
+  outputs_dir_exists: boolean;
+  roots: UnblockerScanRoot[];
+  watcher?: {
+    running: boolean;
+    outputs_dir: string | null;
+    outputs_dir_exists?: boolean;
+    poll_interval?: number;
+    stable_delay_a?: number;
+    stable_delay_b?: number;
+    error?: string;
+  };
+}
+
 export interface UnblockerBoardResponse {
   ok: boolean;
   repo_root: string;
+  scan?: UnblockerScanInfo;
   items: UnblockerItem[];
   total: number;
   counts: {
@@ -386,6 +444,18 @@ export interface UnblockerBoardResponse {
     waiting_files: number;
     files_error: number;
   };
+}
+
+export interface RescueArtifactResponse {
+  ok: boolean;
+  artifact_type?: "pending_task" | "comment";
+  repo_root?: string;
+  pending_task_path?: string;
+  html_output_path?: string;
+  normalized_epic_id?: string;
+  original_epic_id?: string | number | null;
+  error?: string;
+  message?: string;
 }
 
 export interface TicketAttachment {

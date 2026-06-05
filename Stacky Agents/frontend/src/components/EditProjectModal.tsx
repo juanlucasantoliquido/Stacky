@@ -15,8 +15,6 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
     display_name:         project.display_name,
     workspace_root:       project.workspace_root,
     agents_dir:           project.agents_dir ?? "",
-    docs_technical_path:  project.docs_paths?.technical ?? project.docs_technical_path ?? "",
-    docs_functional_path: project.docs_paths?.functional ?? project.docs_functional_path ?? "",
     docs_paths:           project.docs_paths ?? { technical: "", functional: "" },
     tracker_type:         project.tracker_type,
     organization:         project.organization ?? "",
@@ -172,15 +170,28 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
 
   function patch(key: keyof InitProjectPayload, value: unknown) {
     setForm((f) => ({ ...f, [key]: value }));
-    if (key === "docs_technical_path" || key === "docs_functional_path") {
-      setDocsCheckMessage(null);
-    }
+  }
+
+  function docsPath(kind: "technical" | "functional"): string {
+    return form.docs_paths?.[kind] ?? "";
+  }
+
+  function patchDocsPath(kind: "technical" | "functional", value: string) {
+    setForm((f) => ({
+      ...f,
+      docs_paths: {
+        technical: f.docs_paths?.technical ?? "",
+        functional: f.docs_paths?.functional ?? "",
+        [kind]: value,
+      },
+    }));
+    setDocsCheckMessage(null);
   }
 
   function buildPayload(): Partial<InitProjectPayload> {
     const docs_paths = {
-      technical: String(form.docs_technical_path ?? "").trim(),
-      functional: String(form.docs_functional_path ?? "").trim(),
+      technical: docsPath("technical").trim(),
+      functional: docsPath("functional").trim(),
     };
     return { ...form, docs_paths };
   }
@@ -204,14 +215,14 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
 
   async function browseDocsPath(kind: "technical" | "functional") {
     setError(null);
-    const currentPath = kind === "technical" ? form.docs_technical_path : form.docs_functional_path;
+    const currentPath = docsPath(kind);
     try {
       const res = await Projects.browseFolder({
         title: kind === "technical" ? "Seleccionar documentación técnica" : "Seleccionar documentación funcional / manual",
         initial_dir: String(currentPath || form.workspace_root || ""),
       });
       if (res.ok && res.path) {
-        patch(kind === "technical" ? "docs_technical_path" : "docs_functional_path", res.path);
+        patchDocsPath(kind, res.path);
       } else if (!res.ok) {
         setError(res.error || "No se pudo abrir el selector de carpeta");
       }
@@ -318,8 +329,8 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
                 className={styles.input}
                 type="text"
                 placeholder="Ej: C:\Docs\MiProyecto\tecnica"
-                value={form.docs_technical_path ?? ""}
-                onChange={(e) => patch("docs_technical_path", e.target.value)}
+                value={docsPath("technical")}
+                onChange={(e) => patchDocsPath("technical", e.target.value)}
               />
               <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("technical")}>
                 Examinar...
@@ -332,8 +343,8 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
                 className={styles.input}
                 type="text"
                 placeholder="Ej: C:\Docs\MiProyecto\funcional"
-                value={form.docs_functional_path ?? ""}
-                onChange={(e) => patch("docs_functional_path", e.target.value)}
+                value={docsPath("functional")}
+                onChange={(e) => patchDocsPath("functional", e.target.value)}
               />
               <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("functional")}>
                 Examinar...

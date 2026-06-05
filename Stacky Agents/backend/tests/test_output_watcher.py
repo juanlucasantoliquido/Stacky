@@ -606,6 +606,110 @@ def test_mode_a_auto_creates_without_running_execution(client, repo_root_dir, mo
     assert r["mode_a_closes"] == 0
 
 
+def test_mode_a_invalid_pending_task_is_terminal_skip(client, repo_root_dir, monkeypatch):
+    """JSON inválido no debe quedar reintentando cada scan como error transitorio."""
+    import requests as _req
+    import services.output_watcher as ow_mod
+
+    ow_mod._SEEN_TERMINAL_PENDING.clear()
+    calls: list[dict] = []
+
+    def _fake_post(url, json=None, timeout=None, **kw):
+        calls.append({"url": url, "body": json})
+        raise AssertionError("no debe llamar al endpoint con JSON inválido")
+
+    monkeypatch.setattr(_req, "post", _fake_post)
+
+    rf_dir = repo_root_dir / "Agentes" / "outputs" / "epic-40401" / "RF-BAD"
+    rf_dir.mkdir(parents=True, exist_ok=True)
+    pt = rf_dir / "pending-task.json"
+    pt.write_text("", encoding="utf-8")
+
+    first = ow_mod._auto_create_pending_tasks(epic_ado_id=40401, pending_files=[pt])
+    second = ow_mod._auto_create_pending_tasks(epic_ado_id=40401, pending_files=[pt])
+
+    assert first == {"created": 0, "skipped": 1, "errors": 0}
+    assert second == {"created": 0, "skipped": 1, "errors": 0}
+    assert calls == []
+
+
+def test_mode_a_terminal_4xx_is_quarantined_not_retried(client, repo_root_dir, monkeypatch):
+    """Un 4xx estructural del endpoint no debe contarse como error retryable."""
+    import requests as _req
+    import services.output_watcher as ow_mod
+
+    ow_mod._SEEN_TERMINAL_PENDING.clear()
+    calls: list[dict] = []
+
+    class _FakeResp:
+        status_code = 422
+        text = '{"error":"ADO_PARENT_NOT_FOUND"}'
+
+        def json(self):
+            return {
+                "ok": False,
+                "error": "ADO_PARENT_NOT_FOUND",
+                "message": "El work item padre no existe",
+            }
+
+    def _fake_post(url, json=None, timeout=None, **kw):
+        calls.append({"url": url, "body": json})
+        return _FakeResp()
+
+    monkeypatch.setattr(_req, "post", _fake_post)
+    pt = _write_pending_task(repo_root_dir, 40402, "RF-PARENT404")
+
+    first = ow_mod._auto_create_pending_tasks(
+        epic_ado_id=40402,
+        pending_files=[pt],
+        project_name="RSPACIFICO",
+    )
+    second = ow_mod._auto_create_pending_tasks(
+        epic_ado_id=40402,
+        pending_files=[pt],
+        project_name="RSPACIFICO",
+    )
+
+    assert first == {"created": 0, "skipped": 1, "errors": 0}
+    assert second == {"created": 0, "skipped": 1, "errors": 0}
+    assert len(calls) == 1
+    assert calls[0]["body"]["project"] == "RSPACIFICO"
+
+
+def test_mode_a_transient_auto_create_error_is_not_cached(client, repo_root_dir, monkeypatch):
+    """Si auto-create falla con 5xx, el mtime no se cachea y el watcher reintenta."""
+    import requests as _req
+    from services.output_watcher import AdoOutputWatcher
+
+    calls: list[dict] = []
+
+    class _FakeResp:
+        status_code = 503
+        text = "ADO temporalmente no disponible"
+
+        def json(self):
+            raise ValueError("not json")
+
+    def _fake_post(url, json=None, timeout=None, **kw):
+        calls.append({"url": url, "body": json})
+        return _FakeResp()
+
+    monkeypatch.setattr(_req, "post", _fake_post)
+    monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+
+    ticket_id = _mk_ticket(40403, work_item_type="Epic")
+    _mk_execution(ticket_id)
+    _write_pending_task(repo_root_dir, 40403, "RF-RETRY")
+
+    w = AdoOutputWatcher(stable_delay_a=0.0)
+    w.scan_once()
+    assert len(calls) == 1
+    assert not w._seen_a
+
+    w.scan_once()
+    assert len(calls) == 2
+
+
 def test_mode_a_auto_creates_from_alt_base_when_canonical_missing(client, repo_root_dir, monkeypatch):
     """Regresión (incidente 2026-06-01, proyecto RSSICREA): el agente escribió el
     pending-task.json SÓLO en `output/tickets/epic-{id}/` y NUNCA creó el dir

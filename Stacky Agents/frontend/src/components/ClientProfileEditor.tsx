@@ -106,6 +106,7 @@ function TextField({
   placeholder,
   full,
   type = "text",
+  readOnly = false,
 }: {
   label: string;
   value: string;
@@ -113,6 +114,7 @@ function TextField({
   placeholder?: string;
   full?: boolean;
   type?: "text" | "number";
+  readOnly?: boolean;
 }) {
   return (
     <div className={full ? `${styles.field} ${styles.fieldFull}` : styles.field}>
@@ -123,6 +125,7 @@ function TextField({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
+        readOnly={readOnly}
         spellCheck={false}
       />
     </div>
@@ -450,6 +453,10 @@ export default function ClientProfileEditor() {
     setBaseProfile((prev) => setPath(prev as Json, path, value) as ClientProfile);
   // Placeholder = valor del template default del tracker.
   const ph = (path: string[]) => asStr(getPath(defaultTemplate, path));
+  const hasDbCredential = !!dbAuthQuery.data?.has_credentials;
+  const derivedDbServer = hasDbCredential || dbServer ? dbServer : gs(["database", "server"]);
+  const derivedDbReadonlyUser =
+    hasDbCredential || dbUser ? dbUser : gs(["database", "readonly_user_hint"]);
 
   const switchToJson = () => {
     setAdvancedJson(safeStringify(baseProfile));
@@ -569,49 +576,46 @@ export default function ClientProfileEditor() {
         password: dbPassword,
       });
       if (res.ok) {
-        // Si el proyecto todavía no tiene perfil persistido, lo materializamos
-        // desde el editor (default del tracker) + los datos de BD recién cargados,
-        // así el bloque pasa a "Configurado". Respetamos la vista activa para no
-        // pisar ediciones JSON sin aplicar.
-        const current = !hasProfile ? resolveCurrentProfile() : null;
-        if (!hasProfile && !current) {
+        const current = resolveCurrentProfile();
+        if (!current) {
           setDbNotice(
-            "Credencial BD readonly guardada. (No se auto-creó el perfil: corregí el JSON en 'Avanzado' y guardalo manualmente.)"
+            "Credencial BD readonly guardada. (No se pudo sincronizar el perfil: corregí el JSON en 'Avanzado' y guardalo manualmente.)"
           );
-        } else if (!hasProfile && current) {
+        } else {
           try {
             const seeded = setPath(
               setPath(
                 current as Json,
                 ["database", "server"],
-                dbServer.trim() || asStr(getPath(current as Json, ["database", "server"]))
+                dbServer.trim()
               ),
               ["database", "readonly_user_hint"],
-              dbUser.trim() || asStr(getPath(current as Json, ["database", "readonly_user_hint"]))
+              dbUser.trim()
             ) as ClientProfile;
             const saveRes = await ClientProfileApi.save(projectName, seeded);
             if (saveRes.ok) {
               setBaseProfile(seeded);
+              if (view === "json") setAdvancedJson(safeStringify(seeded));
               setWarnings(saveRes.warnings ?? []);
               await qc.invalidateQueries({ queryKey: ["client-profile", projectName] });
               await qc.invalidateQueries({ queryKey: ["projects"] });
               setDbNotice(
-                "Credencial BD guardada. Se creó el perfil del cliente con el template default — revisá y completá las secciones en el formulario de arriba."
+                hasProfile
+                  ? "Credencial BD readonly guardada. El perfil quedó sincronizado con la credencial."
+                  : "Credencial BD guardada. Se creó el perfil del cliente con el template default — revisá y completá las secciones en el formulario de arriba."
               );
             } else {
               setDbNotice(
-                "Credencial BD readonly guardada. (No se pudo auto-crear el perfil: " +
+                "Credencial BD readonly guardada. (No se pudo sincronizar el perfil: " +
                   (saveRes.error ?? "error desconocido") +
                   " — guardalo manualmente con el formulario de arriba.)"
               );
             }
           } catch {
             setDbNotice(
-              "Credencial BD readonly guardada. (Error al auto-crear el perfil — guardalo manualmente con el formulario de arriba.)"
+              "Credencial BD readonly guardada. (Error al sincronizar el perfil — guardalo manualmente con el formulario de arriba.)"
             );
           }
-        } else {
-          setDbNotice("Credencial BD readonly guardada.");
         }
         setDbPassword("");
         await qc.invalidateQueries({ queryKey: ["client-profile", "db-auth", projectName] });
@@ -787,8 +791,8 @@ export default function ClientProfileEditor() {
           <Section title="Base de datos">
             <div className={styles.grid2}>
               <TextField label="Tipo" value={gs(["database", "type"])} onChange={(v) => set(["database", "type"], v)} placeholder={ph(["database", "type"])} />
-              <TextField label="Server" value={gs(["database", "server"])} onChange={(v) => set(["database", "server"], v)} placeholder="aisbddev02.cloud.ais-int.net" />
-              <TextField label="Usuario readonly (hint)" value={gs(["database", "readonly_user_hint"])} onChange={(v) => set(["database", "readonly_user_hint"], v)} placeholder="RSPACIFICOREAD" />
+              <TextField label="Server" value={derivedDbServer} onChange={() => {}} placeholder="Se completa desde Credencial BD readonly" readOnly />
+              <TextField label="Usuario readonly (hint)" value={derivedDbReadonlyUser} onChange={() => {}} placeholder="Se completa desde Credencial BD readonly" readOnly />
               <TextField label="Tipo de conexión" value={gs(["database", "connection_kind"])} onChange={(v) => set(["database", "connection_kind"], v)} placeholder={ph(["database", "connection_kind"])} />
               <TextField label="Política DML" value={gs(["database", "dml_policy"])} onChange={(v) => set(["database", "dml_policy"], v)} placeholder={ph(["database", "dml_policy"])} />
               <TextField label="Ref. auth readonly" value={gs(["database", "readonly_auth_ref"])} onChange={(v) => set(["database", "readonly_auth_ref"], v)} placeholder="auth/db_readonly.json" />

@@ -59,6 +59,26 @@ def _parse_iso(value: str | None) -> datetime | None:
         return None
 
 
+def _extract_assignee(fields: dict) -> str | None:
+    """Normaliza System.AssignedTo a un uniqueName en minúsculas.
+
+    B1: el filtro "Mis tareas" comparaba este valor contra la identidad del
+    operador. Antes guardábamos `uniqueName` o `displayName` sin normalizar, lo
+    que hacía frágil cualquier igualdad (email vs displayName, casing/dominio).
+    Preferimos `uniqueName` (email) y, en su defecto, `displayName`, pero SIEMPRE
+    en minúsculas para que el matcheo del board sea estable. El frontend además
+    aplica un fallback por parte-local, así que un displayName ocasional no
+    rompe el filtro.
+    """
+    assigned_raw = fields.get("System.AssignedTo") or {}
+    if isinstance(assigned_raw, dict):
+        value = assigned_raw.get("uniqueName") or assigned_raw.get("displayName") or ""
+    else:
+        value = str(assigned_raw)
+    value = value.strip().lower()
+    return value or None
+
+
 def _legacy_ticket_match(stacky_project_name: str | None, tracker_project: str):
     clauses = [Ticket.project == tracker_project]
     if stacky_project_name:
@@ -120,14 +140,8 @@ def sync_tickets(client: AdoClient | None = None, project_name: str | None = Non
             except (TypeError, ValueError):
                 parent_ado_id = None
 
-            # P6: extraer uniqueName del asignado (System.AssignedTo puede ser dict u objeto)
-            assigned_raw = fields.get("System.AssignedTo") or {}
-            if isinstance(assigned_raw, dict):
-                assigned_to_ado = assigned_raw.get("uniqueName") or assigned_raw.get("displayName") or None
-            else:
-                assigned_to_ado = str(assigned_raw).strip() if assigned_raw else None
-            if assigned_to_ado == "":
-                assigned_to_ado = None
+            # P6/B1: uniqueName del asignado normalizado a minúsculas (ver _extract_assignee)
+            assigned_to_ado = _extract_assignee(fields)
 
             new_state = str(fields.get("System.State") or "")
 
@@ -260,11 +274,7 @@ def upsert_single_work_item(client: AdoClient, ado_id: int) -> dict | None:
         parent_ado_id = int(parent_raw) if parent_raw else None
     except (TypeError, ValueError):
         parent_ado_id = None
-    assigned_raw = fields.get("System.AssignedTo") or {}
-    if isinstance(assigned_raw, dict):
-        assigned_to_ado = assigned_raw.get("uniqueName") or assigned_raw.get("displayName") or None
-    else:
-        assigned_to_ado = str(assigned_raw).strip() or None
+    assigned_to_ado = _extract_assignee(fields)  # B1: uniqueName normalizado a minúsculas
     new_state = str(fields.get("System.State") or "")
 
     with session_scope() as session:

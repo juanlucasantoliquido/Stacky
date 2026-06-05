@@ -13,8 +13,6 @@ const EMPTY: InitProjectPayload = {
   display_name: "",
   workspace_root: "",
   agents_dir: "",
-  docs_technical_path: "",
-  docs_functional_path: "",
   docs_paths: { technical: "", functional: "" },
   tracker_type: "azure_devops",
   organization: "",
@@ -51,15 +49,28 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
 
   function patch(key: keyof InitProjectPayload, value: unknown) {
     setForm((f) => ({ ...f, [key]: value }));
-    if (key === "docs_technical_path" || key === "docs_functional_path") {
-      setDocsCheckMessage(null);
-    }
+  }
+
+  function docsPath(kind: "technical" | "functional"): string {
+    return form.docs_paths?.[kind] ?? "";
+  }
+
+  function patchDocsPath(kind: "technical" | "functional", value: string) {
+    setForm((f) => ({
+      ...f,
+      docs_paths: {
+        technical: f.docs_paths?.technical ?? "",
+        functional: f.docs_paths?.functional ?? "",
+        [kind]: value,
+      },
+    }));
+    setDocsCheckMessage(null);
   }
 
   function buildPayload(): InitProjectPayload {
     const docs_paths = {
-      technical: (form.docs_technical_path || "").trim(),
-      functional: (form.docs_functional_path || "").trim(),
+      technical: docsPath("technical").trim(),
+      functional: docsPath("functional").trim(),
     };
     return { ...form, docs_paths };
   }
@@ -83,14 +94,14 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
 
   async function browseDocsPath(kind: "technical" | "functional") {
     setError(null);
-    const currentPath = kind === "technical" ? form.docs_technical_path : form.docs_functional_path;
+    const currentPath = docsPath(kind);
     try {
       const res = await Projects.browseFolder({
         title: kind === "technical" ? "Seleccionar documentación técnica" : "Seleccionar documentación funcional / manual",
         initial_dir: currentPath || form.workspace_root || "",
       });
       if (res.ok && res.path) {
-        patch(kind === "technical" ? "docs_technical_path" : "docs_functional_path", res.path);
+        patchDocsPath(kind, res.path);
       } else if (!res.ok) {
         setError(res.error || "No se pudo abrir el selector de carpeta");
       }
@@ -278,8 +289,8 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
                 className={styles.input}
                 type="text"
                 placeholder="Ej: C:\Docs\MiProyecto\tecnica"
-                value={form.docs_technical_path ?? ""}
-                onChange={(e) => patch("docs_technical_path", e.target.value)}
+                value={docsPath("technical")}
+                onChange={(e) => patchDocsPath("technical", e.target.value)}
               />
               <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("technical")}>
                 Examinar...
@@ -292,8 +303,8 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
                 className={styles.input}
                 type="text"
                 placeholder="Ej: C:\Docs\MiProyecto\funcional"
-                value={form.docs_functional_path ?? ""}
-                onChange={(e) => patch("docs_functional_path", e.target.value)}
+                value={docsPath("functional")}
+                onChange={(e) => patchDocsPath("functional", e.target.value)}
               />
               <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("functional")}>
                 Examinar...

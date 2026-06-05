@@ -469,9 +469,11 @@ class AdoOutputWatcher:
         #
         # Si STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS == "false", el helper
         # devuelve todo como skipped (gate del operador re-habilitable).
+        project_name = _project_name_for_epic(epic_ado_id)
         auto_create_summary = _auto_create_pending_tasks(
             epic_ado_id=epic_ado_id,
             pending_files=pending_files,
+            project_name=project_name,
         )
         if auto_create_summary["created"] > 0 or auto_create_summary["errors"] > 0:
             logger.info(
@@ -537,7 +539,8 @@ class AdoOutputWatcher:
                     "output_watcher mode_a: exec=%d epic-%s ya tiene close event (id=%d) — skip",
                     running_exec.id, epic_ado_id, already_event.id,
                 )
-                self._seen_a[str(epic_dir)] = max_mtime_ns
+                if not auto_create_had_errors:
+                    self._seen_a[str(epic_dir)] = max_mtime_ns
                 round_result.mode_a_skipped += 1
                 return
 
@@ -563,7 +566,8 @@ class AdoOutputWatcher:
             auto_publish=False,  # explícito: Epics no llevan comment.html
         )
 
-        self._seen_a[str(epic_dir)] = max_mtime_ns
+        if not auto_create_had_errors:
+            self._seen_a[str(epic_dir)] = max_mtime_ns
         if result.ok and not result.already_terminal:
             round_result.mode_a_closes += 1
         else:
@@ -661,11 +665,93 @@ def _read_target_state_from_meta(ado_dir: Path) -> str | None:
     return None
 
 
-def _auto_create_pending_tasks(*, epic_ado_id: int, pending_files: list[Path]) -> dict:
+# Cuarentena de pending-task.json con fallo ESTRUCTURAL (JSON corrupto o rechazo
+# terminal 4xx del endpoint). Evita el loop de reintentos cada 3s (incidente
+# epic-28/RF-028, 2026-06-05: 1239 reintentos en 1h): logueamos el error UNA vez
+# por (path, mtime) y lo contamos como `skipped` —no `error`— para no bloquear el
+# cacheo del mtime del epic dir. Si el operador corrige el archivo (cambia el
+# mtime), se reprocesa. Key: str(path) → st_mtime_ns.
+_SEEN_TERMINAL_PENDING: dict[str, int] = {}
+
+# HTTP que indican un fallo ESTRUCTURAL del pending-task.json (no transitorio):
+# reintentar idéntico no ayuda hasta que el operador corrija el archivo/carpeta
+# (padre inexistente, jerarquía no soportada, schema/epic_id inválido). Los 5xx y
+# errores de conexión NO están acá: esos sí se reintentan.
+_TERMINAL_CREATE_HTTP = {400, 404, 409, 422}
+_TERMINAL_CREATE_ERRORS = {
+    "ADO_CHILD_TASK_VERIFICATION_FAILED",
+    "ADO_HIERARCHY_NOT_SUPPORTED",
+    "ADO_PARENT_NOT_FOUND",
+    "PENDING_TASK_EPIC_MISMATCH",
+    "PENDING_TASK_FILE_NOT_FOUND",
+    "PENDING_TASK_PARSE_ERROR",
+    "PENDING_TASK_SCHEMA_INVALID",
+    "PENDING_TASK_STATUS_INVALID",
+}
+
+
+def _quarantine_pending_once(pt_file: Path, reason: str) -> bool:
+    """Loguea UNA vez (por path+mtime) un pending-task.json con fallo terminal y
+    lo registra en la cuarentena. Devuelve True si logueó (primera vez para este
+    contenido), False si ya estaba en cuarentena."""
+    key = str(pt_file)
+    try:
+        mtime_ns = pt_file.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = -1
+    if _SEEN_TERMINAL_PENDING.get(key) == mtime_ns:
+        return False  # ya logueado para este contenido
+    _SEEN_TERMINAL_PENDING[key] = mtime_ns
+    logger.error(
+        "output_watcher mode_a: pending-task con fallo terminal (se omite hasta "
+        "corregir el archivo/carpeta) en %s: %s",
+        pt_file, reason,
+    )
+    return True
+
+
+def _pending_is_quarantined(pt_file: Path) -> bool:
+    key = str(pt_file)
+    if key not in _SEEN_TERMINAL_PENDING:
+        return False
+    try:
+        mtime_ns = pt_file.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = -1
+    return _SEEN_TERMINAL_PENDING.get(key) == mtime_ns
+
+
+def _terminal_create_failure(status_code: int, error_code: str | None) -> bool:
+    if status_code in _TERMINAL_CREATE_HTTP:
+        return True
+    return bool(error_code and error_code in _TERMINAL_CREATE_ERRORS)
+
+
+def _project_name_for_epic(epic_ado_id: int) -> str | None:
+    """Devuelve el proyecto Stacky/tracker conocido para enviar al self-HTTP."""
+    try:
+        with session_scope() as session:
+            ticket = session.query(Ticket).filter(Ticket.ado_id == epic_ado_id).first()
+            if ticket is None:
+                return None
+            return (ticket.stacky_project_name or ticket.project or "").strip() or None
+    except Exception:  # noqa: BLE001
+        logger.debug("output_watcher mode_a: no se pudo resolver proyecto para ADO-%s", epic_ado_id, exc_info=True)
+        return None
+
+
+def _auto_create_pending_tasks(
+    *, epic_ado_id: int, pending_files: list[Path], project_name: str | None = None
+) -> dict:
     """Para cada pending-task.json no consumido, llama al endpoint
     `/api/tickets/by-ado/{epic}/create-child-task` vía self-HTTP.
 
     Idempotente: el endpoint mismo skipea archivos con status=consumed.
+
+    Distingue fallos TRANSITORIOS (5xx, conexión → cuenta como `errors`, se
+    reintenta en el próximo scan) de fallos ESTRUCTURALES (JSON inválido, 4xx →
+    cuarentena vía `_quarantine_pending_once`, cuenta como `skipped` para no
+    reintentar cada 3s).
 
     Retorna {created, skipped, errors}.
     """
@@ -688,14 +774,15 @@ def _auto_create_pending_tasks(*, epic_ado_id: int, pending_files: list[Path]) -
     errors = 0
 
     for pt_file in pending_files:
+        if _pending_is_quarantined(pt_file):
+            skipped += 1
+            continue
+
         try:
             pt_payload = _json.loads(pt_file.read_text(encoding="utf-8"))
         except (OSError, _json.JSONDecodeError) as exc:
-            logger.warning(
-                "output_watcher mode_a: pending-task inválido en %s: %s",
-                pt_file, exc,
-            )
-            errors += 1
+            _quarantine_pending_once(pt_file, f"JSON inválido/no legible: {exc}")
+            skipped += 1
             continue
 
         if pt_payload.get("status") == "consumed" or "consumed_at" in pt_payload:
@@ -712,6 +799,8 @@ def _auto_create_pending_tasks(*, epic_ado_id: int, pending_files: list[Path]) -
             ),
             "completion_source": "output_watcher_auto",
         }
+        if project_name:
+            body["project"] = project_name
         try:
             resp = _req.post(base_url, json=body, timeout=60)
         except _req.exceptions.ConnectionError as exc:
@@ -731,30 +820,43 @@ def _auto_create_pending_tasks(*, epic_ado_id: int, pending_files: list[Path]) -
             errors += 1
             continue
 
-        if resp.status_code == 200:
-            try:
-                payload = resp.json()
-            except ValueError:
-                payload = {}
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = {}
+
+        if resp.status_code == 200 and payload.get("ok") is not False:
+            task_ado_id = payload.get("task_ado_id")
             if payload.get("idempotent"):
                 skipped += 1
                 logger.info(
                     "output_watcher mode_a: auto-create rf=%s ya estaba consumido (task_id=%s)",
-                    rf_id, payload.get("task_ado_id"),
+                    rf_id, task_ado_id,
                 )
-            else:
+            elif task_ado_id:
                 created += 1
                 logger.info(
                     "output_watcher mode_a: auto-create rf=%s → task_ado_id=%s",
-                    rf_id, payload.get("task_ado_id"),
+                    rf_id, task_ado_id,
                 )
+            else:
+                logger.warning(
+                    "output_watcher mode_a: auto-create rf=%s devolvió 200 sin task_ado_id: %s",
+                    rf_id, payload,
+                )
+                errors += 1
         else:
+            err_code = payload.get("error") if isinstance(payload, dict) else None
+            err_msg = (
+                (payload.get("message") or err_code)
+                if isinstance(payload, dict)
+                else None
+            ) or resp.text[:200]
+            if _terminal_create_failure(resp.status_code, err_code):
+                _quarantine_pending_once(pt_file, f"HTTP {resp.status_code}: {err_msg}")
+                skipped += 1
+                continue
             errors += 1
-            try:
-                err_payload = resp.json()
-                err_msg = err_payload.get("error") or err_payload.get("message") or resp.text[:200]
-            except ValueError:
-                err_msg = resp.text[:200]
             logger.warning(
                 "output_watcher mode_a: auto-create rf=%s falló (HTTP %d): %s",
                 rf_id, resp.status_code, err_msg,

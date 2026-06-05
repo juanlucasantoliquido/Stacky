@@ -39,6 +39,8 @@ def isolated_client(tmp_path, monkeypatch):
     projects_dir = tmp_path / "projects"
     active_file = tmp_path / "data" / "active_project.json"
 
+    monkeypatch.setenv("STACKY_OUTPUT_WATCHER_ENABLED", "false")
+    monkeypatch.setenv("STACKY_MANIFEST_WATCHER_ENABLED", "false")
     monkeypatch.setattr(project_manager, "PROJECTS_DIR", projects_dir)
     monkeypatch.setattr(project_manager, "ACTIVE_FILE", active_file)
     monkeypatch.setattr(projects_api, "PROJECTS_DIR", projects_dir)
@@ -99,8 +101,49 @@ def test_init_project_persists_docs_paths(isolated_client, tmp_path):
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["project"]["docs_paths"]["technical"].endswith("/technical")
+    assert "docs_technical_path" not in payload["project"]
+    assert "docs_functional_path" not in payload["project"]
     saved = json.loads((projects_dir / "ACME" / "config.json").read_text(encoding="utf-8"))
     assert saved["docs_paths"]["functional"].endswith("/functional")
+
+
+def test_update_project_empty_ado_project_clears_value(isolated_client, tmp_path):
+    client, projects_dir = isolated_client
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    created = client.post(
+        "/api/init_project",
+        json={
+            "name": "CLEARADO",
+            "display_name": "CLEARADO",
+            "workspace_root": str(workspace),
+            "docs_paths": {"technical": "", "functional": ""},
+            "tracker_type": "azure_devops",
+            "organization": "Org",
+            "ado_project": "AdoProject",
+        },
+    )
+    assert created.status_code == 200
+
+    response = client.patch(
+        "/api/projects/CLEARADO",
+        json={
+            "workspace_root": str(workspace),
+            "docs_paths": {"technical": "", "functional": ""},
+            "tracker_type": "azure_devops",
+            "organization": "",
+            "ado_project": "",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["project"]["organization"] == ""
+    assert payload["project"]["ado_project"] == ""
+    saved = json.loads((projects_dir / "CLEARADO" / "config.json").read_text(encoding="utf-8"))
+    assert saved["issue_tracker"]["organization"] == ""
+    assert saved["issue_tracker"]["project"] == ""
 
 
 def test_test_docs_paths_counts_markdown_and_pdf(isolated_client, tmp_path):

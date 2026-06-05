@@ -21,6 +21,7 @@ import RecoverExecutionButton from "./RecoverExecutionButton";
 import FinishWorkButton from "./FinishWorkButton";
 import CreateChildTaskButton from "./CreateChildTaskButton";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
+import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import styles from "./TicketGraphView.module.css";
 
 // Misma lógica que TicketBoard — infiere tipo de agente desde filename.
@@ -295,16 +296,18 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
   const inferResult = inferMap[ticket.id] || null;
   const colors = isEpic ? EPIC_COLORS : (STATE_COLORS[ticket.ado_state] || STATE_COLORS["New"]);
   const summary = isEpic ? epicPipelineSummary(ticket) : ticket.pipeline_summary;
-  // Feature #4: sugerencia determinística desde FlowConfig en lugar de
-  // summary.next_suggested (BD local que siempre devuelve la primera etapa
-  // no completada → "business" para tickets sin progreso).
-  const isTask = (ticket.work_item_type || "").toLowerCase() === "task";
-  const flowAgentType = !isEpic && ticket.ado_state
-    ? (flowConfigMap.get(ticket.ado_state.trim().toLowerCase()) ?? null)
-    : null;
-  // Regla #7/#8: Tasks y Épicas nunca proponen Negocio
-  const flowNext = (isTask && flowAgentType === "business") ? null : flowAgentType;
-  const next = isEpic ? summary.next_suggested : flowNext;
+  // B5: sugerencia con fallback compartido (FlowConfig → pipeline_summary →
+  // por tipo). Antes salía SOLO de FlowConfig por estado, así que un Feature/
+  // Technical/Task en un estado no mapeado quedaba sin sugerencia. Las Épicas
+  // mantienen su pipeline propio (epicPipelineSummary: null si ya tienen hijos).
+  const next = isEpic
+    ? summary.next_suggested
+    : resolveSuggestedAgent({
+        workItemType: ticket.work_item_type,
+        adoState: ticket.ado_state,
+        flowConfigMap,
+        pipelineNext: ticket.pipeline_summary?.next_suggested ?? null,
+      });
   const nextLabel = next && AGENT_LABELS[next] ? `${AGENT_LABELS[next].icon} ${AGENT_LABELS[next].label}` : null;
   const suggestedFilename = next ? findAgentFilenameByType(next, vsCodeAgents, pinnedAgents) : null;
   const runningExecution = runningByTicket.get(ticket.id) ?? null;
@@ -389,7 +392,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
             isEpic={isEpic}
             inferResult={inferResult}
             compact
-            flowNext={isEpic ? null : flowNext}
+            flowNext={isEpic ? null : next}
           />
 
           {/* Next agent prominente */}

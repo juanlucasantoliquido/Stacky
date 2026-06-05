@@ -121,6 +121,15 @@ def close_execution_with_publish(
         ticket_id = exec_row.ticket_id
         agent_type = agent_type_hint or exec_row.agent_type
 
+        # B2: datos para resolver el transition_state configurado por empleado.
+        # El filename del agente se persiste en metadata al lanzar (agent_runner);
+        # el proyecto sale del ticket. Se leen dentro del mismo scope para evitar
+        # un segundo round-trip a la DB.
+        _exec_meta = exec_row.metadata_dict or {}
+        agent_filename = _exec_meta.get("agent_filename") or _exec_meta.get("vscode_agent_filename")
+        ticket_obj = session.get(Ticket, ticket_id) if ticket_id else None
+        stacky_project_name = getattr(ticket_obj, "stacky_project_name", None) if ticket_obj else None
+
         if exec_row.status in _TERMINAL_STATUSES:
             already_terminal = True
         else:
@@ -183,12 +192,29 @@ def close_execution_with_publish(
         else:
             publish_result = _attempt_publish(execution_id=execution_id, triggered_by=triggered_by)
 
+    # ── Paso 3.5 (B2): resolver el estado de transición configurado ───────────
+    # Si el caller no pasó un target explícito, intentamos derivarlo de la config
+    # de workflow del empleado (transition_state) que hoy era write-only: se
+    # guardaba en config.json pero nada lo consumía al terminar. Sólo en cierres
+    # exitosos (completed); el gateo por publish.ok del Paso 4 sigue vigente.
+    effective_target = target_ado_state
+    target_source = "caller" if target_ado_state else None
+    if effective_target is None and final_status == "completed":
+        effective_target = _resolve_transition_state_from_config(
+            project_name=stacky_project_name,
+            agent_type=agent_type,
+            agent_filename=agent_filename,
+            execution_id=execution_id,
+        )
+        if effective_target:
+            target_source = "employee_config"
+
     # ── Paso 4: transición de System.State en ADO ────────────────────────────
-    # Solo si target_ado_state explícito + publish.ok + ticket tiene ado_id.
+    # Solo si hay target (explícito o resuelto de config) + publish.ok + ado_id.
     # Si publish falló/skipeó, NO cambiamos estado (evita ticket "Done" sin
     # comentario publicado).
     state_result: dict
-    if not target_ado_state:
+    if not effective_target:
         state_result = {"skipped": True, "reason": "not_requested"}
     elif not publish_result.get("ok"):
         state_result = {
@@ -199,9 +225,11 @@ def close_execution_with_publish(
     else:
         state_result = _attempt_state_change(
             ticket_id=ticket_id,
-            target_state=target_ado_state,
+            target_state=effective_target,
             execution_id=execution_id,
         )
+        if isinstance(state_result, dict):
+            state_result.setdefault("source", target_source)
 
     return CloseResult(
         ok=True,
@@ -215,6 +243,88 @@ def close_execution_with_publish(
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _infer_agent_type_from_filename(filename: str) -> str:
+    """Infiere el agent_type a partir del nombre del .agent.md (misma heurística
+    que api/agents._infer_agent_type_from_filename y el frontend)."""
+    f = (filename or "").lower()
+    if "business" in f or "negocio" in f:
+        return "business"
+    if "functional" in f or "funcional" in f:
+        return "functional"
+    if "technical" in f or "tecnic" in f:
+        return "technical"
+    if "dev" in f or "desarrollador" in f:
+        return "developer"
+    if "qa" in f or "test" in f:
+        return "qa"
+    return "custom"
+
+
+def _resolve_transition_state_from_config(
+    *,
+    project_name: str | None,
+    agent_type: str | None,
+    agent_filename: str | None,
+    execution_id: int,
+) -> str | None:
+    """B2 — Resuelve el `transition_state` configurado por empleado para este cierre.
+
+    Mapeo `(project, agent) → transition_state`:
+      1. Si la execution persistió el filename del agente, lee directo
+         `agent_workflow_configs[<filename>].transition_state`.
+      2. Fallback: busca en los workflow configs del proyecto el primero cuyo tipo
+         inferido coincida con `agent_type` y tenga `transition_state`.
+
+    Devuelve None si no hay config, si el flag está apagado, o ante cualquier error
+    (defensivo: nunca rompe el cierre). Gated por STACKY_APPLY_TRANSITION_FROM_CONFIG
+    (default "on") para permitir rollback sin redeploy.
+    """
+    if os.getenv("STACKY_APPLY_TRANSITION_FROM_CONFIG", "on").lower().strip() == "off":
+        return None
+    if not project_name:
+        return None
+
+    try:
+        from project_manager import get_agent_workflow_config, get_project_config
+    except Exception:  # noqa: BLE001
+        logger.debug("[exec=%s] project_manager no disponible para transition_state", execution_id)
+        return None
+
+    # (1) por filename persistido en la execution
+    if agent_filename:
+        try:
+            cfg = get_agent_workflow_config(project_name, agent_filename) or {}
+            ts = (cfg.get("transition_state") or "").strip()
+            if ts:
+                logger.info(
+                    "[exec=%s] transition_state desde config (filename=%s) → %s",
+                    execution_id, agent_filename, ts,
+                )
+                return ts
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] lookup transition_state por filename falló", execution_id)
+
+    # (2) fallback: por tipo inferido del agente
+    if agent_type:
+        try:
+            proj_cfg = get_project_config(project_name) or {}
+            configs = proj_cfg.get("agent_workflow_configs") or {}
+            for fname, wf in configs.items():
+                if not isinstance(wf, dict):
+                    continue
+                ts = (wf.get("transition_state") or "").strip()
+                if ts and _infer_agent_type_from_filename(fname) == agent_type:
+                    logger.info(
+                        "[exec=%s] transition_state desde config (tipo=%s, filename=%s) → %s",
+                        execution_id, agent_type, fname, ts,
+                    )
+                    return ts
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] lookup transition_state por tipo falló", execution_id)
+
+    return None
 
 
 def _should_auto_publish(override: bool | None) -> bool:

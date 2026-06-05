@@ -137,6 +137,10 @@ class TestEpicContextInjection:
                     "title": f"Epic ADO-{ticket.ado_id}: {ticket.title}",
                     "content": (
                         f"epic_id: {ticket.ado_id}\n"
+                        f"epic_ado_id: {ticket.ado_id}\n"
+                        f"epic_output_dir: Agentes/outputs/epic-{ticket.ado_id}\n"
+                        "epic_id_rule: epic_id/epic_ado_id es el System.Id real de Azure DevOps; "
+                        "no uses etiquetas humanas del título como EP-26, EP-28, etc. como id.\n"
                         f"epic_title: {ticket.title}\n"
                         f"epic_description:\n{ticket.description or ''}"
                     ),
@@ -258,6 +262,9 @@ class TestEpicContextInjection:
 
         content = epic_block["content"]
         assert "epic_id: 77" in content, "El contenido debe incluir epic_id"
+        assert "epic_ado_id: 77" in content, "El contenido debe incluir el System.Id real de ADO"
+        assert "epic_output_dir: Agentes/outputs/epic-77" in content
+        assert "no uses etiquetas humanas" in content
         assert "epic_title: Gestión de cobranza" in content, "El contenido debe incluir epic_title"
         assert "epic_description:" in content, "El contenido debe incluir el campo epic_description"
         assert "RF-001" in content, "El contenido debe incluir la descripción HTML del Epic"

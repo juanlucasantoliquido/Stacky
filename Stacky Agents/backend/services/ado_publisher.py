@@ -27,6 +27,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,27 @@ logger = logging.getLogger("stacky.ado_publisher")
 ATTACHMENTS_MANIFEST_FILENAME = "attachments.json"
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 _ATTACH_TOKEN_RE = re.compile(r"\{\{ATTACH:[^}]+\}\}")
+
+# ── P0 Inc.2: serialización por work item ──────────────────────────────────────
+# Lock en memoria por `ado_id` que cubre el ciclo dedupe→POST→INSERT. El
+# output_watcher, finish_work y el PATCH /stacky-status corren TODOS dentro del
+# mismo proceso Flask, así que un lock en proceso por work item cierra la ventana
+# de carrera entre el check de idempotencia y el POST a ADO (dos hilos pasaban el
+# check antes de que el primero hiciera INSERT → doble publicación). En despliegue
+# multi-worker el UNIQUE(execution_id, html_sha256) + el dedupe por contenido en
+# DB + el check de marcador ADO-side siguen siendo la última barrera.
+_ADO_PUBLISH_LOCKS: dict[int, threading.Lock] = {}
+_ADO_PUBLISH_LOCKS_GUARD = threading.Lock()
+
+
+def _get_ado_publish_lock(ado_id: int) -> threading.Lock:
+    """Devuelve (creando si hace falta) el lock de publicación para `ado_id`."""
+    with _ADO_PUBLISH_LOCKS_GUARD:
+        lock = _ADO_PUBLISH_LOCKS.get(ado_id)
+        if lock is None:
+            lock = threading.Lock()
+            _ADO_PUBLISH_LOCKS[ado_id] = lock
+        return lock
 
 
 # ── Modelo de registro (idempotencia + audit) ─────────────────────────────────
@@ -149,34 +171,36 @@ def publish_from_execution(
 ) -> PublishResult:
     """Publica en ADO el HTML del agente para una ejecución dada.
 
-    Idempotencia (P2):
-      La tabla agent_html_publish tiene UNIQUE(execution_id, html_sha256).
-      Si la misma (execution_id, sha256) llega más de una vez:
-        - Paso 4a detecta la fila existente ANTES de llamar a ADO.
-        - Si la DB lanza IntegrityError de todos modos (race condition),
-          lo capturamos en paso 6, buscamos el registro existente y
-          devolvemos status='idempotent_replay'.
-      Cada idempotent_replay se registra con el counter
-      stacky_publish_idempotent_replay_total.
+    Idempotencia (P0 Inc.2 — "publicar exactamente una vez"):
+      Tres barreras, todas bajo un lock por work item (`ado_id`) que cubre el
+      ciclo dedupe→POST→INSERT y cierra la carrera entre disparadores
+      concurrentes (output_watcher + finish_work + PATCH):
+        1. Dedupe por CONTENIDO en DB: si existe una fila `ok` con el mismo
+           (ado_id, html_sha256) — sin importar el execution_id — se devuelve
+           idempotent_replay sin tocar ADO. Cubre re-ejecuciones y cross-trigger.
+        2. Dedupe ADO-side por marcador: GET de comentarios y búsqueda del
+           marcador estable por contenido. Cubre reinicios / registro local
+           perdido / otra instancia (el comentario está en ADO pero no en la DB).
+        3. UNIQUE(execution_id, html_sha256) como última red: si la DB lanza
+           IntegrityError (race que escapó al lock, p.ej. multi-worker), se
+           captura y se devuelve idempotent_replay.
+      Cada idempotent_replay incrementa stacky_publish_idempotent_replay_total.
 
     Semántica de force:
-      force=True permite insertar una NUEVA fila cuando el HTML cambió
-      (sha256 distinto). NO omite el UNIQUE de DB — solo omite el dedupe
-      previo por sha256 para la misma ejecución, permitiendo un nuevo
-      html diferente. El UNIQUE sigue protegiendo contra doble-inserción
-      del mismo (execution_id, sha256) incluso con force=True.
-
-      Si llega el mismo sha256 con force=True → el UNIQUE de DB lo bloquea
-      → IntegrityError → idempotent_replay (comportamiento idéntico).
+      force=True habilita publicar un HTML *distinto* (sha256 diferente) para la
+      misma ejecución. NO omite el dedupe por contenido ni el de marcador: con el
+      MISMO contenido (mismo sha) NUNCA se republica, aunque force=True (lo frena
+      la barrera 1/2). El UNIQUE sigue protegiendo la doble-inserción.
 
     Pasos:
       1. Carga AgentExecution + Ticket. Si no existe o no tiene ado_id → falla.
       2. Resuelve el path del HTML (execution.html_output_path o fallback canónico).
       3. Lee+valida el HTML (servicio agent_html_output).
-      4. Dedupe pre-ADO: busca fila existente con mismo (execution_id, sha256) y status=ok.
-         - Si existe → retorna PublishResult(status='idempotent_replay') sin llamar ADO.
-         - Si force=True → omite este paso (permite nuevo SHA para misma execution).
-      5. Llama a AdoClient.post_comment (única invocación autorizada).
+      [bajo lock por ado_id]
+      4. Dedupe pre-ADO por contenido (ado_id, sha256, status=ok) → idempotent_replay.
+      5. Resuelve el AdoClient del proyecto del ticket.
+      5a. Dedupe ADO-side por marcador (comment_exists) → idempotent_replay.
+      5b. Llama a AdoClient.post_comment (única invocación autorizada).
       6. Registra el resultado en AgentHtmlPublish.
          - Si la DB lanza IntegrityError → idempotent_replay (race condition capturada).
 
@@ -185,9 +209,9 @@ def publish_from_execution(
         triggered_by: origen del disparo: 'post_hook' | 'manual' | 'finish_work' | 'rescue' | 'gateway'.
         client_factory: callable que devuelve un objeto con `.post_comment(ado_id, html)`.
                         Default: lambda: AdoClient(). Útil para tests.
-        force: si True, omite el dedupe previo pero NO omite el UNIQUE de DB.
-               Permite publicar un HTML distinto (sha256 diferente) para la
-               misma execution. Usar con auditoría explícita.
+        force: si True, permite publicar un HTML distinto (sha256 diferente) para
+               la misma execution. NO permite re-publicar contenido idéntico ni
+               omite el UNIQUE de DB. Usar con auditoría explícita.
 
     Returns:
         PublishResult — nunca lanza excepción salvo errores de programación.
@@ -252,131 +276,184 @@ def publish_from_execution(
         )
 
     html_sha = _output_publish_fingerprint(output)
+    # Fase 1 + P0 Inc.2: marcador Stacky invisible estable por contenido
+    # (ado_id+sha). Se inyecta en el HTML publicado y se usa para el dedupe
+    # ADO-side (comment_exists) y la reconciliación.
+    marker = _stacky_comment_marker(ado_id=ado_id, html_sha=html_sha)
 
-    # ── 4. Dedupe pre-ADO (idempotencia aplicativa + DB) ─────────────────────
-    # force=True omite este check para permitir un HTML distinto (sha diferente).
-    # Con force=True y mismo sha → el UNIQUE de DB bloquea en paso 6 → idempotent_replay.
-    if not force:
+    # ── P0 Inc.2: TODO el ciclo dedupe→POST→INSERT corre bajo un lock por work
+    # item para que dos disparadores concurrentes (watcher + finish_work + PATCH)
+    # no posteen el mismo comentario antes de que el primero registre la fila. ──
+    publish_lock = _get_ado_publish_lock(ado_id)
+    with publish_lock:
+        # ── 4. Dedupe pre-ADO por CONTENIDO (ado_id, sha) ─────────────────────
+        # Unifica la clave de idempotencia a (ado_id, sha) — antes el check era
+        # por (execution_id, sha) y NO disparaba si el mismo contenido llegaba
+        # bajo otro execution_id (re-ejecución, watcher con latest_exec vs PATCH
+        # con otra ejecución). Este guard replica el que vivía sólo en el watcher
+        # (_find_publish_by_sha) y ahora es la barrera central del publicador.
+        #
+        # Se aplica SIEMPRE, incluso con force=True: force habilita publicar un
+        # HTML *distinto* (sha diferente) para la misma ejecución; NUNCA habilita
+        # re-publicar contenido idéntico.
         with session_scope() as session:
             already = (
                 session.query(AgentHtmlPublish)
                 .filter(
-                    AgentHtmlPublish.execution_id == execution_id,
+                    AgentHtmlPublish.ado_id == ado_id,
                     AgentHtmlPublish.html_sha256 == html_sha,
                     AgentHtmlPublish.status == "ok",
                 )
+                .order_by(AgentHtmlPublish.id.desc())
                 .first()
             )
             if already is not None:
                 result = PublishResult(
                     ok=True, status="idempotent_replay",
-                    reason="duplicate_hash_pre_check",
+                    reason="duplicate_content_pre_check",
                     ado_id=ado_id, execution_id=execution_id,
                     html_sha256=html_sha, ado_response=None,
                     record_id=already.id,
+                    comment_id=already.comment_id, marker=already.marker,
                 )
                 _emit_event(result, triggered_by=triggered_by, html_path=str(output.path))
                 _increment_idempotent_replay_counter(execution_id=execution_id, ado_id=ado_id)
                 return result
 
-    # ── 5. Publicar en ADO (única invocación autorizada) ──────────────────────
-    # Fase 1: agregamos un marcador Stacky invisible al final del HTML para
-    # permitir verificacion idempotente post-publish via fetch_comments.
-    marker = _stacky_comment_marker(execution_id=execution_id, html_sha=html_sha)
-    try:
-        if client_factory is not None:
-            client = client_factory()
-        else:
-            client = _client_for_ticket_project(
-                stacky_project_name=ticket_stacky_project,
-                tracker_project=ticket_tracker_project,
-            )
-        html_to_publish, attachment_summary = _prepare_html_attachments(
-            output=output,
-            client=client,
-            ado_id=ado_id,
-        )
-        html_to_publish = _inject_stacky_marker(html_to_publish, marker)
-        ado_response = client.post_comment(ado_id, html_to_publish, "html")
-        if isinstance(ado_response, dict) and attachment_summary is not None:
-            ado_response = dict(ado_response)
-            ado_response["_stacky_attachments"] = attachment_summary
-        # post_comment ahora exige comment_id en la respuesta o levanta error.
-        # Igual hacemos un check defensivo.
-        comment_id_value = None
-        if isinstance(ado_response, dict):
-            comment_id_value = ado_response.get("id")
-        if comment_id_value is None:
-            raise RuntimeError(
-                f"ADO acepto el comment pero la respuesta no tiene id: "
-                f"{str(ado_response)[:200]}"
-            )
-    except AttachmentPublishError as exc:
-        result = PublishResult(
-            ok=False, status="failed",
-            reason=f"attachment publish failed: {exc}",
-            ado_id=ado_id, execution_id=execution_id,
-            html_sha256=html_sha, ado_response=None, record_id=None,
-        )
-        return _emit_and_persist(
-            result, ticket_id=ticket_id, ado_id=ado_id,
-            html_path=str(output.path), triggered_by=triggered_by,
-        )
-    except Exception as exc:  # noqa: BLE001
-        result = PublishResult(
-            ok=False, status="failed",
-            reason=f"ADO post_comment failed: {type(exc).__name__}: {exc}",
-            ado_id=ado_id, execution_id=execution_id,
-            html_sha256=html_sha, ado_response=None, record_id=None,
-        )
-        return _emit_and_persist(
-            result, ticket_id=ticket_id, ado_id=ado_id,
-            html_path=str(output.path), triggered_by=triggered_by,
-        )
-
-    # ── 6. Persistir — capturar IntegrityError (race condition UNIQUE) ────────
-    ok_result = PublishResult(
-        ok=True, status="ok", reason=None,
-        ado_id=ado_id, execution_id=execution_id,
-        html_sha256=html_sha,
-        ado_response=ado_response if isinstance(ado_response, dict) else None,
-        record_id=None,
-        comment_id=int(comment_id_value) if isinstance(comment_id_value, (int, str)) and str(comment_id_value).isdigit() else None,
-        marker=marker,
-    )
-    try:
-        return _emit_and_persist(
-            ok_result, ticket_id=ticket_id, ado_id=ado_id,
-            html_path=str(output.path), triggered_by=triggered_by,
-        )
-    except IntegrityError:
-        # UNIQUE constraint fired: another concurrent call already inserted this row.
-        # Find the existing record and return idempotent_replay.
-        logger.warning(
-            "publish_from_execution: IntegrityError on execution=%d sha=%s — "
-            "race condition, returning idempotent_replay",
-            execution_id, html_sha,
-        )
-        _increment_idempotent_replay_counter(execution_id=execution_id, ado_id=ado_id)
-        with session_scope() as session:
-            existing = (
-                session.query(AgentHtmlPublish)
-                .filter(
-                    AgentHtmlPublish.execution_id == execution_id,
-                    AgentHtmlPublish.html_sha256 == html_sha,
+        # ── 5. Resolver el cliente ADO del proyecto del ticket ────────────────
+        try:
+            if client_factory is not None:
+                client = client_factory()
+            else:
+                client = _client_for_ticket_project(
+                    stacky_project_name=ticket_stacky_project,
+                    tracker_project=ticket_tracker_project,
                 )
-                .first()
+        except Exception as exc:  # noqa: BLE001
+            result = PublishResult(
+                ok=False, status="failed",
+                reason=f"ADO client build failed: {type(exc).__name__}: {exc}",
+                ado_id=ado_id, execution_id=execution_id,
+                html_sha256=html_sha, ado_response=None, record_id=None,
             )
-            record_id = existing.id if existing else None
-        replay_result = PublishResult(
-            ok=True, status="idempotent_replay",
-            reason="integrity_error_race_condition",
+            return _emit_and_persist(
+                result, ticket_id=ticket_id, ado_id=ado_id,
+                html_path=str(output.path), triggered_by=triggered_by,
+            )
+
+        # ── 5a. Dedupe ADO-side por marcador ──────────────────────────────────
+        # Antes del POST, preguntamos a ADO si ya existe un comentario con este
+        # marcador de contenido. Cubre el caso en que el registro local se perdió
+        # (reinicio, otra instancia/worker) pero el comentario SÍ está publicado:
+        # sin esto se duplicaba en ADO. Defensivo: cualquier fallo del GET no
+        # bloquea la publicación (cae al POST normal, protegido igual por el
+        # dedupe por contenido y el UNIQUE).
+        comment_exists_fn = getattr(client, "comment_exists", None)
+        if callable(comment_exists_fn):
+            try:
+                existing_comment = comment_exists_fn(ado_id, marker)
+            except Exception:  # noqa: BLE001 — nunca bloquea el cierre
+                existing_comment = None
+            if existing_comment is not None:
+                result = PublishResult(
+                    ok=True, status="idempotent_replay",
+                    reason="ado_marker_exists",
+                    ado_id=ado_id, execution_id=execution_id,
+                    html_sha256=html_sha, ado_response=None,
+                    record_id=None, marker=marker,
+                )
+                _emit_event(result, triggered_by=triggered_by, html_path=str(output.path))
+                _increment_idempotent_replay_counter(execution_id=execution_id, ado_id=ado_id)
+                return result
+
+        # ── 5b. Publicar en ADO (única invocación autorizada) ─────────────────
+        try:
+            html_to_publish, attachment_summary = _prepare_html_attachments(
+                output=output,
+                client=client,
+                ado_id=ado_id,
+            )
+            html_to_publish = _inject_stacky_marker(html_to_publish, marker)
+            ado_response = client.post_comment(ado_id, html_to_publish, "html")
+            if isinstance(ado_response, dict) and attachment_summary is not None:
+                ado_response = dict(ado_response)
+                ado_response["_stacky_attachments"] = attachment_summary
+            # post_comment ahora exige comment_id en la respuesta o levanta error.
+            # Igual hacemos un check defensivo.
+            comment_id_value = None
+            if isinstance(ado_response, dict):
+                comment_id_value = ado_response.get("id")
+            if comment_id_value is None:
+                raise RuntimeError(
+                    f"ADO acepto el comment pero la respuesta no tiene id: "
+                    f"{str(ado_response)[:200]}"
+                )
+        except AttachmentPublishError as exc:
+            result = PublishResult(
+                ok=False, status="failed",
+                reason=f"attachment publish failed: {exc}",
+                ado_id=ado_id, execution_id=execution_id,
+                html_sha256=html_sha, ado_response=None, record_id=None,
+            )
+            return _emit_and_persist(
+                result, ticket_id=ticket_id, ado_id=ado_id,
+                html_path=str(output.path), triggered_by=triggered_by,
+            )
+        except Exception as exc:  # noqa: BLE001
+            result = PublishResult(
+                ok=False, status="failed",
+                reason=f"ADO post_comment failed: {type(exc).__name__}: {exc}",
+                ado_id=ado_id, execution_id=execution_id,
+                html_sha256=html_sha, ado_response=None, record_id=None,
+            )
+            return _emit_and_persist(
+                result, ticket_id=ticket_id, ado_id=ado_id,
+                html_path=str(output.path), triggered_by=triggered_by,
+            )
+
+        # ── 6. Persistir — capturar IntegrityError (race condition UNIQUE) ────
+        ok_result = PublishResult(
+            ok=True, status="ok", reason=None,
             ado_id=ado_id, execution_id=execution_id,
-            html_sha256=html_sha, ado_response=None,
-            record_id=record_id,
+            html_sha256=html_sha,
+            ado_response=ado_response if isinstance(ado_response, dict) else None,
+            record_id=None,
+            comment_id=int(comment_id_value) if isinstance(comment_id_value, (int, str)) and str(comment_id_value).isdigit() else None,
+            marker=marker,
         )
-        _emit_event(replay_result, triggered_by=triggered_by, html_path=str(output.path))
-        return replay_result
+        try:
+            return _emit_and_persist(
+                ok_result, ticket_id=ticket_id, ado_id=ado_id,
+                html_path=str(output.path), triggered_by=triggered_by,
+            )
+        except IntegrityError:
+            # UNIQUE constraint fired: another concurrent call already inserted this row.
+            # Find the existing record and return idempotent_replay.
+            logger.warning(
+                "publish_from_execution: IntegrityError on execution=%d sha=%s — "
+                "race condition, returning idempotent_replay",
+                execution_id, html_sha,
+            )
+            _increment_idempotent_replay_counter(execution_id=execution_id, ado_id=ado_id)
+            with session_scope() as session:
+                existing = (
+                    session.query(AgentHtmlPublish)
+                    .filter(
+                        AgentHtmlPublish.execution_id == execution_id,
+                        AgentHtmlPublish.html_sha256 == html_sha,
+                    )
+                    .first()
+                )
+                record_id = existing.id if existing else None
+            replay_result = PublishResult(
+                ok=True, status="idempotent_replay",
+                reason="integrity_error_race_condition",
+                ado_id=ado_id, execution_id=execution_id,
+                html_sha256=html_sha, ado_response=None,
+                record_id=record_id,
+            )
+            _emit_event(replay_result, triggered_by=triggered_by, html_path=str(output.path))
+            return replay_result
 
 
 # ── Hook post-ejecución ───────────────────────────────────────────────────────
@@ -399,6 +476,14 @@ def ado_publish_post_hook(
     if final_status != "completed":
         return
     try:
+        with session_scope() as session:
+            exec_row = session.get(AgentExecution, execution_id)
+            if exec_row is not None and exec_row.metadata_dict.get("skip_ado_publish"):
+                logger.info(
+                    "ado_publish_post_hook execution=%d omitido por skip_ado_publish",
+                    execution_id,
+                )
+                return
         result = publish_from_execution(
             execution_id, triggered_by="post_hook"
         )
@@ -478,17 +563,22 @@ def _client_for_ticket_project(
     )
 
 
-def _stacky_comment_marker(*, execution_id: int | None, html_sha: str) -> str:
+def _stacky_comment_marker(*, ado_id: int | None, html_sha: str) -> str:
     """Marcador invisible que se inyecta en cada comentario publicado por Stacky.
 
-    Permite que el job de reconciliacion identifique comentarios ya publicados
-    sin depender exclusivamente del comment_id (Fase 1 plan creacion-tareas-
-    comentarios-100-efectiva). Formato: comentario HTML estandar para no
-    contaminar el render visual.
+    Permite que el publicador y el job de reconciliacion identifiquen comentarios
+    ya publicados sin depender del comment_id ni del registro local (Fase 1 plan
+    creacion-tareas-comentarios-100-efectiva).
+
+    P0 Inc.2: el marcador es ahora estable por CONTENIDO (`ado_id` + `html_sha`),
+    NO por `execution_id`. Así `comment_exists(ado_id, marker)` reencuentra el
+    comentario aunque lo haya publicado otra ejecución (re-ejecución, watcher vs
+    PATCH, reinicio con registro local perdido) y bloquea el duplicado pre-POST.
+    Formato: comentario HTML estandar para no contaminar el render visual.
     """
     sha_short = (html_sha or "")[:16] if html_sha else "nohash"
-    exec_part = execution_id if execution_id is not None else "noexec"
-    return f"stacky-comment:exec={exec_part}:sha={sha_short}"
+    ado_part = ado_id if ado_id is not None else "noado"
+    return f"stacky-comment:ado={ado_part}:sha={sha_short}"
 
 
 def _inject_stacky_marker(html: str, marker: str) -> str:

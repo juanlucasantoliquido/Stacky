@@ -16,6 +16,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Tickets, type FinishWorkResponse } from "../api/endpoints";
 import type { Ticket } from "../types";
+import { useWorkbench } from "../store/workbench";
 import styles from "./FinishWorkButton.module.css";
 
 interface Props {
@@ -31,6 +32,15 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
   const [reason, setReason] = useState("");
   const [publishToAdo, setPublishToAdo] = useState(true);
   const [targetState, setTargetState] = useState("");
+
+  // B2 (fix secundario): pre-cargar el estado destino con el `transition_state`
+  // configurado para el agente activo, en vez de un string vacío. Así el cierre
+  // manual respeta por default el mismo estado que aplica el cierre automático.
+  const vsCodeAgent = useWorkbench((s) => s.vsCodeAgent);
+  const agentWorkflows = useWorkbench((s) => s.agentWorkflows);
+  const configuredTransitionState = vsCodeAgent
+    ? (agentWorkflows[vsCodeAgent.filename]?.transition_state ?? "")
+    : "";
   const [forcePublish, setForcePublish] = useState(false);
   const [lastResult, setLastResult] = useState<FinishWorkResponse | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -68,6 +78,15 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
   useEffect(() => {
     if (open && !lastResult && !dryRunMutation.isPending) {
       dryRunMutation.mutate();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // B2: al abrir, sembrar el estado destino con el transition_state configurado
+  // (si lo hay y el operador no escribió otro todavía).
+  useEffect(() => {
+    if (open && configuredTransitionState && !targetState) {
+      setTargetState(configuredTransitionState);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);

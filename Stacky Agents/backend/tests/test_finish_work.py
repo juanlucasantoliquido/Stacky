@@ -5,7 +5,7 @@ Verifica:
   - ticket ya completed → 409.
   - dry_run retorna preconditions sin tocar nada.
   - publish con HTML válido invoca ado_publisher y devuelve ok.
-  - sin HTML pero publish_to_ado=True → publica fallback note.
+  - sin HTML pero publish_to_ado=True → publica nota manual via ado_publisher.
   - target_ado_state invoca update_work_item_state.
   - update_stacky_status final es 'completed'.
   - HTML con secreto → 422 antes de tocar ADO.
@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -70,16 +71,21 @@ def fake_ado(monkeypatch):
     # y en services.ado_publisher._default_client.
     import services.ado_client as ado_client_mod
     import services.ado_publisher as pub_mod
+    import api.tickets as tickets_mod
     monkeypatch.setattr(ado_client_mod, "AdoClient", FakeAdoClient)
     monkeypatch.setattr(pub_mod, "_default_client", lambda: FakeAdoClient())
+    monkeypatch.setattr(tickets_mod, "_ado_client_for_ticket", lambda *a, **kw: FakeAdoClient())
     return FakeAdoClient
 
 
 @pytest.fixture
-def client(tmp_repo):
-    from app import create_app
+def client(tmp_repo, monkeypatch):
+    import app as app_module
 
-    app = create_app()
+    monkeypatch.setenv("STACKY_OUTPUT_WATCHER_ENABLED", "false")
+    monkeypatch.setenv("STACKY_MANIFEST_WATCHER_ENABLED", "false")
+    monkeypatch.setattr(app_module, "_startup_sync", lambda logger: None)
+    app = app_module.create_app()
     app.config.update(TESTING=True)
     from services.ticket_status import stop_stale_recovery
     stop_stale_recovery()
@@ -93,6 +99,32 @@ def _write_html(repo_root: Path, ado_id: int, html: str) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     p = out_dir / "comment.html"
     p.write_text(html, encoding="utf-8")
+    return p
+
+
+def _write_pending_task(repo_root: Path, ado_id: int) -> Path:
+    out_dir = repo_root / "Agentes" / "outputs" / f"epic-{ado_id}" / "RF-001"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    plan_rel = f"Agentes/outputs/epic-{ado_id}/RF-001/plan-de-pruebas.md"
+    (repo_root / plan_rel).write_text("# plan", encoding="utf-8")
+    p = out_dir / "pending-task.json"
+    p.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-04T00:00:00Z",
+                "generated_by": "test",
+                "epic_id": str(ado_id),
+                "rf_id": "RF-001",
+                "target_state": "Technical review",
+                "title": "RF-001",
+                "description_html": "<p>detalle</p>",
+                "plan_de_pruebas_path": plan_rel,
+                "parent_link_type": "System.LinkTypes.Hierarchy-Reverse",
+                "status": "pending_manual_creation",
+            }
+        ),
+        encoding="utf-8",
+    )
     return p
 
 
@@ -190,7 +222,7 @@ def test_finish_work_publishes_html_and_updates_state(client, fake_ado, tmp_repo
     assert (3004, "Done") in FakeAdoClient.update_state_calls
 
 
-def test_finish_work_publishes_fallback_note_when_no_html(client, fake_ado, tmp_repo):
+def test_finish_work_publishes_manual_note_via_publisher_when_no_html(client, fake_ado, tmp_repo):
     ticket_id = _mk_ticket(ado_id=3005)
     # NO escribir HTML
 
@@ -205,11 +237,32 @@ def test_finish_work_publishes_fallback_note_when_no_html(client, fake_ado, tmp_
     body = r.get_json()
     actions_by = {a["action"]: a for a in body["actions"]}
     assert actions_by["publish_ado_comment"]["ok"] is True
-    assert actions_by["publish_ado_comment"]["reason"] == "no_agent_html_fallback_note"
-    # Verificamos que el contenido sea la nota fallback (sin _agent_html)
+    assert actions_by["publish_ado_comment"]["reason"] == "manual_finish_note_via_publisher"
+    assert actions_by["publish_ado_comment"]["html_sha256"]
+    # Verificamos que el contenido sea la nota manual publicada via ado_publisher.
     posted = [c for c in FakeAdoClient.post_comment_calls if c[0] == 3005]
-    assert posted, "se esperaba post_comment a ADO con la nota fallback"
+    assert posted, "se esperaba post_comment a ADO con la nota manual"
     assert "Cierre manual" in posted[0][1]
+    assert "stacky-comment:ado=3005" in posted[0][1]
+
+
+def test_finish_work_rejects_pending_tasks_without_force(client, fake_ado, tmp_repo):
+    ticket_id = _mk_ticket(ado_id=3020)
+    _write_pending_task(tmp_repo, 3020)
+
+    r = client.post(
+        f"/api/tickets/{ticket_id}/finish-work",
+        json={
+            "operator_reason": "hay tareas pendientes",
+            "publish_to_ado": True,
+        },
+    )
+
+    assert r.status_code == 409
+    body = r.get_json()
+    assert body["error"] == "PENDING_TASKS_NOT_CONSUMED"
+    assert body["preconditions"]["pending_tasks"]["total_pending"] == 1
+    assert FakeAdoClient.post_comment_calls == []
 
 
 def test_finish_work_rejects_html_with_secrets(client, fake_ado, tmp_repo):
@@ -266,6 +319,7 @@ def test_finish_work_skips_publish_when_publish_to_ado_false(client, fake_ado, t
         json={
             "operator_reason": "solo cerrar en stacky",
             "publish_to_ado": False,
+            "cancel_active_execution": False,
         },
     )
     assert r.status_code == 200

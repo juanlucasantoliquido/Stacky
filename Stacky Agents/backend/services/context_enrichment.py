@@ -228,6 +228,10 @@ def _inject_epic_structured(
             "title": f"Epic ADO-{_epic_ticket.ado_id}: {_epic_ticket.title}",
             "content": (
                 f"epic_id: {_epic_ticket.ado_id}\n"
+                f"epic_ado_id: {_epic_ticket.ado_id}\n"
+                f"epic_output_dir: Agentes/outputs/epic-{_epic_ticket.ado_id}\n"
+                "epic_id_rule: epic_id/epic_ado_id es el System.Id real de Azure DevOps; "
+                "no uses etiquetas humanas del título como EP-26, EP-28, etc. como id.\n"
                 f"epic_title: {_epic_ticket.title}\n"
                 f"epic_description:\n{_epic_ticket.description or ''}"
             ),

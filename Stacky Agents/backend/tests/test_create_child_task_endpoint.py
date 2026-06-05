@@ -40,8 +40,11 @@ os.environ.setdefault("LLM_BACKEND", "mock")
 
 @pytest.fixture(scope="session")
 def flask_app():
-    from app import create_app
-    application = create_app()
+    os.environ["STACKY_OUTPUT_WATCHER_ENABLED"] = "false"
+    os.environ["STACKY_MANIFEST_WATCHER_ENABLED"] = "false"
+    import app as app_module
+    app_module._startup_sync = lambda logger: None
+    application = app_module.create_app()
     application.config["TESTING"] = True
     try:
         from services.ticket_status import stop_stale_recovery
@@ -155,6 +158,16 @@ class FakeAdoClientExt:
         self.state_calls: list[dict] = []
         self._raise_on_upload: Exception | None = None
         self._raise_on_state: Exception | None = None
+        self._last_created_parent: int | None = None
+        self._next_id = 5000
+        self.created_items: dict[int, dict] = {}
+        self.task_parent_override = "__created__"
+        self.parent_type = "Epic"
+        self.unavailable_work_item_types: set[str] = set()
+        # Si True, get_work_item(parent) lanza un 404 TF401232 (work item
+        # inexistente) — simula la carpeta epic-<ordinal> que no mapea a un
+        # work item ADO real (épicas 241/242).
+        self._parent_not_found = False
 
     def create_work_item(
         self,
@@ -168,12 +181,60 @@ class FakeAdoClientExt:
     ):
         # Firma unificada WS1+WS2: acepta tanto keywords nuevos como alias de compatibilidad.
         effective_parent = parent_ado_id if parent_ado_id is not None else parent_id
+        if work_item_type.lower() in {t.lower() for t in self.unavailable_work_item_types}:
+            from services.ado_client import AdoApiError
+            raise AdoApiError(
+                f"ADO POST _apis/wit/workitems/${work_item_type} -> 404: "
+                f"VS402323: Work item type {work_item_type} does not exist in project TestProject",
+                status_code=404,
+            )
         self.create_calls.append({
             "type": work_item_type,
             "fields": fields,
             "parent": effective_parent,
         })
-        return {"id": 5000, "url": "https://dev.azure.com/TestOrg/TestProject/_apis/wit/workitems/5000"}
+        self._last_created_parent = effective_parent
+        created_id = self._next_id
+        self._next_id += 1
+        self.created_items[created_id] = {
+            "type": work_item_type,
+            "fields": fields or {},
+            "parent": effective_parent,
+        }
+        return {"id": created_id, "url": f"https://dev.azure.com/TestOrg/TestProject/_apis/wit/workitems/{created_id}"}
+
+    def get_work_item(self, ado_id: int, fields: list[str] | None = None):
+        if ado_id != 5000 and self._parent_not_found:
+            from services.ado_client import AdoApiError
+            raise AdoApiError(
+                f"ADO GET _apis/wit/workitems/{ado_id} → 404: "
+                f"TF401232: Work item {ado_id} does not exist, or you do not "
+                f"have permissions to read it.",
+                status_code=404,
+            )
+        if ado_id in self.created_items:
+            item = self.created_items[ado_id]
+            parent = (
+                item["parent"]
+                if self.task_parent_override == "__created__"
+                else self.task_parent_override
+            )
+            return {
+                "id": ado_id,
+                "fields": {
+                    "System.Id": ado_id,
+                    "System.Title": (item["fields"] or {}).get("System.Title", "RF-001"),
+                    "System.WorkItemType": item["type"],
+                    "System.Parent": parent,
+                },
+            }
+        return {
+            "id": ado_id,
+            "fields": {
+                "System.Id": ado_id,
+                "System.WorkItemType": self.parent_type,
+            },
+        }
 
     def update_work_item_state(self, ado_id, new_state):
         if self._raise_on_state:
@@ -251,6 +312,178 @@ def test_create_child_task_success(client, epic_ticket, tmp_repo):
     assert fake_ado.create_calls[0]["parent"] == 149
     assert len(fake_ado.upload_calls) == 1
     assert len(fake_ado.link_calls) == 1
+
+
+def test_create_child_task_builds_hierarchy_when_epic_task_unsupported(client, epic_ticket, tmp_repo):
+    """Agile: si Epic->Task no está permitido, crea Feature->User Story->Task."""
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-HIER")
+    rel_path = _rel_path(tmp_repo, pt_path)
+    fake_ado = FakeAdoClientExt()
+
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado), \
+         patch(
+             "api.tickets._resolve_hierarchy_for_project",
+             return_value=("Agile", {
+                 "epic": {"feature"},
+                 "feature": {"user story", "bug"},
+                 "user story": {"task"},
+                 "bug": {"task"},
+             }),
+         ):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path, "project": "RSPACIFICO"},
+        )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["pending_task_consumed"] is True
+    assert data["task_parent_ado_id"] == 5001
+    assert data["task_ado_id"] == 5002
+    assert [c["type"] for c in fake_ado.create_calls] == ["Feature", "User Story", "Task"]
+    assert [c["parent"] for c in fake_ado.create_calls] == [149, 5000, 5001]
+    assert [a["action"] for a in data["actions"]].count("create_intermediate_work_item") == 2
+    payload = json.loads(pt_path.read_text(encoding="utf-8"))
+    assert payload["status"] == "consumed"
+    assert payload["task_ado_id"] == 5002
+    assert payload["hierarchy_bridge"]["path"] == ["Epic", "Feature", "User Story", "Task"]
+    assert [s["ado_id"] for s in payload["hierarchy_bridge"]["steps"]] == [5000, 5001]
+
+
+def test_create_child_task_falls_back_when_feature_type_missing(client, epic_ticket, tmp_repo):
+    """ADO Pacifico: config dice Agile, pero el proyecto no tiene tipo Feature."""
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-NOFEATURE")
+    rel_path = _rel_path(tmp_repo, pt_path)
+    fake_ado = FakeAdoClientExt()
+    fake_ado.unavailable_work_item_types.add("Feature")
+
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado), \
+         patch(
+             "api.tickets._resolve_hierarchy_for_project",
+             return_value=("Agile", {
+                 "epic": {"feature"},
+                 "feature": {"user story"},
+                 "user story": {"task"},
+             }),
+         ):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path, "project": "RSPACIFICO"},
+        )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["task_parent_ado_id"] == 5000
+    assert data["task_ado_id"] == 5001
+    assert [c["type"] for c in fake_ado.create_calls] == ["User Story", "Task"]
+    assert [c["parent"] for c in fake_ado.create_calls] == [149, 5000]
+    assert any(
+        a["action"] == "skip_intermediate_work_item"
+        and a["work_item_type"] == "Feature"
+        and a["reason"] == "WORK_ITEM_TYPE_NOT_AVAILABLE"
+        for a in data["actions"]
+    )
+    payload = json.loads(pt_path.read_text(encoding="utf-8"))
+    assert payload["status"] == "consumed"
+    assert payload["hierarchy_bridge"]["path"] == ["Epic", "User Story", "Task"]
+    assert [s["type"] for s in payload["hierarchy_bridge"]["steps"]] == ["User Story"]
+
+
+def test_create_child_task_does_not_consume_when_parent_link_missing(client, epic_ticket, tmp_repo):
+    """Inc.3: si la Task queda huérfana, devuelve error y deja retryable."""
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-VERIFY")
+    rel_path = _rel_path(tmp_repo, pt_path)
+    fake_ado = FakeAdoClientExt()
+    fake_ado.task_parent_override = None
+
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    assert resp.status_code == 422
+    data = resp.get_json()
+    assert data["error"] == "ADO_CHILD_TASK_VERIFICATION_FAILED"
+    assert data["pending_task_consumed"] is False
+    assert fake_ado.create_calls
+    payload = json.loads(pt_path.read_text(encoding="utf-8"))
+    assert "consumed_at" not in payload
+
+
+def test_create_child_task_parent_not_found(client, epic_ticket, tmp_repo):
+    """Inc.3 (241/242): si el work item padre no existe en ADO (carpeta
+    epic-<ordinal del título> en vez de epic-<ado_id real>), el preflight devuelve
+    422 ADO_PARENT_NOT_FOUND, NO intenta crear la Task y deja el archivo sin
+    consumir — en vez de un 404 TF401232 enterrado en create_work_item."""
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-PARENT404")
+    rel_path = _rel_path(tmp_repo, pt_path)
+    fake_ado = FakeAdoClientExt()
+    fake_ado._parent_not_found = True  # GET del padre 149 → 404 TF401232
+
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    assert resp.status_code == 422
+    data = resp.get_json()
+    assert data["error"] == "ADO_PARENT_NOT_FOUND"
+    assert data["pending_task_consumed"] is False
+    # No se intentó crear la Task (cortó antes de create_work_item).
+    assert fake_ado.create_calls == []
+    # El mensaje es accionable (menciona la confusión ordinal vs id de ADO).
+    assert "epic-149" in data["message"]
+    payload = json.loads(pt_path.read_text(encoding="utf-8"))
+    assert "consumed_at" not in payload
+
+
+def test_create_child_task_parent_preflight_gateable_off(client, epic_ticket, tmp_repo, monkeypatch):
+    """STACKY_PARENT_PREFLIGHT=off omite el preflight de existencia (rollback):
+    el flujo procede y, con el padre presente en el fake, crea la Task igual."""
+    monkeypatch.setenv("STACKY_PARENT_PREFLIGHT", "off")
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-PFOFF")
+    rel_path = _rel_path(tmp_repo, pt_path)
+    fake_ado = FakeAdoClientExt()
+    fake_ado._parent_not_found = True  # aunque el padre "no exista", el flag off lo ignora
+
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    # Con el preflight apagado no se hace el GET de existencia; create_work_item
+    # procede (el fake crea la Task 5000 sin consultar al padre).
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] is True
+    assert fake_ado.create_calls
+
+
+def test_create_child_task_accepts_legacy_epic_id_when_parent_id_matches(client, epic_ticket, tmp_repo):
+    """ADO-241: pending-task legacy trae epic_id=26 pero parent_id=149 real."""
+    pt_path = _write_pending_task(
+        tmp_repo,
+        epic_id="26",
+        rf_id="RF-LEGACY",
+        extra_fields={"parent_id": 149},
+    )
+    rel_path = _rel_path(tmp_repo, pt_path)
+    fake_ado = FakeAdoClientExt()
+
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path, "repo_root": str(tmp_repo)},
+        )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert fake_ado.create_calls[0]["parent"] == 149
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +569,7 @@ def test_dry_run_no_ado_calls(client, epic_ticket, tmp_repo):
     content_before = pt_path.read_bytes()
     fake_ado = FakeAdoClientExt()
 
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         resp = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": rel_path, "dry_run": True},
@@ -416,7 +649,7 @@ def test_operator_reason_in_system_log(client, epic_ticket, tmp_repo):
 
     reason = "Revisado por PO en reunión del 2026-05-15"
 
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         resp = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": rel_path, "operator_reason": reason},
@@ -451,7 +684,7 @@ def test_completion_source_header_in_audit(client, epic_ticket, tmp_repo):
     rel_path = _rel_path(tmp_repo, pt_path)
     fake_ado = FakeAdoClientExt()
 
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         resp = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": rel_path},
@@ -483,7 +716,7 @@ def test_schema_invalid_missing_title(client, epic_ticket, tmp_repo):
     rel_path = _rel_path(tmp_repo, pt_path)
     fake_ado = FakeAdoClientExt()
 
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         resp = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": rel_path},
@@ -507,7 +740,7 @@ def test_file_not_found(client, epic_ticket, tmp_repo):
     """TU-10b: pending_task_path inexistente → 400 PENDING_TASK_FILE_NOT_FOUND."""
     fake_ado = FakeAdoClientExt()
 
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         resp = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": "Agentes/outputs/epic-149/no-existe/pending-task.json"},
@@ -534,7 +767,7 @@ def test_epic_id_mismatch(client, epic_ticket, tmp_repo):
     rel_path = _rel_path(tmp_repo, pt_path)
     fake_ado = FakeAdoClientExt()
 
-    with patch("api.tickets.AdoClient", new=lambda *a, **kw: fake_ado):
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
         resp = client.post(
             "/api/tickets/by-ado/149/create-child-task",
             json={"pending_task_path": rel_path},

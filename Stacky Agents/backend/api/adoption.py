@@ -38,14 +38,13 @@ def _resolve_user() -> str:
 
 
 def _user_matches(execution_user: str | None, target: str) -> bool:
-    """Match laxo: ignora dominio si el target no lo incluye."""
-    if not execution_user:
-        return False
-    if execution_user == target:
-        return True
-    target_local = target.split("@", 1)[0].lower()
-    exec_local = execution_user.split("@", 1)[0].lower()
-    return target_local == exec_local
+    """Match laxo: ignora dominio si el target no lo incluye.
+
+    Delega en el servicio compartido `ado_identity.user_matches` (fuente única de
+    verdad de la semántica de identidad ADO, reusada por B1/B3)."""
+    from services.ado_identity import user_matches
+
+    return user_matches(execution_user, target)
 
 
 def _serialize_ticket(t: Ticket | None) -> dict | None:

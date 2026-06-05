@@ -191,6 +191,11 @@ def cancel_execution(execution_id: int):
         row.completed_at = datetime.utcnow()
         meta = row.metadata_dict or {}
         runtime = meta.get("runtime")
+        # B6: capturar ticket_id/agent_type dentro del session_scope para
+        # sincronizar luego el stacky_status del ticket (hoy el endpoint lo omitía
+        # y el ticket quedaba "running" hasta el próximo reconcile).
+        ticket_id = row.ticket_id
+        agent_type = row.agent_type
 
     if runtime == "codex_cli":
         from services import codex_cli_runner
@@ -198,6 +203,31 @@ def cancel_execution(execution_id: int):
     elif runtime == "claude_code_cli":
         from services import claude_code_cli_runner
         claude_code_cli_runner.cancel(execution_id)
+    else:
+        # B6: github_copilot (y cualquier runtime sin subproceso propio) no tiene
+        # un proceso CLI que matar; la cancelación es cooperativa vía el flag
+        # in-memory de copilot_bridge, expuesto por agent_runner.cancel().
+        try:
+            import agent_runner
+            agent_runner.cancel(execution_id)
+        except Exception:  # noqa: BLE001 — best-effort, no romper el cancel
+            logger.warning("cancel cooperativo (agent_runner) falló exec=%s", execution_id, exc_info=True)
+
+    # B6: sacar el ticket de "running" de inmediato (sin esperar al reaper). El
+    # status ya quedó terminal en la execution row; reflejamos cancelled en el
+    # ticket vía el hook de ciclo de vida (también dispara post-hooks coherentes).
+    if ticket_id is not None:
+        try:
+            from services import ticket_status
+            ticket_status.on_execution_end(
+                ticket_id=ticket_id,
+                execution_id=execution_id,
+                final_status="cancelled",
+                agent_type=agent_type,
+                reason_override="cancelado manualmente desde el board",
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("on_execution_end (cancel) falló exec=%s", execution_id, exc_info=True)
 
     logger.info("execution cancelled manually exec=%s", execution_id)
     return jsonify({"ok": True, "execution_id": execution_id})

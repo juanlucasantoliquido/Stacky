@@ -121,6 +121,26 @@ def _write_pending_alt_base(repo: Path, epic_id: int, rf_id: str, slug: str, pla
     }), encoding="utf-8")
 
 
+def _write_misnamed_pending_with_parent(repo: Path, folder_epic_id: int, real_parent_id: int, rf_id: str):
+    rf_dir = repo / "Agentes" / "outputs" / f"epic-{folder_epic_id}" / rf_id.lower()
+    rf_dir.mkdir(parents=True, exist_ok=True)
+    plan_rel = f"Agentes/outputs/epic-{folder_epic_id}/{rf_id.lower()}/plan-de-pruebas.md"
+    plan_path = repo / plan_rel
+    plan_path.write_text("# plan", encoding="utf-8")
+    (rf_dir / "pending-task.json").write_text(json.dumps({
+        "generated_at": "2026-06-05",
+        "generated_by": "FunctionalAnalyst legacy",
+        "epic_id": str(folder_epic_id),
+        "parent_id": real_parent_id,
+        "rf_id": rf_id,
+        "title": f"{rf_id} — legacy mal nombrado",
+        "description_html": "<p>x</p>",
+        "plan_de_pruebas_path": plan_rel,
+        "parent_link_type": "System.LinkTypes.Hierarchy-Reverse",
+        "status": "pending_manual_creation",
+    }), encoding="utf-8")
+
+
 def _write_comment(repo: Path, ado_id: int):
     d = repo / "Agentes" / "outputs" / str(ado_id)
     d.mkdir(parents=True, exist_ok=True)
@@ -246,3 +266,72 @@ def test_ub07_malformed_pending_task_surfaced(client, tmp_repo):
     assert it["parse_errors"][0]["pending_task_path"].startswith("output/tickets/epic-7007/")
     assert any("MALFORMADO" in b for b in it["blockers"])
     assert board["counts"]["files_error"] >= 1
+
+
+def test_ub08_detects_misnamed_epic_folder_by_parent_id(client, tmp_repo):
+    """Caso ADO-241: archivo bajo epic-26, pero parent_id apunta al Epic real."""
+    _seed_ticket(241, work_item_type="Epic", title="EP-26 - Busqueda Cliente", stacky_status="running")
+    _write_misnamed_pending_with_parent(tmp_repo, folder_epic_id=26, real_parent_id=241, rf_id="RF-026")
+
+    board = _get_board(client)
+    it = _item(board, 241)
+    assert it is not None
+    assert it["readiness"] == "task_ready"
+    assert it["total_pending"] == 1
+    assert "epic-26" in it["pending_tasks"][0]["pending_task_path"]
+    assert board["scan"]["outputs_dir"].endswith("Agentes\\outputs") or board["scan"]["outputs_dir"].endswith("Agentes/outputs")
+
+
+def test_rescue_artifact_stages_pending_task(client, tmp_repo):
+    _seed_ticket(7101, work_item_type="Epic", title="Epic 7101")
+    payload = {
+        "generated_at": "2026-06-05",
+        "generated_by": "drag-drop",
+        "epic_id": "26",
+        "parent_id": 7101,
+        "rf_id": "RF-7101",
+        "title": "RF-7101 — subida manual",
+        "description_html": "<p>x</p>",
+        "plan_de_pruebas_path": "",
+        "parent_link_type": "System.LinkTypes.Hierarchy-Reverse",
+        "status": "pending_manual_creation",
+    }
+
+    resp = client.post("/api/tickets/by-ado/7101/rescue-artifact", json={
+        "repo_root": str(tmp_repo),
+        "files": [
+            {"name": "pending-task.json", "content": json.dumps(payload)},
+            {"name": "plan-de-pruebas.md", "content": "# plan"},
+        ],
+    })
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["artifact_type"] == "pending_task"
+    assert data["pending_task_path"].startswith("Agentes/outputs/epic-7101/")
+    staged = tmp_repo / data["pending_task_path"]
+    saved = json.loads(staged.read_text(encoding="utf-8"))
+    assert saved["epic_id"] == "7101"
+    assert saved["rescue_original_epic_id"] == "26"
+
+
+def test_rescue_artifact_stages_comment_html(client, tmp_repo):
+    _seed_ticket(7102, work_item_type="Task", title="Task 7102")
+
+    resp = client.post("/api/tickets/by-ado/7102/rescue-artifact", json={
+        "repo_root": str(tmp_repo),
+        "artifact_type": "comment",
+        "files": [
+            {"name": "comment.html", "content": "<h2>ok</h2>"},
+            {"name": "comment.meta.json", "content": json.dumps({"source": "drag-drop"})},
+        ],
+    })
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["artifact_type"] == "comment"
+    assert data["html_output_path"] == "Agentes/outputs/7102/comment.html"
+    staged = tmp_repo / data["html_output_path"]
+    assert staged.read_text(encoding="utf-8") == "<h2>ok</h2>"
+    meta = json.loads((staged.parent / "comment.meta.json").read_text(encoding="utf-8"))
+    assert meta["source"] == "drag-drop"

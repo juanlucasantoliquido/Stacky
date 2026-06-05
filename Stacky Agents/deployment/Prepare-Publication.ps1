@@ -79,6 +79,27 @@ function Remove-SafeDirectory {
     Remove-Item -LiteralPath $Path -Recurse -Force
 }
 
+function Stop-DeployProcesses {
+    if (-not (Test-Path $deployRootFull)) {
+        return
+    }
+
+    $deployRootNormalized = [System.IO.Path]::GetFullPath($deployRootFull).TrimEnd('\')
+    $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ExecutablePath -and
+        [System.IO.Path]::GetFullPath($_.ExecutablePath).StartsWith($deployRootNormalized + "\", [StringComparison]::OrdinalIgnoreCase)
+    })
+
+    foreach ($process in $processes) {
+        Write-Warn ("Cerrando proceso activo del deploy: {0} (PID {1})" -f $process.Name, $process.ProcessId)
+        Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+    }
+
+    if ($processes.Count -gt 0) {
+        Start-Sleep -Seconds 2
+    }
+}
+
 function Parse-Version {
     param([string]$Text)
     if ($Text -match "^(\d+)\.(\d+)\.(\d+)$") {
@@ -194,6 +215,7 @@ function Backup-CurrentDeploy {
     }
 
     Write-Step "Respaldando deploy anterior"
+    Stop-DeployProcesses
     New-Item -ItemType Directory -Path $backupsRoot -Force | Out-Null
 
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -206,7 +228,17 @@ function Backup-CurrentDeploy {
         Assert-ChildPath -Base $deployRootFull -Path $item.FullName
         $destination = Join-Path $backupDir $item.Name
         Assert-ChildPath -Base $backupDir -Path $destination
-        Move-Item -LiteralPath $item.FullName -Destination $destination -Force
+        try {
+            Move-Item -LiteralPath $item.FullName -Destination $destination -Force
+        } catch {
+            Write-Warn ("No se pudo mover '{0}' al backup. Se copiara y se actualizara en sitio. Detalle: {1}" -f $item.FullName, $_.Exception.Message)
+            Copy-Item -LiteralPath $item.FullName -Destination $destination -Recurse -Force
+            try {
+                Remove-Item -LiteralPath $item.FullName -Recurse -Force
+            } catch {
+                Write-Warn ("No se pudo limpiar '{0}' despues del backup. Se sobrescribira con el nuevo release. Detalle: {1}" -f $item.FullName, $_.Exception.Message)
+            }
+        }
     }
 
     Write-OK "Backup creado: $backupDir"

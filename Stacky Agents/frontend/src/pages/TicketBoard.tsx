@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Tickets, Agents, FlowConfig } from "../api/endpoints";
+import { Tickets, Agents, FlowConfig, Executions } from "../api/endpoints";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
 import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
 import { useTicketSync } from "../hooks/useTicketSync";
@@ -24,6 +24,7 @@ import {
 } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
+import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import styles from "./TicketBoard.module.css";
 
 // Resuelve el tipo del agente. Prioriza el override explícito que el operador
@@ -241,26 +242,24 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
   const [runModal, setRunModal] = useState<"suggested" | "custom" | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  // B6: cancelación del run en curso desde el board.
+  const [isCancelling, setIsCancelling] = useState(false);
 
-  // Feature #4: la inferencia LLM (Tickets.adoPipelineStatus) fue removida del
-  // consumo del frontend porque devolvía sugerencias poco confiables. La
-  // recomendación viene 100% de FlowConfig (mapping determinístico). El
-  // endpoint backend sigue existiendo para rollback.
-
-  // #7: Tasks nunca proponen Negocio — ya tienen análisis funcional
-  // #8: Épicas nunca proponen Negocio — tienen su propio botón Funcional
-  const isTask  = (ticket.work_item_type ?? "").toLowerCase() === "task";
+  // Regla de negocio #7/#8 (preservada dentro de resolveSuggestedAgent): Tasks y
+  // Épicas nunca proponen Negocio — ya tienen análisis previo / botón Funcional.
   const isEpic  = (ticket.work_item_type ?? "").toLowerCase() === "epic";
 
-  // Feature #4 — recomendación determinística desde FlowConfig (DO-4.1: clave agent_type).
-  // Se resuelve desde el map cargado una vez en TicketBoard raíz; no hay llamada por ticket.
-  // Si el estado ADO no tiene regla configurada, nextSuggested es null → botón deshabilitado.
-  const rawFlowAgentType = ticket.ado_state
-    ? (flowConfigMap.get(ticket.ado_state.trim().toLowerCase()) ?? null)
-    : null;
-  // Preservar regla de negocio #7/#8: Tasks y Épicas nunca proponen Negocio
-  const nextSuggested =
-    ((isTask || isEpic) && rawFlowAgentType === "business") ? null : rawFlowAgentType;
+  // B5 — recomendación con fallback (FlowConfig → pipeline_summary → por tipo).
+  // Antes salía sólo de FlowConfig por estado: un Feature/Technical/Task en un
+  // estado no mapeado quedaba sin sugerencia (botón deshabilitado). El resolver
+  // compartido (mismo en árbol y grafo) agrega los fallbacks y preserva la
+  // supresión de "business" en Tasks/Épicas cayendo al siguiente candidato.
+  const nextSuggested = resolveSuggestedAgent({
+    workItemType: ticket.work_item_type,
+    adoState: ticket.ado_state,
+    flowConfigMap,
+    pipelineNext: ticket.pipeline_summary?.next_suggested ?? null,
+  });
   const nextLabel = nextSuggested ? (NEXT_AGENT_LABELS[nextSuggested] ?? nextSuggested) : null;
 
   // Resuelve el filename del agente del equipo que corresponde al tipo sugerido.
@@ -306,6 +305,36 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
       setIsLaunching(false);
     }
   }, [activeProjectName, agentRuntime, pinnedAgents, qc, setCodexConsoleExecution, ticket.id, vsCodeAgents]);
+
+  // B6: cancela el run activo del ticket. Requiere conocer la execution_id
+  // (runningExecution); si el "running" viene sólo de stacky_status (huérfano)
+  // no hay nada concreto que cancelar y el botón no se muestra.
+  const handleCancelRun = useCallback(async () => {
+    if (!runningExecution) return;
+    if (!window.confirm("¿Cancelar el run en curso?")) return;
+    setIsCancelling(true);
+    try {
+      await Executions.cancel(runningExecution.id);
+    } catch (error) {
+      // 409 = carrera: el run ya terminó entre el render y el click. No es un
+      // error real para el operador; refrescamos y seguimos.
+      const msg = error instanceof Error ? error.message : String(error);
+      if (!msg.startsWith("409")) {
+        // eslint-disable-next-line no-alert
+        window.alert(`No se pudo cancelar el run: ${msg}`);
+      }
+    } finally {
+      setIsCancelling(false);
+      // Claves que usa useRunningStatus + las listas de tickets para sacar el
+      // ticket de "running" sin esperar al polling de 5s.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["executions-active", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["executions-queued", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
+      ]);
+    }
+  }, [activeProjectName, qc, runningExecution]);
 
   return (
     <>
@@ -369,7 +398,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
                 Usa isRunning para cubrir el caso donde runningExecution existe pero
                 stacky_status quedó desincronizado (chat externo, race, reset). */}
             {isRunning && !inconsistency.isInconsistent && (
-              <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
                 <FinishWorkButton
                   ticket={ticket}
                   onCompleted={() => {
@@ -377,6 +406,17 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
                     qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
                   }}
                 />
+                {/* B6: cancelar el run sólo cuando hay una execution_id concreta. */}
+                {runningExecution && (
+                  <button
+                    className={styles.cancelRunBtn}
+                    onClick={handleCancelRun}
+                    disabled={isCancelling}
+                    title="Cancelar el run en curso (en GitHub Copilot la cancelación es cooperativa y puede tardar unos segundos)"
+                  >
+                    {isCancelling ? "⏳ Cancelando…" : "✕ Cancelar run"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -659,8 +699,19 @@ export default function TicketBoard() {
   const displayHierarchy = useMemo<TicketHierarchy | null>(() => {
     if (!hierarchy) return null;
     if (showAll || !myUniqueName) return hierarchy;
-    const mine = (t: { assigned_to_ado?: string | null }) =>
-      (t.assigned_to_ado ?? null) === myUniqueName;
+    // B1: matcheo tolerante (espeja `ado_identity.user_matches` del backend).
+    // El `===` crudo anterior fallaba cuando assigned_to_ado guardaba el
+    // displayName en vez del email, o por diferencias de casing/dominio →
+    // board vacío. Normalizamos (trim+lowercase) y caemos a la parte local
+    // antes de `@` para tolerar email vs uniqueName sin dominio.
+    const norm = (s?: string | null) => (s ?? "").trim().toLowerCase();
+    const localPart = (s?: string | null) => norm(s).split("@", 1)[0];
+    const mine = (t: { assigned_to_ado?: string | null }) => {
+      const a = norm(t.assigned_to_ado);
+      const me = norm(myUniqueName);
+      if (!a || !me) return false;
+      return a === me || localPart(t.assigned_to_ado) === localPart(myUniqueName);
+    };
     const epics = hierarchy.epics
       .map((e) => ({ ...e, children: e.children.filter(mine) }))
       .filter((e) => mine(e) || e.children.length > 0);

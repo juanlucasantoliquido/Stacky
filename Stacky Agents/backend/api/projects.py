@@ -90,8 +90,6 @@ def _project_to_dict(cfg: dict, active_name: str | None) -> dict:
             "technical":      docs_paths.get("technical", ""),
             "functional":     docs_paths.get("functional", ""),
         },
-        "docs_technical_path":  docs_paths.get("technical", ""),
-        "docs_functional_path": docs_paths.get("functional", ""),
         "tracker_type":      t_type,
         # ADO fields
         "organization":      tracker.get("organization", ""),
@@ -119,6 +117,13 @@ def _resolve_workspace_root(data: dict, cfg: dict | None = None) -> str:
     return (cfg.get("workspace_root") or "").strip()
 
 
+def _resolve_text_field(data: dict, key: str, current: object = "") -> str:
+    """Respeta strings vacíos enviados en PATCH; preserva solo si el campo falta."""
+    if key in data:
+        return str(data.get(key) or "").strip()
+    return str(current or "").strip()
+
+
 def _resolve_docs_paths(data: dict, cfg: dict | None = None) -> dict:
     """Lee docs_paths desde payload nuevo o campos planos legacy del modal."""
     current = (cfg or {}).get("docs_paths") or {}
@@ -132,6 +137,12 @@ def _resolve_docs_paths(data: dict, cfg: dict | None = None) -> dict:
         }
 
     nested = data.get("docs_paths") if isinstance(data.get("docs_paths"), dict) else {}
+    if has_nested:
+        return {
+            "technical": nested.get("technical", current.get("technical", "")),
+            "functional": nested.get("functional", current.get("functional", "")),
+        }
+
     return {
         "technical": (
             data.get("docs_technical_path")
@@ -388,8 +399,8 @@ def update_project(project_name: str):
 
         if tracker_type == "jira":
             tracker   = cfg.get("issue_tracker") or {}
-            jira_url  = (data.get("jira_url") or tracker.get("url", "")).strip()
-            jira_key  = (data.get("jira_key") or tracker.get("project_key", "")).strip()
+            jira_url  = _resolve_text_field(data, "jira_url", tracker.get("url", ""))
+            jira_key  = _resolve_text_field(data, "jira_key", tracker.get("project_key", ""))
             new_cfg   = initialize_jira_project(
                 name=project_name,
                 display_name=(data.get("display_name") or cfg.get("display_name", project_name)).strip(),
@@ -426,10 +437,10 @@ def update_project(project_name: str):
 
         elif tracker_type == "mantis":
             tracker             = cfg.get("issue_tracker") or {}
-            mantis_url          = (data.get("mantis_url") or tracker.get("url", "")).strip()
-            mantis_project_id   = str(data.get("mantis_project_id") or tracker.get("project_id", "")).strip()
-            mantis_project_name = (data.get("mantis_project_name") or tracker.get("project_name", "")).strip()
-            mantis_protocol     = (data.get("mantis_protocol") or tracker.get("protocol", "rest")).strip().lower()
+            mantis_url          = _resolve_text_field(data, "mantis_url", tracker.get("url", ""))
+            mantis_project_id   = _resolve_text_field(data, "mantis_project_id", tracker.get("project_id", ""))
+            mantis_project_name = _resolve_text_field(data, "mantis_project_name", tracker.get("project_name", ""))
+            mantis_protocol     = _resolve_text_field(data, "mantis_protocol", tracker.get("protocol", "rest")).lower()
             mantis_token        = (data.get("mantis_token") or "").strip()
             mantis_username     = (data.get("mantis_username") or "").strip()
             mantis_password     = (data.get("mantis_password") or "").strip()
@@ -468,15 +479,15 @@ def update_project(project_name: str):
 
         else:
             tracker      = cfg.get("issue_tracker") or {}
-            organization = (data.get("organization") or tracker.get("organization", "")).strip()
-            ado_project  = (data.get("ado_project") or tracker.get("project", "")).strip()
+            organization = _resolve_text_field(data, "organization", tracker.get("organization", ""))
+            ado_project  = _resolve_text_field(data, "ado_project", tracker.get("project", ""))
             new_cfg      = initialize_ado_project(
                 name=project_name,
                 display_name=(data.get("display_name") or cfg.get("display_name", project_name)).strip(),
                 workspace_root=workspace_root,
                 organization=organization,
                 ado_project=ado_project,
-                area_path=(data.get("area_path") or tracker.get("area_path", "")),
+                area_path=_resolve_text_field(data, "area_path", tracker.get("area_path", "")),
                 auth_file="auth/ado_auth.json",
                 docs_paths=docs_paths,
                 agents_dir=agents_dir,

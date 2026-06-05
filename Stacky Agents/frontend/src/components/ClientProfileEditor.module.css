@@ -172,6 +172,12 @@
   border-color: var(--accent);
 }
 
+.input[readonly] {
+  color: var(--text-muted);
+  background: var(--bg-base);
+  cursor: default;
+}
+
 .hint {
   font-size: 10px;
   color: var(--text-faint);

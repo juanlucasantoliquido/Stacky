@@ -35,8 +35,11 @@ os.environ.setdefault("LLM_BACKEND", "mock")
 
 @pytest.fixture(scope="session")
 def flask_app():
-    from app import create_app
-    application = create_app()
+    os.environ["STACKY_OUTPUT_WATCHER_ENABLED"] = "false"
+    os.environ["STACKY_MANIFEST_WATCHER_ENABLED"] = "false"
+    import app as app_module
+    app_module._startup_sync = lambda logger: None
+    application = app_module.create_app()
     application.config["TESTING"] = True
     try:
         from services.ticket_status import stop_stale_recovery
@@ -412,3 +415,125 @@ def test_publisher_persists_comment_id_and_marker(flask_app, init_db, tmp_path, 
         assert row is not None
         assert row.comment_id == 7777
         assert row.marker == result.marker
+
+
+def test_publisher_dedupes_same_content_across_executions(flask_app, init_db, tmp_path, monkeypatch):
+    from db import session_scope
+    from models import AgentExecution, Ticket
+    from services import ado_publisher
+    from services import agent_html_output as html_io
+
+    with session_scope() as session:
+        t = Ticket(
+            ado_id=88002,
+            project="TestProject",
+            title="publisher cross execution dedupe",
+            work_item_type="task",
+            ado_state="Active",
+        )
+        session.add(t)
+        session.flush()
+        exec_ids = []
+        for _ in range(2):
+            row = AgentExecution(
+                ticket_id=t.id,
+                agent_type="analyst",
+                status="completed",
+                input_context_json="[]",
+                started_by="test",
+            )
+            session.add(row)
+            session.flush()
+            exec_ids.append(row.id)
+
+    html_dir = tmp_path / "Agentes" / "outputs" / "88002"
+    html_dir.mkdir(parents=True, exist_ok=True)
+    html_path = html_dir / "comment.html"
+    html_path.write_text("<p>Mismo contenido</p>", encoding="utf-8")
+    monkeypatch.setattr(html_io, "default_html_path", lambda ado_id: html_path)
+
+    calls: list[int] = []
+
+    class FakeClient:
+        def post_comment(self, ado_id, text, fmt="html"):
+            calls.append(ado_id)
+            return {"id": 880020}
+
+        def upload_attachment(self, *a, **kw):
+            return {"id": "x", "url": "https://ado/x"}
+
+        def link_attachment_to_work_item(self, *a, **kw):
+            return {}
+
+    first = ado_publisher.publish_from_execution(
+        exec_ids[0],
+        triggered_by="pytest",
+        client_factory=lambda: FakeClient(),
+    )
+    second = ado_publisher.publish_from_execution(
+        exec_ids[1],
+        triggered_by="pytest",
+        client_factory=lambda: FakeClient(),
+    )
+
+    assert first.status == "ok"
+    assert second.status == "idempotent_replay"
+    assert second.reason == "duplicate_content_pre_check"
+    assert calls == [88002]
+
+
+def test_publisher_skips_post_when_marker_already_exists(flask_app, init_db, tmp_path, monkeypatch):
+    from db import session_scope
+    from models import AgentExecution, Ticket
+    from services import ado_publisher
+    from services import agent_html_output as html_io
+
+    with session_scope() as session:
+        t = Ticket(
+            ado_id=88003,
+            project="TestProject",
+            title="publisher marker exists",
+            work_item_type="task",
+            ado_state="Active",
+        )
+        session.add(t)
+        session.flush()
+        exec_row = AgentExecution(
+            ticket_id=t.id,
+            agent_type="analyst",
+            status="completed",
+            input_context_json="[]",
+            started_by="test",
+        )
+        session.add(exec_row)
+        session.flush()
+        execution_id = exec_row.id
+
+    html_dir = tmp_path / "Agentes" / "outputs" / "88003"
+    html_dir.mkdir(parents=True, exist_ok=True)
+    html_path = html_dir / "comment.html"
+    html_path.write_text("<p>Ya publicado en ADO</p>", encoding="utf-8")
+    monkeypatch.setattr(html_io, "default_html_path", lambda ado_id: html_path)
+
+    class FakeClient:
+        def comment_exists(self, ado_id, marker):
+            return {"id": 123, "text": marker}
+
+        def post_comment(self, ado_id, text, fmt="html"):
+            raise AssertionError("post_comment no debe llamarse si existe el marker")
+
+        def upload_attachment(self, *a, **kw):
+            return {"id": "x", "url": "https://ado/x"}
+
+        def link_attachment_to_work_item(self, *a, **kw):
+            return {}
+
+    result = ado_publisher.publish_from_execution(
+        execution_id,
+        triggered_by="pytest",
+        client_factory=lambda: FakeClient(),
+    )
+
+    assert result.ok is True
+    assert result.status == "idempotent_replay"
+    assert result.reason == "ado_marker_exists"

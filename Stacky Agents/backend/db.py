@@ -113,6 +113,28 @@ def _migrate_add_columns() -> None:
         _backfill_multi_project_ticket_columns(conn)
         _rebuild_tickets_table_if_needed(conn)
         _backfill_ticket_state_history(conn)
+        _ensure_agent_html_publish_indexes(conn)
+
+
+def _ensure_agent_html_publish_indexes(conn) -> None:
+    statements = [
+        (
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "uq_agent_html_publish_execution_sha "
+            "ON agent_html_publish (execution_id, html_sha256)"
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS "
+            "ix_agent_html_publish_ado_sha_status "
+            "ON agent_html_publish (ado_id, html_sha256, status)"
+        ),
+    ]
+    for statement in statements:
+        try:
+            conn.execute(text(statement))
+            conn.commit()
+        except Exception:
+            pass
 
 
 def _backfill_multi_project_ticket_columns(conn) -> None:

@@ -506,6 +506,30 @@
   border-color: rgba(99,102,241,0.6);
 }
 
+/* B6 — Botón cancelar run (rojo, junto a Finish work) */
+.cancelRunBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid rgba(248,81,73,0.45);
+  background: rgba(248,81,73,0.12);
+  color: #ff9b94;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cancelRunBtn:hover:not(:disabled) {
+  background: rgba(248,81,73,0.22);
+  border-color: rgba(248,81,73,0.7);
+}
+.cancelRunBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* ─── Modal (popup nota / agente) ───────── */
 .modalOverlay {
   position: fixed;
@@ -642,8 +666,17 @@
   outline: none;
   width: 100%;
   cursor: pointer;
+  /* B4: forzar esquema oscuro en el popup nativo del <select> (refuerza el
+     color-scheme global de theme.css; necesario en navegadores que lo scopean). */
+  color-scheme: dark;
 }
 .modalSelect:focus { border-color: rgba(99,102,241,0.6); }
+/* B4: robustez cross-browser (Firefox/Linux no siempre respetan color-scheme en
+   el popup) — pintar las opciones explícitamente con los tokens del tema. */
+.modalSelect option {
+  background-color: var(--bg-elev);
+  color: var(--text-primary);
+}
 
 .modalTextarea {
   background: rgba(255,255,255,0.05);

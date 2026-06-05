@@ -25,10 +25,13 @@ from __future__ import annotations
 
 import getpass
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
 from runtime_paths import data_dir
+
+logger = logging.getLogger("stacky_agents.ado_identity")
 
 _MAP_FILENAME = "ado_user_map.json"
 
@@ -90,8 +93,63 @@ def save_identity(project: str, identity: dict, stacky_user: str | None = None) 
     return entry
 
 
+# ── Matcheo tolerante de identidad ─────────────────────────────────────────────
+# Fuente única de verdad para comparar el assignee de un ticket contra la
+# identidad del operador. Antes esta semántica estaba duplicada (api/adoption.py
+# `_user_matches`) y el board ni siquiera la usaba (comparaba con `===` crudo),
+# lo que rompía el filtro "Mis tareas" (B1). B1 (filtro) y B3 (auto-asignación)
+# consumen ahora exactamente la misma lógica.
+
+
+def user_matches(candidate: str | None, target: str | None) -> bool:
+    """¿`candidate` (ej. Ticket.assigned_to_ado) identifica al mismo usuario que `target`?
+
+    Match tolerante:
+      1. Igualdad exacta tras trim + lowercase (cubre casing/dominio idéntico).
+      2. Si no, compara la parte local (antes de `@`) en minúsculas, lo que tolera
+         que un lado sea email (`jluca@ubimia.com`) y el otro un uniqueName sin
+         dominio o un displayName degenerado a su local-part.
+
+    Devuelve False si cualquiera de los dos está vacío (sin identidad → no filtra).
+    """
+    if not candidate or not target:
+        return False
+    c = candidate.strip().lower()
+    t = target.strip().lower()
+    if not c or not t:
+        return False
+    if c == t:
+        return True
+    return c.split("@", 1)[0] == t.split("@", 1)[0]
+
+
+def resolve_me_unique_name(project_name: str | None) -> str:
+    """uniqueName ADO del operador (single-operator por instancia).
+
+    Prefiere el mapeo persistido (rápido); si no existe, lo resuelve vía PAT
+    (connectionData) y lo cachea. Si no se puede resolver, devuelve "" — los
+    callers deben tratar el vacío como "identidad desconocida" y NO filtrar /
+    NO asignar, evitando una lista vacía confusa o una asignación errónea.
+    """
+    cached = get_cached_identity(project_name or "")
+    if cached and cached.get("ado_unique_name"):
+        return cached["ado_unique_name"]
+    try:
+        from services.project_context import build_ado_client
+
+        identity = build_ado_client(project_name=project_name).get_authenticated_user()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo resolver identidad ADO para 'me': %s", exc)
+        return ""
+    if identity.get("unique_name"):
+        save_identity(project_name or "", identity)
+    return identity.get("unique_name") or ""
+
+
 __all__ = [
     "current_stacky_user",
     "get_cached_identity",
     "save_identity",
+    "user_matches",
+    "resolve_me_unique_name",
 ]

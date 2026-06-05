@@ -1,4 +1,5 @@
 import hashlib
+import html as _html
 import json
 import logging
 import os
@@ -7,7 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, request
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
+from sqlalchemy.exc import OperationalError
 
 import fingerprint
 from db import session_scope
@@ -22,7 +24,7 @@ from services.ado_sync import (
 from services.pipeline_status import get_pipeline_status, get_pipeline_summary
 from services.ado_pipeline_inference import infer_pipeline, invalidate_cache
 from services.ado_client import AdoClient, AdoApiError as _AdoApiError, AdoConfigError as _AdoConfigError
-from services.project_context import build_ado_client, resolve_project_context
+from services.project_context import ProjectContextError, build_ado_client, resolve_project_context
 
 logger = logging.getLogger("stacky_agents.api.tickets")
 
@@ -55,7 +57,7 @@ _PENDING_TASK_STATUS_ALLOWED = _PENDING_TASK_STATUS_PENDING_ALIASES | {PENDING_T
 # al mismo dominio: el contenido producido por el agente.
 _CONSUMED_METADATA_KEYS = {
     "consumed_at", "task_ado_id", "attachment_id", "status", "operator_reason",
-    "operation_id", "payload_sha256",
+    "operation_id", "payload_sha256", "hierarchy_bridge",
 }
 
 
@@ -99,6 +101,167 @@ def _resolve_repo_root() -> Path:
     if REPO_ROOT is not None:
         return REPO_ROOT
     return _repo_root()
+
+
+def _body_json() -> dict:
+    body = request.get_json(silent=True) or {}
+    return body if isinstance(body, dict) else {}
+
+
+def _artifact_root_override_from_request(body: dict | None = None) -> str | None:
+    """Lee un override local de ruta desde query/body.
+
+    Acepta tanto repo root (`N:/.../RSPACIFICO`) como outputs dir
+    (`N:/.../RSPACIFICO/Agentes/outputs`) o incluso un `epic-*` dentro de outputs.
+    Es un override por request para el desatascador/rescate; no modifica el
+    watcher global ni variables de entorno.
+    """
+    for key in ("outputs_root", "repo_root", "artifact_root", "root"):
+        value = (request.args.get(key) or "").strip()
+        if value:
+            return value
+    data = body if body is not None else _body_json()
+    for key in ("outputs_root", "repo_root", "artifact_root", "root"):
+        value = (data.get(key) or "").strip() if isinstance(data.get(key), str) else ""
+        if value:
+            return value
+    return None
+
+
+def _resolve_artifact_repo_root(body: dict | None = None) -> tuple[Path, dict]:
+    """Resuelve repo_root efectivo para escanear artifacts.
+
+    El desatascador necesita poder mirar rutas locales distintas del workspace
+    donde corre Stacky (p.ej. app en N:/STACKY pero proyecto en N:/RSPACIFICO).
+    """
+    default_repo = _resolve_repo_root()
+    raw = _artifact_root_override_from_request(body)
+    if not raw:
+        outputs = default_repo / "Agentes" / "outputs"
+        return default_repo, {
+            "override": None,
+            "repo_root": str(default_repo),
+            "repo_root_exists": default_repo.exists(),
+            "outputs_dir": str(outputs),
+            "outputs_dir_exists": outputs.is_dir(),
+        }
+
+    cleaned = raw.strip().strip('"').strip("'")
+    p = Path(cleaned)
+    if not p.is_absolute():
+        p = default_repo / p
+    try:
+        resolved = p.resolve()
+    except OSError:
+        resolved = p.absolute()
+
+    lower_name = resolved.name.lower()
+    parent_name = resolved.parent.name.lower() if resolved.parent else ""
+    grandparent_name = resolved.parent.parent.name.lower() if resolved.parent and resolved.parent.parent else ""
+
+    if lower_name.startswith("epic-") and parent_name == "outputs" and grandparent_name == "agentes":
+        repo = resolved.parent.parent.parent
+        outputs = resolved.parent
+    elif lower_name == "outputs" and parent_name == "agentes":
+        repo = resolved.parent.parent
+        outputs = resolved
+    else:
+        repo = resolved
+        outputs = repo / "Agentes" / "outputs"
+
+    return repo, {
+        "override": cleaned,
+        "repo_root": str(repo),
+        "repo_root_exists": repo.exists(),
+        "outputs_dir": str(outputs),
+        "outputs_dir_exists": outputs.is_dir(),
+    }
+
+
+def _artifact_scan_roots(repo_root: Path) -> list[dict]:
+    roots = []
+    for base in _EPIC_OUTPUT_BASES:
+        path = repo_root.joinpath(*base)
+        roots.append({
+            "label": "/".join(base),
+            "path": str(path),
+            "exists": path.is_dir(),
+        })
+    return roots
+
+
+def _watcher_snapshot() -> dict:
+    try:
+        from services.output_watcher import get_output_watcher
+        watcher = get_output_watcher()
+        if watcher is None:
+            return {"running": False, "outputs_dir": None}
+        return {
+            "running": bool(watcher._thread is not None and watcher._thread.is_alive()),
+            "outputs_dir": str(watcher.outputs_dir),
+            "outputs_dir_exists": watcher.outputs_dir.exists(),
+            "poll_interval": watcher.poll_interval,
+            "stable_delay_a": watcher.stable_delay_a,
+            "stable_delay_b": watcher.stable_delay_b,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"running": False, "error": str(exc)[:200]}
+
+
+def _write_manual_finish_html(*, ado_id: int, operator: str, operator_reason: str) -> Path:
+    """Crea un comment.html de cierre manual para publicarlo via ado_publisher."""
+    from services import agent_html_output as html_io
+
+    out_path = html_io.default_html_path(ado_id)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    escaped_operator = _html.escape(operator or "anonymous")
+    escaped_reason = _html.escape(operator_reason or "")
+    out_path.write_text(
+        (
+            "<p><b>Cierre manual desde Stacky Agents.</b></p>\n"
+            f"<p>Operador: {escaped_operator}</p>\n"
+            f"<p>Motivo: {escaped_reason}</p>\n"
+        ),
+        encoding="utf-8",
+    )
+    return out_path
+
+
+def _pending_task_preflight_for_finish(ado_id: int | None) -> dict:
+    """Resume pending-task.json no consumidos para bloquear cierres silenciosos."""
+    if ado_id is None:
+        return {
+            "total_pending": 0,
+            "total_consumed": 0,
+            "parse_errors": [],
+            "pending_tasks": [],
+            "scan_error": None,
+        }
+    try:
+        pending, consumed_count, parse_errors = _scan_pending_tasks_for_epic(
+            _resolve_repo_root(),
+            int(ado_id),
+        )
+        return {
+            "total_pending": len(pending),
+            "total_consumed": consumed_count,
+            "parse_errors": parse_errors,
+            "pending_tasks": pending,
+            "scan_error": None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "finish_work: no se pudo escanear pending-task.json para ADO-%s: %s",
+            ado_id,
+            exc,
+        )
+        return {
+            "total_pending": 0,
+            "total_consumed": 0,
+            "parse_errors": [],
+            "pending_tasks": [],
+            "scan_error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def _request_project_name() -> str | None:
@@ -182,22 +345,36 @@ def _ado_client_for_ticket(ticket: Ticket | None = None, project_name: str | Non
 def _resolve_me_unique_name(project_name: str | None) -> str:
     """uniqueName ADO del operador para el filtro 'Mis tareas'.
 
-    Prefiere el mapeo persistido (rápido); si no existe, lo resuelve vía PAT y
-    lo cachea. Si no se puede resolver, devuelve "" (el filtro queda inerte y se
-    muestran todas las tareas, evitando una lista vacía confusa)."""
-    from services.ado_identity import get_cached_identity, save_identity
+    Wrapper fino sobre el servicio compartido `ado_identity.resolve_me_unique_name`
+    (fuente única de verdad reusada por B1 filtro y B3 auto-asignación)."""
+    from services.ado_identity import resolve_me_unique_name
 
-    cached = get_cached_identity(project_name or "")
-    if cached and cached.get("ado_unique_name"):
-        return cached["ado_unique_name"]
+    return resolve_me_unique_name(project_name)
+
+
+def _resolve_agent_block_states(
+    project_name: str | None, agent_type: str | None
+) -> tuple[str | None, str | None]:
+    """B7 (D7-2): devuelve (blocked_state, review_state) del agente según el
+    client_profile efectivo del proyecto.
+
+    `review_state` = primer `input_states` del rol (estado donde el agente recibe
+    el ticket). Defensivo: ante cualquier fallo devuelve (None, None) → el guard
+    queda inerte (no rompe flujos legítimos)."""
+    if not project_name or not agent_type:
+        return (None, None)
     try:
-        identity = _ado_client_for_ticket(project_name=project_name).get_authenticated_user()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("No se pudo resolver identidad ADO para 'me': %s", exc)
-        return ""
-    if identity.get("unique_name"):
-        save_identity(project_name or "", identity)
-    return identity.get("unique_name") or ""
+        from services.client_profile import load_effective_client_profile
+
+        profile = load_effective_client_profile(project_name) or {}
+        machine = (profile.get("tracker_state_machine") or {}).get(agent_type) or {}
+        blocked = (machine.get("blocked_state") or "").strip() or None
+        inputs = machine.get("input_states") or []
+        review = (inputs[0].strip() if inputs and isinstance(inputs[0], str) else None) or None
+        return (blocked, review)
+    except Exception:  # noqa: BLE001
+        logger.debug("no se pudo resolver block/review states para %s/%s", project_name, agent_type, exc_info=True)
+        return (None, None)
 
 
 def _check_finish_manifest_gate(execution_id: int | None) -> dict | None:
@@ -293,7 +470,11 @@ def list_tickets():
         if project_filter is not None:
             q = q.filter(project_filter)
         if assigned_to:
-            q = q.filter(Ticket.assigned_to_ado == assigned_to)
+            # B1: comparación case-insensitive. assigned_to_ado se normaliza a
+            # minúsculas en el sync, pero la identidad resuelta del operador
+            # (connectionData) puede venir con otro casing, y pueden quedar
+            # tickets viejos sin re-sincronizar.
+            q = q.filter(func.lower(Ticket.assigned_to_ado) == assigned_to.strip().lower())
         rows = q.order_by(Ticket.last_synced_at.desc().nulls_last(), Ticket.id.desc()).limit(500).all()
         out = []
         for t in rows:
@@ -837,6 +1018,31 @@ def set_stacky_status_by_ado(ado_id: int):
                     ado_id, last_exec.id, close_result.publish.get("reason"), correlation_id,
                 )
 
+    # ── B7 (D7-2): guard anti auto-bloqueo de agentes ────────────────────────
+    # Un agente NUNCA puede auto-transicionar el ticket a `blocked_state`: debe
+    # publicar una consulta pre-bloqueo y dejar el ticket en su estado de revisión
+    # (D7-1, prompt). Este guard es la garantía dura por código: si el target es el
+    # blocked_state del agente y el origen es el agente (sin X-User-Email — las
+    # acciones del operador desde la UI siempre lo envían), forzamos el estado de
+    # revisión y lo dejamos logueado. El bloqueo real queda reservado a una acción
+    # humana confirmada. Gateable vía STACKY_BLOCK_GUARD (default "on").
+    if (
+        target_ado_state
+        and _os.getenv("STACKY_BLOCK_GUARD", "on").lower().strip() != "off"
+        and not request.headers.get("X-User-Email")  # origen agente (no operador)
+    ):
+        blocked_state, review_state = _resolve_agent_block_states(
+            t.stacky_project_name, agent_type
+        )
+        if blocked_state and target_ado_state.strip().lower() == blocked_state.strip().lower():
+            logger.warning(
+                "block_guard: auto-bloqueo de agente DENEGADO — ADO-%s agent=%s target=%s → forzado a %s corr=%s",
+                ado_id, agent_type, target_ado_state, review_state or "(sin cambio)", correlation_id,
+            )
+            # Forzar el estado de revisión si lo conocemos; si no, cancelar la
+            # transición por completo (mejor dejar el ticket donde está que bloquearlo).
+            target_ado_state = review_state or None
+
     # ── Transición de System.State en ADO (opcional, Fase TA-migration) ──────
     # Solo si: target_ado_state explícito + publish ok + ado_id presente.
     # Si el publish falló o se saltó, no cambiamos estado (no queremos un
@@ -1269,12 +1475,19 @@ def finish_work(ticket_id: int):
                     },
                 }), 422
 
+    pending_task_preflight = _pending_task_preflight_for_finish(ado_id)
+    has_unconsumed_task_artifacts = (
+        pending_task_preflight["total_pending"] > 0
+        or len(pending_task_preflight["parse_errors"]) > 0
+    )
+
     preconditions = {
         "html_exists": html_exists,
         "html_invalid_reason": html_invalid_reason,
         "current_stacky_status": current_stacky,
         "execution_id": execution_id,
         "ado_id": ado_id,
+        "pending_tasks": pending_task_preflight,
         # Ejecución activa detectada al momento del request (dry_run o real).
         # El frontend la muestra como precondición antes de confirmar el cierre.
         "active_execution": (
@@ -1301,7 +1514,32 @@ def finish_work(ticket_id: int):
             "operator": operator,
         })
 
+    if has_unconsumed_task_artifacts and not force_finish:
+        return jsonify({
+            "ok": False,
+            "error": "PENDING_TASKS_NOT_CONSUMED",
+            "message": (
+                "Hay pending-task.json sin consumir o malformados para este Epic. "
+                "Creá/reintentá las Tasks antes de cerrar, o enviá force_finish=true "
+                "si querés hacer un override explícito."
+            ),
+            "preconditions": preconditions,
+            "current_status": current_stacky,
+        }), 409
+
     actions: list[dict] = []
+
+    if not publish_to_ado_flag and active_execution_id is not None:
+        try:
+            with session_scope() as session:
+                row = session.get(AgentExecution, active_execution_id)
+                if row is not None:
+                    meta = row.metadata_dict
+                    meta["skip_ado_publish"] = True
+                    meta["skip_ado_publish_reason"] = "finish_work_publish_to_ado_false"
+                    row.metadata_dict = meta
+        except Exception:  # noqa: BLE001
+            logger.exception("finish_work: no se pudo marcar skip_ado_publish")
 
     # ── 2b. Cancelar ejecución activa (bloqueante, timeout 5s) ───────────────
     cancel_result: dict | None = None
@@ -1362,25 +1600,28 @@ def finish_work(ticket_id: int):
                 "html_sha256": result.html_sha256,
                 "record_id": result.record_id,
             })
-        else:
-            # No hay HTML — publicar nota de cierre manual textual
+        elif execution_id is not None:
             try:
-                fallback_html = (
-                    "<p><b>Cierre manual desde Stacky Agents.</b></p>"
-                    f"<p>Operador: {operator}</p>"
-                    f"<p>Motivo: {operator_reason}</p>"
+                _write_manual_finish_html(
+                    ado_id=int(ado_id),
+                    operator=operator,
+                    operator_reason=operator_reason,
                 )
-                _ado_client_for_ticket(ticket=ticket).post_comment(int(ado_id), fallback_html, "html")
+                result = publish_from_execution(
+                    execution_id,
+                    triggered_by="finish_work_manual_note",
+                    force=force_publish,
+                )
                 actions.append({
                     "action": "publish_ado_comment",
-                    "ok": True,
-                    "status": "ok",
-                    "reason": "no_agent_html_fallback_note",
-                    "html_sha256": None,
-                    "record_id": None,
+                    "ok": result.ok,
+                    "status": result.status,
+                    "reason": result.reason or "manual_finish_note_via_publisher",
+                    "html_sha256": result.html_sha256,
+                    "record_id": result.record_id,
                 })
             except Exception as exc:  # noqa: BLE001
-                logger.exception("finish_work: fallback note falló")
+                logger.exception("finish_work: manual finish note via publisher falló")
                 actions.append({
                     "action": "publish_ado_comment",
                     "ok": False,
@@ -1389,6 +1630,15 @@ def finish_work(ticket_id: int):
                     "html_sha256": None,
                     "record_id": None,
                 })
+        else:
+            actions.append({
+                "action": "publish_ado_comment",
+                "ok": True,
+                "status": "skipped",
+                "reason": "no_agent_html_or_execution",
+                "html_sha256": None,
+                "record_id": None,
+            })
 
     # ── 4. Cambiar estado en ADO ──────────────────────────────────────────────
     if target_ado_state and ado_id is not None:
@@ -1411,21 +1661,37 @@ def finish_work(ticket_id: int):
 
     # ── 5. Cerrar en Stacky BD ────────────────────────────────────────────────
     try:
-        ts.set_status(
-            ticket_id,
-            "completed",
-            changed_by=operator,
-            execution_id=execution_id,
-            reason=f"Manual finish-work: {operator_reason}",
-            metadata={
-                "trigger": "manual_finish_work",
-                "completion_source": completion_source,
-                "operator": operator,
-                "operator_reason": operator_reason,
-                "target_ado_state": target_ado_state,
-                "actions": actions,
-            },
-        )
+        import time
+
+        status_metadata = {
+            "trigger": "manual_finish_work",
+            "completion_source": completion_source,
+            "operator": operator,
+            "operator_reason": operator_reason,
+            "target_ado_state": target_ado_state,
+            "publish_to_ado": publish_to_ado_flag,
+            "actions": actions,
+        }
+        last_lock_error: OperationalError | None = None
+        for attempt in range(3):
+            try:
+                ts.set_status(
+                    ticket_id,
+                    "completed",
+                    changed_by=operator,
+                    execution_id=execution_id,
+                    reason=f"Manual finish-work: {operator_reason}",
+                    metadata=status_metadata,
+                )
+                last_lock_error = None
+                break
+            except OperationalError as exc:
+                last_lock_error = exc
+                if attempt == 2:
+                    raise
+                time.sleep(0.1 * (attempt + 1))
+        if last_lock_error is not None:
+            raise last_lock_error
         actions.append({
             "action": "update_stacky_status",
             "ok": True,
@@ -1506,7 +1772,7 @@ def list_pending_tasks(ado_id: int):
         "total_consumed": M
       }
     """
-    repo_root = _resolve_repo_root()
+    repo_root, scan = _resolve_artifact_repo_root()
     # Escanea ambas bases conocidas (Agentes/outputs y output/tickets) — el
     # agente funcional a veces co-loca el pending-task.json con el análisis.
     pending, consumed_count, parse_errors = _scan_pending_tasks_for_epic(repo_root, ado_id)
@@ -1519,6 +1785,8 @@ def list_pending_tasks(ado_id: int):
         "total_consumed": consumed_count,
         "parse_errors": parse_errors,
         "total_errors": len(parse_errors),
+        "repo_root": str(repo_root),
+        "scan": scan,
     })
 
 
@@ -1563,7 +1831,7 @@ def artifact_status(ado_id: int):
       }
     """
     project_name = _request_project_name()
-    repo_root = _resolve_repo_root()
+    repo_root, scan = _resolve_artifact_repo_root()
     epic_dir = repo_root / "Agentes" / "outputs" / f"epic-{ado_id}"
 
     artifacts: list[dict] = []
@@ -1669,6 +1937,11 @@ def artifact_status(ado_id: int):
         "repo_root": str(repo_root),
         "epic_outputs_dir": str(epic_dir),
         "epic_outputs_exists": epic_dir.is_dir(),
+        "scan": {
+            **scan,
+            "roots": _artifact_scan_roots(repo_root),
+            "watcher": _watcher_snapshot(),
+        },
         "artifacts": artifacts,
         "artifact_count": len(artifacts),
         "recent_system_logs": recent_logs,
@@ -1685,6 +1958,22 @@ _EPIC_OUTPUT_BASES: tuple[tuple[str, ...], ...] = (
 )
 
 
+def _pending_payload_points_to_ado(payload: dict, ado_id: int) -> bool:
+    for key in ("epic_id", "epic_ado_id", "parent_id", "parent_ado_id"):
+        value = payload.get(key)
+        if value is not None and str(value).strip() == str(ado_id):
+            return True
+    return False
+
+
+def _pending_declared_parent_id(payload: dict) -> str | None:
+    for key in ("epic_ado_id", "parent_id", "parent_ado_id"):
+        value = payload.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
 def iter_epic_pending_task_files(repo_root: Path, ado_id: int) -> list[Path]:
     """Devuelve los pending-task.json de un Epic en cualquiera de las bases.
 
@@ -1694,18 +1983,46 @@ def iter_epic_pending_task_files(repo_root: Path, ado_id: int) -> list[Path]:
     found: list[Path] = []
     seen: set[Path] = set()
     for base in _EPIC_OUTPUT_BASES:
-        epic_dir = repo_root.joinpath(*base) / f"epic-{ado_id}"
+        base_dir = repo_root.joinpath(*base)
+        epic_dir = base_dir / f"epic-{ado_id}"
         if not epic_dir.is_dir():
-            continue
-        candidates = sorted(epic_dir.glob("pending-task.json")) + sorted(
-            epic_dir.glob("*/pending-task.json")
-        )
+            candidates = []
+        else:
+            candidates = sorted(epic_dir.glob("pending-task.json")) + sorted(
+                epic_dir.glob("*/pending-task.json")
+            )
         for pt in candidates:
             try:
                 key = pt.resolve()
             except OSError:
                 key = pt
             if key in seen:
+                continue
+            seen.add(key)
+            found.append(pt)
+
+        # Rescate de carpetas mal nombradas: el agente puede usar la etiqueta
+        # humana del título (`epic-26`) aunque el ADO real sea 241. Si el JSON
+        # declara `parent_id`/`epic_ado_id` con el ADO buscado, lo incluimos.
+        if not base_dir.is_dir():
+            continue
+        loose_candidates = sorted(base_dir.glob("epic-*/pending-task.json")) + sorted(
+            base_dir.glob("epic-*/*/pending-task.json")
+        )
+        for pt in loose_candidates:
+            try:
+                key = pt.resolve()
+            except OSError:
+                key = pt
+            if key in seen:
+                continue
+            if pt.parent == epic_dir or pt.parent.parent == epic_dir:
+                continue
+            try:
+                payload = json.loads(pt.read_text(encoding="utf-8-sig"))
+            except Exception:
+                continue
+            if not isinstance(payload, dict) or not _pending_payload_points_to_ado(payload, ado_id):
                 continue
             seen.add(key)
             found.append(pt)
@@ -1806,7 +2123,7 @@ def unblocker_board():
       }
     """
     project_name = _request_project_name()
-    repo_root = _resolve_repo_root()
+    repo_root, scan = _resolve_artifact_repo_root()
     outputs_dir = repo_root / "Agentes" / "outputs"
 
     items: list[dict] = []
@@ -1960,10 +2277,867 @@ def unblocker_board():
     return jsonify({
         "ok": True,
         "repo_root": str(repo_root),
+        "scan": {
+            **scan,
+            "roots": _artifact_scan_roots(repo_root),
+            "watcher": _watcher_snapshot(),
+        },
         "items": items,
         "total": len(items),
         "counts": counts,
     })
+
+
+def _safe_slug(value: str, fallback: str = "artifact") -> str:
+    out = []
+    for ch in (value or "").strip().lower():
+        if ch.isalnum():
+            out.append(ch)
+        elif ch in {"-", "_", " ", ".", "—"}:
+            out.append("-")
+    slug = "".join(out).strip("-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return (slug or fallback)[:90]
+
+
+def _uploaded_files_from_body(body: dict) -> list[dict]:
+    files = body.get("files")
+    if isinstance(files, list):
+        out = []
+        for f in files:
+            if not isinstance(f, dict):
+                continue
+            name = str(f.get("name") or "").strip()
+            content = f.get("content")
+            if name and isinstance(content, str):
+                out.append({"name": Path(name).name, "content": content})
+        return out
+    name = str(body.get("filename") or "").strip()
+    content = body.get("content")
+    if name and isinstance(content, str):
+        return [{"name": Path(name).name, "content": content}]
+    return []
+
+
+@bp.post("/by-ado/<int:ado_id>/rescue-artifact")
+def rescue_artifact(ado_id: int):
+    """Staging de emergencia para archivos arrastrados al desatascador.
+
+    No escribe ADO directamente: deja el artifact en disco bajo la convención que
+    ya consumen `create-child-task` y `finish-work`, y devuelve la ruta para que
+    el frontend invoque esos endpoints inmediatamente con trazabilidad normal.
+    """
+    body = _body_json()
+    files = _uploaded_files_from_body(body)
+    if not files:
+        return jsonify({
+            "ok": False,
+            "error": "NO_FILES",
+            "message": "No se recibieron archivos para rescatar.",
+        }), 400
+
+    repo_root, scan = _resolve_artifact_repo_root(body)
+    outputs_dir = repo_root / "Agentes" / "outputs"
+    by_name = {f["name"].lower(): f for f in files}
+    requested = str(body.get("artifact_type") or "auto").strip().lower()
+
+    pending_file = by_name.get("pending-task.json")
+    if pending_file is None and requested in {"auto", "pending_task", "task"}:
+        for f in files:
+            if f["name"].lower().endswith(".json"):
+                try:
+                    candidate = json.loads(f["content"])
+                except Exception:
+                    continue
+                if isinstance(candidate, dict) and (
+                    "description_html" in candidate or "parent_link_type" in candidate
+                ):
+                    pending_file = f
+                    break
+
+    comment_file = by_name.get("comment.html")
+    if comment_file is None and requested in {"auto", "comment"}:
+        for f in files:
+            low = f["name"].lower()
+            if low.endswith(".html") or low.endswith(".htm"):
+                comment_file = f
+                break
+
+    if requested in {"pending_task", "task"} or (requested == "auto" and pending_file is not None):
+        if pending_file is None:
+            return jsonify({"ok": False, "error": "PENDING_TASK_NOT_FOUND"}), 400
+        try:
+            payload = json.loads(pending_file["content"])
+        except Exception as exc:
+            return jsonify({
+                "ok": False,
+                "error": "PENDING_TASK_PARSE_ERROR",
+                "message": str(exc),
+            }), 400
+        if not isinstance(payload, dict):
+            return jsonify({"ok": False, "error": "PENDING_TASK_SCHEMA_INVALID"}), 400
+
+        original_epic_id = payload.get("epic_id")
+        payload["epic_id"] = str(ado_id)
+        payload.setdefault("parent_id", ado_id)
+        payload.setdefault("parent_link_type", "System.LinkTypes.Hierarchy-Reverse")
+        payload.setdefault("status", PENDING_TASK_STATUS_CANONICAL)
+        rf_id = str(payload.get("rf_id") or body.get("rf_id") or "RF-MANUAL").strip()
+        title = str(payload.get("title") or rf_id)
+        rf_dir_name = _safe_slug(f"{rf_id}-{title}", fallback="manual-upload")
+        target_dir = outputs_dir / f"epic-{ado_id}" / rf_dir_name
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        plan_file = by_name.get("plan-de-pruebas.md")
+        if plan_file is None:
+            for f in files:
+                if f["name"].lower().endswith(".md"):
+                    plan_file = f
+                    break
+        if plan_file is not None:
+            plan_path = target_dir / "plan-de-pruebas.md"
+            plan_path.write_text(plan_file["content"], encoding="utf-8")
+            payload["plan_de_pruebas_path"] = str(plan_path.relative_to(repo_root)).replace("\\", "/")
+
+        payload["rescue_uploaded_at"] = datetime.now(timezone.utc).isoformat()
+        payload["rescue_original_epic_id"] = original_epic_id
+        payload["rescue_original_filename"] = pending_file["name"]
+        target = target_dir / "pending-task.json"
+        target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        rel = str(target.relative_to(repo_root)).replace("\\", "/")
+        return jsonify({
+            "ok": True,
+            "artifact_type": "pending_task",
+            "repo_root": str(repo_root),
+            "scan": scan,
+            "pending_task_path": rel,
+            "normalized_epic_id": str(ado_id),
+            "original_epic_id": original_epic_id,
+        })
+
+    if requested == "comment" or (requested == "auto" and comment_file is not None):
+        if comment_file is None:
+            return jsonify({"ok": False, "error": "COMMENT_HTML_NOT_FOUND"}), 400
+        target_dir = outputs_dir / str(ado_id)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / "comment.html"
+        target.write_text(comment_file["content"], encoding="utf-8")
+        meta_file = by_name.get("comment.meta.json")
+        if meta_file is not None:
+            (target_dir / "comment.meta.json").write_text(meta_file["content"], encoding="utf-8")
+        rel = str(target.relative_to(repo_root)).replace("\\", "/")
+        return jsonify({
+            "ok": True,
+            "artifact_type": "comment",
+            "repo_root": str(repo_root),
+            "scan": scan,
+            "html_output_path": rel,
+        })
+
+    return jsonify({
+        "ok": False,
+        "error": "UNSUPPORTED_ARTIFACT",
+        "message": "Arrastrá pending-task.json o comment.html.",
+    }), 400
+
+
+# ── Inc.3 P0: jerarquía de work items + verificación post-creación ────────────
+#
+# Jerarquías estándar de ADO (tipo padre → tipos hijos DIRECTAMENTE permitidos,
+# en minúsculas). Sirven para el preflight: en Agile/Scrum/CMMI un Epic NO admite
+# Task como hijo directo (exige Epic→Feature→Story/PBI/Requirement→Task), que es
+# exactamente lo que rompía las épicas 241/242 de Pacífico. Si el proyecto declara
+# `issue_tracker.hierarchy` explícito en config.json, ese override gana.
+_ADO_DEFAULT_HIERARCHY: dict[str, dict[str, set[str]]] = {
+    "agile": {
+        "epic": {"feature"},
+        "feature": {"user story", "bug"},
+        "user story": {"task", "bug"},
+        "bug": {"task"},
+    },
+    "scrum": {
+        "epic": {"feature"},
+        "feature": {"product backlog item", "bug"},
+        "product backlog item": {"task", "bug"},
+        "bug": {"task"},
+    },
+    "cmmi": {
+        "epic": {"feature"},
+        "feature": {"requirement", "bug"},
+        "requirement": {"task", "bug"},
+        "bug": {"task"},
+    },
+    "basic": {
+        "epic": {"issue"},
+        "issue": {"task"},
+    },
+}
+
+
+def _resolve_hierarchy_for_project(
+    project_name: str | None,
+) -> tuple[str | None, dict[str, set[str]] | None]:
+    """Devuelve (process_template, mapa padre→hijos) para el proyecto.
+
+    Fuente de verdad, en orden:
+      1. `issue_tracker.hierarchy` explícito en config.json (override del operador):
+         dict { "<parent_type>": ["<child_type>", ...] }.
+      2. `issue_tracker.process_template` ('Agile'|'Scrum'|'CMMI'|'Basic') → tabla
+         built-in `_ADO_DEFAULT_HIERARCHY`.
+    Si no hay nada declarado, devuelve (None, None) → el preflight se omite y el
+    flujo cae a la verificación post-creación (que valida el link real igual).
+    Nunca lanza: ante cualquier fallo devuelve (None, None).
+    """
+    if not project_name:
+        return None, None
+    try:
+        from project_manager import get_project_config
+        cfg = get_project_config(project_name) or {}
+    except Exception:  # noqa: BLE001 — defensivo: sin config → sin preflight
+        return None, None
+    tracker = (cfg.get("issue_tracker") or {}) if isinstance(cfg, dict) else {}
+
+    explicit = tracker.get("hierarchy")
+    if isinstance(explicit, dict) and explicit:
+        mapping: dict[str, set[str]] = {}
+        for parent, children in explicit.items():
+            if isinstance(children, (list, tuple, set)):
+                mapping[str(parent).strip().lower()] = {
+                    str(c).strip().lower() for c in children if str(c).strip()
+                }
+        template = str(tracker.get("process_template") or "custom").strip() or "custom"
+        return template, (mapping or None)
+
+    template = str(tracker.get("process_template") or "").strip()
+    if not template:
+        return None, None
+    mapping = _ADO_DEFAULT_HIERARCHY.get(template.lower())
+    return template, mapping
+
+
+def _hierarchy_preflight(
+    *, ado, epic_ado_id: int, child_type: str,
+    project_name: str | None, operation_id: str,
+) -> dict | None:
+    """Valida que `child_type` pueda colgar directo del tipo del padre `epic_ado_id`.
+
+    Devuelve:
+      - None: preflight omitido (flag off, sin template declarado, o no se pudo
+        leer el tipo del padre) → el caller procede y confía en la verificación
+        post-creación.
+      - {"ok": True, ...}: jerarquía válida.
+      - {"ok": False, "message": ..., "suggestion": ..., ...}: NO crear; el caller
+        devuelve ADO_HIERARCHY_NOT_SUPPORTED y deja el pending-task.json pendiente.
+
+    Gateable con STACKY_HIERARCHY_PREFLIGHT=off (rollback sin redeploy).
+    """
+    if os.getenv("STACKY_HIERARCHY_PREFLIGHT", "on").strip().lower() == "off":
+        return None
+    template, mapping = _resolve_hierarchy_for_project(project_name)
+    if not mapping:
+        return None  # nada declarado → confiar en la verificación post-creación
+
+    get_wi = getattr(ado, "get_work_item", None)
+    if not callable(get_wi):
+        return None  # cliente sin soporte (tests legacy) → skip
+
+    try:
+        wi = get_wi(epic_ado_id, ["System.WorkItemType"])
+        parent_type = str((wi.get("fields") or {}).get("System.WorkItemType") or "").strip()
+    except Exception as exc:  # noqa: BLE001 — no bloquear por fallo de lectura
+        logger.warning(
+            "create_child_task: preflight no pudo leer tipo del padre ADO-%s "
+            "operation_id=%s err=%s — se omite (post-verify cubre)",
+            epic_ado_id, operation_id, str(exc)[:200],
+        )
+        return None
+    if not parent_type:
+        return None
+
+    allowed = mapping.get(parent_type.lower(), set())
+    if child_type.strip().lower() in allowed:
+        return {"ok": True, "parent_type": parent_type, "process_template": template}
+
+    intermediates = sorted(allowed)
+    inter_label = ", ".join(intermediates) if intermediates else "Feature/Story"
+    message = (
+        f"El template '{template}' no permite crear '{child_type}' como hijo directo "
+        f"de '{parent_type}'. Creá un nivel intermedio ({inter_label}) y colgá la "
+        f"'{child_type}' de él."
+    )
+    return {
+        "ok": False,
+        "parent_type": parent_type,
+        "process_template": template,
+        "allowed_children": intermediates,
+        "suggestion": message,
+        "message": message,
+    }
+
+
+_WORK_ITEM_TYPE_DISPLAY = {
+    "epic": "Epic",
+    "feature": "Feature",
+    "user story": "User Story",
+    "product backlog item": "Product Backlog Item",
+    "requirement": "Requirement",
+    "issue": "Issue",
+    "bug": "Bug",
+    "task": "Task",
+}
+
+_HIERARCHY_CHILD_PREFERENCE = {
+    "agile": ["feature", "user story", "task", "bug"],
+    "scrum": ["feature", "product backlog item", "task", "bug"],
+    "cmmi": ["feature", "requirement", "task", "bug"],
+    "basic": ["issue", "task"],
+    "custom": ["feature", "user story", "product backlog item", "requirement", "issue", "task", "bug"],
+}
+
+
+def _norm_work_item_type(value: str | None) -> str:
+    return str(value or "").strip().lower()
+
+
+def _display_work_item_type(value: str) -> str:
+    norm = _norm_work_item_type(value)
+    return _WORK_ITEM_TYPE_DISPLAY.get(norm, norm.title())
+
+
+def _ordered_hierarchy_children(
+    *, template: str | None, children: set[str], target_child: str,
+) -> list[str]:
+    """Orden estable para BFS: preferimos backlog items reales antes que Bug."""
+    norm_template = _norm_work_item_type(template) or "custom"
+    preferred = _HIERARCHY_CHILD_PREFERENCE.get(norm_template, _HIERARCHY_CHILD_PREFERENCE["custom"])
+    target = _norm_work_item_type(target_child)
+    ordered: list[str] = []
+    for item in preferred:
+        if item in children and item not in ordered:
+            ordered.append(item)
+    if target in children and target not in ordered:
+        ordered.append(target)
+    for item in sorted(children):
+        if item not in ordered:
+            ordered.append(item)
+    return ordered
+
+
+def _find_hierarchy_path(
+    *, mapping: dict[str, set[str]], parent_type: str, child_type: str, template: str | None,
+) -> list[str] | None:
+    """Devuelve tipos desde parent_type hasta child_type, inclusive."""
+    start = _norm_work_item_type(parent_type)
+    target = _norm_work_item_type(child_type)
+    if not start or not target:
+        return None
+    queue: list[list[str]] = [[start]]
+    seen = {start}
+    while queue:
+        path = queue.pop(0)
+        current = path[-1]
+        if current == target:
+            return path
+        for child in _ordered_hierarchy_children(
+            template=template,
+            children=mapping.get(current, set()),
+            target_child=target,
+        ):
+            if child in seen:
+                continue
+            seen.add(child)
+            queue.append(path + [child])
+    return None
+
+
+def _candidate_hierarchy_paths(
+    *,
+    root_type: str,
+    child_type: str,
+    preferred_path: list[str],
+    template: str | None,
+) -> list[list[str]]:
+    """Rutas de creación de más estricta a más permisiva.
+
+    ADO puede tener un proceso custom cuya config local diga Agile pero cuyos
+    tipos reales no incluyan Feature. En ese caso probamos rutas comprimidas
+    antes de abandonar.
+    """
+    root = _norm_work_item_type(root_type)
+    child = _norm_work_item_type(child_type)
+    normalized_preferred = [_norm_work_item_type(p) for p in preferred_path if _norm_work_item_type(p)]
+    candidates: list[list[str]] = []
+
+    def add(path: list[str]) -> None:
+        clean = [_norm_work_item_type(p) for p in path if _norm_work_item_type(p)]
+        if len(clean) < 2 or clean[0] != root or clean[-1] != child:
+            return
+        if clean not in candidates:
+            candidates.append(clean)
+
+    add(normalized_preferred)
+    # Comprimir quitando intermedios de a uno: Epic->Feature->Story->Task
+    # pasa a Epic->Story->Task cuando Feature no existe en el proyecto.
+    for idx in range(1, max(len(normalized_preferred) - 1, 1)):
+        add(normalized_preferred[:idx] + normalized_preferred[idx + 1:])
+
+    for mid in _HIERARCHY_CHILD_PREFERENCE.get(
+        _norm_work_item_type(template),
+        _HIERARCHY_CHILD_PREFERENCE["custom"],
+    ):
+        if mid not in {root, child}:
+            add([root, mid, child])
+    add([root, child])
+    return candidates
+
+
+def _ado_error_is_work_item_type_missing(exc: Exception, work_item_type: str) -> bool:
+    raw = str(exc).lower()
+    typ = work_item_type.lower()
+    return (
+        "vs402323" in raw
+        or ("work item type" in raw and "does not exist" in raw and typ in raw)
+        or ("work item type" in raw and "not exist" in raw and typ in raw)
+    )
+
+
+def _bridge_title(pt_payload: dict, work_item_type: str, operation_id: str) -> str:
+    rf_id = str(pt_payload.get("rf_id") or "RF").strip()
+    title = str(pt_payload.get("title") or "").strip()
+    display_type = _display_work_item_type(work_item_type)
+    base = f"{rf_id} - {title}" if title and not title.startswith(rf_id) else (title or rf_id)
+    # ADO tolera bastante, pero mantenerlo corto evita rechazos por títulos largos.
+    clean = " ".join(base.split())
+    return f"{display_type} - {clean}"[:250] or f"{display_type} - {operation_id[:8]}"
+
+
+def _bridge_description_html(
+    *, pt_payload: dict, root_parent_ado_id: int, operation_id: str, payload_sha256: str,
+) -> str:
+    rf_id = _html.escape(str(pt_payload.get("rf_id") or ""))
+    return (
+        "<p><b>Nodo intermedio creado automaticamente por Stacky Agents.</b></p>"
+        f"<p>Epic ADO origen: {root_parent_ado_id}</p>"
+        f"<p>RF: {rf_id}</p>"
+        f"<p><em>operation_id: {_html.escape(operation_id)}</em></p>"
+        f"<p><em>payload_sha256: {_html.escape(payload_sha256)}</em></p>"
+    )
+
+
+def _persist_hierarchy_bridge(pt_file: Path, bridge: dict) -> None:
+    try:
+        current = json.loads(pt_file.read_text(encoding="utf-8"))
+        if not isinstance(current, dict):
+            current = {}
+    except Exception:
+        current = {}
+    current["hierarchy_bridge"] = bridge
+    pt_file.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _valid_bridge_step(
+    *, ado, step: dict, expected_type: str, expected_parent_id: int,
+) -> bool:
+    try:
+        step_id = int(step.get("ado_id"))
+    except (TypeError, ValueError):
+        return False
+    get_wi = getattr(ado, "get_work_item", None)
+    if not callable(get_wi):
+        return True
+    try:
+        wi = get_wi(step_id, ["System.WorkItemType", "System.Parent"])
+    except Exception:
+        return False
+    fields = (wi or {}).get("fields") if isinstance(wi, dict) else {}
+    actual_type = _norm_work_item_type((fields or {}).get("System.WorkItemType"))
+    if actual_type != _norm_work_item_type(expected_type):
+        return False
+    parent = (fields or {}).get("System.Parent")
+    try:
+        return parent is not None and int(parent) == int(expected_parent_id)
+    except (TypeError, ValueError):
+        return False
+
+
+def _ensure_task_creation_parent(
+    *,
+    ado,
+    root_parent_ado_id: int,
+    child_type: str,
+    project_name: str | None,
+    pt_payload: dict,
+    pt_file: Path,
+    operation_id: str,
+    payload_sha256: str,
+) -> dict:
+    """Devuelve el padre real donde debe colgar la Task.
+
+    En Agile/Scrum/CMMI un Epic no acepta Task directa. En vez de abortar, crea
+    los work items intermedios mínimos declarados por la jerarquía del proyecto y
+    persiste sus IDs en el pending-task.json para que un retry no duplique nodos.
+    """
+    if os.getenv("STACKY_HIERARCHY_PREFLIGHT", "on").strip().lower() == "off":
+        return {
+            "ok": True,
+            "parent_ado_id": root_parent_ado_id,
+            "actions": [],
+            "hierarchy_bridge": None,
+        }
+
+    template, mapping = _resolve_hierarchy_for_project(project_name)
+    if not mapping:
+        return {
+            "ok": True,
+            "parent_ado_id": root_parent_ado_id,
+            "actions": [],
+            "hierarchy_bridge": None,
+        }
+
+    get_wi = getattr(ado, "get_work_item", None)
+    if not callable(get_wi):
+        return {
+            "ok": True,
+            "parent_ado_id": root_parent_ado_id,
+            "actions": [],
+            "hierarchy_bridge": None,
+        }
+
+    try:
+        wi = get_wi(root_parent_ado_id, ["System.WorkItemType", "System.Title"])
+        root_type = str((wi.get("fields") or {}).get("System.WorkItemType") or "").strip()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "create_child_task: hierarchy bridge no pudo leer padre ADO-%s "
+            "operation_id=%s err=%s; se omite",
+            root_parent_ado_id, operation_id, str(exc)[:200],
+        )
+        return {
+            "ok": True,
+            "parent_ado_id": root_parent_ado_id,
+            "actions": [],
+            "hierarchy_bridge": None,
+        }
+
+    direct_allowed = mapping.get(_norm_work_item_type(root_type), set())
+    if _norm_work_item_type(child_type) in direct_allowed:
+        return {
+            "ok": True,
+            "parent_ado_id": root_parent_ado_id,
+            "parent_type": root_type,
+            "process_template": template,
+            "actions": [],
+            "hierarchy_bridge": None,
+        }
+
+    path = _find_hierarchy_path(
+        mapping=mapping,
+        parent_type=root_type,
+        child_type=child_type,
+        template=template,
+    )
+    if not path or len(path) < 2 or path[-1] != _norm_work_item_type(child_type):
+        allowed = sorted(direct_allowed)
+        message = (
+            f"El template '{template}' no permite crear '{child_type}' como hijo "
+            f"directo de '{root_type}' y Stacky no encontró una ruta de jerarquía "
+            "hasta Task en la configuración del proyecto."
+        )
+        return {
+            "ok": False,
+            "error": "ADO_HIERARCHY_NOT_SUPPORTED",
+            "message": message,
+            "parent_type": root_type,
+            "child_type": child_type,
+            "process_template": template,
+            "allowed_children": allowed,
+            "actions": [],
+        }
+
+    bridge = pt_payload.get("hierarchy_bridge") if isinstance(pt_payload.get("hierarchy_bridge"), dict) else {}
+    existing_steps = bridge.get("steps") if isinstance(bridge.get("steps"), list) else []
+    fallback_notes: list[dict] = []
+    last_failure: dict | None = None
+
+    for candidate_path in _candidate_hierarchy_paths(
+        root_type=root_type,
+        child_type=child_type,
+        preferred_path=path,
+        template=template,
+    ):
+        new_steps: list[dict] = []
+        actions: list[dict] = list(fallback_notes)
+        current_parent_id = root_parent_ado_id
+        path_failed_before_creating = False
+
+        for index, step_type in enumerate(candidate_path[1:-1]):
+            display_type = _display_work_item_type(step_type)
+            existing = existing_steps[index] if index < len(existing_steps) and isinstance(existing_steps[index], dict) else None
+            if existing and _norm_work_item_type(existing.get("type")) == _norm_work_item_type(step_type):
+                try:
+                    existing_id = int(existing.get("ado_id"))
+                except (TypeError, ValueError):
+                    existing_id = None
+                if existing_id and _valid_bridge_step(
+                    ado=ado,
+                    step=existing,
+                    expected_type=step_type,
+                    expected_parent_id=current_parent_id,
+                ):
+                    reused = {
+                        "type": display_type,
+                        "ado_id": existing_id,
+                        "parent_ado_id": current_parent_id,
+                        "reused": True,
+                    }
+                    new_steps.append(reused)
+                    actions.append({
+                        "action": "reuse_intermediate_work_item",
+                        "ok": True,
+                        "work_item_type": display_type,
+                        "work_item_ado_id": existing_id,
+                        "parent_ado_id": current_parent_id,
+                    })
+                    current_parent_id = existing_id
+                    continue
+
+            try:
+                wi_result = ado.create_work_item(
+                    work_item_type=display_type,
+                    fields={
+                        "System.Title": _bridge_title(pt_payload, step_type, operation_id),
+                        "System.Description": _bridge_description_html(
+                            pt_payload=pt_payload,
+                            root_parent_ado_id=root_parent_ado_id,
+                            operation_id=operation_id,
+                            payload_sha256=payload_sha256,
+                        ),
+                    },
+                    parent_ado_id=current_parent_id,
+                )
+                created_id = int(wi_result["id"])
+            except Exception as exc:  # noqa: BLE001
+                last_failure = {
+                    "ok": False,
+                    "error": "ADO_CREATE_INTERMEDIATE_WORK_ITEM_FAILED",
+                    "message": (
+                        f"No se pudo crear el nodo intermedio '{display_type}' "
+                        f"bajo ADO-{current_parent_id}: {str(exc)[:300]}"
+                    ),
+                    "parent_type": root_type,
+                    "child_type": child_type,
+                    "process_template": template,
+                    "actions": actions + [{
+                        "action": "create_intermediate_work_item",
+                        "ok": False,
+                        "work_item_type": display_type,
+                        "parent_ado_id": current_parent_id,
+                        "reason": str(exc)[:300],
+                    }],
+                    "hierarchy_bridge": {
+                        "root_parent_ado_id": root_parent_ado_id,
+                        "process_template": template,
+                        "path": [_display_work_item_type(p) for p in candidate_path],
+                        "steps": new_steps,
+                    },
+                }
+                if not new_steps and _ado_error_is_work_item_type_missing(exc, display_type):
+                    fallback_notes.append({
+                        "action": "skip_intermediate_work_item",
+                        "ok": True,
+                        "work_item_type": display_type,
+                        "reason": "WORK_ITEM_TYPE_NOT_AVAILABLE",
+                        "detail": str(exc)[:300],
+                    })
+                    path_failed_before_creating = True
+                    break
+                return last_failure
+
+            created_step = {
+                "type": display_type,
+                "ado_id": created_id,
+                "parent_ado_id": current_parent_id,
+                "reused": False,
+            }
+            new_steps.append(created_step)
+            current_parent_id = created_id
+            bridge_payload = {
+                "root_parent_ado_id": root_parent_ado_id,
+                "process_template": template,
+                "path": [_display_work_item_type(p) for p in candidate_path],
+                "steps": new_steps,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "operation_id": operation_id,
+            }
+            _persist_hierarchy_bridge(pt_file, bridge_payload)
+            actions.append({
+                "action": "create_intermediate_work_item",
+                "ok": True,
+                "work_item_type": display_type,
+                "work_item_ado_id": created_id,
+                "parent_ado_id": created_step["parent_ado_id"],
+            })
+
+        if path_failed_before_creating:
+            continue
+
+        final_bridge = {
+            "root_parent_ado_id": root_parent_ado_id,
+            "process_template": template,
+            "path": [_display_work_item_type(p) for p in candidate_path],
+            "steps": new_steps,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "operation_id": operation_id,
+        }
+        _persist_hierarchy_bridge(pt_file, final_bridge)
+        return {
+            "ok": True,
+            "parent_ado_id": current_parent_id,
+            "parent_type": _display_work_item_type(candidate_path[-2]) if len(candidate_path) > 1 else root_type,
+            "process_template": template,
+            "actions": actions,
+            "hierarchy_bridge": final_bridge,
+        }
+
+    return last_failure or {
+        "ok": False,
+        "error": "ADO_HIERARCHY_NOT_SUPPORTED",
+        "message": "No se pudo resolver una ruta de jerarquía válida para crear la Task.",
+        "parent_type": root_type,
+        "child_type": child_type,
+        "process_template": template,
+        "actions": fallback_notes,
+    }
+
+
+def _parent_exists_preflight(
+    *, ado, epic_ado_id: int, operation_id: str,
+) -> dict | None:
+    """Verifica que el work item padre EXISTA en ADO antes de crear la Task.
+
+    Causa raíz de 241/242 (2026-06-05): el agente nombró la carpeta de salida
+    `epic-<N>` usando la etiqueta humana del título (`EP-26` → 26) en vez del id
+    real del work item de ADO (241), y el output_watcher POSTeaba contra
+    `by-ado/26/create-child-task`. ADO respondía 404 TF401232 «Work item 26 does
+    not exist», la Task nunca se creaba y el fallo quedaba enterrado dentro de
+    create_work_item (e incluso se contaba como intento «creado»).
+
+    Este preflight convierte ese 404 silencioso en un error temprano y accionable
+    (`ADO_PARENT_NOT_FOUND`) y deja el pending-task.json SIN consumir.
+
+    Gateable con STACKY_PARENT_PREFLIGHT=off (rollback sin redeploy).
+
+    Devuelve:
+      - None: preflight omitido (flag off, cliente sin get_work_item, o error de
+        lectura NO concluyente) → el flujo procede y create_work_item + sus
+        catches existentes cubren el caso.
+      - {"ok": True, "parent_type": ...}: el padre existe.
+      - {"ok": False, "reason": "ADO_PARENT_NOT_FOUND", "message": ..., "detail": ...}:
+        NO crear; el caller devuelve 422 y no consume el archivo.
+    """
+    if os.getenv("STACKY_PARENT_PREFLIGHT", "on").strip().lower() == "off":
+        return None
+    get_wi = getattr(ado, "get_work_item", None)
+    if not callable(get_wi):
+        return None  # cliente sin soporte (tests legacy) → skip
+
+    def _not_found_payload(detail: str) -> dict:
+        message = (
+            f"El work item padre {epic_ado_id} no existe en Azure DevOps. "
+            f"Causa típica: la carpeta de salida se nombró 'epic-{epic_ado_id}' "
+            f"usando la etiqueta 'EP-{epic_ado_id}' del título en vez del id real "
+            f"del work item de ADO. Verificá el epic_id del pending-task.json y "
+            f"renombrá la carpeta a 'epic-<id ADO real>'."
+        )
+        return {
+            "ok": False,
+            "reason": "ADO_PARENT_NOT_FOUND",
+            "message": message,
+            "detail": detail[:300],
+        }
+
+    try:
+        wi = get_wi(epic_ado_id, ["System.Id", "System.WorkItemType", "System.Title"])
+    except Exception as exc:  # noqa: BLE001 — clasificamos por mensaje/status
+        raw = str(exc)
+        low = raw.lower()
+        status = getattr(exc, "status_code", None)
+        not_found = (
+            status == 404
+            or "tf401232" in low
+            or "does not exist" in low
+            or "→ 404" in raw
+            or " 404:" in raw
+        )
+        if not_found:
+            logger.warning(
+                "create_child_task: ADO_PARENT_NOT_FOUND operation_id=%s ado_id=%s err=%s",
+                operation_id, epic_ado_id, raw[:200],
+            )
+            return _not_found_payload(raw)
+        # Error transitorio o no concluyente (red, 5xx, permisos): no bloquear.
+        logger.warning(
+            "create_child_task: preflight no pudo verificar el padre ADO-%s "
+            "operation_id=%s err=%s — se omite (create_work_item cubre)",
+            epic_ado_id, operation_id, raw[:200],
+        )
+        return None
+
+    fields = (wi or {}).get("fields") if isinstance(wi, dict) else None
+    if not wi or (isinstance(wi, dict) and not wi.get("id") and not fields):
+        # GET ok pero respuesta vacía/sin id → tratar como inexistente (defensivo).
+        return _not_found_payload(repr(wi))
+    parent_type = str((fields or {}).get("System.WorkItemType") or "").strip()
+    return {"ok": True, "parent_type": parent_type}
+
+
+def _verify_child_task_created(
+    *, ado, task_ado_id: int, epic_ado_id: int,
+    expected_title: str, operation_id: str,
+) -> dict | None:
+    """Relee la Task recién creada y verifica que quedó vinculada al Epic.
+
+    ADO puede aceptar el POST de creación pero NO aplicar un link jerárquico
+    inválido, dejando una Task HUÉRFANA (sin padre). Sin esta verificación el
+    endpoint marcaba `consumed` dando por hecho un trabajo que en ADO no existe
+    como Task hija (causa raíz de 241/242, junto con el fallback de finish_work).
+
+    Devuelve:
+      - None: cliente sin `get_work_item` (tests legacy) → verificación omitida.
+      - {"ok": True}: System.Parent apunta al Epic.
+      - {"ok": False, "reason": ..., "detail": ...}: NO marcar consumed.
+    """
+    get_wi = getattr(ado, "get_work_item", None)
+    if not callable(get_wi):
+        return None
+    try:
+        wi = get_wi(
+            task_ado_id,
+            ["System.Id", "System.Title", "System.Parent", "System.WorkItemType"],
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "reason": "VERIFY_GET_FAILED",
+            "detail": f"No se pudo releer la Task {task_ado_id} para verificarla: {str(exc)[:200]}",
+        }
+    fields = wi.get("fields") or {}
+    parent = fields.get("System.Parent")
+    try:
+        parent_ok = parent is not None and int(parent) == int(epic_ado_id)
+    except (TypeError, ValueError):
+        parent_ok = False
+    if not parent_ok:
+        return {
+            "ok": False,
+            "reason": "PARENT_LINK_MISSING",
+            "detail": (
+                f"La Task {task_ado_id} no quedó vinculada al Epic {epic_ado_id} "
+                f"(System.Parent={parent!r}); la jerarquía no se aplicó."
+            ),
+        }
+    return {"ok": True}
 
 
 @bp.post("/by-ado/<int:ado_id>/create-child-task")
@@ -1991,7 +3165,7 @@ def create_child_task(ado_id: int):
     # identificador trazable de este intento de escritura ADO. correlation_id se
     # mantiene como alias de compatibilidad con consumidores actuales.
     operation_id = correlation_id
-    body = request.get_json(silent=True) or {}
+    body = _body_json()
     pending_task_path_str: str = (body.get("pending_task_path") or "").strip()
     operator_reason: str = (body.get("operator_reason") or "").strip()
     dry_run: bool = bool(body.get("dry_run", False))
@@ -2000,6 +3174,7 @@ def create_child_task(ado_id: int):
         or body.get("completion_source")
         or "manual"
     )
+    project_name = _request_project_name()
     user = request.headers.get("X-User-Email") or "anonymous"
 
     if not pending_task_path_str:
@@ -2015,7 +3190,7 @@ def create_child_task(ado_id: int):
             "operation_id": operation_id,
         }), 400
 
-    repo_root = _resolve_repo_root()
+    repo_root, scan = _resolve_artifact_repo_root(body)
     pt_file = repo_root / pending_task_path_str
 
     logger.info(
@@ -2107,17 +3282,25 @@ def create_child_task(ado_id: int):
     # ── [1c] Verificar que epic_id coincide con la URL ─────────────────────────
     file_epic_id = str(pt_payload.get("epic_id", "")).strip()
     if file_epic_id != str(ado_id):
-        return jsonify({
-            "ok": False,
-            "error": "PENDING_TASK_EPIC_MISMATCH",
-            "message": (
-                f"epic_id en el archivo ('{file_epic_id}') no coincide con "
-                f"epic_ado_id en la URL ({ado_id})"
-            ),
-            "file_epic_id": file_epic_id,
-            "url_epic_ado_id": ado_id,
-            "correlation_id": correlation_id,
-        }), 400
+        declared_parent_id = _pending_declared_parent_id(pt_payload)
+        if declared_parent_id != str(ado_id):
+            return jsonify({
+                "ok": False,
+                "error": "PENDING_TASK_EPIC_MISMATCH",
+                "message": (
+                    f"epic_id en el archivo ('{file_epic_id}') no coincide con "
+                    f"epic_ado_id en la URL ({ado_id})"
+                ),
+                "file_epic_id": file_epic_id,
+                "declared_parent_id": declared_parent_id,
+                "url_epic_ado_id": ado_id,
+                "correlation_id": correlation_id,
+            }), 400
+        logger.warning(
+            "create_child_task: epic_id legacy/mal nombrado pero parent_id coincide "
+            "operation_id=%s file_epic_id=%s parent_id=%s url_ado_id=%s path=%s",
+            operation_id, file_epic_id, declared_parent_id, ado_id, pending_task_path_str,
+        )
 
     # ── [1d] Idempotencia: ¿ya fue consumido? ──────────────────────────────────
     if "consumed_at" in pt_payload or pt_payload.get("status") == "consumed":
@@ -2125,7 +3308,7 @@ def create_child_task(ado_id: int):
         prev_url = None
         if prev_task_id:
             try:
-                prev_url = _ado_client_for_ticket(project_name=_request_project_name()).work_item_url(int(prev_task_id))
+                prev_url = _ado_client_for_ticket(project_name=project_name).work_item_url(int(prev_task_id))
             except Exception:
                 pass
         # Fase 0: hash del payload al momento del consume (si lo guardamos
@@ -2200,8 +3383,8 @@ def create_child_task(ado_id: int):
 
     # Inicializar cliente ADO
     try:
-        ado = _ado_client_for_ticket(project_name=_request_project_name())
-    except _AdoConfigError as exc:
+        ado = _ado_client_for_ticket(project_name=project_name)
+    except (_AdoConfigError, ProjectContextError) as exc:
         logger.warning(
             "create_child_task: ADO_CONFIG_MISSING operation_id=%s ado_id=%s err=%s",
             operation_id, ado_id, exc,
@@ -2227,7 +3410,106 @@ def create_child_task(ado_id: int):
             "correlation_id": correlation_id,
             "operation_id": operation_id,
             "payload_sha256": payload_sha256,
+            "scan": scan,
         }), 503
+
+    # ── [1d-bis] Preflight de existencia del padre (Inc.3 — épicas 241/242) ───
+    # Si el work item padre no existe (carpeta `epic-<ordinal del título EP-NN>`
+    # en vez de `epic-<ado_id real>`), fallamos temprano y claro en vez de dejar
+    # que ADO devuelva un 404 enterrado dentro de create_work_item (que además se
+    # contaba como intento "creado"). Deja el pending-task.json sin consumir.
+    parent_check = _parent_exists_preflight(
+        ado=ado, epic_ado_id=ado_id, operation_id=operation_id,
+    )
+    if parent_check is not None and not parent_check.get("ok"):
+        _audit_create_child_task(
+            correlation_id=correlation_id,
+            ado_id=ado_id,
+            user=user,
+            completion_source=completion_source,
+            operator_reason=operator_reason,
+            pt_path=pending_task_path_str,
+            ok=False,
+            actions=[{"action": "parent_exists_preflight", "ok": False,
+                      "reason": parent_check.get("reason")}],
+            error=parent_check.get("message"),
+            operation_id=operation_id,
+            payload_sha256=payload_sha256,
+            repo_root=str(repo_root),
+        )
+        return jsonify({
+            "ok": False,
+            "error": parent_check.get("reason"),
+            "message": parent_check.get("message"),
+            "detail": parent_check.get("detail"),
+            "epic_ado_id": ado_id,
+            "task_ado_id": None,
+            "task_url": None,
+            "attachment_id": None,
+            "actions": [],
+            "pending_task_consumed": False,
+            "correlation_id": correlation_id,
+            "operation_id": operation_id,
+            "payload_sha256": payload_sha256,
+        }), 422
+
+    # ── [1e] Preflight de jerarquía (Inc.3 P0) ────────────────────────────────
+    # Si el process template del proyecto no admite Task como hijo directo del
+    # tipo del padre (p.ej. Epic→Task en Agile), NO intentamos crear: ADO la
+    # rechazaría o, peor, crearía una Task huérfana que luego degradaría a un
+    # comentario en la épica. Devolvemos un error claro y dejamos el
+    # pending-task.json SIN consumir para que el operador cree el nivel intermedio.
+    hierarchy_parent = _ensure_task_creation_parent(
+        ado=ado,
+        root_parent_ado_id=ado_id,
+        child_type="Task",
+        project_name=project_name,
+        pt_payload=pt_payload,
+        pt_file=pt_file,
+        operation_id=operation_id,
+        payload_sha256=payload_sha256,
+    )
+    actions.extend(hierarchy_parent.get("actions") or [])
+    if not hierarchy_parent.get("ok"):
+        logger.warning(
+            "create_child_task: %s operation_id=%s ado_id=%s parent_type=%s template=%s",
+            hierarchy_parent.get("error"), operation_id, ado_id,
+            hierarchy_parent.get("parent_type"), hierarchy_parent.get("process_template"),
+        )
+        _audit_create_child_task(
+            correlation_id=correlation_id,
+            ado_id=ado_id,
+            user=user,
+            completion_source=completion_source,
+            operator_reason=operator_reason,
+            pt_path=pending_task_path_str,
+            ok=False,
+            actions=actions,
+            error=hierarchy_parent.get("message"),
+            operation_id=operation_id,
+            payload_sha256=payload_sha256,
+            repo_root=str(repo_root),
+        )
+        return jsonify({
+            "ok": False,
+            "error": hierarchy_parent.get("error") or "ADO_HIERARCHY_NOT_SUPPORTED",
+            "message": hierarchy_parent.get("message"),
+            "parent_type": hierarchy_parent.get("parent_type"),
+            "child_type": "Task",
+            "process_template": hierarchy_parent.get("process_template"),
+            "allowed_children": hierarchy_parent.get("allowed_children"),
+            "hierarchy_bridge": hierarchy_parent.get("hierarchy_bridge"),
+            "epic_ado_id": ado_id,
+            "task_ado_id": None,
+            "task_url": None,
+            "attachment_id": None,
+            "actions": actions,
+            "pending_task_consumed": False,
+            "correlation_id": correlation_id,
+            "operation_id": operation_id,
+            "payload_sha256": payload_sha256,
+        }), 422
+    task_parent_ado_id = int(hierarchy_parent.get("parent_ado_id") or ado_id)
 
     # ── [2] create_work_item ───────────────────────────────────────────────────
     # No mandamos System.State en la creación: ADO rechaza con 400 cualquier
@@ -2243,7 +3525,7 @@ def create_child_task(ado_id: int):
                 "System.Title": pt_payload["title"],
                 "System.Description": pt_payload.get("description_html", ""),
             },
-            parent_ado_id=ado_id,
+            parent_ado_id=task_parent_ado_id,
         )
         task_ado_id = int(wi_result["id"])
         task_url = ado.work_item_url(task_ado_id)
@@ -2251,18 +3533,34 @@ def create_child_task(ado_id: int):
             "action": "create_work_item",
             "ok": True,
             "task_ado_id": task_ado_id,
+            "parent_ado_id": task_parent_ado_id,
         })
     except _AdoApiError as exc:
+        # Inc.3 P0: si el rechazo de ADO es por jerarquía (Epic→Task no permitido
+        # en el process template), lo mapeamos a ADO_HIERARCHY_NOT_SUPPORTED para
+        # que el operador entienda que necesita un nivel intermedio — no un retry.
+        _raw = str(exc)
+        _raw_low = _raw.lower()
+        _is_hierarchy = (
+            "tf401347" in _raw_low
+            or "not allowed" in _raw_low
+            or "is not a valid parent" in _raw_low
+            or ("parent" in _raw_low and "child" in _raw_low and "type" in _raw_low)
+        )
+        _error_code = "ADO_HIERARCHY_NOT_SUPPORTED" if _is_hierarchy else "ADO_CREATE_WORK_ITEM_FAILED"
         logger.warning(
-            "create_child_task: ADO_CREATE_WORK_ITEM_FAILED operation_id=%s "
+            "create_child_task: %s operation_id=%s "
             "ado_id=%s payload_sha256=%s err=%s",
-            operation_id, ado_id, payload_sha256, str(exc)[:200],
+            _error_code, operation_id, ado_id, payload_sha256, _raw[:200],
         )
         actions.append({
             "action": "create_work_item",
             "ok": False,
-            "reason": "ADO_CREATE_REJECTED_BY_POLICY" if "403" in str(exc) else str(type(exc).__name__),
-            "detail": str(exc)[:300],
+            "reason": (
+                "ADO_HIERARCHY_NOT_SUPPORTED" if _is_hierarchy
+                else ("ADO_CREATE_REJECTED_BY_POLICY" if "403" in _raw else str(type(exc).__name__))
+            ),
+            "detail": _raw[:300],
         })
         _audit_create_child_task(
             correlation_id=correlation_id,
@@ -2273,26 +3571,28 @@ def create_child_task(ado_id: int):
             pt_path=pending_task_path_str,
             ok=False,
             actions=actions,
-            error=str(exc),
+            error=_raw,
             operation_id=operation_id,
             payload_sha256=payload_sha256,
             repo_root=str(repo_root),
         )
         return jsonify({
             "ok": False,
-            "error": "ADO_CREATE_WORK_ITEM_FAILED",
-            "message": _extract_ado_error_message(str(exc)),
+            "error": _error_code,
+            "message": _extract_ado_error_message(_raw),
             "dry_run": False,
             "epic_ado_id": ado_id,
+            "task_parent_ado_id": task_parent_ado_id,
             "task_ado_id": None,
             "task_url": None,
             "attachment_id": None,
             "actions": actions,
+            "hierarchy_bridge": hierarchy_parent.get("hierarchy_bridge"),
             "pending_task_consumed": False,
             "correlation_id": correlation_id,
             "operation_id": operation_id,
             "payload_sha256": payload_sha256,
-        })
+        }), (422 if _is_hierarchy else 200)
 
     # ── [2b] Transicionar al target_state si fue solicitado ────────────────────
     # Ignoramos estados vacíos y los defaults típicos ("To Do" en Agile, "New"
@@ -2321,6 +3621,73 @@ def create_child_task(ado_id: int):
                 f"transición a '{target_state}' rechazada por ADO. "
                 f"Ajustar manualmente en ADO si corresponde."
             )
+
+    # ── [2c] Verificación post-creación (Inc.3 P0) ─────────────────────────────
+    # ADO puede aceptar el create pero NO aplicar el link jerárquico inválido,
+    # dejando una Task HUÉRFANA (sin padre). Releemos el work item y verificamos
+    # que System.Parent apunte al Epic. Si no, NO consumimos el pending-task.json
+    # (queda pendiente para reintento/creación manual) y devolvemos error claro:
+    # nunca damos por hecho una Task hija que en ADO no existe como tal.
+    verify = _verify_child_task_created(
+        ado=ado,
+        task_ado_id=task_ado_id,
+        epic_ado_id=task_parent_ado_id,
+        expected_title=pt_payload.get("title", ""),
+        operation_id=operation_id,
+    )
+    if verify is not None and not verify.get("ok"):
+        actions.append({
+            "action": "verify_creation",
+            "ok": False,
+            "reason": verify.get("reason"),
+            "detail": verify.get("detail"),
+        })
+        human_action_required = (
+            f"Task ADO-{task_ado_id} creada pero su vínculo al Epic {ado_id} no se "
+            f"verificó ({verify.get('reason')}). Revisar en ADO y reparentar o borrar; "
+            f"el pending-task.json queda pendiente."
+        )
+        logger.warning(
+            "create_child_task: ADO_CHILD_TASK_VERIFICATION_FAILED operation_id=%s "
+            "ado_id=%s task_ado_id=%s reason=%s",
+            operation_id, ado_id, task_ado_id, verify.get("reason"),
+        )
+        _audit_create_child_task(
+            correlation_id=correlation_id,
+            ado_id=ado_id,
+            user=user,
+            completion_source=completion_source,
+            operator_reason=operator_reason,
+            pt_path=pending_task_path_str,
+            ok=False,
+            actions=actions,
+            error=verify.get("detail") or verify.get("reason"),
+            level="WARNING",
+            task_ado_id=task_ado_id,
+            operation_id=operation_id,
+            payload_sha256=payload_sha256,
+            repo_root=str(repo_root),
+        )
+        return jsonify({
+            "ok": False,
+            "error": "ADO_CHILD_TASK_VERIFICATION_FAILED",
+            "message": verify.get("detail") or verify.get("reason"),
+            "dry_run": False,
+            "epic_ado_id": ado_id,
+            "task_parent_ado_id": task_parent_ado_id,
+            "task_ado_id": task_ado_id,
+            "task_url": task_url,
+            "attachment_id": None,
+            "actions": actions,
+            "hierarchy_bridge": hierarchy_parent.get("hierarchy_bridge"),
+            "pending_task_consumed": False,
+            "human_action_required": human_action_required,
+            "correlation_id": correlation_id,
+            "operation_id": operation_id,
+            "payload_sha256": payload_sha256,
+        }), 422
+    if verify is not None and verify.get("ok"):
+        actions.append({"action": "verify_creation", "ok": True})
 
     # ── [3] upload_attachment ──────────────────────────────────────────────────
     if plan_exists and plan_path is not None:
@@ -2479,10 +3846,12 @@ def create_child_task(ado_id: int):
         "ok": overall_ok,
         "dry_run": False,
         "epic_ado_id": ado_id,
+        "task_parent_ado_id": task_parent_ado_id,
         "task_ado_id": task_ado_id,
         "task_url": task_url,
         "attachment_id": attachment_id,
         "actions": actions,
+        "hierarchy_bridge": hierarchy_parent.get("hierarchy_bridge"),
         "pending_task_consumed": True,
         "idempotent": False,
         "correlation_id": correlation_id,
@@ -2623,24 +3992,27 @@ def _audit_create_child_task(
         if error:
             level = level or "WARNING"
 
-    with session_scope() as session:
-        log = SystemLog(
-            level=level,
-            source="create_child_task",
-            action="create_child_task_succeeded" if ok else "create_child_task_failed",
-            trigger="create_child_task",
-            user=user,
-            context_json=json.dumps(ctx, ensure_ascii=False, default=str),
-            tags_json=json.dumps(tags),
-        ) if _system_log_has_trigger() else SystemLog(
-            level=level,
-            source="create_child_task",
-            action="create_child_task_succeeded" if ok else "create_child_task_failed",
-            user=user,
-            context_json=json.dumps(ctx, ensure_ascii=False, default=str),
-            tags_json=json.dumps(tags),
-        )
-        session.add(log)
+    try:
+        with session_scope() as session:
+            log = SystemLog(
+                level=level,
+                source="create_child_task",
+                action="create_child_task_succeeded" if ok else "create_child_task_failed",
+                trigger="create_child_task",
+                user=user,
+                context_json=json.dumps(ctx, ensure_ascii=False, default=str),
+                tags_json=json.dumps(tags),
+            ) if _system_log_has_trigger() else SystemLog(
+                level=level,
+                source="create_child_task",
+                action="create_child_task_succeeded" if ok else "create_child_task_failed",
+                user=user,
+                context_json=json.dumps(ctx, ensure_ascii=False, default=str),
+                tags_json=json.dumps(tags),
+            )
+            session.add(log)
+    except Exception:  # noqa: BLE001
+        logger.exception("create_child_task: audit SystemLog falló (no crítico)")
 
 
 def _system_log_has_trigger() -> bool:

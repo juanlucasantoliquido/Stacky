@@ -46,3 +46,47 @@ def test_identity_scoped_per_project(ident):
     ident.save_identity("PROJ_B", {"unique_name": "b@x.com", "display_name": "B"})
     assert ident.get_cached_identity("PROJ_A")["ado_unique_name"] == "a@x.com"
     assert ident.get_cached_identity("PROJ_B")["ado_unique_name"] == "b@x.com"
+
+
+# ── B1/B3: matcheo tolerante de identidad (user_matches) ──────────────────────
+
+
+def test_user_matches_exact_and_casing(ident):
+    assert ident.user_matches("jluca@ubimia.com", "jluca@ubimia.com") is True
+    # casing / espacios
+    assert ident.user_matches("  JLuca@Ubimia.com ", "jluca@ubimia.com") is True
+
+
+def test_user_matches_local_part_fallback(ident):
+    # email vs uniqueName sin dominio
+    assert ident.user_matches("jluca", "jluca@ubimia.com") is True
+    assert ident.user_matches("jluca@ubimia.com", "jluca@otra-org.com") is True
+
+
+def test_user_matches_distinct_users(ident):
+    assert ident.user_matches("otro@ubimia.com", "jluca@ubimia.com") is False
+
+
+def test_user_matches_empty_returns_false(ident):
+    assert ident.user_matches(None, "jluca@ubimia.com") is False
+    assert ident.user_matches("jluca@ubimia.com", "") is False
+    assert ident.user_matches("", "") is False
+
+
+# ── B1/B3: resolve_me_unique_name ─────────────────────────────────────────────
+
+
+def test_resolve_me_prefers_cache(ident):
+    ident.save_identity("RSPACIFICO", {"unique_name": "jluca@ubimia.com", "display_name": "J"})
+    # No debe tocar ADO si el cache tiene la identidad.
+    assert ident.resolve_me_unique_name("RSPACIFICO") == "jluca@ubimia.com"
+
+
+def test_resolve_me_returns_empty_when_unresolvable(ident, monkeypatch):
+    # Sin cache y con build_ado_client fallando → "" (filtro inerte, no rompe).
+    def _boom(*_a, **_k):
+        raise RuntimeError("sin PAT")
+
+    import services.project_context as pc
+    monkeypatch.setattr(pc, "build_ado_client", _boom)
+    assert ident.resolve_me_unique_name("SIN_CACHE") == ""

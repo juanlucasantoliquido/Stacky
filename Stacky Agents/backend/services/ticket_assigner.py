@@ -353,6 +353,112 @@ def compute_recommendations(
     }
 
 
+def auto_assign_on_run(ticket_id: int, project_name: str | None = None) -> str | None:
+    """B3 — Si el ticket no tiene responsable, asignarlo al operador que dispara el agente.
+
+    Stacky es single-operator por instancia, así que la identidad del operador se
+    resuelve server-side (vía PAT) sin depender del frontend (que hardcodea
+    X-User-Email=dev@local).
+
+    Idempotente y defensivo:
+      - No-op si el ticket ya tiene `assigned_to_ado`.
+      - Si no se puede resolver la identidad ADO → log + skip silencioso.
+      - Cualquier excepción se traga (NUNCA debe romper el lanzamiento del agente).
+
+    Returns:
+        El uniqueName asignado (str) si se aplicó la asignación; None en cualquier
+        otro caso (ya asignado, sin identidad, o error).
+    """
+    try:
+        from services.ado_identity import resolve_me_unique_name
+        from services.project_context import build_ado_client
+
+        ado_id: int | None = None
+        resolved_project = project_name
+        with session_scope() as session:
+            ticket = session.get(Ticket, ticket_id)
+            if ticket is None:
+                logger.warning("auto_assign_on_run: ticket_id=%s no encontrado", ticket_id)
+                return None
+            # Sólo asignamos si está SIN responsable (idempotente).
+            if (ticket.assigned_to_ado or "").strip():
+                return None
+            ado_id = ticket.ado_id
+            resolved_project = ticket.stacky_project_name or project_name
+            ticket_obj = ticket  # se usa abajo para build_ado_client (mismo scope)
+
+            if ado_id is None:
+                logger.warning(
+                    "auto_assign_on_run: ticket_id=%s sin ado_id — skip", ticket_id
+                )
+                return None
+
+            me = resolve_me_unique_name(resolved_project)
+            if not me:
+                logger.warning(
+                    "auto_assign_on_run: identidad ADO no resuelta (proyecto=%s) — skip",
+                    resolved_project,
+                )
+                return None
+
+            client = build_ado_client(
+                project_name=resolved_project,
+                tracker_project=ticket_obj.project,
+                ticket=ticket_obj,
+            )
+            client.update_work_item_assigned_to(int(ado_id), me)
+
+            # Espejo local en minúsculas (coherente con la normalización del sync,
+            # para que el filtro "Mis tareas" matchee sin re-sincronizar).
+            ticket.assigned_to_ado = me.strip().lower()
+
+        # Upsert del operador en `users` para que el recomendador y stats queden
+        # consistentes (best-effort, fuera del scope anterior por claridad).
+        try:
+            with session_scope() as session:
+                existing = (
+                    session.query(User)
+                    .filter(User.ado_unique_name == me.strip().lower())
+                    .first()
+                )
+                if existing is None:
+                    session.add(
+                        User(
+                            email=me.strip().lower(),
+                            name=me.split("@")[0] if "@" in me else me,
+                            ado_unique_name=me.strip().lower(),
+                            max_active_tickets=5,
+                        )
+                    )
+        except Exception:  # noqa: BLE001
+            logger.debug("auto_assign_on_run: upsert de users falló (no crítico)", exc_info=True)
+
+        try:
+            from services.stacky_logger import logger as stacky_logger
+
+            stacky_logger.info(
+                "ticket_assigner",
+                "assignment_applied",
+                ticket_id=ticket_id,
+                ado_id=ado_id,
+                assigned_to=me,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        logger.info(
+            "auto_assign_on_run: ticket_id=%s (ADO-%s) asignado a %s",
+            ticket_id, ado_id, me,
+        )
+        return me
+    except Exception:  # noqa: BLE001 — defensivo: nunca romper el run
+        logger.warning(
+            "auto_assign_on_run: falló para ticket_id=%s (no bloquea el run)",
+            ticket_id, exc_info=True,
+        )
+        return None
+
+
 def sync_users_from_ado_history() -> dict:
     """Puebla la tabla users con los asignados distintos encontrados en tickets.
 

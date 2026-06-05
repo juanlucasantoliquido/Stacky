@@ -59,6 +59,10 @@ html, body, #root {
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* B4: el app es dark-theme global. Declarar color-scheme aquí hace que el
+     navegador pinte los popups nativos de <select> (y demás controles UA) con
+     el esquema oscuro, evitando el bug "blanco sobre blanco" en las <option>. */
+  color-scheme: dark;
 }
 
 /* ─── Controls ────────────────────────────────────────────────── */

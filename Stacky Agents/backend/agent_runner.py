@@ -607,6 +607,13 @@ def _run_in_background(
             embeddings.index_execution(execution_id)
         except Exception as exc:  # noqa: BLE001
             log("warn", f"embeddings index failed: {exc}")
+        # Memoria colaborativa (Fase B) — captura DRAFT post-run (best-effort,
+        # gated por STACKY_MEMORY_CAPTURE_ENABLED).
+        try:
+            from services import post_run_memory
+            post_run_memory.capture_on_completion(execution_id)
+        except Exception as exc:  # noqa: BLE001
+            log("warn", f"memory draft capture failed: {exc}")
         # Actualizar estado del ticket a 'completed'
         from services import ticket_status as _ts
         _ts.on_execution_end(

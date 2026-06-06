@@ -53,14 +53,29 @@ def enrich_blocks(
     # Capturar escalares del ticket en una sesión propia (evita DetachedInstanceError).
     ticket_ado_id: int | None = None
     ticket_project: str | None = None
+    ticket_title: str | None = None
+    ticket_description: str | None = None
     ticket_obj = None
     with session_scope() as _sess:
         ticket_obj = _sess.get(Ticket, ticket_id) if ticket_id else None
         if ticket_obj is not None:
             ticket_ado_id = ticket_obj.ado_id
             ticket_project = ticket_obj.project
+            ticket_title = ticket_obj.title
+            ticket_description = ticket_obj.description
 
     project_name = project_ctx.stacky_project_name if project_ctx else None
+
+    # Memoria colaborativa (Fase A): inyectar PRIMERO la memoria operativa
+    # vigente, en índice 0, para que el resto de los pasos (y el agente) la usen
+    # como contexto base. Behind STACKY_MEMORY_INJECTION_ENABLED (default OFF).
+    blocks = _inject_stacky_memory_block(
+        blocks,
+        project=project_name or ticket_project,
+        agent_type=agent_type,
+        query_text="\n".join(p for p in (ticket_title, ticket_description) if p),
+        log=log,
+    )
 
     # Plan 16: inyectar primero el client-profile (si está disponible y el
     # feature flag lo permite) para que todos los pasos siguientes puedan
@@ -203,6 +218,71 @@ def _inject_client_profile_block(
     if block is None:
         return blocks
     return list(blocks) + [block]
+
+
+def _inject_stacky_memory_block(
+    blocks: list[dict],
+    *,
+    project: str | None,
+    agent_type: str,
+    query_text: str,
+    log: LogFn,
+) -> list[dict]:
+    """Inyecta la memoria operativa vigente como bloque `stacky-memory`.
+
+    Memoria colaborativa Fase A. A diferencia del resto de los `_inject_*` (que
+    hacen append), este PREPEND-ea el bloque para dejarlo en índice 0: así el
+    agente lo recibe como contexto base antes que cualquier otro bloque.
+
+    Feature flag `STACKY_MEMORY_INJECTION_ENABLED` (default OFF). Best-effort:
+    cualquier excepción degrada en warning y devuelve `blocks` sin tocar.
+    """
+    if os.getenv("STACKY_MEMORY_INJECTION_ENABLED", "false").lower() not in {
+        "1",
+        "true",
+        "on",
+        "yes",
+    }:
+        return blocks
+    if not project:
+        return blocks
+
+    existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
+    if "stacky-memory" in existing_ids:
+        log("info", "stacky-memory ya presente, omitiendo inyección")
+        return blocks
+
+    try:
+        from services import memory_store
+
+        ctx = memory_store.get_context_for_run(
+            project=project,
+            agent_type=agent_type,
+            query_text=query_text,
+        )
+        if not ctx.get("content"):
+            return blocks
+        block = {
+            "kind": "text",
+            "id": "stacky-memory",
+            "title": "Memoria operativa vigente",
+            "content": ctx["content"],
+            "metadata": {
+                "hits": ctx.get("hits"),
+                "active_hits": ctx.get("active_hits"),
+                "suppressed": ctx.get("suppressed_hits"),
+                "memory_ids": ctx.get("memory_ids"),
+            },
+        }
+        log(
+            "info",
+            f"stacky-memory inyectado (active={ctx.get('active_hits')}, "
+            f"suppressed={ctx.get('suppressed_hits')}, project={project})",
+        )
+        return [block] + list(blocks)
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"stacky-memory no se pudo inyectar (continuando): {exc}")
+        return blocks
 
 
 def _inject_epic_structured(

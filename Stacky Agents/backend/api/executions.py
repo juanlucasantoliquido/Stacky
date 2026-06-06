@@ -134,7 +134,19 @@ def _set_verdict(execution_id: int, verdict: str):
         if row.status != "completed":
             abort(409, "execution not in completed state")
         row.verdict = verdict
-        return jsonify(row.to_dict(include_output=False))
+        result = row.to_dict(include_output=False)
+    # Memoria colaborativa (Fase B) — al aprobar, promueve/crea la memoria ACTIVE
+    # (best-effort, gated por STACKY_MEMORY_CAPTURE_ENABLED). Fuera de la sesión.
+    if verdict == "approved":
+        try:
+            from services import post_run_memory
+
+            post_run_memory.capture_on_approval(execution_id)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "post_run_memory.capture_on_approval falló exec=%s", execution_id, exc_info=True
+            )
+    return jsonify(result)
 
 
 @bp.post("/<int:execution_id>/publish-to-ado")

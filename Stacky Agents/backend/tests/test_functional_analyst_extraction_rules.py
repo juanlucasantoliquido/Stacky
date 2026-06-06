@@ -41,8 +41,15 @@ def test_confirm_total_before_loop(prompt):
 
 
 def test_version_bumped(prompt):
-    assert 'version: "2.0.2"' in prompt
-    assert "FunctionalAnalyst v2.0.2" in prompt
+    assert 'version: "2.0.3"' in prompt
+    assert "FunctionalAnalyst v2.0.3" in prompt
+
+
+def test_uses_real_ado_epic_id_not_human_ep_label(prompt):
+    assert "ADO_EPIC_ID" in prompt
+    assert "epic_ado_id" in prompt
+    assert '"parent_id": {ADO_EPIC_ID}' in prompt
+    assert "No uses el numero de la etiqueta humana" in prompt
 
 
 def test_json_validity_rule_present(prompt):

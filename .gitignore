@@ -39,10 +39,16 @@ build/
 # Deploys locales de Stacky Agents
 Stacky Agents/DeployStackyAgents/
 
-# Bootstrap canonical en dev (se materializa al arrancar; ver plan
-# plan-agentes-bundled-en-stacky-2026-05-29.md)
-Stacky Agents/backend/Stacky/
+# Agentes canónicos versionados. El manifest se regenera en runtime/release.
+Stacky Agents/backend/Stacky/*
+!Stacky Agents/backend/Stacky/agents/
+!Stacky Agents/backend/Stacky/agents/**
+!Stacky Agents/backend/Stacky/agents/*.agent.md
+Stacky Agents/backend/Stacky/agents/manifest.json
 
 # VS Code
 .vscode/
+
+# Repo clonado localmente para referencia
+engram/
 

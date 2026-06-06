@@ -486,6 +486,75 @@ def test_create_child_task_accepts_legacy_epic_id_when_parent_id_matches(client,
     assert fake_ado.create_calls[0]["parent"] == 149
 
 
+def test_create_child_task_normalizes_epic_id_mismatch_from_output_watcher(client, epic_ticket, tmp_repo):
+    """ADO-241: el watcher resuelve ADO real aunque la carpeta diga EP humano."""
+    pt_path = _write_pending_task(tmp_repo, epic_id="26", rf_id="RF-AUTONORM")
+    rel_path = _rel_path(tmp_repo, pt_path)
+    fake_ado = FakeAdoClientExt()
+
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={
+                "pending_task_path": rel_path,
+                "completion_source": "output_watcher_auto",
+                "source_epic_ado_id": 26,
+                "allow_epic_id_mismatch": True,
+            },
+        )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert fake_ado.create_calls[0]["parent"] == 149
+
+    payload = json.loads(pt_path.read_text(encoding="utf-8"))
+    assert payload["epic_id"] == "149"
+    assert payload["parent_id"] == 149
+    assert payload["auto_normalized_from_epic_id"] == "26"
+    assert payload["status"] == "consumed"
+
+
+def test_create_child_task_does_not_duplicate_equivalent_consumed_artifact(client, epic_ticket, tmp_repo):
+    """Si el drag manual ya creo la Task, el watcher no debe duplicarla."""
+    original_pt = _write_pending_task(tmp_repo, epic_id="26", rf_id="RF-DUPE")
+    consumed_pt = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-DUPE")
+    consumed_payload = json.loads(consumed_pt.read_text(encoding="utf-8"))
+    consumed_payload.update({
+        "status": "consumed",
+        "consumed_at": "2026-06-05T23:44:55+00:00",
+        "task_ado_id": 246,
+        "attachment_id": "attach-246",
+    })
+    consumed_pt.write_text(json.dumps(consumed_payload), encoding="utf-8")
+    rel_path = _rel_path(tmp_repo, original_pt)
+    fake_ado = FakeAdoClientExt()
+
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={
+                "pending_task_path": rel_path,
+                "completion_source": "output_watcher_auto",
+                "source_epic_ado_id": 26,
+                "allow_epic_id_mismatch": True,
+            },
+        )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["idempotent"] is True
+    assert data["reason"] == "PENDING_TASK_EQUIVALENT_ALREADY_CONSUMED"
+    assert data["task_ado_id"] == 246
+    assert fake_ado.create_calls == []
+
+    original_payload = json.loads(original_pt.read_text(encoding="utf-8"))
+    assert original_payload["status"] == "consumed"
+    assert original_payload["task_ado_id"] == 246
+    assert original_payload["epic_id"] == "149"
+    assert original_payload["parent_id"] == 149
+
+
 # ---------------------------------------------------------------------------
 # TU-03 — pending-task.json se marca como consumido
 # ---------------------------------------------------------------------------
@@ -813,6 +882,32 @@ def test_list_pending_tasks_only_pending(client, epic_ticket, tmp_repo):
 # ---------------------------------------------------------------------------
 # TU-11b — GET pending-tasks no lista consumidos
 # ---------------------------------------------------------------------------
+
+def test_list_pending_tasks_rescues_ep_label_dir_from_ticket_title(client, tmp_repo):
+    """ADO-241: /pending-tasks ve epic-26 si el ticket ADO real se titula EP-26."""
+    from db import session_scope
+    from models import Ticket
+
+    with session_scope() as session:
+        if not session.query(Ticket).filter(Ticket.ado_id == 90241).first():
+            session.add(Ticket(
+                ado_id=90241,
+                project="TestProject",
+                title="EP-26 - Busqueda de Cliente",
+                work_item_type="Epic",
+            ))
+
+    _write_pending_task(tmp_repo, epic_id="26", rf_id="RF-026")
+
+    resp = client.get("/api/tickets/by-ado/90241/pending-tasks")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["total_pending"] == 1
+    assert data["pending_tasks"][0]["rf_id"] == "RF-026"
+    assert "epic-26" in data["pending_tasks"][0]["pending_task_path"]
+
 
 def test_list_pending_tasks_excludes_consumed(client, epic_ticket, tmp_repo):
     """TU-11b: pending-task.json con consumed_at no aparece en la lista."""

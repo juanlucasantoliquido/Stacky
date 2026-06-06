@@ -397,7 +397,7 @@ def _run_in_background(
         log("info", "claude code cli command: " + _display_command(cmd))
         log(
             "info",
-            f"loaded {len(all_agents)} GitHub Copilot agent prompt(s); selected {selected_agent.filename}",
+            f"loaded {len(all_agents)} Stacky agent prompt(s); selected {selected_agent.filename}",
         )
 
         creationflags = 0
@@ -865,7 +865,7 @@ def _build_user_message(
     """
     inventory = _build_agent_inventory(all_agents)
     invocation_section = f"{invocation_block}\n\n" if invocation_block else ""
-    return f"""{invocation_section}## Catálogo de agentes GitHub Copilot Pro disponibles (referencia)
+    return f"""{invocation_section}## Catálogo de agentes Stacky disponibles (referencia)
 
 {inventory}
 
@@ -903,7 +903,7 @@ criterio, tono, restricciones y forma de trabajo.
 - Archivo: {selected_agent.filename}
 - Descripcion: {selected_agent.description or "(sin descripcion)"}
 
-## Catalogo de agentes GitHub Copilot Pro disponibles
+## Catalogo de agentes Stacky disponibles
 
 {inventory}
 

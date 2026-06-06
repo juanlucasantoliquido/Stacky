@@ -34,8 +34,10 @@ Idempotencia:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
+import re
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -457,6 +459,21 @@ class AdoOutputWatcher:
             else f"estables hace {int(age_seconds)}s (debounce)"
         )
         pending_count = len(pending_files)
+        effective_epic_ado_id, epic_resolution = _resolve_effective_epic_ado_id(
+            source_epic_ado_id=epic_ado_id,
+            epic_dir=epic_dir,
+            pending_files=pending_files,
+            max_mtime_dt=max_mtime_dt,
+        )
+        if effective_epic_ado_id != epic_ado_id:
+            logger.warning(
+                "output_watcher mode_a: corrigiendo epic dir mal nombrado "
+                "source_epic=%s effective_ado=%s reason=%s path=%s",
+                epic_ado_id,
+                effective_epic_ado_id,
+                epic_resolution.get("reason"),
+                epic_dir,
+            )
 
         # ── Auto-create Tasks en ADO (Fase W5 + W6) ───────────────────────────
         # IMPORTANTE: la auto-creación NO depende de que exista una
@@ -469,11 +486,13 @@ class AdoOutputWatcher:
         #
         # Si STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS == "false", el helper
         # devuelve todo como skipped (gate del operador re-habilitable).
-        project_name = _project_name_for_epic(epic_ado_id)
+        project_name = _project_name_for_epic(effective_epic_ado_id)
         auto_create_summary = _auto_create_pending_tasks(
-            epic_ado_id=epic_ado_id,
+            epic_ado_id=effective_epic_ado_id,
             pending_files=pending_files,
             project_name=project_name,
+            source_epic_ado_id=epic_ado_id if effective_epic_ado_id != epic_ado_id else None,
+            source_epic_dir=str(epic_dir) if effective_epic_ado_id != epic_ado_id else None,
         )
         if auto_create_summary["created"] > 0 or auto_create_summary["errors"] > 0:
             logger.info(
@@ -493,9 +512,9 @@ class AdoOutputWatcher:
         # (agente fuera de tracking), las Tasks ya quedaron creadas arriba y no
         # hay nada que cerrar.
         with session_scope() as session:
-            ticket = session.query(Ticket).filter(Ticket.ado_id == epic_ado_id).first()
+            ticket = session.query(Ticket).filter(Ticket.ado_id == effective_epic_ado_id).first()
             if ticket is None:
-                logger.debug("output_watcher mode_a: ADO-%s no existe en DB", epic_ado_id)
+                logger.debug("output_watcher mode_a: ADO-%s no existe en DB", effective_epic_ado_id)
                 if not auto_create_had_errors:
                     self._seen_a[str(epic_dir)] = max_mtime_ns
                 round_result.mode_a_skipped += 1
@@ -515,7 +534,7 @@ class AdoOutputWatcher:
                 logger.debug(
                     "output_watcher mode_a: epic-%s sin execution running — "
                     "Tasks auto-creadas, nada que cerrar",
-                    epic_ado_id,
+                    effective_epic_ado_id,
                 )
                 # Reintentar el auto-create en el próximo scan si hubo errores.
                 if not auto_create_had_errors:
@@ -537,7 +556,7 @@ class AdoOutputWatcher:
             if already_event is not None:
                 logger.debug(
                     "output_watcher mode_a: exec=%d epic-%s ya tiene close event (id=%d) — skip",
-                    running_exec.id, epic_ado_id, already_event.id,
+                    running_exec.id, effective_epic_ado_id, already_event.id,
                 )
                 if not auto_create_had_errors:
                     self._seen_a[str(epic_dir)] = max_mtime_ns
@@ -549,7 +568,7 @@ class AdoOutputWatcher:
 
         logger.info(
             "output_watcher mode_a: cerrando exec=%d epic-%s (pending_tasks=%d, disparador=%s)",
-            execution_id, epic_ado_id, pending_count, trigger_desc,
+            execution_id, effective_epic_ado_id, pending_count, trigger_desc,
         )
         result = close_execution_with_publish(
             execution_id=execution_id,
@@ -558,7 +577,7 @@ class AdoOutputWatcher:
             html_output_path=None,  # explícito: no hay HTML para publicar en modo A
             user=MODE_A_CHANGED_BY_PREFIX,
             reason=(
-                f"output_watcher mode_a: epic-{epic_ado_id} análisis completado "
+                f"output_watcher mode_a: epic-{effective_epic_ado_id} análisis completado "
                 f"({pending_count} pending-task.json, {trigger_desc})"
             ),
             completion_source="output_watcher",
@@ -665,6 +684,117 @@ def _read_target_state_from_meta(ado_dir: Path) -> str | None:
     return None
 
 
+def _ep_label_matches_title(title: str | None, ep_label: int) -> bool:
+    if not title:
+        return False
+    return re.match(
+        rf"^\s*ep\s*[-#:]?\s*0*{re.escape(str(int(ep_label)))}(?=\D|$)",
+        str(title),
+        re.IGNORECASE,
+    ) is not None
+
+
+def _read_pending_payload(pt_file: Path) -> dict | None:
+    try:
+        data = json.loads(pt_file.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _declared_parent_ado_id(payload: dict | None) -> int | None:
+    if not payload:
+        return None
+    for key in ("epic_ado_id", "parent_id", "parent_ado_id"):
+        value = payload.get(key)
+        if value is None or not str(value).strip().isdigit():
+            continue
+        return int(str(value).strip())
+    return None
+
+
+def _exact_ticket_exists(ado_id: int) -> bool:
+    try:
+        with session_scope() as session:
+            return session.query(Ticket.id).filter(Ticket.ado_id == int(ado_id)).first() is not None
+    except Exception:  # noqa: BLE001
+        logger.debug("output_watcher mode_a: no se pudo consultar ticket ADO-%s", ado_id, exc_info=True)
+        return False
+
+
+def _resolve_effective_epic_ado_id(
+    *,
+    source_epic_ado_id: int,
+    epic_dir: Path,
+    pending_files: list[Path],
+    max_mtime_dt: datetime,
+) -> tuple[int, dict]:
+    """Resuelve el ADO real cuando la carpeta usa la etiqueta humana EP-<n>.
+
+    Evidencia ADO-241: el agente escribio `epic-26` porque el titulo del Epic
+    era `EP-26 - ...`. El System.Id real era 241. El watcher no debe crear contra
+    26 si la BD local o la ejecucion activa identifican 241.
+    """
+    if _exact_ticket_exists(source_epic_ado_id):
+        return source_epic_ado_id, {"reason": "exact_ticket_exists"}
+
+    for pt in pending_files:
+        declared = _declared_parent_ado_id(_read_pending_payload(pt))
+        if declared and declared != source_epic_ado_id:
+            return declared, {"reason": "declared_parent_id", "pending_task_path": str(pt)}
+
+    try:
+        with session_scope() as session:
+            from sqlalchemy import func
+
+            titled_matches = [
+                t.ado_id
+                for t in session.query(Ticket)
+                .filter(func.lower(Ticket.work_item_type) == "epic")
+                .all()
+                if _ep_label_matches_title(t.title, source_epic_ado_id)
+            ]
+            if len(set(titled_matches)) == 1:
+                return int(titled_matches[0]), {
+                    "reason": "ticket_title_ep_label",
+                    "source_epic_dir": str(epic_dir),
+                }
+
+            lower_bound = max_mtime_dt - timedelta(minutes=20)
+            upper_bound = max_mtime_dt + timedelta(minutes=5)
+            candidates = []
+            rows = (
+                session.query(AgentExecution, Ticket)
+                .join(Ticket, Ticket.id == AgentExecution.ticket_id)
+                .filter(AgentExecution.agent_type == "functional")
+                .all()
+            )
+            for execution, ticket in rows:
+                if (ticket.work_item_type or "").strip().lower() != "epic":
+                    continue
+                started = execution.started_at
+                completed = execution.completed_at
+                if started and started > upper_bound:
+                    continue
+                if completed and completed < lower_bound:
+                    continue
+                if started and started <= upper_bound:
+                    candidates.append((ticket.ado_id, execution.id, execution.status))
+            unique = {ado_id for ado_id, _, _ in candidates if ado_id != source_epic_ado_id}
+            if len(unique) == 1:
+                ado_id = int(next(iter(unique)))
+                exec_ids = [eid for cand_ado, eid, _ in candidates if cand_ado == ado_id]
+                return ado_id, {
+                    "reason": "agent_execution_time_window",
+                    "execution_ids": exec_ids,
+                    "source_epic_dir": str(epic_dir),
+                }
+    except Exception:  # noqa: BLE001
+        logger.debug("output_watcher mode_a: resolucion de epic efectivo fallo", exc_info=True)
+
+    return source_epic_ado_id, {"reason": "source_epic_dir"}
+
+
 # Cuarentena de pending-task.json con fallo ESTRUCTURAL (JSON corrupto o rechazo
 # terminal 4xx del endpoint). Evita el loop de reintentos cada 3s (incidente
 # epic-28/RF-028, 2026-06-05: 1239 reintentos en 1h): logueamos el error UNA vez
@@ -741,7 +871,12 @@ def _project_name_for_epic(epic_ado_id: int) -> str | None:
 
 
 def _auto_create_pending_tasks(
-    *, epic_ado_id: int, pending_files: list[Path], project_name: str | None = None
+    *,
+    epic_ado_id: int,
+    pending_files: list[Path],
+    project_name: str | None = None,
+    source_epic_ado_id: int | None = None,
+    source_epic_dir: str | None = None,
 ) -> dict:
     """Para cada pending-task.json no consumido, llama al endpoint
     `/api/tickets/by-ado/{epic}/create-child-task` vía self-HTTP.
@@ -799,6 +934,10 @@ def _auto_create_pending_tasks(
             ),
             "completion_source": "output_watcher_auto",
         }
+        if source_epic_ado_id is not None and int(source_epic_ado_id) != int(epic_ado_id):
+            body["source_epic_ado_id"] = int(source_epic_ado_id)
+            body["source_epic_dir"] = source_epic_dir
+            body["allow_epic_id_mismatch"] = True
         if project_name:
             body["project"] = project_name
         try:

@@ -1,33 +1,27 @@
-"""Stacky Agents canonical resolver, materializer e invocation contract.
+"""Stacky Agents canonical resolver e invocation contract.
 
 Este módulo concentra la lógica del plan
 ``plan-agentes-bundled-en-stacky-2026-05-29.md``:
 
 - Resolución del directorio canónico ``<STACKY_HOME>/agents``.
-- Materialización (copia) de los ``.agent.md`` conocidos hacia el canonical.
+- Lectura de los ``.agent.md`` versionados dentro del canonical.
 - Manifest versionado con ``mention`` (``@nombre``), ``checksum_sha256`` y
   ``source`` por agente.
 - Helper único ``build_invocation_block`` para que cualquier runner
   (codex_cli, claude_code_cli, copilot bridge) inyecte el mismo contrato
   de invocación al prompt.
-
-Mantiene compatibilidad temporal con ``VSCODE_PROMPTS_DIR`` legacy a través
-de las fuentes externas; la meta es que producción use solo el canonical.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
 from runtime_paths import (
-    app_root,
-    backend_root,
     ensure_stacky_agents_dir,
     ensure_stacky_home,
     stacky_agents_dir,
@@ -41,7 +35,6 @@ _MANIFEST_NAME = "manifest.json"
 _MANIFEST_SCHEMA_VERSION = 1
 
 SOURCE_BUNDLED = "bundled"
-SOURCE_LEGACY_VSCODE = "legacy_vscode"
 SOURCE_IMPORTED = "imported"
 SOURCE_CUSTOM = "custom"
 
@@ -179,44 +172,15 @@ def _build_entry(path: Path, *, source: str, base: Path) -> AgentEntry | None:
     )
 
 
-def _legacy_vscode_prompts_dir() -> Path | None:
-    if os.name == "nt":
-        appdata = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-        candidate = Path(appdata) / "Code" / "User" / "prompts"
-    else:
-        candidate = Path.home() / ".config" / "Code" / "User" / "prompts"
-    return candidate if candidate.is_dir() else None
-
-
-def _bundled_agents_dir() -> Path | None:
-    """Bundle del deploy: ``<app_root>/github_copilot_agents`` (compat temporal)."""
-    candidate = app_root() / "github_copilot_agents"
-    return candidate if candidate.is_dir() else None
-
-
-def _in_repo_agents_dir() -> Path | None:
-    """Fuente in-repo durante el desarrollo (no-frozen)."""
-    candidate = backend_root().parent / "DeployStackyAgents" / "github_copilot_agents"
-    return candidate if candidate.is_dir() else None
-
-
 def list_external_sources() -> list[tuple[Path, str]]:
-    """Devuelve fuentes externas en orden de prioridad de materialización.
+    """Devuelve fuentes externas configuradas para materialización automática.
 
-    El canonical (``stacky_agents_dir``) NO se lista acá: es el destino, no
-    una fuente. Solo se devuelven los directorios que ya existen.
+    La política actual es no materializar desde GitHub Copilot/VS Code ni desde
+    bundles legacy: los agentes salen siempre de ``Stacky/agents``. La función se
+    conserva como compatibilidad para callers/tests que pasan ``sources``
+    explícitas a ``materialize_agents()``.
     """
-    sources: list[tuple[Path, str]] = []
-    bundled = _bundled_agents_dir()
-    if bundled is not None:
-        sources.append((bundled, SOURCE_BUNDLED))
-    in_repo = _in_repo_agents_dir()
-    if in_repo is not None and (bundled is None or in_repo.resolve() != bundled.resolve()):
-        sources.append((in_repo, SOURCE_BUNDLED))
-    legacy = _legacy_vscode_prompts_dir()
-    if legacy is not None:
-        sources.append((legacy, SOURCE_LEGACY_VSCODE))
-    return sources
+    return []
 
 
 def _load_previous_sources() -> dict[str, str]:
@@ -307,8 +271,7 @@ def build_entry_from_path(
     """Construye un ``AgentEntry`` desde un ``.agent.md`` arbitrario.
 
     Útil para los runners que tienen un path resuelto pero no necesariamente
-    dentro del canonical (por ejemplo, deploys aún apuntando a la carpeta
-    legacy ``github_copilot_agents``).
+    dentro del canonical.
     """
     if not path.is_file():
         return None
@@ -321,16 +284,13 @@ def materialize_agents(
     force: bool = False,
     regenerate_manifest: bool = True,
 ) -> list[AgentEntry]:
-    """Copia ``.agent.md`` desde fuentes externas hacia `stacky_agents_dir()`.
+    """Lista/regenera ``.agent.md`` desde `stacky_agents_dir()`.
 
-    Política:
-    - Si un archivo ya existe en el canonical NO se sobrescribe a menos que
-      ``force=True``: preservamos ediciones del operador en el deploy.
-    - Si la misma `filename` aparece en varias fuentes, gana la primera (orden
-      de prioridad). Estricto: nunca duplicamos por path traversal.
-    - El manifest se regenera al final con ``write_manifest()``.
+    Sin ``sources`` explícitas no copia desde ninguna ruta externa: la fuente de
+    verdad es la carpeta canónica versionada. Con ``sources`` explícitas conserva
+    la capacidad de importación controlada hacia el canonical.
 
-    ``sources`` default = ``list_external_sources()``.
+    El manifest se regenera al final con ``write_manifest()``.
     """
     ensure_stacky_home()
     canonical = ensure_stacky_agents_dir()
@@ -339,10 +299,7 @@ def materialize_agents(
         src.resolve(): prov for src, prov in list_external_sources()
     }
 
-    if sources is None:
-        sources_list = [src for src, _ in list_external_sources()]
-    else:
-        sources_list = list(sources)
+    sources_list = [] if sources is None else list(sources)
 
     previous = _load_previous_sources()
     seen: set[str] = set()

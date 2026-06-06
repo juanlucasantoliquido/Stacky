@@ -105,6 +105,16 @@ def test_materialize_copies_from_external_sources(tmp_path, monkeypatch):
     assert {e.filename for e in entries} == {"Developer.agent.md", "Functional.agent.md"}
 
 
+def test_materialize_without_sources_reads_canonical_only(tmp_path):
+    canonical = runtime_paths.ensure_stacky_agents_dir()
+    _write_agent(canonical, "Developer.agent.md", description="Developer Stacky")
+
+    entries = stacky_agents.materialize_agents()
+
+    assert {e.filename for e in entries} == {"Developer.agent.md"}
+    assert (canonical / "manifest.json").is_file()
+
+
 def test_materialize_does_not_overwrite_existing(tmp_path):
     src = tmp_path / "src"
     _write_agent(src, "Developer.agent.md", body="versión original")

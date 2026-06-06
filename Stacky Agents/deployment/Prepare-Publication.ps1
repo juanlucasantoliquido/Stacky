@@ -304,7 +304,7 @@ Entrega:
 Notas:
 - backend\stacky-backend.exe ya incluye las dependencias Python.
 - frontend\dist ya esta compilado.
-- github_copilot_agents contiene los .agent.md incluidos en el deploy, si se configuro la fuente.
+- Stacky\agents contiene los .agent.md incluidos en el deploy.
 - data y projects se preservan entre actualizaciones.
 - Si existe StackyAgents-$ReleaseVersion-Setup.exe, tambien puede usarse como instalador.
 "@
@@ -396,7 +396,7 @@ try {
         "-Version", $releaseVersion
     )
     if ($GitHubCopilotAgentsRepo) {
-        $buildArgs += @("-GitHubCopilotAgentsRepo", $GitHubCopilotAgentsRepo)
+        Write-Warn "-GitHubCopilotAgentsRepo está obsoleto y se ignora. La fuente de agentes es backend\Stacky\agents."
     }
     if ($SkipInstallerExe) {
         $buildArgs += "-SkipInstaller"

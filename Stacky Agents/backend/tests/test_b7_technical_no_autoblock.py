@@ -16,17 +16,16 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent  # backend/
 DEPLOY = ROOT.parent / "DeployStackyAgents"
 
-# Los .agent.md son assets de runtime/deploy (gitignored). El runtime los lee de
-# backend/Stacky/agents; el bundle los publica en DeployStackyAgents. Probamos la
-# primera ubicación que exista; si ninguna existe (checkout fresco sin materializar
-# los agentes), saltamos el test en vez de fallar.
+# Los .agent.md son assets canónicos versionados en backend/Stacky/agents; el
+# release los publica en DeployStackyAgents/Stacky/agents. Probamos la primera
+# ubicación que exista.
 _LEGACY_CANDIDATES = [
     ROOT / "Stacky" / "agents" / "TechnicalAnalyst.agent.md",
     DEPLOY / "Stacky" / "agents" / "TechnicalAnalyst.agent.md",
 ]
 _V2_CANDIDATES = [
     ROOT / "Stacky" / "agents" / "TechnicalAnalyst.v2.agent.md",
-    DEPLOY / "github_copilot_agents" / "TechnicalAnalyst.v2.agent.md",
+    DEPLOY / "Stacky" / "agents" / "TechnicalAnalyst.v2.agent.md",
 ]
 
 
@@ -40,7 +39,7 @@ V2 = _first_existing(_V2_CANDIDATES)
 
 def _read(p: Path | None) -> str:
     if p is None:
-        pytest.skip("agente .agent.md no materializado en este checkout (gitignored)")
+        pytest.skip("agente .agent.md no disponible en backend/Stacky/agents")
     return p.read_text(encoding="utf-8")
 
 

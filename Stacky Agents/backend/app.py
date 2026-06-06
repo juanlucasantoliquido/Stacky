@@ -193,10 +193,9 @@ def create_app() -> Flask:
     install_console_log_handler()
 
     # ── Bootstrap canonical Stacky/agents ───────────────────────────────────
-    # Plan: plan-agentes-bundled-en-stacky-2026-05-29.md — Fase 1+2.
-    # Materializa los .agent.md externos (bundle + legacy) dentro de
-    # <STACKY_HOME>/agents y regenera manifest.json para que el resto del
-    # backend lea siempre desde el canonical.
+    # Stacky/agents es la fuente versionada. El bootstrap solo refresca
+    # manifest.json para que el resto del backend lea siempre desde el
+    # canonical; no copia agentes desde GitHub Copilot/VS Code.
     try:
         from runtime_paths import stacky_agents_dir, stacky_home
         from services import stacky_agents as _stacky_agents_svc

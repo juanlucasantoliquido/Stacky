@@ -3,6 +3,7 @@ import html as _html
 import json
 import logging
 import os
+import re
 import uuid as _uuid_mod
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +59,8 @@ _PENDING_TASK_STATUS_ALLOWED = _PENDING_TASK_STATUS_PENDING_ALIASES | {PENDING_T
 _CONSUMED_METADATA_KEYS = {
     "consumed_at", "task_ado_id", "attachment_id", "status", "operator_reason",
     "operation_id", "payload_sha256", "hierarchy_bridge",
+    "auto_normalized_at", "auto_normalized_by", "auto_normalized_from_epic_id",
+    "auto_normalized_reason", "auto_normalized_source_epic_dir",
 }
 
 
@@ -1974,6 +1977,52 @@ def _pending_declared_parent_id(payload: dict) -> str | None:
     return None
 
 
+def _epic_label_from_pending_path(pt_file: Path) -> str | None:
+    """Extrae el sufijo de una carpeta `epic-<n>` ancestro del pending-task."""
+    for part in reversed(pt_file.parts):
+        low = part.lower()
+        if low.startswith("epic-") and low[5:].isdigit():
+            return low[5:]
+    return None
+
+
+def _title_matches_ep_label(title: str | None, ep_label: str | None) -> bool:
+    """True si el titulo del work item empieza con una etiqueta humana EP-<n>.
+
+    Ejemplo real ADO-241: titulo `EP-26 - ...`; el agente confundio ese `26`
+    con el System.Id de ADO y escribio `epic-26`.
+    """
+    if not title or not ep_label or not str(ep_label).isdigit():
+        return False
+    label = str(int(ep_label))
+    return re.match(rf"^\s*ep\s*[-#:]?\s*0*{re.escape(label)}(?=\D|$)", title, re.IGNORECASE) is not None
+
+
+def _pending_path_points_to_ado_by_ticket_title(pt_file: Path, ado_id: int) -> bool:
+    """Rescate para carpetas `epic-<EP humano>` sin parent_id en el JSON.
+
+    Si el pending-task esta bajo `epic-26` y el ticket ADO-241 se titula
+    `EP-26 - ...`, el archivo pertenece al ADO-241 aunque su JSON viejo diga
+    `epic_id=26`. Esto permite que el desatascador/listado vea el artifact antes
+    de que el watcher lo normalice.
+    """
+    ep_label = _epic_label_from_pending_path(pt_file)
+    if not ep_label or str(ep_label) == str(ado_id):
+        return False
+    try:
+        with session_scope() as session:
+            ticket = session.query(Ticket).filter(Ticket.ado_id == int(ado_id)).first()
+            if ticket is None:
+                return False
+            exact = session.query(Ticket.id).filter(Ticket.ado_id == int(ep_label)).first()
+            if exact is not None:
+                return False
+            return _title_matches_ep_label(ticket.title, ep_label)
+    except Exception:  # noqa: BLE001
+        logger.debug("pending-task: no se pudo resolver EP label para %s", pt_file, exc_info=True)
+        return False
+
+
 def iter_epic_pending_task_files(repo_root: Path, ado_id: int) -> list[Path]:
     """Devuelve los pending-task.json de un Epic en cualquiera de las bases.
 
@@ -2017,6 +2066,10 @@ def iter_epic_pending_task_files(repo_root: Path, ado_id: int) -> list[Path]:
             if key in seen:
                 continue
             if pt.parent == epic_dir or pt.parent.parent == epic_dir:
+                continue
+            if _pending_path_points_to_ado_by_ticket_title(pt, ado_id):
+                seen.add(key)
+                found.append(pt)
                 continue
             try:
                 payload = json.loads(pt.read_text(encoding="utf-8-sig"))
@@ -3284,18 +3337,45 @@ def create_child_task(ado_id: int):
     if file_epic_id != str(ado_id):
         declared_parent_id = _pending_declared_parent_id(pt_payload)
         if declared_parent_id != str(ado_id):
-            return jsonify({
-                "ok": False,
-                "error": "PENDING_TASK_EPIC_MISMATCH",
-                "message": (
-                    f"epic_id en el archivo ('{file_epic_id}') no coincide con "
-                    f"epic_ado_id en la URL ({ado_id})"
-                ),
-                "file_epic_id": file_epic_id,
-                "declared_parent_id": declared_parent_id,
-                "url_epic_ado_id": ado_id,
-                "correlation_id": correlation_id,
-            }), 400
+            source_epic_ado_id = str(
+                body.get("source_epic_ado_id")
+                or body.get("source_epic_id")
+                or ""
+            ).strip()
+            allow_watcher_normalization = (
+                completion_source == "output_watcher_auto"
+                and bool(body.get("allow_epic_id_mismatch"))
+                and source_epic_ado_id == file_epic_id
+            )
+            if not allow_watcher_normalization:
+                return jsonify({
+                    "ok": False,
+                    "error": "PENDING_TASK_EPIC_MISMATCH",
+                    "message": (
+                        f"epic_id en el archivo ('{file_epic_id}') no coincide con "
+                        f"epic_ado_id en la URL ({ado_id})"
+                    ),
+                    "file_epic_id": file_epic_id,
+                    "declared_parent_id": declared_parent_id,
+                    "url_epic_ado_id": ado_id,
+                    "correlation_id": correlation_id,
+                }), 400
+            logger.warning(
+                "create_child_task: normalizando epic_id mal nombrado desde watcher "
+                "operation_id=%s file_epic_id=%s url_ado_id=%s path=%s",
+                operation_id, file_epic_id, ado_id, pending_task_path_str,
+            )
+            pt_payload = _normalize_pending_task_parent(
+                pt_file=pt_file,
+                payload=pt_payload,
+                ado_id=ado_id,
+                source_epic_id=file_epic_id,
+                source_epic_dir=body.get("source_epic_dir"),
+                operation_id=operation_id,
+                persist=not dry_run,
+            )
+            payload_sha256 = _payload_logical_sha256(pt_payload)
+            declared_parent_id = str(ado_id)
         logger.warning(
             "create_child_task: epic_id legacy/mal nombrado pero parent_id coincide "
             "operation_id=%s file_epic_id=%s parent_id=%s url_ado_id=%s path=%s",
@@ -3337,6 +3417,68 @@ def create_child_task(ado_id: int):
         })
 
     # ── [dry_run] Retornar plan de acciones sin tocar ADO ─────────────────────
+    equivalent_consumed = None if dry_run else _find_equivalent_consumed_pending_task(
+        repo_root=repo_root,
+        ado_id=ado_id,
+        current_pt_file=pt_file,
+        payload=pt_payload,
+    )
+    if equivalent_consumed is not None:
+        prev_task_id = equivalent_consumed.get("task_ado_id")
+        prev_url = None
+        if prev_task_id:
+            try:
+                prev_url = _ado_client_for_ticket(project_name=project_name).work_item_url(int(prev_task_id))
+            except Exception:
+                pass
+        _mark_pending_task_consumed(
+            pt_file=pt_file,
+            task_ado_id=int(prev_task_id) if prev_task_id else None,
+            attachment_id=equivalent_consumed.get("attachment_id"),
+            operator_reason=operator_reason or "Idempotencia: pending-task equivalente ya consumido",
+            operation_id=operation_id,
+            payload_sha256=payload_sha256,
+        )
+        actions = [{
+            "action": "mark_consumed_from_equivalent",
+            "ok": True,
+            "equivalent_pending_task_path": equivalent_consumed.get("pending_task_path"),
+        }]
+        logger.info(
+            "create_child_task: equivalent pending already consumed operation_id=%s "
+            "ado_id=%s task_ado_id=%s equivalent_path=%s",
+            operation_id, ado_id, prev_task_id, equivalent_consumed.get("pending_task_path"),
+        )
+        _audit_create_child_task(
+            correlation_id=correlation_id,
+            ado_id=ado_id,
+            user=user,
+            completion_source=completion_source,
+            operator_reason=operator_reason,
+            pt_path=pending_task_path_str,
+            ok=True,
+            actions=actions,
+            task_ado_id=int(prev_task_id) if prev_task_id else None,
+            operation_id=operation_id,
+            payload_sha256=payload_sha256,
+            repo_root=str(repo_root),
+        )
+        return jsonify({
+            "ok": True,
+            "dry_run": False,
+            "epic_ado_id": ado_id,
+            "task_ado_id": prev_task_id,
+            "task_url": prev_url,
+            "attachment_id": equivalent_consumed.get("attachment_id"),
+            "actions": actions,
+            "pending_task_consumed": True,
+            "idempotent": True,
+            "reason": "PENDING_TASK_EQUIVALENT_ALREADY_CONSUMED",
+            "correlation_id": correlation_id,
+            "operation_id": operation_id,
+            "payload_sha256": payload_sha256,
+        })
+
     plan_rel = pt_payload.get("plan_de_pruebas_path", "")
     plan_path = repo_root / plan_rel if plan_rel else None
     plan_exists = bool(plan_path and plan_path.is_file())
@@ -3893,6 +4035,114 @@ def _extract_ado_error_message(raw: str) -> str:
         except (ValueError, TypeError):
             pass
     return raw[:400]
+
+
+def _find_equivalent_consumed_pending_task(
+    *,
+    repo_root: Path,
+    ado_id: int,
+    current_pt_file: Path,
+    payload: dict,
+) -> dict | None:
+    """Busca otro pending-task del mismo Epic/RF ya consumido.
+
+    Cubre el caso ADO-241 post-rescate: quedo un archivo pendiente en `epic-26`
+    y otro equivalente consumido en `epic-241` con `task_ado_id=246`. El watcher
+    debe marcar el original como idempotente, no crear una Task duplicada.
+    """
+    rf_id = str(payload.get("rf_id") or "").strip().lower()
+    title = str(payload.get("title") or "").strip().lower()
+    if not rf_id and not title:
+        return None
+    try:
+        current_key = current_pt_file.resolve()
+    except OSError:
+        current_key = current_pt_file
+
+    for candidate in iter_epic_pending_task_files(repo_root, ado_id):
+        try:
+            candidate_key = candidate.resolve()
+        except OSError:
+            candidate_key = candidate
+        if candidate_key == current_key:
+            continue
+        try:
+            other = json.loads(candidate.read_text(encoding="utf-8-sig"))
+        except Exception:
+            continue
+        if not isinstance(other, dict):
+            continue
+        if "consumed_at" not in other and other.get("status") != PENDING_TASK_STATUS_CONSUMED:
+            continue
+        if not other.get("task_ado_id"):
+            continue
+        other_rf = str(other.get("rf_id") or "").strip().lower()
+        other_title = str(other.get("title") or "").strip().lower()
+        same_rf = bool(rf_id and other_rf and rf_id == other_rf)
+        same_title = bool(title and other_title and title == other_title)
+        if not same_rf and not same_title:
+            continue
+        try:
+            rel = str(candidate.relative_to(repo_root)).replace("\\", "/")
+        except ValueError:
+            rel = str(candidate)
+        return {
+            "pending_task_path": rel,
+            "task_ado_id": other.get("task_ado_id"),
+            "attachment_id": other.get("attachment_id"),
+            "operation_id": other.get("operation_id"),
+        }
+    return None
+
+
+def _normalize_pending_task_parent(
+    *,
+    pt_file: Path,
+    payload: dict,
+    ado_id: int,
+    source_epic_id: str,
+    source_epic_dir: str | None,
+    operation_id: str,
+    persist: bool = True,
+) -> dict:
+    """Corrige un pending-task mal nombrado antes de crear la Task.
+
+    Caso real ADO-241: el agente escribio `epic_id=26` porque confundio la
+    etiqueta humana `EP-26` del titulo con el System.Id real de ADO. El watcher
+    puede resolver el ADO real por BD/ejecucion y llama al endpoint con una
+    autorizacion explicita; este helper deja el JSON usable tambien para el
+    desatascador si luego ADO falla.
+    """
+    normalized = dict(payload)
+    normalized["epic_id"] = str(ado_id)
+    normalized["parent_id"] = int(ado_id)
+    normalized["auto_normalized_from_epic_id"] = str(source_epic_id)
+    normalized["auto_normalized_at"] = datetime.now(timezone.utc).isoformat()
+    normalized["auto_normalized_by"] = "output_watcher_auto"
+    normalized["auto_normalized_reason"] = (
+        "source folder used human EP label instead of ADO System.Id"
+    )
+    if source_epic_dir:
+        normalized["auto_normalized_source_epic_dir"] = str(source_epic_dir)
+
+    if persist:
+        try:
+            current = json.loads(pt_file.read_text(encoding="utf-8"))
+            if isinstance(current, dict) and "consumed_at" in current:
+                return current
+        except Exception:
+            current = None
+        try:
+            pt_file.write_text(
+                json.dumps(normalized, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            logger.warning(
+                "create_child_task: no se pudo persistir normalizacion operation_id=%s path=%s err=%s",
+                operation_id, pt_file, exc,
+            )
+    return normalized
 
 
 def _mark_pending_task_consumed(

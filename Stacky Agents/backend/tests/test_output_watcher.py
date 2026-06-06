@@ -84,7 +84,12 @@ def client(monkeypatch, repo_root_dir):
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _mk_ticket(ado_id: int, stacky_status: str = "running", work_item_type: str | None = None) -> int:
+def _mk_ticket(
+    ado_id: int,
+    stacky_status: str = "running",
+    work_item_type: str | None = None,
+    title: str | None = None,
+) -> int:
     from db import session_scope
     from models import Ticket
 
@@ -92,7 +97,7 @@ def _mk_ticket(ado_id: int, stacky_status: str = "running", work_item_type: str 
         t = Ticket(
             ado_id=ado_id,
             project="RSPacifico",
-            title=f"t-{ado_id}",
+            title=title or f"t-{ado_id}",
             ado_state="To Do",
             stacky_status=stacky_status,
             work_item_type=work_item_type,
@@ -604,6 +609,41 @@ def test_mode_a_auto_creates_without_running_execution(client, repo_root_dir, mo
     assert "/by-ado/40299/create-child-task" in calls[0]["url"]
     # No hay run vivo que cerrar → no cuenta como close.
     assert r["mode_a_closes"] == 0
+
+
+def test_mode_a_auto_corrects_human_ep_label_dir(client, repo_root_dir, monkeypatch):
+    """ADO-241: `epic-26` debe postear contra el ADO real si el ticket es EP-26."""
+    from services.output_watcher import AdoOutputWatcher
+
+    calls: list[dict] = []
+
+    class _FakeResp:
+        status_code = 200
+        text = "{}"
+
+        def json(self):
+            return {"ok": True, "task_ado_id": 246, "pending_task_consumed": True}
+
+    def _fake_post(url, json=None, timeout=None, **kw):
+        calls.append({"url": url, "body": json})
+        return _FakeResp()
+
+    import requests as _req
+    monkeypatch.setattr(_req, "post", _fake_post)
+    monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+
+    ticket_id = _mk_ticket(40941, work_item_type="Epic", title="EP-26026 - Busqueda de Cliente")
+    _mk_execution(ticket_id)
+    _write_pending_task(repo_root_dir, 26026, "RF-026")
+
+    w = AdoOutputWatcher(stable_delay_a=0.0)
+    result = w.scan_once()
+
+    assert len(calls) == 1
+    assert "/by-ado/40941/create-child-task" in calls[0]["url"]
+    assert calls[0]["body"]["source_epic_ado_id"] == 26026
+    assert calls[0]["body"]["allow_epic_id_mismatch"] is True
+    assert result["mode_a_closes"] == 1
 
 
 def test_mode_a_invalid_pending_task_is_terminal_skip(client, repo_root_dir, monkeypatch):

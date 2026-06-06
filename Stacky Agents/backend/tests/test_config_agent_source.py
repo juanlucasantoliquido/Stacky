@@ -21,9 +21,6 @@ def test_vscode_prompts_dir_uses_canonical_when_ready(monkeypatch, tmp_path):
     _write_agent(legacy, "OldDeveloper.agent.md")
 
     monkeypatch.setattr(config_module, "stacky_agents_dir", lambda: canonical)
-    # Aislar el override por proyecto activo: tiene prioridad máxima en la
-    # property y, sin mockearlo, lee el proyecto real del entorno (su agents_dir
-    # configurado enmascara la fuente canónica que este test ejercita).
     monkeypatch.setattr(config_module, "_project_agents_dir_if_configured", lambda: None)
     monkeypatch.setenv("VSCODE_PROMPTS_DIR", str(legacy))
     monkeypatch.delenv("STACKY_ALLOW_VSCODE_PROMPTS_OVERRIDE", raising=False)
@@ -31,7 +28,7 @@ def test_vscode_prompts_dir_uses_canonical_when_ready(monkeypatch, tmp_path):
     assert config_module.config.VSCODE_PROMPTS_DIR == str(canonical)
 
 
-def test_vscode_prompts_dir_uses_project_agents_dir_first(monkeypatch, tmp_path):
+def test_vscode_prompts_dir_ignores_project_agents_dir(monkeypatch, tmp_path):
     canonical = tmp_path / "Stacky" / "agents"
     project_agents = tmp_path / "ProjectAgents"
     legacy = tmp_path / "githubcopilot-pro"
@@ -44,20 +41,18 @@ def test_vscode_prompts_dir_uses_project_agents_dir_first(monkeypatch, tmp_path)
     monkeypatch.setenv("VSCODE_PROMPTS_DIR", str(legacy))
     monkeypatch.delenv("STACKY_ALLOW_VSCODE_PROMPTS_OVERRIDE", raising=False)
 
-    assert config_module.config.VSCODE_PROMPTS_DIR == str(project_agents)
+    assert config_module.config.VSCODE_PROMPTS_DIR == str(canonical)
 
 
-def test_vscode_prompts_dir_can_force_legacy_with_explicit_flag(monkeypatch, tmp_path):
+def test_vscode_prompts_dir_ignores_legacy_force_flag(monkeypatch, tmp_path):
     canonical = tmp_path / "Stacky" / "agents"
     legacy = tmp_path / "githubcopilot-pro"
     _write_agent(canonical, "Developer.agent.md")
     _write_agent(legacy, "OldDeveloper.agent.md")
 
     monkeypatch.setattr(config_module, "stacky_agents_dir", lambda: canonical)
-    # Aislar el override por proyecto activo (ver test anterior): sin esto el
-    # agents_dir del proyecto real del entorno gana antes de evaluar el flag.
     monkeypatch.setattr(config_module, "_project_agents_dir_if_configured", lambda: None)
     monkeypatch.setenv("VSCODE_PROMPTS_DIR", str(legacy))
     monkeypatch.setenv("STACKY_ALLOW_VSCODE_PROMPTS_OVERRIDE", "true")
 
-    assert config_module.config.VSCODE_PROMPTS_DIR == str(legacy)
+    assert config_module.config.VSCODE_PROMPTS_DIR == str(canonical)

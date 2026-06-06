@@ -318,7 +318,7 @@ def _run_in_background(
         log("info", "codex cli command: " + _display_command(cmd))
         log(
             "info",
-            f"loaded {len(all_agents)} GitHub Copilot agent prompt(s); selected {selected_agent.filename}",
+            f"loaded {len(all_agents)} Stacky agent prompt(s); selected {selected_agent.filename}",
         )
 
         creationflags = 0
@@ -738,7 +738,7 @@ criterio, tono, restricciones y forma de trabajo.
 - Path: {selected_path}
 - Descripcion: {selected_agent.description or "(sin descripcion)"}
 
-## Catalogo de agentes GitHub Copilot Pro disponibles
+## Catalogo de agentes Stacky disponibles
 
 Stacky copio todos los `.agent.md` conocidos a esta ejecucion para que Codex
 CLI pueda consultar cualquier agente GitHub Copilot Pro aunque el operador haya
@@ -778,7 +778,7 @@ def _materialize_agent_prompts(
     run_dir: Path,
     agents: list[vscode_agents.VsCodeAgent],
 ) -> tuple[Path, Path]:
-    bundle_dir = run_dir / "github_copilot_agents"
+    bundle_dir = run_dir / "stacky_agents"
     bundle_dir.mkdir(parents=True, exist_ok=True)
     manifest: list[dict[str, str]] = []
 
@@ -808,7 +808,7 @@ def _format_agent_inventory(
     agent_bundle_dir: Path,
 ) -> str:
     if not agents:
-        return "- No se encontraron agentes en VSCODE_PROMPTS_DIR."
+        return "- No se encontraron agentes en Stacky/agents."
     lines: list[str] = []
     for agent in agents:
         desc = (agent.description or "").replace("\n", " ").strip()

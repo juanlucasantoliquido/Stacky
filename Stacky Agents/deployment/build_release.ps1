@@ -188,103 +188,20 @@ function Assert-CleanReleasePayload {
     }
 }
 
-function Resolve-GitHubCopilotAgentsSource {
-    if ($GitHubCopilotAgentsRepo) {
-        return $GitHubCopilotAgentsRepo
-    }
-
-    if ($env:GITHUB_COPILOT_AGENTS_REPO) {
-        return $env:GITHUB_COPILOT_AGENTS_REPO
-    }
-
-    if ($env:STACKY_GITHUB_COPILOT_AGENTS_REPO) {
-        return $env:STACKY_GITHUB_COPILOT_AGENTS_REPO
-    }
-
+function Resolve-StackyAgentsSource {
     if ($PSScriptRoot) {
         $repoAppRoot = Split-Path -Parent $PSScriptRoot
 
-        # Fuente AUTORIZADA: los .agent.md editables viven en backend/Stacky/agents
-        # (stacky_home de dev). El build DEBE tomarlos de aquí para que los edits
-        # (p.ej. FunctionalAnalyst v2.0.1, fix de sobre-división) lleguen al
-        # release. Antes la fuente era DeployStackyAgents/github_copilot_agents
-        # (self-referencial): el build se copiaba a sí mismo y los edits de
-        # backend/Stacky/agents NUNCA se deployaban → el agente quedaba stale en
-        # v2.0.0 (causa raíz del over-split que seguía en runtime).
+        # Fuente AUTORIZADA: los .agent.md editables viven en backend/Stacky/agents.
+        # No se aceptan fuentes GitHub Copilot/VS Code ni bundles legacy:
+        # Stacky/agents es el origen único del release.
         $authoredSource = Join-Path $repoAppRoot "backend\Stacky\agents"
         if (Test-Path $authoredSource) {
             return $authoredSource
         }
-
-        # Fallback legacy: la carpeta del deploy anterior (self-referencial).
-        $inRepoSource = Join-Path $repoAppRoot "DeployStackyAgents\github_copilot_agents"
-        if (Test-Path $inRepoSource) {
-            return $inRepoSource
-        }
-    }
-
-    if ($env:APPDATA) {
-        $defaultPromptsDir = Join-Path $env:APPDATA "Code\User\prompts"
-        if (Test-Path $defaultPromptsDir) {
-            return $defaultPromptsDir
-        }
     }
 
     return ""
-}
-
-function Copy-GitHubCopilotAgents {
-    param(
-        [Parameter(Mandatory = $true)][string]$SourceRoot,
-        [Parameter(Mandatory = $true)][string]$DestinationRoot
-    )
-
-    if (-not $SourceRoot) {
-        Write-Warn "No se configuro repo/carpeta de agentes GitHub Copilot. Se omite github_copilot_agents."
-        return 0
-    }
-
-    if (-not (Test-Path $SourceRoot)) {
-        Write-Warn "No existe la fuente de agentes GitHub Copilot: $SourceRoot"
-        return 0
-    }
-
-    $sourceFull = [System.IO.Path]::GetFullPath($SourceRoot)
-    $agentFiles = @(Get-ChildItem -LiteralPath $sourceFull -Filter "*.agent.md" -Recurse -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch "\\(node_modules|\.git|outputs|__pycache__)($|\\)" } |
-        Sort-Object FullName)
-
-    if ($agentFiles.Count -eq 0) {
-        Write-Warn "No se encontraron *.agent.md en: $sourceFull"
-        return 0
-    }
-
-    New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
-    $manifest = @()
-    $usedNames = @{}
-
-    foreach ($file in $agentFiles) {
-        $targetName = $file.Name
-        if ($usedNames.ContainsKey($targetName.ToLowerInvariant())) {
-            $relativeParent = $file.DirectoryName.Substring($sourceFull.Length).TrimStart("\", "/")
-            $prefix = ($relativeParent -replace "[\\/:*?`"<>| ]+", "_").Trim("_")
-            if ($prefix) {
-                $targetName = "$prefix-$($file.Name)"
-            }
-        }
-        $usedNames[$targetName.ToLowerInvariant()] = $true
-
-        $target = Join-Path $DestinationRoot $targetName
-        Copy-Item -LiteralPath $file.FullName -Destination $target -Force
-        $manifest += [ordered]@{
-            filename = $targetName
-            source_relative_path = $file.FullName.Substring($sourceFull.Length).TrimStart("\", "/")
-            source_root = $sourceFull
-        }
-    }
-
-    Write-Utf8NoBom -Path (Join-Path $DestinationRoot "manifest.json") -Value ($manifest | ConvertTo-Json -Depth 5)
-    return $agentFiles.Count
 }
 
 function Get-AgentName {
@@ -350,7 +267,7 @@ function Copy-StackyAgents {
     New-Item -ItemType Directory -Path $stackyAgentsDir -Force | Out-Null
 
     if (-not $SourceRoot -or -not (Test-Path $SourceRoot)) {
-        Write-Warn "Sin fuente para Stacky/agents. Queda vacío (el backend lo poblará en runtime si tiene fuentes locales)."
+        Write-Warn "Sin fuente canonical para Stacky/agents: backend/Stacky/agents no existe."
         return 0
     }
 
@@ -452,6 +369,10 @@ Write-Host " Version  : $Version" -ForegroundColor Gray
 Write-Host " Salida   : $releaseDir" -ForegroundColor Gray
 Write-Host "============================================================" -ForegroundColor Cyan
 
+if ($GitHubCopilotAgentsRepo) {
+    Write-Warn "-GitHubCopilotAgentsRepo está obsoleto y se ignora. La fuente de agentes es backend\Stacky\agents."
+}
+
 Require-Command -Command "npm" -Hint "Instala Node.js 18+ para compilar el frontend."
 $script:Python = Resolve-Python
 
@@ -537,7 +458,6 @@ New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
 $releaseBackendDir = Join-Path $releaseDir "backend"
 $releaseFrontendDir = Join-Path $releaseDir "frontend"
 $releaseVsixDir = Join-Path $releaseDir "vscode_extension"
-$releaseGitHubCopilotAgentsDir = Join-Path $releaseDir "github_copilot_agents"
 $releaseStackyHomeDir = Join-Path $releaseDir "Stacky"
 $releaseStackyAgentsDir = Join-Path $releaseStackyHomeDir "agents"
 $releaseDataDir = Join-Path $releaseDir "data"
@@ -567,17 +487,11 @@ if ($latestVsix) {
     Write-Warn "No se encontro .vsix para incluir en el release."
 }
 
-Write-Step "Copiando agentes GitHub Copilot (carpeta legacy github_copilot_agents)"
-$githubCopilotAgentsSource = Resolve-GitHubCopilotAgentsSource
-$githubCopilotAgentsCount = Copy-GitHubCopilotAgents -SourceRoot $githubCopilotAgentsSource -DestinationRoot $releaseGitHubCopilotAgentsDir
-if ($githubCopilotAgentsCount -gt 0) {
-    Write-OK "Agentes incluidos: $githubCopilotAgentsCount desde $githubCopilotAgentsSource"
-}
-
-Write-Step "Materializando Stacky/agents (canonical)"
-$stackyAgentsCount = Copy-StackyAgents -SourceRoot $githubCopilotAgentsSource -StackyHomeDir $releaseStackyHomeDir
+Write-Step "Materializando Stacky/agents desde backend/Stacky/agents"
+$stackyAgentsSource = Resolve-StackyAgentsSource
+$stackyAgentsCount = Copy-StackyAgents -SourceRoot $stackyAgentsSource -StackyHomeDir $releaseStackyHomeDir
 if ($stackyAgentsCount -gt 0) {
-    Write-OK "Stacky/agents incluidos: $stackyAgentsCount agentes (con manifest.json + checksum)"
+    Write-OK "Stacky/agents incluidos: $stackyAgentsCount agentes desde $stackyAgentsSource (con manifest.json + checksum)"
 
     Write-Step "Validando Stacky/agents (check_deploy_agents.py)"
     $checkScript = Join-Path $deploymentDir "check_deploy_agents.py"
@@ -594,7 +508,7 @@ if ($stackyAgentsCount -gt 0) {
     if ($RequireInstaller) {
         throw "Stacky/agents está vacío y RequireInstaller=true. Cancelo el release."
     }
-    Write-Warn "Stacky/agents quedó vacío. El backend intentará materializar desde otras fuentes en runtime."
+    Write-Warn "Stacky/agents quedó vacío. El backend no importará fuentes legacy en runtime."
 }
 
 if ($ExportConfig) {
@@ -640,8 +554,6 @@ $manifest = [ordered]@{
     source_commit = $gitSha
     frontend_dist = "frontend/dist"
     backend_entrypoint = "backend/stacky-backend.exe"
-    github_copilot_agents_dir = "github_copilot_agents"
-    github_copilot_agents_count = $githubCopilotAgentsCount
     stacky_home_dir = "Stacky"
     stacky_agents_dir = "Stacky/agents"
     stacky_agents_count = $stackyAgentsCount

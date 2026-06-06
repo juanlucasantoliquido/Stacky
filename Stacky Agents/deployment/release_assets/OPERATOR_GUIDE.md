@@ -28,15 +28,10 @@ No borrar estas carpetas salvo que soporte lo indique:
 - `data/`: base local, logs y backups;
 - `projects/`: configuracion por cliente/proyecto.
 
-## Agentes GitHub Copilot
+## Agentes Stacky
 
-El deploy puede incluir `github_copilot_agents/` con los `.agent.md` del repo
-de agentes de GitHub Copilot. Si la carpeta existe, Stacky la usa como fuente
-de agentes por defecto. Para generar el deploy desde una ruta especifica:
-
-```powershell
-.\PrepararPublicacion.bat -GitHubCopilotAgentsRepo "C:\ruta\al\repo\de\agentes"
-```
+Los `.agent.md` incluidos en el deploy viven en `Stacky/agents`. Esa carpeta es
+la fuente unica que Stacky usa para listar y lanzar agentes.
 
 ## Detener Stacky Agents
 

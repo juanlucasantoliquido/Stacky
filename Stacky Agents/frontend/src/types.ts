@@ -17,6 +17,7 @@ export interface VsCodeAgent {
 }
 
 export type ExecutionStatus =
+  | "preparing"
   | "queued"
   | "running"
   | "completed"

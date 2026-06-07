@@ -40,7 +40,7 @@ logger = logging.getLogger("stacky.agent_completion_gateway")
 
 # ── Constantes ────────────────────────────────────────────────────────────────
 
-ACTIVE_STATUSES = frozenset({"running", "queued"})
+ACTIVE_STATUSES = frozenset({"preparing", "running", "queued"})
 TERMINAL_STATUSES = frozenset({"completed", "error", "cancelled", "needs_review"})
 
 _GATEWAY_SOURCE = "completion_gateway"

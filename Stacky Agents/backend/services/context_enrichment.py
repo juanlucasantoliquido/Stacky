@@ -60,8 +60,17 @@ def enrich_blocks(
             ticket_ado_id = ticket_obj.ado_id
             ticket_project = ticket_obj.project
 
-    project_name = project_ctx.stacky_project_name if project_ctx else None
+    project_name = (project_ctx.stacky_project_name if project_ctx else None) or ticket_project
 
+    # Memoria Stacky: PREPEND explícito para que sea el primer bloque de
+    # contexto. Flag OFF por default; best-effort para no alterar runs existentes.
+    blocks = _inject_stacky_memory_block(
+        blocks=blocks,
+        project_name=project_name,
+        ticket_id=ticket_id,
+        agent_type=agent_type,
+        log=log,
+    )
     # Plan 16: inyectar primero el client-profile (si está disponible y el
     # feature flag lo permite) para que todos los pasos siguientes puedan
     # leerlo si lo necesitan.
@@ -203,6 +212,69 @@ def _inject_client_profile_block(
     if block is None:
         return blocks
     return list(blocks) + [block]
+
+
+def _inject_stacky_memory_block(
+    *,
+    blocks: list[dict],
+    project_name: str | None,
+    ticket_id: int | None,
+    agent_type: str,
+    log: LogFn,
+) -> list[dict]:
+    if os.getenv("STACKY_MEMORY_INJECTION_ENABLED", "false").lower() not in {
+        "1",
+        "true",
+        "on",
+        "yes",
+    }:
+        return blocks
+    if not project_name:
+        return blocks
+    existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
+    if "stacky-memory" in existing_ids:
+        log("info", "stacky-memory ya presente, omitiendo inyección")
+        return blocks
+
+    try:
+        query_parts: list[str] = []
+        with session_scope() as _mem_sess:
+            ticket = _mem_sess.get(Ticket, ticket_id) if ticket_id else None
+            if ticket is not None:
+                query_parts.extend([ticket.title or "", ticket.description or ""])
+        query_text = "\n".join(p for p in query_parts if p).strip()
+
+        from services import memory_store
+
+        ctx = memory_store.get_context_for_run(
+            project=project_name,
+            agent_type=agent_type,
+            query_text=query_text,
+        )
+        content = (ctx.get("content") or "").strip()
+        if not content:
+            return blocks
+        block = {
+            "kind": "text",
+            "id": "stacky-memory",
+            "title": f"Memoria Stacky relevante: {project_name}",
+            "content": content,
+            "metadata": {
+                "memory_ids": ctx.get("memory_ids") or [],
+                "hits": ctx.get("hits") or 0,
+                "active_hits": ctx.get("active_hits") or 0,
+                "suppressed_hits": ctx.get("suppressed_hits") or 0,
+            },
+        }
+        log(
+            "info",
+            "stacky-memory inyectado "
+            f"(active={ctx.get('active_hits')}, suppressed={ctx.get('suppressed_hits')})",
+        )
+        return [block] + list(blocks)
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"stacky-memory no se pudo inyectar (continuando): {exc}")
+        return blocks
 
 
 def _inject_epic_structured(

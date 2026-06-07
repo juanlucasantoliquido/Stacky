@@ -7,6 +7,7 @@ import PMCommandCenter from "./pages/PMCommandCenter";
 import SettingsPage from "./pages/SettingsPage";
 import DocsPage from "./pages/DocsPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
+import MemoryPage from "./pages/MemoryPage";
 import TopBar from "./components/TopBar";
 import HealthBanner from "./components/HealthBanner";
 import CommandPalette from "./components/CommandPalette";
@@ -20,7 +21,7 @@ import { initUiSections } from "./services/uiSections";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "diagnostics";
+type Tab = "team" | "tickets" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics";
 
 const TAB_PATHS: Record<Tab, string> = {
   team: "/",
@@ -30,6 +31,7 @@ const TAB_PATHS: Record<Tab, string> = {
   logs: "/logs",
   settings: "/settings",
   docs: "/docs",
+  memory: "/memory",
   diagnostics: "/diagnostics",
 };
 
@@ -105,7 +107,8 @@ export default function App() {
     if (tab === "pm" && !sections.pm) selectTab("team");
     else if (tab === "logs" && !sections.logs) selectTab("team");
     else if (tab === "docs" && !sections.docs) selectTab("team");
-  }, [tab, sections.pm, sections.logs, sections.docs]);
+    else if (tab === "memory" && !sections.memory) selectTab("team");
+  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory]);
 
   return (
     <div className={styles.appRoot}>
@@ -163,6 +166,14 @@ export default function App() {
             📄 Docs
           </button>
         )}
+        {sections.memory && (
+          <button
+            className={`${styles.navTab} ${tab === "memory" ? styles.active : ""}`}
+            onClick={() => selectTab("memory")}
+          >
+            Memoria
+          </button>
+        )}
         <button
           className={`${styles.navTab} ${tab === "diagnostics" ? styles.active : ""}`}
           onClick={() => selectTab("diagnostics")}
@@ -178,6 +189,7 @@ export default function App() {
       {tab === "logs"     && sections.logs && <SystemLogsPage />}
       {tab === "settings" && <SettingsPage />}
       {tab === "docs"     && sections.docs && <DocsPage />}
+      {tab === "memory"   && sections.memory && <MemoryPage />}
       {tab === "diagnostics" && <DiagnosticsPage />}
 
       <CommandPalette

@@ -77,7 +77,7 @@ def start_codex_cli_run(
         exec_row = AgentExecution(
             ticket_id=ticket_id,
             agent_type=agent_type,
-            status="running",
+            status="preparing",
             started_by=user,
             started_at=datetime.utcnow(),
         )
@@ -93,7 +93,13 @@ def start_codex_cli_run(
         execution_id = exec_row.id
 
     log_streamer.open(execution_id)
-    _push(execution_id, "info", "start codex cli runtime")
+    log_streamer.push(
+        execution_id,
+        "info",
+        "preparando ejecucion codex cli",
+        group="pre_run",
+        event_type="pre_run",
+    )
     ticket_status.on_execution_start(
         ticket_id=ticket_id,
         execution_id=execution_id,
@@ -243,6 +249,11 @@ def _run_in_background(
             t_desc = ticket.description if ticket else None
             t_wit = ticket.work_item_type if ticket else None
             project_ctx = resolve_project_context(ticket=ticket)
+
+        if not _run_pre_run_checks(execution_id, workspace_root, ticket_id, agent_type):
+            return
+        _mark_status(execution_id, "running")
+        log("info", "start codex cli runtime")
 
         selected_agent = vscode_agents.get_agent_by_filename(
             config.VSCODE_PROMPTS_DIR, vscode_agent_filename
@@ -1105,6 +1116,51 @@ def _mark_status(execution_id: int, status: str, error: str | None = None) -> No
         row.error_message = error
         if status in {"completed", "error", "cancelled"}:
             row.completed_at = datetime.utcnow()
+
+
+def _run_pre_run_checks(
+    execution_id: int,
+    workspace_root: str | None,
+    ticket_id: int | None,
+    agent_type: str | None,
+) -> bool:
+    from services.pre_run_git import run_pull_check
+
+    def log(level: str, message: str) -> None:
+        log_streamer.push(
+            execution_id,
+            level,
+            message,
+            group="pre_run",
+            event_type="pre_run",
+        )
+
+    result = run_pull_check(workspace_root, log=log)
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            return False
+        current_md = row.metadata_dict
+        current_md["pre_run"] = {"git_pull_check": result.to_dict()}
+        row.metadata_dict = current_md
+
+    if not result.ok:
+        error = "; ".join(result.errors or result.warnings or ["pre-run git check failed"])
+        log("error", f"pre-run bloqueado: {error}")
+        _mark_terminal(execution_id, status="error", error=error)
+        if ticket_id is not None:
+            ticket_status.on_execution_end(
+                ticket_id=ticket_id,
+                execution_id=execution_id,
+                final_status="error",
+                agent_type=agent_type,
+                error=error,
+            )
+        return False
+
+    for warning in result.warnings:
+        log("warn", warning)
+    return True
 
 
 def _read_output(output_file: Path | None, stdout_tail: list[str]) -> str:

@@ -121,3 +121,20 @@ def unmask(text: str, mask_map: dict[str, str] | None) -> str:
     for token, original in mask_map.items():
         out = out.replace(token, original)
     return out
+
+
+def redact_irreversible(text: str | None) -> str:
+    """Redacta PII de forma IRREVERSIBLE para memoria persistida/exportada.
+
+    A diferencia de `mask_text` (tokens reversibles + map per-run que NUNCA se
+    persiste), reemplaza cada match por un placeholder fijo `[PII_<KIND>]` sin
+    guardar el original: no hay forma de recuperar el dato. Es lo que debe
+    usarse antes de escribir memoria a un artefacto compartido (chunk git) o de
+    re-inyectarla, donde el map reversible no sobrevive (plan v2 §10/§1.6).
+    """
+    if not text:
+        return text or ""
+    out = text
+    for kind, rx in PATTERNS:
+        out = rx.sub(f"[PII_{kind}]", out)
+    return out

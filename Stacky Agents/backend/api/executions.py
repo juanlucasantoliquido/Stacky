@@ -134,7 +134,18 @@ def _set_verdict(execution_id: int, verdict: str):
         if row.status != "completed":
             abort(409, "execution not in completed state")
         row.verdict = verdict
-        return jsonify(row.to_dict(include_output=False))
+        result = row.to_dict(include_output=False)
+
+    if verdict == "approved":
+        try:
+            from services import post_run_memory
+
+            memory_id = post_run_memory.capture_on_approval(execution_id)
+            if memory_id:
+                result["stacky_memory_id"] = memory_id
+        except Exception:  # noqa: BLE001
+            logger.warning("post_run_memory approval hook falló exec=%s", execution_id, exc_info=True)
+    return jsonify(result)
 
 
 @bp.post("/<int:execution_id>/publish-to-ado")
@@ -185,7 +196,7 @@ def cancel_execution(execution_id: int):
         row = session.get(AgentExecution, execution_id)
         if row is None:
             abort(404, "execution not found")
-        if row.status not in ("vscode_chat", "running"):
+        if row.status not in ("vscode_chat", "preparing", "running"):
             abort(409, f"Cannot cancel execution in status '{row.status}'")
         row.status = "cancelled"
         row.completed_at = datetime.utcnow()

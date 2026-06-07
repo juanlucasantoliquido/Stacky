@@ -5,7 +5,7 @@
  *
  * Definición (plan §7.1):
  *   ticket.stacky_status == 'completed'
- *   AND any(executions where status in {running, queued})
+ *   AND any(executions where status in {preparing, running, queued})
  *
  * Este módulo es puro (sin side effects) para facilitar tests unitarios.
  */
@@ -35,7 +35,7 @@ export function detectInconsistency(
   }
 
   const orphan = executions.find(
-    (e) => e.status === "running" || e.status === "queued"
+    (e) => e.status === "preparing" || e.status === "running" || e.status === "queued"
   );
 
   if (!orphan) {

@@ -155,7 +155,7 @@ def agent_completion_metrics():
         orphans_count = (
             session.query(func.count(AgentExecution.id))
             .filter(
-                AgentExecution.status.in_(["running", "queued"]),
+                AgentExecution.status.in_(["preparing", "running", "queued"]),
                 AgentExecution.started_at < timeout_cutoff,
             )
             .scalar()

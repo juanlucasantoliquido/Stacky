@@ -177,5 +177,31 @@ class Config:
     # Debe setearse en .env de producción. En tests se puede usar cualquier valor.
     STACKY_AGENT_TOKEN: str = os.getenv("STACKY_AGENT_TOKEN", "")
 
+    # Pre-run workspace freshness (Plan memoria colaborativa Fase C).
+    # Default seguro: diagnostico disponible, gate y pull apagados.
+    STACKY_PRE_RUN_GIT_PULL_ENABLED = os.getenv(
+        "STACKY_PRE_RUN_GIT_PULL_ENABLED", "false"
+    ).lower() in {"1", "true", "yes", "on"}
+    STACKY_PRE_RUN_GIT_PULL_REQUIRED = os.getenv(
+        "STACKY_PRE_RUN_GIT_PULL_REQUIRED", "false"
+    ).lower() in {"1", "true", "yes", "on"}
+    STACKY_PRE_RUN_GIT_WORKSPACE_POLICY = os.getenv(
+        "STACKY_PRE_RUN_GIT_WORKSPACE_POLICY", "fetch_only_warn"
+    ).strip().lower()
+    STACKY_PRE_RUN_GIT_TIMEOUT_SECONDS = int(os.getenv("STACKY_PRE_RUN_GIT_TIMEOUT_SECONDS", "30"))
+    STACKY_PRE_RUN_GIT_LOCK_WAIT_SECONDS = int(os.getenv("STACKY_PRE_RUN_GIT_LOCK_WAIT_SECONDS", "5"))
+    STACKY_PRE_RUN_TIMEOUT_SECONDS = int(os.getenv("STACKY_PRE_RUN_TIMEOUT_SECONDS", "90"))
+
+    # Memoria colaborativa Fase D/E — gobernanza. Default seguro: el validador
+    # solo corre los 4 checks baratos; los avanzados (dup-semántico, grafo de
+    # conflictos, LLM judge) exigen opt-in. El git sync nace OFF: activarlo es un
+    # acto explícito del operador (sign-off del cliente).
+    STACKY_MEMORY_VALIDATOR_ADVANCED = os.getenv(
+        "STACKY_MEMORY_VALIDATOR_ADVANCED", "false"
+    ).lower() in {"1", "true", "yes", "on"}
+    STACKY_MEMORY_GIT_SYNC_ENABLED = os.getenv(
+        "STACKY_MEMORY_GIT_SYNC_ENABLED", "false"
+    ).lower() in {"1", "true", "yes", "on"}
+
 
 config = Config()

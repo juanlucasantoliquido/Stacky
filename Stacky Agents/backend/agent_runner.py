@@ -49,11 +49,24 @@ def run_agent(
     if agent is None:
         raise UnknownAgentError(agent_type)
 
+    if runtime in {"codex_cli", "claude_code_cli"}:
+        return _start_cli_runtime(
+            runtime=runtime,
+            agent=agent,
+            agent_type=agent_type,
+            ticket_id=ticket_id,
+            context_blocks=context_blocks,
+            user=user,
+            vscode_agent_filename=vscode_agent_filename,
+            model_override=model_override,
+            project_name=project_name,
+        )
+
     with session_scope() as session:
         exec_row = AgentExecution(
             ticket_id=ticket_id,
             agent_type=agent_type,
-            status="running",
+            status="preparing",
             started_by=user,
             started_at=datetime.utcnow(),
             pack_run_id=pack_run_id,
@@ -66,16 +79,14 @@ def run_agent(
         execution_id = exec_row.id
 
     log_streamer.open(execution_id)
-    log_streamer.push(execution_id, "info", "▶ start")
-
-    # Registrar estado 'running' en el ticket antes de lanzar el thread
-    from services import ticket_status as _ts
-    _ts.on_execution_start(
-        ticket_id=ticket_id,
-        execution_id=execution_id,
-        agent_type=agent_type,
-        user=user,
+    log_streamer.push(
+        execution_id,
+        "info",
+        "preparando ejecucion",
+        group="pre_run",
+        event_type="pre_run",
     )
+    log_streamer.push(execution_id, "info", "▶ start")
 
     # Log agent start to the centralized system log
     stacky_logger.agent_event(
@@ -245,9 +256,11 @@ def run_agent(
     # else: github_copilot → flujo estándar sin cambios.
 
     thread = threading.Thread(
-        target=_run_in_background,
+        target=_pre_run_then_run_in_background,
         args=(agent_type, execution_id),
         kwargs={
+            "ticket_id": ticket_id,
+            "user": user,
             "model_override": model_override,
             "system_prompt_override": system_prompt_override,
             "use_few_shot": use_few_shot,
@@ -264,9 +277,149 @@ def run_agent(
     return execution_id
 
 
+def _start_cli_runtime(
+    *,
+    runtime: str,
+    agent,
+    agent_type: str,
+    ticket_id: int,
+    context_blocks: list[dict],
+    user: str,
+    vscode_agent_filename: str | None,
+    model_override: str | None,
+    project_name: str | None,
+) -> int:
+    workspace_root: str | None = None
+    with session_scope() as session:
+        ticket = session.get(Ticket, ticket_id)
+        project_ctx = resolve_project_context(project_name=project_name, ticket=ticket)
+        if project_ctx:
+            workspace_root = project_ctx.workspace_root
+        resolved_filename = vscode_agent_filename
+        if not resolved_filename:
+            resolved_filename = (
+                (agent.filename if hasattr(agent, "filename") else None)
+                or f"{agent_type}.agent.md"
+            )
+        ticket_message = ticket.title if ticket else f"ticket_id={ticket_id}"
+
+    if runtime == "codex_cli":
+        from services.codex_cli_runner import start_codex_cli_run
+
+        return start_codex_cli_run(
+            ticket_id=ticket_id,
+            agent_type=agent_type,
+            context_blocks=context_blocks,
+            user=user,
+            vscode_agent_filename=resolved_filename,
+            ticket_message=ticket_message,
+            workspace_root=workspace_root,
+            model_override=model_override,
+        )
+
+    if runtime == "claude_code_cli":
+        from services.claude_code_cli_runner import start_claude_code_cli_run
+
+        return start_claude_code_cli_run(
+            ticket_id=ticket_id,
+            agent_type=agent_type,
+            context_blocks=context_blocks,
+            user=user,
+            vscode_agent_filename=resolved_filename,
+            ticket_message=ticket_message,
+            workspace_root=workspace_root,
+            model_override=model_override,
+        )
+
+    raise ValueError(f"unsupported cli runtime: {runtime}")
+
+
+def _pre_run_then_run_in_background(
+    agent_type: str,
+    execution_id: int,
+    *,
+    ticket_id: int,
+    user: str,
+    project_name: str | None = None,
+    **kwargs,
+) -> None:
+    if not _run_pre_run_checks(execution_id, project_name=project_name):
+        return
+
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            log_streamer.close(execution_id)
+            return
+        if row.status == "cancelled":
+            log_streamer.push(execution_id, "warn", "ejecucion cancelada durante preparacion")
+            log_streamer.close(execution_id)
+            return
+        row.status = "running"
+
+    log_streamer.push(execution_id, "info", "pre-run completo; iniciando agente")
+    from services import ticket_status as _ts
+    _ts.on_execution_start(
+        ticket_id=ticket_id,
+        execution_id=execution_id,
+        agent_type=agent_type,
+        user=user,
+    )
+    _run_in_background(agent_type, execution_id, project_name=project_name, **kwargs)
+
+
+def _run_pre_run_checks(execution_id: int, *, project_name: str | None = None) -> bool:
+    from services.pre_run_git import run_pull_check
+
+    def log(level: str, message: str) -> None:
+        log_streamer.push(
+            execution_id,
+            level,
+            message,
+            group="pre_run",
+            event_type="pre_run",
+        )
+
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            log_streamer.close(execution_id)
+            return False
+        ticket = session.get(Ticket, row.ticket_id) if row.ticket_id else None
+        project_ctx = resolve_project_context(project_name=project_name, ticket=ticket)
+        workspace_root = project_ctx.workspace_root if project_ctx else None
+
+    result = run_pull_check(workspace_root, project=project_name, log=log)
+    md = {"pre_run": {"git_pull_check": result.to_dict()}}
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            log_streamer.close(execution_id)
+            return False
+        current_md = row.metadata_dict
+        current_md.update(md)
+        row.metadata_dict = current_md
+
+    if not result.ok:
+        error = "; ".join(result.errors or result.warnings or ["pre-run git check failed"])
+        log("error", "pre-run bloqueado: " + error)
+        _mark_terminal(execution_id, status="error", error=error)
+        log_streamer.close(execution_id)
+        return False
+
+    for warning in result.warnings:
+        log("warn", warning)
+    return True
+
+
 def cancel(execution_id: int) -> bool:
     copilot_bridge.cancel(execution_id)
     log_streamer.push(execution_id, "warn", "cancel requested")
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is not None and row.status == "preparing":
+            row.status = "cancelled"
+            row.completed_at = datetime.utcnow()
     return True
 
 
@@ -303,7 +456,7 @@ def cancel_and_wait(execution_id: int, timeout_seconds: float = 5.0) -> dict:
         except Exception:
             final_status = None
 
-        if final_status != "running":
+        if final_status not in {"preparing", "running"}:
             return {
                 "cancel_ok": True,
                 "cancel_reason": None,
@@ -607,6 +760,14 @@ def _run_in_background(
             embeddings.index_execution(execution_id)
         except Exception as exc:  # noqa: BLE001
             log("warn", f"embeddings index failed: {exc}")
+        try:
+            from services import post_run_memory
+
+            memory_id = post_run_memory.capture_on_completion(execution_id)
+            if memory_id:
+                log("info", f"stacky-memory draft capturado: {memory_id}")
+        except Exception as exc:  # noqa: BLE001
+            log("warn", f"post_run_memory completion hook falló: {exc}")
         # Actualizar estado del ticket a 'completed'
         from services import ticket_status as _ts
         _ts.on_execution_end(

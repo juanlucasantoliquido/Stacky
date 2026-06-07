@@ -84,6 +84,7 @@ function statusLabel(s: string): string {
     published: "Publicado",
     cancelled: "Cancelado",
     error: "Error",
+    preparing: "Preparando",
     running: "En curso",
     pending: "Pendiente",
     vscode_chat: "VS Code Chat",
@@ -413,7 +414,7 @@ function NotesTab({ ticketId, agentFilename, onAllDeleted }: NotesTabProps) {
       {executions.map((ex) => {
         const isExpanded = expanded.has(ex.id);
         const hasOutput = !!ex.output?.trim();
-        const isDeletable = !["running", "queued", "vscode_chat"].includes(ex.status);
+        const isDeletable = !["preparing", "running", "queued", "vscode_chat"].includes(ex.status);
         return (
           <div key={ex.id} className={styles.noteCard}>
             <div

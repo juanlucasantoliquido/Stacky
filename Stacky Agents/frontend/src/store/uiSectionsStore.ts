@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export const OPTIONAL_SECTIONS = ["pm", "logs", "docs"] as const;
+export const OPTIONAL_SECTIONS = ["pm", "logs", "docs", "memory"] as const;
 export const LOCKED_SECTIONS = ["team", "tickets", "settings"] as const;
 
 export type OptionalSection = typeof OPTIONAL_SECTIONS[number];
@@ -19,6 +19,7 @@ const defaults: VisibilityMap = {
   pm: true,
   logs: true,
   docs: true,
+  memory: true,
 };
 
 export const useUiSectionsStore = create<UiSectionsState>((set) => ({

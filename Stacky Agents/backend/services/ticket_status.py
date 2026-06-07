@@ -38,6 +38,7 @@ VALID_STATUSES = frozenset({"idle", "running", "completed", "error", "cancelled"
 # considera colgada y el reaper la fuerza a 'error'. Configurable por env.
 # El nombre tiene prefijo STACKY_ para coherencia con el resto de las variables.
 EXECUTION_TIMEOUT_MINUTES: int = int(os.getenv("STACKY_EXECUTION_TIMEOUT_MINUTES", "120"))
+PRE_RUN_TIMEOUT_SECONDS: int = int(os.getenv("STACKY_PRE_RUN_TIMEOUT_SECONDS", "90"))
 
 
 # ── Modelo ORM ────────────────────────────────────────────────────────────────
@@ -408,6 +409,56 @@ def recover_stale_running_tickets(trigger: str = "startup") -> list[dict]:
                 )
 
         # --- Caso B: ejecuciones activas con timeout (Reaper) ---
+        preparing_cutoff = datetime.utcnow() - timedelta(seconds=PRE_RUN_TIMEOUT_SECONDS)
+        timed_out_preparing = (
+            session.query(AgentExecution)
+            .filter(
+                AgentExecution.status == "preparing",
+                AgentExecution.started_at < preparing_cutoff,
+            )
+            .all()
+        )
+        for exec_row in timed_out_preparing:
+            old_exec_status = exec_row.status
+            exec_row.status = "error"
+            exec_row.completed_at = datetime.utcnow()
+            exec_row.error_message = (
+                f"Preparacion cerrada por timeout ({PRE_RUN_TIMEOUT_SECONDS}s) via reaper [{trigger}]"
+            )
+            if hasattr(exec_row, "completion_source"):
+                exec_row.completion_source = "recovery"
+
+            ticket_of_exec = session.get(Ticket, exec_row.ticket_id)
+            if ticket_of_exec and ticket_of_exec.stacky_status == "running":
+                ticket_of_exec.stacky_status = "error"
+                event = TicketStatusEvent(
+                    ticket_id=exec_row.ticket_id,
+                    execution_id=exec_row.id,
+                    agent_type=exec_row.agent_type,
+                    old_status="running",
+                    new_status="error",
+                    changed_by=f"system:reaper:{trigger}",
+                    reason=f"Pre-run timed out after {PRE_RUN_TIMEOUT_SECONDS}s [{trigger}]",
+                )
+                session.add(event)
+
+            details.append({
+                "ticket_id": exec_row.ticket_id,
+                "ado_id": getattr(ticket_of_exec, "ado_id", None) if ticket_of_exec else None,
+                "old_status": old_exec_status,
+                "new_status": "error",
+                "execution_id": exec_row.id,
+                "agent_type": exec_row.agent_type,
+                "kind": "pre_run_timeout",
+                "reason": f"Execution preparing for >{PRE_RUN_TIMEOUT_SECONDS}s",
+                "trigger": trigger,
+                "completion_source": "recovery",
+            })
+            logger.warning(
+                "reaper[%s]: exec_id=%d ticket_id=%d pre_run timed_out after %ds",
+                trigger, exec_row.id, exec_row.ticket_id, PRE_RUN_TIMEOUT_SECONDS,
+            )
+
         timed_out_execs = (
             session.query(AgentExecution)
             .filter(

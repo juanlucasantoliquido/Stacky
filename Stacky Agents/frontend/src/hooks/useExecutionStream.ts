@@ -116,6 +116,7 @@ export function useExecutionStream(executionId: number | null): StreamState {
     const connect = () => {
       es = new EventSource(Executions.streamUrl(executionId));
       es.addEventListener("log", onLog as EventListener);
+      es.addEventListener("pre_run", onLog as EventListener);
       es.addEventListener("completed", onCompleted as EventListener);
       es.addEventListener("ping", () => {});
       es.addEventListener("open", () => {

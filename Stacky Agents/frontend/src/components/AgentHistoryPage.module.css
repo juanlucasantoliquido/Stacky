@@ -343,7 +343,7 @@
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
 }
-.status_running, .status_vscode_chat {
+.status_preparing, .status_running, .status_vscode_chat {
   background: rgba(99, 102, 241, 0.15);
   color: #818cf8;
 }

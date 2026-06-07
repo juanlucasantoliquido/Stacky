@@ -32,6 +32,7 @@
 }
 .status[data-status="completed"] { color: var(--success); }
 .status[data-status="error"]     { color: var(--danger); }
+.status[data-status="preparing"],
 .status[data-status="running"]   { color: var(--warn); }
 .status[data-status="cancelled"] { color: var(--text-muted); }
 

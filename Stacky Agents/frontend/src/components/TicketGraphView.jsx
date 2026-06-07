@@ -283,7 +283,7 @@ export class NodeErrorBoundary extends React.Component {
 
 // ─── TicketNode Card ──────────────────────────────────────────────────────────
 
-function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgents = [], runningByTicket = new Map(), flowConfigMap = new Map() }) {
+function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgents = [], runningByTicket = new Map(), flowConfigMap = new Map(), memoryBadges = {} }) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -311,6 +311,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
   const nextLabel = next && AGENT_LABELS[next] ? `${AGENT_LABELS[next].icon} ${AGENT_LABELS[next].label}` : null;
   const suggestedFilename = next ? findAgentFilenameByType(next, vsCodeAgents, pinnedAgents) : null;
   const runningExecution = runningByTicket.get(ticket.id) ?? null;
+  const memoryBadge = memoryBadges[String(ticket.id)] ?? null;
   const isRunning = !!runningExecution || runningByTicket.has(ticket.id);
   const isClosed = ["Done", "Closed", "Resolved", "Removed", "Completed"].includes(ticket.ado_state);
 
@@ -372,6 +373,16 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
             </span>
             {!isEpic && ticket.work_item_type && (
               <span className={styles.wiType}>{ticket.work_item_type}</span>
+            )}
+            {!isEpic && memoryBadge && memoryBadge.open_findings > 0 && (
+              <span
+                className={`${styles.memoryFindingBadge} ${
+                  memoryBadge.critical || memoryBadge.error ? styles.memoryFindingBadgeHot : ""
+                }`}
+                title={`Memoria: ${memoryBadge.open_findings} hallazgo(s) abierto(s)`}
+              >
+                Memoria {memoryBadge.open_findings}
+              </span>
             )}
             {/* Botón Run compacto visible en todos los nodos (épicas y tickets) */}
             {!isClosed && (
@@ -526,7 +537,7 @@ function computeLines(containerRef) {
   return newLines;
 }
 
-function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flowConfigMap }) {
+function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flowConfigMap, memoryBadges = {} }) {
   const containerRef = useRef(null);
   const [lines, setLines] = useState([]);
 
@@ -559,7 +570,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flo
       {/* Epic node */}
       <div data-role="epic-node" className={styles.epicNodeWrap}>
         <NodeErrorBoundary adoId={epic.ado_id}>
-          <TicketNodeCard ticket={epic} inferMap={inferMap} onInfer={onInfer} isEpic vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} />
+          <TicketNodeCard ticket={epic} inferMap={inferMap} onInfer={onInfer} isEpic vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} memoryBadges={memoryBadges} />
         </NodeErrorBoundary>
         <span className={styles.childrenCount}>{epic.children.length} ticket{epic.children.length !== 1 ? "s" : ""}</span>
       </div>
@@ -570,7 +581,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flo
           {epic.children.map(child => (
             <div data-role="child-node" key={child.id} className={styles.childNodeWrap}>
               <NodeErrorBoundary adoId={child.ado_id}>
-                <TicketNodeCard ticket={child} inferMap={inferMap} onInfer={onInfer} vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} />
+                <TicketNodeCard ticket={child} inferMap={inferMap} onInfer={onInfer} vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} memoryBadges={memoryBadges} />
               </NodeErrorBoundary>
             </div>
           ))}
@@ -582,7 +593,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flo
 
 // ─── TicketGraphView (exportado) ──────────────────────────────────────────────
 
-export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncError, vsCodeAgents = [], runningByTicket = new Map() }) {
+export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncError, vsCodeAgents = [], runningByTicket = new Map(), memoryBadges = {} }) {
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
 
   // LLM inference removida: inferMap queda vacío, los handlers son no-op
@@ -643,6 +654,7 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
                 vsCodeAgents={vsCodeAgents}
                 runningByTicket={runningByTicket}
                 flowConfigMap={flowConfigMap}
+                memoryBadges={memoryBadges}
               />
             ))}
           </div>
@@ -663,6 +675,7 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
                   vsCodeAgents={vsCodeAgents}
                   runningByTicket={runningByTicket}
                   flowConfigMap={flowConfigMap}
+                  memoryBadges={memoryBadges}
                 />
               </NodeErrorBoundary>
             ))}

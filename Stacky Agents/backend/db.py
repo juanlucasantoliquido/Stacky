@@ -65,6 +65,18 @@ def init_db() -> None:
         PmAiRecommendation,
     )
     from services.docs_rag import DocChunk  # noqa: F401  (P1.1 — tabla docs_index)
+    from services.memory_store import (  # noqa: F401  (memoria colaborativa local)
+        StackyMemoryObservation,
+        StackyMemoryRelation,
+    )
+    from services.memory_validator import (  # noqa: F401  (memoria colaborativa Fase D)
+        StackyMemoryFinding,
+        StackyMemoryValidationRun,
+    )
+    from services.memory_git_sync import (  # noqa: F401  (memoria colaborativa Fase E)
+        StackyMemorySyncChunk,
+        StackyMemorySyncOutbox,
+    )
 
     Base.metadata.create_all(engine)
     _migrate_add_columns()

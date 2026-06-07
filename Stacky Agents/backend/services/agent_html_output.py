@@ -21,10 +21,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+from services.secret_scanner import scan_secrets as _shared_scan_secrets
 
 logger = logging.getLogger("stacky.agent_html_output")
 
@@ -38,19 +39,8 @@ MAX_HTML_BYTES = 256 * 1024  # 256 KB
 # Cualquier path resuelto fuera de este subárbol es rechazado por seguridad.
 OUTPUTS_SUBDIR = ("Agentes", "outputs")
 
-# Patrones heurísticos de posibles secretos en el HTML.
-# No pretende ser exhaustivo — es un guardrail de último recurso.
-_SECRET_PATTERNS: tuple[re.Pattern, ...] = (
-    re.compile(r"ghp_[A-Za-z0-9]{30,}", re.IGNORECASE),       # GitHub PAT
-    re.compile(r"xox[abprs]-[A-Za-z0-9-]{10,}", re.IGNORECASE),  # Slack
-    re.compile(r"AIza[0-9A-Za-z\-_]{30,}"),                   # Google API
-    re.compile(r"AKIA[0-9A-Z]{16}"),                          # AWS access key
-    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),        # private key
-    # PAT de Azure DevOps (Basic auth header) — guardrail explícito
-    re.compile(r"Authorization:\s*Basic\s+[A-Za-z0-9+/=]{20,}", re.IGNORECASE),
-    # PAT name explícito en el HTML (señal clara de leak)
-    re.compile(r"\bADO_PAT\s*[=:]\s*\S+", re.IGNORECASE),
-)
+# El escaneo de secretos vive en services.secret_scanner para compartirlo con
+# el validador de memoria.
 
 
 # ── Resultado tipado ──────────────────────────────────────────────────────────
@@ -227,8 +217,4 @@ def _read_meta(path: Path) -> dict | None:
 
 
 def _scan_secrets(html: str) -> str | None:
-    """Retorna el nombre del patrón que matcheó, o None si está limpio."""
-    for pattern in _SECRET_PATTERNS:
-        if pattern.search(html):
-            return pattern.pattern
-    return None
+    return _shared_scan_secrets(html)

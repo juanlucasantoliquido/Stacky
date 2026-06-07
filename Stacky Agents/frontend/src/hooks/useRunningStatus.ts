@@ -65,6 +65,13 @@ export function useRunningStatus(): RunningStatusResult {
     staleTime: 0,
   });
 
+  const { data: preparingExecs } = useQuery<AgentExecution[]>({
+    queryKey: ["executions-preparing", activeProjectName],
+    queryFn: () => Executions.list({ status: "preparing", project: activeProjectName }),
+    refetchInterval: EXEC_POLL_INTERVAL,
+    staleTime: 0,
+  });
+
   const { data: queuedExecs } = useQuery<AgentExecution[]>({
     queryKey: ["executions-queued", activeProjectName],
     queryFn: () => Executions.list({ status: "queued", project: activeProjectName }),
@@ -81,19 +88,19 @@ export function useRunningStatus(): RunningStatusResult {
     }
     // Fuente 2: executions activas (fallback — captura el caso donde
     // stacky_status aún no llegó al cliente pero ya hay ejecución)
-    for (const e of [...(activeExecs ?? []), ...(queuedExecs ?? [])]) {
+    for (const e of [...(preparingExecs ?? []), ...(activeExecs ?? []), ...(queuedExecs ?? [])]) {
       ids.add(e.ticket_id);
     }
     return ids;
-  }, [tickets, activeExecs, queuedExecs]);
+  }, [tickets, preparingExecs, activeExecs, queuedExecs]);
 
   const runningByTicket = useMemo<Map<number, AgentExecution>>(() => {
     const map = new Map<number, AgentExecution>();
-    for (const e of [...(activeExecs ?? []), ...(queuedExecs ?? [])]) {
+    for (const e of [...(preparingExecs ?? []), ...(activeExecs ?? []), ...(queuedExecs ?? [])]) {
       if (!map.has(e.ticket_id)) map.set(e.ticket_id, e);
     }
     return map;
-  }, [activeExecs, queuedExecs]);
+  }, [preparingExecs, activeExecs, queuedExecs]);
 
   const isTicketRunning = useMemo(
     () => (ticketId: number) => runningTicketIds.has(ticketId),

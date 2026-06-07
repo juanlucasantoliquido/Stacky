@@ -177,6 +177,22 @@
   padding: 1px 5px;
   border-radius: 4px;
 }
+
+.memoryFindingBadge {
+  font-size: 9px;
+  color: #fde68a;
+  background: rgba(234,179,8,0.12);
+  border: 1px solid rgba(234,179,8,0.32);
+  padding: 1px 6px;
+  border-radius: 9px;
+  font-weight: 800;
+}
+
+.memoryFindingBadgeHot {
+  color: #fca5a5;
+  background: rgba(248,113,113,0.12);
+  border-color: rgba(248,113,113,0.36);
+}
 .nodeTitle {
   margin: 0;
   font-size: 12px;

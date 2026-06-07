@@ -9,14 +9,16 @@ Archivo en disco (``data/ui_sections.json``)::
       "version": "1.0",
       "updated_at": "<iso>",
       "sections": {
-        "pm":   { "visible": true },
-        "logs": { "visible": true },
-        "docs": { "visible": true }
+      "pm":     { "visible": true },
+      "logs":   { "visible": true },
+      "docs":   { "visible": true },
+      "memory": { "visible": true }
       }
     }
 
 Reglas:
-- Solo se persisten secciones **opcionales** (``pm``, ``logs``, ``docs``).
+- Solo se persisten secciones **opcionales** (``pm``, ``logs``, ``docs``,
+  ``memory``).
 - Las secciones ``team``, ``tickets`` y ``settings`` son obligatorias y nunca
   aparecen en el JSON ni pueden togglearse desde la UI.
 - Defensa en profundidad: si alguien edita el JSON a mano e incluye claves
@@ -33,7 +35,7 @@ from typing import Any
 _log = logging.getLogger("stacky_agents.ui_sections_store")
 
 # Única fuente de verdad de qué secciones se pueden ocultar.
-OPTIONAL_SECTIONS: frozenset[str] = frozenset({"pm", "logs", "docs"})
+OPTIONAL_SECTIONS: frozenset[str] = frozenset({"pm", "logs", "docs", "memory"})
 
 _CONFIG_FILE = Path("data/ui_sections.json")
 

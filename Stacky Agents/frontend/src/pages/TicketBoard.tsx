@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Tickets, Agents, FlowConfig, Executions } from "../api/endpoints";
+import { Tickets, Agents, FlowConfig, Executions, Memory, type StackyMemoryTicketBadge } from "../api/endpoints";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
 import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
 import { useTicketSync } from "../hooks/useTicketSync";
@@ -227,12 +227,13 @@ interface TicketCardProps {
   ticket: Ticket;
   runningExecution: AgentExecution | null;
   vsCodeAgents: VsCodeAgent[];
+  memoryBadge?: StackyMemoryTicketBadge | null;
   /** Feature #4 — mapa determinístico ado_state → agent_type cargado una vez en TicketBoard raíz */
   flowConfigMap: Map<string, string>;
   indent?: boolean;
 }
 
-function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, indent }: TicketCardProps) {
+function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowConfigMap, indent }: TicketCardProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -376,6 +377,16 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, flowConfigMap, ind
 
           <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
             {nextLabel && <span className={styles.nextTag}>→ {nextLabel}</span>}
+            {memoryBadge && memoryBadge.open_findings > 0 && (
+              <span
+                className={`${styles.memoryFindingBadge} ${
+                  memoryBadge.critical || memoryBadge.error ? styles.memoryFindingBadgeHot : ""
+                }`}
+                title={`Memoria: ${memoryBadge.open_findings} hallazgo(s) abierto(s)`}
+              >
+                Memoria {memoryBadge.open_findings}
+              </span>
+            )}
           </div>
         </div>
 
@@ -509,11 +520,12 @@ interface EpicGroupProps {
   epic: TicketNode;
   runningByTicket: Map<number, AgentExecution>;
   vsCodeAgents: VsCodeAgent[];
+  memoryBadges: Record<string, StackyMemoryTicketBadge>;
   /** Feature #4 — propagado desde TicketBoard raíz */
   flowConfigMap: Map<string, string>;
 }
 
-function EpicGroup({ epic, runningByTicket, vsCodeAgents, flowConfigMap }: EpicGroupProps) {
+function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConfigMap }: EpicGroupProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -618,6 +630,7 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, flowConfigMap }: EpicG
                 ticket={child}
                 runningExecution={runningByTicket.get(child.id) ?? null}
                 vsCodeAgents={vsCodeAgents}
+                memoryBadge={memoryBadges[String(child.id)] ?? null}
                 flowConfigMap={flowConfigMap}
                 indent
               />
@@ -649,6 +662,12 @@ export default function TicketBoard() {
   const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
   const activeProject = useWorkbench((s) => s.activeProject);
   const activeProjectName = activeProject?.name ?? null;
+  const { data: memoryBadges = {} } = useQuery<Record<string, StackyMemoryTicketBadge>>({
+    queryKey: ["memory-ticket-badges", activeProjectName],
+    queryFn: () => Memory.ticketBadges(activeProjectName),
+    enabled: !!activeProjectName,
+    staleTime: 30_000,
+  });
   const activeAllowedStates: string[] = vsCodeAgent
     ? (agentWorkflows[vsCodeAgent.filename]?.allowed_states ?? [])
     : [];
@@ -933,6 +952,7 @@ export default function TicketBoard() {
                   epic={epic}
                   runningByTicket={runningByTicket}
                   vsCodeAgents={vsCodeAgents ?? []}
+                  memoryBadges={memoryBadges}
                   flowConfigMap={flowConfigMap}
                 />
               ))}
@@ -949,6 +969,7 @@ export default function TicketBoard() {
                         ticket={t as Ticket}
                         runningExecution={runningByTicket.get(t.id) ?? null}
                         vsCodeAgents={vsCodeAgents ?? []}
+                        memoryBadge={memoryBadges[String(t.id)] ?? null}
                         flowConfigMap={flowConfigMap}
                       />
                     ))}
@@ -971,6 +992,7 @@ export default function TicketBoard() {
                 syncError={syncErrorV2}
                 vsCodeAgents={vsCodeAgents ?? []}
                 runningByTicket={runningByTicket}
+                memoryBadges={memoryBadges}
               />
             )}
           </>

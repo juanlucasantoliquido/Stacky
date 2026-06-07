@@ -12,6 +12,7 @@ interface AgentHistoryModalProps {
 }
 
 const STATUS_LABEL: Record<string, string> = {
+  preparing: "preparando",
   queued: "en cola",
   running: "ejecutando",
   completed: "completada",

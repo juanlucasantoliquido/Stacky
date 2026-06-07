@@ -467,6 +467,184 @@ export interface TicketAttachment {
   created_at?: string;
 }
 
+export type StackyMemoryStatus =
+  | "draft"
+  | "active"
+  | "needs_review"
+  | "superseded"
+  | "rejected"
+  | "quarantined"
+  | "deleted";
+
+export type StackyMemoryCheck =
+  | "schema"
+  | "checksum"
+  | "secret"
+  | "duplicate_exact"
+  | "duplicate_semantic"
+  | "conflict_graph"
+  | "llm_judge";
+
+export type StackyMemoryFindingAction =
+  | "resolve_finding"
+  | "activate_memory"
+  | "needs_review_memory"
+  | "quarantine_memory"
+  | "mark_supersedes"
+  | "mark_duplicates"
+  | "mark_conflicts_with"
+  | "mark_not_conflict";
+
+export interface StackyMemoryObservation {
+  memory_id: string;
+  project: string;
+  scope: string;
+  type: string;
+  title: string;
+  content: string;
+  topic_key: string | null;
+  status: StackyMemoryStatus;
+  confidence: number | null;
+  source_kind: string | null;
+  source_execution_id: number | null;
+  source_ticket_id: number | null;
+  source_ado_id: number | null;
+  source_agent_type: string | null;
+  author_email: string | null;
+  author_role: string | null;
+  tags: string[];
+  revision_count: number;
+  duplicate_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+  _score?: number;
+}
+
+export interface StackyMemoryFinding {
+  id: number;
+  validation_run_id: number;
+  project: string;
+  check_name: StackyMemoryCheck | string;
+  severity: "critical" | "error" | "warning" | "info" | string;
+  status: "open" | "resolved" | string;
+  memory_id: string | null;
+  title: string;
+  detail: string | null;
+  evidence: Record<string, any>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface StackyMemoryValidationRun {
+  id: number;
+  project: string | null;
+  status: "queued" | "running" | "completed" | "error" | string;
+  requested_by: string | null;
+  checks: StackyMemoryCheck[];
+  summary: Record<string, any>;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface StackyMemoryRelation {
+  relation_id: string;
+  project: string;
+  source_memory_id: string;
+  target_memory_id: string;
+  relation: string;
+  status: string;
+  reason: string | null;
+  evidence: string | null;
+  confidence: number | null;
+  marked_by_actor: string | null;
+  marked_by_kind: string | null;
+  marked_by_model: string | null;
+  source_validation_run_id: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface StackyMemoryConflictGraph {
+  project: string;
+  nodes: StackyMemoryObservation[];
+  edges: StackyMemoryRelation[];
+}
+
+export interface StackyMemoryTicketBadge {
+  ticket_id: number;
+  open_findings: number;
+  critical: number;
+  error: number;
+  warning: number;
+  info: number;
+  checks: Record<string, number>;
+}
+
+export const Memory = {
+  list: (params?: { project?: string | null; status?: string; scope?: string; type?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.project) qs.set("project", params.project);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.scope) qs.set("scope", params.scope);
+    if (params?.type) qs.set("type", params.type);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const query = qs.toString();
+    return api.get<StackyMemoryObservation[]>(`/api/memory${query ? `?${query}` : ""}`);
+  },
+  setStatus: (memoryId: string, status: StackyMemoryStatus) =>
+    api.post<{ ok: boolean }>(`/api/memory/${encodeURIComponent(memoryId)}/status`, { status }),
+  startValidation: (payload: { project?: string | null; checks?: StackyMemoryCheck[] }) =>
+    api.post<{ run_id: number; status: string }>("/api/memory/validation/runs", payload),
+  validationRuns: (project?: string | null, limit = 20) =>
+    api.get<StackyMemoryValidationRun[]>(
+      `/api/memory/validation/runs?limit=${limit}${project ? `&project=${encodeURIComponent(project)}` : ""}`
+    ),
+  findings: (params?: { project?: string | null; status?: string | null; check?: string; severity?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.project) qs.set("project", params.project);
+    if (params?.status !== undefined) qs.set("status", params.status ?? "");
+    if (params?.check) qs.set("check", params.check);
+    if (params?.severity) qs.set("severity", params.severity);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const query = qs.toString();
+    return api.get<StackyMemoryFinding[]>(`/api/memory/validation/findings${query ? `?${query}` : ""}`);
+  },
+  applyFindingAction: (
+    findingId: number,
+    payload: {
+      action: StackyMemoryFindingAction;
+      source_memory_id?: string | null;
+      target_memory_id?: string | null;
+      reason?: string | null;
+    },
+  ) =>
+    api.post<StackyMemoryFinding>(
+      `/api/memory/validation/findings/${findingId}/action`,
+      payload,
+    ),
+  ticketBadges: (project?: string | null) =>
+    api.get<Record<string, StackyMemoryTicketBadge>>(
+      `/api/memory/validation/ticket-badges${project ? `?project=${encodeURIComponent(project)}` : ""}`
+    ),
+  relations: (params?: { project?: string | null; relation?: string; status?: string; memory_id?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.project) qs.set("project", params.project);
+    if (params?.relation) qs.set("relation", params.relation);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.memory_id) qs.set("memory_id", params.memory_id);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const query = qs.toString();
+    return api.get<StackyMemoryRelation[]>(`/api/memory/relations${query ? `?${query}` : ""}`);
+  },
+  conflictGraph: (project: string, status?: string) =>
+    api.get<StackyMemoryConflictGraph>(
+      `/api/memory/conflict-graph?project=${encodeURIComponent(project)}${status ? `&status=${encodeURIComponent(status)}` : ""}`
+    ),
+};
+
 export interface AgentHistoryEntry {
   ticket_id: number;
   ado_id: number;

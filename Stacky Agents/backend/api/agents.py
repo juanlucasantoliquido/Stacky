@@ -299,7 +299,7 @@ def run():
     except agent_runner.UnknownAgentError:
         abort(400, f"unknown agent_type: {agent_type}")
 
-    return jsonify({"execution_id": execution_id, "status": "running", "runtime": runtime}), 202
+    return jsonify({"execution_id": execution_id, "status": "preparing", "runtime": runtime}), 202
 
 
 @bp.post("/route")

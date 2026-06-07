@@ -25,15 +25,19 @@ class LogEvent:
     message: str
     group: str | None = None
     indent: int = 0
+    event_type: str | None = None
 
     def to_dict(self) -> dict:
-        return {
+        payload = {
             "timestamp": self.timestamp.isoformat(),
             "level": self.level,
             "message": self.message,
             "group": self.group,
             "indent": self.indent,
         }
+        if self.event_type:
+            payload["type"] = self.event_type
+        return payload
 
 
 @dataclass
@@ -53,11 +57,25 @@ def open(execution_id: int) -> None:
         _buffers.setdefault(execution_id, _Buffer())
 
 
-def push(execution_id: int, level: str, message: str, group: str | None = None, indent: int = 0) -> None:
+def push(
+    execution_id: int,
+    level: str,
+    message: str,
+    group: str | None = None,
+    indent: int = 0,
+    event_type: str | None = None,
+) -> None:
     buf = _get(execution_id)
     if buf is None:
         return
-    event = LogEvent(timestamp=datetime.utcnow(), level=level, message=message, group=group, indent=indent)
+    event = LogEvent(
+        timestamp=datetime.utcnow(),
+        level=level,
+        message=message,
+        group=group,
+        indent=indent,
+        event_type=event_type,
+    )
     with buf.lock:
         buf.events.append(event)
         for listener in list(buf.listeners):
@@ -68,8 +86,14 @@ def push(execution_id: int, level: str, message: str, group: str | None = None, 
 
 
 def logger_for(execution_id: int):
-    def log(level: str, message: str, group: str | None = None, indent: int = 0) -> None:
-        push(execution_id, level, message, group, indent)
+    def log(
+        level: str,
+        message: str,
+        group: str | None = None,
+        indent: int = 0,
+        event_type: str | None = None,
+    ) -> None:
+        push(execution_id, level, message, group, indent, event_type)
     return log
 
 
@@ -175,7 +199,7 @@ def reconcile_orphans() -> int:
     with session_scope() as session:
         rows = (
             session.query(AgentExecution)
-            .filter(AgentExecution.status == "running", AgentExecution.started_at < cutoff)
+            .filter(AgentExecution.status.in_(["preparing", "running"]), AgentExecution.started_at < cutoff)
             .all()
         )
         for row in rows:

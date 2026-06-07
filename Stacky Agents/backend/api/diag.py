@@ -18,7 +18,7 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from flask import Blueprint, jsonify, send_file
+from flask import Blueprint, jsonify, request, send_file
 
 from db import session_scope
 from models import AgentExecution, Ticket
@@ -28,7 +28,7 @@ from services.heartbeat_monitor import (
     is_execution_heartbeat_stale,
 )
 from services.manifest_watcher import MANIFEST_FILENAME, default_runs_dir
-from services.ticket_status import EXECUTION_TIMEOUT_MINUTES, TicketStatusEvent
+from services.ticket_status import EXECUTION_TIMEOUT_MINUTES, PRE_RUN_TIMEOUT_SECONDS, TicketStatusEvent
 
 logger = logging.getLogger("stacky.api.diag")
 
@@ -115,6 +115,7 @@ def diagnose_execution(execution_id: int):
         "diagnosis": diagnosis,
         "recommended_action": recommended_action,
         "thresholds": {
+            "pre_run_timeout_seconds": PRE_RUN_TIMEOUT_SECONDS,
             "heartbeat_timeout_minutes": HEARTBEAT_TIMEOUT_MINUTES,
             "startup_grace_seconds": STARTUP_GRACE_SECONDS,
         },
@@ -230,7 +231,7 @@ def metrics():
             kind = _classify_recovery_reason(reason)
             recoveries[kind] = recoveries.get(kind, 0) + 1
 
-        currently_running = executions_by_status.get("running", 0)
+        currently_running = executions_by_status.get("running", 0) + executions_by_status.get("preparing", 0)
         oldest_age: float | None = None
 
         # Alerta (Fase P5): ejecuciones running más viejas que el umbral. Sirve
@@ -242,7 +243,7 @@ def metrics():
         if currently_running:
             running_rows = (
                 session.query(AgentExecution)
-                .filter(AgentExecution.status == "running")
+                .filter(AgentExecution.status.in_(["preparing", "running"]))
                 .order_by(AgentExecution.started_at.asc())
                 .all()
             )
@@ -268,6 +269,7 @@ def metrics():
         "running_over_threshold": stale_suspects,
         "thresholds": {
             "execution_timeout_minutes": EXECUTION_TIMEOUT_MINUTES,
+            "pre_run_timeout_seconds": PRE_RUN_TIMEOUT_SECONDS,
             "heartbeat_timeout_minutes": HEARTBEAT_TIMEOUT_MINUTES,
             "startup_grace_seconds": STARTUP_GRACE_SECONDS,
             "running_alert_minutes": alert_minutes,
@@ -364,6 +366,38 @@ def local_diagnostics():
     from services.local_diagnostics import run_local_diagnostics
 
     return jsonify(run_local_diagnostics())
+
+
+@bp.get("/git/pull-check")
+def git_pull_check():
+    """Diagnostico report-only de frescura Git del workspace.
+
+    Query params:
+      project: nombre Stacky del proyecto (opcional; default activo)
+      workspace_root: override explicito para troubleshooting
+      fetch=true: ejecuta git fetch --prune con prompts deshabilitados
+    """
+    from services.pre_run_git import run_pull_check
+    from services.project_context import resolve_project_context
+
+    project_name = (request.args.get("project") or "").strip() or None
+    workspace_root = (request.args.get("workspace_root") or "").strip() or None
+    fetch = (request.args.get("fetch") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    ctx = resolve_project_context(project_name=project_name) if not workspace_root else None
+    if workspace_root is None and ctx is not None:
+        workspace_root = ctx.workspace_root
+
+    result = run_pull_check(
+        workspace_root,
+        enabled=False,
+        required=False,
+        fetch=fetch,
+    )
+    payload = result.to_dict()
+    payload["project"] = ctx.stacky_project_name if ctx else project_name
+    payload["report_only"] = True
+    return jsonify(payload)
 
 
 @bp.post("/backup/run")
@@ -483,6 +517,9 @@ def _diagnose(
         if manifest_terminal:
             return "terminal_clean", None
         return "terminal_no_manifest", None
+
+    if status_in_db == "preparing":
+        return "preparing", None
 
     if status_in_db in {"running", "queued"}:
         if manifest_terminal:

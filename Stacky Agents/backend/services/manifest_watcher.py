@@ -32,7 +32,7 @@ EVENTS_FILENAME = "events.jsonl"
 MANIFEST_SCHEMA_VERSION = "1"
 
 TERMINAL_STATUSES = frozenset({"completed", "error", "cancelled"})
-ACTIVE_STATUSES = frozenset({"running", "queued"})
+ACTIVE_STATUSES = frozenset({"preparing", "running", "queued"})
 
 
 # ── Helpers públicos ──────────────────────────────────────────────────────────

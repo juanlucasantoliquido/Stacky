@@ -30,7 +30,7 @@ export default function OutputPanel() {
     enabled: activeExecutionId != null,
     refetchInterval: (q) => {
       const status = (q.state.data as any)?.status;
-      return status === "running" ? 1500 : false;
+      return status === "preparing" || status === "running" ? 1500 : false;
     },
   });
 
@@ -104,6 +104,9 @@ export default function OutputPanel() {
         </span>
       </header>
       <div className={styles.body}>
+        {execution.status === "preparing" && (
+          <p className="muted">preparando workspace...</p>
+        )}
         {execution.status === "running" && (
           <p className="muted">streaming…</p>
         )}

@@ -17,6 +17,7 @@ const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> 
   pm:   { title: "📊 PM",          hint: "Tablero de Project Management y métricas de sprint." },
   logs: { title: "🔍 System Logs", hint: "Vista cruda de logs estructurados del backend." },
   docs: { title: "📄 Docs",        hint: "Navegador de documentación indexada del proyecto." },
+  memory: { title: "Memoria",      hint: "Curacion de memoria colaborativa y hallazgos de validacion." },
 };
 
 const LOCKED_LABELS: Record<typeof LOCKED_SECTIONS[number], { title: string; hint: string }> = {

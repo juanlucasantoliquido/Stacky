@@ -8,9 +8,10 @@ import {
   type StackyMemoryStatus,
 } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
+import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
 import styles from "./MemoryPage.module.css";
 
-type Tab = "memories" | "triage" | "graph";
+type Tab = "memories" | "drafts" | "triage" | "graph";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Activa",
@@ -20,16 +21,6 @@ const STATUS_LABELS: Record<string, string> = {
   quarantined: "Cuarentena",
   rejected: "Rechazada",
 };
-
-const CHECKS = [
-  "schema",
-  "checksum",
-  "secret",
-  "duplicate_exact",
-  "duplicate_semantic",
-  "conflict_graph",
-  "llm_judge",
-] as const;
 
 const FINDING_ACTIONS: { action: StackyMemoryFindingAction; label: string; needsPair?: boolean }[] = [
   { action: "activate_memory", label: "Activar" },
@@ -180,7 +171,9 @@ export default function MemoryPage() {
     onSuccess: refresh,
   });
   const validationMutation = useMutation({
-    mutationFn: () => Memory.startValidation({ project, checks: [...CHECKS] }),
+    // Sin `checks`: el backend corre los 4 baratos por default; los avanzados
+    // exigen STACKY_MEMORY_VALIDATOR_ADVANCED en el server (no se fuerzan acá).
+    mutationFn: () => Memory.startValidation({ project }),
     onSuccess: refresh,
   });
   const findingMutation = useMutation({
@@ -211,32 +204,41 @@ export default function MemoryPage() {
           <h1>Memoria Stacky</h1>
           <p>{project || "Sin proyecto activo"}</p>
         </div>
-        <div className={styles.headerActions}>
-          {latestRun && (
-            <span className={styles.runPill}>
-              Run #{latestRun.id} · {latestRun.status}
-            </span>
-          )}
-          <button
-            className={styles.primaryBtn}
-            onClick={() => validationMutation.mutate()}
-            disabled={!project || validationMutation.isPending}
-          >
-            {validationMutation.isPending ? "Validando" : "Validar"}
-          </button>
-        </div>
+        {MEMORY_ADVANCED_ENABLED && (
+          <div className={styles.headerActions}>
+            {latestRun && (
+              <span className={styles.runPill}>
+                Run #{latestRun.id} · {latestRun.status}
+              </span>
+            )}
+            <button
+              className={styles.primaryBtn}
+              onClick={() => validationMutation.mutate()}
+              disabled={!project || validationMutation.isPending}
+            >
+              {validationMutation.isPending ? "Validando" : "Validar"}
+            </button>
+          </div>
+        )}
       </header>
 
       <nav className={styles.tabs}>
         <button className={tab === "memories" ? styles.activeTab : ""} onClick={() => setTab("memories")}>
           Memorias
         </button>
-        <button className={tab === "triage" ? styles.activeTab : ""} onClick={() => setTab("triage")}>
-          Triage {openFindings.length ? `(${openFindings.length})` : ""}
+        <button className={tab === "drafts" ? styles.activeTab : ""} onClick={() => setTab("drafts")}>
+          Borradores {drafts.data?.length ? `(${drafts.data.length})` : ""}
         </button>
-        <button className={tab === "graph" ? styles.activeTab : ""} onClick={() => setTab("graph")}>
-          Grafo
-        </button>
+        {MEMORY_ADVANCED_ENABLED && (
+          <>
+            <button className={tab === "triage" ? styles.activeTab : ""} onClick={() => setTab("triage")}>
+              Triage {openFindings.length ? `(${openFindings.length})` : ""}
+            </button>
+            <button className={tab === "graph" ? styles.activeTab : ""} onClick={() => setTab("graph")}>
+              Grafo
+            </button>
+          </>
+        )}
       </nav>
 
       {!project && <div className={styles.empty}>Selecciona un proyecto para ver memoria colaborativa.</div>}
@@ -265,7 +267,28 @@ export default function MemoryPage() {
         </main>
       )}
 
-      {project && tab === "triage" && (
+      {project && tab === "drafts" && (
+        <main className={styles.main}>
+          <div className={styles.toolbar}>
+            <span>{drafts.data?.length ?? 0} borradores pendientes de promover</span>
+          </div>
+          {drafts.isLoading && <div className={styles.empty}>Cargando borradores...</div>}
+          {!drafts.isLoading && (drafts.data ?? []).length === 0 && (
+            <div className={styles.empty}>
+              No hay borradores. Se crean automáticamente al completar ejecuciones (captura post-run). Usá “Activar” para promoverlos.
+            </div>
+          )}
+          {(drafts.data ?? []).map((row) => (
+            <MemoryRow
+              key={row.memory_id}
+              row={row}
+              onStatus={(id, next) => statusMutation.mutate({ id, next })}
+            />
+          ))}
+        </main>
+      )}
+
+      {project && MEMORY_ADVANCED_ENABLED && tab === "triage" && (
         <main className={styles.main}>
           <section className={styles.summaryBand}>
             <span>{drafts.data?.length ?? 0} drafts</span>
@@ -285,7 +308,7 @@ export default function MemoryPage() {
         </main>
       )}
 
-      {project && tab === "graph" && (
+      {project && MEMORY_ADVANCED_ENABLED && tab === "graph" && (
         <main className={styles.main}>
           {graph.isLoading && <div className={styles.empty}>Cargando grafo...</div>}
           {graph.data && graph.data.edges.length === 0 && (

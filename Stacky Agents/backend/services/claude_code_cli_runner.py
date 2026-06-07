@@ -579,6 +579,15 @@ def _run_in_background(
                 payload={"exit_code": return_code, "duration_ms": duration_ms},
             )
             log("info", f"claude code cli completed ({duration_ms}ms)")
+            # Hook A (Fase B): captura DRAFT post-run, paridad con github_copilot.
+            try:
+                from services import post_run_memory
+
+                memory_id = post_run_memory.capture_on_completion(execution_id)
+                if memory_id:
+                    log("info", f"stacky-memory draft capturado: {memory_id}")
+            except Exception as exc:  # noqa: BLE001
+                log("warn", f"post_run_memory completion hook falló: {exc}")
             ticket_status.on_execution_end(
                 ticket_id=ticket_id,
                 execution_id=execution_id,

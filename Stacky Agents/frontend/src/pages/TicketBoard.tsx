@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tickets, Agents, FlowConfig, Executions, Memory, type StackyMemoryTicketBadge } from "../api/endpoints";
+import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
 import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
 import { useTicketSync } from "../hooks/useTicketSync";
@@ -665,7 +666,10 @@ export default function TicketBoard() {
   const { data: memoryBadges = {} } = useQuery<Record<string, StackyMemoryTicketBadge>>({
     queryKey: ["memory-ticket-badges", activeProjectName],
     queryFn: () => Memory.ticketBadges(activeProjectName),
-    enabled: !!activeProjectName,
+    // Plan §11: los badges por ticket son Fase B-F (diferidos). Solo se piden
+    // si el flag avanzado está activo; así el board no se acopla al backend de
+    // validación cuando la feature está OFF por default.
+    enabled: !!activeProjectName && MEMORY_ADVANCED_ENABLED,
     staleTime: 30_000,
   });
   const activeAllowedStates: string[] = vsCodeAgent

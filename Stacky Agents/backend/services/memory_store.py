@@ -53,6 +53,7 @@ from db import Base, session_scope
 # Reutilizamos el MISMO tokenizer que el retrieval TF-IDF existente (FA-01) para
 # que la búsqueda de memoria se comporte igual que la de ejecuciones/docs.
 from services.embeddings import _tokenize  # noqa: F401  (tokenizer compartido)
+from services import pii_masker
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +75,15 @@ ALL_STATUSES = (
 # Scopes que se inyectan a cualquier operador del proyecto. `personal`/`private`
 # se excluyen de la inyección automática (requieren contexto de autor; Fase B).
 INJECT_SCOPES = ("project", "team", "global")
+
+# Tipos que los servicios FA-* ya inyectan por el SYSTEM prompt
+# (decisions/anti_patterns/glossary/style). Para NO doble-inyectar el mismo
+# conocimiento por el USER prompt (plan v2 §6/B5), el bloque `stacky-memory`
+# los EXCLUYE de la inyección. Siguen guardándose/listándose/validándose: el
+# filtro es solo del canal de inyección, no del store.
+_SYSTEM_PROMPT_TYPES = frozenset(
+    {"decision", "anti_pattern", "glossary", "term", "preference", "style"}
+)
 
 # Relaciones soportadas (v1 §7.3).
 RELATIONS = (
@@ -736,7 +746,7 @@ def search(
         if q_norm == 0:
             return []
 
-        scored: list[tuple[float, StackyMemoryObservation]] = []
+        scored: list[tuple[float, float, StackyMemoryObservation]] = []
         for r, tf in doc_tfs:
             d_weighted = {t: c * idf.get(t, 1.0) for t, c in tf.items()}
             d_norm = math.sqrt(sum(v * v for v in d_weighted.values()))
@@ -746,19 +756,23 @@ def search(
             if not common:
                 continue
             dot = sum(q_weighted[t] * d_weighted[t] for t in common)
-            score = dot / (q_norm * d_norm)
-            # Señal liviana 0..1: bonus si el agente coincide.
-            if agent_type and (r.source_agent_type or "") == agent_type:
-                score += 0.05
+            score = dot / (q_norm * d_norm)  # coseno ∈ [0,1]
             if score <= 0:
                 continue
-            scored.append((score, r))
+            # Ranking en 2 etapas: el coseno es la relevancia; el orden final se
+            # decide por señales NORMALIZADAS 0..1 (relevancia + match de agente +
+            # confianza), sin sumar indicadores crudos al coseno (plan v2 §4.3).
+            agent_match = 1.0 if (agent_type and (r.source_agent_type or "") == agent_type) else 0.0
+            conf = r.confidence if r.confidence is not None else 0.5
+            conf = max(0.0, min(1.0, conf))
+            composite = 0.75 * score + 0.15 * agent_match + 0.10 * conf
+            scored.append((composite, score, r))
 
         scored.sort(key=lambda x: x[0], reverse=True)
         results = []
-        for score, r in scored[:k]:
+        for _composite, score, r in scored[:k]:
             d = r.to_dict()
-            d["_score"] = round(score, 4)
+            d["_score"] = round(score, 4)  # se expone la relevancia (coseno), no el composite
             results.append(d)
         return results
 
@@ -869,6 +883,9 @@ def get_context_for_run(
         statuses=INJECTABLE_STATUSES,
         k=max(max_memories * 3, 30),
     )
+    # B5: no re-emitir por el USER prompt lo que los FA-* ya inyectan por el
+    # SYSTEM prompt (un solo canal por conocimiento).
+    candidates = [c for c in candidates if (c.get("type") or "") not in _SYSTEM_PROMPT_TYPES]
     if not candidates:
         return empty
 
@@ -880,14 +897,18 @@ def get_context_for_run(
     kept = kept[:max_memories]
 
     # Cap por chars: ir agregando hasta el techo (drop de menor rank primero).
+    # La memoria se REDACTA (PII irreversible) ANTES de medir y renderizar, así
+    # el cap es un techo real sobre el texto final inyectado y no se reinyecta
+    # PII al prompt/cache (el masker reversible per-run no sobrevive; plan §1.6).
     selected: list[dict] = []
     running = 0
     for it in kept:
-        body = (it.get("content") or "")
-        cost = len(it.get("title") or "") + len(body) + 64
+        title = pii_masker.redact_irreversible(it.get("title") or "")
+        body = pii_masker.redact_irreversible(it.get("content") or "")
+        cost = len(title) + len(body) + 64
         if selected and running + cost > char_cap:
             break
-        selected.append(it)
+        selected.append({**it, "title": title, "content": body})
         running += cost
 
     if not selected:

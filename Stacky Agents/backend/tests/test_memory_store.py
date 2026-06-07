@@ -207,11 +207,13 @@ def test_supersedes_hides_old_memory(app_ctx):
 def test_conflicts_with_suppresses_both(app_ctx):
     from services import memory_store
 
+    # type 'discovery' (no 'decision'): los tipos FA-* se excluyen de la
+    # inyección por B5, y este test valida la supresión de conflicts_with.
     a = memory_store.save_observation(
-        project="MEM_T7", type="decision", title="Opción A", content="usar enfoque alfa para deploy"
+        project="MEM_T7", type="discovery", title="Opción A", content="usar enfoque alfa para deploy"
     )
     b = memory_store.save_observation(
-        project="MEM_T7", type="decision", title="Opción B", content="usar enfoque beta para deploy"
+        project="MEM_T7", type="discovery", title="Opción B", content="usar enfoque beta para deploy"
     )
     memory_store.mark_relation(
         project="MEM_T7",

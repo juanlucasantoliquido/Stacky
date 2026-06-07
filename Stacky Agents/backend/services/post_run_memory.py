@@ -57,7 +57,15 @@ def _gather(execution_id: int) -> dict | None:
     """Lee los escalares necesarios de la ejecución + ticket (sesión propia)."""
     with session_scope() as session:
         ex = session.get(AgentExecution, execution_id)
-        if ex is None or not (ex.output or "").strip():
+        if ex is None:
+            # Modo A del output_watcher crea Tasks sin AgentExecution: no hay de
+            # dónde capturar. Se loggea para que NO sea una pérdida silenciosa.
+            logger.info(
+                "post_run_memory: execution %s sin AgentExecution (p.ej. output_watcher Modo A); captura omitida",
+                execution_id,
+            )
+            return None
+        if not (ex.output or "").strip():
             return None
         tk = session.get(Ticket, ex.ticket_id) if ex.ticket_id else None
         contract = ex.contract_result or {}
@@ -88,8 +96,9 @@ def _build_memory(data: dict) -> dict:
     body = (data["output"] or "").strip()
     if len(body) > _MAX_SUMMARY_CHARS:
         body = body[:_MAX_SUMMARY_CHARS].rstrip() + "\n…(truncado)"
-    # Redacción irreversible: enmascarar y descartar el mapa.
-    body, _discard = pii_masker.mask_text(body)
+    # Redacción IRREVERSIBLE: placeholders fijos [PII_*]; el map reversible no
+    # debe persistirse en memoria almacenada/exportada (plan §1.6/§10).
+    body = pii_masker.redact_irreversible(body)
 
     footer_bits = []
     if data.get("score") is not None:

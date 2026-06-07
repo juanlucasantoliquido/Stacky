@@ -16,6 +16,7 @@ import random
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -31,6 +32,20 @@ from services import memory_store, pii_masker
 from services.secret_scanner import find_secret
 
 logger = logging.getLogger("stacky.memory_git_sync")
+
+# Lock por-proyecto (in-proc) para serializar sync_once del mismo proyecto.
+_project_locks: dict[str, threading.Lock] = {}
+_project_locks_guard = threading.Lock()
+
+
+def _project_lock(project: str) -> threading.Lock:
+    with _project_locks_guard:
+        lock = _project_locks.get(project)
+        if lock is None:
+            lock = threading.Lock()
+            _project_locks[project] = lock
+        return lock
+
 
 EXPORTABLE_SCOPES = ("project", "team", "global")
 OUTBOX_STATUSES = ("pending", "exported", "error")
@@ -217,45 +232,50 @@ def sync_once(
         return result.to_dict()
 
     timeout_seconds = timeout_seconds or _env_int("STACKY_MEMORY_GIT_TIMEOUT_SECONDS", 30)
-    result.bootstrapped = bootstrap_repo(project=project, remote_url=remote_url, timeout_seconds=timeout_seconds, steps=result.git_steps)
 
-    if remote_url:
-        _fetch_and_ff_merge(repo, timeout_seconds, result.git_steps, result.warnings)
+    # Lock por-proyecto (in-proc): bootstrap + commit + push tocan el mismo repo
+    # git dedicado y el mismo outbox. Dos sync_once concurrentes del mismo
+    # proyecto se serializan para evitar carreras en index.lock / doble export.
+    with _project_lock(project):
+        result.bootstrapped = bootstrap_repo(project=project, remote_url=remote_url, timeout_seconds=timeout_seconds, steps=result.git_steps)
 
-    import_summary = import_chunks(project=project, repo_path=repo)
-    result.imported_chunks = import_summary["imported_chunks"]
-    result.quarantined_chunks = import_summary["quarantined_chunks"]
-    result.unreadable_chunks = import_summary["unreadable_chunks"]
+        if remote_url:
+            _fetch_and_ff_merge(repo, timeout_seconds, result.git_steps, result.warnings)
 
-    result.enqueued_events = enqueue_exportable(project=project)
-    pending_push = _pending_push_chunk_ids(project)
-    if pending_push and remote_url and push:
-        pushed = _push_with_retry(project, repo, timeout_seconds, result.git_steps, result.warnings)
-        result.pushed = pushed
-        if not pushed:
-            result.errors.append("git push falló; outbox queda pending para el próximo ciclo")
-            return result.to_dict()
+        import_summary = import_chunks(project=project, repo_path=repo)
+        result.imported_chunks = import_summary["imported_chunks"]
+        result.quarantined_chunks = import_summary["quarantined_chunks"]
+        result.unreadable_chunks = import_summary["unreadable_chunks"]
 
-    chunk = export_pending_chunk(project=project, repo_path=repo, max_events=max_events)
-    if chunk:
-        result.chunk_id = chunk["chunk_id"]
-        result.exported_events = chunk["event_count"]
-        commit = _commit_all(repo, f"stacky memory sync {chunk['chunk_id']}", timeout_seconds)
-        result.git_steps.append(commit)
-        if not commit.ok:
-            result.errors.append(f"git commit falló: {commit.stderr or commit.stdout}")
-            return result.to_dict()
+        result.enqueued_events = enqueue_exportable(project=project)
+        pending_push = _pending_push_chunk_ids(project)
+        if pending_push and remote_url and push:
+            pushed = _push_with_retry(project, repo, timeout_seconds, result.git_steps, result.warnings)
+            result.pushed = pushed
+            if not pushed:
+                result.errors.append("git push falló; outbox queda pending para el próximo ciclo")
+                return result.to_dict()
 
-    if remote_url and push and (chunk or _pending_push_chunk_ids(project)):
-        pushed = _push_with_retry(project, repo, timeout_seconds, result.git_steps, result.warnings)
-        result.pushed = pushed
-        if not pushed:
-            result.errors.append("git push falló; outbox queda pending para el próximo ciclo")
-    elif not remote_url:
-        _mark_project_pending_chunks_pushed(project)
-        _mark_project_pending_outbox_exported(project)
-        result.pushed = False
-        result.warnings.append("remote_url no configurado; chunk committeado solo en repo local dedicado")
+        chunk = export_pending_chunk(project=project, repo_path=repo, max_events=max_events)
+        if chunk:
+            result.chunk_id = chunk["chunk_id"]
+            result.exported_events = chunk["event_count"]
+            commit = _commit_all(repo, f"stacky memory sync {chunk['chunk_id']}", timeout_seconds)
+            result.git_steps.append(commit)
+            if not commit.ok:
+                result.errors.append(f"git commit falló: {commit.stderr or commit.stdout}")
+                return result.to_dict()
+
+        if remote_url and push and (chunk or _pending_push_chunk_ids(project)):
+            pushed = _push_with_retry(project, repo, timeout_seconds, result.git_steps, result.warnings)
+            result.pushed = pushed
+            if not pushed:
+                result.errors.append("git push falló; outbox queda pending para el próximo ciclo")
+        elif not remote_url:
+            _mark_project_pending_chunks_pushed(project)
+            _mark_project_pending_outbox_exported(project)
+            result.pushed = False
+            result.warnings.append("remote_url no configurado; chunk committeado solo en repo local dedicado")
 
     return result.to_dict()
 

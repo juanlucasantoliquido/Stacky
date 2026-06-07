@@ -124,3 +124,58 @@ def test_memory_does_not_leak_across_projects(app_ctx, monkeypatch):
     mem_blocks = [b for b in blocks if b.get("id") == "stacky-memory"]
     # No hay memoria del proyecto propio → no se inyecta, y nunca la de otro proyecto.
     assert mem_blocks == [] or "otro proyecto" not in mem_blocks[0]["content"]
+
+
+def test_fa_types_excluded_from_user_prompt_injection(app_ctx, monkeypatch):
+    from services import context_enrichment, memory_store
+
+    project = "MEM_INJ_B5"
+    memory_store.save_observation(
+        project=project,
+        type="decision",
+        title="Criterio arquitectónico",
+        content="deploy fallido criterio histórico que decisions.py inyecta por system prompt",
+    )
+    memory_store.save_observation(
+        project=project,
+        type="discovery",
+        title="Hallazgo operativo",
+        content="deploy fallido: revisar el watcher de outputs antes de reintentar",
+    )
+    ticket_id = _make_ticket(
+        project=project, title="deploy", description="deploy fallido watcher outputs"
+    )
+
+    monkeypatch.setenv("STACKY_MEMORY_INJECTION_ENABLED", "true")
+    blocks, _ = context_enrichment.enrich_blocks(
+        ticket_id=ticket_id, agent_type="developer", raw_blocks=[], project_ctx=None
+    )
+    mem = next((b for b in blocks if b.get("id") == "stacky-memory"), None)
+    assert mem is not None
+    # El 'discovery' se inyecta; el 'decision' (FA-*) queda excluido del user prompt.
+    assert "watcher de outputs" in mem["content"]
+    assert "decisions.py" not in mem["content"]
+
+
+def test_injected_memory_redacts_pii_irreversibly(app_ctx, monkeypatch):
+    from services import context_enrichment, memory_store
+
+    project = "MEM_INJ_PII"
+    memory_store.save_observation(
+        project=project,
+        type="discovery",
+        title="Contacto de escalamiento",
+        content="deploy fallido: escalar a juan.perez@cliente.com antes de cerrar",
+    )
+    ticket_id = _make_ticket(
+        project=project, title="deploy", description="deploy fallido escalar contacto"
+    )
+
+    monkeypatch.setenv("STACKY_MEMORY_INJECTION_ENABLED", "true")
+    blocks, _ = context_enrichment.enrich_blocks(
+        ticket_id=ticket_id, agent_type="developer", raw_blocks=[], project_ctx=None
+    )
+    mem = next((b for b in blocks if b.get("id") == "stacky-memory"), None)
+    assert mem is not None
+    assert "juan.perez@cliente.com" not in mem["content"]
+    assert "[PII_EMAIL]" in mem["content"]

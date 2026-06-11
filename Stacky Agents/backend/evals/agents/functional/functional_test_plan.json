@@ -1,0 +1,9 @@
+{
+  "name": "functional_test_plan",
+  "agent_type": "functional",
+  "output": "## Plan de pruebas\n\nEste plan de pruebas cubre los criterios de aceptación del ticket de alta de cliente con validación de identidad. Se estructura por funcionalidad y se cruza contra la matriz de cobertura existente del módulo de onboarding.\n\n### Cobertura\n\nMatriz de cobertura de los criterios de aceptación:\n\n- CUBRE: validación de DNI con verificación contra el padrón. Caso feliz y casos de borde (DNI inexistente, DNI con dígito verificador inválido, DNI ya registrado).\n- CUBRE: validación de email único en el sistema, incluyendo normalización de mayúsculas y dominios alias.\n- GAP: no hay caso definido para el comportamiento cuando el servicio del padrón está caído; se propone un caso nuevo que verifique el fallback a validación diferida.\n- NUEVA FUNC: alta con CUIT para personas jurídicas, que requiere su propio set de casos de validación de formato y existencia.\n\n### Casos detallados\n\nPara cada criterio se especifican precondiciones, pasos, datos de prueba y resultado esperado. Los datos sensibles (DNI, email, CBU) se usan enmascarados en los ambientes de prueba. Se incluyen casos negativos para cada validación y un caso de concurrencia para detectar altas duplicadas simultáneas. La regresión cubre además el flujo de notificación por email tras un alta exitosa.",
+  "expect": {
+    "min_score": 80,
+    "must_pass": true
+  }
+}

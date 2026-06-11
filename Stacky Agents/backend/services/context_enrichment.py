@@ -91,7 +91,128 @@ def enrich_blocks(
         ticket_obj=ticket_obj,
         log=log,
     )
+    # F2.4 — presupuesto de contexto con ranking (por proyecto, OFF default).
+    blocks = _apply_context_budget(blocks, project_name=project_name, log=log)
     return blocks, ado_stats
+
+
+# ---------------------------------------------------------------------------
+# F2.4 — Presupuesto de contexto con ranking
+# ---------------------------------------------------------------------------
+
+# Valor relativo por id de bloque (mayor = más importante, se conserva primero).
+# El ticket/épica y las restricciones del cliente nunca se recortan; lo barato
+# de recortar (comentarios viejos, similares) queda accesible vía MCP (F2.1).
+_BLOCK_PRIORITY: dict[str, int] = {
+    "ado-epic-structured": 100,
+    "client-profile": 95,
+    "stacky-memory": 80,
+    "modal_user_input": 78,
+    "operator_note": 76,
+    "filesystem-artifacts-status": 70,
+    "glossary-auto": 60,
+    "ado-similar-tickets": 40,
+    "ado-comments": 30,
+    "ado-attachments": 25,
+}
+_DEFAULT_PRIORITY = 50
+_TRUNCATION_MARKER = (
+    "\n\n[recortado por presupuesto de contexto — pedí el detalle completo "
+    "vía las tools MCP de Stacky si lo necesitás]"
+)
+
+
+def _block_priority(block: dict) -> int:
+    return _BLOCK_PRIORITY.get(block.get("id") or "", _DEFAULT_PRIORITY)
+
+
+def _block_token_estimate(block: dict) -> int:
+    from prompt_builder import estimate_tokens
+
+    content = block.get("content")
+    text = content if isinstance(content, str) else ""
+    for it in block.get("items") or []:
+        if isinstance(it, dict) and it.get("selected"):
+            text += "\n" + (it.get("label") or "")
+    return estimate_tokens(text or "")
+
+
+def _apply_context_budget(
+    blocks: list[dict], *, project_name: str | None, log: LogFn
+) -> list[dict]:
+    """Recorta bloques de menor valor para respetar un presupuesto de tokens.
+
+    Ordena por prioridad (desc), va sumando estimaciones y, cuando se pasa del
+    budget, trunca el contenido del bloque que excede (dejando un marcador) y
+    descarta el resto de los bloques de menor prioridad. Preserva el orden
+    original de la lista para no alterar la narrativa del prompt; solo cambia
+    el contenido de los bloques recortados.
+
+    Pura sobre `blocks` (no muta la entrada). Best-effort: cualquier fallo
+    devuelve los bloques sin tocar.
+    """
+    from config import config
+    from services import cli_feature_flags
+
+    if not cli_feature_flags.context_budget_enabled(project_name):
+        return blocks
+    try:
+        budget = int(config.STACKY_CONTEXT_BUDGET_TOKENS)
+    except (TypeError, ValueError):
+        return blocks
+    if budget <= 0 or not blocks:
+        return blocks
+
+    indexed = list(enumerate(blocks))
+    # Orden de conservación: prioridad desc, y a igualdad respeta el orden de
+    # aparición (estable) para que el corte sea determinístico.
+    ordered = sorted(
+        indexed, key=lambda iv: (-_block_priority(iv[1]), iv[0])
+    )
+
+    used = 0
+    kept: dict[int, dict] = {}
+    dropped = 0
+    truncated = 0
+    for orig_idx, block in ordered:
+        if not isinstance(block, dict):
+            kept[orig_idx] = block
+            continue
+        cost = _block_token_estimate(block)
+        if used + cost <= budget:
+            kept[orig_idx] = block
+            used += cost
+            continue
+        remaining = budget - used
+        content = block.get("content")
+        # Solo tiene sentido truncar bloques con contenido textual sustancial.
+        if isinstance(content, str) and remaining > 50 and len(content) > remaining * 4:
+            keep_chars = remaining * 4
+            new_block = dict(block)
+            new_block["content"] = content[:keep_chars].rstrip() + _TRUNCATION_MARKER
+            new_block.setdefault("metadata", {})
+            if isinstance(new_block.get("metadata"), dict):
+                new_block["metadata"] = {**new_block["metadata"], "budget_truncated": True}
+            kept[orig_idx] = new_block
+            used = budget
+            truncated += 1
+        else:
+            dropped += 1
+        # A partial fill cierra el presupuesto: los siguientes (menor prioridad)
+        # se descartan salvo que sean de costo nulo.
+        if used >= budget:
+            continue
+
+    if dropped == 0 and truncated == 0:
+        return blocks
+
+    result = [kept[i] for i in range(len(blocks)) if i in kept]
+    log(
+        "info",
+        f"presupuesto de contexto aplicado (F2.4): budget={budget} tok, "
+        f"usados~{used}, bloques truncados={truncated}, descartados={dropped}",
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -222,12 +343,11 @@ def _inject_stacky_memory_block(
     agent_type: str,
     log: LogFn,
 ) -> list[dict]:
-    if os.getenv("STACKY_MEMORY_INJECTION_ENABLED", "false").lower() not in {
-        "1",
-        "true",
-        "on",
-        "yes",
-    }:
+    # F2.5 — encendido por proyecto (master env + allowlist). El helper combina
+    # STACKY_MEMORY_INJECTION_ENABLED con STACKY_MEMORY_INJECTION_PROJECTS.
+    from services import cli_feature_flags
+
+    if not cli_feature_flags.memory_injection_enabled(project_name):
         return blocks
     if not project_name:
         return blocks

@@ -1,0 +1,9 @@
+{
+  "name": "qa_pass_verdict",
+  "agent_type": "qa",
+  "output": "## Verdict\n\nVERDICT: PASS\n\nSe ejecutó la suite de regresión completa sobre el flujo de alta de cliente y el de facturación. Todos los casos críticos pasaron sin errores. Se validaron los escenarios de borde de DNI inválido, CBU mal formado y email duplicado. La cobertura de los criterios de aceptación del ticket es total y no se detectaron regresiones respecto del build anterior. Se recomienda promover a UAT.",
+  "expect": {
+    "min_score": 90,
+    "must_pass": true
+  }
+}

@@ -216,6 +216,39 @@ def agent_completion_metrics():
     })
 
 
+# ── F3.3: Score de salud del arnés ───────────────────────────────────────────
+
+@bp.get("/harness-health")
+def harness_health():
+    """Salud del arnés CLI (F3.3 / H8). Agrega datos ya persistidos por Fases 1-2.
+
+    GET /api/metrics/harness-health?days=14
+
+    Sin acciones nuevas para el operador: una vista de
+    completed-sin-intervención, tasa de autocorrección (F1.3), costo real por
+    ticket (F1.2), contract score por agente (F1.1) y distribución de modelos (F3.2).
+
+    H8 — KPIs de valor agregado (top-level + by_runtime):
+      - autocorrection_saves: runs donde autocorrect fue invocado Y completó.
+      - memory_hit_rate: fracción de runs con memoria colaborativa inyectada.
+      - runaway_stops: runs terminados por el runaway guard (needs_review).
+    """
+    from services import harness_health as hh
+
+    try:
+        days = int(request.args.get("days", 14))
+    except (ValueError, TypeError):
+        days = 14
+    days = max(1, min(days, 365))
+
+    health = hh.compute_health(window_days=days)
+    return jsonify({
+        "ok": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        **health.to_dict(),
+    })
+
+
 # ── Feature C: Comparador de Agentes ─────────────────────────────────────────
 
 @bp.get("/agent-comparison")

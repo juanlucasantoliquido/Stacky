@@ -234,6 +234,7 @@ def _run_in_background(
     agent_type: str | None = None
     ticket_id: int | None = None
     mask_map: dict[str, str] = {}
+    _stream_telemetry_sink: dict = {}  # H2.2 — acumula eventos JSONL con uso
 
     try:
         with session_scope() as session:
@@ -309,6 +310,31 @@ def _run_in_background(
             entry=agent_entry,
             workspace_root=cwd,
         )
+        # H4.3 — Stacky Skills injection en codex (sin rama MCP: siempre body top-1).
+        _codex_skills_block = ""
+        _codex_project_name = project_ctx.stacky_project_name if project_ctx else None
+        try:
+            from services.cli_feature_flags import skills_enabled as _skills_on  # noqa: PLC0415
+            from services import stacky_skills as _ss  # noqa: PLC0415
+            if _skills_on(_codex_project_name):
+                _matched = _ss.select_for_run(
+                    agent_type=agent_type or "",
+                    project=_codex_project_name,
+                    context_text=rich_message,
+                    max_skills=3,
+                )
+                if _matched:
+                    _index = _ss.render_index(_matched)
+                    _top = _matched[0]
+                    _codex_skills_block = (
+                        "## Stacky Skills disponibles\n\n"
+                        + _index
+                        + f"\n\n### Skill activa: {_top.name}\n\n"
+                        + _ss.cap_body(_top.body)
+                    )
+                    log("info", f"H4: skills inyectadas ({len(_matched)})", group="operator")
+        except Exception as _exc:  # noqa: BLE001
+            log("warn", f"H4: no se pudo inyectar skills en codex: {_exc}")
         prompt = _build_codex_prompt(
             selected_agent=selected_agent,
             all_agents=all_agents,
@@ -316,15 +342,67 @@ def _run_in_background(
             agent_bundle_dir=agent_bundle_dir,
             agent_manifest_file=agent_manifest_file,
             invocation_block=invocation_block,
+            skills_section=_codex_skills_block,
         )
         prompt_file = run_dir / "prompt.md"
         prompt_file.write_text(prompt, encoding="utf-8")
 
-        cmd = _build_command(
-            cwd=cwd,
-            output_file=output_file,
-            model_override=model_override,
+        # H2.4 — política de modelo para codex
+        from harness.model_policy import resolve_model as _resolve_model
+        _resolved_model, _model_reason = _resolve_model("codex_cli", model_override)
+
+        # H3.3 — Egress check antes del spawn (STACKY_CLI_EGRESS_ENABLED, OFF default).
+        egress_decision = _check_cli_egress(
+            prompt=prompt,
+            project=project_name if "project_name" in dir() else None,
+            model=_resolved_model or "",
         )
+        if egress_decision is not None and not egress_decision.allowed:
+            reason = egress_decision.reason
+            log("error", f"egress bloqueado antes de spawn codex: {reason}")
+            with session_scope() as s:
+                row = s.query(AgentExecution).filter(AgentExecution.id == execution_id).first()
+                if row:
+                    row.status = "error"
+                    row.output = f"[egress] run bloqueado: {reason}"
+            return
+
+        # H7.1 — Re-run con exec resume + delta prompt (por proyecto, OFF default).
+        # Paridad con claude F2.3. Usa harness.resume.resolve (dueño único).
+        _codex_resume_ref: str | None = None
+        try:
+            from harness.resume import resolve as _resume_resolve
+            _codex_resume_ref, _codex_delta = _resume_resolve(
+                runtime=RUNTIME,
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                project=_codex_project_name,
+                current_blocks=enriched_blocks,
+                execution_id=execution_id,
+            )
+            if _codex_delta:
+                prompt = _codex_delta + "\n\n" + prompt
+                prompt_file.write_text(prompt, encoding="utf-8")
+                log("info", f"codex resume: delta prompt aplicado (H7.1)")
+            if _codex_resume_ref:
+                log("info", f"codex resume: sesión previa={_codex_resume_ref[:12]}… (H7.1)")
+        except Exception as _resume_exc:  # noqa: BLE001
+            log("warn", f"codex resume resolve falló (arranque en frío): {_resume_exc}")
+            _codex_resume_ref = None
+
+        if _codex_resume_ref:
+            cmd = _build_resume_command(
+                session_id=_codex_resume_ref,
+                prompt=prompt,
+                output_file=output_file,
+                model_override=_resolved_model,
+            )
+        else:
+            cmd = _build_command(
+                cwd=cwd,
+                output_file=output_file,
+                model_override=_resolved_model,
+            )
         log("info", f"codex cli cwd={cwd}")
         log("info", "codex cli command: " + _display_command(cmd))
         log(
@@ -378,10 +456,34 @@ def _run_in_background(
         )
         heartbeat_thread.start()
 
+        # H5 — Runaway guard: solo turnos (costo no disponible en codex stream hasta H2.2).
+        from harness.runaway_guard import RunLimits, RunawayGuard as _RunawayGuard
+        _codex_runaway_guard = _RunawayGuard(
+            RunLimits(
+                max_turns=config.STACKY_RUNAWAY_MAX_TURNS,
+                max_cost_usd=0.0,  # codex no reporta costo en stream
+            )
+        )
+        _codex_runaway_triggered: list[str] = []
+
+        def _codex_on_runaway(event_count: int, _line: str) -> None:
+            if _codex_runaway_triggered:
+                return
+            reason = _codex_runaway_guard.observe(num_turns=event_count)
+            if reason:
+                _codex_runaway_triggered.append(reason)
+                log("warn", f"codex runaway detectado — {reason} — terminando proceso")
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+
         readers = [
             threading.Thread(
                 target=_read_stream,
                 args=(execution_id, proc.stdout, "info", "codex", stdout_tail),
+                kwargs={"telemetry_sink": _stream_telemetry_sink,
+                        "on_runaway": _codex_on_runaway},
                 daemon=True,
             ),
             threading.Thread(
@@ -419,7 +521,8 @@ def _run_in_background(
             "vscode_agent_filename": vscode_agent_filename,
             "workspace_root": str(cwd),
             "codex_cli_bin": cmd[0],
-            "codex_model": model_override or config.CODEX_CLI_MODEL or None,
+            "codex_model": _resolved_model or config.CODEX_CLI_MODEL or None,
+            "model_decision": {"model": _resolved_model, "reason": _model_reason},
             "exit_code": return_code,
             "duration_ms": duration_ms,
             "output_file": str(output_file),
@@ -430,10 +533,148 @@ def _run_in_background(
             **invocation_meta,
         }
 
-        if return_code == 0:
+        # H5 — Runaway: si el guard disparó, marcar needs_review y salir.
+        if _codex_runaway_triggered:
+            metadata["runaway"] = {
+                "reason": _codex_runaway_triggered[0],
+                "turns": _stream_telemetry_sink.get("num_turns") if _stream_telemetry_sink else None,
+                "cost": None,  # codex no reporta costo en stream
+            }
+            log("warn", f"codex runaway — degradando a needs_review: {_codex_runaway_triggered[0]}")
             _mark_terminal(
                 execution_id,
-                status="completed",
+                status="needs_review",
+                output=output,
+                metadata=metadata,
+            )
+            _safe_write_manifest(
+                run_dir, run_id=execution_id, agent_type=agent_type,
+                status="needs_review", exit_code=return_code,
+                output_file=output_file, prompt_file=prompt_file,
+            )
+            append_event(run_dir, execution_id=execution_id,
+                         event_type="needs_review",
+                         payload={"exit_code": return_code, "duration_ms": duration_ms,
+                                  "runaway": _codex_runaway_triggered[0]})
+            ticket_status.on_execution_end(
+                ticket_id=ticket_id, execution_id=execution_id,
+                final_status="needs_review", agent_type=agent_type,
+            )
+            return
+
+        if return_code == 0:
+            # H2.2 — persistir telemetría codex (si hay datos capturados)
+            if _stream_telemetry_sink:
+                try:
+                    from harness.telemetry import from_codex_event, persist as _persist_telemetry
+                    _t = from_codex_event(_stream_telemetry_sink)
+                    _persist_telemetry(execution_id, _t)
+                    log("debug", f"harness_telemetry codex persistida: session_id={_t.session_id}")
+                except Exception as exc:  # noqa: BLE001
+                    log("warn", f"harness_telemetry codex: persist falló (no crítico): {exc}")
+
+            # H2.3 — autocorrección via exec resume (antes de finalize_run)
+            _codex_session_id: str | None = None
+            try:
+                with session_scope() as _sess:
+                    _row = _sess.get(AgentExecution, execution_id)
+                    if _row is not None:
+                        _codex_session_id = _row.metadata_dict.get("codex_session_id")
+            except Exception:
+                pass
+
+            if config.CODEX_CLI_AUTOCORRECT_ENABLED and t_ado_id is not None:
+                try:
+                    from services.codex_autocorrect import run_autocorrect_loop
+                    from services import artifact_validator as _av
+
+                    def _do_resume(sess_id: str, prompt: str) -> bool:
+                        try:
+                            resume_cmd = _build_resume_command(
+                                session_id=sess_id,
+                                prompt=prompt,
+                                output_file=output_file,
+                                model_override=_resolved_model,
+                            )
+                            import subprocess as _sp
+                            _result = _sp.run(
+                                resume_cmd,
+                                capture_output=True,
+                                text=True,
+                                encoding="utf-8",
+                                errors="replace",
+                                timeout=300,
+                            )
+                            return _result.returncode == 0
+                        except Exception as _exc:
+                            log("warn", f"codex resume subprocess falló: {_exc}")
+                            return False
+
+                    autocorrect_result = run_autocorrect_loop(
+                        session_id=_codex_session_id,
+                        ado_id=t_ado_id,
+                        max_retries=config.CODEX_CLI_AUTOCORRECT_MAX_RETRIES,
+                        gate_enabled=config.CODEX_CLI_CONTRACT_GATE_ENABLED,
+                        resume_fn=_do_resume,
+                        validate_fn=lambda aid, check_db=False: _av.validate_run_artifacts(aid, check_db=check_db),
+                        log=log,
+                    )
+                    metadata["autocorrect_codex"] = {
+                        "retries": autocorrect_result.retries_used,
+                        "final_ok": autocorrect_result.final_artifacts_ok,
+                    }
+                    if autocorrect_result.status_suggestion == "needs_review":
+                        # Override: gate + artifacts inválidos tras retries
+                        _mark_terminal(
+                            execution_id,
+                            status="needs_review",
+                            output=output,
+                            metadata=metadata,
+                        )
+                        _safe_write_manifest(
+                            run_dir, run_id=execution_id, agent_type=agent_type,
+                            status="needs_review", exit_code=return_code,
+                            output_file=output_file, prompt_file=prompt_file,
+                        )
+                        append_event(run_dir, execution_id=execution_id,
+                                     event_type="needs_review",
+                                     payload={"exit_code": return_code, "duration_ms": duration_ms})
+                        log("warn", f"codex cli needs_review ({duration_ms}ms) — autocorrect agotado")
+                        ticket_status.on_execution_end(
+                            ticket_id=ticket_id, execution_id=execution_id,
+                            final_status="needs_review", agent_type=agent_type,
+                        )
+                        stacky_logger.agent_event(
+                            "agent_completed", execution_id=execution_id,
+                            ticket_id=ticket_id, level="WARN", duration_ms=duration_ms,
+                            output_data={"runtime": RUNTIME, "status": "needs_review",
+                                         "exit_code": return_code},
+                            tags=["agent", RUNTIME],
+                        )
+                        return
+                except Exception as exc:  # noqa: BLE001
+                    log("warn", f"codex autocorrect falló (no crítico): {exc}")
+
+            # H2.1 — post-run pipeline (contract validator + confidence)
+            try:
+                from harness.post_run import finalize_run as _finalize_run
+                _pr = _finalize_run(
+                    runtime=RUNTIME,
+                    agent_type=agent_type or "",
+                    output_text=output or "",
+                    ado_id=t_ado_id,
+                    gate_enabled=config.CODEX_CLI_CONTRACT_GATE_ENABLED,
+                    log=log,
+                )
+                metadata.update(_pr.metadata_patch)
+                final_status = _pr.status_suggestion
+            except Exception as exc:  # noqa: BLE001
+                log("warn", f"harness post_run falló (no crítico): {exc}")
+                final_status = "completed"
+
+            _mark_terminal(
+                execution_id,
+                status=final_status,
                 output=output,
                 metadata=metadata,
             )
@@ -441,7 +682,7 @@ def _run_in_background(
                 run_dir,
                 run_id=execution_id,
                 agent_type=agent_type,
-                status="completed",
+                status=final_status,
                 exit_code=return_code,
                 output_file=output_file,
                 prompt_file=prompt_file,
@@ -449,23 +690,33 @@ def _run_in_background(
             append_event(
                 run_dir,
                 execution_id=execution_id,
-                event_type="completed",
+                event_type=final_status,
                 payload={"exit_code": return_code, "duration_ms": duration_ms},
             )
-            log("info", f"codex cli completed ({duration_ms}ms)")
-            # Hook A (Fase B): captura DRAFT post-run, paridad con github_copilot.
+            # H7.2 — repro.ps1: comando exacto + env STACKY_* no sensibles.
             try:
-                from services import post_run_memory
+                write_repro_script(
+                    run_dir=run_dir,
+                    cmd=cmd,
+                    env=build_agent_env(extra={"STACKY_EXECUTION_ID": str(execution_id)}),
+                )
+            except Exception as _repro_exc:  # noqa: BLE001
+                log("warn", f"write_repro_script falló (no crítico): {_repro_exc}")
+            log("info", f"codex cli {final_status} ({duration_ms}ms)")
+            # Hook A (Fase B): captura DRAFT post-run, paridad con github_copilot.
+            if final_status == "completed":
+                try:
+                    from services import post_run_memory
 
-                memory_id = post_run_memory.capture_on_completion(execution_id)
-                if memory_id:
-                    log("info", f"stacky-memory draft capturado: {memory_id}")
-            except Exception as exc:  # noqa: BLE001
-                log("warn", f"post_run_memory completion hook falló: {exc}")
+                    memory_id = post_run_memory.capture_on_completion(execution_id)
+                    if memory_id:
+                        log("info", f"stacky-memory draft capturado: {memory_id}")
+                except Exception as exc:  # noqa: BLE001
+                    log("warn", f"post_run_memory completion hook falló: {exc}")
             ticket_status.on_execution_end(
                 ticket_id=ticket_id,
                 execution_id=execution_id,
-                final_status="completed",
+                final_status=final_status,
                 agent_type=agent_type,
             )
             stacky_logger.agent_event(
@@ -600,6 +851,31 @@ def _safe_write_manifest(
         )
     except Exception:
         logger.exception("[exec=%s] manifest write failed (no crítico)", run_id)
+
+
+# ── H3.3 — Egress check para CLI ─────────────────────────────────────────────
+
+def _check_cli_egress(
+    *,
+    prompt: str,
+    project: str | None,
+    model: str,
+):
+    """Verifica egress policies sobre el prompt final ANTES del spawn.
+
+    Devuelve `EgressDecision` si STACKY_CLI_EGRESS_ENABLED=true, o None si está
+    deshabilitado (default). Si bloquea, el llamador debe abortar el spawn.
+
+    Nunca lanza: cualquier error interno → None (best-effort, no bloquea el run).
+    """
+    if os.environ.get("STACKY_CLI_EGRESS_ENABLED", "false").lower() not in {"1", "true", "yes"}:
+        return None
+    try:
+        from services import egress_policies  # noqa: PLC0415
+        return egress_policies.check(project=project, model=model, context_text=prompt)
+    except Exception:  # noqa: BLE001
+        logger.debug("_check_cli_egress: error inesperado, saltando check", exc_info=True)
+        return None
 
 
 def _build_command(
@@ -737,9 +1013,18 @@ def _build_codex_prompt(
     agent_bundle_dir: Path,
     agent_manifest_file: Path,
     invocation_block: str = "",
+    mcp_enabled: bool = False,
+    skills_section: str = "",
 ) -> str:
+    """H3.1: las reglas se obtienen de harness.run_contract.rules_text en call-time.
+    H4.3: skills_section se inyecta ANTES de las reglas si está presente.
+    """
+    from harness.run_contract import rules_text  # noqa: PLC0415
+    rules = rules_text(runtime="codex", mcp_enabled=mcp_enabled)
+
     inventory = _format_agent_inventory(all_agents, agent_bundle_dir)
     selected_path = str(Path(config.VSCODE_PROMPTS_DIR) / selected_agent.filename)
+    skills_block = f"\n{skills_section.strip()}\n\n" if skills_section.strip() else ""
 
     return f"""# Stacky Agents Codex CLI runtime
 
@@ -772,25 +1057,8 @@ elegido solo uno.
 ## Ticket y contexto
 
 {ticket_message}
-
-## Instrucciones de ejecucion
-
-- Trabaja en el workspace configurado para el proyecto.
-- Mantene el comportamiento esperado por el agente seleccionado.
-- Si editas archivos, limita el cambio al alcance del ticket y deja evidencia
-  clara en tu respuesta final.
-- Reporta comandos relevantes, archivos tocados y cualquier bloqueo real.
-- Regla absoluta: no toques Azure DevOps. No publiques comentarios, no crees
-  ni actualices work items, no cambies estados, no ejecutes APIs/CLI/scripts de
-  ADO y no solicites credenciales ADO. Stacky Agents es el unico autorizado a
-  escribir en ADO.
-- Si el resultado debe ser un comentario ADO, genera el archivo
-  `Agentes/outputs/<ADO_ID>/comment.html` y opcionalmente `comment.meta.json`.
-  Stacky lo validara y publicara.
-- Si el resultado debe ser una Task hija para un Epic, genera
-  `Agentes/outputs/epic-<ADO_ID>/<RF_SLUG>/pending-task.json` y los archivos
-  referenciados, como `plan-de-pruebas.md`. Stacky creara la Task desde la UI y
-  marcara el JSON como consumido.
+{skills_block}
+{rules}
 """
 
 
@@ -845,17 +1113,46 @@ def _read_stream(
     default_level: str,
     group: str,
     tail: list[str],
+    telemetry_sink: dict | None = None,
+    on_runaway: "Callable[[str], None] | None" = None,
 ) -> None:
+    """Lee el stream de codex y procesa línea a línea.
+
+    H2.2: si telemetry_sink es provisto (dict mutable), acumula el último
+    evento JSONL que contenga session_id o campos de uso. El caller persiste
+    harness_telemetry tras el wait().
+    H5: on_runaway(razón) se llama la primera vez que el guard dispara.
+    """
+    from typing import Callable  # noqa: PLC0415 — import local para no afectar startup
+    _event_count = 0
     if stream is None:
         return
     for raw in stream:
         line = raw.rstrip("\r\n")
         if not line:
             continue
+        _event_count += 1
         message, level = _summarize_codex_line(line, default_level)
         session_id = _extract_codex_session_id(line)
         if session_id:
             _remember_codex_session(execution_id, session_id)
+        # H2.2 — acumula telemetría si el evento tiene campos de interés
+        if telemetry_sink is not None:
+            try:
+                event = json.loads(line)
+                if isinstance(event, dict) and (
+                    event.get("session_id") or event.get("conversation_id")
+                    or event.get("usage") or event.get("num_turns") or event.get("total_cost_usd")
+                ):
+                    telemetry_sink.update(event)
+            except (json.JSONDecodeError, Exception):
+                pass
+        # H5 — Runaway: on_runaway se llama una sola vez si el guard dispara.
+        if on_runaway is not None:
+            try:
+                on_runaway(_event_count, line)
+            except Exception:  # noqa: BLE001
+                pass
         _push(execution_id, level, message, group=group)
         tail.append(message)
         if len(tail) > 200:
@@ -1204,3 +1501,48 @@ def _mark_terminal(
         current_md.update(metadata or {})
         current_md["runtime"] = RUNTIME
         row.metadata_dict = current_md
+
+
+def write_repro_script(
+    run_dir: "Path",
+    *,
+    cmd: list[str],
+    env: dict[str, str],
+) -> None:
+    """H7.2 — Escribe run_dir/repro.ps1 con el comando exacto + env STACKY_* no sensibles.
+
+    Espeja el repro.ps1 que claude_code_cli_runner ya genera (F1.2).
+    Las variables sensibles se filtran con agent_env.is_denied.
+    Solo incluye variables STACKY_* para mantener el script mínimo y reproducible.
+    """
+    from services.agent_env import is_denied
+
+    # Incluir solo vars STACKY_* que no sean sensibles (is_denied también protege PATH, etc.)
+    safe_env: list[tuple[str, str]] = [
+        (k, v)
+        for k, v in sorted(env.items())
+        if k.upper().startswith("STACKY_") and not is_denied(k)
+    ]
+
+    lines: list[str] = [
+        "# Stacky repro script — codex_cli_runner (H7.2)",
+        "# Ejecutá este script para reproducir la ejecución localmente.",
+        "",
+    ]
+
+    if safe_env:
+        lines.append("# Variables de entorno no sensibles")
+        for k, v in safe_env:
+            # Escaping mínimo para PowerShell: las comillas simples en el valor se duplican
+            safe_v = v.replace("'", "''")
+            lines.append(f"$env:{k} = '{safe_v}'")
+        lines.append("")
+
+    # Comando como invocación PowerShell
+    ps_cmd = " ".join(f'"{part}"' if " " in part else part for part in cmd)
+    lines.append("# Comando")
+    lines.append(ps_cmd)
+    lines.append("")
+
+    script_path = Path(run_dir) / "repro.ps1"
+    script_path.write_text("\n".join(lines), encoding="utf-8")

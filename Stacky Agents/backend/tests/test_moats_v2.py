@@ -79,21 +79,38 @@ def test_fa04_router_upgrades_for_xl_complexity():
         agent_type="technical",
         blocks=[{"kind": "auto", "title": "x", "content": "x" * 200}],
         fingerprint_complexity="XL",
+        backend="anthropic",
     )
-    assert d.model == "claude-opus-4-7"
+    # §5.2 — XL escala a sonnet, NUNCA opus (cap duro).
+    assert d.model == "claude-sonnet-4-6"
     assert "XL" in d.reason
 
 
-def test_fa04_router_override_takes_precedence():
+def test_fa04_router_override_opus_is_clamped():
     from services import llm_router
 
+    # §5.2 — override del operador a opus se respeta como intención de forzar,
+    # pero clampeado al tope permitido (sonnet-4-6).
     d = llm_router.decide(
         agent_type="qa",
         blocks=[{"kind": "auto", "title": "x", "content": "x"}],
         override="claude-opus-4-7",
         backend="anthropic",
     )
-    assert d.model == "claude-opus-4-7"
+    assert d.model == "claude-sonnet-4-6"
+    assert "clamp" in d.reason.lower()
+
+
+def test_fa04_router_override_allowed_takes_precedence():
+    from services import llm_router
+
+    d = llm_router.decide(
+        agent_type="qa",
+        blocks=[{"kind": "auto", "title": "x", "content": "x"}],
+        override="claude-sonnet-4-6",
+        backend="anthropic",
+    )
+    assert d.model == "claude-sonnet-4-6"
     assert d.reason == "user-override"
 
 

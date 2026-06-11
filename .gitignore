@@ -45,6 +45,9 @@ Stacky Agents/backend/Stacky/*
 !Stacky Agents/backend/Stacky/agents/**
 !Stacky Agents/backend/Stacky/agents/*.agent.md
 Stacky Agents/backend/Stacky/agents/manifest.json
+# Skills: carpeta versionada (fixture de ejemplo para tests + documento de referencia)
+!Stacky Agents/backend/Stacky/skills/
+!Stacky Agents/backend/Stacky/skills/**
 
 # VS Code
 .vscode/

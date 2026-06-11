@@ -31,6 +31,7 @@ from .projects import bp as projects_bp
 from .qa_browser import bp as qa_browser_bp
 from .qa_uat import bp as qa_uat_bp
 from .similarity import bp as similarity_bp
+from .harness_flags import bp as harness_flags_bp
 from .metrics import bp as metrics_bp
 from .tickets import bp as tickets_bp
 from .ui_sections import bp as ui_sections_bp
@@ -61,6 +62,7 @@ api_bp.register_blueprint(preferences_bp)
 api_bp.register_blueprint(projects_bp)
 api_bp.register_blueprint(qa_browser_bp)
 api_bp.register_blueprint(qa_uat_bp)
+api_bp.register_blueprint(harness_flags_bp)
 api_bp.register_blueprint(metrics_bp)
 api_bp.register_blueprint(diag_bp)
 api_bp.register_blueprint(docs_bp)

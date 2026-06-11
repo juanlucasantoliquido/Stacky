@@ -1,0 +1,9 @@
+{
+  "name": "qa_fail_verdict",
+  "agent_type": "qa",
+  "output": "## Verdict\n\nVERDICT: FAIL\n\nLa ejecución de la suite de regresión detectó dos defectos bloqueantes en el flujo de facturación: el cálculo de IVA aplica una alícuota incorrecta para clientes exentos, y el comprobante generado no incluye el CAE. Ambos casos están cubiertos por los criterios de aceptación y deben corregirse antes de avanzar. Los flujos de alta de cliente pasaron correctamente. Se adjunta el detalle de pasos de reproducción para cada defecto.",
+  "expect": {
+    "min_score": 90,
+    "must_pass": true
+  }
+}

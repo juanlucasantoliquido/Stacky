@@ -1,0 +1,9 @@
+{
+  "name": "developer_happy_path",
+  "agent_type": "developer",
+  "output": "## Trazabilidad\n\nImplementación del ticket ADO-1234 completada el 2026-06-10. Se cubren todos los\ncriterios de aceptación definidos en el ticket. La rama feature/ADO-1234-alta-cliente\nfue mergeada a develop tras revisión de pares. El ticket fue comentado con el resumen\nde cambios y el ADO-1234 fue actualizado con el estado de completado el 2026-06-10.\nLa implementación sigue los lineamientos de arquitectura del módulo de onboarding.\n\n## Tests Unitarios\n\nTU-001: test_crear_cliente_valido - PASS\nTU-002: test_dni_invalido_rechazado - PASS\nTU-003: test_email_duplicado_rechazado - PASS\nTU-004: test_cuit_formato_invalido - PASS\nTU-005: test_alta_concurrente_detecta_duplicado - PASS\nTU-006: test_rollback_ante_error_de_bd - PASS\nTodos los tests nuevos fueron ejecutados contra la DB de test y pasan en CI.\nLa cobertura del módulo aumentó de 78% a 87% con los nuevos tests unitarios.\n\n## Verificaciones de BD\n\nSe verificó la integridad referencial en la tabla clientes. Los índices únicos\nsobre email y DNI se validan correctamente. Migraciones ejecutadas sin conflictos.\nSe comprobó que el rollback funciona ante errores de validación. La migración\n0045_add_cliente_validation_indexes fue aplicada en el ambiente de test sin issues.\nLos datos de prueba usados en los tests no persisten entre ejecuciones gracias\nal mecanismo de fixture de transacción con rollback automático.\n\n## Compilación\n\nBuild exitoso. Sin warnings. Cobertura de tests: 87% (objetivo: 80%). Linting OK\ncon las reglas de proyecto configuradas en pylint y flake8. Análisis estático sin\nhallazgos críticos según SonarQube. Artefactos generados y publicados en el\nrepositorio de artefactos de CI. Tiempo de build: 2m 34s. Docker image generada\ny taggeada con el hash del commit para trazabilidad de despliegue.",
+  "expect": {
+    "min_score": 97,
+    "must_pass": true
+  }
+}

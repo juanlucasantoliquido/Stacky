@@ -9,6 +9,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { LocalDiagnostics, type LocalDiagnosticCheck } from "../api/endpoints";
+import HarnessHealthCard from "../components/HarnessHealthCard";
 import styles from "./DiagnosticsPage.module.css";
 
 const STATUS_LABEL = {
@@ -192,6 +193,9 @@ export default function DiagnosticsPage() {
           </div>
         </section>
       )}
+
+      {/* H8 — KPIs de valor agregado del arnés */}
+      <HarnessHealthCard />
     </main>
   );
 }

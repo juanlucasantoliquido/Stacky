@@ -1,0 +1,9 @@
+{
+  "name": "business_acceptance_criteria",
+  "agent_type": "business",
+  "output": "## RF-003: Módulo de Descuentos por Volumen\n\nEl sistema debe permitir configurar descuentos automáticos basados en el volumen\nde compra mensual del cliente. Los descuentos se aplican en el momento de emitir\nla factura y deben ser auditables con registro del porcentaje aplicado y el criterio.\n\nLos criterios de aceptación son: configuración de rangos de volumen y porcentajes\npor parte del administrador, aplicación automática en cada facturación, reporte\nmensual de descuentos otorgados por cliente, y trazabilidad completa en el historial.\n\n## RF-004: Reporte Ejecutivo de Facturación\n\nEl sistema debe generar un reporte ejecutivo mensual con las métricas clave de\nfacturación: total facturado, promedio por cliente, comparativo contra mes anterior,\nclientes con mayor volumen, y alertas por clientes con comportamiento inusual.\nEl reporte debe exportarse a Excel y PDF con el branding corporativo de la empresa.",
+  "expect": {
+    "min_score": 99,
+    "must_pass": true
+  }
+}

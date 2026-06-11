@@ -40,6 +40,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -250,6 +251,34 @@ def send_input(execution_id: int, text: str, *, user: str | None = None) -> dict
     return {"ok": True, "mode": "stdin", "execution_id": execution_id}
 
 
+def _send_system_message(execution_id: int, text: str) -> bool:
+    """Escribe un mensaje originado por Stacky (no el operador) al stdin vivo.
+
+    Lo usa el loop de autocorrección (F1.3). Retorna False si el proceso ya no
+    acepta stdin — nunca lanza (la autocorrección no debe tumbar el run).
+    """
+    with _PROCESSES_LOCK:
+        proc = _PROCESSES.get(execution_id)
+    if proc is None or proc.poll() is not None:
+        return False
+    if proc.stdin is None or proc.stdin.closed:
+        return False
+    lock = _STDIN_LOCKS.setdefault(execution_id, threading.Lock())
+    with lock:
+        try:
+            proc.stdin.write(_user_message_line(text))
+            proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            return False
+    _push(
+        execution_id,
+        "info",
+        f"stacky → claude (autocorrección): {text[:2000]}",
+        group="operator",
+    )
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Thread de background
 # ---------------------------------------------------------------------------
@@ -270,6 +299,7 @@ def _run_in_background(
     output_file: Path | None = None
     prompt_file: Path | None = None
     run_dir: Path | None = None
+    hooks_settings_file: Path | None = None
     stdout_tail: list[str] = []
     return_code: int | None = None
     heartbeat_stop = threading.Event()
@@ -277,6 +307,7 @@ def _run_in_background(
     agent_type: str | None = None
     ticket_id: int | None = None
     mask_map: dict[str, str] = {}
+    knowledge_meta: dict[str, Any] = {}
 
     try:
         with session_scope() as session:
@@ -316,7 +347,7 @@ def _run_in_background(
                 f"agent prompt not found on disk: {selected_path}"
             )
 
-        cwd = _resolve_cwd(workspace_root)
+        cwd, _cwd_fallback = _resolve_cwd(workspace_root)
         run_dir = Path(__file__).resolve().parents[1] / "data" / "claude_code_runs" / str(execution_id)
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -366,10 +397,56 @@ def _run_in_background(
         #                       también sin copiar el contenido del .agent.md.
         system_prompt_mode = (config.CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE or "append")
         system_prompt_file: Path | None = None
+        project_name = project_ctx.stacky_project_name if project_ctx else None
         if system_prompt_mode == "append":
+            knowledge_section, knowledge_meta = _build_project_knowledge(
+                agent_type=agent_type or "",
+                project_name=project_name,
+                context_text=rich_message,
+                log=log,
+            )
+            # H4.3 — Stacky Skills injection (ANTES de _STACKY_RULES).
+            skills_block = ""
+            try:
+                from services.cli_feature_flags import skills_enabled  # noqa: PLC0415
+                from services import stacky_skills  # noqa: PLC0415
+                if skills_enabled(project_name):
+                    _mcp_active = getattr(config, "CLAUDE_CODE_CLI_MCP_ENABLED", False) and bool(
+                        project_name
+                    )
+                    matched = stacky_skills.select_for_run(
+                        agent_type=agent_type or "",
+                        project=project_name,
+                        context_text=rich_message,
+                        max_skills=3,
+                    )
+                    if matched:
+                        index_text = stacky_skills.render_index(matched)
+                        if _mcp_active:
+                            # Solo índice + instrucción de pedir el cuerpo via tool.
+                            skills_block = (
+                                "## Stacky Skills disponibles\n\n"
+                                + index_text
+                                + "\n\nPara obtener el procedimiento completo de una skill "
+                                "usá la tool `stacky_get_skill` con el nombre exacto."
+                            )
+                        else:
+                            # Cuerpo del top-1 skill con cap.
+                            top = matched[0]
+                            skills_block = (
+                                "## Stacky Skills disponibles\n\n"
+                                + index_text
+                                + f"\n\n### Skill activa: {top.name}\n\n"
+                                + stacky_skills.cap_body(top.body)
+                            )
+                        log("info", f"H4: skills inyectadas ({len(matched)})", group="operator")
+            except Exception as exc:  # noqa: BLE001
+                log("warn", f"H4: no se pudo inyectar skills: {exc}")
             system_prompt_text = _build_system_prompt(
                 selected_agent,
                 invocation_block=invocation_block,
+                project_knowledge=knowledge_section,
+                skills_section=skills_block,
             )
             system_prompt_file = run_dir / "system_prompt.md"
             system_prompt_file.write_text(system_prompt_text, encoding="utf-8")
@@ -400,9 +477,98 @@ def _run_in_background(
             )
         prompt_file.write_text(prompt, encoding="utf-8")
 
+        # F1.4 — settings.json efímero con hook PostToolUse de validación de
+        # artifacts. Solo hooks; no toca permisos (decisión §5.3). Flag OFF default.
+        if config.CLAUDE_CODE_CLI_HOOKS_ENABLED:
+            try:
+                from services import claude_cli_hooks
+
+                hooks_settings_file = claude_cli_hooks.write_run_settings(
+                    run_dir, port=config.PORT
+                )
+                log(
+                    "info",
+                    "hook de validación de artifacts generado (--settings efímero, F1.4)",
+                )
+            except Exception as exc:  # noqa: BLE001 — el hook nunca bloquea el run
+                log("warn", f"no se pudo generar el settings.json de hooks: {exc}")
+                hooks_settings_file = None
+
+        # F2.1 — Stacky MCP server (--mcp-config). Por proyecto, OFF default.
+        mcp_config_file: Path | None = None
+        try:
+            from services import stacky_mcp
+
+            mcp_config_file = stacky_mcp.maybe_write_mcp_config(
+                run_dir,
+                project_name=project_name,
+                ticket_id=ticket_id,
+                ado_id=t_ado_id,
+                execution_id=execution_id,
+                port=config.PORT,
+            )
+            if mcp_config_file is not None:
+                log("info", "Stacky MCP server inyectado (--mcp-config, F2.1)")
+        except Exception as exc:  # noqa: BLE001 — el MCP nunca bloquea el run
+            log("warn", f"no se pudo generar el mcp-config (continuando sin MCP): {exc}")
+            mcp_config_file = None
+
+        # F2.3 — re-run con --resume + delta prompt (por proyecto, OFF default).
+        resume_session_id, delta_prefix = _resolve_resume(
+            execution_id=execution_id,
+            ticket_id=ticket_id,
+            agent_type=agent_type,
+            project_name=project_name,
+            current_blocks=enriched_blocks,
+            log=log,
+        )
+        if delta_prefix:
+            prompt = delta_prefix + "\n\n" + prompt
+
+        # F3.2 / §5.2 — routing de modelo OBLIGATORIO también en el CLI.
+        # El runtime CLI corre SIEMPRE modelos Claude, así que routeamos con
+        # backend="anthropic" sin importar LLM_BACKEND (que es del path copilot).
+        # decide() aplica el cap duro (clamp_model): jamás opus/fable, ni por override.
+        from services import llm_router
+
+        routed_model = model_override or config.CLAUDE_CODE_CLI_MODEL
+        try:
+            decision = llm_router.decide(
+                agent_type=agent_type or "",
+                blocks=enriched_blocks,
+                override=model_override,
+                backend="anthropic",
+                project_name=project_name,
+            )
+            routed_model = decision.model
+            log("info", f"router → {decision.model} ({decision.reason})")
+        except Exception as exc:  # noqa: BLE001 — el routing nunca bloquea el run
+            # Fallback: cap duro igual aplicado sobre el modelo estático/override.
+            routed_model = llm_router.clamp_model(routed_model)
+            log("warn", f"router falló, usando modelo {routed_model}: {exc}")
+
+        # H3.3 — Egress check antes del spawn (STACKY_CLI_EGRESS_ENABLED, OFF default).
+        egress_decision = _check_cli_egress(
+            prompt=prompt,
+            project=project_name,
+            model=routed_model or "",
+        )
+        if egress_decision is not None and not egress_decision.allowed:
+            reason = egress_decision.reason
+            log("error", f"egress bloqueado antes de spawn claude: {reason}")
+            with session_scope() as s:
+                row = s.query(AgentExecution).filter(AgentExecution.id == execution_id).first()
+                if row:
+                    row.status = "error"
+                    row.output = f"[egress] run bloqueado: {reason}"
+            return
+
         cmd = _build_command(
-            model_override=model_override,
+            model_override=routed_model,
             system_prompt_file=system_prompt_file,
+            settings_file=hooks_settings_file,
+            mcp_config_file=mcp_config_file,
+            resume_session_id=resume_session_id,
         )
         log("info", f"claude code cli cwd={cwd}")
         log("info", "claude code cli command: " + _display_command(cmd))
@@ -432,9 +598,23 @@ def _run_in_background(
             creationflags=creationflags,
             env=build_agent_env(extra={"STACKY_EXECUTION_ID": str(execution_id)}),
         )
+        spawn_epoch = time.time()
         log("info", f"claude code cli process started pid={proc.pid}")
         with _PROCESSES_LOCK:
             _PROCESSES[execution_id] = proc
+
+        # F1.2 (sub-ítem §5.1) — repro.ps1: comando exacto + env para reproducir
+        # el run a mano al debuggear. Best-effort, nunca bloquea el run.
+        try:
+            _write_repro_script(
+                run_dir,
+                cmd=cmd,
+                cwd=cwd,
+                execution_id=execution_id,
+                initial_message=prompt,
+            )
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] repro.ps1 write failed", execution_id, exc_info=True)
 
         # Enviar el prompt inicial como primer mensaje de usuario (stream-json).
         # NO cerramos stdin: queda abierto para que el operador responda desde la
@@ -473,10 +653,53 @@ def _run_in_background(
         # Acumulador del output final extraído del stream JSON
         final_output: list[str] = []
 
+        # F1.2 — telemetría nativa del stream (session_id, usage, costo, turnos)
+        stream_telemetry: dict[str, Any] = {}
+
+        # F1.3 — loop de autocorrección sobre stdin (flag OFF default).
+        autocorrect = None
+        if config.CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED and t_ado_id:
+            from services.cli_autocorrect import AutocorrectLoop
+
+            autocorrect = AutocorrectLoop(
+                ado_id=int(t_ado_id),
+                max_retries=config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES,
+                send=lambda text: _send_system_message(execution_id, text),
+                log=log,
+                since_epoch=spawn_epoch,
+            )
+            log("info", "autocorrección de artifacts habilitada (F1.3)")
+
+        # H5 — Runaway guard: límite de turnos y costo por run.
+        from harness.runaway_guard import RunLimits, RunawayGuard
+        _runaway_guard = RunawayGuard(
+            RunLimits(
+                max_turns=config.STACKY_RUNAWAY_MAX_TURNS,
+                max_cost_usd=config.STACKY_RUNAWAY_MAX_COST_USD,
+            )
+        )
+        _runaway_triggered: list[str] = []  # [0] = razón si se disparó
+
+        def _on_stream_event(event: dict) -> None:
+            _capture_result_telemetry(stream_telemetry, event)
+            # Fin de turno = evento `result`: validar artifacts y, si están
+            # inválidos, pedir corrección por el stdin todavía abierto.
+            if autocorrect is not None and event.get("type") == "result":
+                autocorrect.on_turn_end()
+            # H5 — chequear runaway en cada evento con datos de telemetría.
+            if not _runaway_triggered:
+                reason = _runaway_guard.observe(
+                    num_turns=stream_telemetry.get("num_turns"),
+                    cost_usd=stream_telemetry.get("total_cost_usd"),
+                )
+                if reason:
+                    _runaway_triggered.append(reason)
+
         readers = [
             threading.Thread(
                 target=_read_stream,
                 args=(execution_id, proc.stdout, "info", "claude-code", stdout_tail, final_output),
+                kwargs={"on_event": _on_stream_event},
                 daemon=True,
             ),
             threading.Thread(
@@ -493,11 +716,44 @@ def _run_in_background(
         # latiendo en su propio thread, así que el reaper no lo marca colgado.
         import time as _time
         session_deadline = (_time.monotonic() + session_timeout) if session_timeout else None
+        _runaway_grace_deadline: float | None = None
         while True:
             try:
                 return_code = proc.wait(timeout=5)
                 break
             except subprocess.TimeoutExpired:
+                # H5 — Runaway: si el guard disparó, enviar señal de cierre
+                # y esperar gracia de 60s antes de terminate.
+                if _runaway_triggered and _runaway_grace_deadline is None:
+                    reason = _runaway_triggered[0]
+                    log("warn", f"claude code cli runaway detectado — {reason}")
+                    _RUNAWAY_CLOSE_MSG = (
+                        "El operador ha solicitado detener el run: has alcanzado "
+                        "el límite de turnos o costo configurado. "
+                        "Por favor finaliza la tarea actual y entrega un resumen "
+                        "de lo completado hasta ahora."
+                    )
+                    try:
+                        if proc.stdin and not proc.stdin.closed:
+                            proc.stdin.write(_user_message_line(_RUNAWAY_CLOSE_MSG))
+                            proc.stdin.flush()
+                    except Exception:
+                        pass
+                    _runaway_grace_deadline = _time.monotonic() + 60.0
+                if _runaway_grace_deadline is not None and _time.monotonic() > _runaway_grace_deadline:
+                    log("warn", "claude code cli runaway: gracia expirada — terminando")
+                    try:
+                        if proc.stdin and not proc.stdin.closed:
+                            proc.stdin.close()
+                    except Exception:
+                        pass
+                    proc.terminate()
+                    try:
+                        return_code = proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        return_code = proc.wait()
+                    break
                 if session_deadline is not None and _time.monotonic() > session_deadline:
                     log("warn", f"claude code cli cap de sesión alcanzado ({session_timeout}s) — terminando")
                     try:
@@ -543,7 +799,7 @@ def _run_in_background(
             "vscode_agent_filename": vscode_agent_filename,
             "workspace_root": str(cwd),
             "claude_code_cli_bin": cmd[0],
-            "claude_code_model": model_override or config.CLAUDE_CODE_CLI_MODEL or None,
+            "claude_code_model": routed_model or model_override or config.CLAUDE_CODE_CLI_MODEL or None,
             "exit_code": return_code,
             "duration_ms": duration_ms,
             "output_file": str(output_file),
@@ -553,13 +809,43 @@ def _run_in_background(
             "system_prompt_file": str(system_prompt_file) if system_prompt_file else None,
             "agent_name": selected_agent.name,
             "pii_masked": bool(mask_map),
+            "hooks_enabled": hooks_settings_file is not None,
             **invocation_meta,
         }
-
-        if return_code == 0:
+        # H0.3 — flag de fallback de cwd (workspace_root vacío/None).
+        if _cwd_fallback:
+            metadata["cwd_fallback"] = True
+        # F2.2 — trazabilidad del conocimiento del proyecto inyectado.
+        if knowledge_meta:
+            metadata["project_knowledge"] = knowledge_meta
+        # F2.1 / F2.3 — trazabilidad de MCP y resume.
+        metadata["mcp_enabled"] = mcp_config_file is not None
+        if resume_session_id:
+            metadata["resumed_session_id"] = resume_session_id
+        # F1.2 — telemetría nativa persistida en metadata. session_id va
+        # top-level: habilita F2.3 (--resume) sin re-parsear nada.
+        if stream_telemetry:
+            session_id = stream_telemetry.get("session_id")
+            if session_id:
+                metadata["session_id"] = session_id
+            metadata["claude_telemetry"] = {
+                k: v for k, v in stream_telemetry.items() if k != "session_id"
+            }
+        # F1.3 — trazabilidad del loop de autocorrección.
+        if autocorrect is not None:
+            metadata["autocorrect"] = autocorrect.summary()
+        # H5 — trazabilidad del runaway guard.
+        if _runaway_triggered:
+            metadata["runaway"] = {
+                "reason": _runaway_triggered[0],
+                "turns": stream_telemetry.get("num_turns"),
+                "cost": stream_telemetry.get("total_cost_usd"),
+            }
+            # El run terminó por runaway: siempre needs_review.
+            log("warn", f"claude code cli runaway — degradando a needs_review: {_runaway_triggered[0]}")
             _mark_terminal(
                 execution_id,
-                status="completed",
+                status="needs_review",
                 output=output,
                 metadata=metadata,
             )
@@ -567,7 +853,7 @@ def _run_in_background(
                 run_dir,
                 run_id=execution_id,
                 agent_type=agent_type,
-                status="completed",
+                status="needs_review",
                 exit_code=return_code,
                 output_file=output_file,
                 prompt_file=prompt_file,
@@ -575,23 +861,66 @@ def _run_in_background(
             append_event(
                 run_dir,
                 execution_id=execution_id,
-                event_type="completed",
-                payload={"exit_code": return_code, "duration_ms": duration_ms},
+                event_type="needs_review",
+                payload={"exit_code": return_code, "duration_ms": duration_ms,
+                         "runaway": _runaway_triggered[0]},
             )
-            log("info", f"claude code cli completed ({duration_ms}ms)")
-            # Hook A (Fase B): captura DRAFT post-run, paridad con github_copilot.
-            try:
-                from services import post_run_memory
-
-                memory_id = post_run_memory.capture_on_completion(execution_id)
-                if memory_id:
-                    log("info", f"stacky-memory draft capturado: {memory_id}")
-            except Exception as exc:  # noqa: BLE001
-                log("warn", f"post_run_memory completion hook falló: {exc}")
             ticket_status.on_execution_end(
                 ticket_id=ticket_id,
                 execution_id=execution_id,
-                final_status="completed",
+                final_status="needs_review",
+                agent_type=agent_type,
+            )
+            return
+
+        if return_code == 0:
+            # F1.1 — Paridad de calidad con el path copilot: contract validator
+            # + confidence ANTES de marcar terminal. Con el gate habilitado,
+            # errores duros de contrato degradan a needs_review (estado ya
+            # soportado por agent_completion.py), no completed.
+            cv_result, conf, final_status = _evaluate_output_quality(
+                agent_type or "", output or "", log=log
+            )
+            metadata["confidence"] = conf.to_dict()
+            metadata["contract_score"] = cv_result.score
+            _mark_terminal(
+                execution_id,
+                status=final_status,
+                output=output,
+                metadata=metadata,
+                contract_result=cv_result.to_dict(),
+            )
+            _safe_write_manifest(
+                run_dir,
+                run_id=execution_id,
+                agent_type=agent_type,
+                status=final_status,
+                exit_code=return_code,
+                output_file=output_file,
+                prompt_file=prompt_file,
+            )
+            append_event(
+                run_dir,
+                execution_id=execution_id,
+                event_type=final_status,
+                payload={"exit_code": return_code, "duration_ms": duration_ms},
+            )
+            log("info", f"claude code cli {final_status} ({duration_ms}ms)")
+            # Hook A (Fase B): captura DRAFT post-run, paridad con github_copilot.
+            # Solo en completed: un run degradado por contrato no es buen draft.
+            if final_status == "completed":
+                try:
+                    from services import post_run_memory
+
+                    memory_id = post_run_memory.capture_on_completion(execution_id)
+                    if memory_id:
+                        log("info", f"stacky-memory draft capturado: {memory_id}")
+                except Exception as exc:  # noqa: BLE001
+                    log("warn", f"post_run_memory completion hook falló: {exc}")
+            ticket_status.on_execution_end(
+                ticket_id=ticket_id,
+                execution_id=execution_id,
+                final_status=final_status,
                 agent_type=agent_type,
             )
             stacky_logger.agent_event(
@@ -604,6 +933,12 @@ def _run_in_background(
                     "runtime": RUNTIME,
                     "output_chars": len(output or ""),
                     "exit_code": return_code,
+                    "status": final_status,
+                    "contract_passed": cv_result.passed,
+                    "contract_score": cv_result.score,
+                    "confidence": conf.overall,
+                    "total_cost_usd": stream_telemetry.get("total_cost_usd"),
+                    "num_turns": stream_telemetry.get("num_turns"),
                 },
                 tags=["agent", RUNTIME],
             )
@@ -693,7 +1028,46 @@ def _run_in_background(
         except Exception:
             logger.exception("could not mark ticket status after claude code cli failure")
     finally:
+        # F1.4 — limpiar los archivos efímeros del hook (Stacky genera y limpia).
+        if hooks_settings_file is not None and run_dir is not None:
+            try:
+                from services import claude_cli_hooks
+
+                claude_cli_hooks.cleanup_run_settings(run_dir)
+            except Exception:  # noqa: BLE001
+                logger.debug("[exec=%s] hooks cleanup failed", execution_id, exc_info=True)
         log_streamer.close(execution_id)
+
+
+# ---------------------------------------------------------------------------
+# H3.3 — Egress check para CLI
+# ---------------------------------------------------------------------------
+
+def _check_cli_egress(
+    *,
+    prompt: str,
+    project: str | None,
+    model: str,
+):
+    """Verifica egress policies sobre el prompt final ANTES del spawn.
+
+    Devuelve `EgressDecision` si STACKY_CLI_EGRESS_ENABLED=true, o None si está
+    deshabilitado (default). Si bloquea, el llamador debe abortar el spawn.
+
+    Nunca lanza: cualquier error interno → None (best-effort, no bloquea el run).
+    """
+    import os as _os  # noqa: PLC0415 — evitar shadowing del módulo os del módulo
+    if _os.environ.get("STACKY_CLI_EGRESS_ENABLED", "false").lower() not in {"1", "true", "yes"}:
+        return None
+    try:
+        from services import egress_policies  # noqa: PLC0415
+        return egress_policies.check(project=project, model=model, context_text=prompt)
+    except Exception:  # noqa: BLE001
+        import logging as _logging  # noqa: PLC0415
+        _logging.getLogger("stacky.cli_runner").debug(
+            "_check_cli_egress: error inesperado, saltando check", exc_info=True
+        )
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -704,6 +1078,9 @@ def _build_command(
     *,
     model_override: str | None,
     system_prompt_file: Path | None = None,
+    settings_file: Path | None = None,
+    mcp_config_file: Path | None = None,
+    resume_session_id: str | None = None,
 ) -> list[str]:
     """Construye el comando CLI para Claude Code en modo interactivo (streaming).
 
@@ -737,6 +1114,21 @@ def _build_command(
     # Fase C — referenciar la persona del agente sin copiar su prompt.
     if system_prompt_file is not None:
         cmd.extend(["--append-system-prompt-file", str(system_prompt_file)])
+
+    # F1.4 — settings.json efímero generado por Stacky (solo hooks; no toca
+    # permisos, --dangerously-skip-permissions sigue mandando — §5.3).
+    if settings_file is not None:
+        cmd.extend(["--settings", str(settings_file)])
+
+    # F2.1 — Stacky MCP server inyectado vía --mcp-config (stdio).
+    if mcp_config_file is not None:
+        cmd.extend(["--mcp-config", str(mcp_config_file)])
+
+    # F2.3 — continuación de sesión: reusa el contexto cacheado de la sesión
+    # previa (más barato y con memoria de lo ya hecho). El delta prompt se
+    # envía como primer mensaje de usuario (ver _run_in_background).
+    if resume_session_id:
+        cmd.extend(["--resume", str(resume_session_id)])
 
     # Permisos: en modo -p no hay forma de aprobar tool calls interactivamente,
     # así que el agente queda bloqueado salvo que se configure un modo permisivo.
@@ -812,30 +1204,98 @@ def _display_command(cmd: list[str]) -> str:
     return " ".join(safe)
 
 
+def _write_repro_script(
+    run_dir: Path,
+    *,
+    cmd: list[str],
+    cwd: Path,
+    execution_id: int,
+    initial_message: str,
+) -> Path:
+    """F1.2 (decisión §5.1) — genera `repro.ps1` en el run_dir.
+
+    Script PowerShell con el comando exacto + env mínimo para que el operador
+    reproduzca el run a mano al debuggear. El primer mensaje de usuario
+    (stream-json) se materializa en `first_message.jsonl` y se pipea por stdin,
+    igual que hace el runner.
+    """
+    first_message = run_dir / "first_message.jsonl"
+    first_message.write_text(_user_message_line(initial_message), encoding="utf-8")
+
+    quoted = " ".join(
+        f'"{part}"' if any(ch.isspace() for ch in part) or part.endswith((".md", ".json")) else part
+        for part in cmd
+    )
+    script = f"""# repro.ps1 — generado por Stacky Agents (execution_id={execution_id})
+# Reproduce este run de Claude Code CLI a mano. El prompt inicial va por stdin
+# en formato stream-json (first_message.jsonl). Sumá mensajes escribiendo más
+# líneas JSONL en stdin si querés continuar la conversación.
+$env:STACKY_EXECUTION_ID = "{execution_id}"
+Set-Location "{cwd}"
+Get-Content -Raw "{first_message}" | & {quoted}
+"""
+    repro = run_dir / "repro.ps1"
+    repro.write_text(script, encoding="utf-8")
+    return repro
+
+
+def _evaluate_output_quality(agent_type: str, output: str, *, log=None):
+    """F1.1 — Paridad de calidad con el path copilot (agent_runner.py:686-757).
+
+    Corre contract_validator + confidence sobre el output y decide el status
+    terminal: con CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED=true, errores duros de
+    contrato degradan a `needs_review`; si no, queda `completed` (la validación
+    y la persistencia corren siempre).
+
+    Retorna (cv_result, confidence_result, final_status).
+    """
+    import contract_validator
+    from services import confidence
+
+    _log = log or (lambda *a, **k: None)
+
+    _log("info", "validando contrato del output…")
+    cv_result = contract_validator.validate(agent_type, output or "")
+    _log(
+        "info" if cv_result.passed else "warn",
+        f"contrato {'OK' if cv_result.passed else 'WARNINGS'} — score {cv_result.score}/100"
+        + (f" ({len(cv_result.failures)} errores)" if cv_result.failures else ""),
+    )
+
+    conf = confidence.score(output or "")
+    _log(
+        "info" if conf.overall >= 70 else "warn",
+        f"confidence {conf.overall}/100"
+        + (f" (señales: {len(conf.signals)})" if conf.signals else ""),
+    )
+
+    final_status = "completed"
+    if config.CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED and cv_result.failures:
+        final_status = "needs_review"
+        _log(
+            "warn",
+            f"contrato con {len(cv_result.failures)} error(es) duro(s) → needs_review "
+            "(CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED=true)",
+        )
+    return cv_result, conf, final_status
+
+
 # ---------------------------------------------------------------------------
 # Construcción del prompt
 # ---------------------------------------------------------------------------
 
-# Reglas duras de Stacky: definen *cómo* actúa el agente (no *qué* hacer). Van
-# al canal de system prompt junto con la persona del .agent.md.
-_STACKY_RULES = """## Reglas de ejecución (Stacky Agents)
+# H3.1 — Texto canónico de reglas delegado a harness/run_contract.py.
+# Ya no se mantiene texto local; los runners consumen rules_text() en call-time.
+# Compatibilidad: _STACKY_RULES se mantiene como alias lazy para código no
+# migrado (legacy prompt monolítico _build_claude_code_prompt).
+def _get_stacky_rules(*, mcp_enabled: bool = False) -> str:
+    from harness.run_contract import rules_text  # noqa: PLC0415
+    return rules_text(runtime="claude", mcp_enabled=mcp_enabled)
 
-- Trabajá en el workspace configurado para el proyecto.
-- Mantené el comportamiento esperado por el agente que estás adoptando.
-- Si editás archivos, limitá el cambio al alcance del ticket y dejá evidencia
-  clara en tu respuesta final.
-- Reportá comandos relevantes, archivos tocados y cualquier bloqueo real.
-- Regla absoluta: no toques Azure DevOps. No publiques comentarios, no crees
-  ni actualices work items, no cambies estados, no ejecutes APIs/CLI/scripts de
-  ADO y no solicites credenciales ADO. Stacky Agents es el único autorizado a
-  escribir en ADO.
-- Si el resultado debe ser un comentario ADO, generá el archivo
-  `Agentes/outputs/<ADO_ID>/comment.html` y opcionalmente `comment.meta.json`.
-  Stacky lo validará y publicará.
-- Si el resultado debe ser una Task hija para un Epic, generá
-  `Agentes/outputs/epic-<ADO_ID>/<RF_SLUG>/pending-task.json` y los archivos
-  referenciados, como `plan-de-pruebas.md`. Stacky creará la Task desde la UI y
-  marcará el JSON como consumido."""
+
+# Alias de compatibilidad para _build_claude_code_prompt (modo rollback).
+# No se usa en _build_system_prompt (call-time lookup).
+_STACKY_RULES = _get_stacky_rules()
 
 
 def _build_agent_inventory(all_agents: list[vscode_agents.VsCodeAgent]) -> str:
@@ -850,17 +1310,93 @@ def _build_agent_inventory(all_agents: list[vscode_agents.VsCodeAgent]) -> str:
     return "\n".join(inventory_lines) if inventory_lines else "- (no se encontraron agentes)"
 
 
+def _resolve_resume(
+    *,
+    execution_id: int,
+    ticket_id: int | None,
+    agent_type: str | None,
+    project_name: str | None,
+    current_blocks: list[dict],
+    log,
+) -> tuple[str | None, str | None]:
+    """F2.3 / H7.1 — Decide si continuar la sesión Claude previa con --resume + delta.
+
+    Delega en harness.resume.resolve (dueño único, parametrizado por runtime).
+    Mantiene la firma original para garantizar bit-identical con el runner claude.
+    Best-effort: cualquier fallo → (None, None). Nunca lanza.
+    """
+    try:
+        from harness.resume import resolve as _resume_resolve
+
+        session_ref, delta_prefix = _resume_resolve(
+            runtime=RUNTIME,
+            ticket_id=ticket_id,
+            agent_type=agent_type,
+            project=project_name,
+            current_blocks=current_blocks,
+            execution_id=execution_id,
+        )
+        if session_ref:
+            log(
+                "info",
+                f"re-run con --resume de sesión previa (F2.3/H7.1): session_id={session_ref[:12]}…",
+            )
+        return session_ref, delta_prefix
+    except Exception as exc:  # noqa: BLE001 — resume nunca tumba el run
+        log("warn", f"no se pudo resolver --resume (arranque en frío): {exc}")
+        return None, None
+
+
+def _build_project_knowledge(
+    *,
+    agent_type: str,
+    project_name: str | None,
+    context_text: str,
+    log,
+) -> tuple[str, dict]:
+    """F2.2 — Conocimiento del proyecto para el system prompt (por proyecto, OFF
+    default). Delega en cli_project_knowledge (dueño único, anti B6). Nunca lanza.
+    """
+    from services import cli_feature_flags
+
+    if not cli_feature_flags.project_knowledge_enabled(project_name):
+        return "", {}
+    try:
+        from services import cli_project_knowledge
+
+        return cli_project_knowledge.build_project_knowledge_section(
+            agent_type=agent_type,
+            project=project_name,
+            context_text=context_text,
+            log=log,
+        )
+    except Exception as exc:  # noqa: BLE001 — el conocimiento nunca bloquea el run
+        log("warn", f"no se pudo componer el conocimiento del proyecto (F2.2): {exc}")
+        return "", {"project_knowledge_error": str(exc)}
+
+
 def _build_system_prompt(
     selected_agent: vscode_agents.VsCodeAgent,
     *,
     invocation_block: str = "",
+    project_knowledge: str = "",
+    mcp_enabled: bool = False,
+    skills_section: str = "",
 ) -> str:
     """System prompt real para --append-system-prompt-file (Fase C).
 
     Declara dónde está el `.agent.md` seleccionado y las reglas duras de Stacky,
-    pero no copia el contenido del agente dentro del prompt.
+    pero no copia el contenido del agente dentro del prompt. Si F2.2 está activa
+    por proyecto, agrega el bloque de conocimiento del proyecto al final.
+
+    H3.1: las reglas se obtienen de harness.run_contract.rules_text en call-time.
+    H4.3: si skills_section está presente, se inyecta ANTES de _STACKY_RULES.
     """
+    from harness.run_contract import rules_text  # noqa: PLC0415
+    rules = rules_text(runtime="claude", mcp_enabled=mcp_enabled)
     invocation_section = f"{invocation_block}\n\n" if invocation_block else ""
+    knowledge_section = f"\n\n{project_knowledge.strip()}\n" if project_knowledge.strip() else ""
+    skills_block = f"\n\n{skills_section.strip()}\n" if skills_section.strip() else ""
     return f"""Stacky te lanzó desde Claude Code CLI para trabajar sobre un ticket y mantener
 trazabilidad en los logs del workbench. No se inyecta el contenido del `.agent.md`
 seleccionado en este system prompt: leelo desde la ruta indicada abajo y usá ese
@@ -868,7 +1404,7 @@ archivo como fuente de rol, criterio, tono, restricciones y forma de trabajo.
 
 {invocation_section}# Agente que estás adoptando: {selected_agent.name} ({selected_agent.filename})
 
-{_STACKY_RULES}
+{rules}{knowledge_section}{skills_block}
 """
 
 
@@ -946,12 +1482,16 @@ def _read_stream(
     group: str,
     tail: list[str],
     final_output: list[str] | None,
+    on_event: Any | None = None,
 ) -> None:
     """Lee stdout/stderr línea a línea y parsea el stream JSON de Claude Code.
 
     Claude Code con --output-format stream-json emite eventos JSONL.
     Los eventos del tipo 'assistant' con role='assistant' contienen el texto
     generado; los eventos 'result' tienen el output final consolidado.
+
+    `on_event(data: dict)` (F1.2/F1.3): callback opcional invocado con cada
+    evento JSON parseado — telemetría nativa + detección de fin de turno.
     """
     if stream is None:
         return
@@ -959,7 +1499,7 @@ def _read_stream(
         line = raw.rstrip("\r\n")
         if not line:
             continue
-        message, level, extracted_text = _parse_claude_code_line(line, default_level)
+        message, level, extracted_text, event = _parse_claude_code_line(line, default_level)
         _push(execution_id, level, message, group=group)
         tail.append(message)
         if len(tail) > 200:
@@ -967,12 +1507,51 @@ def _read_stream(
         # Acumular texto de output para extracción final
         if final_output is not None and extracted_text:
             final_output.append(extracted_text)
+        if on_event is not None and event is not None:
+            try:
+                on_event(event)
+            except Exception:  # noqa: BLE001 — el callback nunca corta el stream
+                logger.exception("[exec=%s] on_event callback failed", execution_id)
 
 
-def _parse_claude_code_line(line: str, default_level: str) -> tuple[str, str, str]:
+def _capture_result_telemetry(telemetry: dict, event: dict) -> None:
+    """F1.2 — Captura telemetría nativa del stream-json en un dict mutable.
+
+    `session_id` aparece en system/init y en result; usage/cost/turns solo en
+    el evento `result` final de cada turno (el último gana).
+    """
+    session_id = event.get("session_id")
+    if session_id:
+        telemetry["session_id"] = session_id
+    if event.get("type") != "result":
+        return
+    usage = event.get("usage")
+    if isinstance(usage, dict):
+        captured = {
+            key: usage.get(key)
+            for key in (
+                "input_tokens",
+                "output_tokens",
+                "cache_read_input_tokens",
+                "cache_creation_input_tokens",
+            )
+            if usage.get(key) is not None
+        }
+        if captured:
+            telemetry["usage"] = captured
+    for key in ("total_cost_usd", "num_turns", "is_error"):
+        if event.get(key) is not None:
+            telemetry[key] = event[key]
+
+
+def _parse_claude_code_line(
+    line: str, default_level: str
+) -> tuple[str, str, str, dict | None]:
     """Parsea una línea del stream JSON de Claude Code CLI.
 
-    Retorna (message_for_log, level, extracted_text_for_output).
+    Retorna (message_for_log, level, extracted_text_for_output, event_dict).
+    `event_dict` es el JSON parseado (None si la línea no era JSON-objeto) —
+    lo consumen la telemetría F1.2 y el loop de autocorrección F1.3.
 
     Estructura esperada del stream-json de Claude Code:
       {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "..."}]}}
@@ -984,10 +1563,10 @@ def _parse_claude_code_line(line: str, default_level: str) -> tuple[str, str, st
     try:
         data = json.loads(line)
     except json.JSONDecodeError:
-        return (line[:4000], default_level, "")
+        return (line[:4000], default_level, "", None)
 
     if not isinstance(data, dict):
-        return (str(data)[:4000], default_level, "")
+        return (str(data)[:4000], default_level, "", None)
 
     event_type = str(data.get("type") or "event")
     level = default_level
@@ -1004,8 +1583,9 @@ def _parse_claude_code_line(line: str, default_level: str) -> tuple[str, str, st
                 f"result({'error' if is_error else 'ok'}): {result_val.strip()[:3000]}",
                 level,
                 extracted_text,
+                data,
             )
-        return (f"result: {json.dumps(data, ensure_ascii=False)[:3500]}", level, "")
+        return (f"result: {json.dumps(data, ensure_ascii=False)[:3500]}", level, "", data)
 
     # Evento de mensaje del asistente (streaming de texto)
     if event_type == "assistant":
@@ -1021,34 +1601,34 @@ def _parse_claude_code_line(line: str, default_level: str) -> tuple[str, str, st
             if full_text:
                 extracted_text = full_text
                 short = full_text[:3000]
-                return (f"assistant: {short}", "info", extracted_text)
-        return (f"assistant: {json.dumps(data, ensure_ascii=False)[:3500]}", "info", "")
+                return (f"assistant: {short}", "info", extracted_text, data)
+        return (f"assistant: {json.dumps(data, ensure_ascii=False)[:3500]}", "info", "", data)
 
     # Tool use — solo log, sin output
     if event_type == "tool_use":
         tool_name = data.get("name") or data.get("tool_name") or "tool"
         tool_input = data.get("input") or {}
         summary = json.dumps(tool_input, ensure_ascii=False)[:500]
-        return (f"tool_use/{tool_name}: {summary}", "info", "")
+        return (f"tool_use/{tool_name}: {summary}", "info", "", data)
 
     if event_type == "tool_result":
         tool_id = data.get("tool_use_id") or ""
         is_err = bool(data.get("is_error"))
         level = "warn" if is_err else "info"
-        return (f"tool_result/{tool_id}({'error' if is_err else 'ok'})", level, "")
+        return (f"tool_result/{tool_id}({'error' if is_err else 'ok'})", level, "", data)
 
     # Eventos de sistema (init, etc.)
     if event_type == "system":
         subtype = data.get("subtype") or ""
-        return (f"system/{subtype}: {json.dumps(data, ensure_ascii=False)[:500]}", "debug", "")
+        return (f"system/{subtype}: {json.dumps(data, ensure_ascii=False)[:500]}", "debug", "", data)
 
     # Fallback genérico — igual que Codex
     for key in ("message", "msg", "text", "summary"):
         value = data.get(key)
         if isinstance(value, str) and value.strip():
-            return (f"{event_type}: {value.strip()}"[:4000], level, "")
+            return (f"{event_type}: {value.strip()}"[:4000], level, "", data)
 
-    return (f"{event_type}: {json.dumps(data, ensure_ascii=False)[:3500]}", level, "")
+    return (f"{event_type}: {json.dumps(data, ensure_ascii=False)[:3500]}", level, "", data)
 
 
 def _extract_output(final_output: list[str], stdout_tail: list[str]) -> str:
@@ -1069,12 +1649,37 @@ def _extract_output(final_output: list[str], stdout_tail: list[str]) -> str:
 # Helpers de persistencia (mismo patrón que codex_cli_runner)
 # ---------------------------------------------------------------------------
 
-def _resolve_cwd(workspace_root: str | None) -> Path:
+def _resolve_cwd(workspace_root: str | None) -> tuple[Path, bool]:
+    """Resuelve el directorio de trabajo para el run.
+
+    Returns:
+        (path, cwd_fallback) donde cwd_fallback=True indica que se usó el
+        directorio de instalación de Stacky como fallback (workspace_root vacío).
+
+    Raises:
+        ValueError: si workspace_root está seteado pero el path NO existe en
+            disco. Nunca cae en silencio al dir de instalación con skip-permissions
+            ON (H0.3 — fix hazard _resolve_cwd).
+    """
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
     if workspace_root:
         candidate = Path(workspace_root)
         if candidate.exists():
-            return candidate
-    return Path(__file__).resolve().parents[2]
+            return candidate, False
+        raise ValueError(
+            f"workspace_root seteado pero no existe en disco: {workspace_root!r}. "
+            "Verificá que el proyecto Stacky tenga una ruta válida configurada."
+        )
+    # workspace_root vacío/None → fallback al dir del repo; loguear advertencia
+    fallback = Path(__file__).resolve().parents[2]
+    _log.warning(
+        "workspace_root vacío; usando fallback al dir de Stacky: %s. "
+        "Seteá 'workspace_root' en el proyecto para evitar operar sobre la instalación.",
+        fallback,
+    )
+    return fallback, True
 
 
 def _push(
@@ -1158,6 +1763,7 @@ def _mark_terminal(
     output: str | None = None,
     error: str | None = None,
     metadata: dict | None = None,
+    contract_result: dict | None = None,
 ) -> None:
     with session_scope() as session:
         row = session.get(AgentExecution, execution_id)
@@ -1172,6 +1778,9 @@ def _mark_terminal(
         current_md.update(metadata or {})
         current_md["runtime"] = RUNTIME
         row.metadata_dict = current_md
+        # F1.1 — paridad con el path copilot (agent_runner.py:720)
+        if contract_result is not None:
+            row.contract_result = contract_result
 
 
 def _safe_write_manifest(

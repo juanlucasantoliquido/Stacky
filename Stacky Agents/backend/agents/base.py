@@ -152,6 +152,34 @@ class BaseAgent(ABC):
             except Exception as exc:  # noqa: BLE001
                 meta["style_memory_error"] = str(exc)
 
+        # H4.3 — Stacky Skills injection para copilot (body top-1 con cap).
+        try:
+            from services.cli_feature_flags import skills_enabled as _skills_on  # noqa: PLC0415
+            from services import stacky_skills as _ss  # noqa: PLC0415
+
+            if _skills_on(run_ctx.stacky_project_name):
+                _matched = _ss.select_for_run(
+                    agent_type=self.type,
+                    project=run_ctx.stacky_project_name,
+                    context_text=run_ctx.context_text or "",
+                    max_skills=3,
+                )
+                if _matched:
+                    _index = _ss.render_index(_matched)
+                    _top = _matched[0]
+                    _skills_block = (
+                        "## Stacky Skills disponibles\n\n"
+                        + _index
+                        + f"\n\n### Skill activa: {_top.name}\n\n"
+                        + _ss.cap_body(_top.body)
+                    )
+                    prefix_parts.append(_skills_block)
+                    meta["skills_count"] = len(_matched)
+                else:
+                    meta["skills_count"] = 0
+        except Exception as exc:  # noqa: BLE001
+            meta["skills_error"] = str(exc)
+
         if prefix_parts:
             full = "\n\n".join(prefix_parts) + "\n\n# Instrucciones del agente\n\n" + base
         else:

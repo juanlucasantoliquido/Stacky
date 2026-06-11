@@ -30,6 +30,30 @@ def list_agents_route():
     return jsonify(agents.list_agents())
 
 
+@bp.post("/validate-artifact")
+def validate_artifact_route():
+    """F1.4 — Valida un artifact de agente (pending-task.json / comment.html).
+
+    Lo invoca el hook PostToolUse generado por Stacky (claude_cli_hooks) en el
+    momento en que el agente escribe el archivo, para devolverle el error
+    exacto de inmediato. Solo lee disco/DB; no muta nada.
+
+    Body: {"path": "<ruta absoluta del archivo escrito>"}
+    """
+    from services import artifact_validator
+
+    body = request.get_json(silent=True) or {}
+    path = (body.get("path") or "").strip()
+    if not path:
+        return jsonify({"error": "path is required"}), 400
+    result = artifact_validator.validate_artifact_path(path)
+    logger.info(
+        "validate-artifact: path=%s kind=%s valid=%s errors=%d",
+        path, result.kind, result.valid, len(result.errors),
+    )
+    return jsonify(result.to_dict())
+
+
 @bp.get("/vscode")
 def list_vscode_agents():
     """Devuelve los .agent.md del directorio de prompts de VS Code (GitHub Copilot)."""
@@ -105,6 +129,10 @@ def stacky_import_agent():
 
     Devuelve la entry materializada. 404 si la fuente no existe; 409 si ya
     existe en el canonical y ``overwrite`` es ``false``.
+
+    H6.3: tras guardar, dispara evals del agent_type inferido en thread daemon
+    (gate suave — no bloquea). La respuesta incluye ``evals_warning`` (null si
+    todo OK o sin goldens para el tipo).
     """
     from pathlib import Path as _Path
     payload = request.get_json(force=True, silent=True) or {}
@@ -121,7 +149,17 @@ def stacky_import_agent():
         abort(409, f"ya existe en canonical: {src.name} (usar overwrite=true para reemplazar)")
     except ValueError as exc:
         abort(400, str(exc))
-    return jsonify({"ok": True, "agent": entry.to_manifest_dict()})
+
+    # H6.3 — gate suave: dispara evals en thread, no bloquea el guardado
+    evals_warning: str | None = None
+    try:
+        from evals.eval_gate import run_evals_for_agent_type_async
+        agent_type = _infer_agent_type_from_filename(entry.filename)
+        run_evals_for_agent_type_async(agent_type)
+    except Exception:
+        logger.debug("eval_gate: no se pudo disparar gate suave (no crítico)", exc_info=True)
+
+    return jsonify({"ok": True, "agent": entry.to_manifest_dict(), "evals_warning": evals_warning})
 
 
 @bp.get("/vscode/<path:filename>/history")

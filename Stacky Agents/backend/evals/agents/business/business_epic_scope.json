@@ -1,0 +1,9 @@
+{
+  "name": "business_epic_scope",
+  "agent_type": "business",
+  "output": "## RF-005: Portal de Autogestión del Cliente\n\nEl cliente debe poder gestionar sus datos de perfil, visualizar su historial de\nfacturación, descargar comprobantes y configurar sus preferencias de notificación\ndesde un portal web accesible con sus credenciales. El portal debe ser responsive\ny funcionar en dispositivos móviles sin degradar la experiencia de usuario.\n\nLos criterios de aceptación incluyen: acceso con autenticación multifactor, descarga\nde facturas en PDF, configuración de email y teléfono para notificaciones, y\nhistorial de últimos 24 meses disponible con filtros por fecha y tipo de operación.\n\n## RF-006: Integración con Sistema de CRM\n\nEl sistema debe sincronizar automáticamente los datos de alta y actualización de\nclientes con el CRM corporativo en tiempo real mediante webhooks. Cualquier cambio\nen el perfil del cliente en el portal debe reflejarse en el CRM en menos de 5 minutos.\nLa integración debe ser bidireccional: cambios en el CRM también deben propagarse.",
+  "expect": {
+    "min_score": 99,
+    "must_pass": true
+  }
+}

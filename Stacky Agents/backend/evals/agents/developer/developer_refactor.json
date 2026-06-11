@@ -1,0 +1,9 @@
+{
+  "name": "developer_refactor",
+  "agent_type": "developer",
+  "output": "## Trazabilidad\n\nRefactor del módulo de autenticación según ticket ADO-3456, completado el 2026-06-10.\nSe migró de JWT stateful a stateless reduciendo la carga en Redis en un 40% según\nlas métricas del ambiente de performance. El cambio fue revisado por el tech lead\ny el ticket ADO-3456 se marcó como completado con fecha 2026-06-10 y referencia\nal PR que incluye el diff completo del refactor para auditoría del equipo.\n\n## Tests Unitarios\n\nTU-001: test_token_generado_es_valido - PASS\nTU-002: test_token_expirado_es_rechazado - PASS\nTU-003: test_refresh_token_genera_nuevo_access_token - PASS\nTU-004: test_token_con_firma_invalida_rechazado - PASS\nTU-005: test_logout_invalida_refresh_token - PASS\nTU-006: test_claims_del_token_son_correctos - PASS\nSe mantiene la interfaz pública: todos los tests de integración siguen en PASS.\n\n## Verificaciones de BD\n\nSe eliminó la tabla redis_sessions obsoleta tras verificar que ningún cliente activo\ndepende de ella. La migración 0052_remove_redis_sessions fue ejecutada con rollback\nprobado. Se verificó que el tiempo de respuesta del endpoint /auth/login bajó de\n45ms a 12ms promedio según las métricas del load test ejecutado en QA.\n\n## Compilación\n\nBuild PASS. Cobertura del módulo de auth: 91% (mejoró desde 83%). Sin warnings\nde linting. Análisis de seguridad con Bandit sin hallazgos críticos en el módulo.\nDocumentación de la API de autenticación actualizada en OpenAPI. Build time: 2m 10s.",
+  "expect": {
+    "min_score": 95,
+    "must_pass": true
+  }
+}

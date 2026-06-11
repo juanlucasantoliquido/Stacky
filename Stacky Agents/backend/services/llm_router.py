@@ -21,8 +21,28 @@ from config import config
 logger = logging.getLogger("stacky_agents.llm_router")
 
 
-CLAUDE_MODELS = ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7"]
+CLAUDE_MODELS = ["claude-haiku-4-5", "claude-sonnet-4-6"]
 MOCK_MODELS = ["mock-1.0"]
+
+# §5.2 — cap duro: NUNCA un modelo Claude superior a Sonnet 4.6.
+# Cualquier tier prohibido (opus / fable) se mapea a este tope.
+CLAUDE_CAP_MODEL = "claude-sonnet-4-6"
+_FORBIDDEN_CLAUDE_TIER = ("opus", "fable")
+
+
+def clamp_model(model: str | None) -> str:
+    """Aplica el cap duro de §5.2 sobre un id de modelo Claude.
+
+    Mapea cualquier modelo de tier prohibido (opus, fable) a CLAUDE_CAP_MODEL.
+    Modelos permitidos (haiku/sonnet) y no-Claude (copilot/mock) pasan sin tocar.
+    Es la ÚNICA función que decide qué está capado; toda decisión Claude pasa por acá.
+    """
+    if not model:
+        return CLAUDE_CAP_MODEL
+    low = model.lower()
+    if low.startswith("claude-") and any(t in low for t in _FORBIDDEN_CLAUDE_TIER):
+        return CLAUDE_CAP_MODEL
+    return model
 
 
 
@@ -189,8 +209,17 @@ def decide(
     if backend == "mock":
         return RoutingDecision(model="mock-1.0", reason="LLM_BACKEND=mock")
 
-    if override and override in available:
-        return RoutingDecision(model=override, reason="user-override")
+    if override:
+        capped = clamp_model(override)
+        if capped != override:
+            # Override prohibido (opus/fable): se respeta la intención de forzar
+            # modelo pero clampeado al tope permitido (§5.2).
+            return RoutingDecision(
+                model=capped,
+                reason=f"user-override {override} -> clamp §5.2 ({capped})",
+            )
+        if override in available:
+            return RoutingDecision(model=override, reason="user-override")
 
     tokens = _approx_tokens(blocks)
 
@@ -212,16 +241,21 @@ def decide(
             return RoutingDecision(model="gpt-4o-mini", reason="qa rápido (qa + <6k tok)")
         return RoutingDecision(model=default, reason="default por agente (copilot)")
 
-    # Claude / anthropic
+    # Claude / anthropic — §5.2: cap duro en sonnet-4-6, jamás opus/fable.
+    # "Complejo" = sonnet (antes opus); "simple" = haiku; default seguro = sonnet.
     default = DEFAULT_BY_AGENT_CLAUDE.get(agent_type, "claude-sonnet-4-6")
     if fingerprint_complexity == "XL":
-        return RoutingDecision(model="claude-opus-4-7", reason="complexity=XL (fingerprint)")
-    if tokens > 30_000:
-        return RoutingDecision(model="claude-opus-4-7", reason=f"contexto grande ({tokens} tok > 30k)")
-    if agent_type == "developer" and tokens > 12_000:
-        return RoutingDecision(model="claude-opus-4-7", reason=f"developer + contexto {tokens} tok > 12k")
-    if agent_type == "qa" and tokens < 6_000:
-        return RoutingDecision(model="claude-haiku-4-5", reason="qa rápido (qa + <6k tok)")
-    if agent_type == "functional" and tokens < 3_000:
-        return RoutingDecision(model="claude-haiku-4-5", reason="functional simple (<3k tok)")
-    return RoutingDecision(model=default, reason="default por agente")
+        decision = RoutingDecision(model="claude-sonnet-4-6", reason="complexity=XL (fingerprint) -> sonnet (cap §5.2)")
+    elif tokens > 30_000:
+        decision = RoutingDecision(model="claude-sonnet-4-6", reason=f"contexto grande ({tokens} tok > 30k) -> sonnet (cap §5.2)")
+    elif agent_type == "developer" and tokens > 12_000:
+        decision = RoutingDecision(model="claude-sonnet-4-6", reason=f"developer + contexto {tokens} tok > 12k -> sonnet (cap §5.2)")
+    elif agent_type == "qa" and tokens < 6_000:
+        decision = RoutingDecision(model="claude-haiku-4-5", reason="qa rápido (qa + <6k tok)")
+    elif agent_type == "functional" and tokens < 3_000:
+        decision = RoutingDecision(model="claude-haiku-4-5", reason="functional simple (<3k tok)")
+    else:
+        decision = RoutingDecision(model=default, reason="default por agente")
+    # Última línea de defensa: clamp sobre TODA decisión Claude (§5.2).
+    decision.model = clamp_model(decision.model)
+    return decision

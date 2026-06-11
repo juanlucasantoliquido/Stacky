@@ -1,0 +1,9 @@
+{
+  "name": "developer_bugfix",
+  "agent_type": "developer",
+  "output": "## Trazabilidad\n\nCorreción del bug ADO-2345 en el módulo de facturación, completada el 2026-06-10.\nEl bug causaba un cálculo incorrecto en el IVA cuando el cliente tenía múltiples\ndescuentos aplicados simultáneamente. La corrección fue revisada por el equipo\ny mergeada con el commit que referencia ADO-2345 y fecha 2026-06-10 en el mensaje.\n\n## Tests Unitarios\n\nTU-001: test_calculo_iva_sin_descuento - PASS\nTU-002: test_calculo_iva_con_un_descuento - PASS\nTU-003: test_calculo_iva_con_dos_descuentos - PASS (antes FAIL — bug reproducido)\nTU-004: test_calculo_iva_con_descuento_100_porciento - PASS\nTU-005: test_factura_negativa_rechazada - PASS\nTodos los tests de regresión del módulo de facturación siguen en PASS.\nSe agregó el test TU-003 para cubrir específicamente el caso del bug reportado.\n\n## Verificaciones de BD\n\nSe verificó que no hay facturas con IVA incorrecto en la BD de producción de QA.\nEl script de diagnóstico no encontró registros afectados por el bug en el histórico.\nLas migraciones no fueron necesarias para este fix ya que el bug era solo de lógica.\nSe ejecutó la suite de regresión completa de la tabla facturas sin errores nuevos.\n\n## Compilación\n\nBuild exitoso. PASS en todos los tests de la suite de facturación. Cobertura estable\nen 84%. Sin nuevos warnings de linting. La corrección es un cambio mínimo de una\nlínea en la función calcular_iva() que corrige el orden de aplicación de descuentos.\nArtefactos actualizados y publicados. Build time: 1m 52s.",
+  "expect": {
+    "min_score": 97,
+    "must_pass": true
+  }
+}

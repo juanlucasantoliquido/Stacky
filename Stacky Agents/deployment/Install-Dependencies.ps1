@@ -319,6 +319,26 @@ function Invoke-NpmInstall {
         [Parameter(Mandatory = $true)][string]$NpmPath
     )
 
+    function Move-ExistingNodeModulesAside {
+        param([Parameter(Mandatory = $true)][string]$TargetDirectory)
+
+        $nodeModulesPath = Join-Path $TargetDirectory "node_modules"
+        if (-not (Test-Path $nodeModulesPath)) {
+            return $true
+        }
+
+        $backupPath = Join-Path $TargetDirectory ("node_modules.stale-{0}" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+        try {
+            Move-Item -LiteralPath $nodeModulesPath -Destination $backupPath -Force -ErrorAction Stop
+            Write-Warn "node_modules existente apartado temporalmente: $backupPath"
+            return $true
+        } catch {
+            Write-Warn "No se pudo apartar node_modules existente. Probablemente sigue bloqueado por otro proceso."
+            Write-Warn "Cerrá cualquier Vite/Node/terminal que use este frontend y volvé a ejecutar."
+            return $false
+        }
+    }
+
     $hasLock = Test-Path (Join-Path $Directory "package-lock.json")
     if ($hasLock -and -not $ForceNpmInstall) {
         try {
@@ -327,7 +347,12 @@ function Invoke-NpmInstall {
         } catch {
             Write-Warn "npm ci fallo. Verificando cache y usando npm install como fallback."
             Invoke-CommandWithRetry -FilePath $NpmPath -Arguments @("cache", "verify") -WorkingDirectory $Directory -Retries 1 -AllowFailure
+            Start-Sleep -Seconds 5
         }
+    }
+
+    if (-not (Move-ExistingNodeModulesAside -TargetDirectory $Directory)) {
+        throw "No se pudo preparar una instalacion limpia de npm en $Directory"
     }
 
     Invoke-CommandWithRetry -FilePath $NpmPath -Arguments @("install") -WorkingDirectory $Directory -Retries 2

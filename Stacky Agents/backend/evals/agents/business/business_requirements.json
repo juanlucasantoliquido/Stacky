@@ -1,0 +1,9 @@
+{
+  "name": "business_requirements",
+  "agent_type": "business",
+  "output": "## RF-001: Alta de Cliente con Validación de Identidad\n\nEl sistema debe permitir el alta de nuevos clientes validando la identidad del usuario\ncontra el padrón electoral y los registros de AFIP. Se requiere que el proceso sea\nasíncrono para no impactar en la experiencia del usuario durante la validación.\n\nLos criterios de aceptación incluyen: validación exitosa de DNI y CUIT, gestión de\nerrores descriptivos cuando los servicios externos no están disponibles, registro de\nauditoría de cada intento de alta, y notificación por email al cliente tras el alta.\n\n## RF-002: Consulta de Estado de Validación\n\nEl cliente debe poder consultar el estado de su proceso de validación en tiempo real.\nEl sistema expone un endpoint REST que retorna el estado actual y el historial de\npasos completados, permitiendo al cliente saber exactamente en qué etapa se encuentra\nsu solicitud de alta.",
+  "expect": {
+    "min_score": 99,
+    "must_pass": true
+  }
+}

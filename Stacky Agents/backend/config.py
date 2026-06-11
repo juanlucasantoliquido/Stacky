@@ -126,6 +126,27 @@ class Config:
     CODEX_CLI_MODEL = os.getenv("CODEX_CLI_MODEL", "")
     CODEX_CLI_SANDBOX = os.getenv("CODEX_CLI_SANDBOX", "danger-full-access")
     CODEX_CLI_APPROVAL = os.getenv("CODEX_CLI_APPROVAL", "never")
+    # ── H2 — Paridad codex_cli ────────────────────────────────────────────────
+    # H2.1 — Gate de contrato post-run (mismo patrón que F1.1 para claude).
+    # Si ON, outputs con errores duros degradan a needs_review.
+    CODEX_CLI_CONTRACT_GATE_ENABLED: bool = os.getenv(
+        "CODEX_CLI_CONTRACT_GATE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # H2.3 — Loop de autocorrección via codex exec resume.
+    CODEX_CLI_AUTOCORRECT_ENABLED: bool = os.getenv(
+        "CODEX_CLI_AUTOCORRECT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    CODEX_CLI_AUTOCORRECT_MAX_RETRIES: int = int(
+        os.getenv("CODEX_CLI_AUTOCORRECT_MAX_RETRIES", "2")
+    )
+    # H2.4 — Denylist de modelos para codex (CSV, default vacío = sin restricción).
+    CODEX_CLI_MODEL_DENYLIST: str = os.getenv("CODEX_CLI_MODEL_DENYLIST", "")
+    # H7.1 — Re-runs con exec resume + delta prompt para codex. OFF default; allowlist
+    # CSV vacía = todos los proyectos (mismo patrón que CLAUDE_CODE_CLI_RESUME_*).
+    CODEX_CLI_RESUME_ENABLED: bool = os.getenv(
+        "CODEX_CLI_RESUME_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    CODEX_CLI_RESUME_PROJECTS: str = os.getenv("CODEX_CLI_RESUME_PROJECTS", "")
 
     # Claude Code CLI runtime
     CLAUDE_CODE_CLI_BIN = os.getenv("CLAUDE_CODE_CLI_BIN", "claude")
@@ -141,8 +162,32 @@ class Config:
     CLAUDE_CODE_CLI_PERMISSION_MODE = os.getenv("CLAUDE_CODE_CLI_PERMISSION_MODE", "acceptEdits")
     # Si true, pasa --dangerously-skip-permissions (bypass total, equivalente a
     # danger-full-access de Codex). Tiene prioridad sobre el permission mode.
+    # Default TRUE por decisión vinculante del operador (PLAN-ROBUSTECIMIENTO-
+    # ARNES.md §5.3, 2026-06-09): el runtime CLI corre SIEMPRE sin prompts de
+    # permisos; la mitigación es la validación de artifacts (F1.3/F1.4), no
+    # permisos. La rama acceptEdits queda como flag de emergencia (=false).
     CLAUDE_CODE_CLI_SKIP_PERMISSIONS = os.getenv(
-        "CLAUDE_CODE_CLI_SKIP_PERMISSIONS", "false"
+        "CLAUDE_CODE_CLI_SKIP_PERMISSIONS", "true"
+    ).lower() in ("1", "true", "yes")
+    # ── Fase 1 plan robustecimiento arnés (2026-06-09) ────────────────────────
+    # F1.1 — Si true, contrato con errores duros degrada el run a needs_review
+    # en vez de completed (la validación/persistencia de contract_result y
+    # confidence corre SIEMPRE; esto solo gobierna el cambio de status).
+    CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED = os.getenv(
+        "CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # F1.3 — Loop de autocorrección sobre stdin al fin de cada turno.
+    CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED = os.getenv(
+        "CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # Cap de mensajes correctivos por run (plan: máx 1-2).
+    CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES = int(
+        os.getenv("CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES", "2")
+    )
+    # F1.4 — settings.json efímero con hook PostToolUse de validación de
+    # artifacts, pasado vía --settings. Solo hooks; NO toca permisos (§5.3).
+    CLAUDE_CODE_CLI_HOOKS_ENABLED = os.getenv(
+        "CLAUDE_CODE_CLI_HOOKS_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
     # Cómo se referencia la persona del agente (.agent.md) al CLI:
     #   "append" (default): vía --append-system-prompt-file se envía solo el
@@ -153,6 +198,70 @@ class Config:
     CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE = os.getenv(
         "CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE", "append"
     ).strip().lower()
+    # ── Fase 2 plan robustecimiento arnés (2026-06-09) ────────────────────────
+    # Todas estas features son por proyecto y OFF por default (regla §4.1: cero
+    # fricción nueva al operador). El encendido por proyecto se hace con una
+    # allowlist de nombres de proyecto Stacky (CSV); el flag *_ENABLED es el
+    # master global (debe estar ON además de que el proyecto esté en la lista).
+    # Lista vacía + master ON = todos los proyectos (escape hatch de staging).
+    #
+    # F2.2 — Conocimiento del proyecto (anti-patterns/decisiones/constraints/
+    # glossary) en el system prompt del CLI. Dueño único por tipo (anti B6).
+    CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_ENABLED = os.getenv(
+        "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_PROJECTS = os.getenv(
+        "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_PROJECTS", ""
+    )
+    # F2.3 — Re-runs con --resume + delta prompt (usa session_id de F1.2).
+    CLAUDE_CODE_CLI_RESUME_ENABLED = os.getenv(
+        "CLAUDE_CODE_CLI_RESUME_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    CLAUDE_CODE_CLI_RESUME_PROJECTS = os.getenv(
+        "CLAUDE_CODE_CLI_RESUME_PROJECTS", ""
+    )
+    # F2.4 — Presupuesto de contexto con ranking en enrich_blocks. El budget es
+    # global (en tokens estimados); el encendido es por proyecto.
+    STACKY_CONTEXT_BUDGET_ENABLED = os.getenv(
+        "STACKY_CONTEXT_BUDGET_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_CONTEXT_BUDGET_PROJECTS = os.getenv(
+        "STACKY_CONTEXT_BUDGET_PROJECTS", ""
+    )
+    STACKY_CONTEXT_BUDGET_TOKENS = int(
+        os.getenv("STACKY_CONTEXT_BUDGET_TOKENS", "25000")
+    )
+    # F2.5 — Memoria colaborativa en el CLI, por proyecto. Reusa el flag global
+    # STACKY_MEMORY_INJECTION_ENABLED (master) + esta allowlist (por proyecto).
+    STACKY_MEMORY_INJECTION_PROJECTS = os.getenv(
+        "STACKY_MEMORY_INJECTION_PROJECTS", ""
+    )
+    # F2.1 — Stacky MCP server inyectado vía --mcp-config. Por proyecto, OFF default.
+    CLAUDE_CODE_CLI_MCP_ENABLED = os.getenv(
+        "CLAUDE_CODE_CLI_MCP_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    CLAUDE_CODE_CLI_MCP_PROJECTS = os.getenv(
+        "CLAUDE_CODE_CLI_MCP_PROJECTS", ""
+    )
+    # ── H4 — Stacky Skills ───────────────────────────────────────────────────
+    # H4.3 — Inyección de skills en el system prompt. OFF por default; allowlist
+    # CSV de proyectos vacía = todos (escape hatch cuando master está ON).
+    STACKY_SKILLS_ENABLED: bool = os.getenv(
+        "STACKY_SKILLS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_SKILLS_PROJECTS: str = os.getenv("STACKY_SKILLS_PROJECTS", "")
+    # ── H5 — Runaway guard in-run ─────────────────────────────────────────────
+    # Límite de turnos por run agéntico. 0 = sin límite (desactivado).
+    # Al superar el límite, el run recibe señal de cierre+resumen y termina
+    # con status needs_review + metadata["runaway"].
+    STACKY_RUNAWAY_MAX_TURNS: int = int(
+        os.getenv("STACKY_RUNAWAY_MAX_TURNS", "0")
+    )
+    # Límite de costo USD por run agéntico. 0.0 = sin límite (desactivado).
+    STACKY_RUNAWAY_MAX_COST_USD: float = float(
+        os.getenv("STACKY_RUNAWAY_MAX_COST_USD", "0.0")
+    )
+
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",

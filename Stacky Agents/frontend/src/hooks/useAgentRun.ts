@@ -31,9 +31,10 @@ export function useAgentRun() {
         model_override: modelOverride,
         system_prompt_override: systemPromptOverride,
         runtime: agentRuntime,
-        // codex_cli requiere vscode_agent_filename. Se envía siempre que haya
-        // un agente VS Code seleccionado en el workbench; el backend lo requiere
-        // cuando runtime=codex_cli y lo ignora en los demás casos.
+        // Los runtimes CLI (codex_cli / claude_code_cli) requieren
+        // vscode_agent_filename. Se envía siempre que haya un agente VS Code
+        // seleccionado en el workbench; el backend lo requiere para esos
+        // runtimes y lo ignora en los demás casos.
         vscode_agent_filename: vsCodeAgent?.filename ?? undefined,
       }),
     onSuccess: (data) => {

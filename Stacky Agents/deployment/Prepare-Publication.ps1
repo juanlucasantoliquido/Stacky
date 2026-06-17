@@ -382,18 +382,19 @@ try {
         Write-OK "Dependencias verificadas"
     }
 
-    $previousVersion = if ($deployedPayloadVersion) { $deployedPayloadVersion.Text } else { "" }
-    $backupDir = Backup-CurrentDeploy -PreviousVersion $previousVersion
-
     Write-Step "Generando release base"
     Remove-SafeDirectory -Path $tempOut -AllowedParent $deploymentDir
     New-Item -ItemType Directory -Path $tempOut -Force | Out-Null
 
     $releaseName = "stacky-agents-$releaseVersion"
+    # -DeployRoot: build_release snapshotea el arnes vivo (harness_defaults.env)
+    # ANTES de Backup-CurrentDeploy, mientras $deployRootFull todavia tiene la
+    # config actual del operador, y lo hornea en el backend\.env del release.
     $buildArgs = @(
         "-OutputRoot", $tempOut,
         "-ReleaseName", $releaseName,
-        "-Version", $releaseVersion
+        "-Version", $releaseVersion,
+        "-DeployRoot", $deployRootFull
     )
     if ($GitHubCopilotAgentsRepo) {
         Write-Warn "-GitHubCopilotAgentsRepo está obsoleto y se ignora. La fuente de agentes es backend\Stacky\agents."
@@ -420,6 +421,9 @@ try {
     if (-not $releaseDir -or -not (Test-Path (Join-Path $releaseDir "backend\stacky-backend.exe"))) {
         throw "El release no contiene backend\stacky-backend.exe"
     }
+
+    $previousVersion = if ($deployedPayloadVersion) { $deployedPayloadVersion.Text } else { "" }
+    $backupDir = Backup-CurrentDeploy -PreviousVersion $previousVersion
 
     $installerPath = Join-Path $tempOut ("StackyAgents-{0}-Setup.exe" -f $releaseVersion)
     Copy-ReleaseToDeploy -ReleaseDir $releaseDir -ReleaseVersion $releaseVersion -InstallerPath $installerPath

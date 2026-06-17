@@ -25,6 +25,7 @@ import styles from "./UnblockerPage.module.css";
 
 const READINESS_LABEL: Record<UnblockerReadiness, string> = {
   task_ready: "Task lista para crear",
+  stale_consumed: "⚠️ Task borrada en ADO — recrear",
   comment_ready: "Comentario listo para publicar",
   waiting_files: "Esperando archivos del agente",
   artifacts_idle: "Artifacts en disco",
@@ -33,6 +34,7 @@ const READINESS_LABEL: Record<UnblockerReadiness, string> = {
 
 const READINESS_CLASS: Record<UnblockerReadiness, string> = {
   task_ready: styles.badgeTask,
+  stale_consumed: styles.badgeError,
   comment_ready: styles.badgeComment,
   waiting_files: styles.badgeWaiting,
   artifacts_idle: styles.badgeIdle,
@@ -66,7 +68,10 @@ function UnblockerCard({
     stacky_status: (item.stacky_status as Ticket["stacky_status"]) ?? undefined,
   };
 
+  // Compat: backend viejo no manda stale_consumed.
+  const staleConsumed = item.stale_consumed ?? [];
   const isEpicWithPending = item.total_pending > 0 && item.ado_id != null;
+  const hasStaleConsumed = staleConsumed.length > 0 && item.ado_id != null;
   const canPublishComment = item.comment.exists && item.ado_id != null;
 
   const createDetectedTasks = useCallback(async () => {
@@ -93,6 +98,36 @@ function UnblockerCard({
       setBusy(false);
     }
   }, [item.ado_id, item.pending_tasks, activeProjectName, artifactRoot, onChanged]);
+
+  // Fix ADO-241: el archivo quedó "consumed" apuntando a una Task que ya no
+  // existe en ADO. create-child-task verifica contra ADO, resetea el marker
+  // stale y crea la Task de nuevo (si la Task siguiera viva, responde
+  // idempotente sin duplicar).
+  const recreateStaleTasks = useCallback(async () => {
+    if (!item.ado_id || staleConsumed.length === 0) return;
+    setBusy(true);
+    setActionMessage("Recreando Task(s) borrada(s) en ADO...");
+    try {
+      for (const st of staleConsumed) {
+        const result = await Tickets.createChildTask(item.ado_id, {
+          pending_task_path: st.pending_task_path,
+          operator_reason:
+            `Desatascador: recreación — la Task ADO-${st.task_ado_id} fue borrada en ADO`,
+          project: activeProjectName,
+          repo_root: artifactRoot,
+        });
+        if (!result.ok) {
+          throw new Error(result.message || result.error || "create-child-task falló");
+        }
+        setActionMessage(`Task recreada: ADO-${result.task_ado_id}`);
+      }
+      onChanged();
+    } catch (err) {
+      setActionMessage((err as Error)?.message ?? "No se pudo recrear la Task.");
+    } finally {
+      setBusy(false);
+    }
+  }, [item.ado_id, staleConsumed, activeProjectName, artifactRoot, onChanged]);
 
   const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
@@ -245,6 +280,20 @@ function UnblockerCard({
         </ul>
       )}
 
+      {staleConsumed.length > 0 && (
+        <ul className={styles.rfList}>
+          {staleConsumed.map((st) => (
+            <li key={`stale-${st.rf_id}-${st.pending_task_path}`}>
+              <strong>{st.rf_id}</strong> — {st.title}{" "}
+              <span className={styles.planMissing}>
+                Task ADO-{st.task_ado_id ?? "?"} borrada en ADO
+              </span>
+              <code className={styles.pathCode}>{st.pending_task_path}</code>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {item.blockers.length > 0 && (
         <ul className={styles.blockers}>
           {item.blockers.map((b, i) => (
@@ -260,10 +309,15 @@ function UnblockerCard({
             {busy ? "Procesando..." : "Crear Task(s) detectadas"}
           </button>
         )}
+        {hasStaleConsumed && (
+          <button className={styles.actionBtn} onClick={recreateStaleTasks} disabled={busy}>
+            {busy ? "Procesando..." : "Recrear Task borrada en ADO"}
+          </button>
+        )}
         {canPublishComment && (
           <FinishWorkButton ticket={ticketShim} onCompleted={onChanged} />
         )}
-        {!isEpicWithPending && !canPublishComment && (
+        {!isEpicWithPending && !hasStaleConsumed && !canPublishComment && (
           <span className={styles.noAction}>
             Sin archivos listos todavía — refrescar cuando el agente termine.
           </span>
@@ -373,6 +427,11 @@ export default function UnblockerPage() {
         <div className={styles.counts}>
           <span className={styles.countTask}>{counts.task_ready} task(s) listas</span>
           <span className={styles.countComment}>{counts.comment_ready} comentario(s) listos</span>
+          {(counts.stale_consumed ?? 0) > 0 && (
+            <span className={styles.countError}>
+              {counts.stale_consumed} task(s) borrada(s) en ADO
+            </span>
+          )}
           {counts.files_error > 0 && (
             <span className={styles.countError}>{counts.files_error} malformado(s)</span>
           )}

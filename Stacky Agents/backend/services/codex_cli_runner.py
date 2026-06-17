@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -23,10 +24,12 @@ from db import session_scope
 from models import AgentExecution, Ticket
 from services import (
     context_enrichment,
+    desktop_notifier,
     pii_masker,
     stacky_agents as stacky_agents_svc,
     ticket_status,
     vscode_agents,
+    webhooks,
 )
 from services.agent_env import build_agent_env
 from services.manifest_watcher import append_event, write_heartbeat, write_manifest
@@ -59,6 +62,25 @@ def _push(
         "error": logging.ERROR,
     }.get(level, logging.INFO)
     logger.log(backend_level, "[exec=%s] %s", execution_id, message)
+
+
+def _notify_outcome(
+    *, execution_id: int, ticket_id: int | None, agent_type: str | None, status: str
+) -> None:
+    try:
+        webhooks.fire_for_execution(execution_id)
+    except Exception:  # noqa: BLE001
+        logger.debug("[exec=%s] webhook fire_for_execution failed", execution_id, exc_info=True)
+
+    if not config.STACKY_DESKTOP_NOTIFY_ENABLED:
+        return
+    try:
+        desktop_notifier.notify(
+            title=f"Stacky · {agent_type or 'agent'} {status}",
+            message=f"Ticket {ticket_id or 'N/A'} · {RUNTIME}",
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("[exec=%s] desktop notify failed", execution_id, exc_info=True)
 
 
 def start_codex_cli_run(
@@ -347,6 +369,32 @@ def _run_in_background(
         prompt_file = run_dir / "prompt.md"
         prompt_file.write_text(prompt, encoding="utf-8")
 
+        # I0.2 — Cómputo de fingerprint_complexity en codex.
+        # Solo se calcula si el flag está ON. OFF → None (routing byte-idéntico).
+        _codex_complexity: str | None = None
+        if config.STACKY_COMPLEXITY_ESTIMATION_ENABLED:
+            try:
+                from harness.complexity import estimate_complexity as _est_cx
+                _cx_title = ""
+                _cx_desc = ""
+                try:
+                    with session_scope() as _sess_cx:
+                        _tobj_cx = _sess_cx.get(Ticket, ticket_id)
+                        if _tobj_cx is not None:
+                            _cx_title = _tobj_cx.title or ""
+                            _cx_desc = _tobj_cx.description or ""
+                except Exception:
+                    pass
+                _codex_complexity = _est_cx(
+                    agent_type=agent_type or "",
+                    ticket_title=_cx_title,
+                    ticket_description=_cx_desc,
+                    blocks=raw_blocks,
+                )
+                log("info", f"complexity estimation → {_codex_complexity} (I0.2)")
+            except Exception as _exc_cx:  # noqa: BLE001
+                log("warn", f"complexity estimation falló (no crítico): {_exc_cx}")
+
         # H2.4 — política de modelo para codex
         from harness.model_policy import resolve_model as _resolve_model
         _resolved_model, _model_reason = _resolve_model("codex_cli", model_override)
@@ -456,11 +504,31 @@ def _run_in_background(
         )
         heartbeat_thread.start()
 
+        # Q0.2 — Esfuerzo adaptativo por dificultad estimada (solo codex, OFF default).
+        # Codex no tiene --effort; se ajusta el presupuesto de turnos bajo el cap.
+        _codex_adaptive_turns = config.STACKY_RUNAWAY_MAX_TURNS
+        if getattr(config, "STACKY_ADAPTIVE_EFFORT_ENABLED", False) and _codex_complexity:
+            _floor = (getattr(config, "STACKY_EFFORT_FLOOR", "medium") or "medium").strip().lower()
+            _ORDER_EFFORT = {"low": 0, "medium": 1, "high": 2}
+            _mapped_effort_codex = {"S": "low", "M": "medium", "L": "high", "XL": "high"}.get(
+                _codex_complexity, "medium"
+            )
+            if _ORDER_EFFORT.get(_mapped_effort_codex, 1) < _ORDER_EFFORT.get(_floor, 1):
+                _mapped_effort_codex = _floor
+            # S/low → 50% del cap; M/medium → 100%; L/XL/high → 100%
+            if _codex_adaptive_turns > 0 and _mapped_effort_codex == "low":
+                _codex_adaptive_turns = max(1, _codex_adaptive_turns // 2)
+            log(
+                "info",
+                f"adaptive effort (codex) → {_mapped_effort_codex} "
+                f"(complexity={_codex_complexity}, max_turns={_codex_adaptive_turns}, Q0.2)",
+            )
+
         # H5 — Runaway guard: solo turnos (costo no disponible en codex stream hasta H2.2).
         from harness.runaway_guard import RunLimits, RunawayGuard as _RunawayGuard
         _codex_runaway_guard = _RunawayGuard(
             RunLimits(
-                max_turns=config.STACKY_RUNAWAY_MAX_TURNS,
+                max_turns=_codex_adaptive_turns,
                 max_cost_usd=0.0,  # codex no reporta costo en stream
             )
         )
@@ -497,7 +565,52 @@ def _run_in_background(
 
         _write_prompt_to_stdin(execution_id, proc, prompt)
 
-        return_code = proc.wait()
+        # R1.1 — espera acotada con terminate→kill espejando la secuencia de claude.
+        # Con STACKY_STALL_WATCHDOG_SECONDS=0 (default) el bucle es equivalente
+        # al proc.wait() original (byte-identico al comportamiento previo).
+        import time as _time
+        _codex_stall_watchdog_sec = config.STACKY_STALL_WATCHDOG_SECONDS
+        _codex_last_event_mono: list[float] = [_time.monotonic()]
+        _codex_stall_fired: list[bool] = [False]
+
+        # Compartir ultimo evento con los readers via lista mutable.
+        _codex_event_notifier: list[float] = _codex_last_event_mono
+
+        # Parchar el telemetry_sink para actualizar _codex_last_event_mono.
+        _orig_codex_on_runaway = _codex_on_runaway
+
+        def _codex_on_runaway_with_stall(event_count: int, line: str) -> None:
+            _codex_last_event_mono[0] = _time.monotonic()
+            _orig_codex_on_runaway(event_count, line)
+
+        # NOTE: los readers ya arrancaron; _codex_on_runaway_with_stall no se puede
+        # pasar retroactivamente. Rastreamos inactividad en el bucle de espera
+        # con el timestamp del ultimo reader alive.
+        while True:
+            try:
+                return_code = proc.wait(timeout=5)
+                break
+            except subprocess.TimeoutExpired:
+                if _codex_stall_watchdog_sec > 0 and not _codex_stall_fired[0]:
+                    elapsed_no_event = _time.monotonic() - _codex_last_event_mono[0]
+                    if elapsed_no_event >= _codex_stall_watchdog_sec:
+                        log("warn",
+                            f"R1.1 stall watchdog codex: {elapsed_no_event:.0f}s sin actividad — terminando")
+                        if config.STACKY_LOG_FLUSH_INCREMENTAL_ENABLED:
+                            try:
+                                log_streamer.flush(execution_id)
+                            except Exception:  # noqa: BLE001
+                                pass
+                        proc.terminate()
+                        try:
+                            return_code = proc.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            return_code = proc.wait()
+                        _codex_stall_fired[0] = True
+                        break
+                continue
+
         heartbeat_stop.set()
         for reader in readers:
             reader.join(timeout=5)
@@ -532,6 +645,52 @@ def _run_in_background(
             "agent_count": len(all_agents),
             **invocation_meta,
         }
+        # V1.1 — sello del prompt usado (trazabilidad/versionado).
+        try:
+            from services import agent_prompt_registry as _apr
+
+            _body = selected_path.read_text(encoding="utf-8")
+            _sha = _apr.ensure_version(vscode_agent_filename, _body)
+            if _sha:
+                metadata["prompt_sha"] = _sha
+                # V2.4 — sello del run_fingerprint (dedup de runs idénticos).
+                from services import run_cache as _rc
+                _rc.seal_into_metadata(
+                    metadata,
+                    prompt_sha=_sha,
+                    # model_override (no el resuelto): coincide con el fingerprint
+                    # del lookup en el launch. Ver claude_code_cli_runner.
+                    model=model_override,
+                    context_blocks=raw_blocks,
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("V1.1 prompt_sha sealing falló (no crítico)", exc_info=True)
+
+        # R1.1 — si el stall watchdog disparó, marcar failed/stalled y salir.
+        if _codex_stall_fired[0]:
+            stall_meta = {
+                "detected_at": datetime.utcnow().isoformat(),
+                "last_event_at": datetime.utcfromtimestamp(
+                    started.timestamp() + (_codex_last_event_mono[0] - _time.monotonic())
+                ).isoformat() if False else datetime.utcnow().isoformat(),
+            }
+            metadata["stall"] = stall_meta
+            _mark_terminal(
+                execution_id,
+                status="failed",
+                error="stalled: sin actividad en stream",
+                metadata=metadata,
+            )
+            log("error", "codex run terminado por watchdog de inactividad (stall)")
+            ticket_status.on_execution_end(
+                ticket_id=ticket_id, execution_id=execution_id,
+                final_status="error", agent_type=agent_type, error="stalled",
+            )
+            _notify_outcome(
+                execution_id=execution_id, ticket_id=ticket_id,
+                agent_type=agent_type, status="error",
+            )
+            return
 
         # H5 — Runaway: si el guard disparó, marcar needs_review y salir.
         if _codex_runaway_triggered:
@@ -559,6 +718,12 @@ def _run_in_background(
             ticket_status.on_execution_end(
                 ticket_id=ticket_id, execution_id=execution_id,
                 final_status="needs_review", agent_type=agent_type,
+            )
+            _notify_outcome(
+                execution_id=execution_id,
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                status="needs_review",
             )
             return
 
@@ -644,6 +809,12 @@ def _run_in_background(
                             ticket_id=ticket_id, execution_id=execution_id,
                             final_status="needs_review", agent_type=agent_type,
                         )
+                        _notify_outcome(
+                            execution_id=execution_id,
+                            ticket_id=ticket_id,
+                            agent_type=agent_type,
+                            status="needs_review",
+                        )
                         stacky_logger.agent_event(
                             "agent_completed", execution_id=execution_id,
                             ticket_id=ticket_id, level="WARN", duration_ms=duration_ms,
@@ -654,6 +825,63 @@ def _run_in_background(
                         return
                 except Exception as exc:  # noqa: BLE001
                     log("warn", f"codex autocorrect falló (no crítico): {exc}")
+
+            # I1.1 — Auto-reparación ante output vacío/malformado (STACKY_RUN_REPAIR_ENABLED).
+            # Corre DESPUÉS del autocorrect y ANTES del post-run. Comparte el techo de
+            # retries del autocorrect. OFF → comportamiento actual exacto.
+            if config.STACKY_RUN_REPAIR_ENABLED and t_ado_id is not None:
+                try:
+                    from harness.run_repair import attempt_repair as _attempt_repair
+
+                    _repair_autocorrect_retries = (
+                        metadata.get("autocorrect_codex", {}).get("retries", 0)
+                        if isinstance(metadata.get("autocorrect_codex"), dict)
+                        else 0
+                    )
+
+                    def _codex_repair_send(msg: str) -> str:
+                        """Envía mensaje de repair via exec resume y devuelve nueva salida."""
+                        try:
+                            if not _codex_session_id:
+                                return ""
+                            import subprocess as _sp
+                            _rcmd = _build_resume_command(
+                                session_id=_codex_session_id,
+                                prompt=msg,
+                                output_file=output_file,
+                                model_override=_resolved_model,
+                            )
+                            _r = _sp.run(
+                                _rcmd, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=300,
+                            )
+                            if _r.returncode == 0 and output_file.exists():
+                                return output_file.read_text(encoding="utf-8", errors="replace")
+                            return ""
+                        except Exception as _e:
+                            log("warn", f"run_repair codex send falló: {_e}")
+                            return ""
+
+                    _repair_result = _attempt_repair(
+                        output_text=output or "",
+                        artifacts=[str(output_file)] if output_file.exists() else [],
+                        runtime=RUNTIME,
+                        retries_budget=config.CODEX_CLI_AUTOCORRECT_MAX_RETRIES,
+                        retries_used=_repair_autocorrect_retries,
+                        send_fn=_codex_repair_send,
+                        enabled=True,
+                    )
+                    if _repair_result is not None:
+                        metadata["run_repair"] = _repair_result
+                        if _repair_result.get("recovered"):
+                            log("info", "run_repair: output recuperado tras reintento (codex)")
+                            # Re-leer output reparado
+                            if output_file.exists():
+                                output = output_file.read_text(encoding="utf-8", errors="replace")
+                        else:
+                            log("warn", "run_repair: reintento no recuperó el output (codex)")
+                except Exception as exc:  # noqa: BLE001
+                    log("warn", f"run_repair codex falló (no crítico): {exc}")
 
             # H2.1 — post-run pipeline (contract validator + confidence)
             try:
@@ -672,12 +900,28 @@ def _run_in_background(
                 log("warn", f"harness post_run falló (no crítico): {exc}")
                 final_status = "completed"
 
+            # Plan 38 C1 — Trazabilidad: agent_type, agent_name, produced_files
+            if config.STACKY_EXECUTION_TRACE_ENABLED:
+                try:
+                    from agent_runner import _build_trace_metadata, _collect_produced_files
+                    _trace = _build_trace_metadata(
+                        prompt_blocks=raw_blocks or [],
+                        agent_type=agent_type or "",
+                        agent_name=getattr(selected_agent, "name", ""),
+                        prompt_text_enabled=config.STACKY_TRACE_PROMPT_TEXT_ENABLED,
+                    )
+                    for k, v in _trace.items():
+                        metadata.setdefault(k, v)
+                    metadata.setdefault("produced_files", _collect_produced_files(None))
+                except Exception:
+                    pass
             _mark_terminal(
                 execution_id,
                 status=final_status,
                 output=output,
                 metadata=metadata,
             )
+            final_status = _read_status(execution_id, fallback=final_status)
             _safe_write_manifest(
                 run_dir,
                 run_id=execution_id,
@@ -718,6 +962,12 @@ def _run_in_background(
                 execution_id=execution_id,
                 final_status=final_status,
                 agent_type=agent_type,
+            )
+            _notify_outcome(
+                execution_id=execution_id,
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                status=final_status,
             )
             stacky_logger.agent_event(
                 "agent_completed",
@@ -764,6 +1014,12 @@ def _run_in_background(
                 final_status="error",
                 agent_type=agent_type,
                 error=error,
+            )
+            _notify_outcome(
+                execution_id=execution_id,
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                status="error",
             )
             stacky_logger.agent_event(
                 "agent_failed",
@@ -814,9 +1070,21 @@ def _run_in_background(
                     agent_type=agent_type,
                     error=str(exc),
                 )
+                _notify_outcome(
+                    execution_id=execution_id,
+                    ticket_id=ticket_id,
+                    agent_type=agent_type,
+                    status="error",
+                )
         except Exception:
             logger.exception("could not mark ticket status after codex cli failure")
     finally:
+        # V0.3 — liberar el slot de concurrencia adquirido en el launch.
+        try:
+            from services import run_slots
+            run_slots.release()
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] run_slots.release falló", execution_id, exc_info=True)
         log_streamer.close(execution_id)
 
 
@@ -1125,6 +1393,7 @@ def _read_stream(
     """
     from typing import Callable  # noqa: PLC0415 — import local para no afectar startup
     _event_count = 0
+    _last_telemetry_emit = 0.0
     if stream is None:
         return
     for raw in stream:
@@ -1145,6 +1414,27 @@ def _read_stream(
                     or event.get("usage") or event.get("num_turns") or event.get("total_cost_usd")
                 ):
                     telemetry_sink.update(event)
+                    if config.STACKY_LIVE_TELEMETRY_ENABLED:
+                        now = time.monotonic()
+                        if now - _last_telemetry_emit >= 2.0:
+                            usage = event.get("usage") if isinstance(event.get("usage"), dict) else {}
+                            payload = {
+                                "turns": event.get("num_turns"),
+                                "input_tokens": usage.get("input_tokens") if isinstance(usage, dict) else None,
+                                "output_tokens": usage.get("output_tokens") if isinstance(usage, dict) else None,
+                                "cost_usd": event.get("total_cost_usd"),
+                                "cost_estimated": bool(event.get("total_cost_usd") is None),
+                            }
+                            if any(v is not None for v in payload.values()):
+                                log_streamer.push(
+                                    execution_id,
+                                    "info",
+                                    "telemetry",
+                                    group="telemetry",
+                                    event_type="telemetry",
+                                    data=payload,
+                                )
+                                _last_telemetry_emit = now
             except (json.JSONDecodeError, Exception):
                 pass
         # H5 — Runaway: on_runaway se llama una sola vez si el guard dispara.
@@ -1480,6 +1770,31 @@ def _read_output(output_file: Path | None, stdout_tail: list[str]) -> str:
     return "\n".join(stdout_tail[-80:]).strip()
 
 
+def reap(execution_id: int, grace_seconds: int = 10) -> bool:
+    """R0.1 — Termina el subproceso registrado para execution_id (codex_cli).
+
+    Busca el Popen exacto registrado bajo _PROCESSES_LOCK. Hace terminate()
+    → wait(grace) → kill() best-effort. Solo actua sobre el pid registrado.
+
+    Retorna True si el proceso fue reaped.
+    Retorna False si no estaba registrado o ya habia terminado.
+    """
+    with _PROCESSES_LOCK:
+        proc = _PROCESSES.get(execution_id)
+    if proc is None:
+        return False
+    try:
+        proc.terminate()
+        try:
+            proc.wait(timeout=grace_seconds)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _mark_terminal(
     execution_id: int,
     *,
@@ -1488,6 +1803,7 @@ def _mark_terminal(
     error: str | None = None,
     metadata: dict | None = None,
 ) -> None:
+    emit_failure_feedback = False
     with session_scope() as session:
         row = session.get(AgentExecution, execution_id)
         if row is None:
@@ -1500,7 +1816,49 @@ def _mark_terminal(
         current_md = row.metadata_dict
         current_md.update(metadata or {})
         current_md["runtime"] = RUNTIME
+        # V0.4 — taxonomía de fallos (clave nueva, no renombra nada).
+        if status in ("error", "needs_review"):
+            try:
+                from harness.failure import classify
+                kind = classify(
+                    return_code=current_md.get("return_code"),
+                    error_message=error,
+                    metadata={**current_md, "status": status,
+                              "contract_result": current_md.get("contract_result")},
+                )
+                if kind is not None:
+                    current_md["failure_kind"] = kind
+            except Exception:  # noqa: BLE001
+                logger.debug("[exec=%s] failure classify falló", execution_id, exc_info=True)
+            emit_failure_feedback = True
         row.metadata_dict = current_md
+
+    if status == "completed":
+        try:
+            from services import self_review
+
+            outcome = self_review.apply_to_execution(execution_id=execution_id)
+            status = str(outcome.get("status") or status)
+            if status in ("error", "needs_review"):
+                emit_failure_feedback = True
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] self_review apply falló (fail-open)", execution_id, exc_info=True)
+
+    if emit_failure_feedback:
+        try:
+            from services import ado_feedback
+
+            ado_feedback.comment_run_outcome(execution_id)
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] ado_feedback comment falló (no crítico)", execution_id, exc_info=True)
+
+
+def _read_status(execution_id: int, *, fallback: str) -> str:
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            return fallback
+        return row.status or fallback
 
 
 def write_repro_script(

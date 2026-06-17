@@ -11,6 +11,7 @@ import TicketGraphView from "../components/TicketGraphView";
 import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
+import EpicFromBriefModal from "../components/EpicFromBriefModal";
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { getAgentType } from "../services/preferences";
@@ -262,12 +263,21 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
     flowConfigMap,
     pipelineNext: ticket.pipeline_summary?.next_suggested ?? null,
   });
-  const nextLabel = nextSuggested ? (NEXT_AGENT_LABELS[nextSuggested] ?? nextSuggested) : null;
+  const pipelineQ = useQuery({
+    queryKey: ["ticket-pipeline", ticket.id],
+    queryFn: () => Tickets.pipeline(ticket.id),
+    enabled: expanded,
+    staleTime: 30000,
+  });
+
+  const pipelineNext = pipelineQ.data?.next?.agent_type ?? null;
+  const effectiveNext = pipelineNext || nextSuggested;
+  const nextLabel = effectiveNext ? (NEXT_AGENT_LABELS[effectiveNext] ?? effectiveNext) : null;
 
   // Resuelve el filename del agente del equipo que corresponde al tipo sugerido.
   // Prioriza agentes pinneados ("Tu Equipo") sobre cualquier agente disponible.
-  const suggestedFilename = nextSuggested
-    ? findAgentFilenameByType(nextSuggested, vsCodeAgents, pinnedAgents)
+  const suggestedFilename = effectiveNext
+    ? findAgentFilenameByType(effectiveNext, vsCodeAgents, pinnedAgents)
     : null;
 
   const isClosed = CLOSED_STATES.includes(ticket.ado_state ?? "");
@@ -476,6 +486,31 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
               </button>
             </div>
 
+            {pipelineQ.data && (
+              <div className={styles.ticketPipelineBox}>
+                <div className={styles.ticketPipelineHeader}>
+                  <span>Pipeline del ticket</span>
+                  {pipelineQ.data.next && (
+                    <span className={styles.ticketPipelineNext}>
+                      siguiente: {pipelineQ.data.next.agent_type} ({pipelineQ.data.next.source})
+                    </span>
+                  )}
+                </div>
+                <div className={styles.ticketPipelineStages}>
+                  {pipelineQ.data.stages.map((stage) => (
+                    <span
+                      key={stage.stage}
+                      className={`${styles.ticketPipelineStage} ${stage.done ? styles.ticketPipelineStageDone : ""}`}
+                      title={stage.evidence || stage.stage}
+                    >
+                      {stage.stage}
+                      {stage.done ? " ✓" : ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {ticket.description && (
               <details className={styles.descDetails}>
                 <summary>Descripción</summary>
@@ -652,6 +687,8 @@ export default function TicketBoard() {
   const [search, setSearch] = useLocalStorageState<string>("ticketBoard.search", "");
   const [onlyPending, setOnlyPending] = useLocalStorageState<boolean>("ticketBoard.onlyPending", false);
   const [viewMode, setViewMode] = useLocalStorageState<ViewMode>("ticketBoard.viewMode", "graph");
+  // Plan 38 B2 — Modal épica desde brief
+  const [epicBriefOpen, setEpicBriefOpen] = useState(false);
   // Requerimiento B: "Mostrar todas las tareas" — arranca MARCADO por defecto
   // (decisión de negocio). Al desmarcar se filtra a "solo asignadas a mí".
   const [showAll, setShowAll] = useLocalStorageState<boolean>("ticketBoard.showAll", true);
@@ -816,6 +853,14 @@ export default function TicketBoard() {
           )}
         </div>
         <div className={styles.headerActions}>
+          {/* Plan 38 B2 — Épica desde brief */}
+          <button
+            className={styles.syncBtn}
+            onClick={() => setEpicBriefOpen(true)}
+            title="Crear una nueva épica desde un brief de negocio"
+          >
+            + Nueva Épica desde brief
+          </button>
           {/* Toggle vista */}
           <div className={styles.viewToggle}>
             <button
@@ -881,6 +926,13 @@ export default function TicketBoard() {
           </button>
         </div>
       </header>
+
+      {/* Plan 38 B2 — Modal Épica desde Brief */}
+      {epicBriefOpen && (
+        <EpicFromBriefModal
+          onClose={() => setEpicBriefOpen(false)}
+        />
+      )}
 
       {/* P7: barra de estado de sincronizacion */}
       <SyncStatusBar

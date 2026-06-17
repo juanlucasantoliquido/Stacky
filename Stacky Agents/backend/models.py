@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -301,6 +302,45 @@ class AgentExecution(Base):
         return d
 
 
+class PipelineRun(Base):
+    __tablename__ = "pipeline_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), nullable=False)
+    project: Mapped[str | None] = mapped_column(String(80))
+    stages_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    current_stage: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
+    last_execution_id: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_pipeline_ticket_status", "ticket_id", "status"),
+    )
+
+    @property
+    def stages(self) -> list[str]:
+        return _json_loads(self.stages_json) or []
+
+    @stages.setter
+    def stages(self, value: list[str]) -> None:
+        self.stages_json = _json_dumps(value or []) or "[]"
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "ticket_id": self.ticket_id,
+            "project": self.project,
+            "stages": self.stages,
+            "current_stage": self.current_stage,
+            "status": self.status,
+            "last_execution_id": self.last_execution_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class ExecutionLog(Base):
     __tablename__ = "execution_logs"
 
@@ -413,4 +453,73 @@ class SystemLog(Base):
             "error": self.error,
             "context": self.context,
             "tags": self.tags,
+        }
+
+
+class AgentPromptVersion(Base):
+    """V1.1 — Historial auditable de prompts de agente (.agent.md).
+
+    Los .agent.md están gitignored, por lo que la DB es el único lugar posible
+    para historizar qué versión de prompt corrió cada run. Tabla nueva ⇒
+    Base.metadata.create_all la crea sin migración destructiva.
+    """
+
+    __tablename__ = "agent_prompt_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    filename: Mapped[str] = mapped_column(String(200), index=True, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    source: Mapped[str] = mapped_column(String(40), nullable=False)  # import_endpoint | fs_scan
+
+    __table_args__ = (
+        UniqueConstraint("filename", "sha256", name="uq_agent_prompt_filename_sha"),
+        Index("ix_agent_prompt_filename", "filename"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "filename": self.filename,
+            "sha256": self.sha256,
+            "size": len(self.body or ""),
+            "imported_at": self.imported_at.isoformat() if self.imported_at else None,
+            "source": self.source,
+        }
+
+
+class EvalRun(Base):
+    """V2.3 — Historial de corridas de evals golden (golden loop).
+
+    Persiste el resultado de cada corrida del daemon programado (o promote) para
+    correlacionar score con `prompt_sha` (V1.1) en el tiempo. Tabla nueva ⇒
+    Base.metadata.create_all la crea sin migración destructiva.
+    """
+
+    __tablename__ = "eval_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ran_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    agent_type: Mapped[str] = mapped_column(String(60), index=True, nullable=False)
+    passed: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+    scores_json: Mapped[str] = mapped_column(Text, default="[]")
+    prompt_sha: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
+    def to_dict(self) -> dict:
+        import json as _json
+
+        try:
+            scores = _json.loads(self.scores_json or "[]")
+        except (ValueError, TypeError):
+            scores = []
+        return {
+            "id": self.id,
+            "ran_at": self.ran_at.isoformat() if self.ran_at else None,
+            "agent_type": self.agent_type,
+            "passed": self.passed,
+            "failed": self.failed,
+            "scores": scores,
+            "prompt_sha": self.prompt_sha,
         }

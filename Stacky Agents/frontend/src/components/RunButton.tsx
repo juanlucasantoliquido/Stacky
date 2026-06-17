@@ -28,7 +28,7 @@ export default function RunButton({ state, disabled, onClick, onCancel }: Props)
       disabled={disabled}
       onClick={onClick}
     >
-      ▶ RUN AGENT
+      ▶ EJECUTAR
     </button>
   );
 }

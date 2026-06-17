@@ -1034,3 +1034,207 @@ def test_create_child_task_accepts_legacy_pending_status(client, epic_ticket, tm
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# Stale consumed (caso ADO-241, 2026-06-11): la Task fue borrada en ADO
+# despues del consume. Los paths idempotentes deben verificar contra ADO.
+# ---------------------------------------------------------------------------
+
+class FakeAdoClientStale(FakeAdoClientExt):
+    """FakeAdoClientExt con ids configurables que devuelven 404 (Task borrada)."""
+
+    def __init__(self, *a, not_found_ids=(), transient_error_ids=(), **kw):
+        super().__init__(*a, **kw)
+        self.not_found_ids = {int(i) for i in not_found_ids}
+        self.transient_error_ids = {int(i) for i in transient_error_ids}
+        self.get_calls: list[int] = []
+
+    def get_work_item(self, ado_id: int, fields: list[str] | None = None):
+        self.get_calls.append(int(ado_id))
+        if int(ado_id) in self.not_found_ids:
+            from services.ado_client import AdoApiError
+            raise AdoApiError(
+                f"ADO GET _apis/wit/workitems/{ado_id} -> 404: TF401232: Work item "
+                f"{ado_id} does not exist, or you do not have permissions to read it.",
+                status_code=404,
+            )
+        if int(ado_id) in self.transient_error_ids:
+            from services.ado_client import AdoApiError
+            raise AdoApiError(
+                f"ADO GET _apis/wit/workitems/{ado_id} -> 500: TF400898: internal error",
+                status_code=500,
+            )
+        return super().get_work_item(ado_id, fields)
+
+
+def _stamp_consumed(pt_path, task_ado_id: int, consumed_at: str = "2026-06-05T23:44:55+00:00"):
+    payload = json.loads(pt_path.read_text(encoding="utf-8"))
+    payload.update({
+        "status": "consumed",
+        "consumed_at": consumed_at,
+        "task_ado_id": task_ado_id,
+        "attachment_id": f"attach-{task_ado_id}",
+    })
+    pt_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return payload
+
+
+def test_stale_consumed_marker_recreates_task(client, epic_ticket, tmp_repo):
+    """Archivo consumed apuntando a una Task borrada en ADO -> reset + recreacion.
+
+    Replica ADO-241: la Task 246 fue creada el 5/6 y borrada en ADO 43 segundos
+    despues; el archivo quedo consumed/task_ado_id=246 y toda corrida posterior
+    respondia idempotente sin crear nada.
+    """
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-STALE1")
+    _stamp_consumed(pt_path, task_ado_id=246)
+    rel_path = _rel_path(tmp_repo, pt_path)
+
+    fake_ado = FakeAdoClientStale(not_found_ids=[246])
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path, "operator_reason": "Desatascador: recrear"},
+        )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data.get("idempotent") is not True
+    assert data["task_ado_id"] == 5000  # Task NUEVA, no la borrada
+    assert data["pending_task_consumed"] is True
+    action_names = [a["action"] for a in data["actions"]]
+    assert "reset_stale_consumed" in action_names
+    assert "create_work_item" in action_names
+    assert 246 in fake_ado.get_calls  # verifico contra ADO antes de decidir
+    assert len(fake_ado.create_calls) == 1
+
+    payload = json.loads(pt_path.read_text(encoding="utf-8"))
+    assert payload["status"] == "consumed"
+    assert payload["task_ado_id"] == 5000
+    resets = payload["stale_consumed_resets"]
+    assert len(resets) == 1 and resets[0]["stale_task_ado_id"] == 246
+
+
+def test_consumed_marker_with_live_task_stays_idempotent(client, epic_ticket, tmp_repo):
+    """Si la Task del marker sigue viva en ADO, la idempotencia se mantiene."""
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-STALE2")
+    _stamp_consumed(pt_path, task_ado_id=246)
+    rel_path = _rel_path(tmp_repo, pt_path)
+
+    fake_ado = FakeAdoClientStale()  # get_work_item(246) responde ok
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    data = resp.get_json()
+    assert resp.status_code == 200
+    assert data["idempotent"] is True
+    assert data["reason"] == "PENDING_TASK_ALREADY_CONSUMED"
+    assert data["stale_check"] == "exists"
+    assert data["task_ado_id"] == 246
+    assert fake_ado.create_calls == []
+
+
+def test_stale_check_transient_error_stays_idempotent(client, epic_ticket, tmp_repo):
+    """Error transitorio (5xx/red) al verificar -> NO recrear (riesgo de duplicado)."""
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-STALE3")
+    _stamp_consumed(pt_path, task_ado_id=246)
+    rel_path = _rel_path(tmp_repo, pt_path)
+
+    fake_ado = FakeAdoClientStale(transient_error_ids=[246])
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    data = resp.get_json()
+    assert resp.status_code == 200
+    assert data["idempotent"] is True
+    assert data["reason"] == "PENDING_TASK_ALREADY_CONSUMED"
+    assert data["stale_check"] == "unknown"
+    assert fake_ado.create_calls == []
+
+    payload = json.loads(pt_path.read_text(encoding="utf-8"))
+    assert payload["task_ado_id"] == 246  # el archivo NO se toco
+
+
+def test_stale_check_flag_off_keeps_legacy_behavior(client, epic_ticket, tmp_repo, monkeypatch):
+    """STACKY_STALE_CONSUMED_CHECK=off -> rollback al comportamiento previo."""
+    monkeypatch.setenv("STACKY_STALE_CONSUMED_CHECK", "off")
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-STALE4")
+    _stamp_consumed(pt_path, task_ado_id=246)
+    rel_path = _rel_path(tmp_repo, pt_path)
+
+    fake_ado = FakeAdoClientStale(not_found_ids=[246])
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    data = resp.get_json()
+    assert resp.status_code == 200
+    assert data["idempotent"] is True
+    assert data["stale_check"] == "unknown"
+    assert 246 not in fake_ado.get_calls  # con el flag off ni siquiera consulta ADO
+    assert fake_ado.create_calls == []
+
+
+def test_equivalent_consumed_stale_is_ignored_and_creates(client, epic_ticket, tmp_repo):
+    """El match por equivalencia NO debe propagar un marker stale.
+
+    Replica las corridas del 6/6 y 11/6 para ADO-241: el agente regenero el
+    contrato, pero el equivalente consumido (task 246, ya borrada) se lo trago
+    y lo estampo consumed sin tocar ADO.
+    """
+    fresh_pt = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-STALE5", slug="nuevo")
+    stale_pt = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-STALE5", slug="viejo")
+    _stamp_consumed(stale_pt, task_ado_id=246)
+    rel_path = _rel_path(tmp_repo, fresh_pt)
+
+    fake_ado = FakeAdoClientStale(not_found_ids=[246])
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data.get("idempotent") is not True
+    assert data.get("reason") != "PENDING_TASK_EQUIVALENT_ALREADY_CONSUMED"
+    assert data["task_ado_id"] == 5000
+    assert len(fake_ado.create_calls) == 1
+
+    fresh_payload = json.loads(fresh_pt.read_text(encoding="utf-8"))
+    assert fresh_payload["task_ado_id"] == 5000
+    stale_payload = json.loads(stale_pt.read_text(encoding="utf-8"))
+    assert stale_payload["task_ado_id"] == 246  # el viejo queda como evidencia
+
+
+def test_equivalent_consumed_live_task_still_idempotent(client, epic_ticket, tmp_repo):
+    """Control: si la Task del equivalente sigue viva, NO se duplica (fix 6/5 intacto)."""
+    fresh_pt = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-STALE6", slug="nuevo")
+    stale_pt = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-STALE6", slug="viejo")
+    _stamp_consumed(stale_pt, task_ado_id=246)
+    rel_path = _rel_path(tmp_repo, fresh_pt)
+
+    fake_ado = FakeAdoClientStale()  # 246 sigue viva
+    with patch("api.tickets._ado_client_for_ticket", return_value=fake_ado):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    data = resp.get_json()
+    assert resp.status_code == 200
+    assert data["idempotent"] is True
+    assert data["reason"] == "PENDING_TASK_EQUIVALENT_ALREADY_CONSUMED"
+    assert data["task_ado_id"] == 246
+    assert fake_ado.create_calls == []

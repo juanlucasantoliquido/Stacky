@@ -29,6 +29,7 @@ from services.heartbeat_monitor import (
 )
 from services.manifest_watcher import MANIFEST_FILENAME, default_runs_dir
 from services.ticket_status import EXECUTION_TIMEOUT_MINUTES, PRE_RUN_TIMEOUT_SECONDS, TicketStatusEvent
+from services.app_version import get_app_version
 
 logger = logging.getLogger("stacky.api.diag")
 
@@ -348,6 +349,7 @@ def health():
     return jsonify({
         "ok": True,
         "healthy": not warnings,
+        "version": get_app_version(),
         "repo_root": str(repo_root_path) if repo_root_path else None,
         "repo_root_error": repo_root_err,
         "outputs_dir": str(outputs_path) if outputs_path else None,

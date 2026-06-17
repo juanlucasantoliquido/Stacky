@@ -8,6 +8,7 @@ import SettingsPage from "./pages/SettingsPage";
 import DocsPage from "./pages/DocsPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
 import MemoryPage from "./pages/MemoryPage";
+import ReviewInboxPage from "./pages/ReviewInboxPage";
 import TopBar from "./components/TopBar";
 import HealthBanner from "./components/HealthBanner";
 import CommandPalette from "./components/CommandPalette";
@@ -16,16 +17,19 @@ import OnboardingTour from "./components/OnboardingTour";
 import ShortcutsCheatsheet from "./components/ShortcutsCheatsheet";
 import DemoModeBanner from "./components/DemoModeBanner";
 import CodexConsoleDock from "./components/CodexConsoleDock";
+import ActiveRunsPanel from "./components/ActiveRunsPanel";
 import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
+import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics";
+type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics";
 
 const TAB_PATHS: Record<Tab, string> = {
   team: "/",
   tickets: "/tickets",
+  review: "/review",
   unblocker: "/unblocker",
   pm: "/pm",
   logs: "/logs",
@@ -46,6 +50,8 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const sections = useUiSectionsStore((s) => s.sections);
+
+  useGlobalExecutionNotifier();
 
   const selectTab = (next: Tab) => {
     setTab(next);
@@ -131,6 +137,12 @@ export default function App() {
           📋 Tickets ADO
         </button>
         <button
+          className={`${styles.navTab} ${tab === "review" ? styles.active : ""}`}
+          onClick={() => selectTab("review")}
+        >
+          🧭 Revisión
+        </button>
+        <button
           className={`${styles.navTab} ${tab === "unblocker" ? styles.active : ""}`}
           onClick={() => selectTab("unblocker")}
         >
@@ -184,6 +196,7 @@ export default function App() {
 
       {tab === "team"     && <TeamScreen />}
       {tab === "tickets"  && <TicketBoard />}
+      {tab === "review"   && <ReviewInboxPage />}
       {tab === "unblocker" && <UnblockerPage />}
       {tab === "pm"       && sections.pm   && <PMCommandCenter />}
       {tab === "logs"     && sections.logs && <SystemLogsPage />}
@@ -207,6 +220,11 @@ export default function App() {
       {/* Consola flotante de runtimes CLI (Codex / Claude): muestra la actividad
           en vivo y permite responderle al agente. Se activa al lanzar un run CLI. */}
       <CodexConsoleDock />
+
+      {/* Panel global de ejecuciones activas: permite cancelar manualmente
+          cualquier run en curso (incluidos huérfanos/colgados de otro proyecto
+          que el board no muestra). Solo aparece si hay runs activos. */}
+      <ActiveRunsPanel />
     </div>
   );
 }

@@ -170,7 +170,7 @@ def _write(data: dict, project_name: str | None = None) -> None:
     )
 
 
-def _validate_fields(ado_state: Any, agent_type: Any) -> None:
+def _validate_fields(ado_state: Any, agent_type: Any, on_failure_state: Any | None = None) -> None:
     """Lanza ValidationError si algún campo es inválido."""
     if not ado_state or not isinstance(ado_state, str) or not ado_state.strip():
         raise ValidationError("ado_state es requerido y debe ser un string no vacío.")
@@ -181,6 +181,8 @@ def _validate_fields(ado_state: Any, agent_type: Any) -> None:
             f"agent_type '{agent_type}' no válido. "
             f"Valores permitidos: {sorted(VALID_AGENT_TYPES)}."
         )
+    if on_failure_state is not None and not isinstance(on_failure_state, str):
+        raise ValidationError("on_failure_state debe ser string o null.")
 
 
 # ── API pública ────────────────────────────────────────────────────────────
@@ -199,7 +201,12 @@ def get_rule(rule_id: str, project_name: str | None = None) -> dict | None:
     return None
 
 
-def create_rule(ado_state: str, agent_type: str, project_name: str | None = None) -> dict:
+def create_rule(
+    ado_state: str,
+    agent_type: str,
+    project_name: str | None = None,
+    on_failure_state: str | None = None,
+) -> dict:
     """
     Crea una nueva regla.
 
@@ -207,9 +214,10 @@ def create_rule(ado_state: str, agent_type: str, project_name: str | None = None
         ValidationError: campos inválidos.
         DuplicateStateError: ya existe una regla para ese ado_state.
     """
-    _validate_fields(ado_state, agent_type)
+    _validate_fields(ado_state, agent_type, on_failure_state)
     ado_state = ado_state.strip()
     agent_type = agent_type.strip()
+    failure_state = (on_failure_state or "").strip() or None
 
     data = _read_raw(project_name)
     rules: list[dict] = data.get("rules", [])
@@ -224,6 +232,7 @@ def create_rule(ado_state: str, agent_type: str, project_name: str | None = None
         "id": str(uuid.uuid4()),
         "ado_state": ado_state,
         "agent_type": agent_type,
+        "on_failure_state": failure_state,
         "created_at": now,
         "updated_at": now,
     }
@@ -237,6 +246,7 @@ def update_rule(
     rule_id: str,
     ado_state: str,
     agent_type: str,
+    on_failure_state: str | None = None,
     project_name: str | None = None,
 ) -> dict:
     """
@@ -247,9 +257,10 @@ def update_rule(
         RuleNotFoundError: regla no encontrada.
         DuplicateStateError: otro registro ya usa ese ado_state.
     """
-    _validate_fields(ado_state, agent_type)
+    _validate_fields(ado_state, agent_type, on_failure_state)
     ado_state = ado_state.strip()
     agent_type = agent_type.strip()
+    failure_state = (on_failure_state or "").strip() or None
 
     data = _read_raw(project_name)
     rules: list[dict] = data.get("rules", [])
@@ -264,6 +275,7 @@ def update_rule(
         if r.get("id") == rule_id:
             r["ado_state"] = ado_state
             r["agent_type"] = agent_type
+            r["on_failure_state"] = failure_state
             r["updated_at"] = _now_iso()
             updated = r
             break
@@ -350,5 +362,11 @@ def resolve(ado_state: str, project_name: str | None = None) -> dict:
                 "found": True,
                 "ado_state": ado_state,
                 "agent_type": rule.get("agent_type"),
+                "on_failure_state": rule.get("on_failure_state"),
             }
-    return {"found": False, "ado_state": ado_state, "agent_type": None}
+    return {
+        "found": False,
+        "ado_state": ado_state,
+        "agent_type": None,
+        "on_failure_state": None,
+    }

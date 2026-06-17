@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Agents } from "../api/endpoints";
 import type { AgentHistoryEntry, AgentHistoryResponse } from "../api/endpoints";
 import PixelAvatar from "./PixelAvatar";
+import ExecutionDetailDrawer from "./ExecutionDetailDrawer";
 import styles from "./AgentHistoryModal.module.css";
 
 interface AgentHistoryModalProps {
@@ -35,6 +36,7 @@ export default function AgentHistoryModal({
   const [data, setData] = useState<AgentHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [detailExecutionId, setDetailExecutionId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,7 +99,7 @@ export default function AgentHistoryModal({
             ) : (
               <div className={styles.list}>
                 {data.tickets.map((t) => (
-                  <TicketRow key={t.ticket_id} entry={t} />
+                  <TicketRow key={t.ticket_id} entry={t} onViewDetails={setDetailExecutionId} />
                 ))}
               </div>
             )}
@@ -106,11 +108,21 @@ export default function AgentHistoryModal({
           </>
         )}
       </div>
+      <ExecutionDetailDrawer
+        executionId={detailExecutionId}
+        onClose={() => setDetailExecutionId(null)}
+      />
     </div>
   );
 }
 
-function TicketRow({ entry }: { entry: AgentHistoryEntry }) {
+function TicketRow({
+  entry,
+  onViewDetails,
+}: {
+  entry: AgentHistoryEntry;
+  onViewDetails: (executionId: number) => void;
+}) {
   const verdict = entry.last_execution_verdict
     ? VERDICT_LABEL[entry.last_execution_verdict] ?? entry.last_execution_verdict
     : null;
@@ -155,6 +167,14 @@ function TicketRow({ entry }: { entry: AgentHistoryEntry }) {
             ADO ↗
           </a>
         )}
+        <button
+          type="button"
+          className={styles.adoLink}
+          onClick={() => onViewDetails(entry.last_execution_id)}
+          title="Ver detalle de ejecución"
+        >
+          Detalle
+        </button>
       </div>
     </div>
   );

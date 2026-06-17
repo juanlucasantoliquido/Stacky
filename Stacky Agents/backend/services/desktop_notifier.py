@@ -52,7 +52,10 @@ def _get_notifier():
 
 
 def is_enabled() -> bool:
-    return os.getenv("STACKY_DESKTOP_NOTIFY", "false").lower() == "true"
+    raw = os.getenv("STACKY_DESKTOP_NOTIFY_ENABLED")
+    if raw is None:
+        raw = os.getenv("STACKY_DESKTOP_NOTIFY", "false")
+    return str(raw).lower() in {"1", "true", "yes"}
 
 
 def notify(title: str, message: str, *, app_name: str = "Stacky Agents", timeout_sec: int = 6) -> bool:

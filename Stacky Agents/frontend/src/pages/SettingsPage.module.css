@@ -145,3 +145,18 @@
   font-size: 12px;
   margin-top: 4px;
 }
+
+.inputInline,
+.selectInline {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.65);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.selectInline {
+  max-width: 220px;
+}

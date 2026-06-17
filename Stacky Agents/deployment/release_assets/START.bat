@@ -35,6 +35,14 @@ if not exist "backend\.env" (
     )
 )
 
+:: Enrich PATH with npm global prefix so claude/codex are visible to the backend.
+:: %APPDATA%\npm is where `npm install -g` puts binaries on Windows (user install).
+if exist "%APPDATA%\npm" set "PATH=%APPDATA%\npm;%PATH%"
+:: Also ask npm for its configured prefix in case it was customised.
+for /f "usebackq delims=" %%N in (`npm config get prefix 2^>nul`) do (
+    if exist "%%N" set "PATH=%%N;%PATH%"
+)
+
 netstat -ano -p tcp 2>nul | findstr ":%STACKY_PORT%" | findstr "LISTENING" >nul 2>&1
 if errorlevel 1 (
     echo [INFO] Iniciando Stacky Agents...

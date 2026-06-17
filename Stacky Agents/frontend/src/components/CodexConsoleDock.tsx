@@ -5,6 +5,7 @@ import { Executions } from "../api/endpoints";
 import { useExecutionStream } from "../hooks/useExecutionStream";
 import { useWorkbench } from "../store/workbench";
 import type { LogLine } from "../types";
+import ExecutionDetailDrawer from "./ExecutionDetailDrawer";
 import styles from "./CodexConsoleDock.module.css";
 
 /** Distancia (px) al fondo dentro de la cual seguimos auto-scrolleando. */
@@ -51,6 +52,7 @@ export default function CodexConsoleDock() {
   const setExecution = useWorkbench((state) => state.setCodexConsoleExecution);
   const setMinimized = useWorkbench((state) => state.setCodexConsoleMinimized);
   const [input, setInput] = useState("");
+  const [detailOpen, setDetailOpen] = useState(false);
   const stream = useExecutionStream(executionId);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -102,6 +104,9 @@ export default function CodexConsoleDock() {
     input.trim().length > 0;
   const sessionEnded = stream.done || status !== "running";
   const phase = workingPhase(stream.lines, isRunning, runtimeLabel);
+  const totalTokens =
+    (stream.telemetry?.input_tokens ?? 0) +
+    (stream.telemetry?.output_tokens ?? 0);
   const statusLabel =
     status === "queued"
       ? "preparado"
@@ -121,6 +126,7 @@ export default function CodexConsoleDock() {
   };
 
   return (
+    <>
     <section className={minimized ? styles.dockMinimized : styles.dock} aria-label={`Consola ${runtimeLabel}`}>
       <header className={styles.header}>
         <div className={styles.title}>
@@ -130,8 +136,30 @@ export default function CodexConsoleDock() {
           <span className={stream.done ? styles.done : styles.running}>
             {statusLabel}
           </span>
+          {stream.telemetry?.turns != null && (
+            <span className={styles.execution}>🔁 {stream.telemetry.turns}</span>
+          )}
+          {totalTokens > 0 && (
+            <span className={styles.execution}>⎁ {totalTokens.toLocaleString()}</span>
+          )}
+          {stream.telemetry?.cost_usd != null && (
+            <span className={styles.execution}>
+              ${Number(stream.telemetry.cost_usd).toFixed(4)}
+              {stream.telemetry?.cost_estimated ? " est" : ""}
+            </span>
+          )}
         </div>
         <div className={styles.actions}>
+          {stream.done && (
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={() => setDetailOpen(true)}
+              title="Ver detalle de ejecución"
+            >
+              Ver detalle
+            </button>
+          )}
           <button
             type="button"
             className={styles.iconButton}
@@ -238,5 +266,12 @@ export default function CodexConsoleDock() {
         </form>
       )}
     </section>
+    {detailOpen && (
+      <ExecutionDetailDrawer
+        executionId={executionId}
+        onClose={() => setDetailOpen(false)}
+      />
+    )}
+    </>
   );
 }

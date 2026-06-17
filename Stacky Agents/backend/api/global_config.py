@@ -23,12 +23,18 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+from runtime_paths import backend_root
+
 logger = logging.getLogger(__name__)
 
 bp = Blueprint("global_config", __name__)
 
-# Ruta al .env del backend
-_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+# Ruta al .env del backend. Debe ser EXACTAMENTE el mismo archivo que carga
+# config.py al arrancar (backend_root()/.env) y el que escribe harness_flags.py.
+# En un deploy frozen, Path(__file__).parent.parent resolvía a _internal/.env
+# (que el loader nunca lee) → los cambios no persistían al reiniciar. Mantener
+# ambos endpoints sobre el mismo archivo es obligatorio: no deben divergir.
+_ENV_PATH = backend_root() / ".env"
 
 # Claves gestionadas por este endpoint
 _MANAGED_KEYS = [
@@ -61,6 +67,7 @@ _MANAGED_KEYS = [
     # Claude Code CLI
     "CLAUDE_CODE_CLI_BIN",
     "CLAUDE_CODE_CLI_MODEL",
+    "CLAUDE_CODE_CLI_EFFORT",
     "CLAUDE_CODE_CLI_PERMISSION_MODE",
     "CLAUDE_CODE_CLI_SKIP_PERMISSIONS",
 ]
@@ -79,7 +86,8 @@ _CODEX_DEFAULTS = {
     "OPENAI_API_KEY": "",
     # Claude Code CLI
     "CLAUDE_CODE_CLI_BIN": "",
-    "CLAUDE_CODE_CLI_MODEL": "",
+    "CLAUDE_CODE_CLI_MODEL": "claude-sonnet-4-6",
+    "CLAUDE_CODE_CLI_EFFORT": "medium",
     "CLAUDE_CODE_CLI_PERMISSION_MODE": "acceptEdits",
     "CLAUDE_CODE_CLI_SKIP_PERMISSIONS": "false",
 }

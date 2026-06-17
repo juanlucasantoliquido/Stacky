@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime
+from datetime import timedelta
 from pathlib import Path
 
 from flask import Blueprint, Response, abort, jsonify, request
@@ -27,10 +28,31 @@ def list_executions():
     ticket_id = request.args.get("ticket_id", type=int)
     agent_type = request.args.get("agent_type")
     status = request.args.get("status")
+    status_values: list[str] = []
+    # Soporta:
+    # - ?status=running
+    # - ?status=needs_review,error
+    # - ?status=needs_review&status=error
+    for raw in request.args.getlist("status"):
+        for token in str(raw).split(","):
+            val = token.strip()
+            if val:
+                status_values.append(val)
+    if not status_values and status:
+        status_values = [status.strip()]
+
+    days = request.args.get("days", type=int)
     project_name = (request.args.get("project") or "").strip() or None
+    all_projects = (request.args.get("all_projects") or "").strip().lower() in ("1", "true", "yes")
     limit = request.args.get("limit", default=50, type=int)
 
-    project_ctx = resolve_project_context(project_name=project_name) if project_name else resolve_project_context()
+    # all_projects=true → NO filtrar por proyecto. Para vistas globales (p.ej. el
+    # panel de runs activos) que deben poder ver/cancelar ejecuciones de cualquier
+    # proyecto, incluidos runs huérfanos cuyo ticket quedó sin stacky_project_name.
+    if all_projects:
+        project_ctx = None
+    else:
+        project_ctx = resolve_project_context(project_name=project_name) if project_name else resolve_project_context()
 
     with session_scope() as session:
         q = session.query(AgentExecution)
@@ -48,8 +70,13 @@ def list_executions():
             q = q.filter(AgentExecution.ticket_id == ticket_id)
         if agent_type:
             q = q.filter(AgentExecution.agent_type == agent_type)
-        if status:
-            q = q.filter(AgentExecution.status == status)
+        if status_values:
+            if len(status_values) == 1:
+                q = q.filter(AgentExecution.status == status_values[0])
+            else:
+                q = q.filter(AgentExecution.status.in_(status_values))
+        if days and days > 0:
+            q = q.filter(AgentExecution.started_at >= (datetime.utcnow() - timedelta(days=days)))
         rows = q.order_by(AgentExecution.started_at.desc()).limit(limit).all()
         return jsonify([r.to_dict(include_output=False) for r in rows])
 
@@ -150,22 +177,23 @@ def _set_verdict(execution_id: int, verdict: str):
 
 @bp.post("/<int:execution_id>/publish-to-ado")
 def publish_to_ado(execution_id: int):
-    """Stub. En Fase 1 delegamos a `Tools/Stacky/ado_attachment_manager` & co."""
-    target = (request.get_json(silent=True) or {}).get("target", "comment")
+    """U2.2 — Publicación real en modo review-before-publish.
+
+    Sólo opera cuando la ejecución quedó en hold por publish_mode=review.
+    """
     with session_scope() as session:
         row = session.get(AgentExecution, execution_id)
         if row is None:
             abort(404)
-        # TODO Fase 1: llamar al ADO real.
-        return jsonify(
-            {
-                "ok": True,
-                "stubbed": True,
-                "target": target,
-                "ado_url": f"https://dev.azure.com/.../_workitems/edit/{row.ticket_id}",
-                "published_at": datetime.utcnow().isoformat(),
-            }
-        )
+
+    from services.agent_completion_internal import publish_execution_from_review
+
+    result = publish_execution_from_review(
+        execution_id=execution_id,
+        triggered_by=current_user() or "operator_review",
+    )
+    status = int(result.pop("status", 200))
+    return jsonify(result), status
 
 
 @bp.get("/<int:execution_id>/diff/<int:other_id>")
@@ -196,7 +224,7 @@ def cancel_execution(execution_id: int):
         row = session.get(AgentExecution, execution_id)
         if row is None:
             abort(404, "execution not found")
-        if row.status not in ("vscode_chat", "preparing", "running"):
+        if row.status not in ("vscode_chat", "preparing", "queued", "running"):
             abort(409, f"Cannot cancel execution in status '{row.status}'")
         row.status = "cancelled"
         row.completed_at = datetime.utcnow()

@@ -200,17 +200,22 @@ def test_cost_per_ticket_sums_across_same_ticket():
     assert h["cost_per_ticket_usd"] == pytest.approx(0.05, abs=1e-4)
 
 
-def test_cost_per_ticket_zero_when_no_cost_data():
-    """Sin datos de costo en ningún run, cost_per_ticket en by_runtime = 0.0 (acumula 0)."""
+def test_cost_per_ticket_none_when_no_cost_data():
+    """Sin datos de costo en ningún run, cost_per_ticket = None (nunca inventar).
+
+    Plan 22 · V0.5: el costo desconocido es null, NO 0.0 — un 0.0 inventado
+    contaminaría el KPI económico haciéndolo parecer "gratis". `_rate` ya
+    devuelve None cuando el denominador de runs-con-costo es 0. (Antes este test
+    asertaba 0.0; la aserción quedó obsoleta frente a la doctrina null-not-zero.)
+    """
     from services.harness_health import compute_health
 
     t = _mk_ticket(80008)
-    _mk_exec(t, status="completed")  # sin cost → total_cost_usd acumula 0.0
+    _mk_exec(t, status="completed")  # sin cost → sin runs-con-costo
 
     h = compute_health(window_days=14).to_dict()
-    # by_runtime[runtime].cost_per_ticket = 0.0 / 1 ticket = 0.0 (no null)
     br = h["by_runtime"].get("claude_code_cli", {})
-    assert br.get("cost_per_ticket") == 0.0
+    assert br.get("cost_per_ticket") is None
 
 
 # ── 5. KPIs en by_runtime ────────────────────────────────────────────────────

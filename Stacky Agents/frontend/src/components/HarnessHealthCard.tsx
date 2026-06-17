@@ -25,6 +25,35 @@ interface RuntimeStats {
   runaway_stops: number;
 }
 
+interface IntegrityKpis {
+  runs_condenados_evitados?: number | "--";
+  exitos_fantasma_atrapados?: number | "--";
+  tasa_referencias_ancladas?: number | "--";
+  tasa_exito_real_creacion?: number | "--";
+}
+
+interface ExecVerificationKpis {
+  verificados?: number;
+  tasa_verde_a_la_primera?: number | "--";
+  tasa_recuperacion_exec_repair?: number | "--";
+  entregables_rotos_atrapados?: number;
+  verde_falso_atrapado?: number;
+  costo_medio_verificacion_ms?: number | "--";
+}
+
+interface AcceptanceContractKpis {
+  total?: number;
+  con_contrato?: number;
+  tasa_contrato_derivable?: number | "--";
+  cumplido_a_la_primera?: number;
+  tasa_cumplido_a_la_primera?: number | "--";
+  repair_attempted?: number;
+  repair_recovered?: number;
+  tasa_recuperacion?: number | "--";
+  calidad_del_examen?: number | "--";
+  intentos_de_gameo_atrapados?: number;
+}
+
 interface HarnessHealthResponse {
   ok: boolean;
   generated_at: string;
@@ -43,6 +72,16 @@ interface HarnessHealthResponse {
   runaway_stops: number;
   by_runtime: Record<string, RuntimeStats>;
   by_project: Record<string, RuntimeStats>;
+  // V0.3 / V0.4 / V0.5
+  active_runs?: number;
+  failure_kinds?: Record<string, number>;
+  estimated_cost_runs?: number;
+  // Plan 30 — G2.1
+  integrity?: IntegrityKpis;
+  // Plan 31 — E2.2
+  exec_verification_kpis?: ExecVerificationKpis;
+  // Plan 32 — A2.2
+  acceptance_contract_kpis?: AcceptanceContractKpis;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,6 +99,22 @@ function usd(value: number | null | undefined): string {
 function fmt(value: number | null | undefined): string {
   if (value == null) return "—";
   return String(value);
+}
+
+// Plan 30 — valor de KPI de integridad: "--" → "—", tasa → porcentaje, count → string.
+function integrityFmt(value: number | "--" | undefined, isTasa: boolean): string {
+  if (value === undefined || value === "--") return "—";
+  if (isTasa) return `${(value * 100).toFixed(1)}%`;
+  return String(value);
+}
+
+// V0.4 — "kind: count, kind: count" ordenado desc por count.
+function topFailures(kinds: Record<string, number> | undefined): string {
+  if (!kinds || Object.keys(kinds).length === 0) return "—";
+  return Object.entries(kinds)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `${k}: ${n}`)
+    .join(", ");
 }
 
 // ── Sub-componentes ──────────────────────────────────────────────────────────
@@ -212,7 +267,92 @@ export default function HarnessHealthCard({ days = 14 }: Props) {
         <KpiRow label="Costo por ticket" value={usd(data.cost_per_ticket_usd)} />
         <KpiRow label="Runs frenados por runaway guard" value={String(data.runaway_stops)} />
         <KpiRow label="Runs con telemetria de costo" value={String(data.runs_with_cost_telemetry)} />
+        {/* V0.3 / V0.5 */}
+        <KpiRow label="Runs CLI activos ahora" value={String(data.active_runs ?? 0)} />
+        <KpiRow label="Runs con costo estimado" value={String(data.estimated_cost_runs ?? 0)} />
+        {/* V0.4 — Top fallos por causa (orden desc) */}
+        <KpiRow label="Top fallos" value={topFailures(data.failure_kinds)} />
       </div>
+
+      {/* Plan 30 — KPIs de integridad (solo si el flag está activo y el endpoint devuelve datos) */}
+      {data.integrity && Object.keys(data.integrity).length > 0 && (
+        <div className={styles.kpiGrid}>
+          <h3 className={styles.title}>Integridad verificada</h3>
+          <KpiRow
+            label="Runs condenados evitados"
+            value={integrityFmt(data.integrity.runs_condenados_evitados, false)}
+          />
+          <KpiRow
+            label="Exitos fantasma atrapados"
+            value={integrityFmt(data.integrity.exitos_fantasma_atrapados, false)}
+          />
+          <KpiRow
+            label="Tasa referencias ancladas"
+            value={integrityFmt(data.integrity.tasa_referencias_ancladas, true)}
+          />
+          <KpiRow
+            label="Tasa exito real creacion"
+            value={integrityFmt(data.integrity.tasa_exito_real_creacion, true)}
+          />
+        </div>
+      )}
+
+      {/* Plan 31 — E2.1/E2.2: KPIs de verificacion ejecutable (solo si flag ON y datos) */}
+      {data.exec_verification_kpis && Object.keys(data.exec_verification_kpis).length > 0 &&
+       (data.exec_verification_kpis.verificados ?? 0) > 0 && (
+        <div className={styles.kpiGrid}>
+          <h3 className={styles.title}>Verificacion ejecutable</h3>
+          <KpiRow label="Verificados" value={String(data.exec_verification_kpis.verificados ?? 0)} />
+          <KpiRow
+            label="Tasa verde a la primera"
+            value={integrityFmt(data.exec_verification_kpis.tasa_verde_a_la_primera, true)}
+          />
+          <KpiRow
+            label="Tasa recuperacion exec-repair"
+            value={integrityFmt(data.exec_verification_kpis.tasa_recuperacion_exec_repair, true)}
+          />
+          <KpiRow
+            label="Entregables rotos atrapados"
+            value={String(data.exec_verification_kpis.entregables_rotos_atrapados ?? 0)}
+          />
+          <KpiRow
+            label="Verde falso atrapado"
+            value={String(data.exec_verification_kpis.verde_falso_atrapado ?? 0)}
+          />
+          <KpiRow
+            label="Costo medio verificacion (ms)"
+            value={integrityFmt(data.exec_verification_kpis.costo_medio_verificacion_ms, false)}
+          />
+        </div>
+      )}
+
+      {/* Plan 32 — A2.1/A2.2: KPIs del contrato de aceptacion (solo si flag ON y datos) */}
+      {data.acceptance_contract_kpis && Object.keys(data.acceptance_contract_kpis).length > 0 &&
+       (data.acceptance_contract_kpis.total ?? 0) > 0 && (
+        <div className={styles.kpiGrid}>
+          <h3 className={styles.title}>Contrato de aceptacion</h3>
+          <KpiRow
+            label="Tasa contrato derivable"
+            value={integrityFmt(data.acceptance_contract_kpis.tasa_contrato_derivable, true)}
+          />
+          <KpiRow
+            label="Tasa cumplido a la primera"
+            value={integrityFmt(data.acceptance_contract_kpis.tasa_cumplido_a_la_primera, true)}
+          />
+          <KpiRow
+            label="Tasa recuperacion (repair)"
+            value={integrityFmt(data.acceptance_contract_kpis.tasa_recuperacion, true)}
+          />
+          <KpiRow
+            label="Calidad del examen"
+            value={integrityFmt(data.acceptance_contract_kpis.calidad_del_examen, true)}
+          />
+          <KpiRow
+            label="Intentos de gameo atrapados"
+            value={String(data.acceptance_contract_kpis.intentos_de_gameo_atrapados ?? 0)}
+          />
+        </div>
+      )}
 
       {/* Selector runtime / proyecto */}
       <div className={styles.tabs}>

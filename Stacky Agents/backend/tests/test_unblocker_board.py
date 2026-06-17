@@ -335,3 +335,111 @@ def test_rescue_artifact_stages_comment_html(client, tmp_repo):
     assert staged.read_text(encoding="utf-8") == "<h2>ok</h2>"
     meta = json.loads((staged.parent / "comment.meta.json").read_text(encoding="utf-8"))
     assert meta["source"] == "drag-drop"
+
+
+# ---------------------------------------------------------------------------
+# Stale consumed (caso ADO-241, 2026-06-11): pending-task consumido cuya Task
+# fue borrada en ADO. Antes era invisible (el board saltea consumed) y el flujo
+# automatico respondia idempotente sin crear nada.
+# ---------------------------------------------------------------------------
+
+def _write_consumed(
+    repo: Path, epic_id: int, rf_id: str, slug: str,
+    task_ado_id: int, consumed_at: str = "2020-01-01T00:00:00+00:00",
+):
+    rf_dir = repo / "Agentes" / "outputs" / f"epic-{epic_id}" / f"{rf_id.lower()}-{slug}"
+    rf_dir.mkdir(parents=True, exist_ok=True)
+    (rf_dir / "pending-task.json").write_text(json.dumps({
+        "generated_at": "2026-06-01T00:00:00",
+        "generated_by": "FunctionalAnalyst v2.0.3",
+        "epic_id": str(epic_id),
+        "rf_id": rf_id,
+        "title": f"{rf_id} — algo",
+        "description_html": "<p>x</p>",
+        "plan_de_pruebas_path": "",
+        "parent_link_type": "System.LinkTypes.Hierarchy-Reverse",
+        "status": "consumed",
+        "consumed_at": consumed_at,
+        "task_ado_id": task_ado_id,
+        "attachment_id": f"attach-{task_ado_id}",
+    }), encoding="utf-8")
+
+
+def test_ub09_stale_consumed_surfaced(client, tmp_repo):
+    """Consumed apuntando a Task inexistente en la sync -> stale_consumed accionable."""
+    _seed_ticket(8101, work_item_type="Epic", title="Epic 8101")
+    _write_consumed(tmp_repo, 8101, "RF-026", "filtros", task_ado_id=8888)
+
+    board = _get_board(client)
+    it = _item(board, 8101)
+    assert it is not None, "el epic con consumed stale debe aparecer en el board"
+    assert it["readiness"] == "stale_consumed"
+    assert it["total_stale_consumed"] == 1
+    stale = it["stale_consumed"][0]
+    assert stale["rf_id"] == "RF-026"
+    assert stale["task_ado_id"] == 8888
+    assert any("borrada" in b for b in it["blockers"])
+    assert board["counts"]["stale_consumed"] >= 1
+
+
+def test_ub10_consumed_with_live_task_not_stale(client, tmp_repo):
+    """Si la Task del consumed existe en la sync local, NO es stale (caso sano)."""
+    _seed_ticket(8102, work_item_type="Epic", title="Epic 8102")
+    _seed_ticket(8103, work_item_type="Task", title="RF-027 task viva", parent_ado_id=8102)
+    _write_consumed(tmp_repo, 8102, "RF-027", "sano", task_ado_id=8103)
+
+    board = _get_board(client)
+    assert _item(board, 8102) is None, "consumed con Task viva no genera item accionable"
+
+
+def test_ub11_recent_consume_not_flagged_before_next_sync(client, tmp_repo):
+    """Consumed posterior a la ultima sync -> NO flag (la sync aun no vio la Task).
+
+    consumed_at en el futuro garantiza consumed_at >= max(last_synced_at) sin
+    depender de cuando corre la suite (el demo seed setea last_synced_at=now).
+    """
+    from datetime import datetime
+    _seed_ticket(
+        8104, work_item_type="Epic", title="Epic 8104",
+        last_synced_at=datetime(2026, 6, 11, 12, 0, 0),
+    )
+    _write_consumed(
+        tmp_repo, 8104, "RF-028", "recien",
+        task_ado_id=9999, consumed_at="2030-01-01T00:00:00+00:00",
+    )
+
+    board = _get_board(client)
+    assert _item(board, 8104) is None, "consume reciente no debe alarmar antes de la proxima sync"
+
+
+def test_ub12_stale_dedup_por_rf_y_prioridad_pending(client, tmp_repo):
+    """Dedupe por RF (gana el consumed mas reciente) y un pending del mismo RF lo tapa."""
+    # Epic con pending + stale del mismo RF -> task_ready, sin stale.
+    _seed_ticket(8105, work_item_type="Epic", title="Epic 8105")
+    _write_pending(tmp_repo, 8105, "RF-030", "fresco", plan=True)
+    _write_consumed(tmp_repo, 8105, "RF-030", "viejo", task_ado_id=8881)
+
+    # Epic con dos stale del mismo RF -> un solo item con el mas reciente.
+    _seed_ticket(8106, work_item_type="Epic", title="Epic 8106")
+    _write_consumed(
+        tmp_repo, 8106, "RF-031", "mas-viejo",
+        task_ado_id=8882, consumed_at="2020-01-01T00:00:00+00:00",
+    )
+    _write_consumed(
+        tmp_repo, 8106, "RF-031", "mas-nuevo",
+        task_ado_id=8883, consumed_at="2021-01-01T00:00:00+00:00",
+    )
+
+    board = _get_board(client)
+
+    it_5 = _item(board, 8105)
+    assert it_5 is not None
+    assert it_5["readiness"] == "task_ready"
+    assert it_5["total_stale_consumed"] == 0
+
+    it_6 = _item(board, 8106)
+    assert it_6 is not None
+    assert it_6["readiness"] == "stale_consumed"
+    assert it_6["total_stale_consumed"] == 1
+    assert it_6["stale_consumed"][0]["task_ado_id"] == 8883
+    assert "mas-nuevo" in it_6["stale_consumed"][0]["pending_task_path"]

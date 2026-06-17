@@ -53,12 +53,16 @@ def enrich_blocks(
     # Capturar escalares del ticket en una sesión propia (evita DetachedInstanceError).
     ticket_ado_id: int | None = None
     ticket_project: str | None = None
+    ticket_title: str | None = None
+    ticket_description: str | None = None
     ticket_obj = None
     with session_scope() as _sess:
         ticket_obj = _sess.get(Ticket, ticket_id) if ticket_id else None
         if ticket_obj is not None:
             ticket_ado_id = ticket_obj.ado_id
             ticket_project = ticket_obj.project
+            ticket_title = ticket_obj.title
+            ticket_description = ticket_obj.description
 
     project_name = (project_ctx.stacky_project_name if project_ctx else None) or ticket_project
 
@@ -77,23 +81,230 @@ def enrich_blocks(
     blocks = _inject_client_profile_block(blocks, project_name, log)
     blocks = _inject_epic_structured(ticket_id, agent_type, blocks, log)
     blocks = _inject_artifact_context(ticket_id, blocks, log)
-    blocks = _inject_similar_tickets(
-        ticket_id, agent_type, ticket_ado_id, blocks, project_name, log
-    )
-    blocks, ado_stats = _inject_ado_context(
+
+    # I3.1 — Paralelización de injectors I/O-bound independientes.
+    ado_stats: dict | None = None
+    from config import config as _cfg
+    if getattr(_cfg, "STACKY_PARALLEL_INJECTORS_ENABLED", False):
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _run_sim() -> list[dict]:
+            return _inject_similar_tickets(
+                ticket_id, agent_type, ticket_ado_id, [], project_name, log
+            )
+
+        def _run_ado() -> tuple[list[dict], dict | None]:
+            return _inject_ado_context(
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                ticket_ado_id=ticket_ado_id,
+                blocks=[],
+                project=ticket_project,
+                project_ctx=project_ctx,
+                project_name=project_name,
+                ticket_obj=ticket_obj,
+                log=log,
+            )
+
+        _sim_blocks: list[dict] = []
+        _ado_blocks: list[dict] = []
+        with ThreadPoolExecutor(max_workers=2) as _pool:
+            _fut_sim = _pool.submit(_run_sim)
+            _fut_ado = _pool.submit(_run_ado)
+            try:
+                _sim_result = _fut_sim.result()
+                _sim_blocks = _sim_result if isinstance(_sim_result, list) else []
+            except Exception as _e_sim:  # noqa: BLE001
+                log("warn", f"parallel _inject_similar_tickets falló: {_e_sim}")
+            try:
+                _ado_result = _fut_ado.result()
+                if isinstance(_ado_result, tuple) and len(_ado_result) == 2:
+                    _ado_blocks, ado_stats = _ado_result
+                    if not isinstance(_ado_blocks, list):
+                        _ado_blocks = []
+            except Exception as _e_ado:  # noqa: BLE001
+                log("warn", f"parallel _inject_ado_context falló: {_e_ado}")
+
+        # Merge en orden canónico: base + similar + ado, dedup por ID
+        blocks = list(blocks)
+        _seen_ids = {b.get("id") for b in blocks if isinstance(b, dict) and b.get("id")}
+        for _b in _sim_blocks:
+            if isinstance(_b, dict):
+                _bid = _b.get("id")
+                if not _bid or _bid not in _seen_ids:
+                    blocks.append(_b)
+                    if _bid:
+                        _seen_ids.add(_bid)
+        for _b in _ado_blocks:
+            if isinstance(_b, dict):
+                _bid = _b.get("id")
+                if not _bid or _bid not in _seen_ids:
+                    blocks.append(_b)
+                    if _bid:
+                        _seen_ids.add(_bid)
+    else:
+        # Camino serial original (byte-idéntico con flag OFF)
+        blocks = _inject_similar_tickets(
+            ticket_id, agent_type, ticket_ado_id, blocks, project_name, log
+        )
+        blocks, ado_stats = _inject_ado_context(
+            ticket_id=ticket_id,
+            agent_type=agent_type,
+            ticket_ado_id=ticket_ado_id,
+            blocks=blocks,
+            project=ticket_project,
+            project_ctx=project_ctx,
+            project_name=project_name,
+            ticket_obj=ticket_obj,
+            log=log,
+        )
+
+    # Q0.1 — Inyección de criterios de aceptación como checklist (OFF default).
+    blocks = _inject_acceptance_criteria(
         ticket_id=ticket_id,
-        agent_type=agent_type,
-        ticket_ado_id=ticket_ado_id,
-        blocks=blocks,
-        project=ticket_project,
-        project_ctx=project_ctx,
         project_name=project_name,
-        ticket_obj=ticket_obj,
+        blocks=blocks,
         log=log,
     )
-    # F2.4 — presupuesto de contexto con ranking (por proyecto, OFF default).
-    blocks = _apply_context_budget(blocks, project_name=project_name, log=log)
+    # A1.1 — Blanco del contrato de aceptación ejecutable (OFF default).
+    # Alta prioridad, nunca se poda. Solo cuando mode=gate y el contrato no es n/a.
+    blocks = _inject_acceptance_contract_block(
+        ticket_id=ticket_id,
+        project_name=project_name,
+        blocks=blocks,
+        log=log,
+    )
+    # Q1.2 — Few-shot de outputs aprobados para runtimes CLI (OFF default).
+    blocks = _inject_cli_fewshot(
+        ticket_id=ticket_id,
+        agent_type=agent_type,
+        project_name=project_name,
+        blocks=blocks,
+        log=log,
+    )
+    # I0.1 — dedup léxico entre bloques (antes del budget, OFF default).
+    blocks = _dedup_blocks(blocks, project_name=project_name, log=log)
+    # F2.4 + I2.1 — presupuesto de contexto con ranking y rerank (OFF default).
+    _context_text = " ".join(p for p in [ticket_title, ticket_description] if p)
+    blocks = _apply_context_budget(
+        blocks, project_name=project_name, log=log, context_text=_context_text or None
+    )
     return blocks, ado_stats
+
+
+# ---------------------------------------------------------------------------
+# I0.1 — Dedup léxico de hechos repetidos entre bloques de contexto
+# ---------------------------------------------------------------------------
+
+# Prioridad >= este umbral: la fuente de verdad. Nunca se poda.
+_HIGH_PRIORITY_THRESHOLD = 75  # cubre: ado-epic-structured(100), client-profile(95),
+                                # stacky-memory(80), modal_user_input(78), operator_note(76)
+
+
+def _normalize_line(line: str) -> str:
+    """Normaliza una línea para comparación: lowercase + colapso de espacios."""
+    return " ".join(line.lower().split())
+
+
+def _dedup_blocks(
+    blocks: list[dict], *, project_name: str | None, log: LogFn
+) -> list[dict]:
+    """Elimina líneas repetidas de bloques de menor prioridad.
+
+    Algoritmo (conservador y barato — I0.1):
+      1. Si el flag está OFF → devuelve la misma lista sin tocar (byte-idéntico).
+      2. Recorre los bloques de MAYOR a MENOR prioridad acumulando hashes de
+         líneas normalizadas (set de seen).
+      3. Para cada bloque de prioridad < _HIGH_PRIORITY_THRESHOLD, filtra las
+         líneas cuyo hash normalizado ya está en seen; las demás se conservan.
+      4. Los bloques de alta prioridad se acumulan en seen pero NUNCA se podan.
+      5. Best-effort: cualquier excepción → bloques sin tocar, mismo contrato
+         que _apply_context_budget.
+
+    Retorna una nueva lista (no muta la entrada) si hubo cambios; la misma lista
+    si no hubo cambios (flag OFF, o ninguna línea podada).
+    """
+    from config import config
+    from services import cli_feature_flags
+
+    # Flag global OFF → identidad estricta.
+    if not getattr(config, "STACKY_CONTEXT_DEDUP_ENABLED", False):
+        return blocks
+
+    # Allowlist de proyectos (mismo patrón que context_budget_enabled).
+    projects_csv: str = getattr(config, "STACKY_CONTEXT_DEDUP_PROJECTS", "") or ""
+    if projects_csv.strip():
+        allowed = {p.strip().lower() for p in projects_csv.split(",") if p.strip()}
+        if project_name and project_name.lower() not in allowed:
+            return blocks
+
+    if not blocks:
+        return blocks
+
+    try:
+        # Ordenar por prioridad DESC para acumular seen desde los más importantes.
+        indexed = sorted(
+            enumerate(blocks), key=lambda iv: (-_block_priority(iv[1]), iv[0])
+        )
+
+        seen_hashes: set[str] = set()
+        # Índices cuyo contenido fue podado → {orig_idx: nuevo_content}
+        replacements: dict[int, str] = {}
+
+        for orig_idx, block in indexed:
+            if not isinstance(block, dict):
+                continue
+            content = block.get("content")
+            if not isinstance(content, str):
+                continue
+
+            is_high_priority = _block_priority(block) >= _HIGH_PRIORITY_THRESHOLD
+            lines = content.splitlines()
+
+            if is_high_priority:
+                # Solo acumular en seen; nunca podar.
+                for line in lines:
+                    norm = _normalize_line(line)
+                    if norm:
+                        seen_hashes.add(norm)
+            else:
+                # Podar las líneas cuyo hash ya está en seen.
+                kept_lines = []
+                for line in lines:
+                    norm = _normalize_line(line)
+                    if norm in seen_hashes:
+                        continue  # duplicado → eliminar
+                    kept_lines.append(line)
+                    if norm:
+                        seen_hashes.add(norm)
+                new_content = "\n".join(kept_lines)
+                if new_content != content:
+                    replacements[orig_idx] = new_content
+
+        if not replacements:
+            return blocks  # nada que cambiar → identidad
+
+        # Construir nueva lista preservando el orden original.
+        result = []
+        for i, block in enumerate(blocks):
+            if i in replacements:
+                new_block = dict(block)
+                new_block["content"] = replacements[i]
+                result.append(new_block)
+            else:
+                result.append(block)
+
+        removed = sum(
+            len(blocks[i].get("content", "").splitlines())
+            - len(replacements[i].splitlines())
+            for i in replacements
+        )
+        log("info", f"dedup de contexto (I0.1): {removed} líneas duplicadas eliminadas "
+            f"de {len(replacements)} bloque(s)")
+        return result
+
+    except Exception:  # noqa: BLE001 — best-effort, mismo contrato que budget
+        return blocks
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +320,10 @@ _BLOCK_PRIORITY: dict[str, int] = {
     "stacky-memory": 80,
     "modal_user_input": 78,
     "operator_note": 76,
+    "acceptance-criteria": 74,   # Q0.1 — alta prioridad, nunca se poda
     "filesystem-artifacts-status": 70,
     "glossary-auto": 60,
+    "few-shot-approved": 55,     # Q1.2 — media-alta, podable bajo presión
     "ado-similar-tickets": 40,
     "ado-comments": 30,
     "ado-attachments": 25,
@@ -138,7 +351,11 @@ def _block_token_estimate(block: dict) -> int:
 
 
 def _apply_context_budget(
-    blocks: list[dict], *, project_name: str | None, log: LogFn
+    blocks: list[dict],
+    *,
+    project_name: str | None,
+    log: LogFn,
+    context_text: str | None = None,
 ) -> list[dict]:
     """Recorta bloques de menor valor para respetar un presupuesto de tokens.
 
@@ -147,6 +364,11 @@ def _apply_context_budget(
     descarta el resto de los bloques de menor prioridad. Preserva el orden
     original de la lista para no alterar la narrativa del prompt; solo cambia
     el contenido de los bloques recortados.
+
+    I2.1 — Con `STACKY_CONTEXT_RERANK_ENABLED=true` y `context_text` no vacío,
+    el orden de conservación mezcla prioridad fija + w * relevancia_al_ticket
+    (w=0.3). Solo afecta bloques de menor prioridad (< _HIGH_PRIORITY_THRESHOLD).
+    El orden de PRESENTACIÓN no cambia (la lista resultado sigue el orden original).
 
     Pura sobre `blocks` (no muta la entrada). Best-effort: cualquier fallo
     devuelve los bloques sin tocar.
@@ -164,11 +386,45 @@ def _apply_context_budget(
         return blocks
 
     indexed = list(enumerate(blocks))
-    # Orden de conservación: prioridad desc, y a igualdad respeta el orden de
-    # aparición (estable) para que el corte sea determinístico.
-    ordered = sorted(
-        indexed, key=lambda iv: (-_block_priority(iv[1]), iv[0])
-    )
+
+    # I2.1 — Rerank: relevancia TF-IDF coseno para desempatar bajo presupuesto.
+    _RERANK_W = 0.3
+    _rerank_scores: dict[int, float] = {}
+    if context_text and getattr(config, "STACKY_CONTEXT_RERANK_ENABLED", False):
+        try:
+            import math
+            from collections import Counter
+            from services.embeddings import _tokenize as _emb_tok
+
+            q_tokens = _emb_tok(context_text)
+            q_tf = Counter(q_tokens)
+            q_norm = math.sqrt(sum(c * c for c in q_tf.values())) if q_tf else 0.0
+            if q_norm > 0:
+                for _idx, _block in indexed:
+                    if _block_priority(_block) >= _HIGH_PRIORITY_THRESHOLD:
+                        continue
+                    _content = (_block.get("content") or "")
+                    _b_tokens = _emb_tok(_content)
+                    _b_tf = Counter(_b_tokens)
+                    _b_norm = math.sqrt(sum(c * c for c in _b_tf.values())) if _b_tf else 0.0
+                    if _b_norm == 0:
+                        continue
+                    _common = set(q_tf) & set(_b_tf)
+                    _dot = sum(q_tf[t] * _b_tf[t] for t in _common)
+                    _rerank_scores[_idx] = _dot / (q_norm * _b_norm)
+        except Exception:  # noqa: BLE001 — best-effort
+            _rerank_scores = {}
+
+    def _sort_key(iv: tuple[int, dict]) -> tuple[float, int]:
+        orig_idx, blk = iv
+        prio = _block_priority(blk)
+        if _rerank_scores and prio < _HIGH_PRIORITY_THRESHOLD:
+            effective = prio + _RERANK_W * _rerank_scores.get(orig_idx, 0.0)
+            return (-effective, orig_idx)
+        return (-float(prio), orig_idx)
+
+    # Orden de conservación: prioridad (+ rerank) desc, estable.
+    ordered = sorted(indexed, key=_sort_key)
 
     used = 0
     kept: dict[int, dict] = {}
@@ -358,10 +614,16 @@ def _inject_stacky_memory_block(
 
     try:
         query_parts: list[str] = []
+        ticket_title = None
+        ticket_description = None
+        ticket_wit = None
         with session_scope() as _mem_sess:
             ticket = _mem_sess.get(Ticket, ticket_id) if ticket_id else None
             if ticket is not None:
-                query_parts.extend([ticket.title or "", ticket.description or ""])
+                ticket_title = ticket.title or ""
+                ticket_description = ticket.description or ""
+                ticket_wit = getattr(ticket, "work_item_type", None)
+                query_parts.extend([ticket_title, ticket_description])
         query_text = "\n".join(p for p in query_parts if p).strip()
 
         from services import memory_store
@@ -370,6 +632,10 @@ def _inject_stacky_memory_block(
             project=project_name,
             agent_type=agent_type,
             query_text=query_text,
+            inject_scopes=cli_feature_flags.memory_inject_scopes(),
+            ticket_title=ticket_title,
+            ticket_description=ticket_description,
+            work_item_type=ticket_wit,
         )
         content = (ctx.get("content") or "").strip()
         if not content:
@@ -384,6 +650,10 @@ def _inject_stacky_memory_block(
                 "hits": ctx.get("hits") or 0,
                 "active_hits": ctx.get("active_hits") or 0,
                 "suppressed_hits": ctx.get("suppressed_hits") or 0,
+                # M1.2 — directivas inyectadas (claves NUEVAS, aditivas). C0.1
+                # (doc 24) las lee del metadata para marcarlas locked en el preview.
+                "directive_ids": ctx.get("directive_ids") or [],
+                "directive_hits": ctx.get("directive_hits") or 0,
             },
         }
         log(
@@ -488,19 +758,44 @@ def _inject_similar_tickets(
     ):
         return blocks
     try:
+        from config import config as _cfg
         from services import similar_tickets
 
         with session_scope() as _sim_sess:
             _sim_ticket = _sim_sess.get(Ticket, ticket_id) if ticket_id else None
             _sim_title = _sim_ticket.title if _sim_ticket else ""
             _sim_project = _sim_ticket.project if _sim_ticket else "Strategist_Pacifico"
-        blocks, _sim_info = similar_tickets.inject_into_blocks(
-            blocks,
-            current_ado_id=ticket_ado_id,
-            current_title=_sim_title,
-            project=_sim_project or "Strategist_Pacifico",
-            project_name=project_name,
-        )
+
+        # I3.2 — Cache de lecturas ADO
+        _ttl = int(getattr(_cfg, "STACKY_ADO_READ_CACHE_TTL_SEC", 0))
+        if _ttl > 0:
+            from services.ado_read_cache import _singleton as _ado_cache
+            _cache_key = (project_name or "", str(ticket_ado_id), "similar")
+
+            def _fetch_sim():
+                return similar_tickets.inject_into_blocks(
+                    [],
+                    current_ado_id=ticket_ado_id,
+                    current_title=_sim_title,
+                    project=_sim_project or "Strategist_Pacifico",
+                    project_name=project_name,
+                )
+
+            _added, _sim_info = _ado_cache.get_or_fetch(_cache_key, _fetch_sim, _ttl)
+            _existing_ids = {b.get("id") for b in blocks if isinstance(b, dict) and b.get("id")}
+            blocks = list(blocks) + [
+                b for b in (_added or [])
+                if isinstance(b, dict) and b.get("id") not in _existing_ids
+            ]
+        else:
+            blocks, _sim_info = similar_tickets.inject_into_blocks(
+                blocks,
+                current_ado_id=ticket_ado_id,
+                current_title=_sim_title,
+                project=_sim_project or "Strategist_Pacifico",
+                project_name=project_name,
+            )
+
         if _sim_info and _sim_info.get("injected"):
             log("info", f"ado-similar-tickets inyectado (count={_sim_info.get('count')})")
     except Exception as _exc_sim:  # noqa: BLE001
@@ -588,20 +883,285 @@ def _inject_ado_context(
     if ticket_ado_id is None:
         return blocks, None
     try:
+        from config import config as _cfg
         from services import ado_context
 
-        blocks, stats = ado_context.enrich(
-            ticket_id=ticket_id,
-            agent_type=agent_type,
-            existing_blocks=blocks or [],
-            ado_id=ticket_ado_id,
-            project_name=project_name,
-            tracker_project=project_ctx.tracker_project if project_ctx else project,
-            ticket=ticket_obj,
-            log=log,
-            return_stats=True,
-        )
-        return blocks, stats
+        # I3.2 — Cache de lecturas ADO
+        _ttl = int(getattr(_cfg, "STACKY_ADO_READ_CACHE_TTL_SEC", 0))
+        _tracker_proj = project_ctx.tracker_project if project_ctx else project
+
+        if _ttl > 0:
+            from services.ado_read_cache import _singleton as _ado_cache
+            _cache_key = (project_name or "", str(ticket_ado_id), "ado_context")
+
+            def _fetch_ado():
+                return ado_context.enrich(
+                    ticket_id=ticket_id,
+                    agent_type=agent_type,
+                    existing_blocks=[],
+                    ado_id=ticket_ado_id,
+                    project_name=project_name,
+                    tracker_project=_tracker_proj,
+                    ticket=ticket_obj,
+                    log=log,
+                    return_stats=True,
+                )
+
+            _added, stats = _ado_cache.get_or_fetch(_cache_key, _fetch_ado, _ttl)
+            _existing_ids = {b.get("id") for b in blocks if isinstance(b, dict) and b.get("id")}
+            blocks = list(blocks) + [
+                b for b in (_added or [])
+                if isinstance(b, dict) and b.get("id") not in _existing_ids
+            ]
+            return blocks, stats
+        else:
+            blocks, stats = ado_context.enrich(
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                existing_blocks=blocks or [],
+                ado_id=ticket_ado_id,
+                project_name=project_name,
+                tracker_project=_tracker_proj,
+                ticket=ticket_obj,
+                log=log,
+                return_stats=True,
+            )
+            return blocks, stats
     except Exception as _exc_ado:  # noqa: BLE001
         log("warn", f"ado_context enrich falló (continuando sin enrichment): {_exc_ado}")
         return blocks, {"error": str(_exc_ado)}
+
+
+# ---------------------------------------------------------------------------
+# Q0.1 — Inyección de criterios de aceptación como checklist
+# ---------------------------------------------------------------------------
+
+def _acceptance_criteria_enabled(project_name: str | None) -> bool:
+    from config import config
+    if not getattr(config, "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", False):
+        return False
+    projects_csv: str = getattr(config, "STACKY_ACCEPTANCE_CRITERIA_PROJECTS", "") or ""
+    if projects_csv.strip():
+        allowed = {p.strip().lower() for p in projects_csv.split(",") if p.strip()}
+        if project_name and project_name.lower() not in allowed:
+            return False
+    return True
+
+
+def _inject_acceptance_criteria(
+    *,
+    ticket_id: int | None,
+    project_name: str | None,
+    blocks: list[dict],
+    log: LogFn,
+) -> list[dict]:
+    """Q0.1 — Inyecta acceptance criteria del ticket como checklist obligatorio.
+
+    Bloque id='acceptance-criteria', prioridad 74 (alta, nunca podado).
+    Best-effort; si no hay AC o ADO falla, devuelve los bloques sin tocar.
+    Participa del dedup I0.1 (sin inyección duplicada con ado-epic-structured).
+    """
+    if not _acceptance_criteria_enabled(project_name):
+        return blocks
+    if not ticket_id:
+        return blocks
+
+    existing_ids = {b.get("id") for b in blocks if isinstance(b, dict)}
+    if "acceptance-criteria" in existing_ids:
+        log("info", "acceptance-criteria ya presente, omitiendo inyección")
+        return blocks
+
+    try:
+        from db import session_scope as _ss
+        from models import Ticket as _Ticket
+        from services.acceptance_criteria import render_checklist, resolve
+
+        with _ss() as _ses:
+            ticket = _ses.get(_Ticket, ticket_id)
+            if ticket is None:
+                return blocks
+            # Snapshot de escalares para usar fuera de sesión
+            _ticket_snap = ticket
+
+        ac_text = resolve(_ticket_snap)
+        if not ac_text:
+            return blocks
+
+        checklist = render_checklist(ac_text)
+        if not checklist:
+            return blocks
+
+        block = {
+            "kind": "text",
+            "id": "acceptance-criteria",
+            "title": "Criterios de aceptación (obligatorios)",
+            "content": checklist,
+        }
+        log("info", "acceptance-criteria inyectado como checklist")
+        return list(blocks) + [block]
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"acceptance-criteria no se pudo inyectar (continuando): {exc}")
+        return blocks
+
+
+# ---------------------------------------------------------------------------
+# A1.1 — Inyección del blanco del contrato de aceptación ejecutable
+# ---------------------------------------------------------------------------
+
+
+def _inject_acceptance_contract_block(
+    *,
+    ticket_id: int | None,
+    project_name: str | None,
+    blocks: list[dict],
+    log: LogFn,
+) -> list[dict]:
+    """A1.1 — Inyecta el blanco del contrato de aceptación como bloque de alta prioridad.
+
+    Solo actúa cuando:
+    - STACKY_ACCEPTANCE_CONTRACT_ENABLED=true
+    - STACKY_ACCEPTANCE_CONTRACT_MODE=gate
+    - El contrato pre-derivado existe en el contexto de la ejecución actual (metadata)
+    - El contrato no es n/a y tiene checks_kept
+
+    El bloque tiene prioridad HIGH y no es podado (como acceptance-criteria).
+    Best-effort; si el contrato no está disponible, no inyecta nada.
+    """
+    try:
+        from config import config as _cfg
+        if not getattr(_cfg, "STACKY_ACCEPTANCE_CONTRACT_ENABLED", False):
+            return blocks
+        mode = getattr(_cfg, "STACKY_ACCEPTANCE_CONTRACT_MODE", "off")
+        if mode != "gate":
+            return blocks
+    except Exception:
+        return blocks
+
+    if not ticket_id:
+        return blocks
+
+    # Verificar que no esté ya inyectado
+    existing_ids = {b.get("id") for b in blocks if isinstance(b, dict)}
+    if "acceptance-contract" in existing_ids:
+        return blocks
+
+    # El contrato se almacena en el contexto de ejecución actual si ya fue derivado.
+    # Para no re-derivar acá, intentamos leerlo de la ejecución activa.
+    # Si no está disponible → no inyectar (best-effort, no bloquea el run).
+    try:
+        from db import session_scope as _ss
+        from models import AgentExecution as _AE
+        from sqlalchemy import desc
+
+        with _ss() as _ses:
+            # Buscar la ejecución más reciente del ticket con acceptance_contract
+            rows = (
+                _ses.query(_AE)
+                .filter(_AE.ticket_id == ticket_id)
+                .order_by(desc(_AE.started_at))
+                .limit(3)
+                .all()
+            )
+            contract_data = None
+            for row in rows:
+                md = row.metadata_dict
+                ac = md.get("acceptance_contract")
+                if isinstance(ac, dict) and not ac.get("n_a") and ac.get("checks_kept"):
+                    contract_data = ac
+                    break
+
+        if not contract_data:
+            return blocks
+
+        checks_kept = contract_data.get("checks_kept") or []
+        if not checks_kept:
+            return blocks
+
+        lines = ["Tu entregable DEBE pasar estos chequeos ejecutables:"]
+        for i, ch in enumerate(checks_kept, 1):
+            lines.append(f"{i}. [{ch.get('kind', 'command')}] {ch.get('ticket_clause', '')}")
+        lines.append("Trabajá hasta que todos pasen.")
+
+        block = {
+            "kind": "text",
+            "id": "acceptance-contract",
+            "priority": "high",
+            "title": "Contrato de aceptación ejecutable (obligatorio)",
+            "content": "\n".join(lines),
+        }
+        log("info", f"acceptance-contract inyectado ({len(checks_kept)} chequeo(s))")
+        return list(blocks) + [block]
+
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"acceptance-contract no se pudo inyectar (continuando): {exc}")
+        return blocks
+
+
+# ---------------------------------------------------------------------------
+# Q1.2 — Inyección de few-shot de outputs aprobados (runtimes CLI)
+# ---------------------------------------------------------------------------
+
+def _cli_fewshot_enabled(project_name: str | None) -> bool:
+    from config import config
+    if not getattr(config, "STACKY_CLI_FEWSHOT_ENABLED", False):
+        return False
+    projects_csv: str = getattr(config, "STACKY_CLI_FEWSHOT_PROJECTS", "") or ""
+    if projects_csv.strip():
+        allowed = {p.strip().lower() for p in projects_csv.split(",") if p.strip()}
+        if project_name and project_name.lower() not in allowed:
+            return False
+    return True
+
+
+def _inject_cli_fewshot(
+    *,
+    ticket_id: int | None,
+    agent_type: str,
+    project_name: str | None,
+    blocks: list[dict],
+    log: LogFn,
+) -> list[dict]:
+    """Q1.2 — Inyecta ejemplos de outputs aprobados (few-shot) para runtimes CLI.
+
+    Bloque id='few-shot-approved', prioridad 55 (podable bajo presión de budget).
+    No duplica el path copilot (agents/base.py:70-88).
+    Si no hay aprobados: no-op silencioso.
+    """
+    if not _cli_fewshot_enabled(project_name):
+        return blocks
+
+    existing_ids = {b.get("id") for b in blocks if isinstance(b, dict)}
+    if "few-shot-approved" in existing_ids:
+        log("info", "few-shot-approved ya presente, omitiendo inyección")
+        return blocks
+
+    try:
+        from config import config
+        from services.few_shot import build_prefix, pick_examples
+
+        k = int(getattr(config, "STACKY_CLI_FEWSHOT_K", 2))
+        examples = pick_examples(
+            agent_type=agent_type,
+            project=project_name,
+            exclude_ticket_id=ticket_id,
+            k=k,
+            max_chars_per_example=6000,
+        )
+        if not examples:
+            return blocks
+
+        prefix = build_prefix(examples)
+        if not prefix:
+            return blocks
+
+        block = {
+            "kind": "text",
+            "id": "few-shot-approved",
+            "title": f"Ejemplos de outputs aprobados ({len(examples)})",
+            "content": prefix,
+        }
+        log("info", f"few-shot-approved inyectado (k={len(examples)})")
+        return list(blocks) + [block]
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"few-shot-approved no se pudo inyectar (continuando): {exc}")
+        return blocks

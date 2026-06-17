@@ -1,0 +1,126 @@
+/* U1.5 — Card "Reporte semanal" (doc 23). Calca los tokens de PMCommandCenter. */
+
+.card {
+  background: #16161e;
+  border: 1px solid #1e1e2e;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.partial {
+  font-size: 10px;
+  color: #fde68a;
+  background: rgba(253, 230, 138, 0.08);
+  border: 1px solid rgba(253, 230, 138, 0.25);
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: help;
+}
+
+.actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn:hover {
+  background: #4f46e5;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.kpi {
+  background: #1a1a24;
+  border: 1px solid #25253a;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.kpiLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.kpiValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f1f5f9;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiSub {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.highlights {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.highlights li {
+  font-size: 11px;
+  color: #94a3b8;
+  padding-left: 14px;
+  position: relative;
+}
+
+.highlights li::before {
+  content: "▸";
+  position: absolute;
+  left: 0;
+  color: #6366f1;
+}
+
+.empty {
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+  padding: 20px;
+  font-style: italic;
+}

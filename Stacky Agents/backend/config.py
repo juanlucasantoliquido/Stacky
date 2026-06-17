@@ -150,11 +150,18 @@ class Config:
 
     # Claude Code CLI runtime
     CLAUDE_CODE_CLI_BIN = os.getenv("CLAUDE_CODE_CLI_BIN", "claude")
-    CLAUDE_CODE_CLI_MODEL = os.getenv("CLAUDE_CODE_CLI_MODEL", "")
+    # Modelo por defecto FIJO para toda invocación del CLI (requisito operador):
+    # sonnet 4.6. Configurable vía .env; vacío = delegar al router (legacy).
+    CLAUDE_CODE_CLI_MODEL = os.getenv("CLAUDE_CODE_CLI_MODEL", "claude-sonnet-4-6")
+    # Reasoning effort del CLI (`--effort`). Valores válidos: low|medium|high.
+    # Default fijo: medium. Vacío o inválido = no se pasa el flag.
+    CLAUDE_CODE_CLI_EFFORT = os.getenv("CLAUDE_CODE_CLI_EFFORT", "medium")
     # Cap de sesión en segundos para una ejecución interactiva de Claude Code CLI.
-    # 0 = ilimitado: la sesión vive hasta que el operador la cierra/cancela desde
-    # la consola, o Claude termina por su cuenta. >0 = mata la sesión tras N seg.
-    CLAUDE_CODE_CLI_TIMEOUT = int(os.getenv("CLAUDE_CODE_CLI_TIMEOUT", "0"))
+    # Plan 37 (F3.1) — default FINITO (30 min) para que un run colgado no quede
+    # zombie indefinido ("sin límite de sesión" gastando la cuenta). 0 = ilimitado
+    # (opt-in explícito). >0 = mata la sesión tras N seg (ver claude_code_cli_runner
+    # :889-902, que cierra stdin + terminate al vencer session_deadline).
+    CLAUDE_CODE_CLI_TIMEOUT = int(os.getenv("CLAUDE_CODE_CLI_TIMEOUT", "1800"))
     # Modo de permisos para tool calls en modo non-interactive (-p).
     # Choices del CLI: acceptEdits | auto | bypassPermissions | default | dontAsk | plan.
     # "acceptEdits" auto-acepta ediciones de archivos sin prompts (el equivalente
@@ -231,11 +238,33 @@ class Config:
     STACKY_CONTEXT_BUDGET_TOKENS = int(
         os.getenv("STACKY_CONTEXT_BUDGET_TOKENS", "25000")
     )
+    # I0.1 — Dedup léxico de hechos repetidos entre bloques de contexto.
+    # OFF default (retro-compat byte-idéntica). El dedup corre ANTES del budget.
+    STACKY_CONTEXT_DEDUP_ENABLED: bool = os.getenv(
+        "STACKY_CONTEXT_DEDUP_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_CONTEXT_DEDUP_PROJECTS: str = os.getenv("STACKY_CONTEXT_DEDUP_PROJECTS", "")
     # F2.5 — Memoria colaborativa en el CLI, por proyecto. Reusa el flag global
     # STACKY_MEMORY_INJECTION_ENABLED (master) + esta allowlist (por proyecto).
     STACKY_MEMORY_INJECTION_PROJECTS = os.getenv(
         "STACKY_MEMORY_INJECTION_PROJECTS", ""
     )
+    # M0.1 — Caps de contexto por agente configurables (JSON). "" = usar los
+    # _AGENT_CAPS hardcodeados (byte-idéntico). Shape: {"developer":[16,16000]}.
+    STACKY_MEMORY_CAPS_JSON = os.getenv("STACKY_MEMORY_CAPS_JSON", "")
+    # M0.3 — Cadencia del barrido de revisión (review_after vencido → needs_review).
+    # 0 = off (default, byte-idéntico). >0 = horas entre barridos.
+    STACKY_MEMORY_REVIEW_SWEEP_HOURS = int(
+        os.getenv("STACKY_MEMORY_REVIEW_SWEEP_HOURS", "0")
+    )
+    # M1.2 — Techo de chars reservado a la sección de directivas obligatorias
+    # dentro del bloque stacky-memory. El slice real es min(char_cap//2, este).
+    STACKY_MEMORY_DIRECTIVE_MAX_CHARS = int(
+        os.getenv("STACKY_MEMORY_DIRECTIVE_MAX_CHARS", "4000")
+    )
+    # M3.1 — Scopes inyectables configurables. "" = default histórico
+    # project,team,global (byte-idéntico). Leído en call time por cli_feature_flags.
+    STACKY_MEMORY_INJECT_SCOPES = os.getenv("STACKY_MEMORY_INJECT_SCOPES", "")
     # F2.1 — Stacky MCP server inyectado vía --mcp-config. Por proyecto, OFF default.
     CLAUDE_CODE_CLI_MCP_ENABLED = os.getenv(
         "CLAUDE_CODE_CLI_MCP_ENABLED", "false"
@@ -261,6 +290,131 @@ class Config:
     STACKY_RUNAWAY_MAX_COST_USD: float = float(
         os.getenv("STACKY_RUNAWAY_MAX_COST_USD", "0.0")
     )
+    # ── V0.3 — Cap de concurrencia de runs CLI ────────────────────────────────
+    # Techo de subprocesos CLI simultáneos. 0 = ilimitado (retro-compat).
+    STACKY_MAX_CONCURRENT_RUNS: int = int(
+        os.getenv("STACKY_MAX_CONCURRENT_RUNS", "0")
+    )
+
+    # ── Plan 23 (Fase U0) — capa perceptible ───────────────────────────────
+    STACKY_ADO_RUN_FOOTER_ENABLED: bool = os.getenv(
+        "STACKY_ADO_RUN_FOOTER_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_WEBHOOKS_V2_ENABLED: bool = os.getenv(
+        "STACKY_WEBHOOKS_V2_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_DESKTOP_NOTIFY_ENABLED: bool = os.getenv(
+        "STACKY_DESKTOP_NOTIFY_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_LIVE_TELEMETRY_ENABLED: bool = os.getenv(
+        "STACKY_LIVE_TELEMETRY_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # ── U1.2 — Self-review contra acceptance criteria ───────────────────────
+    # off: no ejecuta review (retro-compat exacta)
+    # annotate: guarda checklist/score en metadata sin bloquear publish
+    # gate: score < MIN_SCORE degrada a needs_review
+    STACKY_SELF_REVIEW_MODE: str = os.getenv(
+        "STACKY_SELF_REVIEW_MODE", "off"
+    ).strip().lower()
+    STACKY_SELF_REVIEW_MIN_SCORE: float = float(
+        os.getenv("STACKY_SELF_REVIEW_MIN_SCORE", "0.7")
+    )
+    # ── U1.3 — Feedback de fallo en ADO ─────────────────────────────────────
+    STACKY_ADO_FAILURE_COMMENT_ENABLED: bool = os.getenv(
+        "STACKY_ADO_FAILURE_COMMENT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # ── U1.5 — Digest de valor periódico ─────────────────────────────────────
+    # 0 = desactivado (default)
+    STACKY_DIGEST_INTERVAL_HOURS: int = int(
+        os.getenv("STACKY_DIGEST_INTERVAL_HOURS", "0")
+    )
+    STACKY_PIPELINES_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINES_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # ── V0.1 — Perfil del arnés aplicado en boot ──────────────────────────────
+    # "" (default) = no aplicar perfil. "off"|"safe"|"full" = aplicar en startup,
+    # respetando env vars individuales seteadas explícitamente por el operador.
+    STACKY_HARNESS_PROFILE: str = os.getenv("STACKY_HARNESS_PROFILE", "").strip().lower()
+
+    # ── Plan 31 — Verificación ejecutable del entregable (E0.1-E2.2) ─────────
+    # E0.1 — Motor de verificación ejecutable. Todos OFF por default → retro-compat.
+    STACKY_EXEC_VERIFICATION_ENABLED: bool = os.getenv(
+        "STACKY_EXEC_VERIFICATION_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # off | annotate | gate — governs whether hard failures block completion
+    STACKY_EXEC_VERIFICATION_MODE: str = os.getenv(
+        "STACKY_EXEC_VERIFICATION_MODE", "off"
+    ).strip().lower()
+    STACKY_EXEC_VERIFICATION_TIMEOUT_S: int = int(
+        os.getenv("STACKY_EXEC_VERIFICATION_TIMEOUT_S", "120")
+    )
+    STACKY_EXEC_VERIFICATION_BUDGET_S: int = int(
+        os.getenv("STACKY_EXEC_VERIFICATION_BUDGET_S", "300")
+    )
+    # CSV de proyectos Stacky donde corre. Vacío = todos (cuando master ON).
+    STACKY_EXEC_VERIFICATION_PROJECTS: str = os.getenv(
+        "STACKY_EXEC_VERIFICATION_PROJECTS", ""
+    )
+    # E1.1 — Gate + pase correctivo único dirigido al fallo ejecutable.
+    STACKY_EXEC_REPAIR_ENABLED: bool = os.getenv(
+        "STACKY_EXEC_REPAIR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_EXEC_REPAIR_MAX_RETRIES: int = int(
+        os.getenv("STACKY_EXEC_REPAIR_MAX_RETRIES", "1")
+    )
+    # E1.2 — Guard anti-verde-falso (soft por defecto; HARD si _HARD=true).
+    STACKY_FAKE_GREEN_GUARD_ENABLED: bool = os.getenv(
+        "STACKY_FAKE_GREEN_GUARD_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_FAKE_GREEN_GUARD_HARD: bool = os.getenv(
+        "STACKY_FAKE_GREEN_GUARD_HARD", "false"
+    ).lower() in ("1", "true", "yes")
+    # E2.1 — Bloque exec_verification en el payload de la ejecución (read-only).
+    STACKY_EXEC_VERIFICATION_VERDICT_CARD_ENABLED: bool = os.getenv(
+        "STACKY_EXEC_VERIFICATION_VERDICT_CARD_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # E2.2 — KPIs de verificación ejecutable en harness_health.
+    STACKY_EXEC_VERIFICATION_KPIS_ENABLED: bool = os.getenv(
+        "STACKY_EXEC_VERIFICATION_KPIS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 32 — Contrato de Aceptación Ejecutable (A0.1-A2.2) ─────────────
+    # A0.1 — Derivador de contrato + juez determinista.
+    STACKY_ACCEPTANCE_CONTRACT_ENABLED: bool = os.getenv(
+        "STACKY_ACCEPTANCE_CONTRACT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # off | annotate | gate
+    STACKY_ACCEPTANCE_CONTRACT_MODE: str = os.getenv(
+        "STACKY_ACCEPTANCE_CONTRACT_MODE", "off"
+    ).strip().lower()
+    STACKY_ACCEPTANCE_CONTRACT_MAX_CHECKS: int = int(
+        os.getenv("STACKY_ACCEPTANCE_CONTRACT_MAX_CHECKS", "4")
+    )
+    STACKY_ACCEPTANCE_CONTRACT_PROJECTS: str = os.getenv(
+        "STACKY_ACCEPTANCE_CONTRACT_PROJECTS", ""
+    )
+    # A1.1 — Inyección como blanco + gate + pase correctivo.
+    STACKY_ACCEPTANCE_GATE_ENABLED: bool = os.getenv(
+        "STACKY_ACCEPTANCE_GATE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_ACCEPTANCE_REPAIR_ENABLED: bool = os.getenv(
+        "STACKY_ACCEPTANCE_REPAIR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES: int = int(
+        os.getenv("STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES", "1")
+    )
+    # A1.2 — Guard de independencia (inmutabilidad del contrato).
+    STACKY_ACCEPTANCE_INTEGRITY_ENABLED: bool = os.getenv(
+        "STACKY_ACCEPTANCE_INTEGRITY_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # A2.1 — Bloque acceptance_contract en el payload de la ejecución (read-only).
+    STACKY_ACCEPTANCE_VERDICT_CARD_ENABLED: bool = os.getenv(
+        "STACKY_ACCEPTANCE_VERDICT_CARD_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # A2.2 — KPIs del contrato en harness_health.
+    STACKY_ACCEPTANCE_KPIS_ENABLED: bool = os.getenv(
+        "STACKY_ACCEPTANCE_KPIS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
 
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
@@ -311,6 +465,235 @@ class Config:
     STACKY_MEMORY_GIT_SYNC_ENABLED = os.getenv(
         "STACKY_MEMORY_GIT_SYNC_ENABLED", "false"
     ).lower() in {"1", "true", "yes", "on"}
+
+    # ── I0.2 — Cómputo consistente de fingerprint_complexity ─────────────────
+    # OFF default: routing byte-idéntico. ON: estimate_complexity() se invoca
+    # en los 3 runtimes y se pasa a llm_router.decide().
+    STACKY_COMPLEXITY_ESTIMATION_ENABLED: bool = os.getenv(
+        "STACKY_COMPLEXITY_ESTIMATION_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── I1.1 — Auto-reparación del run ante output vacío/malformado ──────────
+    # OFF default: comportamiento actual exacto. ON: un único reintento si el
+    # output queda vacío/malformado y el runtime soporta resume.
+    STACKY_RUN_REPAIR_ENABLED: bool = os.getenv(
+        "STACKY_RUN_REPAIR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── I1.2 — Routing por dificultad estimada dentro del clamp ──────────────
+    # OFF default: decide() comportamiento actual. ON: reglas de downgrade (S)
+    # y upgrade (L/XL) dentro del clamp. Cap duro NUNCA se supera.
+    STACKY_DIFFICULTY_ROUTING_ENABLED: bool = os.getenv(
+        "STACKY_DIFFICULTY_ROUTING_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── I3.2 — Caché en memoria de lecturas caras de ADO ─────────────────────
+    # 0 = sin caché (byte-idéntico al comportamiento actual). >0 = TTL en
+    # segundos: segunda lectura del mismo (project, ado_id, kind) dentro del
+    # TTL no llama a ADO. Escritura exitosa en el outbox invalida el key.
+    STACKY_ADO_READ_CACHE_TTL_SEC: int = int(
+        os.getenv("STACKY_ADO_READ_CACHE_TTL_SEC", "0")
+    )
+
+    # ── I2.3 — Expansión y normalización de query para retrieval ─────────────
+    # OFF default: tokenizer y ranking byte-idénticos. ON: fold de acentos +
+    # sinónimos del dominio sobre el QUERY (corpus sin cambios).
+    STACKY_RETRIEVAL_EXPANSION_ENABLED: bool = os.getenv(
+        "STACKY_RETRIEVAL_EXPANSION_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── I2.1 — Re-ranking de bloques por relevancia al ticket ─────────────────
+    # OFF default: _apply_context_budget byte-idéntico. ON: la relevancia al
+    # ticket (TF-IDF coseno) desempata el orden de conservación bajo presupuesto.
+    STACKY_CONTEXT_RERANK_ENABLED: bool = os.getenv(
+        "STACKY_CONTEXT_RERANK_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── I3.1 — Paralelización de injectors independientes ────────────────────
+    # OFF default: serial byte-idéntico. ON: similar_tickets + ado_context
+    # corren en paralelo con ThreadPoolExecutor(max_workers=2).
+    STACKY_PARALLEL_INJECTORS_ENABLED: bool = os.getenv(
+        "STACKY_PARALLEL_INJECTORS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── I0.3 — Pre-warming del caché ADO al seleccionar el ticket ────────────
+    # OFF default: POST /tickets/<ado_id>/prewarm devuelve {"status":"disabled"}.
+    # Depende de I3.2 (STACKY_ADO_READ_CACHE_TTL_SEC > 0).
+    STACKY_ADO_PREWARM_ENABLED: bool = os.getenv(
+        "STACKY_ADO_PREWARM_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── I3.3 — Asesor de caps de contexto por telemetría ─────────────────────
+    # OFF default: GET /metrics/caps-advisor devuelve {"enabled": false}.
+    # NUNCA escribe: solo produce sugerencias que el operador aplica.
+    STACKY_CAPS_ADVISOR_ENABLED: bool = os.getenv(
+        "STACKY_CAPS_ADVISOR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 28 — Lifecycle e higiene de procesos ─────────────────────────────
+    # R0.1 — Reaping del subproceso al cerrar la ejecución.
+    # OFF default (byte-idéntico). ON: terminate→wait(grace)→kill al cerrar/
+    # marcar terminal. Solo actúa sobre el pid exacto registrado por el runner.
+    STACKY_RUNNER_REAP_ON_CLOSE_ENABLED: bool = os.getenv(
+        "STACKY_RUNNER_REAP_ON_CLOSE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # R0.2 — Flush incremental de logs.
+    # OFF default. ON: persiste el buffer de log a DB antes de matar el proceso
+    # (en reap) y periódicamente en el heartbeat.
+    STACKY_LOG_FLUSH_INCREMENTAL_ENABLED: bool = os.getenv(
+        "STACKY_LOG_FLUSH_INCREMENTAL_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # R0.3 — Reaper de huérfanos + watchdog reconciliador.
+    # OFF default. ON: reconcilia runs en estado running sin heartbeat reciente
+    # al arrancar el backend y, si el intervalo es >0, periódicamente.
+    STACKY_ORPHAN_REAPER_ENABLED: bool = os.getenv(
+        "STACKY_ORPHAN_REAPER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Intervalo entre barridos del reaper de huérfanos (segundos).
+    # 0 = solo al arrancar (si STACKY_ORPHAN_REAPER_ENABLED=true).
+    STACKY_ORPHAN_REAPER_INTERVAL_SEC: int = int(
+        os.getenv("STACKY_ORPHAN_REAPER_INTERVAL_SEC", "0")
+    )
+
+    # R1.1 — Watchdog de inactividad del stream (segundos). 0 = desactivado.
+    # Si el stream no emite ningún evento por N segundos → cierre limpio
+    # failed(reason="stalled") con metadata["stall"]. Independiente del timeout
+    # de sesión total (CLAUDE_CODE_CLI_TIMEOUT), que limita la duración total.
+    STACKY_STALL_WATCHDOG_SECONDS: int = int(
+        os.getenv("STACKY_STALL_WATCHDOG_SECONDS", "600")
+    )
+
+    # R1.2 — Validación estructural always-on del pending-task antes del POST.
+    # OFF default. ON: gate estructural mínimo (campos requeridos, tipos,
+    # coherencia ordinal vs parent ADO id) → inválido: cuarentena + telemetría.
+    STACKY_PENDING_TASK_STRICT_VALIDATION_ENABLED: bool = os.getenv(
+        "STACKY_PENDING_TASK_STRICT_VALIDATION_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # R1.3 — Guardia de idempotencia ante fallo de persistencia local.
+    # OFF default. ON: persiste intención de publicación (idempotency_key) antes
+    # del POST a ADO. Reintento sin doble POST; si check falla → fallback actual.
+    STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED: bool = os.getenv(
+        "STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # R2.1/R2.2 — KPIs de fiabilidad en harness-health.
+    # OFF default. ON: agrega bloque "reliability" con dead_letter/cuarentenas/
+    # reaped/stalled/persist_failures y KPIs tasa_exito_creacion/duracion_saneada.
+    STACKY_RELIABILITY_KPIS_ENABLED: bool = os.getenv(
+        "STACKY_RELIABILITY_KPIS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 29 — Calidad del resultado a la primera ──────────────────────────
+
+    # Q0.1 — Inyección de criterios como checklist en el briefing.
+    # OFF default: enrich_blocks byte-idéntico.
+    STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED: bool = os.getenv(
+        "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_ACCEPTANCE_CRITERIA_PROJECTS: str = os.getenv(
+        "STACKY_ACCEPTANCE_CRITERIA_PROJECTS", ""
+    )
+
+    # Q0.2 — Esfuerzo adaptativo según dificultad estimada.
+    # OFF default: effort fijo (byte-idéntico).
+    STACKY_ADAPTIVE_EFFORT_ENABLED: bool = os.getenv(
+        "STACKY_ADAPTIVE_EFFORT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # Piso de effort: nunca bajar por debajo de este valor.
+    STACKY_EFFORT_FLOOR: str = os.getenv("STACKY_EFFORT_FLOOR", "medium").strip().lower()
+
+    # Q1.1 — Pase correctivo único de criterios incumplidos.
+    # OFF default: sin pase correctivo.
+    STACKY_CRITERIA_REPAIR_ENABLED: bool = os.getenv(
+        "STACKY_CRITERIA_REPAIR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_CRITERIA_REPAIR_MAX_RETRIES: int = int(
+        os.getenv("STACKY_CRITERIA_REPAIR_MAX_RETRIES", "1")
+    )
+
+    # Q1.2 — Few-shot de outputs aprobados en runtimes CLI.
+    # OFF default: CLI sin few-shot (byte-idéntico).
+    STACKY_CLI_FEWSHOT_ENABLED: bool = os.getenv(
+        "STACKY_CLI_FEWSHOT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_CLI_FEWSHOT_K: int = int(os.getenv("STACKY_CLI_FEWSHOT_K", "2"))
+    STACKY_CLI_FEWSHOT_PROJECTS: str = os.getenv("STACKY_CLI_FEWSHOT_PROJECTS", "")
+
+    # Q2.2 — KPI de "aprobado a la primera".
+    # OFF default: harness_health byte-idéntico.
+    STACKY_QUALITY_KPIS_ENABLED: bool = os.getenv(
+        "STACKY_QUALITY_KPIS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 30 — Integridad verificada contra la realidad ────────────────────
+
+    # G0.1 — Gate de precondiciones determinista antes de lanzar el run.
+    # OFF default: run_agent byte-idéntico.
+    STACKY_RUN_PREFLIGHT_GATE_ENABLED: bool = os.getenv(
+        "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # G1.1 — Verificación post-create de que la task existe en ADO antes de
+    # marcar consumed. OFF default: output_watcher byte-idéntico.
+    STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED: bool = os.getenv(
+        "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # G1.2 — Grounding determinista de referencias del output (rutas/IDs).
+    # OFF default: finalize_run byte-idéntico.
+    STACKY_OUTPUT_GROUNDING_ENABLED: bool = os.getenv(
+        "STACKY_OUTPUT_GROUNDING_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # G1.2 — Pase correctivo de grounding via Q1.1 (solo si seam disponible).
+    # Exige STACKY_CRITERIA_REPAIR_ENABLED y STACKY_OUTPUT_GROUNDING_ENABLED.
+    STACKY_OUTPUT_GROUNDING_REPAIR: bool = os.getenv(
+        "STACKY_OUTPUT_GROUNDING_REPAIR", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # G2.1 — KPIs de integridad en harness-health (read-only).
+    # OFF default: harness_health byte-idéntico.
+    STACKY_INTEGRITY_KPIS_ENABLED: bool = os.getenv(
+        "STACKY_INTEGRITY_KPIS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # G2.2 — Retry transitorio (diferido: clasificación de exit-codes no es
+    # confiable/barata con los runtimes actuales; ver comentario en runners).
+    # Flags declarados para completitud del registro; comportamiento: OFF always.
+    STACKY_TRANSIENT_RUN_RETRY_ENABLED: bool = os.getenv(
+        "STACKY_TRANSIENT_RUN_RETRY_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_TRANSIENT_RUN_RETRY_MAX: int = int(
+        os.getenv("STACKY_TRANSIENT_RUN_RETRY_MAX", "1")
+    )
+
+    # ── Plan 36 — Selector de runtime sin fallback silencioso ─────────────────
+    # Si true (default), /run loguea y marca cuando el runtime vino ausente en el
+    # payload y tuvo que aplicarse el default github_copilot.
+    # NUNCA cambia el runtime en silencio; solo registra el evento para diagnóstico.
+    STACKY_RUNTIME_STRICT: bool = os.getenv(
+        "STACKY_RUNTIME_STRICT", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 38 — Versión visible, épica desde brief, trazabilidad ───────────
+
+    # B0 — Endpoint POST /api/tickets/epics/from-brief.
+    STACKY_EPIC_FROM_BRIEF_ENABLED: bool = os.getenv(
+        "STACKY_EPIC_FROM_BRIEF_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # C0/C1 — Trazabilidad de ejecución (agent_type, prompt_sha, produced_files).
+    STACKY_EXECUTION_TRACE_ENABLED: bool = os.getenv(
+        "STACKY_EXECUTION_TRACE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # C0/C1 — Guarda prompt_text en metadata (privacidad: default OFF).
+    STACKY_TRACE_PROMPT_TEXT_ENABLED: bool = os.getenv(
+        "STACKY_TRACE_PROMPT_TEXT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
 
 
 config = Config()

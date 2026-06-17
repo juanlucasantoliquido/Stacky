@@ -214,6 +214,10 @@
   color: var(--accent);
   text-decoration: none;
   white-space: nowrap;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 .adoLink:hover {

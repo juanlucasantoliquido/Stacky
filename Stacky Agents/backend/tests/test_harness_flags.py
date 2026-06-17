@@ -221,3 +221,25 @@ def test_put_env_only_flag_updates_os_environ(client):
     # memory_injection_enabled lo ve sin reinicio (allowlist vacía → aplica a todos)
     from services.cli_feature_flags import memory_injection_enabled
     assert memory_injection_enabled(None) is True
+
+
+# ---------------------------------------------------------------------------
+# 6. Unificación writer/loader del .env (fix del split en deploy frozen)
+# ---------------------------------------------------------------------------
+
+def test_env_writers_target_the_same_file_config_loads():
+    """harness_flags y global_config deben escribir el MISMO .env que carga
+    config.py al arrancar: backend_root()/.env.
+
+    En un deploy frozen, el patrón viejo Path(__file__).parent.parent resolvía a
+    _internal/.env, que el loader (config.py) nunca lee → los cambios de la UI no
+    sobrevivían al reinicio del deploy. Ambos endpoints deben coincidir entre sí
+    y con el loader.
+    """
+    from runtime_paths import backend_root
+    import api.harness_flags as hf
+    import api.global_config as gc
+
+    expected = backend_root() / ".env"
+    assert hf._ENV_PATH == expected
+    assert gc._ENV_PATH == expected

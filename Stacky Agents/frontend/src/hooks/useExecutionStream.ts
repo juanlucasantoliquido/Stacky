@@ -9,6 +9,13 @@ interface StreamState {
   lines: LogLine[];
   done: boolean;
   error?: string;
+  telemetry?: {
+    turns?: number | null;
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+    cost_usd?: number | null;
+    cost_estimated?: boolean;
+  };
 }
 
 // Reconnect backoff: 1s → 30s. Después de eso emitimos error definitivo.
@@ -74,7 +81,7 @@ export function useExecutionStream(executionId: number | null): StreamState {
       qc.invalidateQueries({ queryKey: ["execution", executionId] });
       qc.invalidateQueries({ queryKey: ["executions"] });
       let agentType = "agente";
-      let status: "completed" | "error" | "cancelled" = "completed";
+      let status: "completed" | "error" | "cancelled" | "needs_review" = "completed";
       try {
         if (ev?.data) {
           const parsed = JSON.parse(ev.data);
@@ -87,6 +94,25 @@ export function useExecutionStream(executionId: number | null): StreamState {
       notifyExecutionFinished({ agent_type: agentType, status });
       closed = true;
       es?.close();
+    };
+
+    const onTelemetry = (e: MessageEvent) => {
+      try {
+        const parsed = JSON.parse(e.data);
+        const data = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
+        setState((s) => ({
+          ...s,
+          telemetry: {
+            turns: data?.turns ?? s.telemetry?.turns ?? null,
+            input_tokens: data?.input_tokens ?? s.telemetry?.input_tokens ?? null,
+            output_tokens: data?.output_tokens ?? s.telemetry?.output_tokens ?? null,
+            cost_usd: data?.cost_usd ?? s.telemetry?.cost_usd ?? null,
+            cost_estimated: Boolean(data?.cost_estimated),
+          },
+        }));
+      } catch {
+        // ignore malformed telemetry payloads
+      }
     };
 
     const scheduleReconnect = () => {
@@ -118,6 +144,7 @@ export function useExecutionStream(executionId: number | null): StreamState {
       es.addEventListener("log", onLog as EventListener);
       es.addEventListener("pre_run", onLog as EventListener);
       es.addEventListener("completed", onCompleted as EventListener);
+      es.addEventListener("telemetry", onTelemetry as EventListener);
       es.addEventListener("ping", () => {});
       es.addEventListener("open", () => {
         retryMs = RECONNECT_INITIAL_MS;

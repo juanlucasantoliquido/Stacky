@@ -12,6 +12,7 @@ import type {
   PackRun,
   PipelineBatchResponse,
   PipelineInferenceResult,
+  TicketPipelineResponse,
   Project,
   ProjectsResponse,
   Ticket,
@@ -131,6 +132,8 @@ export const Tickets = {
     }),
   invalidatePipelineCache: (id: number) =>
     api.delete<{ ok: boolean }>(`/api/tickets/${id}/ado-pipeline-cache`),
+  pipeline: (id: number) =>
+    api.get<TicketPipelineResponse>(`/api/tickets/${id}/pipeline`),
   sync: (project?: string | null) =>
     api.post<TicketSyncResult>("/api/tickets/sync", project ? { project } : {}),
   // P7: sync con rate limiting y campos extendidos
@@ -301,6 +304,18 @@ export const Tickets = {
     ),
   uploadAttachment: (id: number, name: string, content: string) =>
     api.post<{ ok: boolean; error?: string }>(`/api/tickets/${id}/attachments`, { name, content }),
+  // Plan 38 B2 — Épica desde Brief
+  createEpicFromBrief: (payload: {
+    title: string;
+    description_html: string;
+    brief: string;
+    project_name?: string;
+    confirm: true;
+  }) =>
+    api.post<{ ok: boolean; ado_id: number; work_item_type: string; title: string; url: string }>(
+      "/api/tickets/epics/from-brief",
+      payload
+    ),
 };
 
 // ── Fase 2: tipos para pending-tasks y create-child-task ──────────────────────
@@ -371,6 +386,7 @@ export interface CreateChildTaskResponse {
 
 export type UnblockerReadiness =
   | "task_ready"
+  | "stale_consumed"
   | "comment_ready"
   | "waiting_files"
   | "artifacts_idle"
@@ -380,6 +396,18 @@ export interface UnblockerParseError {
   rf_id: string;
   pending_task_path: string;
   error: string;
+}
+
+// Fix ADO-241: pending-task consumido cuya Task fue borrada en ADO. El archivo
+// quedó "consumed" apuntando a un work item inexistente; el backend lo detecta
+// contra la sync local y el endpoint create-child-task lo recrea (verifica
+// contra ADO antes de honrar la idempotencia).
+export interface UnblockerStaleConsumed {
+  rf_id: string;
+  title: string;
+  pending_task_path: string;
+  task_ado_id: number | null;
+  consumed_at: string | null;
 }
 
 export interface UnblockerItem {
@@ -397,6 +425,8 @@ export interface UnblockerItem {
   pending_tasks: PendingTaskItem[];
   total_pending: number;
   total_consumed: number;
+  stale_consumed: UnblockerStaleConsumed[];
+  total_stale_consumed: number;
   parse_errors: UnblockerParseError[];
   total_errors: number;
   last_execution: {
@@ -443,6 +473,7 @@ export interface UnblockerBoardResponse {
     task_ready: number;
     waiting_files: number;
     files_error: number;
+    stale_consumed: number;
   };
 }
 
@@ -517,7 +548,64 @@ export interface StackyMemoryObservation {
   duplicate_count: number;
   created_at: string | null;
   updated_at: string | null;
+  // Plan 26 — directivas (aditivo; null/0 para observaciones legacy).
+  enforcement?: "suggest" | "always" | null;
+  priority?: number;
+  applies_to?: StackyDirectiveTargeting | null;
   _score?: number;
+}
+
+// Plan 26 M1.1 — targeting estructurado de una directiva (todas opcionales).
+export interface StackyDirectiveTargeting {
+  agent_types?: string[];
+  projects?: string[];
+  work_item_types?: string[];
+  title_keywords?: string[];
+  tags?: string[];
+}
+
+// Plan 26 M0.2 — preview de lo que `get_context_for_run` inyectaría.
+export interface StackyMemoryContextPreview {
+  content?: string;
+  hits: number;
+  active_hits?: number;
+  suppressed_hits?: number;
+  memory_ids?: string[];
+  directive_ids?: string[];
+  directive_hits?: number;
+  directives_crowded_out_observations?: boolean;
+}
+
+// Plan 26 M3.2 — salud del set de directivas.
+export interface StackyDirectiveHealth {
+  project: string;
+  overlapping: { ids: string[]; shared_targeting: Record<string, string[]> }[];
+  budget_pressure: {
+    project: string;
+    agent_type: string;
+    directive_chars: number;
+    cap: number;
+    ratio: number;
+  }[];
+  stale: { id: string; review_after: string | null; expires_at: string | null }[];
+}
+
+// Plan 26 M3.1 — tipos injectables (canal USER) vs reservados (B5).
+export interface StackyMemoryTypes {
+  injectable: string[];
+  reserved: string[];
+}
+
+// Plan 26 M0.2/M3.1 — vista de un flag del arnés (subset usado por memoria).
+export interface HarnessFlagView {
+  key: string;
+  type: "bool" | "csv" | "int" | "float" | "json" | string;
+  label: string;
+  description: string;
+  group: string;
+  pair: string | null;
+  env_only: boolean;
+  value: boolean | number | string;
 }
 
 export interface StackyMemoryFinding {
@@ -643,6 +731,54 @@ export const Memory = {
     api.get<StackyMemoryConflictGraph>(
       `/api/memory/conflict-graph?project=${encodeURIComponent(project)}${status ? `&status=${encodeURIComponent(status)}` : ""}`
     ),
+  // Plan 26 M2.1 — alta de memoria/directiva (POST /api/memory aditivo).
+  create: (payload: {
+    project: string;
+    type: string;
+    title: string;
+    content: string;
+    scope?: string;
+    enforcement?: "suggest" | "always";
+    priority?: number;
+    applies_to?: StackyDirectiveTargeting;
+    topic_key?: string | null;
+  }) => api.post<{ memory_id: string }>("/api/memory", payload),
+  // Plan 26 M2.2 — edición por memory_id (PATCH, add-only).
+  update: (
+    memoryId: string,
+    payload: {
+      title?: string;
+      content?: string;
+      enforcement?: "suggest" | "always";
+      priority?: number;
+      applies_to?: StackyDirectiveTargeting;
+      expires_at?: string | null;
+      review_after?: string | null;
+    },
+  ) => api.patch<{ ok: boolean }>(`/api/memory/${encodeURIComponent(memoryId)}`, payload),
+  // Plan 26 M0.2 — preview de inyección para (project, agent_type, q).
+  contextPreview: (params: { project: string; agent_type?: string | null; q?: string | null }) => {
+    const qs = new URLSearchParams();
+    qs.set("project", params.project);
+    if (params.agent_type) qs.set("agent_type", params.agent_type);
+    if (params.q) qs.set("q", params.q);
+    return api.get<StackyMemoryContextPreview>(`/api/memory/context-preview?${qs.toString()}`);
+  },
+  // Plan 26 M3.2 — salud de directivas.
+  directiveHealth: (project: string) =>
+    api.get<StackyDirectiveHealth>(`/api/memory/directive-health?project=${encodeURIComponent(project)}`),
+  // Plan 26 M2.2 — dry-run de targeting contra un ticket real.
+  directivePreview: (payload: { applies_to: StackyDirectiveTargeting; ticket_id: number; agent_type?: string | null }) =>
+    api.post<{ matches: boolean; reasons: string[] }>("/api/memory/directive-preview", payload),
+  // Plan 26 M3.1 — tipos injectables vs reservados.
+  types: () => api.get<StackyMemoryTypes>("/api/memory/types"),
+};
+
+// Plan 26 M0.2/M3.1 — flags del arnés (reusa el registry; fuente única).
+export const HarnessFlags = {
+  list: () => api.get<{ ok: boolean; flags: HarnessFlagView[]; active_profile: string | null }>("/api/harness-flags"),
+  update: (updates: Record<string, boolean | number | string>) =>
+    api.put<{ ok: boolean; applied?: Record<string, unknown>; error?: string }>("/api/harness-flags", { updates }),
 };
 
 export interface AgentHistoryEntry {
@@ -790,6 +926,13 @@ export const Agents = {
     vscode_agent_filename?: string;
     model_override?: string | null;
   }) => api.post<{ ok: boolean }>("/api/agents/open-chat", payload),
+  /** Plan 38 B2 — Lanza el BusinessAgent con un brief (sin ticket real). */
+  runBrief: (payload: {
+    brief: string;
+    runtime?: import("../types").AgentRuntime;
+    project?: string | null;
+    vscode_agent_filename?: string;
+  }) => api.post<{ execution_id: number; status: string }>("/api/agents/run-brief", payload),
 };
 
 export const AntiPatterns = {
@@ -813,32 +956,56 @@ export const Webhooks = {
   list: () =>
     api.get<
       { id: number; project: string | null; event: string; url: string; active: boolean;
+        format?: "raw" | "teams";
         created_at: string; last_fired_at: string | null; last_status: string | null;
         last_error: string | null; fires: number }[]
     >("/api/webhooks"),
-  create: (payload: { url: string; event?: string; project?: string; secret?: string }) =>
+  create: (payload: { url: string; event?: string; project?: string; secret?: string; format?: "raw" | "teams" }) =>
     api.post<{ id: number }>("/api/webhooks", payload),
   deactivate: (id: number) => api.delete<{ ok: true }>(`/api/webhooks/${id}`),
 };
+
+export interface ExecutionOutputFile {
+  name: string;
+  rel_path: string;
+  size: number;
+  modified: number;
+}
+
+export interface ExecutionOutputFilesResponse {
+  files: ExecutionOutputFile[];
+  dir: string | null;
+}
 
 export const Executions = {
   list: (q: {
     ticket_id?: number;
     agent_type?: AgentType;
     agent_filename?: string;
-    status?: string;
+    status?: string | string[];
     project?: string | null;
+    /** Ignorar el filtro de proyecto y traer ejecuciones de todos los proyectos. */
+    all_projects?: boolean;
     include_output?: boolean;
     limit?: number;
+    days?: number;
   }) => {
     const params = new URLSearchParams();
     if (q.ticket_id) params.set("ticket_id", String(q.ticket_id));
     if (q.agent_type) params.set("agent_type", q.agent_type);
     if (q.agent_filename) params.set("agent_filename", q.agent_filename);
-    if (q.status) params.set("status", q.status);
+    if (Array.isArray(q.status)) {
+      for (const status of q.status) {
+        params.append("status", status);
+      }
+    } else if (q.status) {
+      params.set("status", q.status);
+    }
     if (q.project) params.set("project", q.project);
+    if (q.all_projects) params.set("all_projects", "true");
     if (q.include_output) params.set("include_output", "true");
     if (q.limit) params.set("limit", String(q.limit));
+    if (q.days) params.set("days", String(q.days));
     const qs = params.toString();
     return api.get<AgentExecution[]>(`/api/executions${qs ? `?${qs}` : ""}`);
   },
@@ -859,6 +1026,8 @@ export const Executions = {
       `/api/executions/${a}/diff/${b}`
     ),
   streamUrl: (id: number) => `${apiBase}/api/executions/${id}/logs/stream`,
+  outputFiles: (id: number) =>
+    api.get<ExecutionOutputFilesResponse>(`/api/executions/${id}/output-files`),
   // P2.3 — endpoints portados de WS2
   forceTransition: (id: number) =>
     api.post<{ ok: boolean; logs?: string[]; error?: string }>(`/api/executions/${id}/force-transition`),
@@ -945,6 +1114,55 @@ export const Metrics = {
     if (params?.agent_type) p.set("agent_type", params.agent_type);
     const qs = p.toString();
     return api.get<AgentComparisonResponse>(`/api/metrics/agent-comparison${qs ? `?${qs}` : ""}`);
+  },
+};
+
+// U1.5 — Digest de valor para management (doc 23)
+export interface DigestTotals {
+  runs: number;
+  completed: number;
+  needs_review: number;
+  error: number;
+  success_rate: number;
+  tickets_touched: number;
+  cost_usd: { reported: number; estimated: number; total: number };
+}
+
+export interface DigestGroupRow {
+  name: string;
+  runs: number;
+  completed: number;
+  needs_review: number;
+  error: number;
+  success_rate: number;
+}
+
+export interface DigestReport {
+  period: { days: number; start: string; end: string };
+  totals: DigestTotals;
+  by_agent_type: DigestGroupRow[];
+  by_runtime: DigestGroupRow[];
+  top_failures: { kind: string; count: number }[];
+  highlights: string[];
+  partial: boolean;
+}
+
+export const Reports = {
+  /** Digest en JSON para el preview de la card (fmt=json es el default del backend). */
+  digest: (params?: { days?: number; project?: string }) => {
+    const p = new URLSearchParams();
+    if (params?.days) p.set("days", String(params.days));
+    if (params?.project) p.set("project", params.project);
+    const qs = p.toString();
+    return api.get<DigestReport>(`/api/reports/digest${qs ? `?${qs}` : ""}`);
+  },
+  /** URL de descarga directa (Content-Disposition attachment lo maneja el backend). */
+  digestDownloadUrl: (params: { fmt: "md" | "html"; days?: number; project?: string }) => {
+    const p = new URLSearchParams();
+    p.set("fmt", params.fmt);
+    if (params.days) p.set("days", String(params.days));
+    if (params.project) p.set("project", params.project);
+    return `${apiBase}/api/reports/digest?${p.toString()}`;
   },
 };
 
@@ -2079,6 +2297,12 @@ export const LocalDiagnostics = {
     api.post<BackupRunResponse>("/api/diag/backup/run", {}),
 
   exportLogsUrl: () => `${apiBase}/api/diag/logs/export`,
+};
+
+// ── Plan 38 A2 — Health endpoint ─────────────────────────────────────────────
+export const Health = {
+  get: (): Promise<{ version?: string; ok?: boolean; healthy?: boolean }> =>
+    api.get<{ version?: string; ok?: boolean; healthy?: boolean }>("/api/diag/health"),
 };
 
 // ── Feature #3: Docs — árbol de documentación ────────────────────────────────

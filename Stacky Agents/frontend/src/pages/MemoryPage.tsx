@@ -10,8 +10,10 @@ import {
 import { useWorkbench } from "../store/workbench";
 import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
 import styles from "./MemoryPage.module.css";
+import MemoryEditor from "./memory/MemoryEditor";
+import MemoryConfigPanel from "./memory/MemoryConfigPanel";
 
-type Tab = "memories" | "drafts" | "triage" | "graph";
+type Tab = "memories" | "drafts" | "triage" | "graph" | "config";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Activa",
@@ -45,17 +47,25 @@ function memoryIds(finding: StackyMemoryFinding): string[] {
 function MemoryRow({
   row,
   onStatus,
+  onEdit,
 }: {
   row: StackyMemoryObservation;
   onStatus: (id: string, status: StackyMemoryStatus) => void;
+  onEdit: (row: StackyMemoryObservation) => void;
 }) {
+  const isDirective = row.type === "directive";
   return (
     <article className={styles.memoryRow}>
       <div className={styles.rowHeader}>
         <div className={styles.rowTitleBlock}>
-          <div className={styles.rowTitle}>{row.title}</div>
+          <div className={styles.rowTitle}>
+            {isDirective && <span title="Directiva">📌 </span>}
+            {row.title}
+          </div>
           <div className={styles.rowMeta}>
             {row.type} · {row.scope}
+            {isDirective && row.enforcement ? ` · ${row.enforcement}` : ""}
+            {row.revision_count ? ` · rev ${row.revision_count}` : ""}
             {row.topic_key ? ` · ${row.topic_key}` : ""}
             {row.source_ado_id ? ` · ADO-${row.source_ado_id}` : ""}
           </div>
@@ -68,6 +78,7 @@ function MemoryRow({
       <div className={styles.rowFooter}>
         <span>{row.memory_id}</span>
         <div className={styles.inlineActions}>
+          <button onClick={() => onEdit(row)}>✏️ Editar</button>
           <button onClick={() => onStatus(row.memory_id, "active")} disabled={row.status === "active"}>
             Activar
           </button>
@@ -129,8 +140,22 @@ export default function MemoryPage() {
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
   const [tab, setTab] = useState<Tab>("memories");
   const [status, setStatus] = useState<StackyMemoryStatus | "">("active");
+  const [editor, setEditor] = useState<{ mode: "create" | "edit"; row?: StackyMemoryObservation } | null>(null);
 
   const project = activeProjectName ?? "";
+  const memoryTypes = useQuery({
+    queryKey: ["memory-types"],
+    queryFn: () => Memory.types(),
+    enabled: !!editor,
+  });
+  const injectableTypes = memoryTypes.data?.injectable ?? [
+    "bugfix",
+    "pattern",
+    "policy",
+    "client_policy",
+    "session_summary",
+    "directive",
+  ];
   const memories = useQuery({
     queryKey: ["memory-list", project, status],
     queryFn: () => Memory.list({ project, status: status || undefined, limit: 300 }),
@@ -204,22 +229,31 @@ export default function MemoryPage() {
           <h1>Memoria Stacky</h1>
           <p>{project || "Sin proyecto activo"}</p>
         </div>
-        {MEMORY_ADVANCED_ENABLED && (
-          <div className={styles.headerActions}>
-            {latestRun && (
-              <span className={styles.runPill}>
-                Run #{latestRun.id} · {latestRun.status}
-              </span>
-            )}
-            <button
-              className={styles.primaryBtn}
-              onClick={() => validationMutation.mutate()}
-              disabled={!project || validationMutation.isPending}
-            >
-              {validationMutation.isPending ? "Validando" : "Validar"}
-            </button>
-          </div>
-        )}
+        <div className={styles.headerActions}>
+          <button
+            className={styles.primaryBtn}
+            onClick={() => setEditor({ mode: "create" })}
+            disabled={!project}
+          >
+            ➕ Nueva
+          </button>
+          {MEMORY_ADVANCED_ENABLED && (
+            <>
+              {latestRun && (
+                <span className={styles.runPill}>
+                  Run #{latestRun.id} · {latestRun.status}
+                </span>
+              )}
+              <button
+                className={styles.primaryBtn}
+                onClick={() => validationMutation.mutate()}
+                disabled={!project || validationMutation.isPending}
+              >
+                {validationMutation.isPending ? "Validando" : "Validar"}
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
       <nav className={styles.tabs}>
@@ -228,6 +262,9 @@ export default function MemoryPage() {
         </button>
         <button className={tab === "drafts" ? styles.activeTab : ""} onClick={() => setTab("drafts")}>
           Borradores {drafts.data?.length ? `(${drafts.data.length})` : ""}
+        </button>
+        <button className={tab === "config" ? styles.activeTab : ""} onClick={() => setTab("config")}>
+          Config
         </button>
         {MEMORY_ADVANCED_ENABLED && (
           <>
@@ -262,6 +299,7 @@ export default function MemoryPage() {
               key={row.memory_id}
               row={row}
               onStatus={(id, next) => statusMutation.mutate({ id, next })}
+              onEdit={(r) => setEditor({ mode: "edit", row: r })}
             />
           ))}
         </main>
@@ -283,8 +321,15 @@ export default function MemoryPage() {
               key={row.memory_id}
               row={row}
               onStatus={(id, next) => statusMutation.mutate({ id, next })}
+              onEdit={(r) => setEditor({ mode: "edit", row: r })}
             />
           ))}
+        </main>
+      )}
+
+      {project && tab === "config" && (
+        <main className={styles.main}>
+          <MemoryConfigPanel project={project} />
         </main>
       )}
 
@@ -336,6 +381,17 @@ export default function MemoryPage() {
             </div>
           )}
         </main>
+      )}
+
+      {editor && project && (
+        <MemoryEditor
+          project={project}
+          mode={editor.mode}
+          existing={editor.row}
+          injectableTypes={injectableTypes}
+          onClose={() => setEditor(null)}
+          onSaved={refresh}
+        />
       )}
     </div>
   );

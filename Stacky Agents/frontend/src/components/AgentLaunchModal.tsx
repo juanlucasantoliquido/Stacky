@@ -7,6 +7,7 @@ import {
   launchAgentWithRuntime,
   launchInProgressLabel,
   openConsoleIfCliRuntime,
+  runtimeDisplayLabel,
 } from "../services/agentLaunch";
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
 import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
@@ -293,6 +294,13 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
             disabled={loading || success}
             claudeNeedsConfig={claudeNeedsConfig}
           />
+          {/* Plan 36 — F3: etiqueta de runtime efectivo */}
+          <p className={styles.effectiveRuntime} role="status">
+            Lanzará con: <strong>{runtimeDisplayLabel(agentRuntime)}</strong>
+            {agentRuntime === "github_copilot"
+              ? " — abre VS Code Chat (no la consola headless de Stacky)."
+              : " — abre la consola headless de Stacky."}
+          </p>
         </div>
 
         {/* Aviso de configuración de Claude Code (no bloquea seleccionar ticket) */}
@@ -301,6 +309,7 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
             <span>
               Claude Code no está configurado
               {claudeSession?.error ? ` (${claudeSession.error})` : " (falta iniciar sesión o instalar el CLI)"}.
+              {" "}Stacky no cambia a GitHub Copilot por vos; configurá este runtime o elegí GitHub Copilot manualmente.
             </span>
             <button
               className={styles.retryBtn}
@@ -398,7 +407,7 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
             disabled={!selected || loading || success || (agentRuntime === "claude_code_cli" && !claudeReady)}
             title={
               agentRuntime === "claude_code_cli" && !claudeReady
-                ? "Configurá Claude Code antes de lanzar"
+                ? "Stacky no cambia a GitHub Copilot por vos; configurá este runtime o elegí GitHub Copilot manualmente."
                 : undefined
             }
           >

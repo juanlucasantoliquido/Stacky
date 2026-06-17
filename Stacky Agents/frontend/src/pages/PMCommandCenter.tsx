@@ -14,6 +14,7 @@ import {
   type PmSprintKpis,
   type PmSprintSnapshotRow,
 } from "../api/pm";
+import WeeklyDigestCard from "../components/WeeklyDigestCard";
 import styles from "./PMCommandCenter.module.css";
 
 type SeverityFilter = "ALL" | "HIGH" | "MEDIUM" | "LOW" | "CRITICAL";
@@ -1056,6 +1057,8 @@ export default function PMCommandCenter() {
         {(snapshot || sprintQuery.isLoading) && (
           <SprintHealthCard snapshot={snapshot} capturedAt={capturedAt} />
         )}
+
+        <WeeklyDigestCard />
 
         <section className={styles.riskSection}>
           <h3 className={styles.sectionTitle}>

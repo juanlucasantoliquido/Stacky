@@ -209,6 +209,7 @@ def decide(
     if backend == "mock":
         return RoutingDecision(model="mock-1.0", reason="LLM_BACKEND=mock")
 
+    _had_override = bool(override)  # se usará para que I1.2 no sobreescriba overrides
     if override:
         capped = clamp_model(override)
         if capped != override:
@@ -218,7 +219,9 @@ def decide(
                 model=capped,
                 reason=f"user-override {override} -> clamp §5.2 ({capped})",
             )
-        if override in available:
+        # Para backend anthropic, cualquier modelo Claude permitido se acepta
+        # directamente (la lista de CLAUDE_MODELS puede estar desactualizada).
+        if backend in ("anthropic", "claude_cli") or override in available:
             return RoutingDecision(model=override, reason="user-override")
 
     tokens = _approx_tokens(blocks)
@@ -256,6 +259,30 @@ def decide(
         decision = RoutingDecision(model="claude-haiku-4-5", reason="functional simple (<3k tok)")
     else:
         decision = RoutingDecision(model=default, reason="default por agente")
+
+    # I1.2 — Routing por dificultad estimada (STACKY_DIFFICULTY_ROUTING_ENABLED).
+    # Se aplica DESPUÉS de las reglas base pero ANTES del clamp final.
+    # _had_override=True → el operador expresó intención de modelo: I1.2 no interfiere.
+    # Cap duro (clamp_model) sigue aplicando sobre todo.
+    import os as _os
+    _difficulty_enabled = _os.getenv("STACKY_DIFFICULTY_ROUTING_ENABLED", "false").lower() in (
+        "1", "true", "yes"
+    )
+    if _difficulty_enabled and not _had_override and fingerprint_complexity is not None:
+        _CRITICAL_AGENTS: frozenset[str] = frozenset()  # sin agentes críticos definidos aún
+        if fingerprint_complexity == "S" and agent_type not in _CRITICAL_AGENTS:
+            decision = RoutingDecision(
+                model="claude-haiku-4-5",
+                reason=f"complexity=S → haiku (downgrade por dificultad baja, I1.2)",
+            )
+        elif fingerprint_complexity in ("L", "XL") and decision.model == "claude-haiku-4-5":
+            # Uprade: el encargo es L/XL pero las reglas base eligieron haiku
+            # (p.ej. qa + pocos tokens). Forzar sonnet.
+            decision = RoutingDecision(
+                model="claude-sonnet-4-6",
+                reason=f"complexity={fingerprint_complexity} → sonnet (upgrade por dificultad alta, I1.2)",
+            )
+
     # Última línea de defensa: clamp sobre TODA decisión Claude (§5.2).
     decision.model = clamp_model(decision.model)
     return decision

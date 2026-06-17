@@ -33,6 +33,115 @@ def test_parse_line_returns_event_dict():
     assert event is None and message == "plain text"
 
 
+def test_event_detail_lines_renders_thinking_text_and_tool_use_in_order():
+    from services import claude_code_cli_runner as r
+
+    event = {
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "primero miro el ticket"},
+                {"type": "text", "text": "Voy a listar los archivos."},
+                {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}},
+            ],
+        },
+    }
+    lines = r._event_detail_lines(event)
+    assert [level for _, level in lines] == ["debug", "info", "info"]
+    assert lines[0][0].startswith("thinking: primero miro el ticket")
+    assert lines[1][0] == "assistant: Voy a listar los archivos."
+    assert lines[2][0].startswith("tool_use/Bash: ")
+    assert '"command": "ls"' in lines[2][0]
+
+
+def test_event_detail_lines_renders_tool_result_from_user_event():
+    from services import claude_code_cli_runner as r
+
+    ok_event = {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "tu_1",
+                    "content": [{"type": "text", "text": "archivo1.py\narchivo2.py"}],
+                }
+            ],
+        },
+    }
+    lines = r._event_detail_lines(ok_event)
+    assert lines == [("tool_result(ok): archivo1.py archivo2.py", "info")]
+
+    err_event = {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "is_error": True, "content": "boom"}
+            ],
+        },
+    }
+    lines = r._event_detail_lines(err_event)
+    assert lines == [("tool_result(error): boom", "warn")]
+
+
+def test_event_detail_lines_passthrough_for_other_events():
+    from services import claude_code_cli_runner as r
+
+    assert r._event_detail_lines(None) is None
+    assert r._event_detail_lines({"type": "result", "result": "ok"}) is None
+    assert r._event_detail_lines({"type": "system", "subtype": "init"}) is None
+    # assistant sin lista de content → sin render especial
+    assert r._event_detail_lines({"type": "assistant", "message": {}}) is None
+    # message no-dict no debe crashear el reader thread
+    assert r._event_detail_lines({"type": "user", "message": "raro"}) is None
+
+
+def test_event_detail_lines_labels_user_text_as_user():
+    from services import claude_code_cli_runner as r
+
+    # Texto en eventos user (p. ej. replay de --resume) NO debe decir assistant.
+    event = {
+        "type": "user",
+        "message": {"role": "user", "content": [{"type": "text", "text": "dale, seguí"}]},
+    }
+    assert r._event_detail_lines(event) == [("user: dale, seguí", "info")]
+
+    # content como string plano también se renderiza.
+    flat = {"type": "user", "message": {"role": "user", "content": "hola"}}
+    assert r._event_detail_lines(flat) == [("user: hola", "info")]
+
+
+def test_prompt_echo_message_shows_input_and_truncates():
+    from services import claude_code_cli_runner as r
+
+    short = r._prompt_echo_message("hola agente")
+    assert short == "input inicial → claude:\nhola agente"
+
+    masked = r._prompt_echo_message("hola [PII_1]", pii_masked=True)
+    assert masked == "input inicial → claude (PII enmascarada):\nhola [PII_1]"
+
+    long_prompt = "x" * (r._PROMPT_ECHO_MAX_CHARS + 500)
+    echoed = r._prompt_echo_message(long_prompt)
+    assert echoed.startswith("input inicial → claude:\n")
+    assert "truncado" in echoed
+    assert str(len(long_prompt)) in echoed
+    # No incluye el prompt completo
+    assert len(echoed) < len(long_prompt)
+
+
+def test_tool_result_excerpt_marks_non_text_blocks():
+    from services import claude_code_cli_runner as r
+
+    content = [
+        {"type": "image", "source": {"type": "base64", "data": "…"}},
+        {"type": "text", "text": "listo"},
+    ]
+    assert r._tool_result_excerpt(content) == "[bloque image] listo"
+
+
 def test_capture_result_telemetry_extracts_native_fields():
     from services import claude_code_cli_runner as r
 
@@ -170,3 +279,43 @@ def test_skip_permissions_default_true_decision_5_3(monkeypatch):
     cmd = r._build_command(model_override=None)
     assert "--dangerously-skip-permissions" in cmd
     assert "--permission-mode" not in cmd
+
+
+# ---------------------------------------------------------------------------
+# Defaults duros: modelo sonnet-4-6 + effort medium en TODA invocación CLI
+# ---------------------------------------------------------------------------
+
+def test_build_command_defaults_sonnet46_and_medium_effort():
+    from config import config
+    from services import claude_code_cli_runner as r
+
+    assert config.CLAUDE_CODE_CLI_MODEL == "claude-sonnet-4-6"
+    assert config.CLAUDE_CODE_CLI_EFFORT == "medium"
+    cmd = r._build_command(model_override=None)
+    assert cmd[cmd.index("--model") + 1] == "claude-sonnet-4-6"
+    assert cmd[cmd.index("--effort") + 1] == "medium"
+
+
+def test_build_command_model_override_wins_over_default():
+    from services import claude_code_cli_runner as r
+
+    cmd = r._build_command(model_override="claude-haiku-4-5")
+    assert cmd[cmd.index("--model") + 1] == "claude-haiku-4-5"
+
+
+def test_build_command_effort_configurable_and_validated(monkeypatch):
+    from config import config
+    from services import claude_code_cli_runner as r
+
+    monkeypatch.setattr(config, "CLAUDE_CODE_CLI_EFFORT", "high")
+    cmd = r._build_command(model_override=None)
+    assert cmd[cmd.index("--effort") + 1] == "high"
+
+    # Valor inválido → no se pasa el flag (el CLI usa su default), no rompe el spawn.
+    monkeypatch.setattr(config, "CLAUDE_CODE_CLI_EFFORT", "ultra")
+    cmd = r._build_command(model_override=None)
+    assert "--effort" not in cmd
+
+    monkeypatch.setattr(config, "CLAUDE_CODE_CLI_EFFORT", "")
+    cmd = r._build_command(model_override=None)
+    assert "--effort" not in cmd

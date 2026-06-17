@@ -22,6 +22,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
 
+from config import config
 from db import Base, session_scope
 from models import AgentExecution
 
@@ -36,6 +37,7 @@ class Webhook(Base):
     event = Column(String(40), nullable=False)  # exec.completed | exec.approved | exec.discarded
     url = Column(String(600), nullable=False)
     secret = Column(String(120))
+    format = Column(String(20), default="raw")  # raw | teams
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_fired_at = Column(DateTime)
@@ -51,6 +53,7 @@ class Webhook(Base):
             "project": self.project,
             "event": self.event,
             "url": self.url,
+            "format": self.format or "raw",
             "active": self.active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_fired_at": self.last_fired_at.isoformat() if self.last_fired_at else None,
@@ -81,8 +84,14 @@ def _deliver(webhook_id: int, payload: dict) -> None:
                 return
             url = wh.url
             secret = wh.secret
+            fmt = (wh.format or "raw").strip().lower()
 
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        if fmt == "teams":
+            body_payload = _to_teams_card(payload)
+        else:
+            body_payload = payload
+
+        body = json.dumps(body_payload, ensure_ascii=False).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         signature = _sign(secret, body)
         if signature:
@@ -132,33 +141,152 @@ def fire(event: str, payload: dict, project: str | None = None) -> int:
 def fire_completed_safe(execution_id: int) -> None:
     """Wrapper seguro para llamar desde agent_runner sin riesgo de tirar el thread."""
     try:
-        with session_scope() as session:
-            row = session.get(AgentExecution, execution_id)
-            if row is None:
-                return
-            payload = {
-                "event": "exec.completed",
-                "execution": row.to_dict(include_output=True),
-            }
-            project = None
-            if row.ticket and row.ticket.project:
-                project = row.ticket.project
-        fire("exec.completed", payload, project=project)
+        fire_for_execution(execution_id)
     except Exception as exc:  # noqa: BLE001
         log.warning("fire_completed_safe failed: %s", exc)
+
+
+def fire_for_execution(execution_id: int) -> None:
+    """Emite webhook según estado final de la ejecución.
+
+    V2 (flag ON):
+      completed -> exec.completed
+      error     -> exec.failed
+      needs_review -> exec.needs_review
+
+    Legacy (flag OFF): solo github_copilot + completed (paridad exacta).
+    """
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            return
+        md = row.metadata_dict or {}
+        runtime = str(md.get("runtime") or "")
+        status = str(row.status or "")
+
+        if config.STACKY_WEBHOOKS_V2_ENABLED:
+            event = _event_for_status(status)
+            if event is None:
+                return
+            payload = {
+                "event": event,
+                "execution": _compact_execution_payload(row),
+            }
+        else:
+            if runtime != "github_copilot" or status != "completed":
+                return
+            event = "exec.completed"
+            payload = {
+                "event": event,
+                "execution": row.to_dict(include_output=True),
+            }
+
+        project = None
+        if row.ticket and row.ticket.project:
+            project = row.ticket.project
+
+    fire(event, payload, project=project)
+
+
+def _event_for_status(status: str) -> str | None:
+    if status == "completed":
+        return "exec.completed"
+    if status == "error":
+        return "exec.failed"
+    if status == "needs_review":
+        return "exec.needs_review"
+    return None
+
+
+def _compact_execution_payload(row: AgentExecution) -> dict:
+    md = row.metadata_dict or {}
+    telem = md.get("claude_telemetry") or {}
+    usage = telem.get("usage") if isinstance(telem, dict) else {}
+    input_tokens = usage.get("input_tokens") if isinstance(usage, dict) else None
+    output_tokens = usage.get("output_tokens") if isinstance(usage, dict) else None
+    cost_usd = None
+    if isinstance(telem, dict):
+        cost_usd = telem.get("total_cost_usd")
+    failure_kind = md.get("failure_kind")
+
+    return {
+        "id": row.id,
+        "ticket_id": row.ticket_id,
+        "agent_type": row.agent_type,
+        "runtime": md.get("runtime"),
+        "status": row.status,
+        "error_message": row.error_message,
+        "duration_s": round((row.duration_ms or 0) / 1000, 3) if row.duration_ms else None,
+        "cost_usd": cost_usd,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "failure_kind": failure_kind,
+    }
+
+
+def _to_teams_card(payload: dict) -> dict:
+    event = str(payload.get("event") or "stacky.event")
+    execution = payload.get("execution") or {}
+    status = str(execution.get("status") or "")
+    agent = str(execution.get("agent_type") or "agente")
+    runtime = str(execution.get("runtime") or "runtime")
+    ticket_id = execution.get("ticket_id")
+    duration = execution.get("duration_s")
+    cost = execution.get("cost_usd")
+    error_message = execution.get("error_message")
+
+    if event == "exec.completed":
+        color = "2EB886"
+        verb = "completó"
+    elif event == "exec.failed":
+        color = "D64545"
+        verb = "falló"
+    else:
+        color = "D4A017"
+        verb = "requiere revisión"
+
+    parts = [f"Ticket {ticket_id}" if ticket_id is not None else "Ticket N/A", runtime]
+    if duration is not None:
+        parts.append(f"{duration}s")
+    if cost is not None:
+        try:
+            parts.append(f"${float(cost):.4f}")
+        except Exception:
+            parts.append(f"${cost}")
+    if error_message:
+        parts.append(str(error_message)[:240])
+
+    text = " · ".join(parts)
+    title = f"Stacky · {agent} {verb}"
+
+    return {
+        "@type": "MessageCard",
+        "@context": "https://schema.org/extensions",
+        "summary": title,
+        "themeColor": color,
+        "title": title,
+        "text": text,
+        "potentialAction": [],
+    }
 
 
 # ---------------------------------------------------------------------------
 # CRUD (lo usa la API)
 # ---------------------------------------------------------------------------
 
-def create(*, event: str, url: str, project: str | None = None, secret: str | None = None) -> int:
+def create(
+    *, event: str, url: str, project: str | None = None, secret: str | None = None, format: str | None = None
+) -> int:
+    fmt = (format or "raw").strip().lower()
+    if fmt not in {"raw", "teams"}:
+        fmt = "raw"
     with session_scope() as session:
         wh = Webhook(
             event=event,
             url=url,
             project=project,
             secret=secret,
+            format=fmt,
             active=True,
         )
         session.add(wh)

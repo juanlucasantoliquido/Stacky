@@ -19,12 +19,16 @@ from services.local_file_logging import logs_dir, recent_log_files
 
 Status = str
 
+_CLI_RUNTIME_CACHE: dict[str, object] = {"expires_at": 0.0, "checks": None}
+_CLI_RUNTIME_CACHE_TTL_SECONDS = 600
+
 
 def run_local_diagnostics() -> dict:
     started = time.monotonic()
     checks = [
         _check_backend(),
         _check_tracker(),
+        _check_cli_runtimes(),
         _check_gh_auth(),
         _check_vscode_installation(),
         _check_vscode_bridge(),
@@ -147,6 +151,97 @@ def _check_gh_auth() -> dict:
         return _result("gh_auth", "GitHub CLI autenticado", "ok", "gh auth status respondió correctamente.")
     detail = (completed.stderr or completed.stdout or "").strip()[:500]
     return _result("gh_auth", "GitHub CLI autenticado", "error", detail or "gh no tiene sesión activa.")
+
+
+def _npm_global_fallbacks(name: str) -> list[str]:
+    """Return candidate full paths for an npm-installed global binary on Windows."""
+    appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    candidates = []
+    for base in filter(None, [appdata and str(Path(appdata) / "npm"),
+                               localappdata and str(Path(localappdata) / "npm")]):
+        candidates += [
+            str(Path(base) / name),
+            str(Path(base) / f"{name}.cmd"),
+            str(Path(base) / f"{name}.ps1"),
+        ]
+    try:
+        result = subprocess.run(
+            ["npm", "config", "get", "prefix"],
+            capture_output=True, text=True, timeout=4,
+        )
+        prefix = (result.stdout or "").strip()
+        if prefix and prefix != "undefined":
+            candidates += [
+                str(Path(prefix) / name),
+                str(Path(prefix) / f"{name}.cmd"),
+            ]
+    except Exception:  # noqa: BLE001
+        pass
+    return candidates
+
+
+def _check_cli_runtimes() -> dict:
+    now = time.monotonic()
+    cached_checks = _CLI_RUNTIME_CACHE.get("checks")
+    expires_at = float(_CLI_RUNTIME_CACHE.get("expires_at") or 0.0)
+    if cached_checks is not None and now < expires_at:
+        checks = cached_checks
+    else:
+        checks = []
+        for runtime_name, configured_bin in (
+            ("claude", config.CLAUDE_CODE_CLI_BIN),
+            ("codex", config.CODEX_CLI_BIN),
+        ):
+            # Resolve to full path: first the configured value, then npm global fallbacks.
+            bin_path = _find_executable(configured_bin, _npm_global_fallbacks(configured_bin))
+            if bin_path is None:
+                checks.append({"name": runtime_name, "ok": False, "detail": "no encontrado en PATH"})
+                continue
+            try:
+                completed = subprocess.run(
+                    [bin_path, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if completed.returncode == 0:
+                    detail = (completed.stdout or completed.stderr or "ok").strip().splitlines()[0][:180]
+                    checks.append({"name": runtime_name, "ok": True, "detail": detail})
+                else:
+                    detail = (completed.stderr or completed.stdout or "no ejecutable").strip()[:180]
+                    checks.append({"name": runtime_name, "ok": False, "detail": detail or "no encontrado en PATH"})
+            except FileNotFoundError:
+                checks.append({"name": runtime_name, "ok": False, "detail": "no encontrado en PATH"})
+            except subprocess.TimeoutExpired:
+                checks.append({"name": runtime_name, "ok": False, "detail": "timeout al consultar versión"})
+            except Exception as exc:  # noqa: BLE001
+                checks.append({"name": runtime_name, "ok": False, "detail": str(exc)[:180]})
+
+        _CLI_RUNTIME_CACHE["checks"] = checks
+        _CLI_RUNTIME_CACHE["expires_at"] = now + _CLI_RUNTIME_CACHE_TTL_SECONDS
+
+    all_ok = all(bool(c.get("ok")) for c in checks)
+    status: Status = "ok" if all_ok else "warning"
+    missing = [c["name"] for c in checks if not c.get("ok")]
+    if all_ok:
+        message = "Runtimes CLI disponibles (claude y codex)."
+    else:
+        message = (
+            f"Faltan runtimes CLI: {', '.join(missing)}. "
+            "Instalá el binario ausente o cambiá runtime a github_copilot."
+        )
+
+    return _result(
+        "cli_runtimes",
+        "Runtimes CLI",
+        status,
+        message,
+        {
+            "checks": checks,
+            "cache_ttl_seconds": _CLI_RUNTIME_CACHE_TTL_SECONDS,
+        },
+    )
 
 
 def _check_vscode_installation() -> dict:

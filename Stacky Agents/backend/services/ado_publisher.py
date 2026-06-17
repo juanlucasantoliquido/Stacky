@@ -38,6 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, session_scope
+from config import config
 from models import AgentExecution, Ticket
 from services import agent_html_output as html_io
 
@@ -46,6 +47,49 @@ logger = logging.getLogger("stacky.ado_publisher")
 ATTACHMENTS_MANIFEST_FILENAME = "attachments.json"
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 _ATTACH_TOKEN_RE = re.compile(r"\{\{ATTACH:[^}]+\}\}")
+
+
+def _render_run_footer(execution: AgentExecution) -> str:
+    md = execution.metadata_dict or {}
+    runtime = str(md.get("runtime") or "unknown")
+    model = (
+        md.get("claude_code_model")
+        or md.get("codex_model")
+        or md.get("model")
+    )
+    duration_ms = md.get("duration_ms") or execution.duration_ms
+    duration = None
+    try:
+        if duration_ms is not None:
+            duration = f"{round(float(duration_ms) / 1000, 1)}s"
+    except Exception:
+        duration = None
+
+    cost = None
+    telem = md.get("claude_telemetry")
+    if isinstance(telem, dict):
+        cost = telem.get("total_cost_usd")
+
+    parts: list[str] = ["Stacky", str(execution.agent_type)]
+    if model:
+        parts.append(f"{runtime}/{model}")
+    else:
+        parts.append(runtime)
+    if duration:
+        parts.append(duration)
+    if cost is not None:
+        try:
+            parts.append(f"${float(cost):.2f}")
+        except Exception:
+            parts.append(f"${cost}")
+    parts.append(f"run #{execution.id}")
+
+    text = " · ".join(parts)
+    return (
+        "\n<hr/>"
+        '<p style="font-size:11px;color:#888">'
+        f"&#129302; {text}</p>"
+    )
 
 # ── P0 Inc.2: serialización por work item ──────────────────────────────────────
 # Lock en memoria por `ado_id` que cubre el ciclo dedupe→POST→INSERT. El
@@ -373,6 +417,11 @@ def publish_from_execution(
                 client=client,
                 ado_id=ado_id,
             )
+            if config.STACKY_ADO_RUN_FOOTER_ENABLED:
+                with session_scope() as session:
+                    exec_for_footer = session.get(AgentExecution, execution_id)
+                    if exec_for_footer is not None:
+                        html_to_publish = html_to_publish + _render_run_footer(exec_for_footer)
             html_to_publish = _inject_stacky_marker(html_to_publish, marker)
             ado_response = client.post_comment(ado_id, html_to_publish, "html")
             if isinstance(ado_response, dict) and attachment_summary is not None:

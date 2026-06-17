@@ -14,6 +14,7 @@ param(
     [string]$OutputRoot = "",
     [string]$ReleaseName = "",
     [string]$Version = "",
+    [string]$DeployRoot = "",
     [string]$GitHubCopilotAgentsRepo = "",
     [string]$CertificateThumbprint = "",
     [string]$CertificatePath = "",
@@ -338,6 +339,8 @@ $backendDir = Join-Path $appRoot "backend"
 $vsixDir = Join-Path $appRoot "vscode_extension"
 $buildRoot = Join-Path $deploymentDir ".build"
 $exportConfigScript = Join-Path $deploymentDir "export_config_for_release.py"
+$exportHarnessScript = Join-Path $deploymentDir "export_harness_defaults.py"
+$harnessDefaultsFile = Join-Path $backendDir "harness_defaults.env"
 
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path $deploymentDir "out"
@@ -376,15 +379,103 @@ if ($GitHubCopilotAgentsRepo) {
 Require-Command -Command "npm" -Hint "Instala Node.js 18+ para compilar el frontend."
 $script:Python = Resolve-Python
 
+# Snapshot del arnés vivo → harness_defaults.env (versionado). Se hornea más abajo
+# en backend\.env. Corre ANTES del backup del deploy en Prepare-Publication, así que
+# $DeployRoot todavía apunta al deploy con la config actual del operador. Si no hay
+# deploy vivo (build standalone / otra máquina) se conserva el harness_defaults.env
+# versionado existente.
+if ($DeployRoot -and (Test-Path $DeployRoot)) {
+    Write-Step "Sincronizando harness_defaults.env con el arnes vivo del deploy"
+    if (Test-Path $exportHarnessScript) {
+        Invoke-BuildPython -PythonArgs @(
+            $exportHarnessScript,
+            "--deploy-root", $DeployRoot,
+            "--out", $harnessDefaultsFile
+        )
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "No se pudo refrescar harness_defaults.env; se usara el versionado existente."
+        } else {
+            Write-OK "harness_defaults.env sincronizado con el arnes vivo"
+        }
+    } else {
+        Write-Warn "export_harness_defaults.py no encontrado; se usara harness_defaults.env versionado."
+    }
+}
+
 Write-Step "Compilando frontend"
 Push-Location $frontendDir
 try {
+    # Matar procesos node/npm activos en el frontend para evitar bloqueos EBUSY en node_modules
+    # (típicamente `npm run dev` que mantiene archivos .node abiertos durante npm install)
+    $frontendDirFull = [System.IO.Path]::GetFullPath($frontendDir)
+    $nodeProcs = @(Get-CimInstance Win32_Process -Filter "Name LIKE '%node.exe%' OR Name LIKE '%npm%'" -ErrorAction SilentlyContinue | 
+        Where-Object { 
+            $_.ExecutablePath -and
+            $_.CommandLine -and
+            $_.CommandLine -match [regex]::Escape($frontendDirFull)
+        })
+    if ($nodeProcs.Count -gt 0) {
+        Write-Warn "Deteniendo $($nodeProcs.Count) procesos node/npm en el frontend para liberar node_modules."
+        foreach ($proc in $nodeProcs) {
+            try {
+                Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+            } catch {
+                Write-Warn "No se pudo detener el proceso $($proc.Name) (PID $($proc.ProcessId)): $_"
+            }
+        }
+        Start-Sleep -Seconds 3
+    }
+
     if (-not (Test-Path (Join-Path $frontendDir "node_modules"))) {
         Write-Step "Instalando dependencias del frontend"
         npm install
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm install fallo con exit code $LASTEXITCODE."
+        }
     }
 
     npm run build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "npm run build fallo. Limpiando node_modules y reintentando."
+
+        # Reintentar matar procesos antes de limpiar
+        $nodeProcs = @(Get-CimInstance Win32_Process -Filter "Name LIKE '%node.exe%' OR Name LIKE '%npm%'" -ErrorAction SilentlyContinue | 
+            Where-Object { 
+                $_.ExecutablePath -and
+                $_.CommandLine -and
+                $_.CommandLine -match [regex]::Escape($frontendDirFull)
+            })
+        if ($nodeProcs.Count -gt 0) {
+            Write-Warn "Deteniendo $($nodeProcs.Count) procesos node/npm en el frontend para liberar node_modules antes de limpiar."
+            foreach ($proc in $nodeProcs) {
+                try {
+                    Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+                } catch {
+                    Write-Warn "No se pudo detener el proceso $($proc.Name) (PID $($proc.ProcessId)): $_"
+                }
+            }
+            Start-Sleep -Seconds 3
+        }
+
+        # Limpiar node_modules completamente y reinstalar
+        $nodeModules = Join-Path $frontendDir "node_modules"
+        if (Test-Path $nodeModules) {
+            Write-Warn "Eliminando node_modules para asegurar limpieza completa."
+            Remove-Item -LiteralPath $nodeModules -Recurse -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+        }
+
+        npm install
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm install fallo durante reintento con exit code $LASTEXITCODE."
+        }
+
+        npm run build
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm run build fallo con exit code $LASTEXITCODE."
+        }
+    }
+
     if (-not (Test-Path (Join-Path $frontendDir "dist\index.html"))) {
         throw "La compilacion no genero frontend\dist\index.html."
     }
@@ -467,6 +558,26 @@ Write-Step "Copiando backend congelado"
 New-Item -ItemType Directory -Path $releaseBackendDir -Force | Out-Null
 Copy-Item -Path (Join-Path $frozenBackend "*") -Destination $releaseBackendDir -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $backendDir ".env.example") -Destination (Join-Path $releaseBackendDir ".env.example") -Force
+
+# Hornear backend\.env con el arnes por defecto, en TODO deploy (con o sin
+# -ExportConfig): .env.example (base sin secretos) + harness_defaults.env (flags
+# del arnes). Es el .env que config.py carga al arrancar (backend_root()\.env),
+# asi que el deploy nuevo arranca con el arnes configurado sin tocar nada.
+# harness_defaults.env SOLO contiene flags de FLAG_REGISTRY: nunca credenciales.
+$releaseEnvFile = Join-Path $releaseBackendDir ".env"
+$envExampleText = Get-Content -LiteralPath (Join-Path $backendDir ".env.example") -Raw
+if (Test-Path $harnessDefaultsFile) {
+    $harnessText = Get-Content -LiteralPath $harnessDefaultsFile -Raw
+    $bakedEnv = $envExampleText.TrimEnd("`r", "`n") + "`r`n`r`n" +
+        "# == Arnes por defecto horneado en el deploy (fuente: harness_defaults.env) ==`r`n" +
+        $harnessText
+    Write-Utf8NoBom -Path $releaseEnvFile -Value $bakedEnv
+    Write-OK "backend\.env horneado con el arnes por defecto (.env.example + harness_defaults.env)"
+} else {
+    Write-Utf8NoBom -Path $releaseEnvFile -Value $envExampleText
+    Write-Warn "harness_defaults.env ausente; backend\.env horneado solo desde .env.example."
+}
+
 New-Item -ItemType Directory -Path $releaseDataDir, $releaseProjectsDir -Force | Out-Null
 Write-OK "Backend copiado sin fuentes del proyecto"
 
@@ -534,6 +645,8 @@ Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\START.bat") -De
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\smoke_test.ps1") -Destination (Join-Path $releaseDir "smoke_test.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\Setup-Copilot.ps1") -Destination (Join-Path $releaseDir "Setup-Copilot.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\SETUP-COPILOT.bat") -Destination (Join-Path $releaseDir "SETUP-COPILOT.bat") -Force
+Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\Install-CLI-Runtimes.ps1") -Destination (Join-Path $releaseDir "Install-CLI-Runtimes.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\INSTALL-CLI-RUNTIMES.bat") -Destination (Join-Path $releaseDir "INSTALL-CLI-RUNTIMES.bat") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\INSTALLER.md") -Destination (Join-Path $releaseDir "INSTALLER.md") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\OPERATOR_GUIDE.md") -Destination (Join-Path $releaseDir "OPERATOR_GUIDE.md") -Force
 Write-OK "Scripts copiados"

@@ -1,0 +1,282 @@
+backend/agent_runner.py
+  class UnknownAgentError(ValueError)
+  def run_agent(
+    *,
+    agent_type: str,
+    ticket_id: int,
+    context_blocks: list[dict],
+    user: str,
+    chain_from: list[int] | None = None,
+    pack_run_id: int | None = None,
+    pack_step: int | None = None,
+    model_override: str | None = None,
+    system_prompt_override: str | None = None,
+    use_few_shot: bool = True,
+    use_anti_patterns: bool = True,
+    fingerprint_complexity: str | None = None,
+    delta_prefix: str | None = None,
+    previous_execution_id: int | None = None,
+    runtime: str = "github_copilot",
+    vscode_agent_filename: str | None = None,
+    project_name: str | None = None,
+) -> int
+  def _start_cli_runtime(
+    *,
+    runtime: str,
+    agent,
+    agent_type: str,
+    ticket_id: int,
+    context_blocks: list[dict],
+    user: str,
+    vscode_agent_filename: str | None,
+    model_override: str | None,
+    project_name: str | None,
+) -> int
+  def _pre_run_then_run_in_background(
+    agent_type: str,
+    execution_id: int,
+    *,
+    ticket_id: int,
+    user: str,
+    project_name: str | None = None,
+    **kwargs,
+) -> None
+  def _run_pre_run_checks(execution_id: int, *, project_name: str | None = None) -> bool
+  def cancel(execution_id: int) -> bool
+  def cancel_and_wait(execution_id: int, timeout_seconds: float = 5.0) -> dict
+  def _run_in_background(
+    agent_type: str,
+    execution_id: int,
+    *,
+    model_override: str | None = None,
+    system_prompt_override: str | None = None,
+    use_few_shot: bool = True,
+    use_anti_patterns: bool = True,
+    fingerprint_complexity: str | None = None,
+    delta_prefix: str | None = None,
+    runtime: str = "github_copilot",
+    project_name: str | None = None,
+) -> None
+  def _mark_terminal(execution_id: int, *, status: str, error: str | None = None) -> None
+
+backend/agents/__init__.py
+  def list_agents() -> list[dict]
+  def get(agent_type: str) -> BaseAgent | None
+
+backend/agents/base.py
+  class AgentResult
+  class RunContext
+  class BaseAgent(ABC)
+
+backend/agents/business.py
+  class BusinessAgent(BaseAgent)
+
+backend/agents/critic.py
+  class CriticAgent(BaseAgent)
+
+backend/agents/custom.py
+  class CustomAgent(BaseAgent)
+
+backend/agents/debug.py
+  class DebugAgent(BaseAgent)
+  class PRReviewAgent(BaseAgent)
+
+backend/agents/developer.py
+  class DeveloperAgent(BaseAgent)
+
+backend/agents/functional.py
+  class FunctionalAgent(BaseAgent)
+
+backend/agents/qa.py
+  class QAAgent(BaseAgent)
+
+backend/agents/technical.py
+  class TechnicalAgent(BaseAgent)
+
+backend/api/__init__.py
+  def health()
+
+backend/api/_helpers.py
+  def current_user() -> str
+
+backend/api/ado_manager.py
+  def create_project_task(project_name: str)
+
+backend/api/adoption.py
+  def _iso(dt: datetime | None) -> str | None
+  def _resolve_user() -> str
+  def _user_matches(execution_user: str | None, target: str) -> bool
+  def _serialize_ticket(t: Ticket | None) -> dict | None
+  def session_resume()
+  def savings_weekly()
+  def _calibrate_baseline(session, since: datetime) -> tuple[dict[str, int], bool]
+  def standup_daily()
+  def _is_business_day(day: datetime) -> bool
+  def streak()
+  def _project_cap_path()
+  def _load_caps() -> dict
+  def _save_caps(caps: dict) -> None
+  def _month_start(now: datetime) -> datetime
+  def _spent_this_month(project: str | None) -> float
+  def cost_cap_get()
+  def cost_cap_put()
+  def demo_seed()
+  def execution_events(execution_id: int)
+  def repo_explain()
+  def execution_export_pdf(execution_id: int)
+  def execution_provenance(execution_id: int)
+  def demo_agent_run()
+  def demo_status()
+
+backend/api/agent_roles.py
+  def _load() -> dict
+  def _save(data: dict) -> None
+  def get_roles()
+  def put_roles()
+
+backend/api/agents.py
+  def list_agents_route()
+  def validate_artifact_route()
+  def list_vscode_agents()
+  def stacky_manifest()
+  def stacky_materialize()
+  def stacky_import_agent()
+  def vscode_agent_history(filename: str)
+  def _validate_agent_filename(filename: str) -> str
+  def agent_prompt_versions(filename: str)
+  def agent_prompt_version_diff(filename: str)
+  def advise_runtime()
+  def run()
+  def route()
+  def list_models_route()
+  def schema(agent_type: str)
+  def system_prompt(agent_type: str)
+  def next_suggestion()
+  def cancel(execution_id: int)
+  def estimate_cost()
+  def open_chat()
+  def _infer_agent_type_from_filename(filename: str) -> str
+  def _build_ado_enrichment_sections(
+    ado_id: int,
+    *,
+    project_name: str | None = None,
+    tracker_project: str | None = None,
+    ticket=None,
+) -> list[str]
+  def _format_attachment_size(size: int) -> str
+
+backend/api/anti_patterns.py
+  def list_route()
+  def create_route()
+  def deactivate_route(ap_id: int)
+
+backend/api/chat.py
+  def _get_system_prompt(agent_filename: str) -> str
+  def _messages_to_prose(messages: list[dict]) -> str
+  def chat_turn()
+
+backend/api/client_profile.py
+  def _actor() -> str
+  def _tracker_type_for(project_name: str) -> str
+  def _build_path_check(project_name: str, profile: dict | None) -> list[dict]
+  def get_default_template()
+  def get_client_profile(project_name: str)
+  def put_client_profile(project_name: str)
+  def delete_client_profile(project_name: str)
+  def save_db_readonly_auth(project_name: str)
+  def get_db_readonly_auth_meta(project_name: str)
+
+backend/api/config_transfer.py
+  def _actor() -> str
+  def _read_sections_payload() -> list[str] | None
+  def _read_import_bundle() -> dict
+  def export_all_projects_config()
+  def import_all_projects_config()
+  def export_config(project_name: str)
+  def import_config(project_name: str)
+  def transfer_events(project_name: str)
+  def list_sections()
+
+backend/api/db_query.py
+  def _actor() -> str
+  def _resolve_project(payload: dict | None) -> str
+  def run_db_query(ticket_id: str)
+  def list_ticket_db_audit(ticket_id: str)
+  def list_global_db_audit()
+
+backend/api/decisions.py
+  def list_route()
+  def create_route()
+  def deactivate_route(decision_id: int)
+
+backend/api/diag.py
+  def diagnose_execution(execution_id: int)
+  def output_watcher_scan_now()
+  def output_watcher_stats()
+  def metrics()
+  def health()
+  def local_diagnostics()
+  def git_pull_check()
+  def run_db_backup()
+  def export_local_logs()
+  def _percentiles(samples: list[int]) -> dict[str, int | None]
+  def _classify_recovery_reason(reason: str | None) -> str
+  def _read_manifest(execution_id: int) -> dict | None
+  def _diagnose(
+    *,
+    status_in_db: str,
+    manifest: dict | None,
+    heartbeat_stale: bool,
+    heartbeat,
+) -> tuple[str, str | None]
+  def _iso(dt: datetime | None) -> str | None
+
+backend/api/docs.py
+  def _get_vscode_prompts_dir() -> str | None
+  def _get_project_param() -> str | None
+  def _get_source_param() -> str
+  def _is_project_source(source_id: str) -> bool
+  def get_doc_sources()
+  def get_docs_index()
+  def get_doc_content()
+
+backend/api/docs_rag.py
+  def _read_agent_system_prompt(agent_filename: str) -> str
+  def _resolve_project(project_name: str | None) -> tuple[str, dict]
+  def _build_context_block(hits: list[DocHit]) -> str
+  def route_index()
+  def route_stats()
+  def route_search()
+  def route_chat()
+
+backend/api/evals.py
+  def promote_to_golden()
+  def eval_history()
+
+backend/api/exec_verification.py
+  def serialize_exec_verification_block(metadata: dict | None) -> dict | None
+  def get_exec_verification(execution_id: int)
+
+backend/api/executions.py
+  def list_executions()
+  def get_execution(execution_id: int)
+  def get_logs(execution_id: int)
+  def send_execution_input(execution_id: int)
+  def stream_logs(execution_id: int)
+  def approve(execution_id: int)
+  def discard(execution_id: int)
+  def _set_verdict(execution_id: int, verdict: str)
+  def publish_to_ado(execution_id: int)
+  def diff(execution_id: int, other_id: int)
+  def cancel_execution(execution_id: int)
+  def delete_execution(execution_id: int)
+  def delete_executions_by_ticket()
+  def answer_question(execution_id: int)
+  def _resolve_ticket_output_dir_ws1(
+    row: AgentExecution,
+    ticket: Ticket,
+) -> "Path | None"
+  def list_output_files(execution_id: int)
+  def delete_output_files(execution_id: int)
+
+# ... (509 archivos adicionales omitidos por limite de 8192 chars)

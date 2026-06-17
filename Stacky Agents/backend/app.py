@@ -1,6 +1,7 @@
 import logging
 import mimetypes
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -247,6 +248,28 @@ def create_app() -> Flask:
     if fixed:
         logger.info("reconciled %d orphan executions", fixed)
 
+    # R0.3 — Orphan reaper: barrido inicial + daemon periodico (si habilitado).
+    try:
+        from services.orphan_reaper import start_background_reaper
+        start_background_reaper()
+    except Exception:
+        logger.exception("orphan_reaper startup fallo (continuando)")
+
+    # ── V0.1 — Perfil del arnés en boot ──────────────────────────────────────
+    # STACKY_HARNESS_PROFILE=off|safe|full (default: "" = no aplicar).
+    # Respeta env vars individuales ya seteadas explícitamente por el operador.
+    _harness_profile = os.getenv("STACKY_HARNESS_PROFILE", "").strip().lower()
+    if _harness_profile:
+        try:
+            from services.harness_profiles import apply_profile
+            applied = apply_profile(_harness_profile, respect_explicit_env=True)
+            logger.info(
+                "perfil de arnés '%s' aplicado en boot (%d flags)",
+                _harness_profile, len(applied),
+            )
+        except ValueError as exc:
+            logger.warning("STACKY_HARNESS_PROFILE inválido, ignorado: %s", exc)
+
     # ── Startup recovery (P5) ────────────────────────────────────────────────
     # STACKY_RECOVERY_ON_STARTUP=true|false (default: true cuando gateway=on, false si no)
     _gateway_mode = os.getenv("STACKY_COMPLETION_GATEWAY", "off").lower().strip()
@@ -309,12 +332,78 @@ def create_app() -> Flask:
     else:
         logger.debug("output watcher disabled (STACKY_OUTPUT_WATCHER_ENABLED=false)")
 
+    # ── Evals programados (V2.3 — golden loop) ───────────────────────────────
+    # Daemon que corre `evals run all` cada STACKY_EVALS_INTERVAL_HOURS y persiste
+    # en la tabla eval_runs. Default 0 = off (retro-compat).
+    try:
+        _evals_interval = float(os.getenv("STACKY_EVALS_INTERVAL_HOURS", "0") or 0)
+    except ValueError:
+        _evals_interval = 0.0
+    if _evals_interval > 0:
+        from services.eval_history import schedule_evals
+        schedule_evals(_evals_interval)
+        logger.info("evals scheduler armed (interval=%.1fh)", _evals_interval)
+    else:
+        logger.debug("evals scheduler disabled (STACKY_EVALS_INTERVAL_HOURS=0)")
+
     # ── Preflight de configuración (Fase P2) ─────────────────────────────────
     # Gritar temprano si el cierre automático del flujo open-chat no va a
     # funcionar: directorio vigilado inexistente (C1) o PAT ausente (C2).
     _log_completion_preflight(logger)
 
     _startup_sync(logger)
+
+    # ── U2.1 — Hook de avance de pipeline por finalización de ejecución ─────
+    try:
+        from services import pipeline_orchestrator
+
+        pipeline_orchestrator.register_ticket_status_hook()
+    except Exception:
+        logger.exception("pipeline orchestrator hook registration failed")
+
+    # ── U1.5 — Digest periódico a webhooks (opcional) ──────────────────────
+    # STACKY_DIGEST_INTERVAL_HOURS=0 => apagado (default).
+    if int(config.STACKY_DIGEST_INTERVAL_HOURS) > 0:
+        interval_seconds = int(config.STACKY_DIGEST_INTERVAL_HOURS) * 3600
+
+        def _digest_loop() -> None:
+            from services import webhooks
+            from services.run_digest import compose_digest
+
+            while True:
+                try:
+                    digest_payload = compose_digest(days=7)
+                    webhooks.fire("digest.ready", {"event": "digest.ready", "digest": digest_payload})
+                except Exception:
+                    logger.exception("digest daemon: dispatch falló")
+                time.sleep(interval_seconds)
+
+        threading.Thread(target=_digest_loop, name="stacky-digest-daemon", daemon=True).start()
+        logger.info("digest daemon armed (interval=%ds)", interval_seconds)
+
+    # ── M0.3 — Barrido de revisión de memoria (opcional) ───────────────────
+    # STACKY_MEMORY_REVIEW_SWEEP_HOURS=0 => apagado (default, byte-idéntico).
+    if int(config.STACKY_MEMORY_REVIEW_SWEEP_HOURS) > 0:
+        _review_sweep_seconds = int(config.STACKY_MEMORY_REVIEW_SWEEP_HOURS) * 3600
+
+        def _memory_review_sweep_loop() -> None:
+            from services import memory_store
+
+            while True:
+                try:
+                    marked = memory_store.mark_stale_for_review()
+                    if marked:
+                        logger.info("memory review sweep: %d -> needs_review", marked)
+                except Exception:
+                    logger.exception("memory review sweep daemon falló")
+                time.sleep(_review_sweep_seconds)
+
+        threading.Thread(
+            target=_memory_review_sweep_loop,
+            name="stacky-memory-review-daemon",
+            daemon=True,
+        ).start()
+        logger.info("memory review daemon armed (interval=%ds)", _review_sweep_seconds)
 
     # ── Structured logging middleware ─────────────────────────────────────
 

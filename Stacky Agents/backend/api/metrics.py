@@ -22,7 +22,7 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy import func, text
 
 from db import session_scope
-from models import SystemLog
+from models import AgentExecution, SystemLog, Ticket
 
 logger = logging.getLogger("stacky.metrics")
 
@@ -45,6 +45,135 @@ def _parse_context(ctx_json: str | None) -> dict:
         return json.loads(ctx_json)
     except (json.JSONDecodeError, TypeError):
         return {}
+
+
+def _execution_costs(execution: AgentExecution) -> tuple[float, float, bool]:
+    md = _parse_context(execution.metadata_json)
+    reported = 0.0
+    estimated = 0.0
+    has_estimated = False
+
+    telemetry = md.get("claude_telemetry") if isinstance(md.get("claude_telemetry"), dict) else {}
+    value = telemetry.get("total_cost_usd") if isinstance(telemetry, dict) else None
+    if value is not None:
+        try:
+            reported = float(value)
+        except (TypeError, ValueError):
+            reported = 0.0
+
+    est_val = md.get("cost_estimated")
+    if est_val is not None:
+        try:
+            estimated = float(est_val)
+            has_estimated = estimated > 0
+        except (TypeError, ValueError):
+            estimated = 0.0
+
+    return reported, estimated, has_estimated
+
+
+@bp.get("/ticket-costs")
+def ticket_costs():
+    raw_ids = (request.args.get("ticket_ids") or "").strip()
+    if not raw_ids:
+        return jsonify({"ok": False, "error": "ticket_ids_required"}), 400
+
+    try:
+        ticket_ids = [int(x.strip()) for x in raw_ids.split(",") if x.strip()]
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_ticket_ids"}), 400
+    if not ticket_ids:
+        return jsonify({"ok": False, "error": "ticket_ids_required"}), 400
+
+    with session_scope() as session:
+        rows = (
+            session.query(AgentExecution, Ticket)
+            .join(Ticket, Ticket.id == AgentExecution.ticket_id)
+            .filter(AgentExecution.ticket_id.in_(ticket_ids))
+            .all()
+        )
+
+    by_ticket: dict[int, dict] = {}
+    for exec_row, ticket in rows:
+        reported, estimated, has_estimated = _execution_costs(exec_row)
+        total = reported + estimated
+        if total <= 0:
+            continue
+        rec = by_ticket.setdefault(
+            exec_row.ticket_id,
+            {
+                "ticket_id": exec_row.ticket_id,
+                "ado_id": ticket.ado_id,
+                "project": ticket.stacky_project_name or ticket.project,
+                "reported_usd": 0.0,
+                "estimated_usd": 0.0,
+                "total_usd": 0.0,
+                "estimated": False,
+            },
+        )
+        rec["reported_usd"] += reported
+        rec["estimated_usd"] += estimated
+        rec["total_usd"] += total
+        rec["estimated"] = bool(rec["estimated"] or has_estimated)
+
+    items = sorted(by_ticket.values(), key=lambda x: x["ticket_id"])
+    for item in items:
+        item["reported_usd"] = round(float(item["reported_usd"]), 6)
+        item["estimated_usd"] = round(float(item["estimated_usd"]), 6)
+        item["total_usd"] = round(float(item["total_usd"]), 6)
+
+    return jsonify({"ok": True, "items": items})
+
+
+@bp.get("/project-costs")
+def project_costs():
+    months = request.args.get("months", default=3, type=int)
+    months = max(1, min(months, 24))
+    now = datetime.utcnow()
+    month_start = datetime(now.year, now.month, 1)
+    # Ventana desde el primer día del mes (months-1) hacia atrás.
+    window_start = month_start - timedelta(days=31 * (months - 1))
+
+    with session_scope() as session:
+        rows = (
+            session.query(AgentExecution, Ticket)
+            .join(Ticket, Ticket.id == AgentExecution.ticket_id)
+            .filter(AgentExecution.started_at >= window_start)
+            .all()
+        )
+
+    agg: dict[tuple[str, str], dict] = {}
+    for exec_row, ticket in rows:
+        reported, estimated, has_estimated = _execution_costs(exec_row)
+        total = reported + estimated
+        if total <= 0:
+            continue
+        month_key = exec_row.started_at.strftime("%Y-%m") if exec_row.started_at else now.strftime("%Y-%m")
+        project = ticket.stacky_project_name or ticket.project or "UNKNOWN"
+        key = (month_key, project)
+        rec = agg.setdefault(
+            key,
+            {
+                "month": month_key,
+                "project": project,
+                "reported_usd": 0.0,
+                "estimated_usd": 0.0,
+                "total_usd": 0.0,
+                "estimated": False,
+            },
+        )
+        rec["reported_usd"] += reported
+        rec["estimated_usd"] += estimated
+        rec["total_usd"] += total
+        rec["estimated"] = bool(rec["estimated"] or has_estimated)
+
+    series = sorted(agg.values(), key=lambda x: (x["month"], x["project"]))
+    for row in series:
+        row["reported_usd"] = round(float(row["reported_usd"]), 6)
+        row["estimated_usd"] = round(float(row["estimated_usd"]), 6)
+        row["total_usd"] = round(float(row["total_usd"]), 6)
+
+    return jsonify({"ok": True, "months": months, "series": series})
 
 
 @bp.get("/agent-completion")
@@ -377,4 +506,51 @@ def agent_comparison():
         "agent_type": agent_type_filter,
         "agents": agents_result,
         "total_executions": sum(a["total_runs"] for a in agents_result),
+    })
+
+
+# ── I3.3 — Asesor de caps de contexto ────────────────────────────────────────
+
+@bp.get("/caps-advisor")
+def caps_advisor():
+    """Sugiere caps de memoria por agente basándose en telemetría (I3.3).
+
+    GET /api/metrics/caps-advisor?project=X&days=30
+
+    SOLO lectura. NUNCA escribe. El operador aplica las sugerencias
+    editando STACKY_MEMORY_CAPS_JSON.
+
+    Response:
+      {"enabled": false}  — si el flag está OFF
+      {"ok": true, "project": "X", "suggestions": {agent_type: {...}}}  — si ON
+    """
+    from config import config as _cfg
+
+    if not getattr(_cfg, "STACKY_CAPS_ADVISOR_ENABLED", False):
+        return jsonify({"enabled": False}), 200
+
+    project = (request.args.get("project") or "").strip()
+    if not project:
+        return jsonify({"ok": False, "error": "project_required"}), 400
+
+    try:
+        days = int(request.args.get("days", 30))
+    except (ValueError, TypeError):
+        days = 30
+    days = max(1, min(days, 365))
+
+    try:
+        from services.context_caps_advisor import suggest_caps
+        suggestions = suggest_caps(project=project, days=days)
+    except Exception as _e:
+        logger.warning("caps_advisor: error en suggest_caps: %s", _e)
+        return jsonify({"ok": False, "error": "internal_error"}), 500
+
+    return jsonify({
+        "ok": True,
+        "enabled": True,
+        "project": project,
+        "days": days,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "suggestions": suggestions,
     })

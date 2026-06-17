@@ -111,6 +111,11 @@ def _migrate_add_columns() -> None:
         # verificacion y reconciliacion idempotente.
         ("agent_html_publish", "comment_id", "INTEGER"),
         ("agent_html_publish", "marker", "VARCHAR(200)"),
+        ("webhooks", "format", "VARCHAR(20) DEFAULT 'raw'"),
+        # M1.1 — Directiva como ciudadano de primera clase (add-only).
+        ("stacky_memory_observations", "enforcement", "VARCHAR(12)"),
+        ("stacky_memory_observations", "priority", "INTEGER DEFAULT 0"),
+        ("stacky_memory_observations", "applies_to_json", "TEXT"),
     ]
     with engine.connect() as conn:
         for table, col, col_type in migrations:

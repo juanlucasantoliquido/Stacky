@@ -21,6 +21,7 @@ export type ExecutionStatus =
   | "queued"
   | "running"
   | "completed"
+  | "needs_review"
   | "error"
   | "cancelled"
   | "discarded";
@@ -189,6 +190,26 @@ export interface PipelineInferenceResult {
 
 export interface PipelineBatchResponse {
   results: Record<string, PipelineInferenceResult>;
+}
+
+export interface TicketPipelineStage {
+  stage: string;
+  done: boolean;
+  evidence?: string | null;
+  last_execution?: {
+    id: number;
+    status: ExecutionStatus;
+    agent_type: string;
+  } | null;
+}
+
+export interface TicketPipelineResponse {
+  ticket_id: number;
+  stages: TicketPipelineStage[];
+  next: {
+    agent_type: string;
+    source: "flow_config" | "default";
+  } | null;
 }
 
 // ── Multi-project ────────────────────────────────────────────────────────────

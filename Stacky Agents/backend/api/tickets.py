@@ -23,6 +23,8 @@ from services.ado_sync import (
     sync_tickets,
 )
 from services.pipeline_status import get_pipeline_status, get_pipeline_summary
+from services import next_agent
+from services.flow_config_store import resolve as resolve_flow
 from services.ado_pipeline_inference import infer_pipeline, invalidate_cache
 from services.ado_client import AdoClient, AdoApiError as _AdoApiError, AdoConfigError as _AdoConfigError
 from services.project_context import ProjectContextError, build_ado_client, resolve_project_context
@@ -61,6 +63,7 @@ _CONSUMED_METADATA_KEYS = {
     "operation_id", "payload_sha256", "hierarchy_bridge",
     "auto_normalized_at", "auto_normalized_by", "auto_normalized_from_epic_id",
     "auto_normalized_reason", "auto_normalized_source_epic_dir",
+    "stale_consumed_resets",
 }
 
 
@@ -241,13 +244,13 @@ def _pending_task_preflight_for_finish(ado_id: int | None) -> dict:
             "scan_error": None,
         }
     try:
-        pending, consumed_count, parse_errors = _scan_pending_tasks_for_epic(
+        pending, consumed, parse_errors = _scan_pending_tasks_for_epic(
             _resolve_repo_root(),
             int(ado_id),
         )
         return {
             "total_pending": len(pending),
-            "total_consumed": consumed_count,
+            "total_consumed": len(consumed),
             "parse_errors": parse_errors,
             "pending_tasks": pending,
             "scan_error": None,
@@ -566,6 +569,83 @@ def get_pipeline_status_endpoint(ticket_id: int):
 
     status = get_pipeline_status(ticket_id, ado_comments=ado_comments)
     return jsonify(status.to_dict())
+
+
+@bp.get("/<int:ticket_id>/pipeline")
+def get_ticket_pipeline(ticket_id: int):
+    """U1.4 — Vista de pipeline por ticket con CTA de próximo agente.
+
+    Combina:
+      - Etapas inferidas por ejecuciones locales (rápido)
+      - Última ejecución por stage
+      - Sugerencia de próximo agente desde flow_config (determinística)
+        con fallback a DEFAULT_NEXT.
+    """
+    with session_scope() as session:
+        ticket = session.get(Ticket, ticket_id)
+        if ticket is None:
+            abort(404)
+
+        status = get_pipeline_status(ticket_id, ado_comments=None)
+        latest_exec_by_agent: dict[str, AgentExecution] = {}
+        rows = (
+            session.query(AgentExecution)
+            .filter(AgentExecution.ticket_id == ticket_id)
+            .order_by(AgentExecution.started_at.desc())
+            .all()
+        )
+        for row in rows:
+            latest_exec_by_agent.setdefault(row.agent_type, row)
+
+    stages: list[dict] = []
+    order = ["business", "functional", "technical", "developer", "qa"]
+    for stage in order:
+        stage_status = status.stages.get(stage)
+        latest = latest_exec_by_agent.get(stage)
+        stages.append(
+            {
+                "stage": stage,
+                "done": bool(stage_status.done) if stage_status else False,
+                "evidence": stage_status.evidence if stage_status else None,
+                "last_execution": (
+                    {
+                        "id": latest.id,
+                        "status": latest.status,
+                        "agent_type": latest.agent_type,
+                    }
+                    if latest is not None
+                    else None
+                ),
+            }
+        )
+
+    next_agent_type: str | None = None
+    source = "default"
+    if ticket.ado_state:
+        resolved = resolve_flow(ticket.ado_state, project_name=ticket.stacky_project_name)
+        next_agent_type = resolved.get("agent_type")
+        if next_agent_type:
+            source = "flow_config"
+    if not next_agent_type:
+        # Fallback lineal por última etapa completada
+        pipeline_next = status.next_suggested
+        if pipeline_next:
+            next_agent_type = pipeline_next
+        elif rows:
+            defaults = next_agent.DEFAULT_NEXT.get(rows[0].agent_type, [])
+            next_agent_type = defaults[0] if defaults else None
+
+    return jsonify(
+        {
+            "ticket_id": ticket_id,
+            "stages": stages,
+            "next": (
+                {"agent_type": next_agent_type, "source": source}
+                if next_agent_type
+                else None
+            ),
+        }
+    )
 
 
 @bp.get("/<int:ticket_id>/ado-pipeline-status")
@@ -1778,14 +1858,15 @@ def list_pending_tasks(ado_id: int):
     repo_root, scan = _resolve_artifact_repo_root()
     # Escanea ambas bases conocidas (Agentes/outputs y output/tickets) — el
     # agente funcional a veces co-loca el pending-task.json con el análisis.
-    pending, consumed_count, parse_errors = _scan_pending_tasks_for_epic(repo_root, ado_id)
+    pending, consumed, parse_errors = _scan_pending_tasks_for_epic(repo_root, ado_id)
 
     return jsonify({
         "ok": True,
         "epic_ado_id": ado_id,
         "pending_tasks": pending,
         "total_pending": len(pending),
-        "total_consumed": consumed_count,
+        "total_consumed": len(consumed),
+        "consumed_tasks": consumed,
         "parse_errors": parse_errors,
         "total_errors": len(parse_errors),
         "repo_root": str(repo_root),
@@ -2082,12 +2163,14 @@ def iter_epic_pending_task_files(repo_root: Path, ado_id: int) -> list[Path]:
     return found
 
 
-def _scan_pending_tasks_for_epic(repo_root: Path, ado_id: int) -> tuple[list[dict], int, list[dict]]:
+def _scan_pending_tasks_for_epic(repo_root: Path, ado_id: int) -> tuple[list[dict], list[dict], list[dict]]:
     """Escanea los pending-task.json de un Epic en ambas bases conocidas.
 
-    Devuelve `(pending, consumed_count, parse_errors)`:
+    Devuelve `(pending, consumed, parse_errors)`:
       - `pending`: pending-task.json NO consumidos, con readiness de plan.
-      - `consumed_count`: cuántos ya fueron consumidos (Task creada).
+      - `consumed`: detalle de los ya consumidos (Task creada) — rf_id, path,
+        task_ado_id y consumed_at. El board los usa para detectar markers
+        stale (Task borrada en ADO después del consume, caso ADO-241).
       - `parse_errors`: archivos que EXISTEN en disco pero NO parsean como JSON.
         Causa típica: el agente metió comillas dobles sin escapar en
         `description_html` (JSON inválido). Antes se descartaban en silencio →
@@ -2098,7 +2181,7 @@ def _scan_pending_tasks_for_epic(repo_root: Path, ado_id: int) -> tuple[list[dic
     """
     pending: list[dict] = []
     parse_errors: list[dict] = []
-    consumed_count = 0
+    consumed: list[dict] = []
 
     for pt_file in iter_epic_pending_task_files(repo_root, ado_id):
         try:
@@ -2118,7 +2201,17 @@ def _scan_pending_tasks_for_epic(repo_root: Path, ado_id: int) -> tuple[list[dic
             continue
 
         if "consumed_at" in payload or payload.get("status") == PENDING_TASK_STATUS_CONSUMED:
-            consumed_count += 1
+            try:
+                rel_c = str(pt_file.relative_to(repo_root)).replace("\\", "/")
+            except ValueError:
+                rel_c = str(pt_file)
+            consumed.append({
+                "rf_id": payload.get("rf_id") or pt_file.parent.name,
+                "title": payload.get("title", ""),
+                "pending_task_path": rel_c,
+                "task_ado_id": payload.get("task_ado_id"),
+                "consumed_at": payload.get("consumed_at"),
+            })
             continue
 
         plan_rel = payload.get("plan_de_pruebas_path", "")
@@ -2139,7 +2232,90 @@ def _scan_pending_tasks_for_epic(repo_root: Path, ado_id: int) -> tuple[list[dic
             "status": payload.get("status", PENDING_TASK_STATUS_CANONICAL),
         })
 
-    return pending, consumed_count, parse_errors
+    return pending, consumed, parse_errors
+
+
+def _parse_consumed_at_utc_naive(value) -> datetime | None:
+    """Parsea consumed_at (ISO, normalmente con tz) a datetime naive en UTC.
+
+    La tabla tickets guarda last_synced_at naive-UTC; normalizamos para poder
+    comparar. Devuelve None si no se puede parsear.
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _detect_stale_consumed(
+    *,
+    consumed: list[dict],
+    pending: list[dict],
+    known_ado_ids: set[int],
+    last_sync_dt: datetime | None,
+) -> list[dict]:
+    """Detecta pending-task consumidos cuya Task ya NO existe en ADO.
+
+    Caso raíz ADO-241 (2026-06-11): la Task 246 fue borrada en ADO después del
+    consume; los archivos quedaron `consumed` → el board no mostraba nada y el
+    flujo automático respondía idempotente sin crear. Este check es barato
+    (contra la tabla tickets ya sincronizada, sin llamadas a ADO); la
+    verificación autoritativa la hace create-child-task contra ADO al recrear.
+
+    Reglas (conservadoras contra falsos positivos):
+      - candidato: consumed con task_ado_id que NO está en la sync local.
+      - se omite si otro archivo del mismo RF tiene una Task viva (la historia
+        vieja del RF no importa si el trabajo existe en ADO).
+      - se omite si el RF ya tiene un pending accionable (task_ready lo cubre).
+      - se omite si consumed_at >= last_sync (la sync todavía no pudo ver una
+        Task recién creada — evita falsa alarma en la ventana entre create y sync).
+      - dedupe por RF quedándonos con el consumed más reciente (el contrato más
+        fresco es el que conviene recrear).
+    """
+    if not consumed:
+        return []
+
+    def _rf_key(entry: dict) -> str:
+        return str(entry.get("rf_id") or "").strip().lower()
+
+    def _task_id_int(entry: dict):
+        try:
+            return int(entry.get("task_ado_id"))
+        except (TypeError, ValueError):
+            return None
+
+    pending_rfs = {str(p.get("rf_id") or "").strip().lower() for p in pending}
+    live_rfs = {
+        _rf_key(c) for c in consumed
+        if _task_id_int(c) is not None and _task_id_int(c) in known_ado_ids
+    }
+
+    best_by_rf: dict[str, tuple[datetime, dict]] = {}
+    for c in consumed:
+        task_id = _task_id_int(c)
+        if task_id is None or task_id in known_ado_ids:
+            continue
+        rf = _rf_key(c)
+        if rf in live_rfs or rf in pending_rfs:
+            continue
+        consumed_dt = _parse_consumed_at_utc_naive(c.get("consumed_at"))
+        if (
+            last_sync_dt is not None
+            and consumed_dt is not None
+            and consumed_dt >= last_sync_dt
+        ):
+            continue
+        sort_dt = consumed_dt or datetime.min
+        prev = best_by_rf.get(rf)
+        if prev is None or sort_dt >= prev[0]:
+            best_by_rf[rf] = (sort_dt, c)
+
+    return [entry for _, entry in best_by_rf.values()]
 
 
 @bp.get("/unblocker-board")
@@ -2180,7 +2356,10 @@ def unblocker_board():
     outputs_dir = repo_root / "Agentes" / "outputs"
 
     items: list[dict] = []
-    counts = {"running": 0, "comment_ready": 0, "task_ready": 0, "waiting_files": 0, "files_error": 0}
+    counts = {
+        "running": 0, "comment_ready": 0, "task_ready": 0,
+        "waiting_files": 0, "files_error": 0, "stale_consumed": 0,
+    }
 
     with session_scope() as session:
         # Ejecuciones en curso → set de ticket_ids + última ejecución por ticket.
@@ -2198,6 +2377,15 @@ def unblocker_board():
         if project_name:
             q = q.filter(Ticket.stacky_project_name == project_name)
         tickets = q.all()
+
+        # Fix ADO-241 (stale consumed): universo de work items que la sync
+        # conoce + momento de la última sync, para detectar consumed que
+        # referencian Tasks borradas en ADO.
+        known_ado_ids = {t.ado_id for t in tickets if t.ado_id}
+        last_sync_dt = None
+        for t in tickets:
+            if t.last_synced_at and (last_sync_dt is None or t.last_synced_at > last_sync_dt):
+                last_sync_dt = t.last_synced_at
 
         # Última ejecución (cualquier estado) por ticket para mostrar contexto.
         ticket_ids = [t.id for t in tickets]
@@ -2231,16 +2419,29 @@ def unblocker_board():
                         comment_info = {"exists": True, "path": rel, "size_bytes": size}
 
             # ── Artifact 2: pending-task.json (Epics) ─────────────────────────
-            pending, consumed_count, parse_errors = ([], 0, [])
+            pending, consumed, parse_errors = ([], [], [])
             if ado_id:
-                pending, consumed_count, parse_errors = _scan_pending_tasks_for_epic(repo_root, ado_id)
+                pending, consumed, parse_errors = _scan_pending_tasks_for_epic(repo_root, ado_id)
             total_pending = len(pending)
             total_errors = len(parse_errors)
 
+            # Fix ADO-241: consumed cuya Task fue borrada en ADO → accionable.
+            stale_consumed = _detect_stale_consumed(
+                consumed=consumed,
+                pending=pending,
+                known_ado_ids=known_ado_ids,
+                last_sync_dt=last_sync_dt,
+            )
+            total_stale = len(stale_consumed)
+
             # Un pending-task.json malformado (JSON inválido) cuenta como artifact:
             # el archivo está en disco pero ningún consumidor puede usarlo. Hay que
-            # mostrarlo, no esconderlo.
-            has_artifacts = comment_info["exists"] or total_pending > 0 or total_errors > 0
+            # mostrarlo, no esconderlo. Ídem un consumed stale: hay trabajo que
+            # Stacky cree hecho pero ya no existe en ADO.
+            has_artifacts = (
+                comment_info["exists"] or total_pending > 0
+                or total_errors > 0 or total_stale > 0
+            )
 
             # Sólo incluir tickets relevantes para el desatascador.
             if not (running or has_artifacts):
@@ -2256,6 +2457,13 @@ def unblocker_board():
                     f"{e['error']} — regéneralo con FunctionalAnalyst (v2.0.2+, que escapa las "
                     f"comillas en description_html) o corregí el JSON a mano."
                 )
+            for s in stale_consumed:
+                blockers.append(
+                    f"La Task ADO-{s.get('task_ado_id')} de {s.get('rf_id')} fue borrada en "
+                    f"ADO pero {s['pending_task_path']} quedó marcado como consumido — "
+                    f"Stacky lo reportaba como hecho y no aparecía acá. Usá «Recrear "
+                    f"Task borrada» (o re-corré el agente) para volver a crearla."
+                )
             if total_pending > 0:
                 readiness = "task_ready"
                 missing_plans = [p["rf_id"] for p in pending if not p["plan_exists"]]
@@ -2265,6 +2473,8 @@ def unblocker_board():
                         + ", ".join(missing_plans)
                         + " (se omitirá el adjunto)."
                     )
+            elif total_stale > 0:
+                readiness = "stale_consumed"
             elif comment_info["exists"]:
                 readiness = "comment_ready"
             elif total_errors > 0:
@@ -2287,6 +2497,8 @@ def unblocker_board():
                 counts["comment_ready"] += 1
             elif readiness == "task_ready":
                 counts["task_ready"] += 1
+            elif readiness == "stale_consumed":
+                counts["stale_consumed"] += 1
             elif readiness == "waiting_files":
                 counts["waiting_files"] += 1
             elif readiness == "files_error":
@@ -2316,15 +2528,20 @@ def unblocker_board():
                 "comment": comment_info,
                 "pending_tasks": pending,
                 "total_pending": total_pending,
-                "total_consumed": consumed_count,
+                "total_consumed": len(consumed),
+                "stale_consumed": stale_consumed,
+                "total_stale_consumed": total_stale,
                 "parse_errors": parse_errors,
                 "total_errors": total_errors,
                 "last_execution": last_execution,
             })
 
-    # Orden: primero lo que requiere acción del operador (archivo malformado y
-    # task lista), luego comment/running/idle.
-    _order = {"files_error": 0, "task_ready": 1, "comment_ready": 2, "waiting_files": 3, "artifacts_idle": 4}
+    # Orden: primero lo que requiere acción del operador (archivo malformado,
+    # task lista y consumed stale), luego comment/running/idle.
+    _order = {
+        "files_error": 0, "task_ready": 1, "stale_consumed": 2,
+        "comment_ready": 3, "waiting_files": 4, "artifacts_idle": 5,
+    }
     items.sort(key=lambda it: (_order.get(it["readiness"], 9), -(it["ado_id"] or 0)))
 
     return jsonify({
@@ -3193,6 +3410,101 @@ def _verify_child_task_created(
     return {"ok": True}
 
 
+def _ado_error_is_not_found(exc: Exception) -> bool:
+    raw = str(exc)
+    low = raw.lower()
+    status = getattr(exc, "status_code", None)
+    return (
+        status == 404
+        or "tf401232" in low
+        or "does not exist" in low
+        or "→ 404" in raw
+        or " 404:" in raw
+    )
+
+
+def _consumed_task_ado_status(
+    *, ado, task_ado_id, operation_id: str,
+) -> str:
+    """Clasifica si la Task referida por un marker `consumed` sigue viva en ADO.
+
+    Causa raíz ADO-241 (2026-06-11): el operador borró en ADO la Task 246 ya
+    creada, pero los pending-task.json quedaron `consumed` con `task_ado_id=246`.
+    Los paths idempotentes de create_child_task confiaban ciegamente en el marker
+    local y respondían ok/idempotent sin crear nada, y el desatascador (que
+    saltea archivos consumed) no mostraba nada accionable.
+
+    Gateable con STACKY_STALE_CONSUMED_CHECK=off (rollback sin redeploy).
+
+    Devuelve:
+      - "exists": la Task sigue en ADO → honrar la idempotencia.
+      - "missing": ADO respondió 404/TF401232 → marker stale; recrear es seguro.
+      - "unknown": flag off, cliente sin get_work_item, o error transitorio
+        (red/5xx) → comportarse como hoy (idempotente) para no duplicar.
+    """
+    if os.getenv("STACKY_STALE_CONSUMED_CHECK", "on").strip().lower() == "off":
+        return "unknown"
+    get_wi = getattr(ado, "get_work_item", None) if ado is not None else None
+    if not callable(get_wi):
+        return "unknown"
+    try:
+        task_id_int = int(task_ado_id)
+    except (TypeError, ValueError):
+        return "unknown"
+    try:
+        wi = get_wi(task_id_int, ["System.Id", "System.WorkItemType", "System.State"])
+    except Exception as exc:  # noqa: BLE001 — clasificamos por mensaje/status
+        if _ado_error_is_not_found(exc):
+            return "missing"
+        logger.warning(
+            "create_child_task: stale-check no concluyente para task ADO-%s "
+            "operation_id=%s err=%s — se mantiene idempotencia",
+            task_id_int, operation_id, str(exc)[:200],
+        )
+        return "unknown"
+    # GET ok pero respuesta vacía → NO concluimos "missing": acá un falso
+    # positivo crea una Task duplicada (al revés que el parent-preflight,
+    # donde el costo de equivocarse es solo bloquear).
+    if isinstance(wi, dict) and (wi.get("id") or wi.get("fields")):
+        return "exists"
+    return "unknown"
+
+
+def _reset_stale_consumed_marker(
+    *, pt_file: Path, payload: dict, stale_task_ado_id, operation_id: str,
+) -> dict:
+    """Quita el marker `consumed` de un pending-task cuya Task fue borrada en ADO.
+
+    Deja el archivo nuevamente en estado canónico pendiente y registra el reset
+    en `stale_consumed_resets` (lista, audit trail local) para que la historia
+    del archivo no se pierda. El caller continúa con el flujo de creación normal.
+    """
+    cleaned = dict(payload)
+    for key in ("consumed_at", "task_ado_id", "attachment_id",
+                "operator_reason", "operation_id", "payload_sha256"):
+        cleaned.pop(key, None)
+    cleaned["status"] = PENDING_TASK_STATUS_CANONICAL
+    resets = list(cleaned.get("stale_consumed_resets") or [])
+    resets.append({
+        "stale_task_ado_id": stale_task_ado_id,
+        "detected_at": datetime.now(timezone.utc).isoformat(),
+        "operation_id": operation_id,
+    })
+    cleaned["stale_consumed_resets"] = resets
+    try:
+        pt_file.write_text(
+            json.dumps(cleaned, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        logger.warning(
+            "create_child_task: no se pudo persistir reset de marker stale "
+            "operation_id=%s path=%s err=%s — se continúa en memoria",
+            operation_id, pt_file, exc,
+        )
+    return cleaned
+
+
 @bp.post("/by-ado/<int:ado_id>/create-child-task")
 def create_child_task(ado_id: int):
     """Crea una Task hija del Epic en ADO consumiendo un pending-task.json (Fase 2).
@@ -3383,45 +3695,106 @@ def create_child_task(ado_id: int):
         )
 
     # ── [1d] Idempotencia: ¿ya fue consumido? ──────────────────────────────────
+    # Causa raíz ADO-241 (2026-06-11): el marker local puede quedar stale si el
+    # operador borró la Task en ADO después del consume. Antes de honrar la
+    # idempotencia verificamos que la Task siga existiendo; si ADO dice 404 el
+    # marker se resetea y el flujo continúa con la creación real.
+    stale_reset_actions: list[dict] = []
     if "consumed_at" in pt_payload or pt_payload.get("status") == "consumed":
         prev_task_id = pt_payload.get("task_ado_id")
-        prev_url = None
-        if prev_task_id:
-            try:
-                prev_url = _ado_client_for_ticket(project_name=project_name).work_item_url(int(prev_task_id))
-            except Exception:
-                pass
-        # Fase 0: hash del payload al momento del consume (si lo guardamos
-        # en algun paso futuro). Por ahora informamos el sha actual; permite
-        # que el operador y la UI detecten "refresh sin re-publicar" comparando
-        # contra system_logs previos.
-        logger.info(
-            "create_child_task: PENDING_TASK_ALREADY_CONSUMED operation_id=%s "
-            "ado_id=%s task_ado_id=%s payload_sha256=%s",
-            operation_id, ado_id, prev_task_id, payload_sha256,
-        )
-        return jsonify({
-            "ok": True,
-            "dry_run": False,
-            "epic_ado_id": ado_id,
-            "task_ado_id": prev_task_id,
-            "task_url": prev_url,
-            "attachment_id": pt_payload.get("attachment_id"),
-            "actions": [],
-            "pending_task_consumed": True,
-            "idempotent": True,
-            "reason": "PENDING_TASK_ALREADY_CONSUMED",
-            "correlation_id": correlation_id,
-            "operation_id": operation_id,
-            "payload_sha256": payload_sha256,
-        })
+        idempotency_ado = None
+        try:
+            idempotency_ado = _ado_client_for_ticket(project_name=project_name)
+        except Exception:
+            idempotency_ado = None
+        stale_status = "skipped"
+        if prev_task_id and not dry_run:
+            stale_status = _consumed_task_ado_status(
+                ado=idempotency_ado,
+                task_ado_id=prev_task_id,
+                operation_id=operation_id,
+            )
+        if stale_status == "missing":
+            logger.warning(
+                "create_child_task: STALE_CONSUMED_MARKER operation_id=%s ado_id=%s "
+                "task_ado_id=%s path=%s — la Task ya no existe en ADO; se resetea "
+                "el marker y se recrea",
+                operation_id, ado_id, prev_task_id, pending_task_path_str,
+            )
+            pt_payload = _reset_stale_consumed_marker(
+                pt_file=pt_file,
+                payload=pt_payload,
+                stale_task_ado_id=prev_task_id,
+                operation_id=operation_id,
+            )
+            payload_sha256 = _payload_logical_sha256(pt_payload)
+            stale_reset_actions.append({
+                "action": "reset_stale_consumed",
+                "ok": True,
+                "stale_task_ado_id": prev_task_id,
+            })
+            # NO retornamos: cae al flujo normal de creación ([2]–[7]).
+        else:
+            prev_url = None
+            if prev_task_id and idempotency_ado is not None:
+                try:
+                    prev_url = idempotency_ado.work_item_url(int(prev_task_id))
+                except Exception:
+                    pass
+            # Fase 0: hash del payload al momento del consume (si lo guardamos
+            # en algun paso futuro). Por ahora informamos el sha actual; permite
+            # que el operador y la UI detecten "refresh sin re-publicar" comparando
+            # contra system_logs previos.
+            logger.info(
+                "create_child_task: PENDING_TASK_ALREADY_CONSUMED operation_id=%s "
+                "ado_id=%s task_ado_id=%s payload_sha256=%s stale_check=%s",
+                operation_id, ado_id, prev_task_id, payload_sha256, stale_status,
+            )
+            return jsonify({
+                "ok": True,
+                "dry_run": False,
+                "epic_ado_id": ado_id,
+                "task_ado_id": prev_task_id,
+                "task_url": prev_url,
+                "attachment_id": pt_payload.get("attachment_id"),
+                "actions": [],
+                "pending_task_consumed": True,
+                "idempotent": True,
+                "reason": "PENDING_TASK_ALREADY_CONSUMED",
+                "stale_check": stale_status,
+                "correlation_id": correlation_id,
+                "operation_id": operation_id,
+                "payload_sha256": payload_sha256,
+            })
 
     # ── [dry_run] Retornar plan de acciones sin tocar ADO ─────────────────────
+    # task_status_fn verifica contra ADO que la Task del candidato equivalente
+    # siga viva (memoizado por id: los N archivos de un mismo RF suelen apuntar
+    # a la misma Task). Sin esto, un marker stale se propaga a cada contrato
+    # nuevo del mismo epic+RF para siempre (caso ADO-241, corridas del 6/6 y 11/6).
+    _stale_status_cache: dict[int, str] = {}
+
+    def _equivalent_task_status(task_ado_id) -> str:
+        try:
+            key = int(task_ado_id)
+        except (TypeError, ValueError):
+            return "unknown"
+        if key not in _stale_status_cache:
+            try:
+                eq_ado = _ado_client_for_ticket(project_name=project_name)
+            except Exception:
+                eq_ado = None
+            _stale_status_cache[key] = _consumed_task_ado_status(
+                ado=eq_ado, task_ado_id=key, operation_id=operation_id,
+            )
+        return _stale_status_cache[key]
+
     equivalent_consumed = None if dry_run else _find_equivalent_consumed_pending_task(
         repo_root=repo_root,
         ado_id=ado_id,
         current_pt_file=pt_file,
         payload=pt_payload,
+        task_status_fn=_equivalent_task_status,
     )
     if equivalent_consumed is not None:
         prev_task_id = equivalent_consumed.get("task_ado_id")
@@ -3517,7 +3890,7 @@ def create_child_task(ado_id: int):
         })
 
     # ── [2–7] Ejecución real ───────────────────────────────────────────────────
-    actions: list[dict] = []
+    actions: list[dict] = list(stale_reset_actions)
     task_ado_id: int | None = None
     task_url: str | None = None
     attachment_id: str | None = None
@@ -3945,6 +4318,125 @@ def create_child_task(ado_id: int):
                 "reason": str(exc)[:200],
             })
 
+    # ── [5b] G1.1 — Verificación post-create de que la task existe en ADO ───────
+    # Solo corre si STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED=true.
+    # Con flag OFF: byte-idéntico.
+    _g11_create_verified = None
+    try:
+        from config import config as _g11_cfg
+        if getattr(_g11_cfg, "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED", False):
+            _g11_verified = False
+            _g11_error = None
+            try:
+                from services.ado_read_cache import _singleton as _g11_cache
+                _g11_ttl = getattr(_g11_cfg, "STACKY_ADO_READ_CACHE_TTL_SEC", 0)
+                _g11_key = ("g11_verify", str(task_ado_id), "exists")
+
+                def _g11_fetch_exists():
+                    import requests as _req2
+                    import os as _os2
+                    _org2 = _os2.getenv("ADO_ORG", "")
+                    _proj2 = _os2.getenv("ADO_PROJECT", "")
+                    _pat2 = _os2.getenv("ADO_PAT", "")
+                    if not (_org2 and _proj2 and _pat2):
+                        return True  # sin credenciales: no bloquear
+                    _url2 = (
+                        f"https://dev.azure.com/{_org2}/{_proj2}/_apis/wit/workitems/{task_ado_id}"
+                        "?$select=id&api-version=7.0"
+                    )
+                    _r2 = _req2.get(_url2, auth=("", _pat2), timeout=10)
+                    return _r2.status_code == 200
+
+                _g11_exists = _g11_cache.get_or_fetch(_g11_key, _g11_fetch_exists, _g11_ttl)
+                _g11_verified = bool(_g11_exists)
+            except Exception as _g11_exc:
+                # Error transitorio de red/caché → fallback: marcar consumed como hoy.
+                _g11_error = str(_g11_exc)[:200]
+                _g11_verified = True  # fallback conservador
+                logger.warning(
+                    "G1.1 verify_task_before_consumed: error transitorio en verificación "
+                    "task_ado_id=%s — fallback consumed: %s",
+                    task_ado_id, _g11_error,
+                )
+
+            if _g11_verified:
+                from datetime import timezone as _tz
+                _g11_create_verified = {
+                    "ado_id": task_ado_id,
+                    "verified_at": datetime.now(_tz.utc).isoformat(),
+                }
+                actions.append({"action": "verify_task_ado", "ok": True, "ado_id": task_ado_id})
+            else:
+                # No existe en ADO → NO marcar consumed; cuarentena.
+                logger.warning(
+                    "G1.1 verify_task_before_consumed: task_ado_id=%s no resuelve en ADO — "
+                    "pending-task NO marcado consumed; se deja para desatascador. "
+                    "pt_file=%s",
+                    task_ado_id, pt_file,
+                )
+                _quarantine_fn = None
+                try:
+                    from services.output_watcher import _quarantine_pending_once
+                    _quarantine_fn = _quarantine_pending_once
+                except Exception:
+                    pass
+                if _quarantine_fn and pt_file:
+                    try:
+                        _quarantine_fn(
+                            pt_file,
+                            f"G1.1: task_ado_id={task_ado_id} creada pero no verificada en ADO",
+                        )
+                    except Exception:
+                        pass
+                actions.append({
+                    "action": "verify_task_ado",
+                    "ok": False,
+                    "ado_id": task_ado_id,
+                    "reason": "task_not_found_in_ado",
+                })
+                # Telemetría: log estructurado para KPI G2.1 (exitos_fantasma_atrapados).
+                logger.info(
+                    "G1.1 telemetry: g11_exito_fantasma_atrapado=1 epic=%s task_ado_id=%s",
+                    ado_id, task_ado_id,
+                )
+                _audit_create_child_task(
+                    correlation_id=correlation_id,
+                    ado_id=ado_id,
+                    user=user,
+                    completion_source=completion_source,
+                    operator_reason=operator_reason,
+                    pt_path=pending_task_path_str,
+                    ok=False,
+                    actions=actions,
+                    error=f"G1.1: task_ado_id={task_ado_id} no verificada en ADO tras crear",
+                    level="WARNING",
+                    task_ado_id=task_ado_id,
+                    operation_id=operation_id,
+                    payload_sha256=payload_sha256,
+                    repo_root=str(repo_root),
+                )
+                return jsonify({
+                    "ok": False,
+                    "dry_run": False,
+                    "epic_ado_id": ado_id,
+                    "task_ado_id": task_ado_id,
+                    "task_url": task_url,
+                    "attachment_id": attachment_id,
+                    "actions": actions,
+                    "pending_task_consumed": False,
+                    "human_action_required": (
+                        f"Task ADO-{task_ado_id} reportada como creada pero no verificada "
+                        f"en ADO. Revisar el estado en Azure DevOps y usar el desatascador."
+                    ),
+                    "correlation_id": correlation_id,
+                    "operation_id": operation_id,
+                    "payload_sha256": payload_sha256,
+                    "g11_verify": "task_not_found",
+                })
+    except Exception as _g11_outer:  # noqa: BLE001
+        # El gate G1.1 nunca bloquea el flujo normal (fail-open).
+        logger.warning("G1.1 verify_task_before_consumed: excepción outer (ignorada): %s", _g11_outer)
+
     # ── [6] Marcar pending-task.json como consumed ────────────────────────────
     _mark_pending_task_consumed(
         pt_file=pt_file,
@@ -3954,7 +4446,7 @@ def create_child_task(ado_id: int):
         operation_id=operation_id,
         payload_sha256=payload_sha256,
     )
-    actions.append({"action": "mark_consumed", "ok": True})
+    actions.append({"action": "mark_consumed", "ok": True, "create_verified": _g11_create_verified})
 
     # ── [7] Auditoría ─────────────────────────────────────────────────────────
     _audit_create_child_task(
@@ -4043,12 +4535,18 @@ def _find_equivalent_consumed_pending_task(
     ado_id: int,
     current_pt_file: Path,
     payload: dict,
+    task_status_fn=None,
 ) -> dict | None:
     """Busca otro pending-task del mismo Epic/RF ya consumido.
 
     Cubre el caso ADO-241 post-rescate: quedo un archivo pendiente en `epic-26`
     y otro equivalente consumido en `epic-241` con `task_ado_id=246`. El watcher
     debe marcar el original como idempotente, no crear una Task duplicada.
+
+    `task_status_fn(task_ado_id) -> "exists"|"missing"|"unknown"` (opcional):
+    permite descartar candidatos cuya Task fue borrada en ADO después del
+    consume (marker stale). Solo "missing" descarta; "unknown" (error
+    transitorio / sin cliente) conserva el comportamiento idempotente seguro.
     """
     rf_id = str(payload.get("rf_id") or "").strip().lower()
     title = str(payload.get("title") or "").strip().lower()
@@ -4086,6 +4584,15 @@ def _find_equivalent_consumed_pending_task(
             rel = str(candidate.relative_to(repo_root)).replace("\\", "/")
         except ValueError:
             rel = str(candidate)
+        if task_status_fn is not None:
+            status = task_status_fn(other.get("task_ado_id"))
+            if status == "missing":
+                logger.warning(
+                    "create_child_task: equivalente consumido STALE ignorado "
+                    "(Task ADO-%s borrada en ADO) path=%s",
+                    other.get("task_ado_id"), rel,
+                )
+                continue
         return {
             "pending_task_path": rel,
             "task_ado_id": other.get("task_ado_id"),
@@ -4766,3 +5273,208 @@ def frontend_config():
         "sync_min_interval_sec": int(os.environ.get("STACKY_SYNC_MIN_INTERVAL_SEC", _SYNC_MIN_INTERVAL_SEC)),
         "stale_threshold_sec": int(os.environ.get("STACKY_STALE_THRESHOLD_SEC", 120)),
     })
+
+
+# ── I0.3 — Pre-warming del caché ADO ─────────────────────────────────────────
+
+@bp.post("/<int:ado_id>/prewarm")
+def prewarm_ado_cache(ado_id: int):
+    """Pre-calienta el caché ADO para un ticket (I0.3).
+
+    POST /api/tickets/<ado_id>/prewarm
+
+    Dispara en un thread daemon (fire-and-forget) las lecturas caras que
+    `enrich_blocks` haría (similar_tickets, ado_context) y las deja en el
+    caché de I3.2. Nunca crea executions ni escribe en ADO.
+
+    Response inmediata (no bloquea):
+      {"status": "warming" | "skipped" | "disabled"}
+    """
+    from config import config as _cfg
+
+    # Flag principal
+    if not getattr(_cfg, "STACKY_ADO_PREWARM_ENABLED", False):
+        return jsonify({"status": "disabled"}), 200
+
+    # Depende de I3.2 (caché activo)
+    ttl = int(getattr(_cfg, "STACKY_ADO_READ_CACHE_TTL_SEC", 0))
+    if ttl <= 0:
+        return jsonify({"status": "disabled"}), 200
+
+    # Lookup del ticket por ado_id
+    from models import Ticket as _Ticket
+    ticket_data: dict | None = None
+    with session_scope() as _sess:
+        _t = _sess.query(_Ticket).filter(_Ticket.ado_id == ado_id).first()
+        if _t is not None:
+            ticket_data = {
+                "ticket_id": _t.id,
+                "project": _t.project or "",
+                "project_name": _t.stacky_project_name or _t.project or "",
+                "title": _t.title or "",
+                "agent_type": "developer",
+            }
+
+    if ticket_data is None:
+        return jsonify({"status": "skipped", "reason": "ticket_not_found"}), 200
+
+    from services.ado_read_cache import _singleton as _cache
+    _sim_key = (ticket_data["project_name"], str(ado_id), "similar")
+    _ado_key = (ticket_data["project_name"], str(ado_id), "ado_context")
+
+    # Idempotente: si ya está caliente, no hace nada
+    if _cache.is_warm(_sim_key) and _cache.is_warm(_ado_key):
+        return jsonify({"status": "skipped"}), 200
+
+    # Fire-and-forget en daemon thread
+    import threading as _threading
+
+    def _do_prewarm() -> None:
+        # Pre-warm similar_tickets
+        if not _cache.is_warm(_sim_key):
+            try:
+                from services import similar_tickets as _sim_svc
+                _cache.get_or_fetch(
+                    _sim_key,
+                    lambda: _sim_svc.inject_into_blocks(
+                        [],
+                        current_ado_id=ado_id,
+                        current_title=ticket_data["title"],
+                        project=ticket_data["project"] or "Strategist_Pacifico",
+                        project_name=ticket_data["project_name"] or None,
+                    ),
+                    ttl,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        # Pre-warm ado_context
+        if not _cache.is_warm(_ado_key):
+            try:
+                from services import ado_context as _ado_svc
+                _cache.get_or_fetch(
+                    _ado_key,
+                    lambda: _ado_svc.enrich(
+                        ticket_id=ticket_data["ticket_id"],
+                        agent_type=ticket_data["agent_type"],
+                        existing_blocks=[],
+                        ado_id=ado_id,
+                        project_name=ticket_data["project_name"] or None,
+                        return_stats=True,
+                    ),
+                    ttl,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+    _thread = _threading.Thread(target=_do_prewarm, daemon=True, name=f"prewarm-{ado_id}")
+    _thread.start()
+
+    return jsonify({"status": "warming"}), 200
+
+
+# ── Plan 38 B0 — Épica desde Brief ──────────────────────────────────────────
+
+def _epic_brief_save(ado_id: int, brief: str, project_name: str | None) -> None:
+    """Persiste el brief en Agentes/outputs/epic-<ado_id>/brief.txt."""
+    try:
+        from runtime_paths import repo_root as _repo_root
+        root = _repo_root()
+        out_dir = root / "Agentes" / "outputs" / f"epic-{ado_id}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "brief.txt").write_text(brief, encoding="utf-8")
+    except Exception as exc:
+        logger.warning("epic_from_brief: no se pudo guardar brief ado_id=%s err=%s", ado_id, exc)
+
+
+@bp.post("/epics/from-brief")
+def create_epic_from_brief():
+    """Plan 38 B0 — Crea una Épica en ADO a partir de un brief de negocio.
+
+    Body: { title, description_html, brief, project_name, confirm: true }
+    Response 201: { ado_id, work_item_type, title, url }
+
+    Human-in-the-loop duro: confirm debe ser exactamente true.
+    Feature gate: STACKY_EPIC_FROM_BRIEF_ENABLED (default true).
+    """
+    from config import config as _cfg
+
+    if not _cfg.STACKY_EPIC_FROM_BRIEF_ENABLED:
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    body = _body_json()
+    confirm = body.get("confirm")
+    title = (body.get("title") or "").strip()
+    description_html = (body.get("description_html") or "").strip()
+    brief = (body.get("brief") or "").strip()
+    project_name = (body.get("project_name") or "").strip() or None
+
+    if confirm is not True:
+        return jsonify({
+            "ok": False,
+            "error": "confirmation_required",
+            "message": "Debes enviar confirm:true para crear la épica (human-in-the-loop).",
+        }), 400
+
+    if not title:
+        return jsonify({"ok": False, "error": "missing_title", "message": "El campo 'title' es obligatorio."}), 400
+
+    if not description_html:
+        return jsonify({"ok": False, "error": "missing_description", "message": "El campo 'description_html' es obligatorio."}), 400
+
+    # Crear en ADO
+    try:
+        client = _ado_client_for_ticket(project_name=project_name)
+        wi = client.create_work_item(
+            work_item_type="Epic",
+            title=title,
+            description=description_html,
+        )
+    except (_AdoApiError, _AdoConfigError, ProjectContextError) as exc:
+        status = getattr(exc, "status_code", None)
+        http_status = 502 if (status is None or status >= 500) else 400
+        logger.error("create_epic_from_brief: ADO error: %s", exc)
+        return jsonify({"ok": False, "error": "ado_error", "message": str(exc)}), http_status
+
+    ado_id: int = wi["id"]
+    wi_title: str = wi.get("fields", {}).get("System.Title", title)
+    wi_url: str = (
+        wi.get("_links", {}).get("html", {}).get("href")
+        or client.work_item_url(ado_id)
+    )
+
+    # Persistir ticket local
+    try:
+        with session_scope() as session:
+            existing = (
+                session.query(Ticket)
+                .filter(Ticket.ado_id == ado_id)
+                .first()
+            )
+            if existing is None:
+                from datetime import timezone as _tz
+                ticket = Ticket(
+                    ado_id=ado_id,
+                    external_id=ado_id,
+                    title=wi_title,
+                    description=description_html,
+                    work_item_type="Epic",
+                    project=project_name or "",
+                    stacky_project_name=project_name,
+                    ado_url=wi_url,
+                )
+                session.add(ticket)
+    except Exception as exc:
+        logger.warning("create_epic_from_brief: no se pudo persistir ticket local ado_id=%s err=%s", ado_id, exc)
+
+    # Guardar brief en disco
+    _epic_brief_save(ado_id, brief, project_name)
+
+    logger.info("create_epic_from_brief: Epic creada ado_id=%s title=%r project=%s", ado_id, wi_title, project_name)
+
+    return jsonify({
+        "ok": True,
+        "ado_id": ado_id,
+        "work_item_type": "Epic",
+        "title": wi_title,
+        "url": wi_url,
+    }), 201

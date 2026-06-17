@@ -85,6 +85,24 @@ _SYSTEM_PROMPT_TYPES = frozenset(
     {"decision", "anti_pattern", "glossary", "term", "preference", "style"}
 )
 
+# V1.5 (B5) — Fuente ÚNICA de verdad del doble canal: los tipos que el filtro de
+# inyección excluye del USER prompt son exactamente los que `POST /api/memory`
+# rechaza (canal USER). La garantía pasa de convención a estructura: un solo set
+# gobierna ambos lados. Alias público para que la API no toque el _privado.
+RESERVED_TYPES = _SYSTEM_PROMPT_TYPES
+
+# M3.1 — Tipos inyectables por el canal USER (informativo para la UI). NO es un
+# allowlist que bloquee el alta (cualquier type no reservado se acepta): es la
+# guía de tipos esperados, con `directive` como ciudadano de primera clase.
+INJECTABLE_TYPES = (
+    "bugfix",
+    "pattern",
+    "policy",
+    "client_policy",
+    "session_summary",
+    "directive",
+)
+
 # Relaciones soportadas (v1 §7.3).
 RELATIONS = (
     "related",
@@ -111,8 +129,66 @@ _AGENT_CAPS: dict[str, tuple[int, int]] = {
 _DEFAULT_CAP = (10, 10000)
 
 
+# M0.1 — Override configurable de caps vía STACKY_MEMORY_CAPS_JSON (env, OFF
+# default = ""). Shape: {"developer": [16, 16000], ...}. El override es MERGE
+# sobre _AGENT_CAPS: un agente ausente conserva su cap actual. Fail-safe: ante
+# cualquier malformación se ignora la entrada inválida (o todo el JSON) y se cae
+# a los defaults — mismo patrón que pricing._load_prices. Se cachea el parse por
+# proceso, keyed por el valor crudo del env, para no parsear en cada run y para
+# reflejar el hot-apply de flags sin reiniciar.
+_CAPS_OVERRIDE_CACHE: dict[str, dict[str, tuple[int, int]]] = {}
+
+
+def _invalidate_caps_cache() -> None:
+    """Limpia el cache del override de caps (tras hot-apply de flags)."""
+    _CAPS_OVERRIDE_CACHE.clear()
+
+
+def _parse_caps_override(raw: str) -> dict[str, tuple[int, int]]:
+    """Parsea STACKY_MEMORY_CAPS_JSON a {agent: (max_mem, max_chars)}.
+
+    Ignora entradas inválidas (no [int, int] con ambos > 0). Ante JSON
+    inválido o shape de tope no-dict, devuelve {} (todo a defaults).
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except Exception:  # noqa: BLE001
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    parsed: dict[str, tuple[int, int]] = {}
+    for agent, val in data.items():
+        try:
+            if not isinstance(val, (list, tuple)) or len(val) != 2:
+                continue
+            a, b = int(val[0]), int(val[1])
+            if a <= 0 or b <= 0:
+                continue
+            parsed[str(agent).strip().lower()] = (a, b)
+        except Exception:  # noqa: BLE001
+            continue
+    return parsed
+
+
+def _load_caps_override() -> dict[str, tuple[int, int]]:
+    import os
+
+    raw = os.getenv("STACKY_MEMORY_CAPS_JSON", "") or ""
+    if raw not in _CAPS_OVERRIDE_CACHE:
+        _CAPS_OVERRIDE_CACHE.clear()  # cache de 1 entrada keyed por raw actual
+        _CAPS_OVERRIDE_CACHE[raw] = _parse_caps_override(raw)
+    return _CAPS_OVERRIDE_CACHE[raw]
+
+
 def _caps_for(agent_type: str | None) -> tuple[int, int]:
-    return _AGENT_CAPS.get((agent_type or "").strip().lower(), _DEFAULT_CAP)
+    key = (agent_type or "").strip().lower()
+    override = _load_caps_override()
+    if key in override:
+        return override[key]
+    return _AGENT_CAPS.get(key, _DEFAULT_CAP)
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +222,11 @@ class StackyMemoryObservation(Base):
     last_seen_at = Column(DateTime)
     review_after = Column(DateTime)
     expires_at = Column(DateTime)
+    # M1.1 — Directiva como ciudadano de primera clase (add-only). Filas legacy:
+    # enforcement=NULL (≡ suggest/observacional), priority=0, applies_to_json=NULL.
+    enforcement = Column(String(12))          # None/"suggest" | "always"
+    priority = Column(Integer, nullable=False, default=0)
+    applies_to_json = Column(Text)            # targeting estructurado (JSON)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     deleted_at = Column(DateTime)
@@ -164,6 +245,13 @@ class StackyMemoryObservation(Base):
         except Exception:  # noqa: BLE001
             return []
 
+    def applies_to(self) -> dict:
+        try:
+            data = json.loads(self.applies_to_json or "{}")
+            return data if isinstance(data, dict) else {}
+        except Exception:  # noqa: BLE001
+            return {}
+
     def to_dict(self) -> dict:
         return {
             "memory_id": self.memory_id,
@@ -174,6 +262,9 @@ class StackyMemoryObservation(Base):
             "content": self.content,
             "topic_key": self.topic_key,
             "status": self.status,
+            "enforcement": self.enforcement,
+            "priority": self.priority if self.priority is not None else 0,
+            "applies_to": self.applies_to(),
             "confidence": self.confidence,
             "source_kind": self.source_kind,
             "source_execution_id": self.source_execution_id,
@@ -270,6 +361,68 @@ def _topic_key_filter(query, *, project: str, scope: str, topic_key: str, author
 
 
 # ---------------------------------------------------------------------------
+# M1.1 — Targeting de directivas (puro, sin DB)
+# ---------------------------------------------------------------------------
+
+# Dimensiones válidas de `applies_to`. Contrato estricto (M2.1 rechaza otras).
+APPLIES_TO_DIMENSIONS = (
+    "agent_types",
+    "projects",
+    "work_item_types",
+    "title_keywords",
+    "tags",
+)
+
+
+def _norm_list(val) -> list[str]:
+    if not isinstance(val, (list, tuple)):
+        return []
+    return [str(x).strip().lower() for x in val if str(x).strip()]
+
+
+def directive_matches_run(
+    applies_to: dict | None,
+    *,
+    agent_type: str | None = None,
+    project: str | None = None,
+    ticket_title: str | None = None,
+    ticket_description: str | None = None,
+    work_item_type: str | None = None,
+) -> bool:
+    """¿Una directiva con este `applies_to` matchea el run? AND multi-dimensión.
+
+    - Una dimensión ausente o vacía = no restringe (matchea cualquier valor).
+    - `agent_types`/`projects`/`work_item_types`: match exacto case-insensitive.
+    - `title_keywords`: substring case-insensitive en title O description.
+    - `tags`: NO participa del match de run (decisión M1.1; son del autor).
+    Un `applies_to` totalmente vacío matchea TODO.
+    """
+    a = applies_to or {}
+    if not isinstance(a, dict):
+        return False
+
+    agent_types = _norm_list(a.get("agent_types"))
+    if agent_types and (agent_type or "").strip().lower() not in agent_types:
+        return False
+
+    projects = _norm_list(a.get("projects"))
+    if projects and (project or "").strip().lower() not in projects:
+        return False
+
+    wits = _norm_list(a.get("work_item_types"))
+    if wits and (work_item_type or "").strip().lower() not in wits:
+        return False
+
+    keywords = _norm_list(a.get("title_keywords"))
+    if keywords:
+        haystack = f"{ticket_title or ''}\n{ticket_description or ''}".lower()
+        if not any(kw in haystack for kw in keywords):
+            return False
+
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Escritura
 # ---------------------------------------------------------------------------
 
@@ -292,6 +445,10 @@ def save_observation(
     author_role: str | None = None,
     tags: Iterable[str] | None = None,
     expires_at: datetime | None = None,
+    review_after: datetime | None = None,
+    enforcement: str | None = None,
+    priority: int = 0,
+    applies_to_json: str | None = None,
 ) -> str:
     """Crea o (si hay `topic_key`) upsertea una memoria. Devuelve el `memory_id`.
 
@@ -318,6 +475,7 @@ def save_observation(
             author_role=author_role,
             tags=tags,
             expires_at=expires_at,
+            review_after=review_after,
         )
 
     memory_id = _new_id("mem")
@@ -346,6 +504,10 @@ def save_observation(
             duplicate_count=1,
             last_seen_at=now,
             expires_at=expires_at,
+            review_after=review_after,
+            enforcement=enforcement,
+            priority=priority or 0,
+            applies_to_json=applies_to_json,
             created_at=now,
             updated_at=now,
         )
@@ -373,6 +535,7 @@ def upsert_by_topic_key(
     author_role: str | None = None,
     tags: Iterable[str] | None = None,
     expires_at: datetime | None = None,
+    review_after: datetime | None = None,
 ) -> str:
     """Upsert por `topic_key`. Incrementa `revision_count` si ya existía."""
     now = datetime.utcnow()
@@ -411,6 +574,8 @@ def upsert_by_topic_key(
             existing.updated_at = now
             if expires_at is not None:
                 existing.expires_at = expires_at
+            if review_after is not None:
+                existing.review_after = review_after
             session.flush()
             return existing.memory_id
 
@@ -438,6 +603,7 @@ def upsert_by_topic_key(
             duplicate_count=1,
             last_seen_at=now,
             expires_at=expires_at,
+            review_after=review_after,
             created_at=now,
             updated_at=now,
         )
@@ -461,6 +627,79 @@ def set_status(memory_id: str, status: str) -> bool:
         if status == "deleted" and row.deleted_at is None:
             row.deleted_at = datetime.utcnow()
         return True
+
+
+def update_observation(
+    memory_id: str,
+    *,
+    title: str | None = None,
+    content: str | None = None,
+    enforcement: str | None = None,
+    priority: int | None = None,
+    applies_to_json: str | None = None,
+    expires_at: datetime | None = None,
+    review_after: datetime | None = None,
+) -> bool:
+    """M2.2 — Edita campos de una memoria por id (add-only, no destructivo).
+
+    Solo toca los campos provistos (None = no tocar). Recalcula `normalized_hash`
+    si cambió título/contenido, incrementa `revision_count` (auditoría) y
+    `updated_at`. NO cambia `status` (eso es `set_status`), NO toca `topic_key`,
+    NO crea fila nueva. Devuelve True si la fila existe.
+    """
+    with session_scope() as session:
+        row = (
+            session.query(StackyMemoryObservation)
+            .filter(StackyMemoryObservation.memory_id == memory_id)
+            .first()
+        )
+        if row is None:
+            return False
+        changed_text = False
+        if title is not None:
+            row.title = title
+            changed_text = True
+        if content is not None:
+            row.content = content
+            changed_text = True
+        if enforcement is not None:
+            row.enforcement = enforcement
+        if priority is not None:
+            row.priority = priority
+        if applies_to_json is not None:
+            row.applies_to_json = applies_to_json
+        if expires_at is not None:
+            row.expires_at = expires_at
+        if review_after is not None:
+            row.review_after = review_after
+        if changed_text:
+            row.normalized_hash = _normalized_hash(row.title or "", row.content or "")
+        row.revision_count = (row.revision_count or 1) + 1
+        row.updated_at = datetime.utcnow()
+        return True
+
+
+def mark_stale_for_review(*, project: str | None = None) -> int:
+    """M0.3 — Marca `needs_review` las memorias `active` cuyo `review_after`
+    venció. NUNCA borra ni desactiva (rule 11: solo mueve a needs_review; el
+    humano decide). Devuelve cuántas marcó.
+    """
+    now = datetime.utcnow()
+    marked = 0
+    with session_scope() as session:
+        q = session.query(StackyMemoryObservation).filter(
+            StackyMemoryObservation.status == "active",
+            StackyMemoryObservation.deleted_at.is_(None),
+            StackyMemoryObservation.review_after.isnot(None),
+            StackyMemoryObservation.review_after < now,
+        )
+        if project:
+            q = q.filter(StackyMemoryObservation.project == project)
+        for row in q.all():
+            row.status = "needs_review"
+            row.updated_at = now
+            marked += 1
+    return marked
 
 
 def mark_relation(
@@ -693,6 +932,11 @@ def search(
         q = session.query(StackyMemoryObservation).filter(
             StackyMemoryObservation.project == project,
             StackyMemoryObservation.deleted_at.is_(None),
+            # M0.3 — una memoria expirada nunca entra al pool de candidatos.
+            or_(
+                StackyMemoryObservation.expires_at.is_(None),
+                StackyMemoryObservation.expires_at > datetime.utcnow(),
+            ),
         )
         if statuses:
             q = q.filter(StackyMemoryObservation.status.in_(statuses))
@@ -719,7 +963,26 @@ def search(
                     results.append(d)
                 return results
 
-        query_tokens = _tokenize(qt) if qt else []
+        # I2.3 — OPT-IN: expansión de query (fold de acentos + sinónimos del
+        # dominio) cuando STACKY_RETRIEVAL_EXPANSION_ENABLED=true. El corpus
+        # (línea _tokenize(_doc_text(r))) NO cambia: solo el query se expande.
+        # `_tokenize` global permanece idéntico (sin mutación).
+        _do_expand = False
+        try:
+            import os as _os
+            _raw = _os.getenv("STACKY_RETRIEVAL_EXPANSION_ENABLED", "false")
+            _do_expand = _raw.lower() in ("1", "true", "yes")
+        except Exception:  # noqa: BLE001
+            pass
+
+        if qt and _do_expand:
+            from services.query_expansion import normalize_text, expand_query
+            _qt_normalized = normalize_text(qt)
+            _base_tokens = _tokenize(_qt_normalized)
+            query_tokens = expand_query(_base_tokens)
+        else:
+            query_tokens = _tokenize(qt) if qt else []
+
         if not query_tokens:
             # Sin query útil → recencia.
             results = []
@@ -849,6 +1112,185 @@ def _render_memory(items: list[dict]) -> str:
     return "\n".join(lines).strip()
 
 
+def get_directives_for_run(
+    *,
+    project: str | None,
+    agent_type: str | None = None,
+    ticket_title: str | None = None,
+    ticket_description: str | None = None,
+    work_item_type: str | None = None,
+    scopes: Iterable[str] = INJECT_SCOPES,
+) -> list[dict]:
+    """M1.2 — Directivas `enforcement=always` que matchean el targeting del run.
+
+    Query RELACIONAL (sin TF-IDF, sin supresión de conflicto): una directiva
+    obligatoria se inyecta SIEMPRE que el run matchee su targeting, ordenada por
+    `priority` desc y luego `updated_at` desc. No compite en el pool léxico.
+    """
+    if not project:
+        return []
+    scopes = tuple(scopes)
+    now = datetime.utcnow()
+    with session_scope() as session:
+        q = session.query(StackyMemoryObservation).filter(
+            StackyMemoryObservation.status == "active",
+            StackyMemoryObservation.enforcement == "always",
+            StackyMemoryObservation.deleted_at.is_(None),
+            or_(
+                StackyMemoryObservation.expires_at.is_(None),
+                StackyMemoryObservation.expires_at > now,
+            ),
+        )
+        # scope: project-match para project-scoped; global/team viajan por scope.
+        if scopes:
+            q = q.filter(StackyMemoryObservation.scope.in_(scopes))
+        q = q.filter(
+            or_(
+                StackyMemoryObservation.scope != "project",
+                StackyMemoryObservation.project == project,
+            )
+        )
+        rows = q.order_by(
+            StackyMemoryObservation.priority.desc(),
+            StackyMemoryObservation.updated_at.desc(),
+        ).all()
+
+        matched = [
+            r for r in rows
+            if directive_matches_run(
+                r.applies_to(),
+                agent_type=agent_type,
+                project=project,
+                ticket_title=ticket_title,
+                ticket_description=ticket_description,
+                work_item_type=work_item_type,
+            )
+        ]
+        return [r.to_dict() for r in matched]
+
+
+def _render_directives(items: list[dict]) -> str:
+    """Render imperativo (espejo de _render_memory con framing de orden)."""
+    lines: list[str] = ["## REGLAS OBLIGATORIAS DEL OPERADOR (cumplir SIEMPRE)"]
+    for it in items:
+        header = f"### {it['title']}"
+        if it.get("topic_key"):
+            header += f"  ({it['topic_key']})"
+        lines.append(header)
+        lines.append((it.get("content") or "").strip())
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def directive_health(project: str) -> dict:
+    """M3.2 — Riesgos del set de directivas activas de un proyecto.
+
+    - overlapping: pares de directivas cuyos applies_to coinciden en TODAS las
+      dimensiones presentes en común (mismo escenario). NO juzga si el contenido
+      se contradice (eso es LLM, fuera de scope) — solo señala "revisá estas".
+    - budget_pressure: por agent_type, ratio de chars de directivas vs el slice
+      reservado (M0.1 caps + STACKY_MEMORY_DIRECTIVE_MAX_CHARS). ratio>0.8 = flag.
+    - stale: directivas con review_after o expires_at vencidos.
+    """
+    import os
+
+    now = datetime.utcnow()
+    with session_scope() as session:
+        rows = (
+            session.query(StackyMemoryObservation)
+            .filter(
+                StackyMemoryObservation.project == project,
+                StackyMemoryObservation.enforcement == "always",
+                StackyMemoryObservation.status == "active",
+                StackyMemoryObservation.deleted_at.is_(None),
+            )
+            .all()
+        )
+        dirs = [
+            {
+                "memory_id": r.memory_id,
+                "applies_to": r.applies_to(),
+                "chars": len(r.title or "") + len(r.content or "") + 64,
+                "review_after": r.review_after,
+                "expires_at": r.expires_at,
+            }
+            for r in rows
+        ]
+
+    # overlapping: comparar pares con targeting que se solapa en las dimensiones
+    # presentes en AMBOS (al menos una compartida y con intersección no vacía).
+    overlapping: list[dict] = []
+    match_dims = ("agent_types", "projects", "work_item_types")
+    for i in range(len(dirs)):
+        for j in range(i + 1, len(dirs)):
+            a, b = dirs[i]["applies_to"], dirs[j]["applies_to"]
+            shared = [d for d in match_dims if d in a and d in b]
+            if not shared:
+                # ambos sin dimensiones de match → ambos aplican a todo → solapan
+                if not any(d in a for d in match_dims) and not any(d in b for d in match_dims):
+                    overlapping.append({
+                        "ids": [dirs[i]["memory_id"], dirs[j]["memory_id"]],
+                        "shared_targeting": {},
+                    })
+                continue
+            shared_targeting = {}
+            ok = True
+            for d in shared:
+                sa = {str(x).strip().lower() for x in (a.get(d) or [])}
+                sb = {str(x).strip().lower() for x in (b.get(d) or [])}
+                inter = sa & sb
+                if not inter:
+                    ok = False
+                    break
+                shared_targeting[d] = sorted(inter)
+            if ok:
+                overlapping.append({
+                    "ids": [dirs[i]["memory_id"], dirs[j]["memory_id"]],
+                    "shared_targeting": shared_targeting,
+                })
+
+    # budget_pressure por agent_type referenciado (o "*" para untargeted).
+    try:
+        directive_cap_flag = int(os.getenv("STACKY_MEMORY_DIRECTIVE_MAX_CHARS", "4000"))
+    except ValueError:
+        directive_cap_flag = 4000
+    buckets: dict[str, int] = {}
+    for d in dirs:
+        agents = d["applies_to"].get("agent_types") or ["*"]
+        for ag in agents:
+            buckets[str(ag).strip().lower()] = buckets.get(str(ag).strip().lower(), 0) + d["chars"]
+    budget_pressure: list[dict] = []
+    for ag, chars in sorted(buckets.items()):
+        _maxmem, agent_max_chars = _caps_for(None if ag == "*" else ag)
+        cap = min(max(agent_max_chars // 2, 0), directive_cap_flag) or agent_max_chars
+        ratio = round(chars / cap, 3) if cap else 0.0
+        budget_pressure.append({
+            "project": project,
+            "agent_type": ag,
+            "directive_chars": chars,
+            "cap": cap,
+            "ratio": ratio,
+        })
+
+    # stale: review_after o expires_at vencidos.
+    stale: list[dict] = []
+    for d in dirs:
+        ra, ex = d["review_after"], d["expires_at"]
+        if (ra is not None and ra < now) or (ex is not None and ex < now):
+            stale.append({
+                "id": d["memory_id"],
+                "review_after": ra.isoformat() if ra else None,
+                "expires_at": ex.isoformat() if ex else None,
+            })
+
+    return {
+        "project": project,
+        "overlapping": overlapping,
+        "budget_pressure": budget_pressure,
+        "stale": stale,
+    }
+
+
 def get_context_for_run(
     *,
     project: str | None,
@@ -856,25 +1298,91 @@ def get_context_for_run(
     query_text: str | None,
     inject_scopes: Iterable[str] = INJECT_SCOPES,
     max_chars: int | None = None,
+    ticket_title: str | None = None,
+    ticket_description: str | None = None,
+    work_item_type: str | None = None,
 ) -> dict:
     """Arma el bloque de memoria operativa para una ejecución.
+
+    Estructura (M1.2): primero las DIRECTIVAS obligatorias (bypass scoring, slice
+    de presupuesto reservado, render imperativo), luego el pool observacional
+    (TF-IDF → supresión de conflicto → caps) con el presupuesto restante.
 
     Devuelve:
       {
         "content": str,          # texto a inyectar (vacío si no hay nada)
-        "hits": int,             # candidatos activos antes de supresión
-        "active_hits": int,      # inyectados finalmente
-        "suppressed_hits": int,  # ocultados por conflicto
-        "memory_ids": [str, ...] # inyectados
+        "hits": int,             # candidatos observacionales activos pre-supresión
+        "active_hits": int,      # observaciones inyectadas
+        "suppressed_hits": int,  # observaciones ocultadas por conflicto
+        "memory_ids": [str, ...] # observaciones inyectadas
+        "directive_ids": [str],  # directivas inyectadas (M1.2, aditivo)
+        "directive_hits": int,   # cantidad de directivas inyectadas (M1.2)
+        "directives_crowded_out_observations": bool  # M1.3, opcional
       }
     """
-    empty = {"content": "", "hits": 0, "active_hits": 0, "suppressed_hits": 0, "memory_ids": []}
+    empty = {
+        "content": "", "hits": 0, "active_hits": 0, "suppressed_hits": 0,
+        "memory_ids": [], "directive_ids": [], "directive_hits": 0,
+    }
     if not project:
         return empty
+
+    import os
 
     max_memories, agent_max_chars = _caps_for(agent_type)
     char_cap = min(max_chars, agent_max_chars) if max_chars else agent_max_chars
 
+    # ── M1.2 — Directivas obligatorias (bypass scoring) ───────────────────────
+    directives = get_directives_for_run(
+        project=project,
+        agent_type=agent_type,
+        ticket_title=ticket_title,
+        ticket_description=ticket_description,
+        work_item_type=work_item_type,
+        scopes=tuple(inject_scopes),
+    )
+
+    try:
+        directive_cap_flag = int(os.getenv("STACKY_MEMORY_DIRECTIVE_MAX_CHARS", "4000"))
+    except ValueError:
+        directive_cap_flag = 4000
+    # Slice reservado: la mitad del techo o el flag, lo menor. Si el techo total
+    # es menor que el slice, las directivas pueden consumir hasta todo el techo
+    # (M1.3: las directivas SIEMPRE ganan al pool).
+    directive_cap_chars = min(max(char_cap // 2, 0), directive_cap_flag) or char_cap
+
+    directive_content = ""
+    directive_ids: list[str] = []
+    directive_used = 0
+    if directives:
+        rendered: list[dict] = []
+        for d in directives:
+            title = pii_masker.redact_irreversible(d.get("title") or "")
+            body = pii_masker.redact_irreversible(d.get("content") or "")
+            rendered.append({**d, "title": title, "content": body})
+        directive_ids = [d["memory_id"] for d in directives]
+        directive_content = _render_directives(rendered)
+        # Las directivas SIEMPRE ganan: si el techo total es menor que el slice,
+        # pueden usar hasta todo el techo (M1.3); si no, su slice reservado.
+        cap_for_directives = min(directive_cap_chars, char_cap)
+        if len(directive_content) > cap_for_directives:
+            # NUNCA se dropea una directiva en silencio: se trunca con marcador.
+            directive_content = directive_content[:cap_for_directives].rstrip() + "\n… [directivas truncadas por presupuesto]"
+            try:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "directivas truncadas por presupuesto (project=%s agent=%s cap=%d)",
+                    project, agent_type, cap_for_directives,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        directive_used = len(directive_content)
+
+    # Presupuesto restante para el pool observacional.
+    obs_cap = max(char_cap - directive_used, 0)
+    crowded_out = directive_used > 0 and obs_cap == 0
+
+    # ── Pool observacional (comportamiento histórico, sobre obs_cap) ──────────
     candidates = search(
         project=project,
         query_text=query_text,
@@ -884,44 +1392,54 @@ def get_context_for_run(
         k=max(max_memories * 3, 30),
     )
     # B5: no re-emitir por el USER prompt lo que los FA-* ya inyectan por el
-    # SYSTEM prompt (un solo canal por conocimiento).
-    candidates = [c for c in candidates if (c.get("type") or "") not in _SYSTEM_PROMPT_TYPES]
-    if not candidates:
-        return empty
+    # SYSTEM prompt (un solo canal por conocimiento). Y excluir las directivas
+    # ya inyectadas arriba (evita doble-inyección si caen en el pool léxico).
+    directive_id_set = set(directive_ids)
+    candidates = [
+        c for c in candidates
+        if (c.get("type") or "") not in _SYSTEM_PROMPT_TYPES
+        and c.get("memory_id") not in directive_id_set
+    ]
 
-    kept, suppressed = _apply_conflict_suppression(project, candidates)
-    if not kept:
-        return {**empty, "hits": len(candidates), "suppressed_hits": len(suppressed)}
-
-    # Cap por cantidad.
-    kept = kept[:max_memories]
-
-    # Cap por chars: ir agregando hasta el techo (drop de menor rank primero).
-    # La memoria se REDACTA (PII irreversible) ANTES de medir y renderizar, así
-    # el cap es un techo real sobre el texto final inyectado y no se reinyecta
-    # PII al prompt/cache (el masker reversible per-run no sobrevive; plan §1.6).
     selected: list[dict] = []
-    running = 0
-    for it in kept:
-        title = pii_masker.redact_irreversible(it.get("title") or "")
-        body = pii_masker.redact_irreversible(it.get("content") or "")
-        cost = len(title) + len(body) + 64
-        if selected and running + cost > char_cap:
-            break
-        selected.append({**it, "title": title, "content": body})
-        running += cost
+    suppressed: list[dict] = []
+    if candidates and obs_cap > 0:
+        kept, suppressed = _apply_conflict_suppression(project, candidates)
+        kept = kept[:max_memories]
+        running = 0
+        for it in kept:
+            title = pii_masker.redact_irreversible(it.get("title") or "")
+            body = pii_masker.redact_irreversible(it.get("content") or "")
+            cost = len(title) + len(body) + 64
+            if selected and running + cost > obs_cap:
+                break
+            selected.append({**it, "title": title, "content": body})
+            running += cost
 
-    if not selected:
-        return {**empty, "hits": len(candidates), "suppressed_hits": len(suppressed)}
+    # ── Composición final ─────────────────────────────────────────────────────
+    obs_content = _render_memory(selected) if selected else ""
+    if obs_content and len(obs_content) > obs_cap:
+        obs_content = obs_content[:obs_cap].rstrip() + "\n…"
 
-    content = _render_memory(selected)
-    if len(content) > char_cap:
-        content = content[:char_cap].rstrip() + "\n…"
+    parts = [p for p in (directive_content, obs_content) if p]
+    content = "\n\n".join(parts)
 
-    return {
+    if not content:
+        return {
+            **empty,
+            "hits": len(candidates),
+            "suppressed_hits": len(suppressed),
+        }
+
+    result = {
         "content": content,
         "hits": len(candidates),
         "active_hits": len(selected),
         "suppressed_hits": len(suppressed),
         "memory_ids": [it["memory_id"] for it in selected],
+        "directive_ids": directive_ids,
+        "directive_hits": len(directive_ids),
     }
+    if crowded_out:
+        result["directives_crowded_out_observations"] = True
+    return result

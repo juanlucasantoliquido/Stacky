@@ -694,6 +694,28 @@ def _ep_label_matches_title(title: str | None, ep_label: int) -> bool:
     ) is not None
 
 
+def _intake_valid_ado_ids(epic_ado_id: int, source_epic_ado_id: int | None) -> list[int]:
+    """V1.3 — ids ADO reales conocidos para el contexto de la regla anti-ordinal.
+
+    Incluye el epic destino y el epic origen (si difiere). Vacío ⇒ la regla
+    anti-ordinal hace skip (no inventa). No consulta toda la DB: el set mínimo
+    confiable es el epic involucrado en este intake.
+    """
+    ids: list[int] = []
+    try:
+        ids.append(int(epic_ado_id))
+    except (TypeError, ValueError):
+        pass
+    if source_epic_ado_id is not None:
+        try:
+            sid = int(source_epic_ado_id)
+            if sid not in ids:
+                ids.append(sid)
+        except (TypeError, ValueError):
+            pass
+    return ids
+
+
 def _read_pending_payload(pt_file: Path) -> dict | None:
     try:
         data = json.loads(pt_file.read_text(encoding="utf-8-sig"))
@@ -851,6 +873,41 @@ def _pending_is_quarantined(pt_file: Path) -> bool:
     return _SEEN_TERMINAL_PENDING.get(key) == mtime_ns
 
 
+def _validate_pending_task_strict(payload: dict, *, epic_ado_id: int) -> list[str]:
+    """R1.2 — Validacion estructural minima del pending-task antes del POST.
+
+    Comprueba: campos requeridos presentes, tipos correctos, coherencia
+    ordinal (rf_id) vs parent ADO id. Solo valida ESTRUCTURA, no contenido.
+
+    Retorna lista de errores (vacia = valido).
+    """
+    errors: list[str] = []
+    required_str = ("title",)
+    for field in required_str:
+        if not payload.get(field) or not isinstance(payload[field], str):
+            errors.append(f"campo requerido ausente o invalido: '{field}'")
+
+    # rf_id: debe ser str o int, no None/vacio
+    rf_id = payload.get("rf_id")
+    if rf_id is None or rf_id == "":
+        errors.append("campo requerido ausente: 'rf_id'")
+
+    # parent_ado_id coherencia ordinal: si esta presente, debe coincidir con epic_ado_id
+    # (regla anti-ordinal del plan 28 R1.2).
+    parent_id = payload.get("parent_ado_id") or payload.get("epic_ado_id")
+    if parent_id is not None:
+        try:
+            if int(parent_id) != int(epic_ado_id):
+                errors.append(
+                    f"parent_ado_id={parent_id} no coincide con epic_ado_id={epic_ado_id} "
+                    "(mismatch ordinal vs ADO id)"
+                )
+        except (TypeError, ValueError):
+            errors.append(f"parent_ado_id={parent_id!r} no es un entero valido")
+
+    return errors
+
+
 def _terminal_create_failure(status_code: int, error_code: str | None) -> bool:
     if status_code in _TERMINAL_CREATE_HTTP:
         return True
@@ -913,18 +970,97 @@ def _auto_create_pending_tasks(
             skipped += 1
             continue
 
-        try:
-            pt_payload = _json.loads(pt_file.read_text(encoding="utf-8"))
-        except (OSError, _json.JSONDecodeError) as exc:
-            _quarantine_pending_once(pt_file, f"JSON inválido/no legible: {exc}")
-            skipped += 1
-            continue
+        # V1.3 — Intake universal (flag-gated). Si ON, todo output file-based
+        # pasa por validate_and_normalize ANTES de encolarse: reparación
+        # determinista + schema + regla anti-ordinal. Si falla → cuarentena con
+        # errores legibles (nunca llega inválido a ADO). Si OFF → path actual.
+        if os.getenv("STACKY_ARTIFACT_INTAKE_ENABLED", "false").lower() in ("1", "true", "yes", "on"):
+            try:
+                from services import artifact_intake
+                raw_text = pt_file.read_text(encoding="utf-8")
+            except OSError as exc:
+                _quarantine_pending_once(pt_file, f"no legible: {exc}")
+                skipped += 1
+                continue
+            # status=consumed: no re-validar, ya procesado.
+            try:
+                _peek = _json.loads(raw_text)
+            except Exception:
+                _peek = None
+            if isinstance(_peek, dict) and (
+                _peek.get("status") == "consumed" or "consumed_at" in _peek
+            ):
+                skipped += 1
+                continue
+            ctx = {"valid_ado_ids": _intake_valid_ado_ids(epic_ado_id, source_epic_ado_id)}
+            result = artifact_intake.validate_and_normalize(
+                raw=raw_text, kind="pending_task_json", ticket_context=ctx,
+            )
+            if not result.ok:
+                _quarantine_pending_once(
+                    pt_file,
+                    "intake rechazó el artefacto: " + "; ".join(result.errors),
+                )
+                skipped += 1
+                continue
+            if result.repaired and isinstance(result.normalized, dict):
+                # Reescribir el archivo con el JSON normalizado para que el
+                # endpoint downstream consuma una versión válida.
+                try:
+                    pt_file.write_text(
+                        _json.dumps(result.normalized, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    logger.info(
+                        "output_watcher intake: reparado %s (%s)",
+                        pt_file.name, ", ".join(result.repairs),
+                    )
+                except OSError:
+                    logger.warning("intake: no se pudo reescribir %s", pt_file, exc_info=True)
+            pt_payload = result.normalized if isinstance(result.normalized, dict) else _peek or {}
+        else:
+            try:
+                pt_payload = _json.loads(pt_file.read_text(encoding="utf-8"))
+            except (OSError, _json.JSONDecodeError) as exc:
+                _quarantine_pending_once(pt_file, f"JSON inválido/no legible: {exc}")
+                skipped += 1
+                continue
 
         if pt_payload.get("status") == "consumed" or "consumed_at" in pt_payload:
             skipped += 1
             continue
 
         rf_id = pt_payload.get("rf_id", "?")
+
+        # R1.2 — Validacion estructural always-on (independiente del flag V1.3).
+        # Gate minimo: campos requeridos, tipos, coherencia ordinal vs parent ADO id.
+        # Si el flag STACKY_PENDING_TASK_STRICT_VALIDATION_ENABLED=false → no-op.
+        _strict_ok = True
+        if os.getenv("STACKY_PENDING_TASK_STRICT_VALIDATION_ENABLED", "false").lower() in (
+            "1", "true", "yes", "on"
+        ):
+            _validation_errors = _validate_pending_task_strict(
+                pt_payload, epic_ado_id=epic_ado_id
+            )
+            if _validation_errors:
+                _quarantine_pending_once(
+                    pt_file,
+                    "R1.2 validacion estricta: " + "; ".join(_validation_errors),
+                )
+                logger.warning(
+                    "output_watcher R1.2: pending-task rf=%s rechazado: %s",
+                    rf_id, _validation_errors,
+                )
+                # Emitir telemetria en el log como contador de cuarentena.
+                logger.info(
+                    "output_watcher R1.2 telemetria: cuarentena_strict epic=%s rf=%s errors=%d",
+                    epic_ado_id, rf_id, len(_validation_errors),
+                )
+                skipped += 1
+                _strict_ok = False
+        if not _strict_ok:
+            continue
+
         pt_rel = _rel_to_repo(pt_file)
         body = {
             "pending_task_path": pt_rel,

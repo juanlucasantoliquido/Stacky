@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWorkbench } from "../store/workbench";
-import { Projects } from "../api/endpoints";
+import { Projects, Health } from "../api/endpoints";
 import type { AgentWorkflowConfig, Project } from "../types";
 import NewProjectModal from "./NewProjectModal";
 import EditProjectModal from "./EditProjectModal";
@@ -30,6 +30,7 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
   const [activeProjectName, setActiveProjectName] = useState<string>("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
+  const [version, setVersion] = useState<string | null>(null);
 
   const activeProject = projects.find((p) => p.name === activeProjectName) ?? null;
 
@@ -90,6 +91,12 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
   }
 
   useEffect(() => { loadProjects(); }, []);
+
+  useEffect(() => {
+    Health.get()
+      .then((res) => { if (res.version) setVersion(res.version); })
+      .catch(() => { /* ignorar: no crítico */ });
+  }, []);
 
   async function handleProjectChange(name: string) {
     setActiveProjectName(name);
@@ -194,7 +201,7 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
           )}
           <CostCapIndicator projectName={activeProjectName || null} />
           <StreakBadge />
-          <span>dev@local</span>
+          <span className={styles.version} title={version ? `Versión ${version}` : "dev@local"}>{version ? `v${version}` : "dev@local"}</span>
         </div>
       </div>
       {isRunning && <div className={styles.progressBar} role="progressbar" aria-label="Ejecución en progreso" />}

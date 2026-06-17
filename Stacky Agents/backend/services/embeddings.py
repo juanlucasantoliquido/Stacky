@@ -145,8 +145,24 @@ def _idf_corpus() -> dict[str, float]:
     return _idf_cache
 
 
-def _query_vector(text: str, idf: dict[str, float]) -> tuple[dict[str, float], float]:
-    tokens = _tokenize(text)
+def _query_vector(
+    text: str,
+    idf: dict[str, float],
+    *,
+    expand: bool = False,
+) -> tuple[dict[str, float], float]:
+    """Computa el vector TF-IDF ponderado para el query.
+
+    `expand=True` activa la normalización de acentos + expansión de sinónimos
+    (I2.3). Nunca muta `_tokenize` global: el opt-in se hace en la ruta de
+    búsqueda, no en el tokenizador base.
+    """
+    if expand:
+        from services.query_expansion import normalize_text, expand_query
+        text = normalize_text(text)
+        tokens = expand_query(_tokenize(text))
+    else:
+        tokens = _tokenize(text)
     if not tokens:
         return {}, 0.0
     tf = Counter(tokens)
@@ -163,11 +179,21 @@ def top_k(
     only_approved: bool = True,
     k: int = 5,
 ) -> list[SemanticHit]:
-    """Retorna top-K execs más similares al query_text usando TF-IDF cosine."""
+    """Retorna top-K execs más similares al query_text usando TF-IDF cosine.
+
+    I2.3 — Cuando `STACKY_RETRIEVAL_EXPANSION_ENABLED=true`, aplica
+    normalización de acentos + sinónimos sobre el QUERY (corpus sin cambios).
+    `_tokenize` global permanece idéntico al estado de importación.
+    """
     if not query_text or not query_text.strip():
         return []
+    try:
+        from config import config as _cfg
+        _do_expand = bool(getattr(_cfg, "STACKY_RETRIEVAL_EXPANSION_ENABLED", False))
+    except Exception:  # noqa: BLE001
+        _do_expand = False
     idf = _idf_corpus()
-    qvec, qnorm = _query_vector(query_text, idf)
+    qvec, qnorm = _query_vector(query_text, idf, expand=_do_expand)
     if qnorm == 0 or not qvec:
         return []
 

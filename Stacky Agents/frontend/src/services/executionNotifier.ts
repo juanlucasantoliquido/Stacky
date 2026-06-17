@@ -79,7 +79,7 @@ export async function requestDesktopPermission(): Promise<boolean> {
 interface FinishedPayload {
   agent_type: string;
   ticket_label?: string;
-  status: "completed" | "error" | "cancelled";
+  status: "completed" | "error" | "cancelled" | "needs_review";
 }
 
 let lastNotifiedAt = 0;

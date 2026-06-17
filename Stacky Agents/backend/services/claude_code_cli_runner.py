@@ -51,10 +51,12 @@ from db import session_scope
 from models import AgentExecution, Ticket
 from services import (
     context_enrichment,
+    desktop_notifier,
     pii_masker,
     stacky_agents as stacky_agents_svc,
     ticket_status,
     vscode_agents,
+    webhooks,
 )
 from services.agent_env import build_agent_env
 from services.project_context import resolve_project_context
@@ -70,6 +72,25 @@ _PROCESSES_LOCK = threading.Lock()
 # Lock por ejecución para serializar escrituras al stdin del proceso (el operador
 # puede enviar varias respuestas concurrentes desde la consola).
 _STDIN_LOCKS: dict[int, threading.Lock] = {}
+
+
+def _notify_outcome(
+    *, execution_id: int, ticket_id: int | None, agent_type: str | None, status: str
+) -> None:
+    try:
+        webhooks.fire_for_execution(execution_id)
+    except Exception:  # noqa: BLE001
+        logger.debug("[exec=%s] webhook fire_for_execution failed", execution_id, exc_info=True)
+
+    if not config.STACKY_DESKTOP_NOTIFY_ENABLED:
+        return
+    try:
+        desktop_notifier.notify(
+            title=f"Stacky · {agent_type or 'agent'} {status}",
+            message=f"Ticket {ticket_id or 'N/A'} · {RUNTIME}",
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("[exec=%s] desktop notify failed", execution_id, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +218,25 @@ def cancel(execution_id: int, *, grace_seconds: float = 8.0) -> bool:
     return True
 
 
+def _stderr_excerpt(stderr_tail: list[str], *, max_lines: int = 40) -> str:
+    """Plan 37 (F2.2) — últimas N líneas de stderr del proceso `claude`, limpias.
+
+    El motivo real de un `exit != 0` (flag no soportada, error de MCP/tool, etc.)
+    queda en stderr; lo extraemos para persistirlo y dejar de "fallar en silencio".
+    """
+    if not stderr_tail:
+        return ""
+    return "\n".join(stderr_tail[-max_lines:]).strip()
+
+
+def _format_cli_error(return_code: int | None, stderr_excerpt: str) -> str:
+    """Mensaje de error persistible: genérico + extracto de stderr si lo hay."""
+    base = f"claude code cli exited with code {return_code}"
+    if stderr_excerpt:
+        return f"{base}: {stderr_excerpt[:500]}"
+    return base
+
+
 def _user_message_line(text: str) -> str:
     """Codifica un mensaje de usuario en el formato stream-json de Claude Code.
 
@@ -301,6 +341,9 @@ def _run_in_background(
     run_dir: Path | None = None
     hooks_settings_file: Path | None = None
     stdout_tail: list[str] = []
+    # Plan 37 (F2.1) — tail de stderr AISLADO: el motivo real de un exit!=0 vive
+    # en stderr; lo persistimos en la rama de error para no "fallar en silencio".
+    stderr_tail: list[str] = []
     return_code: int | None = None
     heartbeat_stop = threading.Event()
     heartbeat_thread: threading.Thread | None = None
@@ -366,6 +409,13 @@ def _run_in_background(
             raw_blocks=raw_blocks,
             project_ctx=project_ctx,
             log=log,
+        )
+        # Q0.1/Q1.2 — registrar qué bloques de calidad fueron inyectados para Q2.2.
+        _enriched_ids = {b.get("id") for b in enriched_blocks if isinstance(b, dict)}
+        _ac_injected = "acceptance-criteria" in _enriched_ids
+        _fewshot_count = sum(
+            1 for b in enriched_blocks
+            if isinstance(b, dict) and b.get("id") == "few-shot-approved"
         )
         rich_message = context_enrichment.build_ticket_context_text(
             ado_id=t_ado_id,
@@ -531,12 +581,44 @@ def _run_in_background(
         # decide() aplica el cap duro (clamp_model): jamás opus/fable, ni por override.
         from services import llm_router
 
+        # I0.2 — Cómputo de fingerprint_complexity en el CLI.
+        # Solo se calcula si el flag está ON. OFF → None (routing byte-idéntico).
+        _cli_complexity: str | None = None
+        if config.STACKY_COMPLEXITY_ESTIMATION_ENABLED:
+            try:
+                from harness.complexity import estimate_complexity as _est_c
+                _cli_title = ""
+                _cli_desc = ""
+                try:
+                    from db import session_scope as _ss
+                    from models import Ticket as _Ticket
+                    with _ss() as _sess_c:
+                        _tobj = _sess_c.get(_Ticket, ticket_id)
+                        if _tobj is not None:
+                            _cli_title = _tobj.title or ""
+                            _cli_desc = _tobj.description or ""
+                except Exception:
+                    pass
+                _cli_complexity = _est_c(
+                    agent_type=agent_type or "",
+                    ticket_title=_cli_title,
+                    ticket_description=_cli_desc,
+                    blocks=enriched_blocks,
+                )
+                log("info", f"complexity estimation → {_cli_complexity} (I0.2)")
+            except Exception as _exc_c:  # noqa: BLE001
+                log("warn", f"complexity estimation falló (no crítico): {_exc_c}")
+
         routed_model = model_override or config.CLAUDE_CODE_CLI_MODEL
         try:
             decision = llm_router.decide(
                 agent_type=agent_type or "",
                 blocks=enriched_blocks,
-                override=model_override,
+                fingerprint_complexity=_cli_complexity,
+                # El default fijo del operador (CLAUDE_CODE_CLI_MODEL, sonnet-4-6)
+                # actúa como override del router: TODA invocación CLI usa ese
+                # modelo salvo override explícito por-run. Vacío = router decide.
+                override=model_override or (config.CLAUDE_CODE_CLI_MODEL or None),
                 backend="anthropic",
                 project_name=project_name,
             )
@@ -563,12 +645,18 @@ def _run_in_background(
                     row.output = f"[egress] run bloqueado: {reason}"
             return
 
+        # Q0.2 — Esfuerzo adaptativo por dificultad estimada (OFF default).
+        _adaptive_effort = _map_effort(_cli_complexity)
+        if _adaptive_effort:
+            log("info", f"adaptive effort → {_adaptive_effort} (complexity={_cli_complexity}, Q0.2)")
+
         cmd = _build_command(
             model_override=routed_model,
             system_prompt_file=system_prompt_file,
             settings_file=hooks_settings_file,
             mcp_config_file=mcp_config_file,
             resume_session_id=resume_session_id,
+            effort_override=_adaptive_effort,
         )
         log("info", f"claude code cli cwd={cwd}")
         log("info", "claude code cli command: " + _display_command(cmd))
@@ -623,6 +711,7 @@ def _run_in_background(
             proc.stdin.write(_user_message_line(prompt))
             proc.stdin.flush()
             log("info", f"prompt inicial enviado a claude por stdin ({len(prompt)} chars)", group="operator")
+            log("info", _prompt_echo_message(prompt, pii_masked=bool(mask_map)), group="operator")
         except Exception as exc:  # noqa: BLE001
             log("error", f"no se pudo enviar el prompt inicial a claude: {exc}")
             raise
@@ -655,6 +744,7 @@ def _run_in_background(
 
         # F1.2 — telemetría nativa del stream (session_id, usage, costo, turnos)
         stream_telemetry: dict[str, Any] = {}
+        last_telemetry_emit = 0.0
 
         # F1.3 — loop de autocorrección sobre stdin (flag OFF default).
         autocorrect = None
@@ -670,6 +760,10 @@ def _run_in_background(
             )
             log("info", "autocorrección de artifacts habilitada (F1.3)")
 
+        # Q1.1 — pase correctivo de criterios incumplidos (flag OFF default).
+        _criteria_repair_result: list[dict | None] = [None]   # [0] = meta o None
+        _criteria_repair_done: list[bool] = [False]           # flag mutable para closure
+
         # H5 — Runaway guard: límite de turnos y costo por run.
         from harness.runaway_guard import RunLimits, RunawayGuard
         _runaway_guard = RunawayGuard(
@@ -680,12 +774,71 @@ def _run_in_background(
         )
         _runaway_triggered: list[str] = []  # [0] = razón si se disparó
 
+        # R1.1 — stall watchdog: rastrea el ultimo evento del stream.
+        _last_event_wall: list[datetime] = [datetime.utcnow()]
+        _last_event_mono: list[float] = [time.monotonic()]
+        _stall_fired: list[bool] = [False]
+
         def _on_stream_event(event: dict) -> None:
+            nonlocal last_telemetry_emit
+            _last_event_wall[0] = datetime.utcnow()
+            _last_event_mono[0] = time.monotonic()
             _capture_result_telemetry(stream_telemetry, event)
+            if config.STACKY_LIVE_TELEMETRY_ENABLED:
+                now = time.monotonic()
+                if now - last_telemetry_emit >= 2.0:
+                    usage = stream_telemetry.get("usage") if isinstance(stream_telemetry.get("usage"), dict) else {}
+                    telemetry_payload = {
+                        "turns": stream_telemetry.get("num_turns"),
+                        "input_tokens": usage.get("input_tokens") if isinstance(usage, dict) else None,
+                        "output_tokens": usage.get("output_tokens") if isinstance(usage, dict) else None,
+                        "cost_usd": stream_telemetry.get("total_cost_usd"),
+                        "cost_estimated": False,
+                    }
+                    if any(v is not None for v in telemetry_payload.values()):
+                        log_streamer.push(
+                            execution_id,
+                            "info",
+                            "telemetry",
+                            group="telemetry",
+                            event_type="telemetry",
+                            data=telemetry_payload,
+                        )
+                        last_telemetry_emit = now
             # Fin de turno = evento `result`: validar artifacts y, si están
             # inválidos, pedir corrección por el stdin todavía abierto.
             if autocorrect is not None and event.get("type") == "result":
                 autocorrect.on_turn_end()
+            # Q1.1 — pase correctivo de criterios incumplidos (último turno,
+            # solo una vez, después de que autocorrect haya terminado su ciclo).
+            if (
+                not _criteria_repair_done[0]
+                and event.get("type") == "result"
+                and getattr(config, "STACKY_CRITERIA_REPAIR_ENABLED", False)
+            ):
+                _criteria_repair_done[0] = True
+                try:
+                    from harness.criteria_repair import attempt_criteria_repair as _acr
+                    _ac_retries_used = (
+                        autocorrect.attempts if autocorrect is not None else 0
+                    )
+                    _ac_budget = config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES
+                    _current_output = "\n".join(final_output) if final_output else ""
+                    _cr = _acr(
+                        execution_id=execution_id,
+                        artifact_text=_current_output,
+                        runtime=RUNTIME,
+                        retries_budget=_ac_budget,
+                        retries_used=_ac_retries_used,
+                        send_fn=lambda msg: _send_system_message(execution_id, msg),
+                        enabled=True,
+                        min_score=float(config.STACKY_SELF_REVIEW_MIN_SCORE),
+                    )
+                    _criteria_repair_result[0] = _cr
+                    if _cr is not None:
+                        log("info", f"criteria_repair: {_cr} (Q1.1)")
+                except Exception as _exc_cr:  # noqa: BLE001
+                    log("warn", f"criteria_repair falló (no crítico): {_exc_cr}")
             # H5 — chequear runaway en cada evento con datos de telemetría.
             if not _runaway_triggered:
                 reason = _runaway_guard.observe(
@@ -704,7 +857,7 @@ def _run_in_background(
             ),
             threading.Thread(
                 target=_read_stream,
-                args=(execution_id, proc.stderr, "warn", "claude-code-stderr", stdout_tail, None),
+                args=(execution_id, proc.stderr, "warn", "claude-code-stderr", stderr_tail, None),
                 daemon=True,
             ),
         ]
@@ -717,6 +870,7 @@ def _run_in_background(
         import time as _time
         session_deadline = (_time.monotonic() + session_timeout) if session_timeout else None
         _runaway_grace_deadline: float | None = None
+        stall_watchdog_sec = config.STACKY_STALL_WATCHDOG_SECONDS
         while True:
             try:
                 return_code = proc.wait(timeout=5)
@@ -768,6 +922,30 @@ def _run_in_background(
                         proc.kill()
                         return_code = proc.wait()
                     break
+                # R1.1 — watchdog de inactividad: sin eventos por N segundos → stall.
+                if stall_watchdog_sec > 0 and not _stall_fired[0]:
+                    elapsed_no_event = _time.monotonic() - _last_event_mono[0]
+                    if elapsed_no_event >= stall_watchdog_sec:
+                        log("warn",
+                            f"R1.1 stall watchdog: {elapsed_no_event:.0f}s sin eventos del stream — terminando")
+                        if config.STACKY_LOG_FLUSH_INCREMENTAL_ENABLED:
+                            try:
+                                log_streamer.flush(execution_id)
+                            except Exception:  # noqa: BLE001
+                                pass
+                        try:
+                            if proc.stdin and not proc.stdin.closed:
+                                proc.stdin.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+                        proc.terminate()
+                        try:
+                            return_code = proc.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            return_code = proc.wait()
+                        _stall_fired[0] = True
+                        break
                 continue
 
         heartbeat_stop.set()
@@ -810,11 +988,35 @@ def _run_in_background(
             "agent_name": selected_agent.name,
             "pii_masked": bool(mask_map),
             "hooks_enabled": hooks_settings_file is not None,
+            # Q0.1 / Q1.2 — flags de calidad para Q2.2 KPIs
+            "acceptance_criteria_injected": _ac_injected,
+            "few_shot_count": _fewshot_count,
             **invocation_meta,
         }
         # H0.3 — flag de fallback de cwd (workspace_root vacío/None).
         if _cwd_fallback:
             metadata["cwd_fallback"] = True
+        # V1.1 — sello del prompt usado (trazabilidad/versionado).
+        try:
+            from services import agent_prompt_registry as _apr
+
+            _body = selected_path.read_text(encoding="utf-8")
+            _sha = _apr.ensure_version(vscode_agent_filename, _body)
+            if _sha:
+                metadata["prompt_sha"] = _sha
+                # V2.4 — sello del run_fingerprint (dedup de runs idénticos).
+                from services import run_cache as _rc
+                _rc.seal_into_metadata(
+                    metadata,
+                    prompt_sha=_sha,
+                    # model_override (no el modelo resuelto): el launch computa el
+                    # mismo fingerprint con model_override para el lookup, así
+                    # coinciden. Dos runs con el mismo override (incl. None) → mismo fp.
+                    model=model_override,
+                    context_blocks=raw_blocks,
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("V1.1 prompt_sha sealing falló (no crítico)", exc_info=True)
         # F2.2 — trazabilidad del conocimiento del proyecto inyectado.
         if knowledge_meta:
             metadata["project_knowledge"] = knowledge_meta
@@ -834,6 +1036,9 @@ def _run_in_background(
         # F1.3 — trazabilidad del loop de autocorrección.
         if autocorrect is not None:
             metadata["autocorrect"] = autocorrect.summary()
+        # Q1.1 — sello del pase correctivo de criterios (clave nueva, aditiva).
+        if _criteria_repair_result[0] is not None:
+            metadata["criteria_repair"] = _criteria_repair_result[0]
         # H5 — trazabilidad del runaway guard.
         if _runaway_triggered:
             metadata["runaway"] = {
@@ -871,9 +1076,88 @@ def _run_in_background(
                 final_status="needs_review",
                 agent_type=agent_type,
             )
+            _notify_outcome(
+                execution_id=execution_id,
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                status="needs_review",
+            )
             return
 
-        if return_code == 0:
+        # I1.1 — Auto-reparación ante output vacío/malformado (STACKY_RUN_REPAIR_ENABLED).
+        # Corre ANTES de la evaluación de calidad, solo si return_code==0 y flag ON.
+        # Comparte el techo de retries del autocorrect. OFF → sin cambio.
+        if return_code == 0 and config.STACKY_RUN_REPAIR_ENABLED:
+            try:
+                from harness.run_repair import attempt_repair as _attempt_repair_cl
+
+                _cl_autocorrect_retries = (
+                    autocorrect.attempts if autocorrect is not None else 0
+                )
+                _cl_autocorrect_budget = (
+                    config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES
+                )
+
+                def _claude_repair_send(msg: str) -> str:
+                    """Envía mensaje de repair via stdin y devuelve nueva salida."""
+                    try:
+                        ok = _send_system_message(execution_id, msg)
+                        if ok and output_file.exists():
+                            return output_file.read_text(encoding="utf-8", errors="replace")
+                        return ""
+                    except Exception as _e:
+                        log("warn", f"run_repair claude send falló: {_e}")
+                        return ""
+
+                _cl_repair_result = _attempt_repair_cl(
+                    output_text=output or "",
+                    artifacts=[str(output_file)] if output_file.exists() else [],
+                    runtime=RUNTIME,
+                    retries_budget=_cl_autocorrect_budget,
+                    retries_used=_cl_autocorrect_retries,
+                    send_fn=_claude_repair_send,
+                    enabled=True,
+                )
+                if _cl_repair_result is not None:
+                    metadata["run_repair"] = _cl_repair_result
+                    if _cl_repair_result.get("recovered"):
+                        log("info", "run_repair: output recuperado tras reintento (claude)")
+                        # Re-leer output reparado
+                        if output_file.exists():
+                            output = output_file.read_text(encoding="utf-8", errors="replace")
+                    else:
+                        log("warn", "run_repair: reintento no recuperó el output (claude)")
+            except Exception as exc:  # noqa: BLE001
+                log("warn", f"run_repair claude falló (no crítico): {exc}")
+
+        # R1.1 — si el stall watchdog disparó, marcar failed/stalled y salir.
+        if _stall_fired[0]:
+            stall_meta = {
+                "detected_at": datetime.utcnow().isoformat(),
+                "last_event_at": _last_event_wall[0].isoformat(),
+            }
+            metadata["stall"] = stall_meta
+            _mark_terminal(
+                execution_id,
+                status="failed",
+                error="stalled: stream sin eventos",
+                metadata=metadata,
+            )
+            log("error", "run terminado por watchdog de inactividad (stall)")
+            ticket_status.on_execution_end(
+                ticket_id=ticket_id,
+                execution_id=execution_id,
+                final_status="error",
+                agent_type=agent_type,
+                error="stalled",
+            )
+            _notify_outcome(
+                execution_id=execution_id,
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                status="error",
+            )
+        elif return_code == 0:
             # F1.1 — Paridad de calidad con el path copilot: contract validator
             # + confidence ANTES de marcar terminal. Con el gate habilitado,
             # errores duros de contrato degradan a needs_review (estado ya
@@ -883,6 +1167,21 @@ def _run_in_background(
             )
             metadata["confidence"] = conf.to_dict()
             metadata["contract_score"] = cv_result.score
+            # Plan 38 C1 — Trazabilidad: agent_type, agent_name, produced_files
+            if config.STACKY_EXECUTION_TRACE_ENABLED:
+                try:
+                    from agent_runner import _build_trace_metadata, _collect_produced_files
+                    _trace = _build_trace_metadata(
+                        prompt_blocks=raw_blocks or [],
+                        agent_type=agent_type or "",
+                        agent_name=getattr(selected_agent, "name", ""),
+                        prompt_text_enabled=config.STACKY_TRACE_PROMPT_TEXT_ENABLED,
+                    )
+                    for k, v in _trace.items():
+                        metadata.setdefault(k, v)
+                    metadata.setdefault("produced_files", _collect_produced_files(None))
+                except Exception:
+                    pass
             _mark_terminal(
                 execution_id,
                 status=final_status,
@@ -890,6 +1189,7 @@ def _run_in_background(
                 metadata=metadata,
                 contract_result=cv_result.to_dict(),
             )
+            final_status = _read_status(execution_id, fallback=final_status)
             _safe_write_manifest(
                 run_dir,
                 run_id=execution_id,
@@ -923,6 +1223,12 @@ def _run_in_background(
                 final_status=final_status,
                 agent_type=agent_type,
             )
+            _notify_outcome(
+                execution_id=execution_id,
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                status=final_status,
+            )
             stacky_logger.agent_event(
                 "agent_completed",
                 execution_id=execution_id,
@@ -943,7 +1249,13 @@ def _run_in_background(
                 tags=["agent", RUNTIME],
             )
         else:
-            error = f"claude code cli exited with code {return_code}"
+            # Plan 37 (F2.2) — el motivo real del exit!=0 vive en stderr: lo
+            # persistimos en error_message (→ manifest + DB), en el evento y en
+            # metadata para que el fallo se VEA y no parezca "usó Copilot".
+            stderr_excerpt = _stderr_excerpt(stderr_tail)
+            error = _format_cli_error(return_code, stderr_excerpt)
+            if stderr_excerpt:
+                metadata["stderr_tail"] = stderr_excerpt
             _mark_terminal(
                 execution_id,
                 status="error",
@@ -965,7 +1277,12 @@ def _run_in_background(
                 run_dir,
                 execution_id=execution_id,
                 event_type="error",
-                payload={"exit_code": return_code, "duration_ms": duration_ms, "error": error},
+                payload={
+                    "exit_code": return_code,
+                    "duration_ms": duration_ms,
+                    "error": error,
+                    "stderr_tail": stderr_excerpt,
+                },
             )
             log("error", error)
             ticket_status.on_execution_end(
@@ -974,6 +1291,12 @@ def _run_in_background(
                 final_status="error",
                 agent_type=agent_type,
                 error=error,
+            )
+            _notify_outcome(
+                execution_id=execution_id,
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                status="error",
             )
             stacky_logger.agent_event(
                 "agent_failed",
@@ -1025,6 +1348,12 @@ def _run_in_background(
                     agent_type=agent_type,
                     error=str(exc),
                 )
+                _notify_outcome(
+                    execution_id=execution_id,
+                    ticket_id=ticket_id,
+                    agent_type=agent_type,
+                    status="error",
+                )
         except Exception:
             logger.exception("could not mark ticket status after claude code cli failure")
     finally:
@@ -1036,6 +1365,12 @@ def _run_in_background(
                 claude_cli_hooks.cleanup_run_settings(run_dir)
             except Exception:  # noqa: BLE001
                 logger.debug("[exec=%s] hooks cleanup failed", execution_id, exc_info=True)
+        # V0.3 — liberar el slot de concurrencia adquirido en el launch.
+        try:
+            from services import run_slots
+            run_slots.release()
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] run_slots.release falló", execution_id, exc_info=True)
         log_streamer.close(execution_id)
 
 
@@ -1074,6 +1409,25 @@ def _check_cli_egress(
 # Construcción del comando
 # ---------------------------------------------------------------------------
 
+def _map_effort(complexity: str | None) -> str | None:
+    """Q0.2 — Mapa determinístico S/M/L/XL → low/medium/high.
+
+    Respeta STACKY_EFFORT_FLOOR como piso. Devuelve None si el flag está OFF
+    para que `_build_command` caiga al default de config (byte-idéntico).
+    """
+    if not getattr(config, "STACKY_ADAPTIVE_EFFORT_ENABLED", False):
+        return None
+    if not complexity:
+        return None
+    _MAP = {"S": "low", "M": "medium", "L": "high", "XL": "high"}
+    mapped = _MAP.get(complexity, "medium")
+    floor = (getattr(config, "STACKY_EFFORT_FLOOR", "medium") or "medium").strip().lower()
+    _ORDER = {"low": 0, "medium": 1, "high": 2}
+    if _ORDER.get(mapped, 1) < _ORDER.get(floor, 1):
+        mapped = floor
+    return mapped
+
+
 def _build_command(
     *,
     model_override: str | None,
@@ -1081,6 +1435,7 @@ def _build_command(
     settings_file: Path | None = None,
     mcp_config_file: Path | None = None,
     resume_session_id: str | None = None,
+    effort_override: str | None = None,
 ) -> list[str]:
     """Construye el comando CLI para Claude Code en modo interactivo (streaming).
 
@@ -1141,6 +1496,13 @@ def _build_command(
 
     if model:
         cmd.extend(["--model", model])
+
+    # Reasoning effort (`--effort low|medium|high`, CLI >= 2.x).
+    # effort_override gana sobre config (Q0.2 — adaptativo). Valores inválidos
+    # no se pasan para no romper el spawn.
+    effort = (effort_override or getattr(config, "CLAUDE_CODE_CLI_EFFORT", "") or "").strip().lower()
+    if effort in ("low", "medium", "high"):
+        cmd.extend(["--effort", effort])
 
     return cmd
 
@@ -1500,8 +1862,14 @@ def _read_stream(
         if not line:
             continue
         message, level, extracted_text, event = _parse_claude_code_line(line, default_level)
-        _push(execution_id, level, message, group=group)
-        tail.append(message)
+        # Render detallado (thinking / tool_use / tool_result) para eventos
+        # assistant/user; el resto usa el mensaje plano del parser.
+        detail_lines = _event_detail_lines(event)
+        if detail_lines is None:
+            detail_lines = [(message, level)] if message else []
+        for detail_message, detail_level in detail_lines:
+            _push(execution_id, detail_level, detail_message, group=group)
+            tail.append(detail_message)
         if len(tail) > 200:
             del tail[:50]
         # Acumular texto de output para extracción final
@@ -1512,6 +1880,111 @@ def _read_stream(
                 on_event(event)
             except Exception:  # noqa: BLE001 — el callback nunca corta el stream
                 logger.exception("[exec=%s] on_event callback failed", execution_id)
+
+
+# Tope del echo del prompt inicial en la consola in-page. El prompt completo
+# queda siempre en prompt.md del run_dir (metadata.prompt_file).
+_PROMPT_ECHO_MAX_CHARS = 6000
+
+
+def _prompt_echo_message(prompt: str, *, pii_masked: bool = False) -> str:
+    """Arma el mensaje de consola con el input exacto enviado a la CLI.
+
+    Permite al operador ver/debuggear el prompt real sin abrir el prompt.md
+    del run_dir. Si hubo masking de PII, lo indica: los placeholders [PII_n]
+    son lo que la CLI realmente recibe. Truncado para no inundar la consola.
+    """
+    body = prompt
+    if len(prompt) > _PROMPT_ECHO_MAX_CHARS:
+        body = (
+            prompt[:_PROMPT_ECHO_MAX_CHARS]
+            + f"\n… [truncado: {len(prompt)} chars en total — completo en prompt.md del run]"
+        )
+    suffix = " (PII enmascarada)" if pii_masked else ""
+    return f"input inicial → claude{suffix}:\n{body}"
+
+
+def _tool_result_excerpt(content: Any, max_chars: int = 400) -> str:
+    """Resume el contenido de un tool_result a una línea legible."""
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            block_text = str(block.get("text") or "")
+            if block_text:
+                parts.append(block_text)
+            elif block.get("type"):
+                # Bloques no-textuales (image, document, …): dejar constancia.
+                parts.append(f"[bloque {block.get('type')}]")
+        text = " ".join(parts)
+    elif content is None:
+        text = ""
+    elif isinstance(content, dict):
+        text = json.dumps(content, ensure_ascii=False)
+    else:
+        text = str(content)
+    text = " ".join(text.split())
+    return text[:max_chars] if text else "(sin contenido)"
+
+
+def _event_detail_lines(event: dict | None) -> list[tuple[str, str]] | None:
+    """Render debug-friendly de eventos assistant/user del stream-json.
+
+    Devuelve [(message, level), ...] respetando el orden real de los bloques
+    de contenido (thinking → texto → tool_use / tool_result), para que la
+    consola in-page muestre cómo razona y qué herramientas usa la CLI.
+    Devuelve None si el evento no tiene render especial (cae al mensaje plano
+    de _parse_claude_code_line).
+    """
+    if not isinstance(event, dict):
+        return None
+    event_type = event.get("type")
+    if event_type not in ("assistant", "user"):
+        return None
+    message_obj = event.get("message")
+    if not isinstance(message_obj, dict):
+        return None
+    content = message_obj.get("content")
+    if isinstance(content, str):
+        # user events con content plano (p. ej. replay de --resume).
+        text = content.strip()
+        if not text:
+            return []
+        label = "assistant" if event_type == "assistant" else "user"
+        return [(f"{label}: {text[:3000]}", "info")]
+    if not isinstance(content, list):
+        return None
+    text_label = "assistant" if event_type == "assistant" else "user"
+    lines: list[tuple[str, str]] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type")
+        if item_type == "thinking":
+            text = str(item.get("thinking") or item.get("text") or "").strip()
+            if text:
+                lines.append((f"thinking: {text[:3000]}", "debug"))
+        elif item_type == "text":
+            text = str(item.get("text") or "").strip()
+            if text:
+                lines.append((f"{text_label}: {text[:3000]}", "info"))
+        elif item_type == "tool_use":
+            tool_name = item.get("name") or "tool"
+            summary = json.dumps(item.get("input") or {}, ensure_ascii=False)[:600]
+            lines.append((f"tool_use/{tool_name}: {summary}", "info"))
+        elif item_type == "tool_result":
+            is_err = bool(item.get("is_error"))
+            excerpt = _tool_result_excerpt(item.get("content"))
+            lines.append(
+                (
+                    f"tool_result({'error' if is_err else 'ok'}): {excerpt}",
+                    "warn" if is_err else "info",
+                )
+            )
+    return lines
 
 
 def _capture_result_telemetry(telemetry: dict, event: dict) -> None:
@@ -1756,6 +2229,31 @@ def _run_pre_run_checks(
     return True
 
 
+def reap(execution_id: int, grace_seconds: int = 10) -> bool:
+    """R0.1 — Termina el subproceso registrado para execution_id (claude_code_cli).
+
+    Busca el Popen exacto registrado bajo _PROCESSES_LOCK. Hace terminate()
+    → wait(grace) → kill() best-effort. Solo actua sobre el pid registrado.
+
+    Retorna True si el proceso fue reaped.
+    Retorna False si no estaba registrado o ya habia terminado.
+    """
+    with _PROCESSES_LOCK:
+        proc = _PROCESSES.get(execution_id)
+    if proc is None:
+        return False
+    try:
+        proc.terminate()
+        try:
+            proc.wait(timeout=grace_seconds)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _mark_terminal(
     execution_id: int,
     *,
@@ -1765,6 +2263,7 @@ def _mark_terminal(
     metadata: dict | None = None,
     contract_result: dict | None = None,
 ) -> None:
+    emit_failure_feedback = False
     with session_scope() as session:
         row = session.get(AgentExecution, execution_id)
         if row is None:
@@ -1777,10 +2276,61 @@ def _mark_terminal(
         current_md = row.metadata_dict
         current_md.update(metadata or {})
         current_md["runtime"] = RUNTIME
+        # V0.4 — taxonomía de fallos: clasifica runs terminados en error/needs_review.
+        if status in ("error", "needs_review"):
+            try:
+                from harness.failure import classify
+                kind = classify(
+                    return_code=current_md.get("return_code"),
+                    error_message=error,
+                    metadata={**current_md, "status": status,
+                              "contract_result": contract_result or current_md.get("contract_result")},
+                )
+                if kind is not None:
+                    current_md["failure_kind"] = kind
+            except Exception:  # noqa: BLE001
+                logger.debug("[exec=%s] failure classify falló", execution_id, exc_info=True)
+            emit_failure_feedback = True
         row.metadata_dict = current_md
         # F1.1 — paridad con el path copilot (agent_runner.py:720)
         if contract_result is not None:
             row.contract_result = contract_result
+
+    # R0.1/R0.2 — flush incremental y reap DESPUES de marcar estado en DB.
+    if config.STACKY_RUNNER_REAP_ON_CLOSE_ENABLED:
+        if config.STACKY_LOG_FLUSH_INCREMENTAL_ENABLED:
+            try:
+                log_streamer.flush(execution_id)
+            except Exception:  # noqa: BLE001
+                logger.debug("[exec=%s] flush incremental fallo (no critico)", execution_id)
+        reap(execution_id)
+
+    if status == "completed":
+        try:
+            from services import self_review
+
+            outcome = self_review.apply_to_execution(execution_id=execution_id)
+            status = str(outcome.get("status") or status)
+            if status in ("error", "needs_review"):
+                emit_failure_feedback = True
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] self_review apply falló (fail-open)", execution_id, exc_info=True)
+
+    if emit_failure_feedback:
+        try:
+            from services import ado_feedback
+
+            ado_feedback.comment_run_outcome(execution_id)
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] ado_feedback comment falló (no crítico)", execution_id, exc_info=True)
+
+
+def _read_status(execution_id: int, *, fallback: str) -> str:
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            return fallback
+        return row.status or fallback
 
 
 def _safe_write_manifest(

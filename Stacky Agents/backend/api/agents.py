@@ -141,6 +141,26 @@ def stacky_import_agent():
     if not source_path:
         abort(400, "source_path es requerido")
     src = _Path(source_path).expanduser()
+
+    # V2.3 — gate de import endurecible: off | warn (default) | block.
+    # En modo block hacemos backup del canonical previo (si existía) para poder
+    # revertir si los goldens fallan → "el archivo NO se pisa" (criterio del plan).
+    import os as _os
+    gate_mode = (_os.getenv("STACKY_EVAL_GATE_MODE", "warn") or "warn").strip().lower()
+    if gate_mode not in ("off", "warn", "block"):
+        gate_mode = "warn"
+
+    # Backup del canonical previo (solo modo block): para revertir si falla el gate.
+    _dest = stacky_agents_svc.stacky_agents_dir() / src.name
+    _prev_body: str | None = None
+    _prev_existed = False
+    if gate_mode == "block" and _dest.exists():
+        _prev_existed = True
+        try:
+            _prev_body = _dest.read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            _prev_body = None
+
     try:
         entry = stacky_agents_svc.import_agent_from_path(src, overwrite=overwrite)
     except FileNotFoundError:
@@ -150,14 +170,55 @@ def stacky_import_agent():
     except ValueError as exc:
         abort(400, str(exc))
 
-    # H6.3 — gate suave: dispara evals en thread, no bloquea el guardado
-    evals_warning: str | None = None
+    # V1.1 — versionado: registra el cuerpo importado (idempotente por sha).
     try:
-        from evals.eval_gate import run_evals_for_agent_type_async
-        agent_type = _infer_agent_type_from_filename(entry.filename)
-        run_evals_for_agent_type_async(agent_type)
+        from services import agent_prompt_registry
+        body = _Path(entry.path).read_text(encoding="utf-8")
+        agent_prompt_registry.record_version(
+            entry.filename, body, source="import_endpoint"
+        )
     except Exception:
-        logger.debug("eval_gate: no se pudo disparar gate suave (no crítico)", exc_info=True)
+        logger.debug("V1.1: no se pudo registrar versión del prompt (no crítico)", exc_info=True)
+
+    # V2.3 — gate de evals con modo configurable (endurece el gate suave H6.3):
+    #   off   → no corre el gate.
+    #   warn  → corre el gate SINCRÓNICO y devuelve el warning (no bloquea).
+    #   block → corre el gate; si algún golden falla, revierte el archivo y 409.
+    evals_warning: str | None = None
+    agent_type = _infer_agent_type_from_filename(entry.filename)
+
+    if gate_mode == "off":
+        pass
+    elif gate_mode == "warn":
+        # Async como H6.3 (no bloquea); además corremos sync para poblar la
+        # respuesta cuando el caller quiere el detalle inmediato.
+        try:
+            from evals.eval_gate import run_evals_for_agent_type
+            evals_warning = run_evals_for_agent_type(agent_type)
+        except Exception:
+            logger.debug("eval_gate(warn): no se pudo correr (no crítico)", exc_info=True)
+    elif gate_mode == "block":
+        try:
+            from evals.eval_gate import run_evals_for_agent_type
+            evals_warning = run_evals_for_agent_type(agent_type)
+        except Exception:
+            logger.debug("eval_gate(block): error corriendo gate (no crítico)", exc_info=True)
+            evals_warning = None
+        if evals_warning:
+            # Revertir: el archivo NO se pisa cuando el gate bloquea.
+            try:
+                if _prev_existed and _prev_body is not None:
+                    _dest.write_text(_prev_body, encoding="utf-8")
+                elif not _prev_existed and _dest.exists():
+                    _dest.unlink()
+            except Exception:  # noqa: BLE001
+                logger.warning("eval_gate(block): no se pudo revertir %s", _dest, exc_info=True)
+            return jsonify({
+                "ok": False,
+                "error": "eval_gate_blocked",
+                "agent_type": agent_type,
+                "detail": evals_warning,
+            }), 409
 
     return jsonify({"ok": True, "agent": entry.to_manifest_dict(), "evals_warning": evals_warning})
 
@@ -219,6 +280,59 @@ def vscode_agent_history(filename: str):
         return jsonify(result)
 
 
+def _validate_agent_filename(filename: str) -> str:
+    safe = (filename or "").strip()
+    if not safe or not safe.lower().endswith(".agent.md") or "/" in safe or "\\" in safe:
+        abort(400, "filename inválido (esperado: '<nombre>.agent.md')")
+    return safe
+
+
+@bp.get("/<path:filename>/versions")
+def agent_prompt_versions(filename: str):
+    """V1.1 — Lista las versiones históricas del prompt de un agente."""
+    from services import agent_prompt_registry
+    safe = _validate_agent_filename(filename)
+    return jsonify({
+        "filename": safe,
+        "versions": agent_prompt_registry.list_versions(safe),
+    })
+
+
+@bp.get("/<path:filename>/versions/diff")
+def agent_prompt_version_diff(filename: str):
+    """V1.1 — Unified diff entre dos versiones (?from=<id>&to=<id>)."""
+    from services import agent_prompt_registry
+    from flask import make_response, Response
+    _validate_agent_filename(filename)
+    from_id = request.args.get("from", type=int)
+    to_id = request.args.get("to", type=int)
+    if from_id is None or to_id is None:
+        abort(400, "se requieren los query params 'from' y 'to' (ids de versión)")
+    try:
+        diff = agent_prompt_registry.diff_versions(from_id, to_id)
+    except ValueError as exc:
+        abort(404, str(exc))
+    return Response(diff, mimetype="text/plain")
+
+
+@bp.get("/advise")
+def advise_runtime():
+    """V1.2 — Recomienda runtime+modelo para un agent_type (sin ejecutar).
+
+    Query: agent_type (req), ticket_id (opt), project (opt).
+    Determinista, sin LLM. El frontend pre-carga el formulario; el operador
+    siempre puede cambiar.
+    """
+    from services import run_advisor
+
+    agent_type = (request.args.get("agent_type") or "").strip()
+    if not agent_type:
+        abort(400, "agent_type es requerido")
+    project = (request.args.get("project") or "").strip() or None
+    adv = run_advisor.advise(agent_type=agent_type, project=project)
+    return jsonify(adv.to_dict())
+
+
 _VALID_RUNTIMES = {"github_copilot", "codex_cli", "claude_code_cli"}
 
 
@@ -231,17 +345,26 @@ def run():
     ticket_id = payload.get("ticket_id")
     context_blocks = payload.get("context_blocks") or []
     chain_from = payload.get("chain_from") or []
-    # Runtime seleccionado por el operador — default github_copilot para retrocompatibilidad
+    # Runtime seleccionado por el operador.
+    # Plan 36: registrar si el runtime vino ausente/vacío para que el frontend lo sepa
+    # y pueda advertir al operador. NUNCA se cambia el runtime en silencio.
     runtime_raw: str | None = payload.get("runtime")
-    runtime: str = runtime_raw or "github_copilot"
+    runtime_defaulted: bool = runtime_raw is None or str(runtime_raw).strip() == ""
+    runtime: str = "github_copilot" if runtime_defaulted else str(runtime_raw)
+    if runtime_defaulted:
+        logger.warning(
+            "runtime ausente en payload de /run; aplicando default EXPLÍCITO '%s' "
+            "(ticket=%s, agent=%s). El frontend SIEMPRE debería enviar runtime.",
+            runtime, payload.get("ticket_id"), payload.get("agent_type"),
+        )
     project_name = (payload.get("project") or "").strip() or None
 
     # Validación de runtime ANTES de cualquier procesamiento.
     # Reglas:
-    #   - runtime ausente o null → github_copilot (retro-compat)
+    #   - runtime ausente o null → github_copilot (retro-compat, marcado con runtime_defaulted=True)
     #   - runtime en _VALID_RUNTIMES → continuar
     #   - cualquier otro valor → 400 explícito, no fallback silencioso
-    if runtime_raw is not None and runtime not in _VALID_RUNTIMES:
+    if not runtime_defaulted and runtime not in _VALID_RUNTIMES:
         logger.warning(
             "runtime desconocido '%s' rechazado (válidos: %s)",
             runtime_raw,
@@ -316,6 +439,38 @@ def run():
     except Exception:  # noqa: BLE001
         logger.warning("auto_assign_on_run falló (no bloquea el run)", exc_info=True)
 
+    # V0.2 — Guard anti-duplicados: no relanzar un run activo del mismo
+    # ticket+agente salvo force=true. Estado terminal NO bloquea.
+    if payload.get("force") is not True:
+        from db import session_scope
+        from services.run_guard import find_active_run
+
+        with session_scope() as session:
+            active = find_active_run(session, int(ticket_id), agent_type)
+            active_id = active.id if active else None
+        if active_id is not None:
+            return jsonify({
+                "ok": False,
+                "error": "duplicate_run",
+                "active_execution_id": active_id,
+                "hint": "reintentar con force=true",
+            }), 409
+
+    # V0.3 — Cap de concurrencia: solo aplica a runtimes con subproceso CLI.
+    # github_copilot no spawnea proceso → no consume slot.
+    _slot_held = False
+    if runtime in ("claude_code_cli", "codex_cli"):
+        from services import run_slots
+
+        if not run_slots.try_acquire():
+            return jsonify({
+                "ok": False,
+                "error": "max_concurrent_runs",
+                "active": run_slots.active_count(),
+                "limit": int(getattr(config, "STACKY_MAX_CONCURRENT_RUNS", 0) or 0),
+            }), 429
+        _slot_held = True
+
     try:
         execution_id = agent_runner.run_agent(
             agent_type=agent_type,
@@ -335,9 +490,134 @@ def run():
             project_name=project_name,
         )
     except agent_runner.UnknownAgentError:
+        # V0.3 — liberar el slot si el spawn ni siquiera arrancó el runner.
+        if _slot_held:
+            from services import run_slots
+            run_slots.release()
         abort(400, f"unknown agent_type: {agent_type}")
+    except Exception:
+        if _slot_held:
+            from services import run_slots
+            run_slots.release()
+        raise
 
-    return jsonify({"execution_id": execution_id, "status": "preparing", "runtime": runtime}), 202
+    resp_body = {
+        "execution_id": execution_id,
+        "status": "preparing",
+        "runtime": runtime,
+        "runtime_defaulted": runtime_defaulted,  # Plan 36: True si el cliente no envió runtime
+    }
+
+    # V2.4 — Cache/dedup: si hay un run completado idéntico (mismo prompt_sha +
+    # model_override + contexto) dentro de la ventana, ofrecerlo como candidato.
+    # NUNCA auto-skip: el run nuevo ya se lanzó; esto es solo una sugerencia para
+    # que el frontend ofrezca "reusar #N". Default OFF (STACKY_RUN_CACHE_DAYS=0).
+    try:
+        cache_days = int(getattr(config, "STACKY_RUN_CACHE_DAYS", 0) or 0)
+        if cache_days > 0 and runtime in ("claude_code_cli", "codex_cli") and vscode_agent_filename:
+            from services import agent_prompt_registry, run_cache
+            from db import session_scope
+
+            versions = agent_prompt_registry.list_versions(vscode_agent_filename)
+            prompt_sha = versions[-1]["sha256"] if versions else None
+            fingerprint = run_cache.compute_fingerprint(
+                prompt_sha=prompt_sha,
+                model=payload.get("model_override"),
+                context_blocks=context_blocks,
+            )
+            if fingerprint:
+                with session_scope() as session:
+                    candidate = run_cache.find_cached_candidate(
+                        session=session,
+                        fingerprint=fingerprint,
+                        days=cache_days,
+                        exclude_execution_id=execution_id,
+                    )
+                if candidate is not None:
+                    resp_body["cached_candidate"] = candidate
+    except Exception:  # noqa: BLE001 — la sugerencia de cache jamás bloquea el launch
+        logger.debug("V2.4 cached_candidate lookup falló (no crítico)", exc_info=True)
+
+    return jsonify(resp_body), 202
+
+
+@bp.post("/run-brief")
+def run_brief():
+    """Plan 38 B2 — Lanza el BusinessAgent con un brief como contexto (sin ticket real).
+
+    Crea o reutiliza un "Brief Pool Ticket" local (ado_id=-1, por proyecto) para
+    anclar la ejecución y delega a run_agent con agent_type="business".
+    El vscode_agent_filename se auto-resuelve a "BusinessAgent.agent.md" para
+    runtimes CLI si no se envía explícitamente.
+    """
+    from db import session_scope
+    from models import Ticket
+
+    payload = request.get_json(force=True, silent=True) or {}
+    brief = (payload.get("brief") or "").strip()
+    if not brief:
+        abort(400, "brief is required")
+
+    runtime_raw = payload.get("runtime") or "github_copilot"
+    project_name = (payload.get("project") or "").strip() or None
+    vscode_agent_filename: str | None = payload.get("vscode_agent_filename") or None
+
+    # Auto-resolve el .agent.md del BusinessAgent para runtimes CLI.
+    if runtime_raw in ("codex_cli", "claude_code_cli") and not vscode_agent_filename:
+        vscode_agent_filename = "BusinessAgent.agent.md"
+
+    # Obtener o crear el Brief Pool Ticket para este proyecto (ado_id=-1).
+    pool_project = project_name or "default"
+    with session_scope() as session:
+        pool_ticket = (
+            session.query(Ticket)
+            .filter_by(ado_id=-1, project=pool_project)
+            .first()
+        )
+        if pool_ticket is None:
+            pool_ticket = Ticket(
+                ado_id=-1,
+                tracker_item_id="-1",
+                project=pool_project,
+                title="[Stacky] Brief Pool",
+                work_item_type="Task",
+                ado_state="Active",
+            )
+            session.add(pool_ticket)
+            session.flush()
+        pool_ticket_id = pool_ticket.id
+
+    context_blocks = [
+        {
+            "id": "brief",
+            "kind": "raw-conversation",
+            "title": "Brief del operador",
+            "content": brief,
+            "source": {"type": "brief_modal"},
+        }
+    ]
+
+    user = current_user()
+    try:
+        execution_id = agent_runner.run_agent(
+            agent_type="business",
+            ticket_id=pool_ticket_id,
+            context_blocks=context_blocks,
+            user=user,
+            runtime=runtime_raw,
+            vscode_agent_filename=vscode_agent_filename,
+            project_name=project_name,
+            use_few_shot=False,
+            use_anti_patterns=False,
+        )
+    except agent_runner.UnknownAgentError:
+        abort(400, "agent_type 'business' no está registrado")
+
+    logger.info(
+        "run_brief: execution_id=%s runtime=%s project=%s",
+        execution_id, runtime_raw, project_name,
+    )
+    return jsonify({"execution_id": execution_id, "status": "running"}), 202
 
 
 @bp.post("/route")

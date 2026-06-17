@@ -34,6 +34,7 @@ class RunTelemetry:
     input_tokens: int | None = None
     output_tokens: int | None = None
     cache_read_tokens: int | None = None
+    cost_estimated: bool = False  # V0.5 — True si total_cost_usd se estimó por pricing
     raw: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -45,13 +46,30 @@ class RunTelemetry:
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "cache_read_tokens": self.cache_read_tokens,
+            "cost_estimated": self.cost_estimated,
         }
+
+
+def _maybe_estimate_cost(t: "RunTelemetry", model: str | None) -> None:
+    """V0.5 — si no hay costo reportado, estima desde tokens. Reportado siempre gana."""
+    if t.total_cost_usd is not None:
+        return
+    if t.input_tokens is None and t.output_tokens is None:
+        return
+    try:
+        from harness.pricing import estimate_cost
+        est = estimate_cost(model, t.input_tokens, t.output_tokens)
+    except Exception:  # noqa: BLE001
+        est = None
+    if est is not None:
+        t.total_cost_usd = est
+        t.cost_estimated = True
 
 
 def from_claude_stream(stream_telemetry: dict[str, Any]) -> RunTelemetry:
     """Construye RunTelemetry desde el dict de claude_code_cli_runner."""
     usage = stream_telemetry.get("usage") or {}
-    return RunTelemetry(
+    t = RunTelemetry(
         runtime="claude_code_cli",
         session_id=stream_telemetry.get("session_id"),
         num_turns=stream_telemetry.get("num_turns"),
@@ -61,6 +79,8 @@ def from_claude_stream(stream_telemetry: dict[str, Any]) -> RunTelemetry:
         cache_read_tokens=usage.get("cache_read_input_tokens"),
         raw=dict(stream_telemetry),
     )
+    _maybe_estimate_cost(t, stream_telemetry.get("model"))
+    return t
 
 
 def from_codex_event(event: dict[str, Any]) -> RunTelemetry:
@@ -84,7 +104,8 @@ def from_codex_event(event: dict[str, Any]) -> RunTelemetry:
     num_turns = event.get("num_turns") or event.get("turn_count")
     total_cost = event.get("total_cost_usd") or event.get("cost_usd")
 
-    return RunTelemetry(
+    model = event.get("model") or item.get("model") or usage.get("model")
+    t = RunTelemetry(
         runtime="codex_cli",
         session_id=session_id,
         num_turns=num_turns,
@@ -94,6 +115,8 @@ def from_codex_event(event: dict[str, Any]) -> RunTelemetry:
         cache_read_tokens=cache_read,
         raw=dict(event),
     )
+    _maybe_estimate_cost(t, model)
+    return t
 
 
 def persist(execution_id: int, t: RunTelemetry) -> None:

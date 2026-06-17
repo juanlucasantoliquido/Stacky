@@ -11,17 +11,22 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 
 from flask import Blueprint, jsonify, request
+
+from runtime_paths import backend_root
 
 logger = logging.getLogger(__name__)
 
 bp = Blueprint("harness_flags", __name__)
 
 # _ENV_PATH: permite monkeypatch en tests sin afectar global_config.
-# Apunta al mismo .env que global_config, pero es nuestra propia referencia.
-_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+# Apunta al MISMO .env que carga config.py al arrancar (backend_root()/.env).
+# En un deploy frozen eso es <dir_del_exe>/.env, NO _internal/.env. Antes esto
+# usaba Path(__file__).parent.parent, que en el .exe resolvía a _internal/.env:
+# el writer escribía ahí pero el loader nunca lo leía, así que los cambios de la
+# UI no sobrevivían al reinicio del deploy.
+_ENV_PATH = backend_root() / ".env"
 
 
 def _write_env(updates: dict[str, str]) -> None:
@@ -67,9 +72,44 @@ def _write_env(updates: dict[str, str]) -> None:
 def get_harness_flags():
     """Devuelve todos los flags del arnés con sus valores actuales."""
     from services.harness_flags import read_current
+    from services.harness_profiles import detect_profile
 
     flags = read_current()
-    return jsonify({"ok": True, "flags": flags})
+    return jsonify({
+        "ok": True,
+        "flags": flags,
+        "active_profile": detect_profile(),  # V0.1 — "off"|"safe"|"full"|None(custom)
+    })
+
+
+@bp.post("/harness-flags/profile")
+def post_harness_profile():
+    """V0.1 — Aplica un perfil de arnés (off|safe|full) en caliente.
+
+    Body: {"name": "full"}
+    200 → {"ok": true, "applied": {flag: valor}, "active_profile": "full"}
+    400 → perfil desconocido (con la lista de válidos)
+    """
+    from services.harness_profiles import apply_profile, detect_profile, PROFILES
+
+    body = request.get_json(force=True, silent=True) or {}
+    name = str(body.get("name") or "").strip().lower()
+
+    try:
+        applied = apply_profile(name)
+    except ValueError as exc:
+        return jsonify({
+            "ok": False,
+            "error": str(exc),
+            "valid_profiles": sorted(PROFILES),
+        }), 400
+
+    logger.info("perfil de arnés aplicado: %s", name)
+    return jsonify({
+        "ok": True,
+        "applied": applied,
+        "active_profile": detect_profile(),
+    })
 
 
 @bp.put("/harness-flags")

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { useAgentRun } from "../hooks/useAgentRun";
 import { useOpenChat } from "../hooks/useOpenChat";
+import { isCliRuntime } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
 import type { ContextBlock } from "../types";
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
@@ -32,9 +33,11 @@ export default function InputContextEditor() {
 
   const tokens = useMemo(() => estimateTokens(blocks), [blocks]);
 
-  // codex_cli requiere un agente VS Code seleccionado para poder pasar
-  // vscode_agent_filename al endpoint (validación backend: HTTP 400 si falta).
-  const codexNeedsAgent = agentRuntime === "codex_cli" && vsCodeAgent == null;
+  // Los runtimes CLI (codex_cli / claude_code_cli) requieren un agente VS Code
+  // seleccionado para poder pasar vscode_agent_filename al endpoint
+  // (validación backend: HTTP 400 si falta).
+  const cliRuntime = isCliRuntime(agentRuntime);
+  const cliNeedsAgent = cliRuntime && vsCodeAgent == null;
 
   const canRun =
     activeTicketId != null &&
@@ -43,7 +46,7 @@ export default function InputContextEditor() {
     tokens < TOKEN_LIMIT &&
     runningExecutionId == null &&
     !run.isPending &&
-    !codexNeedsAgent &&
+    !cliNeedsAgent &&
     (activeAgentType !== "custom" || vsCodeAgent != null);
 
   const canOpenChat =
@@ -121,7 +124,7 @@ export default function InputContextEditor() {
             onChange={setAgentRuntime}
             disabled={run.isPending || runningExecutionId != null}
           />
-          {vsCodeAgent && (
+          {vsCodeAgent && !cliRuntime && (
             <button
               className={styles.chatBtn}
               disabled={!canOpenChat}
@@ -133,13 +136,13 @@ export default function InputContextEditor() {
                 });
               }}
             >
-              {openChat.isPending ? "Abriendo…" : "↗ Abrir en Chat"}
+              {openChat.isPending ? "Abriendo…" : "↗ Abrir en Copilot Chat"}
             </button>
           )}
           <span
             title={
-              codexNeedsAgent
-                ? "Codex CLI requiere seleccionar un agente VS Code (.agent.md) antes de ejecutar"
+              cliNeedsAgent
+                ? "Este runtime CLI requiere seleccionar un agente VS Code (.agent.md) antes de ejecutar"
                 : undefined
             }
           >

@@ -15,6 +15,7 @@ from .flow_config import bp as flow_config_bp
 from .anti_patterns import bp as anti_patterns_bp
 from .decisions import bp as decisions_bp
 from .diag import bp as diag_bp
+from .evals import bp as evals_bp
 from .executions import bp as executions_bp
 from .extras import bp as extras_bp
 from .git import bp as git_bp
@@ -30,9 +31,11 @@ from .preferences import bp as preferences_bp
 from .projects import bp as projects_bp
 from .qa_browser import bp as qa_browser_bp
 from .qa_uat import bp as qa_uat_bp
+from .pipelines import bp as pipelines_bp
 from .similarity import bp as similarity_bp
 from .harness_flags import bp as harness_flags_bp
 from .metrics import bp as metrics_bp
+from .reports import bp as reports_bp
 from .tickets import bp as tickets_bp
 from .ui_sections import bp as ui_sections_bp
 from .webhooks import bp as webhooks_bp
@@ -42,6 +45,7 @@ api_bp.register_blueprint(ado_manager_bp)
 api_bp.register_blueprint(agent_roles_bp)
 api_bp.register_blueprint(agents_bp)
 api_bp.register_blueprint(chat_bp)
+api_bp.register_blueprint(evals_bp)
 api_bp.register_blueprint(executions_bp)
 api_bp.register_blueprint(tickets_bp)
 api_bp.register_blueprint(packs_bp)
@@ -62,8 +66,10 @@ api_bp.register_blueprint(preferences_bp)
 api_bp.register_blueprint(projects_bp)
 api_bp.register_blueprint(qa_browser_bp)
 api_bp.register_blueprint(qa_uat_bp)
+api_bp.register_blueprint(pipelines_bp)
 api_bp.register_blueprint(harness_flags_bp)
 api_bp.register_blueprint(metrics_bp)
+api_bp.register_blueprint(reports_bp)
 api_bp.register_blueprint(diag_bp)
 api_bp.register_blueprint(docs_bp)
 api_bp.register_blueprint(flow_config_bp)

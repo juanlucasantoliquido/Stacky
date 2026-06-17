@@ -26,6 +26,7 @@ class LogEvent:
     group: str | None = None
     indent: int = 0
     event_type: str | None = None
+    data: dict | None = None
 
     def to_dict(self) -> dict:
         payload = {
@@ -37,6 +38,8 @@ class LogEvent:
         }
         if self.event_type:
             payload["type"] = self.event_type
+        if self.data is not None:
+            payload["data"] = self.data
         return payload
 
 
@@ -46,6 +49,9 @@ class _Buffer:
     closed: bool = False
     listeners: list[queue.Queue] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    # R0.2 — índice del último evento ya persistido por flush() incremental.
+    # _persist() respeta este índice para no duplicar.
+    flushed_idx: int = 0
 
 
 _buffers: dict[int, _Buffer] = {}
@@ -64,6 +70,7 @@ def push(
     group: str | None = None,
     indent: int = 0,
     event_type: str | None = None,
+    data: dict | None = None,
 ) -> None:
     buf = _get(execution_id)
     if buf is None:
@@ -75,6 +82,7 @@ def push(
         group=group,
         indent=indent,
         event_type=event_type,
+        data=data,
     )
     with buf.lock:
         buf.events.append(event)
@@ -92,8 +100,9 @@ def logger_for(execution_id: int):
         group: str | None = None,
         indent: int = 0,
         event_type: str | None = None,
+        data: dict | None = None,
     ) -> None:
-        push(execution_id, level, message, group, indent, event_type)
+        push(execution_id, level, message, group, indent, event_type, data)
     return log
 
 
@@ -165,22 +174,65 @@ def _get(execution_id: int) -> _Buffer | None:
         return _buffers.get(execution_id)
 
 
+def flush(execution_id: int) -> int:
+    """R0.2 — Persiste de forma incremental los eventos no flusheados aún.
+
+    Idempotente: solo persiste eventos con índice > flushed_idx.
+    Retorna el número de nuevos eventos persistidos.
+    No-op si el flag R0.2 está OFF o si el buffer ya está cerrado.
+    """
+    from config import config
+    if not config.STACKY_LOG_FLUSH_INCREMENTAL_ENABLED:
+        return 0
+    buf = _get(execution_id)
+    if buf is None:
+        return 0
+    with buf.lock:
+        if buf.closed:
+            return 0
+        to_persist = list(buf.events[buf.flushed_idx:])
+        new_idx = len(buf.events)
+    if not to_persist:
+        return 0
+    try:
+        with session_scope() as session:
+            for ev in to_persist:
+                session.add(
+                    ExecutionLog(
+                        execution_id=execution_id,
+                        timestamp=ev.timestamp,
+                        level=ev.level,
+                        message=ev.message,
+                        group_name=ev.group,
+                        indent=ev.indent,
+                    )
+                )
+        with buf.lock:
+            buf.flushed_idx = max(buf.flushed_idx, new_idx)
+        return len(to_persist)
+    except Exception:
+        return 0
+
+
 def _persist(execution_id: int, buf: _Buffer) -> None:
-    if not buf.events:
+    # R0.2 — solo persiste los eventos que aún no se flushearon incrementalmente.
+    remaining = buf.events[buf.flushed_idx:]
+    if not remaining and buf.flushed_idx == 0 and not buf.events:
         _drop(execution_id)
         return
-    with session_scope() as session:
-        for ev in buf.events:
-            session.add(
-                ExecutionLog(
-                    execution_id=execution_id,
-                    timestamp=ev.timestamp,
-                    level=ev.level,
-                    message=ev.message,
-                    group_name=ev.group,
-                    indent=ev.indent,
+    if remaining:
+        with session_scope() as session:
+            for ev in remaining:
+                session.add(
+                    ExecutionLog(
+                        execution_id=execution_id,
+                        timestamp=ev.timestamp,
+                        level=ev.level,
+                        message=ev.message,
+                        group_name=ev.group,
+                        indent=ev.indent,
+                    )
                 )
-            )
     _drop(execution_id)
 
 

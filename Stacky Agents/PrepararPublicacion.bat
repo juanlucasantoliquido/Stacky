@@ -2,7 +2,12 @@
 setlocal
 cd /d "%~dp0"
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deployment\Prepare-Publication.ps1" -NoPause %*
+set "PS_NOPAUSE=-NoPause"
+for %%A in (%*) do (
+    if /I "%%~A"=="-NoPause" set "PS_NOPAUSE="
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deployment\Prepare-Publication.ps1" %PS_NOPAUSE% %*
 set "EXITCODE=%ERRORLEVEL%"
 
 echo.

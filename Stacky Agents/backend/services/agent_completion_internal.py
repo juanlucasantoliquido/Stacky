@@ -33,6 +33,10 @@ logger = logging.getLogger("stacky.completion_internal")
 _TERMINAL_STATUSES = frozenset({"completed", "error", "cancelled"})
 
 
+def _utc_now_iso() -> str:
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
 @dataclass
 class CloseResult:
     """Resultado de un intento de cierre."""
@@ -147,6 +151,32 @@ def close_execution_with_publish(
             if completion_source:
                 exec_row.completion_source = completion_source
 
+    # R0.1/R0.2 — flush incremental y reap DESPUES de marcar estado en DB.
+    if not already_terminal:
+        try:
+            from config import config as _cfg
+            if _cfg.STACKY_RUNNER_REAP_ON_CLOSE_ENABLED:
+                if _cfg.STACKY_LOG_FLUSH_INCREMENTAL_ENABLED:
+                    import log_streamer as _ls
+                    _ls.flush(execution_id)
+                from services.runner_reap import reap_by_db
+                reap_by_db(execution_id)
+        except Exception:  # noqa: BLE001
+            logger.debug("[exec=%s] reap_by_db fallo (no critico)", execution_id, exc_info=True)
+
+    # ── Paso 2: stacky_status + TicketStatusEvent (no-op si idempotente) ──────
+    # U1.2: self-review contra acceptance criteria (modo annotate/gate).
+    # Se ejecuta antes de publicar para poder degradar a needs_review en mode=gate.
+    if not already_terminal and final_status == "completed":
+        try:
+            from services import self_review
+
+            review_outcome = self_review.apply_to_execution(execution_id=execution_id)
+            if review_outcome.get("status") == "needs_review":
+                final_status = "needs_review"
+        except Exception:
+            logger.exception("[exec=%s] self_review.apply_to_execution falló (fail-open)", execution_id)
+
     # ── Paso 2: stacky_status + TicketStatusEvent (no-op si idempotente) ──────
     if not already_terminal and ticket_id is not None:
         try:
@@ -176,6 +206,23 @@ def close_execution_with_publish(
     # El dedup SHA-256 en agent_html_publish evita doble-publish.
     publish_result: dict
 
+    publish_mode = _resolve_publish_mode(project_name=stacky_project_name)
+    if final_status == "completed" and publish_mode == "review":
+        _set_publish_hold(
+            execution_id=execution_id,
+            html_output_path=html_output_path,
+            triggered_by=triggered_by,
+        )
+        return CloseResult(
+            ok=True,
+            execution_id=execution_id,
+            ticket_id=ticket_id,
+            final_status=final_status,
+            already_terminal=already_terminal,
+            publish={"skipped": True, "reason": "review_mode_hold"},
+            ado_state_change={"skipped": True, "reason": "review_mode_hold"},
+        )
+
     if final_status != "completed":
         publish_result = {"skipped": True, "reason": "status_not_completed"}
     elif not html_output_path:
@@ -199,11 +246,12 @@ def close_execution_with_publish(
     # exitosos (completed); el gateo por publish.ok del Paso 4 sigue vigente.
     effective_target = target_ado_state
     target_source = "caller" if target_ado_state else None
-    if effective_target is None and final_status == "completed":
+    if effective_target is None and final_status in {"completed", "error", "needs_review"}:
         effective_target = _resolve_transition_state_from_config(
             project_name=stacky_project_name,
             agent_type=agent_type,
             agent_filename=agent_filename,
+            final_status=final_status,
             execution_id=execution_id,
         )
         if effective_target:
@@ -216,7 +264,7 @@ def close_execution_with_publish(
     state_result: dict
     if not effective_target:
         state_result = {"skipped": True, "reason": "not_requested"}
-    elif not publish_result.get("ok"):
+    elif final_status == "completed" and not publish_result.get("ok"):
         state_result = {
             "skipped": True,
             "reason": "publish_not_ok",
@@ -230,6 +278,14 @@ def close_execution_with_publish(
         )
         if isinstance(state_result, dict):
             state_result.setdefault("source", target_source)
+
+    if final_status in {"error", "needs_review"}:
+        try:
+            from services import ado_feedback
+
+            ado_feedback.comment_run_outcome(execution_id)
+        except Exception:
+            logger.exception("[exec=%s] ado_feedback falló en close_execution_with_publish", execution_id)
 
     return CloseResult(
         ok=True,
@@ -267,6 +323,7 @@ def _resolve_transition_state_from_config(
     project_name: str | None,
     agent_type: str | None,
     agent_filename: str | None,
+    final_status: str,
     execution_id: int,
 ) -> str | None:
     """B2 — Resuelve el `transition_state` configurado por empleado para este cierre.
@@ -292,15 +349,17 @@ def _resolve_transition_state_from_config(
         logger.debug("[exec=%s] project_manager no disponible para transition_state", execution_id)
         return None
 
+    field_name = "transition_state" if final_status == "completed" else "on_failure_state"
+
     # (1) por filename persistido en la execution
     if agent_filename:
         try:
             cfg = get_agent_workflow_config(project_name, agent_filename) or {}
-            ts = (cfg.get("transition_state") or "").strip()
+            ts = (cfg.get(field_name) or "").strip()
             if ts:
                 logger.info(
-                    "[exec=%s] transition_state desde config (filename=%s) → %s",
-                    execution_id, agent_filename, ts,
+                    "[exec=%s] %s desde config (filename=%s) → %s",
+                    execution_id, field_name, agent_filename, ts,
                 )
                 return ts
         except Exception:  # noqa: BLE001
@@ -314,11 +373,11 @@ def _resolve_transition_state_from_config(
             for fname, wf in configs.items():
                 if not isinstance(wf, dict):
                     continue
-                ts = (wf.get("transition_state") or "").strip()
+                ts = (wf.get(field_name) or "").strip()
                 if ts and _infer_agent_type_from_filename(fname) == agent_type:
                     logger.info(
-                        "[exec=%s] transition_state desde config (tipo=%s, filename=%s) → %s",
-                        execution_id, agent_type, fname, ts,
+                        "[exec=%s] %s desde config (tipo=%s, filename=%s) → %s",
+                        execution_id, field_name, agent_type, fname, ts,
                     )
                     return ts
         except Exception:  # noqa: BLE001
@@ -336,6 +395,108 @@ def _should_auto_publish(override: bool | None) -> bool:
     if override is not None:
         return override
     return os.getenv("STACKY_LEGACY_AUTO_PUBLISH", "on").lower().strip() != "off"
+
+
+def _resolve_publish_mode(*, project_name: str | None) -> str:
+    """Resuelve el modo de publicación por proyecto: auto|review.
+
+    Default retrocompatible: auto.
+    """
+    if not project_name:
+        return "auto"
+    try:
+        from project_manager import get_project_config
+
+        cfg = get_project_config(project_name) or {}
+        mode = str(cfg.get("publish_mode") or "auto").strip().lower()
+        if mode in {"auto", "review"}:
+            return mode
+    except Exception:
+        logger.debug("publish_mode lookup falló project=%s", project_name, exc_info=True)
+    return "auto"
+
+
+def _set_publish_hold(*, execution_id: int, html_output_path: str | None, triggered_by: str) -> None:
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            return
+        md = dict(row.metadata_dict or {})
+        md["publish_hold"] = {
+            "reason": "review_mode",
+            "artifacts": [html_output_path] if html_output_path else [],
+            "created_at": _utc_now_iso(),
+            "triggered_by": triggered_by,
+        }
+        row.metadata_dict = md
+
+
+def publish_execution_from_review(*, execution_id: int, triggered_by: str = "operator_review") -> dict:
+    """Libera un publish_hold y publica a ADO por el path real de publisher.
+
+    Retorna dict estable para API; no lanza excepciones fatales.
+    """
+    ticket_id: int | None = None
+    agent_type: str | None = None
+    agent_filename: str | None = None
+    project_name: str | None = None
+    has_hold = False
+
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            return {"ok": False, "reason": "execution_not_found", "status": 404}
+        md = dict(row.metadata_dict or {})
+        hold = md.get("publish_hold") if isinstance(md.get("publish_hold"), dict) else None
+        has_hold = hold is not None and not hold.get("released_at")
+        if not has_hold:
+            return {"ok": False, "reason": "publish_hold_missing", "status": 409}
+
+        ticket_id = row.ticket_id
+        agent_type = row.agent_type
+        if row.status != "completed":
+            return {"ok": False, "reason": "status_not_completed", "status": 409}
+
+        ticket = session.get(Ticket, row.ticket_id) if row.ticket_id else None
+        project_name = getattr(ticket, "stacky_project_name", None) if ticket else None
+        _exec_meta = row.metadata_dict or {}
+        agent_filename = _exec_meta.get("agent_filename") or _exec_meta.get("vscode_agent_filename")
+
+    publish_result = _attempt_publish(execution_id=execution_id, triggered_by=triggered_by)
+    state_result: dict = {"skipped": True, "reason": "not_requested"}
+    if publish_result.get("ok"):
+        target_state = _resolve_transition_state_from_config(
+            project_name=project_name,
+            agent_type=agent_type,
+            agent_filename=agent_filename,
+            final_status="completed",
+            execution_id=execution_id,
+        )
+        if target_state:
+            state_result = _attempt_state_change(
+                ticket_id=ticket_id,
+                target_state=target_state,
+                execution_id=execution_id,
+            )
+
+    if publish_result.get("ok"):
+        with session_scope() as session:
+            row = session.get(AgentExecution, execution_id)
+            if row is not None:
+                md = dict(row.metadata_dict or {})
+                hold = md.get("publish_hold") if isinstance(md.get("publish_hold"), dict) else {}
+                hold["released_at"] = _utc_now_iso()
+                hold["released_by"] = triggered_by
+                md["publish_hold"] = hold
+                row.metadata_dict = md
+
+    return {
+        "ok": bool(publish_result.get("ok")),
+        "execution_id": execution_id,
+        "publish": publish_result,
+        "ado_state_change": state_result,
+        "status": 200 if publish_result.get("ok") else 500,
+    }
 
 
 def _attempt_state_change(
@@ -392,10 +553,59 @@ def _attempt_state_change(
         }
 
 
+def _r13_check_publish_guard(execution_id: int) -> bool | None:
+    """R1.3 — Comprueba si ya existe marker de intencion de publicacion.
+
+    Retorna True si se detecto un marker existente (idempotent_replay).
+    Retorna False si no existe marker.
+    Retorna None si el check fallo (fallback al comportamiento actual).
+    """
+    try:
+        from db import session_scope
+        from models import AgentExecution
+        with session_scope() as session:
+            row = session.get(AgentExecution, execution_id)
+            if row is None:
+                return None
+            md = row.metadata_dict or {}
+            intent = md.get("publish_intent")
+            if intent and intent.get("marker") == "pending":
+                # Marker existente: ya se habia intentado el POST.
+                return True
+        return False
+    except Exception:  # noqa: BLE001
+        return None  # fallback
+
+
+def _r13_write_publish_intent(execution_id: int) -> bool:
+    """R1.3 — Escribe marker de intencion antes del POST (best-effort).
+
+    Retorna True si el write fue exitoso.
+    """
+    try:
+        from db import session_scope
+        from models import AgentExecution
+        with session_scope() as session:
+            row = session.get(AgentExecution, execution_id)
+            if row is None:
+                return False
+            md = row.metadata_dict or {}
+            md["publish_intent"] = {
+                "marker": "pending",
+                "at": datetime.utcnow().isoformat(),
+            }
+            row.metadata_dict = md
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _attempt_publish(*, execution_id: int, triggered_by: str) -> dict:
     """Invoca ado_publisher.publish_from_execution y normaliza el resultado.
 
-    Cualquier excepción se convierte en `publish.failed` (no propaga al caller).
+    Cualquier excepcion se convierte en `publish.failed` (no propaga al caller).
+    R1.3: si STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED, persiste intencion antes
+    del POST y detecta replays sin re-postear.
     """
     try:
         from services.ado_publisher import publish_from_execution
@@ -410,10 +620,33 @@ def _attempt_publish(*, execution_id: int, triggered_by: str) -> dict:
             "type": "ImportError",
         }
 
+    # R1.3 — guardia de idempotencia: detecta replays sin re-postear.
+    try:
+        from config import config as _cfg
+        _r13_enabled = _cfg.STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED
+    except Exception:  # noqa: BLE001
+        _r13_enabled = False
+
+    if _r13_enabled:
+        existing = _r13_check_publish_guard(execution_id)
+        if existing is True:
+            # Marker detectado → reintento sin re-postear.
+            logger.info("[exec=%s] R1.3 idempotent_replay: marker existente, no re-posea", execution_id)
+            return {
+                "ok": False,
+                "status": "idempotent_replay",
+                "reason": "publish_intent marker existente (reintento sin re-POST)",
+                "execution_id": execution_id,
+                "event": "publish.idempotent_replay",
+            }
+        if existing is False:
+            # No hay marker: escribir intencion antes del POST.
+            _r13_write_publish_intent(execution_id)
+
     try:
         pr = publish_from_execution(execution_id, triggered_by=triggered_by)
     except Exception as exc:  # noqa: BLE001
-        logger.exception("[exec=%s] publish_from_execution lanzó excepción", execution_id)
+        logger.exception("[exec=%s] publish_from_execution lanzo excepcion", execution_id)
         return {
             "ok": False,
             "reason": str(exc),

@@ -64,6 +64,7 @@ def post_rule():
     payload = request.get_json(force=True, silent=True) or {}
     ado_state = payload.get("ado_state", "")
     agent_type = payload.get("agent_type", "")
+    on_failure_state = payload.get("on_failure_state")
     project_name = (payload.get("project") or "").strip() or None
 
     # Validación de presencia de campos requeridos antes de delegar al store
@@ -80,7 +81,12 @@ def post_rule():
         )
 
     try:
-        rule = create_rule(ado_state=ado_state, agent_type=agent_type, project_name=project_name)
+        rule = create_rule(
+            ado_state=ado_state,
+            agent_type=agent_type,
+            project_name=project_name,
+            on_failure_state=on_failure_state,
+        )
     except ValidationError as exc:
         return (
             jsonify({"ok": False, "error": "validation_error", "message": str(exc)}),
@@ -104,6 +110,7 @@ def post_rule():
         rule_id=rule["id"],
         ado_state=rule["ado_state"],
         agent_type=rule["agent_type"],
+        on_failure_state=rule.get("on_failure_state"),
         operator="system",
     )
     return jsonify({"ok": True, "rule": rule}), 201
@@ -118,6 +125,7 @@ def put_rule(rule_id: str):
     payload = request.get_json(force=True, silent=True) or {}
     ado_state = payload.get("ado_state", "")
     agent_type = payload.get("agent_type", "")
+    on_failure_state = payload.get("on_failure_state")
     project_name = (payload.get("project") or "").strip() or None
 
     if not ado_state or not agent_type:
@@ -137,6 +145,7 @@ def put_rule(rule_id: str):
             rule_id=rule_id,
             ado_state=ado_state,
             agent_type=agent_type,
+            on_failure_state=on_failure_state,
             project_name=project_name,
         )
     except ValidationError as exc:
@@ -164,6 +173,7 @@ def put_rule(rule_id: str):
         rule_id=rule["id"],
         ado_state=rule["ado_state"],
         agent_type=rule["agent_type"],
+        on_failure_state=rule.get("on_failure_state"),
         operator="system",
     )
     return jsonify({"ok": True, "rule": rule})

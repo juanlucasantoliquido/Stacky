@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from typing import Callable
@@ -157,6 +160,10 @@ def invoke(
         )
     if backend == "copilot":
         return _invoke_copilot(
+            agent_type=agent_type, system=system, user=user, on_log=on_log, execution_id=execution_id, model=model
+        )
+    if backend == "claude_cli":
+        return _invoke_claude_cli(
             agent_type=agent_type, system=system, user=user, on_log=on_log, execution_id=execution_id, model=model
         )
     raise NotImplementedError(f"LLM_BACKEND='{backend}' no soportado todavía")
@@ -609,6 +616,165 @@ def _invoke_copilot(
             "sub_agents": [],
             "copilot_id": data.get("id"),
             "finish_reason": (data.get("choices") or [{}])[0].get("finish_reason"),
+        },
+    )
+
+
+# ── Claude CLI (cuenta Claude del operador, sin GitHub Copilot) ─────────────────
+
+def _resolve_claude_bin() -> str:
+    """Resuelve el binario `claude` (PATH o rutas npm conocidas en Windows).
+
+    Mantiene este resolver liviano y local para no acoplar el gateway LLM al
+    runner del agente. Lanza RuntimeError accionable si no lo encuentra.
+    """
+    configured = (config.CLAUDE_CODE_CLI_BIN or "claude").strip().strip('"')
+    found = shutil.which(configured)
+    if found:
+        return found
+    candidates: list[str] = []
+    if configured.lower() not in {"claude", "claude.exe", "claude.cmd"}:
+        candidates.append(configured)
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            candidates.append(os.path.join(appdata, "npm", "claude.cmd"))
+            candidates.append(os.path.join(appdata, "npm", "claude.exe"))
+    else:
+        candidates.append("/usr/local/bin/claude")
+        candidates.append(os.path.expanduser("~/.local/bin/claude"))
+    for cand in candidates:
+        if cand and os.path.exists(cand):
+            return cand
+    raise RuntimeError(
+        "LLM_BACKEND=claude_cli pero no encontré el CLI 'claude'. "
+        "Instalalo (npm i -g @anthropic-ai/claude-code) y logueate con tu cuenta "
+        "Claude, o configurá CLAUDE_CODE_CLI_BIN con la ruta al binario."
+    )
+
+
+def _parse_claude_cli_json(stdout: str) -> tuple[str, int, int, str | None]:
+    """Parsea la salida `--output-format json` del CLI claude.
+
+    Espera un objeto JSON con `result` (texto) y `usage`
+    (input_tokens/output_tokens). Tolera una lista de eventos (busca el de
+    type=result). Si no parsea, devuelve ("", 0, 0, None) y el caller cae al
+    stdout crudo.
+    """
+    raw = (stdout or "").strip()
+    if not raw:
+        return "", 0, 0, None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        try:
+            data = json.loads(raw.splitlines()[-1])
+        except (ValueError, IndexError):
+            return "", 0, 0, None
+    if isinstance(data, list):
+        data = next(
+            (e for e in reversed(data) if isinstance(e, dict) and e.get("type") == "result"),
+            None,
+        )
+    if not isinstance(data, dict):
+        return "", 0, 0, None
+    text = data.get("result") or data.get("text") or ""
+    usage = data.get("usage") or {}
+    tin = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+    tout = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+    finish = data.get("subtype") or data.get("stop_reason") or data.get("finish_reason")
+    return str(text), tin, tout, finish
+
+
+def _invoke_claude_cli(
+    *,
+    agent_type: str,
+    system: str,
+    user: str,
+    on_log: LogFn,
+    execution_id: int | None,
+    model: str | None = None,
+) -> BridgeResponse:
+    """Completa vía el CLI `claude` (modo print, one-shot) usando la cuenta
+    Claude del operador (OAuth de disco / suscripción Pro). NO usa GitHub Copilot.
+
+    Es la contraparte interna de `claude_code_cli` (runtime del agente): permite
+    que el cerebro de Stacky (enriquecimiento, criterios, KPIs, chat) corra con la
+    misma cuenta Claude en vez de Copilot. El `system` se antepone al `user` en un
+    único prompt por stdin (las llamadas internas no requieren rol system separado,
+    y así se evita el límite de longitud de línea en Windows).
+    """
+    from services.agent_env import build_agent_env  # filtra secretos del subproceso
+
+    started = time.time()
+    chosen_model = model or config.CLAUDE_CODE_CLI_MODEL or "claude-sonnet-4-6"
+
+    if _is_cancelled(execution_id):
+        raise CancelledError("cancelled by user")
+
+    claude_bin = _resolve_claude_bin()
+    prompt = (f"{system.strip()}\n\n{user.strip()}".strip() if system else (user or "")).strip()
+
+    cmd = [
+        claude_bin, "-p",
+        "--output-format", "json",
+        "--model", chosen_model,
+        "--dangerously-skip-permissions",
+    ]
+    # Completion interna: tope acotado (no el cap de sesión del agente, que es 30 min).
+    timeout_sec = 300
+
+    on_log("info", f"invocando claude CLI (cuenta Claude, sin Copilot) model={chosen_model}")
+    logger.info("invocando claude_cli model=%s agent=%s", chosen_model, agent_type)
+
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=prompt,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_sec,
+            cwd=tempfile.gettempdir(),
+            env=build_agent_env(),
+            creationflags=creationflags,
+        )
+    except subprocess.TimeoutExpired as exc:
+        on_log("error", f"claude CLI timeout tras {timeout_sec}s")
+        logger.error("claude_cli timeout tras %ss", timeout_sec)
+        raise RuntimeError(f"claude_cli timeout tras {timeout_sec}s") from exc
+
+    if _is_cancelled(execution_id):
+        raise CancelledError("cancelled by user")
+
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip()[:1500]
+        on_log("error", f"claude CLI exit {proc.returncode}: {err}")
+        logger.error("claude_cli exit=%s stderr=%s", proc.returncode, err)
+        raise RuntimeError(f"claude_cli exit {proc.returncode}: {err or '(sin stderr)'}")
+
+    text, tokens_in, tokens_out, finish = _parse_claude_cli_json(proc.stdout)
+    if not text:
+        # Sin result parseable: usar stdout crudo como último recurso (mejor que vacío).
+        text = (proc.stdout or "").strip()
+    on_log("info", f"completado claude_cli tokens_in={tokens_in} tokens_out={tokens_out}")
+
+    return BridgeResponse(
+        text=text,
+        format="markdown",
+        metadata={
+            "model": chosen_model,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "duration_ms": int((time.time() - started) * 1000),
+            "sub_agents": [],
+            "backend": "claude_cli",
+            "finish_reason": finish,
         },
     )
 

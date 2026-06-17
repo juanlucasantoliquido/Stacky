@@ -355,7 +355,7 @@ def mark_succeeded(
     verified: bool = True,
     idempotent: bool = False,
 ) -> dict | None:
-    return _apply(
+    result = _apply(
         operation_id,
         status=STATUS_IDEMPOTENT if idempotent else STATUS_SUCCEEDED,
         target_ado_id=target_ado_id,
@@ -365,6 +365,14 @@ def mark_succeeded(
         error_code=None,
         error_message=None,
     )
+    # I3.2 — Invalidar caché ADO para que la próxima lectura del ticket sea fresca.
+    if result is not None and target_ado_id is not None:
+        try:
+            from services.ado_read_cache import _singleton as _ado_cache
+            _ado_cache.invalidate(target_ado_id)
+        except Exception:  # noqa: BLE001
+            pass
+    return result
 
 
 def mark_retryable(

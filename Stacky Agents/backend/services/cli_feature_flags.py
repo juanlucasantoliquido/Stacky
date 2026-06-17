@@ -99,6 +99,23 @@ def memory_injection_enabled(project_name: str | None) -> bool:
     )
 
 
+def memory_inject_scopes() -> tuple[str, ...]:
+    """M3.1 — Scopes inyectables configurables (STACKY_MEMORY_INJECT_SCOPES).
+
+    Default "project,team,global" = byte-idéntico al histórico INJECT_SCOPES.
+    Permite, p. ej., incluir 'personal' para el caso mono-operador.
+    """
+    import os
+
+    raw = os.getenv("STACKY_MEMORY_INJECT_SCOPES", "") or ""
+    parts = tuple(p.strip().lower() for p in raw.split(",") if p.strip())
+    if not parts:
+        from services.memory_store import INJECT_SCOPES
+
+        return tuple(INJECT_SCOPES)
+    return parts
+
+
 def mcp_enabled(project_name: str | None) -> bool:
     """F2.1 — Stacky MCP server inyectado vía --mcp-config."""
     from config import config

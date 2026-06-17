@@ -1,0 +1,190 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.card h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.card h4 {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+}
+
+.on {
+  color: #6ee7a8;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.off {
+  color: #ffb4a8;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.field span {
+  opacity: 0.8;
+}
+
+.inlineRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.inlineRow input {
+  flex: 1;
+  min-width: 140px;
+}
+
+input,
+textarea {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: inherit;
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+}
+
+textarea {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+.invalid {
+  border-color: #ff8a7a;
+}
+
+button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: inherit;
+  border-radius: 6px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+
+.hint code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+.scopeRow {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.scopeChip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.typeList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.reserved {
+  opacity: 0.7;
+}
+
+.previewBox {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.6rem;
+}
+
+.previewMeta {
+  display: flex;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  opacity: 0.85;
+  margin-bottom: 0.4rem;
+}
+
+.previewContent {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.78rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.healthGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+}
+
+.healthItem {
+  margin: 0.2rem 0;
+  font-size: 0.8rem;
+}
+
+.warn {
+  margin: 0.2rem 0;
+  color: #ffb4a8;
+  font-size: 0.8rem;
+}
+
+.ok {
+  margin: 0.2rem 0;
+  color: #6ee7a8;
+  font-size: 0.8rem;
+}
+
+.empty {
+  opacity: 0.7;
+  padding: 1rem;
+  font-size: 0.85rem;
+}

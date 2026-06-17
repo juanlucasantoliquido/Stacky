@@ -173,6 +173,12 @@
   flex-shrink: 0;
 }
 
+/* Plan 38 A2 — Versión del deploy */
+.version {
+  font-size: 12px;
+  opacity: .65;
+}
+
 /* Thin indeterminate progress bar at the bottom of the header */
 .progressBar {
   position: relative;

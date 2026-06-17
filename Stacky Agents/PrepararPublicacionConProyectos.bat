@@ -13,7 +13,12 @@ echo             incluyendo PAT/tokens guardados para los proyectos.
 echo             Usalo solo para entregas controladas.
 echo.
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deployment\Prepare-Publication.ps1" -NoPause -ExportConfig %*
+set "PS_NOPAUSE=-NoPause"
+for %%A in (%*) do (
+    if /I "%%~A"=="-NoPause" set "PS_NOPAUSE="
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deployment\Prepare-Publication.ps1" %PS_NOPAUSE% -ExportConfig %*
 set "EXITCODE=%ERRORLEVEL%"
 
 echo.

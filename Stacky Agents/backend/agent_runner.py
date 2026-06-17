@@ -4,9 +4,12 @@ la ejecución en thread separado, devolviendo el id de la fila persistida.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import threading
 from datetime import datetime
+from pathlib import Path
 
 import agents
 from agents.base import RunContext
@@ -16,13 +19,59 @@ import log_streamer
 from config import config
 from db import session_scope
 from models import AgentExecution, Ticket
-from services import audit_chain, confidence, egress_policies, embeddings, llm_router, output_cache, pii_masker, webhooks
+from services import audit_chain, confidence, desktop_notifier, egress_policies, embeddings, llm_router, output_cache, pii_masker, webhooks
 from services.project_context import ensure_project_vscode, resolve_project_context
 from services.stacky_logger import logger as stacky_logger
 
 
 class UnknownAgentError(ValueError):
     pass
+
+
+# ── Plan 38 C0 — Helpers de trazabilidad ─────────────────────────────────────
+
+def _build_trace_metadata(
+    *,
+    prompt_blocks: list,
+    agent_type: str,
+    agent_name: str,
+    prompt_text_enabled: bool = False,
+) -> dict:
+    """Construye el dict de trazabilidad que se fusiona con setdefault en metadata.
+
+    - prompt_sha: SHA256 del JSON de los context_blocks (inputs del prompt).
+    - prompt_len: longitud en bytes del JSON serializado.
+    - agent_type / agent_name: identidad del agente.
+    - prompt_text: solo si prompt_text_enabled=True (privacidad: default OFF).
+    """
+    serialized = json.dumps(prompt_blocks, sort_keys=True, ensure_ascii=False)
+    sha = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    meta: dict = {
+        "prompt_sha": sha,
+        "prompt_len": len(serialized.encode("utf-8")),
+        "agent_type": agent_type,
+        "agent_name": agent_name,
+    }
+    if prompt_text_enabled:
+        meta["prompt_text"] = serialized
+    return meta
+
+
+def _collect_produced_files(output_dir: Path | None) -> list[str]:
+    """Retorna paths relativos de archivos bajo output_dir (vacío si no existe)."""
+    if output_dir is None:
+        return []
+    try:
+        p = Path(output_dir)
+        if not p.exists():
+            return []
+        return [
+            str(f.relative_to(p)).replace("\\", "/")
+            for f in sorted(p.rglob("*"))
+            if f.is_file()
+        ]
+    except Exception:
+        return []
 
 
 def run_agent(
@@ -49,6 +98,45 @@ def run_agent(
     if agent is None:
         raise UnknownAgentError(agent_type)
 
+    # G0.1 — Gate de precondiciones determinista (solo si flag ON).
+    # Con flag OFF: no-op, byte-idéntico al comportamiento anterior.
+    try:
+        from services.run_preflight import check as _preflight_check
+        with session_scope() as _pf_session:
+            _ticket_obj = _pf_session.query(Ticket).filter_by(id=ticket_id).first()
+        _pf_result = _preflight_check(
+            ticket=_ticket_obj, runtime=runtime, project=project_name
+        )
+        if not _pf_result.ok:
+            with session_scope() as _pf_fail_session:
+                _pf_exec = AgentExecution(
+                    ticket_id=ticket_id,
+                    agent_type=agent_type,
+                    status="failed",
+                    started_by=user,
+                    started_at=datetime.utcnow(),
+                )
+                _pf_exec.input_context = context_blocks
+                _pf_exec.chain_from = chain_from or []
+                _pf_exec_meta = _pf_result.to_metadata()
+                _pf_exec_meta["runtime"] = runtime
+                _pf_exec.metadata_dict = _pf_exec_meta
+                _pf_fail_session.add(_pf_exec)
+                _pf_fail_session.flush()
+                _pf_exec_id = _pf_exec.id
+            import logging as _log_mod
+            _log_mod.getLogger("stacky.agent_runner").warning(
+                "G0.1 preflight gate bloqueó run: ticket=%d runtime=%s check=%s detail=%s",
+                ticket_id, runtime, _pf_result.failure_check, _pf_result.failure_detail,
+            )
+            return _pf_exec_id
+    except Exception as _pf_exc:  # noqa: BLE001
+        # Fallos del propio gate no bloquean el run (fail-open seguro).
+        import logging as _log_mod2
+        _log_mod2.getLogger("stacky.agent_runner").warning(
+            "G0.1 preflight gate lanzó excepción (ignorada, continúa run): %s", _pf_exc
+        )
+
     if runtime in {"codex_cli", "claude_code_cli"}:
         return _start_cli_runtime(
             runtime=runtime,
@@ -74,6 +162,12 @@ def run_agent(
         )
         exec_row.input_context = context_blocks
         exec_row.chain_from = chain_from or []
+        # Plan 36 — F4: persistir runtime en metadata desde el inicio.
+        # Los runners CLI (codex/claude) ya lo hacen; este path (github_copilot)
+        # faltaba. setdefault garantiza que no se sobreescriba si ya fue puesto.
+        md = dict(exec_row.metadata_dict or {})
+        md.setdefault("runtime", runtime)
+        exec_row.metadata_dict = md
         session.add(exec_row)
         session.flush()
         execution_id = exec_row.id
@@ -184,6 +278,13 @@ def run_agent(
             log_streamer.push(execution_id, "error",
                 f"codex_cli runner error: {_codex_exc}")
             _mark_terminal(execution_id, status="error", error=f"codex_cli: {_codex_exc}")
+            # V0.3 — el spawn falló antes del _run_in_background (cuyo finally
+            # libera el slot); liberar acá para no filtrar la cuota.
+            try:
+                from services import run_slots
+                run_slots.release()
+            except Exception:  # noqa: BLE001
+                pass
             log_streamer.close(execution_id)
             return execution_id
 
@@ -250,6 +351,13 @@ def run_agent(
             log_streamer.push(execution_id, "error",
                 f"claude_code_cli runner error: {_claude_exc}")
             _mark_terminal(execution_id, status="error", error=f"claude_code_cli: {_claude_exc}")
+            # V0.3 — el spawn falló antes del _run_in_background (cuyo finally
+            # libera el slot); liberar acá para no filtrar la cuota.
+            try:
+                from services import run_slots
+                run_slots.release()
+            except Exception:  # noqa: BLE001
+                pass
             log_streamer.close(execution_id)
             return execution_id
 
@@ -619,15 +727,51 @@ def _run_in_background(
                 output_data={"cache_key": cached["cache_key"][:8], "hits": cached.get("hits")},
                 tags=["agent", "cache"],
             )
-            webhooks.fire_completed_safe(execution_id)
+            webhooks.fire_for_execution(execution_id)
+            try:
+                if config.STACKY_DESKTOP_NOTIFY_ENABLED:
+                    desktop_notifier.notify(
+                        title=f"Stacky · {agent_type} completed",
+                        message=f"Ticket {ticket_id} · github_copilot",
+                    )
+            except Exception:  # noqa: BLE001
+                logger.debug("desktop notify failed on completed", exc_info=True)
             return
+
+        # I0.2 — Cómputo de fingerprint_complexity si no viene del caller y el flag está ON.
+        # El caller puede pasar un valor explícito (fingerprint_complexity != None);
+        # en ese caso se respeta y no se recalcula.
+        _effective_complexity = fingerprint_complexity
+        if _effective_complexity is None and config.STACKY_COMPLEXITY_ESTIMATION_ENABLED:
+            try:
+                from harness.complexity import estimate_complexity as _est_complexity
+                _ticket_obj = None
+                _title = ""
+                _description = ""
+                try:
+                    with session_scope() as _sess_c:
+                        _ticket_obj = _sess_c.get(Ticket, ticket_id)
+                        if _ticket_obj is not None:
+                            _title = _ticket_obj.title or ""
+                            _description = _ticket_obj.description or ""
+                except Exception:
+                    pass
+                _effective_complexity = _est_complexity(
+                    agent_type=agent_type or "",
+                    ticket_title=_title,
+                    ticket_description=_description,
+                    blocks=masked_blocks,
+                )
+                log("info", f"complexity estimation → {_effective_complexity} (I0.2)")
+            except Exception as _exc_c:  # noqa: BLE001 — estimación nunca bloquea el run
+                log("warn", f"complexity estimation falló (no crítico): {_exc_c}")
 
         # FA-04 — Multi-LLM routing
         backend = config.LLM_BACKEND.lower()
         decision = llm_router.decide(
             agent_type=agent_type,
             blocks=masked_blocks,
-            fingerprint_complexity=fingerprint_complexity,
+            fingerprint_complexity=_effective_complexity,
             override=model_override,
             backend=backend,
             project_name=project_name,
@@ -716,6 +860,25 @@ def _run_in_background(
             # Feature C: persistir agent_filename para el comparador de agentes
             if "agent_filename" not in md and hasattr(agent, "filename"):
                 md["agent_filename"] = agent.filename
+            # Plan 38 C0 — Trazabilidad: prompt_sha, agent_type, produced_files
+            if config.STACKY_EXECUTION_TRACE_ENABLED:
+                _trace = _build_trace_metadata(
+                    prompt_blocks=masked_blocks or [],
+                    agent_type=agent_type or getattr(agent, "type", ""),
+                    agent_name=getattr(agent, "name", ""),
+                    prompt_text_enabled=config.STACKY_TRACE_PROMPT_TEXT_ENABLED,
+                )
+                for k, v in _trace.items():
+                    md.setdefault(k, v)
+                # produced_files: resolver directorio de output del ticket
+                if "produced_files" not in md:
+                    try:
+                        from api.executions import _resolve_ticket_output_dir_ws1
+                        _ticket_for_trace = session.get(Ticket, ticket_id) if ticket_id else None
+                        _out_dir = _resolve_ticket_output_dir_ws1(row, _ticket_for_trace)
+                    except Exception:
+                        _out_dir = None
+                    md["produced_files"] = _collect_produced_files(_out_dir)
             row.metadata_dict = md
             row.contract_result = cv_result.to_dict()
             row.status = "completed"
@@ -751,8 +914,16 @@ def _run_in_background(
                 contract_result=cv_result.to_dict(),
             )
 
-        # FA-52 — Webhooks out
-        webhooks.fire_completed_safe(execution_id)
+        # FA-52/U0.3 — Webhooks out
+        webhooks.fire_for_execution(execution_id)
+        try:
+            if config.STACKY_DESKTOP_NOTIFY_ENABLED:
+                desktop_notifier.notify(
+                    title=f"Stacky · {agent_type} completed",
+                    message=f"Ticket {ticket_id} · github_copilot",
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("desktop notify failed on completed", exc_info=True)
         # FA-39 — Audit chain seal
         audit_chain.seal(execution_id)
         # FA-01 — Indexar para retrieval
@@ -779,6 +950,14 @@ def _run_in_background(
     except copilot_bridge.CancelledError:
         _mark_terminal(execution_id, status="cancelled")
         log("warn", "× cancelled")
+        try:
+            if config.STACKY_DESKTOP_NOTIFY_ENABLED:
+                desktop_notifier.notify(
+                    title=f"Stacky · {agent_type} cancelled",
+                    message=f"Ticket {ticket_id} · github_copilot",
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("desktop notify failed on cancelled", exc_info=True)
         stacky_logger.agent_event(
             "agent_cancelled",
             execution_id=execution_id,
@@ -796,6 +975,15 @@ def _run_in_background(
     except Exception as exc:  # noqa: BLE001
         _mark_terminal(execution_id, status="error", error=str(exc))
         log("error", f"× {exc}")
+        webhooks.fire_for_execution(execution_id)
+        try:
+            if config.STACKY_DESKTOP_NOTIFY_ENABLED:
+                desktop_notifier.notify(
+                    title=f"Stacky · {agent_type} error",
+                    message=f"Ticket {ticket_id} · github_copilot",
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("desktop notify failed on error", exc_info=True)
         stacky_logger.agent_event(
             "agent_failed",
             execution_id=execution_id,

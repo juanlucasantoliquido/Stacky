@@ -23,6 +23,7 @@ def create_route():
         event=event,
         project=payload.get("project"),
         secret=payload.get("secret"),
+        format=payload.get("format"),
     )
     return jsonify({"id": new_id}), 201
 

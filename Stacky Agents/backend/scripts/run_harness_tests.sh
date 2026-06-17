@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# V1.4a — Runner curado del arnés (plan 22).
+#
+# Ejecuta los archivos de test del arnés UNO POR UNO con `pytest <archivo> -q`.
+# Correr por archivo esquiva la polución conocida de la suite completa
+# (engine sqlite in-memory compartido + singletons de app, ver D7 del plan 22).
+#
+# La lista HARNESS_TEST_FILES es un RATCHET: solo crece. Un archivo entra acá
+# cuando pasa aislado; CI impide que la cobertura se encoja silenciosamente.
+#
+# Uso:  bash scripts/run_harness_tests.sh
+# Exit: 0 si todos verdes; 1 si alguno falla (o no existe).
+set -u
+
+cd "$(dirname "$0")/.." || exit 2
+
+PYTHON="${PYTHON:-python}"
+
+# Lista curada (archivos que pasan en aislamiento). Mantener ordenada por área.
+HARNESS_TEST_FILES=(
+  # — Núcleo del arnés (F1-F3, H0-H8) —
+  tests/test_harness_flags.py
+  tests/test_harness_health.py
+  tests/test_harness_h8_kpis.py
+  tests/test_model_policy.py
+  tests/test_run_contract.py
+  tests/test_runaway_guard.py
+  tests/test_codex_telemetry.py
+  tests/test_codex_post_run.py
+  tests/test_claude_code_cli_phase1.py
+  # — Plan 22 · V0 —
+  tests/test_harness_profiles.py
+  tests/test_harness_failure.py
+  tests/test_harness_pricing.py
+  tests/test_harness_health_v0.py
+  tests/test_run_guard.py
+  tests/test_run_slots.py
+  tests/test_run_launch_guards.py
+  tests/test_mark_terminal_failure_kind.py
+  tests/test_telemetry_cost_estimation.py
+  # — Plan 22 · V1 —
+  tests/test_u1_executions_filters.py
+  tests/test_u1_local_diag_cli_runtimes.py
+  tests/test_u1_self_review.py
+  tests/test_agent_prompt_registry.py
+  tests/test_run_advisor.py
+  tests/test_artifact_intake.py
+  tests/test_v15_memory_channel.py
+  # — Plan 22 · V2 —
+  tests/test_u2_cost_metrics.py
+  tests/test_u2_pipeline_orchestrator.py
+  tests/test_u2_publish_review_mode.py
+  tests/test_run_fingerprint.py
+  tests/test_evals_promote.py
+  tests/test_eval_gate_modes.py
+  tests/conformance/test_runtime_conformance.py
+)
+
+pass=0
+fail=0
+missing=0
+declare -a failed_files=()
+
+for f in "${HARNESS_TEST_FILES[@]}"; do
+  if [[ ! -f "$f" ]]; then
+    echo "MISSING  $f"
+    missing=$((missing + 1))
+    failed_files+=("$f (missing)")
+    continue
+  fi
+  if "$PYTHON" -m pytest "$f" -q >/tmp/harness_test_out 2>&1; then
+    echo "PASS     $f"
+    pass=$((pass + 1))
+  else
+    echo "FAIL     $f"
+    tail -n 20 /tmp/harness_test_out
+    fail=$((fail + 1))
+    failed_files+=("$f")
+  fi
+done
+
+echo ""
+echo "===================== RESUMEN ARNÉS ====================="
+echo "PASS=$pass  FAIL=$fail  MISSING=$missing  TOTAL=${#HARNESS_TEST_FILES[@]}"
+if (( fail > 0 || missing > 0 )); then
+  echo "Archivos con problema:"
+  for ff in "${failed_files[@]}"; do echo "  - $ff"; done
+  exit 1
+fi
+echo "Todos los archivos del arnés pasan aislados."
+exit 0

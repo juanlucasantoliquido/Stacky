@@ -1,0 +1,175 @@
+/* Plan 39 A2 — Estilos de la página de historial de ejecuciones */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  min-height: 0;
+  flex: 1;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.subtitle {
+  color: var(--text-muted, #888);
+  font-size: 0.875rem;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.filterSelect {
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+  background: var(--bg-surface, #fff);
+  color: var(--text, #333);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.empty {
+  color: var(--text-muted, #888);
+  text-align: center;
+  padding: 3rem;
+  font-size: 0.9rem;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th {
+  background: var(--bg-header, #f5f5f5);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted, #666);
+  border-bottom: 1px solid var(--border, #ddd);
+  white-space: nowrap;
+}
+
+.row {
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-light, #eee);
+  transition: background 0.12s;
+}
+
+.row:hover {
+  background: var(--bg-hover, #f9f9f9);
+}
+
+.table td {
+  padding: 0.4rem 0.75rem;
+  vertical-align: middle;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dateCell {
+  color: var(--text-muted, #666);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.numCell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ticketCell {
+  color: var(--text-muted, #555);
+  max-width: 200px;
+}
+
+/* Status badges */
+.statusBadge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--bg-badge, #e0e0e0);
+  color: var(--text, #333);
+}
+
+.statusCompleted {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.statusError {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.statusReview {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.statusRunning {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* Paginación */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.pageBtn {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+  background: var(--bg-surface, #fff);
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background 0.12s;
+}
+
+.pageBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pageBtn:not(:disabled):hover {
+  background: var(--bg-hover, #f0f0f0);
+}
+
+.pageInfo {
+  color: var(--text-muted, #666);
+  font-size: 0.875rem;
+}

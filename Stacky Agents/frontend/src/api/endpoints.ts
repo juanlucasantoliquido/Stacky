@@ -977,6 +977,29 @@ export interface ExecutionOutputFilesResponse {
   dir: string | null;
 }
 
+/** Plan 39 A1 — Item del historial de ejecuciones. */
+export interface ExecutionHistoryItem {
+  id: number;
+  ticket_id: number;
+  ticket_title: string | null;
+  agent_type: string;
+  agent_name: string | null;
+  runtime: string | null;
+  model: string | null;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  cost_usd: number | null;
+  tokens_in: number | null;
+  tokens_out: number | null;
+  prompt_sha: string | null;
+  prompt_len: number | null;
+  has_prompt_text: boolean;
+  produced_files_count: number;
+  error_message: string | null;
+}
+
 export const Executions = {
   list: (q: {
     ticket_id?: number;
@@ -1041,6 +1064,27 @@ export const Executions = {
     api.delete<{ ok: boolean; deleted: number[]; skipped: number[] }>(
       `/api/executions/bulk-by-ticket?ticket_id=${ticketId}&agent_filename=${encodeURIComponent(agentFilename)}`
     ),
+  /** Plan 39 A1 — Historial completo de ejecuciones con métricas del arnés. */
+  history: (q: {
+    project?: string;
+    agent_type?: string;
+    runtime?: string;
+    status?: string;
+    days?: number;
+    limit?: number;
+    offset?: number;
+  } = {}) => {
+    const params = new URLSearchParams();
+    if (q.project) params.set("project", q.project);
+    if (q.agent_type) params.set("agent_type", q.agent_type);
+    if (q.runtime) params.set("runtime", q.runtime);
+    if (q.status) params.set("status", q.status);
+    if (q.days) params.set("days", String(q.days));
+    if (q.limit) params.set("limit", String(q.limit));
+    if (q.offset) params.set("offset", String(q.offset));
+    const qs = params.toString();
+    return api.get<ExecutionHistoryItem[]>(`/api/executions/history${qs ? `?${qs}` : ""}`);
+  },
 };
 
 export interface SimilarHit {

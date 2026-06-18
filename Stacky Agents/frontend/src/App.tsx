@@ -8,6 +8,7 @@ import SettingsPage from "./pages/SettingsPage";
 import DocsPage from "./pages/DocsPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
 import MemoryPage from "./pages/MemoryPage";
+import ExecutionHistoryPage from "./pages/ExecutionHistoryPage";
 import ReviewInboxPage from "./pages/ReviewInboxPage";
 import TopBar from "./components/TopBar";
 import HealthBanner from "./components/HealthBanner";
@@ -24,7 +25,7 @@ import { useUiSectionsStore } from "./store/uiSectionsStore";
 import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics";
+type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history";
 
 const TAB_PATHS: Record<Tab, string> = {
   team: "/",
@@ -37,6 +38,7 @@ const TAB_PATHS: Record<Tab, string> = {
   docs: "/docs",
   memory: "/memory",
   diagnostics: "/diagnostics",
+  history: "/history",
 };
 
 function tabFromPath(pathname: string): Tab {
@@ -192,6 +194,12 @@ export default function App() {
         >
           🩺 Diagnóstico
         </button>
+        <button
+          className={`${styles.navTab} ${tab === "history" ? styles.active : ""}`}
+          onClick={() => selectTab("history")}
+        >
+          📋 Historial
+        </button>
       </nav>
 
       {tab === "team"     && <TeamScreen />}
@@ -204,6 +212,7 @@ export default function App() {
       {tab === "docs"     && sections.docs && <DocsPage />}
       {tab === "memory"   && sections.memory && <MemoryPage />}
       {tab === "diagnostics" && <DiagnosticsPage />}
+      {tab === "history"     && <ExecutionHistoryPage />}
 
       <CommandPalette
         open={paletteOpen}

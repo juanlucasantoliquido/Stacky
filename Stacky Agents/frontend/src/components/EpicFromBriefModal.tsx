@@ -23,10 +23,31 @@ interface EpicFromBriefModalProps {
   onCreated?: (result: { ado_id: number; title: string }) => void;
 }
 
-type Step = "brief" | "running" | "review" | "creating" | "done" | "error";
+type Step = "brief" | "running" | "creating" | "done" | "error";
 
 const POLL_INTERVAL_MS = 2500;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min
+
+/**
+ * Guard anti-narración (espejo de `_looks_like_epic` en backend/api/tickets.py).
+ * El BusinessAgent a veces devuelve NARRACIÓN ("Voy a leer el archivo...") en vez
+ * del HTML de la épica. Publicar eso contamina ADO. Solo consideramos épica un
+ * contenido con un heading (<h1>/<h2>) Y al menos un bloque <h2>RF-XXX.
+ * Tolera el fence ```html ... ``` que el CLI a veces antepone.
+ */
+function looksLikeEpic(raw: string | null | undefined): boolean {
+  if (!raw || !raw.trim()) return false;
+  const fence = raw.match(/```(?:html)?\s*\n?([\s\S]*?)```/i);
+  const text = fence ? fence[1] : raw;
+  const hasHeading = /<h[12][^>]*>/i.test(text);
+  const hasRfBlock = /<h2[^>]*>\s*RF-\s*\d/i.test(text);
+  return hasHeading && hasRfBlock;
+}
+
+const EPIC_NOT_IN_OUTPUT_MSG =
+  "El Agente de Negocio devolvió narración en vez del HTML de la épica " +
+  "(probablemente la escribió en un archivo). Revisá la consola y reintentá " +
+  "la generación.";
 
 export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBriefModalProps) {
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
@@ -37,9 +58,6 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   const [step, setStep] = useState<Step>("brief");
   const [brief, setBrief] = useState("");
   const [executionId, setExecutionId] = useState<number | null>(null);
-  const [outputHtml, setOutputHtml] = useState("");
-  const [title, setTitle] = useState("");
-  const [approved, setApproved] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [createdAdoId, setCreatedAdoId] = useState<number | null>(null);
 
@@ -89,11 +107,40 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
         const exec = await Executions.byId(execId);
         if (exec.status !== "running" && exec.status !== "queued" && exec.status !== "preparing") {
           stopPolling();
+          // Plan 41 — El backend puede haber publicado la épica de forma
+          // autónoma al cerrar la run. Si ya hay sello, NO re-publicar (evita
+          // épica duplicada); si hay error de publicación, mostrarlo.
+          const md = (exec.metadata ?? {}) as Record<string, unknown>;
+          const sealedAdoId = typeof md.epic_ado_id === "number" ? md.epic_ado_id : null;
+          const publishErr = typeof md.epic_publish_error === "string" ? md.epic_publish_error : null;
+          if (sealedAdoId !== null) {
+            setCreatedAdoId(sealedAdoId);
+            setStep("done");
+            onCreated?.({ ado_id: sealedAdoId, title: "" });
+            return;
+          }
+          if (publishErr !== null) {
+            setErrorMsg(`La publicación automática de la épica falló: ${publishErr}`);
+            setStep("error");
+            return;
+          }
           if (exec.status === "completed" || exec.status === "needs_review") {
-            setOutputHtml(exec.output ?? "");
-            setTitle("");
-            setApproved(false);
-            setStep("review");
+            const html = (exec.output ?? "").trim();
+            if (!html) {
+              setErrorMsg("La ejecución terminó sin contenido para publicar la épica.");
+              setStep("error");
+              return;
+            }
+            // Guard anti-narración: NO publicar basura si el output no es una épica.
+            // (El backend ya degrada a needs_review + epic_publish_error en el camino
+            // autónomo; este chequeo cubre el caso sin sello ni error, evitando mandar
+            // narración cruda al endpoint.)
+            if (!looksLikeEpic(html)) {
+              setErrorMsg(EPIC_NOT_IN_OUTPUT_MSG);
+              setStep("error");
+              return;
+            }
+            void publishEpic(html);
           } else {
             setErrorMsg(
               exec.error_message ?? `La ejecución terminó con estado: ${exec.status}`
@@ -140,14 +187,15 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
     }
   }
 
-  async function handleCreate() {
-    if (!approved || !outputHtml.trim()) return;
+  // Auto-publicación: al terminar la run, la épica se crea en ADO directamente,
+  // sin paso de aprobación manual. El backend deriva el título del contenido.
+  async function publishEpic(html: string) {
     setStep("creating");
     setErrorMsg(null);
     try {
       const res = await Tickets.createEpicFromBrief({
-        title: title.trim() || "Épica generada desde brief",
-        description_html: outputHtml.trim(),
+        title: "",
+        description_html: html,
         brief: brief.trim(),
         project_name: activeProjectName ?? undefined,
         confirm: true,
@@ -226,8 +274,8 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
 
             <p className={styles.hint}>
               El Agente de Negocio va a descomponer el brief y proponer una Épica estructurada
-              (título + bloques RF-XXX en HTML). Vas a revisar y aprobar el resultado antes
-              de que se cree en ADO.
+              (título + bloques RF-XXX en HTML), que se creará automáticamente en ADO al
+              terminar la generación.
             </p>
 
             <footer className={styles.footer}>
@@ -262,59 +310,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
           </div>
         )}
 
-        {/* PASO 3: Revisar output y aprobar */}
-        {step === "review" && (
-          <div className={styles.body}>
-            <p className={styles.successNote}>
-              El Agente de Negocio completó la generación. Revisá el resultado y corregí si es necesario.
-            </p>
-
-            <label className={styles.label}>
-              Título de la Épica
-              <input
-                className={styles.input}
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Derivá el título del contenido generado…"
-              />
-            </label>
-
-            <label className={styles.label}>
-              Contenido generado (editable)
-              <textarea
-                className={styles.textarea}
-                rows={12}
-                value={outputHtml}
-                onChange={(e) => setOutputHtml(e.target.value)}
-              />
-            </label>
-
-            <label className={styles.checkLabel}>
-              <input
-                type="checkbox"
-                checked={approved}
-                onChange={(e) => setApproved(e.target.checked)}
-              />
-              <span>He revisado el contenido generado y apruebo la creación de esta épica en ADO.</span>
-            </label>
-
-            <footer className={styles.footer}>
-              <button className={styles.cancelBtn} onClick={() => { stopPolling(); setStep("brief"); }}>
-                Volver
-              </button>
-              <button
-                className={styles.primaryBtn}
-                onClick={handleCreate}
-                disabled={!approved || !outputHtml.trim()}
-              >
-                Crear épica en ADO
-              </button>
-            </footer>
-          </div>
-        )}
-
-        {/* PASO 4: Creando en ADO */}
+        {/* PASO 3: Creando épica en ADO (automático, sin aprobación manual) */}
         {step === "creating" && (
           <div className={styles.body}>
             <p className={styles.status}>Creando épica en ADO…</p>
@@ -322,7 +318,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
           </div>
         )}
 
-        {/* PASO 5: Éxito */}
+        {/* PASO 4: Éxito */}
         {step === "done" && createdAdoId !== null && (
           <div className={styles.body}>
             <p className={styles.successNote}>

@@ -175,6 +175,105 @@ def _set_verdict(execution_id: int, verdict: str):
     return jsonify(result)
 
 
+@bp.get("/history")
+def executions_history():
+    """Plan 39 A1 — Historial completo de ejecuciones con métricas del arnés.
+
+    Gated por STACKY_EXECUTION_HISTORY_ENABLED. Si OFF → 404 feature_disabled.
+    Soporta filtros: project, agent_type, runtime, status (csv), days, limit (max 500), offset.
+    """
+    import os as _os
+    if _os.getenv("STACKY_EXECUTION_HISTORY_ENABLED", "false").lower() not in {"1", "true", "on"}:
+        return jsonify({"error": "feature_disabled", "feature": "STACKY_EXECUTION_HISTORY_ENABLED"}), 404
+
+    agent_type = request.args.get("agent_type")
+    runtime_filter = request.args.get("runtime")
+    project_name = (request.args.get("project") or "").strip() or None
+    days = request.args.get("days", type=int)
+    limit = min(request.args.get("limit", default=100, type=int), 500)
+    offset = request.args.get("offset", default=0, type=int)
+
+    # status puede ser CSV o múltiples ?status=
+    status_values: list[str] = []
+    for raw in request.args.getlist("status"):
+        for token in str(raw).split(","):
+            val = token.strip()
+            if val:
+                status_values.append(val)
+
+    with session_scope() as session:
+        q = session.query(AgentExecution).join(Ticket, Ticket.id == AgentExecution.ticket_id)
+
+        if project_name:
+            q = q.filter(
+                or_(
+                    Ticket.stacky_project_name == project_name,
+                    and_(
+                        Ticket.stacky_project_name.is_(None),
+                        Ticket.project == project_name,
+                    ),
+                )
+            )
+
+        if agent_type:
+            q = q.filter(AgentExecution.agent_type == agent_type)
+
+        if status_values:
+            if len(status_values) == 1:
+                q = q.filter(AgentExecution.status == status_values[0])
+            else:
+                q = q.filter(AgentExecution.status.in_(status_values))
+
+        if days and days > 0:
+            q = q.filter(
+                AgentExecution.started_at >= (datetime.utcnow() - timedelta(days=days))
+            )
+
+        rows = (
+            q.order_by(AgentExecution.started_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        # Para cada ejecución construimos el item del contrato.
+        items = []
+        for row in rows:
+            meta = row.metadata_dict or {}
+            row_runtime = meta.get("runtime") or ""
+
+            # Filtro por runtime (runtime viene de metadata, no de columna)
+            if runtime_filter and row_runtime != runtime_filter:
+                continue
+
+            ticket = row.ticket  # relación cargada por join
+            ticket_title = ticket.title if ticket else None
+
+            items.append({
+                "id": row.id,
+                "ticket_id": row.ticket_id,
+                "ticket_title": ticket_title,
+                "agent_type": row.agent_type,
+                "agent_name": meta.get("agent_name") or None,
+                "runtime": row_runtime or None,
+                "model": meta.get("model") or None,
+                "status": row.status,
+                "started_at": row.started_at.isoformat() if row.started_at else None,
+                "finished_at": row.completed_at.isoformat() if row.completed_at else None,
+                "duration_ms": row.duration_ms(),
+                "cost_usd": meta.get("cost_usd") or None,
+                "tokens_in": meta.get("tokens_in") or None,
+                "tokens_out": meta.get("tokens_out") or None,
+                "prompt_sha": meta.get("prompt_sha") or None,
+                "prompt_len": meta.get("prompt_len") or None,
+                "has_prompt_text": bool(meta.get("prompt_text")),
+                "produced_files_count": len(meta.get("produced_files") or []),
+                "error_message": row.error_message or None,
+            })
+
+    return jsonify(items)
+
+
 @bp.post("/<int:execution_id>/publish-to-ado")
 def publish_to_ado(execution_id: int):
     """U2.2 — Publicación real en modo review-before-publish.

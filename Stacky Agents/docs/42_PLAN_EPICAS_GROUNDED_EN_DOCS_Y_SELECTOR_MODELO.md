@@ -14,6 +14,8 @@
 > - **C8:** Orden: F5 marcado como "prerequisito suave" para F0 ganar impacto real.
 > - **C9:** Combinación de flags documentada (independientes, comportamiento esperado con ambas OFF).
 > - **[ADICIÓN ARQUITECTO]:** Guardrail de confidence de grounding: agente calcula métrica y marca alerta `[BAJA CONFIANZA]` si <0.5, reforzando human-in-the-loop sin bloquear.
+> - **REUSO (post-crítica):** F3 cap de modelo REUSA `llm_router.clamp_model` (services/llm_router.py:33, ya cubierto por test_llm_router_cap.py y aplicado por el runner CLI) en vez de crear `clamp_brief_model`. Evita reinventar el cap sonnet/nunca-Opus.
+> - **(post-crítica) F4:** restaurada como propuesta nueva 1 pero REFORMULADA a "resumen post-épica accionable" solo-lectura (no preview bloqueante), para honrar el pedido de 2 propuestas nuevas sin violar la decisión de auto-publicación del Plan 41.
 
 ## 1. Objetivo y KPI
 
@@ -299,32 +301,31 @@ el backend para que NUNCA acepte Opus; **resolver la ambigüedad de C3/C5 con de
 - **`Stacky Agents/frontend/src/components/EpicFromBriefModal.tsx`** (editar — agregar selects de modelo/esfuerzo; C3 detalles exactos).
 
 **Backend (cap de modelo — hacer PRIMERO, es la parte de seguridad):**
-- Nueva función pura en `agents.py`: `clamp_brief_model(requested: str | None) -> str | None`.
-  - Whitelist permitida (alineada con el cap del arnés ya existente en el repo — reusar la constante de
-    modelos permitidos si existe; si no, definir): `{"haiku", "sonnet-4-6"}` (acepta también los ids
-    completos `claude-haiku-*`, `claude-sonnet-4-6`).
-  - Si `requested` es None/"" → devolver `None` (default actual: el runner elige sonnet-4-6).
-  - Si `requested` mapea a un modelo permitido → devolverlo normalizado.
-  - Si `requested` pide Opus/Fable o algo fuera de whitelist → **NO usarlo**: devolver `None` (cae al
-    default seguro) y loggear `logger.warning("run_brief: modelo %s no permitido, usando default", ...)`.
-- En `run_brief`: `model_override = clamp_brief_model(payload.get("model"))`.
-- Leer effort: `effort = (payload.get("effort") or "").strip().lower()`; validar contra
-  `{"low", "medium", "high"}`; default `"high"` (preserva el comportamiento actual). Pasar
-  `effort_override=effort` a `run_agent` (en vez del literal `"high"`).
+- **REUSO OBLIGATORIO (no reinventar):** ya existe `llm_router.clamp_model(model: str | None) -> str`
+  en `Stacky Agents/backend/services/llm_router.py:33`, que CAPA cualquier modelo al máximo permitido
+  (sonnet-4-6, nunca Opus/Fable) y ya lo usa el runner CLI (`claude_code_cli_runner.py:650`). Su cap está
+  cubierto por `tests/test_llm_router_cap.py` (opus → `_CAP`). **NO crear una función nueva** —
+  `run_brief` debe APLICAR `llm_router.clamp_model` al modelo pedido.
+- En `run_brief` (api/agents.py): tras leer `requested = (payload.get("model") or "").strip() or None`,
+  hacer `model_override = llm_router.clamp_model(requested) if requested else None`. Si `requested` venía
+  con Opus/Fable, `clamp_model` lo baja a sonnet-4-6 (seguridad garantizada por el router, no por agents.py).
+  Loggear `logger.info("run_brief: modelo solicitado=%s, efectivo=%s", requested, model_override)`.
+- Leer effort: `effort = (payload.get("effort") or "").strip().lower()`; si NO está en
+  `{"low", "medium", "high"}` → usar default `"high"` (preserva el comportamiento actual). Pasar
+  `effort_override=effort` a `run_agent` (en vez del literal `"high"` hardcodeado en agents.py:616).
 - Flag opcional `STACKY_BRIEF_MODEL_SELECT_ENABLED` (bool, default `True`) solo para poder apagar la
   feature de extremo a extremo si hiciera falta; el cap de modelo NO depende del flag (la seguridad
-  siempre aplica).
+  siempre aplica vía `clamp_model`).
 
 **Tests backend primero (editar `test_run_brief_model_override.py`):**
-- `test_clamp_allows_haiku_and_sonnet` → `clamp_brief_model("haiku") == "haiku"`,
-  `clamp_brief_model("sonnet-4-6") == "sonnet-4-6"`.
-- `test_clamp_rejects_opus_falls_back_to_default` → `clamp_brief_model("opus") is None` (y loggea).
-- `test_clamp_none_when_empty` → `clamp_brief_model(None) is None` y `clamp_brief_model("") is None`.
+- `test_run_brief_clamps_opus_to_cap` → body `model:"claude-opus-4-7"` → `run_agent` recibe
+  `model_override == llm_router._CAP` (NUNCA opus). (Mock de `run_agent`; reusa la constante del router.)
+- `test_run_brief_allows_haiku` → body `model:"haiku"` → `run_agent` recibe un modelo permitido (no se
+  eleva por encima del cap).
+- `test_run_brief_model_none_when_empty` → body sin `model` → `model_override is None` (default del runner).
 - `test_run_brief_passes_effort_from_body` → body con `effort:"medium"` → `run_agent` recibe
   `effort_override="medium"` (mock de `run_agent`).
-- `test_run_brief_effort_defaults_high` → body sin effort → `effort_override="high"`.
-- `test_run_brief_opus_in_body_does_not_reach_runner` → body `model:"opus"` → `run_agent` recibe
-  `model_override=None`.
+- `test_run_brief_effort_defaults_high` → body sin effort (o effort inválido) → `effort_override="high"`.
 
 **Comando backend:** `Stacky Agents/backend/.venv/Scripts/python.exe -m pytest tests/test_run_brief_model_override.py -q`
 
@@ -555,7 +556,7 @@ pedirle al LLM que invente nombres de procesos: los nombres salen de los título
 - **R-SALIDA / R-BATCH / R-GROUNDING:** reglas duras del `BusinessAgent.agent.md`.
 
 ### Orden de implementación (por dependencia)
-1. **F3 backend** (`clamp_brief_model` + effort + tests) — seguridad primero, independiente.
+1. **F3 backend** (aplicar `llm_router.clamp_model` en run_brief + effort + tests) — seguridad primero, reusa el cap existente, independiente.
 2. **F0** (diccionario de procesos) — base del grounding; prerequisito suave (sin diccionario, impacto reducido).
 3. **F1** (índice técnico al client-profile) — aditivo, independiente.
 4. **F2** (R-GROUNDING v1.4.0 + preflight + confidence) — depende de F0/F1 para tener qué citar; incluye [ADICIÓN ARQUITECTO] guardrail de confianza.
@@ -569,7 +570,7 @@ pedirle al LLM que invente nombres de procesos: los nombres salen de los título
 - [ ] Cada feature protegida por su flag con default seguro; con flags OFF el sistema se comporta
       EXACTAMENTE como el Plan 40/41 (backward-compatible verificado por regresión de tests existentes).
 - [ ] BusinessAgent.agent.md en v1.4.0 con R-GROUNDING (incluyendo métrica de confidence [ADICIÓN ARQUITECTO]); R-SALIDA y R-BATCH intactas.
-- [ ] El backend NUNCA envía Opus al runner de brief (verificado por test); `clamp_brief_model` funcional.
+- [ ] El backend NUNCA envía Opus al runner de brief (verificado por test); reusa `llm_router.clamp_model` (no función nueva).
 - [ ] Frontend EpicFromBriefModal: selects de modelo/esfuerzo con handlers, reset de modelo si runtime cambia (C3/C5).
 - [ ] F5 auto-perfilado: algoritmo determinista especificado (C7), nunca alucina procesos.
 - [ ] Paridad de 3 runtimes documentada por ítem con fallback explícito.

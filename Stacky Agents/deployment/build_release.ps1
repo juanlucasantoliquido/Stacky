@@ -434,6 +434,18 @@ try {
         }
     }
 
+    # Rebuild SIEMPRE fresco: borrar el dist previo antes de compilar. Vite vacia
+    # outDir por default, pero esto blinda el deploy contra cualquier cambio futuro
+    # de config (outDir fuera de root o emptyOutDir:false) que dejaria assets
+    # huerfanos del build anterior viajando al release (el dolor "build FROZEN":
+    # los fixes del fuente no llegan). node_modules se reutiliza a proposito (no
+    # afecta la frescura del bundle; Vite recompila el fuente actual).
+    $frontendDist = Join-Path $frontendDir "dist"
+    if (Test-Path $frontendDist) {
+        Write-Step "Limpiando frontend\dist previo (rebuild fresco)"
+        Remove-Item -LiteralPath $frontendDist -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     npm run build
     if ($LASTEXITCODE -ne 0) {
         Write-Warn "npm run build fallo. Limpiando node_modules y reintentando."

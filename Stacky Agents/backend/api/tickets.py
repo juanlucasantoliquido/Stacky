@@ -7,6 +7,7 @@ import re
 import uuid as _uuid_mod
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
 from flask import Blueprint, abort, jsonify, request
 from sqlalchemy import and_, func, or_
@@ -5374,6 +5375,93 @@ def prewarm_ado_cache(ado_id: int):
 
 # ── Plan 38 B0 — Épica desde Brief ──────────────────────────────────────────
 
+def _extract_epic_html(raw: str | None) -> str:
+    """Extrae la Épica HTML LIMPIA del output de un agente.
+
+    El output de un runtime conversacional (claude_code_cli, codex_cli) suele
+    venir como: preámbulo en prosa + uno o más fences ```html ... ``` (la épica)
+    + un resumen final (checklist/emojis). Mandar eso crudo a ADO contamina la
+    Épica. Este helper:
+
+      • Si hay fences ```html```: devuelve el contenido del PRIMER bloque
+        (deduplicando bloques idénticos que el CLI a veces repite).
+      • Si hay fences ``` ``` genéricos cuyo contenido parece HTML: ídem.
+      • Si NO hay fences: devuelve el texto tal cual (HTML ya limpio — compat
+        hacia atrás con clientes que envían `<p>...</p>` directo).
+
+    Idempotente y seguro ante None/"".
+    """
+    if not raw:
+        return ""
+    text = raw.strip()
+
+    # Buscar bloques ```html ... ``` (case-insensitive en el tag).
+    blocks = re.findall(r"```(?:html|HTML)?\s*\n?(.*?)```", text, re.DOTALL)
+    candidates = [b.strip() for b in blocks if b.strip()]
+    # Quedarnos con los que parecen HTML (tienen al menos una etiqueta).
+    html_candidates = [b for b in candidates if re.search(r"<[a-zA-Z][^>]*>", b)]
+    if html_candidates:
+        # Deduplicar preservando orden; devolver el primero (la épica).
+        return html_candidates[0]
+
+    # Sin fences útiles: si el texto ya es HTML, devolverlo limpio.
+    return text
+
+
+def _looks_like_epic(html: str | None) -> bool:
+    """Valida que `html` tenga estructura de Épica real — NO narración del agente.
+
+    Guard anti-narración: el BusinessAgent a veces devuelve narración como mensaje
+    final ("Voy a leer el archivo... El archivo de salida para EP-31 ya existe...")
+    en vez del HTML de la épica. Publicar eso contamina ADO. Este validador exige
+    estructura mínima de épica:
+
+      • al menos un heading (<h1> o <h2>), Y
+      • al menos un bloque de requerimiento `<h2>RF-XXX` (con o sin <hr> previo).
+
+    Narración pura (sin tags) o HTML suelto sin bloque RF → False.
+    Idempotente y seguro ante None/"".
+    """
+    if not html or not str(html).strip():
+        return False
+    text = str(html)
+    has_heading = re.search(r"<h[12][^>]*>", text, re.IGNORECASE) is not None
+    has_rf_block = re.search(r"<h2[^>]*>\s*RF-\s*\d", text, re.IGNORECASE) is not None
+    return has_heading and has_rf_block
+
+
+def _derive_epic_title(raw: str | None, *, fallback: str = "Épica generada desde brief", max_len: int = 250) -> str:
+    """Deriva el título de una Épica desde su HTML cuando el cliente no lo provee.
+
+    Auto-publicación (épica directa, decisión del operador 2026-06-17): el flujo
+    brief→épica dejó de pedir título manual, así que el backend lo deriva del
+    contenido generado por el agente:
+
+      • Preferencia: el texto del primer heading <h1>/<h2>/<h3>.
+      • Si no hay heading: el texto plano del HTML (primera porción).
+      • Limpia tags anidados, desescapa entidades y normaliza espacios.
+      • Trunca a `max_len` (límite de System.Title en ADO ~255).
+      • Fallback estable si el HTML no tiene texto útil.
+
+    Idempotente y seguro ante None/"".
+    """
+    import html as _html
+
+    if not raw or not str(raw).strip():
+        return fallback
+    text = str(raw)
+    m = re.search(r"<h[1-3][^>]*>(.*?)</h[1-3]>", text, re.DOTALL | re.IGNORECASE)
+    candidate = m.group(1) if m else text
+    candidate = re.sub(r"<[^>]+>", " ", candidate)          # quitar tags
+    candidate = _html.unescape(candidate)                    # &amp; → &
+    candidate = " ".join(candidate.split()).strip()          # normalizar espacios
+    if not candidate:
+        return fallback
+    if len(candidate) > max_len:
+        candidate = candidate[:max_len].rstrip()
+    return candidate
+
+
 def _epic_brief_save(ado_id: int, brief: str, project_name: str | None) -> None:
     """Persiste el brief en Agentes/outputs/epic-<ado_id>/brief.txt."""
     try:
@@ -5384,6 +5472,153 @@ def _epic_brief_save(ado_id: int, brief: str, project_name: str | None) -> None:
         (out_dir / "brief.txt").write_text(brief, encoding="utf-8")
     except Exception as exc:
         logger.warning("epic_from_brief: no se pudo guardar brief ado_id=%s err=%s", ado_id, exc)
+
+
+class _PublishedEpic(NamedTuple):
+    """Resultado de publicar una Épica en ADO."""
+    ado_id: int
+    title: str
+    url: str
+
+
+def _persist_epic_ticket(ado_id: int, title: str, description_html: str, url: str, project_name: str | None) -> None:
+    """Persiste (idempotentemente) el ticket local de la Épica creada en ADO."""
+    try:
+        with session_scope() as session:
+            existing = (
+                session.query(Ticket)
+                .filter(Ticket.ado_id == ado_id)
+                .first()
+            )
+            if existing is None:
+                ticket = Ticket(
+                    ado_id=ado_id,
+                    external_id=ado_id,
+                    title=title,
+                    description=description_html,
+                    work_item_type="Epic",
+                    project=project_name or "",
+                    stacky_project_name=project_name,
+                    ado_url=url,
+                )
+                session.add(ticket)
+    except Exception as exc:
+        logger.warning("epic publish: no se pudo persistir ticket local ado_id=%s err=%s", ado_id, exc)
+
+
+def _publish_epic_to_ado(
+    description_html: str,
+    brief: str,
+    project_name: str | None,
+    title: str = "",
+) -> _PublishedEpic:
+    """Helper PURO de publicación: crea la Épica en ADO y persiste el ticket local.
+
+    Reutilizable por el endpoint HTTP (`create_epic_from_brief`) y por la
+    autopublicación autónoma del backend (`autopublish_epic_from_run`).
+
+    - Extrae el HTML limpio de la épica (quita preámbulo/fences/resumen).
+    - Deriva el título del primer heading si `title` viene vacío.
+    - Crea el work item Epic, persiste el ticket local y guarda el brief en disco.
+
+    Propaga las excepciones de ADO (`_AdoApiError`/`_AdoConfigError`/
+    `ProjectContextError`) para que el llamante decida cómo reportar el fallo.
+    """
+    clean_html = _extract_epic_html(description_html) or description_html
+    if not title:
+        title = _derive_epic_title(clean_html)
+
+    client = _ado_client_for_ticket(project_name=project_name)
+    wi = client.create_work_item(
+        work_item_type="Epic",
+        title=title,
+        description=clean_html,
+    )
+
+    ado_id: int = wi["id"]
+    wi_title: str = wi.get("fields", {}).get("System.Title", title)
+    wi_url: str = (
+        wi.get("_links", {}).get("html", {}).get("href")
+        or client.work_item_url(ado_id)
+    )
+
+    _persist_epic_ticket(ado_id, wi_title, clean_html, wi_url, project_name)
+    _epic_brief_save(ado_id, brief, project_name)
+    logger.info("epic publish: Epic creada ado_id=%s title=%r project=%s", ado_id, wi_title, project_name)
+    return _PublishedEpic(ado_id=ado_id, title=wi_title, url=wi_url)
+
+
+class _AutopublishResult(NamedTuple):
+    """Resultado de la autopublicación autónoma de una run brief→épica.
+
+    - ado_id: id de la Épica creada (o el ya sellado si fue idempotente).
+    - error: mensaje de fallo VISIBLE si la publicación falló (None si OK).
+    - skipped: True si no se publicó (ya sellada o sin HTML de épica) — no es fallo.
+    """
+    ado_id: int | None
+    error: str | None
+    skipped: bool = False
+
+
+def autopublish_epic_from_run(
+    *,
+    output: str | None,
+    brief: str,
+    project_name: str | None,
+    already_published_id: int | None,
+) -> _AutopublishResult:
+    """Plan 41 — Publica la Épica en ADO de forma AUTÓNOMA al cerrar la run.
+
+    Cierra el agujero recurrente: el handshake de publicación vivía 100% en el
+    navegador (polling + publishEpic). Si el frontend no completaba el ciclo
+    (modal cerrado, navegación, timeout de 5 min, fallo transitorio), la run
+    terminaba OK pero SIN épica en ADO, sin error ruidoso.
+
+    Contrato:
+      - already_published_id != None → idempotente, no republica (skipped=True).
+      - output vacío → no hay nada que publicar todavía (skipped=True, sin error).
+      - output con contenido que NO es épica (narración del agente) → FALLO RUIDOSO:
+        ado_id=None + error `epic_not_in_output` (el llamante degrada a needs_review).
+      - ADO falla → ado_id=None + error visible (el llamante degrada a needs_review).
+      - éxito → ado_id sellable en metadata["epic_ado_id"].
+    """
+    if already_published_id is not None:
+        return _AutopublishResult(ado_id=int(already_published_id), error=None, skipped=True)
+
+    # Output realmente vacío: la run aún no produjo nada — skip silencioso (sin fallo).
+    if not output or not str(output).strip():
+        return _AutopublishResult(ado_id=None, error=None, skipped=True)
+
+    clean_html = _extract_epic_html(output)
+    # Guard anti-narración: solo publicamos si el contenido tiene estructura de
+    # épica real (heading + bloque RF). El BusinessAgent a veces narra/escribe a
+    # archivo y devuelve prosa como output. Publicar eso = épica basura o, peor,
+    # `completed` fantasma sin épica. Falla RUIDOSO para que el operador lo vea.
+    if not _looks_like_epic(clean_html):
+        return _AutopublishResult(
+            ado_id=None,
+            error=(
+                "epic_not_in_output: el agente devolvió narración en vez del HTML de "
+                "la épica (probablemente la escribió en un archivo). Revisar/reintentar "
+                "la generación de la épica desde el brief."
+            ),
+            skipped=False,
+        )
+
+    try:
+        published = _publish_epic_to_ado(
+            description_html=clean_html,
+            brief=brief,
+            project_name=project_name,
+        )
+    except (_AdoApiError, _AdoConfigError, ProjectContextError) as exc:
+        logger.error("autopublish_epic_from_run: ADO error: %s", exc)
+        return _AutopublishResult(ado_id=None, error=str(exc), skipped=False)
+    except Exception as exc:  # noqa: BLE001 — fallo inesperado también es ruidoso
+        logger.error("autopublish_epic_from_run: error inesperado: %s", exc, exc_info=True)
+        return _AutopublishResult(ado_id=None, error=str(exc), skipped=False)
+
+    return _AutopublishResult(ado_id=published.ado_id, error=None, skipped=False)
 
 
 @bp.post("/epics/from-brief")
@@ -5415,19 +5650,15 @@ def create_epic_from_brief():
             "message": "Debes enviar confirm:true para crear la épica (human-in-the-loop).",
         }), 400
 
-    if not title:
-        return jsonify({"ok": False, "error": "missing_title", "message": "El campo 'title' es obligatorio."}), 400
-
     if not description_html:
         return jsonify({"ok": False, "error": "missing_description", "message": "El campo 'description_html' es obligatorio."}), 400
 
-    # Crear en ADO
     try:
-        client = _ado_client_for_ticket(project_name=project_name)
-        wi = client.create_work_item(
-            work_item_type="Epic",
+        published = _publish_epic_to_ado(
+            description_html=description_html,
+            brief=brief,
+            project_name=project_name,
             title=title,
-            description=description_html,
         )
     except (_AdoApiError, _AdoConfigError, ProjectContextError) as exc:
         status = getattr(exc, "status_code", None)
@@ -5435,46 +5666,10 @@ def create_epic_from_brief():
         logger.error("create_epic_from_brief: ADO error: %s", exc)
         return jsonify({"ok": False, "error": "ado_error", "message": str(exc)}), http_status
 
-    ado_id: int = wi["id"]
-    wi_title: str = wi.get("fields", {}).get("System.Title", title)
-    wi_url: str = (
-        wi.get("_links", {}).get("html", {}).get("href")
-        or client.work_item_url(ado_id)
-    )
-
-    # Persistir ticket local
-    try:
-        with session_scope() as session:
-            existing = (
-                session.query(Ticket)
-                .filter(Ticket.ado_id == ado_id)
-                .first()
-            )
-            if existing is None:
-                from datetime import timezone as _tz
-                ticket = Ticket(
-                    ado_id=ado_id,
-                    external_id=ado_id,
-                    title=wi_title,
-                    description=description_html,
-                    work_item_type="Epic",
-                    project=project_name or "",
-                    stacky_project_name=project_name,
-                    ado_url=wi_url,
-                )
-                session.add(ticket)
-    except Exception as exc:
-        logger.warning("create_epic_from_brief: no se pudo persistir ticket local ado_id=%s err=%s", ado_id, exc)
-
-    # Guardar brief en disco
-    _epic_brief_save(ado_id, brief, project_name)
-
-    logger.info("create_epic_from_brief: Epic creada ado_id=%s title=%r project=%s", ado_id, wi_title, project_name)
-
     return jsonify({
         "ok": True,
-        "ado_id": ado_id,
+        "ado_id": published.ado_id,
         "work_item_type": "Epic",
-        "title": wi_title,
-        "url": wi_url,
+        "title": published.title,
+        "url": published.url,
     }), 201

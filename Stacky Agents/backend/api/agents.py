@@ -561,6 +561,8 @@ def run_brief():
     runtime_raw = payload.get("runtime") or "github_copilot"
     project_name = (payload.get("project") or "").strip() or None
     vscode_agent_filename: str | None = payload.get("vscode_agent_filename") or None
+    # Plan 40 F3 — modelo opcional por-run; effort fijo "high" para briefs.
+    model_override: str | None = (payload.get("model") or "").strip() or None
 
     # Auto-resolve el .agent.md del BusinessAgent para runtimes CLI.
     if runtime_raw in ("codex_cli", "claude_code_cli") and not vscode_agent_filename:
@@ -577,8 +579,9 @@ def run_brief():
         if pool_ticket is None:
             pool_ticket = Ticket(
                 ado_id=-1,
-                tracker_item_id="-1",
+                external_id=-1,
                 project=pool_project,
+                stacky_project_name=pool_project,
                 title="[Stacky] Brief Pool",
                 work_item_type="Task",
                 ado_state="Active",
@@ -609,9 +612,22 @@ def run_brief():
             project_name=project_name,
             use_few_shot=False,
             use_anti_patterns=False,
+            model_override=model_override,
+            effort_override="high",
         )
     except agent_runner.UnknownAgentError:
         abort(400, "agent_type 'business' no está registrado")
+    except Exception as exc:  # noqa: BLE001 — Plan 39 B1: nunca 500 genérico
+        logger.exception(
+            "run_brief: fallo al lanzar agente runtime=%s project=%s",
+            runtime_raw, project_name,
+        )
+        return jsonify({
+            "ok": False,
+            "error": "agent_launch_failed",
+            "runtime": runtime_raw,
+            "message": str(exc),
+        }), 502
 
     logger.info(
         "run_brief: execution_id=%s runtime=%s project=%s",

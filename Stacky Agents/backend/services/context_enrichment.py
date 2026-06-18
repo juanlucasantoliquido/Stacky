@@ -554,6 +554,26 @@ def build_client_profile_block(
                 "defaults del tracker; confirmá rutas/estados antes de usarlos.\n"
                 + content
             )
+        # Plan 39 C2 — Inyectar directiva de acceso a BD read-only (sin password).
+        # Gated por STACKY_DB_READONLY_DIRECTIVE_ENABLED (default false).
+        if os.getenv("STACKY_DB_READONLY_DIRECTIVE_ENABLED", "false").lower() in {"1", "true", "on"}:
+            try:
+                from services.db_query import get_db_access_directive
+                db_dir = get_db_access_directive(project_name)
+                if db_dir.get("has_readonly"):
+                    db_section = (
+                        "\n\n### Acceso a base de datos (OBLIGATORIO)\n"
+                        f"- Conectarse SIEMPRE con el usuario de SOLO LECTURA del perfil: "
+                        f"`{db_dir['user']}` (modo {db_dir['connection_mode']}).\n"
+                        f"- Servidor: `{db_dir['server']}` | Motor: `{db_dir['dialect']}`.\n"
+                        "- PROHIBIDO usar autenticación integrada de Windows (`-E` / Trusted_Connection) "
+                        "cuando hay usuario read-only configurado.\n"
+                        "- El password NO se incluye aquí: se resuelve server-side al ejecutar la consulta."
+                    )
+                    content = content + db_section
+            except Exception as _db_exc:  # noqa: BLE001
+                log("warn", f"db_readonly_directive no disponible (continuando): {_db_exc}")
+
         block = {
             "kind": "text",
             "id": "client-profile",

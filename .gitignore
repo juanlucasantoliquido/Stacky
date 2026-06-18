@@ -18,6 +18,11 @@ __pycache__/
 pipeline/state.json
 state/
 active_project.json
+# DB viva del runtime — binario, no versionar
+data/
+*.db
+*.sqlite
+*.sqlite3
 NOTIFICATIONS.json
 
 # Proyectos / tickets scrapeados — contienen datos del cliente

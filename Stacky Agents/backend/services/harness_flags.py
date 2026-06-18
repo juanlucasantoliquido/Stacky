@@ -1043,6 +1043,31 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
     ),
+    # ── Plan 39 — Historial de runs, fix épica CLI y BD read-only ────────────
+    FlagSpec(
+        key="STACKY_DB_READONLY_DIRECTIVE_ENABLED",
+        type="bool",
+        label="Directiva de acceso BD read-only (C2)",
+        description=(
+            "Plan 39 C2 — Si ON, inyecta una sección en el perfil del cliente con el "
+            "usuario read-only de la BD configurado (readonly_user_hint / auth/db_readonly.json). "
+            "NUNCA incluye el password. Guía al agente a usar sql_login en lugar de auth "
+            "integrada de Windows. OFF = build_client_profile_block byte-idéntico."
+        ),
+        group="database",
+    ),
+    FlagSpec(
+        key="STACKY_EXECUTION_HISTORY_ENABLED",
+        type="bool",
+        label="Historial de ejecuciones (A1)",
+        description=(
+            "Plan 39 A1 — Habilita GET /api/executions/history con historial completo: "
+            "duración, costo, tokens, runtime, modelo, prompt_sha, archivos producidos. "
+            "Soporta filtros por proyecto/agente/runtime/estado/días y paginación. "
+            "OFF = endpoint devuelve 404 feature_disabled."
+        ),
+        group="observability",
+    ),
 )
 
 # Índice rápido para lookups O(1)

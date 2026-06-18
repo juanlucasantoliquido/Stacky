@@ -416,6 +416,17 @@ class Config:
         "STACKY_ACCEPTANCE_KPIS_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # ── Plan 39 — Historial de runs, fix épica CLI y BD read-only ────────────
+    # C2 — Inyecta directiva de acceso a BD read-only en el perfil del cliente.
+    #      NUNCA incluye el password. OFF por default (retro-compat).
+    STACKY_DB_READONLY_DIRECTIVE_ENABLED: bool = os.getenv(
+        "STACKY_DB_READONLY_DIRECTIVE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # A1 — Habilita GET /api/executions/history con historial completo de runs.
+    STACKY_EXECUTION_HISTORY_ENABLED: bool = os.getenv(
+        "STACKY_EXECUTION_HISTORY_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",
@@ -683,6 +694,21 @@ class Config:
     # B0 — Endpoint POST /api/tickets/epics/from-brief.
     STACKY_EPIC_FROM_BRIEF_ENABLED: bool = os.getenv(
         "STACKY_EPIC_FROM_BRIEF_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 41 — Autopublicación backend de la épica brief→épica (palanca de
+    # emergencia). ON: el finalizador del runner CLI publica la épica en ADO de
+    # forma autónoma e idempotente al cerrar la run, sin depender del frontend.
+    STACKY_EPIC_AUTOPUBLISH_BACKEND: bool = os.getenv(
+        "STACKY_EPIC_AUTOPUBLISH_BACKEND", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Fix robusto brief→épica — pase correctivo: si el BusinessAgent (one-shot)
+    # devuelve narración en vez del HTML de la épica, se le pide UNA vez por stdin
+    # que re-emita SOLO el HTML antes de cerrar la sesión. Reusa el presupuesto de
+    # reintentos del autocorrect. OFF → solo fallo ruidoso (needs_review), sin retry.
+    STACKY_EPIC_REPAIR_ENABLED: bool = os.getenv(
+        "STACKY_EPIC_REPAIR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # C0/C1 — Trazabilidad de ejecución (agent_type, prompt_sha, produced_files).

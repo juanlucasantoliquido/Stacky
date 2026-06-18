@@ -107,6 +107,7 @@ def start_claude_code_cli_run(
     ticket_message: str,
     workspace_root: str | None = None,
     model_override: str | None = None,
+    effort_override: str | None = None,
 ) -> int:
     """Crea una fila AgentExecution y lanza Claude Code CLI en background.
 
@@ -173,6 +174,7 @@ def start_claude_code_cli_run(
             "vscode_agent_filename": vscode_agent_filename,
             "workspace_root": workspace_root,
             "model_override": model_override,
+            "effort_override": effort_override,
         },
         daemon=True,
         name=f"claude-code-cli-{execution_id}",
@@ -235,6 +237,24 @@ def _format_cli_error(return_code: int | None, stderr_excerpt: str) -> str:
     if stderr_excerpt:
         return f"{base}: {stderr_excerpt[:500]}"
     return base
+
+
+def _classify_run_outcome(
+    *, stall_fired: bool, result_ok_seen: bool, return_code: int | None
+) -> str:
+    """R1.2 — Clasifica el desenlace de un run claude_code_cli.
+
+    - ``success``: salida limpia (rc==0) o el agente emitió un ``result``
+      terminal exitoso (one-shot cerrado, o stall/terminate tras entregar
+      trabajo: la sesión solo quedó ociosa, el trabajo ya estaba hecho).
+    - ``failed_stall``: el watchdog disparó SIN un result ok → cuelgue real.
+    - ``error``: exit code != 0 sin result ok → fallo del propio CLI.
+    """
+    if stall_fired and not result_ok_seen:
+        return "failed_stall"
+    if return_code == 0 or result_ok_seen:
+        return "success"
+    return "error"
 
 
 def _user_message_line(text: str) -> str:
@@ -330,6 +350,7 @@ def _run_in_background(
     vscode_agent_filename: str,
     workspace_root: str | None,
     model_override: str | None,
+    effort_override: str | None = None,
 ) -> None:
     started = datetime.utcnow()
 
@@ -646,9 +667,13 @@ def _run_in_background(
             return
 
         # Q0.2 — Esfuerzo adaptativo por dificultad estimada (OFF default).
+        # effort_override explícito (ej: "high" para briefs) tiene prioridad.
         _adaptive_effort = _map_effort(_cli_complexity)
         if _adaptive_effort:
             log("info", f"adaptive effort → {_adaptive_effort} (complexity={_cli_complexity}, Q0.2)")
+        _effective_effort = effort_override or _adaptive_effort
+        if effort_override:
+            log("info", f"effort_override explícito → {effort_override} (prioridad sobre adaptativo)")
 
         cmd = _build_command(
             model_override=routed_model,
@@ -656,7 +681,7 @@ def _run_in_background(
             settings_file=hooks_settings_file,
             mcp_config_file=mcp_config_file,
             resume_session_id=resume_session_id,
-            effort_override=_adaptive_effort,
+            effort_override=_effective_effort,
         )
         log("info", f"claude code cli cwd={cwd}")
         log("info", "claude code cli command: " + _display_command(cmd))
@@ -764,6 +789,12 @@ def _run_in_background(
         _criteria_repair_result: list[dict | None] = [None]   # [0] = meta o None
         _criteria_repair_done: list[bool] = [False]           # flag mutable para closure
 
+        # Fix robusto brief→épica — pase correctivo de épica (flag ON default).
+        # Si el BusinessAgent one-shot narra en vez de emitir el HTML de la épica,
+        # le pedimos UNA vez por stdin que re-emita SOLO el HTML antes de cerrar.
+        _epic_repair_result: list[dict | None] = [None]       # [0] = meta o None
+        _epic_repair_done: list[bool] = [False]               # flag mutable para closure
+
         # H5 — Runaway guard: límite de turnos y costo por run.
         from harness.runaway_guard import RunLimits, RunawayGuard
         _runaway_guard = RunawayGuard(
@@ -778,12 +809,24 @@ def _run_in_background(
         _last_event_wall: list[datetime] = [datetime.utcnow()]
         _last_event_mono: list[float] = [time.monotonic()]
         _stall_fired: list[bool] = [False]
+        # R1.2 — ¿el agente emitió un `result` terminal exitoso? Si sí, el run
+        # completó su trabajo aunque después la sesión quede ociosa.
+        _result_ok_seen: list[bool] = [False]
+        # R1.2 — run de un solo turno (brief→épica usa el pool ticket ado_id=-1):
+        # no hay conversación in-page, así que cerramos stdin apenas llega el
+        # result terminal para salir limpio sin esperar al watchdog.
+        _one_shot = (t_ado_id == -1)
 
         def _on_stream_event(event: dict) -> None:
             nonlocal last_telemetry_emit
             _last_event_wall[0] = datetime.utcnow()
             _last_event_mono[0] = time.monotonic()
             _capture_result_telemetry(stream_telemetry, event)
+            # R1.2 — un `result` terminal sin is_error = el agente entregó su
+            # trabajo. Lo recordamos para clasificar bien un stall posterior y
+            # para cerrar la sesión one-shot.
+            if event.get("type") == "result":
+                _result_ok_seen[0] = not bool(event.get("is_error"))
             if config.STACKY_LIVE_TELEMETRY_ENABLED:
                 now = time.monotonic()
                 if now - last_telemetry_emit >= 2.0:
@@ -839,6 +882,48 @@ def _run_in_background(
                         log("info", f"criteria_repair: {_cr} (Q1.1)")
                 except Exception as _exc_cr:  # noqa: BLE001
                     log("warn", f"criteria_repair falló (no crítico): {_exc_cr}")
+            # Fix robusto brief→épica — pase correctivo de épica (último turno,
+            # solo una vez, stdin todavía abierto). Si el BusinessAgent one-shot
+            # devolvió narración en vez del HTML de la épica, le pedimos UNA vez
+            # que re-emita SOLO el HTML. Reusa _send_system_message como Q1.1.
+            if (
+                not _epic_repair_done[0]
+                and event.get("type") == "result"
+                and getattr(config, "STACKY_EPIC_REPAIR_ENABLED", False)
+                and _one_shot
+                and (agent_type or "").lower() == "business"
+            ):
+                _epic_repair_done[0] = True
+                try:
+                    from api.tickets import _extract_epic_html, _looks_like_epic
+                    _current_output = "\n".join(final_output) if final_output else ""
+                    if not _looks_like_epic(_extract_epic_html(_current_output)):
+                        _ac_used = autocorrect.attempts if autocorrect is not None else 0
+                        _ac_budget = config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES
+                        if _ac_used < _ac_budget:
+                            _EPIC_REPAIR_MSG = (
+                                "Tu último mensaje fue narración, no la épica. "
+                                "Re-emití AHORA, como único contenido del mensaje, "
+                                "EXCLUSIVAMENTE el HTML de la épica dentro de un único "
+                                "bloque ```html ... ```: <h1> con el título, el resumen "
+                                "ejecutivo y los bloques <hr><h2>RF-XXX. SIN narración, "
+                                "SIN preámbulo, SIN escribirla en un archivo."
+                            )
+                            _sent = _send_system_message(execution_id, _EPIC_REPAIR_MSG)
+                            _epic_repair_result[0] = {
+                                "attempted": True,
+                                "reason": "narration_not_epic",
+                                "sent": bool(_sent),
+                            }
+                            log("info", f"epic_repair: reintento solicitado (sent={_sent})")
+                        else:
+                            _epic_repair_result[0] = {
+                                "attempted": False,
+                                "reason": "narration_not_epic",
+                                "budget_exhausted": True,
+                            }
+                except Exception as _exc_er:  # noqa: BLE001
+                    log("warn", f"epic_repair falló (no crítico): {_exc_er}")
             # H5 — chequear runaway en cada evento con datos de telemetría.
             if not _runaway_triggered:
                 reason = _runaway_guard.observe(
@@ -870,6 +955,7 @@ def _run_in_background(
         import time as _time
         session_deadline = (_time.monotonic() + session_timeout) if session_timeout else None
         _runaway_grace_deadline: float | None = None
+        _one_shot_close_deadline: float | None = None
         stall_watchdog_sec = config.STACKY_STALL_WATCHDOG_SECONDS
         while True:
             try:
@@ -915,6 +1001,28 @@ def _run_in_background(
                             proc.stdin.close()
                     except Exception:
                         pass
+                    proc.terminate()
+                    try:
+                        return_code = proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        return_code = proc.wait()
+                    break
+                # R1.2 — run one-shot (brief→épica): apenas el agente entrega su
+                # result terminal cerramos stdin para que el proceso salga limpio.
+                # Damos una gracia corta y, si no sale, lo terminamos: así el run
+                # finaliza en segundos (no espera 600s al watchdog) y libera el
+                # slot, evitando el 409 duplicate_run por sesión zombie.
+                if _one_shot and _result_ok_seen[0] and _one_shot_close_deadline is None:
+                    log("info", "run one-shot: result terminal recibido — cerrando sesión")
+                    try:
+                        if proc.stdin and not proc.stdin.closed:
+                            proc.stdin.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    _one_shot_close_deadline = _time.monotonic() + 20.0
+                if _one_shot_close_deadline is not None and _time.monotonic() > _one_shot_close_deadline:
+                    log("warn", "run one-shot: gracia post-result expirada — terminando")
                     proc.terminate()
                     try:
                         return_code = proc.wait(timeout=10)
@@ -1039,8 +1147,58 @@ def _run_in_background(
         # Q1.1 — sello del pase correctivo de criterios (clave nueva, aditiva).
         if _criteria_repair_result[0] is not None:
             metadata["criteria_repair"] = _criteria_repair_result[0]
+        # Fix robusto brief→épica — sello del pase correctivo de épica (aditivo).
+        if _epic_repair_result[0] is not None:
+            metadata["epic_repair"] = _epic_repair_result[0]
+        # Plan 41 — Autopublicación backend de la épica brief→épica.
+        # Mueve la garantía de creación de la épica del navegador al backend:
+        # si la run es brief→épica (one-shot del BusinessAgent) y el output trae
+        # HTML de épica, se publica en ADO de forma autónoma, idempotente y con
+        # fallo RUIDOSO (needs_review). Sella metadata["epic_ado_id"].
+        def _maybe_autopublish_epic(current_status: str) -> str:
+            if not config.STACKY_EPIC_AUTOPUBLISH_BACKEND:
+                return current_status
+            if not (_one_shot and (agent_type or "").lower() == "business"):
+                return current_status
+            try:
+                from api.tickets import autopublish_epic_from_run
+            except Exception as exc:  # noqa: BLE001
+                log("warn", f"autopublish épica: import falló (no crítico): {exc}")
+                return current_status
+            _brief_text = ""
+            for _b in (raw_blocks or []):
+                if isinstance(_b, dict) and _b.get("id") == "brief":
+                    _brief_text = str(_b.get("content") or "")
+                    break
+            _proj = project_ctx.stacky_project_name if project_ctx else None
+            try:
+                _res = autopublish_epic_from_run(
+                    output=output,
+                    brief=_brief_text,
+                    project_name=_proj,
+                    already_published_id=metadata.get("epic_ado_id"),
+                )
+            except Exception as exc:  # noqa: BLE001 — nunca tumbar el finalizador
+                log("error", f"autopublish épica: error inesperado: {exc}")
+                metadata["epic_publish_error"] = str(exc)
+                return "needs_review"
+            if _res.error is not None:
+                # Fallo RUIDOSO: la épica NO se creó → needs_review visible.
+                metadata["epic_publish_error"] = _res.error
+                log("error", f"autopublish épica: publicación falló → needs_review: {_res.error}")
+                return "needs_review"
+            if _res.ado_id is not None and not _res.skipped:
+                metadata["epic_ado_id"] = _res.ado_id
+                log("info", f"autopublish épica: Epic creada autónomamente ado_id={_res.ado_id}")
+            elif _res.ado_id is not None and _res.skipped:
+                metadata["epic_ado_id"] = _res.ado_id  # ya sellada, re-afirmar
+            return current_status
+
         # H5 — trazabilidad del runaway guard.
         if _runaway_triggered:
+            # Incluso en runaway intentamos publicar la épica si el agente alcanzó
+            # a entregar el HTML (no perder trabajo); el status sigue needs_review.
+            _maybe_autopublish_epic("needs_review")
             metadata["runaway"] = {
                 "reason": _runaway_triggered[0],
                 "turns": stream_telemetry.get("num_turns"),
@@ -1130,8 +1288,15 @@ def _run_in_background(
             except Exception as exc:  # noqa: BLE001
                 log("warn", f"run_repair claude falló (no crítico): {exc}")
 
-        # R1.1 — si el stall watchdog disparó, marcar failed/stalled y salir.
-        if _stall_fired[0]:
+        # R1.1/R1.2 — desenlace del run. Un stall SIN result terminal exitoso es
+        # un cuelgue real → failed. Si hubo result(ok), el agente terminó su
+        # trabajo y la sesión solo quedó ociosa → se trata como éxito.
+        _outcome_kind = _classify_run_outcome(
+            stall_fired=_stall_fired[0],
+            result_ok_seen=_result_ok_seen[0],
+            return_code=return_code,
+        )
+        if _outcome_kind == "failed_stall":
             stall_meta = {
                 "detected_at": datetime.utcnow().isoformat(),
                 "last_event_at": _last_event_wall[0].isoformat(),
@@ -1157,7 +1322,18 @@ def _run_in_background(
                 agent_type=agent_type,
                 status="error",
             )
-        elif return_code == 0:
+        elif _outcome_kind == "success":
+            # Éxito: salida limpia (rc=0) o el agente emitió un result terminal
+            # exitoso (one-shot cerrado, o stall/terminate tras entregar trabajo).
+            if _result_ok_seen[0] and return_code != 0:
+                metadata["finalized_after_result"] = {
+                    "reason": "stall_or_oneshot_close",
+                    "stall_fired": bool(_stall_fired[0]),
+                    "one_shot": bool(_one_shot),
+                    "exit_code": return_code,
+                    "last_event_at": _last_event_wall[0].isoformat(),
+                }
+                log("info", "result(ok) recibido: run finalizado como exitoso (sesión cerrada tras entregar trabajo)")
             # F1.1 — Paridad de calidad con el path copilot: contract validator
             # + confidence ANTES de marcar terminal. Con el gate habilitado,
             # errores duros de contrato degradan a needs_review (estado ya
@@ -1167,6 +1343,9 @@ def _run_in_background(
             )
             metadata["confidence"] = conf.to_dict()
             metadata["contract_score"] = cv_result.score
+            # Plan 41 — autopublicar la épica antes de marcar terminal. Puede
+            # forzar needs_review si la publicación falla (fallo ruidoso).
+            final_status = _maybe_autopublish_epic(final_status)
             # Plan 38 C1 — Trazabilidad: agent_type, agent_name, produced_files
             if config.STACKY_EXECUTION_TRACE_ENABLED:
                 try:

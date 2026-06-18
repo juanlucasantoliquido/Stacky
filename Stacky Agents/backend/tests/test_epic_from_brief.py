@@ -45,11 +45,33 @@ def test_requires_confirm(client):
     assert data.get("error") == "confirmation_required"
 
 
-def test_requires_title(client):
-    """Sin title → 400."""
+def test_derives_title_when_missing(client, monkeypatch):
+    """Auto-publicación: title vacío ya NO es 400 — se deriva del HTML.
+
+    Cambio de contrato (decisión del operador 2026-06-17): el flujo brief→épica
+    publica directo sin paso de aprobación manual, así que el backend deriva el
+    título del primer heading del contenido en vez de exigirlo.
+    """
+    captured = {}
+    mock_client = MagicMock()
+
+    def _capture_create(**kwargs):
+        captured.update(kwargs)
+        return {
+            "id": 7777,
+            "fields": {"System.Title": kwargs.get("title", "T")},
+            "_links": {"html": {"href": "https://dev.azure.com/x/_workitems/edit/7777"}},
+        }
+
+    mock_client.create_work_item.side_effect = _capture_create
+    mock_client.work_item_url.return_value = "https://dev.azure.com/x/_workitems/edit/7777"
+    monkeypatch.setattr("api.tickets._ado_client_for_ticket", lambda **kw: mock_client)
+    import api.tickets as t_mod
+    monkeypatch.setattr(t_mod, "_epic_brief_save", lambda *a, **k: None)
+
     body = {
         "title": "",
-        "description_html": "<p>Y</p>",
+        "description_html": "<h1>EP-42 — Motor de Cobranzas</h1><p>x</p>",
         "brief": "Z",
         "project_name": "P",
         "confirm": True,
@@ -59,9 +81,9 @@ def test_requires_title(client):
         data=json.dumps(body),
         content_type="application/json",
     )
-    assert resp.status_code == 400
-    data = resp.get_json()
-    assert data.get("error") in ("missing_title", "validation_error")
+    assert resp.status_code == 201, resp.get_data(as_text=True)
+    # El título mandado a ADO se derivó del primer heading del HTML.
+    assert captured.get("title") == "EP-42 — Motor de Cobranzas"
 
 
 def test_requires_description(client):

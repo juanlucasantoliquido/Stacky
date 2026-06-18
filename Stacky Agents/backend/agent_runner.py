@@ -84,6 +84,7 @@ def run_agent(
     pack_run_id: int | None = None,
     pack_step: int | None = None,
     model_override: str | None = None,
+    effort_override: str | None = None,
     system_prompt_override: str | None = None,
     use_few_shot: bool = True,
     use_anti_patterns: bool = True,
@@ -147,6 +148,7 @@ def run_agent(
             user=user,
             vscode_agent_filename=vscode_agent_filename,
             model_override=model_override,
+            effort_override=effort_override,
             project_name=project_name,
         )
 
@@ -395,6 +397,7 @@ def _start_cli_runtime(
     user: str,
     vscode_agent_filename: str | None,
     model_override: str | None,
+    effort_override: str | None = None,
     project_name: str | None,
 ) -> int:
     workspace_root: str | None = None
@@ -437,6 +440,7 @@ def _start_cli_runtime(
             ticket_message=ticket_message,
             workspace_root=workspace_root,
             model_override=model_override,
+            effort_override=effort_override,
         )
 
     raise ValueError(f"unsupported cli runtime: {runtime}")

@@ -210,13 +210,46 @@ def _resolve_db_readonly(project_name: str) -> dict:
     )
     if not password_secret.value:
         return {}
+    resolved_user = payload.get("user") or db.get("readonly_user_hint") or ""
     return {
-        "server":   payload.get("server") or db.get("server") or "",
-        "database": payload.get("database") or "",
-        "user":     payload.get("user") or db.get("readonly_user_hint") or "",
-        "password": password_secret.value,
-        "auth_file": auth_ref,
-        "dialect":  db.get("type") or "",
+        "server":          payload.get("server") or db.get("server") or "",
+        "database":        payload.get("database") or "",
+        "user":            resolved_user,
+        "password":        password_secret.value,
+        "auth_file":       auth_ref,
+        "dialect":         db.get("type") or "",
+        "connection_mode": "sql_login" if resolved_user else (db.get("connection_kind") or ""),
+    }
+
+
+def get_db_access_directive(project_name: str) -> dict:
+    """Fuente de verdad para conexión del agente a BD. NUNCA devuelve password.
+
+    Plan 39 C1 — Retorna un dict seguro (sin credenciales) que indica cómo
+    el agente debe conectarse a la BD read-only del proyecto.
+    """
+    try:
+        auth = _resolve_db_readonly(project_name)
+    except Exception:  # noqa: BLE001
+        auth = {}
+
+    if not auth or not auth.get("user"):
+        return {
+            "has_readonly": False,
+            "user": "",
+            "server": auth.get("server") or "",
+            "dialect": auth.get("dialect") or "",
+            "connection_mode": auth.get("connection_mode") or "",
+            "must_avoid_windows_auth": False,
+        }
+    return {
+        "has_readonly": True,
+        "user":         auth.get("user") or "",
+        "server":       auth.get("server") or "",
+        "dialect":      auth.get("dialect") or "",
+        "connection_mode": auth.get("connection_mode") or "sql_login",
+        "must_avoid_windows_auth": bool(auth.get("user")),
+        # "password" NUNCA se incluye aquí
     }
 
 

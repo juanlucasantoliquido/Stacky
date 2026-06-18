@@ -139,3 +139,151 @@ def test_codex_stall_watchdog_active_stream_not_cut():
 
     assert stall_fired[0] is False
     assert return_code == 0
+
+
+# ── R1.2 — desenlace del run claude_code_cli: stall tras result(ok) = éxito ───
+
+def test_classify_outcome_stall_without_result_is_failed():
+    """Stall SIN result terminal → cuelgue real → failed."""
+    from services.claude_code_cli_runner import _classify_run_outcome
+
+    assert _classify_run_outcome(
+        stall_fired=True, result_ok_seen=False, return_code=-15
+    ) == "failed_stall"
+
+
+def test_classify_outcome_stall_after_result_ok_is_success():
+    """Stall DESPUÉS de un result(ok) → el trabajo se entregó → success.
+
+    Este es el caso del brief→épica: el agente escribió la épica y emitió
+    result(ok); la sesión quedó ociosa y el watchdog la cerró. No es un fallo.
+    """
+    from services.claude_code_cli_runner import _classify_run_outcome
+
+    assert _classify_run_outcome(
+        stall_fired=True, result_ok_seen=True, return_code=-15
+    ) == "success"
+
+
+def test_classify_outcome_clean_exit_is_success():
+    """Salida limpia (rc=0) → success, haya o no result registrado."""
+    from services.claude_code_cli_runner import _classify_run_outcome
+
+    assert _classify_run_outcome(
+        stall_fired=False, result_ok_seen=False, return_code=0
+    ) == "success"
+
+
+def test_classify_outcome_oneshot_terminate_after_result_is_success():
+    """One-shot: terminate tras result(ok) deja rc!=0 pero el run fue exitoso."""
+    from services.claude_code_cli_runner import _classify_run_outcome
+
+    assert _classify_run_outcome(
+        stall_fired=False, result_ok_seen=True, return_code=-15
+    ) == "success"
+
+
+def test_classify_outcome_nonzero_without_result_is_error():
+    """Exit code != 0 sin result ok → fallo real del CLI → error."""
+    from services.claude_code_cli_runner import _classify_run_outcome
+
+    assert _classify_run_outcome(
+        stall_fired=False, result_ok_seen=False, return_code=1
+    ) == "error"
+
+
+# ── R1.2 — one-shot: cierra stdin apenas llega el result terminal ─────────────
+
+def test_oneshot_closes_stdin_after_result():
+    """Run one-shot con result(ok): se cierra stdin y se termina en la gracia,
+    sin esperar al watchdog de 600s."""
+    import time as _time
+    import subprocess as sp
+
+    proc = MagicMock()
+    proc.stdin.closed = False
+    # El proceso nunca termina solo (espera más input): siempre TimeoutExpired
+    # hasta que lo terminamos tras cerrar stdin.
+    proc.wait.side_effect = [sp.TimeoutExpired("claude", 5), 0]
+
+    one_shot = True
+    result_ok_seen = [True]
+    one_shot_close_deadline = [None]
+    closed = {"stdin": False}
+
+    def _close():
+        closed["stdin"] = True
+        proc.stdin.closed = True
+    proc.stdin.close.side_effect = _close
+
+    return_code = None
+    while True:
+        try:
+            return_code = proc.wait(timeout=5)
+            break
+        except sp.TimeoutExpired:
+            if one_shot and result_ok_seen[0] and one_shot_close_deadline[0] is None:
+                if proc.stdin and not proc.stdin.closed:
+                    proc.stdin.close()
+                one_shot_close_deadline[0] = _time.monotonic() - 1  # ya expirada
+            if one_shot_close_deadline[0] is not None and _time.monotonic() > one_shot_close_deadline[0]:
+                proc.terminate()
+                return_code = proc.wait(timeout=10)
+                break
+            continue
+
+    assert closed["stdin"] is True
+    proc.terminate.assert_called()
+    assert return_code == 0
+
+
+# ── Regresión: "no crea la épica cuando la run termina" ──────────────────────
+# Root cause histórico: el brief→épica (one-shot, ado_id=-1) emitía result(ok)
+# pero la sesión CLI quedaba ociosa; el stall watchdog disparaba y el run se
+# marcaba como FALLIDO. El modal EpicFromBriefModal solo avanza al paso "review"
+# (donde el operador aprueba y se crea la épica en ADO) si el run termina en
+# completed/needs_review; con failed/error va al paso "error" y la épica NUNCA
+# se crea. Este test fija el contrato en el punto de decisión: el escenario
+# brief→épica con trabajo entregado NO debe clasificarse como fallo.
+
+# Estados terminales con los que el modal avanza a "review" (puede crear épica).
+# Espejo de EpicFromBriefModal.tsx (status === completed || needs_review).
+_MODAL_REVIEWABLE_STATUSES = {"completed", "needs_review"}
+
+# Mapeo outcome→status terminal tal como lo aplica _run_in_background:
+#   failed_stall → "error"/"failed"  | success → completed/needs_review (vía gate)
+_OUTCOME_TO_TERMINAL_FAMILY = {
+    "failed_stall": "error",   # el finalizador marca status="error" → modal: paso error
+    "error": "error",
+    "success": "completed",     # _evaluate_output_quality puede degradar a needs_review
+}
+
+
+def test_brief_epic_stall_after_delivery_is_reviewable():
+    """El caso exacto del operador: one-shot que entregó la épica (result ok) y
+    luego sufrió stall debe quedar en un estado que el modal acepta para crear
+    la épica (NO 'error'). Si vuelve a clasificarse como fallo, este test rojo
+    avisa que la épica dejará de crearse al terminar la run."""
+    from services.claude_code_cli_runner import _classify_run_outcome
+
+    outcome = _classify_run_outcome(
+        stall_fired=True, result_ok_seen=True, return_code=-15
+    )
+    terminal_family = _OUTCOME_TO_TERMINAL_FAMILY[outcome]
+    assert terminal_family in _MODAL_REVIEWABLE_STATUSES, (
+        "brief→épica con trabajo entregado terminó en un estado que el modal "
+        f"trata como error (outcome={outcome!r}); la épica no se crearía"
+    )
+
+
+def test_real_hang_without_delivery_stays_error():
+    """Contracara: un cuelgue real SIN entregar trabajo debe seguir siendo un
+    fallo que el modal NO ofrece para crear épica (no degradar la detección de
+    cuelgues reales mientras arreglamos el falso-fallo)."""
+    from services.claude_code_cli_runner import _classify_run_outcome
+
+    outcome = _classify_run_outcome(
+        stall_fired=True, result_ok_seen=False, return_code=-15
+    )
+    terminal_family = _OUTCOME_TO_TERMINAL_FAMILY[outcome]
+    assert terminal_family not in _MODAL_REVIEWABLE_STATUSES

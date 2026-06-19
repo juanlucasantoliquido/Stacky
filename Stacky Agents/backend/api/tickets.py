@@ -5430,6 +5430,41 @@ def _looks_like_epic(html: str | None) -> bool:
     return has_heading and has_rf_block
 
 
+def _epic_grounding_warnings(html: str | None) -> list[str]:
+    """Plan 42 F2 — Detecta si una épica cita módulos/procesos fuente o marca supuestos.
+
+    Devuelve lista vacía si el HTML parece bien anclado (cita módulo, proceso o supuesto).
+    Devuelve warning si no hay ninguna referencia.
+    Función pura; nunca lanza.
+    """
+    if not html:
+        return ["epic_grounding_low: la épica no cita módulos/procesos fuente ni marca supuestos"]
+    if re.search(r"m[oó]dulo|\[SUPUESTO|proceso", html, re.IGNORECASE):
+        return []
+    return ["epic_grounding_low: la épica no cita módulos/procesos fuente ni marca supuestos"]
+
+
+def build_epic_summary(
+    *,
+    ado_id: int | None,
+    ado_url: str | None,
+    clean_html: str,
+    warnings: list[str],
+    confidence: float | None,
+) -> dict:
+    """Plan 42 F4 — Resumen post-épica accionable. Función pura."""
+    rf_count = len(re.findall(r"<h2[^>]*>\s*RF-", clean_html, re.IGNORECASE))
+    cited_modules = list(set(re.findall(r"(?:m[oó]dulo|proceso)\s+\S+", clean_html, re.IGNORECASE)))
+    return {
+        "ado_id": ado_id,
+        "ado_url": ado_url,
+        "rf_count": rf_count,
+        "cited_modules": cited_modules,
+        "warnings": warnings,
+        "confidence": confidence,
+    }
+
+
 def _derive_epic_title(raw: str | None, *, fallback: str = "Épica generada desde brief", max_len: int = 250) -> str:
     """Deriva el título de una Épica desde su HTML cuando el cliente no lo provee.
 
@@ -5554,10 +5589,14 @@ class _AutopublishResult(NamedTuple):
     - ado_id: id de la Épica creada (o el ya sellado si fue idempotente).
     - error: mensaje de fallo VISIBLE si la publicación falló (None si OK).
     - skipped: True si no se publicó (ya sellada o sin HTML de épica) — no es fallo.
+    - grounding_warnings: lista de warnings de grounding (Plan 42 F2); nunca bloquea.
+    - epic_summary: resumen post-épica (Plan 42 F4); None si flag OFF o no aplica.
     """
     ado_id: int | None
     error: str | None
     skipped: bool = False
+    grounding_warnings: list = []  # type: ignore[assignment]
+    epic_summary: dict | None = None
 
 
 def autopublish_epic_from_run(
@@ -5605,6 +5644,20 @@ def autopublish_epic_from_run(
             skipped=False,
         )
 
+    # Plan 42 F2 — Preflight de grounding: advertencia (nunca bloquea la publicación).
+    import os as _os
+    _grounding_enabled = _os.getenv(
+        "STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED", "true"
+    ).lower() not in {"0", "false", "off"}
+    grounding_warnings: list[str] = (
+        _epic_grounding_warnings(clean_html) if _grounding_enabled else []
+    )
+    if grounding_warnings:
+        logger.warning(
+            "autopublish_epic_from_run: grounding_warnings=%s (publicando igual)",
+            grounding_warnings,
+        )
+
     try:
         published = _publish_epic_to_ado(
             description_html=clean_html,
@@ -5613,12 +5666,34 @@ def autopublish_epic_from_run(
         )
     except (_AdoApiError, _AdoConfigError, ProjectContextError) as exc:
         logger.error("autopublish_epic_from_run: ADO error: %s", exc)
-        return _AutopublishResult(ado_id=None, error=str(exc), skipped=False)
+        return _AutopublishResult(ado_id=None, error=str(exc), skipped=False,
+                                  grounding_warnings=grounding_warnings)
     except Exception as exc:  # noqa: BLE001 — fallo inesperado también es ruidoso
         logger.error("autopublish_epic_from_run: error inesperado: %s", exc, exc_info=True)
-        return _AutopublishResult(ado_id=None, error=str(exc), skipped=False)
+        return _AutopublishResult(ado_id=None, error=str(exc), skipped=False,
+                                  grounding_warnings=grounding_warnings)
 
-    return _AutopublishResult(ado_id=published.ado_id, error=None, skipped=False)
+    # Plan 42 F4 — Resumen post-épica accionable.
+    _summary_enabled = _os.getenv(
+        "STACKY_EPIC_SUMMARY_ENABLED", "true"
+    ).lower() not in {"0", "false", "off"}
+    epic_summary: dict | None = None
+    if _summary_enabled:
+        epic_summary = build_epic_summary(
+            ado_id=published.ado_id,
+            ado_url=published.url,
+            clean_html=clean_html,
+            warnings=grounding_warnings,
+            confidence=None,  # el agente calcula confidence_grounding en su output
+        )
+
+    return _AutopublishResult(
+        ado_id=published.ado_id,
+        error=None,
+        skipped=False,
+        grounding_warnings=grounding_warnings,
+        epic_summary=epic_summary,
+    )
 
 
 @bp.post("/epics/from-brief")

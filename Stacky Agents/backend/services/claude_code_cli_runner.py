@@ -1192,6 +1192,11 @@ def _run_in_background(
                 log("info", f"autopublish épica: Epic creada autónomamente ado_id={_res.ado_id}")
             elif _res.ado_id is not None and _res.skipped:
                 metadata["epic_ado_id"] = _res.ado_id  # ya sellada, re-afirmar
+            # Plan 42 F2/F4 — sellar warnings de grounding y resumen post-épica.
+            if _res.grounding_warnings:
+                metadata["grounding_warnings"] = _res.grounding_warnings
+            if _res.epic_summary is not None:
+                metadata["epic_summary"] = _res.epic_summary
             return current_status
 
         # H5 — trazabilidad del runaway guard.

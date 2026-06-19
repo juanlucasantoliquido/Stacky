@@ -41,8 +41,17 @@ def test_confirm_total_before_loop(prompt):
 
 
 def test_version_bumped(prompt):
-    assert 'version: "2.0.3"' in prompt
-    assert "FunctionalAnalyst v2.0.3" in prompt
+    assert 'version: "2.1.0"' in prompt
+    assert "FunctionalAnalyst v2.1.0" in prompt
+
+
+def test_process_catalog_rule_present(prompt):
+    """v2.1.0 (R-PROCESOS): el agente debe leer el process_catalog y especificar
+    los procesos por su propósito, no por su nombre. Cierra el bug 'infirió mal el
+    punto de entrada de la carga'."""
+    assert "process_catalog" in prompt
+    assert "R-PROCESOS" in prompt
+    assert "PROPÓSITO" in prompt or "propósito" in prompt
 
 
 def test_uses_real_ado_epic_id_not_human_ep_label(prompt):

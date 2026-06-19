@@ -561,8 +561,14 @@ def run_brief():
     runtime_raw = payload.get("runtime") or "github_copilot"
     project_name = (payload.get("project") or "").strip() or None
     vscode_agent_filename: str | None = payload.get("vscode_agent_filename") or None
-    # Plan 40 F3 — modelo opcional por-run; effort fijo "high" para briefs.
-    model_override: str | None = (payload.get("model") or "").strip() or None
+    # Plan 42 F3 — modelo opcional por-run; effort leído del body (default "high").
+    # Cap duro vía llm_router.clamp_model (nunca Opus/Fable).
+    from services import llm_router as _llm_router
+    _requested_model: str | None = (payload.get("model") or "").strip() or None
+    model_override: str | None = _llm_router.clamp_model(_requested_model) if _requested_model else None
+    logger.info("run_brief: modelo solicitado=%s, efectivo=%s", _requested_model, model_override)
+    _effort_raw = (payload.get("effort") or "").strip().lower()
+    effort_override: str = _effort_raw if _effort_raw in {"low", "medium", "high"} else "high"
 
     # Auto-resolve el .agent.md del BusinessAgent para runtimes CLI.
     if runtime_raw in ("codex_cli", "claude_code_cli") and not vscode_agent_filename:
@@ -613,7 +619,7 @@ def run_brief():
             use_few_shot=False,
             use_anti_patterns=False,
             model_override=model_override,
-            effort_override="high",
+            effort_override=effort_override,
         )
     except agent_runner.UnknownAgentError:
         abort(400, "agent_type 'business' no está registrado")
@@ -634,6 +640,40 @@ def run_brief():
         execution_id, runtime_raw, project_name,
     )
     return jsonify({"execution_id": execution_id, "status": "running"}), 202
+
+
+@bp.get("/autoprofile/<project>")
+def project_autoprofile(project: str):
+    """Plan 42 F5 — Deriva un perfil de proyecto desde los docs locales (determinista, sin LLM).
+
+    Gated por STACKY_PROJECT_AUTOPROFILE_ENABLED (default false).
+    Devuelve 404 si el flag está OFF o si no hay docs configurados para el proyecto.
+    """
+    import os as _os
+    if _os.getenv("STACKY_PROJECT_AUTOPROFILE_ENABLED", "false").lower() not in {"1", "true", "on"}:
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    if not project:
+        abort(400, "project es requerido")
+
+    try:
+        from project_manager import get_project_config
+        proj_cfg = get_project_config(project)
+        docs_root_str = (proj_cfg or {}).get("docs_root") or ""
+    except Exception:  # noqa: BLE001
+        docs_root_str = ""
+
+    if not docs_root_str:
+        return jsonify({"ok": False, "error": "docs_root no configurado para este proyecto"}), 404
+
+    from pathlib import Path as _Path
+    from services.project_autoprofile import draft_profile_from_docs
+    docs_root = _Path(docs_root_str)
+    if not docs_root.is_dir():
+        return jsonify({"ok": False, "error": f"docs_root no existe: {docs_root_str}"}), 404
+
+    profile = draft_profile_from_docs(docs_root)
+    return jsonify({"ok": True, "project": project, "draft_profile": profile})
 
 
 @bp.post("/route")

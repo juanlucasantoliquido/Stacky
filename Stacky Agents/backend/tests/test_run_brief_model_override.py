@@ -1,10 +1,12 @@
-"""Plan 40 F3 — Wiring de model_override y effort_override='high' en run_brief.
+"""Plan 40 F3 + Plan 42 F3 — Wiring de model_override, effort_override y clamp en run_brief.
 
 Tests TDD que validan:
 1. Sin 'model' en body → run_agent llamado con model_override=None.
 2. Con 'model' válido → run_agent llamado con model_override="claude-sonnet-4-6".
 3. effort_override="high" siempre pasado desde run_brief a run_agent.
 4. clamp_model bloquea modelos opus.
+5. Plan 42: opus se clampea al cap; haiku pasa sin elevar; sin model → None;
+   effort del body se respeta; effort inválido defaultea a "high".
 """
 from __future__ import annotations
 
@@ -124,3 +126,93 @@ def test_clamp_model_blocks_opus():
         f"clamp_model debe eliminar opus, devolvió: {clamped!r}"
     )
     assert clamped, "clamp_model no debe devolver cadena vacía"
+
+
+# ---------------------------------------------------------------------------
+# Plan 42 F3 — tests nuevos
+# ---------------------------------------------------------------------------
+
+def test_run_brief_clamps_opus_to_cap():
+    """Opus en body → run_agent recibe model_override == CLAUDE_CAP_MODEL."""
+    from services.llm_router import CLAUDE_CAP_MODEL
+    app = _make_app()
+    with app.test_client() as client:
+        with _patch_run_brief_deps(execution_id=20) as mock_run_agent:
+            resp = client.post(
+                "/api/agents/run-brief",
+                json={"brief": "x", "runtime": "claude_code_cli", "model": "claude-opus-4-7"},
+                headers={"X-User-Email": "test@test.com"},
+            )
+    assert resp.status_code == 202
+    _, kwargs = mock_run_agent.call_args
+    assert kwargs.get("model_override") == CLAUDE_CAP_MODEL, (
+        f"Opus debe clampearse a {CLAUDE_CAP_MODEL!r}, fue {kwargs.get('model_override')!r}"
+    )
+
+
+def test_run_brief_allows_haiku():
+    """Haiku en body → pasa sin elevar (no se sube a sonnet)."""
+    app = _make_app()
+    with app.test_client() as client:
+        with _patch_run_brief_deps(execution_id=21) as mock_run_agent:
+            resp = client.post(
+                "/api/agents/run-brief",
+                json={"brief": "x", "runtime": "claude_code_cli", "model": "claude-haiku-3-5"},
+                headers={"X-User-Email": "test@test.com"},
+            )
+    assert resp.status_code == 202
+    _, kwargs = mock_run_agent.call_args
+    assert kwargs.get("model_override") == "claude-haiku-3-5", (
+        f"Haiku no debe elevarse, fue {kwargs.get('model_override')!r}"
+    )
+
+
+def test_run_brief_model_none_when_empty():
+    """Body sin 'model' → model_override is None."""
+    app = _make_app()
+    with app.test_client() as client:
+        with _patch_run_brief_deps(execution_id=22) as mock_run_agent:
+            resp = client.post(
+                "/api/agents/run-brief",
+                json={"brief": "x", "runtime": "claude_code_cli"},
+                headers={"X-User-Email": "test@test.com"},
+            )
+    assert resp.status_code == 202
+    _, kwargs = mock_run_agent.call_args
+    assert kwargs.get("model_override") is None, (
+        f"Sin model → None, fue {kwargs.get('model_override')!r}"
+    )
+
+
+def test_run_brief_passes_effort_from_body():
+    """Body con effort:'medium' → effort_override='medium'."""
+    app = _make_app()
+    with app.test_client() as client:
+        with _patch_run_brief_deps(execution_id=23) as mock_run_agent:
+            resp = client.post(
+                "/api/agents/run-brief",
+                json={"brief": "x", "runtime": "claude_code_cli", "effort": "medium"},
+                headers={"X-User-Email": "test@test.com"},
+            )
+    assert resp.status_code == 202
+    _, kwargs = mock_run_agent.call_args
+    assert kwargs.get("effort_override") == "medium", (
+        f"effort_override debería ser 'medium', es {kwargs.get('effort_override')!r}"
+    )
+
+
+def test_run_brief_effort_defaults_high():
+    """Body sin effort → effort_override='high' por defecto."""
+    app = _make_app()
+    with app.test_client() as client:
+        with _patch_run_brief_deps(execution_id=24) as mock_run_agent:
+            resp = client.post(
+                "/api/agents/run-brief",
+                json={"brief": "x", "runtime": "claude_code_cli"},
+                headers={"X-User-Email": "test@test.com"},
+            )
+    assert resp.status_code == 202
+    _, kwargs = mock_run_agent.call_args
+    assert kwargs.get("effort_override") == "high", (
+        f"effort_override sin body → 'high', fue {kwargs.get('effort_override')!r}"
+    )

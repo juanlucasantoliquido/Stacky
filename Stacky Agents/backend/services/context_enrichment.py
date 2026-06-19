@@ -79,6 +79,8 @@ def enrich_blocks(
     # feature flag lo permite) para que todos los pasos siguientes puedan
     # leerlo si lo necesitan.
     blocks = _inject_client_profile_block(blocks, project_name, log)
+    # Plan 42 F0 — diccionario de procesos (inyectado DESPUÉS del client-profile).
+    blocks = _inject_process_catalog_block(blocks, project_name, log)
     blocks = _inject_epic_structured(ticket_id, agent_type, blocks, log)
     blocks = _inject_artifact_context(ticket_id, blocks, log)
 
@@ -590,6 +592,56 @@ def build_client_profile_block(
     except Exception as exc:  # noqa: BLE001
         log("warn", f"client-profile no se pudo inyectar (continuando): {exc}")
         return None
+
+
+def build_process_dictionary_block(client_profile: dict | None) -> dict | None:
+    """Plan 42 F0 — Construye el bloque 'process-catalog' desde client_profile.
+
+    Gated por STACKY_INJECT_PROCESS_CATALOG (default true). Función pura.
+    """
+    if not client_profile:
+        return None
+    catalog = client_profile.get("process_catalog") or []
+    if not catalog:
+        return None
+    lines = [
+        "DICCIONARIO DE PROCESOS DEL PROYECTO (fuente de verdad — NO inventes nombres ni propósitos):"
+    ]
+    for p in catalog:
+        name = (p.get("name") or "").strip()
+        purpose = (p.get("purpose") or "").strip()
+        kind = (p.get("kind") or "otro").strip()
+        if name and purpose:
+            lines.append(f"- {name} [{kind}]: {purpose}")
+    if len(lines) == 1:
+        return None
+    return {"id": "process-catalog", "kind": "process-catalog", "content": "\n".join(lines)}
+
+
+def _inject_process_catalog_block(
+    blocks: list[dict], project_name: str | None, log: LogFn
+) -> list[dict]:
+    """Plan 42 F0 — Inyecta el bloque 'process-catalog' tras client-profile."""
+    if os.getenv("STACKY_INJECT_PROCESS_CATALOG", "true").lower() in {"0", "false", "off"}:
+        return blocks
+    existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
+    if "process-catalog" in existing_ids:
+        return blocks
+    if not project_name:
+        return blocks
+    try:
+        from services.client_profile import load_client_profile
+        profile = load_client_profile(project_name)
+        if not isinstance(profile, dict):
+            return blocks
+        block = build_process_dictionary_block(profile)
+        if block is None:
+            return blocks
+        log("info", f"process-catalog inyectado para proyecto={project_name}")
+        return list(blocks) + [block]
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"process-catalog no se pudo inyectar (continuando): {exc}")
+        return blocks
 
 
 def _inject_client_profile_block(

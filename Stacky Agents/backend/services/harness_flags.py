@@ -1068,6 +1068,64 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="observability",
     ),
+    # Plan 42 — flags nuevos
+    FlagSpec(
+        key="STACKY_BRIEF_MODEL_SELECT_ENABLED",
+        type="bool",
+        label="Selector de modelo/esfuerzo en Épica desde Brief (F3)",
+        description=(
+            "Plan 42 F3 — Si ON, el frontend puede enviar model+effort en el body de "
+            "run-brief; el backend aplica clamp_model (cap sonnet-4-6) y valida effort. "
+            "OFF = model_override=None + effort='high' siempre (igual que Plan 40)."
+        ),
+        group="agents",
+    ),
+    FlagSpec(
+        key="STACKY_INJECT_PROCESS_CATALOG",
+        type="bool",
+        label="Inyección de diccionario de procesos en context (F0)",
+        description=(
+            "Plan 42 F0 — Si ON, inyecta un bloque 'process-catalog' construido desde "
+            "client_profile.process_catalog en los context blocks del agente. "
+            "OFF = enrich_blocks byte-idéntico a Plan 41."
+        ),
+        group="context",
+    ),
+    FlagSpec(
+        key="STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED",
+        type="bool",
+        label="Preflight de grounding en épica (F2)",
+        description=(
+            "Plan 42 F2 — Si ON, antes de publicar la épica en ADO verifica que el "
+            "HTML cite módulos/procesos fuente; adjunta grounding_warnings en metadata "
+            "pero NUNCA bloquea la publicación. OFF = autopublish_epic_from_run sin "
+            "análisis de grounding."
+        ),
+        group="agents",
+    ),
+    FlagSpec(
+        key="STACKY_EPIC_SUMMARY_ENABLED",
+        type="bool",
+        label="Resumen post-épica accionable (F4)",
+        description=(
+            "Plan 42 F4 — Si ON, tras publicar la épica adjunta en metadata['epic_summary'] "
+            "un resumen estructurado: ado_id, rf_count, cited_modules, warnings, confidence. "
+            "OFF = autopublish_epic_from_run sin resumen."
+        ),
+        group="agents",
+    ),
+    FlagSpec(
+        key="STACKY_PROJECT_AUTOPROFILE_ENABLED",
+        type="bool",
+        label="Auto-perfilado de proyecto desde docs (F5)",
+        description=(
+            "Plan 42 F5 — Si ON, habilita GET /api/projects/{project}/autoprofile que "
+            "deriva un perfil de proyecto de forma determinista desde los docs locales "
+            "(sin LLM, sin inventar). Default OFF para no exponer un feature incompleto."
+        ),
+        default=False,
+        group="agents",
+    ),
 )
 
 # Índice rápido para lookups O(1)

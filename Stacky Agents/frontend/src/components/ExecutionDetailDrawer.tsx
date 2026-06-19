@@ -185,6 +185,42 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
               </section>
             )}
 
+            {/* Plan 42 F4 — Resumen post-épica (epic_summary en metadata) */}
+            {metadata.epic_summary && typeof metadata.epic_summary === "object" && (() => {
+              const s = metadata.epic_summary as Record<string, unknown>;
+              return (
+                <section className={styles.section}>
+                  <h4>Resumen de Épica</h4>
+                  <div className={styles.trace}>
+                    {s.ado_id != null && (
+                      <div>
+                        <span className={styles.muted}>ADO ID: </span>
+                        <strong>ADO-{String(s.ado_id)}</strong>
+                        {typeof s.ado_url === "string" && s.ado_url && (
+                          <> · <a href={s.ado_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>ver en ADO</a></>
+                        )}
+                      </div>
+                    )}
+                    <div>
+                      <span className={styles.muted}>RFs: </span>
+                      <span>{typeof s.rf_count === "number" ? s.rf_count : "—"}</span>
+                    </div>
+                    {Array.isArray(s.cited_modules) && (s.cited_modules as string[]).length > 0 && (
+                      <div>
+                        <span className={styles.muted}>Módulos/procesos citados: </span>
+                        <span>{(s.cited_modules as string[]).join(", ")}</span>
+                      </div>
+                    )}
+                    {Array.isArray(s.warnings) && (s.warnings as string[]).length > 0 && (
+                      <div style={{ color: "var(--color-warning, #b45309)", fontSize: 12, marginTop: 4 }}>
+                        {(s.warnings as string[]).map((w, i) => <div key={i}>{w}</div>)}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              );
+            })()}
+
             <section className={styles.section}>
               <h4>Output</h4>
               {content.output ? (

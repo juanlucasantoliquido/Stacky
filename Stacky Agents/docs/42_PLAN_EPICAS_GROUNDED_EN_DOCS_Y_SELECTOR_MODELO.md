@@ -1,8 +1,11 @@
 # Plan 42 — Épicas grounded en documentación del proyecto + selector de modelo de Claude CLI
 
-> **Versión: v2 (reescrito tras crítica adversarial)** · Fecha: 2026-06-18 · Estado: PROPUESTO (no implementado)
+> **Versión: v3** · Fecha: 2026-06-18 · Estado: PROPUESTO (no implementado)
 > Numeración consecutiva calculada listando `Stacky Agents/docs/` (máx previo = 41).
-> 
+>
+> **CHANGELOG v2→v3:**
+> - **[F6 — pedido del operador]** Agregada fase F6 "Botón Stop para frenar un run en curso" (típicamente al hacer pruebas). El mecanismo de cancelación YA existe entero (backend `cancel_execution` + `claude_code_cli_runner.cancel` que mata el proceso real; frontend `Executions.cancel` + botón en `ActiveRunsPanel`). El gap es de UX: exponer un Stop inline en el flujo de generación (EpicFromBriefModal) donde el operador hace pruebas, reusando la infra existente. Cero backend nuevo.
+>
 > **CHANGELOG v1→v2:**
 > - **C1:** F4 REFORMULADO (no eliminado): el preview/checkbox bloqueante ANTES de publicar viola human-in-the-loop (rechazado en Plan 41: "épica auto-publica sin aprobación, no restaurar checkbox"). Se reemplaza por un "resumen post-épica accionable" solo-lectura que amplifica al operador SIN frenar la auto-publicación. Mantiene las 2 propuestas nuevas pedidas (F4 + F5).
 > - **C2:** F0 asigna dueño del diccionario; inyección desde DeployStackyAgents o F5 como prerequisito suave. Sin diccionario, F0 es degradado (transparente en docs).
@@ -29,6 +32,9 @@ detectó en producción:
 2. **No se puede SELECCIONAR el modelo** de Claude CLI al generar una épica: el backend ya soporta
    `model_override`, pero el frontend nunca lo expone y el backend no tiene cap de modelo (riesgo Opus).
 3. **Dos capacidades nuevas** de alto valor que amplifican al operador sin sacarlo del lazo.
+4. **No hay un Stop a mano al probar.** Al generar épicas de prueba, el operador no puede frenar el run
+   desde el modal; debe ir al panel de runs activos. La infra de cancelación ya existe y mata el proceso
+   real — falta solo exponer el botón inline (F6).
 
 **KPI esperado:**
 - % de RF de la épica que **citan un módulo/proceso fuente real** de la doc del proyecto: objetivo ≥ 80%
@@ -514,6 +520,96 @@ pedirle al LLM que invente nombres de procesos: los nombres salen de los título
 
 **Trabajo del operador:** opt-in (default off); si lo usa, revisa un borrador en el endpoint + 1 clic de "Aceptar" → se guarda en el client-profile vivo.
 
+### F6 — Botón Stop para frenar un run en curso (pedido del operador: "frenarlo solo para hacer pruebas")
+
+**Objetivo (1 frase):** dar al operador un botón **Stop visible inline** en el flujo de generación de épica
+(donde hace pruebas), para abortar un run en curso sin tener que ir al panel de runs activos.
+
+**Valor:** mientras prueba briefs, el operador hoy NO tiene un Stop a mano en el modal de Épica desde
+Brief; debe abrir `ActiveRunsPanel` para cancelar. Esto baja la fricción de "tiré una prueba, la quiero
+cortar ya".
+
+**Hallazgo clave (la infra YA existe — NO duplicar):** evidencia confirmada en código a 2026-06-18:
+- `backend/api/executions.py:313` — `cancel_execution(execution_id)`: marca `status="cancelled"` (409 si
+  ya está terminal) y delega al runner según tipo.
+- `backend/services/claude_code_cli_runner.py:186` — `cancel(execution_id, grace_seconds=8.0)`: cierra
+  stdin → espera gracia → `proc.terminate()` → `proc.kill()`. **MATA el proceso de verdad** (no es teatro;
+  no deja zombie). Mismo patrón para `codex_cli_runner.cancel` y el cancel cooperativo de `agent_runner`.
+- `frontend/src/api/endpoints.ts:1045` — `Executions.cancel(id) → POST /api/executions/{id}/cancel`.
+- `frontend/src/components/ActiveRunsPanel.tsx:35-80` — ya tiene un botón **"✕ Cancelar"** con confirm +
+  mutation + estado "cancelando…".
+- **Gap:** el botón solo vive en `ActiveRunsPanel`; el `EpicFromBriefModal` no expone Stop durante la
+  generación.
+
+**Por lo tanto F6 es SOLO frontend (UX).** Backend = 0 cambios (se reusa `Executions.cancel`).
+
+**Archivos a editar/crear:**
+- `Stacky Agents/frontend/src/components/EpicFromBriefModal.tsx` (editar — botón Stop + estado).
+- (opcional) `Stacky Agents/frontend/src/components/EpicFromBriefModal.module.css` (editar — estilo del botón).
+
+**Símbolos / estado React:**
+- El modal ya dispara `runBrief` y obtiene un `execution_id` que usa para pollear/streamear el estado de la
+  run (verificar el nombre exacto del estado; si el modal aún no guarda el id, agregar
+  `const [runningExecutionId, setRunningExecutionId] = useState<number | null>(null)` y setearlo con el id
+  que devuelve `runBrief`).
+- Reusar la mutation existente: `import { Executions } from "../api/endpoints"` y
+  `Executions.cancel(runningExecutionId)` (NO crear endpoint ni wrapper nuevo).
+
+**Pseudocódigo (JSX, mostrar SOLO mientras hay run en curso):**
+```tsx
+const cancelMutation = useMutation({
+  mutationFn: (id: number) => Executions.cancel(id),
+  onSuccess: () => { /* feedback: "Run detenido"; limpiar estado de generación */ },
+});
+
+{isGenerating && runningExecutionId != null && (
+  <button
+    type="button"
+    className={styles.stopBtn}
+    disabled={cancelMutation.isPending}
+    title="Detener este run (mata la sesión del agente)"
+    onClick={() => {
+      if (cancelMutation.isPending) return;
+      if (window.confirm(`¿Detener el run #${runningExecutionId}? Se cortará la sesión del agente.`)) {
+        cancelMutation.mutate(runningExecutionId);
+      }
+    }}
+  >
+    {cancelMutation.isPending ? "deteniendo…" : "■ Detener"}
+  </button>
+)}
+```
+
+**Casos borde:**
+- Run ya terminó entre que se mostró el botón y el clic → el backend responde **409** (`Cannot cancel
+  execution in status '...'`); el `onError` de la mutation muestra un aviso suave ("el run ya había
+  terminado") y limpia el estado. No crashea.
+- `runningExecutionId == null` → el botón no se renderiza.
+- Doble clic → `disabled` mientras `isPending`.
+
+**Tests primero:**
+- Frontend (sin vitest) → validar con `tsc --noEmit` que el wiring compila (tipos de `Executions.cancel`,
+  estado, handler). Criterio: 0 errores TypeScript.
+- Backend → NO requiere tests nuevos (se reusa `cancel_execution`, ya cubierto). Si se quiere reforzar,
+  agregar `test_cancel_execution_kills_claude_proc` en `tests/` que monkeypatchee
+  `claude_code_cli_runner.cancel` y verifique que `cancel_execution` lo invoca para una run de ese tipo y
+  deja `status="cancelled"` (criterio binario: verde).
+
+**Comando:** `cd "Stacky Agents/frontend" && node_modules/.bin/tsc --noEmit -p tsconfig.json` (+ backend
+opcional `... -m pytest tests/test_cancel_execution.py -q`).
+
+**Criterio binario:** botón Stop visible solo durante un run en curso del modal; al clickear, el run pasa a
+`cancelled` y el proceso del CLI se termina (garantizado por `claude_code_cli_runner.cancel`); `tsc` 0
+errores.
+
+**Impacto por runtime:** común a los 3 (el endpoint `cancel` delega al runner correcto: claude_code_cli y
+codex matan proceso; copilot/agent_runner cancela cooperativamente vía flag in-memory). Fallback: si el
+runtime no tiene proceso que matar, el cancel cooperativo igual marca `cancelled`.
+
+**Trabajo del operador:** ninguno (gana un botón; no configura nada).
+
+---
+
 ## 5. Riesgos y mitigaciones
 
 | Riesgo | Mitigación |
@@ -563,6 +659,7 @@ pedirle al LLM que invente nombres de procesos: los nombres salen de los título
 5. **F3 frontend** (endpoints.ts + EpicFromBriefModal con detalles C3/C5) — depende de F3 backend; cierra Plan 40 F3.
 6. **F4** (resumen post-épica accionable, solo-lectura) — depende de F2 (usa warnings + confidence); propuesta nueva 1.
 7. **F5** (auto-perfilado, opt-in, prerequisito suave de F0/F2) — cierra el loop de adopción sin trabajo obligatorio al operador; propuesta nueva 2; implementar después de F0-F3 pero antes de producción si se quiere impacto real del grounding.
+8. **F6** (botón Stop en EpicFromBriefModal) — independiente, solo frontend, reusa la infra de cancel existente; puede hacerse en cualquier momento (incluso primero, es el de menor riesgo y entrega valor inmediato al operador en sus pruebas).
 
 ### Definición de Hecho (DoD) global
 - [ ] Todos los tests nuevos/editados verdes corriendo por archivo con el python del `.venv`.
@@ -578,4 +675,5 @@ pedirle al LLM que invente nombres de procesos: los nombres salen de los título
 - [ ] Confidence de grounding: alerta [BAJA CONFIANZA] cuando <0.5, refuerza human-in-the-loop sin bloquear (ADICIÓN ARQUITECTO).
 - [ ] F4 reformulado a resumen post-épica solo-lectura (C1): amplifica al operador SIN preview bloqueante; preview obligatorio sigue vetado.
 - [ ] Las 2 propuestas nuevas presentes y viables: F4 (resumen post-épica) y F5 (auto-perfilado), cada una con nivel de audacia + supuesto a stress-testear.
-- [ ] Trabajo del operador: ninguno obligatorio (F0-F4 default seguro; F5 opt-in default off, prerequisito suave).
+- [ ] F6: botón Stop visible en EpicFromBriefModal durante un run en curso; reusa `Executions.cancel` (cero backend nuevo); al clickear el run pasa a `cancelled` y el proceso del CLI se mata (vía `claude_code_cli_runner.cancel`); maneja 409 si el run ya terminó; `tsc` 0 errores.
+- [ ] Trabajo del operador: ninguno obligatorio (F0-F4 default seguro; F5 opt-in default off, prerequisito suave; F6 solo agrega un botón).

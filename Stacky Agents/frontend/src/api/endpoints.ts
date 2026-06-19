@@ -926,12 +926,16 @@ export const Agents = {
     vscode_agent_filename?: string;
     model_override?: string | null;
   }) => api.post<{ ok: boolean }>("/api/agents/open-chat", payload),
-  /** Plan 38 B2 — Lanza el BusinessAgent con un brief (sin ticket real). */
+  /** Plan 38 B2 / Plan 42 F3 — Lanza el BusinessAgent con un brief (sin ticket real). */
   runBrief: (payload: {
     brief: string;
     runtime?: import("../types").AgentRuntime;
     project?: string | null;
     vscode_agent_filename?: string;
+    /** Plan 42 F3 — modelo override (solo claude_code_cli); se clampea a sonnet-4-6 en backend. */
+    model?: string | null;
+    /** Plan 42 F3 — esfuerzo del run (default "high"). */
+    effort?: "low" | "medium" | "high";
   }) => api.post<{ execution_id: number; status: string }>("/api/agents/run-brief", payload),
 };
 

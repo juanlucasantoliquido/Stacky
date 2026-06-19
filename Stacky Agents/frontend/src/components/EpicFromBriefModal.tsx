@@ -18,6 +18,12 @@ import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import type { AgentRuntime } from "../types";
 import styles from "./EpicFromBriefModal.module.css";
 
+// Plan 42 F3 — modelos permitidos para claude_code_cli (capped en backend a sonnet-4-6).
+const CLAUDE_MODELS: { value: string; label: string }[] = [
+  { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (recomendado)" },
+  { value: "claude-haiku-3-5", label: "Haiku 3.5 (más rápido)" },
+];
+
 interface EpicFromBriefModalProps {
   onClose: () => void;
   onCreated?: (result: { ado_id: number; title: string }) => void;
@@ -61,6 +67,13 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [createdAdoId, setCreatedAdoId] = useState<number | null>(null);
 
+  // Plan 42 F3 — selector de modelo y esfuerzo.
+  const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-4-6");
+  const [selectedEffort, setSelectedEffort] = useState<"low" | "medium" | "high">("high");
+  // Plan 42 F6 — id de la ejecución en curso para el botón Stop.
+  const [runningExecutionId, setRunningExecutionId] = useState<number | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+
   // Claude Code CLI config
   const [claudeSession, setClaudeSession] = useState<ClaudeSessionStatus | null>(null);
   const [claudeChecking, setClaudeChecking] = useState(false);
@@ -87,6 +100,10 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
 
   async function handleRuntimeChange(rt: AgentRuntime) {
     setAgentRuntime(rt);
+    // Plan 42 F3 — resetear modelo a sonnet-4-6 si el runtime no es claude_code_cli.
+    if (rt !== "claude_code_cli") {
+      setSelectedModel("claude-sonnet-4-6");
+    }
     if (rt === "claude_code_cli") {
       const ready = claudeSession ? claudeReady : await probeClaude();
       if (!ready) setShowClaudeConfig(true);
@@ -167,14 +184,19 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
     if (!brief.trim()) return;
     setErrorMsg(null);
     setStep("running");
+    setRunningExecutionId(null);
     try {
+      // Plan 42 F3 — enviar modelo y esfuerzo; modelo solo si runtime es claude_code_cli.
       const result = await Agents.runBrief({
         brief: brief.trim(),
         runtime: agentRuntime,
         project: activeProjectName,
+        model: agentRuntime === "claude_code_cli" ? selectedModel : undefined,
+        effort: selectedEffort,
       });
       const execId = result.execution_id;
       setExecutionId(execId);
+      setRunningExecutionId(execId); // Plan 42 F6 — habilitar botón Stop
       // Abrir consola in-page para runtimes CLI (igual que tickets).
       if (isCliRuntime(agentRuntime)) {
         openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
@@ -184,6 +206,30 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
       const msg = e instanceof Error ? e.message : String(e);
       setErrorMsg(msg || "No se pudo lanzar el Agente de Negocio.");
       setStep("error");
+    }
+  }
+
+  // Plan 42 F6 — Cancelar ejecución en curso.
+  async function handleStop() {
+    if (!runningExecutionId || isCancelling) return;
+    if (!window.confirm("¿Cancelar la generación en curso?")) return;
+    setIsCancelling(true);
+    try {
+      await Executions.cancel(runningExecutionId);
+      stopPolling();
+      setRunningExecutionId(null);
+      setErrorMsg("Generación cancelada por el operador.");
+      setStep("error");
+    } catch (e: unknown) {
+      const status = (e as { status?: number })?.status;
+      if (status === 409) {
+        // La ejecución ya terminó — no es error grave.
+        setRunningExecutionId(null);
+      } else {
+        setErrorMsg("No se pudo cancelar la ejecución. Verificá el estado en el panel de runs.");
+      }
+    } finally {
+      setIsCancelling(false);
     }
   }
 
@@ -260,6 +306,34 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
               <div className={styles.warning}><span>Verificando Claude Code…</span></div>
             )}
 
+            {/* Plan 42 F3 — Selector de modelo (solo claude_code_cli) y esfuerzo */}
+            <div className={styles.runtimeSection}>
+              <label className={styles.label}>
+                Modelo
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={agentRuntime !== "claude_code_cli"}
+                  title={agentRuntime !== "claude_code_cli" ? "El selector de modelo solo aplica a Claude Code CLI" : undefined}
+                >
+                  {CLAUDE_MODELS.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.label}>
+                Esfuerzo
+                <select
+                  value={selectedEffort}
+                  onChange={(e) => setSelectedEffort(e.target.value as "low" | "medium" | "high")}
+                >
+                  <option value="high">Alto (más completo, más lento)</option>
+                  <option value="medium">Medio</option>
+                  <option value="low">Bajo (más rápido)</option>
+                </select>
+              </label>
+            </div>
+
             <label className={styles.label}>
               Brief del negocio (texto libre)
               <textarea
@@ -306,6 +380,19 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
             <div className={styles.spinner} aria-label="Cargando" />
             {executionId !== null && (
               <p className={styles.hint}>Ejecución #{executionId}</p>
+            )}
+            {/* Plan 42 F6 — botón Stop visible solo mientras hay ejecución en curso */}
+            {runningExecutionId !== null && (
+              <footer className={styles.footer}>
+                <button
+                  className={styles.cancelBtn}
+                  onClick={handleStop}
+                  disabled={isCancelling}
+                  type="button"
+                >
+                  {isCancelling ? "Cancelando…" : "Detener generación"}
+                </button>
+              </footer>
             )}
           </div>
         )}

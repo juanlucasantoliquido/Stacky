@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "planes": {
+    "51": {
+      "plan": "51",
+      "ruta": "Stacky Agents/docs/51_PLAN_GATES_CORRECTIVOS_DETERMINISTAS_EPICA.md",
+      "doc_sha256": "30e6b735490420df2d014225e02f4f9ee023288e532d5cbeff08f183947f5eda",
+      "veredicto": "APROBADO",
+      "fecha": "2026-06-20",
+      "tests": [
+        "tests/test_epic_gate.py -> 18 passed/0 failed",
+        "tests/test_golden_catalog_diff.py -> 10 passed/0 failed",
+        "tests/test_epic_autopublish_backend.py -> 8 passed/0 failed",
+        "tests/conformance/test_runtime_conformance.py -> 27 passed/0 failed"
+      ],
+      "evidencia": {
+        "F0-F2": "backend/harness/epic_gate.py:48 classify_structural_severity, :64 golden_catalog_diff, :73 evaluate_epic_gate",
+        "F2-golden": "backend/evals/catalog_diff_fixtures/ + backend/evals/catalog_diff_runner.py",
+        "F3-wiring": "backend/api/tickets.py:5450 _epic_gate_enabled, :6026 gate ON, :6051 evaluate_epic_gate, :6072 epic_gate_blocked",
+        "F4-telemetria": "backend/api/tickets.py build_epic_summary(gate_decision=...)",
+        "F5-conformance": "backend/tests/conformance/test_runtime_conformance.py (centinela no-determinismo)",
+        "flags": "STACKY_EPIC_GATE_ENABLED / STACKY_EPIC_CATALOG_GATE_ENABLED default OFF en harness_flags.py"
+      },
+      "notas": "test_epic_autopublish_backend.py corre 8 (el doc citaba 26): el archivo fue ampliado/reorganizado por planes posteriores; los 8 actuales pasan. Wiring autopublish Claude-CLI-only (C1 confirmado)."
+    },
+    "52": {
+      "plan": "52",
+      "ruta": "Stacky Agents/docs/52_PLAN_PARIDAD_RUNTIMES_ISSUES_BRIEF_Y_IDEMPOTENCIA_COMENTARIOS.md",
+      "doc_sha256": "cd8be26635c0fe462e32b1c96ba8f71f53910a982e534ce4f8fdf9d285bfc78b",
+      "veredicto": "APROBADO",
+      "fecha": "2026-06-20",
+      "tests": [
+        "tests/test_run_brief_autopublish_parity.py -> 4 passed/0 failed",
+        "tests/test_ado_comment_idempotency.py -> 4 passed/0 failed",
+        "tests/test_persist_issue_ticket.py -> 5 passed/0 failed",
+        "tests/test_issue_observability.py -> 4 passed/0 failed",
+        "tests/test_issue_from_brief_contract.py -> 6 passed/0 failed (no-regresion)"
+      ],
+      "evidencia": {
+        "F0-guard400": "backend/api/agents.py autopublish_requires_claude_cli",
+        "F1-paginado": "backend/services/ado_client.py:37 _COMMENT_PAGE_CAP=40, :769 fetch_all_comments (gateado STACKY_COMMENT_FULL_SCAN_ENABLED default ON)",
+        "F3-persistencia": "backend/tests/test_persist_issue_ticket.py",
+        "F4-observabilidad": "backend/api/tickets.py:6247 _compute_epic_observability, :6357 cableado en publish_issue_from_run"
+      },
+      "notas": "F2 cubierto por el test de F0 (sin fase separada, documentado)."
+    },
+    "54": {
+      "plan": "54",
+      "ruta": "Stacky Agents/docs/54_PLAN_MEMORIA_QUE_EMPUJA_RECHAZOS_Y_PARIDAD_STYLE_MEMORY.md",
+      "doc_sha256": "1c33ff669e656cce6c9f0b497322d66a4a4b3ad724d5bf573edf1657eef933c7",
+      "veredicto": "APROBADO",
+      "fecha": "2026-06-20",
+      "tests": [
+        "tests/test_memory_prefix.py -> 4 passed/0 failed",
+        "tests/test_base_prompt_parity.py -> 2 passed/0 failed",
+        "tests/test_cli_memory_parity.py -> 6 passed/0 failed",
+        "tests/test_rejection_sink.py -> 4 passed/0 failed",
+        "tests/test_rejection_lessons_trim.py -> 5 passed/0 failed",
+        "tests/test_harness_ratchet_meta.py -> 3 passed/0 failed"
+      ],
+      "evidencia": {
+        "F0-helper": "backend/services/memory_prefix.py:10 build_memory_prefix",
+        "F1-base": "backend/agents/base.py usa build_memory_prefix (1 ref)",
+        "F2-claude": "backend/services/claude_code_cli_runner.py usa build_memory_prefix (1 ref)",
+        "F3-codex": "backend/services/codex_cli_runner.py usa build_memory_prefix (1 ref)",
+        "F4-sink": "backend/services/rejection_lessons.py:138 pure_rejection_to_lesson",
+        "F4b-poda": "backend/services/rejection_lessons.py:154 trim_rejection_corpus(max_count=100)",
+        "F5-ratchet": "tests registrados en scripts/run_harness_tests.ps1"
+      },
+      "notas": "Paridad FA-11 cerrada en 3 runtimes (DoD #7 verificado por grep). FA-10 style_memory queda copilot-only por herencia Plan 48 (decision del plan, no falta)."
+    },
+    "55": {
+      "plan": "55",
+      "ruta": "Stacky Agents/docs/55_PLAN_PREVIEW_EJECUTABLE_PORTAFOLIO_BRIEF_A_N_EPICAS.md",
+      "doc_sha256": "c0d0aa4ac0e33908075da7f3040d2887db97f8482ea6904b3392023ff7f6143a",
+      "veredicto": "APROBADO",
+      "fecha": "2026-06-20",
+      "tests": [
+        "tests/test_epic_payload_preview.py -> 6 passed/0 failed",
+        "tests/test_epic_preview_endpoint.py -> 8 passed/0 failed",
+        "tests/test_epic_portfolio_preview.py -> 7 passed/0 failed",
+        "frontend npx tsc --noEmit -> 0 errores (exit 0)"
+      ],
+      "evidencia": {
+        "F0-helper": "backend/api/tickets.py:5821 EpicPayloadPreview, :5835 build_epic_payload_preview",
+        "F1-endpoint": "backend/api/tickets.py:6436 GET /epic-preview (flag STACKY_ADO_PREVIEW_ENABLED default ON)",
+        "F2-UI": "frontend/src/components/EpicFromBriefModal.tsx (Vista previa + control publishable_runtime)",
+        "F3-portafolio": "backend/api/tickets.py:6494 _split_epics_html, :6513 build_epic_portfolio_preview, :6549 GET /epic-portfolio-preview (flag STACKY_EPIC_PORTFOLIO_ENABLED default OFF)",
+        "F4-ratchet": "tests registrados en scripts/run_harness_tests.ps1"
+      },
+      "notas": "Flags STACKY_ADO_PREVIEW_ENABLED y STACKY_EPIC_PORTFOLIO_ENABLED expuestos en UI (commit 55849f56)."
+    },
+    "57": {
+      "plan": "57",
+      "ruta": "Stacky Agents/docs/57_PLAN_LATENCIA_CERO_ANTICIPATORIA_AUDITAR_FA36.md",
+      "doc_sha256": "f96602f63de6225b7d8b3dc74201860cb19105dcd2ea81f8c5bebb75a24b3861",
+      "veredicto": "APROBADO",
+      "fecha": "2026-06-20",
+      "tests": [
+        "tests/test_speculative_hash.py -> 7 passed/0 failed",
+        "tests/test_speculative_parity.py -> 6 passed/0 failed (incl. test_spec_never_calls_autopublish)",
+        "tests/test_speculative_flag.py -> 9 passed/0 failed",
+        "tests/test_speculative_claim_flow.py -> 8 passed/0 failed",
+        "tests/test_harness_ratchet_meta.py -> 3 passed/0 failed"
+      ],
+      "evidencia": {
+        "F1-hash": "backend/services/speculative.py hash runtime/model/effort-aware",
+        "F2-dispatch": "backend/services/speculative.py:133 _run_spec(runtime=...) despacha por runtime",
+        "F3-flag": "backend/services/harness_flags.py:1342 STACKY_SPECULATIVE_ENABLED (FLAG_REGISTRY, env_only kill-switch, default OFF) + .env.example:159",
+        "F4-claim": "backend/services/speculative.py:204 claim + from_speculative en metadata (run_brief)",
+        "F5-ratchet": "4 test_speculative_*.py registrados en scripts/run_harness_tests.ps1"
+      },
+      "notas": "Flag env_only INTENCIONAL (kill-switch interno, plan dice activar SOLO post-GA tras F0=5 PASS): cumple excepcion R4. F2a (headless runner side-effect-free) DIFERIDA post-GA por decision del plan: con F2a sin construir, FA-36 queda copilot-only -> paridad-3 plena de ejecucion especulativa es PARCIAL hasta F2a. Blindaje test_spec_never_calls_autopublish verde (no publica sola). Activacion (flag ON) sigue pendiente de aprobacion del operador."
+    }
+  }
+}

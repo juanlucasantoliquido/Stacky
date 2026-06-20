@@ -1078,6 +1078,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "run-brief; el backend aplica clamp_model (cap sonnet-4-6) y valida effort. "
             "OFF = model_override=None + effort='high' siempre (igual que Plan 40)."
         ),
+        env_only=True,  # leído via os.getenv; no es atributo de Config
         group="agents",
     ),
     FlagSpec(
@@ -1089,6 +1090,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "client_profile.process_catalog en los context blocks del agente. "
             "OFF = enrich_blocks byte-idéntico a Plan 41."
         ),
+        env_only=True,  # leído via os.getenv; no es atributo de Config
         group="context",
     ),
     FlagSpec(
@@ -1101,6 +1103,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "pero NUNCA bloquea la publicación. OFF = autopublish_epic_from_run sin "
             "análisis de grounding."
         ),
+        env_only=True,  # leído via os.getenv; no es atributo de Config
         group="agents",
     ),
     FlagSpec(
@@ -1112,6 +1115,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "un resumen estructurado: ado_id, rf_count, cited_modules, warnings, confidence. "
             "OFF = autopublish_epic_from_run sin resumen."
         ),
+        env_only=True,  # leído via os.getenv; no es atributo de Config
         group="agents",
     ),
     FlagSpec(
@@ -1123,8 +1127,215 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "deriva un perfil de proyecto de forma determinista desde los docs locales "
             "(sin LLM, sin inventar). Default OFF para no exponer un feature incompleto."
         ),
-        default=False,
+        env_only=True,  # leído via os.getenv; no es atributo de Config
         group="agents",
+    ),
+    FlagSpec(
+        key="STACKY_GROUNDING_OBSERVATORY_ENABLED",
+        type="bool",
+        label="Observatorio de grounding de épicas (Plan 44)",
+        description=(
+            "Plan 44 F2 — Si ON, expone GET /api/agents/epics/grounding-observatory "
+            "con métricas agregadas de grounding de épicas (solo-lectura, default ON). "
+            "OFF = el endpoint responde 404 feature_disabled."
+        ),
+        group="agents",
+    ),
+    FlagSpec(
+        key="STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED",
+        type="bool",
+        label="Sugeridor de diccionario de procesos (Plan 44)",
+        description=(
+            "Plan 44 F3 — Si ON, expone GET /api/agents/projects/{project}/"
+            "process-catalog-suggestions con procesos citados en épicas que faltan "
+            "en el catálogo (solo sugiere, nunca escribe, default ON). OFF = 404."
+        ),
+        group="agents",
+    ),
+    FlagSpec(
+        key="STACKY_OPERATIONAL_HEALTH_ENABLED",
+        type="bool",
+        label="Panel de salud operativa",
+        description=(
+            "Plan 46 — Triage solo-lectura de runs (needs_review/failed/caras/zombie). "
+            "OFF = endpoint 404 y card oculta."
+        ),
+        group="global",
+        env_only=True,
+    ),
+    FlagSpec(
+        key="STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
+        type="bool",
+        label="Nota del operador → memoria",
+        description=(
+            "Plan 47 — Si ON, la nota humana de una run revisada se guarda como "
+            "memoria operator_note reutilizable. Default OFF."
+        ),
+        group="global",
+        env_only=True,
+    ),
+    FlagSpec(
+        key="INTENT_PREFLIGHT_ENABLED",
+        type="bool",
+        label="Pre-vuelo de Intención (41)",
+        description=(
+            "Plan 41 — Si ON, antes del run genera un Brief de Intención que el "
+            "operador aprueba/corrige. Default OFF (byte-idéntico al actual)."
+        ),
+        group="preflight",
+    ),
+    FlagSpec(
+        key="INTENT_PREFLIGHT_AUTO_APPROVE",
+        type="bool",
+        label="Pre-vuelo: auto-aprobar si está claro",
+        description=(
+            "Plan 41 — Si ON, salta el modal cuando no hay preguntas abiertas y la "
+            "confianza supera el umbral."
+        ),
+        group="preflight",
+    ),
+    FlagSpec(
+        key="INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF",
+        type="float",
+        label="Pre-vuelo: confianza mínima para auto-aprobar",
+        description="Plan 41 — Umbral de confianza para auto-aprobar sin modal (default 0.8).",
+        group="preflight",
+    ),
+    FlagSpec(
+        key="STACKY_ARTIFACT_RESCUE_ENABLED",
+        type="bool",
+        label="Rescate de épica desde disco",
+        description=(
+            "Plan 47 — Si ON, cuando el agente narra en vez de devolver el HTML "
+            "de la épica, el backend rescata el artefacto que el agente ya escribió "
+            "en Agentes/outputs y lo publica. Default OFF."
+        ),
+        group="global",
+        env_only=True,  # se lee con os.getenv en autopublish_epic_from_run
+    ),
+    FlagSpec(
+        key="STACKY_PUSH_REJECTIONS_ENABLED",
+        type="bool",
+        label="Memoria que empuja: rechazos como anti-patrones",
+        description=(
+            "Plan 48+54 — Si ON, las notas de rechazo del operador (memoria "
+            "operator_note) se inyectan como anti-patrones imperativos en el "
+            "próximo run del mismo proyecto, en los 3 runtimes "
+            "(copilot/claude_code_cli/codex). Default OFF."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_EPIC_SANITIZE_ENABLED",
+        type="bool",
+        label="Saneamiento de forma de la épica",
+        description=(
+            "Plan 50 F1 — Si ON, normaliza SOLO la forma del HTML de la épica "
+            "antes de publicar (RF-12, fences residuales, emojis de checklist, "
+            "dedup de bloques RF idénticos). Pura e idempotente. Default ON."
+        ),
+        group="global",
+        env_only=True,  # se lee con os.getenv en _extract_epic_html
+    ),
+    FlagSpec(
+        key="STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED",
+        type="bool",
+        label="Warnings estructurales de la épica",
+        description=(
+            "Plan 50 F2 — Si ON, agrega warnings NO bloqueantes por defectos "
+            "estructurales de la épica (RF duplicados/no consecutivos, headings "
+            "vacíos, bloques RF sin contenido) al Observatorio. Default ON."
+        ),
+        group="global",
+        env_only=True,  # se lee con os.getenv en _epic_grounding_warnings
+    ),
+    FlagSpec(
+        key="STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED",
+        type="bool",
+        label="Warnings de catálogo (grounding)",
+        description=(
+            "Plan 50 F3 — Si ON, warning NO bloqueante cuando la épica cita "
+            "procesos que no existen en el process_catalog del proyecto. "
+            "Default OFF (evita falsos positivos hasta catálogo curado)."
+        ),
+        group="global",
+        env_only=True,  # se lee con os.getenv en el flujo de warnings de tickets
+    ),
+    FlagSpec(
+        key="STACKY_COMMENT_FULL_SCAN_ENABLED",
+        type="bool",
+        label="Idempotencia: escanear todas las páginas de comentarios",
+        description=(
+            "Plan 52 F1 — Si ON (default), comment_exists recorre TODAS las "
+            "páginas de comentarios del work item para encontrar el marker "
+            "idempotente aunque haya >50 comentarios. Si OFF, vuelve al "
+            "comportamiento legacy de 1 página."
+        ),
+        group="global",
+        env_only=True,  # se lee con os.getenv en ado_client.comment_exists
+    ),
+    FlagSpec(
+        key="STACKY_EPIC_GATE_ENABLED",
+        type="bool",
+        label="Gate correctivo determinista de épica",
+        description=(
+            "Plan 51 F3 — Si ON, ante defectos no reparables (huecos RF, bloques "
+            "vacíos) bloquea el autopublish de la épica (needs_review) y dispara "
+            "un pase correctivo inline ante defectos de forma reparables. "
+            "Caso feliz = 0 tokens extra. Default OFF."
+        ),
+        group="global",
+        env_only=True,  # se lee con os.getenv en api/tickets y el runner CLI
+    ),
+    FlagSpec(
+        key="STACKY_EPIC_CATALOG_GATE_ENABLED",
+        type="bool",
+        label="Bloqueo por catálogo (procesos inventados)",
+        description=(
+            "Plan 51 F3 — Si ON (requiere STACKY_EPIC_GATE_ENABLED), un proceso "
+            "citado que no exista en el process_catalog del cliente bloquea el "
+            "autopublish. Opt-in dentro de opt-in. Default OFF."
+        ),
+        group="global",
+        env_only=True,  # se lee con os.getenv en api/tickets
+    ),
+    # ── Plan 53 — Selector adaptativo de modelo/effort por confidence ──────────
+    FlagSpec(
+        key="STACKY_ADAPTIVE_SELECTOR_ENABLED",
+        type="bool",
+        label="Selector adaptativo modelo/effort (Plan 53)",
+        description=(
+            "Plan 53 — Si ON, ajusta automáticamente modelo y effort según el "
+            "confidence del grounding de la épica: bajo confidence → Opus/max; "
+            "alto confidence → Sonnet/low. El override manual del operador "
+            "(model/effort en el body) siempre gana. Default OFF."
+        ),
+        group="agents",
+    ),
+    # ── Plan 55 — Preview ejecutable ADO y portafolio N épicas ───────────────
+    FlagSpec(
+        key="STACKY_ADO_PREVIEW_ENABLED",
+        type="bool",
+        label="Preview ejecutable de publicación ADO (Plan 55)",
+        description=(
+            "Plan 55 — Si ON (default), habilita GET /api/tickets/epic-preview "
+            "que simula la publicación en ADO sin escribir nada (solo-lectura). "
+            "OFF = endpoint responde 404 feature_disabled."
+        ),
+        group="agents",
+        env_only=True,  # leído via os.getenv en tickets.py; no es atributo de Config
+    ),
+    FlagSpec(
+        key="STACKY_EPIC_PORTFOLIO_ENABLED",
+        type="bool",
+        label="Portafolio N épicas desde un brief (Plan 55, beta)",
+        description=(
+            "Plan 55 — Si ON, habilita la generación de N épicas en paralelo "
+            "desde un único brief (feature beta, default OFF). "
+            "OFF = endpoint devuelve 404 feature_disabled."
+        ),
+        group="agents",
+        env_only=True,  # leído via os.getenv en tickets.py; no es atributo de Config
     ),
 )
 

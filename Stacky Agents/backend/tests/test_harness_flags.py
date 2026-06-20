@@ -47,6 +47,106 @@ def test_registry_no_duplicates():
     assert len(keys) == len(set(keys)), "Claves duplicadas en FLAG_REGISTRY"
 
 
+def test_operator_note_flag_registered():
+    """Plan 47 F3 — flag STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED registrado."""
+    from services.harness_flags import FLAG_REGISTRY
+
+    spec = next(
+        (s for s in FLAG_REGISTRY if s.key == "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED"),
+        None,
+    )
+    assert spec is not None
+    assert spec.type == "bool"
+    assert spec.env_only is True
+    assert spec.group == "global"
+
+
+def test_artifact_rescue_flag_registered():
+    """Plan 47 F4 — flag STACKY_ARTIFACT_RESCUE_ENABLED registrado."""
+    from services.harness_flags import FLAG_REGISTRY
+
+    spec = next(
+        (s for s in FLAG_REGISTRY if s.key == "STACKY_ARTIFACT_RESCUE_ENABLED"),
+        None,
+    )
+    assert spec is not None
+    assert spec.type == "bool"
+    assert spec.group == "global"
+    assert spec.env_only is True
+
+
+def test_push_rejections_flag_registered():
+    """Plan 48 F5 — flag STACKY_PUSH_REJECTIONS_ENABLED registrado."""
+    from services.harness_flags import FLAG_REGISTRY
+
+    spec = next(
+        (s for s in FLAG_REGISTRY if s.key == "STACKY_PUSH_REJECTIONS_ENABLED"),
+        None,
+    )
+    assert spec is not None
+    assert spec.type == "bool"
+    assert spec.group == "global"
+
+
+def test_plan50_flags_registered():
+    """Plan 50 F0 — las 3 flags de saneamiento/warnings registradas como bool."""
+    from services.harness_flags import FLAG_REGISTRY
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    for key in (
+        "STACKY_EPIC_SANITIZE_ENABLED",
+        "STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED",
+        "STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED",
+    ):
+        assert key in by_key, f"flag {key} no registrada"
+        assert by_key[key].type == "bool"
+        assert by_key[key].env_only is True
+
+
+def test_plan51_52_flags_registered():
+    """Plan 51 F3 + Plan 52 F1 — flags nuevas registradas como bool env_only."""
+    from services.harness_flags import FLAG_REGISTRY
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    for key in (
+        "STACKY_EPIC_GATE_ENABLED",
+        "STACKY_EPIC_CATALOG_GATE_ENABLED",
+        "STACKY_COMMENT_FULL_SCAN_ENABLED",
+    ):
+        assert key in by_key, f"flag {key} no registrada"
+        assert by_key[key].type == "bool"
+        assert by_key[key].env_only is True
+
+
+def test_plan53_adaptive_selector_flag_registered():
+    """Plan 53 — STACKY_ADAPTIVE_SELECTOR_ENABLED registrada, bool, no env_only (atributo de Config)."""
+    from services.harness_flags import FLAG_REGISTRY
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    key = "STACKY_ADAPTIVE_SELECTOR_ENABLED"
+    assert key in by_key, f"flag {key} no registrada en FLAG_REGISTRY"
+    spec = by_key[key]
+    assert spec.type == "bool"
+    assert spec.env_only is False, "debe ser atributo de Config (no env_only)"
+    assert spec.group == "agents"
+
+
+def test_plan55_flags_registered():
+    """Plan 55 — STACKY_ADO_PREVIEW_ENABLED y STACKY_EPIC_PORTFOLIO_ENABLED registradas como bool env_only."""
+    from services.harness_flags import FLAG_REGISTRY
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    for key, expected_group in (
+        ("STACKY_ADO_PREVIEW_ENABLED", "agents"),
+        ("STACKY_EPIC_PORTFOLIO_ENABLED", "agents"),
+    ):
+        assert key in by_key, f"flag {key} no registrada en FLAG_REGISTRY"
+        spec = by_key[key]
+        assert spec.type == "bool", f"{key}: type debe ser bool"
+        assert spec.env_only is True, f"{key}: debe ser env_only=True"
+        assert spec.group == expected_group, f"{key}: group debe ser '{expected_group}'"
+
+
 # ---------------------------------------------------------------------------
 # 2. apply_updates — cast por tipo
 # ---------------------------------------------------------------------------

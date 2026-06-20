@@ -1,8 +1,17 @@
 # Plan 58 — Bucle de Convergencia de Calidad Determinista
 
 > Estado: PROPUESTO (2026-06-20). Autor: StackyArchitectaUltraEficientCode.
+> Versión: **v2** (v1 → v2, endurecido por juez adversarial 2026-06-20).
 > Finalista #1 del roadmap `docs/_roadmap/TOP5_2026-06-20_POST57_LOOP_MOLECULA_BIDIRECCIONAL.md`.
 > Pensado para que un modelo MENOR (Haiku/Codex/Copilot) lo implemente sin inferir nada.
+
+## CHANGELOG v1 → v2
+- **C1 (BLOQUEANTE):** F0.1 usaba helpers `_env_bool`/`_env_int` que **NO existen** en `config.py` (verificado: el archivo usa `os.getenv(...).lower() in ("1","true","yes")` para bool e `int(os.getenv(...))` para int). Reescrito el snippet con el patrón REAL, sin hedge.
+- **C2 (BLOQUEANTE):** doble presupuesto de envíos. El gate actual frena con `autocorrect.attempts < CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES` (runner:950-952); el bucle v1 ignoraba ese freno y podía enviar más mensajes stdin que el cap global. F2 ahora respeta el budget compartido vía `remaining_global_budget`.
+- **C3 (IMPORTANTE):** `GateVerdict` real (epic_gate.py:26-31) tiene `regression_defects` (plan 56), omitido en el contrato v1. El anti-loop `STOP_NO_PROGRESS` ahora compara `structural_defects + regression_defects` para no declarar "sin progreso" falsamente.
+- **C4 (IMPORTANTE):** F4 sellaba `metadata["epic_convergence"]` "justo después de poblar `_epic_repair_result[0]`", pero `metadata` recién se ensambla en runner:1160+ (fuera del closure `_on_stream_event`). Reasignado: poblar el list-holder `_epic_repair_result[0]` dentro del closure y sellar `metadata` en runner:1205-1206 (donde ya se sella `epic_repair`).
+- **C5 (MENOR):** F0.2 — `group="global"` confirmado válido (FlagSpec.group ∈ {"claude_code_cli","global","codex_cli"}). Campos de FlagSpec confirmados (no hay `default`).
+- **[ADICIÓN ARQUITECTO]:** `STOP_BUDGET_REACHED_GLOBAL` + telemetría `global_budget_spent` para que el cap compartido sea observable (ver §3.2 y F1).
 
 ---
 
@@ -59,6 +68,12 @@ Es decir: el gate (plan 51) ya da un veredicto determinista PASS/REPAIR/NEEDS_RE
 
 > Nota para el implementador: el wiring real de este plan es **Claude-CLI-only** porque es el único runtime que ejecuta el pase correctivo de épica + autopublish. La función `run_convergence_loop` se diseña **agnóstica de runtime** (recibe `runtime`, `send_fn`, `reextract_fn`) para que (a) sea testeable sin Claude y (b) un plan futuro la reuse en Codex sin reescribir. NO inventar wiring para Codex/Copilot acá.
 
+### 3.2 Presupuesto de envíos compartido (C2 — firsthand: `claude_code_cli_runner.py:950-952`)
+
+El pase correctivo épico actual NO envía si `autocorrect.attempts >= CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES` (runner:950-952): el cap de autocorrección es un **freno global de mensajes stdin** que la épica respeta hoy. `autocorrect.attempts` solo lo incrementa `AutocorrectLoop` (cli_autocorrect.py:165), NO `_send_system_message`. Por lo tanto el bucle de convergencia debe **respetar el mismo freno compartido** para no exceder el total de mensajes stdin del run.
+
+**Regla dura:** el presupuesto efectivo del bucle es `min(STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS, CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES - autocorrect.attempts)`. Si ese mínimo es ≤0, el bucle NO envía (degrada a `STOP_BUDGET_REACHED_GLOBAL`, iterations=0). `run_convergence_loop` recibe este valor ya calculado por el caller (F2) como `max_iterations`; la función PURA no conoce `autocorrect`. **[ADICIÓN ARQUITECTO]:** además expone `STOP_BUDGET_REACHED_GLOBAL` y la telemetría `global_budget_spent` (cuántos envíos quedaban) para que el cap compartido sea **observable** en `metadata["epic_convergence"]` — hoy el freno global es invisible.
+
 ---
 
 ## 4. Fases
@@ -77,21 +92,21 @@ Es decir: el gate (plan 51) ya da un veredicto determinista PASS/REPAIR/NEEDS_RE
 - `backend/.env.example`
 
 **F0.1 — `backend/config.py`**
-Agregar dos atributos a la clase `Config` (mismo patrón que `STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES` en `config.py:403-404`):
+Agregar dos atributos a la clase `Config`. **NO existen** helpers `_env_bool`/`_env_int`: el archivo lee bool con `os.getenv(...).lower() in ("1","true","yes")` (ver config.py:132-141) e int con `int(os.getenv(...))` (ver `STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES` en config.py:403-404). Copiá EXACTAMENTE este patrón:
 
 ```python
 # Plan 58 — Bucle de convergencia de calidad determinista (épica).
 # OFF por defecto: con OFF el pase correctivo de épica es single-shot (idéntico al actual).
-STACKY_QUALITY_CONVERGENCE_ENABLED: bool = _env_bool(
-    "STACKY_QUALITY_CONVERGENCE_ENABLED", False
-)
+STACKY_QUALITY_CONVERGENCE_ENABLED: bool = os.getenv(
+    "STACKY_QUALITY_CONVERGENCE_ENABLED", "false"
+).lower() in ("1", "true", "yes")
 # Máximo de PASES CORRECTIVOS del bucle (>=1). 1 == single-shot actual. Default 2.
-STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS: int = _env_int(
-    "STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS", 2
+STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS: int = int(
+    os.getenv("STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS", "2")
 )
 ```
 
-> Usá los helpers de lectura de env que ya existan en `config.py` (`_env_bool`/`_env_int` o el patrón equivalente que use el archivo — confirmá el nombre real leyendo cómo está definido `STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES`). Caso borde: si el valor de env es `< 1`, **clamp a 1** en el punto de uso (F2), NO acá (config refleja lo seteado).
+> Caso borde: si el valor de env es `< 1`, **clamp a 1** en el punto de uso (F2 → `run_convergence_loop` regla 0), NO acá (config refleja lo seteado, igual que `CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES`).
 
 **F0.2 — `backend/services/harness_flags.py`**
 Agregar al `FLAG_REGISTRY` (tupla) dos `FlagSpec` nuevos, group `"global"` (no es claude-specific en su semántica, aunque hoy solo lo use Claude):
@@ -172,18 +187,30 @@ class ConvergenceResult(NamedTuple):
     iterations: int            # nº de PASES CORRECTIVOS efectivamente enviados
     final_decision: str        # GateDecision.value del último veredicto ("pass"|"repair"|"needs_review")
     stop_reason: str           # ver constantes STOP_* abajo
-    defects_first: list        # structural_defects del PRIMER veredicto (sorted)
-    defects_last: list         # structural_defects del ÚLTIMO veredicto (sorted)
+    defects_first: list        # _all_defects del PRIMER veredicto (sorted)
+    defects_last: list         # _all_defects del ÚLTIMO veredicto (sorted)
+    global_budget_spent: int   # C2/ADICIÓN: nº de envíos consumidos del cap compartido (== iterations)
 
 
 # stop_reason canónicos (strings estables para telemetría/tests):
-STOP_CONVERGED = "converged"                 # alcanzó PASS
-STOP_BUDGET_EXHAUSTED = "budget_exhausted"   # agotó max_iterations sin PASS
-STOP_NO_RESUME = "degraded_no_resume"        # runtime sin supports_resume → pase único
-STOP_NEEDS_REVIEW = "needs_review_terminal"  # veredicto NEEDS_REVIEW (no reparable inline)
-STOP_NO_PROGRESS = "no_progress"             # el pase no cambió los defectos → abortar (anti-loop)
-STOP_DISABLED = "disabled"                   # flag OFF (no debería llamarse, defensa)
-STOP_SEND_FAILED = "send_failed"             # send_fn lanzó/retornó falsy
+STOP_CONVERGED = "converged"                       # alcanzó PASS
+STOP_BUDGET_EXHAUSTED = "budget_exhausted"         # agotó max_iterations (cap del bucle) sin PASS
+STOP_BUDGET_REACHED_GLOBAL = "budget_reached_global"  # C2: cap compartido autocorrect ya agotado → no envía
+STOP_NO_RESUME = "degraded_no_resume"              # runtime sin supports_resume → pase único
+STOP_NEEDS_REVIEW = "needs_review_terminal"        # veredicto NEEDS_REVIEW (no reparable inline)
+STOP_NO_PROGRESS = "no_progress"                   # el pase no cambió los defectos → abortar (anti-loop)
+STOP_DISABLED = "disabled"                         # flag OFF (no debería llamarse, defensa)
+STOP_SEND_FAILED = "send_failed"                   # send_fn lanzó/retornó falsy
+
+
+def _all_defects(verdict: GateVerdict) -> list:
+    """C3 — combina structural_defects + regression_defects (plan 56) sorted.
+
+    El anti-loop debe ver TODOS los defectos reparables; comparar solo
+    structural_defects declararía 'sin progreso' falsamente si el pase movió
+    un regression_defect. GateVerdict.regression_defects existe (epic_gate.py:31).
+    """
+    return sorted(list(verdict.structural_defects) + list(verdict.regression_defects))
 
 
 def run_convergence_loop(
@@ -201,7 +228,12 @@ def run_convergence_loop(
     Parámetros:
       enabled: flag STACKY_QUALITY_CONVERGENCE_ENABLED resuelto por el caller.
       runtime: nombre del runtime (clave de CAPABILITIES).
-      max_iterations: presupuesto de PASES CORRECTIVOS (se clampa a >=1).
+      max_iterations: presupuesto de PASES CORRECTIVOS YA CALCULADO por el caller
+          como min(STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS_clamped,
+          CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES - autocorrect.attempts), donde
+          el clamp de config (<1⇒1) lo hace el CALLER (F2) ANTES de restar. Lo que
+          llega <=0 a esta función ⇒ "cap compartido agotado" (regla 4b), NUNCA
+          config inválido. La función pura NO clampa.
       initial_verdict: GateVerdict ya calculado sobre el output actual.
       build_repair_message: dado un GateVerdict, arma el mensaje correctivo dirigido.
       send_fn: envía el mensaje correctivo al runtime (None => no se puede reparar).
@@ -209,8 +241,7 @@ def run_convergence_loop(
           GateVerdict. El caller encapsula acá la lectura de final_output +
           _extract_epic_html + evaluate_epic_gate.
 
-    Reglas deterministas (en orden):
-      0. cap = max(1, max_iterations).
+    Reglas deterministas (en orden ESTRICTO):
       1. Si not enabled -> ConvergenceResult(converged=(decision==PASS), iterations=0,
          stop_reason=STOP_DISABLED, ...). (Defensa; el caller no debería llamar con OFF.)
       2. Si initial_verdict.decision == PASS -> converged=True, iterations=0, STOP_CONVERGED.
@@ -220,6 +251,9 @@ def run_convergence_loop(
          or send_fn is None -> converged=False, iterations=0, STOP_NO_RESUME (pase único: NO
          envía nada; el caller, si quiere, ya hizo/ hará el single-shot histórico — ver F2 nota).
          [Para Copilot/runtime incapaz: NO se itera.]
+      4b. (C2) Si max_iterations <= 0 -> converged=False, iterations=0,
+         stop_reason=STOP_BUDGET_REACHED_GLOBAL, global_budget_spent=0. NO envía. (cap
+         compartido autocorrect ya agotado por el caller.) cap = max_iterations en adelante.
       5. Bucle while sent < cap and current.decision == REPAIR:
            a. msg = build_repair_message(current)
            b. try: ok = send_fn(msg)  except -> STOP_SEND_FAILED (break, no incrementar más)
@@ -228,14 +262,15 @@ def run_convergence_loop(
            d. nxt = reextract_and_evaluate_fn()
            e. if nxt.decision == PASS -> current=nxt; STOP_CONVERGED; break
               if nxt.decision == NEEDS_REVIEW -> current=nxt; STOP_NEEDS_REVIEW; break
-              if sorted(nxt.structural_defects) == sorted(current.structural_defects)
-                 -> current=nxt; STOP_NO_PROGRESS; break   # anti-loop: no avanzó
+              if _all_defects(nxt) == _all_defects(current)
+                 -> current=nxt; STOP_NO_PROGRESS; break   # anti-loop C3: structural+regression
               current = nxt   # siguió en REPAIR pero con defectos distintos -> reintentar
          Al salir del while por budget: STOP_BUDGET_EXHAUSTED.
       6. Devolver ConvergenceResult con converged=(current.decision==PASS),
          iterations=sent, final_decision=current.decision.value,
-         defects_first=sorted(initial_verdict.structural_defects),
-         defects_last=sorted(current.structural_defects).
+         defects_first=_all_defects(initial_verdict),
+         defects_last=_all_defects(current),
+         global_budget_spent=sent.
 
     NUNCA lanza: cualquier excepción de los callables se traduce a STOP_SEND_FAILED
     (en send_fn) o se propaga SOLO si viene de reextract_and_evaluate_fn antes del
@@ -266,16 +301,18 @@ Casos (mínimo 10):
 7. `test_copilot_degrades_single` — runtime="github_copilot" ⇒ STOP_NO_RESUME, iterations=0.
 8. `test_send_fn_none` — send_fn=None ⇒ STOP_NO_RESUME (regla 4), iterations=0.
 9. `test_send_fn_returns_falsy` — send_fn ⇒ False ⇒ STOP_SEND_FAILED, iterations=0.
-10. `test_max_iterations_clamped_to_one` — max_iterations=0, REPAIR→PASS ⇒ converged=True, iterations=1.
+10. `test_config_clamp_at_caller` — el clamp de config `<1 ⇒ 1` lo hace el CALLER (F2: `max(1, int(config...))`), NO la función pura. Verificar en F2 (`should_use_convergence_loop`/wiring) que un config=0 se traduce a budget efectivo ≥1 ANTES de descontar el cap compartido. (La función pura, en cambio, trata `max_iterations<=0` como STOP_BUDGET_REACHED_GLOBAL — ver caso 13. NO hay ambigüedad: config-clamp ocurre arriba; lo que llega 0 a la función es "cap compartido agotado".)
 11. `test_disabled_returns_disabled` — enabled=False ⇒ STOP_DISABLED, iterations=0.
-12. `test_defects_first_and_last_recorded` — verifica `defects_first`/`defects_last` sorted.
+12. `test_defects_first_and_last_recorded` — verifica `defects_first`/`defects_last` sorted, incluyendo un `regression_defect` en el último veredicto (C3).
+13. `test_global_budget_reached` — max_iterations=0 con initial REPAIR ⇒ STOP_BUDGET_REACHED_GLOBAL, iterations=0, global_budget_spent=0 (C2). [OJO: distinto de `test_max_iterations_clamped_to_one`, que clampa a 1; acá el caller pasa 0 deliberadamente porque el cap COMPARTIDO se agotó. Regla 0b NO clampa.]
+14. `test_no_progress_uses_all_defects` — pase mueve un structural pero deja igual el conjunto structural+regression ⇒ NO declara progreso solo por structural; valida que `_all_defects` (no `structural_defects`) gobierna STOP_NO_PROGRESS (C3).
 
 **Comando exacto:**
 ```
 .venv\Scripts\python.exe -m pytest "tests/test_convergence_loop.py" -q
 ```
 
-**Criterio de aceptación (binario):** comando en verde, ≥11 casos. La función no lanza en ninguno.
+**Criterio de aceptación (binario):** comando en verde, ≥13 casos. La función no lanza en ninguno.
 **Flag que protege:** la propia función respeta `enabled`. **Impacto runtime:** ninguno (todavía no se cablea). **Fallback:** integrado (STOP_NO_RESUME).
 **Trabajo del operador:** ninguno.
 
@@ -329,7 +366,14 @@ if config.STACKY_QUALITY_CONVERGENCE_ENABLED and getattr(config, "STACKY_EPIC_RE
             base += "\nDefectos detectados: " + ", ".join(verdict.structural_defects) + "."
         return base
 
-    _budget = max(1, int(config.STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS))
+    # C2 — budget compartido con el cap de autocorrección (runner:950-952).
+    # autocorrect.attempts NO lo incrementa _send_system_message (solo AutocorrectLoop),
+    # pero el cap CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES es el freno global de mensajes
+    # stdin que la épica respeta hoy. El bucle no puede excederlo.
+    _ac_used = autocorrect.attempts if autocorrect is not None else 0
+    _ac_cap = int(config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES)
+    _cfg_cap = max(1, int(config.STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS))  # clamp config
+    _budget = min(_cfg_cap, _ac_cap - _ac_used)  # puede ser <=0 ⇒ regla 4b
     _initial = _evaluate()
     _conv = run_convergence_loop(
         enabled=True,
@@ -340,19 +384,13 @@ if config.STACKY_QUALITY_CONVERGENCE_ENABLED and getattr(config, "STACKY_EPIC_RE
         send_fn=lambda m: _send_system_message(execution_id, m),
         reextract_and_evaluate_fn=_evaluate,
     )
-    _epic_repair_result[0] = {
-        "attempted": _conv.iterations > 0,
-        "converged": _conv.converged,
-        "iterations": _conv.iterations,
-        "final_decision": _conv.final_decision,
-        "stop_reason": _conv.stop_reason,
-        "defects_first": _conv.defects_first,
-        "defects_last": _conv.defects_last,
-    }
+    _epic_repair_result[0] = build_convergence_payload(_conv)
     log("info", f"convergence: {_epic_repair_result[0]}")
 else:
     # ... rama OFF: el bloque single-shot ACTUAL, sin cambios ...
 ```
+
+> `build_convergence_payload(conv) -> dict` (helper PURA en `harness/convergence.py`, ver F2 tests) produce: `{attempted, converged, iterations, final_decision, stop_reason, defects_first, defects_last, global_budget_spent}` con `attempted = conv.iterations > 0`. Usarla en lugar de armar el dict a mano (evita drift entre runner y tests).
 
 **Casos borde a respetar:**
 - `final_output` puede estar vacío en el primer `result`: `_extract_epic_html("")` ya tolera vacío (igual que hoy). `_evaluate()` devuelve un veredicto (probablemente `not_epic`→REPAIR).
@@ -365,7 +403,7 @@ else:
 **TESTS PRIMERO** — archivo nuevo: `backend/tests/test_convergence_wiring.py`.
 > El runner es difícil de instanciar entero. Estrategia: testear la **forma del payload** `_epic_repair_result` y la decisión de rama por flag mediante una función auxiliar extraída, O un test de integración ligero con dobles. Mínimo viable sin sobre-ingeniería:
 - Extraer la construcción de `_epic_repair_result` a una helper PURA `build_convergence_payload(conv: ConvergenceResult) -> dict` en `harness/convergence.py` (así es testeable sin runner). Tests:
-1. `test_payload_shape_converged` — payload tiene keys exactas: attempted, converged, iterations, final_decision, stop_reason, defects_first, defects_last.
+1. `test_payload_shape_converged` — payload tiene keys exactas: attempted, converged, iterations, final_decision, stop_reason, defects_first, defects_last, global_budget_spent.
 2. `test_payload_attempted_false_when_zero_iterations`.
 3. `test_flag_off_uses_legacy_path` — con `STACKY_QUALITY_CONVERGENCE_ENABLED=False`, la rama OFF no invoca `run_convergence_loop` (verificar con monkeypatch que `run_convergence_loop` NO se llama; usar un import-level patch o un flag-checker puro `should_use_convergence_loop(config) -> bool`).
 
@@ -408,22 +446,26 @@ else:
 
 **Archivos exactos:** el constructor de `epic_summary` vive en `backend/api/tickets.py` (función que arma el dict `epic_summary`; localizar por `epic_summary` en `tickets.py` — es donde plan 42/44 sellan `confidence`/grounding). Si `epic_summary` no es accesible desde el runner en el momento del bucle, sellar bajo `metadata["epic_convergence"]` en el runner (más simple y desacoplado).
 
-**Decisión determinística para el implementador (NO inferir):** sellar bajo **`metadata["epic_convergence"]`** directamente en `claude_code_cli_runner.py`, justo después de poblar `_epic_repair_result[0]` en F2:
+**Decisión determinística para el implementador (NO inferir):** sellar bajo **`metadata["epic_convergence"]`** en `claude_code_cli_runner.py` en el bloque de sellado de metadata (runner:1204-1206, donde YA se sella `metadata["epic_repair"]` — VERIFICADO firsthand). **C4: NO sellarlo dentro del closure `_on_stream_event` (911-976): ahí `metadata` NO está en scope.** El closure solo puebla el list-holder `_epic_repair_result[0]` (que ya trae el payload completo vía `build_convergence_payload`). Añadir junto al sello existente:
 
 ```python
-metadata["epic_convergence"] = {
-    "enabled": True,
-    "converged": _conv.converged,
-    "iterations": _conv.iterations,
-    "final_decision": _conv.final_decision,
-    "stop_reason": _conv.stop_reason,
-}
+# runner:~1206, junto a metadata["epic_repair"] = _epic_repair_result[0]
+if config.STACKY_QUALITY_CONVERGENCE_ENABLED and _epic_repair_result[0] is not None:
+    _p = _epic_repair_result[0]
+    metadata["epic_convergence"] = {
+        "enabled": True,
+        "converged": _p.get("converged"),
+        "iterations": _p.get("iterations"),
+        "final_decision": _p.get("final_decision"),
+        "stop_reason": _p.get("stop_reason"),
+        "global_budget_spent": _p.get("global_budget_spent"),  # ADICIÓN: cap compartido observable
+    }
 ```
 
-> Razón de la decisión: `epic_summary` se construye dentro de `autopublish_epic_from_run` (api/tickets.py), que corre DESPUÉS y en otro módulo; pasarle el resultado del bucle requeriría ensanchar su firma. `metadata["epic_convergence"]` es el canal ya usado para telemetría de runner (`runaway`, `epic_recovery`, etc., ver líneas 1271-1276) y lo consume el panel de salud. Menor acoplamiento, mismo valor.
+> Con flag OFF, la guarda `config.STACKY_QUALITY_CONVERGENCE_ENABLED` NO sella la key ⇒ `metadata["epic_convergence"]` ausente (compatibilidad hacia atrás). Razón de no usar `epic_summary`: se construye en `autopublish_epic_from_run` (api/tickets.py), que corre DESPUÉS y en otro módulo; pasarle el bucle ensancharía su firma. `metadata[...]` es el canal ya usado para telemetría de runner (`runaway`, `epic_recovery`, runner:1271-1284). Menor acoplamiento.
 
 **TESTS PRIMERO:** cubierto indirectamente por F2 (el payload). Agregar a `test_convergence_wiring.py`:
-- `test_convergence_metadata_block_shape` — `build_convergence_payload` + el sellado producen un dict con keys `enabled, converged, iterations, final_decision, stop_reason`. (Test sobre la helper, no sobre el runner entero.)
+- `test_convergence_metadata_block_shape` — `build_convergence_payload` + el sellado producen un dict con keys `enabled, converged, iterations, final_decision, stop_reason, global_budget_spent`. (Test sobre la helper, no sobre el runner entero.)
 
 **Comando exacto:**
 ```
@@ -479,6 +521,8 @@ Y el meta-test del ratchet (nombre real según plan 49; típicamente en `tests/t
 | R6 | `send_fn` lanza y tumba el run. | `run_convergence_loop` envuelve `send_fn` en try/except ⇒ `STOP_SEND_FAILED`, nunca propaga. El wiring ya envuelve el bloque en try/except (líneas 975-976 actuales). |
 | R7 | Flag editable solo por env (rompe regla dura). | F0.2 registra ambos en `FLAG_REGISTRY` ⇒ editable por UI (plan 33). |
 | R8 | Test nuevos se borran sin aviso. | F5 los registra en `HARNESS_TEST_FILES` (ambos scripts) ⇒ meta-test ratchet los exige. |
+| R9 | (C2) El bucle excede el total de mensajes stdin del run (autocorrect + convergence ambos ON). | `_budget = min(cfg_cap, ac_cap - autocorrect.attempts)` en F2; si ≤0 ⇒ `STOP_BUDGET_REACHED_GLOBAL`, 0 envíos. Telemetría `global_budget_spent` lo hace observable. |
+| R10 | (C3) Anti-loop declara "sin progreso" falsamente al mover un regression_defect. | `_all_defects` combina `structural_defects + regression_defects` (plan 56). El bucle solo aborta si el conjunto COMPLETO no cambió. |
 
 ---
 
@@ -514,8 +558,9 @@ Y el meta-test del ratchet (nombre real según plan 49; típicamente en `tests/t
 
 ### Definition of Done (global, binario)
 - [ ] `STACKY_QUALITY_CONVERGENCE_ENABLED` y `STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS` existen en `Config`, en `FLAG_REGISTRY` (editables por UI) y en `.env.example`.
-- [ ] `backend/harness/convergence.py` existe con `run_convergence_loop`, `ConvergenceResult`, las constantes `STOP_*`, `build_convergence_payload`, `should_use_convergence_loop`.
-- [ ] `tests/test_convergence_loop.py` ≥11 casos en verde.
+- [ ] `backend/harness/convergence.py` existe con `run_convergence_loop`, `ConvergenceResult` (incluye `global_budget_spent`), las constantes `STOP_*` (incluida `STOP_BUDGET_REACHED_GLOBAL`), `_all_defects`, `build_convergence_payload`, `should_use_convergence_loop`.
+- [ ] El wiring F2 calcula `_budget = min(cfg_cap, ac_cap - autocorrect.attempts)` (C2) y nunca excede el cap compartido de autocorrección.
+- [ ] `tests/test_convergence_loop.py` ≥13 casos en verde (incluye `test_global_budget_reached` y `test_no_progress_uses_all_defects`).
 - [ ] `tests/test_convergence_wiring.py` en verde (incluye `test_flag_off_uses_legacy_path`).
 - [ ] `tests/test_harness_flags.py` en verde con los 3 casos nuevos.
 - [ ] El wiring del runner usa la rama de convergencia SOLO con flag ON; OFF = bloque legacy intacto.

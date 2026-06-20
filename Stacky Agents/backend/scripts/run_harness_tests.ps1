@@ -81,7 +81,12 @@ $HarnessTestFiles = @(
   "tests/test_regression_capture.py",
   "tests/test_regression_goldens.py",
   "tests/test_regression_goldens_store.py",
-  "tests/test_epic_gate_regression.py"
+  "tests/test_epic_gate_regression.py",
+  # Plan 57 - FA-36 Especulacion anticipatoria
+  "tests/test_speculative_hash.py",
+  "tests/test_speculative_parity.py",
+  "tests/test_speculative_flag.py",
+  "tests/test_speculative_claim_flow.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

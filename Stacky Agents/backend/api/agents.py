@@ -541,6 +541,26 @@ def run():
     return jsonify(resp_body), 202
 
 
+def _clamp_effort_for_model(effort: str, model_id: str | None) -> str:
+    """Plan 43 F0 — Degrada effort al máximo soportado por el modelo.
+
+    Matriz modelo x effort (oficial Claude CLI):
+      claude-haiku-*   : low/medium/high            → xhigh→high, max→high
+      claude-sonnet-*  : low/medium/high/max        → xhigh→high (xhigh es Opus 4.7+)
+      claude-opus-4-5+ : low/medium/high/xhigh/max  → todo
+    """
+    if not model_id:
+        return effort
+    m = model_id.lower()
+    if "haiku" in m:
+        return effort if effort in ("low", "medium", "high") else "high"
+    if "sonnet" in m:
+        # sonnet no soporta xhigh (es Opus 4.7+); max sí en sonnet-4-6
+        return "high" if effort == "xhigh" else effort
+    # opus: todo soportado
+    return effort
+
+
 @bp.post("/run-brief")
 def run_brief():
     """Plan 38 B2 — Lanza el BusinessAgent con un brief como contexto (sin ticket real).
@@ -561,14 +581,125 @@ def run_brief():
     runtime_raw = payload.get("runtime") or "github_copilot"
     project_name = (payload.get("project") or "").strip() or None
     vscode_agent_filename: str | None = payload.get("vscode_agent_filename") or None
-    # Plan 42 F3 — modelo opcional por-run; effort leído del body (default "high").
-    # Cap duro vía llm_router.clamp_model (nunca Opus/Fable).
+
+    # Plan 45 F2 — tipo de work item destino (Epic por default; Issue opt-in).
+    # La validación normaliza None/"" → "Epic" (backward-compatible) y rechaza
+    # valores fuera de la allowlist. Issue solo se admite con el flag ON.
+    from api.tickets import validate_brief_work_item_type
+    try:
+        work_item_type = validate_brief_work_item_type(payload.get("work_item_type"))
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_work_item_type"}), 400
+    if work_item_type == "Issue" and not config.STACKY_ISSUE_FROM_BRIEF_ENABLED:
+        return jsonify({"ok": False, "error": "issue_from_brief_disabled"}), 400
+    # Plan 52 F0 — Paridad de runtimes: el autopublish (Epic/Issue) SOLO lo ejecuta
+    # el finalizador de claude_code_cli_runner (_maybe_autopublish_epic). Codex CLI y
+    # GitHub Copilot NO autopublican → degradación controlada: rechazo explícito y
+    # temprano (antes de gastar tokens) para no dar falsa sensación de éxito.
+    _AUTOPUBLISH_RUNTIME = "claude_code_cli"
+    if work_item_type in ("Epic", "Issue") and runtime_raw != _AUTOPUBLISH_RUNTIME:
+        return jsonify({
+            "ok": False,
+            "error": "autopublish_requires_claude_cli",
+            "detail": (
+                f"work_item_type={work_item_type!r} requiere runtime "
+                f"{_AUTOPUBLISH_RUNTIME!r}; recibido {runtime_raw!r}."
+            ),
+        }), 400
+    # Plan 42 F3 / Plan 53 F2 — modelo y effort por-run con selector adaptativo.
+    # Cap duro vía llm_router.clamp_model (nunca Opus/Fable salvo allowlist).
     from services import llm_router as _llm_router
-    _requested_model: str | None = (payload.get("model") or "").strip() or None
-    model_override: str | None = _llm_router.clamp_model(_requested_model) if _requested_model else None
-    logger.info("run_brief: modelo solicitado=%s, efectivo=%s", _requested_model, model_override)
-    _effort_raw = (payload.get("effort") or "").strip().lower()
-    effort_override: str = _effort_raw if _effort_raw in {"low", "medium", "high"} else "high"
+    from services import adaptive_selector  # Plan 53
+
+    # --- Extracción de override del operador (C3: empty string == ausente) ---
+    _requested_model_raw = (payload.get("model") or "").strip()
+    _requested_model: str | None = _requested_model_raw or None  # None si vacío
+
+    _requested_effort_raw = (payload.get("effort") or "").strip().lower()
+
+    # Override explícito: solo si el operador envió algo no-vacío y válido.
+    _operator_explicitly_set_model = _requested_model is not None
+    _operator_explicitly_set_effort = _requested_effort_raw in {"low", "medium", "high", "xhigh", "max"}
+
+    # Base inicial: override del operador si lo envió, si no, defaults.
+    _base_model: str | None = _requested_model if _operator_explicitly_set_model else None
+    _base_effort: str = _requested_effort_raw if _operator_explicitly_set_effort else "high"
+
+    # --- Plan 53 F2: propuesta adaptativa (solo flag ON y sin override manual total) ---
+    _adaptive_trace: dict | None = None
+    if (
+        config.STACKY_ADAPTIVE_SELECTOR_ENABLED
+        and not (_operator_explicitly_set_model and _operator_explicitly_set_effort)
+    ):
+        # G4 fino: si el operador NO fijó ambos, el selector propone los que faltan.
+        _conf = adaptive_selector._load_last_project_confidence(project_name)
+        _sel = adaptive_selector.select(_conf, base_model=_base_model, base_effort=_base_effort)
+
+        # G4: respetar CADA override por separado (si el operador fijó solo uno, respetarlo).
+        if not _operator_explicitly_set_model:
+            _base_model = _sel.model
+        if not _operator_explicitly_set_effort:
+            _base_effort = _sel.effort
+        logger.info("run_brief: selector adaptativo conf=%s -> %s", _conf, _sel.reason)
+        # F5 — traza opcional para auditar K1/K2 (se adjunta a metadata más abajo).
+        _adaptive_trace = {
+            "enabled": True,
+            "input_confidence": _conf,
+            "reason": _sel.reason,
+            "proposed_model": _sel.model,
+            "proposed_effort": _sel.effort,
+        }
+
+    # --- Plan 43 F1 — brief→épica permite Opus 4.8 de primera clase, siempre (sin flag).
+    # Clamp duro SIEMPRE (G3 — red de seguridad final).
+    model_override: str | None = (
+        _llm_router.clamp_model(_base_model, allow_opus=True) if _base_model else None
+    )
+    effort_override: str = _base_effort if _base_effort in {"low", "medium", "high", "xhigh", "max"} else "high"
+    effort_override = _clamp_effort_for_model(effort_override, model_override)
+
+    # Completar la traza con los valores efectivos post-clamp.
+    if _adaptive_trace is not None:
+        _adaptive_trace["final_model"] = model_override
+        _adaptive_trace["final_effort"] = effort_override
+
+    logger.info("run_brief: modelo efectivo=%s effort=%s", model_override, effort_override)
+
+    # Plan 41 — Pre-vuelo de Intención (dos pasos, sin estado server-side).
+    # Paso 1: con flag ON y preflight:true (y NO aprobado aún) → generar el Brief
+    # de Intención y devolverlo SIN arrancar el run. Si el runtime no puede
+    # pre-volar, generate_intent_brief devuelve None → se cae al camino normal.
+    from services import intent_preflight
+    preflight_requested = bool(payload.get("preflight"))
+    approved = bool(payload.get("approved"))
+    corrections = (payload.get("corrections") or "").strip() or None
+
+    if config.INTENT_PREFLIGHT_ENABLED and preflight_requested and not approved:
+        intent = intent_preflight.generate_intent_brief(
+            brief_text=brief,
+            context_summary=_short_context_summary(project_name),
+            runtime=runtime_raw,
+            project_name=project_name,
+            invoke_short_llm=_make_short_llm_invoker(),
+            log=logger.info,
+        )
+        if intent is not None:
+            intent = intent_preflight.rank_and_flag(intent)
+            auto_approvable = (
+                config.INTENT_PREFLIGHT_AUTO_APPROVE
+                and not intent.open_questions
+                and intent.confidence >= config.INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF
+            )
+            return jsonify({
+                "stage": "preflight",
+                "intent": intent_preflight.to_payload(intent),
+                "auto_approvable": auto_approvable,
+            }), 200
+        # intent is None → runtime no disponible → cae al camino normal (arranca).
+        logger.info(
+            "run_brief: pre-vuelo no disponible para runtime=%s; se procede sin pre-vuelo",
+            runtime_raw,
+        )
 
     # Auto-resolve el .agent.md del BusinessAgent para runtimes CLI.
     if runtime_raw in ("codex_cli", "claude_code_cli") and not vscode_agent_filename:
@@ -605,8 +736,32 @@ def run_brief():
             "source": {"type": "brief_modal"},
         }
     ]
+    # Plan 41 paso 2 — las correcciones del operador mandan sobre cualquier
+    # supuesto; se anteponen como bloque de máxima prioridad (id registrado en
+    # context_enrichment._BLOCK_PRIORITY con valor 110).
+    if corrections:
+        context_blocks = intent_preflight.build_corrections_block(corrections) + context_blocks
 
     user = current_user()
+
+    # Plan 57 F4 — Claim hook especulativo (latencia-cero si spec completado).
+    # Ocurre DESPUÉS de validar runtime+autopublish, ANTES de spawnear ejecutor.
+    # Si STACKY_SPECULATIVE_ENABLED=false, claim() retorna None inmediatamente (miss).
+    # Si hay spec completado con el mismo hash → se usa su output directamente.
+    # Auto-publish posterior ocurre igual: el runner confirmado lo maneja.
+    _spec_claimed: dict | None = None
+    try:
+        from services import speculative as _speculative
+        _spec_claimed = _speculative.claim(
+            agent_type="business",
+            context_blocks=context_blocks,
+            runtime=runtime_raw,
+            model=model_override or "",
+            effort=effort_override,
+        )
+    except Exception as _spec_exc:  # noqa: BLE001 — claim nunca bloquea el run
+        logger.debug("run_brief: spec claim falló (ignorado): %s", _spec_exc)
+
     try:
         execution_id = agent_runner.run_agent(
             agent_type="business",
@@ -620,6 +775,7 @@ def run_brief():
             use_anti_patterns=False,
             model_override=model_override,
             effort_override=effort_override,
+            work_item_type=work_item_type,
         )
     except agent_runner.UnknownAgentError:
         abort(400, "agent_type 'business' no está registrado")
@@ -639,6 +795,38 @@ def run_brief():
         "run_brief: execution_id=%s runtime=%s project=%s",
         execution_id, runtime_raw, project_name,
     )
+
+    # Plan 53 F5 — Traza opcional del selector adaptativo en metadata del run.
+    # Solo se persiste con flag ON; con flag OFF la metadata no cambia (G5 byte-identidad).
+    if _adaptive_trace is not None:
+        try:
+            from db import session_scope as _sc53
+            from models import AgentExecution as _AE53
+            with _sc53() as _s53:
+                _ex53 = _s53.get(_AE53, execution_id)
+                if _ex53 is not None:
+                    _md53 = dict(_ex53.metadata_dict or {})
+                    _md53["adaptive_selector"] = _adaptive_trace
+                    _ex53.metadata_dict = _md53
+        except Exception as _e53:  # noqa: BLE001 — traza es opcional; nunca bloquea el run
+            logger.warning("run_brief: no se pudo persistir traza adaptive_selector: %s", _e53)
+
+    # Plan 57 F4 — Anotar si el run proviene de spec completado (solo informativo).
+    # Con flag OFF, _spec_claimed siempre es None → metadata byte-idéntica.
+    if _spec_claimed is not None:
+        try:
+            from db import session_scope as _sc57
+            from models import AgentExecution as _AE57
+            with _sc57() as _s57:
+                _ex57 = _s57.get(_AE57, execution_id)
+                if _ex57 is not None:
+                    _md57 = dict(_ex57.metadata_dict or {})
+                    _md57["from_speculative"] = True
+                    _md57["spec_id"] = _spec_claimed.get("id")
+                    _ex57.metadata_dict = _md57
+        except Exception as _e57:  # noqa: BLE001 — traza es opcional; nunca bloquea el run
+            logger.debug("run_brief: no se pudo persistir traza from_speculative: %s", _e57)
+
     return jsonify({"execution_id": execution_id, "status": "running"}), 202
 
 
@@ -1188,4 +1376,143 @@ def _format_attachment_size(size: int) -> str:
     if size < 1024 * 1024:
         return f"{size / 1024:.1f} KB"
     return f"{size / (1024 * 1024):.1f} MB"
+
+
+# ── Plan 44 — Observatorio de Grounding + Sugeridor de Diccionario ────────────
+
+def _collect_epic_summaries(project: str | None) -> tuple[list[dict], list[str]]:
+    """Recolecta los epic_summary persistidos en metadata, en orden cronológico.
+
+    Devuelve (summaries, runtimes) en paralelo. AgentExecution no tiene campo de
+    proyecto propio; cuando se pide filtrar por proyecto se usa el
+    `stacky_project_name` del ticket asociado (best-effort). Runs con metadata
+    corrupta o sin epic_summary se omiten (degradación segura).
+    """
+    from db import session_scope
+    from models import AgentExecution, Ticket
+
+    summaries: list[dict] = []
+    runtimes: list[str] = []
+    with session_scope() as session:
+        q = (
+            session.query(AgentExecution)
+            .filter(AgentExecution.metadata_json.isnot(None))
+            .filter(AgentExecution.metadata_json.like('%epic_summary%'))
+            .order_by(AgentExecution.started_at.asc())
+        )
+        for ex in q:
+            try:
+                md = ex.metadata_dict
+            except Exception:  # noqa: BLE001 — metadata corrupta → omitir
+                continue
+            summary = md.get("epic_summary")
+            if not isinstance(summary, dict):
+                continue
+            if project:
+                # Filtro best-effort por el proyecto del ticket asociado.
+                ticket = session.get(Ticket, ex.ticket_id) if ex.ticket_id else None
+                proj_name = getattr(ticket, "stacky_project_name", None) if ticket else None
+                if proj_name and proj_name != project:
+                    continue
+            summaries.append(summary)
+            runtimes.append(str(md.get("runtime") or ""))
+    return summaries, runtimes
+
+
+def _load_process_catalog(project: str | None) -> list[dict]:
+    """Carga el process_catalog del client-profile del proyecto (o [])."""
+    if not project:
+        return []
+    try:
+        from services.client_profile import load_client_profile
+        profile = load_client_profile(project) or {}
+        catalog = profile.get("process_catalog")
+        return catalog if isinstance(catalog, list) else []
+    except Exception:  # noqa: BLE001 — sin perfil → degradación: todo se sugiere
+        return []
+
+
+@bp.get("/epics/grounding-observatory")
+def grounding_observatory_route():
+    """Plan 44 F2 — Métricas agregadas de grounding de épicas (solo-lectura).
+
+    URL final: GET /api/agents/epics/grounding-observatory[?project=NAME]
+    Gated por STACKY_GROUNDING_OBSERVATORY_ENABLED (default true). OFF → 404.
+    """
+    if not config.STACKY_GROUNDING_OBSERVATORY_ENABLED:
+        return jsonify({"error": "feature_disabled"}), 404
+    project = (request.args.get("project") or "").strip() or None
+    summaries, runtimes = _collect_epic_summaries(project)
+    from services.grounding_observatory import aggregate_grounding
+    result = aggregate_grounding(summaries, runtimes)
+    result["project"] = project
+    return jsonify(result), 200
+
+
+@bp.get("/projects/<project>/process-catalog-suggestions")
+def process_catalog_suggestions_route(project: str):
+    """Plan 44 F3 — Procesos citados en épicas que faltan en el catálogo.
+
+    URL final: GET /api/agents/projects/<project>/process-catalog-suggestions
+    Gated por STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED (default true). OFF → 404.
+    Solo sugiere; nunca escribe (human-in-the-loop).
+    """
+    if not config.STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED:
+        return jsonify({"error": "feature_disabled"}), 404
+    proj = (project or "").strip() or None
+    summaries, _ = _collect_epic_summaries(proj)
+    existing = _load_process_catalog(proj)
+    from services.grounding_observatory import suggest_process_catalog_entries
+    suggestions = suggest_process_catalog_entries(summaries, existing)
+    return jsonify({"project": proj, "suggestions": suggestions}), 200
+
+
+# ── Plan 41 — Helpers del Pre-vuelo de Intención ──────────────────────────────
+
+def _short_context_summary(project_name: str | None) -> str:
+    """Resumen barato del client-profile para el pre-vuelo (sin secretos).
+
+    Best-effort: si no hay perfil, devuelve "". Reusa el bloque client-profile
+    existente (ya redacta y respeta el flag); recorta para mantener el prompt corto.
+    """
+    if not project_name:
+        return ""
+    try:
+        from services.context_enrichment import build_client_profile_block
+        block = build_client_profile_block(project_name)
+        if not block:
+            return ""
+        content = block.get("content") or ""
+        return content[:1500]  # acotado: el pre-vuelo es barato por diseño
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _make_short_llm_invoker():
+    """Devuelve un callable(system, user, runtime, project) -> str para el pre-vuelo.
+
+    La pasada corta usa el LLM backend interno de Stacky (copilot_bridge), que es
+    server-side y agnóstico al runtime del agente. Si el backend no está disponible
+    o falla, lanza PreflightRuntimeUnavailable → el caller cae al camino normal
+    (comportamiento idéntico a flag OFF). Nunca bloquea el run.
+    """
+    from services.intent_preflight import PreflightRuntimeUnavailable
+
+    def _invoke(system: str, user: str, runtime: str, project_name: str | None) -> str:
+        try:
+            import copilot_bridge
+            resp = copilot_bridge.invoke(
+                agent_type="business",
+                system=system,
+                user=user,
+                on_log=lambda *a, **k: None,
+                project_name=project_name,
+            )
+        except NotImplementedError as exc:
+            raise PreflightRuntimeUnavailable(str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 — bridge caído/no configurado
+            raise PreflightRuntimeUnavailable(f"bridge no disponible: {exc}") from exc
+        return getattr(resp, "text", "") or ""
+
+    return _invoke
 

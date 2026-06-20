@@ -44,6 +44,10 @@ class SpecExecution(Base):
     output = Column(Text)
     output_format = Column(String(20), default="markdown")
     started_by = Column(String(200))
+    # F1/F2: runtime/model/effort para paridad-3 y claim sin cross-runtime
+    runtime = Column(String(40))   # None = github_copilot (legacy)
+    model = Column(String(60))
+    effort = Column(String(20))
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime)
 
@@ -74,9 +78,23 @@ def start(
     ticket_id: int,
     context_blocks: list[dict],
     started_by: str,
+    runtime: str = "",
+    model: str = "",
+    effort: str = "",
 ) -> int:
-    """Inicia una ejecución especulativa en background. Devuelve spec_id."""
-    input_hash = compute_key(agent_type=agent_type, blocks=context_blocks)
+    """Inicia una ejecución especulativa en background. Devuelve spec_id.
+
+    F1: input_hash incluye runtime/model/effort; claim no cruza runtimes distintos.
+    F3: si STACKY_SPECULATIVE_ENABLED=false, retorna -1 (sin thread).
+    """
+    import os
+    if not os.getenv("STACKY_SPECULATIVE_ENABLED", "false").lower() in ("1", "true", "yes", "on"):
+        return -1
+
+    input_hash = compute_key(
+        agent_type=agent_type, blocks=context_blocks,
+        runtime=runtime, model=model, effort=effort,
+    )
     now = datetime.utcnow()
 
     with session_scope() as session:
@@ -94,6 +112,9 @@ def start(
             input_hash=input_hash,
             status="running",
             started_by=started_by,
+            runtime=runtime or None,
+            model=model or None,
+            effort=effort or None,
             created_at=now,
             expires_at=now + timedelta(minutes=SPEC_TTL_MINUTES),
         )
@@ -103,15 +124,38 @@ def start(
 
     threading.Thread(
         target=_run_spec,
-        args=(spec_id, agent_type, context_blocks),
+        args=(spec_id, agent_type, context_blocks, runtime),
         daemon=True,
     ).start()
     return spec_id
 
 
-def _run_spec(spec_id: int, agent_type: str, blocks: list[dict]) -> None:
+def _run_spec(spec_id: int, agent_type: str, blocks: list[dict], runtime: str = "") -> None:
+    """Ejecuta la especulación en background.
+
+    F2 — Despacha por runtime. Para claude_code_cli y codex_cli no existe aún
+    una función headless side-effect-free; se usa el fallback copilot (ruta
+    in-process, sin AgentExecution ni autopublish). Cuando F2a exista, sustituir
+    los bloques TODO. El autopublish NUNCA se llama desde aquí (ver test
+    test_spec_never_calls_autopublish).
+
+    NOTE: los runs especulativos vía copilot-fallback crean un AgentExecution
+    solo si el runner lo hace internamente; la ruta `a.run(...)` no lo hace.
+    Si en el futuro se quieren runs especulativos invisibles en la UI, implementar
+    F2a (runner CLI headless) antes de activar la paridad-3 con flag ON.
+    """
     import agents as _agents
-    import copilot_bridge
+
+    # F2: dispatch por runtime.
+    # claude_code_cli / codex_cli: fallback a ruta copilot in-process hasta que
+    # exista compute_cli_output_headless (F2a, trabajo futuro).
+    # El fallback es seguro: a.run() no crea AgentExecution ni llama autopublish.
+    if runtime in ("claude_code_cli", "codex_cli"):
+        # TODO F2a: cuando exista, llamar:
+        #   from services.claude_code_cli_runner import compute_cli_output_headless
+        #   result = compute_cli_output_headless(agent_type=agent_type, context_blocks=blocks, ...)
+        # Por ahora: fallback copilot (resultado del mismo agente, sin efectos de BD).
+        pass  # caemos a la ruta copilot debajo
 
     a = _agents.get(agent_type)
     if a is None:
@@ -161,12 +205,25 @@ def claim(
     *,
     agent_type: str,
     context_blocks: list[dict],
+    runtime: str = "",
+    model: str = "",
+    effort: str = "",
 ) -> dict | None:
     """
     Busca un spec completado con el mismo hash. Si existe y no expiró,
     devuelve el resultado listo para usarse como output de Run.
+
+    F1: el hash incluye runtime/model/effort → no se reclaman specs de runtime distinto.
+    F3: si STACKY_SPECULATIVE_ENABLED=false, retorna None (miss → run normal).
     """
-    input_hash = compute_key(agent_type=agent_type, blocks=context_blocks)
+    import os
+    if not os.getenv("STACKY_SPECULATIVE_ENABLED", "false").lower() in ("1", "true", "yes", "on"):
+        return None
+
+    input_hash = compute_key(
+        agent_type=agent_type, blocks=context_blocks,
+        runtime=runtime, model=model, effort=effort,
+    )
     with session_scope() as session:
         row = (
             session.query(SpecExecution)

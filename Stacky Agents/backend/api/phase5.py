@@ -19,8 +19,18 @@ bp = Blueprint("phase5", __name__, url_prefix="")
 
 # ── FA-36 — speculative pre-execution ───────────────────────
 
+import os as _os
+
+
+def _spec_enabled() -> bool:
+    """Retorna True si STACKY_SPECULATIVE_ENABLED está activo."""
+    return _os.getenv("STACKY_SPECULATIVE_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+
+
 @bp.post("/agents/speculate")
 def speculate():
+    if not _spec_enabled():
+        abort(404, "feature_disabled: STACKY_SPECULATIVE_ENABLED=false")
     p = request.get_json(force=True, silent=True) or {}
     agent_type = p.get("agent_type")
     ticket_id = p.get("ticket_id")
@@ -32,12 +42,17 @@ def speculate():
         ticket_id=int(ticket_id),
         context_blocks=context_blocks,
         started_by=current_user(),
+        runtime=p.get("runtime", ""),
+        model=p.get("model", ""),
+        effort=p.get("effort", ""),
     )
     return jsonify({"spec_id": spec_id, "status": "running"})
 
 
 @bp.get("/agents/speculate/<int:spec_id>")
 def get_spec(spec_id: int):
+    if not _spec_enabled():
+        abort(404, "feature_disabled: STACKY_SPECULATIVE_ENABLED=false")
     result = speculative.get(spec_id)
     if result is None:
         abort(404)
@@ -46,6 +61,8 @@ def get_spec(spec_id: int):
 
 @bp.delete("/agents/speculate/<int:spec_id>")
 def cancel_spec(spec_id: int):
+    if not _spec_enabled():
+        abort(404, "feature_disabled: STACKY_SPECULATIVE_ENABLED=false")
     speculative.cancel(spec_id)
     return jsonify({"ok": True})
 
@@ -53,12 +70,20 @@ def cancel_spec(spec_id: int):
 @bp.post("/agents/speculate/claim")
 def claim_spec():
     """Intenta reclamar un spec completado con el mismo context hash."""
+    if not _spec_enabled():
+        abort(404, "feature_disabled: STACKY_SPECULATIVE_ENABLED=false")
     p = request.get_json(force=True, silent=True) or {}
     agent_type = p.get("agent_type")
     context_blocks = p.get("context_blocks") or []
     if not agent_type:
         abort(400)
-    result = speculative.claim(agent_type=agent_type, context_blocks=context_blocks)
+    result = speculative.claim(
+        agent_type=agent_type,
+        context_blocks=context_blocks,
+        runtime=p.get("runtime", ""),
+        model=p.get("model", ""),
+        effort=p.get("effort", ""),
+    )
     return jsonify({"found": result is not None, "spec": result})
 
 

@@ -70,11 +70,26 @@ def _normalize_blocks(blocks: list[dict]) -> list[dict]:
     return normalized
 
 
-def compute_key(*, agent_type: str, blocks: list[dict]) -> str:
+def compute_key(
+    *,
+    agent_type: str,
+    blocks: list[dict],
+    runtime: str = "",
+    model: str = "",
+    effort: str = "",
+) -> str:
+    """Incluye runtime/model/effort en hash para diferenciar specs por contexto+decisiones.
+
+    Backward-compatible: los parámetros nuevos tienen default "" → hash idéntico a
+    la firma anterior cuando se omiten (runtime="", model="", effort="").
+    """
     payload = {
         "agent": agent_type,
         "prompt_version": PROMPT_VERSION,
         "blocks": _normalize_blocks(blocks),
+        "runtime": runtime,
+        "model": model,
+        "effort": effort,
     }
     serialized = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

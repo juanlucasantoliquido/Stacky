@@ -1337,6 +1337,32 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="agents",
         env_only=True,  # leído via os.getenv en tickets.py; no es atributo de Config
     ),
+    # ── Plan 57 — FA-36 Especulación anticipatoria (kill-switches internos) ───
+    FlagSpec(
+        key="STACKY_SPECULATIVE_ENABLED",
+        type="bool",
+        label="Especulación anticipatoria FA-36",
+        description=(
+            "Plan 57 — Kill-switch interno de FA-36. Si ON (env-only), el backend "
+            "pre-ejecuta el agente en background antes de que el operador confirme. "
+            "Cuando confirma, si el hash coincide → latencia cero. "
+            "Default OFF. Activar SOLO tras F0 auditoría = 5 PASS."
+        ),
+        group="global",
+        env_only=True,
+    ),
+    FlagSpec(
+        key="STACKY_SPECULATIVE_MODE",
+        type="csv",
+        label="Modo de especulación anticipatoria",
+        description=(
+            "Plan 57 — Modo de FA-36: 'eager' (especula ASAP) | 'lazy' (deferred v1.1) | "
+            "'off'. En v1 solo 'eager' es operativo; 'lazy' hace fallback a eager con "
+            "warning. Ignorado si STACKY_SPECULATIVE_ENABLED=false."
+        ),
+        group="global",
+        env_only=True,
+    ),
 )
 
 # Índice rápido para lookups O(1)

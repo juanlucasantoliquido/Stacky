@@ -1,9 +1,18 @@
 # Plan 59 — Descomposición vertical épica → hijos (1 Epic → Features/Tasks)
 
-> Estado: PROPUESTO (2026-06-20). NO implementado.
+> Estado: PROPUESTO (2026-06-20). NO implementado.  **Versión: v1 → v2** (endurecido por juez adversarial 2026-06-20).
 > Tipo: molécula VERTICAL (complementa, NO duplica, el plan 55 que es molécula HORIZONTAL brief→N épicas hermanas).
 > Origen: finalista #2 del roadmap `Stacky Agents/docs/_roadmap/TOP5_2026-06-20_POST57_LOOP_MOLECULA_BIDIRECCIONAL.md`.
 > Audiencia de implementación: modelo MENOR (Haiku/Codex/Copilot). Todo está dado: rutas exactas, nombres exactos, casos borde, tests primero, comandos exactos. NO inferir nada.
+
+> ### CHANGELOG v1 → v2 (correcciones del juez)
+> - **C1 (BLOQUEANTE) resuelto:** F3 ya NO usa `get_work_item(..., expand="relations")` — esa firma NO existe (`ado_client.py:836` es `get_work_item(ado_id, fields=None)`, sin `expand`; lanzaría `TypeError`). La idempotencia ahora reusa la primitiva REAL `find_child_by_marker(parent_ado_id, marker)` (`ado_client.py:851`) + marcador invisible en `System.Description`, patrón ya endurecido en el repo (idempotencia de create-child-task).
+> - **C2 (BLOQUEANTE) resuelto:** idempotencia ya NO es por (tipo, título) — frágil ante renombre del operador o títulos repetidos → duplicaba WIs reales. Ahora la clave es un MARCADOR DETERMINÍSTICO estable `<!-- stacky-child:{epic_ado_id}:{tipo}:{slug} -->` insertado en la descripción, independiente del título visible.
+> - **C3 (IMPORTANTE) resuelto:** se ELIMINA el reuso de `_ensure_task_creation_parent` (`tickets.py:3059`): su firma real exige `pt_payload`/`pt_file`/`operation_id`/`payload_sha256` (aparato del pending-task.json, inexistente en este flujo). Task se crea con `create_work_item(parent_ado_id=feature_id)` directo; template restrictivo = error capturado, NO puente inventado. Movido a "Fuera de scope".
+> - **C4 (IMPORTANTE) resuelto:** el plan 55 (`build_epic_payload_preview`, `tickets.py:5835`) SÍ está implementado (firma `(*, output, brief, project_name, work_item_type="Epic")`). Se elimina el fallback muerto de F2/R5.
+> - **C5 (IMPORTANTE) resuelto:** descubrimiento de hijos por `System.Parent = parent_id` vía WIQL (como `find_child_by_marker`), NO leyendo `Hierarchy-Forward` del Epic (dirección opuesta a como el repo lee hijos; el link se setea `Hierarchy-Reverse` desde el hijo, `ado_client.py:609`).
+> - **C6/C7/C9 (MENOR) aclarados** en Riesgos y Glosario.
+> - **[ADICIÓN ARQUITECTO]:** detección de DRIFT del operador en el preview (ver §4 bis).
 
 ---
 
@@ -222,7 +231,7 @@ Helpers auxiliares (puros, mismo módulo):
 
 **Trabajo del operador:** ninguno / opt-in default off.
 
-> **Dependencia con plan 55:** este endpoint reusa `build_epic_payload_preview` (ya en código, tickets.py:5835). Si por algún motivo no existiera, degradar a preview mínimo propio: `clean = _extract_epic_html(output); if not _looks_like_epic(clean): epic_ok=False`. Documentado para que el implementador no se bloquee.
+> **Dependencia con plan 55 (VERIFICADA, C4):** `build_epic_payload_preview` SÍ está implementada (`tickets.py:5835`), firma `(*, output: str|None, brief: str, project_name: str|None, work_item_type: str = "Epic") -> EpicPayloadPreview`, y `EpicPayloadPreview` (`tickets.py:5821`) expone `.ok / .title / .html / .work_item_type / .error / .grounding_warnings`. NO hay fallback que implementar: la dependencia está satisfecha. Llamar con `brief=""` cuando solo se tiene el `output`.
 
 ---
 
@@ -252,9 +261,20 @@ def publish_epic_children(
     ...
 ```
 
-**Idempotencia (SIN BD nueva):** antes de crear una Feature, listar los hijos directos actuales del Epic en ADO y comparar por `(work_item_type, title)` normalizado (trim + colapso espacios + lower). Si ya existe un hijo con mismo tipo+título → REUSAR su id (no crear). Para listar hijos: usar la primitiva de lectura de relaciones que ya use el código (grep `get_work_item` con `relations`, ado_client.py; si no hay un helper de "listar hijos", usar `ado.get_work_item(epic_ado_id, expand="relations")` y filtrar links `System.LinkTypes.Hierarchy-Forward`). Misma estrategia para Tasks bajo cada Feature.
+**Idempotencia por MARCADOR (SIN BD nueva) — REESCRITA v2 (C1+C2):**
 
-**Pseudocódigo:**
+> **NO usar** `get_work_item(..., expand="relations")`: esa firma NO existe. La firma real es `get_work_item(ado_id, fields=None)` (`ado_client.py:836`). Asumirla = `TypeError`.
+
+Reusar la primitiva de idempotencia YA endurecida en el repo: `find_child_by_marker(parent_ado_id, marker)` (`ado_client.py:851`), que internamente hace WIQL `System.Parent = {parent_ado_id}` (`_wiql_ids`) + busca un marcador invisible en `System.Description`. Estrategia:
+
+1. Para cada hijo (Feature o Task) se calcula un **marcador determinístico estable**, independiente del título visible:
+   `marker = f"<!-- stacky-child:{epic_ado_id}:{tipo_lower}:{slug} -->"` donde `slug = _child_slug(title)` (ver helper). Para Tasks el `epic_ado_id` del marcador se reemplaza por el `feature_id` padre, para que la unicidad sea relativa al padre directo.
+2. Antes de crear: `existing = ado.find_child_by_marker(parent_id, marker)`. Si devuelve dict → REUSAR `existing["id"]` (no crear).
+3. Al crear: el marcador se INCRUSTA en `System.Description` (`html + marker`), para que un futuro reintento lo reencuentre. (Mismo patrón exacto que create-child-task del repo.)
+
+Esto sobrevive al renombre del hijo por el operador (la clave es el slug del título ORIGINAL embebido en el marcador, no el título vivo) y a títulos repetidos entre RF (el `slug` colisionaría, pero como el marcador embebido es único por hijo creado, el segundo RF con mismo título genera su propio marcador con sufijo ordinal — ver `_child_slug`).
+
+**Pseudocódigo (v2):**
 ```python
 def publish_epic_children(*, epic_ado_id, children_plan, project_name, ado=None):
     if not _epic_decomposition_enabled():        # helper F0 (lee la flag)
@@ -265,35 +285,42 @@ def publish_epic_children(*, epic_ado_id, children_plan, project_name, ado=None)
         ado = build_ado_client(project_name)          # patrón existente
     created, reused = [], []
     try:
-        existing_children = _list_child_titles(ado, epic_ado_id)  # {(type_norm, title_norm): id}
-        for feature in children_plan.features:
-            key = ("feature", _norm_title(feature.title))
-            if key in existing_children:
-                feature_id = existing_children[key]
-                reused.append(feature_id)
+        for idx, feature in enumerate(children_plan.features):
+            f_marker = _child_marker(epic_ado_id, "feature", feature.title, idx)
+            existing = ado.find_child_by_marker(epic_ado_id, f_marker)   # WIQL System.Parent + marcador
+            if existing:
+                feature_id = int(existing["id"]); reused.append(feature_id)
             else:
-                # _ensure_task_creation_parent NO aplica a Feature directa de Epic
-                # (Epic acepta Feature en Agile). Para Task usar la jerarquía.
+                # Epic acepta Feature directa en Agile/Scrum/CMMI. Marcador embebido.
                 res = ado.create_work_item(
                     work_item_type="Feature",
-                    fields={"System.Title": feature.title, "System.Description": feature.html},
+                    fields={
+                        "System.Title": feature.title,
+                        "System.Description": feature.html + f_marker,
+                    },
                     parent_ado_id=epic_ado_id,
                 )
                 feature_id = int(res["id"]); created.append(feature_id)
-            # Tasks bajo la feature
-            existing_tasks = _list_child_titles(ado, feature_id)
-            for task in feature.children:
-                tkey = ("task", _norm_title(task.title))
-                if tkey in existing_tasks:
-                    reused.append(existing_tasks[tkey]); continue
-                # Epic→Feature→Task: Feature acepta Task directo en Agile; si el
-                # template no lo permite, _ensure_task_creation_parent resuelve puente.
-                res = ado.create_work_item(
-                    work_item_type="Task",
-                    fields={"System.Title": task.title, "System.Description": task.html},
-                    parent_ado_id=feature_id,
-                )
-                created.append(int(res["id"]))
+            # Tasks bajo la feature (marcador relativo al feature_id)
+            for tidx, task in enumerate(feature.children):
+                t_marker = _child_marker(feature_id, "task", task.title, tidx)
+                t_existing = ado.find_child_by_marker(feature_id, t_marker)
+                if t_existing:
+                    reused.append(int(t_existing["id"])); continue
+                try:
+                    res = ado.create_work_item(
+                        work_item_type="Task",
+                        fields={
+                            "System.Title": task.title,
+                            "System.Description": task.html + t_marker,
+                        },
+                        parent_ado_id=feature_id,   # Feature acepta Task directo en Agile
+                    )
+                    created.append(int(res["id"]))
+                except Exception as exc:  # noqa: BLE001 — template restrictivo: NO inventar puente
+                    logger.warning("Task bajo Feature %s rechazada por template: %s", feature_id, str(exc)[:150])
+                    return _ChildrenPublishResult(created_ids=created, reused_ids=reused,
+                                                  error=f"task_under_feature_rejected: {str(exc)[:120]}")
         return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=None)
     except Exception as exc:  # noqa: BLE001
         logger.warning("publish_epic_children falló: %s", str(exc)[:200], exc_info=True)
@@ -301,28 +328,31 @@ def publish_epic_children(*, epic_ado_id, children_plan, project_name, ado=None)
 ```
 Helpers:
 - `_epic_decomposition_enabled() -> bool` (F0).
-- `_norm_title(t: str) -> str`: `re.sub(r"\s+", " ", t).strip().lower()`.
-- `_list_child_titles(ado, parent_id) -> dict[tuple[str,str], int]`: lee hijos directos del WI vía relations Hierarchy-Forward y devuelve mapa `{(type_norm, title_norm): child_id}`. Si la lectura falla → `{}` (degradar a "crear", aceptando que un reintento tras fallo de lectura podría duplicar — mitigado porque el flujo normal lee bien; documentar en Riesgos).
+- `_child_slug(title: str) -> str`: `re.sub(r"[^a-z0-9]+", "-", re.sub(r"\s+", " ", title).strip().lower())[:60].strip("-")`.
+- `_child_marker(parent_id: int, tipo: str, title: str, ordinal: int) -> str`: `f"<!-- stacky-child:{parent_id}:{tipo}:{_child_slug(title)}:{ordinal} -->"`. El `ordinal` rompe colisiones de títulos repetidos bajo el mismo padre. **El marcador es DETERMINÍSTICO**: la misma épica re-derivada produce los mismos marcadores → reintento idempotente.
+
+> **Por qué `find_child_by_marker` y no listar relaciones:** la función ya existe, ya usa WIQL `System.Parent` (la dirección correcta de descubrimiento de hijos — C5), ya es defensiva (cualquier fallo de ADO → `None` → cae al flujo de creación) y ya es el mecanismo de idempotencia probado del repo. Cero primitiva nueva.
 
 **Casos borde:**
 - Flag OFF → `skipped=True`, 0 llamadas a ADO.
 - `children_plan.ok is False` o sin features → `skipped=True` (fallback duro, solo Epic).
-- Reintento idéntico → todas las features/tasks caen en `reused_ids`, `created_ids=[]` (idempotente).
-- Template ADO que no permite Task directo bajo Feature → reusar `_ensure_task_creation_parent` (tickets.py:3059) en vez de `create_work_item` plano para las Tasks. **Nota implementación:** envolver la creación de Task con la misma resolución de jerarquía que usa `create_child_task`; si el template estándar (Agile) permite Task bajo Feature, el camino directo basta. Probar con mock que simula ambos.
-- Fallo a media corrida → devolver lo creado en `created_ids` + `error` (no rollback; ADO no es transaccional; el reintento idempotente completa el resto).
+- Reintento idéntico → `find_child_by_marker` reencuentra cada hijo → todos en `reused_ids`, `created_ids=[]` (idempotente, robusto a renombre).
+- Template ADO que no permite Task directo bajo Feature → la creación de Task lanza; se captura y se devuelve `error="task_under_feature_rejected: …"` con las Features ya creadas en `created_ids`. **NO se inventa puente jerárquico** (`_ensure_task_creation_parent` NO aplica: su firma exige el aparato pending-task.json inexistente acá — C3). El soporte de templates restrictivos para Tasks queda Fuera de scope.
+- Fallo a media corrida → devolver lo creado en `created_ids` + `error` (no rollback; ADO no es transaccional). El reintento idempotente por marcador (no por título) completa el resto sin duplicar — red de seguridad real (C6).
 
 **TEST PRIMERO:**
 - Archivo: `Stacky Agents/backend/tests/test_epic_decomposition.py`.
-- Usar un `FakeAdo` (clase de test, igual patrón que mocks en `test_epic_autopublish_backend.py`) que registra `create_work_item` calls y simula `get_work_item(expand="relations")`.
+- Usar un `FakeAdo` (clase de test, igual patrón que mocks en `test_epic_autopublish_backend.py`) que registra cada `create_work_item(...)` call (tipo, title, description, parent_ado_id) y simula `find_child_by_marker(parent_id, marker)`: devuelve el dict del hijo si su marcador ya fue "creado" en una corrida previa del mismo FakeAdo, o `None` si no. (NO simular `get_work_item(expand=…)`: esa API no existe.)
 - Casos:
   1. `test_publish_children_flag_off_skips` → flag OFF → `skipped is True`, `FakeAdo.create_calls == []`.
-  2. `test_publish_children_creates_features_and_tasks` → plan con 1 Feature + 1 Task → `created_ids` tiene 2 ids; parent de la Feature == epic_ado_id; parent de la Task == feature_id.
-  3. `test_publish_children_idempotent_reuses` → FakeAdo precargado con la Feature ya existente → segunda llamada → `created_ids==[]`, `reused_ids` no vacío.
-  4. `test_publish_children_empty_plan_skips` → `EpicChildrenPlan(ok=False)` → `skipped is True`.
-  5. `test_publish_children_ado_failure_returns_error_no_raise` → FakeAdo lanza en la 2ª creación → resultado tiene `error` y `created_ids` con la 1ª; no propaga excepción.
+  2. `test_publish_children_creates_features_and_tasks` → plan con 1 Feature + 1 Task → `created_ids` tiene 2 ids; `parent_ado_id` de la Feature == epic_ado_id; `parent_ado_id` de la Task == feature_id; ambas descripciones contienen su marcador `<!-- stacky-child:… -->`.
+  3. `test_publish_children_idempotent_by_marker` → mismo FakeAdo, llamar `publish_epic_children` DOS veces con el mismo plan → 2ª llamada: `created_ids==[]`, `reused_ids` contiene los ids de la 1ª (porque `find_child_by_marker` reencuentra por marcador). Prueba idempotencia robusta.
+  4. `test_publish_children_idempotent_survives_rename` → tras la 1ª creación, mutar el `System.Title` del hijo en el FakeAdo (simula renombre del operador) PERO conservar su descripción/marcador → 2ª llamada → `created_ids==[]` (el marcador embebido, no el título, manda). Prueba C2.
+  5. `test_publish_children_empty_plan_skips` → `EpicChildrenPlan(ok=False)` → `skipped is True`.
+  6. `test_publish_children_task_template_rejected_returns_error` → FakeAdo lanza al crear Task bajo Feature → resultado tiene `error` que empieza con `"task_under_feature_rejected"` y `created_ids` con la Feature; no propaga excepción.
 - Comando: `.venv\Scripts\python.exe -m pytest "Stacky Agents/backend/tests/test_epic_decomposition.py" -q`
 
-**Criterio binario:** los 5 casos pasan; el caso 3 prueba idempotencia, el caso 2 prueba el parent link correcto.
+**Criterio binario:** los 6 casos pasan; el caso 3 prueba idempotencia por marcador, el caso 4 prueba supervivencia al renombre (C2), el caso 2 prueba el parent link correcto.
 
 **Impacto por runtime + fallback:** la FUNCIÓN es runtime-agnóstica, pero solo el flujo claude-CLI la INVOCA (F4). Fallback: plan vacío/flag OFF → 0 hijos, solo Epic.
 
@@ -340,7 +370,7 @@ Helpers:
 
 **Contrato:**
 - Método `POST`, ruta `/epic-children` (→ `/api/tickets/epic-children`).
-- Body JSON: `{ "epic_ado_id": int, "output": str (de la run, para re-derivar el plan server-side), "project_name": str|null }`.
+- Body JSON: `{ "epic_ado_id": int, "output": str (de la run, para re-derivar el plan server-side), "project_name": str|null, "approved_fingerprint": str|null (opcional — [ADICIÓN ARQUITECTO] §4 bis, anti-drift) }`.
 - **Seguridad anti-tamper:** el backend NO confía en una lista de hijos enviada por el cliente; RE-DERIVA el plan server-side desde `output` (preview F1) y crea EXACTAMENTE eso. (Evita que un body manipulado cree WIs arbitrarios. Coherente con mono-operador: aunque no hay auth, no se ejecuta input no validado.)
 - Guard flag OFF → `200 {"enabled": false, "created_ids": [], "reused_ids": []}`.
 - Guard `epic_ado_id` ausente/no-int → `400 {"error": "epic_ado_id_required"}`.
@@ -348,8 +378,9 @@ Helpers:
   1. `preview = build_epic_payload_preview(output=output, brief="", project_name=project_name)`.
   2. Si `not preview.ok` → `409 {"error": "epic_not_in_output"}` (no hay épica de la cual derivar hijos).
   3. `plan = build_epic_children_plan(epic_html=preview.html)`.
-  4. `result = publish_epic_children(epic_ado_id=epic_ado_id, children_plan=plan, project_name=project_name)`.
-  5. `200 {"enabled": true, "created_ids": result.created_ids, "reused_ids": result.reused_ids, "error": result.error, "skipped": result.skipped}`.
+  4. **[ADICIÓN §4 bis] anti-drift:** si llega `approved_fingerprint` y `compute_plan_fingerprint(plan) != approved_fingerprint` → `409 {"error": "plan_drift", "expected": approved_fingerprint, "actual": compute_plan_fingerprint(plan)}`. (Si no llega `approved_fingerprint`, se omite — backward-compatible.)
+  5. `result = publish_epic_children(epic_ado_id=epic_ado_id, children_plan=plan, project_name=project_name)`.
+  6. `200 {"enabled": true, "created_ids": result.created_ids, "reused_ids": result.reused_ids, "error": result.error, "skipped": result.skipped}`.
 
 **Casos borde:** flag OFF (200 disabled); épica no parseable (409); plan sin hijos (200, created=[], skipped=true); reintento (200, reused poblado).
 
@@ -424,17 +455,41 @@ Helpers:
 
 ---
 
+## 4 bis. [ADICIÓN ARQUITECTO] — Detección de DRIFT entre lo aprobado y lo que se crea
+
+**Problema que cierra (respeta TODOS los rieles):** el human-in-the-loop del plan v1 tiene un agujero silencioso. El operador VE el preview (F2) y aprueba; pero F4 RE-DERIVA el plan server-side al crear (correcto anti-tamper, C7/R6). Si entre el preview y la aprobación el `output` que el frontend reenvía difiere (sesión vieja, output editado, run distinta), el operador aprueba una jerarquía y se crea OTRA — sin que nadie lo note. Aprobar A y obtener B viola el espíritu del human-in-the-loop aunque sea técnicamente "lo que dice el output".
+
+**Solución (determinística, cero tokens de modelo, cero primitiva ADO nueva):**
+- F2 (preview) agrega al JSON un campo `plan_fingerprint`: hash estable del plan propuesto = `hashlib.sha256("|".join(f"{c.work_item_type}:{_child_slug(c.title)}" for feature in plan.features for c in [feature, *feature.children]).encode()).hexdigest()[:16]`. Función PURA, idéntica en los 3 runtimes.
+- F4 (creación) acepta un campo opcional `approved_fingerprint` en el body. Tras re-derivar el plan server-side, recomputa el fingerprint. Si `approved_fingerprint` viene y NO coincide → `409 {"error": "plan_drift", "expected": approved_fingerprint, "actual": <nuevo>}`. NO crea nada.
+- F5 (UI) guarda el `plan_fingerprint` que mostró en el preview y lo manda como `approved_fingerprint` al aprobar. Si el backend responde `409 plan_drift`, la UI re-pide el preview y avisa: "La épica cambió desde que la viste; revisá la nueva jerarquía antes de aprobar".
+
+**Por qué es de alto valor y barato:**
+- Convierte el human-in-the-loop de "vi algo y aprobé" a "apruebo EXACTAMENTE lo que vi, o me entero". Es la diferencia entre teatro de aprobación y aprobación real.
+- Es opt-in implícito: si la UI no manda `approved_fingerprint` (cliente viejo), F4 se comporta como v1 (backward-compatible total).
+- Cero costo de modelo (hash determinístico), cero tabla nueva, cero llamada extra a ADO.
+
+**Test (en `test_epic_decomposition.py`):**
+- `test_children_endpoint_rejects_plan_drift` → preview de output A (fingerprint Fa); POST a F4 con `output=A_modificado` (otro fingerprint) + `approved_fingerprint=Fa` → `409`, `error=="plan_drift"`, FakeAdo `create_calls == []`.
+- `test_children_endpoint_fingerprint_match_creates` → mismo output, `approved_fingerprint` coincide → crea normal.
+- `test_children_endpoint_no_fingerprint_is_backward_compatible` → body sin `approved_fingerprint` → crea (comportamiento v1).
+
+**Criterio binario:** los 3 casos pasan; el primero garantiza que aprobar-A-obtener-B es imposible.
+
+---
+
 ## 5. Riesgos y mitigaciones
 
 | # | Riesgo | Mitigación |
 |---|--------|------------|
-| R1 | Duplicación de hijos en reintento tras fallo de lectura de relaciones (`_list_child_titles` devuelve `{}`) | Idempotencia por (tipo,título) cubre el caso normal. Documentado que un fallo de LECTURA seguido de reintento podría duplicar; aceptable mono-operador (operador ve el preview y los ids creados). No introducir BD nueva para esto. |
-| R2 | Template ADO no permite Task bajo Feature | Reusar `_ensure_task_creation_parent` (tickets.py:3059) para Tasks; probar con mock de template restrictivo. |
+| R1 | Duplicación de hijos en reintento (C1+C2) | **Idempotencia por MARCADOR determinístico** vía `find_child_by_marker` (`ado_client.py:851`, WIQL `System.Parent`). Sobrevive a renombre del hijo y a títulos repetidos (ordinal en el marcador). Solo un fallo de ADO en la LECTURA del marcador (devuelve `None`) seguido de reintido podría duplicar — aceptable mono-operador; el operador ve `created_ids`/`reused_ids`. Sin BD nueva. |
+| R2 | Template ADO no permite Task bajo Feature (C3) | NO se inventa puente: `_ensure_task_creation_parent` (tickets.py:3059) NO aplica (su firma exige `pt_payload`/`pt_file`/`operation_id`/`payload_sha256`, el aparato del pending-task.json, inexistente acá). La creación de Task que el template rechace se captura y devuelve `error="task_under_feature_rejected"`; soporte de templates restrictivos = Fuera de scope. En Agile/Scrum estándar Feature acepta Task. |
 | R3 | Parser malinterpreta prosa como Task | Contrato §4.F1 punto 4 exige prefijo explícito (`T-`/`Task:`/`Tarea:`/`TODO:`); sin prefijo → no es Task. Determinístico. |
 | R4 | Operador crea hijos sin querer | Flag default OFF + preview + botón con confirmación. Nada automático. |
-| R5 | Plan 55 (`build_epic_payload_preview`) ausente | Verificado presente (tickets.py:5835). Fallback documentado en F2 (preview mínimo propio). |
+| R5 | Dependencia plan 55 (C4) | VERIFICADO PRESENTE: `build_epic_payload_preview` (tickets.py:5835) + `EpicPayloadPreview` (tickets.py:5821). Sin fallback que implementar. |
 | R6 | Body manipulado en F4 crea WIs arbitrarios | F4 RE-DERIVA el plan server-side desde `output`; ignora cualquier lista de hijos del cliente. |
-| R7 | Falso "completado" si crea unos hijos y falla otros | `_ChildrenPublishResult` devuelve `created_ids` + `error`; UI muestra parcial; reintento idempotente completa. |
+| R7 | Falso "completado" si crea unos hijos y falla otros (C6) | `_ChildrenPublishResult` devuelve `created_ids` + `error`; UI muestra parcial; el reintento idempotente POR MARCADOR (no por título) completa el resto sin duplicar. |
+| R8 | Drift: el HTML cambió entre preview y aprobación, o el operador editó la épica en ADO (C5/[ADICIÓN]) | F4 re-deriva el plan en el momento de crear; el preview F2 expone `plan_fingerprint` para que la UI advierta si lo aprobado ≠ lo que se va a crear (ver §4 bis). |
 
 ---
 
@@ -445,8 +500,9 @@ Helpers:
 - Estimaciones, asignación de responsables, sprints o iteration paths en los hijos.
 - Autopublicación de hijos SIN aprobación humana (prohibido por guardarraíl #4).
 - Descomposición en runtimes no-CLI más allá del preview (la publicación hereda CLI-only; no se "arregla" acá).
-- Persistencia en BD local de la jerarquía de hijos (idempotencia se resuelve leyendo ADO).
+- Persistencia en BD local de la jerarquía de hijos (idempotencia se resuelve por marcador leyendo ADO vía `find_child_by_marker`).
 - Soporte de tipos de WI distintos a Feature/Task (p.ej. User Story, PBI) — extensible luego.
+- **Soporte de templates ADO que NO permiten Task directo bajo Feature** (C3): si el template rechaza la Task, el publicador devuelve `error="task_under_feature_rejected"` y NO arma jerarquía intermedia; resolver puentes jerárquicos para descomposición vertical queda para un plan futuro (no se reusa el aparato pending-task.json).
 
 ---
 
@@ -469,7 +525,7 @@ F0 (flag) → F1 (parser puro + tests) → F2 (endpoint preview + tests) → F3 
 3. Meta-test del ratchet (plan 49 F4) → verde con el nuevo archivo registrado.
 4. Con `STACKY_EPIC_DECOMPOSITION_ENABLED=false`: el flujo brief→épica produce SOLO el Epic (0 hijos, 0 preview) — comportamiento idéntico al actual (verificable por test F1 caso fallback + F3 caso skip).
 5. Con la flag ON + aprobación: una épica con N bloques RF produce N Features (+ Tasks por marca) colgando del Epic; un segundo POST idéntico no crea duplicados (test F3 idempotencia).
-6. Cero primitivas ADO nuevas: solo `ado.create_work_item(..., parent_ado_id=...)` y lectura de relaciones existente.
+6. Cero primitivas ADO nuevas: solo `ado.create_work_item(..., parent_ado_id=...)` (creación) y `ado.find_child_by_marker(parent_id, marker)` (idempotencia, `ado_client.py:851`). NO se usa `get_work_item(expand=…)` (no existe) ni `_ensure_task_creation_parent` (firma incompatible).
 
 ---
 

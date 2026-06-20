@@ -87,6 +87,7 @@ export interface FrontendConfig {
   ticket_sync_interval_ms: number;
   sync_min_interval_sec: number;
   stale_threshold_sec: number;
+  issue_from_brief_enabled: boolean;
 }
 
 export const Tickets = {
@@ -316,6 +317,17 @@ export const Tickets = {
       "/api/tickets/epics/from-brief",
       payload
     ),
+  // Plan 55 F1 — Preview solo-lectura del payload que se publicaría en ADO.
+  epicPreview: (executionId: number, workItemType: "Epic" | "Issue" = "Epic") =>
+    api.get<{
+      ok: boolean;
+      title: string | null;
+      html: string | null;
+      work_item_type: string;
+      error: string | null;
+      grounding_warnings: string[];
+      publishable_runtime: boolean;
+    }>(`/api/tickets/epic-preview?execution_id=${executionId}&work_item_type=${workItemType}`),
 };
 
 // ── Fase 2: tipos para pending-tasks y create-child-task ──────────────────────
@@ -826,6 +838,47 @@ export interface StackyManifestResponse {
   count: number;
 }
 
+// Plan 44 — Grounding Observatory
+export interface GroundingObservatoryResponse {
+  project: string;
+  total_epics: number;
+  epics_with_warnings: number;
+  grounding_warning_rate: number;
+  avg_confidence: number | null;
+  top_cited_modules: Array<{ name: string; count: number }>;
+  top_cited_processes: Array<{ name: string; count: number }>;
+  confidence_trend: (number | null)[];
+  runtime_coverage: string[];
+}
+
+export interface ProcessCatalogSuggestion {
+  name: string;
+  occurrences: number;
+}
+
+export interface ProcessCatalogSuggestionsResponse {
+  project: string;
+  suggestions: ProcessCatalogSuggestion[];
+}
+
+/** Plan 41 F4 — supuesto con evaluación de impacto. */
+export interface IntentAssumptionDTO {
+  text: string;
+  impact: "high" | "medium" | "low";
+  needs_confirmation: boolean;
+}
+
+/** Plan 41 F4 — intención descompuesta tras pre-vuelo. */
+export interface IntentBriefDTO {
+  objective: string;
+  deliverables: string[];
+  assumptions: IntentAssumptionDTO[];
+  open_questions: string[];
+  areas: string[];
+  confidence: number;
+  version: string;
+}
+
 export const Agents = {
   list: () => api.get<AgentDefinition[]>("/api/agents"),
   vsCodeAgents: () => api.get<VsCodeAgent[]>("/api/agents/vscode"),
@@ -842,6 +895,20 @@ export const Agents = {
       `/api/agents/vscode/${encodeURIComponent(filename)}/history?${p.toString()}`
     );
   },
+  // Plan 44 F4 — Observatorio pasivo de grounding de épicas
+  groundingObservatory: (project?: string) => {
+    const params = new URLSearchParams();
+    if (project) params.set("project", project);
+    const qs = params.toString();
+    return api.get<GroundingObservatoryResponse>(
+      `/api/agents/epics/grounding-observatory${qs ? `?${qs}` : ""}`
+    );
+  },
+  // Plan 44 F4 — Sugeridor de procesos para el diccionario
+  processCatalogSuggestions: (project: string) =>
+    api.get<ProcessCatalogSuggestionsResponse>(
+      `/api/agents/projects/${encodeURIComponent(project)}/process-catalog-suggestions`
+    ),
   run: (payload: {
     agent_type: AgentType;
     ticket_id: number;
@@ -934,9 +1001,23 @@ export const Agents = {
     vscode_agent_filename?: string;
     /** Plan 42 F3 — modelo override (solo claude_code_cli); se clampea a sonnet-4-6 en backend. */
     model?: string | null;
-    /** Plan 42 F3 — esfuerzo del run (default "high"). */
-    effort?: "low" | "medium" | "high";
-  }) => api.post<{ execution_id: number; status: string }>("/api/agents/run-brief", payload),
+    /** Plan 42 F3 / Plan 43 F0 — esfuerzo del run (default "high"). */
+    effort?: "low" | "medium" | "high" | "xhigh" | "max";
+    /** Plan 45 F3 — tipo de work item a crear (Epic | Issue). */
+    work_item_type?: "Epic" | "Issue";
+    /** Plan 41 F4 — pre-vuelo de intención. */
+    preflight?: boolean;
+    /** Plan 41 F4 — aprobación de intención tras pre-vuelo. */
+    approved?: boolean;
+    /** Plan 41 F4 — correcciones sugeridas por el operador. */
+    corrections?: string;
+  }) => api.post<{
+    execution_id?: number;
+    status?: string;
+    stage?: "preflight" | "running";
+    intent?: IntentBriefDTO;
+    auto_approvable?: boolean;
+  }>("/api/agents/run-brief", payload),
 };
 
 export const AntiPatterns = {
@@ -1039,6 +1120,8 @@ export const Executions = {
   byId: (id: number) => api.get<AgentExecution>(`/api/executions/${id}`),
   approve: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/approve`),
   discard: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/discard`),
+  humanReview: (id: number, body: { verdict: "approved" | "rejected" | "approved_with_notes"; note?: string }) =>
+    api.post<AgentExecution>(`/api/executions/${id}/human-review`, body),
   publish: (id: number, target: "comment" | "task" = "comment") =>
     api.post<{ ok: true; ado_url: string }>(`/api/executions/${id}/publish-to-ado`, { target }),
   sendCodexInput: (id: number, text: string) =>
@@ -2345,6 +2428,51 @@ export const LocalDiagnostics = {
     api.post<BackupRunResponse>("/api/diag/backup/run", {}),
 
   exportLogsUrl: () => `${apiBase}/api/diag/logs/export`,
+};
+
+// ── Plan 46 F3 — Operational Health (Panel de Salud Operativa) ──────────────
+export interface OperationalHealthRow {
+  id: number;
+  ticket_id: number | null;
+  agent_type: string;
+  runtime: string;
+  project: string | null;
+  started_at: string | null;
+  status: string;
+  age_days?: number;
+  stale?: boolean;
+  failure_kind?: string | null;
+  error_message?: string | null;
+  cost_usd?: number | null;
+  model?: string | null;
+  age_minutes?: number;
+}
+
+export interface OperationalHealthSummary {
+  needs_review_pending: number;
+  needs_review_stale: number;
+  failed: number;
+  expensive: number;
+  zombie: number;
+  scanned: number;
+}
+
+export interface OperationalHealthReport {
+  ok: boolean;
+  generated_at: string;
+  thresholds: Record<string, unknown>;
+  summary: OperationalHealthSummary;
+  needs_review: OperationalHealthRow[];
+  failed: OperationalHealthRow[];
+  expensive: OperationalHealthRow[];
+  zombie: OperationalHealthRow[];
+  expensive_cost_by_model: Record<string, number>;
+  expensive_cost_by_runtime: Record<string, number>;
+}
+
+export const OperationalHealth = {
+  get: (): Promise<OperationalHealthReport> =>
+    api.get<OperationalHealthReport>("/api/diag/operational-health"),
 };
 
 // ── Plan 38 A2 — Health endpoint ─────────────────────────────────────────────

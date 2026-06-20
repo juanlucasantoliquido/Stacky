@@ -149,3 +149,63 @@
   color: var(--accent);
   font-size: 13px;
 }
+
+/* Plan 55 F2 — Preview de publicación */
+.previewSection {
+  margin-top: 12px;
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.previewHeader {
+  background: var(--bg-secondary, #f5f5f5);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.previewTitle {
+  padding: 8px 12px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #222);
+}
+
+.previewHtml {
+  padding: 0 12px 10px;
+  font-size: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  color: var(--text-primary, #222);
+}
+
+.previewHtml h1,
+.previewHtml h2,
+.previewHtml h3 {
+  font-size: 13px;
+  margin: 6px 0 2px;
+}
+
+.previewError {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.previewWarnings {
+  padding: 4px 12px 8px;
+  font-size: 11px;
+  color: var(--warning, #e67e22);
+}
+
+.publishDisabledHint {
+  padding: 4px 12px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}

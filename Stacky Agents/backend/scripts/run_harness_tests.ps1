@@ -46,7 +46,42 @@ $HarnessTestFiles = @(
   "tests/test_run_fingerprint.py",
   "tests/test_evals_promote.py",
   "tests/test_eval_gate_modes.py",
-  "tests/conformance/test_runtime_conformance.py"
+  "tests/conformance/test_runtime_conformance.py",
+  # Plan 49 - Blindaje de calidad determinista
+  "tests/test_golden_extraction.py",
+  "tests/test_extraction_detects_pathologies.py",
+  "tests/test_harness_ratchet_meta.py",
+  "tests/test_no_determinism_sentinel.py",
+  # Plan 50 - Saneamiento determinista de la epica + warnings
+  "tests/test_epic_sanitize.py",
+  "tests/test_epic_structure_warnings.py",
+  "tests/test_catalog_grounding_warnings.py",
+  # Plan 51 - Gates correctivos deterministas de epica
+  "tests/test_epic_gate.py",
+  "tests/test_golden_catalog_diff.py",
+  # Plan 52 - Paridad runtimes autopublish + idempotencia comentarios
+  "tests/test_run_brief_autopublish_parity.py",
+  "tests/test_ado_comment_idempotency.py",
+  "tests/test_issue_observability.py",
+  "tests/test_persist_issue_ticket.py",
+  # Plan 53 - Selector adaptativo de modelo/effort por confidence
+  "tests/test_adaptive_selector.py",
+  "tests/test_adaptive_selector_wiring.py",
+  # Plan 54 - Memoria que empuja: paridad rejection_lessons 3 runtimes
+  "tests/test_memory_prefix.py",
+  "tests/test_base_prompt_parity.py",
+  "tests/test_cli_memory_parity.py",
+  "tests/test_rejection_sink.py",
+  "tests/test_rejection_lessons_trim.py",
+  # Plan 55 - Preview ejecutable portafolio epicas
+  "tests/test_epic_payload_preview.py",
+  "tests/test_epic_preview_endpoint.py",
+  "tests/test_epic_portfolio_preview.py",
+  # Plan 56 - Gate de regresion golden
+  "tests/test_regression_capture.py",
+  "tests/test_regression_goldens.py",
+  "tests/test_regression_goldens_store.py",
+  "tests/test_epic_gate_regression.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -2871,6 +2871,30 @@ def _norm_work_item_type(value: str | None) -> str:
     return str(value or "").strip().lower()
 
 
+# Plan 45 F0 — Allowlist de tipos válidos para el pipeline brief→ADO.
+ALLOWED_BRIEF_WORK_ITEM_TYPES = {"Epic", "Issue"}
+
+
+def validate_brief_work_item_type(value: str | None) -> str:
+    """Normaliza y valida el tipo de work item para el pipeline brief→ADO.
+
+    Retorna "Epic" si ``value`` es None/vacío (backward-compatible: el flujo
+    histórico solo creaba épicas). Lanza ``ValueError`` si el valor no está en
+    ``ALLOWED_BRIEF_WORK_ITEM_TYPES``.
+    """
+    if not value:
+        return "Epic"
+    value = str(value).strip()
+    if not value:
+        return "Epic"
+    if value not in ALLOWED_BRIEF_WORK_ITEM_TYPES:
+        raise ValueError(
+            f"work_item_type inválido: {value!r}. "
+            f"Permitidos: {sorted(ALLOWED_BRIEF_WORK_ITEM_TYPES)}"
+        )
+    return value
+
+
 def _display_work_item_type(value: str) -> str:
     norm = _norm_work_item_type(value)
     return _WORK_ITEM_TYPE_DISPLAY.get(norm, norm.title())
@@ -5269,10 +5293,14 @@ def frontend_config():
 
     GET /api/tickets/config/frontend
     """
+    from config import config as _cfg
     return jsonify({
         "ticket_sync_interval_ms": int(os.environ.get("STACKY_TICKET_SYNC_INTERVAL_MS", 45000)),
         "sync_min_interval_sec": int(os.environ.get("STACKY_SYNC_MIN_INTERVAL_SEC", _SYNC_MIN_INTERVAL_SEC)),
         "stale_threshold_sec": int(os.environ.get("STACKY_STALE_THRESHOLD_SEC", 120)),
+        # Plan 45 F3 — feature flag de Issues desde brief, expuesto al frontend
+        # para condicionar el selector de tipo. Default False = modal idéntico a hoy.
+        "issue_from_brief_enabled": bool(getattr(_cfg, "STACKY_ISSUE_FROM_BRIEF_ENABLED", False)),
     })
 
 
@@ -5391,21 +5419,112 @@ def _extract_epic_html(raw: str | None) -> str:
 
     Idempotente y seguro ante None/"".
     """
+    result = _extract_epic_html_raw(raw)
+    # Plan 50 F1 — saneamiento de forma (idempotente, puro), protegido por flag y
+    # por el guard _looks_like_epic posterior en los call sites.
+    if _epic_sanitize_enabled():
+        result = _sanitize_epic_html(result)
+    return result
+
+
+def _extract_epic_html_raw(raw: str | None) -> str:
+    """Plan 50 — extracción CRUDA del bloque HTML de la épica, SIN sanitizar.
+    Permite a los call sites medir el efecto del sanitizado (epic_sanitize_changed).
+    Pura; seguro ante None/""."""
     if not raw:
         return ""
     text = raw.strip()
-
-    # Buscar bloques ```html ... ``` (case-insensitive en el tag).
     blocks = re.findall(r"```(?:html|HTML)?\s*\n?(.*?)```", text, re.DOTALL)
     candidates = [b.strip() for b in blocks if b.strip()]
-    # Quedarnos con los que parecen HTML (tienen al menos una etiqueta).
     html_candidates = [b for b in candidates if re.search(r"<[a-zA-Z][^>]*>", b)]
     if html_candidates:
-        # Deduplicar preservando orden; devolver el primero (la épica).
         return html_candidates[0]
-
-    # Sin fences útiles: si el texto ya es HTML, devolverlo limpio.
     return text
+
+
+def _epic_sanitize_enabled() -> bool:
+    """Plan 50 F1 — lee STACKY_EPIC_SANITIZE_ENABLED (default ON)."""
+    return os.getenv("STACKY_EPIC_SANITIZE_ENABLED", "true").strip().lower() != "false"
+
+
+def _epic_gate_enabled() -> bool:
+    """Plan 51 F3 — lee STACKY_EPIC_GATE_ENABLED (default OFF)."""
+    return os.getenv("STACKY_EPIC_GATE_ENABLED", "false").strip().lower() == "true"
+
+
+def _epic_catalog_gate_enabled() -> bool:
+    """Plan 51 F3 — lee STACKY_EPIC_CATALOG_GATE_ENABLED (default OFF).
+    Bloqueo por catálogo: opt-in dentro de opt-in."""
+    return os.getenv("STACKY_EPIC_CATALOG_GATE_ENABLED", "false").strip().lower() == "true"
+
+
+def _regression_gate_enabled() -> bool:
+    """Plan 56 F3 — lee STACKY_REGRESSION_GATE_ENABLED (default OFF).
+    Activa la carga de goldens en el gate de regresión."""
+    return os.getenv("STACKY_REGRESSION_GATE_ENABLED", "false").strip().lower() in ("1", "true", "on")
+
+
+def _regression_gate_blocking() -> bool:
+    """Plan 56 F3 — lee STACKY_REGRESSION_GATE_BLOCKING (default OFF).
+    Modo warning→blocking para defectos de regresión."""
+    return os.getenv("STACKY_REGRESSION_GATE_BLOCKING", "false").strip().lower() in ("1", "true", "on")
+
+
+_CHECK_EMOJIS = "✅☑✔✓🟢❌⬜□▢"
+
+
+def _dedup_identical_rf_blocks(text: str) -> str:
+    """Plan 50 F1 — elimina bloques RF byte-idénticos (tras normalizar espacios),
+    preservando el PRIMERO. Bloques con mismo RF-N pero cuerpo distinto se CONSERVAN.
+    Pura; nunca lanza."""
+    # Segmentar por headings <h2 ...>RF-N. Mantener el preámbulo antes del primer RF.
+    parts = re.split(r"(?=<h2[^>]*>\s*RF-\d)", text, flags=re.IGNORECASE)
+    seen: set[str] = set()
+    out: list[str] = []
+    for part in parts:
+        key = re.sub(r"\s+", " ", part).strip()
+        if key and re.match(r"<h2[^>]*>\s*RF-\d", part, re.IGNORECASE):
+            if key in seen:
+                continue
+            seen.add(key)
+        out.append(part)
+    return "".join(out)
+
+
+def _sanitize_epic_html(html: str | None) -> str:
+    """Plan 50 F1 — Normaliza SOLO la forma del HTML de la épica. NUNCA la semántica.
+
+    Idempotente: _sanitize_epic_html(_sanitize_epic_html(x)) == _sanitize_epic_html(x).
+    Pura; nunca lanza; segura ante None/"".
+
+    Normalizaciones (en orden):
+      1. Colapsa "RF- 12" / "RF -12" / "RF - 12" -> "RF-12".
+      2. Quita fences residuales ```...``` en líneas que son SOLO backticks.
+      3. Quita emojis de checklist sueltos (ruido del resumen final del CLI).
+      4. Colapsa runs de espacios/tabs (no newlines) y hace trim por línea.
+      5. Deduplica bloques RF byte-idénticos (mismo heading + cuerpo).
+    """
+    if not html or not str(html).strip():
+        return ""
+    text = str(html)
+
+    # (1) guion-espacio en RF
+    text = re.sub(r"RF\s*-\s*(\d)", r"RF-\1", text)
+
+    # (2) fences residuales: líneas que SOLO contienen ``` (con/sin lenguaje)
+    text = re.sub(r"(?m)^\s*```[a-zA-Z]*\s*$\n?", "", text)
+
+    # (3) emojis de checklist (set fijo; no son HTML válido)
+    text = re.sub(f"[{re.escape(_CHECK_EMOJIS)}]\\s*", "", text)
+
+    # (4) espacios: colapsar runs de [ \t] (no \n); trim por línea
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
+
+    # (5) dedup de bloques RF idénticos
+    text = _dedup_identical_rf_blocks(text)
+
+    return text.strip()
 
 
 def _looks_like_epic(html: str | None) -> bool:
@@ -5437,11 +5556,115 @@ def _epic_grounding_warnings(html: str | None) -> list[str]:
     Devuelve warning si no hay ninguna referencia.
     Función pura; nunca lanza.
     """
+    warnings: list[str] = []
     if not html:
         return ["epic_grounding_low: la épica no cita módulos/procesos fuente ni marca supuestos"]
-    if re.search(r"m[oó]dulo|\[SUPUESTO|proceso", html, re.IGNORECASE):
+    if not re.search(r"m[oó]dulo|\[SUPUESTO|proceso", html, re.IGNORECASE):
+        warnings.append("epic_grounding_low: la épica no cita módulos/procesos fuente ni marca supuestos")
+    # Plan 50 F2 — warnings estructurales (gate suave), protegidos por flag.
+    if _epic_structure_warnings_enabled():
+        warnings.extend(_structural_epic_warnings(html))
+    return warnings
+
+
+def _epic_structure_warnings_enabled() -> bool:
+    """Plan 50 F2 — lee STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED (default ON)."""
+    return os.getenv("STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED", "true").strip().lower() != "false"
+
+
+def _structural_epic_warnings(html: str | None) -> list[str]:
+    """Plan 50 F2 — Warnings estructurales deterministas. Pura; nunca lanza."""
+    if not html:
         return []
-    return ["epic_grounding_low: la épica no cita módulos/procesos fuente ni marca supuestos"]
+    out: list[str] = []
+    nums = [int(n) for n in re.findall(r"<h2[^>]*>\s*RF-(\d+)", html, re.IGNORECASE)]
+    # (a) duplicados de número RF
+    dups = sorted({n for n in nums if nums.count(n) > 1})
+    if dups:
+        out.append(f"epic_structure: números RF duplicados: {dups}")
+    # (b) no consecutivos (huecos en la secuencia 1..max)
+    if nums:
+        missing = sorted(set(range(1, max(nums) + 1)) - set(nums))
+        if missing:
+            out.append(f"epic_structure: secuencia RF no consecutiva, faltan: {missing}")
+    # (c) headings vacíos
+    if re.search(r"<h[12][^>]*>\s*</h[12]>", html, re.IGNORECASE):
+        out.append("epic_structure: hay headings vacíos")
+    # (d) bloque RF sin contenido (heading RF seguido de otro heading o EOF)
+    if re.search(r"<h2[^>]*>\s*RF-\d+[^<]*</h2>\s*(?=<h[12]|$)", html, re.IGNORECASE):
+        out.append("epic_structure: hay bloques RF sin contenido")
+    return out
+
+
+def _catalog_grounding_warnings_enabled() -> bool:
+    """Plan 50 F3 — lee STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED (default OFF)."""
+    return os.getenv("STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED", "false").strip().lower() == "true"
+
+
+def catalog_unknown_processes(html: str | None, process_catalog: list | None) -> list[str]:
+    """Plan 51 F2 — PURA. Procesos/módulos citados en `html` que NO están en el
+    catálogo del cliente. Devuelve sorted(list). NO-OP sin evidencia (html vacío o
+    catálogo vacío → []). Nunca inventa reemplazos. Núcleo extraído de
+    `_catalog_grounding_warnings` (comportamiento idéntico, sin cambiar el string).
+    """
+    if not html or not process_catalog:
+        return []
+
+    def _norm(s) -> str:
+        return re.sub(r"\s+", " ", str(s)).strip().lower()
+
+    catalog_names = {_norm(item.get("name")) for item in process_catalog if item.get("name")}
+    if not catalog_names:
+        return []
+    cited = set(re.findall(r"(?:proceso|m[oó]dulo)\s+([A-Za-z0-9_./-]+)", html, re.IGNORECASE))
+    return sorted({c for c in cited if _norm(c) not in catalog_names})
+
+
+def _catalog_grounding_warnings(html: str | None, process_catalog: list | None) -> list[str]:
+    """Plan 50 F3 — Warning si el HTML cita procesos que NO están en el catálogo real.
+
+    Best-effort: si process_catalog es None/vacío -> [] (no opina sin fuente de verdad).
+    Matching normalizado (lower + trim + colapso de espacios). NUNCA bloquea ni corrige.
+    Pura; nunca lanza. Limitación honesta: compara NOMBRES del catálogo, no IDs de ADO.
+    Delega la extracción en `catalog_unknown_processes` (Plan 51 F2, sin cambio de salida).
+    """
+    unknown = catalog_unknown_processes(html, process_catalog)
+    if unknown:
+        return [f"catalog_grounding: procesos citados no presentes en el catálogo: {unknown}"]
+    return []
+
+
+# Plan 44 F0 — Extracción de la confidence_grounding que el BusinessAgent calcula.
+# El agente (R-GROUNDING ítem 5, BusinessAgent v1.5.0) escribe en el HTML de la
+# épica `confidence_grounding = N` y, si N < 0.5, un bloque `[BAJA CONFIANZA...]`.
+# Hasta ahora esa señal se descartaba (build_epic_summary recibía confidence=None).
+_LOW_CONFIDENCE_SENTINEL = 0.4
+_CONFIDENCE_RE = re.compile(r"confidence[_\s]*grounding\s*[:=]\s*([01](?:\.\d+)?)", re.I)
+_LOW_CONFIDENCE_RE = re.compile(r"\[\s*baja\s+confianza", re.I)
+
+
+def _extract_confidence_from_html(html: str | None) -> float | None:
+    """Plan 44 F0 — Extrae confidence_grounding del HTML de la épica.
+
+    Orden de búsqueda:
+      1. Un número explícito `confidence_grounding = 0.83` → float capped a [0,1].
+      2. El marcador `[BAJA CONFIANZA ...]` sin número → _LOW_CONFIDENCE_SENTINEL.
+      3. Nada → None (idéntico al comportamiento histórico, sin regresión).
+
+    Función pura; nunca lanza.
+    """
+    if not html:
+        return None
+    m = _CONFIDENCE_RE.search(html)
+    if m:
+        try:
+            val = float(m.group(1))
+        except ValueError:
+            return None
+        return max(0.0, min(1.0, val))
+    if _LOW_CONFIDENCE_RE.search(html):
+        return _LOW_CONFIDENCE_SENTINEL
+    return None
 
 
 def build_epic_summary(
@@ -5451,8 +5674,15 @@ def build_epic_summary(
     clean_html: str,
     warnings: list[str],
     confidence: float | None,
+    sanitize_changed: bool = False,
+    gate_decision: str | None = None,
 ) -> dict:
-    """Plan 42 F4 — Resumen post-épica accionable. Función pura."""
+    """Plan 42 F4 — Resumen post-épica accionable. Función pura.
+
+    Plan 50 [ADICIÓN] — `sanitize_changed`: True si el saneamiento de forma
+    (F1) modificó el HTML; permite medir K1 y detectar sanitizado inerte.
+    Plan 51 F4 — `gate_decision`: "pass"|"repair"|"needs_review"|None (gate OFF).
+    """
     rf_count = len(re.findall(r"<h2[^>]*>\s*RF-", clean_html, re.IGNORECASE))
     cited_modules = list(set(re.findall(r"(?:m[oó]dulo|proceso)\s+\S+", clean_html, re.IGNORECASE)))
     return {
@@ -5462,6 +5692,8 @@ def build_epic_summary(
         "cited_modules": cited_modules,
         "warnings": warnings,
         "confidence": confidence,
+        "epic_sanitize_changed": bool(sanitize_changed),
+        "gate_decision": gate_decision,
     }
 
 
@@ -5583,6 +5815,97 @@ def _publish_epic_to_ado(
     return _PublishedEpic(ado_id=ado_id, title=wi_title, url=wi_url)
 
 
+# ── Plan 55 F0 — Preview ejecutable de payload (función pura) ─────────────────
+
+
+class EpicPayloadPreview(NamedTuple):
+    """Preview del payload que se enviaría a ADO — solo-lectura, no publica.
+
+    Producida por `build_epic_payload_preview` (pura) y consumida por el endpoint
+    GET /api/tickets/epic-preview (F1) y por `build_epic_portfolio_preview` (F3).
+    """
+    ok: bool
+    title: str | None
+    html: str | None
+    work_item_type: str            # "Epic" | "Issue"
+    error: str | None              # "empty_output" | "epic_not_in_output" | None
+    grounding_warnings: list = []  # type: ignore[assignment]
+
+
+def build_epic_payload_preview(
+    *,
+    output: str | None,
+    brief: str,
+    project_name: str | None,
+    work_item_type: str = "Epic",
+) -> EpicPayloadPreview:
+    """Plan 55 F0 — Función PURA que reproduce la construcción de payload de
+    `autopublish_epic_from_run` / `publish_issue_from_run` ANTES de publicar.
+
+    NO toca ADO, NO toca BD, NO rescata del disco (el rescate es un efecto del
+    publicador en tiempo real; el preview solo inspecciona el output en texto).
+
+    Orden lógico (mismo que los publicadores):
+      1. output vacío / None → ok=False, error="empty_output".
+      2. clean_html = _extract_epic_html(output).
+      3. not _looks_like_epic(clean_html) → ok=False, error="epic_not_in_output".
+      4. title = _derive_epic_title(clean_html, fallback=...).
+      5. ok=True, devuelve payload completo.
+
+    NUNCA lanza.
+    """
+    try:
+        if not output or not str(output).strip():
+            return EpicPayloadPreview(
+                ok=False,
+                title=None,
+                html=None,
+                work_item_type=work_item_type,
+                error="empty_output",
+                grounding_warnings=[],
+            )
+
+        clean_html = _extract_epic_html(output)
+        if not _looks_like_epic(clean_html):
+            return EpicPayloadPreview(
+                ok=False,
+                title=None,
+                html=None,
+                work_item_type=work_item_type,
+                error="epic_not_in_output",
+                grounding_warnings=[],
+            )
+
+        title = _derive_epic_title(clean_html, fallback="Épica generada desde brief")
+
+        # Grounding warnings (best-effort, nunca bloquean).
+        import os as _os_preview
+        _grounding_enabled = _os_preview.getenv(
+            "STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED", "true"
+        ).lower() not in {"0", "false", "off"}
+        grounding_warnings: list[str] = (
+            _epic_grounding_warnings(clean_html) if _grounding_enabled else []
+        )
+
+        return EpicPayloadPreview(
+            ok=True,
+            title=title,
+            html=clean_html,
+            work_item_type=work_item_type,
+            error=None,
+            grounding_warnings=grounding_warnings,
+        )
+    except Exception:  # noqa: BLE001 — preview nunca lanza al llamante
+        return EpicPayloadPreview(
+            ok=False,
+            title=None,
+            html=None,
+            work_item_type=work_item_type,
+            error="preview_error",
+            grounding_warnings=[],
+        )
+
+
 class _AutopublishResult(NamedTuple):
     """Resultado de la autopublicación autónoma de una run brief→épica.
 
@@ -5597,6 +5920,7 @@ class _AutopublishResult(NamedTuple):
     skipped: bool = False
     grounding_warnings: list = []  # type: ignore[assignment]
     epic_summary: dict | None = None
+    recovery_method: str | None = None  # plan 47: "published_inline" | "rescued_from_disk" | None
 
 
 def autopublish_epic_from_run(
@@ -5605,6 +5929,7 @@ def autopublish_epic_from_run(
     brief: str,
     project_name: str | None,
     already_published_id: int | None,
+    run_started_at: float | None = None,  # plan 47: epoch float; min_mtime del rescate.
 ) -> _AutopublishResult:
     """Plan 41 — Publica la Épica en ADO de forma AUTÓNOMA al cerrar la run.
 
@@ -5628,35 +5953,137 @@ def autopublish_epic_from_run(
     if not output or not str(output).strip():
         return _AutopublishResult(ado_id=None, error=None, skipped=True)
 
+    import os as _os
     clean_html = _extract_epic_html(output)
     # Guard anti-narración: solo publicamos si el contenido tiene estructura de
     # épica real (heading + bloque RF). El BusinessAgent a veces narra/escribe a
     # archivo y devuelve prosa como output. Publicar eso = épica basura o, peor,
     # `completed` fantasma sin épica. Falla RUIDOSO para que el operador lo vea.
     if not _looks_like_epic(clean_html):
-        return _AutopublishResult(
-            ado_id=None,
-            error=(
-                "epic_not_in_output: el agente devolvió narración en vez del HTML de "
-                "la épica (probablemente la escribió en un archivo). Revisar/reintentar "
-                "la generación de la épica desde el brief."
-            ),
-            skipped=False,
-        )
+        # Plan 47 — Rescate del disco ANTES de fallar. El agente a veces ESCRIBE la
+        # épica en Agentes/outputs y narra en el output → produced_files=[] pero el
+        # artefacto EXISTE. Rescatarlo es más barato y robusto que regenerar.
+        _rescue_enabled = _os.getenv(
+            "STACKY_ARTIFACT_RESCUE_ENABLED", "false"
+        ).lower() in {"1", "true", "on", "yes"}
+        _rescued = None
+        if _rescue_enabled:
+            try:
+                from services import artifact_rescue
+                _rescued = artifact_rescue.find_rescued_html(
+                    artifact_rescue.resolve_outputs_dir(),
+                    extract=_extract_epic_html,
+                    looks_valid=_looks_like_epic,
+                    min_mtime=run_started_at,  # C4/R-STALE: solo artefactos de ESTA run
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("artifact_rescue falló (no crítico)", exc_info=True)
+                _rescued = None
+        if _rescued and _looks_like_epic(_rescued):
+            clean_html = _rescued
+            _recovery_method = "rescued_from_disk"  # F3: se sella en el return de éxito
+            # IMPORTANTE (C7): NO hay `return` acá. Se deja CAER al bloque existente de
+            # abajo (grounding preflight + _publish_epic_to_ado). No duplicar.
+        else:
+            return _AutopublishResult(
+                ado_id=None,
+                error=(
+                    "epic_not_in_output: el agente devolvió narración en vez del HTML de "
+                    "la épica (probablemente la escribió en un archivo). Revisar/reintentar "
+                    "la generación de la épica desde el brief."
+                ),
+                skipped=False,
+            )
+    else:
+        _recovery_method = "published_inline"  # F3: output ya era épica
 
     # Plan 42 F2 — Preflight de grounding: advertencia (nunca bloquea la publicación).
-    import os as _os
     _grounding_enabled = _os.getenv(
         "STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED", "true"
     ).lower() not in {"0", "false", "off"}
     grounding_warnings: list[str] = (
         _epic_grounding_warnings(clean_html) if _grounding_enabled else []
     )
+    # Plan 50 F3 — linter de catálogo (best-effort, NUNCA bloquea), tras flag OFF.
+    if _catalog_grounding_warnings_enabled():
+        try:
+            from services.client_profile import load_client_profile
+
+            profile = load_client_profile(project_name)
+            catalog = (profile or {}).get("process_catalog") or []
+        except Exception:  # noqa: BLE001 — best-effort, sin opinión ante fallo
+            catalog = []
+        grounding_warnings = grounding_warnings + _catalog_grounding_warnings(clean_html, catalog)
     if grounding_warnings:
         logger.warning(
             "autopublish_epic_from_run: grounding_warnings=%s (publicando igual)",
             grounding_warnings,
         )
+
+    # Plan 51 F3 — Gate correctivo determinista (default OFF). Si bloquea, NO
+    # publica y devuelve error ruidoso → el operador revisa/reintenta.
+    _gate_decision_value: str | None = None
+    if _epic_gate_enabled():
+        try:
+            from harness.epic_gate import evaluate_epic_gate, GateDecision  # noqa: F401
+
+            _gate_catalog = None
+            if _epic_catalog_gate_enabled():
+                try:
+                    from services.client_profile import load_client_profile as _lcp
+
+                    _gate_catalog = (_lcp(project_name) or {}).get("process_catalog") or []
+                except Exception:  # noqa: BLE001
+                    _gate_catalog = []
+            # Plan 56 F3 — cargar goldens si flag ON
+            _regression_goldens = None
+            if _regression_gate_enabled():
+                try:
+                    from harness.regression_goldens import load_goldens as _load_goldens
+                    _regression_goldens = _load_goldens(
+                        project=project_name,
+                        agent_type="BusinessAgent",
+                        work_item_type="Epic",
+                    )
+                except Exception:  # noqa: BLE001
+                    _regression_goldens = None
+
+            _verdict = evaluate_epic_gate(
+                clean_html=clean_html,
+                structural_warnings=_epic_grounding_warnings(clean_html),
+                process_catalog=_gate_catalog,
+                catalog_blocking_enabled=_epic_catalog_gate_enabled(),
+                looks_like_epic_fn=_looks_like_epic,
+                regression_goldens=_regression_goldens,
+                regression_blocking_enabled=_regression_gate_blocking(),
+            )
+            _gate_decision_value = _verdict.decision.value
+            grounding_warnings = grounding_warnings + [
+                f"epic_gate: decision={_verdict.decision.value} "
+                f"defects={_verdict.structural_defects} catalog_unknown={_verdict.catalog_unknown}"
+            ]
+            # Plan 56 F4 — telemetría de regresión pasiva
+            if _verdict.regression_defects:
+                grounding_warnings = grounding_warnings + [
+                    f"epic_gate_regression: defects={_verdict.regression_defects}"
+                ]
+            if _verdict.blocking:
+                _block_error = (
+                    "epic_gate_blocked: la épica tiene defectos no reparables inline "
+                    f"(defects={_verdict.structural_defects}, "
+                    f"catalog_unknown={_verdict.catalog_unknown}"
+                )
+                if _verdict.regression_defects:
+                    _block_error += f", regression_defects={_verdict.regression_defects}"
+                _block_error += "). Revisar/reintentar."
+                return _AutopublishResult(
+                    ado_id=None,
+                    error=_block_error,
+                    skipped=False,
+                    grounding_warnings=grounding_warnings,
+                )
+        except Exception as exc:  # noqa: BLE001 — el gate nunca debe romper el publish
+            logger.warning("autopublish_epic_from_run: epic_gate falló (no fatal): %s", exc)
 
     try:
         published = _publish_epic_to_ado(
@@ -5679,14 +6106,261 @@ def autopublish_epic_from_run(
     ).lower() not in {"0", "false", "off"}
     epic_summary: dict | None = None
     if _summary_enabled:
+        # Plan 50 [ADICIÓN] — ¿el saneamiento de forma cambió algo? (mide K1).
+        _sanitize_changed = (
+            _epic_sanitize_enabled()
+            and _sanitize_epic_html(_extract_epic_html_raw(output)) != _extract_epic_html_raw(output)
+        )
         epic_summary = build_epic_summary(
             ado_id=published.ado_id,
             ado_url=published.url,
             clean_html=clean_html,
             warnings=grounding_warnings,
-            confidence=None,  # el agente calcula confidence_grounding en su output
+            # Plan 44 F0 — rescatar la confidence que el agente calcula en su HTML.
+            confidence=_extract_confidence_from_html(clean_html),
+            sanitize_changed=_sanitize_changed,
+            # Plan 51 F4 — sellar la decisión del gate (None si gate OFF).
+            gate_decision=_gate_decision_value,
         )
 
+    return _AutopublishResult(
+        ado_id=published.ado_id,
+        error=None,
+        skipped=False,
+        grounding_warnings=grounding_warnings,
+        epic_summary=epic_summary,
+        recovery_method=_recovery_method,
+    )
+
+
+# ── Plan 45 F1 — Soporte de Issues desde brief ────────────────────────────────
+#
+# Un Issue reutiliza el 100% del pipeline brief→ADO de la épica, con dos
+# diferencias: (1) el work item ADO es tipo "Issue" (no "Epic"); (2) el output
+# del agente se acumula como COMENTARIO idempotente en ese mismo WI (no como
+# tickets hijos). Las funciones viven en zona aislada y NO tocan el path de
+# épica probado (separación de responsabilidades).
+
+# Marcadores HTML de fase: garantizan idempotencia del comentario por fase. Hoy
+# el agente produce UN bloque de output → un Issue postea UN comentario "funcional".
+# Si en el futuro se encadenan fases (funcional→técnico→implementación como runs
+# separadas), cada una usa su marker y _post_phase_comment escala sin cambios.
+_ISSUE_PHASE_MARKERS = {
+    "funcional": "<!-- stacky:issue-phase:funcional -->",
+    "tecnico": "<!-- stacky:issue-phase:tecnico -->",
+    "implementacion": "<!-- stacky:issue-phase:implementacion -->",
+}
+
+
+def _persist_issue_ticket(
+    ado_id: int, title: str, description_html: str, url: str, project_name: str | None
+) -> None:
+    """Persiste (idempotentemente) el ticket local del Issue creado en ADO.
+
+    Espejo de `_persist_epic_ticket` pero con work_item_type="Issue".
+    """
+    try:
+        with session_scope() as session:
+            existing = (
+                session.query(Ticket).filter(Ticket.ado_id == ado_id).first()
+            )
+            if existing is None:
+                ticket = Ticket(
+                    ado_id=ado_id,
+                    external_id=ado_id,
+                    title=title,
+                    description=description_html,
+                    work_item_type="Issue",
+                    project=project_name or "",
+                    stacky_project_name=project_name,
+                    ado_url=url,
+                )
+                session.add(ticket)
+    except Exception as exc:
+        logger.warning(
+            "issue publish: no se pudo persistir ticket local ado_id=%s err=%s", ado_id, exc
+        )
+
+
+def _publish_issue_to_ado(
+    description_html: str,
+    brief: str,
+    project_name: str | None,
+    title: str = "",
+) -> _PublishedEpic:
+    """Crea un work item ADO tipo "Issue" y persiste el ticket local.
+
+    Espejo de `_publish_epic_to_ado` con work_item_type="Issue". Reutiliza
+    `_extract_epic_html`, `_derive_epic_title`, `_ado_client_for_ticket`,
+    `_epic_brief_save`. Propaga las excepciones de ADO al llamante.
+    """
+    clean_html = _extract_epic_html(description_html) or description_html
+    if not title:
+        title = _derive_epic_title(clean_html)
+
+    client = _ado_client_for_ticket(project_name=project_name)
+    wi = client.create_work_item(
+        work_item_type="Issue",
+        title=title,
+        description=clean_html,
+    )
+
+    ado_id: int = wi["id"]
+    wi_title: str = wi.get("fields", {}).get("System.Title", title)
+    wi_url: str = (
+        wi.get("_links", {}).get("html", {}).get("href")
+        or client.work_item_url(ado_id)
+    )
+
+    _persist_issue_ticket(ado_id, wi_title, clean_html, wi_url, project_name)
+    _epic_brief_save(ado_id, brief, project_name)
+    logger.info(
+        "issue publish: Issue creado ado_id=%s title=%r project=%s", ado_id, wi_title, project_name
+    )
+    return _PublishedEpic(ado_id=ado_id, title=wi_title, url=wi_url)
+
+
+def _post_phase_comment(client, ado_id: int, phase: str, html_content: str) -> None:
+    """Postea (idempotentemente) el output de una fase como comentario del Issue.
+
+    Anteponemos un marker HTML único por fase. Si `comment_exists` detecta el
+    marker, no se vuelve a postear (idempotencia). Un fallo al postear el
+    comentario NO es fatal: el Issue ya existe; se registra warning y se sigue.
+    """
+    marker = _ISSUE_PHASE_MARKERS.get(phase)
+    if not marker:
+        logger.warning("issue comment: fase desconocida=%s ado_id=%s (omitido)", phase, ado_id)
+        return
+    try:
+        if client.comment_exists(ado_id, marker):
+            logger.debug("issue comment: ya existe fase=%s ado_id=%s", phase, ado_id)
+            return
+        marked_html = f"{marker}\n{html_content}"
+        client.post_comment(ado_id, marked_html, fmt="html")
+        logger.info("issue comment: posteado fase=%s ado_id=%s", phase, ado_id)
+    except Exception as exc:  # noqa: BLE001 — comentario no fatal: el Issue ya existe
+        logger.warning(
+            "issue comment: no se pudo postear fase=%s ado_id=%s err=%s", phase, ado_id, exc
+        )
+
+
+def _compute_epic_observability(
+    *,
+    clean_html: str,
+    output: str | None,
+    project_name: str | None,
+    ado_id: int,
+    ado_url: str | None,
+) -> tuple[list[str], dict | None]:
+    """Plan 52 F4 — calcula (grounding_warnings, epic_summary) REUSANDO las
+    helpers de la épica (mismos flags/funciones que autopublish_epic_from_run).
+    Best-effort: ante cualquier fallo devuelve ([], None) sin romper el publish.
+    """
+    grounding_warnings: list[str] = []
+    epic_summary: dict | None = None
+    try:
+        import os as _os
+        _grounding_enabled = _os.getenv(
+            "STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED", "true"
+        ).lower() not in {"0", "false", "off"}
+        if _grounding_enabled:
+            grounding_warnings = _epic_grounding_warnings(clean_html)
+        if _catalog_grounding_warnings_enabled():
+            try:
+                from services.client_profile import load_client_profile
+
+                profile = load_client_profile(project_name)
+                catalog = (profile or {}).get("process_catalog") or []
+            except Exception:  # noqa: BLE001
+                catalog = []
+            grounding_warnings = grounding_warnings + _catalog_grounding_warnings(clean_html, catalog)
+
+        _summary_enabled = _os.getenv(
+            "STACKY_EPIC_SUMMARY_ENABLED", "true"
+        ).lower() not in {"0", "false", "off"}
+        if _summary_enabled:
+            _sanitize_changed = (
+                _epic_sanitize_enabled()
+                and _sanitize_epic_html(_extract_epic_html_raw(output)) != _extract_epic_html_raw(output)
+            )
+            epic_summary = build_epic_summary(
+                ado_id=ado_id,
+                ado_url=ado_url,
+                clean_html=clean_html,
+                warnings=grounding_warnings,
+                confidence=_extract_confidence_from_html(clean_html),
+                sanitize_changed=_sanitize_changed,
+            )
+    except Exception as exc:  # noqa: BLE001 — observabilidad nunca debe romper el publish
+        logger.warning("_compute_epic_observability falló (no fatal): %s", exc)
+        return [], None
+    return grounding_warnings, epic_summary
+
+
+def publish_issue_from_run(
+    *,
+    output: str | None,
+    brief: str,
+    project_name: str | None,
+    already_published_id: int | None,
+) -> _AutopublishResult:
+    """Plan 45 F1 — Publica un Issue en ADO al cerrar la run (análogo a épica).
+
+    Contrato idéntico a `autopublish_epic_from_run`:
+      - already_published_id != None → idempotente, no republica (skipped=True).
+      - output vacío → skipped=True, sin error.
+      - output que NO es épica/issue (narración) → error `epic_not_in_output`.
+      - ADO falla al crear el WI → ado_id=None + error visible.
+      - éxito → ado_id sellable en metadata["issue_ado_id"]; el output se postea
+        como comentario "funcional" (idempotente por marker).
+    """
+    if already_published_id is not None:
+        return _AutopublishResult(ado_id=int(already_published_id), error=None, skipped=True)
+
+    if not output or not str(output).strip():
+        return _AutopublishResult(ado_id=None, error=None, skipped=True)
+
+    clean_html = _extract_epic_html(output)
+    if not _looks_like_epic(clean_html):
+        return _AutopublishResult(
+            ado_id=None,
+            error=(
+                "epic_not_in_output: el agente devolvió narración en vez del HTML del "
+                "issue (probablemente lo escribió en un archivo). Revisar/reintentar."
+            ),
+            skipped=False,
+        )
+
+    try:
+        published = _publish_issue_to_ado(
+            description_html=clean_html,
+            brief=brief,
+            project_name=project_name,
+        )
+    except (_AdoApiError, _AdoConfigError, ProjectContextError) as exc:
+        logger.error("publish_issue_from_run: ADO error: %s", exc)
+        return _AutopublishResult(ado_id=None, error=str(exc), skipped=False)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("publish_issue_from_run: error inesperado: %s", exc, exc_info=True)
+        return _AutopublishResult(ado_id=None, error=str(exc), skipped=False)
+
+    # Comentario único de fase "funcional" con el output del agente (idempotente).
+    try:
+        client = _ado_client_for_ticket(project_name=project_name)
+        _post_phase_comment(client, published.ado_id, "funcional", clean_html)
+    except Exception as exc:  # noqa: BLE001 — el Issue ya existe; comentario no fatal
+        logger.warning("publish_issue_from_run: comentario de fase falló (no fatal): %s", exc)
+
+    # Plan 52 F4 — paridad de observabilidad con la épica: calcular
+    # grounding_warnings y epic_summary REUSANDO las helpers existentes, para que
+    # el finalizador los selle en metadata también para Issues.
+    grounding_warnings, epic_summary = _compute_epic_observability(
+        clean_html=clean_html,
+        output=output,
+        project_name=project_name,
+        ado_id=published.ado_id,
+        ado_url=published.url,
+    )
     return _AutopublishResult(
         ado_id=published.ado_id,
         error=None,
@@ -5748,3 +6422,173 @@ def create_epic_from_brief():
         "title": published.title,
         "url": published.url,
     }), 201
+
+
+# ── Plan 55 F1 — Endpoint de preview de publicación (solo-lectura) ─────────────
+
+
+def _get_run_for_preview(execution_id: int, *, db):
+    """Devuelve el AgentExecution o None. Función separada para facilitar el mock en tests."""
+    from models import AgentExecution
+    return db.query(AgentExecution).filter(AgentExecution.id == execution_id).first()
+
+
+@bp.get("/epic-preview")
+def epic_payload_preview():
+    """Plan 55 F1 — Preview solo-lectura del payload que se publicaría en ADO.
+
+    GET /api/tickets/epic-preview?execution_id=<id>&work_item_type=Epic|Issue
+
+    Devuelve exactamente el HTML y título que build_epic_payload_preview construiría,
+    que es el mismo que autopublish_epic_from_run enviaría a ADO.
+    NO toca ADO. NO modifica nada.
+
+    Flag: STACKY_ADO_PREVIEW_ENABLED (default ON). env_only (kill-switch interno).
+    Respuestas:
+      200: {ok, title, html, work_item_type, error, grounding_warnings, publishable_runtime}
+      404: endpoint deshabilitado o run no encontrada (con error="run_not_found")
+    """
+    import os as _os_ep
+    _preview_enabled = _os_ep.getenv("STACKY_ADO_PREVIEW_ENABLED", "true").lower() not in {"0", "false", "off"}
+    if not _preview_enabled:
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    execution_id_str = request.args.get("execution_id", "").strip()
+    if not execution_id_str or not execution_id_str.isdigit():
+        return jsonify({"ok": False, "error": "invalid_execution_id"}), 400
+
+    execution_id = int(execution_id_str)
+    work_item_type = request.args.get("work_item_type", "Epic").strip() or "Epic"
+
+    with session_scope() as db:
+        run = _get_run_for_preview(execution_id, db=db)
+        if run is None:
+            return jsonify({"ok": False, "error": "run_not_found"}), 404
+
+        output = run.output
+        brief = (run.metadata or {}).get("brief", "") if isinstance(run.metadata, dict) else ""
+        project_name = getattr(run, "project_name", None)
+        runtime = getattr(run, "runtime", None)
+
+    preview = build_epic_payload_preview(
+        output=output,
+        brief=brief,
+        project_name=project_name,
+        work_item_type=work_item_type,
+    )
+
+    return jsonify({
+        "ok": preview.ok,
+        "title": preview.title,
+        "html": preview.html,
+        "work_item_type": preview.work_item_type,
+        "error": preview.error,
+        "grounding_warnings": preview.grounding_warnings,
+        "publishable_runtime": runtime == "claude_code_cli",
+    }), 200
+
+
+# ── Plan 55 F3 — Portafolio brief→N épicas (preview de molécula) ──────────────
+
+
+def _split_epics_html(html: str) -> list[str]:
+    """Plan 55 F3 — PURA. Divide un bloque HTML en épicas por separador <h1>.
+
+    Algoritmo determinista:
+      - Si no hay <h1>: devuelve [html] (una sola épica).
+      - Si hay N <h1>s: devuelve N bloques, cada uno encabezado por su <h1>.
+
+    Nunca lanza. Mismo input → mismo output (orden estable).
+    """
+    if not html or not html.strip():
+        return [html]
+
+    # Partición por <h1> como separador de épicas.
+    parts = re.split(r"(?=<h1[^>]*>)", html, flags=re.IGNORECASE)
+    # Filtrar fragmentos vacíos que puedan quedar antes del primer H1.
+    parts = [p.strip() for p in parts if p.strip()]
+    return parts if parts else [html]
+
+
+def build_epic_portfolio_preview(
+    *,
+    output: str | None,
+    brief: str,
+    project_name: str | None,
+) -> list[EpicPayloadPreview]:
+    """Plan 55 F3 — PURA. Particiona output en bloques-épica y aplica
+    build_epic_payload_preview a cada uno.
+
+    Partición determinista vía _split_epics_html (por <h1> headings).
+    Sin LLM, sin generación: solo particiona lo que el agente YA produjo.
+    NUNCA lanza.
+    """
+    try:
+        # Primero extraemos el HTML limpio del output.
+        if not output or not str(output).strip():
+            # output vacío → lista de 1 ítem con ok=False (igual que build_epic_payload_preview).
+            return [build_epic_payload_preview(output=output, brief=brief, project_name=project_name)]
+
+        clean_html = _extract_epic_html(output)
+        blocks = _split_epics_html(clean_html)
+
+        # Aplica el preview a cada bloque individualmente.
+        return [
+            build_epic_payload_preview(
+                output=block,
+                brief=brief,
+                project_name=project_name,
+                work_item_type="Epic",
+            )
+            for block in blocks
+        ]
+    except Exception:  # noqa: BLE001 — portafolio nunca lanza al llamante
+        return [build_epic_payload_preview(output=output, brief=brief, project_name=project_name)]
+
+
+@bp.get("/epic-portfolio-preview")
+def epic_portfolio_preview():
+    """Plan 55 F3 — Preview de portafolio (N épicas) desde una run.
+
+    GET /api/tickets/epic-portfolio-preview?execution_id=<id>
+
+    Flag: STACKY_EPIC_PORTFOLIO_ENABLED default OFF (feature beta; opt-in).
+    Devuelve lista de EpicPayloadPreview serializada.
+    """
+    import os as _os_port
+    _portfolio_enabled = _os_port.getenv("STACKY_EPIC_PORTFOLIO_ENABLED", "false").lower() in {"1", "true", "on", "yes"}
+    if not _portfolio_enabled:
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    execution_id_str = request.args.get("execution_id", "").strip()
+    if not execution_id_str or not execution_id_str.isdigit():
+        return jsonify({"ok": False, "error": "invalid_execution_id"}), 400
+
+    execution_id = int(execution_id_str)
+
+    with session_scope() as db:
+        run = _get_run_for_preview(execution_id, db=db)
+        if run is None:
+            return jsonify({"ok": False, "error": "run_not_found"}), 404
+
+        output = run.output
+        brief = (run.metadata or {}).get("brief", "") if isinstance(run.metadata, dict) else ""
+        project_name = getattr(run, "project_name", None)
+
+    previews = build_epic_portfolio_preview(output=output, brief=brief, project_name=project_name)
+
+    return jsonify({
+        "ok": True,
+        "items": [
+            {
+                "ok": p.ok,
+                "title": p.title,
+                "html": p.html,
+                "work_item_type": p.work_item_type,
+                "error": p.error,
+                "grounding_warnings": p.grounding_warnings,
+            }
+            for p in previews
+        ],
+        "count": len(previews),
+    }), 200

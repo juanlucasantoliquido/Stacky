@@ -6,7 +6,7 @@
  * Human-in-the-loop: el botón "Crear épica" solo se habilita tras checkbox de aprobación.
  */
 import React, { useState, useEffect, useRef } from "react";
-import { Agents, ClaudeCli, Executions, Tickets, type ClaudeSessionStatus } from "../api/endpoints";
+import { Agents, ClaudeCli, Executions, Tickets, type ClaudeSessionStatus, type IntentBriefDTO } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
 import {
   isCliRuntime,
@@ -15,14 +15,39 @@ import {
 } from "../services/agentLaunch";
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
 import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
+import IntentPreflightModal from "./IntentPreflightModal";
 import type { AgentRuntime } from "../types";
 import styles from "./EpicFromBriefModal.module.css";
 
-// Plan 42 F3 — modelos permitidos para claude_code_cli (capped en backend a sonnet-4-6).
+// Plan 43 F3 — modelos para claude_code_cli. Opus 4.8 es de primera clase en brief→épica
+// (backend pasa allow_opus=True). Sonnet 4.6 es el default. Haiku 4.5 (id válido) opcional.
 const CLAUDE_MODELS: { value: string; label: string }[] = [
   { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (recomendado)" },
-  { value: "claude-haiku-3-5", label: "Haiku 3.5 (más rápido)" },
+  { value: "claude-opus-4-8", label: "Opus 4.8 (mayor calidad, más lento, mayor costo)" },
+  { value: "claude-haiku-4-5", label: "Haiku 4.5 (más rápido, menor costo)" },
 ];
+
+// Plan 43 F3 — efforts oficiales de Claude CLI con matriz de soporte por modelo.
+// haiku → low/medium/high; sonnet → low/medium/high/max; opus → todos.
+type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
+
+const CLAUDE_EFFORTS: {
+  value: EffortLevel;
+  label: string;
+  supportedModels: string[]; // prefijos de modelo que soportan este effort
+}[] = [
+  { value: "low", label: "low — mínimo (respuestas rápidas)", supportedModels: ["claude-haiku", "claude-sonnet", "claude-opus"] },
+  { value: "medium", label: "medium — estándar", supportedModels: ["claude-haiku", "claude-sonnet", "claude-opus"] },
+  { value: "high", label: "high — alto (recomendado para épicas)", supportedModels: ["claude-haiku", "claude-sonnet", "claude-opus"] },
+  { value: "xhigh", label: "xhigh — muy alto (Opus 4.7+)", supportedModels: ["claude-opus"] },
+  { value: "max", label: "max — máximo (Opus 4.8 / Sonnet 4.6)", supportedModels: ["claude-sonnet", "claude-opus"] },
+];
+
+function isEffortValidForModel(effort: EffortLevel, modelId: string): boolean {
+  const entry = CLAUDE_EFFORTS.find((e) => e.value === effort);
+  if (!entry) return false;
+  return entry.supportedModels.some((prefix) => modelId.startsWith(prefix));
+}
 
 interface EpicFromBriefModalProps {
   onClose: () => void;
@@ -69,10 +94,30 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
 
   // Plan 42 F3 — selector de modelo y esfuerzo.
   const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-4-6");
-  const [selectedEffort, setSelectedEffort] = useState<"low" | "medium" | "high">("high");
+  const [selectedEffort, setSelectedEffort] = useState<EffortLevel>("high");
+  // Plan 45 F3 — selector de tipo de work item (Epic | Issue).
+  const [workItemType, setWorkItemType] = useState<"Epic" | "Issue">("Epic");
+  const [issueEnabled, setIssueEnabled] = useState(false);
   // Plan 42 F6 — id de la ejecución en curso para el botón Stop.
   const [runningExecutionId, setRunningExecutionId] = useState<number | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Plan 55 F2 — Preview de publicación (solo-lectura).
+  const [epicPreview, setEpicPreview] = useState<{
+    ok: boolean;
+    title: string | null;
+    html: string | null;
+    work_item_type: string;
+    error: string | null;
+    grounding_warnings: string[];
+    publishable_runtime: boolean;
+  } | null>(null);
+  const [previewAvailable, setPreviewAvailable] = useState(true); // false si flag OFF (404)
+
+  // Plan 41 F4 — pre-vuelo de intención.
+  const [showPreflightModal, setShowPreflightModal] = useState(false);
+  const [preflightIntent, setPreflightIntent] = useState<IntentBriefDTO | null>(null);
+  const [preflightAutoApprovable, setPreflightAutoApprovable] = useState(false);
 
   // Claude Code CLI config
   const [claudeSession, setClaudeSession] = useState<ClaudeSessionStatus | null>(null);
@@ -98,17 +143,69 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
     }
   }
 
-  async function handleRuntimeChange(rt: AgentRuntime) {
+  function handleRuntimeChange(rt: AgentRuntime) {
     setAgentRuntime(rt);
     // Plan 42 F3 — resetear modelo a sonnet-4-6 si el runtime no es claude_code_cli.
     if (rt !== "claude_code_cli") {
       setSelectedModel("claude-sonnet-4-6");
     }
-    if (rt === "claude_code_cli") {
-      const ready = claudeSession ? claudeReady : await probeClaude();
-      if (!ready) setShowClaudeConfig(true);
-    }
+    // Plan 43 F2 — el probe se dispara vía useEffect([agentRuntime]); no abrir config automáticamente.
   }
+
+  // Plan 43 F2 — probe silencioso al montar / al cambiar a claude_code_cli (sin abrir panel).
+  useEffect(() => {
+    if (agentRuntime === "claude_code_cli") {
+      void probeClaude();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentRuntime]);
+
+  // Plan 45 F3 — cargar flag de config al montar.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const cfg = await Tickets.frontendConfig();
+        setIssueEnabled(cfg.issue_from_brief_enabled ?? false);
+      } catch {
+        // Silenciar error — default a false si la config no está disponible.
+        setIssueEnabled(false);
+      }
+    })();
+  }, []);
+
+  // Plan 43 F3 — si el modelo cambia y el effort actual no es válido, resetear a "high".
+  useEffect(() => {
+    if (!isEffortValidForModel(selectedEffort, selectedModel)) {
+      setSelectedEffort("high");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedModel]);
+
+  // Plan 55 F2 — Fetch del preview cuando hay executionId activo.
+  // Refresca cada poll cycle; si el endpoint no está disponible (flag OFF / 404), oculta la sección.
+  useEffect(() => {
+    if (executionId === null || !previewAvailable) return;
+    let cancelled = false;
+    const poll = setInterval(async () => {
+      try {
+        const preview = await Tickets.epicPreview(executionId, issueEnabled ? workItemType : "Epic");
+        if (!cancelled) setEpicPreview(preview);
+      } catch (err: unknown) {
+        if (!cancelled) {
+          const status = (err as { status?: number })?.status;
+          if (status === 404) {
+            setPreviewAvailable(false);
+          }
+          // Otros errores: ignorar silenciosamente (best-effort)
+        }
+      }
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [executionId, previewAvailable, workItemType]);
 
   // Inicia el polling de la ejecución hasta que termine.
   function startPolling(execId: number) {
@@ -183,9 +280,9 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   async function handleGenerate() {
     if (!brief.trim()) return;
     setErrorMsg(null);
-    setStep("running");
     setRunningExecutionId(null);
     try {
+      // Plan 41 F4 — enviar preflight:true para disponer el pre-vuelo.
       // Plan 42 F3 — enviar modelo y esfuerzo; modelo solo si runtime es claude_code_cli.
       const result = await Agents.runBrief({
         brief: brief.trim(),
@@ -193,11 +290,73 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
         project: activeProjectName,
         model: agentRuntime === "claude_code_cli" ? selectedModel : undefined,
         effort: selectedEffort,
+        work_item_type: issueEnabled ? workItemType : "Epic",
+        preflight: true,
       });
+
+      // Plan 41 F4 — si el backend devolvió stage:preflight, mostrar modal sin comenzar la ejecución.
+      if (result.stage === "preflight" && result.intent) {
+        setPreflightIntent(result.intent);
+        setPreflightAutoApprovable(result.auto_approvable ?? false);
+        setShowPreflightModal(true);
+        // Si auto_approvable, re-llamar inmediatamente con approved:true (sin mostrar el modal).
+        if (result.auto_approvable) {
+          setShowPreflightModal(false);
+          await handleApproveIntent(undefined);
+        }
+        return;
+      }
+
+      // Backend no dispuso preflight (flag OFF o runtime no disponible) — proceder normalmente.
       const execId = result.execution_id;
+      if (!execId) {
+        setErrorMsg("No se pudo lanzar el Agente de Negocio (ejecución sin ID).");
+        setStep("error");
+        return;
+      }
       setExecutionId(execId);
       setRunningExecutionId(execId); // Plan 42 F6 — habilitar botón Stop
+      setStep("running");
       // Abrir consola in-page para runtimes CLI (igual que tickets).
+      if (isCliRuntime(agentRuntime)) {
+        openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
+      }
+      startPolling(execId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setErrorMsg(msg || "No se pudo lanzar el Agente de Negocio.");
+      setStep("error");
+    }
+  }
+
+  // Plan 41 F4 — re-llamar runBrief con approved:true (+ corrections si las hay).
+  async function handleApproveIntent(corrections: string | undefined) {
+    if (!brief.trim()) return;
+    setErrorMsg(null);
+    setStep("running");
+    setRunningExecutionId(null);
+    try {
+      const result = await Agents.runBrief({
+        brief: brief.trim(),
+        runtime: agentRuntime,
+        project: activeProjectName,
+        model: agentRuntime === "claude_code_cli" ? selectedModel : undefined,
+        effort: selectedEffort,
+        work_item_type: issueEnabled ? workItemType : "Epic",
+        approved: true,
+        corrections,
+      });
+
+      const execId = result.execution_id;
+      if (!execId) {
+        setErrorMsg("No se pudo lanzar el Agente de Negocio (ejecución sin ID).");
+        setStep("error");
+        return;
+      }
+      setExecutionId(execId);
+      setRunningExecutionId(execId);
+      setShowPreflightModal(false);
+      // Abrir consola in-page para runtimes CLI.
       if (isCliRuntime(agentRuntime)) {
         openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
       }
@@ -287,10 +446,14 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
               </p>
             </div>
 
-            {agentRuntime === "claude_code_cli" && !claudeReady && !claudeChecking && (
+            {/* Plan 43 F2 — aviso no intrusivo; el probe es automático y silencioso. */}
+            {agentRuntime === "claude_code_cli" && claudeChecking && (
+              <div className={styles.warning}><span>Verificando sesión Claude Code…</span></div>
+            )}
+            {agentRuntime === "claude_code_cli" && !claudeChecking && !claudeReady && (
               <div className={styles.warning}>
                 <span>
-                  Claude Code no está configurado.{" "}
+                  Claude Code no está listo.{" "}
                   {claudeSession?.error ? `(${claudeSession.error})` : ""}
                 </span>
                 <button
@@ -301,9 +464,6 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
                   ⚙ Configurar
                 </button>
               </div>
-            )}
-            {agentRuntime === "claude_code_cli" && claudeChecking && (
-              <div className={styles.warning}><span>Verificando Claude Code…</span></div>
             )}
 
             {/* Plan 42 F3 — Selector de modelo (solo claude_code_cli) y esfuerzo */}
@@ -325,13 +485,32 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
                 Esfuerzo
                 <select
                   value={selectedEffort}
-                  onChange={(e) => setSelectedEffort(e.target.value as "low" | "medium" | "high")}
+                  onChange={(e) => setSelectedEffort(e.target.value as EffortLevel)}
+                  disabled={agentRuntime !== "claude_code_cli"}
+                  title={agentRuntime !== "claude_code_cli" ? "El selector de esfuerzo solo aplica a Claude Code CLI" : undefined}
                 >
-                  <option value="high">Alto (más completo, más lento)</option>
-                  <option value="medium">Medio</option>
-                  <option value="low">Bajo (más rápido)</option>
+                  {CLAUDE_EFFORTS.map((eff) => {
+                    const valid = isEffortValidForModel(eff.value, selectedModel);
+                    return (
+                      <option key={eff.value} value={eff.value} disabled={!valid}>
+                        {eff.label}{!valid ? " (no disponible para este modelo)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </label>
+              {issueEnabled && (
+                <label className={styles.label}>
+                  Tipo de work item
+                  <select
+                    value={workItemType}
+                    onChange={(e) => setWorkItemType(e.target.value as "Epic" | "Issue")}
+                  >
+                    <option value="Epic">Épica</option>
+                    <option value="Issue">Issue</option>
+                  </select>
+                </label>
+              )}
             </div>
 
             <label className={styles.label}>
@@ -381,6 +560,44 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
             {executionId !== null && (
               <p className={styles.hint}>Ejecución #{executionId}</p>
             )}
+
+            {/* Plan 55 F2 — Vista previa de publicación (solo-lectura) */}
+            {previewAvailable && epicPreview !== null && (
+              <div className={styles.previewSection}>
+                <div className={styles.previewHeader}>Vista previa de publicación</div>
+                {epicPreview.ok ? (
+                  <>
+                    {epicPreview.title && (
+                      <div className={styles.previewTitle}>{epicPreview.title}</div>
+                    )}
+                    <div
+                      className={styles.previewHtml}
+                      // eslint-disable-next-line react/no-danger
+                      dangerouslySetInnerHTML={{ __html: epicPreview.html ?? "" }}
+                    />
+                    {epicPreview.grounding_warnings.length > 0 && (
+                      <div className={styles.previewWarnings}>
+                        Advertencias de grounding: {epicPreview.grounding_warnings.join("; ")}
+                      </div>
+                    )}
+                    {!epicPreview.publishable_runtime && (
+                      <div className={styles.publishDisabledHint}>
+                        Este runtime no auto-publica. Para publicar automáticamente, seleccioná Claude Code CLI.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className={styles.previewError}>
+                    {epicPreview.error === "empty_output"
+                      ? "El agente aún no produjo contenido publicable…"
+                      : epicPreview.error === "epic_not_in_output"
+                      ? "El agente narró en vez de devolver HTML de épica. Si falla la publicación, revisá el output."
+                      : `No se pudo generar el preview: ${epicPreview.error ?? "error desconocido"}`}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Plan 42 F6 — botón Stop visible solo mientras hay ejecución en curso */}
             {runningExecutionId !== null && (
               <footer className={styles.footer}>
@@ -435,6 +652,21 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
         <ClaudeCliConfigModal
           onClose={() => setShowClaudeConfig(false)}
           onConfigured={() => { void probeClaude(); }}
+        />
+      )}
+
+      {/* Plan 41 F4 — Modal de pre-vuelo de intención. */}
+      {showPreflightModal && preflightIntent && (
+        <IntentPreflightModal
+          intent={preflightIntent}
+          onApprove={(corrections) => {
+            void handleApproveIntent(corrections);
+          }}
+          onCancel={() => {
+            setShowPreflightModal(false);
+            setPreflightIntent(null);
+            setPreflightAutoApprovable(false);
+          }}
         />
       )}
     </div>

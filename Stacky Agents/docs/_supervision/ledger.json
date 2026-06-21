@@ -111,6 +111,95 @@
         "F5-ratchet": "4 test_speculative_*.py registrados en scripts/run_harness_tests.ps1"
       },
       "notas": "Flag env_only INTENCIONAL (kill-switch interno, plan dice activar SOLO post-GA tras F0=5 PASS): cumple excepcion R4. F2a (headless runner side-effect-free) DIFERIDA post-GA por decision del plan: con F2a sin construir, FA-36 queda copilot-only -> paridad-3 plena de ejecucion especulativa es PARCIAL hasta F2a. Blindaje test_spec_never_calls_autopublish verde (no publica sola). Activacion (flag ON) sigue pendiente de aprobacion del operador."
+    },
+    "58": {
+      "plan": "58",
+      "ruta": "Stacky Agents/docs/58_PLAN_BUCLE_CONVERGENCIA_CALIDAD_DETERMINISTA.md",
+      "doc_sha256": "5a5ac16e9a02ea998fa50e8b33e78f3761e4b96f9652cfda9ac1c9af66f4a25b",
+      "veredicto": "APROBADO",
+      "fecha": "2026-06-21",
+      "tests": [
+        "tests/test_convergence_loop.py -> 14 passed/0 failed",
+        "tests/test_convergence_wiring.py -> 9 passed/0 failed",
+        "tests/test_harness_flags.py -> 32 passed/0 failed",
+        "tests/test_harness_ratchet_meta.py -> 3 passed/0 failed"
+      ],
+      "evidencia": {
+        "F0-flags": "config.py:428-433 (Config attrs, NO env_only) + harness_flags.py:1405-1423 FLAG_REGISTRY + .env.example:231,233",
+        "F1-puro": "harness/convergence.py run_convergence_loop/ConvergenceResult(+global_budget_spent)/STOP_*(incl STOP_BUDGET_REACHED_GLOBAL)/_all_defects/build_convergence_payload/should_use_convergence_loop",
+        "F2-wiring": "claude_code_cli_runner.py:930 import, :968 run_convergence_loop, :977 build_convergence_payload",
+        "F4-telemetria": "claude_code_cli_runner.py:1268 metadata['epic_convergence'] (sellado solo con flag ON)",
+        "F5-ratchet": "scripts/run_harness_tests.ps1:91-92 + .sh:98-99"
+      },
+      "notas": "Wiring Claude-CLI-only intencional (unico runtime que autopublica epica). Flags son Config attrs (no env_only) y UI-editables por PUT /api/harness-flags. Byte-identico con flag OFF (rama legacy intacta)."
+    },
+    "59": {
+      "plan": "59",
+      "ruta": "Stacky Agents/docs/59_PLAN_DESCOMPOSICION_VERTICAL_EPICA_A_HIJOS.md",
+      "doc_sha256": "26844da414ee14924a4ebab3afe5a5f5a0ac3492998b96499402c16014ea4de5",
+      "veredicto": "APROBADO",
+      "fecha": "2026-06-21",
+      "tests": [
+        "tests/test_epic_decomposition.py -> 23 passed/0 failed",
+        "tests/test_harness_flags.py -> 32 passed/0 failed",
+        "frontend npx tsc --noEmit -> 0 errores (exit 0)"
+      ],
+      "evidencia": {
+        "F0-flag": "harness_flags.py:1392-1403 STACKY_EPIC_DECOMPOSITION_ENABLED (group global, env_only, UI-editable) + .env.example:236",
+        "F1-parser": "tickets.py:6697 EpicChildrenPlan, :6740 build_epic_children_plan (puro)",
+        "F2-preview": "tickets.py:6801 POST /epic-children-preview (solo-lectura)",
+        "F3-publicador": "tickets.py:6856 _ChildrenPublishResult, :6863 publish_epic_children (idempotencia por marcador find_child_by_marker)",
+        "F4-endpoint": "tickets.py:6938 POST /epic-children + :6786 compute_plan_fingerprint + :6969-6974 plan_drift (anti-drift 4bis)",
+        "F5-UI": "frontend EpicChildrenPanel.tsx + endpoints.ts:332/349 + OutputPanel.tsx:10/244",
+        "F6-ratchet": "scripts/run_harness_tests.ps1:94 + .sh:101"
+      },
+      "notas": "Publicacion de hijos hereda CLI-only (solo Claude autopublica). Anti-drift fingerprint (4bis) implementado: aprobar-A-obtener-B imposible. tsc 0 errores."
+    },
+    "60": {
+      "plan": "60",
+      "ruta": "Stacky Agents/docs/60_PLAN_APRENDIZAJE_BIDIRECCIONAL_EDICIONES_ADO.md",
+      "doc_sha256": "6932e6c3a3e4243762a18ff60470f87be3444bd187aceeefaed9a1f1dc00f671",
+      "veredicto": "APROBADO",
+      "fecha": "2026-06-21",
+      "tests": [
+        "tests/test_ado_edit_diff.py -> 8 passed/0 failed",
+        "tests/test_ado_edit_detect.py -> 9 passed/0 failed",
+        "tests/test_ado_edit_ledger.py -> 5 passed/0 failed",
+        "tests/test_ado_edit_learning.py -> 7 passed/0 failed",
+        "tests/test_ado_edit_sweep.py -> 5 passed/0 failed",
+        "tests/test_harness_flags.py -> 32 passed/0 failed"
+      ],
+      "evidencia": {
+        "F0-diff": "harness/ado_edit_diff.py EditDelta/strip_html_to_text/diff_edit (puro)",
+        "F1-baseline": "tickets.py:5982-5983 _AutopublishResult.published_html/baseline_rev; sellado GATEADO por flag:6186-6198; runner:1346-1351 (byte-identico OFF)",
+        "F2-detect": "harness/ado_edit_detect.py is_human_edit/select_latest_human_edit/_extract_* defensivos (no-PII por construccion)",
+        "F3-ledger": "services/ado_edit_ledger.py already_learned/mark_learned/processed_revs_for + fallback JSONL",
+        "F4-materializador": "services/ado_edit_learning.py learn_from_work_item -> memory_store.save_observation(type=operator_note, tags approval_condition+ado_human_edit) + pii_masker.redact_irreversible",
+        "F5-sweep": "app.py:409-429 daemon stacky-ado-edit-daemon (gated flag) + sweep_recent_runs",
+        "F6-flags": "harness_flags.py:1425-1457 (3 flags env_only UI-editable) + .env.example:239,241,243 + ratchet ps1:96-100/sh:103-107"
+      },
+      "notas": "Pasivo, NUNCA re-publica (human-in-the-loop). Solo epicas autopublicadas por claude_code_cli tienen baseline (asimetria esperada/documentada). Golden plan 56 opcional (degrada limpio). No-PII verificado (autor nunca persiste)."
+    },
+    "61": {
+      "plan": "61",
+      "ruta": "Stacky Agents/docs/61_PLAN_BLINDAJE_DETERMINISTA_FLUJO_FUNCIONAL_TASK_GATE.md",
+      "doc_sha256": "73fed09d1239be3fbdd90195690fe5500dd86736a444f7aba9a0ceaa49868482",
+      "veredicto": "APROBADO",
+      "fecha": "2026-06-21",
+      "tests": [
+        "tests/test_task_gate.py -> 11 passed/0 failed",
+        "tests/test_task_gate_flags.py -> 4 passed/0 failed",
+        "tests/test_create_child_task_gate.py -> 8 passed/0 failed",
+        "tests/test_harness_ratchet_meta.py -> 3 passed/0 failed"
+      ],
+      "evidencia": {
+        "F0-flags": "tickets.py:5521 _task_gate_enabled, :5526 _task_gate_blocking + harness_flags.py:1303-1326 (2 flags env_only UI-editable) + .env.example:246,248",
+        "F1-puro": "harness/task_gate.py TaskGateDecision/TaskGateVerdict/classify_task_defects/evaluate_task_gate (mirror epic_gate)",
+        "F2-wiring": "tickets.py:3881-3956 [1e] gate en create_child_task (400 TASK_GATE_BLOCKED:3916; clave task_gate condicional:3956 byte-identico OFF)",
+        "F3-systemlog": "tickets.py:4532 task_gate -> :4814 en audit ctx",
+        "F5-ratchet": "scripts/run_harness_tests.ps1:102-104 + .sh:109-111"
+      },
+      "notas": "Paridad-3 trivial (gate en endpoint backend, runtime-agnostico). Flags env_only pero UI-editables. Warning por default, blocking opt-in-dentro-de-opt-in. Byte-identico con flag OFF."
     }
   }
 }

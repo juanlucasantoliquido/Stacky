@@ -54,10 +54,19 @@ def edit_to_lesson_content(delta, *, ado_id: int) -> str:
 
 
 def _golden_available() -> bool:
-    """True si el plan 56 provee register_positive_golden en harness.epic_gate."""
+    """True si el plan 56 (gate de regresión) está presente con su API viva.
+
+    El plan 60 se escribió cuando el 56 NO existía y probaba un símbolo placeholder
+    (`epic_gate.register_positive_golden`) que nunca llegó a existir -> el bridge
+    quedaba muerto. El 56 ya está implementado en `harness.regression_goldens` con
+    otra API (`derive_positive_golden` + `save_golden`): probamos ESA. Degrada limpio
+    si falta.
+    """
     try:
-        from harness import epic_gate
-        return hasattr(epic_gate, "register_positive_golden")
+        from harness import regression_goldens
+        return hasattr(regression_goldens, "derive_positive_golden") and hasattr(
+            regression_goldens, "save_golden"
+        )
     except Exception:
         return False
 
@@ -149,15 +158,24 @@ def learn_from_work_item(
     except Exception as exc:
         logger.warning("learn_from_work_item: save_observation falló para WI %s: %s", ado_id, exc)
 
-    # 7. Golden opcional (plan 56) — degradación limpia si no disponible
+    # 7. Golden positivo (plan 56) — la versión humana corregida pasa a ser baseline
+    #    de calidad. Se guarda con LAS MISMAS keys que lee el gate de autopublish
+    #    (api/tickets.py:6103-6107: agent_type="BusinessAgent", work_item_type="Epic"),
+    #    si no el golden quedaría huérfano (nadie lo leería). Degrada limpio:
+    #    derive_positive_golden devuelve None si el HTML no tiene heading RF que proteger.
     golden_written = False
     try:
         if _golden_available():
-            from harness import epic_gate
-            epic_gate.register_positive_golden(
-                project=project_name, html=he.edited_html, ado_id=ado_id
+            from harness.regression_goldens import derive_positive_golden, save_golden
+            g = derive_positive_golden(
+                clean_html=he.edited_html,
+                project=project_name,
+                agent_type="BusinessAgent",
+                work_item_type="Epic",
             )
-            golden_written = True
+            if g is not None:
+                save_golden(g)
+                golden_written = True
     except Exception as exc:
         logger.warning("learn_from_work_item: golden falló (no crítico) para WI %s: %s", ado_id, exc)
 

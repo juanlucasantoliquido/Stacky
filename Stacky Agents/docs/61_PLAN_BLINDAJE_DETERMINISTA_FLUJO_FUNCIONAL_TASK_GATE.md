@@ -5,7 +5,7 @@
 > Origen del número: listado de `Stacky Agents/docs/` → NN máximo existente = 60 → este plan = **61**.
 >
 > **Versión: v1 → v2** (endurecido por juez adversarial 2026-06-21, skill `criticar-y-mejorar-plan`).
-> **Estado de implementación:** IMPLEMENTADO (commit `20f48001`, F0..F5). El juez verificó la crítica **firsthand contra el código ya mergeado**: varios hallazgos describen un bug LATENTE que el plan v1 habría inducido en un modelo menor y que el implementador tuvo que sortear por su cuenta (ver C1). La **[ADICIÓN ARQUITECTO]** (test de vocabulario de defectos) es lo único aún NO implementado: queda para el próximo pase de implementación/supervisión.
+> **Estado de implementación:** IMPLEMENTADO (commit `20f48001`, F0..F5). El juez verificó la crítica **firsthand contra el código ya mergeado**: varios hallazgos describen un bug LATENTE que el plan v1 habría inducido en un modelo menor y que el implementador tuvo que sortear por su cuenta (ver C1). La **[ADICIÓN ARQUITECTO]** (test de vocabulario de defectos) **fue implementada en el pase de supervisión 2026-06-21** (`_ALL_CODES` congelado en `harness/task_gate.py` + `test_defect_vocabulary_is_frozen` en `test_task_gate.py`): v2 queda 100% construido.
 
 ---
 
@@ -238,7 +238,7 @@ def evaluate_task_gate(
 - `test_defect_vocabulary_is_frozen` **[ADICIÓN ARQUITECTO]**: `set(_ALL_CODES)` == el conjunto literal congelado `{"title_empty", "rf_id_empty", "description_empty", "description_missing_rf", "plan_de_pruebas_empty", "epic_id_not_numeric"}`; y, sobre ≥5 payloads basura variados, `classify_task_defects` NUNCA emite un código fuera de `_ALL_CODES`. Blinda el contrato de telemetría `task_gate.defects` (consumido por operador/dashboards) contra erosión silenciosa — filosofía golden/ratchet de los planes 49/56. **(Aún NO implementado: pendiente del próximo pase de implementación/supervisión.)**
 
 **Comando exacto:** `.venv\Scripts\python.exe -m pytest tests/test_task_gate.py -q`
-**Criterio binario.** Suite `test_task_gate.py` verde, 0 failed (hoy **11 casos** implementados —los nombres shipped difieren levemente de esta lista ilustrativa, ver C4—; **12** al sumar el centinela de vocabulario [ADICIÓN ARQUITECTO], aún pendiente).
+**Criterio binario.** Suite `test_task_gate.py` verde, 0 failed: **12 casos** implementados (los nombres shipped difieren levemente de esta lista ilustrativa, ver C4) — incluye el centinela de vocabulario `test_defect_vocabulary_is_frozen` [ADICIÓN ARQUITECTO], implementado en supervisión 2026-06-21.
 **Flag.** N/A (módulo puro; lo gobierna el caller). **Impacto runtime.** Idéntico (módulo importado igual por los 3). **Trabajo del operador:** ninguno.
 
 ---
@@ -408,7 +408,7 @@ if task_gate_result is not None:
 - [ ] Con `STACKY_TASK_GATE_ENABLED=true`, la respuesta y el SystemLog incluyen `task_gate` con defects deterministas; NO bloquea.
 - [ ] Con `STACKY_TASK_GATE_BLOCKING=true` + veredicto blocking, devuelve 400 `TASK_GATE_BLOCKED` y NO crea la Task (salvo dry_run).
 - [ ] Todos los tests nombrados verdes con el venv del repo; los 3 archivos están en el ratchet.
-- [ ] **[ADICIÓN ARQUITECTO]** `test_defect_vocabulary_is_frozen` implementado y verde (congela `_ALL_CODES`). *(Pendiente: lo único de v2 aún no construido.)*
+- [x] **[ADICIÓN ARQUITECTO]** `test_defect_vocabulary_is_frozen` implementado y verde (congela `_ALL_CODES`). *(Construido en supervisión 2026-06-21; v2 completo.)*
 - [ ] Paridad-3 trivial (backend); cero trabajo del operador; human-in-the-loop intacto; sin auth nueva; sin degradación.
 
 ---

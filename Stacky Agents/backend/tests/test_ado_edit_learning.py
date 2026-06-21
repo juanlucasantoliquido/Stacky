@@ -75,6 +75,20 @@ def captured_save(monkeypatch):
     return calls
 
 
+@pytest.fixture(autouse=True)
+def captured_golden(monkeypatch):
+    """Captura save_golden (plan 56) y EVITA escribir goldens reales en el repo.
+
+    Autouse: cualquier test cuyo HTML editado tenga heading RF dispararía
+    derive_positive_golden+save_golden tras el fix del bridge; sin este stub
+    la suite dejaría de ser hermética (escribiría harness/goldens/*.json).
+    """
+    calls = []
+    import harness.regression_goldens as rg
+    monkeypatch.setattr(rg, "save_golden", lambda g: calls.append(g))
+    return calls
+
+
 # ── Tests F4 ─────────────────────────────────────────────────────────────────
 
 def test_no_revisions_returns_unavailable(mem_ledger, captured_save):
@@ -156,6 +170,33 @@ def test_golden_not_available_golden_false(mem_ledger, captured_save, monkeypatc
     )
     assert result.lesson_written is True
     assert result.golden_written is False
+
+
+def test_golden_available_writes_positive_golden(mem_ledger, captured_save, captured_golden):
+    """Plan 56 PRESENTE + edición humana con heading RF => golden_written=True.
+
+    Cierra el bridge muerto: el golden positivo se guarda con LAS MISMAS keys que
+    lee el gate de autopublish (api/tickets.py:6103-6107 BusinessAgent/Epic), si no
+    quedaría huérfano. La versión humana corregida pasa a ser baseline de calidad.
+    """
+    import services.ado_edit_learning as lm
+    # Precondición firsthand: el plan 56 ya está implementado (API viva), no el placeholder.
+    assert lm._golden_available() is True
+    result = lm.learn_from_work_item(
+        ado_id=106, baseline_html=_BASELINE_HTML, baseline_rev=1,
+        baseline_author="stacky@empresa.com", run_id="r1", project_name="P",
+        ado_client=FakeAdo(revisions=[_REV_STACKY, _REV_HUMAN]),
+        service_identities=set(),
+    )
+    assert result.learned is True
+    assert result.lesson_written is True
+    assert result.golden_written is True
+    assert len(captured_golden) == 1
+    g = captured_golden[0]
+    assert g.kind == "positive"
+    assert g.project == "P"
+    assert g.agent_type == "BusinessAgent"
+    assert g.work_item_type == "Epic"
 
 
 def test_edit_to_lesson_content_deterministic():

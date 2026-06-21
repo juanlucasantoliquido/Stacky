@@ -22,6 +22,20 @@ class TaskGateVerdict(NamedTuple):
 
 _REPAIRABLE = frozenset({"title_empty", "description_empty", "description_missing_rf"})
 
+# Plan 61 v2 [ADICIÓN ARQUITECTO] — Vocabulario CONGELADO de defectos que el gate
+# puede emitir. Es el contrato de telemetría `task_gate.defects` que consumen el
+# operador y los dashboards. Cualquier código nuevo en classify_task_defects DEBE
+# agregarse aquí; el centinela test_defect_vocabulary_is_frozen lo fuerza (filosofía
+# golden/ratchet de los planes 49/56) para evitar erosión silenciosa del contrato.
+_ALL_CODES = frozenset({
+    "title_empty",
+    "rf_id_empty",
+    "description_empty",
+    "description_missing_rf",
+    "plan_de_pruebas_empty",
+    "epic_id_not_numeric",
+})
+
 
 def _is_blank(v: object) -> bool:
     if v is None:

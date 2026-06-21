@@ -1,9 +1,16 @@
 # Plan 60 — Aprendizaje bidireccional: las ediciones del operador en ADO vuelven como lección/golden
 
-> **Estado:** PROPUESTO 2026-06-20 · **v2 (juzgado — APROBADO-CON-CAMBIOS)** · NO implementado.
+> **Estado:** IMPLEMENTADO 2026-06-21 · **v3 (supervisión — bridge edición→golden VIVO)** · F0..F6 verdes + golden positivo cableado a la API viva del plan 56.
 > **Autor:** StackyArchitectaUltraEficientCode. **Juez:** StackyArchitectaUltraEficientCode (adversarial).
 > **Origen:** finalista #3 del roadmap `docs/_roadmap/TOP5_2026-06-20_POST57_LOOP_MOLECULA_BIDIRECCIONAL.md`.
 > **Sustrato verificado firsthand 2026-06-20:** `ado_client.fetch_work_item_updates` (ado_client.py:930-945, código muerto, cero callers; devuelve crudo `data.get("value")` — shape NO documentado por el método), `get_work_item` (ado_client.py:836), wiring autopublish `_maybe_autopublish_epic` (claude_code_cli_runner.py:1212) que sella `metadata["epic_ado_id"]`, corpus de lecciones plan 54 (`rejection_lessons.py:25,100-131` — `load_for_run` filtra `type="operator_note"`, NO por tag arbitrario; writer real = `memory_store.save_observation` NO `add`; redacción PII = `pii_masker.redact_irreversible`, ver post_run_memory.py:227), golden gate plan 56 (`harness/epic_gate.py`, NO implementado), patrón de loop de fondo (`app.py:389 _memory_review_sweep_loop`).
+
+---
+
+## CHANGELOG v2 → v3 (supervisión — cierre del bridge muerto)
+
+- **[SUPERVISIÓN 2026-06-21] Bridge edición→golden estaba MUERTO; ahora VIVO.** v2 (escrito cuando el plan 56 NO existía) probaba `hasattr(epic_gate, "register_positive_golden")` y llamaba `epic_gate.register_positive_golden(...)`. Ese símbolo **nunca llegó a existir** (grep ⇒ 0 definiciones); cuando el 56 se implementó lo hizo con OTRA API (`harness/regression_goldens.py`). Resultado: `_golden_available()` siempre `False` ⇒ `golden_written` siempre `False` ⇒ la mitad POSITIVA del loop de prevención era código muerto, y los tests lo toleraban (solo cubrían el camino degradado). La auditoría per-plan del supervisor no lo detectó porque cada plan, por separado, era fiel a SU doc: el gap era de INTEGRACIÓN cruzada 56↔60. **Fix (F4):** `_golden_available()` prueba la API viva (`regression_goldens.derive_positive_golden`+`save_golden`) y el golden positivo se deriva de `he.edited_html` y se guarda con las MISMAS keys que lee el gate de autopublish (`BusinessAgent`/`Epic`, `api/tickets.py:6103-6107`) para no quedar huérfano. Nuevo test #8 prueba el camino `golden_written=True` (TDD RED→GREEN). **Criterio de aceptación #3 (golden positivo con 56 presente) — antes incumplido — ahora cumplido.**
+- **Fuera de scope (no hecho aquí):** la mitad NEGATIVA (lo que el humano BORRA ⇒ `derive_negative_golden`⇒`save_golden`⇒ el gate bloquea recurrencia) es capacidad NUEVA no especificada por este plan. Queda como posible plan pequeño futuro (`proponer-plan-stacky`), reusando el 56 íntegro.
 
 ---
 
@@ -363,7 +370,11 @@ def learn_from_work_item(
 
 Así la lección entra automáticamente al prefix que ya se inyecta en los 3 runtimes (plan 54 cerró la paridad FA-11). **Cero código de inyección nuevo, cero cambios a `rejection_lessons.py`.**
 
-**Golden opcional (plan 56).** El plan 56 NO está implementado. `_golden_available()` hace `try: from harness import epic_gate; return hasattr(epic_gate, "register_positive_golden") except Exception: return False`. Si no existe ⇒ `golden_written=False`, `lesson_written=True` (degradación limpia: solo lección). **Documentar el prerequisito 56 y el modo degradado.** Flag del golden: `STACKY_EPIC_CATALOG_GATE_ENABLED` (ya existe en memoria plan 51) o el que el 56 defina; si no está, irrelevante.
+**Golden positivo (plan 56) — ACTUALIZADO v3.** El plan 56 YA está implementado (`harness/regression_goldens.py`), pero con otra API que la que este plan asumió: NO existe `epic_gate.register_positive_golden` (placeholder que nunca llegó a existir; el bridge quedó muerto hasta v3). La API viva es `regression_goldens.derive_positive_golden(*, clean_html, project, agent_type, work_item_type, confidence=None) -> Golden | None` + `save_golden(g)`. Por eso:
+- `_golden_available()` ahora prueba `hasattr(regression_goldens, "derive_positive_golden") and hasattr(regression_goldens, "save_golden")` (degrada limpio si el 56 desaparece).
+- El golden se deriva de `he.edited_html` (la versión humana corregida = baseline de calidad) y se guarda con **las MISMAS keys que LEE el gate de autopublish** (`api/tickets.py:6103-6107`: `agent_type="BusinessAgent"`, `work_item_type="Epic"`). Si se usaran otras keys, el golden quedaría huérfano (nadie lo leería) — bridge muerto de segundo orden, evitado.
+- `derive_positive_golden` devuelve `None` si el HTML no tiene heading `RF-` que proteger ⇒ `golden_written=False`, `lesson_written=True` (degradación limpia: solo lección). Idéntico al modo cuando el 56 está ausente.
+- Sin flag nuevo: la captura del golden es inocua (paridad con `regression_capture.save_goldens_from_review`, que es "siempre activa"); el GATE que lo consume sí está gateado (`STACKY_REGRESSION_GATE_ENABLED`/`_BLOCKING`, plan 56). Todo el sweep ya está detrás de `STACKY_ADO_EDIT_LEARNING_ENABLED` (UI-editable), así que cero trabajo extra al operador.
 
 **Test primero:** `Stacky Agents/backend/tests/test_ado_edit_learning.py` con `FakeAdoClient` (mock de `fetch_work_item_updates`) y `memory_store.save_observation` monkeypatcheado a un stub que captura los kwargs:
 1. `fetch_work_item_updates` ⇒ `[]` ⇒ `LearnResult(learned=False, reason ∈ {ado_unavailable,no_human_edit})`, NO escribe memoria, NO marca ledger.
@@ -373,8 +384,9 @@ Así la lección entra automáticamente al prefix que ya se inyecta en los 3 run
 5. `_golden_available()` falso ⇒ `golden_written=False` pero `lesson_written=True`.
 6. `edit_to_lesson_content` produce texto determinista con bullets de added/removed.
 7. **[C4 no-PII] El autor (`op@x`) NO aparece en el `content` ni en ningún kwarg pasado a `save_observation`** (assert sobre los kwargs capturados): `"op@x" not in content` y `kwargs.get("author_email") is None`.
+8. **[v3 — bridge vivo] Plan 56 PRESENTE + edición humana con heading `RF-` ⇒ `golden_written=True`** y `save_golden` recibe un `Golden(kind="positive", project, agent_type="BusinessAgent", work_item_type="Epic")` (las MISMAS keys que lee el gate en `api/tickets.py:6103-6107`). Prueba que el bridge edición→golden ya no está muerto. Fixture `captured_golden` autouse stubea `save_golden` para mantener la suite hermética (no escribe `harness/goldens/*.json`).
 
-**Aceptación binaria:** 7 passed.
+**Aceptación binaria:** 8 passed.
 **Flag:** la orquestación se invoca solo desde F5 (sweep gateado); la función en sí no checkea flag (testeable directo).
 **Runtime/fallback:** la lección se inyecta vía corpus 54 que ya es paritario en 3 runtimes. Si `fetch_work_item_updates` falla ⇒ no-op.
 **Trabajo del operador:** ninguno.

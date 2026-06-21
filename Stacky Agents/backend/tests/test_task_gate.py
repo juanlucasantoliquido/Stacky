@@ -139,3 +139,42 @@ def test_defects_list_is_deterministic():
     v2 = evaluate_task_gate(payload=payload, plan_de_pruebas_text=_PLAN_TEXT, blocking_enabled=False)
     assert v1.defects == v2.defects
     assert v1.defects == sorted(v1.defects)
+
+
+# ── F1-12: vocabulario de defectos CONGELADO (centinela anti-erosión) ─────────
+# [Plan 61 v2 — ADICIÓN ARQUITECTO] Filosofía golden/ratchet de los planes 49/56.
+
+
+def test_defect_vocabulary_is_frozen():
+    """El conjunto de códigos que el gate puede emitir está congelado.
+
+    (a) `_ALL_CODES` == el conjunto literal esperado: un cambio deliberado a la
+        constante rompe el test → fuerza actualizar el contrato de telemetría
+        `task_gate.defects` (que consumen operador y dashboards).
+    (b) Sobre payloads basura variados, `classify_task_defects` NUNCA emite un
+        código fuera de `_ALL_CODES`: agregar un código nuevo en la función sin
+        registrarlo en `_ALL_CODES` rompe el test (anti-erosión silenciosa).
+    """
+    from harness.task_gate import _ALL_CODES, classify_task_defects
+
+    expected = {
+        "title_empty",
+        "rf_id_empty",
+        "description_empty",
+        "description_missing_rf",
+        "plan_de_pruebas_empty",
+        "epic_id_not_numeric",
+    }
+    assert set(_ALL_CODES) == expected
+
+    garbage_payloads = [
+        ({}, None),
+        ({"title": "", "rf_id": "", "description_html": ""}, ""),
+        ({"title": "x", "rf_id": "RF-1", "description_html": "no cita la rf", "epic_id": "abc"}, "plan"),
+        ({"title": "  ", "rf_id": "  ", "description_html": "  ", "epic_id": "12a"}, "  "),
+        ({"epic_id": "007", "title": "ok", "rf_id": "RF-9", "description_html": "RF-9 ok"}, "texto"),
+        ({"weird_key": 123, "title": None, "rf_id": None}, None),
+    ]
+    for payload, plan_text in garbage_payloads:
+        codes = set(classify_task_defects(payload, plan_text).keys())
+        assert codes <= _ALL_CODES, f"código fuera del vocabulario congelado: {codes - _ALL_CODES}"

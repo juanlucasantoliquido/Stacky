@@ -86,7 +86,10 @@ $HarnessTestFiles = @(
   "tests/test_speculative_hash.py",
   "tests/test_speculative_parity.py",
   "tests/test_speculative_flag.py",
-  "tests/test_speculative_claim_flow.py"
+  "tests/test_speculative_claim_flow.py",
+  # Plan 58 - Bucle de convergencia de calidad determinista
+  "tests/test_convergence_loop.py",
+  "tests/test_convergence_wiring.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -422,6 +422,16 @@ class Config:
     STACKY_DB_READONLY_DIRECTIVE_ENABLED: bool = os.getenv(
         "STACKY_DB_READONLY_DIRECTIVE_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
+
+    # ── Plan 58 — Bucle de convergencia de calidad determinista (épica) ────────
+    # OFF por defecto: con OFF el pase correctivo de épica es single-shot (idéntico al actual).
+    STACKY_QUALITY_CONVERGENCE_ENABLED: bool = os.getenv(
+        "STACKY_QUALITY_CONVERGENCE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # Máximo de PASES CORRECTIVOS del bucle (>=1). 1 == single-shot actual. Default 2.
+    STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS: int = int(
+        os.getenv("STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS", "2")
+    )
     # A1 — Habilita GET /api/executions/history con historial completo de runs.
     STACKY_EXECUTION_HISTORY_ENABLED: bool = os.getenv(
         "STACKY_EXECUTION_HISTORY_ENABLED", "false"
@@ -703,6 +713,36 @@ class Config:
         "STACKY_EPIC_AUTOPUBLISH_BACKEND", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 41 — Pre-vuelo de Intención. Default OFF → byte-idéntico al actual.
+    INTENT_PREFLIGHT_ENABLED: bool = os.getenv(
+        "INTENT_PREFLIGHT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes", "on")
+    INTENT_PREFLIGHT_AUTO_APPROVE: bool = os.getenv(
+        "INTENT_PREFLIGHT_AUTO_APPROVE", "false"
+    ).lower() in ("1", "true", "yes", "on")
+    INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF: float = float(
+        os.getenv("INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF", "0.8")
+    )
+
+    # Plan 44 F2/F3 — Observatorio de grounding y sugeridor de diccionario. Ambos
+    # son SOLO-LECTURA (no mutan estado, no llaman a ADO): default True es seguro
+    # (la card aparece vacía si no hay épicas). OFF → los endpoints responden 404.
+    STACKY_GROUNDING_OBSERVATORY_ENABLED: bool = os.getenv(
+        "STACKY_GROUNDING_OBSERVATORY_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED: bool = os.getenv(
+        "STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 45 F0 — Soporte de Issues desde brief. OFF (default seguro): el flujo
+    # brief→ADO solo admite Epic (byte-idéntico a hoy). ON: el operador puede
+    # elegir work_item_type="Issue" en el modal; el finalizador del runner crea
+    # un work item ADO tipo "Issue" y acumula el output como comentario único
+    # idempotente en ese mismo WI (sin tickets hijos).
+    STACKY_ISSUE_FROM_BRIEF_ENABLED: bool = os.getenv(
+        "STACKY_ISSUE_FROM_BRIEF_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Fix robusto brief→épica — pase correctivo: si el BusinessAgent (one-shot)
     # devuelve narración en vez del HTML de la épica, se le pide UNA vez por stdin
     # que re-emita SOLO el HTML antes de cerrar la sesión. Reusa el presupuesto de
@@ -719,6 +759,22 @@ class Config:
     # C0/C1 — Guarda prompt_text en metadata (privacidad: default OFF).
     STACKY_TRACE_PROMPT_TEXT_ENABLED: bool = os.getenv(
         "STACKY_TRACE_PROMPT_TEXT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 53 — Selector adaptativo de modelo/effort por confidence de grounding
+    # OFF por defecto → comportamiento byte-idéntico al actual.
+    # ON: bajo confidence escala a Opus/max; alto confidence baja a Sonnet/low.
+    # El override manual del operador (model/effort en el body del request) SIEMPRE gana.
+    STACKY_ADAPTIVE_SELECTOR_ENABLED: bool = os.getenv(
+        "STACKY_ADAPTIVE_SELECTOR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 54 — Memoria que empuja: rechazos como anti-patrones ────────────
+    # OFF por defecto → 3 runtimes idénticos al estado previo (byte-compat).
+    # ON: notas de rechazo del operador se inyectan como anti-patrones imperativos
+    # en el próximo run del mismo proyecto, en los 3 runtimes (copilot/claude_cli/codex).
+    STACKY_PUSH_REJECTIONS_ENABLED: bool = os.getenv(
+        "STACKY_PUSH_REJECTIONS_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
 

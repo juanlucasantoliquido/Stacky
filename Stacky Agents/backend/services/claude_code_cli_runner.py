@@ -108,6 +108,7 @@ def start_claude_code_cli_run(
     workspace_root: str | None = None,
     model_override: str | None = None,
     effort_override: str | None = None,
+    work_item_type: str = "Epic",
 ) -> int:
     """Crea una fila AgentExecution y lanza Claude Code CLI en background.
 
@@ -128,6 +129,7 @@ def start_claude_code_cli_run(
             "vscode_agent_filename": vscode_agent_filename,
             "workspace_root": workspace_root,
             "model_override": model_override,
+            "work_item_type": work_item_type,
         }
         session.add(exec_row)
         session.flush()
@@ -175,6 +177,7 @@ def start_claude_code_cli_run(
             "workspace_root": workspace_root,
             "model_override": model_override,
             "effort_override": effort_override,
+            "work_item_type": work_item_type,
         },
         daemon=True,
         name=f"claude-code-cli-{execution_id}",
@@ -351,6 +354,7 @@ def _run_in_background(
     workspace_root: str | None,
     model_override: str | None,
     effort_override: str | None = None,
+    work_item_type: str = "Epic",
 ) -> None:
     started = datetime.utcnow()
 
@@ -469,6 +473,9 @@ def _run_in_background(
         system_prompt_mode = (config.CLAUDE_CODE_CLI_SYSTEM_PROMPT_MODE or "append")
         system_prompt_file: Path | None = None
         project_name = project_ctx.stacky_project_name if project_ctx else None
+        # Plan 54 F2 — inicializar vars de memory_prefix (solo se populan en rama "append").
+        _mem_prefix_claude: str = ""
+        _mem_meta_claude: dict = {}
         if system_prompt_mode == "append":
             knowledge_section, knowledge_meta = _build_project_knowledge(
                 agent_type=agent_type or "",
@@ -513,12 +520,27 @@ def _run_in_background(
                         log("info", f"H4: skills inyectadas ({len(matched)})", group="operator")
             except Exception as exc:  # noqa: BLE001
                 log("warn", f"H4: no se pudo inyectar skills: {exc}")
+            # Plan 54 F2 — inyección rejection_lessons en claude_code_cli (paridad FA-11).
+            _mem_prefix_claude = ""
+            _mem_meta_claude: dict = {}
+            try:
+                from services.memory_prefix import build_memory_prefix as _bmp_cli  # noqa: PLC0415
+                _mem_prefix_claude, _mem_meta_claude = _bmp_cli(
+                    project=project_name,
+                    agent_type=agent_type or "",
+                )
+                if _mem_prefix_claude:
+                    log("info", "Plan 54: rejection_lessons inyectadas en system prompt (CLI)", group="operator")
+            except Exception as _exc_mp:  # noqa: BLE001
+                log("warn", f"Plan 54: memory_prefix falló (no crítico): {_exc_mp}")
             system_prompt_text = _build_system_prompt(
                 selected_agent,
                 invocation_block=invocation_block,
                 project_knowledge=knowledge_section,
                 skills_section=skills_block,
             )
+            if _mem_prefix_claude:
+                system_prompt_text = (_mem_prefix_claude.strip() + "\n\n" + system_prompt_text).strip()
             system_prompt_file = run_dir / "system_prompt.md"
             system_prompt_file.write_text(system_prompt_text, encoding="utf-8")
             prompt = _build_user_message(
@@ -895,33 +917,118 @@ def _run_in_background(
             ):
                 _epic_repair_done[0] = True
                 try:
-                    from api.tickets import _extract_epic_html, _looks_like_epic
-                    _current_output = "\n".join(final_output) if final_output else ""
-                    if not _looks_like_epic(_extract_epic_html(_current_output)):
-                        _ac_used = autocorrect.attempts if autocorrect is not None else 0
-                        _ac_budget = config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES
-                        if _ac_used < _ac_budget:
-                            _EPIC_REPAIR_MSG = (
-                                "Tu último mensaje fue narración, no la épica. "
+                    from api.tickets import (
+                        _extract_epic_html, _looks_like_epic,
+                        _epic_grounding_warnings, _epic_gate_enabled,
+                    )
+                    # Plan 58 F2 — bucle de convergencia de calidad (cuando flag ON).
+                    if (
+                        getattr(config, "STACKY_QUALITY_CONVERGENCE_ENABLED", False)
+                        and _epic_gate_enabled()
+                    ):
+                        from harness.convergence import (
+                            run_convergence_loop, build_convergence_payload,
+                        )
+                        from harness.epic_gate import evaluate_epic_gate, GateDecision
+
+                        def _current_clean_58() -> str:
+                            _txt = "\n".join(final_output) if final_output else ""
+                            return _extract_epic_html(_txt)
+
+                        def _evaluate_58():
+                            _clean58 = _current_clean_58()
+                            return evaluate_epic_gate(
+                                clean_html=_clean58,
+                                structural_warnings=_epic_grounding_warnings(_clean58),
+                                process_catalog=None,
+                                catalog_blocking_enabled=False,
+                                looks_like_epic_fn=_looks_like_epic,
+                            )
+
+                        def _build_msg_58(verdict) -> str:
+                            base = (
+                                "Tu último mensaje no cumple el contrato de la épica. "
                                 "Re-emití AHORA, como único contenido del mensaje, "
                                 "EXCLUSIVAMENTE el HTML de la épica dentro de un único "
                                 "bloque ```html ... ```: <h1> con el título, el resumen "
-                                "ejecutivo y los bloques <hr><h2>RF-XXX. SIN narración, "
-                                "SIN preámbulo, SIN escribirla en un archivo."
+                                "ejecutivo y los bloques <hr><h2>RF-XXX consecutivos y SIN "
+                                "duplicados ni headings vacíos. SIN narración, SIN preámbulo, "
+                                "SIN escribirla en un archivo."
                             )
-                            _sent = _send_system_message(execution_id, _EPIC_REPAIR_MSG)
-                            _epic_repair_result[0] = {
-                                "attempted": True,
-                                "reason": "narration_not_epic",
-                                "sent": bool(_sent),
-                            }
-                            log("info", f"epic_repair: reintento solicitado (sent={_sent})")
-                        else:
-                            _epic_repair_result[0] = {
-                                "attempted": False,
-                                "reason": "narration_not_epic",
-                                "budget_exhausted": True,
-                            }
+                            if verdict.structural_defects:
+                                base += "\nDefectos detectados: " + ", ".join(verdict.structural_defects) + "."
+                            return base
+
+                        # C2 — budget compartido con el cap de autocorrección.
+                        _ac_used_58 = autocorrect.attempts if autocorrect is not None else 0
+                        _ac_cap_58 = int(config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES)
+                        _cfg_cap_58 = max(1, int(config.STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS))
+                        _budget_58 = min(_cfg_cap_58, _ac_cap_58 - _ac_used_58)
+                        _initial_58 = _evaluate_58()
+                        _conv_58 = run_convergence_loop(
+                            enabled=True,
+                            runtime=RUNTIME,
+                            max_iterations=_budget_58,
+                            initial_verdict=_initial_58,
+                            build_repair_message=_build_msg_58,
+                            send_fn=lambda m: _send_system_message(execution_id, m),
+                            reextract_and_evaluate_fn=_evaluate_58,
+                        )
+                        _epic_repair_result[0] = build_convergence_payload(_conv_58)
+                        log("info", f"convergence: {_epic_repair_result[0]}")
+                    else:
+                        # Rama legacy (flag OFF o gate OFF): single-shot original.
+                        _current_output = "\n".join(final_output) if final_output else ""
+                        _clean = _extract_epic_html(_current_output)
+                        # Plan 51 F3 — si el gate está ON, decide REPAIR por cualquier
+                        # defecto reparable (no solo narración). El runner solo repara
+                        # FORMA (catálogo se chequea en autopublish). Si el gate está
+                        # OFF, conserva el disparador histórico (not _looks_like_epic).
+                        _needs_repair = not _looks_like_epic(_clean)
+                        _repair_reason = "narration_not_epic"
+                        _gate_defects: list[str] = []
+                        if _epic_gate_enabled():
+                            try:
+                                from harness.epic_gate import evaluate_epic_gate, GateDecision
+                                _verdict = evaluate_epic_gate(
+                                    clean_html=_clean,
+                                    structural_warnings=_epic_grounding_warnings(_clean),
+                                    process_catalog=None,
+                                    catalog_blocking_enabled=False,
+                                    looks_like_epic_fn=_looks_like_epic,
+                                )
+                                _gate_defects = list(_verdict.structural_defects)
+                                if _verdict.decision == GateDecision.REPAIR:
+                                    _needs_repair = True
+                                    _repair_reason = f"gate_repair:{_gate_defects}"
+                            except Exception:  # noqa: BLE001
+                                pass
+                        if _needs_repair:
+                            _ac_used = autocorrect.attempts if autocorrect is not None else 0
+                            _ac_budget = config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES
+                            if _ac_used < _ac_budget:
+                                _EPIC_REPAIR_MSG = (
+                                    "Tu último mensaje no cumple el contrato de la épica. "
+                                    "Re-emití AHORA, como único contenido del mensaje, "
+                                    "EXCLUSIVAMENTE el HTML de la épica dentro de un único "
+                                    "bloque ```html ... ```: <h1> con el título, el resumen "
+                                    "ejecutivo y los bloques <hr><h2>RF-XXX consecutivos y SIN "
+                                    "duplicados ni headings vacíos. SIN narración, SIN preámbulo, "
+                                    "SIN escribirla en un archivo."
+                                )
+                                _sent = _send_system_message(execution_id, _EPIC_REPAIR_MSG)
+                                _epic_repair_result[0] = {
+                                    "attempted": True,
+                                    "reason": _repair_reason,
+                                    "sent": bool(_sent),
+                                }
+                                log("info", f"epic_repair: reintento solicitado (sent={_sent}, reason={_repair_reason})")
+                            else:
+                                _epic_repair_result[0] = {
+                                    "attempted": False,
+                                    "reason": _repair_reason,
+                                    "budget_exhausted": True,
+                                }
                 except Exception as _exc_er:  # noqa: BLE001
                     log("warn", f"epic_repair falló (no crítico): {_exc_er}")
             # H5 — chequear runaway en cada evento con datos de telemetría.
@@ -1084,6 +1191,7 @@ def _run_in_background(
             "runtime": RUNTIME,
             "vscode_agent_filename": vscode_agent_filename,
             "workspace_root": str(cwd),
+            "work_item_type": work_item_type,
             "claude_code_cli_bin": cmd[0],
             "claude_code_model": routed_model or model_override or config.CLAUDE_CODE_CLI_MODEL or None,
             "exit_code": return_code,
@@ -1101,6 +1209,9 @@ def _run_in_background(
             "few_shot_count": _fewshot_count,
             **invocation_meta,
         }
+        # Plan 54 F2 — telemetría rejection_lessons CLI.
+        if _mem_meta_claude:
+            metadata.update(_mem_meta_claude)
         # H0.3 — flag de fallback de cwd (workspace_root vacío/None).
         if _cwd_fallback:
             metadata["cwd_fallback"] = True
@@ -1150,6 +1261,18 @@ def _run_in_background(
         # Fix robusto brief→épica — sello del pase correctivo de épica (aditivo).
         if _epic_repair_result[0] is not None:
             metadata["epic_repair"] = _epic_repair_result[0]
+        # Plan 58 F4 — telemetría del bucle de convergencia (C4: solo en este scope,
+        # no dentro de _on_stream_event donde metadata no está en scope).
+        if getattr(config, "STACKY_QUALITY_CONVERGENCE_ENABLED", False) and _epic_repair_result[0] is not None:
+            _p58 = _epic_repair_result[0]
+            metadata["epic_convergence"] = {
+                "enabled": True,
+                "converged": _p58.get("converged"),
+                "iterations": _p58.get("iterations"),
+                "final_decision": _p58.get("final_decision"),
+                "stop_reason": _p58.get("stop_reason"),
+                "global_budget_spent": _p58.get("global_budget_spent"),
+            }
         # Plan 41 — Autopublicación backend de la épica brief→épica.
         # Mueve la garantía de creación de la épica del navegador al backend:
         # si la run es brief→épica (one-shot del BusinessAgent) y el output trae
@@ -1160,10 +1283,21 @@ def _run_in_background(
                 return current_status
             if not (_one_shot and (agent_type or "").lower() == "business"):
                 return current_status
+            # Plan 45 F2 — bifurcación Epic vs Issue según el tipo destino sellado
+            # en metadata. Issue solo si el flag global está ON (defensa en
+            # profundidad: run_brief ya rechaza Issue con flag OFF).
+            _is_issue = (
+                str(metadata.get("work_item_type") or "Epic") == "Issue"
+                and config.STACKY_ISSUE_FROM_BRIEF_ENABLED
+            )
+            _label = "issue" if _is_issue else "épica"
             try:
-                from api.tickets import autopublish_epic_from_run
+                from api.tickets import (
+                    autopublish_epic_from_run,
+                    publish_issue_from_run,
+                )
             except Exception as exc:  # noqa: BLE001
-                log("warn", f"autopublish épica: import falló (no crítico): {exc}")
+                log("warn", f"autopublish {_label}: import falló (no crítico): {exc}")
                 return current_status
             _brief_text = ""
             for _b in (raw_blocks or []):
@@ -1171,32 +1305,44 @@ def _run_in_background(
                     _brief_text = str(_b.get("content") or "")
                     break
             _proj = project_ctx.stacky_project_name if project_ctx else None
+            _seal_key = "issue_ado_id" if _is_issue else "epic_ado_id"
+            _publish = publish_issue_from_run if _is_issue else autopublish_epic_from_run
             try:
-                _res = autopublish_epic_from_run(
-                    output=output,
-                    brief=_brief_text,
-                    project_name=_proj,
-                    already_published_id=metadata.get("epic_ado_id"),
-                )
+                _publish_kwargs = {
+                    "output": output,
+                    "brief": _brief_text,
+                    "project_name": _proj,
+                    "already_published_id": metadata.get(_seal_key),
+                }
+                # Plan 47 F2bis — ventana temporal del rescate del disco (R-STALE):
+                # solo aplica al path de épica (publish_issue_from_run no lo acepta).
+                if not _is_issue:
+                    _publish_kwargs["run_started_at"] = spawn_epoch
+                _res = _publish(**_publish_kwargs)
             except Exception as exc:  # noqa: BLE001 — nunca tumbar el finalizador
-                log("error", f"autopublish épica: error inesperado: {exc}")
+                log("error", f"autopublish {_label}: error inesperado: {exc}")
                 metadata["epic_publish_error"] = str(exc)
                 return "needs_review"
             if _res.error is not None:
-                # Fallo RUIDOSO: la épica NO se creó → needs_review visible.
+                # Fallo RUIDOSO: el WI NO se creó → needs_review visible.
                 metadata["epic_publish_error"] = _res.error
-                log("error", f"autopublish épica: publicación falló → needs_review: {_res.error}")
+                log("error", f"autopublish {_label}: publicación falló → needs_review: {_res.error}")
                 return "needs_review"
             if _res.ado_id is not None and not _res.skipped:
-                metadata["epic_ado_id"] = _res.ado_id
-                log("info", f"autopublish épica: Epic creada autónomamente ado_id={_res.ado_id}")
+                metadata[_seal_key] = _res.ado_id
+                log("info", f"autopublish {_label}: {_label} creado autónomamente ado_id={_res.ado_id}")
             elif _res.ado_id is not None and _res.skipped:
-                metadata["epic_ado_id"] = _res.ado_id  # ya sellada, re-afirmar
+                metadata[_seal_key] = _res.ado_id  # ya sellado, re-afirmar
             # Plan 42 F2/F4 — sellar warnings de grounding y resumen post-épica.
+            # Plan 52 F4 — el path Issue también produce grounding_warnings y
+            # epic_summary (publish_issue_from_run los puebla reusando las helpers).
             if _res.grounding_warnings:
                 metadata["grounding_warnings"] = _res.grounding_warnings
             if _res.epic_summary is not None:
                 metadata["epic_summary"] = _res.epic_summary
+            # Plan 47 F3 — telemetría del método de recuperación de la épica.
+            if _res.recovery_method:
+                metadata["epic_recovery"] = _res.recovery_method
             return current_status
 
         # H5 — trazabilidad del runaway guard.
@@ -1685,7 +1831,8 @@ def _build_command(
     # effort_override gana sobre config (Q0.2 — adaptativo). Valores inválidos
     # no se pasan para no romper el spawn.
     effort = (effort_override or getattr(config, "CLAUDE_CODE_CLI_EFFORT", "") or "").strip().lower()
-    if effort in ("low", "medium", "high"):
+    # Plan 43 F0 — set ampliado: low/medium/high/xhigh/max (oficial Claude CLI >= 2.x).
+    if effort in ("low", "medium", "high", "xhigh", "max"):
         cmd.extend(["--effort", effort])
 
     return cmd

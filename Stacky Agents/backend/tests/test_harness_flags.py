@@ -343,3 +343,47 @@ def test_env_writers_target_the_same_file_config_loads():
     expected = backend_root() / ".env"
     assert hf._ENV_PATH == expected
     assert gc._ENV_PATH == expected
+
+
+# ---------------------------------------------------------------------------
+# Plan 58 — Flags del bucle de convergencia de calidad
+# ---------------------------------------------------------------------------
+
+def test_convergence_flags_registered():
+    """Los dos keys del plan 58 deben aparecer en FLAG_REGISTRY."""
+    from services.harness_flags import FLAG_REGISTRY
+    keys = {f.key for f in FLAG_REGISTRY}
+    assert "STACKY_QUALITY_CONVERGENCE_ENABLED" in keys
+    assert "STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS" in keys
+
+
+def test_convergence_enabled_default_off():
+    """Con env limpio, STACKY_QUALITY_CONVERGENCE_ENABLED debe ser False."""
+    env_backup = os.environ.pop("STACKY_QUALITY_CONVERGENCE_ENABLED", None)
+    try:
+        from importlib import reload
+        import config as cfg_module
+        reload(cfg_module)
+        assert cfg_module.Config().STACKY_QUALITY_CONVERGENCE_ENABLED is False
+    finally:
+        if env_backup is not None:
+            os.environ["STACKY_QUALITY_CONVERGENCE_ENABLED"] = env_backup
+        from importlib import reload
+        import config as cfg_module
+        reload(cfg_module)
+
+
+def test_convergence_cap_default_two():
+    """Con env limpio, STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS debe ser 2."""
+    env_backup = os.environ.pop("STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS", None)
+    try:
+        from importlib import reload
+        import config as cfg_module
+        reload(cfg_module)
+        assert cfg_module.Config().STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS == 2
+    finally:
+        if env_backup is not None:
+            os.environ["STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS"] = env_backup
+        from importlib import reload
+        import config as cfg_module
+        reload(cfg_module)

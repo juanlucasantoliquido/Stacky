@@ -1363,6 +1363,26 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,
     ),
+    # ── Plan 58 — Bucle de convergencia de calidad determinista (épica) ──────
+    FlagSpec(
+        key="STACKY_QUALITY_CONVERGENCE_ENABLED",
+        type="bool",
+        label="Bucle de convergencia de calidad (épica)",
+        description=(
+            "Plan 58 — Si ON, el pase correctivo de épica re-evalúa el gate y reintenta "
+            "hasta PASS o agotar el presupuesto. OFF = un solo pase (actual)."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS",
+        type="int",
+        label="Máx. iteraciones de convergencia",
+        description=(
+            "Plan 58 — Máximo de pases correctivos del bucle (>=1). 1 = single-shot. Default 2."
+        ),
+        group="global",
+    ),
 )
 
 # Índice rápido para lookups O(1)

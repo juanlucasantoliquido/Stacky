@@ -1,8 +1,22 @@
 # Plan 61 — Blindaje determinista del flujo FUNCIONAL (Task Gate)
 
-> Estado: PROPUESTO (2026-06-21). Tipo: **HARDENING** (NO game-changer — así fue decidido por el operador tras el 3er debate `debatir-top5-evolucion-stacky`, ver `docs/_roadmap/TOP5_2026-06-20_POZO_SECO_POST60_IMPLEMENTAR_BACKLOG.md`, sección "La idea en la burbuja").
+> Estado: IMPLEMENTADO (2026-06-21, commit `20f48001`) · **v2 (juzgado — APROBADO-CON-CAMBIOS)**. Tipo: **HARDENING** (NO game-changer — así fue decidido por el operador tras el 3er debate `debatir-top5-evolucion-stacky`, ver `docs/_roadmap/TOP5_2026-06-20_POZO_SECO_POST60_IMPLEMENTAR_BACKLOG.md`, sección "La idea en la burbuja").
 > Audiencia de implementación: modelo MENOR (Haiku / Codex / GitHub Copilot Pro). Todo está dado: rutas exactas, símbolos exactos, casos borde, tests primero, comandos exactos. **NO inferir nada.**
 > Origen del número: listado de `Stacky Agents/docs/` → NN máximo existente = 60 → este plan = **61**.
+>
+> **Versión: v1 → v2** (endurecido por juez adversarial 2026-06-21, skill `criticar-y-mejorar-plan`).
+> **Estado de implementación:** IMPLEMENTADO (commit `20f48001`, F0..F5). El juez verificó la crítica **firsthand contra el código ya mergeado**: varios hallazgos describen un bug LATENTE que el plan v1 habría inducido en un modelo menor y que el implementador tuvo que sortear por su cuenta (ver C1). La **[ADICIÓN ARQUITECTO]** (test de vocabulario de defectos) es lo único aún NO implementado: queda para el próximo pase de implementación/supervisión.
+
+---
+
+## CHANGELOG v1 → v2 (correcciones del juez)
+
+- **C1 (BLOQUEANTE) resuelto — F2 resolvía `plan_de_pruebas_path` contra la base EQUIVOCADA.** v1 instruía `plan_file = pt_file.parent / plan_rel`. FALSO: la convención del módulo —y la línea inmediatamente posterior al gate (`tickets.py:3921-3922`: `plan_path = repo_root / plan_rel`)— resuelve `plan_de_pruebas_path` relativo a **`repo_root`**, NO a `pt_file.parent`. Un modelo menor siguiendo el plan al pie (que el plan EXIGE: "NO inferir nada") habría resuelto la ruta mal → `plan_de_pruebas_empty` falso-positivo casi siempre → ruido en warning y **BLOQUEO ESPURIO de Tasks legítimas** con blocking ON. El implementador tuvo que DESVIARSE del plan (usó `repo_root`, `tickets.py:3889`), lo que delata que la promesa de literalidad no se cumplía. Reescrito F2: base = `repo_root / plan_rel`.
+- **C2 (IMPORTANTE) resuelto — `epic_id_not_numeric` es un defecto MUERTO en el punto de inserción.** El gate corre en `tickets.py:3881`, DESPUÉS del check `[1c]` (`:3672-3699`) que exige `file_epic_id == str(ado_id)` (ado_id es `int` de la URL → siempre dígitos). Al llegar el gate, epic_id ya es numérico o ya se devolvió 400 `PENDING_TASK_EPIC_MISMATCH` (o se normalizó). El código `epic_id_not_numeric` NUNCA dispara. La tabla de Riesgos v1 lo vendía como código "específico y **temprano**" — pero NO es temprano y es inalcanzable. v2: se mantiene en el código como defensa-en-profundidad redundante (subsumido por [1c]) y se BORRA la afirmación "temprano".
+- **C3 (IMPORTANTE) resuelto — el KPI sobre-promete "TODO pending-task.json".** El gate es la ÚLTIMA compuerta antes de crear; las rutas que retornan antes ([1a–1d]: mismatch, stale-consumed, idempotencia) NO pasan por él. El KPI v1 ("todo pending-task.json consumido produce un veredicto") es falso para una reconsumición idempotente. Reescrito el KPI: "todo pending-task.json que **llega a la etapa de creación** (no rechazado antes ni servido por idempotencia)".
+- **C4 (MENOR) resuelto — drift de refs de línea.** `_epic_gate_enabled` está en `:5498` (no `:5450`); los lectores nuevos quedaron en `:5521`/`:5526`; el gate se insertó en `:3881` (no "~3790"). Refs actualizadas a la realidad verificada.
+- **C5 (MENOR) anotado — doble lectura del plan-de-pruebas** (el gate lee el archivo en `:3884-3894` y `:3921-3923` lo vuelve a stat). Optimización opcional, no bloqueante; anotada en Riesgos.
+- **[ADICIÓN ARQUITECTO]** Centinela **golden del vocabulario de defectos** (`_ALL_CODES`): un test que congela el conjunto de códigos que el gate puede emitir, para que el ratchet falle si un cambio futuro agrega/borra un código sin actualizar el contrato de telemetría `task_gate.defects` (que el operador y los dashboards consumen). Reusa la filosofía golden/ratchet de los planes 49/56; cero red/LLM, determinista, cero trabajo del operador, paridad-3 trivial. Ver F1 (test `test_defect_vocabulary_is_frozen`).
 
 ---
 
@@ -14,7 +28,7 @@
 
 **Gap concreto (verificado firsthand).** `create_child_task` (`backend/api/tickets.py:3534`) valida: archivo existe (`:3594`), JSON parsea (`:3620`), claves requeridas PRESENTES (`_PENDING_TASK_REQUIRED_FIELDS`, `:3646`), `status` válido (`:3658`), `epic_id` == ado_id de la URL (`:3672`), idempotencia/stale-consumed (`:3722`). **NUNCA valida que los VALORES sean útiles:** `title` puede ser `""`, `rf_id` puede ser `""`, `description_html` puede estar vacío o no citar la RF, y `plan_de_pruebas_path` puede apuntar a un archivo inexistente o vacío. El check de claves (`tickets.py:40-44`) sólo verifica que la clave exista en el dict, no su contenido. El stack de gate de calidad (`tickets.py:5450-5633`, `harness/epic_gate.py`) es **épica-only**.
 
-**KPI binario.** Con `STACKY_TASK_GATE_ENABLED=true`, todo `pending-task.json` consumido por `create_child_task` produce un veredicto determinista `task_gate` (en la respuesta JSON y en el SystemLog) que lista los defectos de contenido detectados (`title_empty`, `rf_id_empty`, `plan_de_pruebas_empty`, `description_empty`, `description_missing_rf`, `epic_id_not_numeric`); por default NO bloquea (warning). Con `STACKY_TASK_GATE_BLOCKING=true` (opt-in dentro de opt-in, requiere el anterior), un veredicto `blocking` devuelve 400 `TASK_GATE_BLOCKED` y NO crea la Task. Con `STACKY_TASK_GATE_ENABLED=false` (default), el comportamiento es **byte-idéntico** al actual: cero llamadas nuevas, cero campos nuevos en la respuesta.
+**KPI binario.** Con `STACKY_TASK_GATE_ENABLED=true`, todo `pending-task.json` que **llega a la etapa de creación** (es decir, no rechazado antes por las validaciones `[1a–1d]` —mismatch, stale-consumed, idempotencia— que retornan temprano) produce un veredicto determinista `task_gate` (en la respuesta JSON y en el SystemLog) que lista los defectos de contenido detectados (`title_empty`, `rf_id_empty`, `plan_de_pruebas_empty`, `description_empty`, `description_missing_rf`, `epic_id_not_numeric`); por default NO bloquea (warning). Con `STACKY_TASK_GATE_BLOCKING=true` (opt-in dentro de opt-in, requiere el anterior), un veredicto `blocking` devuelve 400 `TASK_GATE_BLOCKED` y NO crea la Task. Con `STACKY_TASK_GATE_ENABLED=false` (default), el comportamiento es **byte-idéntico** al actual: cero llamadas nuevas, cero campos nuevos en la respuesta.
 
 ---
 
@@ -32,7 +46,7 @@ El 3er debate evolutivo (`debatir-top5-evolucion-stacky`, post-60) convergió a 
 - **Human-in-the-loop intacto:** el gate produce un veredicto que el operador ve; NO auto-publica, NO auto-corrige, NO saca al operador del lazo. En modo blocking, simplemente DEVUELVE un 400 con el motivo y el operador decide.
 - **Mono-operador sin auth:** sin RBAC, sin multiusuario.
 - **No degradar:** flag OFF → cero llamadas nuevas (byte-idéntico, verificable por test). El gate es O(tamaño del payload), sin red ni disco dentro de la función pura (el disco lo lee el caller y le pasa el texto).
-- **Reuso obligatorio:** mirror EXACTO del patrón de `harness/epic_gate.py` (`GateDecision`/`GateVerdict`/funciones puras `evaluate_*`); reuso de constantes existentes (`_PENDING_TASK_REQUIRED_FIELDS`, `PENDING_TASK_STATUS_CANONICAL`); patrón de lector de flag idéntico a `_epic_gate_enabled` (`tickets.py:5450`); patrón de ratchet idéntico a planes 54/55/57 (`scripts/run_harness_tests.ps1`).
+- **Reuso obligatorio:** mirror EXACTO del patrón de `harness/epic_gate.py` (`GateDecision`/`GateVerdict`/funciones puras `evaluate_*`); reuso de constantes existentes (`_PENDING_TASK_REQUIRED_FIELDS`, `PENDING_TASK_STATUS_CANONICAL`); patrón de lector de flag idéntico a `_epic_gate_enabled` (`tickets.py:5498`); patrón de ratchet idéntico a planes 54/55/57 (`scripts/run_harness_tests.ps1`).
 
 ---
 
@@ -44,7 +58,7 @@ El 3er debate evolutivo (`debatir-top5-evolucion-stacky`, post-60) convergió a 
 
 **Archivos a editar:**
 - `backend/services/harness_flags.py` — agregar 2 `FlagSpec` a `FLAG_REGISTRY` (tupla que arranca en `:29`). Insertar justo DESPUÉS del bloque `STACKY_EPIC_CATALOG_GATE_ENABLED` (termina en `:1300`), para agrupar los gates.
-- `backend/api/tickets.py` — agregar 2 lectores junto a `_epic_gate_enabled` (`:5450`).
+- `backend/api/tickets.py` — agregar 2 lectores junto a `_epic_gate_enabled` (`:5498`; verificado: los nuevos lectores quedaron en `:5521`/`:5526`).
 
 **Diff ilustrativo (harness_flags.py, dentro de FLAG_REGISTRY):**
 ```python
@@ -221,9 +235,10 @@ def evaluate_task_gate(
 - `test_blocking_disabled_never_blocks`: payload con needs_review pero `blocking_enabled=False` → `blocking==False`, decision NEEDS_REVIEW NO se fuerza (sigue siendo NEEDS_REVIEW solo si hay sev needs_review… ojo: con blocking=False la decisión cae a REPAIR/PASS). **Aclaración determinista:** la decisión NEEDS_REVIEW SÓLO se emite cuando `blocking==True`. Con `blocking_enabled=False`, un defecto needs_review NO bloquea y la decisión es REPAIR (si hay algún repair) o PASS; el defecto SÍ aparece en `defects` (para el warning).
 - `test_never_raises_on_garbage`: payload={} y plan_text=None → no lanza, devuelve veredicto con varios defects.
 - `test_determinism_sorted`: dos llamadas idénticas → mismo `defects` (lista sorted estable).
+- `test_defect_vocabulary_is_frozen` **[ADICIÓN ARQUITECTO]**: `set(_ALL_CODES)` == el conjunto literal congelado `{"title_empty", "rf_id_empty", "description_empty", "description_missing_rf", "plan_de_pruebas_empty", "epic_id_not_numeric"}`; y, sobre ≥5 payloads basura variados, `classify_task_defects` NUNCA emite un código fuera de `_ALL_CODES`. Blinda el contrato de telemetría `task_gate.defects` (consumido por operador/dashboards) contra erosión silenciosa — filosofía golden/ratchet de los planes 49/56. **(Aún NO implementado: pendiente del próximo pase de implementación/supervisión.)**
 
 **Comando exacto:** `.venv\Scripts\python.exe -m pytest tests/test_task_gate.py -q`
-**Criterio binario.** 10 passed / 0 failed.
+**Criterio binario.** 11 passed / 0 failed (incluye el centinela de vocabulario [ADICIÓN ARQUITECTO]).
 **Flag.** N/A (módulo puro; lo gobierna el caller). **Impacto runtime.** Idéntico (módulo importado igual por los 3). **Trabajo del operador:** ninguno.
 
 ---
@@ -232,7 +247,7 @@ def evaluate_task_gate(
 
 **Objetivo.** Llamar al gate en el punto de consumo, adjuntar el veredicto y, si blocking, devolver 400. Valor: la protección efectiva, sin sacar al operador del lazo.
 
-**Archivo a editar:** `backend/api/tickets.py`, función `create_child_task` (`:3534`). Punto de inserción: DESPUÉS del bloque `[1d] idempotencia` (termina ~`:3790`, después de resolver `pt_payload` definitivo) y ANTES del bloque `[2]` de creación real del work item. Esto garantiza que el gate ve el `pt_payload` ya normalizado.
+**Archivo a editar:** `backend/api/tickets.py`, función `create_child_task` (`:3534`). Punto de inserción (verificado: el gate quedó en `:3880-3919`): DESPUÉS del bloque `[1d] idempotencia` y del check `[1c]` (`:3672`, después de resolver `pt_payload` definitivo), y ANTES del bloque `dry_run`/creación real del work item. Esto garantiza que el gate ve el `pt_payload` ya normalizado. **OJO (C2):** como corre tras `[1c]`, `epic_id` ya está forzado a ser numérico (`== ado_id`) → el defecto `epic_id_not_numeric` es **inalcanzable** en este punto (queda como defensa-en-profundidad redundante, NO como telemetría temprana).
 
 **Pseudocódigo del bloque nuevo (`[1e] Gate de contenido — Plan 61`):**
 ```python
@@ -245,7 +260,11 @@ if _task_gate_enabled():
     try:
         plan_rel = str(pt_payload.get("plan_de_pruebas_path") or "").strip()
         if plan_rel:
-            plan_file = (pt_file.parent / plan_rel) if not _os.path.isabs(plan_rel) else _Path(plan_rel)
+            # C1 — `plan_de_pruebas_path` es relativo a `repo_root` (convención del
+            # módulo; ver `tickets.py:3921-3922` `plan_path = repo_root / plan_rel`),
+            # NO a `pt_file.parent`. Resolver mal la base produce un
+            # `plan_de_pruebas_empty` FALSO (y, con blocking ON, un 400 espurio).
+            plan_file = (repo_root / plan_rel) if not Path(plan_rel).is_absolute() else Path(plan_rel)
             if plan_file.is_file():
                 plan_text = plan_file.read_text(encoding="utf-8", errors="replace")
     except Exception:
@@ -279,7 +298,7 @@ if _task_gate_enabled():
         }), 400
 ```
 - Luego, en el `return jsonify({...})` de ÉXITO de la función (el payload de respuesta OK), agregar `"task_gate": task_gate_result` (será `None` si el flag está OFF → no cambia nada perceptible salvo una clave null; **alternativa byte-idéntica:** incluir la clave solo si `task_gate_result is not None`). **Decisión determinista:** incluir la clave SÓLO si `task_gate_result is not None`, para garantizar respuesta byte-idéntica con flag OFF.
-- Usar los imports ya presentes en el módulo. Si `_Path`/`_os` no existieran con ese alias, usar `from pathlib import Path` y `import os` ya importados al tope de `tickets.py` (verificar y usar los símbolos reales del módulo; NO crear alias nuevos si ya hay `os`/`Path`).
+- Usar los símbolos REALES ya en scope: `repo_root` ya está disponible dentro de `create_child_task` (se usa en `:3921`) y `Path` ya está importado al tope de `tickets.py`. **NO usar `pt_file.parent` como base** (C1) ni inventar alias `_Path`/`_os`.
 
 **Tests PRIMERO.** Archivo: `backend/tests/test_create_child_task_gate.py`. Usar el patrón de fixtures de `tests/test_create_child_task_endpoint.py` (cliente Flask + AdoClient fake + tmp_path con pending-task.json). Casos:
 - `test_gate_off_response_byte_identical`: sin flag → la respuesta OK NO contiene la clave `task_gate`.
@@ -352,7 +371,8 @@ if task_gate_result is not None:
 |---|---|
 | El gate bloquea Tasks legítimas (falsos positivos) | Default OFF + blocking es opt-in dentro de opt-in; warning-mode primero. El operador prueba en warning, observa los defects en el log, y recién enciende blocking si confía. |
 | Lectura del `plan_de_pruebas` rompe el flujo por error de disco/encoding | Acceso 100% defensivo (`try/except` → `plan_text=None`); el error de disco se trata como "plan ausente" (defecto, no excepción). El gate NUNCA lanza. |
-| `epic_id_not_numeric` solapa el check `[1c]` existente (PENDING_TASK_EPIC_MISMATCH) | Es ADITIVO, no reemplaza: da un código de defecto ESPECÍFICO y temprano para telemetría (la causa raíz documentada `functional-task-not-created`), aunque `[1c]` también rechace. No cambia el comportamiento de `[1c]`. |
+| `epic_id_not_numeric` es INALCANZABLE en el punto de inserción (el gate corre tras `[1c]`, que ya exige `epic_id == ado_id` numérico) | **Verificado (C2):** al llegar el gate, epic_id ya es numérico, o ya se devolvió 400 `PENDING_TASK_EPIC_MISMATCH`, o se normalizó. Se mantiene SÓLO como defensa-en-profundidad redundante ante un futuro refactor de `[1c]`; NO es "temprano" ni aporta telemetría nueva hoy. No cambia el comportamiento de `[1c]`. |
+| Doble lectura del `plan_de_pruebas` (C5): el gate lo lee en `:3884-3894` y `:3921-3923` lo vuelve a stat | Menor (no es hot-path; el flujo crea UNA Task por request). Optimización opcional: computar `plan_text`/`plan_exists` una sola vez y reusar. No bloqueante. |
 | Cambiar la respuesta JSON rompe consumidores | Con flag OFF la clave `task_gate` NO se agrega (byte-idéntico, test F4). Con flag ON, es una clave NUEVA opcional (aditiva, backward-compatible). |
 | Acoplar el gate a un runtime | Imposible: corre en `create_child_task` (backend), después de que cualquier runtime escribió el archivo. Parity-3 por construcción. |
 
@@ -361,6 +381,7 @@ if task_gate_result is not None:
 - **Auto-corrección del `pending-task.json`** (reescribir el archivo). Violaría human-in-the-loop y mecánica de idempotencia. El gate sólo ADVIERTE/BLOQUEA; el operador corrige.
 - **Bucle de convergencia para el Task** (análogo al plan 58 de épica). Depende de un re-emit del agente; fuera de este hardening.
 - **Gate de catálogo/grounding sobre el Task.** El `pending-task.json` no cita procesos del catálogo como la épica; no aplica.
+- **Superficie del veredicto en el triage de Salud Operativa (plan 46) / `needs_review`.** Mostrar `task_gate.defects` en `OperationalHealthCard` para que el modo warning sea visible sin leer logs es valioso, pero toca frontend y agrega alcance → queda como **hook futuro explícito**, NO en este hardening.
 
 ## 7. Glosario (términos Stacky para un modelo menor)
 - **pending-task.json:** contrato en disco que el `FunctionalAgent` deja para que Stacky cree una Task hija en ADO. Campos obligatorios en `_PENDING_TASK_REQUIRED_FIELDS` (`tickets.py:40`). El agente NUNCA escribe en ADO; sólo deja el archivo (ver `agents/functional.py:25-39`).
@@ -387,6 +408,7 @@ if task_gate_result is not None:
 - [ ] Con `STACKY_TASK_GATE_ENABLED=true`, la respuesta y el SystemLog incluyen `task_gate` con defects deterministas; NO bloquea.
 - [ ] Con `STACKY_TASK_GATE_BLOCKING=true` + veredicto blocking, devuelve 400 `TASK_GATE_BLOCKED` y NO crea la Task (salvo dry_run).
 - [ ] Todos los tests nombrados verdes con el venv del repo; los 3 archivos están en el ratchet.
+- [ ] **[ADICIÓN ARQUITECTO]** `test_defect_vocabulary_is_frozen` implementado y verde (congela `_ALL_CODES`). *(Pendiente: lo único de v2 aún no construido.)*
 - [ ] Paridad-3 trivial (backend); cero trabajo del operador; human-in-the-loop intacto; sin auth nueva; sin degradación.
 
 ---

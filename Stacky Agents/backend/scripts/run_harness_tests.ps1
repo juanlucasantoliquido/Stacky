@@ -97,7 +97,11 @@ $HarnessTestFiles = @(
   "tests/test_ado_edit_detect.py",
   "tests/test_ado_edit_ledger.py",
   "tests/test_ado_edit_learning.py",
-  "tests/test_ado_edit_sweep.py"
+  "tests/test_ado_edit_sweep.py",
+  # Plan 61 - Gate determinista del flujo funcional (Task)
+  "tests/test_task_gate_flags.py",
+  "tests/test_task_gate.py",
+  "tests/test_create_child_task_gate.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

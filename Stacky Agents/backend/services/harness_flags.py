@@ -1299,6 +1299,31 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,  # se lee con os.getenv en api/tickets
     ),
+    # ── Plan 61 — Gate determinista del flujo funcional (Task) ──────────────────
+    FlagSpec(
+        key="STACKY_TASK_GATE_ENABLED",
+        type="bool",
+        label="Gate determinista del flujo funcional (Task)",
+        description=(
+            "Plan 61 — Si ON, clasifica defectos del pending-task.json antes de crear "
+            "la Task en ADO y adjunta el veredicto (decision/defects/blocking) a la "
+            "respuesta. Default OFF."
+        ),
+        group="global",
+        env_only=True,
+    ),
+    FlagSpec(
+        key="STACKY_TASK_GATE_BLOCKING",
+        type="bool",
+        label="Bloqueo del flujo funcional (Task)",
+        description=(
+            "Plan 61 — Requiere STACKY_TASK_GATE_ENABLED. Si ON, un defecto de "
+            "severidad needs_review impide la creación en ADO (devuelve 400 "
+            "TASK_GATE_BLOCKED). Default OFF."
+        ),
+        group="global",
+        env_only=True,
+    ),
     # ── Plan 53 — Selector adaptativo de modelo/effort por confidence ──────────
     FlagSpec(
         key="STACKY_ADAPTIVE_SELECTOR_ENABLED",

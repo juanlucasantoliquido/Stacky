@@ -3877,6 +3877,47 @@ def create_child_task(ado_id: int):
             "payload_sha256": payload_sha256,
         })
 
+    # ── Plan 61 F2 — Gate determinista del flujo funcional ──────────────────
+    task_gate_result: dict | None = None
+    if _task_gate_enabled():
+        from harness.task_gate import evaluate_task_gate as _evaluate_task_gate
+        _plan_text_for_gate: str | None = None
+        try:
+            _gate_plan_rel = str(pt_payload.get("plan_de_pruebas_path") or "").strip()
+            if _gate_plan_rel:
+                _gate_plan_file = (
+                    repo_root / _gate_plan_rel
+                    if not Path(_gate_plan_rel).is_absolute()
+                    else Path(_gate_plan_rel)
+                )
+                if _gate_plan_file.is_file():
+                    _plan_text_for_gate = _gate_plan_file.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            _plan_text_for_gate = None
+        _gate_verdict = _evaluate_task_gate(
+            payload=pt_payload,
+            plan_de_pruebas_text=_plan_text_for_gate,
+            blocking_enabled=_task_gate_blocking(),
+        )
+        task_gate_result = {
+            "decision": _gate_verdict.decision.value,
+            "defects": _gate_verdict.defects,
+            "blocking": _gate_verdict.blocking,
+        }
+        logger.info(
+            "create_child_task: task_gate operation_id=%s ado_id=%s decision=%s defects=%s blocking=%s",
+            operation_id, ado_id, task_gate_result["decision"],
+            task_gate_result["defects"], task_gate_result["blocking"],
+        )
+        if _gate_verdict.blocking and not dry_run:
+            return jsonify({
+                "ok": False,
+                "error": "TASK_GATE_BLOCKED",
+                "task_gate": task_gate_result,
+                "correlation_id": correlation_id,
+                "operation_id": operation_id,
+            }), 400
+
     plan_rel = pt_payload.get("plan_de_pruebas_path", "")
     plan_path = repo_root / plan_rel if plan_rel else None
     plan_exists = bool(plan_path and plan_path.is_file())
@@ -3912,6 +3953,7 @@ def create_child_task(ado_id: int):
             "actions": dry_actions,
             "pending_task_consumed": False,
             "correlation_id": correlation_id,
+            **({"task_gate": task_gate_result} if task_gate_result is not None else {}),
         })
 
     # ── [2–7] Ejecución real ───────────────────────────────────────────────────
@@ -4487,6 +4529,7 @@ def create_child_task(ado_id: int):
         operation_id=operation_id,
         payload_sha256=payload_sha256,
         repo_root=str(repo_root),
+        task_gate=task_gate_result,
     )
     logger.info(
         "create_child_task: succeeded operation_id=%s ado_id=%s task_ado_id=%s "
@@ -4519,6 +4562,8 @@ def create_child_task(ado_id: int):
     }
     if human_action_required:
         response_payload["human_action_required"] = human_action_required
+    if task_gate_result is not None:
+        response_payload["task_gate"] = task_gate_result
     return jsonify(response_payload)
 
 
@@ -4743,6 +4788,7 @@ def _audit_create_child_task(
     operation_id: str | None = None,
     payload_sha256: str | None = None,
     repo_root: str | None = None,
+    task_gate: dict | None = None,
 ) -> None:
     """Persiste el evento de create_child_task en SystemLog (CA-07, CA-08).
 
@@ -4765,6 +4811,8 @@ def _audit_create_child_task(
             {"action": a["action"], "ok": a.get("ok")} for a in actions
         ],
     }
+    if task_gate is not None:
+        ctx["task_gate"] = task_gate
     if error:
         ctx["error"] = error[:500]
 
@@ -5468,6 +5516,16 @@ def _regression_gate_blocking() -> bool:
     """Plan 56 F3 — lee STACKY_REGRESSION_GATE_BLOCKING (default OFF).
     Modo warning→blocking para defectos de regresión."""
     return os.getenv("STACKY_REGRESSION_GATE_BLOCKING", "false").strip().lower() in ("1", "true", "on")
+
+
+def _task_gate_enabled() -> bool:
+    """Plan 61 F0 — lee STACKY_TASK_GATE_ENABLED (default OFF)."""
+    return os.getenv("STACKY_TASK_GATE_ENABLED", "false").strip().lower() == "true"
+
+
+def _task_gate_blocking() -> bool:
+    """Plan 61 F0 — lee STACKY_TASK_GATE_BLOCKING (default OFF)."""
+    return os.getenv("STACKY_TASK_GATE_BLOCKING", "false").strip().lower() == "true"
 
 
 _CHECK_EMOJIS = "✅☑✔✓🟢❌⬜□▢"

@@ -405,6 +405,32 @@ def create_app() -> Flask:
         ).start()
         logger.info("memory review daemon armed (interval=%ds)", _review_sweep_seconds)
 
+    # ── Plan 60 — Aprendizaje bidireccional de ediciones humanas en ADO ──────
+    # STACKY_ADO_EDIT_LEARNING_ENABLED=false => apagado (default, byte-idéntico).
+    _ado_edit_learning_on = os.environ.get(
+        "STACKY_ADO_EDIT_LEARNING_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "on", "yes")
+    if _ado_edit_learning_on:
+        _ado_edit_seconds = int(os.environ.get("STACKY_ADO_EDIT_SWEEP_HOURS", "6")) * 3600
+
+        def _ado_edit_sweep_loop() -> None:
+            from services.ado_edit_learning import sweep_recent_runs
+            while True:
+                try:
+                    n = sweep_recent_runs()
+                    if n:
+                        logger.info("ado edit learning sweep: %d lecciones nuevas", n)
+                except Exception:
+                    logger.exception("ado edit learning daemon falló")
+                time.sleep(_ado_edit_seconds)
+
+        threading.Thread(
+            target=_ado_edit_sweep_loop,
+            name="stacky-ado-edit-daemon",
+            daemon=True,
+        ).start()
+        logger.info("ado edit learning daemon armed (interval=%ds)", _ado_edit_seconds)
+
     # ── Structured logging middleware ─────────────────────────────────────
 
     @app.before_request

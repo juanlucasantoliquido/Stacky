@@ -1396,6 +1396,40 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
     ),
+    # ── Plan 60 — Aprendizaje bidireccional: ediciones humanas en ADO ─────────
+    FlagSpec(
+        key="STACKY_ADO_EDIT_LEARNING_ENABLED",
+        type="bool",
+        label="Aprender de ediciones en ADO (plan 60)",
+        description=(
+            "Plan 60 — Si ON, Stacky lee de vuelta las correcciones humanas del WI publicado "
+            "y las materializa como lección en el corpus (plan 54). Pasivo, default OFF."
+        ),
+        group="global",
+        env_only=True,
+    ),
+    FlagSpec(
+        key="STACKY_ADO_EDIT_SWEEP_HOURS",
+        type="int",
+        label="Intervalo del sweep ADO (horas)",
+        description=(
+            "Plan 60 — Cada cuántas horas el daemon relee los WI publicados buscando "
+            "ediciones humanas. Default 6."
+        ),
+        group="global",
+        env_only=True,
+    ),
+    FlagSpec(
+        key="STACKY_ADO_SERVICE_IDENTITY",
+        type="csv",
+        label="Identidad(es) de servicio Stacky en ADO",
+        description=(
+            "Plan 60 — CSV de uniqueName/displayName con que Stacky publica WI en ADO; "
+            "sus revisiones se ignoran como 'no humanas'. Vacío = heurístico por autor de baseline."
+        ),
+        group="global",
+        env_only=True,
+    ),
 )
 
 # Índice rápido para lookups O(1)

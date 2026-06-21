@@ -1343,6 +1343,12 @@ def _run_in_background(
             # Plan 47 F3 — telemetría del método de recuperación de la épica.
             if _res.recovery_method:
                 metadata["epic_recovery"] = _res.recovery_method
+            # Plan 60 F1 — sellar baseline para aprendizaje bidireccional.
+            if not _is_issue and not _res.skipped:
+                if _res.published_html is not None:
+                    metadata["epic_baseline_html"] = _res.published_html
+                if _res.baseline_rev is not None:
+                    metadata["epic_baseline_rev"] = _res.baseline_rev
             return current_status
 
         # H5 — trazabilidad del runaway guard.

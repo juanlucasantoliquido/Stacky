@@ -99,6 +99,12 @@ HARNESS_TEST_FILES=(
   tests/test_convergence_wiring.py
   # — Plan 59 · Descomposición vertical épica→hijos —
   tests/test_epic_decomposition.py
+  # — Plan 60 · Aprendizaje bidireccional ediciones ADO —
+  tests/test_ado_edit_diff.py
+  tests/test_ado_edit_detect.py
+  tests/test_ado_edit_ledger.py
+  tests/test_ado_edit_learning.py
+  tests/test_ado_edit_sweep.py
 )
 
 pass=0

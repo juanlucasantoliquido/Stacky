@@ -5921,6 +5921,8 @@ class _AutopublishResult(NamedTuple):
     grounding_warnings: list = []  # type: ignore[assignment]
     epic_summary: dict | None = None
     recovery_method: str | None = None  # plan 47: "published_inline" | "rescued_from_disk" | None
+    published_html: str | None = None   # plan 60 F1: HTML enviado a ADO (baseline para diff)
+    baseline_rev: int | None = None     # plan 60 F1: System.Rev del WI recién creado
 
 
 def autopublish_epic_from_run(
@@ -6123,6 +6125,22 @@ def autopublish_epic_from_run(
             gate_decision=_gate_decision_value,
         )
 
+    # Plan 60 F1 — Sellar baseline (HTML + rev) para aprendizaje bidireccional (default OFF).
+    _learning_enabled = _os.getenv(
+        "STACKY_ADO_EDIT_LEARNING_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "on", "yes")
+    _published_html: str | None = None
+    _baseline_rev: int | None = None
+    if _learning_enabled:
+        _published_html = clean_html
+        try:
+            _rev_client = _ado_client_for_ticket(project_name=project_name)
+            _wi_rev = _rev_client.get_work_item(published.ado_id, fields=["System.Rev"])
+            _rev_val = int((_wi_rev.get("fields") or {}).get("System.Rev", 0))
+            _baseline_rev = _rev_val if _rev_val > 0 else None
+        except Exception as _exc_rev:  # noqa: BLE001
+            logger.warning("autopublish_epic_from_run: no se pudo obtener System.Rev: %s", _exc_rev)
+
     return _AutopublishResult(
         ado_id=published.ado_id,
         error=None,
@@ -6130,6 +6148,8 @@ def autopublish_epic_from_run(
         grounding_warnings=grounding_warnings,
         epic_summary=epic_summary,
         recovery_method=_recovery_method,
+        published_html=_published_html,
+        baseline_rev=_baseline_rev,
     )
 
 

@@ -6592,3 +6592,321 @@ def epic_portfolio_preview():
         ],
         "count": len(previews),
     }), 200
+
+
+# ── Plan 59 — Descomposición vertical épica→hijos ─────────────────────────────
+
+
+def _epic_decomposition_enabled() -> bool:
+    """Plan 59 F0 — Lee STACKY_EPIC_DECOMPOSITION_ENABLED con os.getenv (env_only)."""
+    import os as _os_decomp
+    return _os_decomp.getenv(
+        "STACKY_EPIC_DECOMPOSITION_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "on", "yes")
+
+
+# ── F1 · NamedTuples de jerarquía de hijos ────────────────────────────────────
+
+class ChildNodePreview(NamedTuple):
+    """Nodo de la jerarquía propuesta (Feature o Task)."""
+    work_item_type: str        # "Feature" | "Task"
+    title: str                 # texto plano, ≤250 chars
+    html: str                  # descripción HTML del nodo
+    children: list = []        # type: ignore[assignment]  # list[ChildNodePreview] (Tasks bajo Feature)
+
+
+class EpicChildrenPlan(NamedTuple):
+    """Resultado de build_epic_children_plan — la jerarquía de hijos propuesta."""
+    ok: bool
+    features: list = []        # type: ignore[assignment]  # list[ChildNodePreview]
+    total_children: int = 0    # features + tasks
+    error: str | None = None   # "empty_html" | "no_children_parseable" | "parse_error" | None
+
+
+def _plain_text(html_fragment: str) -> str:
+    """Plan 59 F1 — PURA. Strips tags y colapsa espacios."""
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", html_fragment)).strip()
+
+
+def _parse_tasks_from_block(block: str) -> list:
+    """Plan 59 F1 — PURA. Extrae Tasks del primer <ul>/<ol> del bloque RF.
+
+    Un <li> se convierte en Task solo si su texto plano empieza (case-insensitive)
+    con un prefijo de tarea: T-, Task:, Tarea:, TODO:
+    """
+    _TASK_PREFIXES = re.compile(
+        r"^(T-|Task:|Tarea:|TODO:)\s*", re.IGNORECASE
+    )
+    # Extraer primer <ul> o <ol>
+    list_match = re.search(r"<(ul|ol)[^>]*>(.*?)</(ul|ol)>", block, re.IGNORECASE | re.DOTALL)
+    if not list_match:
+        return []
+    list_html = list_match.group(2)
+    items = re.findall(r"<li[^>]*>(.*?)</li>", list_html, re.IGNORECASE | re.DOTALL)
+    tasks: list[ChildNodePreview] = []
+    for item_html in items:
+        text = _plain_text(item_html)
+        m = _TASK_PREFIXES.match(text)
+        if not m:
+            continue
+        title = _TASK_PREFIXES.sub("", text).strip()[:250]
+        tasks.append(ChildNodePreview(
+            work_item_type="Task",
+            title=title,
+            html=f"<li>{item_html}</li>",
+            children=[],
+        ))
+    return tasks
+
+
+def build_epic_children_plan(*, epic_html: str | None) -> EpicChildrenPlan:
+    """Plan 59 F1 — PURA. HTML de épica → jerarquía lógica de hijos.
+
+    NO toca ADO/BD/disco. NUNCA lanza.
+    """
+    try:
+        if not epic_html or not str(epic_html).strip():
+            return EpicChildrenPlan(ok=False, features=[], total_children=0, error="empty_html")
+        text = str(epic_html)
+        parts = re.split(r"(?=<h2[^>]*>\s*RF-\d)", text, flags=re.IGNORECASE)
+        rf_blocks = [p for p in parts if re.match(r"<h2[^>]*>\s*RF-\d", p, re.IGNORECASE)]
+        if not rf_blocks:
+            return EpicChildrenPlan(ok=False, features=[], total_children=0, error="no_children_parseable")
+        features: list[ChildNodePreview] = []
+        total = 0
+        for block in rf_blocks:
+            heading = re.search(r"<h2[^>]*>(.*?)</h2>", block, re.IGNORECASE | re.DOTALL)
+            f_title = _plain_text(heading.group(1))[:250] if heading else "Feature"
+            tasks = _parse_tasks_from_block(block)
+            total += 1 + len(tasks)
+            features.append(ChildNodePreview(
+                work_item_type="Feature",
+                title=f_title,
+                html=block.strip(),
+                children=tasks,
+            ))
+        return EpicChildrenPlan(ok=True, features=features, total_children=total, error=None)
+    except Exception:  # noqa: BLE001 — pura, nunca lanza
+        return EpicChildrenPlan(ok=False, features=[], total_children=0, error="parse_error")
+
+
+# ── F1 · Helpers de marcadores (idempotencia) ─────────────────────────────────
+
+def _child_slug(title: str) -> str:
+    """Plan 59 F3 — slug determinístico para marcadores de idempotencia."""
+    return re.sub(r"[^a-z0-9]+", "-", re.sub(r"\s+", " ", title).strip().lower())[:60].strip("-")
+
+
+def _child_marker(parent_id: int, tipo: str, title: str, ordinal: int) -> str:
+    """Plan 59 F3 — marcador invisible e idempotente embebido en System.Description.
+
+    El ordinal rompe colisiones de títulos repetidos bajo el mismo padre.
+    """
+    return f"<!-- stacky-child:{parent_id}:{tipo}:{_child_slug(title)}:{ordinal} -->"
+
+
+def compute_plan_fingerprint(plan: EpicChildrenPlan) -> str:
+    """Plan 59 §4bis — Hash determinístico del plan propuesto. PURA, cero tokens.
+
+    Permite que la UI verifique que lo que aprobó = lo que se va a crear.
+    """
+    parts: list[str] = []
+    for feature in plan.features:
+        parts.append(f"{feature.work_item_type}:{_child_slug(feature.title)}")
+        for task in feature.children:
+            parts.append(f"{task.work_item_type}:{_child_slug(task.title)}")
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+
+# ── F2 · Endpoint POST /api/tickets/epic-children-preview ────────────────────
+
+@bp.post("/epic-children-preview")
+def epic_children_preview():
+    """Plan 59 F2 — Preview solo-lectura de la jerarquía de hijos propuesta.
+
+    POST /api/tickets/epic-children-preview
+    Body JSON: {output, brief?, project_name?}
+
+    NO toca ADO. El operador ve qué Features/Tasks se crearían ANTES de aprobar.
+    Flag: STACKY_EPIC_DECOMPOSITION_ENABLED (default OFF). env_only.
+    """
+    if not _epic_decomposition_enabled():
+        return jsonify({"enabled": False, "features": [], "total_children": 0}), 200
+
+    body = request.get_json(silent=True) or {}
+    output: str | None = body.get("output") or None
+    brief: str = body.get("brief") or ""
+    project_name: str | None = body.get("project_name") or None
+
+    preview = build_epic_payload_preview(output=output, brief=brief, project_name=project_name)
+    if not preview.ok:
+        return jsonify({
+            "enabled": True,
+            "epic_ok": False,
+            "epic_error": preview.error,
+            "features": [],
+            "total_children": 0,
+        }), 200
+
+    plan = build_epic_children_plan(epic_html=preview.html)
+
+    def _serialize_node(node: ChildNodePreview) -> dict:
+        return {
+            "work_item_type": node.work_item_type,
+            "title": node.title,
+            "html": node.html,
+            "children": [
+                {"work_item_type": c.work_item_type, "title": c.title, "html": c.html}
+                for c in node.children
+            ],
+        }
+
+    return jsonify({
+        "enabled": True,
+        "epic_ok": True,
+        "epic_title": preview.title,
+        "features": [_serialize_node(f) for f in plan.features],
+        "total_children": plan.total_children,
+        "children_error": plan.error,
+        "plan_fingerprint": compute_plan_fingerprint(plan),
+    }), 200
+
+
+# ── F3 · Publicador idempotente de hijos ─────────────────────────────────────
+
+class _ChildrenPublishResult(NamedTuple):
+    """Resultado de publish_epic_children."""
+    created_ids: list = []    # type: ignore[assignment]  # ids creados esta corrida
+    reused_ids: list = []     # type: ignore[assignment]  # ids ya existentes (idempotencia)
+    error: str | None = None
+    skipped: bool = False     # flag OFF o plan sin hijos
+
+
+def publish_epic_children(
+    *,
+    epic_ado_id: int,
+    children_plan: EpicChildrenPlan,
+    project_name: str | None,
+    ado=None,
+) -> _ChildrenPublishResult:
+    """Plan 59 F3 — Crea los hijos del Epic en ADO, idempotentemente por MARCADOR.
+
+    Idempotencia: para cada hijo, calcula un marcador determinístico y llama a
+    ado.find_child_by_marker(parent_id, marker) antes de crear. Si ya existe →
+    reused_ids. Si no → crea y embebe el marcador en System.Description.
+
+    NUNCA reinventa jerarquía: solo Feature directo bajo Epic, Task directo bajo Feature.
+    """
+    if not _epic_decomposition_enabled():
+        return _ChildrenPublishResult(skipped=True)
+    if not children_plan.ok or not children_plan.features:
+        return _ChildrenPublishResult(skipped=True)
+    if ado is None:
+        ado = build_ado_client(project_name)
+    created: list[int] = []
+    reused: list[int] = []
+    try:
+        for idx, feature in enumerate(children_plan.features):
+            f_marker = _child_marker(epic_ado_id, "feature", feature.title, idx)
+            existing = ado.find_child_by_marker(epic_ado_id, f_marker)
+            if existing:
+                feature_id = int(existing["id"])
+                reused.append(feature_id)
+            else:
+                res = ado.create_work_item(
+                    work_item_type="Feature",
+                    fields={
+                        "System.Title": feature.title,
+                        "System.Description": feature.html + f_marker,
+                    },
+                    parent_ado_id=epic_ado_id,
+                )
+                feature_id = int(res["id"])
+                created.append(feature_id)
+            for tidx, task in enumerate(feature.children):
+                t_marker = _child_marker(feature_id, "task", task.title, tidx)
+                t_existing = ado.find_child_by_marker(feature_id, t_marker)
+                if t_existing:
+                    reused.append(int(t_existing["id"]))
+                    continue
+                try:
+                    res = ado.create_work_item(
+                        work_item_type="Task",
+                        fields={
+                            "System.Title": task.title,
+                            "System.Description": task.html + t_marker,
+                        },
+                        parent_ado_id=feature_id,
+                    )
+                    created.append(int(res["id"]))
+                except Exception as exc:  # noqa: BLE001 — template restrictivo: no inventar puente
+                    logger.warning(
+                        "Task bajo Feature %s rechazada por template ADO: %s",
+                        feature_id, str(exc)[:150],
+                    )
+                    return _ChildrenPublishResult(
+                        created_ids=created,
+                        reused_ids=reused,
+                        error=f"task_under_feature_rejected: {str(exc)[:120]}",
+                    )
+        return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=None)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("publish_epic_children falló: %s", str(exc)[:200], exc_info=True)
+        return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=str(exc)[:200])
+
+
+# ── F4 · Endpoint POST /api/tickets/epic-children (creación tras aprobación) ─
+
+@bp.post("/epic-children")
+def create_epic_children():
+    """Plan 59 F4 — Crea los hijos de un Epic ya publicado, tras aprobación del operador.
+
+    POST /api/tickets/epic-children
+    Body JSON: {epic_ado_id, output, project_name?, approved_fingerprint? (§4bis)}
+
+    Re-deriva el plan server-side desde `output` (anti-tamper). Si llega
+    `approved_fingerprint` y no coincide con el plan re-derivado → 409 plan_drift.
+    """
+    if not _epic_decomposition_enabled():
+        return jsonify({"enabled": False, "created_ids": [], "reused_ids": []}), 200
+
+    body = request.get_json(silent=True) or {}
+
+    try:
+        epic_ado_id = int(body["epic_ado_id"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "epic_ado_id_required"}), 400
+
+    output: str | None = body.get("output") or None
+    project_name: str | None = body.get("project_name") or None
+    approved_fingerprint: str | None = body.get("approved_fingerprint") or None
+
+    preview = build_epic_payload_preview(output=output, brief="", project_name=project_name)
+    if not preview.ok:
+        return jsonify({"error": "epic_not_in_output"}), 409
+
+    plan = build_epic_children_plan(epic_html=preview.html)
+
+    # §4bis — anti-drift: validar que el operador aprobó EXACTAMENTE este plan.
+    if approved_fingerprint:
+        actual_fp = compute_plan_fingerprint(plan)
+        if actual_fp != approved_fingerprint:
+            return jsonify({
+                "error": "plan_drift",
+                "expected": approved_fingerprint,
+                "actual": actual_fp,
+            }), 409
+
+    result = publish_epic_children(
+        epic_ado_id=epic_ado_id,
+        children_plan=plan,
+        project_name=project_name,
+    )
+
+    return jsonify({
+        "enabled": True,
+        "created_ids": result.created_ids,
+        "reused_ids": result.reused_ids,
+        "error": result.error,
+        "skipped": result.skipped,
+    }), 200

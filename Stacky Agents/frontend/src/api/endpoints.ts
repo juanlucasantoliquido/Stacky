@@ -328,6 +328,37 @@ export const Tickets = {
       grounding_warnings: string[];
       publishable_runtime: boolean;
     }>(`/api/tickets/epic-preview?execution_id=${executionId}&work_item_type=${workItemType}`),
+  // Plan 59 F2 — Preview solo-lectura de la jerarquía de hijos propuesta.
+  epicChildrenPreview: (body: { output: string; brief?: string; project_name?: string }) =>
+    api.post<{
+      enabled: boolean;
+      epic_ok?: boolean;
+      epic_title?: string | null;
+      epic_error?: string | null;
+      features: Array<{
+        work_item_type: string;
+        title: string;
+        html: string;
+        children: Array<{ work_item_type: string; title: string; html: string }>;
+      }>;
+      total_children: number;
+      children_error?: string | null;
+      plan_fingerprint?: string;
+    }>("/api/tickets/epic-children-preview", body),
+  // Plan 59 F4 — Crea los hijos del Epic en ADO tras aprobación del operador.
+  createEpicChildren: (body: {
+    epic_ado_id: number;
+    output: string;
+    project_name?: string;
+    approved_fingerprint?: string;
+  }) =>
+    api.post<{
+      enabled: boolean;
+      created_ids: number[];
+      reused_ids: number[];
+      error: string | null;
+      skipped: boolean;
+    }>("/api/tickets/epic-children", body),
 };
 
 // ── Fase 2: tipos para pending-tasks y create-child-task ──────────────────────

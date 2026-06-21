@@ -1363,6 +1363,19 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,
     ),
+    # ── Plan 59 — Descomposición vertical épica→hijos ────────────────────────
+    FlagSpec(
+        key="STACKY_EPIC_DECOMPOSITION_ENABLED",
+        type="bool",
+        label="Descomposición vertical épica→hijos",
+        description=(
+            "Plan 59 — Si ON, tras aprobar una épica el operador puede previsualizar "
+            "y crear los hijos (Features/Tasks) colgando del Epic. "
+            "Default OFF = solo el Epic, sin desglose hijo."
+        ),
+        group="global",
+        env_only=True,  # leído con os.getenv en api/tickets en call time
+    ),
     # ── Plan 58 — Bucle de convergencia de calidad determinista (épica) ──────
     FlagSpec(
         key="STACKY_QUALITY_CONVERGENCE_ENABLED",

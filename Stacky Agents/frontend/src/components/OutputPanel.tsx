@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Executions } from "../api/endpoints";
@@ -7,6 +7,7 @@ import { useWorkbench } from "../store/workbench";
 import ConfidenceBadge from "./ConfidenceBadge";
 import ContractBadge from "./ContractBadge";
 import DossierPanel from "./DossierPanel";
+import EpicChildrenPanel from "./EpicChildrenPanel";
 import NextAgentSuggestion from "./NextAgentSuggestion";
 import OutputTools from "./OutputTools";
 import StructuredOutput from "./StructuredOutput";
@@ -15,6 +16,8 @@ import styles from "./OutputPanel.module.css";
 export default function OutputPanel() {
   const { activeExecutionId, runningExecutionId, setRunningExecution } = useWorkbench();
   const qc = useQueryClient();
+  const [note, setNote] = useState("");
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const stream = useExecutionStream(runningExecutionId);
 
@@ -46,6 +49,20 @@ export default function OutputPanel() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["execution", activeExecutionId] });
       qc.invalidateQueries({ queryKey: ["executions"] });
+    },
+  });
+  const humanReview = useMutation({
+    mutationFn: (payload: { id: number; verdict: "approved" | "rejected" | "approved_with_notes"; note?: string }) =>
+      Executions.humanReview(payload.id, { verdict: payload.verdict, note: payload.note }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["execution", activeExecutionId] });
+      qc.invalidateQueries({ queryKey: ["executions"] });
+      setNote("");
+      setReviewError(null);
+    },
+    onError: (error: any) => {
+      const msg = error?.response?.data?.error || error?.message || "Error submitting review";
+      setReviewError(msg);
     },
   });
   const publish = useMutation({
@@ -127,30 +144,91 @@ export default function OutputPanel() {
           </>
         )}
       </div>
-      {execution.status === "completed" && !execution.verdict && (
-        <footer className={styles.actions}>
-          <button
-            className={styles.primary}
-            onClick={() => approve.mutate(execution.id)}
-            disabled={approve.isPending}
-          >
-            Approve
-          </button>
-          <button
-            className={styles.secondary}
-            onClick={() => publish.mutate(execution.id)}
-            disabled={publish.isPending}
-          >
-            Send to ADO
-          </button>
-          <button
-            className={styles.secondary}
-            onClick={() => discard.mutate(execution.id)}
-            disabled={discard.isPending}
-          >
-            Discard
-          </button>
-        </footer>
+      {(execution.status === "completed" || execution.status === "needs_review") && (
+        <>
+          {execution.metadata?.human_review && (
+            <div style={{ padding: 12, borderTop: "1px solid var(--border)", backgroundColor: "var(--bg-elev)", fontSize: 12 }}>
+              <div style={{ color: "var(--text-muted)" }}>
+                Reviewed: <strong>{(execution.metadata.human_review as any).verdict}</strong>
+                {(execution.metadata.human_review as any).reviewed_by && ` — ${(execution.metadata.human_review as any).reviewed_by}`}
+              </div>
+            </div>
+          )}
+          {!execution.verdict && (
+            <>
+              <footer className={styles.actions}>
+                <button
+                  className={styles.primary}
+                  onClick={() => humanReview.mutate({ id: execution.id, verdict: "approved" })}
+                  disabled={humanReview.isPending}
+                >
+                  Aprobar
+                </button>
+                <button
+                  className={styles.secondary}
+                  onClick={() => humanReview.mutate({ id: execution.id, verdict: "rejected" })}
+                  disabled={humanReview.isPending}
+                >
+                  Rechazar
+                </button>
+                <button
+                  className={styles.secondary}
+                  onClick={() => {
+                    if (note.trim()) {
+                      humanReview.mutate({ id: execution.id, verdict: "approved_with_notes", note });
+                    }
+                  }}
+                  disabled={humanReview.isPending || !note.trim()}
+                >
+                  Aprobar con notas
+                </button>
+              </footer>
+              <div style={{ padding: 12, backgroundColor: "var(--bg-elev)", borderTop: "1px solid var(--border)" }}>
+                <textarea
+                  value={note}
+                  onChange={(e) => {
+                    const val = e.target.value.slice(0, 2000);
+                    setNote(val);
+                    setReviewError(null);
+                  }}
+                  placeholder="Agregar nota (máx 2000 caracteres)..."
+                  style={{
+                    width: "100%",
+                    height: 80,
+                    padding: 8,
+                    fontFamily: "var(--font-sans)",
+                    fontSize: 12,
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-panel)",
+                    color: "var(--text-primary)",
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                  }}
+                />
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                  {note.length}/2000
+                </div>
+                {reviewError && (
+                  <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 8 }}>
+                    {reviewError}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+          {!execution.metadata?.human_review && execution.status === "completed" && (
+            <footer className={styles.actions}>
+              <button
+                className={styles.secondary}
+                onClick={() => publish.mutate(execution.id)}
+                disabled={publish.isPending}
+              >
+                Send to ADO
+              </button>
+            </footer>
+          )}
+        </>
       )}
       {execution.status === "completed" && execution.output && (
         <OutputTools
@@ -159,6 +237,16 @@ export default function OutputPanel() {
           output={execution.output}
         />
       )}
+      {/* Plan 59 — Descomposición vertical épica→hijos (flag STACKY_EPIC_DECOMPOSITION_ENABLED, default OFF) */}
+      {execution.status === "completed" &&
+        execution.output &&
+        typeof execution.metadata?.epic_ado_id === "number" && (
+          <EpicChildrenPanel
+            output={execution.output}
+            epicAdoId={execution.metadata.epic_ado_id as number}
+            projectName={typeof execution.metadata?.project_name === "string" ? execution.metadata.project_name : undefined}
+          />
+        )}
       {execution.verdict === "approved" && (
         <div style={{ padding: 12, borderTop: "1px solid var(--border)" }}>
           <NextAgentSuggestion afterAgent={execution.agent_type} />

@@ -89,7 +89,9 @@ $HarnessTestFiles = @(
   "tests/test_speculative_claim_flow.py",
   # Plan 58 - Bucle de convergencia de calidad determinista
   "tests/test_convergence_loop.py",
-  "tests/test_convergence_wiring.py"
+  "tests/test_convergence_wiring.py",
+  # Plan 59 - Descomposicion vertical epica->hijos
+  "tests/test_epic_decomposition.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

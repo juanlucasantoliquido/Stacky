@@ -97,6 +97,8 @@ HARNESS_TEST_FILES=(
   # — Plan 58 · Bucle de convergencia de calidad determinista —
   tests/test_convergence_loop.py
   tests/test_convergence_wiring.py
+  # — Plan 59 · Descomposición vertical épica→hijos —
+  tests/test_epic_decomposition.py
 )
 
 pass=0

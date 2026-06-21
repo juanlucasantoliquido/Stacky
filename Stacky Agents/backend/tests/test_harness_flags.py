@@ -387,3 +387,30 @@ def test_convergence_cap_default_two():
         from importlib import reload
         import config as cfg_module
         reload(cfg_module)
+
+
+# ---------------------------------------------------------------------------
+# Plan 59 — Flag de descomposición vertical épica→hijos
+# ---------------------------------------------------------------------------
+
+def test_epic_decomposition_flag_registered():
+    """STACKY_EPIC_DECOMPOSITION_ENABLED debe aparecer en FLAG_REGISTRY."""
+    from services.harness_flags import FLAG_REGISTRY
+    keys = {f.key for f in FLAG_REGISTRY}
+    assert "STACKY_EPIC_DECOMPOSITION_ENABLED" in keys
+
+
+def test_epic_decomposition_flag_default_off():
+    """El flag de descomposición debe tener default False (env_only, leído via os.getenv)."""
+    from services.harness_flags import FLAG_REGISTRY
+    spec = next(f for f in FLAG_REGISTRY if f.key == "STACKY_EPIC_DECOMPOSITION_ENABLED")
+    assert spec.type == "bool"
+    # env_only=True: leído con os.getenv en tickets.py, no atributo de Config.
+    assert spec.env_only is True
+
+
+def test_epic_decomposition_flag_group_global():
+    """El flag de descomposición debe pertenecer al grupo 'global'."""
+    from services.harness_flags import FLAG_REGISTRY
+    spec = next(f for f in FLAG_REGISTRY if f.key == "STACKY_EPIC_DECOMPOSITION_ENABLED")
+    assert spec.group == "global"

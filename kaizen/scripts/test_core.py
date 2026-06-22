@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (99 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (103 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
@@ -21,6 +21,7 @@ Cubre:
   - dashboard_static.py: _impl_badge, _phase_pills, _session_rows (5 casos de render HTML)
   - _config.py: _coerce (null/bool/int/string con comillas) + _strip_comment (hash en strings)
   - metrics.py: _median (lista vacia, lista par, lista impar)
+  - check.py: _parse_test_count (patron test_core, patron test_aotl, sin patron, 0)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1298,6 +1299,38 @@ def test_median_even_list():
     """_median de lista par devuelve el promedio de los 2 centrales."""
     result = _metrics._median([1.0, 2.0, 3.0, 4.0])
     assert_eq(result, 2.5, "mediana de [1,2,3,4] debe ser 2.5")
+
+
+# ---------------------------------------------------------------------------
+# Tests de check.py — _parse_test_count (extrae conteo de tests del output)
+# ---------------------------------------------------------------------------
+import check as _chk  # noqa: E402
+
+
+@test
+def test_parse_test_count_core_pattern():
+    """_parse_test_count detecta el patron de test_core.py: '85 OK, 0 FAIL'."""
+    assert_eq(_chk._parse_test_count("85 OK, 0 FAIL"), 85)  # noqa: SLF001
+
+
+@test
+def test_parse_test_count_aotl_pattern():
+    """_parse_test_count detecta el patron de test_aotl.py: '50/50 verdes.'."""
+    assert_eq(_chk._parse_test_count("50/50 verdes."), 50)  # noqa: SLF001
+
+
+@test
+def test_parse_test_count_no_pattern():
+    """_parse_test_count devuelve 0 si no hay patron conocido."""
+    assert_eq(_chk._parse_test_count(""), 0)  # noqa: SLF001
+    assert_eq(_chk._parse_test_count("error: module not found"), 0)  # noqa: SLF001
+
+
+@test
+def test_parse_test_count_multiline():
+    """_parse_test_count extrae el patron de un output multilinea real."""
+    output = "  OK  test_foo\n  OK  test_bar\n\n99 OK, 0 FAIL"
+    assert_eq(_chk._parse_test_count(output), 99)  # noqa: SLF001
 
 
 if __name__ == "__main__":

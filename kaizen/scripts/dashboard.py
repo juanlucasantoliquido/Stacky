@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 """Dashboard HTML del loop de automejora de Kaizen. stdlib pura, offline-first (sin CDN).
 
-Sirve una página que se auto-refresca y muestra, en vivo:
-  - qué está haciendo el loop AHORA (fase del ciclo, mapeada a PLAN->DO->CHECK->ACT),
-  - métricas (implementadas / planificadas / rechazadas / iterando / escaladas),
-  - cada plan con su ESTADO: si quedó IMPLEMENTADO o sólo está el plan sin implementar, etc.
-  - el detalle de cada sesión (propuesta, evaluación, decisión, cambios, medición).
+Centro de control del modo AI-driven: desde el navegador podés ARRANCAR y FRENAR el loop,
+ver qué está haciendo AHORA (fase del ciclo, mapeada a PLAN->DO->CHECK->ACT), las métricas,
+cada plan con su ESTADO (implementado vs sólo planificado vs rechazado/iterando/escalado), el
+detalle de cada sesión, y el LOG en vivo del loop (ahí ves cualquier error).
 
-No usa red saliente ni recursos externos (CSP-safe): HTML+CSS+JS embebidos. El front consume
-dos endpoints JSON locales. Botón STOP = parada cooperativa (flag que el loop respeta).
+El dashboard ES el dueño del proceso del loop: START lo spawnea (autoloop.py --forever,
+motor tomado de config/kaizen.config.yaml) y redirige su salida a sessions/_loop.log; STOP
+pide la parada cooperativa (el loop corta al terminar la vuelta actual). No usa red saliente.
 
 Uso:
-    python scripts/dashboard.py                 # http://127.0.0.1:8765
+    python kaizen.py dashboard                 # http://127.0.0.1:8765
     python scripts/dashboard.py --port 9000 --host 0.0.0.0
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -31,6 +33,8 @@ enable_utf8()
 
 SESSIONS = ROOT / "sessions"
 INDEX = SESSIONS / "_index.json"
+SCRIPTS = ROOT / "scripts"
+LOOP_LOG = SESSIONS / "_loop.log"
 
 
 # --- estado agregado (rápido: solo el índice + el estado del loop) --------------------------
@@ -48,7 +52,6 @@ def build_state() -> dict:
         "created_utc": e.get("created_utc", ""), "status": e.get("status", ""),
         "verdict": e.get("verdict"), "impl_status": e.get("impl_status"),
         "auto": e.get("auto", False), "tags": e.get("tags", []), "commit": e.get("commit"),
-        "child": e.get("child"),
     } for e in reversed(sessions)]
     return {
         "loop": loop,
@@ -79,6 +82,45 @@ def session_detail(sid: str) -> dict:
     return out
 
 
+# --- control del proceso del loop (el dashboard es el dueño) --------------------------------
+class KaizenServer(ThreadingHTTPServer):
+    loop_proc = None
+    loop_log_fh = None
+
+
+def loop_running(server) -> bool:
+    proc = getattr(server, "loop_proc", None)
+    return proc is not None and proc.poll() is None
+
+
+def start_loop(server) -> tuple[bool, str]:
+    if loop_running(server):
+        return False, "el loop ya está corriendo"
+    st.clear_stop()
+    fh = open(LOOP_LOG, "wb")  # bytes crudos; PYTHONUTF8 garantiza utf-8 al redirigir la salida
+    env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-u", str(SCRIPTS / "autoloop.py"), "--forever"],
+            cwd=str(ROOT), stdout=fh, stderr=subprocess.STDOUT, env=env)
+    except OSError as exc:
+        fh.close()
+        return False, "no se pudo iniciar el loop: %s" % exc
+    server.loop_proc = proc
+    server.loop_log_fh = fh
+    return True, "loop iniciado (pid %d)" % proc.pid
+
+
+def log_tail(n: int = 160) -> str:
+    if not LOOP_LOG.exists():
+        return ""
+    try:
+        data = LOOP_LOG.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return "\n".join(data.splitlines()[-n:])
+
+
 PAGE = r"""<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kaizen — Automejora AI-driven</title>
@@ -87,17 +129,18 @@ PAGE = r"""<!doctype html><html lang="es"><head><meta charset="utf-8">
 --green:#3fb950;--red:#f85149;--amber:#d29922;--purple:#a371f7;--orange:#db8c3a;--blue:#58a6ff;--slate:#6e7681;}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);
 font:14px/1.5 ui-sans-serif,system-ui,Segoe UI,Roboto,Arial}
-header{padding:14px 20px;border-bottom:1px solid var(--bd);display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--panel)}
+header{padding:14px 20px;border-bottom:1px solid var(--bd);display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--panel)}
 h1{font-size:17px;margin:0;font-weight:650}.sub{color:var(--mut);font-size:12px}
 .wrap{padding:18px 20px;max-width:1180px;margin:0 auto}
 .pill{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:650;border:1px solid var(--bd)}
-.run{background:rgba(63,185,80,.15);color:var(--green);border-color:var(--green)}
-.stopped{background:rgba(110,118,129,.15);color:var(--slate)}
+.running{background:rgba(63,185,80,.15);color:var(--green);border-color:var(--green)}
+.stopped,.idle{background:rgba(110,118,129,.15);color:var(--slate)}
 .paused-escalated{background:rgba(219,140,58,.18);color:var(--orange);border-color:var(--orange)}
 .error{background:rgba(248,81,73,.15);color:var(--red);border-color:var(--red)}
 button{background:var(--panel2);color:var(--fg);border:1px solid var(--bd);border-radius:7px;padding:6px 12px;cursor:pointer;font-weight:600}
-button:hover{border-color:var(--blue)}button.stop{border-color:var(--red);color:var(--red)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:14px 0}
+button:hover{border-color:var(--blue)}button:disabled{opacity:.38;cursor:default}
+button.start{border-color:var(--green);color:var(--green)}button.stop{border-color:var(--red);color:var(--red)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:14px 0}
 .card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
 .card .n{font-size:24px;font-weight:700}.card .l{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
 .pipe{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 0}
@@ -118,15 +161,17 @@ tr.s{cursor:pointer}tr.s:hover{background:var(--panel2)}
 .reverted{background:rgba(110,118,129,.18);color:var(--slate)}
 .detail{background:var(--panel2);padding:14px;border-radius:8px;margin:2px 0 8px}
 .detail h4{margin:10px 0 4px;font-size:12px;color:var(--mut);text-transform:uppercase}
-pre{background:#0a0d12;border:1px solid var(--bd);border-radius:6px;padding:10px;overflow:auto;max-height:280px;font-size:12px}
+pre{background:#0a0d12;border:1px solid var(--bd);border-radius:6px;padding:10px;overflow:auto;max-height:280px;font-size:12px;white-space:pre-wrap;word-break:break-word}
+#log{max-height:230px}
 code{color:var(--blue)}.muted{color:var(--mut)}.right{margin-left:auto}
 a{color:var(--blue)}
 </style></head><body>
 <header>
   <h1>🔁 Kaizen <span class="sub">Automejora AI-driven</span></h1>
-  <span id="loopPill" class="pill stopped">—</span>
+  <span id="loopPill" class="pill idle">—</span>
   <span id="loopInfo" class="sub"></span>
   <span class="right"></span>
+  <button id="startBtn" class="start">▶ START</button>
   <button id="stopBtn" class="stop">■ STOP</button>
   <button id="refreshBtn">↻</button>
 </header>
@@ -135,8 +180,10 @@ a{color:var(--blue)}
   <span class="phgrp">·</span><span class="phgrp">CHECK</span><span class="phgrp">·</span><span class="phgrp">ACT</span></div>
   <div id="pipe" class="pipe"></div>
   <div id="metrics" class="grid"></div>
+  <h3 style="margin:16px 0 4px">Actividad del loop (log en vivo)</h3>
+  <pre id="log" class="muted">(sin actividad — apretá ▶ START)</pre>
   <h3 style="margin:18px 0 0">Planes y su estado</h3>
-  <div class="sub">verde = implementado · azul = sólo plan (sin implementar) · rojo = rechazado · violeta = iterando · naranja = escalado a vos</div>
+  <div class="sub">verde = implementado · azul = sólo plan (sin implementar) · rojo = rechazado · violeta = iterando · naranja = escalado a vos (parqueado)</div>
   <table><thead><tr><th>Cuándo (UTC)</th><th>Plan (objetivo)</th><th>Estado</th><th>Veredicto</th><th>Motor</th></tr></thead>
   <tbody id="rows"></tbody></table>
 </div>
@@ -148,16 +195,18 @@ function esc(s){return (s==null?"":(""+s)).replace(/[&<>]/g,c=>({"&":"&amp;","<"
 function badge(s){s=s||"—";const c=ST.includes(s)?s:"reverted";return '<span class="badge '+c+'">'+esc(s)+'</span>';}
 async function load(){
   let d; try{d=await (await fetch("/api/state")).json();}catch(e){return;}
-  const lp=d.loop||{}, st=lp.state||"idle";
+  const lp=d.loop||{}, running=!!lp.process_alive, stt=running?"running":(lp.state||"idle");
   const pill=document.getElementById("loopPill");
-  pill.className="pill "+(["running","stopped","paused-escalated","error"].includes(st)?st:"stopped");
-  pill.textContent=st.toUpperCase();
+  pill.className="pill "+(["running","stopped","paused-escalated","error","idle"].includes(stt)?stt:"idle");
+  pill.textContent=running?"RUNNING":stt.toUpperCase();
   document.getElementById("loopInfo").textContent=
     (lp.engine?("motor="+lp.engine+" · "):"")+(lp.adapter?("adapter="+lp.adapter+" · "):"")+
-    "vuelta "+(lp.iteration||0)+(lp.max_iterations?("/"+lp.max_iterations):"")+
-    (lp.current_session?(" · "+lp.current_session):"");
+    "vuelta "+(lp.iteration||0)+(lp.current_session?(" · "+lp.current_session):"")+
+    (d.metrics&&d.metrics.stop_requested?" · (deteniéndose…)":"");
+  document.getElementById("startBtn").disabled=running;
+  document.getElementById("stopBtn").disabled=!running;
   document.getElementById("pipe").innerHTML=PHASES.map(([p,g])=>
-    '<span class="step'+(lp.phase===p?" on":"")+'">'+p+'</span>').join("");
+    '<span class="step'+(running&&lp.phase===p?" on":"")+'">'+p+'</span>').join("");
   const m=d.metrics||{by_impl:{}};
   const cells=[["total",m.total||0]].concat(ST.map(k=>[k,(m.by_impl||{})[k]||0]));
   document.getElementById("metrics").innerHTML=cells.map(([k,v])=>
@@ -170,6 +219,13 @@ async function load(){
       esc(s.verdict||"—")+'</td><td class="muted">'+motor+'</td></tr><tr class="d" data-for="'+esc(s.id)+'"></tr>';
   }).join("");
   document.querySelectorAll("tr.s").forEach(tr=>tr.onclick=()=>toggle(tr.dataset.id));
+}
+async function loadLog(){
+  let d; try{d=await (await fetch("/api/log")).json();}catch(e){return;}
+  const el=document.getElementById("log");
+  const atBottom=el.scrollHeight-el.scrollTop-el.clientHeight<40;
+  el.textContent=d.log&&d.log.trim()?d.log:"(sin actividad — apretá ▶ START)";
+  if(atBottom)el.scrollTop=el.scrollHeight;
 }
 async function toggle(id){
   const row=document.querySelector('tr.d[data-for="'+CSS.escape(id)+'"]');
@@ -185,9 +241,14 @@ async function toggle(id){
   if(cs.changes)h+='<h4>Cambios ('+cs.changes.length+')</h4><pre>'+esc(cs.changes.map(c=>c.action+"  "+c.path).join("\n"))+'</pre>';
   h+='</div></td>';row.innerHTML=h;row.dataset.open="1";
 }
+document.getElementById("startBtn").onclick=async()=>{
+  const b=document.getElementById("startBtn");b.disabled=true;
+  try{await fetch("/api/start",{method:"POST"});}catch(e){}
+  setTimeout(()=>{load();loadLog();},500);
+};
 document.getElementById("stopBtn").onclick=async()=>{await fetch("/api/stop",{method:"POST"});load();};
-document.getElementById("refreshBtn").onclick=load;
-load();setInterval(load,2000);
+document.getElementById("refreshBtn").onclick=()=>{load();loadLog();};
+load();loadLog();setInterval(load,2000);setInterval(loadLog,2000);
 </script></body></html>"""
 
 
@@ -206,13 +267,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path == "/" or path == "/index.html":
+        if path in ("/", "/index.html"):
             self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
         elif path == "/api/state":
             try:
-                self._json(build_state())
+                state = build_state()
+                state["loop"]["process_alive"] = loop_running(self.server)
+                self._json(state)
             except Exception as exc:  # noqa: BLE001
                 self._json({"error": str(exc)}, 500)
+        elif path == "/api/log":
+            self._json({"log": log_tail(), "running": loop_running(self.server)})
         elif path.startswith("/api/session/"):
             self._json(session_detail(path[len("/api/session/"):]))
         else:
@@ -223,7 +288,10 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         if length:
             self.rfile.read(length)
-        if path == "/api/stop":
+        if path == "/api/start":
+            ok, msg = start_loop(self.server)
+            self._json({"ok": ok, "message": msg, "running": loop_running(self.server)})
+        elif path == "/api/stop":
             st.request_stop(reason="dashboard")
             self._json({"ok": True, "stop_requested": True})
         elif path == "/api/resume":
@@ -241,9 +309,15 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args(argv)
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    try:
+        server = KaizenServer((args.host, args.port), Handler)
+    except OSError as exc:
+        print("ERROR: no se pudo abrir %s:%d (%s). ¿Ya hay un dashboard corriendo?" %
+              (args.host, args.port, exc), file=sys.stderr)
+        return 1
     url = "http://%s:%d" % ("127.0.0.1" if args.host == "0.0.0.0" else args.host, args.port)
     print("Kaizen dashboard en %s  (Ctrl+C para salir)" % url)
+    print("Arrancá/frená el loop desde el botón START/STOP de la página.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

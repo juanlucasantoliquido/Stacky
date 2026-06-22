@@ -16,6 +16,7 @@ El acoplamiento a un runtime de IA vive SOLO acá (y en el adapter), respetando 
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -49,6 +50,17 @@ def extract_json(text: str) -> dict:
         return json.loads(chunk[start:end + 1])
     except json.JSONDecodeError as exc:
         raise EngineError("JSON inválido en la salida del modelo: %s" % exc)
+
+
+# Bloques de contenido fuera del JSON: evitan tener que escapar archivos completos como
+# strings JSON (la causa típica de "JSON inválido" del modelo).
+_FILE_BLOCK = re.compile(
+    r"===KAIZEN-FILE:\s*(?P<path>.+?)\s*===\r?\n(?P<body>.*?)\r?\n===KAIZEN-END===", re.DOTALL)
+
+
+def parse_file_blocks(text: str) -> dict:
+    """Extrae {ruta: contenido} de los bloques ===KAIZEN-FILE: ...=== / ===KAIZEN-END===."""
+    return {m.group("path").strip(): m.group("body") for m in _FILE_BLOCK.finditer(text)}
 
 
 def normalize_proposal(proposal: dict, session_id: str, author: str) -> dict:
@@ -201,20 +213,35 @@ class ClaudeCliEngine:
         sid = context["session_id"]
         ctx = self._context_block(context)
         user = (
-            "%s\n\n## Tarea\nProponé UNA mejora pequeña, valiosa y reversible DENTRO del foco.\n"
-            "Devolvé SOLO un bloque ```json con esta forma EXACTA:\n"
-            '{"proposal": %s, "change_set": {"changes": [{"path": "ruta/relativa", '
-            '"action": "create|modify|delete", "content": "CONTENIDO COMPLETO del archivo"}]}}\n'
-            "Reglas: para 'modify' incluí el contenido COMPLETO resultante del archivo; toda ruta "
-            "debe estar dentro del foco; rollback y success_metric son obligatorios.\n" %
-            (ctx, _PROPOSAL_SKELETON)
+            ctx + "\n\n## Tarea\n"
+            "Proponé UNA mejora pequeña, valiosa y reversible DENTRO del foco.\n\n"
+            "Respondé en DOS partes:\n"
+            "PARTE 1 — un bloque ```json con la propuesta y el plan de cambios "
+            "(SIN el contenido de los archivos):\n"
+            '{"proposal": ' + _PROPOSAL_SKELETON + ', "change_set": {"changes": '
+            '[{"path": "ruta/relativa", "action": "create|modify|delete"}]}}\n\n'
+            "PARTE 2 — para CADA archivo con action create o modify, el contenido COMPLETO "
+            "resultante, delimitado EXACTAMENTE así (texto crudo, SIN fences ni JSON adentro):\n"
+            "===KAIZEN-FILE: ruta/relativa===\n"
+            "<contenido completo del archivo>\n"
+            "===KAIZEN-END===\n\n"
+            "Reglas duras: toda ruta dentro del foco; rollback y success_metric obligatorios; "
+            "NO pongas el contenido de archivos dentro del JSON (va SOLO en los bloques de la PARTE 2)."
         )
-        data = extract_json(self._run(self._system("improver"), user))
+        out = self._run(self._system("improver"), user)
+        data = extract_json(out)
         if "proposal" not in data or "change_set" not in data:
             raise EngineError("la respuesta del improver no trae 'proposal' + 'change_set'")
         proposal = normalize_proposal(data["proposal"], sid, "agent:improver:claude")
         change_set = data["change_set"]
         change_set["session_id"] = sid
+        blocks = parse_file_blocks(out)
+        for ch in change_set.get("changes", []):
+            if ch.get("action") in ("create", "modify") and not ch.get("content"):
+                if ch.get("path") in blocks:
+                    ch["content"] = blocks[ch["path"]]
+                else:
+                    raise EngineError("falta el bloque de contenido (PARTE 2) para %s" % ch.get("path"))
         return proposal, change_set
 
     def evaluate(self, proposal: dict, measurement: dict, context: dict) -> dict:

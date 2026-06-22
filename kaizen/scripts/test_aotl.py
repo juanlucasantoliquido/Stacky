@@ -177,6 +177,13 @@ def _():
     except eng.EngineError:
         pass
 
+@check("parse_file_blocks: extrae contenido (con comillas/comas) fuera del JSON")
+def _():
+    text = ('```json\n{"change_set":{"changes":[{"path":"a.md","action":"modify"}]}}\n```\n'
+            '===KAIZEN-FILE: a.md===\nlinea1\n"comillas", comas y { llaves }\n===KAIZEN-END===')
+    blocks = eng.parse_file_blocks(text)
+    assert blocks["a.md"] == 'linea1\n"comillas", comas y { llaves }', repr(blocks)
+
 
 # --- gate determinista (los 4 caminos) ------------------------------------------------------
 def _profile():

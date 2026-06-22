@@ -143,11 +143,6 @@ def run_gate(session_id: str) -> dict:
     return json.loads(res.stdout.strip().splitlines()[-1])
 
 
-def spawn_child(session_id: str) -> str | None:
-    res = _py("spawn_child.py", session_id)
-    return res.stdout.strip() if res.returncode == 0 else None
-
-
 def promote(session_id: str) -> None:
     _py("promote_decision.py", session_id)
 
@@ -224,15 +219,16 @@ def run_iteration(i: int, args, adapter_cfg: dict, profile: dict, engine, totals
             promote(sid)
             totals["implemented"] += 1
             return st.IMPLEMENTED
-        if verdict == "iterate" and escalated:
+        if escalated:
+            # Parqueado para revisión humana (queda revertido y marcado). El loop NO se
+            # detiene salvo --halt-on-escalation: sigue explorando otras mejoras.
             ap.rollback(sid, root=ROOT); applied = False
-            st.set_impl_status(sid, st.ESCALATED)
+            st.set_impl_status(sid, st.ESCALATED, note=(decision.get("rationale") or "")[:300])
             totals["escalated"] += 1
             return st.ESCALATED
         if verdict == "iterate":
             ap.rollback(sid, root=ROOT); applied = False
-            child = spawn_child(sid)
-            st.set_impl_status(sid, st.ITERATING, child=child)
+            st.set_impl_status(sid, st.ITERATING, note=(decision.get("rationale") or "")[:300])
             totals["iterating"] += 1
             return st.ITERATING
         # reject
@@ -256,6 +252,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--interval", type=float, default=3.0, help="Segundos entre vueltas.")
     parser.add_argument("--objective", default=None, help="Objetivo semilla (opcional).")
     parser.add_argument("--no-commit", action="store_true", help="No commitear las aceptadas.")
+    parser.add_argument("--halt-on-escalation", action="store_true",
+                        help="Modo estricto: detener el loop cuando un ítem escala a humano.")
     args = parser.parse_args(argv)
 
     cfg = active_config()
@@ -298,8 +296,8 @@ def main(argv: list[str]) -> int:
                 final_state = "error"
                 status["last_error"] = str(exc)
                 break
-            if terminal == st.ESCALATED:
-                print("ESCALADO a humano. El loop se detiene (human-in-the-loop).")
+            if terminal == st.ESCALATED and args.halt_on_escalation:
+                print("ESCALADO a humano. El loop se detiene (--halt-on-escalation).")
                 final_state = "paused-escalated"
                 break
             if args.interval > 0 and (args.forever or i < args.max_iterations):

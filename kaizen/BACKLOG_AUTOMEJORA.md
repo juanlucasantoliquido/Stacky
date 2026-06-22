@@ -158,6 +158,16 @@ el texto de la ruta. En file:// los links a rutas absolutas funcionan en los bro
 **Métrica:** El HTML generado contiene un elemento con la ruta del archivo (al menos como texto).
 **Rollback:** Eliminar el elemento del header.
 
+### B-18 [PENDIENTE] Actualizar docs/07_AOTL_AUTODRIVE.md con cambios de sesiones B-01..B-17
+**Valor:** El doc dice "python kaizen.py dashboard lanza HTTP" pero ahora genera un HTML estatico.
+No menciona blocking_details, la seccion de revision humana del dashboard, ni PROTECTED_FILES
+ampliado. La doc desactualizada confunde a quien lee el runbook.
+**Detalles:** (1) Cambiar la descripcion del subcomando dashboard: ahora genera dashboard/index.html
+(file://). Con --port sigue siendo el servidor. (2) Mencionar blocking_details en el gate.
+(3) Mencionar la seccion de revision humana en el dashboard. (4) Actualizar lista de PROTECTED_FILES.
+**Métrica:** docs/07_AOTL_AUTODRIVE.md menciona 'file://', 'blocking_details', 'revision humana' y la lista actualizada. selfcheck: 0 fallas.
+**Rollback:** Revertir docs/07_AOTL_AUTODRIVE.md.
+
 ## Items parkeados (REVIEW_QUEUE)
 
 *(ninguno parkeado aún — ver kaizen/REVIEW_QUEUE.md cuando exista)*
@@ -178,3 +188,8 @@ el texto de la ruta. En file:// los links a rutas absolutas funcionan en los bro
 - B-10: Contexto AOTL decisions ADR-lite — sesión 053808Z (2026-06-22)
 - B-11: Regeneración automática dashboard — sesión 054032Z (2026-06-22)
 - B-12: Tests unitarios recent_decisions_summary — sesión 054144Z (2026-06-22)
+- B-13: Dashboard sección revisión humana — sesión 054632Z (2026-06-22)
+- B-14: Tests gate zonas iterate/reject — sesión 054741Z (2026-06-22)
+- B-15: Selfcheck detecta decided huérfanas — sesión 054844Z (2026-06-22)
+- B-16: PROTECTED_FILES maquinaria crítica — sesión 055032Z (2026-06-22)
+- B-17: Dashboard URL file:// en header — sesión 055139Z (2026-06-22)

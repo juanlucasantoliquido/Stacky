@@ -554,6 +554,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T055325Z__actualizar-docs-07-aotl-con-cambios-recientes-b-01-b-17-b-18",
+      "objective": "Actualizar docs 07 AOTL con cambios recientes B-01..B-17 (B-18)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:53:25+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

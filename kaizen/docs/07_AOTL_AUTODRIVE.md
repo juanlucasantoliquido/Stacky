@@ -33,10 +33,17 @@ OBSERVAR → PROPONER → APLICAR → MEDIR → EVALUAR → DECIDIR → RESOLVER
 - **iterate + escalado** (baja confianza / irreversible) → se revierte y **el loop se detiene**:
   decide un humano (`impl_status: escalated`). Es la regla 6 de [`06_RUNBOOK_AGENTE.md`](06_RUNBOOK_AGENTE.md).
 
+Cuando el gate dispara un **bloqueante** (B1..B4), el `decision.json` incluye el campo
+`blocking_details` con la descripción humana de cada bloqueante (no solo el código B1/B2…).
+
 ## Guardarraíles (no negociables)
 1. **Rutas acotadas:** el auto-apply sólo toca archivos dentro de `kaizen/` y **nunca** los datos
-   de sesión ni la maquinaria del propio loop (denylist en `scripts/aotl_state.py`). Empieza
-   acotado al sandbox `playground/` vía `observe.focus` del adapter.
+   de sesión ni la maquinaria del propio loop (`PROTECTED_FILES` en `scripts/aotl_state.py`).
+   Archivos protegidos: `kaizen.py`, `config/kaizen.config.yaml`, y los scripts del arnés
+   (`aotl_state.py`, `apply.py`, `autoloop.py`, `engine.py`, `dashboard.py`, `run_session.py`,
+   `validate.py`, `forensic.py`, `new_session.py`, `selfcheck.py`, `spawn_child.py`,
+   `promote_decision.py`). Scripts de visualización y tests **sí** pueden ser editados por el loop.
+   Empieza acotado al sandbox `playground/` vía `observe.focus` del adapter.
 2. **Reversibilidad siempre:** cada aplicación guarda pre-imagen; el rollback no depende de git.
 3. **Commit scopeado:** al aceptar, se commitea **sólo** las rutas tocadas (jamás `git add -A`),
    así el loop nunca arrastra cambios ajenos del repo.
@@ -62,14 +69,24 @@ python kaizen.py loop --engine mock  --max-iterations 3   # demo determinista, s
 Flags: `--interval S` (espera entre vueltas), `--objective "..."` (semilla), `--no-commit`,
 `--adapter NAME`.
 
-### 3. Ver todo en vivo
+### 3. Ver el dashboard
 ```sh
-python kaizen.py dashboard            # http://127.0.0.1:8765
+python kaizen.py dashboard            # genera dashboard/index.html (file://), sin servidor
+python kaizen.py dashboard --port 8765  # servidor HTTP en vivo (auto-refresca)
 ```
-El dashboard se auto-refresca y muestra: la **fase actual** del ciclo, métricas, y cada **plan
-con su estado** (verde = implementado · azul = sólo plan sin implementar · rojo = rechazado ·
-violeta = iterando · naranja = escalado a vos). Click en una fila para ver propuesta, evaluación,
-decisión y los archivos cambiados. El botón **STOP** pide la parada cooperativa.
+El dashboard **estático** (`dashboard/index.html`) se genera automáticamente al cerrar cada sesión
+(`run_session.py` lo regenera como best-effort). Abrilo con la URL `file://` que imprime el comando.
+El header del HTML muestra la propia URL clickeable.
+
+El dashboard incluye:
+- La **fase actual** del ciclo (la etapa resaltada en azul).
+- **Métricas** (total, aceptadas, rechazadas, iterando, AOTL, tasa %).
+- Sección **"Pendiente de revisión humana"** (naranja): sesiones con `verdict=iterate` o escaladas;
+  el loop se detuvo ahí y necesita tu decisión.
+- **Historial** de sesiones con estado de implementación e indicadores de color.
+
+La variante HTTP (`--port`) sigue disponible para visualización en vivo con auto-refresco.
+El botón **STOP** en la variante HTTP pide la parada cooperativa.
 
 ## Costo
 Un loop `--forever` con Opus puede gastar bastante. Para iterar seguido conviene `sonnet` (default)

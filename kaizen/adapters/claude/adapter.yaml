@@ -9,9 +9,18 @@ observe:
   mode: snapshot          # se le pasa al modelo un snapshot del foco (no toca nada externo)
   # Archivos cuyo CONTENIDO ve el modelo y dentro de los cuales puede proponer cambios.
   # DENYLIST (nunca editables, forzada en scripts/aotl_state.py PROTECTED_PREFIXES/FILES):
-  #   sessions/, decisions/, artifacts/, .git/, kaizen.py, config/kaizen.config.yaml,
-  #   scripts/aotl_state.py, scripts/apply.py, scripts/autoloop.py, scripts/engine.py,
-  #   scripts/dashboard.py
+  #   Prefijos protegidos: sessions/, decisions/, artifacts/, .git/
+  #   Archivos protegidos (maquinaria del arnes — NO editables por el loop):
+  #     .gitignore, kaizen.py, config/kaizen.config.yaml,
+  #     scripts/aotl_state.py, scripts/apply.py, scripts/autoloop.py, scripts/engine.py,
+  #     scripts/dashboard.py, scripts/run_session.py, scripts/validate.py,
+  #     scripts/forensic.py, scripts/new_session.py, scripts/selfcheck.py,
+  #     scripts/spawn_child.py, scripts/promote_decision.py
+  #   Editables por el loop (tests, visualizacion, utilidades):
+  #     scripts/test_core.py, scripts/test_aotl.py, scripts/dashboard_static.py,
+  #     scripts/metrics.py, scripts/doctor.py, scripts/archive.py, scripts/check.py,
+  #     scripts/forensic_view.py, scripts/list_sessions.py, scripts/show_session.py,
+  #     scripts/adapter_info.py, docs/, playground/
   focus:
     - playground          # sandbox seguro para experimentos
     - docs                # documentacion del ciclo (sincronizacion post-sesion)

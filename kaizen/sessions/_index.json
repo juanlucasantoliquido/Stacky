@@ -564,6 +564,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T055540Z__sincronizar-denylist-en-adapter-claude-con-protected-files-actual-b-19",
+      "objective": "Sincronizar denylist en adapter claude con PROTECTED_FILES actual (B-19)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:55:40+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

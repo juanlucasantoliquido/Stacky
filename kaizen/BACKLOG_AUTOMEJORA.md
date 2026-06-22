@@ -140,7 +140,7 @@ existe session.output.json Y la sesión tiene edad < 5 minutos. Si es más vieja
 
 ---
 
-### B-16 [PENDIENTE] Proteger scripts criticos de maquinaria en PROTECTED_FILES
+### B-16 [HECHO 2026-06-22] Proteger scripts criticos de maquinaria en PROTECTED_FILES
 **Valor:** run_session.py, validate.py, forensic.py, new_session.py, selfcheck.py, spawn_child.py
 y promote_decision.py no estan en PROTECTED_FILES. El loop AOTL podria auto-editarlos y
 autosabotearse silenciosamente en caliente.
@@ -150,7 +150,7 @@ por el loop (tests, visualizacion, metrics, adapter_info, doctor, archive, check
 `st.safe_target_path("scripts/test_core.py")` no lanza (editable).
 **Rollback:** Quitar las entradas de PROTECTED_FILES.
 
-### B-17 [PENDIENTE] Dashboard: mostrar ruta file:// clickeable en el header
+### B-17 [HECHO 2026-06-22] Dashboard: mostrar ruta file:// clickeable en el header
 **Valor:** El dashboard no muestra su propia URL. El operador debe recordar la ruta o correr
 de nuevo el comando para verla. Agregar el link en el header facilita compartir/reabrir.
 **Detalles:** En generate_html(), agregar en el header un link href='<url_relativa>' o simplemente
@@ -158,7 +158,7 @@ el texto de la ruta. En file:// los links a rutas absolutas funcionan en los bro
 **Métrica:** El HTML generado contiene un elemento con la ruta del archivo (al menos como texto).
 **Rollback:** Eliminar el elemento del header.
 
-### B-18 [PENDIENTE] Actualizar docs/07_AOTL_AUTODRIVE.md con cambios de sesiones B-01..B-17
+### B-18 [HECHO 2026-06-22] Actualizar docs/07_AOTL_AUTODRIVE.md con cambios de sesiones B-01..B-17
 **Valor:** El doc dice "python kaizen.py dashboard lanza HTTP" pero ahora genera un HTML estatico.
 No menciona blocking_details, la seccion de revision humana del dashboard, ni PROTECTED_FILES
 ampliado. La doc desactualizada confunde a quien lee el runbook.
@@ -167,6 +167,25 @@ ampliado. La doc desactualizada confunde a quien lee el runbook.
 (3) Mencionar la seccion de revision humana en el dashboard. (4) Actualizar lista de PROTECTED_FILES.
 **Métrica:** docs/07_AOTL_AUTODRIVE.md menciona 'file://', 'blocking_details', 'revision humana' y la lista actualizada. selfcheck: 0 fallas.
 **Rollback:** Revertir docs/07_AOTL_AUTODRIVE.md.
+
+### B-19 [PENDIENTE] Adapter denylist: sincronizar comentario con PROTECTED_FILES actual
+**Valor:** El comentario DENYLIST en adapters/claude/adapter.yaml lista 9 scripts pero ya
+hay 15 protegidos (los 7 nuevos de B-16 no aparecen). Quien edite el adapter podria omitirlos.
+**Detalles:** Actualizar el comentario DENYLIST en adapters/claude/adapter.yaml con los 7 nuevos.
+Solo es documentacion del adapter; la proteccion real esta en aotl_state.py.
+**Metrica:** adapters/claude/adapter.yaml menciona 'run_session.py', 'selfcheck.py', 'validate.py'.
+**Rollback:** Revertir el comentario en adapter.yaml.
+
+### B-20 [PENDIENTE] doctor verifica PROTECTED_FILES no modificados (integridad del guardarrail)
+**Valor:** El doctor verifica que scripts/contratos existen pero no verifica que PROTECTED_FILES
+no fue manipulado. Si alguien agrega un script a PROTECTED_FILES que no existe, safe_target_path
+funciona mal en silencio (rechaza paths invalidos sin alertar).
+**Detalles:** En doctor.py agregar check: cada ruta en PROTECTED_FILES existe en kaizen/ (o es
+ignorada si tiene prefijo de tipo 'scripts/' — en ese caso verifica que la ruta este en la tupla
+de aotl_state.py). Reportar WARN si algun PROTECTED_FILE no existe.
+**Metrica:** python kaizen.py doctor da OK en todos los checks de PROTECTED_FILES. Si borramos
+un script listado en PROTECTED_FILES, da WARN.
+**Rollback:** Eliminar el check de doctor.py.
 
 ## Items parkeados (REVIEW_QUEUE)
 

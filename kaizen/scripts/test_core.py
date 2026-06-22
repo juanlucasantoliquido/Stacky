@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (120 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (125 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
@@ -28,6 +28,7 @@ Cubre:
   - run_session.py: update_index_status (modifica solo la entrada correcta, id inexistente)
   - run_session.py: load_json (archivo valido, inexistente lanza FileNotFoundError, malformado lanza JSONDecodeError)
   - validate.py: validate_session (valida/0, inexistente/1, score_fuera_de_rango/1, strict_falta_proposal/1)
+  - metrics.py: print_report (encabezado, campos), read_index (sin archivo, con fixture), read_forensic (sin archivo)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1555,6 +1556,86 @@ def test_build_context_valores_pasados():
         finally:
             autoloop.ROOT = old_root
             autoloop.INDEX = old_index
+
+
+# ---------------------------------------------------------------------------
+# B-86: metrics.print_report, read_index, read_forensic — 5 casos
+# ---------------------------------------------------------------------------
+import io as _io
+import metrics as _metrics_mod
+
+
+def _empty_summary() -> dict:
+    return _metrics_mod.summarize([], [])
+
+
+@test
+def test_print_report_contiene_encabezado():
+    """print_report escribe la cabecera KAIZEN a stdout."""
+    old_out = sys.stdout
+    try:
+        buf = _io.StringIO()
+        sys.stdout = buf
+        _metrics_mod.print_report(_empty_summary())
+    finally:
+        sys.stdout = old_out
+    assert "KAIZEN" in buf.getvalue(), "debe contener KAIZEN en el encabezado"
+
+
+@test
+def test_print_report_contiene_campos_requeridos():
+    """print_report incluye los campos principales en la salida."""
+    old_out = sys.stdout
+    try:
+        buf = _io.StringIO()
+        sys.stdout = buf
+        _metrics_mod.print_report(_empty_summary())
+    finally:
+        sys.stdout = old_out
+    out = buf.getvalue()
+    assert "Sesiones totales" in out, "debe mostrar sesiones totales"
+    assert "Tasa de aceptaci" in out, "debe mostrar tasa de aceptacion"
+    assert "p95" in out, "debe mostrar p95"
+
+
+@test
+def test_read_index_sin_archivo():
+    """read_index devuelve [] cuando el archivo no existe."""
+    old = _metrics_mod.INDEX
+    try:
+        _metrics_mod.INDEX = Path(tempfile.mkdtemp()) / "no_existe.json"
+        result = _metrics_mod.read_index()
+        assert_eq(result, [], "sin archivo debe devolver lista vacia")
+    finally:
+        _metrics_mod.INDEX = old
+
+
+@test
+def test_read_index_con_fixture():
+    """read_index devuelve las sesiones del archivo."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = Path(td) / "_index.json"
+        idx.write_text(_json.dumps({"sessions": [{"id": "s1"}, {"id": "s2"}]}), encoding="utf-8")
+        old = _metrics_mod.INDEX
+        try:
+            _metrics_mod.INDEX = idx
+            result = _metrics_mod.read_index()
+            assert_eq(len(result), 2, "debe devolver 2 sesiones")
+            assert_eq(result[0]["id"], "s1", "primera sesion debe ser s1")
+        finally:
+            _metrics_mod.INDEX = old
+
+
+@test
+def test_read_forensic_sin_archivo():
+    """read_forensic devuelve [] cuando el archivo no existe."""
+    old = _metrics_mod.FORENSIC
+    try:
+        _metrics_mod.FORENSIC = Path(tempfile.mkdtemp()) / "no_existe.jsonl"
+        result = _metrics_mod.read_forensic()
+        assert_eq(result, [], "sin archivo debe devolver lista vacia")
+    finally:
+        _metrics_mod.FORENSIC = old
 
 
 # ---------------------------------------------------------------------------

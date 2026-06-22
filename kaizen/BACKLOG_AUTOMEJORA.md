@@ -187,7 +187,7 @@ de aotl_state.py). Reportar WARN si algun PROTECTED_FILE no existe.
 un script listado en PROTECTED_FILES, da WARN.
 **Rollback:** Eliminar el check de doctor.py.
 
-### B-21 [PENDIENTE] test_aotl: guardarrail debe verificar los 7 scripts nuevos en PROTECTED_FILES
+### B-21 [HECHO 2026-06-22] test_aotl: guardarrail debe verificar los 7 scripts nuevos en PROTECTED_FILES
 **Valor:** El test 'guardarrail: maquinaria del loop protegida' solo prueba 3 de los 10 scripts
 en PROTECTED_FILES (kaizen.py, apply.py, autoloop.py). Los 7 nuevos (run_session, validate,
 forensic, new_session, selfcheck, spawn_child, promote_decision) no estan en el test. Si alguien
@@ -198,7 +198,7 @@ los saca de PROTECTED_FILES, los tests no lo detectan.
 los scripts en PROTECTED_FILES.
 **Rollback:** Revertir el cambio en test_aotl.py.
 
-### B-22 [PENDIENTE] metrics: agregar latencia p95 y tasa de escalacion al reporte JSON
+### B-22 [HECHO 2026-06-22] metrics: agregar latencia p95 y tasa de escalacion al reporte JSON
 **Valor:** El reporte de metrics reporta media/mediana/min/max de latencia pero no p95 (percentil
 que suele importar mas que la media). Tampoco normaliza la tasa de escalacion. Datos utiles para
 detectar runs que tardan mucho.
@@ -207,7 +207,7 @@ escalation_rate (escalations_to_human / sessions_total). Actualizar print_report
 **Metrica:** python kaizen.py metrics --json contiene 'p95_elapsed_ms' y 'escalation_rate'.
 **Rollback:** Quitar los 2 campos de summarize() y print_report().
 
-### B-23 [PENDIENTE] Dashboard: columna tags en historial de sesiones
+### B-23 [HECHO 2026-06-22] Dashboard: columna tags en historial de sesiones
 **Valor:** Las sesiones tienen tags (ej: ['infra', 'cli']) pero el dashboard no los muestra.
 El historial es mas util para filtrar/entender cuando se ven los tags.
 **Detalles:** En _session_rows() de dashboard_static.py, agregar columna 'Tags' que muestra
@@ -216,7 +216,7 @@ una 6ta pequeña.
 **Metrica:** El HTML generado muestra la columna Tags con al menos un tag visible (hay 15 sesiones con tags).
 **Rollback:** Eliminar la columna Tags de _session_rows() y el thead.
 
-### B-24 [PENDIENTE] test_core: test de _percentile para casos borde (lista vacia y un elemento)
+### B-24 [HECHO 2026-06-22] test_core: test de _percentile para casos borde (lista vacia y un elemento)
 **Valor:** _percentile() es una funcion pura critica para el reporte de metricas. No tiene
 tests propios. Si se rompe, el reporte dice 0 silenciosamente.
 **Detalles:** Agregar en test_core.py 3 casos para _percentile: lista vacia, 1 elemento, lista con varios.
@@ -224,6 +224,21 @@ tests propios. Si se rompe, el reporte dice 0 silenciosamente.
 **Rollback:** Eliminar los 3 casos de test_core.py.
 
 ## Items parkeados (REVIEW_QUEUE)
+
+### B-25 [PENDIENTE] Dashboard: tarjeta de latencia con p95 y tasa de escalacion
+**Valor:** El dashboard muestra total/aceptadas/rechazadas pero no las metricas de latencia
+(p95, media, mediana) ni la tasa de escalacion que ya calcula metrics.py. El operador
+deberia ver el p95 directamente en el dashboard sin correr metrics.
+**Detalles:** En build_data() de dashboard_static.py, agregar lectura de forensic para
+calcular p95 y escalation_rate. Agregar 2 cards nuevas en la grilla de metricas: p95 (ms)
+y escalation_rate (%). Reusar _percentile de metrics.py (o reimplementarla inline si el
+import es problematico).
+**Metrica:** HTML generado contiene 'p95' y 'escalacion %'. python scripts/test_core.py: 22 OK.
+**Rollback:** Quitar las 2 cards de la grilla y el calculo de build_data().
+
+### B-26 [N/A] Adapter generic actualizar denylist con PROTECTED_FILES actual
+**DESCARTADO:** adapters/generic/adapter.yaml es modo manual (HITL): no tiene foco ni
+denylist porque no hace auto-apply. No aplica el mismo parche que B-19.
 
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
@@ -257,3 +272,10 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-15: Selfcheck detecta decided huérfanas — sesión 054844Z (2026-06-22)
 - B-16: PROTECTED_FILES maquinaria crítica — sesión 055032Z (2026-06-22)
 - B-17: Dashboard URL file:// en header — sesión 055139Z (2026-06-22)
+- B-18: Docs 07 actualizados — sesión 055325Z (2026-06-22)
+- B-19: Denylist adapter claude sincronizado — sesión 055540Z (2026-06-22)
+- B-20: Doctor verifica PROTECTED_FILES — sesión 055628Z (2026-06-22)
+- B-21: Test guardarrail itera PROTECTED_FILES completo — sesión 055812Z (2026-06-22)
+- B-22: Metrics p95 y escalation_rate — sesión 055930Z (2026-06-22)
+- B-23: Dashboard columna Tags — sesión 060132Z (2026-06-22)
+- B-24: Tests _percentile + refactor modulo — sesión 060233Z (2026-06-22)

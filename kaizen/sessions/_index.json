@@ -624,6 +624,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T060520Z__dashboard-tarjetas-p95-latencia-y-tasa-escalacion-b-25",
+      "objective": "Dashboard tarjetas p95 latencia y tasa escalacion (B-25)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:05:20+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

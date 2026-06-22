@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
 SESSIONS = ROOT / "sessions"
 INDEX = SESSIONS / "_index.json"
 LOOP_STATUS = SESSIONS / "_loop.status.json"
@@ -70,6 +71,22 @@ def _esc(s: object) -> str:
     return str(s if s is not None else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _load_metrics() -> dict:
+    """Carga las metricas de latencia y escalacion desde metrics.py (best-effort)."""
+    try:
+        import metrics as m
+        idx = m.read_index()
+        evts = m.read_forensic()
+        s = m.summarize(idx, evts)
+        return {
+            "p95_elapsed_ms": s.get("p95_elapsed_ms", 0),
+            "escalation_rate": s.get("escalation_rate", 0),
+            "avg_elapsed_ms": s.get("avg_elapsed_ms", 0),
+        }
+    except Exception:  # noqa: BLE001
+        return {"p95_elapsed_ms": 0, "escalation_rate": 0, "avg_elapsed_ms": 0}
+
+
 def build_data(out_path: "Path | None" = None) -> dict:
     index = _load_json(INDEX)
     sessions = index.get("sessions", [])
@@ -90,6 +107,7 @@ def build_data(out_path: "Path | None" = None) -> dict:
 
     target = out_path or (OUT_DIR / "index.html")
     file_url = target.resolve().as_uri()
+    perf = _load_metrics()
 
     return {
         "generated_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -100,6 +118,9 @@ def build_data(out_path: "Path | None" = None) -> dict:
         "loop": loop,
         "sessions": list(reversed(sessions)),
         "file_url": file_url,
+        "p95_elapsed_ms": perf["p95_elapsed_ms"],
+        "escalation_rate": perf["escalation_rate"],
+        "avg_elapsed_ms": perf["avg_elapsed_ms"],
     }
 
 
@@ -251,6 +272,8 @@ def generate_html(data: dict) -> str:
             ("iterando", verdicts.get("iterate", 0)),
             ("AOTL", data["aotl_count"]),
             ("tasa %", f"{data['accept_rate']:.0f}"),
+            ("p95 ms", f"{data['p95_elapsed_ms']:.0f}"),
+            ("escal %", f"{(data['escalation_rate'] * 100):.1f}"),
         ]
     )
 

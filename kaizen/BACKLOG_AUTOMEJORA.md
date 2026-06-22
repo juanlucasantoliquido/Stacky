@@ -464,3 +464,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-58: tests gather_focus y active_config en autoloop.py — sesión 134357Z (2026-06-22)
 - B-59: tests applied_paths sin_manifest + tras_apply — sesión 134553Z (2026-06-22)
 - B-60: sincronizar decision.schema.json agregar _meta — sesión 134818Z (2026-06-22)
+- B-61: tests de compute_total, required_keys, validate_required en run_session.py — sesión 135301Z (2026-06-22)

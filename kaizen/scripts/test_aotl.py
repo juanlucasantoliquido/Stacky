@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (44 tests)
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (50 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -15,7 +15,8 @@ Cubre las invariantes que sostienen la seguridad del loop:
   - promote_decision: next_adr_number + already_promoted (idempotencia),
   - set_impl_status + update_index_fields (trazabilidad del loop),
   - spawn_child: caminos de error (no_args, no_decision, non_iterate) + idempotencia,
-  - forensic.py: sha256_text, sha256_file, Forensic.log() campos + seq monotonica.
+  - forensic.py: sha256_text, sha256_file, Forensic.log() campos + seq monotonica,
+  - aotl_state.py: write/read/clear loop_status, request/stop/clear_stop (6 tests).
 """
 from __future__ import annotations
 
@@ -587,6 +588,85 @@ def _():
             assert r2["level"] == "WARN" and r3["level"] == "ERROR"
         finally:
             fx.GLOBAL_LOG = orig_gl
+    finally:
+        shutil.rmtree(tmp)
+
+
+# --- aotl_state: loop_status (write/read/clear) + stop flag (request/stop/clear) -----------
+import aotl_state as _ast  # noqa: E402
+
+
+@check("aotl_state.write_loop_status: agrega updated_utc y el campo dado")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        path = tmp / "_loop.status.json"
+        _ast.write_loop_status({"phase": "propose", "iteration": 1}, path=path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data["phase"] == "propose", "debe preservar el campo dado"
+        assert "updated_utc" in data, "debe agregar updated_utc"
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("aotl_state.read_loop_status: devuelve None si no existe")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        result = _ast.read_loop_status(path=tmp / "_no_existe.json")
+        assert result is None, "debe devolver None si el archivo no existe"
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("aotl_state.read_loop_status: devuelve dict si existe")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        path = tmp / "_loop.status.json"
+        _ast.write_loop_status({"phase": "run"}, path=path)
+        result = _ast.read_loop_status(path=path)
+        assert isinstance(result, dict), "debe devolver dict"
+        assert result["phase"] == "run"
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("aotl_state.clear_loop_status: borra el archivo existente")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        path = tmp / "_loop.status.json"
+        path.write_text("{}", encoding="utf-8")
+        _ast.clear_loop_status(path=path)
+        assert not path.exists(), "clear debe eliminar el archivo"
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("aotl_state.request_stop + stop_requested: crea y detecta el flag")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        flag = tmp / "_loop.stop"
+        assert not _ast.stop_requested(path=flag), "no debe haber flag inicial"
+        _ast.request_stop(path=flag, reason="test")
+        assert _ast.stop_requested(path=flag), "despues de request_stop debe existir el flag"
+        data = json.loads(flag.read_text(encoding="utf-8"))
+        assert data["reason"] == "test", "debe persistir el reason"
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("aotl_state.clear_stop: elimina el flag de parada")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        flag = tmp / "_loop.stop"
+        _ast.request_stop(path=flag)
+        assert _ast.stop_requested(path=flag)
+        _ast.clear_stop(path=flag)
+        assert not _ast.stop_requested(path=flag), "tras clear_stop no debe existir el flag"
     finally:
         shutil.rmtree(tmp)
 

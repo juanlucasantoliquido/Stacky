@@ -60,6 +60,19 @@ python scripts/new_session.py "smoke-test"
 # Debe imprimir la ruta de la sesión creada y salir con código 0.
 ```
 
+## Verificación completa (CI / pre-commit)
+
+```sh
+python kaizen.py check
+# CHECK: TODO VERDE  [5/5 grupos OK | 110 tests unitarios]
+```
+
+Corre en orden: `doctor` (salud estructural) → `selfcheck` (consistencia del índice) →
+`validate` (contratos de sesiones cerradas) → `test_core` (72 tests de lógica pura:
+slugify, scores, metrics, dashboard, archive, adapters, config, doctor, _console) → `test_aotl` (38 tests
+de maquinaria AOTL: guardarraíl, gate, apply/rollback, spawn_child, forensic).
+Exit 0 solo si todo pasa. Usalo como gate antes de commitear o como CI.
+
 ## Pasar a AOTL (más adelante)
 
 Cambiá `mode: aotl` en `config/kaizen.config.yaml` y configurá la política de gates en

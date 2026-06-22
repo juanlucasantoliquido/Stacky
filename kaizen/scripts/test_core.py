@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (64 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (72 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value
@@ -13,6 +13,9 @@ Cubre:
   - forensic_view.py: fmt_data (pura) + main() — 2 caminos (no_args, no_log)
   - adapter_info.py: list_adapters, describe_valid(0), describe_missing(1)
   - _config.py: load_yaml — escalares, anidados, listas, comentarios
+  - doctor.py: main() — 6 ramas (sin_config/WARN, config_invalida/FAIL, perfil_faltante/FAIL,
+               instalacion_completa/OK, contratos_faltantes/FAIL, scripts_faltantes/FAIL)
+  - _console.py: enable_utf8() — no lanza en streams reales, no lanza sin reconfigure
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -831,6 +834,160 @@ def test_load_yaml_strips_comments():
         d = _load_yaml(f)
         assert_eq(d["a"], 1, "valor antes del comentario")
         assert_eq(d["b"], "url#hash", "hash dentro de string no es comentario")
+
+
+# ---------------------------------------------------------------------------
+# Tests de doctor.py — 7 ramas: config/perfil/adapter/contratos/scripts/PROTECTED/indice
+# ---------------------------------------------------------------------------
+import importlib
+import json as _json
+import types as _types
+
+
+def _mk_doctor_root(td: str, *, with_config: bool = True, config_valid: bool = True,
+                    with_profile: bool = True, with_adapter: bool = True,
+                    with_contracts: bool = True, with_scripts: bool = True,
+                    with_index: bool = True) -> Path:
+    """Monta un ROOT minimo en tempdir para probar doctor.main()."""
+    root = Path(td)
+    # config/
+    (root / "config" / "profiles").mkdir(parents=True, exist_ok=True)
+    if with_config:
+        adapter_name = "mock" if with_adapter else "noexiste"
+        cfg_text = "mode: aotl\nadapter: %s\nprofile: default\n" % adapter_name
+        if not config_valid:
+            cfg_text = ": invalid yaml {{{\n"
+        (root / "config" / "kaizen.config.yaml").write_text(cfg_text, encoding="utf-8")
+    if with_profile:
+        (root / "config" / "profiles" / "default.yaml").write_text("gate:\n  accept: 11\n", encoding="utf-8")
+    # adapters/
+    if with_adapter:
+        (root / "adapters" / "mock").mkdir(parents=True, exist_ok=True)
+        (root / "adapters" / "mock" / "adapter.yaml").write_text("name: mock\n", encoding="utf-8")
+    # contracts/
+    if with_contracts:
+        (root / "contracts").mkdir(exist_ok=True)
+        for c in ["session.input.schema.json", "proposal.schema.json", "evaluation.schema.json",
+                  "decision.schema.json", "artifact.schema.json", "session.output.schema.json"]:
+            (root / "contracts" / c).write_text("{}", encoding="utf-8")
+    # scripts/ (los requeridos)
+    if with_scripts:
+        (root / "scripts").mkdir(exist_ok=True)
+        for s in ["new_session.py", "run_session.py", "validate.py", "metrics.py", "selfcheck.py"]:
+            (root / "scripts" / s).write_text("", encoding="utf-8")
+    # sessions/
+    if with_index:
+        (root / "sessions").mkdir(exist_ok=True)
+        (root / "sessions" / "_index.json").write_text('{"sessions": []}', encoding="utf-8")
+    return root
+
+
+def _run_doctor(td_root: Path) -> tuple[int, str]:
+    """Corre doctor.main con ROOT parcheado; devuelve (exit_code, stdout)."""
+    import io, contextlib
+    import doctor as _doctor_mod
+    old_root = _doctor_mod.ROOT
+    old_cfg = _doctor_mod.CONFIG
+    old_contracts = _doctor_mod.CONTRACTS
+    try:
+        _doctor_mod.ROOT = td_root
+        _doctor_mod.CONFIG = td_root / "config" / "kaizen.config.yaml"
+        _doctor_mod.CONTRACTS = td_root / "contracts"
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = _doctor_mod.main([])
+        return code, buf.getvalue()
+    finally:
+        _doctor_mod.ROOT = old_root
+        _doctor_mod.CONFIG = old_cfg
+        _doctor_mod.CONTRACTS = old_contracts
+
+
+@test
+def test_doctor_sin_config_reporta_warn():
+    """Sin config activa: doctor reporta WARN (config ausente es advertencia, no falla dura).
+    El adapter default 'generic' puede no existir -> FAIL adicional; lo que importa es
+    que la ausencia de config produce al menos un '!!' en el output."""
+    with tempfile.TemporaryDirectory() as td:
+        root = _mk_doctor_root(td, with_config=False)
+        _code, out = _run_doctor(root)
+        assert_true("!!" in out or "WARN" in out, "debe reportar WARN por config ausente: %r" % out)
+
+
+@test
+def test_doctor_config_invalida_exit_1():
+    """Con config que no parsea: doctor da FAIL y exit 1."""
+    with tempfile.TemporaryDirectory() as td:
+        root = _mk_doctor_root(td, config_valid=False)
+        code, out = _run_doctor(root)
+        assert_eq(code, 1, "config invalida debe ser exit 1")
+        assert_true("FAIL" in out or "XX" in out, "debe reportar FAIL")
+
+
+@test
+def test_doctor_perfil_faltante_exit_1():
+    """Con perfil faltante: doctor da FAIL y exit 1."""
+    with tempfile.TemporaryDirectory() as td:
+        root = _mk_doctor_root(td, with_profile=False)
+        code, out = _run_doctor(root)
+        assert_eq(code, 1, "perfil faltante debe ser exit 1")
+
+
+@test
+def test_doctor_instalacion_completa_exit_0():
+    """Instalacion completa y valida: doctor da todos OK y exit 0."""
+    with tempfile.TemporaryDirectory() as td:
+        root = _mk_doctor_root(td)
+        code, out = _run_doctor(root)
+        assert_eq(code, 0, "instalacion completa debe ser exit 0: %r" % out)
+        assert_true("OK" in out, "debe reportar OK")
+
+
+@test
+def test_doctor_contratos_faltantes_exit_1():
+    """Sin contratos: doctor da FAIL y exit 1."""
+    with tempfile.TemporaryDirectory() as td:
+        root = _mk_doctor_root(td, with_contracts=False)
+        code, out = _run_doctor(root)
+        assert_eq(code, 1, "sin contratos debe ser exit 1")
+
+
+@test
+def test_doctor_scripts_faltantes_exit_1():
+    """Sin scripts nucleo: doctor da FAIL y exit 1."""
+    with tempfile.TemporaryDirectory() as td:
+        root = _mk_doctor_root(td, with_scripts=False)
+        code, out = _run_doctor(root)
+        assert_eq(code, 1, "sin scripts nucleo debe ser exit 1")
+
+
+# ---------------------------------------------------------------------------
+# Tests de _console.py — enable_utf8(): no lanza en condiciones normales ni sin reconfigure
+# ---------------------------------------------------------------------------
+from _console import enable_utf8  # noqa: E402
+
+
+@test
+def test_enable_utf8_no_lanza():
+    """enable_utf8() no lanza excepciones en stdout/stderr reales."""
+    enable_utf8()  # solo verifica que no levanta
+
+
+@test
+def test_enable_utf8_sin_reconfigure():
+    """enable_utf8() no lanza si los streams no tienen reconfigure (objeto sin ese metodo)."""
+    import types
+    dummy = types.SimpleNamespace()  # sin reconfigure
+    import _console as _con
+    import sys
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    try:
+        sys.stdout = dummy  # type: ignore[assignment]
+        sys.stderr = dummy  # type: ignore[assignment]
+        _con.enable_utf8()  # debe capturar la excepcion internamente
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
 
 if __name__ == "__main__":

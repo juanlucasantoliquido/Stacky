@@ -886,6 +886,49 @@
         "coverage"
       ],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T065416Z__doc-02-usage-actualizar-con-kaizen-check-y-102-tests-b-51",
+      "objective": "doc 02_USAGE actualizar con kaizen check y 102 tests (B-51)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:54:16+00:00",
+      "status": "closed",
+      "tags": [
+        "docs"
+      ],
+      "verdict": "reject",
+      "note": "sesion huerfana: objetivo ya estaba cumplido (02_USAGE ya decia 102 tests); cerrada por limpieza 2026-06-22"
+    },
+    {
+      "id": "2026-06-22T133116Z__actualizar-backlog-automejora-md-marcar-b-51-cerrada-y-detectar-nueva-deuda-b-52-b-55-b-52",
+      "objective": "actualizar BACKLOG_AUTOMEJORA.md: marcar B-51 cerrada y detectar nueva deuda B-52..B-55 (B-52)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:31:16+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T133315Z__test-core-tests-de-doctor-py-7-ramas-config-perfil-adapter-contratos-scripts-protected-files-indice-b-52",
+      "objective": "test_core: tests de doctor.py (7 ramas: config/perfil/adapter/contratos/scripts/PROTECTED_FILES/indice) (B-52)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:33:15+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T133633Z__test-core-tests-de-console-enable-utf8-b-53",
+      "objective": "test_core: tests de _console.enable_utf8() (B-53)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:36:33+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

@@ -343,6 +343,34 @@ No afecta los docstrings (no van al stdout en runtime).
 **Metrica lograda:** python kaizen.py check: headers ASCII, sin '?' en terminal cp1252.
 **Rollback:** Revertir los 3 prints en scripts/check.py.
 
+### B-52 [PENDIENTE] test_core: tests de doctor.py (7 ramas)
+**Valor:** doctor.py es el comando de diagnostico estructural pero no tiene tests. Tiene 7
+ramas: config OK/FAIL/WARN, perfil OK/FAIL, adapter OK/WARN, contratos OK/FAIL, scripts OK/FAIL,
+PROTECTED_FILES OK/WARN, indice OK/FAIL. Sin tests, una regresion puede hacer que doctor
+devuelva exit 0 aunque detecte FAILs.
+**Detalles:** Agregar en test_core.py al menos 4 casos de doctor.main(): (1) sin config ->
+0 FAIL (WARN); (2) config valida -> OK; (3) config invalida -> 1 FAIL; (4) perfil faltante -> 1 FAIL.
+Usar tempdir y parchar ROOT dentro de doctor.py o montar estructura minima en tempdir.
+**Metrica:** python scripts/test_core.py: OK con al menos 4 casos nuevos para doctor. 0 FAIL.
+**Rollback:** Eliminar los casos de doctor en test_core.py.
+
+### B-53 [PENDIENTE] test_core: tests de _console.enable_utf8()
+**Valor:** _console.py no tiene tests. La funcion enable_utf8() es el guardarrail de encoding;
+si se rompe, todos los scripts que la llaman pueden fallar silenciosamente en Windows cp1252.
+**Detalles:** Agregar en test_core.py 2 casos: (1) enable_utf8() no lanza en stdout/stderr normales;
+(2) enable_utf8() no lanza si reconfigure no existe (mock del atributo).
+**Metrica:** python scripts/test_core.py: 2 casos nuevos, 0 FAIL.
+**Rollback:** Eliminar los 2 casos de _console en test_core.py.
+
+### B-54 [PENDIENTE] Sincronizar conteo de tests en check.py y docstring con el total actual
+**Valor:** check.py dice '102 tests unitarios' pero el total real podria cambiar con B-52/B-53.
+El docstring de test_core.py tambien necesita sincronizarse con cada lote nuevo.
+**Detalles:** Tras implementar B-52 y B-53, actualizar el conteo en check.py y el docstring de
+test_core.py para que reflejen el numero exacto de tests. Verificar con python kaizen.py check.
+**Metrica:** python kaizen.py check muestra el conteo exacto. python scripts/test_core.py: 0 FAIL.
+**Rollback:** Revertir los conteos en check.py y test_core.py.
+**Nota:** Este item es dependiente de B-52 y B-53; implementar despues de ambos.
+
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
 guarda una pre-imagen del archivo eliminado y no lo restaura. Si el loop elimina un archivo
@@ -404,3 +432,7 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-45: Conteos sincronizados 56+27=83 tests — sesión 063604Z (2026-06-22)
 - B-46: Tests promote_decision next_adr_number+already_promoted — sesión 063744Z (2026-06-22)
 - B-47: check.py headers ASCII (sin acentos para cp1252) + B-19/B-20 marcados HECHO — sesión 064318Z (2026-06-22)
+- B-48: Tests _config.load_yaml y spawn_child.py — sesión 064617Z (2026-06-22)
+- B-49: Tests forensic.py sha256 y Forensic.log — sesión 064923Z (2026-06-22)
+- B-50: Tests validate.check_scores — sesión 065224Z (2026-06-22)
+- B-51: doc 02_USAGE actualizar (RECHAZADO: ya estaba cumplido) — sesión 065416Z (2026-06-22)

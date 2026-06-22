@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (103 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (105 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
@@ -22,6 +22,7 @@ Cubre:
   - _config.py: _coerce (null/bool/int/string con comillas) + _strip_comment (hash en strings)
   - metrics.py: _median (lista vacia, lista par, lista impar)
   - check.py: _parse_test_count (patron test_core, patron test_aotl, sin patron, 0)
+  - adapter_info.py: active_adapter (default 'generic' sin config, y 'mock' con config)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1331,6 +1332,39 @@ def test_parse_test_count_multiline():
     """_parse_test_count extrae el patron de un output multilinea real."""
     output = "  OK  test_foo\n  OK  test_bar\n\n99 OK, 0 FAIL"
     assert_eq(_chk._parse_test_count(output), 99)  # noqa: SLF001
+
+
+# ---------------------------------------------------------------------------
+# Tests de adapter_info.py — active_adapter (config y default)
+# ---------------------------------------------------------------------------
+import adapter_info as _ai  # noqa: E402
+
+
+@test
+def test_active_adapter_default_generic():
+    """active_adapter devuelve 'generic' si no hay config."""
+    old_cfg = _ai.CONFIG
+    try:
+        _ai.CONFIG = Path("/tmp/__kaizen_no_config_ai__.yaml")
+        result = _ai.active_adapter()
+        assert_eq(result, "generic", "sin config debe devolver 'generic'")
+    finally:
+        _ai.CONFIG = old_cfg
+
+
+@test
+def test_active_adapter_reads_config():
+    """active_adapter devuelve el adapter de la config cuando existe."""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = Path(td) / "kaizen.config.yaml"
+        cfg.write_text("mode: aotl\nadapter: mock\nprofile: default\n", encoding="utf-8")
+        old_cfg = _ai.CONFIG
+        try:
+            _ai.CONFIG = cfg
+            result = _ai.active_adapter()
+            assert_eq(result, "mock", "con adapter: mock debe devolver 'mock'")
+        finally:
+            _ai.CONFIG = old_cfg
 
 
 if __name__ == "__main__":

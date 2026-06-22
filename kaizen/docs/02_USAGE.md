@@ -64,17 +64,18 @@ python scripts/new_session.py "smoke-test"
 
 ```sh
 python kaizen.py check
-# CHECK: TODO VERDE  [5/5 grupos OK | 190 tests unitarios]
+# CHECK: TODO VERDE  [5/5 grupos OK | 193 tests unitarios]
 ```
 
 Corre en orden: `doctor` (salud estructural) → `selfcheck` (consistencia del índice) →
-`validate` (contratos de sesiones cerradas) → `test_core` (129 tests de lógica pura:
+`validate` (contratos de sesiones cerradas) → `test_core` (132 tests de lógica pura:
 slugify, scores, metrics, dashboard, archive, adapters, config, doctor, _console,
 autoloop.gather_focus/active_config/load_adapter/load_profile/active_adapter/build_context,
 new_session.render+append_to_index,
 run_session.compute_total+required_keys+validate_required+update_index_status+load_json,
 validate.validate_session, metrics.print_report+read_index+read_forensic,
-spawn_child.max_iterations+write_json, dashboard_static.generate_html smoke)
+spawn_child.max_iterations+write_json, dashboard_static.generate_html smoke,
+check.run_and_capture, engine.st_now)
 → `test_aotl` (61 tests de maquinaria AOTL: guardarraíl, gate, apply/rollback+applied_paths,
 spawn_child, forensic, engine.normalize/extract_json/_context_block, aotl_state.loop_status+stop_flag,
 make_engine, promote_decision.next_adr_number+already_promoted,

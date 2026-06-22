@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (129 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (132 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
@@ -31,6 +31,8 @@ Cubre:
   - metrics.py: print_report (encabezado, campos), read_index (sin archivo, con fixture), read_forensic (sin archivo)
   - spawn_child.py: max_iterations (sin config/con perfil), write_json (crea archivo valido)
   - dashboard_static.py: generate_html (smoke test: retorna HTML con 'kaizen')
+  - check.py: run_and_capture (rc=0+output, rc=1+output con mock subprocess)
+  - engine.py: st_now (retorna ISO 8601 UTC)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1558,6 +1560,54 @@ def test_build_context_valores_pasados():
         finally:
             autoloop.ROOT = old_root
             autoloop.INDEX = old_index
+
+
+# ---------------------------------------------------------------------------
+# B-88: check.run_and_capture y engine.st_now — 3 casos
+# ---------------------------------------------------------------------------
+import check as _check_mod
+import engine as _engine_mod
+import subprocess as _sp88
+
+
+@test
+def test_run_and_capture_rc0_retorna_output():
+    """run_and_capture con rc=0 devuelve (0, stdout+stderr combinado)."""
+    old = _check_mod.subprocess.run
+    try:
+        _check_mod.subprocess.run = lambda *a, **kw: _sp88.CompletedProcess(
+            args=[], returncode=0, stdout="hola\n", stderr="warn\n"
+        )
+        rc, out = _check_mod.run_and_capture("test_core.py")
+        assert_eq(rc, 0, "returncode debe ser 0")
+        assert "hola" in out, "stdout debe estar en output"
+        assert "warn" in out, "stderr debe estar en output"
+    finally:
+        _check_mod.subprocess.run = old
+
+
+@test
+def test_run_and_capture_rc1_retorna_output():
+    """run_and_capture con rc=1 devuelve (1, output combinado)."""
+    old = _check_mod.subprocess.run
+    try:
+        _check_mod.subprocess.run = lambda *a, **kw: _sp88.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="error critico\n"
+        )
+        rc, out = _check_mod.run_and_capture("validate.py")
+        assert_eq(rc, 1, "returncode debe ser 1")
+        assert "error critico" in out, "stderr debe estar en output"
+    finally:
+        _check_mod.subprocess.run = old
+
+
+@test
+def test_st_now_retorna_iso8601_utc():
+    """st_now retorna un string ISO 8601 con offset UTC."""
+    ts = _engine_mod.st_now()
+    assert isinstance(ts, str), "debe ser string"
+    assert "+00:00" in ts or ts.endswith("Z"), "debe indicar UTC"
+    assert "T" in ts, "debe tener separador T de ISO 8601"
 
 
 # ---------------------------------------------------------------------------

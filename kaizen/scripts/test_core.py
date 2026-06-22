@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (53 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (56 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value
@@ -11,6 +11,7 @@ Cubre:
   - list_sessions.py: main() y get_opt
   - show_session.py: main() — 3 caminos (no_args, not_found, exists)
   - forensic_view.py: fmt_data (pura) + main() — 2 caminos (no_args, no_log)
+  - adapter_info.py: list_adapters, describe_valid(0), describe_missing(1)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests

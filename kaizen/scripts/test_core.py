@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (85 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (90 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
@@ -18,6 +18,7 @@ Cubre:
   - autoloop.py: gather_focus (dir vacio, archivo editable, foco vacio) + active_config sin CONFIG
   - _console.py: enable_utf8() — no lanza en streams reales, no lanza sin reconfigure
   - run_session.py: compute_total, required_keys, validate_required (5 casos puros)
+  - dashboard_static.py: _impl_badge, _phase_pills, _session_rows (5 casos de render HTML)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1168,6 +1169,55 @@ def test_validate_required_detects_missing():
         # Objeto con solo uno de los dos campos
         missing = _rs.validate_required({"session_id": "s1"}, schema_path)
         assert_eq(missing, ["verdict"], "debe detectar 'verdict' como faltante")
+
+
+# ---------------------------------------------------------------------------
+# Tests de dashboard_static.py — _impl_badge, _phase_pills, _session_rows
+# ---------------------------------------------------------------------------
+
+
+@test
+def test_impl_badge_none():
+    """_impl_badge(None) devuelve guion HTML (estado indefinido)."""
+    result = _ds._impl_badge(None)
+    assert_true("—" in result, "None debe devolver guion")
+
+
+@test
+def test_impl_badge_implemented():
+    """_impl_badge('implemented') devuelve badge con el texto 'implemented'."""
+    result = _ds._impl_badge("implemented")
+    assert_true("implemented" in result, "debe contener 'implemented'")
+    # Debe ser un span HTML (badge)
+    assert_true("<span" in result, "debe ser un elemento span")
+
+
+@test
+def test_phase_pills_returns_all_phases():
+    """_phase_pills() devuelve HTML con las fases del pipeline (en español)."""
+    result = _ds._phase_pills(None)
+    # El pipeline tiene al menos 3 fases conocidas (en español)
+    assert_true(len(result) > 50, "debe generar HTML con las fases del pipeline")
+    assert_true("proponer" in result, "debe incluir la fase 'proponer'")
+
+
+@test
+def test_phase_pills_active_phase_highlighted():
+    """_phase_pills con fase activa genera HTML distinto (activa vs inactiva)."""
+    result_none = _ds._phase_pills(None)
+    result_propose = _ds._phase_pills("propose")
+    assert_true(result_none != result_propose,
+                "la fase activa debe cambiar el HTML vs sin fase")
+
+
+@test
+def test_session_rows_genera_filas():
+    """_session_rows con 1 sesion genera al menos 1 fila <tr>."""
+    sessions = [{"id": "s-test", "objective": "mejorar algo", "verdict": "accept",
+                 "status": "closed", "created_utc": "2026-06-22T10:00:00Z"}]
+    result = _ds._session_rows(sessions)
+    assert_true("<tr>" in result, "debe generar al menos una fila <tr>")
+    assert_true("mejorar algo" in result, "debe incluir el objetivo de la sesion")
 
 
 if __name__ == "__main__":

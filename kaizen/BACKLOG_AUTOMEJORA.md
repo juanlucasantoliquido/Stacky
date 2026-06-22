@@ -68,7 +68,7 @@ un `observe.prompt` ajustado al contexto de Stacky.
 **Métrica:** `python kaizen.py loop --engine mock --adapter stacky --max-iterations 1` corre sin error.
 **Rollback:** Eliminar `adapters/stacky/`.
 
-### B-08 [PENDIENTE] Gate: reportar ítem de bloqueante con descripción en decision.json
+### B-08 [HECHO 2026-06-22] Gate: reportar ítem de bloqueante con descripción en decision.json
 **Valor:** Actualmente el gate escribe `blocking: []` pero no explica por qué se disparó cada
 bloqueante. El operador debe inferirlo del evaluation.json.
 **Detalles:** Agregar campo `blocking_details` en `decision.json` con descripción de cada bloqueante.
@@ -85,12 +85,31 @@ bloqueante. El operador debe inferirlo del evaluation.json.
 **Métrica:** README.md contiene la sección y no hay contradicción con el comportamiento real.
 **Rollback:** Revertir README.md.
 
-### B-10 [PENDIENTE] Prompt de observación AOTL más rico (incluye decisiones previas)
+### B-10 [HECHO 2026-06-22] Prompt de observación AOTL más rico (incluye decisiones previas)
 **Valor:** El prompt actual que recibe el motor solo ve el índice de sesiones, no las decisiones
 promovidas (ADR-lite). Inyectar el resumen de decisions/ mejoraría la calidad de las propuestas.
 **Detalles:** Actualizar `scripts/engine.py` o el adapter para incluir un resumen de `decisions/`.
 **Métrica:** El prompt generado contiene al menos una línea de las decisions/ existentes.
 **Rollback:** Revertir cambio en engine.py / adapter.
+
+---
+
+### B-11 [PENDIENTE] Regeneración automática del dashboard al cerrar cada sesión
+**Valor:** El prompt del operador dice "regeneralo al cierre de CADA sesión". Actualmente solo se
+regenera si el operador llama manualmente a `python kaizen.py dashboard`.
+**Detalles:** Agregar llamada a `dashboard_static.py` al final de `run_session.py` (tras cerrar la
+sesión). Solo si `dashboard/` existe ya (para no crearlo en tests). La llamada silencia errores
+(el dashboard es best-effort; no debe romper el gate).
+**Métrica:** Tras `python kaizen.py run <id>`, `dashboard/index.html` tiene fecha de modificación
+más reciente que antes del run.
+**Rollback:** Eliminar la llamada en `run_session.py`.
+
+### B-12 [PENDIENTE] Test unitario para recent_decisions_summary (autoloop.py)
+**Valor:** La funcion recien agregada no tiene tests unitarios.
+**Detalles:** Agregar cases en `scripts/test_core.py` para `recent_decisions_summary` con
+fixtures de decisions/ simuladas en tempdir.
+**Métrica:** `python scripts/test_core.py` da 0 fallas con al menos 2 casos nuevos.
+**Rollback:** Eliminar los 2 casos nuevos de test_core.py.
 
 ---
 
@@ -102,4 +121,13 @@ promovidas (ADR-lite). Inyectar el resumen de decisions/ mejoraría la calidad d
 
 ## Historial de items cerrados
 
-*(vacío — primera versión del backlog, 2026-06-22)*
+- B-01: Dashboard estático HTML — sesión 052633Z (2026-06-22)
+- B-02: Limpiar sesiones open huérfanas — sesión 052346Z (2026-06-22)
+- B-03: Ampliar foco AOTL docs/ y scripts/ — sesión 052910Z (2026-06-22)
+- B-04: Subcomando dashboard genera file:// — incluido en B-01
+- B-05: Tests unitarios core (new_session, validate) — sesión 053031Z (2026-06-22)
+- B-06: Sincronizar MANIFEST.md — sesión 053151Z (2026-06-22)
+- B-07: Adapter Stacky end-to-end — sesión 053400Z (2026-06-22)
+- B-08: Gate blocking_details — sesión 053558Z (2026-06-22)
+- B-09: README dashboard estático — sesión 053307Z (2026-06-22)
+- B-10: Contexto AOTL decisions ADR-lite — sesión 053808Z (2026-06-22)

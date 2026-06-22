@@ -99,9 +99,44 @@ def recent_objectives(n: int = 5) -> list[str]:
     return [e.get("objective", "") for e in items[-n:]]
 
 
+def recent_decisions_summary(n: int = 8, max_chars: int = 300) -> list[str]:
+    """Retorna los últimos N ADR-lite de decisions/ como resumen de una línea cada uno.
+
+    Cada entrada incluye el número, el título y el veredicto (leídos del encabezado del .md).
+    Limita el texto de cada ADR a max_chars caracteres para no inflar el contexto.
+    """
+    decisions_dir = ROOT / "decisions"
+    if not decisions_dir.is_dir():
+        return []
+    files = sorted(f for f in decisions_dir.glob("[0-9]*.md"))[-n:]
+    summaries: list[str] = []
+    for f in reversed(files):
+        try:
+            text = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # Extrae línea de título (# ADR NNNN — ...) y veredicto (- Veredicto: ...)
+        title = ""
+        verdict_line = ""
+        for line in text.splitlines()[:10]:
+            line = line.strip()
+            if line.startswith("# ") and not title:
+                title = line[2:].strip()
+            elif line.lower().startswith("- veredicto:") or "veredicto:" in line.lower():
+                verdict_line = line.strip("- ").strip()
+                break
+        if title:
+            entry = "[%s] %s" % (verdict_line or "?", title)
+            summaries.append(entry[:max_chars])
+    return summaries
+
+
 def build_context(session_id: str, objective: str, iteration: int,
                   focus: list[str], measure_command: str) -> dict:
     tree, files = gather_focus(focus)
+    decisions = recent_decisions_summary()
+    # Combina ADR-lite con los últimos objetivos para contexto completo
+    recent = decisions if decisions else recent_objectives()
     return {
         "session_id": session_id,
         "objective": objective,
@@ -109,7 +144,7 @@ def build_context(session_id: str, objective: str, iteration: int,
         "root": str(ROOT),
         "tree": tree,
         "files": files,
-        "recent_decisions": recent_objectives(),
+        "recent_decisions": recent,
         "protected": list(st.PROTECTED_PREFIXES) + list(st.PROTECTED_FILES),
         "measure_command": measure_command,
     }

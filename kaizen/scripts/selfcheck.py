@@ -13,6 +13,7 @@ Uso:
 """
 from __future__ import annotations
 
+import datetime
 import json
 import sys
 from pathlib import Path
@@ -82,7 +83,32 @@ def main(argv: list[str]) -> int:
 
         print("OK  %s verdict=%s" % (prefix, decision.get("verdict")))
 
-    print("\nself-check: %d sesiones cerradas revisadas, %d fallas." % (checked, failures))
+    # Segunda pasada: sesiones en estado 'decided' (en vuelo) con edad > 5 min.
+    # Estas sesiones deberian haber sido cerradas por run_session.py; si llevan
+    # mas de 5 minutos en 'decided' son huerfanas potenciales -> WARNING.
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    stale_threshold = datetime.timedelta(minutes=5)
+    warnings = 0
+    for entry in sessions:
+        if entry.get("status") != "decided":
+            continue
+        created_raw = entry.get("created_utc") or ""
+        try:
+            created = datetime.datetime.fromisoformat(created_raw)
+            # Normalizar a UTC si no tiene tzinfo
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=datetime.timezone.utc)
+        except (ValueError, TypeError):
+            continue
+        age = now_utc - created
+        if age > stale_threshold:
+            sid = entry.get("id", "?")
+            print("WARN  [%s] status=decided hace %s (>5 min) — posible sesion huerfana" %
+                  (sid, str(age).split(".")[0]))
+            warnings += 1
+
+    print("\nself-check: %d sesiones cerradas revisadas, %d fallas, %d warnings." %
+          (checked, failures, warnings))
     return 1 if failures else 0
 
 

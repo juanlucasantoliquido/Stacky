@@ -524,6 +524,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T054844Z__selfcheck-detecta-sesiones-decided-huerfanas-b-15",
+      "objective": "Selfcheck detecta sesiones decided huerfanas (B-15)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:48:44+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

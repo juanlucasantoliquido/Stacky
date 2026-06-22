@@ -604,6 +604,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T060132Z__dashboard-columna-tags-en-historial-de-sesiones-b-23",
+      "objective": "Dashboard columna tags en historial de sesiones (B-23)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:01:32+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

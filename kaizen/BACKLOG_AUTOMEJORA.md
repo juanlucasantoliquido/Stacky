@@ -207,9 +207,34 @@ escalation_rate (escalations_to_human / sessions_total). Actualizar print_report
 **Metrica:** python kaizen.py metrics --json contiene 'p95_elapsed_ms' y 'escalation_rate'.
 **Rollback:** Quitar los 2 campos de summarize() y print_report().
 
+### B-23 [PENDIENTE] Dashboard: columna tags en historial de sesiones
+**Valor:** Las sesiones tienen tags (ej: ['infra', 'cli']) pero el dashboard no los muestra.
+El historial es mas util para filtrar/entender cuando se ven los tags.
+**Detalles:** En _session_rows() de dashboard_static.py, agregar columna 'Tags' que muestra
+los tags de la sesion como pills (o vacio si no tiene). La tabla ya tiene 5 columnas; agregar
+una 6ta pequeña.
+**Metrica:** El HTML generado muestra la columna Tags con al menos un tag visible (hay 15 sesiones con tags).
+**Rollback:** Eliminar la columna Tags de _session_rows() y el thead.
+
+### B-24 [PENDIENTE] test_core: test de _percentile para casos borde (lista vacia y un elemento)
+**Valor:** _percentile() es una funcion pura critica para el reporte de metricas. No tiene
+tests propios. Si se rompe, el reporte dice 0 silenciosamente.
+**Detalles:** Agregar en test_core.py 3 casos para _percentile: lista vacia, 1 elemento, lista con varios.
+**Metrica:** python scripts/test_core.py: 22 OK (19+3) 0 FAIL.
+**Rollback:** Eliminar los 3 casos de test_core.py.
+
 ## Items parkeados (REVIEW_QUEUE)
 
-*(ninguno parkeado aún — ver kaizen/REVIEW_QUEUE.md cuando exista)*
+### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
+**Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
+guarda una pre-imagen del archivo eliminado y no lo restaura. Si el loop elimina un archivo
+con action='delete', el rollback deja el archivo eliminado permanentemente. Esto viola el
+guardarrail B1 (propuesta sin rollback completo).
+**Impacto:** Potencialmente irreversible. action='delete' en el change_set es una trampa.
+**Opciones:** (A) Guardar pre-imagen del archivo antes de eliminarlo (como hace con modify).
+(B) Prohibir action='delete' en el gate si no hay respaldo externo (git rollback manual).
+**Por que va a REVIEW_QUEUE:** apply.py esta en PROTECTED_FILES (no puede ser auto-editado
+por el loop). Requiere decision y cambio manual del operador.
 
 ---
 

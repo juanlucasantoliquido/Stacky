@@ -186,6 +186,22 @@ def _pending_review_section(sessions: list[dict]) -> str:
 """
 
 
+def _tag_pills(tags: list | None) -> str:
+    """Genera pills HTML para los tags de una sesion (excluye los de motor interno)."""
+    if not tags:
+        return '<span style="color:#6e7681">—</span>'
+    visible = [t for t in tags if not t.startswith("engine:")]
+    if not visible:
+        return '<span style="color:#6e7681">—</span>'
+    parts = []
+    for t in visible[:4]:  # max 4 tags para no saturar la celda
+        parts.append(
+            f'<span style="background:#30363d;color:#8b949e;padding:1px 6px;'
+            f'border-radius:99px;font-size:10px;margin-right:3px">{_esc(t)}</span>'
+        )
+    return "".join(parts)
+
+
 def _session_rows(sessions: list[dict]) -> str:
     rows = []
     for s in sessions:
@@ -205,6 +221,7 @@ def _session_rows(sessions: list[dict]) -> str:
             f'<td>{_impl_badge(s.get("impl_status"))}</td>'
             f'<td>{_pill(s.get("verdict"))}</td>'
             f'<td style="color:#8b949e;font-size:12px">{_esc(engine) or _esc(mode)}</td>'
+            f'<td>{_tag_pills(s.get("tags"))}</td>'
             f"</tr>"
         )
     return "\n".join(rows)
@@ -293,6 +310,7 @@ tr:hover td{{background:#161b22}}
         <th>Impl status</th>
         <th>Veredicto</th>
         <th>Motor</th>
+        <th>Tags</th>
       </tr>
     </thead>
     <tbody>

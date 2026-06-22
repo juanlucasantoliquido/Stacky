@@ -955,6 +955,36 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T134159Z__test-aotl-casos-borde-extract-json-fence-sin-json-entrada-vacia-b-56",
+      "objective": "test_aotl: casos borde extract_json (fence sin json, entrada vacia) (B-56)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:41:59+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T134243Z__test-core-caso-negativo-check-enums-campo-fuera-de-enums-retorna-error-b-57",
+      "objective": "test_core: caso negativo check_enums (campo fuera de enums retorna error) (B-57)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:42:43+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T134357Z__test-core-tests-de-gather-focus-y-active-config-en-autoloop-py-b-58",
+      "objective": "test_core: tests de gather_focus y active_config en autoloop.py (B-58)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:43:57+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

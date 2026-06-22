@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (72 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (76 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value
@@ -15,6 +15,7 @@ Cubre:
   - _config.py: load_yaml — escalares, anidados, listas, comentarios
   - doctor.py: main() — 6 ramas (sin_config/WARN, config_invalida/FAIL, perfil_faltante/FAIL,
                instalacion_completa/OK, contratos_faltantes/FAIL, scripts_faltantes/FAIL)
+  - autoloop.py: gather_focus (dir vacio, archivo editable, foco vacio) + active_config sin CONFIG
   - _console.py: enable_utf8() — no lanza en streams reales, no lanza sin reconfigure
 
 Uso:
@@ -959,6 +960,70 @@ def test_doctor_scripts_faltantes_exit_1():
         root = _mk_doctor_root(td, with_scripts=False)
         code, out = _run_doctor(root)
         assert_eq(code, 1, "sin scripts nucleo debe ser exit 1")
+
+
+# ---------------------------------------------------------------------------
+# Tests de autoloop.py — gather_focus y active_config
+# ---------------------------------------------------------------------------
+import autoloop  # noqa: E402
+
+
+@test
+def test_gather_focus_dir_vacio():
+    """gather_focus con directorio vacio devuelve tree y files vacias."""
+    with tempfile.TemporaryDirectory() as td:
+        old_root = autoloop.ROOT
+        try:
+            autoloop.ROOT = Path(td)
+            tree, files = autoloop.gather_focus(["."])
+            assert_eq(tree, [], "dir vacio debe dar tree vacio")
+            assert_eq(files, {}, "dir vacio debe dar files vacio")
+        finally:
+            autoloop.ROOT = old_root
+
+
+@test
+def test_gather_focus_incluye_archivo_editable():
+    """gather_focus con 1 archivo no protegido lo incluye en tree y files."""
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "test.txt"
+        f.write_text("contenido de prueba", encoding="utf-8")
+        old_root = autoloop.ROOT
+        try:
+            autoloop.ROOT = Path(td)
+            tree, files = autoloop.gather_focus(["."])
+            assert_true(len(tree) == 1, "tree debe tener 1 archivo: %r" % tree)
+            assert_true(len(files) == 1, "files debe tener 1 archivo: %r" % files)
+            assert_true(list(files.values())[0] == "contenido de prueba", "contenido incorrecto")
+        finally:
+            autoloop.ROOT = old_root
+
+
+@test
+def test_gather_focus_foco_lista_vacia():
+    """gather_focus con lista de foco vacia devuelve tree y files vacias."""
+    with tempfile.TemporaryDirectory() as td:
+        (Path(td) / "algo.txt").write_text("x", encoding="utf-8")
+        old_root = autoloop.ROOT
+        try:
+            autoloop.ROOT = Path(td)
+            tree, files = autoloop.gather_focus([])  # sin foco
+            assert_eq(tree, [], "foco vacio debe dar tree vacio")
+            assert_eq(files, {}, "foco vacio debe dar files vacio")
+        finally:
+            autoloop.ROOT = old_root
+
+
+@test
+def test_active_config_sin_config():
+    """active_config devuelve {} si CONFIG no existe."""
+    old_cfg = autoloop.CONFIG
+    try:
+        autoloop.CONFIG = Path("/tmp/__kaizen_no_existe_config__.yaml")
+        cfg = autoloop.active_config()
+        assert_eq(cfg, {}, "sin CONFIG debe retornar dict vacio")
+    finally:
+        autoloop.CONFIG = old_cfg
 
 
 # ---------------------------------------------------------------------------

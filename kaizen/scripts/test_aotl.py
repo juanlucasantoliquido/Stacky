@@ -198,11 +198,18 @@ def _():
 
 
 # --- extracción de JSON del modelo ----------------------------------------------------------
-@check("extract_json: fenced / raw / con prosa / inválido")
+@check("extract_json: fenced / raw / con prosa / fence-sin-json / vacio / invalido")
 def _():
     assert eng.extract_json('```json\n{"a":1}\n```')["a"] == 1
     assert eng.extract_json('{"b":2}')["b"] == 2
     assert eng.extract_json('texto ```json\n{"c":3}\n``` mas texto')["c"] == 3
+    # fence sin prefijo "json" — rama elif '```' in text (caso real de algunos modelos)
+    assert eng.extract_json('```\n{"d":4}\n```')["d"] == 4, "fence sin 'json' debe parsear"
+    # entrada vacia o solo espacios -> EngineError
+    try:
+        eng.extract_json("   "); assert False, "espacios vacios debio fallar"
+    except eng.EngineError:
+        pass
     try:
         eng.extract_json("sin json aqui"); assert False, "debió fallar"
     except eng.EngineError:

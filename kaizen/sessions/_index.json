@@ -774,6 +774,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T063048Z__test-core-tests-de-forensic-view-py-y-fmt-data-b-41",
+      "objective": "test_core: tests de forensic_view.py y fmt_data (B-41)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:30:48+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

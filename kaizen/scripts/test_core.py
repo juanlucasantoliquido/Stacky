@@ -302,6 +302,7 @@ import dashboard_static as _ds  # noqa: E402
 
 
 import archive as _arc  # noqa: E402
+import forensic_view as _fv  # noqa: E402
 import json as _json  # noqa: E402
 import list_sessions as _ls  # noqa: E402
 import show_session as _sh  # noqa: E402
@@ -312,6 +313,39 @@ def _mk_arc_index(tmp_dir: Path, sessions: list) -> Path:
     idx.parent.mkdir(parents=True, exist_ok=True)
     idx.write_text(_json.dumps({"sessions": sessions}), encoding="utf-8")
     return idx
+
+
+@test
+def test_fmt_data_empty():
+    """fmt_data con dict vacio -> cadena vacia."""
+    assert_eq(_fv.fmt_data({}), "")
+
+
+@test
+def test_fmt_data_with_verdict():
+    """fmt_data con verdict -> incluye 'verdict=accept'."""
+    result = _fv.fmt_data({"verdict": "accept", "score": 15})
+    assert_true("verdict=accept" in result, "debe incluir 'verdict=accept'")
+    assert_true("score" not in result, "score no es un campo KEY_FIELDS, no debe aparecer")
+
+
+@test
+def test_forensic_view_no_args():
+    """Sin argumentos -> exit 2."""
+    assert_eq(_fv.main([]), 2)
+
+
+@test
+def test_forensic_view_no_log():
+    """Sesion sin forensic.jsonl -> exit 1."""
+    with tempfile.TemporaryDirectory() as td:
+        # Crea el directorio de sesion pero SIN el forensic.jsonl
+        (Path(td) / "mi-sesion").mkdir()
+        orig = _fv.SESSIONS; _fv.SESSIONS = Path(td)
+        try:
+            assert_eq(_fv.main(["mi-sesion"]), 1)
+        finally:
+            _fv.SESSIONS = orig
 
 
 @test

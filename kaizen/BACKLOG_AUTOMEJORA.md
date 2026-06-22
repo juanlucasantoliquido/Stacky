@@ -308,6 +308,10 @@ de la funcion (que acepta directorio temporal) para futuros mantenedores.
 ### B-39 [HECHO 2026-06-22] test_core: actualizar docstring para reflejar 9 modulos cubiertos
 
 ### B-40 [HECHO 2026-06-22] test_core: tests de show_session.py
+
+### B-41 [HECHO 2026-06-22] test_core: tests de forensic_view.py y fmt_data
+**Valor:** forensic_view.py ultimo comando sin tests. 4 casos: fmt_data pura (2) + main (2 caminos).
+**Metrica lograda:** python scripts/test_core.py: 53 OK 0 FAIL.
 **Valor:** show_session.py sin tests. 3 caminos: no_args(2), not_found(1), exists(0).
 **Metrica lograda:** python scripts/test_core.py: 49 OK 0 FAIL.
 **Valor:** Docstring obsoleto decia solo 2 modulos cuando hay 9 y 46 tests. Corregido.
@@ -377,3 +381,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-38: Tests list_sessions.py — sesión 062709Z (2026-06-22)
 - B-39: Docstring test_core.py actualizado — sesión 062816Z (2026-06-22)
 - B-40: Tests show_session.py — sesión 062934Z (2026-06-22)
+- B-41: Tests forensic_view.py y fmt_data — sesión 063048Z (2026-06-22)

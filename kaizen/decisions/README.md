@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0052-t | ADR 0052 — test_core: tests de forensic_view.py y fmt_data ( | accept |
 | 0051-t | ADR 0051 — test_core: tests de show_session.py (B-40) | accept |
 | 0050-t | ADR 0050 — test_core: actualizar docstring para reflejar tod | accept |
 | 0049-t | ADR 0049 — test_core: tests de list_sessions.py (B-38) | accept |

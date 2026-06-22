@@ -296,6 +296,10 @@ de la funcion (que acepta directorio temporal) para futuros mantenedores.
 **Rollback:** Eliminar los 3 casos de test_core.py.
 
 ### B-34 [HECHO 2026-06-22] test_core: tests de _pending_review_section en dashboard_static
+
+### B-35 [HECHO 2026-06-22] test_core: tests de metrics.summarize con forensic fixtures
+**Valor:** metrics.summarize() es la funcion principal que alimenta el dashboard y el reporte. 4 casos puros con _mk_run_events fixtures minimas.
+**Metrica lograda:** python scripts/test_core.py: 34 OK 0 FAIL.
 **Valor:** _pending_review_section filtra sesiones que requieren atencion del operador. Funcion pura directamente testeable.
 **Metrica lograda:** python scripts/test_core.py: 30 OK 0 FAIL (3 casos: empty, iterate, escalated).
 
@@ -347,3 +351,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-32: decisions/README.md auto-generado — sesión 061802Z (2026-06-22)
 - B-33: Tests _gen_decisions_index en test_core.py — sesión 061953Z (2026-06-22)
 - B-34: Tests _pending_review_section en test_core.py — sesión 062113Z (2026-06-22)
+- B-35: Tests metrics.summarize con fixtures forenses — sesión 062219Z (2026-06-22)

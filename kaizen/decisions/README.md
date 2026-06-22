@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0046-t | ADR 0046 — test_core: tests de metrics.summarize con forensi | accept |
 | 0045-t | ADR 0045 — test_core: tests de _pending_review_section en da | accept |
 | 0044-t | ADR 0044 — test_core: tests de _gen_decisions_index en dashb | accept |
 | 0043-d | ADR 0043 — decisions/README.md auto-generado con lista de AD | accept |

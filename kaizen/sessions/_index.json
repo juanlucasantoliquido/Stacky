@@ -714,6 +714,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T062219Z__test-core-tests-de-metrics-summarize-con-forensic-fixtures-b-35",
+      "objective": "test_core: tests de metrics.summarize con forensic fixtures (B-35)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:22:19+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

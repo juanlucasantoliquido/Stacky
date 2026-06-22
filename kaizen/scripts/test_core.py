@@ -371,9 +371,68 @@ def test_gen_decisions_index_excludes_non_numeric():
 
 
 # ---------------------------------------------------------------------------
-# Tests de metrics.py — _percentile (funcion pura local)
+# Tests de metrics.py — summarize (funcion principal)
 # ---------------------------------------------------------------------------
 import metrics as _metrics  # noqa: E402
+
+
+def _mk_run_events(run_id: str, session_id: str, elapsed_ms: float, verdict: str,
+                   escalated: bool = False) -> list:
+    """Crea eventos forenses minimos para un run (start + decision + end)."""
+    return [
+        {"run_id": run_id, "session_id": session_id, "run_kind": "run_session",
+         "seq": 0, "event": "run.start", "level": "INFO", "elapsed_ms": 0},
+        {"run_id": run_id, "session_id": session_id, "run_kind": "run_session",
+         "seq": 5, "event": "decision.written", "level": "INFO", "elapsed_ms": elapsed_ms / 2,
+         "data": {"verdict": verdict, "escalated": escalated}},
+        {"run_id": run_id, "session_id": session_id, "run_kind": "run_session",
+         "seq": 9, "event": "run.end", "level": "INFO", "elapsed_ms": elapsed_ms,
+         "data": {"verdict": verdict}},
+    ]
+
+
+@test
+def test_summarize_empty():
+    """Sin sesiones ni eventos -> campos clave en 0/None."""
+    s = _metrics.summarize([], [])
+    assert_eq(s["sessions_total"], 0)
+    assert_eq(s["runs_total"], 0)
+    assert_eq(s["acceptance_rate"], None)
+    assert_eq(s["escalation_rate"], None)
+
+
+@test
+def test_summarize_single_accept():
+    """1 sesion accept + 1 run -> sessions_total=1, acceptance_rate=1.0."""
+    idx = [{"id": "s1", "verdict": "accept"}]
+    evts = _mk_run_events("r1", "s1", 20.0, "accept")
+    s = _metrics.summarize(idx, evts)
+    assert_eq(s["sessions_total"], 1)
+    assert_eq(s["runs_total"], 1)
+    assert_eq(s["acceptance_rate"], 1.0)
+    assert_eq(s["escalations_to_human"], 0)
+    assert_true(s["avg_elapsed_ms"] > 0, "avg_elapsed debe ser positivo")
+
+
+@test
+def test_summarize_accept_and_reject():
+    """accept+reject: acceptance_rate=0.5, p95 calculado correctamente."""
+    idx = [{"id": "s1", "verdict": "accept"}, {"id": "s2", "verdict": "reject"}]
+    evts = _mk_run_events("r1", "s1", 10.0, "accept") + _mk_run_events("r2", "s2", 30.0, "reject")
+    s = _metrics.summarize(idx, evts)
+    assert_eq(s["sessions_total"], 2)
+    assert_eq(s["acceptance_rate"], 0.5)
+    assert_true(s["p95_elapsed_ms"] >= s["median_elapsed_ms"], "p95 >= mediana")
+
+
+@test
+def test_summarize_escalation_counted():
+    """Escalacion en evento decision.written -> escalations_to_human=1."""
+    idx = [{"id": "s1", "verdict": "iterate"}]
+    evts = _mk_run_events("r1", "s1", 25.0, "iterate", escalated=True)
+    s = _metrics.summarize(idx, evts)
+    assert_eq(s["escalations_to_human"], 1)
+    assert_true(s["escalation_rate"] > 0, "escalation_rate debe ser positivo")
 
 
 def _pct(xs, p):

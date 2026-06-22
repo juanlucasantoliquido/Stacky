@@ -584,6 +584,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T055812Z__test-aotl-guardarrail-cubre-los-7-scripts-nuevos-de-protected-files-b-21",
+      "objective": "test-aotl guardarrail cubre los 7 scripts nuevos de PROTECTED-FILES (B-21)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:58:12+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

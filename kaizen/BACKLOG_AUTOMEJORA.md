@@ -187,6 +187,26 @@ de aotl_state.py). Reportar WARN si algun PROTECTED_FILE no existe.
 un script listado en PROTECTED_FILES, da WARN.
 **Rollback:** Eliminar el check de doctor.py.
 
+### B-21 [PENDIENTE] test_aotl: guardarrail debe verificar los 7 scripts nuevos en PROTECTED_FILES
+**Valor:** El test 'guardarrail: maquinaria del loop protegida' solo prueba 3 de los 10 scripts
+en PROTECTED_FILES (kaizen.py, apply.py, autoloop.py). Los 7 nuevos (run_session, validate,
+forensic, new_session, selfcheck, spawn_child, promote_decision) no estan en el test. Si alguien
+los saca de PROTECTED_FILES, los tests no lo detectan.
+**Detalles:** Ampliar el test existente en test_aotl.py para incluir los 7 scripts nuevos
+(o agregar un caso adicional que los itere todos).
+**Metrica:** python scripts/test_aotl.py: 20/20 verdes y el test guardarrail prueba todos
+los scripts en PROTECTED_FILES.
+**Rollback:** Revertir el cambio en test_aotl.py.
+
+### B-22 [PENDIENTE] metrics: agregar latencia p95 y tasa de escalacion al reporte JSON
+**Valor:** El reporte de metrics reporta media/mediana/min/max de latencia pero no p95 (percentil
+que suele importar mas que la media). Tampoco normaliza la tasa de escalacion. Datos utiles para
+detectar runs que tardan mucho.
+**Detalles:** En scripts/metrics.py, agregar p95_elapsed_ms (sorted list, indexado en 95%) y
+escalation_rate (escalations_to_human / sessions_total). Actualizar print_report.
+**Metrica:** python kaizen.py metrics --json contiene 'p95_elapsed_ms' y 'escalation_rate'.
+**Rollback:** Quitar los 2 campos de summarize() y print_report().
+
 ## Items parkeados (REVIEW_QUEUE)
 
 *(ninguno parkeado aún — ver kaizen/REVIEW_QUEUE.md cuando exista)*

@@ -79,9 +79,11 @@ def _():
 
 @check("guardarrail: maquinaria del loop protegida -> rechaza")
 def _():
-    for prot in ("kaizen.py", "scripts/apply.py", "scripts/autoloop.py"):
+    # Itera TODOS los PROTECTED_FILES para que el test no quede desincronizado
+    # si se agregan nuevas entradas a la tupla (ver B-21).
+    for prot in st.PROTECTED_FILES:
         try:
-            st.safe_target_path(prot); assert False, "debió rechazar %s" % prot
+            st.safe_target_path(prot); assert False, "debio rechazar %s" % prot
         except ValueError:
             pass
 

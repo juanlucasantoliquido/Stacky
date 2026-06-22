@@ -299,6 +299,7 @@ import dashboard_static as _ds  # noqa: E402
 
 import archive as _arc  # noqa: E402
 import json as _json  # noqa: E402
+import list_sessions as _ls  # noqa: E402
 
 
 def _mk_arc_index(tmp_dir: Path, sessions: list) -> Path:
@@ -306,6 +307,40 @@ def _mk_arc_index(tmp_dir: Path, sessions: list) -> Path:
     idx.parent.mkdir(parents=True, exist_ok=True)
     idx.write_text(_json.dumps({"sessions": sessions}), encoding="utf-8")
     return idx
+
+
+@test
+def test_list_sessions_no_index():
+    """Sin indice -> exit 0 (no explota)."""
+    orig = _ls.INDEX
+    _ls.INDEX = Path("/tmp/__kaizen_nonexistent_ls_test__.json")
+    try:
+        assert_eq(_ls.main([]), 0)
+    finally:
+        _ls.INDEX = orig
+
+
+@test
+def test_list_sessions_returns_zero():
+    """Con indice de 2 sesiones -> exit 0."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = _mk_arc_index(Path(td), [
+            {"id": "s1", "status": "closed", "verdict": "accept", "objective": "obj1"},
+            {"id": "s2", "status": "closed", "verdict": "reject", "objective": "obj2"},
+        ])
+        orig = _ls.INDEX; _ls.INDEX = idx
+        try:
+            assert_eq(_ls.main([]), 0)
+        finally:
+            _ls.INDEX = orig
+
+
+@test
+def test_list_sessions_get_opt():
+    """get_opt extrae el valor del flag indicado."""
+    assert_eq(_ls.get_opt(["--status", "closed", "--verdict", "accept"], "--status"), "closed")
+    assert_eq(_ls.get_opt(["--status", "closed"], "--verdict"), None)
+    assert_eq(_ls.get_opt([], "--status"), None)
 
 
 @test

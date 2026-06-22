@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0049-t | ADR 0049 — test_core: tests de list_sessions.py (B-38) | accept |
 | 0048-t | ADR 0048 — test_core: tests de archive.py (5 caminos de main | accept |
 | 0047-t | ADR 0047 — test_core: tests de _tag_pills y build_data basic | accept |
 | 0046-t | ADR 0046 — test_core: tests de metrics.summarize con forensi | accept |

@@ -302,6 +302,10 @@ de la funcion (que acepta directorio temporal) para futuros mantenedores.
 ### B-36 [HECHO 2026-06-22] test_core: tests de _tag_pills y build_data en dashboard_static
 
 ### B-37 [HECHO 2026-06-22] test_core: tests de archive.py (5 caminos de main)
+
+### B-38 [HECHO 2026-06-22] test_core: tests de list_sessions.py
+**Valor:** list_sessions.py sin tests. 3 casos: no_index, returns_zero, get_opt.
+**Metrica lograda:** python scripts/test_core.py: 46 OK 0 FAIL.
 **Valor:** archive.py unico comando sin tests. 5 caminos cubiertos con tempdir + parche archive.INDEX.
 **Metrica lograda:** python scripts/test_core.py: 43 OK 0 FAIL.
 **Valor:** _tag_pills (pura) y build_data (contrato de claves) sin tests. El test B-36 descubrio que build_data no tiene clave 'metrics' (es 'verdicts'+'p95_elapsed_ms') — fact capturado.
@@ -362,3 +366,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-35: Tests metrics.summarize con fixtures forenses — sesión 062219Z (2026-06-22)
 - B-36: Tests _tag_pills y build_data en test_core.py — sesión 062402Z (2026-06-22)
 - B-37: Tests archive.py 5 caminos — sesión 062539Z (2026-06-22)
+- B-38: Tests list_sessions.py — sesión 062709Z (2026-06-22)

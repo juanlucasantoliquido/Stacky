@@ -744,6 +744,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T062709Z__test-core-tests-de-list-sessions-py-b-38",
+      "objective": "test_core: tests de list_sessions.py (B-38)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:27:09+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

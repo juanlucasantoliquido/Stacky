@@ -318,6 +318,10 @@ de la funcion (que acepta directorio temporal) para futuros mantenedores.
 ### B-44 [HECHO 2026-06-22] test_core: tests de adapter_info.py
 
 ### B-45 [HECHO 2026-06-22] Actualizar conteos docstring test_core y check.py a 83 tests
+
+### B-46 [HECHO 2026-06-22] test_aotl: tests de promote_decision (next_adr_number + already_promoted)
+**Valor:** promote_decision.py sin tests. next_adr_number y already_promoted cubiertos + detectado bug Path%tuple (corregido en el test).
+**Metrica lograda:** python scripts/test_aotl.py: 30/30 verdes.
 **Valor:** Sincronizar conteos exactos (56 tests / 12 modulos / 83 total) tras B-44.
 **Metrica lograda:** CHECK: TODO VERDE [5/5 grupos OK | 83 tests unitarios].
 **Valor:** adapter_info.py ultimo script con logica sin tests. 3 casos: list_adapters, describe_valid(0), describe_missing(1).
@@ -402,3 +406,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-43: check.py resumen final con ~80 tests — sesión 063307Z (2026-06-22)
 - B-44: Tests adapter_info.py — sesión 063445Z (2026-06-22)
 - B-45: Conteos sincronizados 56+27=83 tests — sesión 063604Z (2026-06-22)
+- B-46: Tests promote_decision next_adr_number+already_promoted — sesión 063744Z (2026-06-22)

@@ -824,6 +824,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T063744Z__test-aotl-tests-de-promote-decision-next-adr-number-y-already-promoted-b-46",
+      "objective": "test_aotl: tests de promote_decision — next_adr_number y already_promoted (B-46)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:37:44+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

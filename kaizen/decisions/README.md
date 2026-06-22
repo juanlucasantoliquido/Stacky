@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0057-t | ADR 0057 — test_aotl: tests de promote_decision (B-46) | accept |
 | 0056-a | ADR 0056 — Actualizar conteos: test_core docstring a 56 test | accept |
 | 0055-t | ADR 0055 — test_core: tests de adapter_info.py — list_adapte | accept |
 | 0054-c | ADR 0054 — check.py: actualizar conteos en docstring y agreg | accept |

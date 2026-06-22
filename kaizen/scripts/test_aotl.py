@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones.
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (30 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -9,7 +9,9 @@ Cubre las invariantes que sostienen la seguridad del loop:
   - validación + apply/rollback determinista y reversible (en dir temporal),
   - contratos del motor mock (proposal/evaluation válidas),
   - extracción de JSON de la salida del modelo,
-  - gate determinista en sus 4 caminos (accept / reject / escalado x2).
+  - gate determinista en sus 4 caminos (accept / reject / escalado x2),
+  - promote_decision: next_adr_number + already_promoted (idempotencia),
+  - set_impl_status + update_index_fields (trazabilidad del loop).
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import aotl_state as st          # noqa: E402
 import apply as ap               # noqa: E402
 import engine as eng             # noqa: E402
+import promote_decision as pd    # noqa: E402
 import run_session as rs         # noqa: E402
 import dashboard as dash         # noqa: E402
 from _config import load_yaml    # noqa: E402
@@ -313,6 +316,53 @@ def _():
         assert entry.get("new_field") == "new_val", "debe agregar el nuevo campo"
     finally:
         shutil.rmtree(tmp_idx.parent.parent)
+
+
+# --- promote_decision: numeracion y idempotencia --------------------------------------------
+@check("promote: next_adr_number con decisions/ vacio -> 1")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        (tmp).mkdir(exist_ok=True)
+        orig = pd.DECISIONS; pd.DECISIONS = tmp
+        try:
+            assert pd.next_adr_number() == 1, "debe devolver 1 si no hay ADRs"
+        finally:
+            pd.DECISIONS = orig
+    finally:
+        shutil.rmtree(tmp)
+
+@check("promote: next_adr_number con 3 ADRs -> 4")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        for n in (1, 2, 3):
+            fname = "%04d-adr-%d.md" % (n, n)
+            (tmp / fname).write_text("# ADR %04d\n" % n, encoding="utf-8")
+        orig = pd.DECISIONS; pd.DECISIONS = tmp
+        try:
+            assert pd.next_adr_number() == 4, "debe devolver 4 si el maximo es 3"
+        finally:
+            pd.DECISIONS = orig
+    finally:
+        shutil.rmtree(tmp)
+
+@check("promote: already_promoted devuelve None y Path correctamente")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        orig = pd.DECISIONS; pd.DECISIONS = tmp
+        try:
+            assert pd.already_promoted("s-no-existe") is None, "debe devolver None si no hay marker"
+            adr = tmp / "0001-test.md"
+            adr.write_text("# ADR 0001\n- session: s-existe\n", encoding="utf-8")
+            result = pd.already_promoted("s-existe")
+            assert result is not None, "debe devolver Path cuando hay marker"
+            assert result.name == "0001-test.md", "debe devolver el path correcto"
+        finally:
+            pd.DECISIONS = orig
+    finally:
+        shutil.rmtree(tmp)
 
 
 # --- dashboard: estado agregado no rompe ----------------------------------------------------

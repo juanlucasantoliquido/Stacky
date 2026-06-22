@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (34 tests)
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (38 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -12,7 +12,8 @@ Cubre las invariantes que sostienen la seguridad del loop:
   - gate determinista en sus 4 caminos (accept / reject / escalado x2),
   - promote_decision: next_adr_number + already_promoted (idempotencia),
   - set_impl_status + update_index_fields (trazabilidad del loop),
-  - spawn_child: caminos de error (no_args, no_decision, non_iterate) + idempotencia.
+  - spawn_child: caminos de error (no_args, no_decision, non_iterate) + idempotencia,
+  - forensic.py: sha256_text, sha256_file, Forensic.log() campos + seq monotonica.
 """
 from __future__ import annotations
 
@@ -439,6 +440,83 @@ def _():
             assert "child-ya-existente" in buf.getvalue(), "debe imprimir el child_id existente"
         finally:
             sc.SESSIONS = orig
+    finally:
+        shutil.rmtree(tmp)
+
+
+# --- forensic: sha256 + Forensic.log() con GLOBAL_LOG parchado ----------------------------
+import forensic as fx  # noqa: E402
+
+
+@check("forensic.sha256_text: determinista y 64 hex chars")
+def _():
+    h1 = fx.sha256_text("hola")
+    h2 = fx.sha256_text("hola")
+    assert h1 == h2, "debe ser determinista"
+    assert len(h1) == 64, "sha256 debe tener 64 hex chars"
+    assert h1 != fx.sha256_text("otra"), "hashes distintos para inputs distintos"
+
+
+@check("forensic.sha256_file: None si no existe, hex si existe")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        assert fx.sha256_file(tmp / "noexiste.txt") is None, "debe devolver None si no existe"
+        f = tmp / "real.txt"
+        f.write_text("contenido", encoding="utf-8")
+        h = fx.sha256_file(f)
+        assert h is not None and len(h) == 64, "debe devolver 64 hex chars para archivo existente"
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("forensic.Forensic.log: escribe JSONL con campos requeridos")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        sid = "s-ftest"
+        sdir = tmp / "sessions" / sid
+        sdir.mkdir(parents=True)
+        # Parchamos GLOBAL_LOG para no contaminar el log real
+        orig_gl = fx.GLOBAL_LOG; fx.GLOBAL_LOG = tmp / "sessions" / "_forensic.jsonl"
+        try:
+            f = fx.Forensic(sid, sdir, run_kind="run_session")
+            rec = f.info("test.event", phase="gate", score=42)
+            # Verificar campos en el dict devuelto
+            for k in ("ts", "seq", "run_id", "run_kind", "session_id", "phase", "event", "level", "elapsed_ms"):
+                assert k in rec, "falta campo %s en el record" % k
+            assert rec["event"] == "test.event"
+            assert rec["level"] == "INFO"
+            assert rec["data"].get("score") == 42
+            # Verificar que se escribio en el JSONL de sesion
+            lines = (sdir / "forensic.jsonl").read_text(encoding="utf-8").strip().splitlines()
+            assert len(lines) == 1, "debe haber 1 linea JSONL"
+            parsed = json.loads(lines[0])
+            assert parsed["event"] == "test.event"
+        finally:
+            fx.GLOBAL_LOG = orig_gl
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("forensic.Forensic.log: seq monotonica y elapsed_ms no negativo")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        sid = "s-seq"
+        sdir = tmp / "sessions" / sid
+        sdir.mkdir(parents=True)
+        orig_gl = fx.GLOBAL_LOG; fx.GLOBAL_LOG = tmp / "_g.jsonl"
+        try:
+            f = fx.Forensic(sid, sdir)
+            r1 = f.info("e1")
+            r2 = f.warn("e2")
+            r3 = f.error("e3")
+            assert r1["seq"] < r2["seq"] < r3["seq"], "seq debe ser monotonica"
+            assert r1["elapsed_ms"] >= 0 and r2["elapsed_ms"] >= 0, "elapsed_ms no negativo"
+            assert r2["level"] == "WARN" and r3["level"] == "ERROR"
+        finally:
+            fx.GLOBAL_LOG = orig_gl
     finally:
         shutil.rmtree(tmp)
 

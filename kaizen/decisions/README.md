@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0060-t | ADR 0060 — tests de forensic.py sha256 y Forensic.log (B-49) | accept |
 | 0059-t | ADR 0059 — tests de _config.load_yaml y spawn_child.py (B-48 | accept |
 | 0058-c | ADR 0058 — check.py headers ASCII para terminales cp1252 (B- | accept |
 | 0057-t | ADR 0057 — test_aotl: tests de promote_decision (B-46) | accept |

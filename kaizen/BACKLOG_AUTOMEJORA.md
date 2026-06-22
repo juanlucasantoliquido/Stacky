@@ -465,3 +465,5 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-59: tests applied_paths sin_manifest + tras_apply — sesión 134553Z (2026-06-22)
 - B-60: sincronizar decision.schema.json agregar _meta — sesión 134818Z (2026-06-22)
 - B-61: tests de compute_total, required_keys, validate_required en run_session.py — sesión 135301Z (2026-06-22)
+- B-62: tests write/read/clear loop_status + request/stop/clear_stop en aotl_state.py — sesión 135621Z (2026-06-22)
+- B-63: tests render y append_to_index en new_session.py — sesión 135826Z (2026-06-22)

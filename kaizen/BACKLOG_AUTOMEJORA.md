@@ -8,7 +8,7 @@
 
 ## Alta prioridad
 
-### B-01 [PENDIENTE] Dashboard estático HTML (kaizen/dashboard/index.html)
+### B-01 [HECHO 2026-06-22] Dashboard estático HTML (kaizen/dashboard/index.html)
 **Valor:** El prompt del operador lo pide explícitamente. Permite ver el estado sin servidor.
 **Detalles:** `python kaizen.py dashboard` debe generar `kaizen/dashboard/index.html` autocontenido
 (CSS/JS inline, sin CDN). Mostrar: pipeline 5 etapas con etapa actual, historial de sesiones con
@@ -17,14 +17,14 @@ veredicto, métricas forenses. Regenerar al cierre de CADA sesión. El servidor 
 **Métrica:** El archivo existe, se abre con `file://`, tiene las 3 secciones requeridas.
 **Rollback:** Eliminar `kaizen/dashboard/index.html` y revertir cambio en `kaizen.py`.
 
-### B-02 [PENDIENTE] Limpiar sesión open sin artefactos (043909Z)
+### B-02 [HECHO 2026-06-22] Limpiar sesión open sin artefactos (043909Z)
 **Valor:** La sesión `2026-06-22T043909Z__automejora-aotl-1-foco-playground` quedó con status=open
 y proposal.md vacío (solo template). Contamina el índice y selfcheck la tolera pero no la limpia.
 **Detalles:** Cerrar la sesión como `abandoned` en `_index.json` con nota explicativa.
 **Métrica:** `python kaizen.py list` no muestra esa sesión en estado open.
 **Rollback:** Revertir el campo `status` en `_index.json`.
 
-### B-03 [PENDIENTE] Ampliar foco AOTL más allá de playground/
+### B-03 [HECHO 2026-06-22] Ampliar foco AOTL más allá de playground/
 **Valor:** El loop actual solo toca `playground/`; las mejoras reales de Kaizen (docs, scripts,
 contratos) quedan fuera del alcance AOTL.
 **Detalles:** Actualizar `adapters/claude/adapter.yaml` (y el genérico) para incluir `docs/`,
@@ -32,7 +32,7 @@ contratos) quedan fuera del alcance AOTL.
 **Métrica:** El adapter.yaml actualizado contiene los nuevos focos y el loop no toca rutas protegidas.
 **Rollback:** Revertir adapter.yaml al estado previo.
 
-### B-04 [PENDIENTE] Subcomando `dashboard` genera HTML estático + ruta file://
+### B-04 [HECHO 2026-06-22] Subcomando `dashboard` genera HTML estático + ruta file://
 **Valor:** El runbook y el prompt piden `python kaizen.py dashboard` que regenere el HTML estático
 y muestre la ruta `file://`. Actualmente solo lanza el servidor HTTP.
 **Detalles:** Hacer que `dashboard` sin `--port` genere el estático y lo imprima. Con `--port` sigue

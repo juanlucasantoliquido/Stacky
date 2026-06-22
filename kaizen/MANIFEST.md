@@ -11,6 +11,7 @@
 | `MANIFEST.md` | doc | Este archivo. Inventario de propósito por archivo/carpeta. |
 | `PORTABILITY.md` | doc | Manifiesto de portabilidad: cómo mover/extraer la carpeta sin romper nada. |
 | `ASSUMPTIONS.md` | doc | Supuestos, límites y no-objetivos del sistema. |
+| `BACKLOG_AUTOMEJORA.md` | doc | Backlog vivo de mejoras priorizadas; el loop lo lee para elegir el próximo objetivo. |
 | `VERSION` | meta | Versión semántica de la base (independiente del repo padre). |
 | `.gitignore` | meta | Ignora datos volátiles de sesiones/artefactos locales. |
 | `kaizen.py` | cli | **Punto de entrada único.** Despacha a `scripts/`: new, run, list, show, validate, spawn-child, promote, view, metrics, selfcheck, doctor, adapter, check, archive, **apply, loop, dashboard**. |
@@ -94,6 +95,12 @@
 | `adapters/claude/adapter.yaml` | adapter | **AOTL AI-driven:** improver/evaluator vía Claude Code CLI (`claude -p`). |
 | `adapters/mock/adapter.yaml` | adapter | **AOTL determinista** sin red: demo/test reproducible del loop. |
 
+## `dashboard/` — Dashboard estático (generado)
+
+| Ruta | Tipo | Propósito |
+|---|---|---|
+| `dashboard/index.html` | generado | HTML autocontenido (CSS/JS inline, sin CDN) generado por `python kaizen.py dashboard`. Apto para `file://`. |
+
 ## `playground/` — Sandbox del loop AI-driven (foco por defecto)
 
 | Ruta | Tipo | Propósito |
@@ -136,7 +143,9 @@
 | `scripts/_config.py` | módulo | Lector YAML mínimo (stdlib pura, sin PyYAML). |
 | `scripts/_console.py` | módulo | Helper de salida UTF-8 tolerante (portabilidad consolas cp1252). |
 | `scripts/autoloop.py` | script | **Loop de automejora AI-driven (AOTL):** orquesta observar→proponer→aplicar→medir→evaluar→gate→resolver. |
-| `scripts/dashboard.py` | script | **Dashboard HTML en vivo** del loop (stdlib `http.server`, offline-first). |
+| `scripts/dashboard.py` | script | **Dashboard HTTP en vivo** del loop (stdlib `http.server`, offline-first). |
+| `scripts/dashboard_static.py` | script | **Dashboard HTML estático** (sin servidor): genera `dashboard/index.html` con pipeline, métricas e historial apto para `file://`. |
+| `scripts/test_core.py` | test | Tests unitarios de scripts core (new_session, validate): 16 casos, stdlib pura, sin pytest. |
 | `scripts/apply.py` | script | Aplica/revierte el `change_set` de forma determinista y reversible (pre-imagen); commit scopeado. |
 | `scripts/engine.py` | módulo | Motor improver/evaluator: drivers `mock` (offline) y `claude` (CLI `claude -p`). |
 | `scripts/aotl_state.py` | módulo | Estado compartido AOTL: `impl_status`, estado del loop, flag de parada, guardarraíl de rutas. |

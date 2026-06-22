@@ -8,9 +8,14 @@ description: AOTL con Claude Code CLI. El modelo propone/evalúa; Python aplica 
 observe:
   mode: snapshot          # se le pasa al modelo un snapshot del foco (no toca nada externo)
   # Archivos cuyo CONTENIDO ve el modelo y dentro de los cuales puede proponer cambios.
-  # Empezá acotado (sandbox) y ampliá con cuidado a medida que confíes en el loop.
+  # DENYLIST (nunca editables, forzada en scripts/aotl_state.py PROTECTED_PREFIXES/FILES):
+  #   sessions/, decisions/, artifacts/, .git/, kaizen.py, config/kaizen.config.yaml,
+  #   scripts/aotl_state.py, scripts/apply.py, scripts/autoloop.py, scripts/engine.py,
+  #   scripts/dashboard.py
   focus:
-    - playground
+    - playground          # sandbox seguro para experimentos
+    - docs                # documentacion del ciclo (sincronizacion post-sesion)
+    - scripts             # scripts del ciclo (mejoras acotadas; denylist frena lo critico)
 
 engine:
   driver: claude

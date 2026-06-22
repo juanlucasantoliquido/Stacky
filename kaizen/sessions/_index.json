@@ -259,6 +259,38 @@
         "cli"
       ],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T043308Z__automejora-aotl-1-foco-playground",
+      "objective": "automejora AOTL #1 (foco: playground)",
+      "mode": "aotl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T04:33:08+00:00",
+      "status": "closed",
+      "tags": [
+        "aotl",
+        "engine:mock"
+      ],
+      "impl_status": "implemented",
+      "auto": true,
+      "verdict": "accept",
+      "commit": null
+    },
+    {
+      "id": "2026-06-22T043308Z__automejora-aotl-2-foco-playground",
+      "objective": "automejora AOTL #2 (foco: playground)",
+      "mode": "aotl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T04:33:08+00:00",
+      "status": "closed",
+      "tags": [
+        "aotl",
+        "engine:mock"
+      ],
+      "impl_status": "implemented",
+      "auto": true,
+      "verdict": "accept",
+      "commit": null
     }
   ]
 }

@@ -13,11 +13,16 @@ Subcomandos:
     view <session_id> [--errors]                            muestra la traza forense de la sesión
     metrics [--json]                                        reporte forense de eficiencia
     selfcheck                                               guard de consistencia/regresión
+    apply <session_id> [--rollback]                         aplica/revierte el change_set (AOTL)
+    loop [--engine claude|mock] [--forever] [...]           loop de automejora AI-driven (AOTL)
+    dashboard [--port N] [--host H]                         dashboard HTML en vivo del loop
     help                                                    esta ayuda
 
 Ejemplos:
     python kaizen.py new "mejorar mensajes de error"
     python kaizen.py run 2026-06-21T1925Z__mejorar-mensajes-de-error
+    python kaizen.py loop --engine claude --forever        # automejora constante AI-driven
+    python kaizen.py dashboard                              # http://127.0.0.1:8765
     python kaizen.py metrics
 """
 from __future__ import annotations
@@ -45,6 +50,9 @@ DISPATCH = {
     "adapter": "adapter_info.py",
     "check": "check.py",
     "archive": "archive.py",
+    "apply": "apply.py",
+    "loop": "autoloop.py",
+    "dashboard": "dashboard.py",
 }
 
 

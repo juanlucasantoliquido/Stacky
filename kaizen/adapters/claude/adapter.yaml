@@ -1,0 +1,26 @@
+# Adapter AI-driven (AOTL): improver/evaluator via Claude Code CLI (claude -p, print/read-only).
+# El modelo SÓLO propone y evalúa (genera JSON); Python aplica el change_set de forma
+# determinista y reversible. Activá el modo con `mode: aotl` en config/kaizen.config.yaml.
+
+name: claude
+description: AOTL con Claude Code CLI. El modelo propone/evalúa; Python aplica reversible.
+
+observe:
+  mode: snapshot          # se le pasa al modelo un snapshot del foco (no toca nada externo)
+  # Archivos cuyo CONTENIDO ve el modelo y dentro de los cuales puede proponer cambios.
+  # Empezá acotado (sandbox) y ampliá con cuidado a medida que confíes en el loop.
+  focus:
+    - playground
+
+engine:
+  driver: claude
+  command: claude         # CLI en PATH
+  model: claude-sonnet-4-6  # más barato para un loop que corre seguido; subí a opus si querés
+  timeout_seconds: 180
+
+apply:
+  mode: auto              # apply.py escribe el change_set (determinista)
+  rollback: auto          # rollback por pre-imagen (stdlib), sin depender de git
+
+measure:
+  command: selfcheck      # métrica de regresión objetiva (el "CHECK" del ciclo)

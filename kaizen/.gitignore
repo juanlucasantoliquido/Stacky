@@ -9,6 +9,10 @@ sessions/*/
 !sessions/README.md
 !sessions/_index.json
 
+# Estado vivo del loop AOTL: transitorio, no versionar.
+sessions/_loop.status.json
+sessions/_loop.stop
+
 # Artefactos y decisiones generados localmente (se conserva README).
 artifacts/*
 !artifacts/README.md

@@ -50,9 +50,14 @@ aislada y reproducible.
 
 ```sh
 python kaizen.py help                       # lista todos los subcomandos
-python kaizen.py new "mi objetivo acotado"  # crea una sesión
+python kaizen.py new "mi objetivo acotado"  # crea una sesión (HITL)
 python kaizen.py run  <session_id>          # gate determinista + traza forense
 python kaizen.py metrics                    # reporte forense de eficiencia
+
+# Modo AI-driven (AOTL): automejora constante + dashboard en vivo
+python kaizen.py loop --engine claude --forever   # la IA propone/evalúa; el gate decide
+python kaizen.py loop --engine mock --max-iterations 3  # demo determinista, sin red
+python kaizen.py dashboard                   # http://127.0.0.1:8765 (estado y planes en vivo)
 ```
 
 > **¿Sos un agente y querés ejecutar una sesión completa de punta a punta?**
@@ -66,9 +71,11 @@ Todo usa solo la librería estándar de Python 3 (sin red, sin instalar nada del
 
 - **Human-in-the-Loop (HITL)** — *modo inicial.* El humano propone o aprueba cada paso.
   La máquina nunca cierra el ciclo sola.
-- **Agent-on-the-Loop (AOTL)** — *modo futuro.* Un agente propone y evalúa; el humano
-  supervisa por excepción. Se activa por configuración (`config/kaizen.config.yaml: mode`),
-  reusando los **mismos contratos**. Ver [`docs/03_SESSIONS.md`](docs/03_SESSIONS.md).
+- **Agent-on-the-Loop (AOTL)** — *AI-driven, implementado.* Un modelo propone y evalúa, Python
+  aplica de forma reversible, y un gate determinista decide; el humano supervisa por excepción
+  (el escalado detiene el loop). Se activa por configuración (`config/kaizen.config.yaml: mode`),
+  reusando los **mismos contratos**. Operás con `kaizen loop` + `kaizen dashboard`.
+  Ver [`docs/07_AOTL_AUTODRIVE.md`](docs/07_AOTL_AUTODRIVE.md) y [`docs/03_SESSIONS.md`](docs/03_SESSIONS.md).
 
 ---
 

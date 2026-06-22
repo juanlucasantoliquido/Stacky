@@ -18,6 +18,8 @@ aotl:
   require_reversibility: true
   # Tope de sesiones-hijas encadenadas por 'iterate' (evita bucles infinitos).
   max_iterations: 3
+  # AI-driven: al ACEPTAR, commitea la mejora (scopeado a kaizen/). Reversible vía git.
+  commit_on_accept: true
   # Condiciones que fuerzan escalado a un humano aunque el gate pudiera decidir.
   escalate_to_human_when:
     - low_confidence            # confidence < review.min_confidence

@@ -1,0 +1,20 @@
+# Adapter determinista sin red (AOTL de prueba/demo). Ejercita el loop de punta a punta
+# de forma reproducible: anota un "latido" en el sandbox playground/. No requiere CLI ni claves.
+
+name: mock
+description: AOTL determinista (sin IA real). Demo/test reproducible del ciclo completo.
+
+observe:
+  mode: snapshot
+  focus:
+    - playground
+
+engine:
+  driver: mock
+
+apply:
+  mode: auto
+  rollback: auto
+
+measure:
+  command: selfcheck

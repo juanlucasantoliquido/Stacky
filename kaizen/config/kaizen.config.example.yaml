@@ -4,11 +4,14 @@
 
 # Modo del ciclo:
 #   hitl = Human-in-the-Loop (humano propone/evalúa/decide)  <-- empezá acá
-#   aotl = Agent-on-the-Loop (agente propone/evalúa; gate decide; humano por excepción)
+#   aotl = Agent-on-the-Loop (AI-driven: el modelo propone/evalúa; el gate decide;
+#          Python aplica/revierte; humano por excepción). Se opera con `kaizen loop`.
 mode: hitl
 
 # Adapter activo: nombre de una carpeta bajo adapters/.
-#   generic = sin acoplarse a ningún proyecto (no toca nada externo).
+#   generic = HITL sin acoplarse a ningún proyecto (no toca nada externo).
+#   claude  = AOTL AI-driven con Claude Code CLI (improver/evaluator vía `claude -p`).
+#   mock    = AOTL determinista sin red (demo/test reproducible del loop).
 adapter: generic
 
 # Perfil de políticas (umbrales, gates). Archivo bajo config/profiles/.

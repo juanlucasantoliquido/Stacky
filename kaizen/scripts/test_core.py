@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (105 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (109 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
@@ -23,6 +23,7 @@ Cubre:
   - metrics.py: _median (lista vacia, lista par, lista impar)
   - check.py: _parse_test_count (patron test_core, patron test_aotl, sin patron, 0)
   - adapter_info.py: active_adapter (default 'generic' sin config, y 'mock' con config)
+  - autoloop.py: load_adapter (vacio si no existe, dict si existe) + load_profile (igual)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1365,6 +1366,72 @@ def test_active_adapter_reads_config():
             assert_eq(result, "mock", "con adapter: mock debe devolver 'mock'")
         finally:
             _ai.CONFIG = old_cfg
+
+
+# ---------------------------------------------------------------------------
+# Tests de autoloop.py — load_adapter y load_profile
+# ---------------------------------------------------------------------------
+
+
+@test
+def test_load_adapter_no_existe():
+    """load_adapter devuelve {} si el adapter no existe."""
+    old_root = autoloop.ROOT
+    try:
+        autoloop.ROOT = Path("/tmp/__kaizen_no_adapters__")
+        result = autoloop.load_adapter("noexiste")
+        assert_eq(result, {}, "adapter no existente debe devolver {}")
+    finally:
+        autoloop.ROOT = old_root
+
+
+@test
+def test_load_adapter_con_archivo():
+    """load_adapter devuelve el contenido del adapter.yaml si existe."""
+    with tempfile.TemporaryDirectory() as td:
+        adapter_dir = Path(td) / "adapters" / "test-adapter"
+        adapter_dir.mkdir(parents=True)
+        (adapter_dir / "adapter.yaml").write_text(
+            "name: test-adapter\ndescription: adapter de prueba\n", encoding="utf-8"
+        )
+        old_root = autoloop.ROOT
+        try:
+            autoloop.ROOT = Path(td)
+            result = autoloop.load_adapter("test-adapter")
+            assert_eq(result["name"], "test-adapter", "debe cargar el nombre del adapter")
+        finally:
+            autoloop.ROOT = old_root
+
+
+@test
+def test_load_profile_no_existe():
+    """load_profile devuelve {} si el perfil no existe."""
+    old_root = autoloop.ROOT
+    try:
+        autoloop.ROOT = Path("/tmp/__kaizen_no_profiles__")
+        result = autoloop.load_profile({})
+        assert_eq(result, {}, "perfil no existente debe devolver {}")
+    finally:
+        autoloop.ROOT = old_root
+
+
+@test
+def test_load_profile_con_archivo():
+    """load_profile devuelve el contenido del perfil si existe."""
+    with tempfile.TemporaryDirectory() as td:
+        profiles_dir = Path(td) / "config" / "profiles"
+        profiles_dir.mkdir(parents=True)
+        (profiles_dir / "custom.yaml").write_text(
+            "review:\n  accept_threshold: 12\n", encoding="utf-8"
+        )
+        old_root = autoloop.ROOT
+        try:
+            autoloop.ROOT = Path(td)
+            result = autoloop.load_profile({"profile": "custom"})
+            assert_eq(result["review"]["accept_threshold"], 12,
+                      "debe cargar el umbral del perfil")
+        finally:
+            autoloop.ROOT = old_root
 
 
 if __name__ == "__main__":

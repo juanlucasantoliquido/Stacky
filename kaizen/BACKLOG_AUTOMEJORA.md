@@ -140,6 +140,24 @@ existe session.output.json Y la sesión tiene edad < 5 minutos. Si es más vieja
 
 ---
 
+### B-16 [PENDIENTE] Proteger scripts criticos de maquinaria en PROTECTED_FILES
+**Valor:** run_session.py, validate.py, forensic.py, new_session.py, selfcheck.py, spawn_child.py
+y promote_decision.py no estan en PROTECTED_FILES. El loop AOTL podria auto-editarlos y
+autosabotearse silenciosamente en caliente.
+**Detalles:** Agregar esos 7 scripts a PROTECTED_FILES en aotl_state.py. Scripts editables
+por el loop (tests, visualizacion, metrics, adapter_info, doctor, archive, check): se dejan libres.
+**Métrica:** `st.safe_target_path("scripts/run_session.py")` lanza ValueError.
+`st.safe_target_path("scripts/test_core.py")` no lanza (editable).
+**Rollback:** Quitar las entradas de PROTECTED_FILES.
+
+### B-17 [PENDIENTE] Dashboard: mostrar ruta file:// clickeable en el header
+**Valor:** El dashboard no muestra su propia URL. El operador debe recordar la ruta o correr
+de nuevo el comando para verla. Agregar el link en el header facilita compartir/reabrir.
+**Detalles:** En generate_html(), agregar en el header un link href='<url_relativa>' o simplemente
+el texto de la ruta. En file:// los links a rutas absolutas funcionan en los browsers modernos.
+**Métrica:** El HTML generado contiene un elemento con la ruta del archivo (al menos como texto).
+**Rollback:** Eliminar el elemento del header.
+
 ## Items parkeados (REVIEW_QUEUE)
 
 *(ninguno parkeado aún — ver kaizen/REVIEW_QUEUE.md cuando exista)*

@@ -49,6 +49,15 @@ PROTECTED_FILES = (
     "scripts/autoloop.py",
     "scripts/engine.py",
     "scripts/dashboard.py",
+    # Maquinaria critica del arnes: gate, validacion, forense, ciclo de sesiones.
+    # El loop AOTL NO debe auto-editarlos para evitar autosabotaje en caliente.
+    "scripts/run_session.py",
+    "scripts/validate.py",
+    "scripts/forensic.py",
+    "scripts/new_session.py",
+    "scripts/selfcheck.py",
+    "scripts/spawn_child.py",
+    "scripts/promote_decision.py",
 )
 
 

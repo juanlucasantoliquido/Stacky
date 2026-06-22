@@ -5,6 +5,8 @@ Corre, en orden, los guards existentes y agrega un veredicto único:
   1. doctor      (salud estructural)
   2. selfcheck   (consistencia de sesiones cerradas)
   3. validate    (cada sesión cerrada cumple los contratos)
+  4. test_core   (22 tests: lógica pura — percentile, decisions, etc.)
+  5. test_aotl   (27 tests: maquinaria del loop — guardrail, gate, apply)
 
 Exit 0 sólo si TODO pasa. Pensado como un único comando para un pipeline.
 Uso:
@@ -30,13 +32,13 @@ def run(script: str, *args: str) -> int:
 def main(argv: list[str]) -> int:
     failures = 0
 
-    print("### check 1/3: doctor ###")
+    print("### check 1/5: doctor ###")
     failures += run("doctor.py") != 0
 
-    print("\n### check 2/3: selfcheck ###")
+    print("\n### check 2/5: selfcheck ###")
     failures += run("selfcheck.py") != 0
 
-    print("\n### check 3/3: validate de sesiones cerradas ###")
+    print("\n### check 3/5: validate de sesiones cerradas ###")
     closed = []
     if INDEX.exists():
         closed = [s["id"] for s in json.loads(INDEX.read_text(encoding="utf-8"))
@@ -48,6 +50,12 @@ def main(argv: list[str]) -> int:
             print("  -> validate FALLÓ en %s" % sid)
     print("validate: %d/%d sesiones cerradas OK" % (len(closed) - val_fail, len(closed)))
     failures += val_fail > 0
+
+    print("\n### check 4/5: test_core (lógica pura) ###")
+    failures += run("test_core.py") != 0
+
+    print("\n### check 5/5: test_aotl (maquinaria del loop) ###")
+    failures += run("test_aotl.py") != 0
 
     print("\n" + "=" * 48)
     if failures:

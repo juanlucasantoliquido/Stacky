@@ -664,6 +664,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T061331Z__check-py-ejecuta-test-core-y-test-aotl-en-el-pipeline-ci-b-30",
+      "objective": "check.py ejecuta test_core y test_aotl en el pipeline CI (B-30)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:13:31+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

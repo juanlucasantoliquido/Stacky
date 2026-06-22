@@ -249,7 +249,7 @@ rechazado, extra_protected funciona, ruta editable pasa.
 **Metrica:** 20/20 + 4 nuevos = 24/24 en test_aotl.py.
 **Rollback:** Quitar los 4 casos de test_aotl.py.
 
-### B-29 [PENDIENTE] test_aotl: tests de set_impl_status y update_index_fields en tempdir
+### B-29 [HECHO 2026-06-22] test_aotl: tests de set_impl_status y update_index_fields en tempdir
 **Valor:** set_impl_status y update_index_fields son funciones criticas que usa autoloop
 para actualizar el indice entre vueltas. Sin tests, una regresion puede hacer que las sesiones
 queden con impl_status incorrecto (planned en vez de implemented) y el operador crea que fallo.
@@ -258,13 +258,34 @@ campo, rechaza impl_status invalido, update_index_fields hace merge sin borrar c
 **Metrica:** python scripts/test_aotl.py: 27/27 verdes (24 + 3).
 **Rollback:** Quitar los 3 casos de test_aotl.py.
 
-### B-30 [PENDIENTE] check.py: agregar test_core y test_aotl al pipeline de check
+### B-30 [HECHO 2026-06-22] check.py: agregar test_core y test_aotl al pipeline de check
 **Valor:** python kaizen.py check corre doctor y selfcheck pero NO corre test_core.py ni
 test_aotl.py. El CI-gate de check pasa aunque los tests fallen.
 **Detalles:** En scripts/check.py, agregar subcall a test_core.py y test_aotl.py con
 subprocess.run y reportar FAIL si alguno da exit code != 0.
 **Metrica:** python kaizen.py check termina con exit 1 si test_core.py tiene fallas. Normalmente 0.
 **Rollback:** Quitar los subcalls en check.py.
+
+### B-31 [PENDIENTE] test_core: tests de recent_objectives y gather_focus (autoloop.py)
+**Valor:** recent_objectives y gather_focus son funciones puras en autoloop.py que el loop usa para
+construir su contexto en cada iteracion. Sin tests, una regresion puede hacer que el contexto del
+motor quede vacio o con datos incorrectos sin que nadie lo detecte.
+**Detalles:** Agregar en test_core.py: (1) test_recent_objectives_empty_index: devuelve [] si no hay
+indice; (2) test_recent_objectives_returns_last_n: devuelve los ultimos n objetivos. Usar tempdir
+y parchar INDEX en autoloop antes del test.
+**Metrica:** python scripts/test_core.py: 24 OK (22 + 2) 0 FAIL.
+**Rollback:** Eliminar los 2 casos de test_core.py.
+
+### B-32 [PENDIENTE] decisions/: indice README de las ADR-lites existentes
+**Valor:** Hay 41 decisiones en decisions/ pero no hay un indice legible. El motor solo puede
+leer los ultimos 8 vía recent_decisions_summary. Un README.md en decisions/ que liste las N
+mas recientes con fecha + titulo + veredicto facilita la navegacion humana y puede reutilizarse
+como contexto de orientacion.
+**Detalles:** Generar (o actualizar) decisions/README.md con las ultimas 15 decisiones en tabla
+Markdown. El archivo se regenera solo en cada sesion (como el dashboard). Agregarlo en run_session.py
+(best-effort, no rompe el gate).
+**Metrica:** decisions/README.md existe y tiene una tabla con al menos 15 filas tras el gate.
+**Rollback:** Eliminar la llamada en run_session.py y el archivo decisions/README.md.
 
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
@@ -305,3 +326,8 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-22: Metrics p95 y escalation_rate — sesión 055930Z (2026-06-22)
 - B-23: Dashboard columna Tags — sesión 060132Z (2026-06-22)
 - B-24: Tests _percentile + refactor modulo — sesión 060233Z (2026-06-22)
+- B-25: Dashboard tarjetas p95 y escalation_rate — sesión 060520Z (2026-06-22)
+- B-27: Tests is_protected() casos borde — sesión 060714Z (2026-06-22)
+- B-28: Denylist adapter stacky sincronizado — sesión 060821Z (2026-06-22)
+- B-29: Tests set_impl_status y update_index_fields — sesión 060947Z (2026-06-22)
+- B-30: check.py integra test_core y test_aotl — sesión 061331Z (2026-06-22)

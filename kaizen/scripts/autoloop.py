@@ -179,11 +179,19 @@ def run_iteration(i: int, args, adapter_cfg: dict, profile: dict, engine, totals
     st.write_json(session_dir / "proposal.json", proposal)
     st.write_json(session_dir / "change_set.json", change_set)
 
+    # APLICAR (tentativo, reversible). Un change_set inseguro/ inválido NO crashea el loop:
+    # se trata como rechazo (no se aplicó nada) y el ciclo continúa.
+    beat("apply", current_session=sid)
+    try:
+        ap.apply_change_set(sid, change_set, root=ROOT)
+    except ValueError as exc:
+        print("    change_set inválido (rechazado sin aplicar): %s" % str(exc).splitlines()[0])
+        st.set_impl_status(sid, st.REJECTED, note="change_set inválido")
+        totals["rejected"] += 1
+        return st.REJECTED
+
     applied = False
     try:
-        # APLICAR (tentativo, reversible)
-        beat("apply", current_session=sid)
-        ap.apply_change_set(sid, change_set, root=ROOT)
         applied = True
         st.set_impl_status(sid, st.APPLIED)
 

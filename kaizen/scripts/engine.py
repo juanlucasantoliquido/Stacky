@@ -16,6 +16,7 @@ El acoplamiento a un runtime de IA vive SOLO acá (y en el adapter), respetando 
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -161,14 +162,19 @@ class ClaudeCliEngine:
         return path.read_text(encoding="utf-8") if path.exists() else ""
 
     def _run(self, system: str, user: str) -> str:
-        cmd = [self.command, "-p", "--model", self.model, "--output-format", "text"]
-        if system:
-            cmd += ["--append-system-prompt", system]
+        # En Windows, `claude` suele ser un shim .CMD: hay que resolver la ruta real con
+        # shutil.which (CreateProcess no aplica PATHEXT). El system prompt va plegado en el
+        # stdin (no como arg multilínea) para no romper el shim .cmd.
+        exe = shutil.which(self.command)
+        if not exe:
+            raise EngineError("CLI %r no encontrado en PATH" % self.command)
+        cmd = [exe, "-p", "--model", self.model, "--output-format", "text"]
+        prompt = ("%s\n\n---\n\n%s" % (system, user)) if system else user
         try:
-            res = subprocess.run(cmd, input=user, capture_output=True, text=True,
+            res = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
                                  timeout=self.timeout, encoding="utf-8")
         except FileNotFoundError:
-            raise EngineError("CLI %r no encontrado en PATH" % self.command)
+            raise EngineError("CLI %r no ejecutable" % self.command)
         except subprocess.TimeoutExpired:
             raise EngineError("timeout de %ds esperando al modelo" % self.timeout)
         if res.returncode != 0:

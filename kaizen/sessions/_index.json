@@ -307,6 +307,37 @@
       "auto": true,
       "verdict": "accept",
       "commit": "62e16419"
+    },
+    {
+      "id": "2026-06-22T043909Z__automejora-aotl-1-foco-playground",
+      "objective": "automejora AOTL #1 (foco: playground)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T04:39:09+00:00",
+      "status": "open",
+      "tags": [
+        "aotl",
+        "engine:claude"
+      ],
+      "impl_status": "planned",
+      "auto": true
+    },
+    {
+      "id": "2026-06-22T044047Z__automejora-aotl-1-foco-playground",
+      "objective": "automejora AOTL #1 (foco: playground)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T04:40:47+00:00",
+      "status": "closed",
+      "tags": [
+        "aotl",
+        "engine:claude"
+      ],
+      "impl_status": "reverted",
+      "auto": true,
+      "verdict": "accept",
+      "commit": null,
+      "note": "verificacion del motor claude; cambio revertido"
     }
   ]
 }

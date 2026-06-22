@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (58 tests)
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (61 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -718,6 +718,69 @@ def _():
     assert "scripts/metrics.py" in result, "debe listar el archivo del foco"
     assert "### Decisiones recientes" in result, "debe incluir seccion de decisiones"
     assert "mi-decision" in result, "debe listar la decision reciente"
+
+
+# --- apply.commit_applied: sin rutas, git-add-falla, commit-ok (B-85) -------------------------
+import apply as _ap  # noqa: E402
+import subprocess as _subp  # noqa: E402
+
+
+def _seed_manifest(root: Path, session_id: str, paths: list) -> None:
+    """Crea applied.json en sessions/<session_id>/_apply/ para que applied_paths devuelva paths."""
+    d = root / "sessions" / session_id / "_apply"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "applied.json").write_text(
+        json.dumps({"changes": [{"path": p} for p in paths]}), encoding="utf-8"
+    )
+
+
+@check("apply.commit_applied: sin rutas devuelve (False, 'sin rutas')")
+def _():
+    with tempfile.TemporaryDirectory() as td:
+        ok, msg = _ap.commit_applied("alguna-sesion", "msg", root=Path(td))
+        assert not ok, "debe ser False cuando no hay rutas"
+        assert "sin rutas" in msg, "mensaje debe indicar sin rutas"
+
+
+@check("apply.commit_applied: git add falla devuelve (False, mensaje de error)")
+def _():
+    with tempfile.TemporaryDirectory() as td:
+        _seed_manifest(Path(td), "mi-sesion", ["scripts/foo.py"])
+        calls = []
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            return _subp.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="git add error")
+        old = _ap.subprocess.run
+        try:
+            _ap.subprocess.run = fake_run
+            ok, msg = _ap.commit_applied("mi-sesion", "msg", root=Path(td))
+            assert not ok, "debe ser False cuando git add falla"
+            assert "git add" in msg, "mensaje debe mencionar git add"
+        finally:
+            _ap.subprocess.run = old
+
+
+@check("apply.commit_applied: commit exitoso devuelve (True, hash)")
+def _():
+    with tempfile.TemporaryDirectory() as td:
+        _seed_manifest(Path(td), "mi-sesion", ["scripts/foo.py"])
+        call_idx = [0]
+        def fake_run(cmd, **kw):
+            idx = call_idx[0]; call_idx[0] += 1
+            if idx == 0:  # git add
+                return _subp.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+            elif idx == 1:  # git commit
+                return _subp.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+            else:  # git rev-parse
+                return _subp.CompletedProcess(args=cmd, returncode=0, stdout="abc1234\n", stderr="")
+        old = _ap.subprocess.run
+        try:
+            _ap.subprocess.run = fake_run
+            ok, hash_val = _ap.commit_applied("mi-sesion", "msg", root=Path(td))
+            assert ok, "debe ser True cuando git ok"
+            assert hash_val == "abc1234", "debe retornar el hash corto"
+        finally:
+            _ap.subprocess.run = old
 
 
 # --- autoloop: create_session y run_gate con mock de _py (B-84) --------------------------------

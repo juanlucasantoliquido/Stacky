@@ -544,6 +544,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T055139Z__dashboard-muestra-ruta-file-en-header-b-17",
+      "objective": "Dashboard muestra ruta file en header (B-17)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:51:39+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

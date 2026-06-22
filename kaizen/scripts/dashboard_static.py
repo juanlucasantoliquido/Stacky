@@ -70,7 +70,7 @@ def _esc(s: object) -> str:
     return str(s if s is not None else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def build_data() -> dict:
+def build_data(out_path: "Path | None" = None) -> dict:
     index = _load_json(INDEX)
     sessions = index.get("sessions", [])
     loop = _load_json(LOOP_STATUS) if LOOP_STATUS.exists() else {}
@@ -88,6 +88,9 @@ def build_data() -> dict:
     closed = sum(v for k, v in verdicts.items() if k != "(sin correr)")
     rate = (accept / closed * 100) if closed else 0
 
+    target = out_path or (OUT_DIR / "index.html")
+    file_url = target.resolve().as_uri()
+
     return {
         "generated_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
         "total": total,
@@ -96,6 +99,7 @@ def build_data() -> dict:
         "aotl_count": aotl_count,
         "loop": loop,
         "sessions": list(reversed(sessions)),
+        "file_url": file_url,
     }
 
 
@@ -263,7 +267,10 @@ tr:hover td{{background:#161b22}}
     {"motor=" + _esc(loop_engine) + " · " if loop_engine else ""}
     vuelta {loop_iter}{(" · " + _esc(loop_session)) if loop_session else ""}
   </span>
-  <span style="margin-left:auto;color:#8b949e;font-size:11px">generado {_esc(data["generated_utc"])}</span>
+  <span style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+    <span style="color:#8b949e;font-size:11px">generado {_esc(data["generated_utc"])}</span>
+    <a href="{_esc(data["file_url"])}" style="color:#58a6ff;font-size:10px;text-decoration:none;font-family:ui-monospace,monospace;white-space:nowrap;overflow:hidden;max-width:420px;text-overflow:ellipsis" title="{_esc(data["file_url"])}">{_esc(data["file_url"])}</a>
+  </span>
 </header>
 
 <div class="wrap">
@@ -306,7 +313,7 @@ def main(argv: list[str]) -> int:
     out_path = Path(args.out) if args.out else OUT_DIR / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    data = build_data()
+    data = build_data(out_path)
     html = generate_html(data)
     out_path.write_text(html, encoding="utf-8")
 

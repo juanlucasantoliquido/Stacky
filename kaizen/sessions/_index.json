@@ -929,6 +929,32 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T133847Z__automejora-aotl-1-foco-playground",
+      "objective": "automejora AOTL #1 (foco: playground)",
+      "mode": "aotl",
+      "adapter": "stacky",
+      "created_utc": "2026-06-22T13:38:47+00:00",
+      "status": "closed",
+      "tags": [
+        "aotl",
+        "engine:mock"
+      ],
+      "impl_status": "implemented",
+      "auto": true,
+      "verdict": "accept",
+      "commit": "2f8bde06"
+    },
+    {
+      "id": "2026-06-22T133921Z__test-aotl-tests-de-engine-py-extract-json-parse-file-blocks-normalize-proposal-normalize-evaluation-b-55",
+      "objective": "test_aotl: tests de engine.py (extract_json, parse_file_blocks, normalize_proposal, normalize_evaluation) (B-55)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:39:21+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

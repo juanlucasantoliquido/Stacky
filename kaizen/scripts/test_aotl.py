@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (38 tests)
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (42 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -8,7 +8,9 @@ Cubre las invariantes que sostienen la seguridad del loop:
   - guardarraíl de rutas (sólo kaizen/, nunca datos/maquinaria),
   - validación + apply/rollback determinista y reversible (en dir temporal),
   - contratos del motor mock (proposal/evaluation válidas),
-  - extracción de JSON de la salida del modelo,
+  - extracción de JSON de la salida del modelo (extract_json, parse_file_blocks),
+  - normalize_proposal: session_id forzado, defaults risks/artifacts, author respetado,
+  - normalize_evaluation: total derivado de scores, defaults findings/blocking,
   - gate determinista en sus 4 caminos (accept / reject / escalado x2),
   - promote_decision: next_adr_number + already_promoted (idempotencia),
   - set_impl_status + update_index_fields (trazabilidad del loop),
@@ -212,6 +214,40 @@ def _():
             '===KAIZEN-FILE: a.md===\nlinea1\n"comillas", comas y { llaves }\n===KAIZEN-END===')
     blocks = eng.parse_file_blocks(text)
     assert blocks["a.md"] == 'linea1\n"comillas", comas y { llaves }', repr(blocks)
+
+
+@check("normalize_proposal: fuerza session_id, setdefaults risks/artifacts, no pisa author dado")
+def _():
+    p = eng.normalize_proposal({"title": "t", "author": "human"}, "s-123", "agent:mock")
+    assert p["session_id"] == "s-123", "session_id debe sobrescribirse"
+    assert p["author"] == "human", "author dado no debe pisarse"
+    assert p["risks"] == [], "risks debe defaultear a []"
+    assert p["artifacts"] == [], "artifacts debe defaultear a []"
+
+
+@check("normalize_proposal: sin author -> usa el default del parametro")
+def _():
+    p = eng.normalize_proposal({"title": "t"}, "s-456", "agent:improver")
+    assert p["author"] == "agent:improver", "author debe tomarse del parametro"
+
+
+@check("normalize_evaluation: computa total desde scores y setdefaults findings/blocking")
+def _():
+    e = eng.normalize_evaluation(
+        {"scores": {"value": 3, "correctness": 2, "scope": 3,
+                    "reversibility": 3, "measurability": 2}},
+        "s-789", "agent:evaluator"
+    )
+    assert e["session_id"] == "s-789", "session_id debe sobrescribirse"
+    assert e["total"] == 13, "total debe sumar scores: got %d" % e.get("total", -1)
+    assert e["findings"] == [], "findings debe defaultear a []"
+    assert e["blocking"] == [], "blocking debe defaultear a []"
+
+
+@check("normalize_evaluation: sin scores no pone total")
+def _():
+    e = eng.normalize_evaluation({}, "s-000", "agent:eval")
+    assert "total" not in e, "sin scores no debe haber total"
 
 
 # --- gate determinista (los 4 caminos) ------------------------------------------------------

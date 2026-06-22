@@ -343,7 +343,7 @@ No afecta los docstrings (no van al stdout en runtime).
 **Metrica lograda:** python kaizen.py check: headers ASCII, sin '?' en terminal cp1252.
 **Rollback:** Revertir los 3 prints en scripts/check.py.
 
-### B-52 [PENDIENTE] test_core: tests de doctor.py (7 ramas)
+### B-52 [HECHO 2026-06-22] test_core: tests de doctor.py (6 ramas implementadas)
 **Valor:** doctor.py es el comando de diagnostico estructural pero no tiene tests. Tiene 7
 ramas: config OK/FAIL/WARN, perfil OK/FAIL, adapter OK/WARN, contratos OK/FAIL, scripts OK/FAIL,
 PROTECTED_FILES OK/WARN, indice OK/FAIL. Sin tests, una regresion puede hacer que doctor
@@ -354,7 +354,7 @@ Usar tempdir y parchar ROOT dentro de doctor.py o montar estructura minima en te
 **Metrica:** python scripts/test_core.py: OK con al menos 4 casos nuevos para doctor. 0 FAIL.
 **Rollback:** Eliminar los casos de doctor en test_core.py.
 
-### B-53 [PENDIENTE] test_core: tests de _console.enable_utf8()
+### B-53 [HECHO 2026-06-22] test_core: tests de _console.enable_utf8()
 **Valor:** _console.py no tiene tests. La funcion enable_utf8() es el guardarrail de encoding;
 si se rompe, todos los scripts que la llaman pueden fallar silenciosamente en Windows cp1252.
 **Detalles:** Agregar en test_core.py 2 casos: (1) enable_utf8() no lanza en stdout/stderr normales;
@@ -362,7 +362,7 @@ si se rompe, todos los scripts que la llaman pueden fallar silenciosamente en Wi
 **Metrica:** python scripts/test_core.py: 2 casos nuevos, 0 FAIL.
 **Rollback:** Eliminar los 2 casos de _console en test_core.py.
 
-### B-54 [PENDIENTE] Sincronizar conteo de tests en check.py y docstring con el total actual
+### B-54 [HECHO/INLINE 2026-06-22] Sincronizar conteo de tests en check.py y docstring con el total actual
 **Valor:** check.py dice '102 tests unitarios' pero el total real podria cambiar con B-52/B-53.
 El docstring de test_core.py tambien necesita sincronizarse con cada lote nuevo.
 **Detalles:** Tras implementar B-52 y B-53, actualizar el conteo en check.py y el docstring de
@@ -370,6 +370,23 @@ test_core.py para que reflejen el numero exacto de tests. Verificar con python k
 **Metrica:** python kaizen.py check muestra el conteo exacto. python scripts/test_core.py: 0 FAIL.
 **Rollback:** Revertir los conteos en check.py y test_core.py.
 **Nota:** Este item es dependiente de B-52 y B-53; implementar despues de ambos.
+
+### B-55 [HECHO 2026-06-22] test_aotl: tests de normalize_proposal y normalize_evaluation de engine.py
+**Metrica lograda:** 42/42 verdes. python kaizen.py check: 114 tests unitarios.
+
+### B-56 [PENDIENTE] test_aotl: test de extract_json con fence sin json/ (solo ```) y vacio
+**Valor:** extract_json tiene el camino "```" sin "```json" — se extrae el primer bloque.
+Ese camino existe en el codigo pero el test actual solo prueba "```json" y sin fence.
+Agregar 2 casos: fence sin prefijo "json" y entrada vacia.
+**Detalles:** Agregar en test_aotl.py 2 assertions en el check existente o como check nuevo.
+**Metrica:** python scripts/test_aotl.py: 44/44 verdes (42 + 2 casos).
+**Rollback:** Eliminar los 2 assertions.
+
+### B-57 [PENDIENTE] test_aotl: test de validate.check_enums con campo no requerido
+**Valor:** check_enums actualmente tiene tests en test_core para el camino "campo valido".
+Falta el camino "campo no en enums". Agregar 1 caso negativo que retorna mensajes de error.
+**Metrica:** python scripts/test_core.py: 73/73 verdes (72 + 1 caso nuevo).
+**Rollback:** Eliminar el caso en test_core.py.
 
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
@@ -436,3 +453,7 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-49: Tests forensic.py sha256 y Forensic.log — sesión 064923Z (2026-06-22)
 - B-50: Tests validate.check_scores — sesión 065224Z (2026-06-22)
 - B-51: doc 02_USAGE actualizar (RECHAZADO: ya estaba cumplido) — sesión 065416Z (2026-06-22)
+- B-52: tests doctor.py 6 ramas — sesión 133315Z (2026-06-22)
+- B-53: tests _console.enable_utf8() 2 casos — sesión 133633Z (2026-06-22)
+- B-54: sync conteo tests (INLINE en B-52/B-53) — 2026-06-22
+- B-55: tests normalize_proposal/evaluation 4 casos — sesión 133921Z (2026-06-22)

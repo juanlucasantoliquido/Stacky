@@ -16,9 +16,16 @@ description: Adapter para Stacky Agents. Mejora la maquinaria de Kaizen en modo 
 observe:
   mode: snapshot
   # Archivos cuyo contenido puede proponer cambios el motor. Empezar acotado.
-  # DENYLIST (nunca editables): sessions/, decisions/, artifacts/, .git/, kaizen.py,
-  #   config/kaizen.config.yaml, scripts/aotl_state.py, scripts/apply.py,
-  #   scripts/autoloop.py, scripts/engine.py, scripts/dashboard.py
+  # DENYLIST (nunca editables, forzada en scripts/aotl_state.py PROTECTED_PREFIXES/FILES):
+  #   Prefijos protegidos: sessions/, decisions/, artifacts/, .git/
+  #   Archivos protegidos (maquinaria del arnes):
+  #     .gitignore, kaizen.py, config/kaizen.config.yaml,
+  #     scripts/aotl_state.py, scripts/apply.py, scripts/autoloop.py, scripts/engine.py,
+  #     scripts/dashboard.py, scripts/run_session.py, scripts/validate.py,
+  #     scripts/forensic.py, scripts/new_session.py, scripts/selfcheck.py,
+  #     scripts/spawn_child.py, scripts/promote_decision.py
+  #   Editables por el loop: scripts/test_*.py, scripts/dashboard_static.py,
+  #     scripts/metrics.py, scripts/doctor.py, docs/, playground/
   focus:
     - playground
     # - docs              # documentacion del ciclo (descomentar con cuidado)

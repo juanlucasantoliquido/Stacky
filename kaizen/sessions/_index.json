@@ -644,6 +644,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T060821Z__actualizar-denylist-en-adapter-stacky-con-protected-files-actual-b-28",
+      "objective": "Actualizar denylist en adapter stacky con PROTECTED-FILES actual (B-28)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:08:21+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

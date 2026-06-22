@@ -44,6 +44,23 @@ def read_forensic() -> list[dict]:
     return out
 
 
+def _median(xs: list) -> float:
+    """Mediana de una lista ordenada de numeros."""
+    if not xs:
+        return 0.0
+    m = len(xs) // 2
+    return float(xs[m] if len(xs) % 2 else round((xs[m - 1] + xs[m]) / 2, 2))
+
+
+def _percentile(xs: list, p: float) -> float:
+    """Percentil p (0-100) de una lista ordenada de numeros."""
+    if not xs:
+        return 0.0
+    k = (len(xs) - 1) * p / 100
+    lo, hi = int(k), min(int(k) + 1, len(xs) - 1)
+    return round(xs[lo] + (xs[hi] - xs[lo]) * (k - lo), 2)
+
+
 def summarize(index: list[dict], events: list[dict]) -> dict:
     verdicts: dict[str, int] = {}
     for s in index:
@@ -76,13 +93,6 @@ def summarize(index: list[dict], events: list[dict]) -> dict:
     avg_events = round(sum(r["events"] for r in run_stats) / n_runs, 2) if n_runs else 0
 
     elapsed_sorted = sorted(r["elapsed_ms"] for r in run_stats)
-
-    def _median(xs):
-        if not xs:
-            return 0
-        m = len(xs) // 2
-        return xs[m] if len(xs) % 2 else round((xs[m - 1] + xs[m]) / 2, 2)
-
     median_elapsed = _median(elapsed_sorted)
     min_elapsed = elapsed_sorted[0] if elapsed_sorted else 0
     max_elapsed = elapsed_sorted[-1] if elapsed_sorted else 0
@@ -90,15 +100,6 @@ def summarize(index: list[dict], events: list[dict]) -> dict:
     decided = sum(v for k, v in verdicts.items() if k in ("accept", "reject", "iterate"))
     escalations = sum(1 for e in events if e.get("event") == "decision.written"
                       and e.get("data", {}).get("escalated"))
-
-    # p95 de latencia: percentil 95 de elapsed_ms por run
-    def _percentile(xs: list, p: float) -> float:
-        """Percentil p (0-100) de una lista ordenada."""
-        if not xs:
-            return 0.0
-        k = (len(xs) - 1) * p / 100
-        lo, hi = int(k), min(int(k) + 1, len(xs) - 1)
-        return round(xs[lo] + (xs[hi] - xs[lo]) * (k - lo), 2)
 
     p95_elapsed = _percentile(elapsed_sorted, 95)
     sessions_total = len(index)

@@ -261,6 +261,39 @@ def test_recent_decisions_summary_excludes_readme():
             autoloop.ROOT = orig
 
 
+# ---------------------------------------------------------------------------
+# Tests de metrics.py — _percentile (funcion pura local)
+# ---------------------------------------------------------------------------
+import metrics as _metrics  # noqa: E402
+
+
+def _pct(xs, p):
+    """Wrapper para llamar _percentile definida localmente en metrics.py."""
+    return _metrics._percentile(xs, p)  # noqa: SLF001
+
+
+@test
+def test_percentile_empty_list():
+    """Lista vacia devuelve 0."""
+    assert_eq(_pct([], 95), 0.0)
+
+
+@test
+def test_percentile_single_element():
+    """1 elemento: cualquier percentil es ese elemento."""
+    assert_eq(_pct([42.0], 50), 42.0)
+    assert_eq(_pct([42.0], 95), 42.0)
+    assert_eq(_pct([42.0], 0), 42.0)
+
+
+@test
+def test_percentile_p95_multi():
+    """p95 de [1..20] deve ser ~19.05 (interpolacion lineal)."""
+    xs = sorted(float(i) for i in range(1, 21))
+    p95 = _pct(xs, 95)
+    assert_true(18.0 <= p95 <= 20.0, "p95 de [1..20] debe estar entre 18 y 20, got %s" % p95)
+
+
 if __name__ == "__main__":
     print("Kaizen — test_core.py")
     print("=" * 40)

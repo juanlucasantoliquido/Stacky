@@ -614,6 +614,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T060233Z__tests-de-percentile-en-test-core-para-casos-borde-b-24",
+      "objective": "Tests de percentile en test-core para casos borde (B-24)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:02:33+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

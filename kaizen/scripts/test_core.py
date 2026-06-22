@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (90 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (99 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
@@ -19,6 +19,8 @@ Cubre:
   - _console.py: enable_utf8() — no lanza en streams reales, no lanza sin reconfigure
   - run_session.py: compute_total, required_keys, validate_required (5 casos puros)
   - dashboard_static.py: _impl_badge, _phase_pills, _session_rows (5 casos de render HTML)
+  - _config.py: _coerce (null/bool/int/string con comillas) + _strip_comment (hash en strings)
+  - metrics.py: _median (lista vacia, lista par, lista impar)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1218,6 +1220,84 @@ def test_session_rows_genera_filas():
     result = _ds._session_rows(sessions)
     assert_true("<tr>" in result, "debe generar al menos una fila <tr>")
     assert_true("mejorar algo" in result, "debe incluir el objetivo de la sesion")
+
+
+# ---------------------------------------------------------------------------
+# Tests de _config.py — _coerce y _strip_comment (helpers del parser YAML)
+# ---------------------------------------------------------------------------
+from _config import _coerce, _strip_comment  # noqa: E402
+
+
+@test
+def test_coerce_null_values():
+    """_coerce retorna None para '', '~' y 'null' (case-insensitive)."""
+    assert_eq(_coerce(""), None, "vacio -> None")
+    assert_eq(_coerce("~"), None, "~ -> None")
+    assert_eq(_coerce("null"), None, "null -> None")
+    assert_eq(_coerce("NULL"), None, "NULL -> None")
+
+
+@test
+def test_coerce_booleans():
+    """_coerce retorna True/False para 'true'/'false' (case-insensitive)."""
+    assert_eq(_coerce("true"), True)
+    assert_eq(_coerce("True"), True)
+    assert_eq(_coerce("false"), False)
+    assert_eq(_coerce("FALSE"), False)
+
+
+@test
+def test_coerce_integers():
+    """_coerce retorna int para valores numericos enteros."""
+    assert_eq(_coerce("42"), 42)
+    assert_eq(_coerce("0"), 0)
+    assert_eq(_coerce("-7"), -7)
+
+
+@test
+def test_coerce_strings_with_quotes():
+    """_coerce strip comillas simples y dobles del valor."""
+    assert_eq(_coerce("'hola mundo'"), "hola mundo")
+    assert_eq(_coerce('"doble"'), "doble")
+
+
+@test
+def test_strip_comment_removes_trailing_hash():
+    """_strip_comment elimina comentarios # al final de la linea."""
+    result = _strip_comment("valor: 42  # esto es un comentario")
+    assert_true("comentario" not in result, "debe eliminar el comentario")
+    assert_true("valor" in result, "debe preservar el valor")
+
+
+@test
+def test_strip_comment_preserves_hash_in_string():
+    """_strip_comment NO elimina # dentro de strings con comillas."""
+    result = _strip_comment("url: 'https://example.com/path#hash'")
+    assert_true("#hash" in result, "hash dentro de string no debe eliminarse")
+
+
+# ---------------------------------------------------------------------------
+# Tests de metrics.py — _median (complementa los tests de _percentile)
+# ---------------------------------------------------------------------------
+
+
+@test
+def test_median_empty():
+    """_median de lista vacia devuelve 0.0."""
+    assert_eq(_metrics._median([]), 0.0)  # noqa: SLF001
+
+
+@test
+def test_median_odd_list():
+    """_median de lista impar devuelve el elemento del medio."""
+    assert_eq(_metrics._median([1.0, 3.0, 5.0]), 3.0)
+
+
+@test
+def test_median_even_list():
+    """_median de lista par devuelve el promedio de los 2 centrales."""
+    result = _metrics._median([1.0, 2.0, 3.0, 4.0])
+    assert_eq(result, 2.5, "mediana de [1,2,3,4] debe ser 2.5")
 
 
 if __name__ == "__main__":

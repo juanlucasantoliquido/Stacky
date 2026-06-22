@@ -1849,6 +1849,61 @@ def test_validate_session_strict_falta_proposal():
             _validate_mod.SESSIONS = old_s
 
 
+# --- run_session: load_profile y utc_now (B-96) -----------------------------------------------
+
+@test
+def test_utc_now_formato():
+    """utc_now() retorna string ISO con offset UTC ('+00:00') y longitud >= 19."""
+    ts = _rs.utc_now()
+    assert "+00:00" in ts, "utc_now debe incluir '+00:00', got: %r" % ts
+    assert len(ts) >= 19, "utc_now debe tener al menos 19 chars, got: %r" % ts
+
+
+@test
+def test_load_profile_sin_config_ni_perfil_lanza():
+    """load_profile() lanza FileNotFoundError cuando CONFIG no existe y el perfil default tampoco."""
+    with tempfile.TemporaryDirectory() as td:
+        old_config = _rs.CONFIG
+        old_root = _rs.ROOT
+        try:
+            _rs.ROOT = Path(td)
+            _rs.CONFIG = Path(td) / "config" / "kaizen.config.yaml"
+            raised = False
+            try:
+                _rs.load_profile()
+            except (FileNotFoundError, OSError):
+                raised = True
+            assert raised, "load_profile sin config ni perfil default debe lanzar FileNotFoundError"
+        finally:
+            _rs.CONFIG = old_config
+            _rs.ROOT = old_root
+
+
+@test
+def test_load_profile_con_config():
+    """load_profile() carga el perfil indicado en CONFIG cuando existe."""
+    with tempfile.TemporaryDirectory() as td:
+        old_config = _rs.CONFIG
+        old_root = _rs.ROOT
+        try:
+            _rs.ROOT = Path(td)
+            cfg_dir = Path(td) / "config"
+            cfg_dir.mkdir()
+            (cfg_dir / "kaizen.config.yaml").write_text("profile: custom\n", encoding="utf-8")
+            profiles_dir = cfg_dir / "profiles"
+            profiles_dir.mkdir()
+            (profiles_dir / "custom.yaml").write_text(
+                "aotl:\n  commit_on_accept: false\n", encoding="utf-8")
+            _rs.CONFIG = cfg_dir / "kaizen.config.yaml"
+            result = _rs.load_profile()
+            assert isinstance(result, dict), "load_profile debe retornar dict"
+            assert result.get("aotl", {}).get("commit_on_accept") is False, \
+                "debe cargar perfil custom con commit_on_accept=false, got: %r" % result
+        finally:
+            _rs.CONFIG = old_config
+            _rs.ROOT = old_root
+
+
 if __name__ == "__main__":
     print("Kaizen — test_core.py")
     print("=" * 40)

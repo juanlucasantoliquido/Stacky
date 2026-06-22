@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (52 tests)
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (58 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -17,7 +17,8 @@ Cubre las invariantes que sostienen la seguridad del loop:
   - spawn_child: caminos de error (no_args, no_decision, non_iterate) + idempotencia,
   - forensic.py: sha256_text, sha256_file, Forensic.log() campos + seq monotonica,
   - aotl_state.py: write/read/clear loop_status, request/stop/clear_stop (6 tests),
-  - engine.py: make_engine — factory devuelve MockEngine por defecto y con driver='mock'.
+  - engine.py: make_engine — factory devuelve MockEngine por defecto y con driver='mock',
+  - engine.py: ClaudeCliEngine._context_block — encabezado+rutas prohibidas, tree+decisions incluidos.
 """
 from __future__ import annotations
 
@@ -694,6 +695,92 @@ def _():
 def _():
     eng = _eng.make_engine({"engine": {"driver": "mock"}})
     assert isinstance(eng, _eng.MockEngine), "debe devolver MockEngine con driver=mock"
+
+
+@check("ClaudeCliEngine._context_block: contexto vacio tiene encabezado y rutas prohibidas")
+def _():
+    result = eng.ClaudeCliEngine._context_block({"objective": "obj", "protected": ["kaizen.py"]})
+    assert "## Contexto observado" in result, "debe tener encabezado"
+    assert "obj" in result, "debe incluir el objetivo"
+    assert "kaizen.py" in result, "debe incluir rutas protegidas"
+
+@check("ClaudeCliEngine._context_block: con tree y decisions incluye esas secciones")
+def _():
+    ctx = {
+        "objective": "mejorar",
+        "tree": ["scripts/metrics.py"],
+        "recent_decisions": ["0001: mi-decision accept"],
+        "files": {},
+        "protected": [],
+    }
+    result = eng.ClaudeCliEngine._context_block(ctx)
+    assert "### Archivos editables" in result, "debe incluir seccion de archivos"
+    assert "scripts/metrics.py" in result, "debe listar el archivo del foco"
+    assert "### Decisiones recientes" in result, "debe incluir seccion de decisiones"
+    assert "mi-decision" in result, "debe listar la decision reciente"
+
+
+# --- autoloop: create_session y run_gate con mock de _py (B-84) --------------------------------
+import autoloop as _al  # noqa: E402
+import subprocess as _sp  # noqa: E402
+
+
+def _fake_proc(stdout: str, returncode: int = 0) -> _sp.CompletedProcess:
+    return _sp.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr="")
+
+
+@check("autoloop.create_session: ok -> devuelve nombre del directorio de sesion")
+def _():
+    old_py = _al._py
+    try:
+        _al._py = lambda *a, **kw: _fake_proc("sessions/2026-06-22T000000Z__mi-sesion-b84\n")
+        sid = _al.create_session("mi objetivo", "generic", "mock")
+        assert sid == "2026-06-22T000000Z__mi-sesion-b84", "debe retornar el basename de la linea de salida"
+    finally:
+        _al._py = old_py
+
+
+@check("autoloop.create_session: returncode!=0 lanza RuntimeError")
+def _():
+    old_py = _al._py
+    try:
+        _al._py = lambda *a, **kw: _fake_proc("", returncode=1)
+        raised = False
+        try:
+            _al.create_session("obj", "generic", "mock")
+        except RuntimeError:
+            raised = True
+        assert raised, "debe lanzar RuntimeError si new_session falla"
+    finally:
+        _al._py = old_py
+
+
+@check("autoloop.run_gate: ok -> devuelve dict parseado del ultimo JSON de stdout")
+def _():
+    old_py = _al._py
+    try:
+        gate_output = '{"verdict": "accept", "total": 12}\n'
+        _al._py = lambda *a, **kw: _fake_proc(gate_output)
+        result = _al.run_gate("alguna-sesion")
+        assert result.get("verdict") == "accept", "debe parsear el veredicto"
+        assert result.get("total") == 12, "debe parsear el total"
+    finally:
+        _al._py = old_py
+
+
+@check("autoloop.run_gate: returncode!=0 lanza RuntimeError")
+def _():
+    old_py = _al._py
+    try:
+        _al._py = lambda *a, **kw: _fake_proc("error", returncode=1)
+        raised = False
+        try:
+            _al.run_gate("alguna-sesion")
+        except RuntimeError:
+            raised = True
+        assert raised, "debe lanzar RuntimeError si run_session falla"
+    finally:
+        _al._py = old_py
 
 
 def main() -> int:

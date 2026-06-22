@@ -522,6 +522,7 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-74: gate_decide ya cubierto (6 tests en test_aotl.py lineas 289-340) — auditoria inline sesion 141846Z (2026-06-22)
 - B-75: docs/02_USAGE.md actualizado a 161 tests (109+52) — sesion 141846Z (2026-06-22)
 - B-83: test_core: 4 tests validate_session (valida/inexistente/score_rango/strict) — sesion 143205Z (2026-06-22)
+- B-84: test_aotl: 4 tests create_session+run_gate con mock de _py — sesion 143630Z (2026-06-22)
 - B-76: test_core: 2 tests build_context (claves_obligatorias + valores_pasados) — sesion 142114Z (2026-06-22)
 - B-77: docstring test_core.py 111 y 02_USAGE.md 163 tests — sesion 142225Z (2026-06-22)
 - B-78: test_core: 2 tests update_index_status (modifica_correcta + id_inexistente) — sesion 142403Z (2026-06-22)

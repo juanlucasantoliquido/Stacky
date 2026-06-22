@@ -594,6 +594,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T055930Z__metrics-agrega-p95-de-latencia-y-escalation-rate-b-22",
+      "objective": "Metrics agrega p95 de latencia y escalation-rate (B-22)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:59:30+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

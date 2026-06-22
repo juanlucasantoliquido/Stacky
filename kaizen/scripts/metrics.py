@@ -91,19 +91,33 @@ def summarize(index: list[dict], events: list[dict]) -> dict:
     escalations = sum(1 for e in events if e.get("event") == "decision.written"
                       and e.get("data", {}).get("escalated"))
 
+    # p95 de latencia: percentil 95 de elapsed_ms por run
+    def _percentile(xs: list, p: float) -> float:
+        """Percentil p (0-100) de una lista ordenada."""
+        if not xs:
+            return 0.0
+        k = (len(xs) - 1) * p / 100
+        lo, hi = int(k), min(int(k) + 1, len(xs) - 1)
+        return round(xs[lo] + (xs[hi] - xs[lo]) * (k - lo), 2)
+
+    p95_elapsed = _percentile(elapsed_sorted, 95)
+    sessions_total = len(index)
+
     return {
-        "sessions_total": len(index),
+        "sessions_total": sessions_total,
         "verdict_distribution": verdicts,
         "acceptance_rate": round(accepted / decided, 3) if decided else None,
         "runs_total": n_runs,
         "avg_elapsed_ms": avg_elapsed,
         "median_elapsed_ms": median_elapsed,
+        "p95_elapsed_ms": p95_elapsed,
         "min_elapsed_ms": min_elapsed,
         "max_elapsed_ms": max_elapsed,
         "avg_events_per_run": avg_events,
         "total_errors": sum(r["errors"] for r in run_stats),
         "total_warnings": sum(r["warnings"] for r in run_stats),
         "escalations_to_human": escalations,
+        "escalation_rate": round(escalations / sessions_total, 4) if sessions_total else None,
         "runs": sorted(run_stats, key=lambda r: r["run_id"]),
     }
 
@@ -116,9 +130,10 @@ def print_report(summary: dict) -> None:
     print("Veredictos:              %s" % summary["verdict_distribution"])
     print("Tasa de aceptación:      %s" % summary["acceptance_rate"])
     print("Runs del arnés:          %d" % summary["runs_total"])
-    print("Duración por run (ms):   media=%.2f mediana=%.2f min=%.2f max=%.2f" % (
+    print("Duración por run (ms):   media=%.2f mediana=%.2f p95=%.2f min=%.2f max=%.2f" % (
         summary["avg_elapsed_ms"], summary["median_elapsed_ms"],
-        summary["min_elapsed_ms"], summary["max_elapsed_ms"]))
+        summary["p95_elapsed_ms"], summary["min_elapsed_ms"], summary["max_elapsed_ms"]))
+    print("Tasa de escalacion:      %s" % summary["escalation_rate"])
     print("Eventos medios por run:  %.2f" % summary["avg_events_per_run"])
     print("Errores / Warnings:      %d / %d" %
           (summary["total_errors"], summary["total_warnings"]))

@@ -203,6 +203,36 @@ import autoloop  # noqa: E402
 
 
 @test
+def test_recent_objectives_empty():
+    """Si INDEX no existe, recent_objectives devuelve lista vacia."""
+    orig = autoloop.INDEX
+    autoloop.INDEX = Path("/tmp/__kaizen_nonexistent_index_test__.json")
+    try:
+        result = autoloop.recent_objectives(n=5)
+        assert_eq(result, [], "debe devolver [] si no hay indice")
+    finally:
+        autoloop.INDEX = orig
+
+
+@test
+def test_recent_objectives_returns_last_n():
+    """Devuelve los ultimos n objetivos del indice."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = Path(td) / "sessions" / "_index.json"
+        idx.parent.mkdir(parents=True)
+        sessions = [{"id": "s%d" % i, "status": "closed", "objective": "obj%d" % i}
+                    for i in range(7)]
+        idx.write_text(__import__("json").dumps({"sessions": sessions}), encoding="utf-8")
+        orig = autoloop.INDEX
+        autoloop.INDEX = idx
+        try:
+            result = autoloop.recent_objectives(n=3)
+            assert_eq(result, ["obj4", "obj5", "obj6"], "debe devolver los ultimos 3")
+        finally:
+            autoloop.INDEX = orig
+
+
+@test
 def test_recent_decisions_summary_empty_dir():
     """Si decisions/ esta vacio, retorna lista vacia."""
     with tempfile.TemporaryDirectory() as td:

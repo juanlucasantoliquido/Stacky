@@ -266,7 +266,7 @@ subprocess.run y reportar FAIL si alguno da exit code != 0.
 **Metrica:** python kaizen.py check termina con exit 1 si test_core.py tiene fallas. Normalmente 0.
 **Rollback:** Quitar los subcalls en check.py.
 
-### B-31 [PENDIENTE] test_core: tests de recent_objectives y gather_focus (autoloop.py)
+### B-31 [HECHO 2026-06-22] test_core: tests de recent_objectives y gather_focus (autoloop.py)
 **Valor:** recent_objectives y gather_focus son funciones puras en autoloop.py que el loop usa para
 construir su contexto en cada iteracion. Sin tests, una regresion puede hacer que el contexto del
 motor quede vacio o con datos incorrectos sin que nadie lo detecte.
@@ -331,3 +331,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-28: Denylist adapter stacky sincronizado — sesión 060821Z (2026-06-22)
 - B-29: Tests set_impl_status y update_index_fields — sesión 060947Z (2026-06-22)
 - B-30: check.py integra test_core y test_aotl — sesión 061331Z (2026-06-22)
+- B-31: Tests recent_objectives en autoloop.py — sesión 061632Z (2026-06-22)

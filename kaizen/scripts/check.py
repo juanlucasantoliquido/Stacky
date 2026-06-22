@@ -61,7 +61,7 @@ def main(argv: list[str]) -> int:
     if failures:
         print("CHECK: FALLO (%d grupo(s) con error)" % failures)
         return 1
-    print("CHECK: TODO VERDE  [5/5 grupos OK | 131 tests unitarios]")
+    print("CHECK: TODO VERDE  [5/5 grupos OK | 135 tests unitarios]")
     return 0
 
 

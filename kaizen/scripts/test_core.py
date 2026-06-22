@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (81 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (85 tests)
 
 Cubre:
-  - new_session.py: slugify, utc_now, read_config_value
+  - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
   - validate.py: check_required, check_enums, check_patterns, check_scores
   - autoloop.py: recent_objectives, recent_decisions_summary
   - dashboard_static.py: _tag_pills, _pending_review_section, _gen_decisions_index, build_data
@@ -1054,6 +1054,68 @@ def test_enable_utf8_sin_reconfigure():
     finally:
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+
+
+# ---------------------------------------------------------------------------
+# Tests de new_session.py — render() y append_to_index()
+# ---------------------------------------------------------------------------
+import new_session as _ns  # noqa: E402
+
+
+@test
+def test_render_sin_placeholders():
+    """render() con mapping vacio devuelve el texto original intacto."""
+    with tempfile.TemporaryDirectory() as td:
+        tpl = Path(td) / "tpl.txt"
+        tpl.write_text("texto sin placeholders", encoding="utf-8")
+        result = _ns.render(tpl, {})
+        assert_eq(result, "texto sin placeholders")
+
+
+@test
+def test_render_con_archivo_real():
+    """render() lee un archivo y sustituye todos los placeholders."""
+    with tempfile.TemporaryDirectory() as td:
+        tpl = Path(td) / "tpl.txt"
+        tpl.write_text("sesion={{SESSION_ID}} obj={{OBJECTIVE}}", encoding="utf-8")
+        result = _ns.render(tpl, {"SESSION_ID": "s-42", "OBJECTIVE": "mejorar algo"})
+        assert_eq(result, "sesion=s-42 obj=mejorar algo")
+
+
+@test
+def test_append_to_index_crea_indice_si_no_existe():
+    """append_to_index() crea el indice desde cero si no existe."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = Path(td) / "sessions" / "_index.json"
+        idx.parent.mkdir(parents=True)
+        old_idx = _ns.INDEX
+        try:
+            _ns.INDEX = idx
+            _ns.append_to_index({"id": "s-1", "objective": "primera sesion"})
+            data = _json.loads(idx.read_text(encoding="utf-8"))
+            assert_eq(len(data["sessions"]), 1)
+            assert_eq(data["sessions"][0]["id"], "s-1")
+        finally:
+            _ns.INDEX = old_idx
+
+
+@test
+def test_append_to_index_agrega_a_indice_existente():
+    """append_to_index() agrega al final sin borrar las entradas previas."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = Path(td) / "sessions" / "_index.json"
+        idx.parent.mkdir(parents=True)
+        idx.write_text(_json.dumps({"sessions": [{"id": "s-0", "objective": "ya existia"}]}),
+                       encoding="utf-8")
+        old_idx = _ns.INDEX
+        try:
+            _ns.INDEX = idx
+            _ns.append_to_index({"id": "s-1", "objective": "nueva"})
+            data = _json.loads(idx.read_text(encoding="utf-8"))
+            assert_eq(len(data["sessions"]), 2, "debe haber 2 sesiones")
+            assert_eq(data["sessions"][1]["id"], "s-1", "la nueva es la ultima")
+        finally:
+            _ns.INDEX = old_idx
 
 
 # ---------------------------------------------------------------------------

@@ -37,20 +37,20 @@ El umbral vive en `config/profiles/default.yaml: review.accept_threshold`.
 
 ## Cómo se completa (HITL)
 
-En `evaluation.md` de la sesión:
+En `evaluation.json` de la sesión (conforme a `contracts/evaluation.schema.json`):
 
 1. Listá hallazgos concretos (qué está bien / qué falta), citando evidencia cuando exista.
 2. Puntuá C1..C5 con una línea de justificación cada uno.
-3. Marcá bloqueantes disparados (si los hay).
-4. Veredicto preliminar (la decisión final va en `decision.md`).
+3. Marcá bloqueantes disparados (si los hay) en el campo `blocking`.
+4. Veredicto preliminar en `preliminary_verdict` (la decisión final la escribe el gate en `decision.json`).
 
 ## Cómo lo reusa AOTL
 
-El `agents/evaluator` produce el **mismo** `evaluation.json` (mismo contrato), con los mismos
-criterios y bloqueantes. El gate de `config/profiles/default.yaml`:
+El engine produce el **mismo** `evaluation.json` (mismo contrato), con los mismos
+criterios y bloqueantes. El gate de `run_session.py` aplica la lógica de `config/profiles/default.yaml`:
 
-- aplica `accept_threshold`,
-- respeta los bloqueantes (cualquier bloqueante ⇒ no auto-accept),
-- y **escala a humano** si la confianza del evaluador es menor a `review.min_confidence`.
+- aplica `review.accept_threshold` (default 11/15): total ≥ umbral + sin bloqueantes → `accept`.
+- total 7–10 o bloqueante corregible → `iterate` (abre sesión hija via `spawn_child.py`).
+- total ≤ 6 o bloqueante no corregible → `reject`.
 
 > Principio: AOTL no inventa criterios nuevos. Solo automatiza una rúbrica ya validada en HITL.

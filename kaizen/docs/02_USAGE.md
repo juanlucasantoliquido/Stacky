@@ -64,14 +64,17 @@ python scripts/new_session.py "smoke-test"
 
 ```sh
 python kaizen.py check
-# CHECK: TODO VERDE  [5/5 grupos OK | 120 tests unitarios]
+# CHECK: TODO VERDE  [5/5 grupos OK | 135 tests unitarios]
 ```
 
 Corre en orden: `doctor` (salud estructural) → `selfcheck` (consistencia del índice) →
-`validate` (contratos de sesiones cerradas) → `test_core` (76 tests de lógica pura:
-slugify, scores, metrics, dashboard, archive, adapters, config, doctor, _console, autoloop.gather_focus)
-→ `test_aotl` (44 tests de maquinaria AOTL: guardarraíl, gate, apply/rollback+applied_paths,
-spawn_child, forensic, engine.normalize).
+`validate` (contratos de sesiones cerradas) → `test_core` (85 tests de lógica pura:
+slugify, scores, metrics, dashboard, archive, adapters, config, doctor, _console,
+autoloop.gather_focus/active_config, new_session.render+append_to_index,
+run_session.compute_total+required_keys+validate_required)
+→ `test_aotl` (50 tests de maquinaria AOTL: guardarraíl, gate, apply/rollback+applied_paths,
+spawn_child, forensic, engine.normalize, aotl_state.loop_status+stop_flag).
+El conteo se calcula dinámicamente del output real de los runners.
 Exit 0 solo si todo pasa. Usalo como gate antes de commitear o como CI.
 
 ## Pasar a AOTL (más adelante)

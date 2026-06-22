@@ -196,6 +196,71 @@ def test_check_patterns_invalid():
     assert_true(len(errs) == 1)
 
 
+# ---------------------------------------------------------------------------
+# Tests de autoloop.py — recent_decisions_summary
+# ---------------------------------------------------------------------------
+import autoloop  # noqa: E402
+
+
+@test
+def test_recent_decisions_summary_empty_dir():
+    """Si decisions/ esta vacio, retorna lista vacia."""
+    with tempfile.TemporaryDirectory() as td:
+        orig = autoloop.ROOT
+        autoloop.ROOT = Path(td)
+        try:
+            result = autoloop.recent_decisions_summary()
+            assert_eq(result, [])
+        finally:
+            autoloop.ROOT = orig
+
+
+@test
+def test_recent_decisions_summary_with_adr():
+    """Extrae titulo y veredicto de un ADR .md valido."""
+    with tempfile.TemporaryDirectory() as td:
+        decisions_dir = Path(td) / "decisions"
+        decisions_dir.mkdir()
+        adr = decisions_dir / "0001-mi-decision.md"
+        adr.write_text(textwrap.dedent("""\
+            # ADR 0001 — Mi primera decision
+            - session: 2026-06-22T000000Z__test
+            - Veredicto: accept (por gate)
+
+            ## Contexto
+            ...
+        """), encoding="utf-8")
+        orig = autoloop.ROOT
+        autoloop.ROOT = Path(td)
+        try:
+            result = autoloop.recent_decisions_summary(n=5)
+            assert_true(len(result) == 1, "debe haber 1 entrada")
+            assert_true("Mi primera decision" in result[0], "debe incluir el titulo")
+            assert_true("accept" in result[0], "debe incluir el veredicto")
+        finally:
+            autoloop.ROOT = orig
+
+
+@test
+def test_recent_decisions_summary_excludes_readme():
+    """El README.md de decisions/ no debe aparecer como ADR."""
+    with tempfile.TemporaryDirectory() as td:
+        decisions_dir = Path(td) / "decisions"
+        decisions_dir.mkdir()
+        readme = decisions_dir / "README.md"
+        readme.write_text("# Registro de decisiones\n", encoding="utf-8")
+        adr = decisions_dir / "0001-real-adr.md"
+        adr.write_text("# ADR 0001 — Real\n- Veredicto: accept\n", encoding="utf-8")
+        orig = autoloop.ROOT
+        autoloop.ROOT = Path(td)
+        try:
+            result = autoloop.recent_decisions_summary(n=5)
+            assert_true(len(result) == 1, "solo debe haber 1 entrada (el ADR, no el README)")
+            assert_true("Real" in result[0], "debe incluir el ADR real")
+        finally:
+            autoloop.ROOT = orig
+
+
 if __name__ == "__main__":
     print("Kaizen — test_core.py")
     print("=" * 40)

@@ -71,7 +71,9 @@
       "mode": "hitl",
       "adapter": "generic",
       "created_utc": "2026-06-21T19:38:37+00:00",
-      "status": "open"
+      "status": "closed",
+      "verdict": "reject",
+      "note": "sesion hija de iterate que nunca se completo; cerrada como deuda de limpieza 2026-06-22"
     },
     {
       "id": "2026-06-21T193904Z__promocion-de-decisiones-a-adr-lite",
@@ -314,13 +316,15 @@
       "mode": "aotl",
       "adapter": "claude",
       "created_utc": "2026-06-22T04:39:09+00:00",
-      "status": "open",
+      "status": "closed",
       "tags": [
         "aotl",
         "engine:claude"
       ],
-      "impl_status": "planned",
-      "auto": true
+      "impl_status": "reverted",
+      "auto": true,
+      "verdict": "reject",
+      "note": "sesion huerfana sin artefactos (template vacio); cerrada por limpieza 2026-06-22"
     },
     {
       "id": "2026-06-22T044047Z__automejora-aotl-1-foco-playground",
@@ -338,6 +342,168 @@
       "verdict": "accept",
       "commit": null,
       "note": "verificacion del motor claude; cambio revertido"
+    },
+    {
+      "id": "2026-06-22T052229Z__crear-backlog-automejora-md-con-deuda-detectada-y-objetivos-priorizados",
+      "objective": "crear BACKLOG_AUTOMEJORA.md con deuda detectada y objetivos priorizados",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:22:29+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T052346Z__cerrar-sesion-open-huerfana-043909z-que-qued-sin-artefactos",
+      "objective": "cerrar sesion open huerfana 043909Z que quedó sin artefactos",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:23:46+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T052633Z__dashboard-estatico-html-en-dashboard-index-html-generado-por-python-kaizen-py-dashboard",
+      "objective": "dashboard estatico HTML en dashboard/index.html generado por python kaizen.py dashboard",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:26:33+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T052910Z__ampliar-foco-aotl-del-adapter-claude-agregar-docs-y-scripts-con-denylist-explicita",
+      "objective": "ampliar foco AOTL del adapter claude: agregar docs/ y scripts/ con denylist explicita",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:29:10+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T053031Z__tests-unitarios-para-new-session-y-validate-b-05",
+      "objective": "tests unitarios para new_session y validate (B-05)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:30:31+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T053151Z__sincronizar-manifest-md-con-artefactos-nuevos-dashboard-static-test-core-backlog-dashboard",
+      "objective": "sincronizar MANIFEST.md con artefactos nuevos: dashboard_static, test_core, BACKLOG, dashboard/",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:31:51+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T053307Z__actualizar-readme-md-mencionar-dashboard-estatico-file-y-backlog-automejora",
+      "objective": "actualizar README.md: mencionar dashboard estatico file:// y BACKLOG_AUTOMEJORA",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:33:07+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T053400Z__adapter-de-ejemplo-para-stacky-agents-adapters-stacky-verificable-con-motor-mock",
+      "objective": "adapter de ejemplo para Stacky Agents (adapters/stacky/) verificable con motor mock",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:34:00+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T053454Z__automejora-aotl-1-foco-playground",
+      "objective": "automejora AOTL #1 (foco: playground)",
+      "mode": "aotl",
+      "adapter": "stacky",
+      "created_utc": "2026-06-22T05:34:54+00:00",
+      "status": "closed",
+      "tags": [
+        "aotl",
+        "engine:mock"
+      ],
+      "impl_status": "implemented",
+      "auto": true,
+      "verdict": "accept",
+      "commit": "4fff56f9"
+    },
+    {
+      "id": "2026-06-22T053558Z__gate-agrega-blocking-details-al-decision-json-con-descripcion-de-cada-bloqueante-disparado",
+      "objective": "gate agrega blocking_details al decision.json con descripcion de cada bloqueante disparado",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:35:58+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T053642Z__test-gate-blocking-b1-verificacion",
+      "objective": "test-gate-blocking-b1-verificacion",
+      "mode": "hitl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:36:42+00:00",
+      "status": "decided",
+      "tags": [],
+      "verdict": "iterate"
+    },
+    {
+      "id": "2026-06-22T053808Z__incluir-resumen-de-decisions-adr-lite-en-el-contexto-del-motor-aotl-b-10",
+      "objective": "incluir resumen de decisions/ ADR-lite en el contexto del motor AOTL (B-10)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:38:08+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T053905Z__automejora-aotl-1-foco-playground",
+      "objective": "automejora AOTL #1 (foco: playground)",
+      "mode": "aotl",
+      "adapter": "stacky",
+      "created_utc": "2026-06-22T05:39:05+00:00",
+      "status": "closed",
+      "tags": [
+        "aotl",
+        "engine:mock"
+      ],
+      "impl_status": "implemented",
+      "auto": true,
+      "verdict": "accept",
+      "commit": "98fe6b1f"
+    },
+    {
+      "id": "2026-06-22T054032Z__regeneracion-automatica-del-dashboard-al-cerrar-cada-sesion-en-run-session-py-b-11",
+      "objective": "regeneracion automatica del dashboard al cerrar cada sesion en run_session.py (B-11)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:40:32+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T054144Z__tests-unitarios-para-recent-decisions-summary-en-test-core-py-b-12",
+      "objective": "tests unitarios para recent_decisions_summary en test_core.py (B-12)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:41:44+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

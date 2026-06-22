@@ -52,7 +52,100 @@
   border-color: var(--color-primary, #2563eb);
 }
 
-/* ── Grupos ──────────────────────────────────────────────────────────────── */
+/* ── Búsqueda ────────────────────────────────────────────────────────────── */
+.search {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 180px;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  background: var(--color-input-bg, #fff);
+}
+
+.onlyActiveLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #555);
+  cursor: pointer;
+}
+
+/* ── Resumen global ──────────────────────────────────────────────────────── */
+.summary {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #888);
+  margin-bottom: 1rem;
+}
+
+/* ── Sección colapsable ──────────────────────────────────────────────────── */
+.section {
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sectionSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  background: var(--color-surface-raised, #f4f4f4);
+  user-select: none;
+  list-style: none;
+  gap: 0.5rem;
+}
+
+.sectionSummary::-webkit-details-marker {
+  display: none;
+}
+
+.sectionSummary::before {
+  content: "▶";
+  font-size: 0.65rem;
+  color: var(--color-text-secondary, #888);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+
+details[open] > .sectionSummary::before {
+  transform: rotate(90deg);
+}
+
+.sectionLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text, #222);
+  flex: 1;
+}
+
+.sectionMeta {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #888);
+  white-space: nowrap;
+}
+
+.sectionDesc {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #666);
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  background: var(--color-surface, #fff);
+  border-bottom: 1px solid var(--color-border-subtle, #f0f0f0);
+}
+
+/* ── Grupos (compatibilidad) ─────────────────────────────────────────────── */
 .group {
   margin-bottom: 1.5rem;
 }
@@ -80,10 +173,17 @@
 
 .flagLabel {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  flex-direction: column;
+  gap: 0.2rem;
   flex: 1;
   min-width: 0;
+}
+
+.flagMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 .flagName {
@@ -105,6 +205,28 @@
   color: var(--color-text-secondary, #888);
   cursor: help;
   flex-shrink: 0;
+}
+
+.flagDesc {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #777);
+  margin: 0;
+  line-height: 1.35;
+}
+
+.defaultBadge {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background: var(--color-surface-raised, #f0f0f0);
+  border: 1px solid var(--color-border-subtle, #ddd);
+  color: var(--color-text-secondary, #666);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.activeRow {
+  background: var(--color-primary-light-subtle, #f0f6ff);
 }
 
 .flagControl {

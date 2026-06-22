@@ -414,3 +414,260 @@ def test_epic_decomposition_flag_group_global():
     from services.harness_flags import FLAG_REGISTRY
     spec = next(f for f in FLAG_REGISTRY if f.key == "STACKY_EPIC_DECOMPOSITION_ENABLED")
     assert spec.group == "global"
+
+
+# ---------------------------------------------------------------------------
+# Plan 60 — Flags de aprendizaje bidireccional ediciones ADO
+# ---------------------------------------------------------------------------
+
+def test_ado_edit_learning_flags_registered():
+    """Los 3 keys del plan 60 deben aparecer en FLAG_REGISTRY."""
+    from services.harness_flags import FLAG_REGISTRY
+    keys = {f.key for f in FLAG_REGISTRY}
+    assert "STACKY_ADO_EDIT_LEARNING_ENABLED" in keys
+    assert "STACKY_ADO_EDIT_SWEEP_HOURS" in keys
+    assert "STACKY_ADO_SERVICE_IDENTITY" in keys
+
+
+def test_ado_edit_learning_enabled_is_env_only_bool():
+    """STACKY_ADO_EDIT_LEARNING_ENABLED debe ser type=bool, env_only=True, group=global."""
+    from services.harness_flags import FLAG_REGISTRY
+    spec = next(f for f in FLAG_REGISTRY if f.key == "STACKY_ADO_EDIT_LEARNING_ENABLED")
+    assert spec.type == "bool"
+    assert spec.env_only is True
+    assert spec.group == "global"
+
+
+def test_ado_edit_sweep_hours_is_env_only_int():
+    """STACKY_ADO_EDIT_SWEEP_HOURS debe ser type=int, env_only=True."""
+    from services.harness_flags import FLAG_REGISTRY
+    spec = next(f for f in FLAG_REGISTRY if f.key == "STACKY_ADO_EDIT_SWEEP_HOURS")
+    assert spec.type == "int"
+    assert spec.env_only is True
+
+
+def test_ado_service_identity_is_env_only_csv():
+    """STACKY_ADO_SERVICE_IDENTITY debe ser type=csv, env_only=True."""
+    from services.harness_flags import FLAG_REGISTRY
+    spec = next(f for f in FLAG_REGISTRY if f.key == "STACKY_ADO_SERVICE_IDENTITY")
+    assert spec.type == "csv"
+    assert spec.env_only is True
+
+
+# ---------------------------------------------------------------------------
+# Plan 63 — F0: taxonomía de categorías + helpers
+# ---------------------------------------------------------------------------
+
+# Keys con default=True curadas en el plan (12 exactas).
+_CURATED_DEFAULTS_ON = {
+    "STACKY_EPIC_SANITIZE_ENABLED",
+    "STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED",
+    "STACKY_COMMENT_FULL_SCAN_ENABLED",
+    "STACKY_ADO_PREVIEW_ENABLED",
+    "STACKY_GROUNDING_OBSERVATORY_ENABLED",
+    "STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED",
+    "STACKY_OPERATIONAL_HEALTH_ENABLED",
+    "STACKY_EPIC_FROM_BRIEF_ENABLED",
+    "STACKY_EXECUTION_TRACE_ENABLED",
+    "STACKY_ORPHAN_REAPER_ENABLED",
+    "STACKY_PENDING_TASK_STRICT_VALIDATION_ENABLED",
+    "STACKY_RUNNER_REAP_ON_CLOSE_ENABLED",
+}
+
+
+def test_every_registry_flag_is_categorized():
+    """Cada key del registry debe estar en _CATEGORY_KEYS (bijección completa, sin huérfanas)."""
+    from services.harness_flags import FLAG_REGISTRY, _KEY_CATEGORY
+
+    registry_keys = {s.key for s in FLAG_REGISTRY}
+    category_keys = set(_KEY_CATEGORY.keys())
+    missing = registry_keys - category_keys
+    stale = category_keys - registry_keys
+    assert missing == set(), f"Keys del registry sin categoría: {sorted(missing)}"
+    assert stale == set(), f"Keys en _CATEGORY_KEYS que ya no existen en el registry: {sorted(stale)}"
+
+
+def test_category_keys_no_duplicates_across_categories():
+    """Ninguna key aparece en más de una categoría."""
+    from services.harness_flags import _CATEGORY_KEYS
+
+    all_keys: list[str] = []
+    for keys in _CATEGORY_KEYS.values():
+        all_keys.extend(keys)
+    assert len(all_keys) == len(set(all_keys)), "Hay keys duplicadas en _CATEGORY_KEYS"
+
+
+def test_categorize_known_and_fallback():
+    """categorize devuelve la categoría correcta para una key conocida y 'otros' para una inexistente."""
+    from services.harness_flags import categorize
+
+    assert categorize("STACKY_TASK_GATE_ENABLED") == "flujo_funcional"
+    assert categorize("CLAVE_INEXISTENTE_XYZ") == "otros"
+
+
+def test_list_categories_ids_unique_and_include_otros():
+    """list_categories devuelve ids únicos, incluye 'otros', y toda categoría usada en
+    _CATEGORY_KEYS existe en FLAG_CATEGORIES."""
+    from services.harness_flags import list_categories, FLAG_CATEGORIES, _CATEGORY_KEYS
+
+    cats = list_categories()
+    ids = [c["id"] for c in cats]
+    assert len(ids) == len(set(ids)), "ids de categorías duplicados"
+    assert "otros" in ids, "'otros' debe estar en list_categories"
+    # Toda categoría en _CATEGORY_KEYS debe aparecer en FLAG_CATEGORIES
+    flag_cat_ids = {c.id for c in FLAG_CATEGORIES}
+    for cat_id in _CATEGORY_KEYS:
+        assert cat_id in flag_cat_ids, f"Categoría '{cat_id}' en _CATEGORY_KEYS pero no en FLAG_CATEGORIES"
+
+
+def test_read_current_includes_category_and_default():
+    """Cada dict de read_current() tiene 'category', 'default', 'default_known', 'active'
+    y 'category' pertenece a los ids de FLAG_CATEGORIES."""
+    from services.harness_flags import read_current, FLAG_CATEGORIES
+
+    valid_cat_ids = {c.id for c in FLAG_CATEGORIES}
+    for d in read_current():
+        assert "category" in d, f"Falta 'category' en {d['key']}"
+        assert "default" in d, f"Falta 'default' en {d['key']}"
+        assert "default_known" in d, f"Falta 'default_known' en {d['key']}"
+        assert "active" in d, f"Falta 'active' en {d['key']}"
+        assert d["category"] in valid_cat_ids, (
+            f"category '{d['category']}' de {d['key']} no está en FLAG_CATEGORIES"
+        )
+
+
+def test_declared_default_true_set():
+    """Las 12 keys curadas tienen declared_default is True y default_is_known is True."""
+    from services.harness_flags import FLAG_REGISTRY, declared_default, default_is_known
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    for key in _CURATED_DEFAULTS_ON:
+        spec = by_key[key]
+        assert declared_default(spec) is True, f"{key}: declared_default debe ser True"
+        assert default_is_known(spec) is True, f"{key}: default_is_known debe ser True"
+
+
+def test_default_known_only_for_curated():
+    """default_is_known es True SOLO para las 12 keys curadas: ni más ni menos."""
+    from services.harness_flags import FLAG_REGISTRY, default_is_known
+
+    known_keys = {s.key for s in FLAG_REGISTRY if default_is_known(s)}
+    assert known_keys == _CURATED_DEFAULTS_ON, (
+        f"Drift detectado.\n"
+        f"Extras (no curadas): {sorted(known_keys - _CURATED_DEFAULTS_ON)}\n"
+        f"Faltantes (curadas pero default_known=False): {sorted(_CURATED_DEFAULTS_ON - known_keys)}"
+    )
+
+
+def test_declared_default_falls_back_to_type_zero():
+    """Para flags sin default explícito, declared_default devuelve el type-zero y
+    default_is_known devuelve False."""
+    from services.harness_flags import FLAG_REGISTRY, declared_default, default_is_known
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    # bool sin default → False
+    bool_spec = by_key["STACKY_TASK_GATE_ENABLED"]
+    assert declared_default(bool_spec) is False
+    assert default_is_known(bool_spec) is False
+    # int sin default → 0
+    int_spec = by_key["STACKY_RUNAWAY_MAX_TURNS"]
+    assert declared_default(int_spec) == 0
+    assert default_is_known(int_spec) is False
+
+
+def test_is_active_semantics():
+    """is_active: bool→True si True; int→True si !=0 (normalización numérica C4);
+    float→True si !=0.0; csv→True si no vacío."""
+    from dataclasses import dataclass
+    from services.harness_flags import is_active, FlagSpec
+
+    bool_spec = FlagSpec("K_B", "bool", "L", "D", "global")
+    int_spec   = FlagSpec("K_I", "int",  "L", "D", "global")
+    float_spec = FlagSpec("K_F", "float","L", "D", "global")
+    csv_spec   = FlagSpec("K_C", "csv",  "L", "D", "global")
+
+    # bool
+    assert is_active(bool_spec, True) is True
+    assert is_active(bool_spec, False) is False
+    # int
+    assert is_active(int_spec, 0) is False
+    assert is_active(int_spec, 2) is True
+    # float (normalización numérica C4: compara como float)
+    assert is_active(float_spec, 0.0) is False
+    assert is_active(float_spec, 1.0) is True
+    assert is_active(float_spec, "1.0") is True   # string numérico
+    assert is_active(float_spec, "0.0") is False
+    # csv
+    assert is_active(csv_spec, "") is False
+    assert is_active(csv_spec, "proj-a") is True
+
+
+def test_flagspec_backward_compatible():
+    """FlagSpec con construcción legacy (sin default) no rompe; default es None."""
+    from services.harness_flags import FlagSpec
+
+    spec = FlagSpec("K", "bool", "L", "D", "global")
+    assert spec.default is None
+
+
+# ---------------------------------------------------------------------------
+# Plan 63 — F1: endpoint expone categories
+# ---------------------------------------------------------------------------
+
+def test_get_harness_flags_includes_categories(client):
+    """GET /api/harness-flags incluye campo 'categories' con lista de {id, label, description}
+    y el primer elemento tiene id='runtimes_cli'."""
+    c, _ = client
+    resp = c.get("/api/harness-flags")
+    assert resp.status_code == 200
+    data = json.loads(resp.data)
+    assert "categories" in data, "Falta 'categories' en la respuesta"
+    cats = data["categories"]
+    assert isinstance(cats, list) and len(cats) > 0
+    for cat in cats:
+        assert "id" in cat and "label" in cat and "description" in cat
+    assert cats[0]["id"] == "runtimes_cli", f"Primera categoría debe ser 'runtimes_cli', got: {cats[0]['id']}"
+
+
+def test_get_harness_flags_flags_have_category(client):
+    """GET /api/harness-flags: cada item de 'flags' tiene category, default, default_known y active."""
+    c, _ = client
+    resp = c.get("/api/harness-flags")
+    assert resp.status_code == 200
+    data = json.loads(resp.data)
+    # Verificar que los campos existentes siguen intactos
+    assert data["ok"] is True
+    assert "flags" in data
+    assert "active_profile" in data
+    for flag in data["flags"]:
+        assert "category" in flag, f"Falta 'category' en flag {flag['key']}"
+        assert "default" in flag, f"Falta 'default' en flag {flag['key']}"
+        assert "default_known" in flag, f"Falta 'default_known' en flag {flag['key']}"
+        assert "active" in flag, f"Falta 'active' en flag {flag['key']}"
+
+
+# Plan 64 F1 — tests de flags RAG en FLAG_REGISTRY
+def test_rag_catalog_enabled_in_registry():
+    from services.harness_flags import FLAG_REGISTRY
+    keys = {s.key for s in FLAG_REGISTRY}
+    assert "STACKY_RAG_CATALOG_ENABLED" in keys
+    assert "STACKY_RAG_CATALOG_TOP_K" in keys
+
+
+def test_rag_catalog_enabled_is_bool_off_by_default():
+    from services.harness_flags import FLAG_REGISTRY
+    spec = next(s for s in FLAG_REGISTRY if s.key == "STACKY_RAG_CATALOG_ENABLED")
+    assert spec.type == "bool"
+    assert spec.default is None  # no tiene default declarado → OFF por type-zero
+
+
+def test_rag_catalog_top_k_is_int():
+    from services.harness_flags import FLAG_REGISTRY
+    spec = next(s for s in FLAG_REGISTRY if s.key == "STACKY_RAG_CATALOG_TOP_K")
+    assert spec.type == "int"
+
+
+def test_rag_flags_pair_linkage():
+    from services.harness_flags import FLAG_REGISTRY
+    spec = next(s for s in FLAG_REGISTRY if s.key == "STACKY_RAG_CATALOG_ENABLED")
+    assert spec.pair == "STACKY_RAG_CATALOG_TOP_K"

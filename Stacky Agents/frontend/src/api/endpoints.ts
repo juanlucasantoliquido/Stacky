@@ -649,6 +649,16 @@ export interface HarnessFlagView {
   pair: string | null;
   env_only: boolean;
   value: boolean | number | string;
+  category: string;
+  default: boolean | number | string;
+  default_known: boolean;
+  active: boolean;
+}
+
+export interface HarnessFlagCategory {
+  id: string;
+  label: string;
+  description: string;
 }
 
 export interface StackyMemoryFinding {
@@ -819,7 +829,7 @@ export const Memory = {
 
 // Plan 26 M0.2/M3.1 — flags del arnés (reusa el registry; fuente única).
 export const HarnessFlags = {
-  list: () => api.get<{ ok: boolean; flags: HarnessFlagView[]; active_profile: string | null }>("/api/harness-flags"),
+  list: () => api.get<{ ok: boolean; flags: HarnessFlagView[]; active_profile: string | null; categories: HarnessFlagCategory[] }>("/api/harness-flags"),
   update: (updates: Record<string, boolean | number | string>) =>
     api.put<{ ok: boolean; applied?: Record<string, unknown>; error?: string }>("/api/harness-flags", { updates }),
 };

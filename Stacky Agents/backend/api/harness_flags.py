@@ -71,7 +71,7 @@ def _write_env(updates: dict[str, str]) -> None:
 @bp.get("/harness-flags")
 def get_harness_flags():
     """Devuelve todos los flags del arnés con sus valores actuales."""
-    from services.harness_flags import read_current
+    from services.harness_flags import read_current, list_categories
     from services.harness_profiles import detect_profile
 
     flags = read_current()
@@ -79,6 +79,7 @@ def get_harness_flags():
         "ok": True,
         "flags": flags,
         "active_profile": detect_profile(),  # V0.1 — "off"|"safe"|"full"|None(custom)
+        "categories": list_categories(),
     })
 
 

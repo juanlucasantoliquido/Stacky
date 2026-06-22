@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (125 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (129 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
@@ -29,6 +29,8 @@ Cubre:
   - run_session.py: load_json (archivo valido, inexistente lanza FileNotFoundError, malformado lanza JSONDecodeError)
   - validate.py: validate_session (valida/0, inexistente/1, score_fuera_de_rango/1, strict_falta_proposal/1)
   - metrics.py: print_report (encabezado, campos), read_index (sin archivo, con fixture), read_forensic (sin archivo)
+  - spawn_child.py: max_iterations (sin config/con perfil), write_json (crea archivo valido)
+  - dashboard_static.py: generate_html (smoke test: retorna HTML con 'kaizen')
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1556,6 +1558,76 @@ def test_build_context_valores_pasados():
         finally:
             autoloop.ROOT = old_root
             autoloop.INDEX = old_index
+
+
+# ---------------------------------------------------------------------------
+# B-87: spawn_child.max_iterations, write_json + smoke test generate_html — 4 casos
+# ---------------------------------------------------------------------------
+import spawn_child as _sc
+import dashboard_static as _ds_mod
+
+
+@test
+def test_max_iterations_sin_config():
+    """max_iterations devuelve 3 (default) cuando no hay config."""
+    old_cfg = _sc.CONFIG
+    old_root = _sc.ROOT
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            # Crear estructura de perfiles en tempdir
+            (Path(td) / "config" / "profiles").mkdir(parents=True)
+            (Path(td) / "config" / "profiles" / "default.yaml").write_text(
+                "aotl:\n  max_iterations: 3\n", encoding="utf-8"
+            )
+            _sc.CONFIG = Path(td) / "config" / "no_existe.yaml"
+            _sc.ROOT = Path(td)
+            result = _sc.max_iterations()
+            assert_eq(result, 3, "sin config debe devolver 3 (default)")
+    finally:
+        _sc.CONFIG = old_cfg
+        _sc.ROOT = old_root
+
+
+@test
+def test_max_iterations_con_perfil():
+    """max_iterations lee el perfil y devuelve el valor configurado."""
+    old_cfg = _sc.CONFIG
+    old_root = _sc.ROOT
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "config" / "profiles").mkdir(parents=True)
+            (Path(td) / "config" / "profiles" / "default.yaml").write_text(
+                "aotl:\n  max_iterations: 7\n", encoding="utf-8"
+            )
+            # No crear config -> usa perfil 'default'
+            _sc.CONFIG = Path(td) / "config" / "no_existe.yaml"
+            _sc.ROOT = Path(td)
+            result = _sc.max_iterations()
+            assert_eq(result, 7, "debe leer max_iterations del perfil")
+    finally:
+        _sc.CONFIG = old_cfg
+        _sc.ROOT = old_root
+
+
+@test
+def test_write_json_crea_archivo_valido():
+    """write_json escribe JSON valido que puede re-leerse."""
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "out.json"
+        _sc.write_json(p, {"key": "valor", "num": 42})
+        data = _json.loads(p.read_text(encoding="utf-8"))
+        assert_eq(data["key"], "valor", "debe conservar key")
+        assert_eq(data["num"], 42, "debe conservar num")
+
+
+@test
+def test_generate_html_smoke():
+    """generate_html devuelve un string HTML con la cabecera KAIZEN sin lanzar excepciones."""
+    data = _ds_mod.build_data()
+    html = _ds_mod.generate_html(data)
+    assert isinstance(html, str), "debe retornar un string"
+    assert "kaizen" in html.lower(), "debe contener 'kaizen' en el HTML (case-insensitive)"
+    assert "<html" in html.lower(), "debe ser un documento HTML"
 
 
 # ---------------------------------------------------------------------------

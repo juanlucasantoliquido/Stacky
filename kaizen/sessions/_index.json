@@ -704,6 +704,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T062113Z__test-core-tests-de-pending-review-section-en-dashboard-static-b-34",
+      "objective": "test_core: tests de _pending_review_section en dashboard_static (B-34)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:21:13+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

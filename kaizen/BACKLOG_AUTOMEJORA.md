@@ -295,6 +295,10 @@ de la funcion (que acepta directorio temporal) para futuros mantenedores.
 **Metrica:** python scripts/test_core.py: 27 OK (24 + 3) 0 FAIL.
 **Rollback:** Eliminar los 3 casos de test_core.py.
 
+### B-34 [HECHO 2026-06-22] test_core: tests de _pending_review_section en dashboard_static
+**Valor:** _pending_review_section filtra sesiones que requieren atencion del operador. Funcion pura directamente testeable.
+**Metrica lograda:** python scripts/test_core.py: 30 OK 0 FAIL (3 casos: empty, iterate, escalated).
+
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
 guarda una pre-imagen del archivo eliminado y no lo restaura. Si el loop elimina un archivo
@@ -342,3 +346,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-31: Tests recent_objectives en autoloop.py — sesión 061632Z (2026-06-22)
 - B-32: decisions/README.md auto-generado — sesión 061802Z (2026-06-22)
 - B-33: Tests _gen_decisions_index en test_core.py — sesión 061953Z (2026-06-22)
+- B-34: Tests _pending_review_section en test_core.py — sesión 062113Z (2026-06-22)

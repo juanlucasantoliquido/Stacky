@@ -298,6 +298,32 @@ import dashboard_static as _ds  # noqa: E402
 
 
 @test
+def test_pending_review_section_empty():
+    """Lista vacia -> cadena vacia (sin HTML)."""
+    result = _ds._pending_review_section([])
+    assert_eq(result, "", "debe devolver '' para lista vacia")
+
+
+@test
+def test_pending_review_section_iterate_verdict():
+    """Sesion con verdict=iterate aparece en la seccion con texto 'Pendiente'."""
+    sessions = [{"id": "s1", "objective": "mejorar algo", "verdict": "iterate", "status": "closed"}]
+    result = _ds._pending_review_section(sessions)
+    assert_true("Pendiente" in result, "debe incluir encabezado 'Pendiente'")
+    assert_true("mejorar algo" in result, "debe incluir el objetivo de la sesion")
+
+
+@test
+def test_pending_review_section_escalated():
+    """Sesion con escalated_to_human=True aparece aunque verdict sea accept."""
+    sessions = [{"id": "s2", "objective": "objeto escalado", "verdict": "accept",
+                 "escalated_to_human": True, "status": "closed"}]
+    result = _ds._pending_review_section(sessions)
+    assert_true("objeto escalado" in result, "debe incluir el objetivo de la sesion escalada")
+    assert_true(len(result) > 0, "no debe ser cadena vacia cuando hay escalacion")
+
+
+@test
 def test_gen_decisions_index_empty_dir():
     """Si decisions/ tiene 0 archivos .md numericos, no escribe README."""
     with tempfile.TemporaryDirectory() as td:

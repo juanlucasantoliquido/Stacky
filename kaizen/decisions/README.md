@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0045-t | ADR 0045 — test_core: tests de _pending_review_section en da | accept |
 | 0044-t | ADR 0044 — test_core: tests de _gen_decisions_index en dashb | accept |
 | 0043-d | ADR 0043 — decisions/README.md auto-generado con lista de AD | accept |
 | 0042-t | ADR 0042 — test_core: tests de recent_objectives en autoloop | accept |

@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest.
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (46 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value
   - validate.py: check_required, check_enums, check_patterns
+  - autoloop.py: recent_objectives, recent_decisions_summary
+  - dashboard_static.py: _tag_pills, _pending_review_section, _gen_decisions_index, build_data
+  - metrics.py: summarize (sessions/verdicts/escalation/p95), _percentile
+  - archive.py: main() — 5 caminos (no_args, not_found, idempotente, no_closed, closed)
+  - list_sessions.py: main() y get_opt
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
-    python -m scripts.test_core        # alternativa
 """
 from __future__ import annotations
 

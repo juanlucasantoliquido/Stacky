@@ -31,6 +31,29 @@ def _noop_log(*_args: Any, **_kwargs: Any) -> None:  # pragma: no cover - trivia
     pass
 
 
+# Plan 64 F2 — Cache en-memoria: content_hash -> RagIndex. Se invalida automáticamente cuando
+# el catálogo cambia (hash distinto). Usa un único slot (clear en cada cambio).
+# Thread-safety: no es safe para gunicorn multi-worker (cada worker tiene su propia
+# copia del proceso; para Stacky single-worker es OK).
+_RAG_INDEX_CACHE: dict = {}
+
+
+def _get_rag_index(catalog: list[dict]):  # type: ignore[return]
+    """Devuelve el índice TF-IDF del catálogo; lo construye si el hash cambió."""
+    import hashlib
+    import json
+    from services.rag_retriever import build_index, chunks_from_process_catalog
+
+    content_hash = hashlib.md5(
+        json.dumps(catalog, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+    if content_hash not in _RAG_INDEX_CACHE:
+        chunks = chunks_from_process_catalog(catalog)
+        _RAG_INDEX_CACHE.clear()  # máximo 1 entrada; libera si cambió el catálogo
+        _RAG_INDEX_CACHE[content_hash] = build_index(chunks, content_hash=content_hash)
+    return _RAG_INDEX_CACHE[content_hash]
+
+
 def enrich_blocks(
     *,
     ticket_id: int | None,
@@ -66,6 +89,9 @@ def enrich_blocks(
 
     project_name = (project_ctx.stacky_project_name if project_ctx else None) or ticket_project
 
+    # Plan 64 F2 — query para RAG (disponible desde el inicio del pipeline)
+    _rag_query = " ".join(p for p in [ticket_title, ticket_description] if p) or None
+
     # Memoria Stacky: PREPEND explícito para que sea el primer bloque de
     # contexto. Flag OFF por default; best-effort para no alterar runs existentes.
     blocks = _inject_stacky_memory_block(
@@ -79,8 +105,8 @@ def enrich_blocks(
     # feature flag lo permite) para que todos los pasos siguientes puedan
     # leerlo si lo necesitan.
     blocks = _inject_client_profile_block(blocks, project_name, log)
-    # Plan 42 F0 — diccionario de procesos (inyectado DESPUÉS del client-profile).
-    blocks = _inject_process_catalog_block(blocks, project_name, log)
+    # Plan 42 F0 + Plan 64 F2 — diccionario de procesos (RAG si habilitado).
+    blocks = _inject_process_catalog_block(blocks, project_name, log, query=_rag_query)
     blocks = _inject_epic_structured(ticket_id, agent_type, blocks, log)
     blocks = _inject_artifact_context(ticket_id, blocks, log)
 
@@ -183,6 +209,10 @@ def enrich_blocks(
         project_name=project_name,
         blocks=blocks,
         log=log,
+    )
+    # Plan 48 — lecciones de rechazo del operador como anti-patrón imperativo (CLI).
+    blocks = _inject_rejection_lessons(
+        blocks=blocks, project_name=project_name, agent_type=agent_type, log=log
     )
     # I0.1 — dedup léxico entre bloques (antes del budget, OFF default).
     blocks = _dedup_blocks(blocks, project_name=project_name, log=log)
@@ -317,8 +347,10 @@ def _dedup_blocks(
 # El ticket/épica y las restricciones del cliente nunca se recortan; lo barato
 # de recortar (comentarios viejos, similares) queda accesible vía MCP (F2.1).
 _BLOCK_PRIORITY: dict[str, int] = {
+    "operator-corrections": 110,  # Plan 41 — correcciones del operador mandan sobre todo
     "ado-epic-structured": 100,
     "client-profile": 95,
+    "rejection-lessons": 82,  # Plan 48 — restricción dura (rechazos previos del operador)
     "stacky-memory": 80,
     "modal_user_input": 78,
     "operator_note": 76,
@@ -618,10 +650,61 @@ def build_process_dictionary_block(client_profile: dict | None) -> dict | None:
     return {"id": "process-catalog", "kind": "process-catalog", "content": "\n".join(lines)}
 
 
+def build_process_dictionary_block_rag(
+    client_profile: dict | None,
+    query: str,
+    top_k: int = 8,
+) -> tuple[dict, int] | None:
+    """Plan 64 F2 — Bloque 'process-catalog' con solo los top-K procesos relevantes al query.
+
+    Función PURA. Retorna (block, n_retrieved) donde n_retrieved = len(results) exacto.
+    Fallback: si falla el retriever o no hay resultados → None
+    (el caller usa el fallback al full-inject).
+    """
+    if not client_profile or not query or not query.strip():
+        return None
+    catalog = client_profile.get("process_catalog") or []
+    if not catalog:
+        return None
+    try:
+        from services.rag_retriever import retrieve
+        index = _get_rag_index(catalog)
+        results = retrieve(index, query, top_k=top_k)
+        if not results:
+            return None
+        lines = [
+            f"PROCESOS RELEVANTES AL TICKET (top-{len(results)} de {len(catalog)}, "
+            f"TF-IDF — NO inventes nombres ni propósitos):"
+        ]
+        for chunk, score in results:
+            p = chunk.payload
+            name = (p.get("name") or "").strip()
+            purpose = (p.get("purpose") or "").strip()
+            kind = (p.get("kind") or "otro").strip()
+            if name and purpose:
+                lines.append(f"- {name} [{kind}]: {purpose}")
+        if len(lines) == 1:
+            return None
+        block = {"id": "process-catalog", "kind": "process-catalog", "content": "\n".join(lines)}
+        return block, len(results)  # n_retrieved exacto, no string-counted
+    except Exception:  # noqa: BLE001
+        return None  # degradación controlada → caller usa full-inject
+
+
 def _inject_process_catalog_block(
-    blocks: list[dict], project_name: str | None, log: LogFn
+    blocks: list[dict],
+    project_name: str | None,
+    log: LogFn,
+    query: str | None = None,  # Plan 64 F2 — query para RAG (ticket title+description)
 ) -> list[dict]:
-    """Plan 42 F0 — Inyecta el bloque 'process-catalog' tras client-profile."""
+    """Plan 42 F0 + Plan 64 F2/F3 — Inyecta el bloque 'process-catalog'.
+
+    Con STACKY_RAG_CATALOG_ENABLED=true y query disponible: recupera los top-K
+    procesos más relevantes (TF-IDF puro) e incluye telemetría _rag_meta.
+    Fallback: full-inject si RAG falla, está OFF, o query es vacío/None.
+    Con STACKY_RAG_CATALOG_ENABLED=false (default): byte-idéntico al comportamiento anterior.
+    Nota: ticket_id=None (flujo epic-from-brief sin ticket) → query=None → full-inject.
+    """
     if os.getenv("STACKY_INJECT_PROCESS_CATALOG", "true").lower() in {"0", "false", "off"}:
         return blocks
     existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
@@ -634,10 +717,48 @@ def _inject_process_catalog_block(
         profile = load_client_profile(project_name)
         if not isinstance(profile, dict):
             return blocks
-        block = build_process_dictionary_block(profile)
+
+        rag_enabled = os.getenv("STACKY_RAG_CATALOG_ENABLED", "false").lower() in {
+            "1", "true", "on"
+        }
+        block: dict | None = None
+        _rag_meta: dict | None = None
+
+        if rag_enabled and query and query.strip():
+            top_k_raw = os.getenv("STACKY_RAG_CATALOG_TOP_K", "8")
+            try:
+                top_k = max(1, int(top_k_raw))
+            except ValueError:
+                top_k = 8
+            rag_result = build_process_dictionary_block_rag(profile, query=query, top_k=top_k)
+            if rag_result is not None:
+                block, n_retrieved = rag_result
+                catalog_size = len(profile.get("process_catalog") or [])
+                log(
+                    "info",
+                    f"process-catalog RAG: {n_retrieved}/{catalog_size} procesos para proyecto={project_name}",
+                )
+                _rag_meta = {
+                    "rag_enabled": True,
+                    "retrieved": n_retrieved,
+                    "catalog_total": catalog_size,
+                    "top_k": top_k,
+                }
+
+        # Fallback: full-inject (comportamiento original)
+        if block is None:
+            block = build_process_dictionary_block(profile)
+            if block is not None:
+                log("info", f"process-catalog inyectado para proyecto={project_name}")
+
         if block is None:
             return blocks
-        log("info", f"process-catalog inyectado para proyecto={project_name}")
+
+        # Agregar telemetría solo cuando RAG estuvo activo (no en full-inject)
+        if _rag_meta is not None:
+            block = dict(block)
+            block["_rag_meta"] = _rag_meta
+
         return list(blocks) + [block]
     except Exception as exc:  # noqa: BLE001
         log("warn", f"process-catalog no se pudo inyectar (continuando): {exc}")
@@ -736,6 +857,61 @@ def _inject_stacky_memory_block(
         return [block] + list(blocks)
     except Exception as exc:  # noqa: BLE001
         log("warn", f"stacky-memory no se pudo inyectar (continuando): {exc}")
+        return blocks
+
+
+def _push_rejections_enabled() -> bool:
+    import os
+    return os.getenv("STACKY_PUSH_REJECTIONS_ENABLED", "false").lower() in {
+        "1", "true", "on", "yes",
+    }
+
+
+def _inject_rejection_lessons(
+    *, blocks: list[dict], project_name: str | None, agent_type: str, log: LogFn
+) -> list[dict]:
+    """Plan 48 F2 — inyecta lecciones de rechazo (operator_note) como anti-patrón.
+
+    Detrás del flag STACKY_PUSH_REJECTIONS_ENABLED (default OFF). Dedupe cruzado
+    contra los anti-patrones manuales FA-11 ya relevantes. Best-effort: ante
+    cualquier fallo devuelve los blocks intactos.
+    """
+    if not _push_rejections_enabled():
+        return blocks
+    if not project_name:
+        return blocks
+    existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
+    if "rejection-lessons" in existing_ids:
+        return blocks
+    try:
+        from services import rejection_lessons
+        # Dedupe cruzado con anti-patrones manuales FA-11 ya relevantes.
+        existing_patterns: set[str] = set()
+        try:
+            from services import anti_patterns
+            for ap in anti_patterns.relevant(agent_type=agent_type, project=project_name):
+                existing_patterns.add(" ".join((ap.pattern or "").lower().split()))
+        except Exception:  # noqa: BLE001
+            pass
+        items = rejection_lessons.load_for_run(
+            project=project_name,
+            agent_type=agent_type,
+            existing_patterns=existing_patterns,
+        )
+        if not items:
+            return blocks
+        prefix = rejection_lessons.build_prefix(items)
+        block = {
+            "kind": "text",
+            "id": "rejection-lessons",
+            "title": f"Lecciones de rechazos previos ({len(items)})",
+            "content": prefix,
+            "metadata": {"rejection_lessons_count": len(items)},
+        }
+        log("info", f"rejection-lessons inyectado (n={len(items)})")
+        return [block] + list(blocks)
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"rejection-lessons no se pudo inyectar (continuando): {exc}")
         return blocks
 
 

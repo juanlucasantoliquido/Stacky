@@ -24,8 +24,153 @@ class FlagSpec:
     group: str           # "claude_code_cli" | "global"
     pair: str | None = None    # key del *_PROJECTS asociado (UI los renderiza juntos)
     env_only: bool = False     # True = no existe como atributo de Config
+    default: object | None = None  # NUEVO — default DECLARADO (hint de UI). None = usar type-zero.
 
 
+@dataclass(frozen=True)
+class CategorySpec:
+    id: str          # slug estable (no cambia)
+    label: str       # título humano para la UI (español)
+    description: str # 1 línea: qué controla esta categoría
+
+
+FLAG_CATEGORIES: tuple[CategorySpec, ...] = (
+    CategorySpec("runtimes_cli", "Runtimes CLI (Claude / Codex)",
+        "Comportamiento de los agentes que corren como CLI: gates de contrato, autocorrección, hooks, resume, MCP, modelos."),
+    CategorySpec("contexto_memoria", "Contexto y memoria",
+        "Qué información recibe el agente: presupuesto/dedup/rerank de contexto, memoria colaborativa, skills, few-shot, catálogo."),
+    CategorySpec("calidad_verificacion", "Calidad y verificación del entregable",
+        "Criterios de aceptación, verificación ejecutable, contrato de aceptación, anti-verde-falso, convergencia, self-review, esfuerzo."),
+    CategorySpec("integridad_grounding", "Integridad y grounding del resultado",
+        "Verifica que lo que el agente afirma sea real: precondiciones, verificación post-create de tasks, anclado de referencias."),
+    CategorySpec("epicas_ado", "Épicas, briefs y publicación en ADO",
+        "Generación, saneamiento, gates, preview, descomposición y selector de modelo de épicas/issues hacia Azure DevOps."),
+    CategorySpec("flujo_funcional", "Flujo funcional (Tasks)",
+        "Creación de Tasks funcionales en ADO y su gate determinista."),
+    CategorySpec("routing_costo", "Routing de modelo y costo",
+        "Estimación de complejidad, routing por dificultad, advisor de runtime, presupuesto por ticket, caché de runs, evals."),
+    CategorySpec("fiabilidad_ciclo_vida", "Fiabilidad y ciclo de vida del run",
+        "Higiene de procesos: reaping, watchdog, validación pending-task, idempotencia, retries, runaway guard, auto-reparación, intake."),
+    CategorySpec("observabilidad_notif", "Observabilidad y notificaciones",
+        "KPIs en harness-health, historial, footer ADO, webhooks, notificaciones, telemetría en vivo, salud operativa, pipelines, trazabilidad."),
+    CategorySpec("aprendizaje", "Aprendizaje y memoria que empuja",
+        "Rechazos como anti-patrones, nota del operador a memoria, aprendizaje desde ediciones humanas en ADO."),
+    CategorySpec("preflight_intencion", "Pre-vuelo de intención",
+        "Brief de intención negociable que el operador aprueba antes del run."),
+    CategorySpec("base_datos", "Base de datos y caché ADO",
+        "Directiva de acceso read-only a la BD, caché y pre-warm de lecturas caras de ADO."),
+    CategorySpec("avanzado", "Avanzado / experimental",
+        "Kill-switches internos y features beta: egress check, especulación anticipatoria."),
+    CategorySpec("otros", "Otros / sin categorizar",
+        "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza)."),
+)
+
+_CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
+    "runtimes_cli": (
+        "CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED", "CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED",
+        "CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES", "CLAUDE_CODE_CLI_HOOKS_ENABLED",
+        "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_ENABLED", "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_PROJECTS",
+        "CLAUDE_CODE_CLI_RESUME_ENABLED", "CLAUDE_CODE_CLI_RESUME_PROJECTS",
+        "CLAUDE_CODE_CLI_MCP_ENABLED", "CLAUDE_CODE_CLI_MCP_PROJECTS",
+        "CODEX_CLI_CONTRACT_GATE_ENABLED", "CODEX_CLI_AUTOCORRECT_ENABLED",
+        "CODEX_CLI_AUTOCORRECT_MAX_RETRIES", "CODEX_CLI_MODEL_DENYLIST",
+        "CODEX_CLI_RESUME_ENABLED", "CODEX_CLI_RESUME_PROJECTS",
+    ),
+    "contexto_memoria": (
+        "STACKY_CONTEXT_BUDGET_ENABLED", "STACKY_CONTEXT_BUDGET_PROJECTS",
+        "STACKY_CONTEXT_BUDGET_TOKENS", "STACKY_CONTEXT_DEDUP_ENABLED",
+        "STACKY_CONTEXT_DEDUP_PROJECTS", "STACKY_CONTEXT_RERANK_ENABLED",
+        "STACKY_PARALLEL_INJECTORS_ENABLED", "STACKY_RETRIEVAL_EXPANSION_ENABLED",
+        "STACKY_MEMORY_INJECTION_ENABLED", "STACKY_MEMORY_INJECTION_PROJECTS",
+        "STACKY_MEMORY_CAPS_JSON", "STACKY_MEMORY_REVIEW_SWEEP_HOURS",
+        "STACKY_MEMORY_DIRECTIVE_MAX_CHARS", "STACKY_MEMORY_INJECT_SCOPES",
+        "STACKY_SKILLS_ENABLED", "STACKY_SKILLS_PROJECTS",
+        "STACKY_CLI_FEWSHOT_ENABLED", "STACKY_CLI_FEWSHOT_K", "STACKY_CLI_FEWSHOT_PROJECTS",
+        "STACKY_INJECT_PROCESS_CATALOG", "STACKY_CAPS_ADVISOR_ENABLED",
+        "STACKY_RAG_CATALOG_ENABLED", "STACKY_RAG_CATALOG_TOP_K",
+    ),
+    "calidad_verificacion": (
+        "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
+        "STACKY_CRITERIA_REPAIR_ENABLED", "STACKY_CRITERIA_REPAIR_MAX_RETRIES",
+        "STACKY_SELF_REVIEW_MODE", "STACKY_SELF_REVIEW_MIN_SCORE",
+        "STACKY_EXEC_VERIFICATION_ENABLED", "STACKY_EXEC_VERIFICATION_MODE",
+        "STACKY_EXEC_VERIFICATION_TIMEOUT_S", "STACKY_EXEC_VERIFICATION_BUDGET_S",
+        "STACKY_EXEC_VERIFICATION_PROJECTS", "STACKY_EXEC_REPAIR_ENABLED",
+        "STACKY_EXEC_REPAIR_MAX_RETRIES", "STACKY_FAKE_GREEN_GUARD_ENABLED",
+        "STACKY_FAKE_GREEN_GUARD_HARD", "STACKY_EXEC_VERIFICATION_VERDICT_CARD_ENABLED",
+        "STACKY_ACCEPTANCE_CONTRACT_ENABLED", "STACKY_ACCEPTANCE_CONTRACT_MODE",
+        "STACKY_ACCEPTANCE_CONTRACT_MAX_CHECKS", "STACKY_ACCEPTANCE_CONTRACT_PROJECTS",
+        "STACKY_ACCEPTANCE_GATE_ENABLED", "STACKY_ACCEPTANCE_REPAIR_ENABLED",
+        "STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES", "STACKY_ACCEPTANCE_INTEGRITY_ENABLED",
+        "STACKY_ACCEPTANCE_VERDICT_CARD_ENABLED", "STACKY_QUALITY_CONVERGENCE_ENABLED",
+        "STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS", "STACKY_ADAPTIVE_EFFORT_ENABLED",
+        "STACKY_EFFORT_FLOOR",
+    ),
+    "integridad_grounding": (
+        "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",
+        "STACKY_OUTPUT_GROUNDING_ENABLED", "STACKY_OUTPUT_GROUNDING_REPAIR",
+    ),
+    "epicas_ado": (
+        "STACKY_EPIC_FROM_BRIEF_ENABLED", "STACKY_BRIEF_MODEL_SELECT_ENABLED",
+        "STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED", "STACKY_EPIC_SUMMARY_ENABLED",
+        "STACKY_GROUNDING_OBSERVATORY_ENABLED", "STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED",
+        "STACKY_EPIC_SANITIZE_ENABLED", "STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED",
+        "STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED", "STACKY_EPIC_GATE_ENABLED",
+        "STACKY_EPIC_CATALOG_GATE_ENABLED", "STACKY_ADO_PREVIEW_ENABLED",
+        "STACKY_EPIC_PORTFOLIO_ENABLED", "STACKY_EPIC_DECOMPOSITION_ENABLED",
+        "STACKY_ADAPTIVE_SELECTOR_ENABLED", "STACKY_PROJECT_AUTOPROFILE_ENABLED",
+        "STACKY_COMMENT_FULL_SCAN_ENABLED",
+    ),
+    "flujo_funcional": (
+        "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
+    ),
+    "routing_costo": (
+        "STACKY_COMPLEXITY_ESTIMATION_ENABLED", "STACKY_DIFFICULTY_ROUTING_ENABLED",
+        "STACKY_RUN_ADVISOR_ENABLED", "STACKY_RUN_ADVISOR_ENFORCE",
+        "STACKY_BUDGET_PER_TICKET_USD", "STACKY_RUN_CACHE_DAYS",
+        "STACKY_EVALS_INTERVAL_HOURS", "STACKY_EVAL_GATE_MODE",
+        "STACKY_MAX_CONCURRENT_RUNS",
+    ),
+    "fiabilidad_ciclo_vida": (
+        "STACKY_RUNNER_REAP_ON_CLOSE_ENABLED", "STACKY_LOG_FLUSH_INCREMENTAL_ENABLED",
+        "STACKY_ORPHAN_REAPER_ENABLED", "STACKY_ORPHAN_REAPER_INTERVAL_SEC",
+        "STACKY_STALL_WATCHDOG_SECONDS", "STACKY_PENDING_TASK_STRICT_VALIDATION_ENABLED",
+        "STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED", "STACKY_RUNAWAY_MAX_TURNS",
+        "STACKY_RUNAWAY_MAX_COST_USD", "STACKY_RUN_REPAIR_ENABLED",
+        "STACKY_TRANSIENT_RUN_RETRY_ENABLED", "STACKY_TRANSIENT_RUN_RETRY_MAX",
+        "STACKY_ARTIFACT_INTAKE_ENABLED", "STACKY_ARTIFACT_RESCUE_ENABLED",
+    ),
+    "observabilidad_notif": (
+        "STACKY_RELIABILITY_KPIS_ENABLED", "STACKY_QUALITY_KPIS_ENABLED",
+        "STACKY_INTEGRITY_KPIS_ENABLED", "STACKY_EXEC_VERIFICATION_KPIS_ENABLED",
+        "STACKY_ACCEPTANCE_KPIS_ENABLED", "STACKY_EXECUTION_HISTORY_ENABLED",
+        "STACKY_ADO_RUN_FOOTER_ENABLED", "STACKY_WEBHOOKS_V2_ENABLED",
+        "STACKY_DESKTOP_NOTIFY_ENABLED", "STACKY_LIVE_TELEMETRY_ENABLED",
+        "STACKY_OPERATIONAL_HEALTH_ENABLED", "STACKY_PIPELINES_ENABLED",
+        "STACKY_EXECUTION_TRACE_ENABLED", "STACKY_TRACE_PROMPT_TEXT_ENABLED",
+        "STACKY_DIGEST_INTERVAL_HOURS", "STACKY_ADO_FAILURE_COMMENT_ENABLED",
+    ),
+    "aprendizaje": (
+        "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
+        "STACKY_ADO_EDIT_LEARNING_ENABLED", "STACKY_ADO_EDIT_SWEEP_HOURS",
+        "STACKY_ADO_SERVICE_IDENTITY",
+    ),
+    "preflight_intencion": (
+        "INTENT_PREFLIGHT_ENABLED", "INTENT_PREFLIGHT_AUTO_APPROVE",
+        "INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF",
+    ),
+    "base_datos": (
+        "STACKY_DB_READONLY_DIRECTIVE_ENABLED", "STACKY_ADO_READ_CACHE_TTL_SEC",
+        "STACKY_ADO_PREWARM_ENABLED",
+    ),
+    "avanzado": (
+        "STACKY_CLI_EGRESS_ENABLED", "STACKY_SPECULATIVE_ENABLED", "STACKY_SPECULATIVE_MODE",
+    ),
+    # "otros" intencionalmente vacío: es el fallback de categorize().
+}
+
+# NOTA: toda flag nueva debe agregarse también a _CATEGORY_KEYS (arriba) o el test
+# test_every_registry_flag_is_categorized rompe CI a propósito (Plan 63).
 FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED",
@@ -571,6 +716,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Solo actúa sobre el pid exacto registrado por el runner. OFF = sin cambio."
         ),
         group="global",
+        default=True,
     ),
     FlagSpec(
         key="STACKY_LOG_FLUSH_INCREMENTAL_ENABLED",
@@ -591,6 +737,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "sealed metadata['reaped']. Al arrancar y periódicamente. OFF = solo reporta."
         ),
         group="global",
+        default=True,
     ),
     FlagSpec(
         key="STACKY_ORPHAN_REAPER_INTERVAL_SEC",
@@ -618,6 +765,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "coherencia ordinal vs parent ADO id. Inválido → cuarentena + telemetría."
         ),
         group="global",
+        default=True,
     ),
     FlagSpec(
         key="STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED",
@@ -1020,6 +1168,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = endpoint devuelve 404 feature_disabled."
         ),
         group="global",
+        default=True,
     ),
     FlagSpec(
         key="STACKY_EXECUTION_TRACE_ENABLED",
@@ -1031,6 +1180,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = metadata byte-idéntica al plan anterior."
         ),
         group="global",
+        default=True,
     ),
     FlagSpec(
         key="STACKY_TRACE_PROMPT_TEXT_ENABLED",
@@ -1094,6 +1244,30 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="context",
     ),
     FlagSpec(
+        key="STACKY_RAG_CATALOG_ENABLED",
+        type="bool",
+        label="RAG catálogo de procesos",
+        description=(
+            "Plan 64 — Si ON, inyecta solo los top-K procesos más relevantes al ticket "
+            "(TF-IDF puro) en lugar del catálogo completo. "
+            "Reduce ruido de contexto y mejora el grounding. Default OFF."
+        ),
+        group="global",
+        pair="STACKY_RAG_CATALOG_TOP_K",
+        env_only=True,  # leído via os.getenv en _inject_process_catalog_block
+    ),
+    FlagSpec(
+        key="STACKY_RAG_CATALOG_TOP_K",
+        type="int",
+        label="RAG catálogo: top-K procesos",
+        description=(
+            "Plan 64 — Cantidad de procesos a recuperar por similitud TF-IDF cuando "
+            "STACKY_RAG_CATALOG_ENABLED=true. Rango recomendado: 5-15. Default 8."
+        ),
+        group="global",
+        env_only=True,  # leído via os.getenv en _inject_process_catalog_block
+    ),
+    FlagSpec(
         key="STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED",
         type="bool",
         label="Preflight de grounding en épica (F2)",
@@ -1140,6 +1314,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = el endpoint responde 404 feature_disabled."
         ),
         group="agents",
+        default=True,
     ),
     FlagSpec(
         key="STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED",
@@ -1151,6 +1326,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "en el catálogo (solo sugiere, nunca escribe, default ON). OFF = 404."
         ),
         group="agents",
+        default=True,
     ),
     FlagSpec(
         key="STACKY_OPERATIONAL_HEALTH_ENABLED",
@@ -1162,6 +1338,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+        default=True,
     ),
     FlagSpec(
         key="STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -1236,6 +1413,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en _extract_epic_html
+        default=True,
     ),
     FlagSpec(
         key="STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED",
@@ -1248,6 +1426,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en _epic_grounding_warnings
+        default=True,
     ),
     FlagSpec(
         key="STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED",
@@ -1273,6 +1452,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en ado_client.comment_exists
+        default=True,
     ),
     FlagSpec(
         key="STACKY_EPIC_GATE_ENABLED",
@@ -1349,6 +1529,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="agents",
         env_only=True,  # leído via os.getenv en tickets.py; no es atributo de Config
+        default=True,
     ),
     FlagSpec(
         key="STACKY_EPIC_PORTFOLIO_ENABLED",
@@ -1460,6 +1641,53 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
 # Índice rápido para lookups O(1)
 _REGISTRY_INDEX: dict[str, FlagSpec] = {s.key: s for s in FLAG_REGISTRY}
 
+_KEY_CATEGORY: dict[str, str] = {
+    key: cat_id for cat_id, keys in _CATEGORY_KEYS.items() for key in keys
+}
+
+
+def categorize(key: str) -> str:
+    """Categoría (id) de una flag. Fallback determinista a 'otros'."""
+    return _KEY_CATEGORY.get(key, "otros")
+
+
+def _type_zero(flag_type: str) -> object:
+    if flag_type == "bool":
+        return False
+    if flag_type in ("csv", "json"):
+        return ""
+    if flag_type == "float":
+        return 0.0
+    return 0  # int
+
+
+def declared_default(spec: FlagSpec) -> object:
+    """Default DECLARADO para la UI. spec.default si está; si no, type-zero (= off/seguro)."""
+    return spec.default if spec.default is not None else _type_zero(spec.type)
+
+
+def default_is_known(spec: FlagSpec) -> bool:
+    """v2/C1 — True solo si el default fue curado con confianza (spec.default explícito)."""
+    return spec.default is not None
+
+
+def is_active(spec: FlagSpec, value: object) -> bool:
+    """v2/C1 — 'con valor / activa': el valor difiere de su type-zero."""
+    if spec.type == "bool":
+        return bool(value)
+    if spec.type in ("int", "float"):
+        try:
+            return float(value) != 0.0
+        except (TypeError, ValueError):
+            return bool(str(value).strip())
+    return bool(str(value).strip())  # csv / json (string)
+
+
+def list_categories() -> list[dict]:
+    """Categorías ordenadas para el frontend (id/label/description)."""
+    return [{"id": c.id, "label": c.label, "description": c.description}
+            for c in FLAG_CATEGORIES]
+
 
 def read_current() -> list[dict]:
     """Devuelve spec + valor actual de cada flag del registry."""
@@ -1490,6 +1718,10 @@ def read_current() -> list[dict]:
             "pair": spec.pair,
             "env_only": spec.env_only,
             "value": value,
+            "category": categorize(spec.key),
+            "default": declared_default(spec),
+            "default_known": default_is_known(spec),
+            "active": is_active(spec, value),
         })
     return result
 

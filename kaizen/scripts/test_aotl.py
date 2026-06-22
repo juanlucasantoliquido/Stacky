@@ -846,6 +846,165 @@ def _():
         _al._py = old_py
 
 
+# --- autoloop: run_iteration smoke tests con mocks pesados (B-92) ------------------------------
+
+class _Args:
+    """Stub mínimo de argparse.Namespace para run_iteration."""
+    def __init__(self, *, objective=None, adapter="generic", no_commit=True):
+        self.objective = objective
+        self.adapter = adapter
+        self.no_commit = no_commit
+
+
+class _StStub:
+    """Stub de aotl_state (st) — captura llamadas sin tocar el sistema de archivos."""
+    def __init__(self):
+        self.calls = []
+        self.PLANNED = "planned"
+        self.APPLIED = "applied"
+        self.IMPLEMENTED = "implemented"
+        self.REJECTED = "rejected"
+        self.ESCALATED = "escalated"
+        self.ITERATING = "iterating"
+        self.REVERTED = "reverted"
+
+    def set_impl_status(self, sid, status, **kw):
+        self.calls.append(("set_impl_status", sid, status))
+
+    def write_loop_status(self, data):
+        self.calls.append(("write_loop_status",))
+
+    def write_json(self, path, data):
+        self.calls.append(("write_json", str(path)))
+
+
+class _ApStub:
+    """Stub de apply (ap) — captura llamadas sin tocar el sistema de archivos."""
+    def __init__(self, apply_raises=None):
+        self.calls = []
+        self._apply_raises = apply_raises
+
+    def apply_change_set(self, sid, change_set, root=None):
+        self.calls.append(("apply_change_set", sid))
+        if self._apply_raises:
+            raise self._apply_raises
+
+    def rollback(self, sid, root=None):
+        self.calls.append(("rollback", sid))
+
+    def commit_applied(self, sid, msg, root=None):
+        self.calls.append(("commit_applied", sid))
+        return True, "abc123"
+
+
+class _EngineStub:
+    """Stub de engine — propone y evalúa sin llamar a ningún modelo."""
+    def __init__(self, name="mock"):
+        self.name = name
+
+    def propose(self, ctx):
+        return {"title": "propuesta smoke"}, []
+
+    def evaluate(self, proposal, measurement, ctx):
+        return {"scores": {}, "total": 15, "blocking": [], "preliminary_verdict": "accept",
+                "evaluator": "mock"}
+
+
+def _patch_al_for_run_iteration(sid="test-sid-b92", verdict="accept", escalated=False,
+                                  apply_raises=None):
+    """Devuelve un dict con los parches originales y los stubs, para restaurar en finally."""
+    st_stub = _StStub()
+    ap_stub = _ApStub(apply_raises=apply_raises)
+    orig = {
+        "st": _al.st,
+        "ap": _al.ap,
+        "create_session": _al.create_session,
+        "build_context": _al.build_context,
+        "measure": _al.measure,
+        "run_gate": _al.run_gate,
+        "promote": _al.promote,
+    }
+    _al.st = st_stub
+    _al.ap = ap_stub
+    _al.create_session = lambda *a, **kw: sid
+    _al.build_context = lambda *a, **kw: {"session_id": sid, "objective": "smoke"}
+    _al.measure = lambda cmd: {"passed": True, "exit": 0, "summary": "OK"}
+    _al.run_gate = lambda s: {"verdict": verdict, "escalated_to_human": escalated}
+    _al.promote = lambda s: None
+    return orig, st_stub, ap_stub
+
+
+def _restore_al(orig):
+    for k, v in orig.items():
+        setattr(_al, k, v)
+
+
+@check("autoloop.run_iteration: camino accept -> retorna IMPLEMENTED, no rollback")
+def _():
+    import tempfile, os
+    with tempfile.TemporaryDirectory() as td:
+        orig_sessions = _al.SESSIONS
+        _al.SESSIONS = _sp.Path(td) if hasattr(_sp, "Path") else _al.SESSIONS
+        import pathlib
+        _al.SESSIONS = pathlib.Path(td)
+        orig, st_stub, ap_stub = _patch_al_for_run_iteration("sid-accept", verdict="accept")
+        try:
+            args = _Args(no_commit=True)
+            totals = {"implemented": 0, "rejected": 0, "escalated": 0, "iterating": 0}
+            result = _al.run_iteration(1, args, {}, {}, _EngineStub(), totals, {})
+            assert result == "implemented", "debe retornar IMPLEMENTED en camino accept, got: %r" % result
+            assert totals["implemented"] == 1, "totals[implemented] debe ser 1"
+            rollbacks = [c for c in ap_stub.calls if c[0] == "rollback"]
+            assert len(rollbacks) == 0, "accept: no debe hacer rollback"
+        finally:
+            _restore_al(orig)
+            _al.SESSIONS = orig_sessions
+
+
+@check("autoloop.run_iteration: camino reject -> retorna REJECTED, hace rollback")
+def _():
+    import tempfile
+    import pathlib
+    with tempfile.TemporaryDirectory() as td:
+        orig_sessions = _al.SESSIONS
+        _al.SESSIONS = pathlib.Path(td)
+        orig, st_stub, ap_stub = _patch_al_for_run_iteration("sid-reject", verdict="reject")
+        try:
+            args = _Args(no_commit=True)
+            totals = {"implemented": 0, "rejected": 0, "escalated": 0, "iterating": 0}
+            result = _al.run_iteration(1, args, {}, {}, _EngineStub(), totals, {})
+            assert result == "rejected", "debe retornar REJECTED, got: %r" % result
+            assert totals["rejected"] == 1, "totals[rejected] debe ser 1"
+            rollbacks = [c for c in ap_stub.calls if c[0] == "rollback"]
+            assert len(rollbacks) >= 1, "reject: debe hacer rollback"
+        finally:
+            _restore_al(orig)
+            _al.SESSIONS = orig_sessions
+
+
+@check("autoloop.run_iteration: change_set invalido -> retorna REJECTED sin apply")
+def _():
+    import tempfile
+    import pathlib
+    with tempfile.TemporaryDirectory() as td:
+        orig_sessions = _al.SESSIONS
+        _al.SESSIONS = pathlib.Path(td)
+        orig, st_stub, ap_stub = _patch_al_for_run_iteration(
+            "sid-invalido", verdict="reject", apply_raises=ValueError("ruta protegida"))
+        try:
+            args = _Args(no_commit=True)
+            totals = {"implemented": 0, "rejected": 0, "escalated": 0, "iterating": 0}
+            result = _al.run_iteration(1, args, {}, {}, _EngineStub(), totals, {})
+            assert result == "rejected", "change_set invalido debe retornar REJECTED, got: %r" % result
+            applies = [c for c in ap_stub.calls if c[0] == "apply_change_set"]
+            assert len(applies) == 1, "debe haber intentado apply_change_set"
+            rollbacks = [c for c in ap_stub.calls if c[0] == "rollback"]
+            assert len(rollbacks) == 0, "change_set invalido: NO debe hacer rollback (no hubo apply exitoso)"
+        finally:
+            _restore_al(orig)
+            _al.SESSIONS = orig_sessions
+
+
 # --- autoloop: measure y promote con mock de _py (B-91) ----------------------------------------
 
 @check("autoloop.measure: exit=0 -> passed=True y exit=0 en el dict")

@@ -94,6 +94,7 @@
 | `adapters/example-project/adapter.yaml` | adapter | Ejemplo que muestra qué se reemplaza al acoplar a un proyecto. |
 | `adapters/claude/adapter.yaml` | adapter | **AOTL AI-driven:** improver/evaluator vía Claude Code CLI (`claude -p`). |
 | `adapters/mock/adapter.yaml` | adapter | **AOTL determinista** sin red: demo/test reproducible del loop. |
+| `adapters/stacky/adapter.yaml` | adapter | **AOTL para Stacky Agents:** foco en `backend/` del proyecto padre, denylist sincronizada con PROTECTED_FILES. |
 
 ## `dashboard/` — Dashboard estático (generado)
 
@@ -137,7 +138,7 @@
 | `scripts/show_session.py` | script | Resumen legible de una sesión (objetivo/propuesta/evaluación/decisión). |
 | `scripts/doctor.py` | script | Diagnóstico de salud estructural (config/perfil/adapter/contratos/scripts/índice). |
 | `scripts/adapter_info.py` | script | Resuelve y describe el adapter activo; valida sus campos de contrato. |
-| `scripts/check.py` | script | Chequeo agregado para CI (doctor + selfcheck + validate). |
+| `scripts/check.py` | script | Chequeo agregado para CI (doctor + selfcheck + validate + test_core + test_aotl). Conteo de tests dinámico (no hardcodeado). |
 | `scripts/archive.py` | script | Archiva una sesión cerrada (housekeeping no destructivo). |
 | `scripts/forensic.py` | módulo | Logger forense JSONL append-only (sha256 + tiempos). |
 | `scripts/_config.py` | módulo | Lector YAML mínimo (stdlib pura, sin PyYAML). |
@@ -145,8 +146,8 @@
 | `scripts/autoloop.py` | script | **Loop de automejora AI-driven (AOTL):** orquesta observar→proponer→aplicar→medir→evaluar→gate→resolver. |
 | `scripts/dashboard.py` | script | **Dashboard HTTP en vivo** del loop (stdlib `http.server`, offline-first). |
 | `scripts/dashboard_static.py` | script | **Dashboard HTML estático** (sin servidor): genera `dashboard/index.html` con pipeline, métricas e historial apto para `file://`. |
-| `scripts/test_core.py` | test | Tests unitarios de scripts core (new_session, validate): 16 casos, stdlib pura, sin pytest. |
+| `scripts/test_core.py` | test | Tests unitarios de scripts core: ~103 casos cubriendo 17 módulos (new_session, validate, autoloop, dashboard_static, metrics, archive, list/show/forensic, adapter_info, _config, doctor, _console, run_session, aotl_state). stdlib pura, sin pytest. |
 | `scripts/apply.py` | script | Aplica/revierte el `change_set` de forma determinista y reversible (pre-imagen); commit scopeado. |
 | `scripts/engine.py` | módulo | Motor improver/evaluator: drivers `mock` (offline) y `claude` (CLI `claude -p`). |
 | `scripts/aotl_state.py` | módulo | Estado compartido AOTL: `impl_status`, estado del loop, flag de parada, guardarraíl de rutas. |
-| `scripts/test_aotl.py` | test | Tests del modo AOTL (guardarraíl, apply/rollback, motor mock, gate, dashboard). |
+| `scripts/test_aotl.py` | test | Tests del modo AOTL: 52 casos (guardarraíl, apply/rollback+applied_paths, motor mock+make_engine, gate 5 caminos, promote_decision, set_impl_status, spawn_child, forensic, engine.normalize, aotl_state stop/loop_status). |

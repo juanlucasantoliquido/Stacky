@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0062-a | ADR 0062 — Anotar latido de automejora #1 | accept |
 | 0061-t | ADR 0061 — tests de validate.check_scores (B-50) | accept |
 | 0060-t | ADR 0060 — tests de forensic.py sha256 y Forensic.log (B-49) | accept |
 | 0059-t | ADR 0059 — tests de _config.load_yaml y spawn_child.py (B-48 | accept |

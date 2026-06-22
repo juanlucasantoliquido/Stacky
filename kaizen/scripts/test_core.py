@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (76 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (81 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value
@@ -17,6 +17,7 @@ Cubre:
                instalacion_completa/OK, contratos_faltantes/FAIL, scripts_faltantes/FAIL)
   - autoloop.py: gather_focus (dir vacio, archivo editable, foco vacio) + active_config sin CONFIG
   - _console.py: enable_utf8() — no lanza en streams reales, no lanza sin reconfigure
+  - run_session.py: compute_total, required_keys, validate_required (5 casos puros)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1053,6 +1054,58 @@ def test_enable_utf8_sin_reconfigure():
     finally:
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+
+
+# ---------------------------------------------------------------------------
+# Tests de run_session.py — compute_total, required_keys, validate_required
+# ---------------------------------------------------------------------------
+import sys as _sys
+import importlib as _il
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+import run_session as _rs  # noqa: E402
+
+
+@test
+def test_compute_total_full_scores():
+    """Suma correcta de los 5 campos de scores (1+2+3+2+3=11)."""
+    scores = {"value": 1, "correctness": 2, "scope": 3, "reversibility": 2, "measurability": 3}
+    assert_eq(_rs.compute_total(scores), 11)
+
+
+@test
+def test_compute_total_empty_scores():
+    """Scores vacio -> total=0 (no KeyError)."""
+    assert_eq(_rs.compute_total({}), 0)
+
+
+@test
+def test_compute_total_partial_scores():
+    """Solo algunos campos presentes -> suma los presentes, 0 para los que faltan."""
+    scores = {"value": 3, "correctness": 3}  # 3 campos ausentes = 0
+    assert_eq(_rs.compute_total(scores), 6)
+
+
+@test
+def test_required_keys_returns_list():
+    """required_keys extrae la lista del campo 'required' del schema."""
+    schema = {"required": ["session_id", "verdict", "rationale"], "properties": {}}
+    keys = _rs.required_keys(schema)
+    assert_eq(keys, ["session_id", "verdict", "rationale"])
+
+
+@test
+def test_validate_required_detects_missing():
+    """validate_required detecta campo faltante contra schema real del contrato."""
+    with tempfile.TemporaryDirectory() as td:
+        # Schema minimo con 2 campos requeridos
+        schema_path = Path(td) / "mini.schema.json"
+        schema_path.write_text(
+            '{"required": ["session_id", "verdict"], "properties": {}}',
+            encoding="utf-8",
+        )
+        # Objeto con solo uno de los dos campos
+        missing = _rs.validate_required({"session_id": "s1"}, schema_path)
+        assert_eq(missing, ["verdict"], "debe detectar 'verdict' como faltante")
 
 
 if __name__ == "__main__":

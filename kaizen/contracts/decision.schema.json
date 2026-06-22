@@ -48,6 +48,11 @@
       "items": { "type": "string" },
       "description": "Descripcion de cada bloqueante disparado (B1..B4). Vacio si no hubo bloqueantes.",
       "default": []
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Metadatos internos del gate (computed_total, notas). Solo informativo; no afecta el veredicto.",
+      "additionalProperties": true
     }
   }
 }

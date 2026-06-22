@@ -217,6 +217,27 @@ def _():
     d = _decide(5, 0.9, True, [])
     assert d["verdict"] == "reject", d
 
+@check("gate: score zona iterate (8) sin bloqueantes -> iterate sin escalar")
+def _():
+    # iterate_floor=7, accept_threshold=11 en default.yaml
+    d = _decide(8, 0.9, True, [])
+    assert d["verdict"] == "iterate", d
+    # score en zona iterate sin baja confianza: NO escala al humano
+    assert not d["escalated_to_human"], "zona iterate por score no debe escalar al humano"
+
+@check("gate: bloqueante B1 + score alto -> iterate (no accept) con blocking_details")
+def _():
+    # block_on_any_blocking=True en default.yaml: el bloqueante veta accept
+    d = _decide(14, 0.9, True, ["B1"])
+    assert d["verdict"] in ("iterate", "reject"), d
+    assert "B1" in d.get("blocking_details", [""])[0], "debe describir B1 en blocking_details"
+
+@check("gate: bloqueante B2 + score bajo -> reject (no iterate)")
+def _():
+    # score < iterate_floor (7) con bloqueante: resultado es reject
+    d = _decide(4, 0.9, True, ["B2"])
+    assert d["verdict"] == "reject", "score < floor con bloqueante debe dar reject, got %s" % d["verdict"]
+
 
 # --- dashboard: estado agregado no rompe ----------------------------------------------------
 @check("dashboard.build_state: estructura esperada")

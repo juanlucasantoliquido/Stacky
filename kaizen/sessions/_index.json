@@ -514,6 +514,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T054741Z__tests-del-gate-con-scores-en-zona-iterate-y-reject-b-14",
+      "objective": "Tests del gate con scores en zona iterate y reject (B-14)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:47:41+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

@@ -834,6 +834,19 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T064318Z__check-py-headers-ascii-para-terminales-cp1252-b-47",
+      "objective": "check.py headers ASCII para terminales cp1252 (B-47)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:43:18+00:00",
+      "status": "closed",
+      "tags": [
+        "infra",
+        "encoding"
+      ],
+      "verdict": "accept"
     }
   ]
 }

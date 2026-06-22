@@ -168,24 +168,11 @@ ampliado. La doc desactualizada confunde a quien lee el runbook.
 **Métrica:** docs/07_AOTL_AUTODRIVE.md menciona 'file://', 'blocking_details', 'revision humana' y la lista actualizada. selfcheck: 0 fallas.
 **Rollback:** Revertir docs/07_AOTL_AUTODRIVE.md.
 
-### B-19 [PENDIENTE] Adapter denylist: sincronizar comentario con PROTECTED_FILES actual
-**Valor:** El comentario DENYLIST en adapters/claude/adapter.yaml lista 9 scripts pero ya
-hay 15 protegidos (los 7 nuevos de B-16 no aparecen). Quien edite el adapter podria omitirlos.
-**Detalles:** Actualizar el comentario DENYLIST en adapters/claude/adapter.yaml con los 7 nuevos.
-Solo es documentacion del adapter; la proteccion real esta en aotl_state.py.
-**Metrica:** adapters/claude/adapter.yaml menciona 'run_session.py', 'selfcheck.py', 'validate.py'.
-**Rollback:** Revertir el comentario en adapter.yaml.
+### B-19 [HECHO 2026-06-22] Adapter denylist: sincronizar comentario con PROTECTED_FILES actual
+**Metrica lograda:** adapters/claude/adapter.yaml menciona los 15 scripts protegidos (verificado en sesion 46).
 
-### B-20 [PENDIENTE] doctor verifica PROTECTED_FILES no modificados (integridad del guardarrail)
-**Valor:** El doctor verifica que scripts/contratos existen pero no verifica que PROTECTED_FILES
-no fue manipulado. Si alguien agrega un script a PROTECTED_FILES que no existe, safe_target_path
-funciona mal en silencio (rechaza paths invalidos sin alertar).
-**Detalles:** En doctor.py agregar check: cada ruta en PROTECTED_FILES existe en kaizen/ (o es
-ignorada si tiene prefijo de tipo 'scripts/' — en ese caso verifica que la ruta este en la tupla
-de aotl_state.py). Reportar WARN si algun PROTECTED_FILE no existe.
-**Metrica:** python kaizen.py doctor da OK en todos los checks de PROTECTED_FILES. Si borramos
-un script listado en PROTECTED_FILES, da WARN.
-**Rollback:** Eliminar el check de doctor.py.
+### B-20 [HECHO 2026-06-22] doctor verifica PROTECTED_FILES no modificados (integridad del guardarrail)
+**Metrica lograda:** doctor.py verifica PROTECTED_FILES en lines 85-94, corre OK con 15 rutas (verificado en sesion 46).
 
 ### B-21 [HECHO 2026-06-22] test_aotl: guardarrail debe verificar los 7 scripts nuevos en PROTECTED_FILES
 **Valor:** El test 'guardarrail: maquinaria del loop protegida' solo prueba 3 de los 10 scripts
@@ -347,6 +334,15 @@ de la funcion (que acepta directorio temporal) para futuros mantenedores.
 **Valor:** _pending_review_section filtra sesiones que requieren atencion del operador. Funcion pura directamente testeable.
 **Metrica lograda:** python scripts/test_core.py: 30 OK 0 FAIL (3 casos: empty, iterate, escalated).
 
+### B-47 [HECHO 2026-06-22] check.py: headers sin acentos para terminales cp1252
+**Valor:** En terminales Windows con codepage cp1252, los acentos en los headers del check.py
+aparecen como '?' corrompiendo la legibilidad del output CI. El fix es usar ASCII puro en los
+strings de print() del check (logica, FALLO en lugar de logica, FALLO con acento).
+**Detalles:** Reemplazar 'logica' con 'logica' y 'FALLO' con 'FALLO' en scripts/check.py.
+No afecta los docstrings (no van al stdout en runtime).
+**Metrica lograda:** python kaizen.py check: headers ASCII, sin '?' en terminal cp1252.
+**Rollback:** Revertir los 3 prints en scripts/check.py.
+
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
 guarda una pre-imagen del archivo eliminado y no lo restaura. Si el loop elimina un archivo
@@ -407,3 +403,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-44: Tests adapter_info.py — sesión 063445Z (2026-06-22)
 - B-45: Conteos sincronizados 56+27=83 tests — sesión 063604Z (2026-06-22)
 - B-46: Tests promote_decision next_adr_number+already_promoted — sesión 063744Z (2026-06-22)
+- B-47: check.py headers ASCII (sin acentos para cp1252) + B-19/B-20 marcados HECHO — sesión 064318Z (2026-06-22)

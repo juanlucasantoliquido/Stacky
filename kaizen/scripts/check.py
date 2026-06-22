@@ -47,11 +47,11 @@ def main(argv: list[str]) -> int:
     for sid in closed:
         if run("validate.py", sid) != 0:
             val_fail += 1
-            print("  -> validate FALLÓ en %s" % sid)
+            print("  -> validate FALLO en %s" % sid)
     print("validate: %d/%d sesiones cerradas OK" % (len(closed) - val_fail, len(closed)))
     failures += val_fail > 0
 
-    print("\n### check 4/5: test_core (lógica pura) ###")
+    print("\n### check 4/5: test_core (logica pura) ###")
     failures += run("test_core.py") != 0
 
     print("\n### check 5/5: test_aotl (maquinaria del loop) ###")
@@ -59,7 +59,7 @@ def main(argv: list[str]) -> int:
 
     print("\n" + "=" * 48)
     if failures:
-        print("CHECK: FALLÓ (%d grupo(s) con error)" % failures)
+        print("CHECK: FALLO (%d grupo(s) con error)" % failures)
         return 1
     print("CHECK: TODO VERDE  [5/5 grupos OK | 86 tests unitarios]")
     return 0

@@ -734,6 +734,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T062539Z__test-core-tests-de-archive-py-5-caminos-de-main-b-37",
+      "objective": "test_core: tests de archive.py (5 caminos de main) (B-37)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:25:39+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

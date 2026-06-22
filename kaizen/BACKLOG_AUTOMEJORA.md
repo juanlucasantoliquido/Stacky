@@ -300,6 +300,10 @@ de la funcion (que acepta directorio temporal) para futuros mantenedores.
 ### B-35 [HECHO 2026-06-22] test_core: tests de metrics.summarize con forensic fixtures
 
 ### B-36 [HECHO 2026-06-22] test_core: tests de _tag_pills y build_data en dashboard_static
+
+### B-37 [HECHO 2026-06-22] test_core: tests de archive.py (5 caminos de main)
+**Valor:** archive.py unico comando sin tests. 5 caminos cubiertos con tempdir + parche archive.INDEX.
+**Metrica lograda:** python scripts/test_core.py: 43 OK 0 FAIL.
 **Valor:** _tag_pills (pura) y build_data (contrato de claves) sin tests. El test B-36 descubrio que build_data no tiene clave 'metrics' (es 'verdicts'+'p95_elapsed_ms') — fact capturado.
 **Metrica lograda:** python scripts/test_core.py: 38 OK 0 FAIL.
 **Valor:** metrics.summarize() es la funcion principal que alimenta el dashboard y el reporte. 4 casos puros con _mk_run_events fixtures minimas.
@@ -357,3 +361,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-34: Tests _pending_review_section en test_core.py — sesión 062113Z (2026-06-22)
 - B-35: Tests metrics.summarize con fixtures forenses — sesión 062219Z (2026-06-22)
 - B-36: Tests _tag_pills y build_data en test_core.py — sesión 062402Z (2026-06-22)
+- B-37: Tests archive.py 5 caminos — sesión 062539Z (2026-06-22)

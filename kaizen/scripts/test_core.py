@@ -297,6 +297,75 @@ def test_recent_decisions_summary_excludes_readme():
 import dashboard_static as _ds  # noqa: E402
 
 
+import archive as _arc  # noqa: E402
+import json as _json  # noqa: E402
+
+
+def _mk_arc_index(tmp_dir: Path, sessions: list) -> Path:
+    idx = tmp_dir / "sessions" / "_index.json"
+    idx.parent.mkdir(parents=True, exist_ok=True)
+    idx.write_text(_json.dumps({"sessions": sessions}), encoding="utf-8")
+    return idx
+
+
+@test
+def test_archive_no_args_exits_2():
+    """Sin argumentos -> exit code 2."""
+    assert_eq(_arc.main([]), 2)
+
+
+@test
+def test_archive_session_not_found():
+    """Sesion inexistente en indice -> exit code 1."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = _mk_arc_index(Path(td), [{"id": "s1", "status": "closed"}])
+        orig = _arc.INDEX; _arc.INDEX = idx
+        try:
+            assert_eq(_arc.main(["no_existe"]), 1)
+        finally:
+            _arc.INDEX = orig
+
+
+@test
+def test_archive_idempotent():
+    """Sesion ya archivada -> exit 0 sin error."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = _mk_arc_index(Path(td), [{"id": "s1", "status": "archived"}])
+        orig = _arc.INDEX; _arc.INDEX = idx
+        try:
+            assert_eq(_arc.main(["s1"]), 0)
+        finally:
+            _arc.INDEX = orig
+
+
+@test
+def test_archive_rejects_non_closed():
+    """Sesion con status=open -> exit code 1 (solo se archivan 'closed')."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = _mk_arc_index(Path(td), [{"id": "s1", "status": "open"}])
+        orig = _arc.INDEX; _arc.INDEX = idx
+        try:
+            assert_eq(_arc.main(["s1"]), 1)
+        finally:
+            _arc.INDEX = orig
+
+
+@test
+def test_archive_closed_session():
+    """Sesion closed -> status=archived en el indice y exit 0."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = _mk_arc_index(Path(td), [{"id": "s1", "status": "closed", "verdict": "accept"}])
+        orig = _arc.INDEX; _arc.INDEX = idx
+        try:
+            result = _arc.main(["s1"])
+            assert_eq(result, 0)
+            data = _json.loads(idx.read_text(encoding="utf-8"))
+            entry = data["sessions"][0]
+            assert_eq(entry["status"], "archived", "debe haber cambiado a archived")
+        finally:
+            _arc.INDEX = orig
+
+
 @test
 def test_tag_pills_none():
     """Tags=None -> guion (indicador vacio)."""

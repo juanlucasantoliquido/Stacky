@@ -1,0 +1,19 @@
+# Adapter genérico (default). No se acopla a ningún proyecto: todo es manual.
+# Sirve para correr el ciclo en HITL sin tocar nada externo. Copialo para crear el tuyo.
+
+name: generic
+description: Adapter sin proyecto. Observación, ejecución, aplicación y medición manuales (HITL).
+
+observe:
+  mode: manual          # el humano describe el contexto en session.md / session.json
+
+engine:
+  improver: manual      # el humano escribe la propuesta
+  evaluator: manual     # el humano escribe la evaluación
+
+apply:
+  mode: manual          # el humano aplica el cambio (si decide aceptarlo)
+  rollback: manual      # y describe/ejecuta el rollback a mano
+
+measure:
+  mode: manual          # el humano verifica la métrica de éxito

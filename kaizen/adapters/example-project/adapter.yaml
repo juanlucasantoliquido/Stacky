@@ -1,0 +1,36 @@
+# EJEMPLO ILUSTRATIVO (no funcional) — muestra QUÉ se reemplaza al acoplar a un proyecto real.
+# Copiá esta carpeta a adapters/<tu-proyecto>/ y completá con TU proyecto.
+# Las rutas son RELATIVAS o por variable de entorno: NUNCA absolutas versionadas.
+
+name: example-project
+description: Ejemplo de adapter que muestra los puntos de acoplamiento a un proyecto.
+
+# Raíz del proyecto a mejorar, relativa a kaizen/ o por variable de entorno.
+# (Declarar cualquier dependencia resultante también en ASSUMPTIONS.md.)
+project:
+  root: "${KAIZEN_PROJECT_ROOT:-../..}"   # ej: el repo padre; configurable por entorno
+
+observe:
+  mode: command
+  # Hook que emite el 'context' de session.input (JSON por stdout).
+  command: "./hooks/observe.sh"
+
+engine:
+  improver:
+    mode: command            # en AOTL: un runner que corre prompts/system/improver.system.md
+    command: "./hooks/improve.sh"
+  evaluator:
+    mode: command
+    command: "./hooks/evaluate.sh"
+
+apply:
+  mode: command
+  command: "./hooks/apply.sh"
+  rollback: "./hooks/rollback.sh"   # OBLIGATORIO: sin rollback, no se aplica
+
+measure:
+  mode: command
+  command: "./hooks/measure.sh"      # devuelve si se cumplió success_metric
+
+# NOTA: los hooks de ./hooks/ son responsabilidad del adapter, viven aquí (aislados),
+# y reciben/emiten JSON conforme a los contratos de ../../contracts/.

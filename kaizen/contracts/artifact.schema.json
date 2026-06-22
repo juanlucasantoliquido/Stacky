@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kaizen/v1/artifact.schema.json",
+  "title": "Kaizen Artifact",
+  "description": "Metadatos de un artefacto producido por una sesión (un archivo, un diff, un reporte, etc.).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "session_id", "kind", "path", "created_utc"],
+  "properties": {
+    "id": { "type": "string" },
+    "session_id": { "type": "string" },
+    "kind": {
+      "type": "string",
+      "description": "Tipo libre pero declarado: diff | report | dataset | note | other.",
+      "enum": ["diff", "report", "dataset", "note", "other"]
+    },
+    "path": {
+      "type": "string",
+      "description": "Ruta RELATIVA a la raíz kaizen/. Nunca absoluta."
+    },
+    "description": { "type": "string", "default": "" },
+    "created_utc": { "type": "string", "format": "date-time" },
+    "checksum": {
+      "type": ["string", "null"],
+      "description": "Opcional: hash para integridad/reproducibilidad.",
+      "default": null
+    }
+  }
+}

@@ -1,0 +1,264 @@
+{
+  "$schema_ref": "../contracts/session.input.schema.json",
+  "description": "Indice append-only de sesiones. Cada item es un resumen de una sesion.",
+  "sessions": [
+    {
+      "id": "2026-06-21T1925Z__validador-de-contratos-cli",
+      "objective": "validador de contratos cli",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:25:00+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T1926Z__fix-colision-de-slug-en-new-session",
+      "objective": "fix colision de slug en new session",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:26:10+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T192708Z__reporte-forense-de-eficiencia-cross-session",
+      "objective": "reporte forense de eficiencia cross session",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:27:08+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T192819Z__selfcheck-guard-de-regresion-end-to-end",
+      "objective": "selfcheck guard de regresion end to end",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:28:19+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T192919Z__control-negativo-gate-debe-rechazar",
+      "objective": "control negativo gate debe rechazar",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:29:19+00:00",
+      "status": "archived",
+      "verdict": "reject"
+    },
+    {
+      "id": "2026-06-21T192920Z__control-negativo-gate-debe-escalar",
+      "objective": "control negativo gate debe escalar",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:29:20+00:00",
+      "status": "decided",
+      "verdict": "iterate"
+    },
+    {
+      "id": "2026-06-21T193804Z__spawn-de-sesion-hija-en-iterate",
+      "objective": "spawn de sesion hija en iterate",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:38:04+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T193837Z__control-negativo-gate-debe-escalar-iteracion-2",
+      "objective": "control negativo gate debe escalar (iteracion 2)",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:38:37+00:00",
+      "status": "open"
+    },
+    {
+      "id": "2026-06-21T193904Z__promocion-de-decisiones-a-adr-lite",
+      "objective": "promocion de decisiones a adr lite",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:39:04+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T194009Z__visor-de-traza-forense-por-sesion",
+      "objective": "visor de traza forense por sesion",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:40:09+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T194053Z__cli-unificado-kaizen-punto-de-entrada",
+      "objective": "cli unificado kaizen punto de entrada",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:40:53+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T195207Z__comando-list-de-sesiones",
+      "objective": "comando list de sesiones",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:52:07+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T195230Z__salida-json-del-gate-run",
+      "objective": "salida json del gate run",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:52:30+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T195334Z__enforce-de-max-iterations-en-spawn",
+      "objective": "enforce de max iterations en spawn",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:53:34+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T195404Z__validar-patron-de-id-contra-contrato",
+      "objective": "validar patron de id contra contrato",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:54:04+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T195447Z__comando-doctor-de-diagnostico",
+      "objective": "comando doctor de diagnostico",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:54:47+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T195510Z__espejo-humano-decision-md",
+      "objective": "espejo humano decision md",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:55:10+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-21T195546Z__loader-del-adapter-activo",
+      "objective": "loader del adapter activo",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-21T19:55:46+00:00",
+      "status": "closed",
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T001521Z__soporte-de-tags-en-new",
+      "objective": "soporte de tags en new",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T00:15:21+00:00",
+      "status": "closed",
+      "tags": [
+        "infra",
+        "cli"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T001541Z__selfcheck-exige-traza-forense",
+      "objective": "selfcheck exige traza forense",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T00:15:41+00:00",
+      "status": "closed",
+      "tags": [
+        "forense"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T001611Z__comando-check-agregado-para-ci",
+      "objective": "comando check agregado para ci",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T00:16:11+00:00",
+      "status": "closed",
+      "tags": [
+        "ci"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T001642Z__metrics-mediana-min-max-latencia",
+      "objective": "metrics mediana min max latencia",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T00:16:42+00:00",
+      "status": "closed",
+      "tags": [
+        "forense"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T001718Z__grafo-mermaid-del-ciclo-y-gate",
+      "objective": "grafo mermaid del ciclo y gate",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T00:17:18+00:00",
+      "status": "closed",
+      "tags": [
+        "docs"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T001804Z__comando-show-resumen-de-sesion",
+      "objective": "comando show resumen de sesion",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T00:18:04+00:00",
+      "status": "closed",
+      "tags": [
+        "cli"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T002116Z__endurecimiento-utf8-de-salida-del-cli",
+      "objective": "endurecimiento utf8 de salida del cli",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T00:21:16+00:00",
+      "status": "closed",
+      "tags": [
+        "portabilidad"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T002205Z__comando-archive-housekeeping",
+      "objective": "comando archive housekeeping",
+      "mode": "hitl",
+      "adapter": "generic",
+      "created_utc": "2026-06-22T00:22:05+00:00",
+      "status": "closed",
+      "tags": [
+        "cli"
+      ],
+      "verdict": "accept"
+    }
+  ]
+}

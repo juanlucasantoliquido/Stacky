@@ -1,0 +1,25 @@
+# Kaizen — configuración de ejemplo.
+# Copiá este archivo a kaizen.config.yaml y adaptalo. (kaizen.config.yaml está gitignored.)
+# Todas las rutas son RELATIVAS a la raíz kaizen/.
+
+# Modo del ciclo:
+#   hitl = Human-in-the-Loop (humano propone/evalúa/decide)  <-- empezá acá
+#   aotl = Agent-on-the-Loop (agente propone/evalúa; gate decide; humano por excepción)
+mode: hitl
+
+# Adapter activo: nombre de una carpeta bajo adapters/.
+#   generic = sin acoplarse a ningún proyecto (no toca nada externo).
+adapter: generic
+
+# Perfil de políticas (umbrales, gates). Archivo bajo config/profiles/.
+profile: default
+
+# Convenciones de las sesiones.
+sessions:
+  dir: sessions          # dónde se crean las sesiones
+  index: sessions/_index.json
+
+# Dónde se promueven los productos.
+outputs:
+  artifacts_dir: artifacts
+  decisions_dir: decisions

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kaizen/v1/session.output.schema.json",
+  "title": "Kaizen Session Output",
+  "description": "Cierre de una sesión: agrega la entrada, la propuesta, la evaluación, la decisión y las referencias a artefactos. Es el registro auditable (paso REGISTRAR).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input", "proposal", "evaluation", "decision", "closed_utc"],
+  "properties": {
+    "input":      { "$ref": "session.input.schema.json" },
+    "proposal":   { "$ref": "proposal.schema.json" },
+    "evaluation": { "$ref": "evaluation.schema.json" },
+    "decision":   { "$ref": "decision.schema.json" },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "artifact.schema.json" },
+      "default": []
+    },
+    "closed_utc": { "type": "string", "format": "date-time" }
+  }
+}

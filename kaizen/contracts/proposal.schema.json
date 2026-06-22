@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kaizen/v1/proposal.schema.json",
+  "title": "Kaizen Proposal",
+  "description": "Una propuesta de mejora producida en el paso PROPONER (humano o agente improver).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "title", "summary", "motivation", "scope", "reversibility", "success_metric"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "title": { "type": "string", "minLength": 3 },
+    "summary": { "type": "string", "description": "Qué cambia, en 1-3 frases." },
+    "motivation": { "type": "string", "description": "Por qué vale la pena (problema real)." },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["in", "out"],
+      "properties": {
+        "in": { "type": "array", "items": { "type": "string" }, "description": "Qué SÍ incluye." },
+        "out": { "type": "array", "items": { "type": "string" }, "description": "Qué deja explícitamente afuera." }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "reversibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reversible", "rollback"],
+      "properties": {
+        "reversible": { "type": "boolean" },
+        "rollback": { "type": "string", "description": "Cómo se deshace. Obligatorio aunque reversible sea true." }
+      }
+    },
+    "success_metric": {
+      "type": "string",
+      "description": "Cómo se mide objetivamente si mejoró."
+    },
+    "author": {
+      "type": "string",
+      "description": "'human' o el nombre del agente que la produjo.",
+      "default": "human"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "type": "string", "description": "Rutas relativas a artefactos asociados." },
+      "default": []
+    }
+  }
+}

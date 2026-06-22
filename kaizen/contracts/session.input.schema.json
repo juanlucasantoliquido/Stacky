@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kaizen/v1/session.input.schema.json",
+  "title": "Kaizen Session Input",
+  "description": "Metadatos de entrada de una sesión de automejora. Project-agnostic: lo específico del proyecto vive en context y se llena vía adapter.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "objective", "mode", "adapter", "created_utc", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identificador de sesión: <timestamp-UTC>__<slug>. La marca admite HHMM o HHMMSS, con sufijo -N opcional ante colisión.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{4,6}Z__[a-z0-9-]+$"
+    },
+    "objective": {
+      "type": "string",
+      "description": "Objetivo acotado de la sesión, en una frase.",
+      "minLength": 3
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["hitl", "aotl"],
+      "description": "Quién ejecuta el ciclo en esta sesión."
+    },
+    "adapter": {
+      "type": "string",
+      "description": "Nombre del adapter activo (carpeta en adapters/). 'generic' = sin proyecto.",
+      "default": "generic"
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "proposed", "evaluated", "decided", "closed"]
+    },
+    "parent_session": {
+      "type": ["string", "null"],
+      "description": "Si esta sesión nace de un 'iterate', id de la sesión madre.",
+      "default": null
+    },
+    "context": {
+      "type": "object",
+      "description": "Contexto observado. Forma libre, la define el adapter. Genérico no impone campos.",
+      "additionalProperties": true,
+      "default": {}
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    }
+  }
+}

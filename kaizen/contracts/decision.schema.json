@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kaizen/v1/decision.schema.json",
+  "title": "Kaizen Decision",
+  "description": "Decisión final de una sesión y su justificación. En HITL la toma el humano; en AOTL un gate, con escalado a humano por excepción.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "verdict", "rationale", "decided_by", "decided_utc"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "verdict": {
+      "type": "string",
+      "enum": ["accept", "reject", "iterate"]
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Por qué esta decisión. Explícita y justificada (invariante I3)."
+    },
+    "decided_by": {
+      "type": "string",
+      "description": "'human', 'gate' o nombre del responsable.",
+      "enum": ["human", "gate"]
+    },
+    "escalated_to_human": {
+      "type": "boolean",
+      "description": "true si un gate AOTL escaló la decisión a un humano.",
+      "default": false
+    },
+    "decided_utc": { "type": "string", "format": "date-time" },
+    "next_steps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "child_session": {
+      "type": ["string", "null"],
+      "description": "Si verdict == iterate, id de la sesión hija creada.",
+      "default": null
+    },
+    "promoted_artifacts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Rutas relativas de artefactos promovidos a artifacts/.",
+      "default": []
+    }
+  }
+}

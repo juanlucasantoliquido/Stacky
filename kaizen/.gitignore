@@ -1,0 +1,27 @@
+# Kaizen — ignora datos volátiles, conserva estructura y plantillas.
+# Esta carpeta es autocontenida: este .gitignore es local a kaizen/.
+
+# Config activa (puede contener rutas/valores locales); el ejemplo SÍ se versiona.
+config/kaizen.config.yaml
+
+# Salidas de sesiones reales (se conserva README e índice).
+sessions/*/
+!sessions/README.md
+!sessions/_index.json
+
+# Artefactos y decisiones generados localmente (se conserva README).
+artifacts/*
+!artifacts/README.md
+decisions/*
+!decisions/README.md
+
+# Secretos de adapters: nunca versionar.
+adapters/**/secrets/
+adapters/**/*.secret.*
+adapters/**/.env
+
+# Temporales
+__pycache__/
+*.pyc
+*.log
+.DS_Store

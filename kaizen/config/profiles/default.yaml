@@ -1,0 +1,29 @@
+# Kaizen — perfil de políticas por defecto.
+# Define la rúbrica operativa y los gates. Usado por HITL (como guía) y AOTL (como reglas duras).
+
+review:
+  # Umbral de aceptación sobre score 0-15 (ver docs/04_HUMAN_REVIEW.md).
+  accept_threshold: 11
+  # Por debajo de esto se sugiere iterate en vez de reject.
+  iterate_floor: 7
+  # Confianza mínima del evaluador para auto-decidir en AOTL; por debajo, escala a humano.
+  min_confidence: 0.7
+
+# Gates específicos del modo Agent-on-the-Loop. Ignorados en HITL.
+aotl:
+  enabled: false                 # se activa junto con mode: aotl
+  # Cualquier criterio bloqueante (B1..B4) impide auto-accept SIEMPRE.
+  block_on_any_blocking: true
+  # Toda propuesta aceptada debe declarar rollback, o el gate la rechaza.
+  require_reversibility: true
+  # Tope de sesiones-hijas encadenadas por 'iterate' (evita bucles infinitos).
+  max_iterations: 3
+  # Condiciones que fuerzan escalado a un humano aunque el gate pudiera decidir.
+  escalate_to_human_when:
+    - low_confidence            # confidence < review.min_confidence
+    - irreversible_action       # propuesta no reversible
+    - blocking_triggered        # se disparó algún B1..B4
+
+# Presupuesto opcional por sesión (genérico; un adapter puede interpretarlo).
+budget:
+  max_artifacts_per_session: 20

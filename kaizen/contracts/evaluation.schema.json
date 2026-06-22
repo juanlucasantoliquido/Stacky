@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kaizen/v1/evaluation.schema.json",
+  "title": "Kaizen Evaluation",
+  "description": "Evaluación de una propuesta segun la rubrica de docs/04_HUMAN_REVIEW.md. Mismo contrato para humano (HITL) y agente evaluator (AOTL).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "scores", "total", "blocking", "preliminary_verdict", "evaluator"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Hallazgos concretos (qué bien / qué falta), con evidencia si existe.",
+      "default": []
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "correctness", "scope", "reversibility", "measurability"],
+      "description": "Criterios C1..C5, 0-3 cada uno.",
+      "properties": {
+        "value":         { "type": "integer", "minimum": 0, "maximum": 3 },
+        "correctness":   { "type": "integer", "minimum": 0, "maximum": 3 },
+        "scope":         { "type": "integer", "minimum": 0, "maximum": 3 },
+        "reversibility": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "measurability": { "type": "integer", "minimum": 0, "maximum": 3 }
+      }
+    },
+    "total": { "type": "integer", "minimum": 0, "maximum": 15 },
+    "blocking": {
+      "type": "array",
+      "description": "Criterios bloqueantes disparados (ver docs/04).",
+      "items": { "type": "string", "enum": ["B1", "B2", "B3", "B4"] },
+      "default": []
+    },
+    "preliminary_verdict": {
+      "type": "string",
+      "enum": ["accept", "iterate", "reject"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confianza del evaluador (clave para el escalado a humano en AOTL).",
+      "default": 1
+    },
+    "evaluator": {
+      "type": "string",
+      "description": "'human' o el nombre del agente evaluador.",
+      "default": "human"
+    }
+  }
+}

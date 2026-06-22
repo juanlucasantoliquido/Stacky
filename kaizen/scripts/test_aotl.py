@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (61 tests)
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (70 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -18,7 +18,8 @@ Cubre las invariantes que sostienen la seguridad del loop:
   - forensic.py: sha256_text, sha256_file, Forensic.log() campos + seq monotonica,
   - aotl_state.py: write/read/clear loop_status, request/stop/clear_stop (6 tests),
   - engine.py: make_engine — factory devuelve MockEngine por defecto y con driver='mock',
-  - engine.py: ClaudeCliEngine._context_block — encabezado+rutas prohibidas, tree+decisions incluidos.
+  - engine.py: ClaudeCliEngine._context_block — encabezado+rutas prohibidas, tree+decisions incluidos,
+  - autoloop.py: create_session, run_gate, measure, promote, run_iteration (5 ramas: accept/reject/invalido/escalated/iterate).
 """
 from __future__ import annotations
 

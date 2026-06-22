@@ -1005,6 +1005,54 @@ def _():
             _al.SESSIONS = orig_sessions
 
 
+# --- autoloop: run_iteration caminos escalated e iterate (B-93) --------------------------------
+
+@check("autoloop.run_iteration: camino escalated -> retorna ESCALATED, hace rollback")
+def _():
+    import tempfile
+    import pathlib
+    with tempfile.TemporaryDirectory() as td:
+        orig_sessions = _al.SESSIONS
+        _al.SESSIONS = pathlib.Path(td)
+        # escalated_to_human se evalua DESPUES del check de verdict==accept;
+        # para que el escalado se active, verdict debe ser != "accept".
+        orig, st_stub, ap_stub = _patch_al_for_run_iteration(
+            "sid-escalated", verdict="iterate", escalated=True)
+        try:
+            args = _Args(no_commit=True)
+            totals = {"implemented": 0, "rejected": 0, "escalated": 0, "iterating": 0}
+            result = _al.run_iteration(1, args, {}, {}, _EngineStub(), totals, {})
+            assert result == "escalated", "debe retornar ESCALATED cuando escalated_to_human=True, got: %r" % result
+            assert totals["escalated"] == 1, "totals[escalated] debe ser 1"
+            rollbacks = [c for c in ap_stub.calls if c[0] == "rollback"]
+            assert len(rollbacks) >= 1, "escalated: debe hacer rollback"
+        finally:
+            _restore_al(orig)
+            _al.SESSIONS = orig_sessions
+
+
+@check("autoloop.run_iteration: camino iterate -> retorna ITERATING, hace rollback")
+def _():
+    import tempfile
+    import pathlib
+    with tempfile.TemporaryDirectory() as td:
+        orig_sessions = _al.SESSIONS
+        _al.SESSIONS = pathlib.Path(td)
+        orig, st_stub, ap_stub = _patch_al_for_run_iteration(
+            "sid-iterate", verdict="iterate", escalated=False)
+        try:
+            args = _Args(no_commit=True)
+            totals = {"implemented": 0, "rejected": 0, "escalated": 0, "iterating": 0}
+            result = _al.run_iteration(1, args, {}, {}, _EngineStub(), totals, {})
+            assert result == "iterating", "debe retornar ITERATING cuando verdict=iterate, got: %r" % result
+            assert totals["iterating"] == 1, "totals[iterating] debe ser 1"
+            rollbacks = [c for c in ap_stub.calls if c[0] == "rollback"]
+            assert len(rollbacks) >= 1, "iterate: debe hacer rollback"
+        finally:
+            _restore_al(orig)
+            _al.SESSIONS = orig_sessions
+
+
 # --- autoloop: measure y promote con mock de _py (B-91) ----------------------------------------
 
 @check("autoloop.measure: exit=0 -> passed=True y exit=0 en el dict")

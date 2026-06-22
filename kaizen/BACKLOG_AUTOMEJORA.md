@@ -390,6 +390,29 @@ Sesion aceptada (score=12) porque la auditoria misma tiene valor de confirmacion
 ### B-60 [HECHO 2026-06-22] Sincronizar contracts/decision.schema.json: agregar _meta
 **Metrica lograda:** _meta en schema. python kaizen.py check: TODO VERDE [120 tests].
 
+### B-69 [PENDIENTE] test_aotl: test de make_engine devuelve MockEngine para driver='mock'
+**Valor:** make_engine es la factory del motor AOTL. Si se rompe, el loop arranca con el driver
+incorrecto silenciosamente. El test de MockEngine ya existe via dashboard.build_state pero
+make_engine en si no tiene assertion directa.
+**Detalles:** Agregar 2 checks en test_aotl.py: make_engine({"engine":{"driver":"mock"}}) devuelve
+MockEngine; make_engine({}) (sin config) tambien devuelve MockEngine (default).
+**Metrica:** python scripts/test_aotl.py: 52/52 verdes.
+**Rollback:** Eliminar los 2 checks.
+
+### B-70 [PENDIENTE] MANIFEST.md: verificar que todos los scripts actuales esten listados
+**Valor:** MANIFEST.md puede estar desactualizado si se agregaron scripts durante el loop.
+**Detalles:** Auditar MANIFEST.md contra la lista real de scripts/ y contratos/.
+**Metrica:** MANIFEST.md lista todos los archivos existentes; no hay discrepancias.
+**Rollback:** Revertir MANIFEST.md.
+
+### B-71 [PENDIENTE] test_aotl: test de active_adapter en adapter_info.py
+**Valor:** active_adapter lee la config activa para determinar el adapter en uso. No tiene test.
+Si se rompe, el loop arranca con el adapter incorrecto sin advertencia.
+**Detalles:** Agregar 1 check en test_aotl.py o test_core.py: active_adapter con config que
+tiene 'adapter: mock' devuelve 'mock'.
+**Metrica:** python scripts/test_aotl.py o test_core.py: 1 caso nuevo verde.
+**Rollback:** Eliminar el check.
+
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
 guarda una pre-imagen del archivo eliminado y no lo restaura. Si el loop elimina un archivo
@@ -467,3 +490,8 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-61: tests de compute_total, required_keys, validate_required en run_session.py — sesión 135301Z (2026-06-22)
 - B-62: tests write/read/clear loop_status + request/stop/clear_stop en aotl_state.py — sesión 135621Z (2026-06-22)
 - B-63: tests render y append_to_index en new_session.py — sesión 135826Z (2026-06-22)
+- B-64: check.py conteo de tests dinamico (run_and_capture + _parse_test_count) — sesión 140049Z (2026-06-22)
+- B-65: docs/02_USAGE.md actualizado con conteos reales 85+50=135 — sesión 140245Z (2026-06-22)
+- B-66: tests _impl_badge, _phase_pills, _session_rows en dashboard_static — sesión 140404Z (2026-06-22)
+- B-67: tests _coerce, _strip_comment, _median (helpers puros) — sesión 140546Z (2026-06-22)
+- B-68: tests _parse_test_count en check.py — sesión 140728Z (2026-06-22)

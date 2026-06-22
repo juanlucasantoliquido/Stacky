@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (50 tests)
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (52 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -16,7 +16,8 @@ Cubre las invariantes que sostienen la seguridad del loop:
   - set_impl_status + update_index_fields (trazabilidad del loop),
   - spawn_child: caminos de error (no_args, no_decision, non_iterate) + idempotencia,
   - forensic.py: sha256_text, sha256_file, Forensic.log() campos + seq monotonica,
-  - aotl_state.py: write/read/clear loop_status, request/stop/clear_stop (6 tests).
+  - aotl_state.py: write/read/clear loop_status, request/stop/clear_stop (6 tests),
+  - engine.py: make_engine — factory devuelve MockEngine por defecto y con driver='mock'.
 """
 from __future__ import annotations
 
@@ -677,6 +678,22 @@ def _():
     state = dash.build_state()
     assert set(("loop", "metrics", "sessions")) <= set(state.keys())
     assert "by_impl" in state["metrics"]
+
+
+# --- engine.py: make_engine factory -----------------------------------------------------------
+import engine as _eng  # noqa: E402
+
+
+@check("make_engine: sin config devuelve MockEngine")
+def _():
+    eng = _eng.make_engine({})
+    assert isinstance(eng, _eng.MockEngine), "debe devolver MockEngine sin config"
+
+
+@check("make_engine: con driver='mock' explicito devuelve MockEngine")
+def _():
+    eng = _eng.make_engine({"engine": {"driver": "mock"}})
+    assert isinstance(eng, _eng.MockEngine), "debe devolver MockEngine con driver=mock"
 
 
 def main() -> int:

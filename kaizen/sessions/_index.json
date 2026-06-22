@@ -694,6 +694,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T061953Z__test-core-tests-de-gen-decisions-index-en-dashboard-static-py-b-33",
+      "objective": "test_core: tests de _gen_decisions_index en dashboard_static.py (B-33)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:19:53+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

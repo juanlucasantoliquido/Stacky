@@ -4,6 +4,8 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0044-t | ADR 0044 — test_core: tests de _gen_decisions_index en dashb | accept |
+| 0043-d | ADR 0043 — decisions/README.md auto-generado con lista de AD | accept |
 | 0042-t | ADR 0042 — test_core: tests de recent_objectives en autoloop | accept |
 | 0041-c | ADR 0041 — check.py ejecuta test_core y test_aotl en el pipe | accept |
 | 0040-t | ADR 0040 — Tests de set_impl_status y update_index_fields en | accept |

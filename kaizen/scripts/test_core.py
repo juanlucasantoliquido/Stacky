@@ -292,6 +292,59 @@ def test_recent_decisions_summary_excludes_readme():
 
 
 # ---------------------------------------------------------------------------
+# Tests de dashboard_static.py — _gen_decisions_index
+# ---------------------------------------------------------------------------
+import dashboard_static as _ds  # noqa: E402
+
+
+@test
+def test_gen_decisions_index_empty_dir():
+    """Si decisions/ tiene 0 archivos .md numericos, no escribe README."""
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td) / "decisions"
+        d.mkdir()
+        _ds._gen_decisions_index(d)
+        assert not (d / "README.md").exists(), "no debe crear README si no hay ADRs"
+
+
+@test
+def test_gen_decisions_index_generates_table():
+    """Con 2 ADRs, genera README con tabla que incluye titulo y veredicto."""
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td) / "decisions"
+        d.mkdir()
+        (d / "0001-primera.md").write_text(
+            "# ADR 0001 — Primera decision\n- Veredicto: accept (gate)\n",
+            encoding="utf-8",
+        )
+        (d / "0002-segunda.md").write_text(
+            "# ADR 0002 — Segunda decision\n- Veredicto: reject\n",
+            encoding="utf-8",
+        )
+        _ds._gen_decisions_index(d)
+        readme = (d / "README.md").read_text(encoding="utf-8")
+        assert "Primera decision" in readme, "debe incluir titulo del ADR 0001"
+        assert "accept" in readme, "debe incluir veredicto accept"
+        assert "Segunda decision" in readme, "debe incluir titulo del ADR 0002"
+        assert "reject" in readme, "debe incluir veredicto reject"
+
+
+@test
+def test_gen_decisions_index_excludes_non_numeric():
+    """README.md en decisions/ no se incluye como fila de la tabla."""
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td) / "decisions"
+        d.mkdir()
+        (d / "README.md").write_text("# Registro\n", encoding="utf-8")
+        (d / "0001-real.md").write_text("# ADR 0001 — Real\n- Veredicto: accept\n", encoding="utf-8")
+        _ds._gen_decisions_index(d)
+        readme = (d / "README.md").read_text(encoding="utf-8")
+        # La tabla debe tener exactamente 1 fila de datos (el ADR real)
+        rows = [ln for ln in readme.splitlines() if ln.startswith("| 0")]
+        assert_eq(len(rows), 1, "solo 1 fila: el ADR numerico, no el README previo")
+
+
+# ---------------------------------------------------------------------------
 # Tests de metrics.py — _percentile (funcion pura local)
 # ---------------------------------------------------------------------------
 import metrics as _metrics  # noqa: E402

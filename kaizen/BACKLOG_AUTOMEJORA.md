@@ -287,7 +287,7 @@ Markdown. El archivo se regenera solo en cada sesion (como el dashboard). Agrega
 **Metrica:** decisions/README.md existe y tiene una tabla con al menos 15 filas tras el gate.
 **Rollback:** Eliminar la llamada en run_session.py y el archivo decisions/README.md.
 
-### B-33 [PENDIENTE] test_core: tests de _gen_decisions_index en dashboard_static.py
+### B-33 [HECHO 2026-06-22] test_core: tests de _gen_decisions_index en dashboard_static.py
 **Valor:** _gen_decisions_index es la unica funcion nueva de B-32 que no tiene tests.
 Si se rompe, decisions/README.md queda obsoleto silenciosamente. Ademas documenta el contrato
 de la funcion (que acepta directorio temporal) para futuros mantenedores.
@@ -341,3 +341,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-30: check.py integra test_core y test_aotl — sesión 061331Z (2026-06-22)
 - B-31: Tests recent_objectives en autoloop.py — sesión 061632Z (2026-06-22)
 - B-32: decisions/README.md auto-generado — sesión 061802Z (2026-06-22)
+- B-33: Tests _gen_decisions_index en test_core.py — sesión 061953Z (2026-06-22)

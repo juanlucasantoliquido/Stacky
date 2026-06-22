@@ -985,6 +985,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T134553Z__test-aotl-tests-de-applied-paths-vacio-tras-apply-tras-rollback-b-59",
+      "objective": "test_aotl: tests de applied_paths (vacio, tras apply, tras rollback) (B-59)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:45:53+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

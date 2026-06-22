@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (42 tests)
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (44 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -170,6 +170,33 @@ def _():
         except ValueError:
             pass
         assert not (tmp.parent / "escape.md").exists()
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("applied_paths: sin manifest devuelve lista vacia")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        paths = ap.applied_paths("sid_no_existe", root=tmp)
+        assert paths == [], "sin manifest debe ser lista vacia: %r" % paths
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("applied_paths: tras apply devuelve rutas aplicadas")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        (tmp / "f.md").write_text("ORIGINAL\n", encoding="utf-8")
+        cs = {"changes": [
+            {"path": "f.md", "action": "modify", "content": "NUEVO\n"},
+            {"path": "g.md", "action": "create", "content": "creado\n"},
+        ]}
+        ap.apply_change_set("sid_ap", cs, root=tmp)
+        paths = ap.applied_paths("sid_ap", root=tmp)
+        assert len(paths) == 2, "debe haber 2 rutas: %r" % paths
+        assert "f.md" in paths and "g.md" in paths, "rutas incorrectas: %r" % paths
     finally:
         shutil.rmtree(tmp)
 

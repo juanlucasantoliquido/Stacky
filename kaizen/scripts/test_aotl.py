@@ -164,6 +164,33 @@ def _():
     finally:
         shutil.rmtree(tmp)
 
+@check("apply+rollback: delete de archivo existente -> lo elimina, rollback lo restaura (refuta RQ-01)")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        (tmp / "to_delete.md").write_text("CONTENIDO ORIGINAL\n", encoding="utf-8")
+        cs = {"changes": [{"path": "to_delete.md", "action": "delete"}]}
+        ap.apply_change_set("sid-del", cs, root=tmp)
+        assert not (tmp / "to_delete.md").exists(), "apply(delete) debe eliminar el archivo"
+        n = ap.rollback("sid-del", root=tmp)
+        assert (tmp / "to_delete.md").exists(), "rollback debe restaurar el archivo eliminado"
+        assert (tmp / "to_delete.md").read_text(encoding="utf-8") == "CONTENIDO ORIGINAL\n"
+        assert n >= 1, "rollback debe reportar al menos 1 archivo restaurado"
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("apply: delete de archivo inexistente es no-op sin error")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        cs = {"changes": [{"path": "noexiste.md", "action": "delete"}]}
+        manifest = ap.apply_change_set("sid-delno", cs, root=tmp)
+        assert manifest["changes"][0]["pre_existed"] is False, "pre_existed debe ser False"
+    finally:
+        shutil.rmtree(tmp)
+
+
 @check("apply: rechaza ruta fuera de root")
 def _():
     tmp = Path(tempfile.mkdtemp())

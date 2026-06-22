@@ -432,16 +432,12 @@ iterate (7-10), reject (<7).
 **Metrica:** grep '161' docs/02_USAGE.md retorna resultado.
 **Rollback:** Revertir docs/02_USAGE.md.
 
-### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
-**Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
-guarda una pre-imagen del archivo eliminado y no lo restaura. Si el loop elimina un archivo
-con action='delete', el rollback deja el archivo eliminado permanentemente. Esto viola el
-guardarrail B1 (propuesta sin rollback completo).
-**Impacto:** Potencialmente irreversible. action='delete' en el change_set es una trampa.
-**Opciones:** (A) Guardar pre-imagen del archivo antes de eliminarlo (como hace con modify).
-(B) Prohibir action='delete' en el gate si no hay respaldo externo (git rollback manual).
-**Por que va a REVIEW_QUEUE:** apply.py esta en PROTECTED_FILES (no puede ser auto-editado
-por el loop). Requiere decision y cambio manual del operador.
+### RQ-01 [REFUTADO 2026-06-22] Rollback no restaura archivos borrados por action='delete'
+**REFUTADO:** La lectura de apply.py lineas 101-154 y los tests de B-95 demuestran que
+el mecanismo YA funciona correctamente: apply_change_set guarda un backup del archivo
+antes de eliminarlo (si pre_existed=True), y rollback lo restaura desde ese backup.
+Test en test_aotl.py: "apply+rollback: delete de archivo existente -> lo elimina, rollback lo restaura (refuta RQ-01)".
+**No hay accion pendiente.**
 
 ---
 

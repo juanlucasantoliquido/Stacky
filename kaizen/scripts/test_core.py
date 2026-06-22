@@ -298,6 +298,39 @@ import dashboard_static as _ds  # noqa: E402
 
 
 @test
+def test_tag_pills_none():
+    """Tags=None -> guion (indicador vacio)."""
+    result = _ds._tag_pills(None)
+    assert_true("—" in result, "debe devolver guion para None")
+
+
+@test
+def test_tag_pills_with_user_tags():
+    """Tags de usuario visibles -> HTML con el texto del tag."""
+    result = _ds._tag_pills(["infra", "cli"])
+    assert_true("infra" in result, "debe incluir 'infra'")
+    assert_true("cli" in result, "debe incluir 'cli'")
+
+
+@test
+def test_tag_pills_filters_engine_tags():
+    """Tags engine:* se filtran -> si solo habia engine:* devuelve guion."""
+    result = _ds._tag_pills(["engine:claude", "engine:mock"])
+    assert_true("—" in result, "solo engine tags debe devolver guion")
+    assert_true("claude" not in result, "no debe mostrar engine:claude como pill")
+
+
+@test
+def test_build_data_basic_keys():
+    """build_data() devuelve dict con las claves minimas esperadas."""
+    data = _ds.build_data()
+    assert_true("sessions" in data, "debe tener 'sessions'")
+    assert_true("file_url" in data, "debe tener 'file_url'")
+    assert_true("verdicts" in data, "debe tener 'verdicts'")
+    assert_true("p95_elapsed_ms" in data, "debe tener 'p95_elapsed_ms'")
+
+
+@test
 def test_pending_review_section_empty():
     """Lista vacia -> cadena vacia (sin HTML)."""
     result = _ds._pending_review_section([])

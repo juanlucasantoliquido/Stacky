@@ -724,6 +724,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T062402Z__test-core-tests-de-tag-pills-y-build-data-basico-en-dashboard-static-b-36",
+      "objective": "test_core: tests de _tag_pills y build_data basico en dashboard_static (B-36)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:24:02+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

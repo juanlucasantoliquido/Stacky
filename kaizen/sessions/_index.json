@@ -634,6 +634,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T060714Z__tests-de-is-protected-casos-borde-extra-protected-y-prefijo-b-27",
+      "objective": "Tests de is-protected() casos borde extra-protected y prefijo (B-27)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:07:14+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

@@ -240,6 +240,15 @@ import es problematico).
 **DESCARTADO:** adapters/generic/adapter.yaml es modo manual (HITL): no tiene foco ni
 denylist porque no hace auto-apply. No aplica el mismo parche que B-19.
 
+### B-27 [PENDIENTE] Tests de is_protected() para casos: prefijo protegido, archivo exacto, extra_protected
+**Valor:** is_protected() es la funcion raiz del guardarrail. safe_target_path la usa pero
+los tests solo prueban safe_target_path (comportamiento externo). Si is_protected tiene un
+bug de borde (ej: prefijo con trailing slash, ruta con mayusculas), no lo detectamos.
+**Detalles:** Agregar en test_aotl.py 4 casos: prefijo sessions/ rechazado, archivo en PROTECTED_FILES
+rechazado, extra_protected funciona, ruta editable pasa.
+**Metrica:** 20/20 + 4 nuevos = 24/24 en test_aotl.py.
+**Rollback:** Quitar los 4 casos de test_aotl.py.
+
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
 guarda una pre-imagen del archivo eliminado y no lo restaura. Si el loop elimina un archivo

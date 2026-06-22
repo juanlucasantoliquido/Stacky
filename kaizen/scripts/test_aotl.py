@@ -87,6 +87,28 @@ def _():
         except ValueError:
             pass
 
+@check("is_protected: prefijo sessions/ -> True")
+def _():
+    assert st.is_protected("sessions/2026-01-01/proposal.json"), "sessions/ debe ser protegido"
+    assert st.is_protected("sessions"), "sessions sola debe ser protegida"
+
+@check("is_protected: archivo en PROTECTED_FILES -> True")
+def _():
+    # kaizen.py y scripts/run_session.py estan en PROTECTED_FILES
+    assert st.is_protected("kaizen.py"), "kaizen.py debe ser protegido"
+    assert st.is_protected("scripts/run_session.py"), "scripts/run_session.py debe ser protegido"
+
+@check("is_protected: extra_protected funciona")
+def _():
+    assert st.is_protected("scripts/custom_danger.py", extra_protected=("scripts/custom_danger.py",))
+    assert not st.is_protected("scripts/custom_danger.py"), "sin extra no debe ser protegido"
+
+@check("is_protected: ruta editable -> False")
+def _():
+    # scripts/test_core.py y playground/ son editables por el loop
+    assert not st.is_protected("scripts/test_core.py"), "test_core debe ser editable"
+    assert not st.is_protected("playground/JOURNAL.md"), "playground debe ser editable"
+
 
 # --- validación + apply/rollback ------------------------------------------------------------
 @check("validate_change_set: bueno -> sin errores")

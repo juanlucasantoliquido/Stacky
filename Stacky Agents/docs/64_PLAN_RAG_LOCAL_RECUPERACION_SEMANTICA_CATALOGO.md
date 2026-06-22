@@ -1,6 +1,28 @@
 # Plan 64 — RAG local: recuperación semántica del catálogo de procesos para grounding preciso
 
-> **Versión: v1**
+> **Versión: v1 → v2** (endurecido por el juez adversarial `criticar-y-mejorar-plan`).
+>
+> **CHANGELOG v2:**
+> - **C1 (BLOQUEANTE) — patch target incorrecto en todos los tests de F2 y F3.**
+>   `load_client_profile` se importa inline dentro de `_inject_process_catalog_block`; el nombre
+>   NO existe en el namespace de `services.context_enrichment` → `patch("services.context_enrichment.load_client_profile", ...)`
+>   levantaba `AttributeError` antes de ejecutar una sola aserción. Corregido a
+>   `patch("services.client_profile.load_client_profile", ...)` en los 8 usos de F2/F3.
+> - **C2 (IMPORTANTE) — F3 entregaba instrucción vaga sobre dónde integrar `_rag_meta`.**
+>   "Dentro del bloque if block is not None, ya DESPUÉS del log" no es locatable en la función
+>   reescrita de F2. F3 ahora entrega el body completo final de `_inject_process_catalog_block`
+>   con `_rag_meta` ya integrado (única fuente de verdad).
+> - **C3 (IMPORTANTE) — `retrieved` contado por `"\n- "` en el string era frágil.**
+>   Si `purpose` de un proceso contenía `"\n- "` el conteo se inflaba. Corregido: 
+>   `build_process_dictionary_block_rag` retorna `tuple[dict, int] | None` donde el entero es
+>   `len(results)` exacto. El caller usa ese entero para `_rag_meta["retrieved"]`.
+> - **C4 (MENOR) — Agregar nota de thread-safety** en el comentario de `_RAG_INDEX_CACHE`.
+> - **C5 (MENOR) — F4 ahora nombra el script de ratchet** del repo para enlazar el test de perf.
+> - **[ADICIÓN ARQUITECTO] Tests de discriminación de dominio RSPACIFICO:** dos tests nuevos en
+>   `test_rag_retriever.py` verifican que el TF-IDF discrimina correctamente el vocabulario
+>   técnico real (Mul2Bane/GenReporte), no solo queries genéricos. Elevan el conteo de tests
+>   de F0 de 13 a **15**.
+>
 > **Audiencia de implementación:** modelo MENOR (Haiku / Codex / GitHub Copilot Pro). Todo está dado:
 > rutas exactas, símbolos exactos, casos borde, tests primero, comandos exactos. **NO inferir nada.**
 > **Origen del número:** listado de `Stacky Agents/docs/` → NN máximo = 63 → este plan = **64**.
@@ -325,6 +347,29 @@ def test_content_hash_stored():
     chunks = chunks_from_process_catalog(CATALOG)
     idx = build_index(chunks, content_hash="abc123")
     assert idx.content_hash == "abc123"
+
+
+# [ADICIÓN ARQUITECTO v2] — Discriminación de vocabulario real RSPACIFICO
+def test_domain_discrimination_mul2bane():
+    """'multigestion bancos entidades' debe recuperar Mul2Bane como top-1."""
+    chunks = chunks_from_process_catalog(CATALOG)
+    idx = build_index(chunks)
+    results = retrieve(idx, "multigestion bancos entidades", top_k=3)
+    assert len(results) > 0
+    assert results[0][0].payload["name"] == "Mul2Bane", (
+        f"Esperaba Mul2Bane como top-1, obtuve {results[0][0].payload['name']}"
+    )
+
+
+def test_domain_discrimination_reporte():
+    """'conciliacion auditoria reportes' debe recuperar GenReporte como top-1."""
+    chunks = chunks_from_process_catalog(CATALOG)
+    idx = build_index(chunks)
+    results = retrieve(idx, "conciliacion auditoria reportes", top_k=3)
+    assert len(results) > 0
+    assert results[0][0].payload["name"] == "GenReporte", (
+        f"Esperaba GenReporte como top-1, obtuve {results[0][0].payload['name']}"
+    )
 ```
 
 **Comando exacto:**
@@ -332,8 +377,8 @@ def test_content_hash_stored():
 & "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest tests/test_rag_retriever.py -q
 ```
 
-**Criterio de aceptación BINARIO:** todos los 13 tests pasan (exit 0). Ningún import externo a
-`stdlib`.
+**Criterio de aceptación BINARIO:** todos los **15** tests pasan (exit 0; +2 de discriminación de
+dominio RSPACIFICO vs. los 13 originales). Ningún import externo a `stdlib`.
 
 **Flag que la protege:** ninguna (módulo puro, no se llama desde ningún lado aún).
 **Impacto por runtime:** ninguno (F0 solo crea el módulo).
@@ -440,8 +485,10 @@ del volcado completo. **Valor:** el modelo solo ve los procesos relevantes al ti
 **Paso 1 — Agregar helper de índice en-memoria** (DESPUÉS de los imports, antes de `enrich_blocks`):
 
 ```python
-# Cache en-memoria: (content_hash) -> RagIndex. Se invalida automáticamente
-# cuando el catálogo cambia (hash distinto).
+# Cache en-memoria: content_hash -> RagIndex. Se invalida automáticamente cuando
+# el catálogo cambia (hash distinto). Usa un único slot (clear en cada cambio).
+# Thread-safety: no es safe para gunicorn multi-worker (cada worker tiene su propia
+# copia del proceso; para Stacky single-worker es OK).
 _RAG_INDEX_CACHE: dict[str, "RagIndex"] = {}  # type: ignore[name-defined]
 
 def _get_rag_index(catalog: list[dict]) -> "RagIndex":
@@ -466,10 +513,11 @@ def build_process_dictionary_block_rag(
     client_profile: dict | None,
     query: str,
     top_k: int = 8,
-) -> dict | None:
+) -> tuple[dict, int] | None:
     """Plan 64 F2 — Bloque 'process-catalog' con solo los top-K procesos relevantes al query.
 
-    Función PURA. Fallback: si falla el retriever o no hay resultados → None
+    Función PURA. Retorna (block, n_retrieved) donde n_retrieved = len(results) exacto.
+    Fallback: si falla el retriever o no hay resultados → None
     (el caller usa el fallback al full-inject).
     """
     if not client_profile or not query or not query.strip():
@@ -496,73 +544,20 @@ def build_process_dictionary_block_rag(
                 lines.append(f"- {name} [{kind}]: {purpose}")
         if len(lines) == 1:
             return None
-        return {"id": "process-catalog", "kind": "process-catalog", "content": "\n".join(lines)}
+        block = {"id": "process-catalog", "kind": "process-catalog", "content": "\n".join(lines)}
+        return block, len(results)  # (v2/C3) — n_retrieved exacto, no string-counted
     except Exception:  # noqa: BLE001
         return None  # degradación controlada → caller usa full-inject
 ```
 
 **Paso 3 — Modificar `_inject_process_catalog_block`** para llamar al RAG si está habilitado:
 
-Reemplazar el cuerpo actual de `_inject_process_catalog_block` (líneas 627-650) con:
+> **v2/C2 — ATENCIÓN:** El body completo y definitivo de esta función (integrando RAG + telemetría
+> `_rag_meta`) está en **F3** de este plan (fuente única de verdad). Implementar directamente
+> desde F3; NO usar este Paso 3 como referencia. Se mantiene aquí solo para trazabilidad.
 
-```python
-def _inject_process_catalog_block(
-    blocks: list[dict],
-    project_name: str | None,
-    log: LogFn,
-    query: str | None = None,  # NUEVO — query para RAG (ticket title+description)
-) -> list[dict]:
-    """Plan 42 F0 + Plan 64 F2 — Inyecta el bloque 'process-catalog'.
-
-    Con STACKY_RAG_CATALOG_ENABLED=true y query disponible: recupera los top-K
-    procesos más relevantes (TF-IDF puro). Fallback: full-inject si RAG falla o está OFF.
-    """
-    if os.getenv("STACKY_INJECT_PROCESS_CATALOG", "true").lower() in {"0", "false", "off"}:
-        return blocks
-    existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
-    if "process-catalog" in existing_ids:
-        return blocks
-    if not project_name:
-        return blocks
-    try:
-        from services.client_profile import load_client_profile
-        profile = load_client_profile(project_name)
-        if not isinstance(profile, dict):
-            return blocks
-
-        # Plan 64 F2: si RAG habilitado y hay query → usar RAG
-        rag_enabled = os.getenv("STACKY_RAG_CATALOG_ENABLED", "false").lower() in {
-            "1", "true", "on"
-        }
-        block = None
-        if rag_enabled and query and query.strip():
-            top_k_raw = os.getenv("STACKY_RAG_CATALOG_TOP_K", "8")
-            try:
-                top_k = max(1, int(top_k_raw))
-            except ValueError:
-                top_k = 8
-            block = build_process_dictionary_block_rag(profile, query=query, top_k=top_k)
-            if block is not None:
-                catalog_size = len(profile.get("process_catalog") or [])
-                retrieved = block["content"].count("\n- ")
-                log(
-                    "info",
-                    f"process-catalog RAG: {retrieved}/{catalog_size} procesos para proyecto={project_name}",
-                )
-
-        # Fallback: full-inject (comportamiento original)
-        if block is None:
-            block = build_process_dictionary_block(profile)
-            if block is not None:
-                log("info", f"process-catalog inyectado para proyecto={project_name}")
-
-        if block is None:
-            return blocks
-        return list(blocks) + [block]
-    except Exception as exc:  # noqa: BLE001
-        log("warn", f"process-catalog no se pudo inyectar (continuando): {exc}")
-        return blocks
-```
+Reemplazar el cuerpo actual de `_inject_process_catalog_block` (líneas 627-650) con el cuerpo
+completo que aparece en F3 más abajo. El body de F3 es la versión definitiva.
 
 **Paso 4 — Pasar `query` desde `enrich_blocks`.**
 En `enrich_blocks` (línea 83), el `_context_text` ya se construye en la línea 194. Como F2 necesita
@@ -616,7 +611,7 @@ def test_rag_disabled_injects_full_catalog(monkeypatch):
     monkeypatch.setenv("STACKY_RAG_CATALOG_ENABLED", "false")
     monkeypatch.setenv("STACKY_INJECT_PROCESS_CATALOG", "true")
     from services import context_enrichment as ce
-    with patch("services.context_enrichment.load_client_profile", _make_profile_loader(PROFILE)):
+    with patch("services.client_profile.load_client_profile", _make_profile_loader(PROFILE)):
         result = ce._inject_process_catalog_block([], "mi-proyecto", lambda *a, **k: None, query="reportes")
     assert any(b.get("id") == "process-catalog" for b in result)
     block = next(b for b in result if b.get("id") == "process-catalog")
@@ -634,7 +629,7 @@ def test_rag_enabled_injects_subset(monkeypatch):
     from services import context_enrichment as ce
     # Limpiar cache para forzar rebuild
     ce._RAG_INDEX_CACHE.clear()
-    with patch("services.context_enrichment.load_client_profile", _make_profile_loader(PROFILE)):
+    with patch("services.client_profile.load_client_profile", _make_profile_loader(PROFILE)):
         result = ce._inject_process_catalog_block(
             [], "mi-proyecto", lambda *a, **k: None, query="reportes conciliacion auditoria"
         )
@@ -651,7 +646,7 @@ def test_rag_enabled_no_query_falls_back_to_full(monkeypatch):
     monkeypatch.setenv("STACKY_INJECT_PROCESS_CATALOG", "true")
     from services import context_enrichment as ce
     ce._RAG_INDEX_CACHE.clear()
-    with patch("services.context_enrichment.load_client_profile", _make_profile_loader(PROFILE)):
+    with patch("services.client_profile.load_client_profile", _make_profile_loader(PROFILE)):
         result = ce._inject_process_catalog_block(
             [], "mi-proyecto", lambda *a, **k: None, query=None
         )
@@ -736,25 +731,93 @@ puede ver la eficacia del RAG sin ningún paso manual.
 **Archivos a editar:**
 - `N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend/services/context_enrichment.py`
 
-**Cambio exacto:** en `_inject_process_catalog_block`, cuando `block` se construye vía RAG (es
-decir, `rag_enabled=True` y `block is not None`), agregar al bloque un campo de telemetría:
+**Cambio exacto (v2/C2 — body completo, fuente única de verdad).**
+Reemplazar el body de `_inject_process_catalog_block` del Paso 3 de F2 por esta versión
+final que integra `_rag_meta`. Este es el cuerpo DEFINITIVO de la función; F2/Paso 3 queda
+OBSOLETO y debe ignorarse — este es el cuerpo correcto para implementar:
 
 ```python
-# Dentro del bloque if block is not None (línea del bloque RAG), ya DESPUÉS del log:
-block = dict(block)  # descongelar si es necesario
-block["_rag_meta"] = {
-    "rag_enabled": True,
-    "retrieved": retrieved,
-    "catalog_total": catalog_size,
-    "top_k": top_k,
-}
+def _inject_process_catalog_block(
+    blocks: list[dict],
+    project_name: str | None,
+    log: LogFn,
+    query: str | None = None,  # query para RAG (ticket title+description)
+) -> list[dict]:
+    """Plan 42 F0 + Plan 64 F2/F3 — Inyecta el bloque 'process-catalog'.
+
+    Con STACKY_RAG_CATALOG_ENABLED=true y query disponible: recupera los top-K
+    procesos más relevantes (TF-IDF puro) e incluye telemetría _rag_meta.
+    Fallback: full-inject si RAG falla, está OFF, o query es vacío/None.
+    Con STACKY_RAG_CATALOG_ENABLED=false (default): byte-idéntico al comportamiento anterior.
+    Nota: _RAG_INDEX_CACHE usa un único slot; no es thread-safe para multi-worker gunicorn
+    (para Stacky single-worker es OK; si se mueve a multi-worker, usar threading.Lock).
+    """
+    if os.getenv("STACKY_INJECT_PROCESS_CATALOG", "true").lower() in {"0", "false", "off"}:
+        return blocks
+    existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
+    if "process-catalog" in existing_ids:
+        return blocks
+    if not project_name:
+        return blocks
+    # Nota: ticket_id=None (flujo epic-from-brief sin ticket) → query=None → full-inject.
+    # Esto es correcto: el brief tiene su propio contexto; el RAG aplica solo con ticket.
+    try:
+        from services.client_profile import load_client_profile
+        profile = load_client_profile(project_name)
+        if not isinstance(profile, dict):
+            return blocks
+
+        rag_enabled = os.getenv("STACKY_RAG_CATALOG_ENABLED", "false").lower() in {
+            "1", "true", "on"
+        }
+        block: dict | None = None
+        _rag_meta: dict | None = None
+
+        if rag_enabled and query and query.strip():
+            top_k_raw = os.getenv("STACKY_RAG_CATALOG_TOP_K", "8")
+            try:
+                top_k = max(1, int(top_k_raw))
+            except ValueError:
+                top_k = 8
+            rag_result = build_process_dictionary_block_rag(profile, query=query, top_k=top_k)
+            if rag_result is not None:
+                block, n_retrieved = rag_result  # tuple (dict, int) — v2/C3
+                catalog_size = len(profile.get("process_catalog") or [])
+                log(
+                    "info",
+                    f"process-catalog RAG: {n_retrieved}/{catalog_size} procesos para proyecto={project_name}",
+                )
+                _rag_meta = {
+                    "rag_enabled": True,
+                    "retrieved": n_retrieved,       # exacto: len(results), no string-counted
+                    "catalog_total": catalog_size,
+                    "top_k": top_k,
+                }
+
+        # Fallback: full-inject (comportamiento original)
+        if block is None:
+            block = build_process_dictionary_block(profile)
+            if block is not None:
+                log("info", f"process-catalog inyectado para proyecto={project_name}")
+
+        if block is None:
+            return blocks
+
+        # Agregar telemetría solo cuando RAG estuvo activo (no en full-inject)
+        if _rag_meta is not None:
+            block = dict(block)          # shallow copy para no mutar el objeto original
+            block["_rag_meta"] = _rag_meta
+
+        return list(blocks) + [block]
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"process-catalog no se pudo inyectar (continuando): {exc}")
+        return blocks
 ```
 
-> **Nota:** `_rag_meta` es un campo de metadata interno (prefijo `_`); el runtime no lo consume
-> como instrucción. Los runners ya ignoran campos desconocidos en blocks. El observatorio de
-> grounding (plan 44, `services/grounding_observatory.py`) puede leer este campo si está
-> disponible. **No tocar `grounding_observatory.py` en este plan** (la integración es opt-in
-> y aditiva: si el observatorio no lee `_rag_meta`, no pasa nada).
+> **Nota:** `_rag_meta` es metadata interna (prefijo `_`). Los runners procesan solo el campo
+> `content` del bloque; los campos desconocidos se ignoran. El observatorio de grounding
+> (plan 44, `services/grounding_observatory.py`) puede leer `_rag_meta` en el futuro;
+> **no tocar `grounding_observatory.py` en este plan** (la integración es aditiva y diferida).
 
 **Tests PRIMERO** — agregar a `tests/test_rag_context_enrichment.py`:
 
@@ -766,7 +829,7 @@ def test_rag_block_has_meta_when_rag_on(monkeypatch):
     monkeypatch.setenv("STACKY_INJECT_PROCESS_CATALOG", "true")
     from services import context_enrichment as ce
     ce._RAG_INDEX_CACHE.clear()
-    with patch("services.context_enrichment.load_client_profile", _make_profile_loader(PROFILE)):
+    with patch("services.client_profile.load_client_profile", _make_profile_loader(PROFILE)):
         result = ce._inject_process_catalog_block(
             [], "mi-proyecto", lambda *a, **k: None, query="reportes conciliacion"
         )
@@ -783,7 +846,7 @@ def test_rag_block_no_meta_when_rag_off(monkeypatch):
     monkeypatch.setenv("STACKY_RAG_CATALOG_ENABLED", "false")
     monkeypatch.setenv("STACKY_INJECT_PROCESS_CATALOG", "true")
     from services import context_enrichment as ce
-    with patch("services.context_enrichment.load_client_profile", _make_profile_loader(PROFILE)):
+    with patch("services.client_profile.load_client_profile", _make_profile_loader(PROFILE)):
         result = ce._inject_process_catalog_block(
             [], "mi-proyecto", lambda *a, **k: None, query="reportes"
         )
@@ -859,6 +922,13 @@ def test_retriever_perf_cache_hit_negligible():
 Si el entorno de CI es particularmente lento, el límite de 100 ms puede relajarse a 300 ms
 editando la constante en el test (no en el código de producción).
 
+**Enlace al ratchet del repo (v2/C5):** agregar `test_rag_perf.py` al script de ratchet existente
+del repo. Localizar con `grep -r "run_harness_tests\|pytest.*tests/" scripts/` y agregar el archivo
+al grupo de tests que corre el ratchet. Si el script no existe aún en el repo, correr manualmente:
+```powershell
+& "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest tests/test_rag_perf.py tests/test_rag_retriever.py tests/test_rag_context_enrichment.py -q
+```
+
 **Flag:** ninguna. **Runtime:** sin impacto. **Trabajo del operador: ninguno.**
 
 ---
@@ -933,7 +1003,7 @@ editando la constante en el test (no en el código de producción).
 5. F4 — Ratchet de performance → verde.
 
 **Definición de Hecho (DoD) global:**
-- [ ] `tests/test_rag_retriever.py` — 13 tests verdes (exit 0).
+- [ ] `tests/test_rag_retriever.py` — **15** tests verdes (13 originales + 2 discriminación dominio RSPACIFICO).
 - [ ] `tests/test_harness_flags.py` — 4 tests nuevos + todos los existentes verdes.
 - [ ] `tests/test_rag_context_enrichment.py` — 11 tests verdes (9 de F2 + 2 de F3).
 - [ ] `tests/test_rag_perf.py` — 2 tests de performance verdes (<100 ms para N=500).

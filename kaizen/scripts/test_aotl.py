@@ -263,6 +263,58 @@ def _():
     assert d["verdict"] == "reject", "score < floor con bloqueante debe dar reject, got %s" % d["verdict"]
 
 
+# --- set_impl_status y update_index_fields -------------------------------------------------
+def _make_tmp_index(session_id: str, extra: dict | None = None) -> Path:
+    """Crea un indice temporal con una sesion de prueba y devuelve su path."""
+    tmp = Path(tempfile.mkdtemp())
+    entry: dict = {"id": session_id, "status": "closed", "verdict": "accept"}
+    if extra:
+        entry.update(extra)
+    idx_path = tmp / "sessions" / "_index.json"
+    idx_path.parent.mkdir(parents=True, exist_ok=True)
+    idx_path.write_text(
+        json.dumps({"sessions": [entry]}), encoding="utf-8"
+    )
+    return idx_path
+
+
+@check("set_impl_status: escribe impl_status + auto=True en el indice")
+def _():
+    tmp_idx = _make_tmp_index("s-impl-1")
+    try:
+        st.set_impl_status("s-impl-1", "implemented", index=tmp_idx)
+        data = json.loads(tmp_idx.read_text(encoding="utf-8"))
+        entry = data["sessions"][0]
+        assert entry.get("impl_status") == "implemented", entry
+        assert entry.get("auto") is True, "debe agregar auto=True"
+    finally:
+        shutil.rmtree(tmp_idx.parent.parent)
+
+@check("set_impl_status: rechaza impl_status invalido")
+def _():
+    tmp_idx = _make_tmp_index("s-impl-2")
+    try:
+        try:
+            st.set_impl_status("s-impl-2", "invalid_status", index=tmp_idx)
+            assert False, "debio rechazar"
+        except ValueError:
+            pass
+    finally:
+        shutil.rmtree(tmp_idx.parent.parent)
+
+@check("update_index_fields: merge sin borrar campos previos")
+def _():
+    tmp_idx = _make_tmp_index("s-merge-1", extra={"tag": "prev_tag"})
+    try:
+        st.update_index_fields("s-merge-1", {"new_field": "new_val"}, index=tmp_idx)
+        data = json.loads(tmp_idx.read_text(encoding="utf-8"))
+        entry = data["sessions"][0]
+        assert entry.get("tag") == "prev_tag", "no debe borrar campos previos"
+        assert entry.get("new_field") == "new_val", "debe agregar el nuevo campo"
+    finally:
+        shutil.rmtree(tmp_idx.parent.parent)
+
+
 # --- dashboard: estado agregado no rompe ----------------------------------------------------
 @check("dashboard.build_state: estructura esperada")
 def _():

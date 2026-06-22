@@ -654,6 +654,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T060947Z__tests-de-set-impl-status-y-update-index-fields-en-tempdir-b-29",
+      "objective": "Tests de set-impl-status y update-index-fields en tempdir (B-29)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:09:47+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

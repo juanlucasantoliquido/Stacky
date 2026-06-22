@@ -225,7 +225,7 @@ tests propios. Si se rompe, el reporte dice 0 silenciosamente.
 
 ## Items parkeados (REVIEW_QUEUE)
 
-### B-25 [PENDIENTE] Dashboard: tarjeta de latencia con p95 y tasa de escalacion
+### B-25 [HECHO 2026-06-22] Dashboard: tarjeta de latencia con p95 y tasa de escalacion
 **Valor:** El dashboard muestra total/aceptadas/rechazadas pero no las metricas de latencia
 (p95, media, mediana) ni la tasa de escalacion que ya calcula metrics.py. El operador
 deberia ver el p95 directamente en el dashboard sin correr metrics.
@@ -240,7 +240,7 @@ import es problematico).
 **DESCARTADO:** adapters/generic/adapter.yaml es modo manual (HITL): no tiene foco ni
 denylist porque no hace auto-apply. No aplica el mismo parche que B-19.
 
-### B-27 [PENDIENTE] Tests de is_protected() para casos: prefijo protegido, archivo exacto, extra_protected
+### B-27 [HECHO 2026-06-22] Tests de is_protected() para casos: prefijo protegido, archivo exacto, extra_protected
 **Valor:** is_protected() es la funcion raiz del guardarrail. safe_target_path la usa pero
 los tests solo prueban safe_target_path (comportamiento externo). Si is_protected tiene un
 bug de borde (ej: prefijo con trailing slash, ruta con mayusculas), no lo detectamos.
@@ -248,6 +248,23 @@ bug de borde (ej: prefijo con trailing slash, ruta con mayusculas), no lo detect
 rechazado, extra_protected funciona, ruta editable pasa.
 **Metrica:** 20/20 + 4 nuevos = 24/24 en test_aotl.py.
 **Rollback:** Quitar los 4 casos de test_aotl.py.
+
+### B-29 [PENDIENTE] test_aotl: tests de set_impl_status y update_index_fields en tempdir
+**Valor:** set_impl_status y update_index_fields son funciones criticas que usa autoloop
+para actualizar el indice entre vueltas. Sin tests, una regresion puede hacer que las sesiones
+queden con impl_status incorrecto (planned en vez de implemented) y el operador crea que fallo.
+**Detalles:** Agregar en test_aotl.py 3 casos con indice en tempdir: set_impl_status guarda el
+campo, rechaza impl_status invalido, update_index_fields hace merge sin borrar campos previos.
+**Metrica:** python scripts/test_aotl.py: 27/27 verdes (24 + 3).
+**Rollback:** Quitar los 3 casos de test_aotl.py.
+
+### B-30 [PENDIENTE] check.py: agregar test_core y test_aotl al pipeline de check
+**Valor:** python kaizen.py check corre doctor y selfcheck pero NO corre test_core.py ni
+test_aotl.py. El CI-gate de check pasa aunque los tests fallen.
+**Detalles:** En scripts/check.py, agregar subcall a test_core.py y test_aotl.py con
+subprocess.run y reportar FAIL si alguno da exit code != 0.
+**Metrica:** python kaizen.py check termina con exit 1 si test_core.py tiene fallas. Normalmente 0.
+**Rollback:** Quitar los subcalls en check.py.
 
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no

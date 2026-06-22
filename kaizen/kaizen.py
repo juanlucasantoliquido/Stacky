@@ -15,14 +15,16 @@ Subcomandos:
     selfcheck                                               guard de consistencia/regresión
     apply <session_id> [--rollback]                         aplica/revierte el change_set (AOTL)
     loop [--engine claude|mock] [--forever] [...]           loop de automejora AI-driven (AOTL)
-    dashboard [--port N] [--host H]                         dashboard HTML en vivo del loop
+    dashboard [--port N] [--host H]                         sin --port: genera dashboard/index.html estático (file://)
+                                                            con --port: dashboard HTTP en vivo del loop
     help                                                    esta ayuda
 
 Ejemplos:
     python kaizen.py new "mejorar mensajes de error"
     python kaizen.py run 2026-06-21T1925Z__mejorar-mensajes-de-error
     python kaizen.py loop --engine claude --forever        # automejora constante AI-driven
-    python kaizen.py dashboard                              # http://127.0.0.1:8765
+    python kaizen.py dashboard                              # genera dashboard/index.html estático
+    python kaizen.py dashboard --port 8765                  # http://127.0.0.1:8765
     python kaizen.py metrics
 """
 from __future__ import annotations
@@ -65,6 +67,12 @@ def main(argv: list[str]) -> int:
         print_help()
         return 0
     cmd, rest = argv[0], argv[1:]
+
+    # Bifurcación especial para dashboard: sin --port/--host genera estático (file://)
+    if cmd == "dashboard" and not any(a.startswith("--port") or a.startswith("--host") for a in rest):
+        result = subprocess.run([sys.executable, str(SCRIPTS / "dashboard_static.py"), *rest], cwd=str(ROOT))
+        return result.returncode
+
     script = DISPATCH.get(cmd)
     if not script:
         print("ERROR: subcomando desconocido %r\n" % cmd, file=sys.stderr)

@@ -87,6 +87,15 @@ def gate_decide(proposal: dict, evaluation: dict, profile: dict, fx: Forensic) -
     escalate = False
     verdict = "reject"
 
+    # Descripciones canónicas de cada código de bloqueante (docs/04_HUMAN_REVIEW.md)
+    _BLOCKING_DESCRIPTIONS = {
+        "B1": "B1: propuesta sin rollback declarado (reversibilidad faltante)",
+        "B2": "B2: acción destructiva o irreversible sin aprobación humana explícita",
+        "B3": "B3: scope creep — la sesión supera su alcance declarado",
+        "B4": "B4: métrica de éxito no verificable objetivamente",
+    }
+    blocking_details = [_BLOCKING_DESCRIPTIONS.get(b, b) for b in blocking]
+
     # 1) Bloqueantes vetan accept.
     if blocking and block_on_any_blocking:
         reasons.append("bloqueantes disparados: %s" % ", ".join(blocking))
@@ -117,7 +126,7 @@ def gate_decide(proposal: dict, evaluation: dict, profile: dict, fx: Forensic) -
             confidence=confidence, reversible=reversible, verdict=verdict,
             escalate_to_human=escalate, accept_threshold=accept_threshold)
 
-    return {
+    decision: dict = {
         "session_id": proposal.get("session_id"),
         "verdict": verdict,
         "rationale": "; ".join(reasons),
@@ -129,6 +138,9 @@ def gate_decide(proposal: dict, evaluation: dict, profile: dict, fx: Forensic) -
         "promoted_artifacts": [],
         "_meta": {"computed_total": total},
     }
+    if blocking_details:
+        decision["blocking_details"] = blocking_details
+    return decision
 
 
 def update_index_status(session_id: str, status: str, verdict: str) -> None:

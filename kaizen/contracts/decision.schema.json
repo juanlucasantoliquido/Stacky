@@ -42,6 +42,12 @@
       "items": { "type": "string" },
       "description": "Rutas relativas de artefactos promovidos a artifacts/.",
       "default": []
+    },
+    "blocking_details": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Descripcion de cada bloqueante disparado (B1..B4). Vacio si no hubo bloqueantes.",
+      "default": []
     }
   }
 }

@@ -1,0 +1,40 @@
+# Adapter Kaizen para el proyecto Stacky Agents.
+# Acopla el ciclo de automejora de Kaizen al ecosistema Stacky Agents.
+# Puede usarse con motor claude (Claude Code CLI) o mock (demo/test sin red).
+#
+# Foco por defecto: playground/ (sandbox seguro).
+# Para ampliar a Stacky Agents backend/ o docs/, descomentá las líneas de focus más abajo
+# y asegurate de haber revisado los guardarraíles en scripts/aotl_state.py.
+#
+# Uso:
+#   python kaizen.py loop --engine mock --adapter stacky --max-iterations 1   # demo
+#   python kaizen.py loop --engine claude --adapter stacky --forever           # AI-driven
+
+name: stacky
+description: Adapter para Stacky Agents. Mejora la maquinaria de Kaizen en modo AI-driven (claude) o de prueba sin red (mock). Foco en sandbox playground/.
+
+observe:
+  mode: snapshot
+  # Archivos cuyo contenido puede proponer cambios el motor. Empezar acotado.
+  # DENYLIST (nunca editables): sessions/, decisions/, artifacts/, .git/, kaizen.py,
+  #   config/kaizen.config.yaml, scripts/aotl_state.py, scripts/apply.py,
+  #   scripts/autoloop.py, scripts/engine.py, scripts/dashboard.py
+  focus:
+    - playground
+    # - docs              # documentacion del ciclo (descomentar con cuidado)
+    # - scripts           # scripts del ciclo (la denylist frena lo critico)
+
+engine:
+  driver: mock
+  # Para AI-driven con Claude Code CLI cambiar a:
+  # driver: claude
+  # command: claude
+  # model: claude-sonnet-4-6
+  # timeout_seconds: 180
+
+apply:
+  mode: auto
+  rollback: auto
+
+measure:
+  command: selfcheck

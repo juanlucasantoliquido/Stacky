@@ -40,7 +40,9 @@ aislada y reproducible.
 | [`sessions/`](sessions/) | Salidas de cada sesión (una carpeta por sesión) | Datos |
 | [`artifacts/`](artifacts/) | Artefactos producidos por las sesiones | Datos |
 | [`decisions/`](decisions/) | Registro de decisiones (ADR-lite) | Datos |
+| [`dashboard/`](dashboard/) | Dashboard HTML estático (generado por `python kaizen.py dashboard`) | Generado |
 | [`scripts/`](scripts/) | Utilidades portables (stdlib pura) | Genérico |
+| [`BACKLOG_AUTOMEJORA.md`](BACKLOG_AUTOMEJORA.md) | Backlog vivo de mejoras priorizadas para el loop | Datos |
 
 > El **manifiesto completo** de qué hace cada archivo está en [`MANIFEST.md`](MANIFEST.md).
 
@@ -57,7 +59,8 @@ python kaizen.py metrics                    # reporte forense de eficiencia
 # Modo AI-driven (AOTL): automejora constante + dashboard en vivo
 python kaizen.py loop --engine claude --forever   # la IA propone/evalúa; el gate decide
 python kaizen.py loop --engine mock --max-iterations 3  # demo determinista, sin red
-python kaizen.py dashboard                   # http://127.0.0.1:8765 (estado y planes en vivo)
+python kaizen.py dashboard                   # genera dashboard/index.html estático (file://)
+python kaizen.py dashboard --port 8765       # http://127.0.0.1:8765 (dashboard HTTP en vivo)
 ```
 
 > **¿Sos un agente y querés ejecutar una sesión completa de punta a punta?**

@@ -45,7 +45,7 @@ siendo el servidor. Agregar a `kaizen.py` la bifurcación.
 
 ## Media prioridad
 
-### B-05 [PENDIENTE] Tests unitarios para scripts core (new_session, run_session, validate)
+### B-05 [HECHO 2026-06-22] Tests unitarios para scripts core (new_session, run_session, validate)
 **Valor:** La cobertura de tests es baja; solo hay `test_aotl.py`. Agregar tests para los scripts
 más críticos reduce el riesgo de regresión en sesiones futuras.
 **Detalles:** Crear `scripts/test_core.py` con tests de `new_session.py`, `validate.py`,
@@ -53,13 +53,13 @@ más críticos reduce el riesgo de regresión en sesiones futuras.
 **Métrica:** `python -m pytest scripts/test_core.py -q` da 0 fallos.
 **Rollback:** Eliminar `scripts/test_core.py`.
 
-### B-06 [PENDIENTE] Sincronizar MANIFEST.md con artefactos reales
+### B-06 [HECHO 2026-06-22] Sincronizar MANIFEST.md con artefactos reales
 **Valor:** MANIFEST.md puede estar desactualizado respecto a los scripts y contratos reales.
 **Detalles:** Auditar MANIFEST.md contra `ls scripts/`, `ls contracts/`, `ls adapters/` y actualizar.
 **Métrica:** Cada archivo en MANIFEST.md existe; no hay archivos reales no listados.
 **Rollback:** Revertir MANIFEST.md.
 
-### B-07 [PENDIENTE] Adapter de ejemplo end-to-end verificable (adapter distinto de claude/mock)
+### B-07 [HECHO 2026-06-22] Adapter de ejemplo end-to-end verificable (adapter distinto de claude/mock)
 **Valor:** La arquitectura promete soporte de adapters para mejorar OTRAS aplicaciones, pero solo
 hay dos (claude y mock). Un tercer adapter de ejemplo (ej: adapter para Stacky Agents) demostraría
 la portabilidad real.
@@ -79,7 +79,7 @@ bloqueante. El operador debe inferirlo del evaluation.json.
 
 ## Baja prioridad / Mantenimiento
 
-### B-09 [PENDIENTE] README.md menciona el dashboard estático
+### B-09 [HECHO 2026-06-22] README.md menciona el dashboard estático
 **Valor:** La doc no cubre la variante estática del dashboard.
 **Detalles:** Agregar sección en README.md sobre `python kaizen.py dashboard` (variante estática).
 **Métrica:** README.md contiene la sección y no hay contradicción con el comportamiento real.

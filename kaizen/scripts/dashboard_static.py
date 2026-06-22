@@ -346,6 +346,39 @@ tr:hover td{{background:#161b22}}
 """
 
 
+def _gen_decisions_index(decisions_dir: "Path | None" = None) -> None:
+    """Regenera decisions/README.md con tabla de todas las ADR-lites. Best-effort."""
+    d = decisions_dir or (ROOT / "decisions")
+    if not d.is_dir():
+        return
+    files = sorted(f for f in d.glob("[0-9]*.md"))
+    rows: list[str] = []
+    for f in reversed(files):
+        try:
+            text = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        title = ""
+        verdict = ""
+        for line in text.splitlines():
+            if line.startswith("# ") and not title:
+                title = line[2:].strip()
+            if "Veredicto:" in line and not verdict:
+                verdict = line.split("Veredicto:", 1)[1].strip().split()[0].rstrip(")")
+        if not title:
+            title = f.stem
+        rows.append("| %s | %s | %s |" % (f.stem[:6], title[:60], verdict or "—"))
+    if not rows:
+        return
+    header = "# Registro de decisiones ADR-lite\n\n> Auto-generado. No editar manualmente.\n\n"
+    table = "| Num | Titulo | Veredicto |\n|-----|--------|----------|\n" + "\n".join(rows) + "\n"
+    readme = d / "README.md"
+    try:
+        readme.write_text(header + table, encoding="utf-8")
+    except OSError:
+        pass  # silencioso
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Genera kaizen/dashboard/index.html estatico.")
     parser.add_argument("--out", default=None, help="Ruta de salida (default: dashboard/index.html)")
@@ -357,6 +390,8 @@ def main(argv: list[str]) -> int:
     data = build_data(out_path)
     html = generate_html(data)
     out_path.write_text(html, encoding="utf-8")
+
+    _gen_decisions_index()
 
     file_url = out_path.resolve().as_uri()
     print("Dashboard estatico generado: %s" % out_path)

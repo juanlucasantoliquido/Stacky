@@ -276,7 +276,7 @@ y parchar INDEX en autoloop antes del test.
 **Metrica:** python scripts/test_core.py: 24 OK (22 + 2) 0 FAIL.
 **Rollback:** Eliminar los 2 casos de test_core.py.
 
-### B-32 [PENDIENTE] decisions/: indice README de las ADR-lites existentes
+### B-32 [HECHO 2026-06-22] decisions/: indice README de las ADR-lites existentes
 **Valor:** Hay 41 decisiones en decisions/ pero no hay un indice legible. El motor solo puede
 leer los ultimos 8 vía recent_decisions_summary. Un README.md en decisions/ que liste las N
 mas recientes con fecha + titulo + veredicto facilita la navegacion humana y puede reutilizarse
@@ -286,6 +286,14 @@ Markdown. El archivo se regenera solo en cada sesion (como el dashboard). Agrega
 (best-effort, no rompe el gate).
 **Metrica:** decisions/README.md existe y tiene una tabla con al menos 15 filas tras el gate.
 **Rollback:** Eliminar la llamada en run_session.py y el archivo decisions/README.md.
+
+### B-33 [PENDIENTE] test_core: tests de _gen_decisions_index en dashboard_static.py
+**Valor:** _gen_decisions_index es la unica funcion nueva de B-32 que no tiene tests.
+Si se rompe, decisions/README.md queda obsoleto silenciosamente. Ademas documenta el contrato
+de la funcion (que acepta directorio temporal) para futuros mantenedores.
+**Detalles:** Agregar en test_core.py: (1) test_gen_decisions_index_empty_dir: decisions/ vacia -> no crea README; (2) test_gen_decisions_index_generates_table: 2 ADRs en tempdir -> README con tabla correcta; (3) test_gen_decisions_index_excludes_non_numeric: README.md existente no se incluye.
+**Metrica:** python scripts/test_core.py: 27 OK (24 + 3) 0 FAIL.
+**Rollback:** Eliminar los 3 casos de test_core.py.
 
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
@@ -332,3 +340,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-29: Tests set_impl_status y update_index_fields — sesión 060947Z (2026-06-22)
 - B-30: check.py integra test_core y test_aotl — sesión 061331Z (2026-06-22)
 - B-31: Tests recent_objectives en autoloop.py — sesión 061632Z (2026-06-22)
+- B-32: decisions/README.md auto-generado — sesión 061802Z (2026-06-22)

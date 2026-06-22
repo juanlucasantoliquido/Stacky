@@ -684,6 +684,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T061802Z__decisions-readme-md-auto-generado-con-lista-de-ultimas-adr-lites-b-32",
+      "objective": "decisions/README.md auto-generado con lista de ultimas ADR-lites (B-32)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:18:02+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

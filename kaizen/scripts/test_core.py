@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (60 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (64 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value
-  - validate.py: check_required, check_enums, check_patterns
+  - validate.py: check_required, check_enums, check_patterns, check_scores
   - autoloop.py: recent_objectives, recent_decisions_summary
   - dashboard_static.py: _tag_pills, _pending_review_section, _gen_decisions_index, build_data
   - metrics.py: summarize (sessions/verdicts/escalation/p95), _percentile
@@ -144,7 +144,7 @@ def test_read_config_value_from_tempfile():
 # ---------------------------------------------------------------------------
 # Tests de validate.py — check_required, check_enums, check_patterns
 # ---------------------------------------------------------------------------
-from validate import check_required, check_enums, check_patterns  # noqa: E402
+from validate import check_required, check_enums, check_patterns, check_scores  # noqa: E402
 
 
 @test
@@ -202,6 +202,47 @@ def test_check_patterns_invalid():
     schema = {"properties": {"session_id": {"pattern": r"^\d{4}-"}}}
     errs = check_patterns({"session_id": "abc-xyz"}, schema)
     assert_true(len(errs) == 1)
+
+
+@test
+def test_check_scores_valid():
+    """Scores todos validos (0-3), total coincide con suma -> sin errores."""
+    obj = {
+        "scores": {"value": 3, "correctness": 2, "scope": 3, "reversibility": 3, "measurability": 2},
+        "total": 13,
+    }
+    errs = check_scores(obj, "evaluation.schema.json")
+    assert_eq(errs, [], "scores validos no deben producir errores")
+
+
+@test
+def test_check_scores_out_of_range():
+    """Score fuera de rango 0-3 -> error."""
+    obj = {
+        "scores": {"value": 5, "correctness": 2, "scope": 3, "reversibility": 3, "measurability": 2},
+        "total": 15,
+    }
+    errs = check_scores(obj, "evaluation.schema.json")
+    assert_true(len(errs) >= 1 and "value" in errs[0], "debe detectar score 5 fuera de rango")
+
+
+@test
+def test_check_scores_total_mismatch():
+    """Total no coincide con suma de scores -> error."""
+    obj = {
+        "scores": {"value": 3, "correctness": 3, "scope": 3, "reversibility": 3, "measurability": 3},
+        "total": 10,  # deberia ser 15
+    }
+    errs = check_scores(obj, "evaluation.schema.json")
+    assert_true(len(errs) >= 1 and "total=10" in errs[0], "debe detectar total incorrecto")
+
+
+@test
+def test_check_scores_non_evaluation_schema():
+    """Para schemas distintos de evaluation.schema.json, devuelve lista vacia."""
+    obj = {"scores": {"value": 99}, "total": 99}
+    errs = check_scores(obj, "proposal.schema.json")
+    assert_eq(errs, [], "no debe validar scores en schemas que no son evaluation")
 
 
 # ---------------------------------------------------------------------------

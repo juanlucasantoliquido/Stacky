@@ -873,6 +873,19 @@
         "coverage"
       ],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T065224Z__tests-de-validate-check-scores-b-50",
+      "objective": "tests de validate.check_scores (B-50)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:52:24+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "coverage"
+      ],
+      "verdict": "accept"
     }
   ]
 }

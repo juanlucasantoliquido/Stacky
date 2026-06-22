@@ -5,7 +5,7 @@ Corre, en orden, los guards existentes y agrega un veredicto único:
   1. doctor      (salud estructural)
   2. selfcheck   (consistencia de sesiones cerradas)
   3. validate    (cada sesión cerrada cumple los contratos)
-  4. test_core   (60 tests: logica pura — percentile, decisions, dashboard, metrics, archive, adapters, _config, etc.)
+  4. test_core   (64 tests: logica pura — percentile, decisions, dashboard, metrics, archive, adapters, _config, check_scores, etc.)
   5. test_aotl   (38 tests: maquinaria del loop — guardrail, gate, apply/rollback, promote, set_impl_status, spawn_child, forensic)
 
 Exit 0 sólo si TODO pasa. Pensado como un único comando para un pipeline.
@@ -61,7 +61,7 @@ def main(argv: list[str]) -> int:
     if failures:
         print("CHECK: FALLO (%d grupo(s) con error)" % failures)
         return 1
-    print("CHECK: TODO VERDE  [5/5 grupos OK | 98 tests unitarios]")
+    print("CHECK: TODO VERDE  [5/5 grupos OK | 102 tests unitarios]")
     return 0
 
 

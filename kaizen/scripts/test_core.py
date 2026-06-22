@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (109 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (120 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value, render, append_to_index
@@ -24,6 +24,10 @@ Cubre:
   - check.py: _parse_test_count (patron test_core, patron test_aotl, sin patron, 0)
   - adapter_info.py: active_adapter (default 'generic' sin config, y 'mock' con config)
   - autoloop.py: load_adapter (vacio si no existe, dict si existe) + load_profile (igual)
+  - autoloop.py: build_context (claves obligatorias, valores reflejados)
+  - run_session.py: update_index_status (modifica solo la entrada correcta, id inexistente)
+  - run_session.py: load_json (archivo valido, inexistente lanza FileNotFoundError, malformado lanza JSONDecodeError)
+  - validate.py: validate_session (valida/0, inexistente/1, score_fuera_de_rango/1, strict_falta_proposal/1)
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -1432,6 +1436,214 @@ def test_load_profile_con_archivo():
                       "debe cargar el umbral del perfil")
         finally:
             autoloop.ROOT = old_root
+
+
+@test
+def test_load_json_archivo_valido():
+    """load_json retorna el dict cuando el archivo existe y es JSON valido."""
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "data.json"
+        path.write_text('{"key": "value", "num": 42}', encoding="utf-8")
+        result = _rs.load_json(path)
+        assert_eq(result["key"], "value", "debe retornar el valor del campo key")
+        assert_eq(result["num"], 42, "debe retornar el valor numerico")
+
+
+@test
+def test_load_json_archivo_inexistente():
+    """load_json lanza FileNotFoundError si el archivo no existe."""
+    try:
+        _rs.load_json(Path("/no/existe/archivo.json"))
+        assert False, "debia lanzar FileNotFoundError"
+    except FileNotFoundError:
+        pass  # esperado
+
+
+@test
+def test_load_json_malformado():
+    """load_json lanza json.JSONDecodeError si el archivo no es JSON valido."""
+    import json as _json
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "bad.json"
+        path.write_text("esto no es json {{{", encoding="utf-8")
+        try:
+            _rs.load_json(path)
+            assert False, "debia lanzar json.JSONDecodeError"
+        except _json.JSONDecodeError:
+            pass  # esperado
+
+
+@test
+def test_update_index_status_modifica_correcta():
+    """update_index_status modifica solo la entrada con el session_id dado."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = Path(td) / "sessions" / "_index.json"
+        idx.parent.mkdir(parents=True)
+        data = {"sessions": [
+            {"id": "s1", "status": "open", "verdict": None},
+            {"id": "s2", "status": "open", "verdict": None},
+        ]}
+        idx.write_text(__import__("json").dumps(data), encoding="utf-8")
+        old_idx = _rs.INDEX
+        try:
+            _rs.INDEX = idx
+            _rs.update_index_status("s1", "closed", "accept")
+            result = __import__("json").loads(idx.read_text(encoding="utf-8"))
+            s1 = next(e for e in result["sessions"] if e["id"] == "s1")
+            s2 = next(e for e in result["sessions"] if e["id"] == "s2")
+            assert_eq(s1["status"], "closed", "s1.status debe ser closed")
+            assert_eq(s1["verdict"], "accept", "s1.verdict debe ser accept")
+            assert_eq(s2["status"], "open", "s2 no debe ser modificada")
+        finally:
+            _rs.INDEX = old_idx
+
+
+@test
+def test_update_index_status_id_inexistente():
+    """update_index_status no falla si session_id no existe en el indice."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = Path(td) / "sessions" / "_index.json"
+        idx.parent.mkdir(parents=True)
+        data = {"sessions": [{"id": "s1", "status": "open", "verdict": None}]}
+        idx.write_text(__import__("json").dumps(data), encoding="utf-8")
+        old_idx = _rs.INDEX
+        try:
+            _rs.INDEX = idx
+            _rs.update_index_status("no_existe", "closed", "reject")  # no debe lanzar
+            result = __import__("json").loads(idx.read_text(encoding="utf-8"))
+            assert_eq(result["sessions"][0]["status"], "open", "s1 no debe ser modificada")
+        finally:
+            _rs.INDEX = old_idx
+
+
+@test
+def test_build_context_claves_obligatorias():
+    """build_context devuelve las 8 claves obligatorias del contrato de contexto."""
+    with tempfile.TemporaryDirectory() as td:
+        old_root = autoloop.ROOT
+        old_index = autoloop.INDEX
+        try:
+            # Montar estructura minima: decisions/ vacio + sessions/_index.json vacio
+            autoloop.ROOT = Path(td)
+            autoloop.INDEX = Path(td) / "sessions" / "_index.json"
+            (Path(td) / "sessions").mkdir(parents=True)
+            autoloop.INDEX.write_text('{"sessions": []}', encoding="utf-8")
+            ctx = autoloop.build_context("sid-001", "test-obj", 1, [], "python scripts/check.py")
+            for key in ("session_id", "objective", "iteration", "tree",
+                        "files", "recent_decisions", "protected", "measure_command"):
+                assert_true(key in ctx, "build_context debe incluir clave: %s" % key)
+        finally:
+            autoloop.ROOT = old_root
+            autoloop.INDEX = old_index
+
+
+@test
+def test_build_context_valores_pasados():
+    """build_context refleja session_id, objective e iteration en el dict retornado."""
+    with tempfile.TemporaryDirectory() as td:
+        old_root = autoloop.ROOT
+        old_index = autoloop.INDEX
+        try:
+            autoloop.ROOT = Path(td)
+            autoloop.INDEX = Path(td) / "sessions" / "_index.json"
+            (Path(td) / "sessions").mkdir(parents=True)
+            autoloop.INDEX.write_text('{"sessions": []}', encoding="utf-8")
+            ctx = autoloop.build_context("my-session", "my-objective", 3, [], "cmd")
+            assert_eq(ctx["session_id"], "my-session", "session_id debe coincidir")
+            assert_eq(ctx["objective"], "my-objective", "objective debe coincidir")
+            assert_eq(ctx["iteration"], 3, "iteration debe coincidir")
+        finally:
+            autoloop.ROOT = old_root
+            autoloop.INDEX = old_index
+
+
+# ---------------------------------------------------------------------------
+# B-83: validate.validate_session — 4 casos de integración
+# ---------------------------------------------------------------------------
+import validate as _validate_mod
+
+
+def _make_session_dir(td: str) -> Path:
+    """Crea sesion valida minima en td y retorna el directorio."""
+    root = Path(td)
+    sid = "2026-06-22T000000Z__test-session-b83"
+    sdir = root / "sessions" / sid
+    sdir.mkdir(parents=True)
+    (sdir / "session.json").write_text(_json.dumps({
+        "id": sid,
+        "objective": "obj",
+        "mode": "hitl",
+        "adapter": "generic",
+        "created_utc": "2026-06-22T00:00:00+00:00",
+        "status": "open",
+    }), encoding="utf-8")
+    return sdir
+
+
+@test
+def test_validate_session_valida():
+    """validate_session devuelve 0 cuando session.json es valida y no hay artefactos opcionales."""
+    with tempfile.TemporaryDirectory() as td:
+        sdir = _make_session_dir(td)
+        old_s, old_c = _validate_mod.SESSIONS, _validate_mod.CONTRACTS
+        try:
+            _validate_mod.SESSIONS = Path(td) / "sessions"
+            _validate_mod.CONTRACTS = _validate_mod.CONTRACTS  # contratos reales
+            rc = _validate_mod.validate_session("2026-06-22T000000Z__test-session-b83", strict=False)
+            assert_eq(rc, 0, "sesion valida debe retornar 0")
+        finally:
+            _validate_mod.SESSIONS = old_s
+            _validate_mod.CONTRACTS = old_c
+
+
+@test
+def test_validate_session_inexistente():
+    """validate_session devuelve 1 cuando el directorio de sesion no existe."""
+    with tempfile.TemporaryDirectory() as td:
+        old_s = _validate_mod.SESSIONS
+        try:
+            _validate_mod.SESSIONS = Path(td) / "sessions"
+            (Path(td) / "sessions").mkdir()
+            rc = _validate_mod.validate_session("no-existe", strict=False)
+            assert_eq(rc, 1, "sesion inexistente debe retornar 1")
+        finally:
+            _validate_mod.SESSIONS = old_s
+
+
+@test
+def test_validate_session_score_fuera_de_rango():
+    """validate_session devuelve 1 cuando evaluation.json tiene score > 3."""
+    with tempfile.TemporaryDirectory() as td:
+        sdir = _make_session_dir(td)
+        (sdir / "evaluation.json").write_text(_json.dumps({
+            "session_id": "2026-06-22T000000Z__test-session-b83",
+            "scores": {"value": 5, "correctness": 2, "scope": 2, "reversibility": 2, "measurability": 2},
+            "total": 13,
+            "blocking": [],
+            "preliminary_verdict": "accept",
+            "evaluator": "test",
+        }), encoding="utf-8")
+        old_s = _validate_mod.SESSIONS
+        try:
+            _validate_mod.SESSIONS = Path(td) / "sessions"
+            rc = _validate_mod.validate_session("2026-06-22T000000Z__test-session-b83", strict=False)
+            assert_eq(rc, 1, "score > 3 debe retornar 1")
+        finally:
+            _validate_mod.SESSIONS = old_s
+
+
+@test
+def test_validate_session_strict_falta_proposal():
+    """validate_session devuelve 1 en modo strict si falta proposal.json."""
+    with tempfile.TemporaryDirectory() as td:
+        sdir = _make_session_dir(td)
+        old_s = _validate_mod.SESSIONS
+        try:
+            _validate_mod.SESSIONS = Path(td) / "sessions"
+            rc = _validate_mod.validate_session("2026-06-22T000000Z__test-session-b83", strict=True)
+            assert_eq(rc, 1, "strict sin proposal debe retornar 1")
+        finally:
+            _validate_mod.SESSIONS = old_s
 
 
 if __name__ == "__main__":

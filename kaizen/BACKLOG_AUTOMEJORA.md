@@ -390,28 +390,47 @@ Sesion aceptada (score=12) porque la auditoria misma tiene valor de confirmacion
 ### B-60 [HECHO 2026-06-22] Sincronizar contracts/decision.schema.json: agregar _meta
 **Metrica lograda:** _meta en schema. python kaizen.py check: TODO VERDE [120 tests].
 
-### B-69 [PENDIENTE] test_aotl: test de make_engine devuelve MockEngine para driver='mock'
-**Valor:** make_engine es la factory del motor AOTL. Si se rompe, el loop arranca con el driver
-incorrecto silenciosamente. El test de MockEngine ya existe via dashboard.build_state pero
-make_engine en si no tiene assertion directa.
-**Detalles:** Agregar 2 checks en test_aotl.py: make_engine({"engine":{"driver":"mock"}}) devuelve
-MockEngine; make_engine({}) (sin config) tambien devuelve MockEngine (default).
-**Metrica:** python scripts/test_aotl.py: 52/52 verdes.
-**Rollback:** Eliminar los 2 checks.
+### B-69 [HECHO 2026-06-22] test_aotl: test de make_engine devuelve MockEngine para driver='mock'
+**Metrica lograda:** python scripts/test_aotl.py: 52/52 verdes. Sesion 140953Z.
 
-### B-70 [PENDIENTE] MANIFEST.md: verificar que todos los scripts actuales esten listados
-**Valor:** MANIFEST.md puede estar desactualizado si se agregaron scripts durante el loop.
-**Detalles:** Auditar MANIFEST.md contra la lista real de scripts/ y contratos/.
-**Metrica:** MANIFEST.md lista todos los archivos existentes; no hay discrepancias.
-**Rollback:** Revertir MANIFEST.md.
+### B-70 [HECHO 2026-06-22] MANIFEST.md: verificar que todos los scripts actuales esten listados
+**Metrica lograda:** MANIFEST.md actualizado con test_core 103 casos, check.py CI, adapter stacky. Sesion 141103Z.
 
-### B-71 [PENDIENTE] test_aotl: test de active_adapter en adapter_info.py
-**Valor:** active_adapter lee la config activa para determinar el adapter en uso. No tiene test.
-Si se rompe, el loop arranca con el adapter incorrecto sin advertencia.
-**Detalles:** Agregar 1 check en test_aotl.py o test_core.py: active_adapter con config que
-tiene 'adapter: mock' devuelve 'mock'.
-**Metrica:** python scripts/test_aotl.py o test_core.py: 1 caso nuevo verde.
-**Rollback:** Eliminar el check.
+### B-71 [HECHO 2026-06-22] test_aotl: test de active_adapter en adapter_info.py
+**Metrica lograda:** 2 casos verdes (config con adapter + default). Sesion 141224Z. python scripts/test_core.py: 109 OK.
+
+### B-72 [HECHO 2026-06-22] test_core: tests de load_adapter y load_profile en autoloop.py
+**Metrica lograda:** 3 casos verdes. python scripts/test_core.py: 109 OK. Sesion 141346Z.
+
+---
+
+## Deuda nueva detectada (B-73+)
+
+### B-73 [HECHO/INLINE 2026-06-22] test_aotl: tests de validate_change_set (apply.py) con casos criticos
+**Valor:** validate_change_set es el guardarrail de contenido del change_set antes de aplicar.
+No tiene tests directos. Si se rompe, el loop puede aplicar change_sets invalidos (rutas protegidas
+en foco erroneo, action invalida, path con traversal ../) sin deteccion.
+**Detalles:** Agregar en test_aotl.py: (1) path protegido rechazado; (2) action invalida rechazada;
+(3) change_set valido pasa; (4) path con ../ rechazado. Usar tempdir para root.
+**Metrica:** python scripts/test_aotl.py: 56/56 verdes (52 + 4).
+**Rollback:** Eliminar los 4 casos.
+
+### B-74 [HECHO/INLINE 2026-06-22] test_aotl: test de gate_decide en run_session (score accept/iterate/reject)
+**Nota:** gate_decide ya cubierto en test_aotl.py lineas 289-340 (6 tests: accept/iterate/reject/escalar/bloqueante B1/B2). Auditoria inline sesion 141846Z.
+**Valor:** gate_decide es la funcion que toma scores y devuelve accept/iterate/reject. Ya hay tests
+de check_scores pero no de gate_decide directamente con proposal+evaluation reales. Si la logica de
+umbral cambia silenciosamente, los tests existentes no lo detectan.
+**Detalles:** Agregar en test_aotl.py o test_core.py: fixture minima de proposal + evaluation con
+C1..C5 scores. Verificar que gate_decide devuelve decision correcta para accept (total>=11),
+iterate (7-10), reject (<7).
+**Metrica:** 3 casos nuevos verdes.
+**Rollback:** Eliminar los 3 casos.
+
+### B-75 [HECHO 2026-06-22] docs/02_USAGE.md: actualizar conteo tests a 161 (109+52)
+**Valor:** 02_USAGE.md menciona 135 tests (85+50) pero el total real ahora es 161 (109+52) tras B-69..B-72.
+**Detalles:** Actualizar la tabla de modulos y el total en docs/02_USAGE.md.
+**Metrica:** grep '161' docs/02_USAGE.md retorna resultado.
+**Rollback:** Revertir docs/02_USAGE.md.
 
 ### RQ-01 [PENDIENTE REVISION HUMANA] Rollback no restaura archivos borrados por action='delete'
 **Descripcion:** apply.py implementa action='delete' (elimina el archivo) pero rollback() no
@@ -495,3 +514,17 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-66: tests _impl_badge, _phase_pills, _session_rows en dashboard_static — sesión 140404Z (2026-06-22)
 - B-67: tests _coerce, _strip_comment, _median (helpers puros) — sesión 140546Z (2026-06-22)
 - B-68: tests _parse_test_count en check.py — sesión 140728Z (2026-06-22)
+- B-69: tests make_engine MockEngine factory — sesión 140953Z (2026-06-22)
+- B-70: MANIFEST.md actualizado scripts/adapters — sesión 141103Z (2026-06-22)
+- B-71: tests active_adapter en adapter_info.py — sesión 141224Z (2026-06-22)
+- B-72: tests load_adapter y load_profile en autoloop.py — sesión 141346Z (2026-06-22)
+- B-73: validate_change_set ya cubierto (4 tests en test_aotl.py lineas 123-176) — auditoria inline sesion 141846Z (2026-06-22)
+- B-74: gate_decide ya cubierto (6 tests en test_aotl.py lineas 289-340) — auditoria inline sesion 141846Z (2026-06-22)
+- B-75: docs/02_USAGE.md actualizado a 161 tests (109+52) — sesion 141846Z (2026-06-22)
+- B-83: test_core: 4 tests validate_session (valida/inexistente/score_rango/strict) — sesion 143205Z (2026-06-22)
+- B-76: test_core: 2 tests build_context (claves_obligatorias + valores_pasados) — sesion 142114Z (2026-06-22)
+- B-77: docstring test_core.py 111 y 02_USAGE.md 163 tests — sesion 142225Z (2026-06-22)
+- B-78: test_core: 2 tests update_index_status (modifica_correcta + id_inexistente) — sesion 142403Z (2026-06-22)
+- B-79: sync docstring 113/165 + backlog B-74..B-78 — sesion 142531Z (2026-06-22)
+- B-80: test_aotl: 2 tests ClaudeCliEngine._context_block — sesion 142702Z (2026-06-22)
+- B-81: test_core: 3 tests load_json (valido/inexistente/malformado) — sesion 142829Z (2026-06-22)

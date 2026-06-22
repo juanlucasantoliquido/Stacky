@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0051-t | ADR 0051 — test_core: tests de show_session.py (B-40) | accept |
 | 0050-t | ADR 0050 — test_core: actualizar docstring para reflejar tod | accept |
 | 0049-t | ADR 0049 — test_core: tests de list_sessions.py (B-38) | accept |
 | 0048-t | ADR 0048 — test_core: tests de archive.py (5 caminos de main | accept |

@@ -304,6 +304,7 @@ import dashboard_static as _ds  # noqa: E402
 import archive as _arc  # noqa: E402
 import json as _json  # noqa: E402
 import list_sessions as _ls  # noqa: E402
+import show_session as _sh  # noqa: E402
 
 
 def _mk_arc_index(tmp_dir: Path, sessions: list) -> Path:
@@ -311,6 +312,41 @@ def _mk_arc_index(tmp_dir: Path, sessions: list) -> Path:
     idx.parent.mkdir(parents=True, exist_ok=True)
     idx.write_text(_json.dumps({"sessions": sessions}), encoding="utf-8")
     return idx
+
+
+@test
+def test_show_session_no_args():
+    """Sin argumentos -> exit 2."""
+    assert_eq(_sh.main([]), 2)
+
+
+@test
+def test_show_session_not_found():
+    """Sesion que no existe -> exit 1."""
+    with tempfile.TemporaryDirectory() as td:
+        orig = _sh.SESSIONS; _sh.SESSIONS = Path(td)
+        try:
+            assert_eq(_sh.main(["sesion_inexistente"]), 1)
+        finally:
+            _sh.SESSIONS = orig
+
+
+@test
+def test_show_session_exists():
+    """Sesion existente con session.json minimo -> exit 0."""
+    with tempfile.TemporaryDirectory() as td:
+        sdir = Path(td) / "mi-sesion-test"
+        sdir.mkdir()
+        (sdir / "session.json").write_text(
+            _json.dumps({"id": "mi-sesion-test", "objective": "prueba show", "mode": "aotl",
+                         "adapter": "claude", "tags": []}),
+            encoding="utf-8",
+        )
+        orig = _sh.SESSIONS; _sh.SESSIONS = Path(td)
+        try:
+            assert_eq(_sh.main(["mi-sesion-test"]), 0)
+        finally:
+            _sh.SESSIONS = orig
 
 
 @test

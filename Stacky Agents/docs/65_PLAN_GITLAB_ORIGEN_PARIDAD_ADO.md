@@ -1,6 +1,24 @@
 # Plan 65 — GitLab como tracker de primer nivel con paridad funcional completa frente a Azure DevOps
 
-> Versión: v1 (propuesta) · Estado: PROPUESTO (no implementado) · Autor: StackyArchitectaUltraEficientCode · Fecha: 2026-06-22
+> Versión: **v2** (criticada y endurecida) · Estado: PROPUESTO (no implementado) · Autor: StackyArchitectaUltraEficientCode · Fecha: 2026-06-22
+> Veredicto del juez: **APROBADO-CON-CAMBIOS** (no había bloqueantes irreparables, pero sí 1 cuasi-bloqueante de coherencia arquitectónica + varias imprecisiones de seam verificadas contra el código).
+
+## 0. CHANGELOG v1 -> v2 (qué cambió y por qué)
+
+Esta v2 corrige afirmaciones del v1 que NO resistieron la verificación contra el código (grep dirigido, sin leer archivos enteros), y endurece TDD/anti-falso-verde.
+
+- **[C1 — IMPORTANTE→arquitectura] El eje de selección de tracker YA EXISTE y es por-proyecto, no global.** El v1 inventaba `STACKY_TRACKER_PROVIDER=ado|gitlab` (env global). Pero `project_context.py:73` ya resuelve `tracker_type = issue_tracker.type` con ramas `azure_devops|jira|mantis`, y `build_ado_client` (`project_context.py:217`) **rechaza** proyectos no-ADO. La fábrica F10 ahora se ancla en `issue_tracker.type` (valor canónico **`gitlab`**, junto a `azure_devops|jira|mantis`), NO en una env paralela. `STACKY_GITLAB_ENABLED` queda solo como kill-switch.
+- **[C2 — IMPORTANTE] El v1 afirmaba "NO existe abstracción de provider, todo cableado a ADO": FALSO.** El repo YA tiene `jira_client.py`/`jira_sync.py`/`mantis_client.py`/`mantis_sync.py` y `test_global_tracker_connection` con ramas `azure_devops|jira|mantis` (`global_config.py:208,229,249`). Corregida la sección §2; agregada §2.bis que define la relación GitLab↔Jira/Mantis (GitLab es el primer tracker en adoptar el puerto formal; Jira/Mantis quedan como están, sin regresión, y se documenta el camino para portarlos luego — fuera de scope de este plan).
+- **[C3 — IMPORTANTE] "35 call-sites de `AdoClient(` en `tickets.py`": FALSO.** `grep -c 'AdoClient('` en `tickets.py` = **0**. El acceso real es vía `ado_publisher._client_for_ticket_project()` / `_default_client()` (`ado_publisher.py:373,573,579,607`). F10 reescrita para apuntar al seam REAL (los dos factory-helpers de `ado_publisher`, más `build_ado_client` de `project_context`), no a un patrón inexistente.
+- **[C4 — IMPORTANTE] El v1 decía que F10 cambia `ado_write_outbox._apply` para "despachar al provider": FALSO.** `_apply` (`ado_write_outbox.py:334`) solo persiste estado en DB (`setattr` sobre `AdoWriteOperation`); no llama a ningún cliente. El consumidor que ejecuta la escritura real es otro. F10/fila 27 corregidas: se identifica el consumidor real por grep antes de tocar nada; el outbox-store NO se toca.
+- **[C5 — IMPORTANTE] Campo del profile equivocado.** El v1 hablaba de `tracker.auth_file`; el campo real es `issue_tracker` (`project_manager.py:100`, `project_context.py:72`). Corregido en GP-3, F1, F2, F11. El auth-file de GitLab sigue el patrón YA existente (`auth/jira_auth.json`, `auth/mantis_auth.json` → `auth/gitlab_auth.json`).
+- **[C6 — BLOQUEANTE de falso-verde] El conformance del v1 solo probaba existencia (`callable`).** Un adapter con métodos que existen pero lanzan `NotImplementedError` pasaría → FALSO VERDE. F0/F12 endurecidas: el conformance prueba **comportamiento** con HTTP doubles por método y un test explícito anti-stub que falla si un PORT_METHOD lanza `NotImplementedError`/`pass`. (Ver **[ADICIÓN ARQUITECTO #1]**.)
+- **[C7 — IMPORTANTE] Pseudocódigo con `...` no implementable por Haiku.** Rellenados los huecos de F3 (`update_item_state`), F7 (`_link_parent` ids), F1 (delegaciones). Cada `...` que escondía lógica no trivial ahora es literal.
+- **[C8 — IMPORTANTE] Dependencias inter-fase rotas.** F3 `create_item` llamaba `_resolve_assignee_id` (F6) y `_link_parent` (F7) antes de que existieran → el test de F3 fallaría. Resuelto con **stubs explícitos en F3** (definidos no-op y sobreescritos en F6/F7) + nota de orden. Ver §8 orden.
+- **[C9 — MENOR] Defaults de flags ahora explícitos y tabulados** (§3.bis), incluido `STACKY_GITLAB_CI_INFERENCE`.
+- **[ADICIÓN ARQUITECTO #1]** Test anti-falso-verde `test_no_port_method_is_a_stub` (F12): instancia el GitLabProvider con un transporte double y verifica que NINGÚN PORT_METHOD lanza `NotImplementedError`; los que escriben/leen prueban el efecto observable (request emitido + shape normalizado). Convierte KPI-1 en una garantía real de comportamiento, no de firma.
+- **[ADICIÓN ARQUITECTO #2]** Guard de CI `test_no_adoclient_outside_ado_provider` + grep en el ratchet (F13): falla si `AdoClient(` aparece fuera de `ado_provider.py`/`project_context.py`/`ado_*` internos, sellando la regresión "alguien vuelve a cablear ADO directo".
+- **[ADICIÓN ARQUITECTO #3]** Modo **shadow/dry-run** de GitLab (F11.bis): un botón "Probar conexión + permisos" que valida credenciales, lectura paginada y permiso de escritura SIN crear nada (usa `GET /user`, `GET /projects/{id}`, y un `POST` a un recurso de prueba con rollback/o solo `HEAD`/scopes), reusando el patrón de `test_global_tracker_connection`. Cero escritura, cero trabajo extra, opt-in.
 
 ## 1. Título, objetivo y KPI
 
@@ -9,36 +27,62 @@
 El plan **no reescribe** la lógica ADO: la **envuelve** detrás de un puerto y agrega un segundo adapter GitLab. La garantía "no falta ninguna función" se vuelve **verificable por un test de conformance** que recorre la matriz de paridad y falla si algún método del puerto no está implementado en GitLab.
 
 **KPI / impacto esperado (binarios).**
-- KPI-1: `python -m pytest backend/tests/test_tracker_provider_conformance.py -q` pasa con AMBOS adapters (ADO y GitLab) cubriendo el 100% de los métodos del puerto. Falla si falta uno.
-- KPI-2: La suite ADO existente (`test_ado_*.py`, `test_tickets*.py`, conformance de runtime) sigue verde sin cambios de comportamiento con `STACKY_TRACKER_PROVIDER=ado` (default). 0 regresiones.
-- KPI-3: Con `STACKY_TRACKER_PROVIDER=gitlab` + `STACKY_GITLAB_ENABLED=true`, un brief→épica produce el MISMO artefacto lógico (épica + hijos + comentarios idempotentes por marcador) que contra ADO, verificado por `test_gitlab_provider.py` con HTTP doubles.
+- KPI-1: `python -m pytest backend/tests/test_tracker_provider_conformance.py -q` pasa con AMBOS adapters (ADO y GitLab) cubriendo el 100% de los métodos del puerto, incluido el test **anti-stub** (`test_no_port_method_is_a_stub`, ADICIÓN #1): ningún método existe vacío/`NotImplementedError`; los de escritura emiten el request esperado y los de lectura devuelven el shape canónico. Falla si falta uno o si alguno es un stub.
+- KPI-2: La suite ADO existente (`test_ado_*.py`, `test_tickets*.py`, conformance de runtime) sigue verde sin cambios de comportamiento con `issue_tracker.type=azure_devops` (default). 0 regresiones.
+- KPI-3: Con `issue_tracker.type=gitlab` + `STACKY_GITLAB_ENABLED=true`, un brief→épica produce el MISMO artefacto lógico (épica + hijos + comentarios idempotentes por marcador) que contra ADO, verificado por `test_gitlab_provider.py` con HTTP doubles.
 - KPI-4: `tsc --noEmit` en `frontend/` = 0 errores tras agregar el selector de provider en la UI.
 
-## 2. Por qué ahora / gap que cierra
+## 2. Por qué ahora / gap que cierra (CORREGIDO en v2, verificado contra código)
 
-Hoy NO existe ninguna abstracción de "provider/origin": el tracker está **cableado a ADO**. Evidencia:
-- `backend/services/ado_client.py:228` — `AdoClient.__init__(org, project, auth_path)` con base URL `https://dev.azure.com/...` hardcodeada (`ado_client.py:245-248`).
-- `backend/config.py:445-447` — `ADO_ORG`, `ADO_PROJECT`, `ADO_PAT` como únicas env de tracker; muchos flags `STACKY_ADO_*` (`config.py:300,323,515,543`).
-- 11 módulos `backend/services/ado_*.py` (~6.6k LOC) + `backend/api/tickets.py` con **35 call-sites** directos de `AdoClient(` / métodos `ado_` (medido por grep dirigido).
-- Única mención "provider-agnostic" del repo: `services/slash_commands.py:15` (comentario, sin implementación). `providerDisplayName` es solo identidad de la API Azure, no una abstracción.
+**Estado real (no el del v1).** Stacky YA es multi-tracker para sync/lectura: existen `jira_client.py`/`jira_sync.py`/`mantis_client.py`/`mantis_sync.py`, y la selección se hace **por proyecto** vía `issue_tracker.type` (`project_context.py:73` → ramas `azure_devops|jira|mantis`; default `azure_devops`). `global_config.test_global_tracker_connection` ya enruta por `tracker_type` (`global_config.py:199,208,229,249`) y resuelve secretos por archivo por tracker (`auth/jira_auth.json`, `auth/mantis_auth.json`). Lo que NO existe es un **puerto formal y completo** que cubra TODA la superficie de escritura/jerarquía/idempotencia/edit-learning de ADO; los trackers alternos hoy solo cubren sync/lectura básica.
 
-**Seam ya existente que aprovechamos:**
-- `backend/services/client_profile.py` modela `tracker_state_machine` con estados **lógicos** (functional/technical/developer) — punto natural para mapear estados a cualquier tracker SIN reescribir lógica de estados.
-- `backend/project_manager.py` ya expone `get_active_tracker_config()` y `get_active_project()` (ver CLAUDE.md / REPO_MAP) — punto natural de **selección de provider**.
-- El PAT ADO ya se resuelve **por archivo cifrado** (`ado_client.py:154` lee `tracker.auth_file` o `auth/ado_auth.json`; cadena `_resolve_auth_header`/`_resolve_active_project_defaults`). Replicamos el mismo patrón para GitLab — **el secreto NUNCA va en client_profile**.
+**El gap real que cierra el plan:**
+- No hay un contrato único (`TrackerProvider`) que garantice paridad funcional COMPLETA con ADO (épicas/issues/tasks jerárquicas, comentarios idempotentes, attachments, identity, edit-learning, pipeline). Jira/Mantis cubren un subconjunto sin contrato verificable.
+- `build_ado_client` (`project_context.py:217`) **rechaza** explícitamente proyectos no-ADO para el camino de escritura rico (`ado_publisher`, etc.). Ese es el muro a romper con el puerto.
+- Evidencia ADO-céntrica que persiste: `ado_client.py` con base URL `https://dev.azure.com/...`; ~11 módulos `ado_*.py`; el camino de publicación de épicas (planes 51/55/59/60) está atado a `AdoClient`.
 
-El gap: sin puerto, agregar GitLab obligaría a tocar 35 call-sites con `if provider == ...` esparcidos → frágil y no verificable. El puerto + conformance test lo hace robusto y sectorizado.
+**Imprecisiones del v1 corregidas (medidas con grep):**
+- `grep -c 'AdoClient(' backend/api/tickets.py` = **0** (no "35 call-sites"). El acceso a cliente en `tickets.py` es indirecto vía `ado_publisher._client_for_ticket_project()`/`_default_client()`. Ver C3.
+- `ado_write_outbox._apply` (`ado_write_outbox.py:334`) NO despacha a ningún cliente: solo persiste estado. Ver C4.
+
+**Seam ya existente que aprovechamos (verificado):**
+- **Selección por proyecto:** `project_context.resolve_project_context` + `build_ado_client` (`project_context.py:175,208`). La fábrica nueva se inserta AQUÍ, NO en una env global.
+- **Estados lógicos:** `client_profile.tracker_state_machine` (functional/technical/developer) — validado en `client_profile.py:144`. Punto de mapeo estado-lógico↔tracker.
+- **Secreto por archivo:** patrón ya usado por ADO/Jira/Mantis (`auth/<tracker>_auth.json`). GitLab reusa el mismo patrón → `auth/gitlab_auth.json`. El secreto NUNCA va en `issue_tracker` del profile.
+
+### 2.bis Relación GitLab ↔ Jira/Mantis (decisión explícita)
+
+Para no romper lo existente ni inflar el scope:
+- GitLab es el **primer tracker que adopta el puerto formal `TrackerProvider`** con paridad COMPLETA verificada por conformance.
+- ADO se envuelve en `AdoTrackerProvider` (F1) byte-idéntico.
+- **Jira y Mantis quedan exactamente como están** (sync/lectura por su propio path). NO se tocan, NO se degradan, NO entran al conformance en este plan. Su migración al puerto es **fuera de scope** (se deja anotada como evolución futura en §7).
+- La fábrica `get_tracker_provider` devuelve `AdoTrackerProvider` o `GitLabTrackerProvider`; para `issue_tracker.type in {jira,mantis}` **lanza `TrackerConfigError` explícito** ("tracker sin puerto formal todavía") en los call-sites de escritura rica que hoy ya rechazan no-ADO — es decir, mismo comportamiento que hoy (`build_ado_client` ya rechaza no-ADO), sin regresión.
+
+El puerto + conformance test hace robusto y verificable agregar GitLab sin `if tracker_type == ...` esparcidos.
 
 ## 3. Principios y guardarraíles (no negociables, codificados en cada fase)
 
-- **GP-1 Retro-compatibilidad byte-idéntica.** Default `STACKY_TRACKER_PROVIDER=ado`. Con GitLab off, el código pasa por `AdoTrackerProvider`, que es un wrapper delgado y **no cambia ningún comportamiento** del camino ADO actual. 0 regresiones es criterio de aceptación, no aspiración.
-- **GP-2 Opt-in, cero trabajo al operador.** GitLab solo se activa si el operador lo elige por UI (provider=gitlab) y setea sus credenciales. Sin pasos manuales nuevos obligatorios para quien usa ADO.
-- **GP-3 Secretos por archivo, nunca en profile.** `GITLAB_TOKEN` se resuelve por env o por archivo cifrado bajo `auth/` (espejo de ADO). `client_profile` solo guarda referencias no-secretas (`auth_file`, `gitlab_url`, `gitlab_project`).
+- **GP-1 Retro-compatibilidad byte-idéntica.** La selección es por `issue_tracker.type` por proyecto (default `azure_devops`). Para proyectos ADO, el código pasa por `AdoTrackerProvider`, wrapper delgado que **no cambia ningún comportamiento** del camino ADO actual. 0 regresiones es criterio de aceptación, no aspiración.
+- **GP-2 Opt-in, cero trabajo al operador.** GitLab solo se activa si el operador setea `issue_tracker.type=gitlab` por UI + `STACKY_GITLAB_ENABLED=true` (kill-switch) + credenciales. Sin pasos manuales nuevos obligatorios para quien usa ADO/Jira/Mantis.
+- **GP-3 Secretos por archivo, nunca en profile.** `GITLAB_TOKEN` se resuelve por env o por archivo bajo `auth/gitlab_auth.json` (mismo patrón que `auth/jira_auth.json`/`auth/mantis_auth.json`). El `issue_tracker` del profile solo guarda referencias no-secretas (`auth_file`, `gitlab_url`, `gitlab_project`, `gitlab_group`).
 - **GP-4 Config del operador siempre por UI.** El selector de provider y los campos GitLab son editables desde la UI (regla dura del repo), reusando `client_profile`/settings/harness flags. Solo kill-switches internos quedan env-only.
 - **GP-5 Paridad de 3 runtimes.** Esto es integración de BACKEND/tracker, NO del runtime del agente (Codex CLI / Claude Code CLI / GitHub Copilot Pro). Los 3 runtimes publican/leen vía el MISMO puerto agnóstico y producen los mismos artefactos. Ninguna fase ata lógica a un runtime.
 - **GP-6 Human-in-the-loop innegociable.** Nada de autonomía proactiva nueva. La única auto-publicación que existe (épica desde brief, solo Claude CLI) se mantiene idéntica, solo que su escritura pasa por el puerto.
 - **GP-7 Mono-operador, sin auth real.** No se introduce RBAC ni multiusuario.
-- **GP-8 No degradar.** Reusar `ado_read_cache`/`ado_write_outbox`/memoria colaborativa/flags del arnés/telemetría como mecanismos **agnósticos** (renombrarlos lógicamente, no reescribirlos). No reinventar paginación, retries ni caché.
+- **GP-8 No degradar.** Reusar `ado_read_cache`/`ado_write_outbox`/memoria colaborativa/flags del arnés/telemetría como mecanismos **agnósticos** (renombrar lógico opcional, no reescribir). No reinventar paginación, retries ni caché. Reusar `build_ado_client`/`resolve_project_context` (`project_context.py`) como el seam de construcción, no instanciar clientes pelados.
+
+### 3.bis Flags y defaults (todos seguros; default ADO intacto)
+
+| Flag / campo | Tipo | Default | Quién lo setea | Notas |
+|---|---|---|---|---|
+| `issue_tracker.type` (profile) | str | `azure_devops` | UI (ClientProfileEditor) | Valores: `azure_devops\|jira\|mantis\|gitlab`. Es el ÚNICO selector de tracker (no hay env paralela). |
+| `STACKY_GITLAB_ENABLED` | bool | `false` | UI (harness flag) + env | Kill-switch. Aunque `type=gitlab`, si está `false` la fábrica degrada con `TrackerConfigError` ruidoso (no silencioso). |
+| `STACKY_GITLAB_EPICS_NATIVE` | bool | `false` | UI (harness flag) + env | Epics nativos (Premium, nivel grupo). Default fallback issues+links. |
+| `STACKY_GITLAB_CI_INFERENCE` | bool | `true` | UI (harness flag) + env | Solo aplica cuando `type=gitlab`. Si no hay pipelines/CI → fallback a inferencia LLM existente. Default `true` no cambia nada para ADO. |
+| `GITLAB_URL` / `GITLAB_PROJECT` / `STACKY_GITLAB_GROUP` | str | `""` | UI + env | No-secretos. URL self-managed o gitlab.com. |
+| `GITLAB_TOKEN` | secreto | (archivo) | archivo `auth/gitlab_auth.json` | NUNCA por UI/profile/endpoint de config. |
+
+> Regla dura del repo (memoria `operator-config-always-via-ui`): toda flag que el operador deba setear es editable por UI reusando el panel de harness flags / ClientProfileEditor; solo kill-switches internos quedan env-only. Las 3 flags `STACKY_GITLAB_*` se exponen en el panel de flags (default off/seguro).
 
 ## 4. MATRIZ DE PARIDAD EXHAUSTIVA (capacidad ADO → método del puerto → recurso GitLab → fallback)
 
@@ -80,13 +124,13 @@ El gap: sin puerto, agregar GitLab obligaría a tocar 35 call-sites con `if prov
 | 24 | `ado_identity.resolve_me_unique_name/save_identity/get_cached_identity/user_matches` | Adapter de identidad por provider: ADO=`get_authenticated_user().uniqueName`; GitLab=`/user.username` + id. Caché de identidad reusa el mismo store (`_map_path`). | GitLab assignee = id numérico; cachear `{username, id}`. |
 | 25 | `ado_pipeline_inference.infer_pipeline/invalidate_cache` | Fuente de pipelines por provider. ADO=inferencia LLM sobre ticket; GitLab=**CI real**. | `GET /projects/{id}/pipelines` + `/pipelines/{pid}/jobs`. Fallback si CI deshabilitado: mantener inferencia LLM existente. Caché reusa `PipelineInferenceCache`. |
 | 26 | `ado_read_cache.get_or_fetch/invalidate/is_warm/clear` | **Agnóstico ya** (cachea por `key` tuple + `fetch_fn`). Solo cambia quién es `fetch_fn` (el provider). | Reusar tal cual. Renombrar lógico opcional a `tracker_read_cache` sin romper imports (alias). |
-| 27 | `ado_write_outbox.enqueue/claim/claim_due/mark_*/list_operations/summary` | **Agnóstico ya** (encola operaciones serializadas). El `_apply` debe despachar al provider activo, no a AdoClient directo. | El worker que consume la outbox usa `get_tracker_provider()`. Tabla y backoff intactos. |
+| 27 | `ado_write_outbox.enqueue/claim/claim_due/mark_*/list_operations/summary` | **Agnóstico ya** (encola operaciones + persiste estado; `_apply` solo hace `setattr` en DB, NO llama clientes — `ado_write_outbox.py:334`). El despacho real lo hace el **consumidor** de la outbox (identificarlo por grep en F10 antes de tocar: `grep -rn 'claim_due\|claim(' backend`), y ESE consumidor usa `get_tracker_provider()`. | El store/backoff/tabla quedan INTACTOS. Solo el consumidor cambia su forma de construir el cliente. |
 | 28 | `ado_sync.sync_tickets/upsert_single_work_item/purge_*/get_last_sync_at` | Parametrizar la fuente: `fetch_open_items` + `get_item` vía puerto. `_extract_assignee` se vuelve provider-aware (ADO fields vs GitLab assignees). | `sync_tickets(provider=...)`. Modelo local `Ticket` sin cambios (guarda `tracker_id`, `tracker_project`). |
 | 29 | `ado_edit_learning.learn_from_work_item/sweep_recent_runs/edit_to_lesson_content` | Consume `fetch_item_updates` (F8) vía puerto en lugar de `AdoClient.fetch_work_item_updates`. | Delta de edición se computa desde resource_*_events. Golden/corpus intactos. |
 | 30 | `ado_edit_ledger` (ledger de ediciones) | **Agnóstico** (persistencia local). Solo cambia el origen del fetch (F8). | Sin cambios estructurales. |
 | 31 | `ado_feedback.comment_run_outcome` | Usa `provider.post_comment`. | Mismo marcador/idempotencia. |
 | 32 | `api/ado_manager.create_project_task` | Usa `provider.create_item`. | Trivial. |
-| 33 | `api/tickets.py` (35 call-sites) | Reemplazo mecánico `AdoClient(...)` → `get_tracker_provider(project)`; métodos 1:1 con el puerto. | Enumerados por grep en F10; ninguno queda con `AdoClient` directo salvo el AdoProvider. |
+| 33 | `api/tickets.py` (acceso INDIRECTO al cliente) | `tickets.py` NO instancia `AdoClient(` (grep=0). El cliente se obtiene vía `ado_publisher._client_for_ticket_project()`/`_default_client()` (`ado_publisher.py:373,573,579,607`). F10 reescribe ESOS dos helpers para devolver `get_tracker_provider(project)` (un solo punto), y las ~37 referencias `ado_*`/`import ado` de `tickets.py` siguen funcionando porque el puerto expone los mismos métodos. | Enumerar los call-sites de `ado_publisher` y `tickets.py` por grep en F10; ninguno queda con `AdoClient` directo salvo `ado_provider.py`/`project_context.build_ado_client`. |
 | 34 | Estados lógicos (`client_profile.tracker_state_machine`) | El mapa estado-lógico→tracker se parametriza por provider dentro del profile (subsección `gitlab`/`ado`). | ADO=nombres de estado; GitLab=labels + opened/closed. |
 | 35 | `work_item_url` en footers/telemetría (`ado_publisher._render_run_footer`) | Usa `provider.item_url`. | URL GitLab por `iid`. |
 
@@ -180,8 +224,10 @@ PORT_METHODS: tuple[str, ...] = (
 
 **Tests primero (`test_tracker_provider_conformance.py`), casos:**
 - `test_port_methods_list_matches_protocol`: cada nombre en `PORT_METHODS` existe como método declarado en `TrackerProvider`. (Detecta drift entre matriz y puerto.)
-- `test_tracker_query_and_item_are_frozen`: instanciar y verificar inmutabilidad.
-- `test_api_error_carries_status_and_kind`.
+- `test_tracker_query_and_item_are_frozen`: instanciar y verificar inmutabilidad (`dataclasses.FrozenInstanceError` al asignar).
+- `test_api_error_carries_status_and_kind`: `TrackerApiError(404,"x",kind="not_found").status==404` y `.kind=="not_found"`.
+
+> Nota anti-falso-verde (C6): este F0 solo congela el CONTRATO. La verificación de COMPORTAMIENTO (que ningún método sea un stub `NotImplementedError`) vive en F12 (**[ADICIÓN ARQUITECTO #1]**), no aquí.
 
 **Comando:** `& "...\.venv\Scripts\python.exe" -m pytest "backend/tests/test_tracker_provider_conformance.py" -q`
 **Criterio binario:** los 3 tests pasan.
@@ -198,22 +244,53 @@ PORT_METHODS: tuple[str, ...] = (
 
 **Símbolos a crear (`ado_provider.py`):**
 ```python
+from services.project_context import build_ado_client   # REUSO: resuelve org/project/auth y setea tracker_type (project_context.py:208)
+from services.ado_client import AdoClient                # solo para fallback explícito de tests
+
 class AdoTrackerProvider:               # implementa TrackerProvider (duck/Protocol)
     name = "ado"
-    def __init__(self, project: str | None = None):
-        self._client = AdoClient(project=project)   # reusa resolución de auth/org actual
-    # cada método delega 1:1, normalizando shape:
-    def fetch_open_items(self, query):  # TrackerQuery -> WIQL
-        return self._client.fetch_open_work_items(_query_to_wiql(query))
-    def create_item(self, item):        # TrackerItem -> create_work_item(...)
-        return self._client.create_work_item(_item_type_to_ado(item.item_type), _item_to_fields(item), parent=item.parent_id)
-    def fetch_item_updates(self, item_id, since=None):
-        return self._client.fetch_work_item_updates(int(item_id))
-    # ... (un método por fila 1..21 de la matriz)
-def _query_to_wiql(query: TrackerQuery) -> str: ...   # construye el WIQL que hoy se usa
-def _item_type_to_ado(t: str) -> str: ...             # "epic"->"Epic", "task"->"Task"...
-def _item_to_fields(item: TrackerItem) -> dict: ...
+    def __init__(self, project: str | None = None, *, client: AdoClient | None = None):
+        # REUSO del seam existente (no instanciar AdoClient pelado): build_ado_client ya
+        # resuelve org/project/auth_file y valida tracker_type==azure_devops.
+        self._client = client if client is not None else build_ado_client(project_name=project)
+    # cada método delega 1:1, normalizando al shape canónico de _normalize_issue (mismo dict
+    # que GitLab: {id,iid,title,description,state,labels,assignees,web_url,updated_at,parent}):
+    def name_attr(self): return self.name
+    def credentials_present(self):        return self._client.ado_pat_present()
+    def get_authenticated_user(self):     return self._client.get_authenticated_user()
+    def fetch_open_items(self, query):    return self._client.fetch_open_work_items(_query_to_wiql(query))
+    def get_item(self, item_id):          return _normalize_ado(self._client.get_work_item(int(item_id)))
+    def item_url(self, item_id):          return self._client.work_item_url(int(item_id))
+    def fetch_states(self):               return self._client.fetch_states()
+    def update_item_state(self, item_id, logical_state):
+        return self._client.update_work_item_state(int(item_id), _logical_to_ado_state(logical_state))
+    def fetch_comments(self, item_id):    return self._client.fetch_comments(int(item_id))
+    def fetch_all_comments(self, item_id):return self._client.fetch_all_comments(int(item_id))
+    def post_comment(self, item_id, body_html): return self._client.post_comment(int(item_id), body_html)
+    def comment_exists(self, item_id, marker):  return self._client.comment_exists(int(item_id), marker)
+    def create_item(self, item):
+        return _normalize_ado(self._client.create_work_item(
+            _item_type_to_ado(item.item_type), _item_to_fields(item),
+            parent=int(item.parent_id) if item.parent_id else None))
+    def find_child_by_marker(self, parent_id, marker):
+        return self._client.find_child_by_marker(int(parent_id), marker)
+    def update_item_assignee(self, item_id, assignee):
+        return self._client.update_work_item_assigned_to(int(item_id), assignee)
+    def fetch_attachments(self, item_id):       return self._client.fetch_attachments(int(item_id))
+    def upload_attachment(self, file_path, file_name): return self._client.upload_attachment(file_path, file_name)
+    def link_attachment(self, item_id, attachment):    return self._client.link_attachment_to_work_item(int(item_id), attachment)
+    def fetch_item_updates(self, item_id, since=None): return self._client.fetch_work_item_updates(int(item_id))
+
+def _query_to_wiql(query: TrackerQuery) -> str: ...   # construye el WIQL que hoy se usa (snapshot exacto del WIQL vigente)
+def _item_type_to_ado(t: str) -> str:                 # "epic"->"Epic","feature"->"Feature","story"->"User Story","task"->"Task","issue"->"Issue"
+    return {"epic":"Epic","feature":"Feature","story":"User Story","task":"Task","issue":"Issue"}[t]
+def _item_to_fields(item: TrackerItem) -> dict:       # {"System.Title":item.title,"System.Description":item.description_html, ...labels/assignee}
+    ...
+def _logical_to_ado_state(logical_state: str) -> str: ...  # del tracker_state_machine del profile (rama ado); identidad si no hay mapa
+def _normalize_ado(wi: dict) -> dict:                 # mapea campos ADO -> shape canónico (id=iid=id ADO; parent de relations)
+    ...
 ```
+> Nota: cada método del puerto está aquí explícito (18 de `PORT_METHODS`). No queda ningún `...` con lógica de despacho; los `...` restantes son helpers puros de mapeo cuyo contrato está descrito inline (entrada→salida), implementables por Haiku sin inferir.
 
 **Tests primero (`test_ado_provider.py`), casos (con `AdoClient` mockeado, sin red):**
 - `test_ado_provider_is_tracker_provider`: `isinstance(AdoTrackerProvider(), TrackerProvider)` (runtime_checkable) Y `all(hasattr(p, m) for m in PORT_METHODS)`.
@@ -224,7 +301,7 @@ def _item_to_fields(item: TrackerItem) -> dict: ...
 
 **Comando:** `... -m pytest "backend/tests/test_ado_provider.py" -q`
 **Criterio binario:** todos pasan; `AdoTrackerProvider` satisface `PORT_METHODS` completo.
-**Flag:** `STACKY_TRACKER_PROVIDER` (default `ado`) — la fábrica F10 lo lee, aquí solo se construye explícito.
+**Flag:** ninguno propio — la selección la hace la fábrica F10 vía `issue_tracker.type` (default `azure_devops`); aquí el provider se construye explícito en los tests.
 **Impacto runtime:** ninguno aún (no se cablea hasta F10). **Trabajo del operador:** ninguno.
 
 ---
@@ -243,7 +320,7 @@ GITLAB_PROJECT = os.getenv("GITLAB_PROJECT", "")    # id numérico o path "grupo
 GITLAB_TOKEN = os.getenv("GITLAB_TOKEN", "")        # PAT (fallback; preferir archivo auth/)
 STACKY_GITLAB_GROUP = os.getenv("STACKY_GITLAB_GROUP", "")  # para Epics nativos (F7)
 ```
-**Resolución de secreto (espejo de ADO, `gitlab_client.py`):** orden `env GITLAB_TOKEN` → `auth/gitlab_auth.json` (campo `token`) → `tracker.auth_file` del profile activo. NUNCA leer token de `client_profile` directo.
+**Resolución de secreto (espejo del patrón Jira/Mantis ya existente, `gitlab_client.py`):** orden `env GITLAB_TOKEN` → archivo `issue_tracker.auth_file` del profile activo (campo `token`) → default `auth/gitlab_auth.json` (campo `token`). NUNCA leer token del `issue_tracker` plano del profile. (El campo del profile es `issue_tracker`, NO `tracker` — `project_manager.py:100`, `project_context.py:72`. Default auth-file por tracker como en `global_config.py:93-97`.)
 
 **Símbolos a crear (`gitlab_client.py`):**
 ```python
@@ -300,20 +377,53 @@ class GitLabTrackerProvider:
         return self.get_item(item_id)["web_url"]
     def fetch_states(self): return ["opened","closed"]
     def update_item_state(self, item_id, logical_state):
-        mp = _state_map_for_gitlab()          # del client_profile.tracker_state_machine.gitlab
-        ...PUT con state_event + add_labels...
+        # Mapa estado-lógico -> {label, closed:bool} desde el profile (default sano si ausente).
+        entry = _state_map_for_gitlab().get(logical_state, {"label": f"stacky::{logical_state}", "closed": False})
+        payload: dict = {"add_labels": entry["label"]}
+        # state_event solo si el mapeo indica cierre/reapertura; GitLab acepta close|reopen.
+        payload["state_event"] = "close" if entry.get("closed") else "reopen"
+        body, _ = self._c._request("PUT", f"/projects/{self._c._project_path()}/issues/{item_id}", json=payload)
+        return _normalize_issue(body)
     def create_item(self, item):
         payload = {"title":item.title, "description":item.description_html,
                    "labels":",".join((*item.labels, _type_label(item.item_type)))}
-        if item.assignee: payload["assignee_ids"]=[_resolve_assignee_id(self._c, item.assignee)]  # F6
+        if item.assignee:
+            uid = _resolve_assignee_id(self._c, item.assignee)   # F3 stub: lambda c,u: None  (sobreescrito en F6)
+            if uid: payload["assignee_ids"]=[uid]
         body,_ = self._c._request("POST", f"/projects/{self._c._project_path()}/issues", json=payload)
-        if item.parent_id: _link_parent(self._c, body["iid"], item.parent_id)  # F7
+        if item.parent_id:
+            _link_parent(self._c, body["iid"], item.parent_id)   # F3 stub: lambda c,ci,pi: None  (sobreescrito en F7)
         return _normalize_issue(body)
-def _query_to_gitlab_params(q: TrackerQuery) -> dict:  # state, labels(csv), milestone, assignee_username, search
-def _normalize_issue(body: dict) -> dict:              # {id,iid,title,description,state,labels,assignees,web_url,updated_at}
+def _query_to_gitlab_params(q: TrackerQuery) -> dict:
+    # state "open"->"opened","closed"->"closed","all"->"all"; labels -> csv; milestone, assignee->assignee_username, search
+    state = {"open":"opened","closed":"closed","all":"all"}.get(q.state, "opened")
+    p: dict = {"state": state}
+    if q.labels: p["labels"] = ",".join(q.labels)
+    if q.milestone: p["milestone"] = q.milestone
+    if q.assignee: p["assignee_username"] = q.assignee
+    if q.search: p["search"] = q.search
+    return p
+def _normalize_issue(body: dict) -> dict:
+    # SHAPE CANÓNICO exacto (mismas claves que _normalize_ado de F1):
+    return {"id": body.get("id"), "iid": body.get("iid"), "title": body.get("title"),
+            "description": body.get("description"), "state": body.get("state"),
+            "labels": tuple(body.get("labels") or ()), "assignees": body.get("assignees") or [],
+            "web_url": body.get("web_url"), "updated_at": body.get("updated_at"),
+            "parent": body.get("epic") or None}
 def _type_label(t: str) -> str: return f"type::{t}"
-def _state_map_for_gitlab() -> dict: ...               # lee profile; default {"functional":{"label":"stacky::functional","closed":False},...}
+def _state_map_for_gitlab() -> dict:
+    # Lee client_profile.tracker_state_machine (rama gitlab). Default sano si ausente:
+    # {"functional":{"label":"stacky::functional","closed":False},
+    #  "technical":{"label":"stacky::technical","closed":False},
+    #  "developer":{"label":"stacky::developer","closed":False}}
+    ...
+# === STUBS DE DEPENDENCIA INTER-FASE (C8) — definidos en F3, sobreescritos luego ===
+def _resolve_assignee_id(client, username):  # F3: stub no-op; F6 lo implementa de verdad.
+    return None
+def _link_parent(client, child_iid, parent_id):  # F3: stub no-op; F7 lo implementa de verdad.
+    return None
 ```
+> **Orden/dependencias (C8):** `_resolve_assignee_id` (F6) y `_link_parent` (F7) se declaran como **stubs no-op en F3** para que el test de F3 NO dependa de fases posteriores. F6 y F7 reemplazan el cuerpo del stub (misma firma). El test `test_create_item_with_parent_calls_link` de F3 mockea `_link_parent` (verifica que se invoca), no su implementación real. Así cada fase es verde de forma aislada.
 
 **Tests primero (`test_gitlab_provider.py`), casos (con `GitLabClient` mockeado):**
 - `test_fetch_open_items_translates_query`: `TrackerQuery(state="open", labels=("a",), search="x")` → params `{state:"opened", labels:"a", search:"x"}`.
@@ -498,7 +608,7 @@ def fetch_item_updates(self, item_id, since=None):
 
 **Objetivo.** Hacer `ado_pipeline_inference.infer_pipeline` provider-aware: GitLab usa CI real (`/pipelines`); ADO mantiene inferencia LLM. **Valor:** el contexto de pipeline es real (no inferido) cuando hay GitLab CI.
 
-**Archivos a EDITAR:** `backend/services/ado_pipeline_inference.py` (rama por provider; o nuevo `gitlab_provider.fetch_pipelines`), `backend/tests/test_gitlab_provider.py`. **Env:** `STACKY_GITLAB_CI_INFERENCE` (default `true` cuando provider=gitlab).
+**Archivos a EDITAR:** `backend/services/ado_pipeline_inference.py` (rama por tracker; o nuevo `gitlab_provider.fetch_pipelines`), `backend/tests/test_gitlab_provider.py`. **Env:** `STACKY_GITLAB_CI_INFERENCE` (default `true`; solo tiene efecto cuando `issue_tracker.type=gitlab`).
 
 **Pseudocódigo (en `gitlab_provider.py`):**
 ```python
@@ -507,7 +617,7 @@ def fetch_pipelines(self, item_id=None, ref=None) -> list[dict]:
     pipelines = self._c._request_paginated(f"/projects/{path}/pipelines", params=params)
     return [{"id":p["id"],"status":p["status"],"ref":p["ref"],"web_url":p["web_url"]} for p in pipelines]
 ```
-`infer_pipeline` decide: si provider=gitlab y CI inference on → `fetch_pipelines` + mapear a `PipelineInferenceResult`; si CI deshabilitado/sin pipelines → **fallback** a la inferencia LLM existente. Caché reusa `PipelineInferenceCache`.
+`infer_pipeline` decide: si `issue_tracker.type=gitlab` y `STACKY_GITLAB_CI_INFERENCE` on → `fetch_pipelines` + mapear a `PipelineInferenceResult`; si CI deshabilitado/sin pipelines → **fallback** a la inferencia LLM existente. Caché reusa `PipelineInferenceCache`.
 
 **Tests:**
 - `test_fetch_pipelines_normalizes`.
@@ -521,37 +631,67 @@ def fetch_pipelines(self, item_id=None, ref=None) -> list[dict]:
 
 ### F10 — Wiring: fábrica de provider + reemplazo de call-sites
 
-**Objetivo.** Fábrica `get_tracker_provider(project?)` que selecciona adapter por `STACKY_TRACKER_PROVIDER`, y reemplazo mecánico de los call-sites `AdoClient(`/`ado_` en `api/tickets.py`, `ado_publisher`, `ado_context`, `ado_sync`, `ado_write_outbox`, `ado_feedback`, `api/ado_manager`. **Valor:** todo el sistema usa el puerto; ADO sigue default byte-idéntico.
+**Objetivo.** Fábrica `get_tracker_provider(project?)` que selecciona adapter por `issue_tracker.type` del proyecto (el seam YA existente, `project_context.py:73`), y reescritura del **seam de construcción de cliente real** (`ado_publisher._client_for_ticket_project()`/`_default_client()`), NO de un patrón `AdoClient(` inexistente en `tickets.py`. **Valor:** todo el sistema usa el puerto; ADO sigue default byte-idéntico.
 
-**Archivos a EDITAR:** `backend/services/tracker_provider.py` (agregar fábrica), `backend/config.py` (`STACKY_TRACKER_PROVIDER`), `backend/api/tickets.py` (35 call-sites), `backend/services/ado_publisher.py`, `backend/services/ado_context.py`, `backend/services/ado_sync.py`, `backend/services/ado_write_outbox.py` (`_apply`), `backend/services/ado_feedback.py`, `backend/api/ado_manager.py`. **CREAR:** `backend/tests/test_tracker_factory.py`.
+**Archivos a EDITAR:**
+- `backend/services/tracker_provider.py` (agregar fábrica).
+- `backend/config.py` (`STACKY_GITLAB_ENABLED` ya en F2; aquí nada nuevo — NO se crea `STACKY_TRACKER_PROVIDER`).
+- `backend/services/ado_publisher.py` — los DOS helpers de construcción: `_default_client()` (`:573`) y `_client_for_ticket_project()` (`:579`) devuelven `get_tracker_provider(project)`. Verificar por grep que las llamadas a `client.<metodo_ado>` ya correspondan a métodos del puerto; renombrar las pocas que difieran (lista exacta por grep, abajo).
+- El **consumidor de la outbox** (identificar por `grep -rn 'claim_due\|ado_write_outbox' backend` — NO `_apply`, que solo persiste): que construya el cliente vía la fábrica.
+- `backend/services/ado_context.py`, `backend/services/ado_sync.py`, `backend/services/ado_feedback.py`, `backend/api/ado_manager.py`: reemplazar la construcción de cliente por la fábrica donde hoy usan `build_ado_client`/`AdoClient`.
+- **CREAR:** `backend/tests/test_tracker_factory.py`.
 
-**Env nueva en `config.py`:**
-```python
-STACKY_TRACKER_PROVIDER = os.getenv("STACKY_TRACKER_PROVIDER", "ado")   # "ado" | "gitlab"
+> Para Jira/Mantis: la fábrica NO los cubre (ver §2.bis). Si `issue_tracker.type in {jira,mantis}` en un call-site de escritura rica, la fábrica lanza `TrackerConfigError` (mismo rechazo que hoy hace `build_ado_client` para no-ADO — sin regresión). Los paths sync de Jira/Mantis siguen intactos por su propio camino.
+
+**Grep para enumerar call-sites a tocar (NO leer archivos enteros):**
+```
+grep -nE '_default_client|_client_for_ticket_project|build_ado_client|AdoClient\(' backend/services/ado_publisher.py backend/services/ado_context.py backend/services/ado_sync.py backend/services/ado_feedback.py backend/api/ado_manager.py backend/api/tickets.py
 ```
 
 **Fábrica (`tracker_provider.py`):**
 ```python
-def get_tracker_provider(project: str | None = None) -> TrackerProvider:
-    sel = (config.STACKY_TRACKER_PROVIDER or "ado").strip().lower()
-    if sel == "gitlab" and config.STACKY_GITLAB_ENABLED:
+def get_tracker_provider(project: str | None = None) -> "TrackerProvider":
+    from services.project_context import resolve_project_context
+    import config
+    ctx = resolve_project_context(project_name=project)     # ya resuelve issue_tracker.type
+    ttype = (ctx.tracker_type or "azure_devops").strip().lower()
+    if ttype == "gitlab":
+        if not getattr(config, "STACKY_GITLAB_ENABLED", False):
+            from .tracker_provider import TrackerConfigError
+            raise TrackerConfigError("issue_tracker.type=gitlab pero STACKY_GITLAB_ENABLED=false")
         from .gitlab_provider import GitLabTrackerProvider
         return GitLabTrackerProvider(project=project)
-    from .ado_provider import AdoTrackerProvider     # default duro
-    return AdoTrackerProvider(project=project)
+    if ttype == "azure_devops":
+        from .ado_provider import AdoTrackerProvider
+        return AdoTrackerProvider(project=project)
+    # jira/mantis: sin puerto formal todavía (§2.bis); mismo rechazo que build_ado_client.
+    from .tracker_provider import TrackerConfigError
+    raise TrackerConfigError(f"tracker '{ttype}' sin puerto formal (usa su path de sync existente)")
 ```
-**Reemplazo mecánico:** cada `client = AdoClient(...)` → `provider = get_tracker_provider(project)`; cada `client.<metodo_ado>` → `provider.<metodo_puerto>` (mapeo 1:1 de la matriz). Enumerar los 35 sitios con: `grep -nE 'AdoClient\(|\.fetch_open_work_items|\.create_work_item|\.post_comment|...' backend/api/tickets.py`. NO leer tickets.py entero: editar por call-site.
+> Sin import dinámico por-request costoso: la fábrica es barata (resuelve un dict del profile cacheado por `resolve_project_context`). No agrega latencia material vs `build_ado_client` actual.
 
 **Tests primero (`test_tracker_factory.py`):**
-- `test_factory_defaults_to_ado` (sin env).
-- `test_factory_returns_gitlab_when_selected_and_enabled` (monkeypatch config).
-- `test_factory_falls_back_to_ado_when_gitlab_disabled` (provider=gitlab pero ENABLED=false → AdoProvider).
-**Regresión obligatoria:** correr `test_ado_provider.py`, `test_tickets*.py`, `test_ado_publisher*` y conformance de runtime → 0 cambios.
+- `test_factory_defaults_to_ado`: profile sin `issue_tracker.type` → `AdoTrackerProvider` (default `azure_devops`).
+- `test_factory_returns_gitlab_when_type_and_enabled`: `type=gitlab` + `STACKY_GITLAB_ENABLED=true` (monkeypatch ctx+config) → `GitLabTrackerProvider`.
+- `test_factory_raises_when_gitlab_disabled`: `type=gitlab` + ENABLED=false → `TrackerConfigError` (NO degrada silencioso a ADO; ruidoso para no publicar en el tracker equivocado).
+- `test_factory_raises_for_jira_mantis`: `type in {jira,mantis}` → `TrackerConfigError`.
+**Regresión obligatoria:** correr `test_ado_provider.py`, `test_tickets*.py`, `test_ado_publisher*`, `test_ado_sync*` y conformance de runtime → 0 cambios.
 
-**Comando:** `... -m pytest "backend/tests/test_tracker_factory.py" -q` + suite ADO afectada.
-**Criterio binario:** factory tests pasan Y suite ADO sigue verde sin cambios.
-**Flag:** `STACKY_TRACKER_PROVIDER` (default ado), `STACKY_GITLAB_ENABLED` (default false).
-**Impacto runtime:** los 3 runtimes (Codex/Claude CLI/Copilot) ahora publican/leen vía la fábrica; con default ado el comportamiento es idéntico. **Fallback por runtime:** ninguno aplica (es backend común; ninguna rama por runtime). **Trabajo del operador:** ninguno (default ado).
+**[ADICIÓN ARQUITECTO #2] Guard anti-recableo (CREAR `backend/tests/test_no_adoclient_outside_ado_provider.py`):**
+```python
+# Falla si 'AdoClient(' aparece fuera de la allowlist; sella la regresión "alguien vuelve a cablear ADO directo".
+ALLOWED = {"services/ado_provider.py", "services/ado_client.py", "services/project_context.py"}
+def test_no_adoclient_construction_outside_allowlist():
+    hits = grep_repo(r"AdoClient\(", root="backend")     # helper simple con pathlib/re
+    offenders = [h for h in hits if normalize(h.path) not in ALLOWED]
+    assert offenders == [], f"AdoClient() construido fuera de la allowlist: {offenders}"
+```
+Se registra en `HARNESS_TEST_FILES` (F13).
+
+**Comando:** `... -m pytest "backend/tests/test_tracker_factory.py" "backend/tests/test_no_adoclient_outside_ado_provider.py" -q` + suite ADO afectada.
+**Criterio binario:** factory + guard pasan Y suite ADO sigue verde sin cambios.
+**Flag:** `issue_tracker.type` (default `azure_devops`), `STACKY_GITLAB_ENABLED` (default false).
+**Impacto runtime:** los 3 runtimes (Codex/Claude CLI/Copilot) publican/leen vía la fábrica; con `type=azure_devops` el comportamiento es idéntico. **Fallback por runtime:** ninguno aplica (backend común; ninguna rama por runtime). **Trabajo del operador:** ninguno (default ADO).
 
 ---
 
@@ -559,27 +699,61 @@ def get_tracker_provider(project: str | None = None) -> TrackerProvider:
 
 **Objetivo.** Exponer en la UI la selección de provider y los campos GitLab (URL, project, referencia al archivo de token), reusando `ClientProfileEditor`/global-config; el secreto se referencia por archivo, nunca se tipea en el profile plano. **Valor:** cumple GP-4 (toda config del operador por UI).
 
-**Archivos a EDITAR:** `backend/api/global_config.py` (exponer/persistir `tracker_provider`, `gitlab_url`, `gitlab_project`, `gitlab_auth_file`; `test_global_tracker_connection` provider-aware), `backend/api/client_profile.py` (subsección `gitlab` no-secreta + `tracker_state_machine.gitlab`), `frontend/src/components/ClientProfileEditor.tsx` (selector provider ado|gitlab + campos condicionales GitLab), posible `frontend/src/pages/DiagnosticsPage.tsx` (test de conexión). **CREAR:** `backend/tests/test_global_config_gitlab.py`.
+**Archivos a EDITAR:** `backend/api/global_config.py` (agregar rama `gitlab` a `test_global_tracker_connection` — ya tiene `azure_devops|jira|mantis`, `global_config.py:208,229,249`; y persistir `gitlab_url`/`gitlab_project`/`gitlab_group`/`gitlab_auth_file` vía `_write_env`), `backend/api/client_profile.py` (subsección `issue_tracker` con `type=gitlab` no-secreto + `tracker_state_machine.gitlab`), `frontend/src/components/ClientProfileEditor.tsx` (agregar `gitlab` al selector de tracker que YA existe + campos condicionales GitLab), `frontend/src/pages/DiagnosticsPage.tsx` (botón test de conexión, reusa el existente). **CREAR:** `backend/tests/test_global_config_gitlab.py`.
 
-**Pseudocódigo backend:**
+**Pseudocódigo backend (extiende lo que YA existe, no reinventa):**
 ```python
-# global_config.put_global_config acepta:
-#   {"tracker_provider":"gitlab","gitlab_url":"https://gitlab.com","gitlab_project":"grp/proj","gitlab_auth_file":"auth/gitlab_auth.json"}
-# Escribe a backend/.env (ya hay _write_env) las env correspondientes; el TOKEN se sube por archivo separado (mismo flujo que PAT ADO), NO por este endpoint.
-def test_global_tracker_connection(payload):
-    p = get_tracker_provider() if payload["tracker_provider"]=="gitlab" else ...
-    return {"ok": p.credentials_present() and bool(p.get_authenticated_user())}
+# test_global_tracker_connection: AGREGAR rama gitlab al if/elif por tracker_type existente.
+elif t_type == "gitlab":
+    from services.gitlab_client import GitLabClient, GitLabConfigError
+    base = _merge("gitlab_url", "GITLAB_URL").rstrip("/")
+    proj = _merge("gitlab_project", "GITLAB_PROJECT")
+    if not base or not proj:
+        return {"ok": False, "error": "Falta GITLAB_URL o GITLAB_PROJECT"}
+    c = GitLabClient(base_url=base, project=proj)   # token resuelto por archivo/env (NO del payload)
+    user, _ = c._request("GET", "/user")            # lectura: valida credenciales
+    return {"ok": bool(user.get("id")), "user": user.get("username")}
+# put_global_config: agrega gitlab_url/gitlab_project/gitlab_group/gitlab_auth_file a _write_env.
+#   El TOKEN NO viaja por este endpoint: se sube por archivo auth/gitlab_auth.json (mismo flujo que PAT ADO/Jira/Mantis).
 ```
-**UI (`ClientProfileEditor.tsx`):** `<select>` provider (default "ado"); si "gitlab" mostrar inputs `gitlab_url`, `gitlab_project`, y un campo de **ruta** de archivo de token (no el token). Botón "Probar conexión" → `test_global_tracker_connection`.
+**UI (`ClientProfileEditor.tsx`):** el selector de tracker YA existe (ado/jira/mantis); **agregar opción `gitlab`** (default sigue "azure_devops"); si `gitlab`, mostrar inputs `gitlab_url`, `gitlab_project`, `gitlab_group` (opcional) y un campo de **ruta** de archivo de token (no el token). Exponer las 3 flags `STACKY_GITLAB_*` en el panel de harness flags (default off). Botón "Probar conexión" → `test_global_tracker_connection`.
 
 **Tests:**
-- `test_put_config_persists_gitlab_fields_without_token` (token nunca escrito por este endpoint).
-- `test_connection_check_uses_active_provider`.
+- `test_put_config_persists_gitlab_fields_without_token`: el token NUNCA se escribe por este endpoint (solo `gitlab_url`/`project`/`group`/`auth_file`).
+- `test_connection_check_uses_gitlab_branch`: con `tracker_type=gitlab` enruta a la rama GitLab y NO toca ADO.
 - Frontend gate: `cd frontend; npx tsc --noEmit` → 0 errores.
 
 **Comando:** `... -m pytest "backend/tests/test_global_config_gitlab.py" -q` + `tsc --noEmit`.
 **Criterio binario:** tests pasan; tsc 0 errores; el token JAMÁS viaja por el endpoint de config.
-**Flag:** `STACKY_TRACKER_PROVIDER`, `STACKY_GITLAB_ENABLED`. **Impacto runtime:** ninguno. **Trabajo del operador:** opt-in (solo si elige GitLab).
+**Flag:** `issue_tracker.type`, `STACKY_GITLAB_ENABLED`, `STACKY_GITLAB_EPICS_NATIVE`, `STACKY_GITLAB_CI_INFERENCE` (expuestas en panel de flags). **Impacto runtime:** ninguno. **Trabajo del operador:** opt-in (solo si elige GitLab).
+
+---
+
+### F11.bis — [ADICIÓN ARQUITECTO #3] Modo shadow / dry-run de conexión GitLab (validar sin escribir)
+
+**Objetivo.** Extender el botón "Probar conexión" a un **chequeo de permisos no destructivo**: además de credenciales (`GET /user`), valida (a) acceso de LECTURA al proyecto y paginación (`GET /projects/{id}/issues?per_page=1`), y (b) **permiso de ESCRITURA sin crear nada**, leyendo los scopes del token / el rol del usuario en el proyecto (`GET /projects/{id}/members/all/{user_id}` → `access_level >= 30` Developer). **Valor:** el operador sabe ANTES de publicar si el token tiene scope `api` y rol suficiente, evitando una épica a medio publicar por 403. Reusa el patrón `test_global_tracker_connection`; CERO escritura; opt-in (solo si elige GitLab).
+
+**Archivos a EDITAR:** `backend/api/global_config.py` (ampliar la rama gitlab del test con los 2 chequeos extra), `backend/tests/test_global_config_gitlab.py` (casos).
+
+**Pseudocódigo (dentro de la rama `gitlab` del test de conexión):**
+```python
+checks = {"auth": False, "read": False, "write_permission": False}
+user, _ = c._request("GET", "/user"); checks["auth"] = bool(user.get("id"))
+items, _ = c._request("GET", f"/projects/{c._project_path()}/issues", params={"per_page": 1}); checks["read"] = True
+member, _ = c._request("GET", f"/projects/{c._project_path()}/members/all/{user['id']}")
+checks["write_permission"] = (member.get("access_level", 0) >= 30)   # Developer+
+return {"ok": all(checks.values()), "checks": checks}
+```
+**Casos borde:** 404 en members → token sin visibilidad de miembros → reportar `write_permission: unknown` (no romper); 401/403 → `auth:false` con mensaje claro.
+
+**Tests:**
+- `test_shadow_check_reports_all_three` (mock 200s → ok true).
+- `test_shadow_check_flags_insufficient_role` (access_level 20 Reporter → write_permission false, ok false).
+- `test_shadow_check_never_writes` (assert: NINGÚN `POST`/`PUT`/`DELETE` emitido por el transporte double).
+
+**Comando:** `... -m pytest "backend/tests/test_global_config_gitlab.py" -q`.
+**Criterio binario:** los 3 casos pasan; el test verifica explícitamente cero escrituras.
+**Flag:** `STACKY_GITLAB_ENABLED`. **Impacto runtime:** ninguno (es chequeo de UI). **Trabajo del operador:** opt-in (botón, no obligatorio).
 
 ---
 
@@ -590,13 +764,28 @@ def test_global_tracker_connection(payload):
 **Archivos a EDITAR:** `backend/tests/test_tracker_provider_conformance.py` (ampliar). **CREAR:** `backend/tests/conformance/fixtures_tracker.py` (doubles ADO/GitLab).
 
 **Casos:**
-- `test_both_adapters_implement_all_port_methods`: `for adapter in (AdoTrackerProvider, GitLabTrackerProvider): for m in PORT_METHODS: assert callable(getattr(adapter_instance, m))`. **Si GitLab no implementa una fila de la matriz, falla aquí.**
+- `test_both_adapters_implement_all_port_methods`: `for adapter in (AdoTrackerProvider, GitLabTrackerProvider): for m in PORT_METHODS: assert callable(getattr(adapter_instance, m))`. **Si GitLab no implementa una fila de la matriz, falla aquí.** (Existencia — necesario pero NO suficiente, ver siguiente.)
+- **[ADICIÓN ARQUITECTO #1] `test_no_port_method_is_a_stub[adapter]`** (anti-falso-verde, C6): instancia cada provider con un **transporte double** que captura requests y devuelve fixtures por endpoint; invoca CADA `PORT_METHOD` con args válidos mínimos y verifica que:
+  1. NINGÚN método lanza `NotImplementedError` (y no es un cuerpo vacío `pass`/`return None` cuando el contrato exige dict);
+  2. los métodos de LECTURA devuelven el shape canónico (claves mínimas `{id,iid,title,state,...}`);
+  3. los métodos de ESCRITURA emiten el request HTTP esperado (método+path+payload clave) al double.
+  ```python
+  @pytest.mark.parametrize("provider", [ado_with_double(), gitlab_with_double()])
+  def test_no_port_method_is_a_stub(provider, double):
+      for m in PORT_METHODS:
+          try:
+              result = invoke_with_min_args(provider, m)   # tabla de args mínimos por método
+          except NotImplementedError:
+              pytest.fail(f"{provider.name}.{m} es un stub NotImplementedError")
+          assert_contract(m, result, double.requests)       # shape (lectura) o request emitido (escritura)
+  ```
+  Esto convierte KPI-1 de "las firmas existen" a "los métodos HACEN lo que dicen". Un adapter con métodos vacíos FALLA aquí.
 - `test_create_then_find_child_by_marker_idempotent[adapter]` (parametrizado ado/gitlab con doubles): crear hijo con marcador → `find_child_by_marker` lo encuentra; segunda publicación no duplica.
 - `test_post_comment_idempotent[adapter]`: `comment_exists` true tras post; re-post no duplica.
 - `test_fetch_open_items_returns_normalized_shape[adapter]`: ambas devuelven dicts con claves canónicas mínimas.
 
 **Comando:** `... -m pytest "backend/tests/test_tracker_provider_conformance.py" -q`
-**Criterio binario:** parametrizado verde para ado Y gitlab. **(KPI-1.)**
+**Criterio binario:** parametrizado verde para ado Y gitlab, incluido el anti-stub. **(KPI-1.)**
 **Flag:** ninguno (test). **Impacto runtime:** ninguno. **Trabajo del operador:** ninguno.
 
 ---
@@ -605,7 +794,7 @@ def test_global_tracker_connection(payload):
 
 **Objetivo.** Registrar los nuevos archivos de test en `HARNESS_TEST_FILES` (sh+ps1) para que el meta-test del arnés (plan 49 F4) no falle, agregar telemetría `tracker_provider` a `epic_summary`/run footer, y documentar GitLab en la matriz viva. **Valor:** evita falso-verde del arnés y deja observabilidad.
 
-**Archivos a EDITAR:** los scripts que listan `HARNESS_TEST_FILES` (buscar con `grep -rln HARNESS_TEST_FILES backend`), `backend/services/ado_publisher.py:_render_run_footer` (incluir `provider`), telemetría `epic_summary`. **CREAR:** entrada en docs/sistema si aplica (no obligatorio para el gate).
+**Archivos a EDITAR:** los scripts que listan `HARNESS_TEST_FILES` (buscar con `grep -rln HARNESS_TEST_FILES backend` — recordar: hay versión .sh y .ps1, ambas; memoria `ratchet-obliga-registrar-tests`), `backend/services/ado_publisher.py:_render_run_footer` (incluir `tracker_provider`), telemetría `epic_summary`. **Registrar TODOS los tests nuevos** en `HARNESS_TEST_FILES`: `test_tracker_provider_conformance.py`, `test_ado_provider.py`, `test_gitlab_client.py`, `test_gitlab_provider.py`, `test_tracker_factory.py`, `test_no_adoclient_outside_ado_provider.py` (ADICIÓN #2), `test_global_config_gitlab.py`. **CREAR:** entrada en docs/sistema si aplica (no obligatorio para el gate).
 
 **Tests:** correr el meta-test del ratchet (plan 49) → verde con los nuevos archivos registrados.
 **Comando:** el del ratchet (ver plan 49 status).
@@ -623,7 +812,9 @@ def test_global_tracker_connection(payload):
 | **GraphQL vs REST** | Plan usa REST v4 (suficiente para toda la matriz). GraphQL queda **fuera de scope** (solo se documenta que Epics nativos tienen mejor soporte GraphQL; el fallback REST cubre la paridad). |
 | **id global vs iid de issues** | `_normalize_issue` guarda ambos; URLs/links usan `iid`, epics usan id global (F3/F7). Documentado. |
 | **Comentarios Markdown vs HTML** | Marcador idempotente sobrevive como HTML-comment embebido en MD (F4); test lo verifica. |
-| **Regresión del camino ADO** | F1 es wrapper byte-idéntico; F10 mantiene default ado; KPI-2 exige suite ADO verde sin cambios. |
+| **Regresión del camino ADO** | F1 es wrapper byte-idéntico; F10 mantiene default `azure_devops` (fábrica anclada en `issue_tracker.type`, no env nueva); guard ADICIÓN #2 sella el recableo; KPI-2 exige suite ADO verde sin cambios. |
+| **Jira/Mantis se rompen al meter el puerto** | NO se tocan (§2.bis); la fábrica lanza `TrackerConfigError` para ellos en escritura rica = mismo rechazo que hoy hace `build_ado_client`. Sin regresión; migrarlos al puerto es plan futuro. |
+| **Conformance falso-verde (métodos stub)** | `test_no_port_method_is_a_stub` (ADICIÓN #1) prueba comportamiento con doubles, no solo existencia; un método vacío/`NotImplementedError` falla el gate. |
 | **Drift matriz↔puerto** | `PORT_METHODS` + conformance (F0/F12): si la matriz crece y el puerto no, el test falla. |
 
 ## 7. Fuera de scope
@@ -631,7 +822,8 @@ def test_global_tracker_connection(payload):
 - GitLab **GraphQL** API (solo REST v4).
 - Merge Requests / code review / branches (Stacky es tracker de work items; MRs no tienen equivalente ADO en el flujo actual).
 - Migración de datos ADO→GitLab (no se mueven tickets; cada proyecto elige UN provider).
-- Multi-provider simultáneo en un mismo proyecto activo (un proyecto = un provider; el selector es por proyecto/global).
+- Multi-provider simultáneo en un mismo proyecto activo (un proyecto = un tracker; el selector es `issue_tracker.type` por proyecto).
+- **Migración de Jira/Mantis al puerto `TrackerProvider`** (evolución futura). Hoy Jira/Mantis siguen por su path de sync existente sin tocarse (§2.bis). El puerto queda diseñado para que un plan posterior cree `JiraTrackerProvider`/`MantisTrackerProvider` sin reescribir la fábrica.
 - RBAC / multiusuario (mono-operador, GP-7).
 - Webhooks/eventos push de GitLab (Stacky es pull/poll, como hoy con ADO).
 
@@ -659,20 +851,22 @@ def test_global_tracker_connection(payload):
 8. F7 (jerarquía épica + fallback)
 9. F8 (updates/edit-learning)
 10. F9 (pipeline/CI)
-11. F10 (fábrica + wiring de call-sites) + regresión ADO completa
-12. F11 (UI selector + global-config)
-13. F12 (conformance cross-provider) → KPI-1
-14. F13 (ratchet + telemetría)
+11. F10 (fábrica anclada en `issue_tracker.type` + wiring del seam real `ado_publisher` + guard ADICIÓN #2) + regresión ADO completa
+12. F11 (UI selector + global-config) + F11.bis (shadow/dry-run, ADICIÓN #3)
+13. F12 (conformance cross-provider + anti-stub ADICIÓN #1) → KPI-1
+14. F13 (ratchet: registrar TODOS los tests nuevos + telemetría `tracker_provider`)
 
 ### Definición de Hecho (DoD) global
 - [ ] `TrackerProvider` define las 18 firmas de `PORT_METHODS`; matriz §4 sin "etc." y reflejada por `PORT_METHODS`.
-- [ ] `AdoTrackerProvider` y `GitLabTrackerProvider` pasan `test_tracker_provider_conformance.py` (ambos) — KPI-1.
-- [ ] Suite ADO (`test_ado_*`, `test_tickets*`, conformance runtime) verde sin cambios con default `ado` — KPI-2, 0 regresiones.
+- [ ] `AdoTrackerProvider` y `GitLabTrackerProvider` pasan `test_tracker_provider_conformance.py` (ambos), incluido `test_no_port_method_is_a_stub` (ADICIÓN #1, sin falsos verdes) — KPI-1.
+- [ ] Suite ADO (`test_ado_*`, `test_tickets*`, conformance runtime) verde sin cambios con default `azure_devops` — KPI-2, 0 regresiones.
 - [ ] Flujo brief→épica produce artefacto lógico equivalente en GitLab con doubles — KPI-3.
-- [ ] `tsc --noEmit` 0 errores con el selector de provider — KPI-4.
-- [ ] Cada flag nuevo (`STACKY_TRACKER_PROVIDER`, `STACKY_GITLAB_ENABLED`, `STACKY_GITLAB_EPICS_NATIVE`, `STACKY_GITLAB_CI_INFERENCE`) con default seguro y configurable por UI donde el operador lo setea (GP-4).
-- [ ] Token GitLab JAMÁS en `client_profile` ni en el endpoint de config (GP-3) — verificado por test.
-- [ ] Default `ado`, GitLab opt-in, cero pasos manuales nuevos para usuarios ADO (GP-2).
-- [ ] Ningún archivo `ado_*`/`tickets.py` referencia `AdoClient` directo salvo `ado_provider.py` (verificado por grep).
-- [ ] Nuevos archivos de test registrados en `HARNESS_TEST_FILES` (ratchet plan 49 verde).
+- [ ] `tsc --noEmit` 0 errores con la opción `gitlab` agregada al selector de tracker — KPI-4.
+- [ ] Cada flag nuevo (`STACKY_GITLAB_ENABLED`, `STACKY_GITLAB_EPICS_NATIVE`, `STACKY_GITLAB_CI_INFERENCE`) con default seguro y expuesto en el panel de flags por UI (GP-4); selección de tracker por `issue_tracker.type` en ClientProfileEditor. NO existe `STACKY_TRACKER_PROVIDER` (se descartó por duplicar `issue_tracker.type`, C1).
+- [ ] Token GitLab JAMÁS en `issue_tracker` del profile ni en el endpoint de config (GP-3) — verificado por test.
+- [ ] Default `azure_devops`, GitLab opt-in, cero pasos manuales nuevos para usuarios ADO/Jira/Mantis (GP-2).
+- [ ] Ningún archivo referencia `AdoClient(` directo salvo allowlist (`ado_provider.py`/`ado_client.py`/`project_context.py`) — verificado por `test_no_adoclient_outside_ado_provider` (ADICIÓN #2) en el ratchet.
+- [ ] Jira/Mantis NO tocados ni degradados; la fábrica lanza `TrackerConfigError` para ellos en escritura rica (mismo comportamiento que hoy) — §2.bis.
+- [ ] Nuevos archivos de test registrados en `HARNESS_TEST_FILES` (.sh y .ps1; ratchet plan 49 verde).
 - [ ] Los 3 runtimes (Codex/Claude CLI/Copilot) operan vía la misma fábrica, mismos artefactos, sin ramas por runtime (GP-5).
+- [ ] Botón "Probar conexión + permisos" GitLab valida auth/lectura/permiso-de-escritura SIN escribir nada (ADICIÓN #3, F11.bis) — verificado por `test_shadow_check_never_writes`.

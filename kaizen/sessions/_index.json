@@ -53,7 +53,7 @@
       "mode": "hitl",
       "adapter": "generic",
       "created_utc": "2026-06-21T19:29:20+00:00",
-      "status": "decided",
+      "status": "closed",
       "verdict": "iterate"
     },
     {
@@ -355,7 +355,7 @@
     },
     {
       "id": "2026-06-22T052346Z__cerrar-sesion-open-huerfana-043909z-que-qued-sin-artefactos",
-      "objective": "cerrar sesion open huerfana 043909Z que quedó sin artefactos",
+      "objective": "cerrar sesion open huerfana 043909Z que quedÃ³ sin artefactos",
       "mode": "aotl",
       "adapter": "claude",
       "created_utc": "2026-06-22T05:23:46+00:00",
@@ -455,7 +455,7 @@
       "mode": "hitl",
       "adapter": "claude",
       "created_utc": "2026-06-22T05:36:42+00:00",
-      "status": "decided",
+      "status": "closed",
       "tags": [],
       "verdict": "iterate"
     },
@@ -501,6 +501,16 @@
       "mode": "aotl",
       "adapter": "claude",
       "created_utc": "2026-06-22T05:41:44+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T054632Z__dashboard-seccion-de-sesiones-pendientes-de-revision-humana-b-13",
+      "objective": "Dashboard: seccion de sesiones pendientes de revision humana (B-13)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T05:46:32+00:00",
       "status": "closed",
       "tags": [],
       "verdict": "accept"

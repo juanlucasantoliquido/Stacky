@@ -94,7 +94,7 @@ promovidas (ADR-lite). Inyectar el resumen de decisions/ mejoraría la calidad d
 
 ---
 
-### B-11 [PENDIENTE] Regeneración automática del dashboard al cerrar cada sesión
+### B-11 [HECHO 2026-06-22] Regeneración automática del dashboard al cerrar cada sesión
 **Valor:** El prompt del operador dice "regeneralo al cierre de CADA sesión". Actualmente solo se
 regenera si el operador llama manualmente a `python kaizen.py dashboard`.
 **Detalles:** Agregar llamada a `dashboard_static.py` al final de `run_session.py` (tras cerrar la
@@ -104,12 +104,39 @@ sesión). Solo si `dashboard/` existe ya (para no crearlo en tests). La llamada 
 más reciente que antes del run.
 **Rollback:** Eliminar la llamada en `run_session.py`.
 
-### B-12 [PENDIENTE] Test unitario para recent_decisions_summary (autoloop.py)
+### B-12 [HECHO 2026-06-22] Test unitario para recent_decisions_summary (autoloop.py)
 **Valor:** La funcion recien agregada no tiene tests unitarios.
 **Detalles:** Agregar cases en `scripts/test_core.py` para `recent_decisions_summary` con
 fixtures de decisions/ simuladas en tempdir.
 **Métrica:** `python scripts/test_core.py` da 0 fallas con al menos 2 casos nuevos.
 **Rollback:** Eliminar los 2 casos nuevos de test_core.py.
+
+### B-13 [PENDIENTE] Dashboard: sección de bloqueantes activos y sesiones iterate
+**Valor:** El dashboard actual muestra historial de sesiones pero no resalta las que quedaron en
+estado iterate/escalado (sesiones que el operador debe revisar manualmente). El loop es invisible
+cuando algo escala.
+**Detalles:** Agregar en `dashboard_static.py` una sección "Pendiente revisión humana" con las
+sesiones status=closed verdict=iterate o escalated_to_human=true. Colores: rojo para bloqueantes,
+amarillo para confianza baja.
+**Métrica:** Tras crear una sesión con verdict=iterate, el HTML generado muestra esa sesión en rojo/amarillo.
+**Rollback:** Eliminar la sección de `dashboard_static.py`.
+
+### B-14 [PENDIENTE] test_aotl.py: ampliar con tests de run_session (gate con scores distintos)
+**Valor:** test_aotl.py solo cubre el loop end-to-end con mock. No hay tests del gate con scores
+en zona iterate (7-10) ni en zona reject (<7). Una regresión del gate podría pasar desapercibida.
+**Detalles:** Agregar en `scripts/test_aotl.py` al menos 3 casos: accept (>=11), iterate (7-10),
+reject (<7). Usar fixtures de proposal/evaluation en tempdir.
+**Métrica:** `python scripts/test_aotl.py` corre sin fallos con los 3 nuevos casos.
+**Rollback:** Eliminar los 3 casos nuevos.
+
+### B-15 [PENDIENTE] Selfcheck detecta sesiones decide->closed olvidadas (status=decided)
+**Valor:** En esta sesión se encontraron 2 sesiones con status=decided (deberían ser closed).
+Selfcheck las contaba como OK. El invariante debería verificar que status=decided solo existe
+para sesiones en vuelo (recién decididas por el gate, antes de que run_session las cierre).
+**Detalles:** En `scripts/selfcheck.py`, agregar regla: status=decided es válido solo si
+existe session.output.json Y la sesión tiene edad < 5 minutos. Si es más vieja, reportar WARNING.
+**Métrica:** `python kaizen.py selfcheck` da WARNING para sesiones decided viejas.
+**Rollback:** Eliminar la regla en selfcheck.py.
 
 ---
 
@@ -131,3 +158,5 @@ fixtures de decisions/ simuladas en tempdir.
 - B-08: Gate blocking_details — sesión 053558Z (2026-06-22)
 - B-09: README dashboard estático — sesión 053307Z (2026-06-22)
 - B-10: Contexto AOTL decisions ADR-lite — sesión 053808Z (2026-06-22)
+- B-11: Regeneración automática dashboard — sesión 054032Z (2026-06-22)
+- B-12: Tests unitarios recent_decisions_summary — sesión 054144Z (2026-06-22)

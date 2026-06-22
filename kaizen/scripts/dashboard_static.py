@@ -133,6 +133,55 @@ def _phase_pills(current_phase: str | None) -> str:
     return "  ".join(parts)
 
 
+def _pending_review_section(sessions: list[dict]) -> str:
+    """Devuelve HTML de la seccion 'Pendiente de revision humana' o '' si no hay nada."""
+    pending = [
+        s for s in sessions
+        if s.get("verdict") == "iterate" or s.get("escalated_to_human")
+    ]
+    if not pending:
+        return ""
+
+    rows = []
+    for s in pending:
+        sid = s.get("id", "")
+        obj = _esc(s.get("objective", ""))
+        when = _esc((s.get("created_utc") or "").replace("T", " ").replace("+00:00", ""))
+        is_escalated = s.get("escalated_to_human") or s.get("verdict") == "iterate"
+        # Naranja para escalado al humano, ambar para iterate sin escalacion explicita
+        color = "#db8c3a" if is_escalated else "#d29922"
+        rows.append(
+            f'<tr style="background:{color}11;border-left:3px solid {color}">'
+            f'<td style="color:#8b949e;font-size:12px;white-space:nowrap;padding-left:10px">{when}</td>'
+            f'<td style="color:{color};font-weight:600">{obj}</td>'
+            f'<td>{_pill(s.get("verdict"))}</td>'
+            f'<td style="color:#8b949e;font-size:12px">{_esc(s.get("status", ""))}</td>'
+            f"</tr>"
+        )
+
+    rows_html = "\n".join(rows)
+    count = len(pending)
+    return f"""
+  <h3 style="color:#db8c3a">Pendiente de revision humana ({count})</h3>
+  <div style="background:#db8c3a11;border:1px solid #db8c3a44;border-radius:8px;padding:10px 14px;margin-bottom:10px">
+    <span style="color:#db8c3a;font-size:12px">
+      Estas sesiones tienen verdict=iterate o fueron escaladas al operador y requieren decision manual.
+    </span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Cuando (UTC)</th>
+        <th>Objetivo</th>
+        <th>Veredicto</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>{rows_html}</tbody>
+  </table>
+"""
+
+
 def _session_rows(sessions: list[dict]) -> str:
     rows = []
     for s in sessions:
@@ -226,6 +275,7 @@ tr:hover td{{background:#161b22}}
   <h3>Metricas</h3>
   <div class="grid">{verdicts_html}</div>
 
+  {_pending_review_section(data["sessions"])}
   <h3>Historial de sesiones ({data["total"]} total)</h3>
   <div class="note">verde = implementado · azul = planificado · rojo = rechazado · violeta = iterando · naranja = escalado</div>
   <table>

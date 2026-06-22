@@ -995,6 +995,350 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T134818Z__sincronizar-contracts-decision-schema-json-agregar-meta-campo-real-generado-por-gate-b-60",
+      "objective": "sincronizar contracts/decision.schema.json: agregar _meta (campo real generado por gate) (B-60)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:48:18+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T135301Z__test-core-tests-de-compute-total-required-keys-y-validate-required-en-run-session-py-b-61",
+      "objective": "test_core: tests de compute_total, required_keys y validate_required en run_session.py (B-61)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:53:01+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "run_session"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T135621Z__test-aotl-tests-de-write-read-clear-loop-status-y-request-stop-clear-stop-en-aotl-state-py-b-62",
+      "objective": "test_aotl: tests de write/read/clear loop_status y request/stop/clear_stop en aotl_state.py (B-62)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:56:21+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "aotl_state"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T135826Z__test-core-tests-de-render-y-append-to-index-en-new-session-py-b-63",
+      "objective": "test_core: tests de render y append_to_index en new_session.py (B-63)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T13:58:26+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "new_session"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T140049Z__check-py-conteo-de-tests-dinamico-desde-output-de-test-core-y-test-aotl-en-lugar-de-hardcoded-b-64",
+      "objective": "check.py: conteo de tests dinamico desde output de test_core y test_aotl en lugar de hardcoded (B-64)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:00:49+00:00",
+      "status": "closed",
+      "tags": [
+        "infra",
+        "check"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T140245Z__docs-02-usage-md-actualizar-conteos-y-modulos-de-test-core-85-y-test-aotl-50-b-65",
+      "objective": "docs 02_USAGE.md: actualizar conteos y modulos de test_core (85) y test_aotl (50) (B-65)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:02:45+00:00",
+      "status": "closed",
+      "tags": [
+        "docs"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T140404Z__test-core-tests-de-impl-badge-phase-pills-y-session-rows-en-dashboard-static-py-b-66",
+      "objective": "test_core: tests de _impl_badge, _phase_pills y _session_rows en dashboard_static.py (B-66)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:04:04+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "dashboard"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T140546Z__test-core-tests-de-coerce-strip-comment-en-config-py-y-median-en-metrics-py-b-67",
+      "objective": "test_core: tests de _coerce, _strip_comment en _config.py y _median en metrics.py (B-67)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:05:46+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "config"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T140728Z__test-core-tests-de-parse-test-count-en-check-py-detecta-conteo-de-test-core-y-test-aotl-b-68",
+      "objective": "test_core: tests de _parse_test_count en check.py — detecta conteo de test_core y test_aotl (B-68)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:07:28+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "check"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T140953Z__test-aotl-tests-de-make-engine-factory-del-motor-mockengine-por-defecto-y-con-driver-explicito-b-69",
+      "objective": "test_aotl: tests de make_engine (factory del motor) — MockEngine por defecto y con driver explicito (B-69)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:09:53+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "engine"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T141103Z__manifest-md-actualizar-descripcion-de-scripts-test-core-103-casos-check-py-ci-adapter-stacky-b-70",
+      "objective": "MANIFEST.md: actualizar descripcion de scripts (test_core 103 casos, check.py CI, adapter stacky) (B-70)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:11:03+00:00",
+      "status": "closed",
+      "tags": [
+        "docs"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T141224Z__test-core-test-de-active-adapter-en-adapter-info-py-devuelve-config-y-default-b-71",
+      "objective": "test_core: test de active_adapter en adapter_info.py — devuelve config y default (B-71)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:12:24+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "adapter"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T141346Z__test-core-tests-de-load-adapter-y-load-profile-en-autoloop-py-b-72",
+      "objective": "test_core: tests de load_adapter y load_profile en autoloop.py (B-72)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:13:46+00:00",
+      "status": "closed",
+      "tags": [
+        "testing",
+        "autoloop"
+      ],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T141602Z__actualizar-backlog-automejora-md-marcar-b-69-b-70-b-71-hecho-y-detectar-deuda-nueva-b-73",
+      "objective": "actualizar BACKLOG_AUTOMEJORA.md: marcar B-69/B-70/B-71 HECHO y detectar deuda nueva B-73+",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:16:02+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T141846Z__test-aotl-tests-de-validate-change-set-apply-py-4-casos-criticos-path-protegido-action-invalida-path-traversal-valido-pasa-b-73",
+      "objective": "test_aotl: tests de validate_change_set (apply.py) — 4 casos criticos (path protegido, action invalida, path traversal, valido pasa) (B-73)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:18:46+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T142114Z__test-core-test-de-build-context-en-autoloop-py-verifica-claves-del-dict-session-id-objective-tree-files-recent-decisions-protected-measure-command-b-76",
+      "objective": "test_core: test de build_context en autoloop.py (verifica claves del dict: session_id, objective, tree, files, recent_decisions, protected, measure_command) (B-76)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:21:14+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T142225Z__sincronizar-docstring-test-core-py-y-docs-02-usage-md-a-163-tests-111-52-tras-b-76-b-77",
+      "objective": "sincronizar docstring test_core.py y docs/02_USAGE.md a 163 tests (111+52) tras B-76 (B-77)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:22:25+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T142403Z__test-core-test-de-run-session-update-index-status-modifica-solo-la-entrada-correcta-en-index-b-78",
+      "objective": "test_core: test de run_session.update_index_status (modifica solo la entrada correcta en INDEX) (B-78)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:24:03+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T142531Z__sincronizar-docstring-test-core-py-a-113-tests-y-docs-02-usage-md-a-165-113-52-y-marcar-b-73-b-78-en-backlog-b-79",
+      "objective": "sincronizar docstring test_core.py a 113 tests y docs/02_USAGE.md a 165 (113+52) y marcar B-73..B-78 en backlog (B-79)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:25:31+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T142702Z__test-aotl-test-de-claudeengine-context-block-funcion-pura-que-construye-el-prompt-de-contexto-para-el-motor-b-80",
+      "objective": "test_aotl: test de ClaudeEngine._context_block (funcion pura que construye el prompt de contexto para el motor) (B-80)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:27:02+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T142829Z__test-core-test-de-run-session-load-json-archivo-valido-archivo-inexistente-lanza-malformado-lanza-b-81",
+      "objective": "test_core: test de run_session.load_json (archivo valido, archivo inexistente lanza, malformado lanza) (B-81)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:28:29+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T142913Z__sincronizar-docstring-test-core-py-a-116-y-test-aotl-py-a-54-docs-02-usage-md-a-170-backlog-b-80-b-81-hecho-b-82",
+      "objective": "sincronizar docstring test_core.py a 116 y test_aotl.py a 54, docs/02_USAGE.md a 170, backlog B-80+B-81 HECHO (B-82)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:29:13+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T143205Z__test-core-tests-de-validate-validate-session-valido-campo-faltante-score-fuera-de-rango-b-83",
+      "objective": "test_core: tests de validate.validate_session (valido, campo faltante, score fuera de rango) (B-83)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:32:05+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T143630Z__test-aotl-tests-de-create-session-ok-y-falla-y-run-gate-ok-y-falla-con-mock-de-py-en-autoloop-b-84",
+      "objective": "test_aotl: tests de create_session (ok y falla) y run_gate (ok y falla) con mock de _py en autoloop (B-84)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:36:30+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T143920Z__test-aotl-tests-de-apply-commit-applied-sin-rutas-git-add-falla-commit-ok-con-mock-de-subprocess-b-85",
+      "objective": "test_aotl: tests de apply.commit_applied (sin rutas, git-add-falla, commit-ok) con mock de subprocess (B-85)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:39:20+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T144159Z__test-core-tests-de-metrics-print-report-salida-stdout-con-campos-requeridos-y-metrics-read-index-read-forensic-sin-archivos-con-fixture-b-86",
+      "objective": "test_core: tests de metrics.print_report (salida stdout con campos requeridos) y metrics.read_index/read_forensic (sin archivos, con fixture) (B-86)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:41:59+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T144433Z__test-core-tests-de-spawn-child-max-iterations-y-spawn-child-write-json-smoke-test-de-dashboard-static-generate-html-b-87",
+      "objective": "test_core: tests de spawn_child.max_iterations y spawn_child.write_json + smoke test de dashboard_static.generate_html (B-87)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:44:33+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T144709Z__test-core-tests-de-check-run-and-capture-returncode-output-capturado-con-mock-de-subprocess-test-de-engine-st-now-retorna-datetime-utc-b-88",
+      "objective": "test_core: tests de check.run_and_capture (returncode+output capturado) con mock de subprocess + test de engine.st_now (retorna datetime UTC) (B-88)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:47:09+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T144949Z__docs-03-sessions-md-actualizar-estructura-de-artefactos-json-no-md-agregar-change-set-json-y-apply-y-sincronizar-con-estado-real-b-89",
+      "objective": "docs/03_SESSIONS.md: actualizar estructura de artefactos (JSON no MD, agregar change_set.json y _apply/) y sincronizar con estado real (B-89)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:49:49+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T145134Z__docs-04-human-review-md-corregir-referencias-a-evaluation-md-decision-md-json-y-actualizar-umbral-accept-threshold-b-90",
+      "objective": "docs/04_HUMAN_REVIEW.md: corregir referencias a evaluation.md/decision.md -> .json y actualizar umbral accept_threshold (B-90)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:51:34+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T145426Z__test-aotl-tests-de-autoloop-measure-y-autoloop-promote-con-mock-de-py-b-91",
+      "objective": "test_aotl: tests de autoloop.measure y autoloop.promote con mock de _py (B-91)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:54:26+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

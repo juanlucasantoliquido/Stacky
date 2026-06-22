@@ -846,6 +846,60 @@ def _():
         _al._py = old_py
 
 
+# --- autoloop: measure y promote con mock de _py (B-91) ----------------------------------------
+
+@check("autoloop.measure: exit=0 -> passed=True y exit=0 en el dict")
+def _():
+    old_py = _al._py
+    try:
+        _al._py = lambda *a, **kw: _fake_proc("selfcheck OK\n", returncode=0)
+        result = _al.measure("selfcheck")
+        assert result["passed"] is True, "exit 0 debe dar passed=True"
+        assert result["exit"] == 0, "exit debe ser 0"
+    finally:
+        _al._py = old_py
+
+
+@check("autoloop.measure: exit=1 -> passed=False y exit=1 en el dict")
+def _():
+    old_py = _al._py
+    try:
+        _al._py = lambda *a, **kw: _sp.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="1 falla\n")
+        result = _al.measure("selfcheck")
+        assert result["passed"] is False, "exit != 0 debe dar passed=False"
+        assert result["exit"] == 1, "exit debe ser 1"
+    finally:
+        _al._py = old_py
+
+
+@check("autoloop.measure: stdout+stderr se concatenan en summary (truncado 1800)")
+def _():
+    old_py = _al._py
+    try:
+        _al._py = lambda *a, **kw: _sp.CompletedProcess(
+            args=[], returncode=0, stdout="SALIDA", stderr="ERR")
+        result = _al.measure("selfcheck")
+        assert "SALIDA" in result["summary"], "summary debe contener stdout"
+        assert "ERR" in result["summary"], "summary debe contener stderr"
+    finally:
+        _al._py = old_py
+
+
+@check("autoloop.promote: llama a _py con promote_decision.py y el session_id")
+def _():
+    calls = []
+    old_py = _al._py
+    try:
+        _al._py = lambda *a, **kw: (calls.append(a), _fake_proc(""))[1]
+        _al.promote("mi-sesion-b91")
+        assert len(calls) == 1, "debe llamar _py exactamente una vez"
+        assert "promote_decision.py" in calls[0][0], "debe invocar promote_decision.py"
+        assert "mi-sesion-b91" in calls[0], "debe pasar el session_id como argumento"
+    finally:
+        _al._py = old_py
+
+
 def main() -> int:
     for fn in list(globals().values()):
         pass  # los checks ya corrieron al definirse (decorador)

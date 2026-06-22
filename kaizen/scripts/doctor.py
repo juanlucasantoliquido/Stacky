@@ -82,6 +82,19 @@ def main(argv: list[str]) -> int:
     add("OK" if not missing_s else "FAIL", "scripts núcleo",
         "presentes" if not missing_s else "faltan %s" % missing_s)
 
+    # PROTECTED_FILES: cada ruta listada debe existir (si no existe, la proteccion es fantasma)
+    try:
+        import aotl_state as _st
+        missing_pf = [p for p in _st.PROTECTED_FILES if not (ROOT / p).exists()]
+        if missing_pf:
+            add("WARN", "guardarrail PROTECTED_FILES",
+                "rutas listadas que no existen: %s" % missing_pf)
+        else:
+            add("OK", "guardarrail PROTECTED_FILES",
+                "%d rutas protegidas verificadas" % len(_st.PROTECTED_FILES))
+    except Exception as exc:  # noqa: BLE001
+        add("WARN", "guardarrail PROTECTED_FILES", "no se pudo verificar: %s" % exc)
+
     # Índice
     idx = ROOT / "sessions" / "_index.json"
     if idx.exists():

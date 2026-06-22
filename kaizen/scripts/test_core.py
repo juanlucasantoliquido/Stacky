@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (56 tests)
+"""Tests unitarios para scripts core de Kaizen. stdlib pura, sin pytest. (60 tests)
 
 Cubre:
   - new_session.py: slugify, utc_now, read_config_value
@@ -12,6 +12,7 @@ Cubre:
   - show_session.py: main() — 3 caminos (no_args, not_found, exists)
   - forensic_view.py: fmt_data (pura) + main() — 2 caminos (no_args, no_log)
   - adapter_info.py: list_adapters, describe_valid(0), describe_missing(1)
+  - _config.py: load_yaml — escalares, anidados, listas, comentarios
 
 Uso:
     python scripts/test_core.py        # corre todos los tests
@@ -725,6 +726,70 @@ def test_percentile_p95_multi():
     xs = sorted(float(i) for i in range(1, 21))
     p95 = _pct(xs, 95)
     assert_true(18.0 <= p95 <= 20.0, "p95 de [1..20] debe estar entre 18 y 20, got %s" % p95)
+
+
+# ---------------------------------------------------------------------------
+# Tests de _config.py — load_yaml (parser YAML minimo, stdlib pura)
+# ---------------------------------------------------------------------------
+from _config import load_yaml as _load_yaml  # noqa: E402
+
+
+@test
+def test_load_yaml_scalars():
+    """Parsea int, bool, null y string (con y sin comillas)."""
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "t.yaml"
+        f.write_text(
+            "n: 42\nb: true\nnull_val: null\ns: hello\nq: 'world'\n",
+            encoding="utf-8",
+        )
+        d = _load_yaml(f)
+        assert_eq(d["n"], 42, "int")
+        assert_eq(d["b"], True, "bool")
+        assert_eq(d["null_val"], None, "null")
+        assert_eq(d["s"], "hello", "string sin comillas")
+        assert_eq(d["q"], "world", "string con comillas simples")
+
+
+@test
+def test_load_yaml_nested():
+    """Parsea mapeos anidados por indentacion."""
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "t.yaml"
+        f.write_text(
+            "outer:\n  inner: 7\n  deep:\n    val: ok\n",
+            encoding="utf-8",
+        )
+        d = _load_yaml(f)
+        assert_eq(d["outer"]["inner"], 7, "inner int")
+        assert_eq(d["outer"]["deep"]["val"], "ok", "deep string")
+
+
+@test
+def test_load_yaml_list():
+    """Parsea listas de escalares (lineas '- item')."""
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "t.yaml"
+        f.write_text(
+            "items:\n  - alpha\n  - 2\n  - true\n",
+            encoding="utf-8",
+        )
+        d = _load_yaml(f)
+        assert_eq(d["items"], ["alpha", 2, True], "lista mixta")
+
+
+@test
+def test_load_yaml_strips_comments():
+    """Elimina comentarios '#' sin afectar strings con '#' dentro de comillas."""
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "t.yaml"
+        f.write_text(
+            "a: 1  # esto es comentario\nb: 'url#hash'  # otro comentario\n",
+            encoding="utf-8",
+        )
+        d = _load_yaml(f)
+        assert_eq(d["a"], 1, "valor antes del comentario")
+        assert_eq(d["b"], "url#hash", "hash dentro de string no es comentario")
 
 
 if __name__ == "__main__":

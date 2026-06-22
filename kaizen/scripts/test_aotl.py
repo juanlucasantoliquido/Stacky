@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (30 tests)
+"""Tests del modo AOTL (AI-driven) de Kaizen. stdlib pura, sin red, sin contaminar sesiones. (34 tests)
 
 Corre con el intérprete del repo:
     python scripts/test_aotl.py        # exit 0 si todo verde
@@ -11,7 +11,8 @@ Cubre las invariantes que sostienen la seguridad del loop:
   - extracción de JSON de la salida del modelo,
   - gate determinista en sus 4 caminos (accept / reject / escalado x2),
   - promote_decision: next_adr_number + already_promoted (idempotencia),
-  - set_impl_status + update_index_fields (trazabilidad del loop).
+  - set_impl_status + update_index_fields (trazabilidad del loop),
+  - spawn_child: caminos de error (no_args, no_decision, non_iterate) + idempotencia.
 """
 from __future__ import annotations
 
@@ -361,6 +362,83 @@ def _():
             assert result.name == "0001-test.md", "debe devolver el path correcto"
         finally:
             pd.DECISIONS = orig
+    finally:
+        shutil.rmtree(tmp)
+
+
+# --- spawn_child: caminos de error e idempotencia ------------------------------------------
+import spawn_child as sc  # noqa: E402
+
+
+def _mk_decision(tmp: Path, session_id: str, verdict: str, child_session: "str | None" = None) -> Path:
+    """Crea estructura minima de sesion madre con decision.json en tempdir."""
+    d = tmp / "sessions" / session_id
+    d.mkdir(parents=True, exist_ok=True)
+    decision: dict = {"session_id": session_id, "verdict": verdict, "next_steps": []}
+    if child_session:
+        decision["child_session"] = child_session
+    (d / "decision.json").write_text(json.dumps(decision), encoding="utf-8")
+    session: dict = {"id": session_id, "objective": "test obj", "parent_session": None}
+    (d / "session.json").write_text(json.dumps(session), encoding="utf-8")
+    return d
+
+
+@check("spawn_child: sin args -> exit 2")
+def _():
+    orig_sessions = sc.SESSIONS
+    try:
+        assert sc.main([]) == 2, "sin args debe devolver exit 2"
+    finally:
+        sc.SESSIONS = orig_sessions
+
+
+@check("spawn_child: sesion sin decision.json -> exit 1")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        # Crear directorio de sesion sin decision.json
+        sid = "s-nodecision"
+        (tmp / "sessions" / sid).mkdir(parents=True)
+        orig = sc.SESSIONS; sc.SESSIONS = tmp / "sessions"
+        try:
+            assert sc.main([sid]) == 1, "sin decision.json debe devolver exit 1"
+        finally:
+            sc.SESSIONS = orig
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("spawn_child: verdict != iterate -> exit 1")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        sid = "s-accept"
+        _mk_decision(tmp, sid, verdict="accept")
+        orig = sc.SESSIONS; sc.SESSIONS = tmp / "sessions"
+        try:
+            assert sc.main([sid]) == 1, "verdict=accept debe rechazar (solo itera en 'iterate')"
+        finally:
+            sc.SESSIONS = orig
+    finally:
+        shutil.rmtree(tmp)
+
+
+@check("spawn_child: idempotente si ya tiene child_session")
+def _():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        sid = "s-idem"
+        _mk_decision(tmp, sid, verdict="iterate", child_session="child-ya-existente")
+        orig = sc.SESSIONS; sc.SESSIONS = tmp / "sessions"
+        try:
+            import io, contextlib
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = sc.main([sid])
+            assert rc == 0, "idempotente debe devolver exit 0, got %d" % rc
+            assert "child-ya-existente" in buf.getvalue(), "debe imprimir el child_id existente"
+        finally:
+            sc.SESSIONS = orig
     finally:
         shutil.rmtree(tmp)
 

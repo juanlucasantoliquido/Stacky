@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0059-t | ADR 0059 — tests de _config.load_yaml y spawn_child.py (B-48 | accept |
 | 0058-c | ADR 0058 — check.py headers ASCII para terminales cp1252 (B- | accept |
 | 0057-t | ADR 0057 — test_aotl: tests de promote_decision (B-46) | accept |
 | 0056-a | ADR 0056 — Actualizar conteos: test_core docstring a 56 test | accept |

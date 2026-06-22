@@ -14,6 +14,7 @@
 | `VERSION` | meta | Versión semántica de la base (independiente del repo padre). |
 | `.gitignore` | meta | Ignora datos volátiles de sesiones/artefactos locales. |
 | `kaizen.py` | cli | **Punto de entrada único.** Despacha a `scripts/`: new, run, list, show, validate, spawn-child, promote, view, metrics, selfcheck, doctor, adapter, check, archive, **apply, loop, dashboard**. |
+| `start_kaizen.bat` | launcher | **Doble clic (Windows):** levanta el dashboard, abre el navegador y corre el loop AI-driven constante. |
 
 ## `config/` — Capa de configuración (genérico; valores por proyecto)
 

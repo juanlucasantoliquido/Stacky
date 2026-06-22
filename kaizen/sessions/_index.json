@@ -804,6 +804,16 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T063445Z__test-core-tests-de-adapter-info-py-list-adapters-y-describe-b-44",
+      "objective": "test_core: tests de adapter_info.py — list_adapters y describe (B-44)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T06:34:45+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

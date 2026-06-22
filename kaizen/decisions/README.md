@@ -4,6 +4,7 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0055-t | ADR 0055 — test_core: tests de adapter_info.py — list_adapte | accept |
 | 0054-c | ADR 0054 — check.py: actualizar conteos en docstring y agreg | accept |
 | 0053-t | ADR 0053 — test_core: actualizar docstring a 53 tests y 11 m | accept |
 | 0052-t | ADR 0052 — test_core: tests de forensic_view.py y fmt_data ( | accept |

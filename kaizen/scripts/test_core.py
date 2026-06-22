@@ -303,6 +303,7 @@ def test_recent_decisions_summary_excludes_readme():
 import dashboard_static as _ds  # noqa: E402
 
 
+import adapter_info as _ai  # noqa: E402
 import archive as _arc  # noqa: E402
 import forensic_view as _fv  # noqa: E402
 import json as _json  # noqa: E402
@@ -315,6 +316,56 @@ def _mk_arc_index(tmp_dir: Path, sessions: list) -> Path:
     idx.parent.mkdir(parents=True, exist_ok=True)
     idx.write_text(_json.dumps({"sessions": sessions}), encoding="utf-8")
     return idx
+
+
+@test
+def test_list_adapters_finds_dirs():
+    """list_adapters devuelve nombres de subdirs con adapter.yaml en ADAPTERS."""
+    with tempfile.TemporaryDirectory() as td:
+        # Crea 2 adapters y 1 directorio sin yaml (debe ignorarse)
+        for name in ("alpha", "beta"):
+            d = Path(td) / name
+            d.mkdir()
+            (d / "adapter.yaml").write_text("name: %s\n" % name, encoding="utf-8")
+        (Path(td) / "gamma").mkdir()  # sin adapter.yaml
+        orig = _ai.ADAPTERS; _ai.ADAPTERS = Path(td)
+        try:
+            result = _ai.list_adapters()
+            assert_eq(result, ["alpha", "beta"], "debe listar solo los que tienen adapter.yaml")
+        finally:
+            _ai.ADAPTERS = orig
+
+
+@test
+def test_describe_valid_adapter():
+    """describe con yaml que tiene todos los campos -> exit 0."""
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td) / "mi-adapter"
+        d.mkdir()
+        (d / "adapter.yaml").write_text(
+            "name: mi-adapter\ndescription: test\nobserve: observe.prompt\n"
+            "engine: claude\napply: auto\nmeasure: selfcheck\n",
+            encoding="utf-8",
+        )
+        orig = _ai.ADAPTERS; _ai.ADAPTERS = Path(td)
+        try:
+            assert_eq(_ai.describe("mi-adapter"), 0)
+        finally:
+            _ai.ADAPTERS = orig
+
+
+@test
+def test_describe_missing_fields():
+    """describe con yaml sin campos requeridos -> exit 1."""
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td) / "incompleto"
+        d.mkdir()
+        (d / "adapter.yaml").write_text("name: incompleto\n", encoding="utf-8")
+        orig = _ai.ADAPTERS; _ai.ADAPTERS = Path(td)
+        try:
+            assert_eq(_ai.describe("incompleto"), 1)
+        finally:
+            _ai.ADAPTERS = orig
 
 
 @test

@@ -314,6 +314,10 @@ de la funcion (que acepta directorio temporal) para futuros mantenedores.
 ### B-42 [HECHO 2026-06-22] test_core: actualizar docstring a 53 tests y 11 modulos
 
 ### B-43 [HECHO 2026-06-22] check.py: resumen final con conteo de tests
+
+### B-44 [HECHO 2026-06-22] test_core: tests de adapter_info.py
+**Valor:** adapter_info.py ultimo script con logica sin tests. 3 casos: list_adapters, describe_valid(0), describe_missing(1).
+**Metrica lograda:** python scripts/test_core.py: 56 OK 0 FAIL.
 **Valor:** El resumen 'TODO VERDE' no decia cuantos tests pasaron. Ahora: '5/5 grupos OK | ~80 tests'.
 **Metrica lograda:** python kaizen.py check termina con el resumen ampliado.
 **Valor:** Docstring estaba en 46/9. Corregido a 53/11 con show_session y forensic_view.
@@ -392,3 +396,4 @@ por el loop). Requiere decision y cambio manual del operador.
 - B-41: Tests forensic_view.py y fmt_data — sesión 063048Z (2026-06-22)
 - B-42: Docstring test_core.py a 53 tests/11 modulos — sesión 063206Z (2026-06-22)
 - B-43: check.py resumen final con ~80 tests — sesión 063307Z (2026-06-22)
+- B-44: Tests adapter_info.py — sesión 063445Z (2026-06-22)

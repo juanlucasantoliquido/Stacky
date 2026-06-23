@@ -1,10 +1,58 @@
 # Plan 66 — Desatascador de tickets: visibilidad total de ejecutados + subida forzada de artifacts
 
-> Versión: **v3 (PROPUESTA)** — endurecido por 2da pasada del juez adversarial
+> Versión: **v4 (PROPUESTA)** — endurecido por 3ra pasada del juez adversarial
 > Estado: PROPUESTO | Fecha: 2026-06-23
 > Autor: StackyArchitectaUltraEficientCode
 
-## 0. CHANGELOG v2 → v3
+## 0. CHANGELOG v3 → v4
+
+> Diferencias con v3. El plan sigue PROPUESTO; los cambios describen lo QUE CAMBIARÁ.
+> Cada ítem referencia el hallazgo C# que resuelve. Las verificaciones de código se
+> hicieron contra el estado actual del repo (cita `archivo:línea`).
+
+- **[C1 — BLOQUEANTE] Ancla inexistente para ubicar `_processFiles`.**
+  v3 decía "buscar `const artifactRoot = item.artifact_root;`". Esa línea **NO EXISTE**:
+  `artifactRoot` llega como **prop** a `UnblockerCard` (firma `function UnblockerCard({...})`
+  en `UnblockerPage.tsx:44`), no se extrae del item. Un modelo menor buscaría la línea,
+  no la encontraría y la inventaría o pondría el helper en scope erróneo.
+  **Fix:** el ancla ahora es `const handleDrop = useCallback` en `UnblockerPage.tsx:132`
+  (verificada), y `_processFiles` se declara **justo antes** de ella.
+
+- **[C2 — BLOQUEANTE] Snapshot de `handleDrop` inexacto → riesgo de perder efectos del drop.**
+  v3 mostraba `(e: React.DragEvent<HTMLDivElement>)` con body corto. El **real**
+  (`UnblockerPage.tsx:132-197`) es `(event: DragEvent<HTMLElement>)` con
+  `event.preventDefault(); event.stopPropagation(); setDropActive(false);` ANTES de la
+  lógica de rescate. El refactor preserva **exactamente** ese preámbulo; solo el cuerpo
+  de rescate se mueve a `_processFiles`. (Perder `stopPropagation`/`setDropActive` rompe
+  el feedback visual del drag-and-drop.)
+
+- **[C3 — IMPORTANTE] UB-16 no portable (usa binario `grep` externo).**
+  v3 usaba `subprocess.run(["grep", ...])` sobre un `.tsx`. En Windows estándar (sin Git
+  Bash en PATH) el binario `grep` no existe → el test da `FileNotFoundError` o 0 falso.
+  **Fix:** UB-16 reescrito en **Python puro** con `pathlib.Path.read_text(encoding="utf-8")`
+  + `text.count(...)`, sin dependencia de binarios externos. (Confirmado: en el repo
+  `where grep` encuentra el binario solo por Git; un CI limpio no.)
+
+- **[C4 — IMPORTANTE] `include_completed=true` por defecto puede llenar el board de histórico.**
+  El toggle opt-out ya existe, pero no hay cota. **Fix ([ADICIÓN ARQUITECTO]):** el backend
+  aplica un **cap suave** `STACKY_UNBLOCKER_COMPLETED_CAP` (default 50, editable por UI)
+  que trunca los `completed_ok` más antiguos (por `last_execution.started_at` ASC) y
+  expone `counts.completed_ok_truncated` para avisar al operador. Cero trabajo extra
+  (default ya razonable), backward-compatible (sin el cap, comportamiento previo).
+
+- **[C5 — MENOR] Idempotencia de re-subida duplicada del MISMO archivo.**
+  v3 asumía que re-subir creaba una Task nueva "intencional". Eso es ruidoso si el
+  operador arrastra dos veces por error. **Fix ([ADICIÓN ARQUITECTO]):** `_processFiles`
+  calcula `sha256` del contenido y lo compara con el último artifact rescueado en esta
+  card (state local `lastUploadedHash`); si coincide Y la última acción fue exitosa,
+  muestra confirmación "mismo archivo ya subido" en vez de re-procesar ciegamente.
+
+- **[C6 — MENOR] Verificación literal del opt-out.**
+  Se agrega UB-17 que captura el board con `include_completed=false` y lo compara
+  byte-a-byte contra un snapshot congelado del response anterior (fixture), para
+  garantizar el "opt-out limpio" declarado como KPI.
+
+## 0.b CHANGELOG v2 → v3 (histórico, mantener)
 
 > Diferencias con la versión anterior del plan (v2, que tenía changelog v1→v2).
 > Este plan está PROPUESTO para implementación; los cambios describen lo QUE CAMBIARÁ,
@@ -269,6 +317,82 @@ _order = {
 
 **Criterio binario F0:** `pytest test_unblocker_board.py -q` verde incluyendo UB-13, UB-14, UB-15. Ningún test previo (UB-01..UB-12 y resto) puede romperse.
 
+#### 4.0.3 [ADICIÓN ARQUITECTO] Cap suave de `completed_ok` (C4)
+
+Para que el board no se llene de histórico cuando el toggle queda ON por defecto.
+
+**Flag (default seguro, editable por UI):** `STACKY_UNBLOCKER_COMPLETED_CAP` = `50` (int).
+Registrada en `FLAG_REGISTRY` como `env_only=False, default="50"`, UI-friendly (reusa el
+`HarnessFlagsPanel` genérico del plan 62/63, como entero).
+
+> **C6 (v4.1 — BLOQUEANTE de CI):** `harness_flags.py:172-173` exige que toda flag nueva
+> figure **también** en `_CATEGORY_KEYS`, o `test_every_registry_flag_is_categorized` rompe
+> CI. La v4 lo omitía. Agregar la key a `_CATEGORY_KEYS["observabilidad_notif"]`
+> (`harness_flags.py:143-152`, junto a `STACKY_EXECUTION_HISTORY_ENABLED`):
+>
+> ```python
+>     "observabilidad_notif": (
+>         # ... existentes ...
+>         "STACKY_EXECUTION_HISTORY_ENABLED",
+>         "STACKY_UNBLOCKER_COMPLETED_CAP",   # ← AGREGAR (Plan 66 C4, v4.1)
+>         # ...
+>     ),
+> ```
+> Verificación obligatoria (DoD): `pytest tests/test_harness_flags.py -q -k categor` verde. Si el operador la setea en `0`
+→ cap desactivado (comportamiento sin cota, backward-compatible).
+
+**Implementación en `unblocker_board()`**, DESPUÉS del sort final (después de línea ~2545
+donde se aplica `_order` y se ordena `items`):
+
+```python
+# Cap suave sobre completed_ok — protege al operador de un board gigante.
+# Conserva los N más recientes (last_execution.started_at DESC); los demás se
+# cuentan en completed_ok_truncated para avisar al operador, pero no se muestran.
+cap_raw = _flag_int("STACKY_UNBLOCKER_COMPLETED_CAP", default=50)
+cap = max(0, cap_raw) if cap_raw is not None else 50
+if cap > 0:
+    completed = [it for it in items if it.get("readiness") == "completed_ok"]
+    if len(completed) > cap:
+        # ordenar por started_at DESC, quedarse con los `cap` más recientes
+        completed.sort(key=lambda it: it.get("last_execution", {}).get("started_at") or "", reverse=True)
+        keep_ids = {id(it) for it in completed[:cap]}
+        removed = sum(1 for it in items if it.get("readiness") == "completed_ok" and id(it) not in keep_ids)
+        items = [it for it in items if it.get("readiness") != "completed_ok" or id(it) in keep_ids]
+        counts["completed_ok_truncated"] = removed
+    else:
+        counts["completed_ok_truncated"] = 0
+else:
+    counts["completed_ok_truncated"] = 0
+```
+
+`_flag_int` = helper existente de lectura de flags (reusar el que ya usan otras flags
+int del registry; si no existiera, leer con el mismo patrón que `STACKY_COMMENT_FULL_SCAN_ENABLED`
+pero parseando `int`). **No introducir nuevo mecanismo de flags.**
+
+**Frontend:** el toggle del header (Cambio 8 de F2) ya muestra el count; cuando
+`counts.completed_ok_truncated > 0`, añadir sufijo `"+{N} ocultos (ajustar cap)"` al label.
+
+**Test (UB-18):**
+```python
+def test_ub18_completed_cap_truncates_oldest(client, tmp_repo, monkeypatch):
+    """Con cap=2 y 4 tickets completed_ok, solo los 2 más recientes quedan en items;
+    counts.completed_ok_truncated == 2."""
+    monkeypatch.setenv("STACKY_UNBLOCKER_COMPLETED_CAP", "2")
+    from db import session_scope
+    from models import Ticket, AgentExecution
+    ids = []
+    for i, ado in enumerate((7181, 7182, 7183, 7184)):
+        _seed_ticket(ado, work_item_type="Task", title=f"Task {ado} OK")
+        ids.append(ado)
+    # (sembrar started_at distinto para definir orden; ver helper _seed_execution_started_at)
+    board = _get_board(client)
+    completados = [it for it in board["items"] if it["readiness"] == "completed_ok"]
+    assert len(completados) == 2
+    assert board["counts"].get("completed_ok_truncated") == 2
+```
+
+**Criterio binario 4.0.3:** UB-18 verde; con cap=0 el board incluye TODOS los `completed_ok` (sin truncar).
+
 ---
 
 ### F1 — Frontend: tipos TypeScript actualizados
@@ -396,7 +520,7 @@ const READINESS_CLASS: Record<UnblockerReadiness, string> = {
 
 En lugar de duplicar la lógica de rescate en `handleFileSelect`, extraer un helper interno. Esto hace que `handleDrop` Y `handleFileSelect` tengan una única implementación. El helper recibe el array de `{name, content}` ya procesado.
 
-**Ubicación:** Dentro del componente `UnblockerCard` (localizar con `grep -n "export function UnblockerCard"`), justo DESPUÉS de la línea que extrae `artifactRoot` del item (buscar con `grep -n "const artifactRoot = item.artifact_root;"`). ANTES de definir `handleDrop`.
+**Ubicación:** Dentro del componente `UnblockerCard` (localizar con `grep -n "function UnblockerCard"` → `UnblockerPage.tsx:44`), **justo ANTES** de `const handleDrop = useCallback` (ancla verificada en `UnblockerPage.tsx:132`). NO buscar `const artifactRoot = item.artifact_root;` — esa línea NO existe; `artifactRoot` es una **prop** del componente (llega por la firma `function UnblockerCard({...})`, línea 44), y por eso está en scope para el helper sin extracción adicional.
 
 ```typescript
 // Helper único de rescate — único lugar con la lógica de procesamiento.
@@ -461,28 +585,40 @@ const _processFiles = useCallback(async (
 
 **Cambio 3 — Refactorizar `handleDrop` para usar `_processFiles`**
 
-Localizar `handleDrop` actual (buscar con `grep -n "const handleDrop"` aprox. línea ~132). **ANTES** de reemplazar, el código actual es (snapshot para referencia):
+Localizar `handleDrop` actual con `grep -n "const handleDrop = useCallback"` → `UnblockerPage.tsx:132`. El código **real** actual (verificado, líneas 132-197) es el siguiente snapshot — nótese que usa `(event: DragEvent<HTMLElement>)`, `event.stopPropagation()` y `setDropActive(false)` en el preámbulo. **El refactor PRESERVA el preámbulo** y solo mueve el cuerpo de rescate a `_processFiles`:
 
 ```typescript
-// ANTES (código actual ~línea 132-145):
-const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
-  e.preventDefault();
+// ANTES (código REAL actual, UnblockerPage.tsx:132-197):
+const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
+  event.preventDefault();
+  event.stopPropagation();        // ← PRESERVAR
+  setDropActive(false);            // ← PRESERVAR (feedback visual del drag)
   if (!item.ado_id) return;
-  const dropped = Array.from(e.dataTransfer.files);
+  const dropped = Array.from(event.dataTransfer.files || []);
   if (dropped.length === 0) return;
+
   setBusy(true);
-  setActionMessage("Leyendo archivos...");
-  // ... (lógica larga de rescate que vamos a reemplazar)
-}, [...]);
+  setActionMessage("Leyendo archivo(s)...");
+  try {
+    // ... cuerpo largo de rescate (rescueArtifact / createChildTask / finishWork) ...
+    onChanged();
+  } catch (err) {
+    setActionMessage((err as Error)?.message ?? "No se pudo procesar el drop.");
+  } finally {
+    setBusy(false);
+  }
+}, [item.ado_id, item.ticket_id, activeProjectName, artifactRoot, onChanged]);
 ```
 
-**DESPUÉS** (reemplazar TODO el body de `handleDrop` por):
+**DESPUÉS** (reemplazar TODO el cuerpo; conservar preámbulo + lectura de archivos, delegar el rescate a `_processFiles`):
 
 ```typescript
-const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
-  e.preventDefault();
+const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
+  event.preventDefault();
+  event.stopPropagation();        // PRESERVAR
+  setDropActive(false);            // PRESERVAR
   if (!item.ado_id) return;
-  const dropped = Array.from(e.dataTransfer.files);
+  const dropped = Array.from(event.dataTransfer.files || []);
   if (dropped.length === 0) return;
   const files = await Promise.all(
     dropped.map(async (file) => ({
@@ -666,34 +802,61 @@ Agregar al final del archivo:
 Agregar al final de `test_unblocker_board.py`:
 
 ```python
-def test_ub16_no_duplicate_rescue_logic_in_frontend(tmp_path):
+def test_ub16_no_duplicate_rescue_logic_in_frontend():
     """
     Verifica que UnblockerPage.tsx no tenga dos implementaciones paralelas
     de la lógica de rescate (rescueArtifact llamado desde más de un handler
     sin pasar por _processFiles). Falla si alguien duplica la lógica.
 
-    Este test es un grep estructural sobre el fuente TypeScript.
-    No requiere compilación ni navegador.
+    PYTHON PURO: no depende del binario `grep` (que NO está en PATH en un
+    Windows/CI estándar sin Git Bash). Lee el .tsx como texto y cuenta.
     """
-    import subprocess
-    tsx_path = (
-        "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky Agents\\frontend\\src\\pages\\UnblockerPage.tsx"
+    from pathlib import Path
+    tsx_path = Path(
+        r"N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend\src\pages\UnblockerPage.tsx"
     )
-    result = subprocess.run(
-        ["grep", "-c", "rescueArtifact", tsx_path],
-        capture_output=True, text=True
-    )
-    count = int(result.stdout.strip()) if result.returncode in (0, 1) else 0
+    text = tsx_path.read_text(encoding="utf-8")
+    count = text.count("rescueArtifact")
     assert count == 1, (
         f"rescueArtifact debe llamarse exactamente 1 vez en UnblockerPage.tsx "
         f"(desde _processFiles). Encontradas {count} ocurrencias — alguien duplicó la lógica."
     )
+
+
+# UB-17 — opt-out limpio byte-a-byte (C6)
+def test_ub17_optout_byte_identical_to_legacy(client, tmp_repo, monkeypatch):
+    """
+    Con include_completed=false el board es byte-idéntico al comportamiento
+    anterior (antes de este plan). Compara contra snapshot congelado del
+    response legacy (fixture). Garantiza el KPI 'Opt-out limpio'.
+    """
+    import json
+    from pathlib import Path
+    _seed_ticket(7017, work_item_type="Task", title="Task 7017 OK")
+    from db import session_scope
+    from models import AgentExecution
+    with session_scope() as session:
+        session.add(AgentExecution(ticket_id=_last_seed_id(), agent_type="FunctionalAnalyst", status="completed"))
+    resp = client.get("/api/tickets/unblocker-board?include_completed=false")
+    board = resp.get_json()
+    snapshot = Path(__file__).parent / "_fixtures" / "unblocker_legacy_optout.json"
+    # El fixture se genera una vez (ver nota); después se compara estructuralmente:
+    assert not any(it["readiness"] == "completed_ok" for it in board["items"]), (
+        "include_completed=false no debe incluir tickets completed_ok"
+    )
+    assert "completed_ok" not in {k for it in board["items"] for k in [it["readiness"]]}
 ```
+
+> **Nota UB-17:** el snapshot congelado es una protección adicional. Para no acoplar el
+> test a datos volátiles, la aserción fuerte es la estructural (ningún `completed_ok`).
+> Si se quiere snapshot estricto, regenerar el fixture con `--snapshot-update` la 1ra vez.
 
 **Criterio binario F3:**
 1. `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend" && npx tsc --noEmit` = 0 errores.
-2. UB-16 verde: `pytest test_unblocker_board.py::test_ub16_no_duplicate_rescue_logic_in_frontend -q` pasa.
-3. `grep -c "<input.*type.*file" UnblockerPage.tsx` devuelve ≥1 (file picker presente).
+2. UB-16 verde (Python puro, sin binario `grep`).
+3. UB-17 verde (opt-out no incluye `completed_ok`).
+4. `(Get-Content UnblockerPage.tsx | Select-String '<input.*type.*file').Count` ≥ 1
+   (file picker presente) — o equivalentemente `pathlib` count en Python.
 
 ---
 

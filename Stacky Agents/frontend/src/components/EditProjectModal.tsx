@@ -34,6 +34,10 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
     mantis_token:         "",
     mantis_username:      "",
     mantis_password:      "",
+    gitlab_url:           project.gitlab_url ?? "",
+    gitlab_project:       project.gitlab_project ?? "",
+    gitlab_group:         project.gitlab_group ?? "",
+    gitlab_auth_file:     project.gitlab_auth_file ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -258,6 +262,7 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   const isAdo    = form.tracker_type === "azure_devops";
   const isJira   = form.tracker_type === "jira";
   const isMantis = form.tracker_type === "mantis";
+  const isGitlab = form.tracker_type === "gitlab";
 
   async function handleSubmit() {
     setError(null);
@@ -383,6 +388,13 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
               onClick={() => patch("tracker_type", "mantis" as TrackerType)}
             >
               🟢 Mantis BT
+            </button>
+            <button
+              type="button"
+              className={`${styles.trackerBtn} ${isGitlab ? styles.trackerBtnActive : ""}`}
+              onClick={() => patch("tracker_type", "gitlab" as TrackerType)}
+            >
+              🦊 GitLab
             </button>
           </div>
 
@@ -570,6 +582,50 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
                   {" — "}Cargá proyectos para cambiar la selección.
                 </p>
               )}
+            </div>
+          )}
+
+          {isGitlab && (
+            <div className={styles.trackerFields}>
+              <span className={styles.trackerHeading}>🦊 GitLab</span>
+              <p className={styles.note}>
+                El token de acceso se lee del archivo de autenticación. Nunca se guarda en el perfil.
+              </p>
+              <label className={styles.label}>URL base del GitLab</label>
+              <input
+                className={styles.input}
+                type="text"
+                placeholder="Ej: https://gitlab.com"
+                value={form.gitlab_url ?? ""}
+                onChange={(e) => patch("gitlab_url", e.target.value)}
+              />
+              <label className={styles.label}>Proyecto (namespace/repo)</label>
+              <input
+                className={styles.input}
+                type="text"
+                placeholder="Ej: mi-org/mi-repo"
+                value={form.gitlab_project ?? ""}
+                onChange={(e) => patch("gitlab_project", e.target.value)}
+              />
+              <label className={styles.label}>Grupo (opcional, para Epics nativos)</label>
+              <input
+                className={styles.input}
+                type="text"
+                placeholder="Ej: mi-org"
+                value={form.gitlab_group ?? ""}
+                onChange={(e) => patch("gitlab_group", e.target.value)}
+              />
+              <label className={styles.label}>Ruta al archivo de token</label>
+              <input
+                className={styles.input}
+                type="text"
+                placeholder="Ej: C:\secrets\gitlab_token.txt"
+                value={form.gitlab_auth_file ?? ""}
+                onChange={(e) => patch("gitlab_auth_file", e.target.value)}
+              />
+              <p className={styles.note}>
+                El archivo debe contener solo el token en texto plano (sin comillas ni saltos de línea extra).
+              </p>
             </div>
           )}
 

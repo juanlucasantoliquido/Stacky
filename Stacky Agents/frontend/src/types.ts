@@ -214,7 +214,7 @@ export interface TicketPipelineResponse {
 
 // ── Multi-project ────────────────────────────────────────────────────────────
 
-export type TrackerType = "azure_devops" | "jira" | "mantis";
+export type TrackerType = "azure_devops" | "jira" | "mantis" | "gitlab";  // Plan 65
 
 export interface DocsPaths {
   technical: string;
@@ -239,6 +239,11 @@ export interface Project {
   mantis_project_id?: string;
   mantis_project_name?: string;
   mantis_protocol?: "rest" | "soap";
+  /** GitLab fields */
+  gitlab_url?: string;
+  gitlab_project?: string;
+  gitlab_group?: string;
+  gitlab_auth_file?: string;
   /** Runtime */
   active: boolean;
   initialized: boolean;
@@ -288,6 +293,11 @@ export interface InitProjectPayload {
   mantis_token?: string;
   mantis_username?: string;
   mantis_password?: string;
+  // GitLab (Plan 65)
+  gitlab_url?: string;
+  gitlab_project?: string;
+  gitlab_group?: string;
+  gitlab_auth_file?: string;
 }
 
 export interface AgentWorkflowConfig {

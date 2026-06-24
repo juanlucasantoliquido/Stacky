@@ -368,6 +368,55 @@ def test_open_chat_works_when_ado_unavailable(client):
     assert "## Adjuntos" not in msg
 
 
+def test_dp08_open_chat_rule_not_duplicated(client):
+    """La frase de regla no debe repetirse en el mensaje final a Copilot."""
+    from db import session_scope
+    from models import Ticket
+
+    with session_scope() as session:
+        t = Ticket(
+            ado_id=70001,
+            project="RSPacifico",
+            title="dp08",
+            ado_state="Active",
+            description="d",
+        )
+        session.add(t)
+        session.flush()
+        ticket_id = t.id
+
+    captured: dict = {}
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+    def _fake_post(url, json=None, timeout=None):
+        captured["json"] = json
+        return _Resp()
+
+    with patch(
+        "services.ado_client.AdoClient", side_effect=RuntimeError("off")
+    ), patch(
+        "api.agents.ensure_project_vscode", return_value=_fake_project_context()
+    ), patch("requests.post", side_effect=_fake_post):
+        r = client.post(
+            "/api/agents/open-chat",
+            json={
+                "ticket_id": ticket_id,
+                "context_blocks": [],
+                "vscode_agent_filename": "X.agent.md",
+            },
+        )
+
+    assert r.status_code == 200
+    msg = captured["json"]["message"]
+    assert msg.count("fuente de rol, criterio, tono") <= 1
+    assert "no se incluye el contenido" in msg.lower() or "leé el archivo" in msg.lower()
+
+
 # ── /open-chat — inyección del client-profile (paridad con enrich_blocks) ────
 #
 # Antes, /open-chat NO pasaba por `context_enrichment.enrich_blocks`, así que el

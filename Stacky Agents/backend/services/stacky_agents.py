@@ -435,6 +435,7 @@ def build_invocation_block(
         f"- Carpeta de agentes configurada: {agents_dir}\n"
         f"- STACKY_HOME: {home}\n"
         f"- Workspace de trabajo: {ws or '(no resuelto)'}\n"
+        f"- Descripcion: {entry.description or '(sin descripcion)'}\n"
         "\n"
         f"Regla: usá el agente `{entry.mention}` y tomá como prompt/persona\n"
         f"únicamente el archivo `{entry.path}`.\n"

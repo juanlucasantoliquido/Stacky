@@ -176,3 +176,29 @@ def test_legacy_prompt_includes_invocation_block_when_provided():
     )
     assert "Agente Stacky seleccionado" in prompt
     assert "@Developer" in prompt
+
+
+def test_dp06_claude_rollback_no_duplicate_agent_block():
+    from services.claude_code_cli_runner import _build_claude_code_prompt
+
+    sel = _selected()
+    prompt = _build_claude_code_prompt(
+        selected_agent=sel,
+        all_agents=[sel],
+        ticket_message="t",
+        invocation_block="## Agente Stacky seleccionado\n- Mention: @X\n",
+    )
+    assert "## Agente seleccionado\n" not in prompt
+
+
+def test_dp07_claude_rollback_keeps_read_from_disk_directive():
+    from services.claude_code_cli_runner import _build_claude_code_prompt
+
+    sel = _selected()
+    prompt = _build_claude_code_prompt(
+        selected_agent=sel,
+        all_agents=[sel],
+        ticket_message="t",
+        invocation_block="## Agente Stacky seleccionado\n- Mention: @X\n",
+    )
+    assert "no está en este mensaje" in prompt or "leé el archivo" in prompt

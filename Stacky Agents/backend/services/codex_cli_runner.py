@@ -357,6 +357,19 @@ def _run_in_background(
                     log("info", f"H4: skills inyectadas ({len(_matched)})", group="operator")
         except Exception as _exc:  # noqa: BLE001
             log("warn", f"H4: no se pudo inyectar skills en codex: {_exc}")
+        # Plan 54 F3 — inyección rejection_lessons en codex_cli (paridad FA-11).
+        _mem_prefix_codex: str = ""
+        _mem_meta_codex: dict = {}
+        try:
+            from services.memory_prefix import build_memory_prefix as _bmp_codex  # noqa: PLC0415
+            _mem_prefix_codex, _mem_meta_codex = _bmp_codex(
+                project=_codex_project_name,
+                agent_type=agent_type or "",
+            )
+            if _mem_prefix_codex:
+                log("info", "Plan 54: rejection_lessons inyectadas en prompt (Codex)", group="operator")
+        except Exception as _exc_mp_codex:  # noqa: BLE001
+            log("warn", f"Plan 54: memory_prefix falló en codex (no crítico): {_exc_mp_codex}")
         prompt = _build_codex_prompt(
             selected_agent=selected_agent,
             all_agents=all_agents,
@@ -366,6 +379,8 @@ def _run_in_background(
             invocation_block=invocation_block,
             skills_section=_codex_skills_block,
         )
+        if _mem_prefix_codex:
+            prompt = (_mem_prefix_codex.strip() + "\n\n" + prompt).strip()
         prompt_file = run_dir / "prompt.md"
         prompt_file.write_text(prompt, encoding="utf-8")
 
@@ -645,6 +660,9 @@ def _run_in_background(
             "agent_count": len(all_agents),
             **invocation_meta,
         }
+        # Plan 54 F3 — telemetría rejection_lessons codex.
+        if _mem_meta_codex:
+            metadata.update(_mem_meta_codex)
         # V1.1 — sello del prompt usado (trazabilidad/versionado).
         try:
             from services import agent_prompt_registry as _apr
@@ -1291,25 +1309,14 @@ def _build_codex_prompt(
     rules = rules_text(runtime="codex", mcp_enabled=mcp_enabled)
 
     inventory = _format_agent_inventory(all_agents, agent_bundle_dir)
-    selected_path = str(Path(config.VSCODE_PROMPTS_DIR) / selected_agent.filename)
     skills_block = f"\n{skills_section.strip()}\n\n" if skills_section.strip() else ""
 
     return f"""# Stacky Agents Codex CLI runtime
 
 {invocation_block}
-
-Stacky te esta lanzando desde Codex CLI para trabajar sobre el ticket y mantener
-trazabilidad en los logs del workbench. No se inyecta el contenido del
-`.agent.md` seleccionado en este mensaje: debes leerlo desde la ruta indicada en
-el bloque "Agente Stacky seleccionado" y usar ese archivo como fuente de rol,
+Tu `.agent.md` (persona/rol) no está en este mensaje: leé el archivo desde la
+'Ruta agent.md' indicada arriba antes de empezar y usalo como fuente de rol,
 criterio, tono, restricciones y forma de trabajo.
-
-## Agente seleccionado
-
-- Nombre: {selected_agent.name}
-- Archivo: {selected_agent.filename}
-- Path: {selected_path}
-- Descripcion: {selected_agent.description or "(sin descripcion)"}
 
 ## Catalogo de agentes Stacky disponibles
 

@@ -2146,17 +2146,9 @@ def _build_claude_code_prompt(
     invocation_section = f"{invocation_block}\n\n" if invocation_block else ""
     return f"""# Stacky Agents Claude Code CLI runtime
 
-{invocation_section}Stacky te esta lanzando desde Claude Code CLI para trabajar sobre el ticket y
-mantener trazabilidad en los logs del workbench. No se inyecta el contenido del
-`.agent.md` seleccionado en este mensaje: debes leerlo desde la ruta indicada en
-el bloque "Agente Stacky seleccionado" y usar ese archivo como fuente de rol,
-criterio, tono, restricciones y forma de trabajo.
-
-## Agente seleccionado
-
-- Nombre: {selected_agent.name}
-- Archivo: {selected_agent.filename}
-- Descripcion: {selected_agent.description or "(sin descripcion)"}
+{invocation_section}Tu `.agent.md` (persona/rol) no está en este mensaje: leé el archivo desde la
+'Ruta agent.md' indicada arriba y usalo como fuente de rol, criterio, tono,
+restricciones y forma de trabajo.
 
 ## Catalogo de agentes Stacky disponibles
 

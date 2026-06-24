@@ -1153,11 +1153,8 @@ def open_chat():
             )
         message = (
             f"{invocation}\n"
-            "## Agente Stacky\n"
-            "\n"
-            "No se incluye el contenido del `.agent.md` en este mensaje. "
-            "Usá únicamente el archivo indicado arriba como fuente de rol, "
-            "criterio, tono, restricciones y forma de trabajo.\n"
+            "No se incluye el contenido del `.agent.md` en este mensaje: "
+            "leé el archivo indicado arriba antes de empezar.\n"
             "\n"
             "## Tarea\n"
             "\n"

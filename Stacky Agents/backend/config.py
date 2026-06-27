@@ -437,6 +437,12 @@ class Config:
         "STACKY_EXECUTION_HISTORY_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # ── Plan 67 — Disciplina de procesos: reutilizar por default ──────────────
+    # OFF por defecto: con OFF enrich_blocks es byte-idéntico al plan 64.
+    STACKY_PROCESS_DISCIPLINE_ENABLED: bool = os.getenv(
+        "STACKY_PROCESS_DISCIPLINE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",
@@ -775,6 +781,26 @@ class Config:
     # en el próximo run del mismo proyecto, en los 3 runtimes (copilot/claude_cli/codex).
     STACKY_PUSH_REJECTIONS_ENABLED: bool = os.getenv(
         "STACKY_PUSH_REJECTIONS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 65 — GitLab como tracker de primer nivel ─────────────────────────
+    # STACKY_GITLAB_ENABLED: master switch para el adapter GitLab. OFF default.
+    # Sin este flag, issue_tracker.type=gitlab rechaza en la fábrica.
+    GITLAB_URL: str = os.getenv("GITLAB_URL", "")
+    GITLAB_PROJECT: str = os.getenv("GITLAB_PROJECT", "")
+    GITLAB_TOKEN: str = os.getenv("GITLAB_TOKEN", "")
+    STACKY_GITLAB_GROUP: str = os.getenv("STACKY_GITLAB_GROUP", "")
+    STACKY_GITLAB_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    # Si true, usa Group Epics nativos de GitLab (requiere licencia Premium/Ultimate).
+    # False (default): jerarquía vía issue-links (fallback siempre disponible).
+    STACKY_GITLAB_EPICS_NATIVE: bool = os.getenv(
+        "STACKY_GITLAB_EPICS_NATIVE", "false"
+    ).lower() in ("1", "true", "yes")
+    # Si true (default), infiere pipelines CI de GitLab cuando el tracker es gitlab.
+    STACKY_GITLAB_CI_INFERENCE: bool = os.getenv(
+        "STACKY_GITLAB_CI_INFERENCE", "true"
     ).lower() in ("1", "true", "yes")
 
 

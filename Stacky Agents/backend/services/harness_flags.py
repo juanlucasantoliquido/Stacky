@@ -1293,7 +1293,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Default OFF = enrich_blocks byte-idéntico al Plan 64."
         ),
         group="contexto_memoria",
-        env_only=True,  # leído via os.getenv en get_flag() — patrón de STACKY_RAG_CATALOG_ENABLED
+        env_only=False,  # editable por UI (Plan 62/63 HarnessFlagsPanel); NO es kill-switch interno
     ),
     FlagSpec(
         key="STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED",

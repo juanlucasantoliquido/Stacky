@@ -128,6 +128,8 @@ HARNESS_TEST_FILES=(
   tests/test_prompt_dedup_guard.py
   # — Plan 67 · Disciplina de procesos: reusar por default —
   tests/test_process_discipline.py
+  # — Plan 66 · Desatascador visibilidad total + subida forzada —
+  tests/test_unblocker_board.py
 )
 
 pass=0

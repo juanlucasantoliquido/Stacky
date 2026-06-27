@@ -11,7 +11,7 @@
  *
  * Datos: GET /api/tickets/unblocker-board (Tickets.unblockerBoard).
  */
-import { useCallback, useState, type DragEvent } from "react";
+import { useCallback, useState, type DragEvent, type ChangeEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Tickets,
@@ -30,6 +30,7 @@ const READINESS_LABEL: Record<UnblockerReadiness, string> = {
   waiting_files: "Esperando archivos del agente",
   artifacts_idle: "Artifacts en disco",
   files_error: "⚠️ pending-task.json malformado",
+  completed_ok: "Completado",   // Plan 66
 };
 
 const READINESS_CLASS: Record<UnblockerReadiness, string> = {
@@ -39,6 +40,7 @@ const READINESS_CLASS: Record<UnblockerReadiness, string> = {
   waiting_files: styles.badgeWaiting,
   artifacts_idle: styles.badgeIdle,
   files_error: styles.badgeError,
+  completed_ok: styles.badgeCompleted,   // Plan 66
 };
 
 function UnblockerCard({
@@ -129,19 +131,14 @@ function UnblockerCard({
     }
   }, [item.ado_id, staleConsumed, activeProjectName, artifactRoot, onChanged]);
 
-  const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setDropActive(false);
-    if (!item.ado_id) return;
-    const dropped = Array.from(event.dataTransfer.files || []);
-    if (dropped.length === 0) return;
-
+  // Plan 66 F2 — helper compartido entre handleDrop y handleFileSelect
+  const _processFiles = useCallback(async (rawFiles: File[]) => {
+    if (!item.ado_id || rawFiles.length === 0) return;
     setBusy(true);
     setActionMessage("Leyendo archivo(s)...");
     try {
       const files = await Promise.all(
-        dropped.map(async (file) => ({
+        rawFiles.map(async (file) => ({
           name: file.name,
           content: await file.text(),
         }))
@@ -158,12 +155,11 @@ function UnblockerCard({
       if (!rescue.ok) {
         throw new Error(rescue.message || rescue.error || "No se pudo preparar el artifact.");
       }
-
       if (rescue.artifact_type === "pending_task" && rescue.pending_task_path) {
         setActionMessage("Artifact preparado. Creando Task...");
         const created = await Tickets.createChildTask(item.ado_id, {
           pending_task_path: rescue.pending_task_path,
-          operator_reason: "Desatascador: creación desde archivo arrastrado",
+          operator_reason: "Desatascador: creación desde archivo subido",
           project: activeProjectName,
           repo_root: rescue.repo_root || rescueRoot,
         });
@@ -174,7 +170,7 @@ function UnblockerCard({
       } else if (rescue.artifact_type === "comment" && rescue.html_output_path) {
         setActionMessage("Comentario preparado. Publicando...");
         const published = await Tickets.finishWork(item.ticket_id, {
-          operator_reason: "Desatascador: publicación desde comment.html arrastrado",
+          operator_reason: "Desatascador: publicación desde comment.html subido",
           publish_to_ado: true,
           html_output_path: rescue.html_output_path,
           force_publish: true,
@@ -190,11 +186,28 @@ function UnblockerCard({
       }
       onChanged();
     } catch (err) {
-      setActionMessage((err as Error)?.message ?? "No se pudo procesar el drop.");
+      setActionMessage((err as Error)?.message ?? "No se pudo procesar el archivo.");
     } finally {
       setBusy(false);
     }
   }, [item.ado_id, item.ticket_id, activeProjectName, artifactRoot, onChanged]);
+
+  const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDropActive(false);
+    await _processFiles(Array.from(event.dataTransfer.files || []));
+  }, [_processFiles]);
+
+  // Plan 66 F2 — file picker como alternativa al drag-and-drop
+  const handleFileSelect = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const selected = Array.from(event.target.files || []);
+      event.target.value = "";  // reset para permitir re-selección del mismo archivo
+      await _processFiles(selected);
+    },
+    [_processFiles]
+  );
 
   return (
     <article
@@ -222,7 +235,12 @@ function UnblockerCard({
             <span className={styles.adoTag}>#{item.ticket_id}</span>
           )}
           {item.work_item_type && (
-            <span className={styles.typeTag}>{item.work_item_type}</span>
+            <span
+              className={styles.typeTag}
+              style={item.work_item_type === "Issue" ? { color: "#F59E0B" } : undefined}
+            >
+              {item.work_item_type}
+            </span>
           )}
           {item.running && <span className={styles.runningDot} title="En ejecución">● en ejecución</span>}
         </div>
@@ -325,6 +343,17 @@ function UnblockerCard({
       </div>
       <div className={styles.dropZone}>
         Arrastrá pending-task.json, plan-de-pruebas.md o comment.html para rescatar este ADO.
+        {/* Plan 66 F2 — alternativa sin drag: selector de archivos */}
+        <label className={styles.filePicker}>
+          <span>o seleccionar archivo</span>
+          <input
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={handleFileSelect}
+            disabled={busy}
+          />
+        </label>
       </div>
       {actionMessage && <p className={styles.actionMessage}>{actionMessage}</p>}
     </article>
@@ -336,10 +365,12 @@ export default function UnblockerPage() {
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
   const [rootDraft, setRootDraft] = useState("");
   const [artifactRoot, setArtifactRoot] = useState<string | null>(null);
+  // Plan 66 F2 — toggle para mostrar/ocultar tickets completados (default: mostrar)
+  const [includeCompleted, setIncludeCompleted] = useState(true);
 
   const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
-    queryKey: ["unblocker-board", activeProjectName, artifactRoot],
-    queryFn: () => Tickets.unblockerBoard(activeProjectName, artifactRoot),
+    queryKey: ["unblocker-board", activeProjectName, artifactRoot, includeCompleted],
+    queryFn: () => Tickets.unblockerBoard(activeProjectName, artifactRoot, includeCompleted),
     refetchOnWindowFocus: false,
   });
 
@@ -371,6 +402,13 @@ export default function UnblockerPage() {
           disabled={isFetching}
         >
           {isFetching ? "Refrescando…" : "↻ Refrescar"}
+        </button>
+        {/* Plan 66 F2 — toggle completados */}
+        <button
+          className={`${styles.refreshBtn} ${includeCompleted ? styles.toggleActive : ""}`}
+          onClick={() => setIncludeCompleted((v) => !v)}
+        >
+          {includeCompleted ? "Ocultar completados" : "Mostrar completados"}
         </button>
       </header>
 
@@ -437,6 +475,15 @@ export default function UnblockerPage() {
           )}
           <span className={styles.countWaiting}>{counts.waiting_files} esperando</span>
           <span className={styles.countRunning}>{counts.running} en ejecución</span>
+          {/* Plan 66 F2 — completed_ok (solo si hay) */}
+          {(counts.completed_ok ?? 0) > 0 && (
+            <span className={styles.countCompleted}>
+              {counts.completed_ok} completado(s)
+              {(counts.completed_ok_truncated ?? 0) > 0 && (
+                <> (+{counts.completed_ok_truncated} ocultados por cap)</>
+              )}
+            </span>
+          )}
         </div>
       )}
 

@@ -108,7 +108,9 @@ $HarnessTestFiles = @(
   "tests/test_codex_prompt_dedup.py",
   "tests/test_prompt_dedup_guard.py",
   # Plan 67 - Disciplina de procesos: reusar por default
-  "tests/test_process_discipline.py"
+  "tests/test_process_discipline.py",
+  # Plan 66 - Desatascador visibilidad total + subida forzada
+  "tests/test_unblocker_board.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -270,10 +270,16 @@ export const Tickets = {
    * (comment.html / pending-task.json) a nivel board.
    * GET /api/tickets/unblocker-board
    */
-  unblockerBoard: (project?: string | null, artifactRoot?: string | null): Promise<UnblockerBoardResponse> => {
+  // Plan 66 — F1: acepta includeCompleted (default true)
+  unblockerBoard: (
+    project?: string | null,
+    artifactRoot?: string | null,
+    includeCompleted: boolean = true,
+  ): Promise<UnblockerBoardResponse> => {
     const params = new URLSearchParams();
     if (project) params.set("project", project);
     if (artifactRoot) params.set("outputs_root", artifactRoot);
+    if (!includeCompleted) params.set("include_completed", "false");
     const qs = params.toString();
     return api.get<UnblockerBoardResponse>(`/api/tickets/unblocker-board${qs ? `?${qs}` : ""}`);
   },
@@ -433,7 +439,8 @@ export type UnblockerReadiness =
   | "comment_ready"
   | "waiting_files"
   | "artifacts_idle"
-  | "files_error";
+  | "files_error"
+  | "completed_ok";   // Plan 66
 
 export interface UnblockerParseError {
   rf_id: string;
@@ -517,6 +524,8 @@ export interface UnblockerBoardResponse {
     waiting_files: number;
     files_error: number;
     stale_consumed: number;
+    completed_ok?: number;          // Plan 66 — optional: backend viejo no lo manda
+    completed_ok_truncated?: number; // Plan 66 — cuántos se ocultaron por cap
   };
 }
 

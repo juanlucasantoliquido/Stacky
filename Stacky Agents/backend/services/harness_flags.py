@@ -150,6 +150,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_OPERATIONAL_HEALTH_ENABLED", "STACKY_PIPELINES_ENABLED",
         "STACKY_EXECUTION_TRACE_ENABLED", "STACKY_TRACE_PROMPT_TEXT_ENABLED",
         "STACKY_DIGEST_INTERVAL_HOURS", "STACKY_ADO_FAILURE_COMMENT_ENABLED",
+        "STACKY_UNBLOCKER_COMPLETED_CAP",   # Plan 66 C4 v4.1
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -1218,6 +1219,19 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = endpoint devuelve 404 feature_disabled."
         ),
         group="observability",
+    ),
+    FlagSpec(
+        key="STACKY_UNBLOCKER_COMPLETED_CAP",
+        type="int",
+        label="Desatascador: cap de tickets completados visibles",
+        description=(
+            "Plan 66 — Número máximo de tickets con readiness=completed_ok que aparecen "
+            "en el board del desatascador. Los más antiguos se ocultan (se reportan en "
+            "counts.completed_ok_truncated). Default 50 (inline). 0 = sin cota (todos). "
+            "Editable por UI para no saturar el board con histórico."
+        ),
+        env_only=True,  # leído via os.environ.get en unblocker_board(); default 50 inline
+        group="observabilidad_notif",
     ),
     # Plan 42 — flags nuevos
     FlagSpec(

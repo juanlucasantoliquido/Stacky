@@ -284,6 +284,35 @@
 .rootOk { color: #4ade80; border-color: #166534; }
 .rootMissing { color: #f87171; border-color: #7f1d1d; }
 
+/* ─── Plan 66 F2 — nuevas clases ─────────────────────────────────────────── */
+.badgeCompleted { background: #1e3a5f; color: #7dd3fc; }
+
+.card[data-readiness="completed_ok"] {
+  opacity: 0.7;
+}
+.card[data-readiness="completed_ok"]:hover {
+  opacity: 1;
+}
+
+.countCompleted { color: #7dd3fc; border-color: #1e40af !important; }
+
+.toggleActive {
+  background: rgba(56, 189, 248, 0.18) !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+}
+
+.filePicker {
+  display: inline-block;
+  margin-top: 5px;
+  cursor: pointer;
+  color: #38bdf8;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.filePicker:hover { color: #7dd3fc; }
+
 @media (max-width: 720px) {
   .pageHeader,
   .pathBar {

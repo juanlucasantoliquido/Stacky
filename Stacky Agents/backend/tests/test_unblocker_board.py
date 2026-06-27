@@ -443,3 +443,148 @@ def test_ub12_stale_dedup_por_rf_y_prioridad_pending(client, tmp_repo):
     assert it_6["total_stale_consumed"] == 1
     assert it_6["stale_consumed"][0]["task_ado_id"] == 8883
     assert "mas-nuevo" in it_6["stale_consumed"][0]["pending_task_path"]
+
+
+# ─── Plan 66: visibilidad total (tickets completados) ──────────────────────────
+
+# UB-13: ticket completado (sin artifacts, sin running) → aparece con completed_ok
+#         cuando include_completed=true (default, sin pasar el param)
+def test_ub13_completed_ticket_visible_by_default(client, tmp_repo):
+    """Ticket con última ejecución 'completed' y sin artifacts → completed_ok en el board."""
+    from db import session_scope
+    from models import Ticket, AgentExecution
+    ticket_id = _seed_ticket(7013, work_item_type="Task", title="Task 7013 OK")
+    with session_scope() as session:
+        session.add(AgentExecution(
+            ticket_id=ticket_id,
+            agent_type="FunctionalAnalyst",
+            status="completed",
+            started_by="pytest",
+            input_context_json="[]",
+        ))
+    board = _get_board(client)  # include_completed omitido → default True
+    it = _item(board, 7013)
+    assert it is not None, "Ticket completado debe aparecer con include_completed=true"
+    assert it["readiness"] == "completed_ok"
+    assert it["total_pending"] == 0
+    assert it["comment"]["exists"] is False
+
+
+# UB-14: ticket completado → NO aparece con include_completed=false
+def test_ub14_completed_ticket_excluded_when_flag_false(client, tmp_repo):
+    """Con include_completed=false el board es byte-idéntico al comportamiento anterior."""
+    from db import session_scope
+    from models import Ticket, AgentExecution
+    ticket_id = _seed_ticket(7014, work_item_type="Task", title="Task 7014 OK")
+    with session_scope() as session:
+        session.add(AgentExecution(
+            ticket_id=ticket_id,
+            agent_type="FunctionalAnalyst",
+            status="completed",
+            started_by="pytest",
+            input_context_json="[]",
+        ))
+    resp = client.get("/api/tickets/unblocker-board?include_completed=false")
+    assert resp.status_code == 200
+    board = resp.get_json()
+    it = _item(board, 7014)
+    assert it is None, "Ticket completado NO debe aparecer con include_completed=false"
+
+
+# UB-15: orden — task_ready aparece antes que completed_ok en el mismo board
+def test_ub15_order_task_ready_before_completed_ok(client, tmp_repo):
+    """Tickets con readiness task_ready deben preceder a completed_ok en el orden del board."""
+    from db import session_scope
+    from models import Ticket, AgentExecution
+    # Ticket completado (order=6)
+    tid_ok = _seed_ticket(7015, work_item_type="Task", title="Task 7015 OK")
+    with session_scope() as session:
+        session.add(AgentExecution(
+            ticket_id=tid_ok,
+            agent_type="FunctionalAnalyst",
+            status="completed",
+            started_by="pytest",
+            input_context_json="[]",
+        ))
+    # Ticket con pending-task (order=1)
+    _seed_ticket(7016, work_item_type="Epic", title="Epic 7016")
+    _write_pending(tmp_repo, 7016, "RF-099", "orden", plan=True)
+
+    board = _get_board(client)
+    readiness_list = [it["readiness"] for it in board["items"] if it["ado_id"] in (7015, 7016)]
+    assert readiness_list.index("task_ready") < readiness_list.index("completed_ok"), (
+        "task_ready debe aparecer antes que completed_ok en el sort"
+    )
+
+
+# UB-16: anti-regresión PURA — tickets que no tienen ejecución no aparecen como completed_ok
+def test_ub16_no_execution_never_completed_ok(client, tmp_repo):
+    """Ticket sin ninguna AgentExecution NO puede tener readiness completed_ok."""
+    _seed_ticket(7017, work_item_type="Task", title="Task 7017 sin ejecución")
+    board = _get_board(client)
+    it = _item(board, 7017)
+    # Si no hay artifacts ni running, no aparece en el board en absoluto
+    # (no pasa el filtro 'running or has_artifacts or completed_ok')
+    assert it is None or it.get("readiness") != "completed_ok", (
+        "Un ticket sin AgentExecution jamás puede tener completed_ok"
+    )
+
+
+# UB-17: opt-out byte-idéntico — include_completed=false no altera los ítems no-completed
+def test_ub17_optout_does_not_alter_non_completed_items(client, tmp_repo):
+    """Con include_completed=false los ítems task_ready siguen apareciendo sin cambios."""
+    _seed_ticket(7018, work_item_type="Epic", title="Epic 7018")
+    _write_pending(tmp_repo, 7018, "RF-100", "parity", plan=True)
+
+    resp_on = client.get("/api/tickets/unblocker-board?include_completed=true")
+    resp_off = client.get("/api/tickets/unblocker-board?include_completed=false")
+    assert resp_on.status_code == 200
+    assert resp_off.status_code == 200
+
+    items_on = {it["ado_id"]: it["readiness"] for it in resp_on.get_json()["items"]}
+    items_off = {it["ado_id"]: it["readiness"] for it in resp_off.get_json()["items"]}
+
+    # El ticket task_ready aparece en ambos con la misma readiness
+    assert items_on.get(7018) == "task_ready"
+    assert items_off.get(7018) == "task_ready"
+
+
+# UB-18: cap suave — con STACKY_UNBLOCKER_COMPLETED_CAP=1 y 2 tickets completados,
+#         solo aparece 1 en la respuesta y completed_ok_truncated == 1
+def test_ub18_cap_truncates_oldest_completed(client, tmp_repo, monkeypatch):
+    """El cap STACKY_UNBLOCKER_COMPLETED_CAP limita el número de completed_ok en el board."""
+    import os
+    from db import session_scope
+    from models import AgentExecution
+
+    monkeypatch.setenv("STACKY_UNBLOCKER_COMPLETED_CAP", "1")
+
+    tid_a = _seed_ticket(7019, work_item_type="Task", title="Task 7019 cap-A")
+    tid_b = _seed_ticket(7020, work_item_type="Task", title="Task 7020 cap-B")
+    with session_scope() as session:
+        session.add(AgentExecution(
+            ticket_id=tid_a,
+            agent_type="FunctionalAnalyst",
+            status="completed",
+            started_by="pytest",
+            input_context_json="[]",
+        ))
+        session.add(AgentExecution(
+            ticket_id=tid_b,
+            agent_type="FunctionalAnalyst",
+            status="completed",
+            started_by="pytest",
+            input_context_json="[]",
+        ))
+
+    board = _get_board(client)
+    completed_items = [it for it in board["items"] if it.get("readiness") == "completed_ok"]
+    # Cap=1 → exactamente 1 completed_ok visible en el board
+    assert len(completed_items) == 1, (
+        f"Cap=1 debe retener solo 1 completed_ok, pero hay {len(completed_items)}"
+    )
+    # Al menos 1 fue truncado (la DB puede tener más completados de tests anteriores,
+    # pero lo importante es que el cap se aplicó y hay ≥1 truncado)
+    assert board["counts"].get("completed_ok_truncated", 0) >= 1, (
+        "completed_ok_truncated debe ser >= 1 cuando el cap poda elementos"
+    )

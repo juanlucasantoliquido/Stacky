@@ -2353,6 +2353,9 @@ def unblocker_board():
       }
     """
     project_name = _request_project_name()
+    # Plan 66 — F0 | Cambio 1: opt-in de tickets completados (default True)
+    include_completed_str = request.args.get("include_completed", "true").lower()
+    include_completed = include_completed_str not in ("false", "0", "no")
     repo_root, scan = _resolve_artifact_repo_root()
     outputs_dir = repo_root / "Agentes" / "outputs"
 
@@ -2360,6 +2363,7 @@ def unblocker_board():
     counts = {
         "running": 0, "comment_ready": 0, "task_ready": 0,
         "waiting_files": 0, "files_error": 0, "stale_consumed": 0,
+        "completed_ok": 0,   # Plan 66 — F0 Cambio 2
     }
 
     with session_scope() as session:
@@ -2444,8 +2448,18 @@ def unblocker_board():
                 or total_errors > 0 or total_stale > 0
             )
 
+            # Plan 66 — F0 Cambio 3: declarar is_completed_ok ANTES del continue
+            # Whitelist de estados terminales exitosos; estados fallidos excluidos implícitamente.
+            last_ex = last_exec_by_ticket.get(t.id)
+            is_completed_ok = (
+                last_ex is not None
+                and not running
+                and not has_artifacts
+                and (last_ex.status or "").lower() in {"completed", "ok", "done"}
+            )
+
             # Sólo incluir tickets relevantes para el desatascador.
-            if not (running or has_artifacts):
+            if not (running or has_artifacts or (include_completed and is_completed_ok)):
                 continue
 
             # ── Readiness + blockers ──────────────────────────────────────────
@@ -2490,7 +2504,11 @@ def unblocker_board():
                     "o revisar la consola del runtime."
                 )
             else:
-                readiness = "artifacts_idle"
+                # Plan 66 — F0 Cambio 4: readiness para completed_ok
+                if is_completed_ok:
+                    readiness = "completed_ok"
+                else:
+                    readiness = "artifacts_idle"
 
             if running:
                 counts["running"] += 1
@@ -2504,6 +2522,8 @@ def unblocker_board():
                 counts["waiting_files"] += 1
             elif readiness == "files_error":
                 counts["files_error"] += 1
+            elif readiness == "completed_ok":
+                counts["completed_ok"] += 1  # Plan 66 — F0 Cambio 5
 
             ex = last_exec_by_ticket.get(t.id)
             last_execution = None
@@ -2542,8 +2562,32 @@ def unblocker_board():
     _order = {
         "files_error": 0, "task_ready": 1, "stale_consumed": 2,
         "comment_ready": 3, "waiting_files": 4, "artifacts_idle": 5,
+        "completed_ok": 6,   # Plan 66 — F0 Cambio 6 — siempre al final
     }
     items.sort(key=lambda it: (_order.get(it["readiness"], 9), -(it["ado_id"] or 0)))
+
+    # Plan 66 — F0 §4.0.3: cap suave de completed_ok para no llenar el board.
+    # STACKY_UNBLOCKER_COMPLETED_CAP (default 50): conserva los N más recientes.
+    try:
+        cap_raw = int(os.environ.get("STACKY_UNBLOCKER_COMPLETED_CAP", "50"))
+    except (ValueError, TypeError):
+        cap_raw = 50
+    cap = max(0, cap_raw)
+    if cap > 0 and include_completed:
+        completed = [it for it in items if it.get("readiness") == "completed_ok"]
+        if len(completed) > cap:
+            completed.sort(
+                key=lambda it: (it.get("last_execution") or {}).get("started_at") or "",
+                reverse=True,
+            )
+            keep_ids = {id(it) for it in completed[:cap]}
+            removed = sum(1 for it in items if it.get("readiness") == "completed_ok" and id(it) not in keep_ids)
+            items = [it for it in items if it.get("readiness") != "completed_ok" or id(it) in keep_ids]
+            counts["completed_ok_truncated"] = removed
+        else:
+            counts["completed_ok_truncated"] = 0
+    else:
+        counts["completed_ok_truncated"] = 0
 
     return jsonify({
         "ok": True,
@@ -5734,12 +5778,14 @@ def build_epic_summary(
     confidence: float | None,
     sanitize_changed: bool = False,
     gate_decision: str | None = None,
+    tracker_provider: str | None = None,
 ) -> dict:
     """Plan 42 F4 — Resumen post-épica accionable. Función pura.
 
     Plan 50 [ADICIÓN] — `sanitize_changed`: True si el saneamiento de forma
     (F1) modificó el HTML; permite medir K1 y detectar sanitizado inerte.
     Plan 51 F4 — `gate_decision`: "pass"|"repair"|"needs_review"|None (gate OFF).
+    Plan 65 F13 — `tracker_provider`: "ado"|"gitlab"|None (telemetría multi-tracker).
     """
     rf_count = len(re.findall(r"<h2[^>]*>\s*RF-", clean_html, re.IGNORECASE))
     cited_modules = list(set(re.findall(r"(?:m[oó]dulo|proceso)\s+\S+", clean_html, re.IGNORECASE)))
@@ -5752,6 +5798,7 @@ def build_epic_summary(
         "confidence": confidence,
         "epic_sanitize_changed": bool(sanitize_changed),
         "gate_decision": gate_decision,
+        "tracker_provider": tracker_provider or "ado",
     }
 
 

@@ -106,7 +106,9 @@ $HarnessTestFiles = @(
   "tests/test_cli_visibility_parity.py",
   # Clasificacion colateral (Plan 68): 2 tests preexistentes sin clasificar
   "tests/test_codex_prompt_dedup.py",
-  "tests/test_prompt_dedup_guard.py"
+  "tests/test_prompt_dedup_guard.py",
+  # Plan 67 - Disciplina de procesos: reusar por default
+  "tests/test_process_discipline.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

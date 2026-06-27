@@ -24,6 +24,9 @@ from typing import Any, Callable
 from db import session_scope
 from models import AgentExecution, Ticket
 
+# Plan 67 — disciplina de procesos
+from services import process_discipline
+
 LogFn = Callable[..., None]
 
 
@@ -107,6 +110,14 @@ def enrich_blocks(
     blocks = _inject_client_profile_block(blocks, project_name, log)
     # Plan 42 F0 + Plan 64 F2 — diccionario de procesos (RAG si habilitado).
     blocks = _inject_process_catalog_block(blocks, project_name, log, query=_rag_query)
+    # Plan 67 | 2026-06-23 | Disciplina de procesos: decidir REUSE vs CREATE
+    blocks = _inject_process_discipline_block(
+        blocks=blocks,
+        project_name=project_name,
+        title=ticket_title,
+        description=ticket_description,
+        log=log,
+    )
     blocks = _inject_epic_structured(ticket_id, agent_type, blocks, log)
     blocks = _inject_artifact_context(ticket_id, blocks, log)
 
@@ -689,6 +700,65 @@ def build_process_dictionary_block_rag(
         return block, len(results)  # n_retrieved exacto, no string-counted
     except Exception:  # noqa: BLE001
         return None  # degradación controlada → caller usa full-inject
+
+
+# Plan 67 | 2026-06-23 | Inyecta bloque de disciplina de procesos si el flag está ON.
+# Patrón idiomático del módulo: retorna list[dict]; `return blocks` en todos los fallbacks.
+def _inject_process_discipline_block(
+    blocks: list[dict],
+    project_name: str | None,
+    title: str | None,
+    description: str | None,
+    log: LogFn,
+) -> list[dict]:
+    """Si STACKY_PROCESS_DISCIPLINE_ENABLED=true y hay catálogo, decide REUSE vs CREATE y agrega bloque."""
+    if not project_name or not (title or description):
+        return blocks
+    try:
+        from services.harness_flags import get_flag
+        if not get_flag("STACKY_PROCESS_DISCIPLINE_ENABLED"):
+            return blocks
+    except Exception:
+        return blocks
+
+    # Reusar el seam de carga de profile (Plan 42/64) — NO asumir project_ctx.process_catalog.
+    try:
+        from services.client_profile import load_client_profile
+        profile = load_client_profile(project_name)
+        if not isinstance(profile, dict):
+            return blocks
+        process_catalog = profile.get("process_catalog") or []
+        if not process_catalog:
+            return blocks
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"process-discipline no pudo cargar el catálogo (continuando): {exc}")
+        return blocks
+
+    try:
+        decision = process_discipline.decide_process_action(
+            title=title or "",
+            description=description or "",
+            process_catalog=process_catalog,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log("warn", f"process-discipline falló al decidir (continuando): {exc}")
+        return blocks
+
+    # [ADICIÓN ARQUITECTO] Telemetría decision.action en meta del bloque (Plan 44 observatorio).
+    block = {
+        "id": "process-discipline",
+        "type": "process-discipline",
+        "title": "Disciplina de Procesos",
+        "content": process_discipline.build_discipline_block(decision),
+        "meta": {
+            "action": decision.action,
+            "process_name": decision.process_name,
+            "confidence": decision.confidence,
+            "instruction_present": decision.instruction_present,
+        },
+    }
+    log("info", f"process-discipline inyectado: action={decision.action} project={project_name}")
+    return list(blocks) + [block]
 
 
 def _inject_process_catalog_block(

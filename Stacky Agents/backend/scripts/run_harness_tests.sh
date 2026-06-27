@@ -126,6 +126,8 @@ HARNESS_TEST_FILES=(
   # — Clasificación colateral (Plan 68): 2 tests preexistentes sin clasificar que rompían el meta-test —
   tests/test_codex_prompt_dedup.py
   tests/test_prompt_dedup_guard.py
+  # — Plan 67 · Disciplina de procesos: reusar por default —
+  tests/test_process_discipline.py
 )
 
 pass=0

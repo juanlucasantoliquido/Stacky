@@ -88,6 +88,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CLI_FEWSHOT_ENABLED", "STACKY_CLI_FEWSHOT_K", "STACKY_CLI_FEWSHOT_PROJECTS",
         "STACKY_INJECT_PROCESS_CATALOG", "STACKY_CAPS_ADVISOR_ENABLED",
         "STACKY_RAG_CATALOG_ENABLED", "STACKY_RAG_CATALOG_TOP_K",
+        "STACKY_PROCESS_DISCIPLINE_ENABLED",   # Plan 67, C6 v2.1
     ),
     "calidad_verificacion": (
         "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -1268,6 +1269,19 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=True,  # leído via os.getenv en _inject_process_catalog_block
     ),
     FlagSpec(
+        key="STACKY_PROCESS_DISCIPLINE_ENABLED",
+        type="bool",
+        label="Disciplina de procesos: reusar por default (Plan 67)",
+        description=(
+            "Plan 67 — Si ON, inyecta un bloque 'process-discipline' que decide "
+            "REUTILIZAR un proceso existente del catálogo vs CREAR uno nuevo, según "
+            "instrucción explícita del ticket y similitud con el catálogo. "
+            "Default OFF = enrich_blocks byte-idéntico al Plan 64."
+        ),
+        group="contexto_memoria",
+        env_only=True,  # leído via os.getenv en get_flag() — patrón de STACKY_RAG_CATALOG_ENABLED
+    ),
+    FlagSpec(
         key="STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED",
         type="bool",
         label="Preflight de grounding en épica (F2)",
@@ -1747,6 +1761,16 @@ def apply_updates(updates: dict[str, object]) -> dict[str, object]:
         spec = _REGISTRY_INDEX[key]
         result[key] = _cast(spec, raw_value)
     return result
+
+
+def get_flag(key: str) -> bool:
+    """Lee un flag bool del registry por env var (Plan 67 — convenience helper).
+
+    Lee directamente os.getenv. Default False si la var no está configurada.
+    Útil para lazy-import dentro de funciones; patchen en tests para controlar
+    el valor sin setear env vars reales.
+    """
+    return os.getenv(key, "false").strip().lower() in {"1", "true", "on", "yes"}
 
 
 def _cast(spec: FlagSpec, raw: object) -> object:

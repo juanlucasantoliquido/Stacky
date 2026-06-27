@@ -101,7 +101,12 @@ $HarnessTestFiles = @(
   # Plan 61 - Gate determinista del flujo funcional (Task)
   "tests/test_task_gate_flags.py",
   "tests/test_task_gate.py",
-  "tests/test_create_child_task_gate.py"
+  "tests/test_create_child_task_gate.py",
+  # Plan 68 - Paridad de visibilidad de streams Codex vs Claude (AD-1 stderr tail)
+  "tests/test_cli_visibility_parity.py",
+  # Clasificacion colateral (Plan 68): 2 tests preexistentes sin clasificar
+  "tests/test_codex_prompt_dedup.py",
+  "tests/test_prompt_dedup_guard.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

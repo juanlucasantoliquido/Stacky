@@ -250,6 +250,7 @@ def _run_in_background(
     prompt_file: Path | None = None
     run_dir: Path | None = None
     stdout_tail: list[str] = []
+    stderr_tail: list[str] = []  # Plan 68 AD-1 — tail dedicado para stderr (paridad con claude)
     return_code: int | None = None
     heartbeat_stop = threading.Event()
     heartbeat_thread: threading.Thread | None = None
@@ -571,7 +572,7 @@ def _run_in_background(
             ),
             threading.Thread(
                 target=_read_stream,
-                args=(execution_id, proc.stderr, "warn", "codex-stderr", stdout_tail),
+                args=(execution_id, proc.stderr, "warn", "codex-stderr", stderr_tail),  # Plan 68 AD-1 — tail dedicado (era stdout_tail)
                 daemon=True,
             ),
         ]
@@ -1594,6 +1595,7 @@ def _resume_with_input(
         suffix = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
         output_file = run_dir / f"input_{suffix}_last_message.md"
         stdout_tail: list[str] = []
+        stderr_tail: list[str] = []  # Plan 68 AD-1 — tail dedicado para stderr (paridad con claude)
         return_code: int | None = None
 
         try:
@@ -1640,7 +1642,7 @@ def _resume_with_input(
                 ),
                 threading.Thread(
                     target=_read_stream,
-                    args=(execution_id, proc.stderr, "warn", "codex-stderr", stdout_tail),
+                    args=(execution_id, proc.stderr, "warn", "codex-stderr", stderr_tail),  # Plan 68 AD-1 — tail dedicado (era stdout_tail)
                     daemon=True,
                 ),
             ]

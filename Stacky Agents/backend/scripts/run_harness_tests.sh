@@ -109,6 +109,23 @@ HARNESS_TEST_FILES=(
   tests/test_task_gate_flags.py
   tests/test_task_gate.py
   tests/test_create_child_task_gate.py
+  # — Plan 64 · RAG TF-IDF grounding catalog —
+  tests/test_rag_context_enrichment.py
+  tests/test_rag_perf.py
+  tests/test_rag_retriever.py
+  # — Plan 65 · GitLab TrackerProvider puerto + adapters ADO/GitLab —
+  tests/test_tracker_provider_conformance.py
+  tests/test_ado_provider.py
+  tests/test_gitlab_client.py
+  tests/test_gitlab_provider.py
+  tests/test_tracker_factory.py
+  tests/test_no_adoclient_outside_ado_provider.py
+  tests/test_global_config_gitlab.py
+  # — Plan 68 · Paridad de visibilidad de streams Codex vs Claude (AD-1 stderr tail) —
+  tests/test_cli_visibility_parity.py
+  # — Clasificación colateral (Plan 68): 2 tests preexistentes sin clasificar que rompían el meta-test —
+  tests/test_codex_prompt_dedup.py
+  tests/test_prompt_dedup_guard.py
 )
 
 pass=0

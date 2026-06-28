@@ -29,6 +29,8 @@ from services.flow_config_store import resolve as resolve_flow
 from services.ado_pipeline_inference import infer_pipeline, invalidate_cache
 from services.ado_client import AdoClient, AdoApiError as _AdoApiError, AdoConfigError as _AdoConfigError
 from services.project_context import ProjectContextError, build_ado_client, resolve_project_context
+from services.tracker_provider import get_tracker_provider, TrackerConfigError  # Plan 70 F2
+import config  # Plan 70 F2 — flag STACKY_TICKETS_PROVIDER_ENABLED
 
 logger = logging.getLogger("stacky_agents.api.tickets")
 
@@ -349,6 +351,65 @@ def _ado_client_for_ticket(ticket: Ticket | None = None, project_name: str | Non
     return build_ado_client()
 
 
+def _tracker_item_from_kwargs(
+    *,
+    work_item_type: str,
+    title: str | None = None,
+    description: str | None = None,
+    fields: dict | None = None,
+    parent_ado_id: str | int | None = None,
+):
+    """Plan 70 F1-B (GAP-E) — Adapter PURA que normaliza las firmas ADO al puerto.
+
+    Acepta las dos formas usadas por los callers:
+      - kwargs-style: ``work_item_type=..., title=..., description=...``
+      - fields-style: ``work_item_type=..., fields={"System.Title":...,
+        "System.Description":...}, parent_ado_id=42``
+
+    Devuelve un ``TrackerItem`` del puerto ``services.tracker_provider``. El
+    ``parent_id`` se normaliza a ``str``; los campos no estándar viajan en
+    ``TrackerItem.fields``. Sin I/O.
+    """
+    from services.tracker_provider import TrackerItem
+
+    f = dict(fields or {})
+    resolved_title = title if title is not None else f.pop("System.Title", "")
+    resolved_desc = (
+        description
+        if description is not None
+        else f.pop("System.Description", "")
+    )
+    # Other System.* ADO fields kept as-is in .fields (callers/provider may consume)
+    parent_id = None if parent_ado_id is None else str(parent_ado_id)
+    return TrackerItem(
+        item_type=work_item_type,
+        title=resolved_title or "",
+        description_html=resolved_desc or "",
+        parent_id=parent_id,
+        fields=f,
+    )
+
+
+def _provider_for_ticket(ticket: "Ticket | None" = None, project_name: str | None = None):
+    """Plan 70 F2 — Devuelve el ``TrackerProvider`` para el proyecto/ticket.
+
+    Espejo provider-agnóstico de ``_ado_client_for_ticket``. La migración está
+    gateada por ``STACKY_TICKETS_PROVIDER_ENABLED`` (default **OFF**):
+      - flag OFF → retorna ``None`` y el caller cae a ``_ado_client_for_ticket``
+        (backward-compat byte-idéntico).
+      - flag ON + provider disponible → retorna la instancia del puerto.
+      - flag ON + provider no configurado (ej. GitLab sin
+        ``STACKY_GITLAB_ENABLED``) → retorna ``None`` (fallback ADO), NO propaga.
+    """
+    if not getattr(config.config, "STACKY_TICKETS_PROVIDER_ENABLED", False):
+        return None
+    proj = project_name or (ticket.stacky_project_name if ticket is not None else None)
+    try:
+        return get_tracker_provider(proj)
+    except TrackerConfigError:
+        return None  # caller cae a fallback ADO
+
+
 def _resolve_me_unique_name(project_name: str | None) -> str:
     """uniqueName ADO del operador para el filtro 'Mis tareas'.
 
@@ -500,12 +561,36 @@ def list_tickets():
         return jsonify(out)
 
 
+def _sync_via_provider_or_ado(project_name: str | None) -> dict:
+    """Plan 70 F10 — GAP-A: branch provider vs ADO para sync de tickets.
+
+    - Flag OFF o provider.name == "azure_devops": delegamos a sync_tickets (ADO legacy).
+    - Flag ON + provider no-ADO (ej. gitlab): no soportado aun → NotImplementedError
+      ruidoso que el operador puede resolver volviendo a usar ADO o esperando la
+      implementacion de _apply_synced_items para GitLab.
+
+    Nunca silencia el error del path GitLab: el operador debe ver el fallo claro.
+    """
+    from services.tracker_provider import TrackerQuery
+    provider = _provider_for_ticket(project_name=project_name)
+    if provider is not None and getattr(provider, "name", "azure_devops") != "azure_devops":
+        # Path no-ADO: GitLab u otro tracker
+        # TODO (Plan 71): implementar _apply_synced_items para normalizar items del provider
+        raise NotImplementedError(
+            f"Sync para tracker '{provider.name}' aun no implementado. "
+            "Activá STACKY_TICKETS_PROVIDER_ENABLED=false o esperá Plan 71."
+        )
+    # Path ADO: usar sync_tickets legacy (byte-identico con flag OFF)
+    return sync_tickets(client=_ado_client_for_ticket(project_name=project_name))
+
+
 @bp.post("/sync")
 def sync_from_ado():
-    """Trae los work items abiertos desde Azure DevOps y actualiza la BD local."""
+    """Trae los work items abiertos desde el tracker y actualiza la BD local."""
     project_name = _request_project_name()
     try:
-        result = sync_tickets(client=_ado_client_for_ticket(project_name=project_name))
+        # Plan 70 F10 — branch provider/GAP-A: sync para trackers no-ADO
+        result = _sync_via_provider_or_ado(project_name=project_name)
     except AdoConfigError as e:
         logger.warning("ADO sync — config: %s", e)
         return jsonify({"ok": False, "error": "config", "message": str(e)}), 400
@@ -563,8 +648,12 @@ def get_pipeline_status_endpoint(ticket_id: int):
     ado_comments = None
     if request.args.get("include_ado_comments", "").lower() in ("1", "true", "yes"):
         try:
-            client = _ado_client_for_ticket(ticket=t)
-            ado_comments = client.fetch_comments(ado_id, top=30)
+            provider = _provider_for_ticket(ticket=t)
+            if provider is not None:
+                ado_comments = provider.fetch_comments(str(ado_id))
+            else:
+                client = _ado_client_for_ticket(ticket=t)
+                ado_comments = client.fetch_comments(ado_id, top=30)
         except Exception as e:
             logger.warning("pipeline-status: no se pudo leer comentarios ADO para %s: %s", ado_id, e)
 
@@ -783,12 +872,15 @@ def get_comments(ticket_id: int):
             abort(404)
         ado_id = t.ado_id
 
-    try:
-        client = _ado_client_for_ticket(ticket=t)
-    except AdoConfigError as e:
-        return jsonify({"comments": [], "error": str(e)}), 200
-
-    raw = client.fetch_comments(ado_id)
+    provider = _provider_for_ticket(ticket=t)
+    if provider is not None:
+        raw = provider.fetch_comments(str(ado_id))
+    else:
+        try:
+            client = _ado_client_for_ticket(ticket=t)
+        except AdoConfigError as e:
+            return jsonify({"comments": [], "error": str(e)}), 200
+        raw = client.fetch_comments(ado_id)
     comments = [
         {
             "author": c["author"],
@@ -816,12 +908,15 @@ def get_attachments(ticket_id: int):
             abort(404)
         ado_id = t.ado_id
 
-    try:
-        client = _ado_client_for_ticket(ticket=t)
-    except AdoConfigError as e:
-        return jsonify({"attachments": [], "error": str(e)}), 200
-
-    attachments = client.fetch_attachments(ado_id)
+    provider = _provider_for_ticket(ticket=t)
+    if provider is not None:
+        attachments = provider.fetch_attachments(str(ado_id))
+    else:
+        try:
+            client = _ado_client_for_ticket(ticket=t)
+        except AdoConfigError as e:
+            return jsonify({"attachments": [], "error": str(e)}), 200
+        attachments = client.fetch_attachments(ado_id)
     return jsonify({"attachments": attachments})
 
 
@@ -1143,7 +1238,11 @@ def set_stacky_status_by_ado(ado_id: int):
             }
         else:
             try:
-                _ado_client_for_ticket(ticket=t).update_work_item_state(int(ado_id), target_ado_state)
+                _provider = _provider_for_ticket(ticket=t)
+                if _provider is not None:
+                    _provider.update_item_state(str(ado_id), target_ado_state)
+                else:
+                    _ado_client_for_ticket(ticket=t).update_work_item_state(int(ado_id), target_ado_state)
                 state_change_result = {"ok": True, "to": target_ado_state}
                 logger.info(
                     "set_stacky_status_by_ado: ado state changed → %s (ADO-%s corr=%s)",
@@ -1727,7 +1826,11 @@ def finish_work(ticket_id: int):
     # ── 4. Cambiar estado en ADO ──────────────────────────────────────────────
     if target_ado_state and ado_id is not None:
         try:
-            _ado_client_for_ticket(ticket=ticket).update_work_item_state(int(ado_id), target_ado_state)
+            _provider = _provider_for_ticket(ticket=ticket)
+            if _provider is not None:
+                _provider.update_item_state(str(ado_id), target_ado_state)
+            else:
+                _ado_client_for_ticket(ticket=ticket).update_work_item_state(int(ado_id), target_ado_state)
             actions.append({
                 "action": "update_ado_state",
                 "ok": True,
@@ -1948,7 +2051,11 @@ def artifact_status(ado_id: int):
             task_url = None
             if task_ado_id:
                 try:
-                    task_url = _ado_client_for_ticket(project_name=project_name).work_item_url(int(task_ado_id))
+                    _provider = _provider_for_ticket(project_name=project_name)
+                    if _provider is not None:
+                        task_url = _provider.item_url(str(task_ado_id))
+                    else:
+                        task_url = _ado_client_for_ticket(project_name=project_name).work_item_url(int(task_ado_id))
                 except Exception:
                     pass
 
@@ -3110,6 +3217,7 @@ def _ensure_task_creation_parent(
     pt_file: Path,
     operation_id: str,
     payload_sha256: str,
+    provider=None,  # Plan 70 F8 — TrackerProvider si disponible
 ) -> dict:
     """Devuelve el padre real donde debe colgar la Task.
 
@@ -3242,19 +3350,37 @@ def _ensure_task_creation_parent(
                     continue
 
             try:
-                wi_result = ado.create_work_item(
-                    work_item_type=display_type,
-                    fields={
-                        "System.Title": _bridge_title(pt_payload, step_type, operation_id),
-                        "System.Description": _bridge_description_html(
-                            pt_payload=pt_payload,
-                            root_parent_ado_id=root_parent_ado_id,
-                            operation_id=operation_id,
-                            payload_sha256=payload_sha256,
-                        ),
-                    },
-                    parent_ado_id=current_parent_id,
-                )
+                # Plan 70 F8 — branch provider para creacion de work items intermedios
+                if provider is not None:
+                    wi_result = provider.create_item(
+                        _tracker_item_from_kwargs(
+                            work_item_type=display_type,
+                            fields={
+                                "System.Title": _bridge_title(pt_payload, step_type, operation_id),
+                                "System.Description": _bridge_description_html(
+                                    pt_payload=pt_payload,
+                                    root_parent_ado_id=root_parent_ado_id,
+                                    operation_id=operation_id,
+                                    payload_sha256=payload_sha256,
+                                ),
+                            },
+                            parent_ado_id=current_parent_id,
+                        )
+                    )
+                else:
+                    wi_result = ado.create_work_item(
+                        work_item_type=display_type,
+                        fields={
+                            "System.Title": _bridge_title(pt_payload, step_type, operation_id),
+                            "System.Description": _bridge_description_html(
+                                pt_payload=pt_payload,
+                                root_parent_ado_id=root_parent_ado_id,
+                                operation_id=operation_id,
+                                payload_sha256=payload_sha256,
+                            ),
+                        },
+                        parent_ado_id=current_parent_id,
+                    )
                 created_id = int(wi_result["id"])
             except Exception as exc:  # noqa: BLE001
                 last_failure = {
@@ -3351,9 +3477,9 @@ def _ensure_task_creation_parent(
 
 
 def _parent_exists_preflight(
-    *, ado, epic_ado_id: int, operation_id: str,
+    *, ado, epic_ado_id: int, operation_id: str, provider=None,
 ) -> dict | None:
-    """Verifica que el work item padre EXISTA en ADO antes de crear la Task.
+    """Verifica que el work item padre EXISTA antes de crear la Task.
 
     Causa raíz de 241/242 (2026-06-05): el agente nombró la carpeta de salida
     `epic-<N>` usando la etiqueta humana del título (`EP-26` → 26) en vez del id
@@ -3367,19 +3493,28 @@ def _parent_exists_preflight(
 
     Gateable con STACKY_PARENT_PREFLIGHT=off (rollback sin redeploy).
 
+    Plan 70 F9: acepta ``provider`` (TrackerProvider) para usar get_item() en vez
+    de get_work_item() ADO-específico.
+
     Devuelve:
-      - None: preflight omitido (flag off, cliente sin get_work_item, o error de
-        lectura NO concluyente) → el flujo procede y create_work_item + sus
-        catches existentes cubren el caso.
+      - None: preflight omitido (flag off, cliente sin get_work_item/get_item, o
+        error de lectura NO concluyente) → el flujo procede.
       - {"ok": True, "parent_type": ...}: el padre existe.
       - {"ok": False, "reason": "ADO_PARENT_NOT_FOUND", "message": ..., "detail": ...}:
         NO crear; el caller devuelve 422 y no consume el archivo.
     """
     if os.getenv("STACKY_PARENT_PREFLIGHT", "on").strip().lower() == "off":
         return None
-    get_wi = getattr(ado, "get_work_item", None)
-    if not callable(get_wi):
-        return None  # cliente sin soporte (tests legacy) → skip
+
+    # Plan 70 F9 — path provider: usa get_item del puerto (GAP-B)
+    if provider is not None:
+        get_wi = getattr(provider, "get_item", None)
+        if not callable(get_wi):
+            return None
+    else:
+        get_wi = getattr(ado, "get_work_item", None)
+        if not callable(get_wi):
+            return None  # cliente sin soporte (tests legacy) → skip
 
     def _not_found_payload(detail: str) -> dict:
         message = (
@@ -3397,7 +3532,12 @@ def _parent_exists_preflight(
         }
 
     try:
-        wi = get_wi(epic_ado_id, ["System.Id", "System.WorkItemType", "System.Title"])
+        # Plan 70 F9: provider usa str id + sin kwarg fields (filtrado post-fetch);
+        # ADO legacy usa int id + lista de campos (optimizacion ADO-especifica).
+        if provider is not None:
+            wi = get_wi(str(epic_ado_id))
+        else:
+            wi = get_wi(epic_ado_id, ["System.Id", "System.WorkItemType", "System.Title"])
     except Exception as exc:  # noqa: BLE001 — clasificamos por mensaje/status
         raw = str(exc)
         low = raw.lower()
@@ -3408,6 +3548,7 @@ def _parent_exists_preflight(
             or "does not exist" in low
             or "→ 404" in raw
             or " 404:" in raw
+            or "not found" in low
         )
         if not_found:
             logger.warning(
@@ -3417,7 +3558,7 @@ def _parent_exists_preflight(
             return _not_found_payload(raw)
         # Error transitorio o no concluyente (red, 5xx, permisos): no bloquear.
         logger.warning(
-            "create_child_task: preflight no pudo verificar el padre ADO-%s "
+            "create_child_task: preflight no pudo verificar el padre %s "
             "operation_id=%s err=%s — se omite (create_work_item cubre)",
             epic_ado_id, operation_id, raw[:200],
         )
@@ -3870,7 +4011,11 @@ def create_child_task(ado_id: int):
         prev_url = None
         if prev_task_id:
             try:
-                prev_url = _ado_client_for_ticket(project_name=project_name).work_item_url(int(prev_task_id))
+                _provider = _provider_for_ticket(project_name=project_name)
+                if _provider is not None:
+                    prev_url = _provider.item_url(str(prev_task_id))
+                else:
+                    prev_url = _ado_client_for_ticket(project_name=project_name).work_item_url(int(prev_task_id))
             except Exception:
                 pass
         _mark_pending_task_consumed(
@@ -4046,6 +4191,7 @@ def create_child_task(ado_id: int):
     # contaba como intento "creado"). Deja el pending-task.json sin consumir.
     parent_check = _parent_exists_preflight(
         ado=ado, epic_ado_id=ado_id, operation_id=operation_id,
+        provider=_provider_for_ticket(project_name=project_name),  # Plan 70 F9
     )
     if parent_check is not None and not parent_check.get("ok"):
         _audit_create_child_task(
@@ -4094,6 +4240,7 @@ def create_child_task(ado_id: int):
         pt_file=pt_file,
         operation_id=operation_id,
         payload_sha256=payload_sha256,
+        provider=_provider_for_ticket(project_name=project_name),  # Plan 70 F8
     )
     actions.extend(hierarchy_parent.get("actions") or [])
     if not hierarchy_parent.get("ok"):
@@ -4144,17 +4291,33 @@ def create_child_task(ado_id: int):
     # ("To Do" en Agile / "New" en Scrum) y, si target_state es distinto,
     # intentamos transicionarlo con un PATCH post-creación (paso [2b]).
     target_state = (pt_payload.get("target_state") or "").strip()
+    _provider = _provider_for_ticket(project_name=project_name)
     try:
-        wi_result = ado.create_work_item(
-            work_item_type="Task",
-            fields={
-                "System.Title": pt_payload["title"],
-                "System.Description": pt_payload.get("description_html", ""),
-            },
-            parent_ado_id=task_parent_ado_id,
-        )
+        if _provider is not None:
+            wi_result = _provider.create_item(
+                _tracker_item_from_kwargs(
+                    work_item_type="Task",
+                    fields={
+                        "System.Title": pt_payload["title"],
+                        "System.Description": pt_payload.get("description_html", ""),
+                    },
+                    parent_ado_id=task_parent_ado_id,
+                )
+            )
+        else:
+            wi_result = ado.create_work_item(
+                work_item_type="Task",
+                fields={
+                    "System.Title": pt_payload["title"],
+                    "System.Description": pt_payload.get("description_html", ""),
+                },
+                parent_ado_id=task_parent_ado_id,
+            )
         task_ado_id = int(wi_result["id"])
-        task_url = ado.work_item_url(task_ado_id)
+        if _provider is not None:
+            task_url = _provider.item_url(str(task_ado_id))
+        else:
+            task_url = ado.work_item_url(task_ado_id)
         actions.append({
             "action": "create_work_item",
             "ok": True,
@@ -4228,7 +4391,11 @@ def create_child_task(ado_id: int):
     # estado inicial y el operador puede ajustarlo manualmente en ADO.
     if target_state and target_state.lower() not in ("to do", "new", "to-do", "todo"):
         try:
-            ado.update_work_item_state(task_ado_id, target_state)
+            _provider = _provider_for_ticket(project_name=project_name)
+            if _provider is not None:
+                _provider.update_item_state(str(task_ado_id), target_state)
+            else:
+                ado.update_work_item_state(task_ado_id, target_state)
             actions.append({
                 "action": "set_state",
                 "ok": True,
@@ -4317,11 +4484,15 @@ def create_child_task(ado_id: int):
 
     # ── [3] upload_attachment ──────────────────────────────────────────────────
     if plan_exists and plan_path is not None:
+        _provider = _provider_for_ticket(project_name=project_name)
         try:
-            attach_result = ado.upload_attachment(
-                file_path=plan_path,
-                file_name="plan-de-pruebas.md",
-            )
+            if _provider is not None:
+                attach_result = _provider.upload_attachment(plan_path, "plan-de-pruebas.md")
+            else:
+                attach_result = ado.upload_attachment(
+                    file_path=plan_path,
+                    file_name="plan-de-pruebas.md",
+                )
             attachment_id = attach_result.get("id") or attach_result.get("url", "")
             attach_url = attach_result.get("url", "")
             actions.append({
@@ -4332,11 +4503,14 @@ def create_child_task(ado_id: int):
 
             # ── [4] link_attachment_to_work_item ───────────────────────────────
             try:
-                ado.link_attachment_to_work_item(
-                    work_item_id=task_ado_id,
-                    attachment_url=attach_url,
-                    comment=f"Plan de pruebas - {pt_payload.get('rf_id', '')}",
-                )
+                if _provider is not None:
+                    _provider.link_attachment(str(task_ado_id), attach_result)
+                else:
+                    ado.link_attachment_to_work_item(
+                        work_item_id=task_ado_id,
+                        attachment_url=attach_url,
+                        comment=f"Plan de pruebas - {pt_payload.get('rf_id', '')}",
+                    )
                 actions.append({"action": "link_attachment", "ok": True})
             except _AdoApiError as exc:
                 actions.append({
@@ -5046,7 +5220,11 @@ def assign_ticket(ticket_id: int):
         ado_ok = False
         ado_error = None
         try:
-            _ado_client_for_ticket(ticket=ticket).update_work_item_assigned_to(ado_id, ado_unique_name)
+            _provider = _provider_for_ticket(ticket=ticket)
+            if _provider is not None:
+                _provider.update_item_assignee(str(ado_id), ado_unique_name)
+            else:
+                _ado_client_for_ticket(ticket=ticket).update_work_item_assigned_to(ado_id, ado_unique_name)
             ado_ok = True
         except Exception as e:
             ado_error = str(e)
@@ -5186,7 +5364,11 @@ def get_ado_user():
         })
 
     try:
-        identity = _ado_client_for_ticket(project_name=project_name).get_authenticated_user()
+        _provider = _provider_for_ticket(project_name=project_name)
+        if _provider is not None:
+            identity = _provider.get_authenticated_user()
+        else:
+            identity = _ado_client_for_ticket(project_name=project_name).get_authenticated_user()
     except (AdoConfigError, _AdoConfigError) as exc:
         return jsonify({"ok": False, "linked": False, "error": "config", "message": str(exc)}), 400
     except (AdoApiError, _AdoApiError) as exc:
@@ -5300,7 +5482,8 @@ def sync_from_ado_v2():
     t_start = _sync_time.monotonic()
 
     try:
-        result = sync_tickets(client=_ado_client_for_ticket(project_name=project_name))
+        # Plan 70 F10 — branch provider/GAP-A
+        result = _sync_via_provider_or_ado(project_name=project_name)
     except AdoConfigError as e:
         _sync_in_progress_by_project.discard(sync_scope)
         logger.warning("ADO sync-v2 — config: %s", e)
@@ -5900,19 +6083,31 @@ def _publish_epic_to_ado(
     if not title:
         title = _derive_epic_title(clean_html)
 
-    client = _ado_client_for_ticket(project_name=project_name)
-    wi = client.create_work_item(
-        work_item_type="Epic",
-        title=title,
-        description=clean_html,
-    )
-
-    ado_id: int = wi["id"]
-    wi_title: str = wi.get("fields", {}).get("System.Title", title)
-    wi_url: str = (
-        wi.get("_links", {}).get("html", {}).get("href")
-        or client.work_item_url(ado_id)
-    )
+    # Plan 70 F8 — branch provider para creacion de Epic (GAP-E)
+    _provider = _provider_for_ticket(project_name=project_name)
+    if _provider is not None:
+        wi = _provider.create_item(
+            _tracker_item_from_kwargs(work_item_type="Epic", title=title, description=clean_html)
+        )
+        ado_id: int = wi["id"]
+        wi_title: str = wi.get("fields", {}).get("System.Title", title)
+        wi_url: str = (
+            wi.get("_links", {}).get("html", {}).get("href")
+            or _provider.item_url(str(ado_id))
+        )
+    else:
+        client = _ado_client_for_ticket(project_name=project_name)
+        wi = client.create_work_item(
+            work_item_type="Epic",
+            title=title,
+            description=clean_html,
+        )
+        ado_id = wi["id"]
+        wi_title = wi.get("fields", {}).get("System.Title", title)
+        wi_url = (
+            wi.get("_links", {}).get("html", {}).get("href")
+            or client.work_item_url(ado_id)
+        )
 
     _persist_epic_ticket(ado_id, wi_title, clean_html, wi_url, project_name)
     _epic_brief_save(ado_id, brief, project_name)
@@ -6323,19 +6518,31 @@ def _publish_issue_to_ado(
     if not title:
         title = _derive_epic_title(clean_html)
 
-    client = _ado_client_for_ticket(project_name=project_name)
-    wi = client.create_work_item(
-        work_item_type="Issue",
-        title=title,
-        description=clean_html,
-    )
-
-    ado_id: int = wi["id"]
-    wi_title: str = wi.get("fields", {}).get("System.Title", title)
-    wi_url: str = (
-        wi.get("_links", {}).get("html", {}).get("href")
-        or client.work_item_url(ado_id)
-    )
+    # Plan 70 F8 — branch provider para creacion de Issue (GAP-E)
+    _provider = _provider_for_ticket(project_name=project_name)
+    if _provider is not None:
+        wi = _provider.create_item(
+            _tracker_item_from_kwargs(work_item_type="Issue", title=title, description=clean_html)
+        )
+        ado_id: int = wi["id"]
+        wi_title: str = wi.get("fields", {}).get("System.Title", title)
+        wi_url: str = (
+            wi.get("_links", {}).get("html", {}).get("href")
+            or _provider.item_url(str(ado_id))
+        )
+    else:
+        client = _ado_client_for_ticket(project_name=project_name)
+        wi = client.create_work_item(
+            work_item_type="Issue",
+            title=title,
+            description=clean_html,
+        )
+        ado_id = wi["id"]
+        wi_title = wi.get("fields", {}).get("System.Title", title)
+        wi_url = (
+            wi.get("_links", {}).get("html", {}).get("href")
+            or client.work_item_url(ado_id)
+        )
 
     _persist_issue_ticket(ado_id, wi_title, clean_html, wi_url, project_name)
     _epic_brief_save(ado_id, brief, project_name)
@@ -6351,17 +6558,27 @@ def _post_phase_comment(client, ado_id: int, phase: str, html_content: str) -> N
     Anteponemos un marker HTML único por fase. Si `comment_exists` detecta el
     marker, no se vuelve a postear (idempotencia). Un fallo al postear el
     comentario NO es fatal: el Issue ya existe; se registra warning y se sigue.
+
+    Plan 70 F3: ``client`` puede ser un ``TrackerProvider`` (puerto, sin
+    ``fmt``) o un ``AdoClient`` legacy (con ``fmt="html"``). Se distingue por
+    el atributo ``name`` que solo tiene el provider del puerto.
     """
     marker = _ISSUE_PHASE_MARKERS.get(phase)
     if not marker:
         logger.warning("issue comment: fase desconocida=%s ado_id=%s (omitido)", phase, ado_id)
         return
+    is_provider = hasattr(client, "name") and isinstance(
+        getattr(client, "name", None), str
+    )
     try:
-        if client.comment_exists(ado_id, marker):
+        if client.comment_exists(str(ado_id) if is_provider else ado_id, marker):
             logger.debug("issue comment: ya existe fase=%s ado_id=%s", phase, ado_id)
             return
         marked_html = f"{marker}\n{html_content}"
-        client.post_comment(ado_id, marked_html, fmt="html")
+        if is_provider:
+            client.post_comment(str(ado_id), marked_html)
+        else:
+            client.post_comment(ado_id, marked_html, fmt="html")
         logger.info("issue comment: posteado fase=%s ado_id=%s", phase, ado_id)
     except Exception as exc:  # noqa: BLE001 — comentario no fatal: el Issue ya existe
         logger.warning(
@@ -6471,8 +6688,10 @@ def publish_issue_from_run(
 
     # Comentario único de fase "funcional" con el output del agente (idempotente).
     try:
-        client = _ado_client_for_ticket(project_name=project_name)
-        _post_phase_comment(client, published.ado_id, "funcional", clean_html)
+        tracker = _provider_for_ticket(project_name=project_name) or _ado_client_for_ticket(
+            project_name=project_name
+        )
+        _post_phase_comment(tracker, published.ado_id, "funcional", clean_html)
     except Exception as exc:  # noqa: BLE001 — el Issue ya existe; comentario no fatal
         logger.warning("publish_issue_from_run: comentario de fase falló (no fatal): %s", exc)
 
@@ -6926,10 +7145,70 @@ def publish_epic_children(
         return _ChildrenPublishResult(skipped=True)
     if not children_plan.ok or not children_plan.features:
         return _ChildrenPublishResult(skipped=True)
+
+    # Plan 70 F8 — branch provider para publish_epic_children (GAP-E)
+    _provider = _provider_for_ticket(project_name=project_name)
+    if _provider is not None:
+        created: list[int] = []
+        reused: list[int] = []
+        try:
+            for idx, feature in enumerate(children_plan.features):
+                f_marker = _child_marker(epic_ado_id, "feature", feature.title, idx)
+                existing = _provider.find_child_by_marker(str(epic_ado_id), f_marker)
+                if existing:
+                    feature_id = int(existing["id"])
+                    reused.append(feature_id)
+                else:
+                    res = _provider.create_item(
+                        _tracker_item_from_kwargs(
+                            work_item_type="Feature",
+                            fields={
+                                "System.Title": feature.title,
+                                "System.Description": feature.html + f_marker,
+                            },
+                            parent_ado_id=epic_ado_id,
+                        )
+                    )
+                    feature_id = int(res["id"])
+                    created.append(feature_id)
+                for tidx, task in enumerate(feature.children):
+                    t_marker = _child_marker(feature_id, "task", task.title, tidx)
+                    t_existing = _provider.find_child_by_marker(str(feature_id), t_marker)
+                    if t_existing:
+                        reused.append(int(t_existing["id"]))
+                        continue
+                    try:
+                        res = _provider.create_item(
+                            _tracker_item_from_kwargs(
+                                work_item_type="Task",
+                                fields={
+                                    "System.Title": task.title,
+                                    "System.Description": task.html + t_marker,
+                                },
+                                parent_ado_id=feature_id,
+                            )
+                        )
+                        created.append(int(res["id"]))
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Task bajo Feature %s rechazada por provider: %s",
+                            feature_id, str(exc)[:150],
+                        )
+                        return _ChildrenPublishResult(
+                            created_ids=created,
+                            reused_ids=reused,
+                            error=f"task_under_feature_rejected: {str(exc)[:120]}",
+                        )
+            return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=None)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("publish_epic_children (provider) falló: %s", str(exc)[:200], exc_info=True)
+            return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=str(exc)[:200])
+
+    # Fallback: ADO path (flag OFF o provider no disponible)
     if ado is None:
         ado = build_ado_client(project_name)
-    created: list[int] = []
-    reused: list[int] = []
+    created = []
+    reused = []
     try:
         for idx, feature in enumerate(children_plan.features):
             f_marker = _child_marker(epic_ado_id, "feature", feature.title, idx)

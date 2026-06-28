@@ -793,6 +793,14 @@ class Config:
     STACKY_GITLAB_ENABLED: bool = os.getenv(
         "STACKY_GITLAB_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 70 — Desacople consumers TrackerProvider ─────────────────────────
+    # ON: api/tickets.py enruta los ~18 call sites por el puerto TrackerProvider
+    # (get_tracker_provider) en vez de por _ado_client_for_ticket; cae al fallback
+    # ADO si el provider del proyecto no está disponible. OFF (default):
+    # byte-idéntico al comportamiento pre-Plan-70 (todo por AdoClient directo).
+    STACKY_TICKETS_PROVIDER_ENABLED: bool = os.getenv(
+        "STACKY_TICKETS_PROVIDER_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
     # Si true, usa Group Epics nativos de GitLab (requiere licencia Premium/Ultimate).
     # False (default): jerarquía vía issue-links (fallback siempre disponible).
     STACKY_GITLAB_EPICS_NATIVE: bool = os.getenv(

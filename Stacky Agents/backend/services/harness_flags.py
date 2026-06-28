@@ -121,6 +121,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EPIC_PORTFOLIO_ENABLED", "STACKY_EPIC_DECOMPOSITION_ENABLED",
         "STACKY_ADAPTIVE_SELECTOR_ENABLED", "STACKY_PROJECT_AUTOPROFILE_ENABLED",
         "STACKY_COMMENT_FULL_SCAN_ENABLED",
+        "STACKY_TICKETS_PROVIDER_ENABLED",   # Plan 70 — consumers por puerto TrackerProvider
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1663,6 +1664,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+    ),
+    FlagSpec(
+        key="STACKY_TICKETS_PROVIDER_ENABLED",
+        type="bool",
+        label="Tracker Provider en tickets.py (Plan 70)",
+        description=(
+            "Plan 70 — Si ON, api/tickets.py enruta sus call sites por el puerto "
+            "TrackerProvider (get_tracker_provider) en vez de por "
+            "_ado_client_for_ticket; cae al fallback ADO si el provider del "
+            "proyecto no está disponible (ej. GitLab sin STACKY_GITLAB_ENABLED). "
+            "OFF (default): byte-idéntico al comportamiento pre-Plan-70."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
     ),
 )
 

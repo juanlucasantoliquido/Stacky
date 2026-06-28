@@ -130,6 +130,21 @@ HARNESS_TEST_FILES=(
   tests/test_process_discipline.py
   # — Plan 66 · Desatascador visibilidad total + subida forzada —
   tests/test_unblocker_board.py
+  # — Plan 70 · Desacople consumidores TrackerProvider —
+  tests/test_plan70_provider_for_ticket.py
+  tests/test_plan70_tracker_item_adapter.py
+  tests/test_plan70_gitlab_provider_complete.py
+  tests/test_plan70_group_comments.py
+  tests/test_plan70_group_state.py
+  tests/test_plan70_group_url.py
+  tests/test_plan70_group_assignee_auth.py
+  tests/test_plan70_group_attachments.py
+  tests/test_plan70_group_create.py
+  tests/test_plan70_group_helpers.py
+  tests/test_plan70_group_sync.py
+  tests/test_plan70_publisher_sync.py
+  tests/test_plan70_no_typed_adoclient_in_api.py
+  tests/test_plan70_smoke_gitlab.py
 )
 
 pass=0

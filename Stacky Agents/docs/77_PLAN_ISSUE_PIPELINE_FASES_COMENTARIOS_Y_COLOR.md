@@ -1,11 +1,64 @@
 # Plan 77 — Issue como épica de un solo ticket: fases (funcional → técnico → implementación) como comentarios idempotentes + color propio
 
 > Estado: PROPUESTO (no implementado). Autor: StackyArchitectaUltraEficientCode. Fecha: 2026-06-29.
+> **Versión: v2** (criticado v1 → v2 por el juez adversarial el 2026-06-29).
 > Origen: pedido del operador — "Stacky debe admitir Issues tratados como una épica, pero con dos
 > diferencias: (1) color distinto al de las épicas en la UI, y (2) todo ocurre en el MISMO ticket:
 > el análisis funcional, el técnico y la implementación se publican como COMENTARIOS en el work item
 > del Issue, NO como tickets hijos."
 > Implementable por un modelo menor (Haiku / Codex CLI / GitHub Copilot Pro) SIN inferir nada.
+
+---
+
+## Changelog v1 → v2 (crítica del juez aplicada)
+
+> **VEREDICTO v1: RECHAZADO** (3 hallazgos BLOQUEANTES verificados contra el código real). v2 los resuelve.
+
+- **C1 (BLOQUEANTE) — Reader de flag inexistente.** F1/F2 v1 leían el flag con
+  `harness_flags.is_enabled(...)`, función que **no existe** en `services/harness_flags.py`, y citaban un
+  ancla falsa ("Plan 52 usó `harness_flags.is_enabled`"): `STACKY_COMMENT_FULL_SCAN_ENABLED` se lee con
+  `os.getenv` (`harness_flags.py:1492`). Los flags **UI-editables** (`env_only=False`) se leen como
+  **atributos de `Config`** (`config.<FLAG>`), p. ej. `tickets.py:6829` (`_cfg.STACKY_EPIC_FROM_BRIEF_ENABLED`)
+  y `claude_code_cli_runner.py:1291` (`config.STACKY_ISSUE_FROM_BRIEF_ENABLED`). **v2:** el reader es
+  `from config import config; return bool(config.STACKY_ISSUE_PHASE_COMMENTS_ENABLED)`. Barrido de todo
+  el doc para erradicar `is_enabled`.
+- **C2 (BLOQUEANTE) — Falta el registro en `_CATEGORY_KEYS` (rompe CI).** `harness_flags.py:184-185`
+  exige: *toda flag nueva debe agregarse también a `_CATEGORY_KEYS` o el test
+  `test_every_registry_flag_is_categorized` rompe CI a propósito (Plan 63)*. v1 trataba la categoría como
+  opcional y perseguía una key inexistente (`STACKY_ISSUE_FROM_BRIEF_ENABLED`; la real es
+  `STACKY_EPIC_FROM_BRIEF_ENABLED`, en la tupla `epicas_ado`). **v2:** F1 agrega
+  `STACKY_ISSUE_PHASE_COMMENTS_ENABLED` a la tupla `epicas_ado` de `_CATEGORY_KEYS` (paso obligatorio) y
+  el test afirma la categorización.
+- **C3 (BLOQUEANTE) — Guard F4 sobre variable fantasma.** `create_child_task(ado_id: int)`
+  (`tickets.py:3819`) trabaja con `ado_id` (int) + `pending-task.json`; **no** tiene ninguna variable
+  `parent_ticket`. El diff v1 (`parent_ticket.work_item_type`) es inimplementable. **v2:** el guard usa un
+  lookup real del `Ticket` por `ado_id` (o el preflight de tipo de padre que ya existe en
+  `tickets.py:3072/3359`), y se elimina el segundo sitio vago ("grep del endpoint del Plan 59"):
+  `create_child_task` es el ÚNICO creador de hijos ADO (único `create_work_item` de Task con
+  Hierarchy-Reverse).
+- **C4 (IMPORTANTE) — Cableado F3 con shapes equivocados por runner + sitio Copilot incorrecto.** El diff
+  único de v1 (`ticket_id`, `agent_type`, `output`, `project_ctx`) **solo** existe tal cual en
+  `claude_code_cli_runner.py`. `codex_cli_runner.py` tiene `output`/`agent_type`/`ticket_id` pero **no**
+  `project_ctx`. `agents/base.py` es la **clase del agente** (`run()` devuelve
+  `AgentResult(output=response.text)` con `self.type`/`ctx.stacky_project_name`): **no** es el finalizador,
+  no tiene `_mark_terminal` ni esos locales. **v2:** tabla de mapeo por runner con locales verificados,
+  `project_name=None` donde no hay `project_ctx` (el helper lo recupera del ticket), y el sitio Copilot
+  correcto (el **llamador** de `base.Agent.run`, no `base.py`).
+- **C5 (IMPORTANTE) — Contradicción interna en el conformance F3.** v1 exigía "falla si se quita el
+  cableado de cualquiera de los 3" **y** a la vez permitía a Copilot "degradar y documentar". **v2:** se
+  fija UNA regla — los 3 deben cablear (verificando el contrato compartido del helper por runner); se
+  elimina la cláusula de degradación.
+- **C6 (IMPORTANTE) → [ADICIÓN ARQUITECTO] — Pérdida silenciosa por colisión del marker `funcional`.** v1
+  "aceptaba" que el `business` de brief→Issue ocupe el marker `funcional` y que un `functional` posterior
+  quede idempotente-skipped **sin señal visible** (el operador corre el agente y no ve nada). **v2:**
+  `publish_issue_phase_from_run` distingue `posted=True` de `reason="phase_already_present"` (pre-chequeo
+  de `comment_exists`) y lo sella en `metadata["issue_phase"]`, dándole al operador una señal perceptible
+  ("la fase X ya estaba publicada — no se duplicó") en vez de silencio. Reusa el canal de metadata y
+  `comment_exists` existentes; cero trabajo del operador; sin autonomía nueva.
+- **C7/C8/C9 (MENORES) —** F5: `TicketBoard.tsx:447` usa `isEpic` para *render* (no solo color) y
+  `SprintBoardPage.tsx:84` hoy **no** tiene elemento de color (hay que envolver el tipo en un `<span>`, no
+  "reemplazar un inline inexistente"); barrido de `is_enabled` residual; y el test de F2 afirma el
+  fallback a `output` crudo cuando `_extract_epic_html` no encuentra bloque épica (salida `technical`).
 
 ---
 
@@ -231,34 +284,53 @@ redeploy.
 
 #### Procedimiento determinista (sin ambigüedad)
 
-1. Abrir `services/harness_flags.py` y **leer** cómo está declarado un flag bool existente con
-   `env_only=False` (por ejemplo el patrón usado por `STACKY_COMMENT_FULL_SCAN_ENABLED`, Plan 52, o
-   cualquier `FlagSpec` con `env_only=False`). **Copiar exactamente ese patrón.**
-2. Agregar la entrada nueva con:
+> **[C1/C2 v2] Dos pasos OBLIGATORIOS y verificados contra el código:** (a) el flag se registra en
+> `FLAG_REGISTRY` **y** (b) se agrega su key a `_CATEGORY_KEYS`, o el meta-test
+> `test_every_registry_flag_is_categorized` **rompe CI a propósito** (`harness_flags.py:184-185`, Plan 63).
+> El reader del flag **NO** es `harness_flags.is_enabled` (esa función no existe): un flag con
+> `env_only=False` es atributo de `Config` y se lee como `config.STACKY_ISSUE_PHASE_COMMENTS_ENABLED`
+> (patrón real: `tickets.py:6829`, `claude_code_cli_runner.py:1291`).
+
+1. Abrir `services/harness_flags.py` y **leer** cómo está declarado un `FlagSpec` bool con
+   `env_only=False` (patrón real verificado: el bloque que define `STACKY_EPIC_FROM_BRIEF_ENABLED` y demás
+   flags de la categoría `epicas_ado`; ver también el `FlagSpec` con `env_only=False` del Plan 62/63).
+   **Copiar exactamente ese patrón.**
+2. Agregar la entrada nueva al `FLAG_REGISTRY` con:
    - **nombre exacto:** `STACKY_ISSUE_PHASE_COMMENTS_ENABLED`
    - **tipo:** bool
    - **default:** `False`
-   - **env_only:** `False` (visible/editable en UI)
-   - **categoría:** la misma categoría/keys donde viven los flags de Issues/épica (buscar dónde está
-     `STACKY_ISSUE_FROM_BRIEF_ENABLED` si está registrado; si no, usar la categoría "avanzado"/Arnés que
-     ya use el panel, confirmando con `_CATEGORY_KEYS` o equivalente).
+   - **env_only:** `False` (visible/editable en UI; lo lee `Config` como atributo)
    - **descripción (string, en español):** "Postea el análisis funcional/técnico/implementación de un
      Issue como comentarios idempotentes en el mismo work item (no crea hijos). Default OFF."
-3. Confirmar el **nombre exacto de la función lectora** del módulo (p. ej. `is_enabled(name, default)` o
-   `get_bool(name)`); se reusará en F2. Plan 52 usó `harness_flags.is_enabled("...", default=...)`.
-4. Agregar en `.env.example`, junto al bloque del Plan 45 (`.env.example:193-194`):
+3. **[C2 — OBLIGATORIO] Agregar la key a `_CATEGORY_KEYS`.** Insertar el string
+   `"STACKY_ISSUE_PHASE_COMMENTS_ENABLED"` en la tupla `"epicas_ado"` de `_CATEGORY_KEYS`
+   (`harness_flags.py:116-130`), junto a `STACKY_EPIC_FROM_BRIEF_ENABLED` / `STACKY_COMMENT_FULL_SCAN_ENABLED`
+   (es de la familia Issues/épica). Sin este paso, `test_every_registry_flag_is_categorized` queda ROJO.
+4. **[C1] Reader del flag** (se reusará en F2): **NO** usar `harness_flags.is_enabled`. El patrón correcto:
+   ```python
+   from config import config
+   config.STACKY_ISSUE_PHASE_COMMENTS_ENABLED  # bool; env_only=False → atributo de Config
+   ```
+   Verificá que `Config` expone el atributo nuevo automáticamente (es el mecanismo de `FlagSpec`
+   `env_only=False`); si el repo requiere declararlo también en `config.py`, seguí el mismo patrón que
+   `STACKY_EPIC_FROM_BRIEF_ENABLED` (buscar con `grep -n "STACKY_EPIC_FROM_BRIEF_ENABLED" config.py`).
+5. Agregar en `.env.example`, junto al bloque del Plan 45 (`.env.example:193-194`):
    ```
    # Plan 77 — Comentarios de fase de Issue (funcional/tecnico/implementacion) en el mismo WI. Default OFF.
    # STACKY_ISSUE_PHASE_COMMENTS_ENABLED=false
    ```
 
-#### Test PRIMERO — caso nuevo en `tests/test_harness_flags.py`
+#### Test PRIMERO — casos nuevos en `tests/test_harness_flags.py`
 
 `test_issue_phase_comments_flag_registered_default_false`:
-- El flag `STACKY_ISSUE_PHASE_COMMENTS_ENABLED` está en el registro.
+- El flag `STACKY_ISSUE_PHASE_COMMENTS_ENABLED` está en `FLAG_REGISTRY`.
 - Su default es `False`.
-- `env_only` es `False` (aparece en la vista de UI; usar la misma aserción que los otros tests del panel
-  que verifican visibilidad).
+- `env_only` es `False` (visible en UI; usar la misma aserción que los otros tests del panel).
+- **[C2] El flag está categorizado:** su key pertenece a alguna tupla de `_CATEGORY_KEYS` (idealmente
+  `"epicas_ado"`). Reusar el helper de categorización (`categorize(...)`) o afirmar pertenencia a la tupla.
+
+> No hace falta un caso nuevo dedicado al meta-test: `test_every_registry_flag_is_categorized` (ya
+> existente) cubre la garantía global y debe seguir verde tras el paso 3.
 
 Comando:
 ```
@@ -266,7 +338,8 @@ Comando:
 ```
 
 #### Criterio de aceptación BINARIO
-`tests\test_harness_flags.py` pasa 100% (los 23 casos previos + el nuevo).
+`tests\test_harness_flags.py` pasa 100% (todos los casos previos + el nuevo), **incluyendo**
+`test_every_registry_flag_is_categorized` verde (prueba el paso 3).
 
 #### Flag que la protege + default seguro
 Este ES el flag. Default `False`.
@@ -298,10 +371,27 @@ finalizadores invocan con una línea (F3).
 
 ```python
 def _issue_phase_comments_enabled() -> bool:
-    """Lee el flag STACKY_ISSUE_PHASE_COMMENTS_ENABLED vía harness_flags (default False).
-    Usar la función lectora real confirmada en F1 (p. ej. is_enabled)."""
-    from services import harness_flags
-    return harness_flags.is_enabled("STACKY_ISSUE_PHASE_COMMENTS_ENABLED", default=False)
+    """[C1 v2] Lee el flag STACKY_ISSUE_PHASE_COMMENTS_ENABLED como atributo de Config
+    (env_only=False → atributo de Config; NO existe harness_flags.is_enabled)."""
+    from config import config
+    return bool(getattr(config, "STACKY_ISSUE_PHASE_COMMENTS_ENABLED", False))
+
+
+def _marker_already_present(tracker, ado_id: int, phase: str) -> bool:
+    """[ADICIÓN ARQUITECTO / C6] ¿Ya existe el comentario de esta fase?
+
+    Pre-chequeo para distinguir 'posteado ahora' de 'ya estaba' y darle al
+    operador una señal visible (en vez del skip silencioso de _post_phase_comment).
+    Reusa el marker y la firma provider-vs-AdoClient del módulo. No-fatal.
+    """
+    marker = _ISSUE_PHASE_MARKERS.get(phase)
+    if not marker:
+        return False
+    is_provider = isinstance(getattr(tracker, "name", None), str)
+    try:
+        return bool(tracker.comment_exists(str(ado_id) if is_provider else ado_id, marker))
+    except Exception:  # noqa: BLE001 — pre-chequeo nunca rompe
+        return False
 
 
 def publish_issue_phase_from_run(
@@ -319,10 +409,12 @@ def publish_issue_phase_from_run(
       3. Carga el Ticket por ticket_id; si no existe o work_item_type != "Issue"
          o no tiene ado_id válido (>0) → None (no-op).
       4. Si output vacío → {"phase": fase, "posted": False, "reason": "empty_output"}.
-      5. Extrae el HTML (reusa _extract_epic_html; si no hay, usa output crudo) y
-         postea vía _post_phase_comment usando _provider_for_ticket (ADO o GitLab).
-         Idempotente por marker (si ya existe, _post_phase_comment no re-postea).
-      6. Devuelve telemetría: {"phase": fase, "posted": True, "ado_id": ado_id}.
+      5. Extrae el HTML (reusa _extract_epic_html; si no hay, usa output crudo).
+         [ADICIÓN ARQUITECTO/C6] Pre-chequea el marker: si ya existe →
+         {"phase": fase, "posted": False, "reason": "phase_already_present"}
+         (señal visible para el operador, sin duplicar).
+      6. Postea vía _post_phase_comment usando _provider_for_ticket (ADO o GitLab),
+         idempotente por marker; devuelve {"phase": fase, "posted": True, "ado_id": ado_id}.
 
     NUNCA lanza: cualquier excepción se captura y se devuelve telemetría con error.
     No crea tickets hijos (solo comentarios en el WI del Issue).
@@ -348,6 +440,10 @@ def publish_issue_phase_from_run(
             return {"phase": phase, "posted": False, "reason": "empty_output"}
         clean_html = _extract_epic_html(output) or output
         tracker = _provider_for_ticket(project_name=proj) or _ado_client_for_ticket(project_name=proj)
+        # [ADICIÓN ARQUITECTO/C6] señal explícita de idempotencia (no silenciosa).
+        if _marker_already_present(tracker, int(ado_id), phase):
+            return {"phase": phase, "posted": False, "reason": "phase_already_present",
+                    "ado_id": int(ado_id)}
         _post_phase_comment(tracker, int(ado_id), phase, clean_html)
         return {"phase": phase, "posted": True, "ado_id": int(ado_id)}
     except Exception as exc:  # noqa: BLE001 — fase nunca tumba el finalizador
@@ -357,9 +453,11 @@ def publish_issue_phase_from_run(
 
 > Notas de reuso (verificar antes de codear, ya existen en el mismo módulo):
 > `_post_phase_comment` (`tickets.py:6655`) ya distingue provider del puerto vs `AdoClient` legacy y ya
-> es idempotente y no-fatal. `_provider_for_ticket` y `_ado_client_for_ticket` ya se usan en
-> `publish_issue_from_run` (`tickets.py:6791`). `_extract_epic_html` ya se usa en `_publish_issue_to_ado`
-> (`tickets.py:6617`). **No** duplicar ninguna.
+> es idempotente y no-fatal. `_provider_for_ticket` (`:394`) y `_ado_client_for_ticket` (`:343`) ya se usan
+> en `publish_issue_from_run` (`tickets.py:6791`). `_extract_epic_html` (`:5781`) ya se usa en
+> `_publish_issue_to_ado` (`tickets.py:6617`). El marker y la firma `comment_exists(str(id))` (provider) vs
+> `comment_exists(id, marker)` (AdoClient) son los mismos de `_post_phase_comment`. **No** duplicar ninguna,
+> ni cambiar la firma de `_post_phase_comment` (el pre-chequeo es aditivo).
 
 #### Test PRIMERO — `tests/test_issue_phase_publisher.py`
 
@@ -370,33 +468,43 @@ de test, lazy imports parcheados en el módulo de origen). Leer un test existent
 `post_comment`/`comment_exists`.
 
 Casos exactos:
-1. `test_noop_when_flag_off` — flag OFF (monkeypatch `harness_flags.is_enabled` → False); llamar con un
-   Issue válido y `agent_type="technical"` → devuelve `None`, **sin** llamar a `post_comment`.
+1. `test_noop_when_flag_off` — flag OFF (**[C1]** monkeypatch `api.tickets._issue_phase_comments_enabled`
+   → `False`, o `config.STACKY_ISSUE_PHASE_COMMENTS_ENABLED = False`; NO existe `harness_flags.is_enabled`);
+   llamar con un Issue válido y `agent_type="technical"` → devuelve `None`, **sin** llamar a `post_comment`.
 2. `test_noop_when_agent_not_a_phase` — flag ON, `agent_type="business"` → `None`, sin `post_comment`.
 3. `test_noop_when_ticket_not_issue` — flag ON, ticket con `work_item_type="Epic"`,
    `agent_type="technical"` → `None`, sin `post_comment`.
 4. `test_posts_tecnico_comment_for_technical_agent` — flag ON, ticket Issue (ado_id=9100),
-   `agent_type="technical"`, output con HTML → `post_comment` se llamó **una vez** con un texto que
-   **contiene** el marker `_ISSUE_PHASE_MARKERS["tecnico"]`; retorno `{"phase":"tecnico","posted":True,...}`.
+   `agent_type="technical"`, output con HTML, `comment_exists` → False → `post_comment` se llamó **una vez**
+   con un texto que **contiene** el marker `_ISSUE_PHASE_MARKERS["tecnico"]`; retorno
+   `{"phase":"tecnico","posted":True,...}`.
 5. `test_posts_implementacion_for_developer_agent` — igual con `agent_type="developer"` → marker
    `implementacion`.
-6. `test_idempotent_when_marker_exists` — fake `comment_exists` devuelve verdadero (ya existe) →
-   `post_comment` **NO** se llama; función no rompe.
+6. `test_phase_already_present_returns_not_posted` — **[ADICIÓN ARQUITECTO/C6]** fake `comment_exists`
+   devuelve True (el marker ya existe) → `post_comment` **NO** se llama; retorno
+   `{"phase":...,"posted":False,"reason":"phase_already_present","ado_id":...}` (señal visible, no silencio).
 7. `test_empty_output_returns_not_posted` — output `""` → `{"phase":...,"posted":False,"reason":"empty_output"}`,
    sin `post_comment`.
-8. `test_gitlab_provider_path` — fake provider con atributo `name` (rama provider del puerto): se llama
-   `post_comment(str(ado_id), marked_html)` (firma del puerto, sin `fmt`), confirmando paridad GitLab.
+8. `test_gitlab_provider_path` — fake provider con atributo `name` (rama provider del puerto): `comment_exists`
+   se llama con `str(ado_id)` y, si False, `post_comment(str(ado_id), marked_html)` (firma del puerto, sin
+   `fmt`), confirmando paridad GitLab.
 9. `test_never_raises_on_provider_error` — fake `post_comment` lanza → la función captura, devuelve
-   `posted=False`, **no** propaga.
+   `posted=False` con `reason` `error:...`, **no** propaga.
+10. `test_raw_output_fallback_when_not_epic_shaped` — **[C9]** `agent_type="technical"`, output que NO es
+    HTML de épica (p. ej. `"<p>análisis técnico</p>"` sin estructura de épica) → `_extract_epic_html`
+    devuelve `""` y se postea el `output` crudo: `post_comment` recibe un texto que **contiene** el `output`
+    original; `posted=True`. (Garantiza que las fases técnica/implementación no se pierden por no ser
+    "épica-shaped".)
 
 Comando:
 ```
 .venv\Scripts\python.exe -m pytest tests\test_issue_phase_publisher.py -q
 ```
-Confirmar que 4, 5 y 8 FALLAN antes (la función no existe).
+Confirmar que 4, 5, 6, 8 y 10 FALLAN antes (la función no existe).
 
 #### Criterio de aceptación BINARIO
-`tests\test_issue_phase_publisher.py` pasa 100% (9 casos verdes).
+`tests\test_issue_phase_publisher.py` pasa 100% (10 casos verdes, incluyendo `phase_already_present`,
+rama GitLab, no-fatal y fallback de output crudo).
 
 #### Flag que la protege + default seguro
 `STACKY_ISSUE_PHASE_COMMENTS_ENABLED` (F1), default OFF → la función es no-op total.
@@ -420,23 +528,39 @@ de los 3 runtimes, y fijar la paridad con un conformance test.
 
 #### Archivos exactos
 
-- Implementación (3 puntos de cableado, una llamada cada uno):
-  - `Stacky Agents/backend/services/claude_code_cli_runner.py` — en el finalizador, junto al sellado de
-    `metadata`, **después** de tener `output` final y **antes** de `_mark_terminal(...)`. (El finalizador
-    de épica/issue one-shot vive en `:1281`; el cableado de fase va en la ruta de cierre **normal** del
-    runner, que aplica a cualquier `agent_type`, no solo `business`.)
-  - `Stacky Agents/backend/services/codex_cli_runner.py` — punto equivalente de cierre normal.
-  - `Stacky Agents/backend/agents/base.py` — finalizador del runtime `github_copilot` (la run vía VS
-    Code/bridge); punto donde se dispone del `output` final del agente y del `ticket_id`.
+- Implementación (3 puntos de cableado, una llamada cada uno). **[C4 v2] Los locales NO son iguales en los
+  3 runners — usar la tabla de mapeo verificada de abajo, no un diff único:**
+  - `Stacky Agents/backend/services/claude_code_cli_runner.py` — en la ruta de cierre **normal** del runner
+    (la que aplica a cualquier `agent_type`, no solo `business`), **antes** del `_mark_terminal(...)` de
+    éxito. Locales verificados disponibles: `output`, `agent_type`, `ticket_id`, `project_ctx`, `metadata`
+    (mismo patrón que `_proj = project_ctx.stacky_project_name if project_ctx else None`, `:1307`). **No**
+    cablear dentro de `_maybe_autopublish_epic` (`:1281`, solo `business` one-shot).
+  - `Stacky Agents/backend/services/codex_cli_runner.py` — ruta de cierre normal (éxito, `return_code == 0`).
+    Locales verificados: `output`, `agent_type`, `ticket_id`, `metadata`. **No hay `project_ctx`** → pasar
+    `project_name=None` (el helper recupera el proyecto del propio Ticket en F2 paso 3).
+  - **[C4 — sitio Copilot corregido]** `agents/base.py` **NO** es el finalizador: `Agent.run()` (`base.py:205`)
+    devuelve `AgentResult(output=response.text, ...)` usando `self.type` y `ctx.stacky_project_name` — no
+    tiene `_mark_terminal` ni los locales `agent_type`/`ticket_id`/`output`. El finalizador del runtime
+    `github_copilot` es el **llamador** de `Agent.run` (el runner/orquestador que consume el `AgentResult`
+    y llama a `_mark_terminal`/`on_execution_end`). **Localizarlo** con
+    `grep -rn "\.run(" backend/agent_runner.py backend/services` y `grep -rn "_mark_terminal" backend`
+    filtrando el path de `github_copilot`; cablear allí, donde están `execution_id`/`ticket_id`/`agent_type`
+    y el `output` del `AgentResult`. Mapear los nombres reales según la tabla.
 - Test: `Stacky Agents/backend/tests/conformance/test_runtime_conformance.py` (**archivo existente**;
   agregar casos) — o, si el patrón de conformance no admite el caso, crear
   `Stacky Agents/backend/tests/test_issue_phase_runtime_parity.py` (**archivo nuevo**).
 
-#### Procedimiento determinista de cableado
+#### Procedimiento determinista de cableado (tabla de mapeo por runner) — [C4]
 
-En cada finalizador, localizar el bloque que ya arma `metadata` y llama a `_mark_terminal`/equivalente
-(grep sugerido por runner: `grep -n "_mark_terminal\|on_execution_end\|def .*final" <archivo>`). Insertar,
-gated y no-fatal:
+| Runner / archivo | `ticket_id` | `agent_type` | `output` | `project_name` | log |
+|---|---|---|---|---|---|
+| `claude_code_cli_runner.py` (cierre normal) | `ticket_id` | `agent_type` | `output` | `project_ctx.stacky_project_name if project_ctx else None` | `log("warn", ...)` |
+| `codex_cli_runner.py` (cierre normal, rc==0) | `ticket_id` | `agent_type` | `output` | `None` (no hay `project_ctx`) | `log("warn", ...)` |
+| Copilot finalizer (**llamador** de `Agent.run`) | nombre real local (`ticket_id`/`row.ticket_id`) | `self.type`/`agent_type` según scope | `result.output` del `AgentResult` | `ctx.stacky_project_name` o `None` | `log`/`logger.warning` |
+
+En cada finalizador, localizar el bloque que arma `metadata` y llama a `_mark_terminal`/`on_execution_end`
+(`grep -n "_mark_terminal" <archivo>`). Insertar, gated y no-fatal, **sustituyendo cada celda por el local
+real de la tabla** (no copiar `project_ctx` donde no existe):
 
 ```python
 # Plan 77 F3 — Si la run fue de un agente de fase (functional/technical/developer)
@@ -445,10 +569,10 @@ gated y no-fatal:
 try:
     from api.tickets import publish_issue_phase_from_run
     _issue_phase = publish_issue_phase_from_run(
-        ticket_id=ticket_id,
-        agent_type=agent_type,
-        output=output,
-        project_name=(project_ctx.stacky_project_name if project_ctx else None),
+        ticket_id=<TICKET_ID>,          # ver tabla
+        agent_type=<AGENT_TYPE>,        # ver tabla
+        output=<OUTPUT>,                # ver tabla
+        project_name=<PROJECT_NAME>,    # ver tabla; None si el runner no tiene project_ctx
     )
     if _issue_phase is not None:
         metadata["issue_phase"] = _issue_phase
@@ -456,9 +580,8 @@ except Exception as _ip_exc:  # noqa: BLE001
     log("warn", f"issue phase publish (no fatal): {_ip_exc}")
 ```
 
-> Ajustar los nombres locales reales de cada runner: `output`, `ticket_id`, `agent_type`, el objeto de
-> proyecto (`project_ctx` o equivalente) y la función de log (`log(...)`/`logger.warning(...)`). **No**
-> cambiar la firma del finalizador. El sello `metadata["issue_phase"]` es aditivo (no pisa nada).
+> **No** cambiar la firma del finalizador. El sello `metadata["issue_phase"]` es aditivo (no pisa nada) y
+> transporta `posted`/`reason` (incluido `phase_already_present`, C6) hasta la UI del run.
 
 #### Test PRIMERO — conformance de paridad
 
@@ -471,12 +594,18 @@ que **los 3** finalizadores lo invocan con los kwargs correctos (`ticket_id`, `a
 1. `test_claude_runner_invokes_issue_phase_publisher`
 2. `test_codex_runner_invokes_issue_phase_publisher`
 3. `test_copilot_runner_invokes_issue_phase_publisher`
-4. `test_phase_publisher_not_invoked_when_flag_off` — los 3 igualmente llaman a la función (que es no-op
-   interno), **o** el espía confirma `None`/no-sello; fijar el contrato elegido en el test.
+4. `test_phase_publisher_not_invoked_when_flag_off` — con flag OFF, los 3 finalizadores **igualmente**
+   invocan `publish_issue_phase_from_run` (que es no-op interno y devuelve `None`); el espía confirma
+   retorno `None` y que **no** se sella `metadata["issue_phase"]`. (Contrato elegido y fijo: el gating vive
+   en el helper, no en el call site — un solo punto de verdad.)
 
-> Si aislar los finalizadores reales es caro, el conformance puede verificar el **contrato del helper**
-> (un solo punto de verdad) + un test de humo por runner que confirme la presencia del cableado
-> (importable y llamado). Lo esencial: que el test **falle** si alguno de los 3 runners NO cablea.
+> **[C5 v2] Regla única (sin degradación):** los **3** runners DEBEN cablear. El conformance verifica, por
+> runner, que el finalizador invoca `publish_issue_phase_from_run` con los kwargs correctos (espía sobre la
+> función; sin lanzar procesos reales). Si aislar el finalizador real de un runner es caro, el test de ese
+> runner puede ser de **humo** (confirma import + llamada presente en el path de cierre), pero **debe
+> existir para los 3** y **fallar** si a cualquiera le falta el cableado. Queda **eliminada** la cláusula v1
+> de "Copilot degrada y se documenta": si el sitio Copilot no se puede cablear correctamente (C4), el plan
+> **no** alcanza DoD — no se cierra a medias.
 
 Comando:
 ```
@@ -515,20 +644,29 @@ coexistan dos mecanismos (comentarios vs hijos) sobre el mismo Issue.
 
 #### Archivos exactos
 
-- Implementación: `Stacky Agents/backend/api/tickets.py` — en el punto de entrada de creación de hijos
-  (`create_child_task`; localizar con `grep -n "def create_child_task" tickets.py`). Agregar el guard al
-  inicio, **después** de resolver el ticket padre y **antes** de crear nada.
-- (Si el flujo épica→hijos del Plan 59 tiene su propio endpoint de publicación de hijos, agregar el mismo
-  guard allí; localizar con `grep -rn "children" backend/api/tickets.py` y revisar el publicador de
-  `build_epic_children_plan`.)
+- Implementación: `Stacky Agents/backend/api/tickets.py` — en `create_child_task(ado_id: int)`
+  (`tickets.py:3819`). **[C3 v2]** Esta función trabaja con `ado_id` (int) + `pending-task.json`: **NO
+  existe** ninguna variable `parent_ticket`. El guard se agrega temprano (tras parsear el body, antes de
+  crear el WI) cargando el padre por `ado_id`.
+- **[C3] Sitio único — sin segundo guard vago.** `create_child_task` es el **único** creador de hijos ADO
+  (único `create_work_item` de Task con `Hierarchy-Reverse`, `tickets.py:3471`/`:3824`). El flujo épica→hijos
+  (Plan 59) **produce un plan**, no crea WIs por su cuenta. Verificación obligatoria (una vez, no editar):
+  `grep -rn "create_work_item" backend/api/tickets.py` debe confirmar que toda creación de Task pasa por
+  `create_child_task`. Se elimina la instrucción v1 de "agregar el mismo guard en el endpoint del Plan 59".
 - Test: `Stacky Agents/backend/tests/test_issue_no_children_guard.py` (**archivo nuevo**).
 
-#### Implementación (diff ilustrativo)
+#### Implementación (diff ilustrativo) — [C3]
 
 ```python
 # Plan 77 F4 — Un Issue NO genera tickets hijos: todo su trabajo vive como
 # comentarios de fase en el mismo WI. Guard explícito y temprano.
-_parent_type = (parent_ticket.work_item_type or "").strip()
+# create_child_task recibe `ado_id` (id ADO del padre) — NO un objeto ticket;
+# se carga el padre local para leer su work_item_type.
+from db import session_scope          # ya importado a nivel de módulo en tickets.py
+from models import Ticket             # idem
+with session_scope() as _guard_sess:
+    _parent = _guard_sess.query(Ticket).filter(Ticket.ado_id == ado_id).first()
+    _parent_type = (_parent.work_item_type or "").strip() if _parent is not None else ""
 if _parent_type == "Issue":
     return jsonify({
         "ok": False,
@@ -537,18 +675,31 @@ if _parent_type == "Issue":
     }), 400
 ```
 
-> Usar el nombre real de la variable del ticket padre tal como exista en `create_child_task`. El guard es
-> incondicional (no requiere flag): un Issue nunca debe tener hijos, independientemente del flag de fases.
+> `session_scope` y `Ticket` ya se usan en todo `tickets.py` (no agregar imports nuevos si ya están a nivel
+> de módulo). Alternativa equivalente: reusar el **preflight de tipo de padre** que ya lee el WI del padre
+> desde ADO (`tickets.py:3072`/`:3359`, "no pudo leer tipo del padre ADO-…") y rechazar si es "Issue"; si se
+> elige esta vía, ubicar el guard **después** de ese preflight. El guard es incondicional (no requiere
+> flag): un Issue nunca tiene hijos, independientemente del flag de fases.
 
 #### Test PRIMERO — `tests/test_issue_no_children_guard.py`
 
+> **[C3] Setup:** el guard lee el padre de la BD local por `ado_id`. Cada caso **persiste** un `Ticket`
+> (mismo fixture de `tests/test_persist_issue_ticket.py`) con `ado_id=<N>` y el `work_item_type` del caso,
+> luego hace `POST /tickets/<N>/child-task` (usar la ruta real; confirmar con
+> `grep -n "child-task\|create_child_task" backend/api/tickets.py`). Mockear el creador de WI hijo
+> (`AdoClient.create_work_item`) para afirmar que **no** se invoca cuando el guard dispara.
+
 Casos:
-1. `test_create_child_task_rejected_for_issue_parent` — padre con `work_item_type="Issue"` → HTTP 400,
-   `error == "issue_has_no_children"`, y **no** se llama al creador de WI hijo (mock).
-2. `test_create_child_task_allowed_for_epic_parent` — padre `Epic` → el guard NO se dispara (puede fallar
-   por otras validaciones; afirmar solo que el error **no** es `issue_has_no_children`).
-3. `test_create_child_task_allowed_for_feature_parent` — padre `Feature`/`User Story` → idem (guard no
-   dispara).
+1. `test_create_child_task_rejected_for_issue_parent` — `Ticket(ado_id=N, work_item_type="Issue")`
+   persistido → HTTP 400, `error == "issue_has_no_children"`, y `create_work_item` **no** se llamó.
+2. `test_create_child_task_allowed_for_epic_parent` — `Ticket(ado_id=N, work_item_type="Epic")` → el guard
+   NO dispara (puede fallar por otras validaciones; afirmar solo que el error **no** es
+   `issue_has_no_children`).
+3. `test_create_child_task_allowed_for_feature_parent` — `work_item_type="Feature"`/`"User Story"` → idem
+   (guard no dispara).
+4. `test_create_child_task_no_local_parent_does_not_block` — sin `Ticket` local para ese `ado_id`
+   (`_parent is None` → `_parent_type == ""`) → el guard NO dispara (no rechaza por ausencia de padre
+   local; deja que las validaciones existentes sigan su curso). Evita falsos 400.
 
 Comando:
 ```
@@ -556,7 +707,7 @@ Comando:
 ```
 
 #### Criterio de aceptación BINARIO
-`tests\test_issue_no_children_guard.py` pasa 100% (3 casos). No-regresión:
+`tests\test_issue_no_children_guard.py` pasa 100% (4 casos, incl. padre local ausente). No-regresión:
 `tests\test_create_child_task_endpoint.py` y `tests\test_create_child_task_gate.py` siguen verdes.
 
 #### Flag que la protege + default seguro
@@ -584,10 +735,12 @@ UnblockerPage.
 - Editar (aplicar el helper):
   - `Stacky Agents/frontend/src/pages/UnblockerPage.tsx` — reemplazar el inline `#F59E0B` de `:240` por
     `workItemTypeColor(item.work_item_type)`.
-  - `Stacky Agents/frontend/src/pages/TicketBoard.tsx` — donde hoy distingue `isEpic` (`:253`), usar el
-    helper para el color del badge/tipo (sin romper la lógica `isEpic` existente).
-  - `Stacky Agents/frontend/src/pages/SprintBoardPage.tsx` — `:84` muestra `item.work_item_type`; aplicar
-    color con el helper.
+  - `Stacky Agents/frontend/src/pages/TicketBoard.tsx` — `isEpic` (`:253`) además dispara **render**
+    condicional en `:447`; **[C7]** NO tocar esa rama. Aplicar el helper SOLO al color del badge/tipo
+    (localizar el elemento del badge de tipo y setear su `color`/`style` con `workItemTypeColor(...)`).
+  - `Stacky Agents/frontend/src/pages/SprintBoardPage.tsx` — `:84` renderiza `{item.work_item_type}` **sin
+    color** hoy; **[C7]** no hay inline que "reemplazar": envolver el tipo en
+    `<span style={{ color: workItemTypeColor(item.work_item_type) }}>…</span>`.
   - `Stacky Agents/frontend/src/pages/ExecutionHistoryPage.tsx` — si muestra `work_item_type`, aplicar el
     helper (si no lo muestra, omitir y documentarlo en el PR).
 
@@ -671,10 +824,10 @@ N/A. Ninguno.
 
 | # | Riesgo | Severidad | Mitigación |
 |---|---|---|---|
-| R1 | Colisión del marker `funcional`: brief→Issue ya postea `funcional` (business); luego el agente `functional` queda idempotente-skipped y su análisis no aparece | Media | **Documentado y aceptado:** para Issues brief-originados el output de `business` ES la fase funcional. Para Issues creados manualmente, el operador corre los 3 agentes y obtiene las 3 fases. Si en el futuro se quiere separar, se agrega un 4º marker; fuera de scope. |
+| R1 | Colisión del marker `funcional`: brief→Issue ya postea `funcional` (business); luego el agente `functional` queda idempotente-skipped y su análisis no aparece | Media | **[C6/ADICIÓN]** Ya no es silencioso: `publish_issue_phase_from_run` devuelve `reason="phase_already_present"` y lo sella en `metadata["issue_phase"]`, así el operador VE en el run que la fase ya estaba (no se "perdió" en silencio). Semántica: para Issues brief-originados el `business` ES la fase funcional; para Issues manuales el operador corre los 3 agentes. Separar negocio/funcional técnico = 4º marker, fuera de scope. |
 | R2 | El hook de fase dispara para tickets que no deberían (p. ej. una épica con `work_item_type` raro) | Baja | Guard estricto `work_item_type == "Issue"` + `agent_type` mapeado + flag OFF por default. Tests F2 casos 2/3. |
 | R3 | Cablear 3 finalizadores introduce divergencia entre runtimes | Media | Toda la lógica vive en UNA función (`publish_issue_phase_from_run`); los runners solo la invocan. Conformance test F3 falla si algún runner no cablea. |
-| R4 | El finalizador de Copilot (`base.py`) no tiene `ticket_id`/`output` en el mismo shape | Media | F3 instruye localizar los nombres reales por runner; el helper recibe primitivos (`ticket_id:int`, `output:str`), agnóstico del shape interno. Si Copilot no expone `output` en el finalizador, degradar: cablear donde sí esté disponible y documentarlo (el conformance test marca el faltante). |
+| R4 | El finalizador de Copilot NO es `agents/base.py` (esa es la clase del agente, `run()` devuelve `AgentResult`); el verdadero finalizador es el **llamador** de `Agent.run` y tiene otro shape de locales | Media | **[C4 v2]** F3 corrige el sitio: cablear en el llamador de `Agent.run` (el runner/orquestador `github_copilot` que llama a `_mark_terminal`), no en `base.py`. El helper recibe primitivos (`ticket_id:int`, `output:str`, `project_name:str|None`) → agnóstico del shape. Tabla de mapeo por runner en F3. **Sin degradación** (C5): los 3 deben cablear o no hay DoD. |
 | R5 | Comentarios de fase crecen sin límite en Issues longevos | Baja | Idempotencia por marker (`_post_phase_comment` + `comment_exists` paginado, Plan 52 F1): cada fase se postea una sola vez. |
 | R6 | GitLab no soporta tipo "Issue" igual que ADO | Baja | `_publish_issue_to_ado` y `_post_phase_comment` ya son provider-aware (Plan 70 F3/F8); `gitlab_provider.post_comment`/`comment_exists` existen. F2 caso 8 fija la rama GitLab. |
 | R7 | Suite completa enmascara verdes/rojos | Media | Correr SIEMPRE por archivo con el .venv (P8). [[stacky-backend-test-suite-pollution]] |
@@ -733,12 +886,17 @@ N/A. Ninguno.
 ### Definición de Hecho (DoD) global
 
 - [ ] `tests\test_issue_phase_mapper.py` — 7 verdes (F0).
-- [ ] `STACKY_ISSUE_PHASE_COMMENTS_ENABLED` registrado bool default False `env_only=False`; entrada en
-      `.env.example`; `tests\test_harness_flags.py` verde con el caso nuevo (F1).
-- [ ] `tests\test_issue_phase_publisher.py` — 9 verdes, incluyendo rama GitLab y no-fatal (F2).
-- [ ] Los 3 finalizadores (`claude_code_cli_runner.py`, `codex_cli_runner.py`, `agents/base.py`) invocan
-      `publish_issue_phase_from_run`; conformance/paridad verde y falla si se quita un cableado (F3).
-- [ ] `tests\test_issue_no_children_guard.py` — 3 verdes; `create_child_task` rechaza padres Issue (F4).
+- [ ] `STACKY_ISSUE_PHASE_COMMENTS_ENABLED` en `FLAG_REGISTRY` (bool, default False, `env_only=False`) **y**
+      en la tupla `epicas_ado` de `_CATEGORY_KEYS` (C2); reader vía `config.<FLAG>` (C1, NO `is_enabled`);
+      entrada en `.env.example`; `tests\test_harness_flags.py` verde, incl. `test_every_registry_flag_is_categorized` (F1).
+- [ ] `tests\test_issue_phase_publisher.py` — 10 verdes, incluyendo `phase_already_present` (C6), rama
+      GitLab, no-fatal y fallback de output crudo (C9) (F2).
+- [ ] Los 3 finalizadores invocan `publish_issue_phase_from_run`: `claude_code_cli_runner.py` (cierre
+      normal), `codex_cli_runner.py` (cierre normal, `project_name=None`), y el **llamador de `Agent.run`**
+      del runtime `github_copilot` (NO `agents/base.py`, C4); conformance/paridad verde y falla si se quita
+      un cableado, sin cláusula de degradación (C5) (F3).
+- [ ] `tests\test_issue_no_children_guard.py` — 4 verdes (incl. padre local ausente); `create_child_task`
+      rechaza padres Issue vía lookup por `ado_id`, sin variable `parent_ticket` (C3) (F4).
 - [ ] `frontend/src/utils/workItemTypeColor.ts` creado y aplicado en TicketBoard/SprintBoard/Unblocker
       (+ ExecutionHistory si aplica); `tsc --noEmit` limpio (F5).
 - [ ] Tests nuevos registrados en `HARNESS_TEST_FILES` (sh + ps1); meta-test de cobertura verde (F6).

@@ -39,6 +39,7 @@ from .reports import bp as reports_bp
 from .tickets import bp as tickets_bp
 from .ui_sections import bp as ui_sections_bp
 from .webhooks import bp as webhooks_bp
+from .ci import bp as ci_bp  # Plan 72 — trigger/monitor CI (HITL)
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -80,6 +81,7 @@ api_bp.register_blueprint(docs_rag_bp)
 api_bp.register_blueprint(config_transfer_bp)
 api_bp.register_blueprint(client_profile_bp)
 api_bp.register_blueprint(db_query_bp)
+api_bp.register_blueprint(ci_bp)  # Plan 72 — url_prefix="/ci" → /api/ci/...
 
 
 @api_bp.get("/health")

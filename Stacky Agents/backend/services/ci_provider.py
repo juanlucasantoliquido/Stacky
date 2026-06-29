@@ -91,9 +91,13 @@ class CIProvider(Protocol):
     def monitor_pipeline(self, pipeline_id: str) -> dict:
         ...
 
+    def trigger_pipeline(self, item_ref: ItemRef, ref: str) -> dict:
+        ...  # Plan 72 F1 — dispara pipeline sobre ref; requiere scope api en GitLab
 
-# Contrato congelado — no renombrar sin actualizar centinela del Plan 71
-CI_PORT_METHODS: tuple[str, ...] = ("infer_item_pipeline", "monitor_pipeline")
+
+# Contrato congelado — no renombrar sin actualizar centinela del Plan 71/72
+# Plan 72 F1: actualizado a 3-tupla (agrega trigger_pipeline, C3).
+CI_PORT_METHODS: tuple[str, ...] = ("infer_item_pipeline", "monitor_pipeline", "trigger_pipeline")
 
 
 # ---------------------------------------------------------------------------

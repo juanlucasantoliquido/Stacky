@@ -56,9 +56,23 @@ class GitLabCIProvider:
         return _pipelines_to_result(pipelines, item_ref)
 
     def monitor_pipeline(self, pipeline_id: str) -> dict:
-        raise NotImplementedError(
-            "monitor_pipeline se implementa en Plan 72 F1"
-        )
+        """Plan 72 F1 — Delega a delegate.poll_pipeline."""
+        return self._delegate.poll_pipeline(pipeline_id)
+
+    def trigger_pipeline(self, item_ref: "ItemRef", ref: str) -> dict:
+        """Plan 72 F2 — Delega a delegate.trigger_pipeline(ref).
+
+        item_ref se pasa por contrato del Protocol pero el delegate solo necesita ref.
+        """
+        return self._delegate.trigger_pipeline(ref)
+
+    def last_pipeline_for_ref(self, ref: str) -> dict | None:
+        """Plan 72 F4 — preview HITL: devuelve el primer pipeline del ref o None.
+
+        Read-only; reusa fetch_pipelines del delegate (Plan 71).
+        """
+        pipelines = self._delegate.fetch_pipelines(ref=ref)
+        return pipelines[0] if pipelines else None
 
 
 def _pipelines_to_result(pipelines: list[dict], item_ref: ItemRef) -> ItemPipelineResult:

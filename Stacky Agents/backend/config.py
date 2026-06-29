@@ -817,6 +817,11 @@ class Config:
     STACKY_PIPELINE_PROVIDER_ENABLED: bool = os.getenv(
         "STACKY_PIPELINE_PROVIDER_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
+    # Plan 72 — Trigger y monitoreo de pipelines CI (HITL). Default OFF.
+    # Editable por UI (HarnessFlagsPanel, categoría "Pipelines / CI").
+    STACKY_PIPELINE_TRIGGER_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_TRIGGER_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
 
 
 config = Config()

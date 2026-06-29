@@ -2870,3 +2870,62 @@ export const PM = {
     }>(`/api/pm/sprint/board${qs}`);
   },
 };
+
+// ── Plan 72 — CI Trigger & Monitor ────────────────────────────────────────
+
+export interface CITriggerResponse {
+  id: string;
+  status: string;
+  ref: string;
+  sha: string;
+  web_url: string;
+  pipeline_id?: string;
+  message?: string;
+}
+
+export interface CIPreviewResponse {
+  kind: "branch" | "sha" | "tag";
+  ref: string;
+  last_pipeline: { id: string; status: string; sha: string; ref: string; web_url?: string } | null;
+  would_reuse: boolean;
+  existing_pipeline_id: string | null;
+}
+
+export interface CIMonitorResponse {
+  id: string;
+  status: string;
+  ref: string;
+  sha: string;
+  web_url: string;
+  tracker_type: string;
+  source: string;
+}
+
+export const CIPipeline = {
+  /** Preview read-only: muestra ref resuelto + ultimo pipeline + would_reuse. */
+  preview: (project: string, ref: string): Promise<CIPreviewResponse> =>
+    api.get<CIPreviewResponse>(
+      `/api/ci/${encodeURIComponent(project)}/trigger-preview?ref=${encodeURIComponent(ref)}`
+    ),
+
+  /** Dispara pipeline CI. confirm DEBE ser true (HITL). */
+  trigger: (
+    project: string,
+    ref: string,
+    sha: string,
+    itemId: string,
+    confirm: true
+  ): Promise<CITriggerResponse> =>
+    api.post<CITriggerResponse>(`/api/ci/${encodeURIComponent(project)}/trigger`, {
+      ref,
+      sha,
+      item_id: itemId,
+      confirm,
+    }),
+
+  /** Estado actual del pipeline. */
+  monitor: (project: string, pipelineId: string): Promise<CIMonitorResponse> =>
+    api.get<CIMonitorResponse>(
+      `/api/ci/${encodeURIComponent(project)}/pipeline/${encodeURIComponent(pipelineId)}`
+    ),
+};

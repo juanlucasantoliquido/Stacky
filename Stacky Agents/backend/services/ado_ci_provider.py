@@ -23,9 +23,20 @@ class AdoCIProvider:
         return _legacy_to_result(legacy, item_ref)
 
     def monitor_pipeline(self, pipeline_id: str) -> dict:
+        """Plan 72 F1 — ADO fuera de scope v1."""
         raise NotImplementedError(
-            "monitor_pipeline se implementa en Plan 72 F1"
+            "monitor_pipeline ADO fuera de scope v1 — usar Azure Pipelines REST directo"
         )
+
+    def trigger_pipeline(self, item_ref: "ItemRef", ref: str) -> dict:
+        """Plan 72 F3 — ADO fuera de scope v1."""
+        raise NotImplementedError(
+            "trigger_pipeline ADO fuera de scope v1 — usar push o Azure Pipelines REST directo"
+        )
+
+    def last_pipeline_for_ref(self, ref: str) -> dict | None:
+        """Plan 72 F4 — ADO sin preview en v1."""
+        return None
 
 
 def _legacy_to_result(legacy, item_ref: ItemRef) -> ItemPipelineResult:

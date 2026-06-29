@@ -145,6 +145,18 @@ HARNESS_TEST_FILES=(
   tests/test_plan70_publisher_sync.py
   tests/test_plan70_no_typed_adoclient_in_api.py
   tests/test_plan70_smoke_gitlab.py
+  # — Plan 71 — CIProvider sub-puerto —
+  tests/test_plan71_ci_provider_protocol.py
+  tests/test_plan71_ado_ci_provider.py
+  tests/test_plan71_gitlab_ci_provider.py
+  # — Plan 72 — Trigger y monitoreo CI (HITL) —
+  tests/test_plan72_trigger_rules.py
+  tests/test_plan72_ci_provider_trigger_port.py
+  tests/test_plan72_routes_registered.py
+  tests/test_plan72_trigger_endpoint.py
+  tests/test_plan72_ado_trigger_not_implemented.py
+  tests/test_plan72_preview_endpoint.py
+  tests/test_plan72_monitor_endpoint.py
 )
 
 pass=0

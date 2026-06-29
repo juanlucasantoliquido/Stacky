@@ -123,6 +123,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_COMMENT_FULL_SCAN_ENABLED",
         "STACKY_TICKETS_PROVIDER_ENABLED",   # Plan 70 — consumers por puerto TrackerProvider
         "STACKY_PIPELINE_PROVIDER_ENABLED",  # Plan 71 — sub-puerto CIProvider
+        "STACKY_PIPELINE_TRIGGER_ENABLED",   # Plan 72 — trigger y monitoreo CI (HITL)
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1690,6 +1691,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "en vez de llamar directamente a infer_pipeline. Habilita inferencia CI "
             "agnóstica del tracker (ADO + GitLab). OFF (default): comportamiento "
             "pre-Plan-71 byte-idéntico."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    FlagSpec(
+        key="STACKY_PIPELINE_TRIGGER_ENABLED",
+        type="bool",
+        label="Trigger y monitoreo CI — HITL (Plan 72)",
+        description=(
+            "Plan 72 — Si ON, habilita los endpoints POST /api/ci/<project>/trigger "
+            "(dispara pipeline CI con confirm=True obligatorio — HITL) y "
+            "GET /api/ci/<project>/pipeline/<id> (monitoreo). "
+            "PAT GitLab debe tener scope api. Default OFF. "
+            "OFF: guard 404 per-request; el blueprint siempre está registrado."
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)

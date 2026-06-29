@@ -196,11 +196,11 @@ tests/test_transient_run_retry.py  # pendiente-de-triage
 # tests/test_unblocker_board.py  → movido a HARNESS_TEST_FILES (run_harness_tests.sh) por Plan 70 F13
 tests/test_verify_task_before_consumed.py  # pendiente-de-triage
 # Plan 71 F1-F7 -- sub-puerto CIProvider + adapters ADO/GitLab + cableado
-tests/test_plan71_ci_provider_protocol.py
+# test_plan71_ci_provider_protocol.py → MOVIDO al ratchet (Plan 72 F1)
 tests/test_plan71_ci_cache_table_created.py
 tests/test_plan71_ci_cache.py
-tests/test_plan71_ado_ci_provider.py
-tests/test_plan71_gitlab_ci_provider.py
+# test_plan71_ado_ci_provider.py → MOVIDO al ratchet (Plan 72 F1)
+# test_plan71_gitlab_ci_provider.py → MOVIDO al ratchet (Plan 72 F1)
 tests/test_plan71_pipeline_status_endpoint.py
 tests/test_plan71_pipeline_status_comments.py
 tests/test_plan71_no_adoclient_in_ci_path.py

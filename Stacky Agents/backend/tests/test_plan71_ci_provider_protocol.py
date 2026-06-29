@@ -91,6 +91,10 @@ def test_ci_provider_runtime_checkable():
         def monitor_pipeline(self, pipeline_id: str) -> dict:
             ...
 
+        # Plan 72 F1 — trigger_pipeline añadido al Protocol (C3); stub actualizado.
+        def trigger_pipeline(self, item_ref: ItemRef, ref: str) -> dict:
+            ...
+
     assert isinstance(FakeProvider(), CIProvider)
 
 

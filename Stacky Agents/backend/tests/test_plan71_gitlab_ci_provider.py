@@ -108,15 +108,23 @@ def test_empty_pipelines_progress_is_0():
 # ---------------------------------------------------------------------------
 # C6 — monitor_pipeline lanza NotImplementedError
 # ---------------------------------------------------------------------------
-def test_monitor_pipeline_not_implemented():
+def test_monitor_pipeline_delegates_to_poll(mocker=None):
+    """Plan 72 F1: monitor_pipeline YA IMPLEMENTADO (delega a poll_pipeline).
+    Antes lanzaba NotImplementedError (placeholder Plan 71); ahora funciona.
+    """
     from services.gitlab_ci_provider import GitLabCIProvider
+    from unittest.mock import MagicMock
 
     delegate = _make_gitlab_delegate([])
+    delegate.poll_pipeline = MagicMock(return_value={
+        "id": "456", "status": "running", "ref": "main", "sha": "abc", "web_url": "http://x",
+    })
     with patch("services.gitlab_ci_provider.GitLabTrackerProvider", return_value=delegate):
         provider = GitLabCIProvider(project="test_proj")
 
-    with pytest.raises(NotImplementedError):
-        provider.monitor_pipeline("pipeline-id-456")
+    result = provider.monitor_pipeline("456")
+    delegate.poll_pipeline.assert_called_once_with("456")
+    assert result["status"] == "running"
 
 
 # ---------------------------------------------------------------------------

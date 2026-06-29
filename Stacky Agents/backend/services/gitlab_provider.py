@@ -473,3 +473,43 @@ class GitLabTrackerProvider:
         # puede escalar a infer_pipeline de ado_pipeline_inference si necesita
         # más detalle).
         return [{"source": "llm", "status": "unknown", "ref": ref or ""}]
+
+    # ── Plan 72 F1: trigger y poll ────────────────────────────────────────────
+
+    def trigger_pipeline(self, ref: str) -> dict:
+        """POST /projects/:id/pipeline — dispara pipeline sobre el ref. Requiere scope api.
+
+        Contrato de _request (gitlab_client.py:107):
+          - Devuelve (body, response_headers).
+          - YA lanza TrackerApiError(status, msg, kind=...) ante no-2xx (L153-159).
+          - NUNCA comparar el 2º valor a un status (C1').
+        Si GitLab responde 403, TrackerApiError se propaga al caller (endpoint la mapea a 403).
+        """
+        proj_path = self._client._project_path()
+        body, _ = self._client._request(
+            "POST",
+            f"/projects/{proj_path}/pipeline",
+            json_body={"ref": ref},
+        )
+        return {
+            "id": str(body.get("id") or ""),
+            "status": body.get("status") or "",
+            "ref": body.get("ref") or ref,
+            "sha": body.get("sha") or "",
+            "web_url": body.get("web_url") or "",
+        }
+
+    def poll_pipeline(self, pipeline_id: str) -> dict:
+        """GET /projects/:id/pipelines/:pipeline_id — estado actual del pipeline."""
+        proj_path = self._client._project_path()
+        body, _ = self._client._request(
+            "GET",
+            f"/projects/{proj_path}/pipelines/{pipeline_id}",
+        )
+        return {
+            "id": str(body.get("id") or ""),
+            "status": body.get("status") or "",
+            "ref": body.get("ref") or "",
+            "sha": body.get("sha") or "",
+            "web_url": body.get("web_url") or "",
+        }

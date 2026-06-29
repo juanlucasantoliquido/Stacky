@@ -1,15 +1,19 @@
 # Plan 74 — Migrador ADO → GitLab seguro e idempotente
 
-> **Estado:** PROPUESTO v1.
-> **Pre-requisito:** Plan 70 (desacople de consumers del puerto `TrackerProvider`) — COMPLETO. Sin 70, el migrador escribiría acoplado a `AdoClient`; este plan asume que los consumers de `tickets.py` ya hablan por el puerto.
+> **Estado:** PROPUESTO v2 (criticado por juez adversarial 2026-06-28).
+> **Pre-requisito:** Plan 70 (desacople de consumers del puerto `TrackerProvider`) — COMPLETO (commit 83d7e59d). Sin 70, el migrador escribiría acoplado a `AdoClient`; este plan asume que los consumers de `tickets.py` ya hablan por el puerto.
+> **Dirección de dependencia (verificada):** 74 **NO** depende del Plan 73 (creador de pipelines). 74 solo lo **referencia para EXCLUIR** la migración de pipelines CI (ver §6). El roadmap implementa 74 ANTES de 73; cualquier lectura de "74 consume 73" es falsa. Dep dura única = Plan 70 (implementado).
 > **Roadmap:** Quinto eslabón del bloque GitLab-Main 70-76 (desacople → pipeline infer agnóstico → trigger CI → creador pipelines → **migrador ADO→GitLab** → deep links → eval codebase-memory-mcp).
-> **Versión doc:** v1 (2026-06-27). Reemplaza al boceto v0.
+> **Versión doc:** v2 (2026-06-28). Reemplaza a v1 (2026-06-27) y al boceto v0.
 
-> **CHANGELOG boceto v0 → v1:**
-> - Supuesto crítico del boceto (tier GitLab Free vs Premium para épicas) **RESUELTO**: la degradación Free ya existe en `gitlab_provider._link_parent` (fallback 403 → issue-links). Este plan la reusa y la vuelve **política configurable** (`STACKY_MIGRATOR_EPIC_POLICY`).
-> - Tabla F0 completa: 6 tipos × método puerto lectura-ADO × método puerto escritura-GitLab × marker idempotencia.
-> - Fases F0..F11 con archivos/símbolos EXACTOS, tests TDD PRIMERO con nombre+casos+comando, criterios binarios.
-> - Marcado `[a verificar tras implementar Plan 70]` donde el detalle fino depende del 70 (migración de los ~27 call sites de `tickets.py`).
+> **CHANGELOG v1 → v2 (crítica adversarial):**
+> - **C1 (BLOQUEANTE) doble-prefijo de rutas RESUELTO:** `api/__init__.py:43` define `api_bp = Blueprint("api", url_prefix="/api")` y los feature-bp se registran en `api/__init__.py` SIN `/api` propio. v1 decía "registrar `migrator_bp` en `app.py`" (que solo hace `app.register_blueprint(api_bp)`) y escribía rutas `/api/migrator/...` — exactamente el bug que ya rechazó a los planes 72/73. F9 ahora fija: `migrator_bp = Blueprint("migrator", __name__, url_prefix="/migrator")` registrado en `api/__init__.py` vía `api_bp.register_blueprint(migrator_bp)`. Nuevo centinela `test_plan74_routes_registered` (F11 bis).
+> - **C2 (IMPORTANTE) op `link_parent` privada+redundante ELIMINADA:** `gitlab_provider.create_item` (`:228-229`) YA llama `_link_parent` cuando `item.parent_id` está seteado. v1 emitía una op separada que invocaba el método PRIVADO `dest._link_parent(...)` (no está en `PORT_METHODS`), violando el propio §3/§6 "consumidor del puerto". v2: los links se reconstruyen **en create_item vía `parent_id` mapeado** con **orden topológico** (Epic→Issue/Story→Task); no hay op `link_parent` ni se toca ningún método privado.
+> - **C3 (IMPORTANTE) descarga binaria de attachments ESPECIFICADA:** `ado_client._request` (`:257`) devuelve `dict` (JSON) y NO sirve para binarios; no existe helper de descarga. F5 ahora define `download_attachment_to_temp` con GET autenticado binario explícito (header PAT, `stream`) y prohíbe reusar `_request`.
+> - **C4 (IMPORTANTE) idempotencia robusta ante DB fresca/otra máquina/crash:** v1 consultaba solo el `migrator_map` local antes de crear → re-correr en una DB Stacky vacía o tras crash post-create/pre-upsert DUPLICABA. v2 agrega `hydrate_map_from_destination` **[ADICIÓN ARQUITECTO]** que reconstruye el mapeo desde el DESTINO (marker) antes de planear/ejecutar; el GitLab destino es la fuente de verdad, no el SQLite local.
+> - **C5 (IMPORTANTE) persistencia del plan para drift ESPECIFICADA:** v1 comparaba contra "el plan_id almacenado" sin definir dónde se guarda. v2 agrega tabla `migrator_plan_snapshot` (hash + counts) para que `/execute` detecte drift (409) de verdad.
+> - **C6 (MENOR) ratchet:** DoD (i) ya no hardcodea "9 archivos"; exige registrar **todos** los `test_plan74_*.py`.
+> - Marcado `[a verificar tras implementar Plan 70]` donde el detalle fino depende del 70 (helper `_provider_for_ticket`, Plan 70 F2 — ya implementado).
 > - Riel absoluto "read-only sobre origen ADO" operacionalizado con centinela AST (F11).
 
 ---
@@ -61,11 +65,13 @@ Migrar **todo** el contenido tracker de un proyecto ADO de origen a un proyecto 
 | 3 | `Task` | `issue` + label `type::task` (Free) / sub-issue (Premium) | `get_item` + `find_child_by_marker` | `create_item(TrackerItem(item_type="task", parent_id=...))` | marker en descripción | Parent se re-apunta vía mapeo F1 |
 | 4 | `Comment` (de cualquier work item) | `note` en el issue GitLab correspondiente | `fetch_all_comments(item_id)` | `post_comment(item_id, body_html)` | `comment_exists(item_id, marker)` antes de postear | Marker embebido en el body del note |
 | 5 | `Attachment` | Upload binario al issue GitLab | `fetch_attachments(item_id)` + descarga ADO (vía URL del attachment) | `upload_attachment(file_path, file_name)` + `link_attachment(item_id, attach_result)` | re-fetch descripción: si el markdown ya está, skip | Hash post-subida verifica integridad |
-| 6 | `Link` parent/child | Premium: epic-issue link / Free: issue-issue link | `get_item` (campo `parent`) + `find_child_by_marker` | `_link_parent(child_iid, parent_id)` (interno de `gitlab_provider`) | idempotente por naturaleza (re-link no duplica) | Warnings para IDs no migrados |
+| 6 | `Link` parent/child | Premium: epic-issue link / Free: issue-issue link | `get_item` (campo `parent`) | **`create_item(TrackerItem(parent_id=iid_mapeado))`** (el linkeo lo hace `create_item` internamente, ver `gitlab_provider.py:228-229`) | idempotente por orden topológico + map | Warnings para IDs no migrados; **NO** se llama `_link_parent` directamente |
+
+> **DECISIÓN C2 (link en create-time, sin método privado):** `gitlab_provider.create_item` (`:207`) ya invoca `self._link_parent(...)` cuando `item.parent_id` está seteado (`:228-229`). Por lo tanto el migrador **NO emite una op `link_parent` separada** ni toca el método privado `_link_parent` (no está en `PORT_METHODS`; viola §3/§6). En su lugar, los links se reconstruyen **al crear**: se pasa `parent_id = existing_map[ado_parent_id]` (el `iid` GitLab ya mapeado) dentro del `TrackerItem` del `create_item`. Esto exige **orden topológico** (ver F2): se migran primero `Epic`, luego `Issue`/`User Story`, luego `Task`; al ejecutar, tras cada create se hace `upsert_mapping` para que los hijos siguientes resuelvan su padre. Un item cuyo padre **no** está en `existing_map` al momento de crearlo se crea **sin** `parent_id` (huérfano) y se acumula un warning; nunca se aborta.
 
 **GAPs detectados (alimentan F1):**
 
-- **GAP-A (links rotos por cambio de ID):** los links ADO referencian `ado_id`; en GitLab los items tienen `iid` distinto. **Decisión:** tabla de mapeo persistente `ado_id ↔ gitlab_iid` (F1); al reconstruir links se consulta el mapeo; los links a IDs no migrados se reportan como warnings (no se aborta).
+- **GAP-A (links rotos por cambio de ID):** los links ADO referencian `ado_id`; en GitLab los items tienen `iid` distinto. **Decisión:** tabla de mapeo persistente `ado_id ↔ gitlab_iid` (F1); el link se establece **en `create_item` vía `parent_id` mapeado** (no en una op separada, ver DECISIÓN C2 arriba); los links a IDs no migrados se reportan como warnings (no se aborta). El **orden topológico** (Epic→Story/Issue→Task) garantiza que el padre exista en el mapeo antes de crear al hijo.
 - **GAP-B (attachments binarios):** `fetch_attachments` ADO devuelve metadatos + URL de descarga (requiere auth ADO); GitLab `upload_attachment` recibe un `file_path` local. **Decisión:** F5 descarga el binario ADO a un temp file local, lo sube a GitLab, verifica hash, y limpia el temp file. El adapter ADO ya devuelve la URL; la descarga usa el mismo PAT del `client_profile`.
 - **GAP-C (épicas en Free):** GitLab Free no tiene group epics. **Decisión:** política configurable `STACKY_MIGRATOR_EPIC_POLICY ∈ {premium_native, free_degrade, auto}` (default `auto`): `premium_native` fuerza epic nativo (falla si no hay licencia), `free_degrade` crea issue + label `type::epic` + comment-marker, `auto` prueba `_link_parent` y si recibe 403 cae a `free_degrade`. La detección de tier ya vive en `gitlab_provider._epics_native` (`gitlab_provider.py:36`) y `_link_parent` (`:99-115`); este plan la reusa sin tocar el provider.
 - **GAP-D (metadatos originales: autor/fecha):** GitLab API no permite setear `author_id`/`created_at` en issues en SaaS (sí en self-managed admin). **Decisión:** el migrador preserva autor/fecha originales como **comment-marker** inicial (`<!-- stacky-meta:author={x};created={y} -->`) + un note visible "Migrado de ADO por {author} el {date}". No se intenta forzar `created_at` (frágil entre tiers). Documentado en F4.
@@ -141,39 +147,48 @@ from typing import Literal, Optional
 
 @dataclass(frozen=True)
 class MigrationOp:
-    op_kind: Literal["create_item", "post_comment", "upload_attachment", "link_parent"]
+    # NOTA C2: NO existe op_kind "link_parent". El link se establece dentro
+    # de "create_item" pasando dest_parent_ado_id resuelto a iid en F4.
+    op_kind: Literal["create_item", "post_comment", "upload_attachment"]
     ado_id: str
     ado_type: str
-    dest_parent_ado_id: Optional[str]   # para re-apuntar via mapeo
+    dest_parent_ado_id: Optional[str]   # ado_id del padre; F4 lo resuelve a iid vía map
     payload: dict                        # TrackerItem dict / comment body / attach meta
     marker: str
 
 @dataclass(frozen=True)
 class MigrationPlan:
-    ops: list[MigrationOp]
+    ops: list[MigrationOp]               # ORDENADAS topológicamente: Epic→Story/Issue→Task
     counts_by_type: dict[str, int]
-    warnings: list[str]                  # ej: "link a ado_id 999 no migrado"
+    warnings: list[str]                  # ej: "padre ado_id 999 no migrado; item creado huérfano"
+
+# Orden topológico fijo (C2): los padres se crean antes que los hijos.
+_TYPE_ORDER: dict[str, int] = {"Epic": 0, "Issue": 1, "User Story": 1, "Task": 2}
 
 def plan_migration(
     origin: "TrackerProvider",
     dest: "TrackerProvider",
     *,
     stacky_project: str,
-    existing_map: dict[str, str],        # ado_id -> gitlab_iid (ya migrados)
+    existing_map: dict[str, str],        # ado_id -> gitlab_iid (ya migrados; ver hydrate F4b)
 ) -> MigrationPlan:
     """Lee del origen por el puerto (fetch_open_items, fetch_all_comments,
     fetch_attachments) y produce el plan SIN escribir en dest.
     Para cada item del origen:
       - si ado_id in existing_map -> skip (ya migrado)
-      - sino -> genera op create_item + op post_comment por cada comentario
-               + op upload_attachment por cada attachment + op link_parent si tiene parent.
-    Los links a IDs no migrados se acumulan como warnings."""
+      - sino -> genera op create_item (con dest_parent_ado_id si tiene parent)
+               + op post_comment por cada comentario
+               + op upload_attachment por cada attachment.
+    Las ops se ORDENAN por _TYPE_ORDER (Epic→Story/Issue→Task) para que F4 pueda
+    resolver el parent_id del hijo contra el map ya poblado por el padre.
+    Un padre ausente del origen Y del plan -> warning (item se creará huérfano en F4).
+    NO emite ops de linkeo: el link viaja en el create_item (ver DECISIÓN C2)."""
 ```
 
 **Invariante READ-ONLY (verificada por F11):** `plan_migration` solo invoca métodos `fetch_*`/`get_*` sobre `origin`. Nunca invoca `create_*`/`update_*`/`post_*`/`upload_*`/`link_*` sobre ningún provider.
 
 **Archivos exactos F2:**
-- `backend/services/migrator_core.py` (NUEVO) — `MigrationOp`, `MigrationPlan`, `plan_migration`, helpers puros `_build_create_op`, `_build_comment_ops`, `_build_attachment_ops`, `_build_link_ops`.
+- `backend/services/migrator_core.py` (NUEVO) — `MigrationOp`, `MigrationPlan`, `plan_migration`, `_TYPE_ORDER`, helpers puros `_build_create_op` (incluye `dest_parent_ado_id`), `_build_comment_ops`, `_build_attachment_ops`, `_sort_ops_topologically`. **NO** existe `_build_link_ops` (eliminado por C2).
 - No toca `TrackerProvider`, `ado_provider`, `gitlab_provider`.
 
 **Tests F2 (TDD primero):**
@@ -181,14 +196,15 @@ def plan_migration(
 - Casos:
   1. `plan_migration` con origen mock (2 items, 3 comments, 1 attachment) → `MigrationPlan` con counts correctos.
   2. Item cuyo `ado_id` ya está en `existing_map` → no genera op (skip).
-  3. Item con parent → genera `link_parent` op con `dest_parent_ado_id` correcto.
-  4. Item con parent cuyo `ado_id` no está en `existing_map` ni en el plan → warning (no op link).
-  5. **Patrón mock read-only:** `mock_origin.fetch_open_items.assert_called_once()` y `mock_dest` nunca fue llamado por `plan_migration`.
-  6. `counts_by_type` determinista (ordenado por tipo alfabético).
-  7. `plan_migration` es pura: 2 llamadas con mismo input → mismo plan.
+  3. Item con parent → la op `create_item` lleva `dest_parent_ado_id` = ado_id del padre (NO hay op `op_kind=="link_parent"` en el plan).
+  4. Item con parent cuyo `ado_id` no está en `existing_map` ni en el plan → warning ("padre ... no migrado; huérfano"); la op `create_item` se genera igual con `dest_parent_ado_id=None`.
+  5. **Orden topológico:** un origen con 1 Task (parent=Epic) + 1 Epic produce `ops` donde la op del Epic precede a la del Task (`_TYPE_ORDER`).
+  6. **Patrón mock read-only:** `mock_origin.fetch_open_items.assert_called_once()` y `mock_dest` nunca fue llamado por `plan_migration`.
+  7. `counts_by_type` determinista (ordenado por tipo alfabético).
+  8. `plan_migration` es pura: 2 llamadas con mismo input → mismo plan (incluyendo el orden de `ops`).
 - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan74_migrator_core.py -q`.
 
-**Criterio binario F2:** los 7 casos pasan; `plan_migration` es pura; el mock del destino nunca es invocado.
+**Criterio binario F2:** los 8 casos pasan; `plan_migration` es pura; el orden topológico se respeta (caso 5); el mock del destino nunca es invocado.
 
 **Impacto por runtime:** ninguno.
 
@@ -266,27 +282,40 @@ class MigrationResult:
     failed: list[dict]          # {ado_id, op_kind, error}
     mapping_rows: list[dict]    # filas para bulk_upsert
     markers_used: list[str]
+    orphaned: list[str]         # ado_ids creados sin parent (padre no mapeado)
 
-def execute_migration(plan, dest_provider, db, *, stacky_project, migration_run) -> MigrationResult:
-    """Para cada op del plan:
-      - op_kind=create_item: si dest_provider.comment_exists NO aplica (marker va en descripción);
-        en su lugar, consulta migrator_map.get_gitlab_iid(ado_id) → si existe, skip;
-        sino, dest_provider.create_item(TrackerItem(...)) con marker en description_html;
-        upsert_mapping con el iid retornado.
-      - op_kind=post_comment: si dest_provider.comment_exists(dest_iid, marker) → skip;
-        sino dest_provider.post_comment(dest_iid, body+marker).
+def execute_migration(plan, dest_provider, db, *, stacky_project, migration_run, existing_map) -> MigrationResult:
+    """existing_map se construye con hydrate_map_from_destination ANTES de llamar (ver F4b).
+    Para cada op del plan (en el ORDEN topológico que ya trae el plan):
+      - op_kind=create_item: si get_gitlab_iid(ado_id) existe (map ya hidratado) → skip;
+        sino: resolver parent_id = existing_map.get(op.dest_parent_ado_id) (None si no mapeado;
+        si None y había padre → registrar en orphaned[] + warning);
+        dest_provider.create_item(TrackerItem(..., parent_id=parent_id_resuelto)) con marker en
+        description_html (create_item enlaza al padre internamente, gitlab_provider.py:228-229);
+        upsert_mapping(ado_id→iid) y actualizar existing_map en memoria para los hijos siguientes.
+      - op_kind=post_comment: resolver dest_iid = existing_map[ado_id]; si
+        dest_provider.comment_exists(dest_iid, marker) → skip; sino post_comment(dest_iid, body+marker).
       - op_kind=upload_attachment: si el markdown del attachment ya está en la descripción (re-fetch) → skip;
-        sino download ADO → upload GitLab → link_attachment.
-      - op_kind=link_parent: dest_provider._link_parent(child_iid, parent_iid_mapeado).
-    Cualquier error se acumula en failed[] (no aborta); al final, si failed>0, el resultado lleva el detalle.
+        sino migrate_attachment (F5): download ADO → upload GitLab → link_attachment.
+    NO hay rama op_kind=link_parent (eliminada por C2). Cualquier error se acumula en failed[]
+    (no aborta); al final, si failed>0, el resultado lleva el detalle.
     """
+
+def hydrate_map_from_destination(dest_provider, db, *, stacky_project) -> dict[str, str]:
+    """[ADICIÓN ARQUITECTO — cierra C4] Reconstruye el mapeo ado_id→iid desde el DESTINO
+    (fuente de verdad), no desde el SQLite local. Lista los items del destino que portan el
+    marker `<!-- stacky-migrated:ado:{id} -->` (vía dest_provider.fetch_open_items + parseo del
+    marker en la descripción), parsea el ado_id, y hace upsert_mapping en migrator_map. Devuelve
+    el map fusionado (local ∪ destino). Es READ-ONLY sobre el destino salvo el upsert local.
+    Garantiza idempotencia aunque el SQLite de Stacky esté vacío (DB fresca / otra máquina /
+    crash post-create-pre-upsert). Pura respecto al destino: sólo invoca fetch_*/get_*."""
 ```
 
-**Invariante IDEMPOTENCIA:** ejecutar `execute_migration` 2x sobre el mismo plan deja el destino sin duplicados (verificado por F10).
+**Invariante IDEMPOTENCIA:** ejecutar `execute_migration` 2x sobre el mismo plan deja el destino sin duplicados (verificado por F10). La garantía NO depende solo del `migrator_map` local: `hydrate_map_from_destination` (F4b) reconstruye el map desde el destino antes de cada corrida, cerrando la ventana "create OK / upsert falló" y el caso "DB Stacky vacía en otra máquina".
 
 **Archivos exactos F4:**
-- `backend/services/migrator_executor.py` (NUEVO) — `MigrationResult`, `execute_migration`, helpers `_apply_create`, `_apply_comment`, `_apply_attachment`, `_apply_link`.
-- Reusa `migrator_map.upsert_mapping` y `get_gitlab_iid` (F1).
+- `backend/services/migrator_executor.py` (NUEVO) — `MigrationResult`, `execute_migration`, `hydrate_map_from_destination` (F4b), helpers `_apply_create` (resuelve `parent_id` desde el map), `_apply_comment`, `_apply_attachment`. **NO** existe `_apply_link` (eliminado por C2; el link va en `create_item`).
+- Reusa `migrator_map.upsert_mapping` y `get_gitlab_iid` (F1) y `migrate_attachment` (F5).
 
 **Tests F4 (TDD primero):**
 - Archivo: `backend/tests/test_plan74_migrator_executor.py`.
@@ -295,12 +324,14 @@ def execute_migration(plan, dest_provider, db, *, stacky_project, migration_run)
   2. Re-correr el mismo plan (2da vez) con el mapping ya poblado → `skipped == 2`, `create_item` **NO** llamado de nuevo.
   3. Comment op cuyo marker ya existe → `post_comment` NO llamado **[Patrón mock: `comment_exists` retorna True, `assert_not_called`]**.
   4. Attachment op → secuencia download→upload→link_attachment; hash verificado; temp file limpiado.
-  5. Link op a parent mapeado → `_link_parent` llamado con iid correcto.
-  6. Una op falla (create_item levanta `TrackerApiError`) → acumula en `failed`, no aborta, las demás se aplican.
-  7. **Invariant read-only origen:** `mock_origin` nunca fue invocado por `execute_migration` (sólo se leen `fetch_*` en F2, no aquí) **[Patrón mock: `assert_not_called` en todos los métodos mutadores]**.
+  5. **Create con parent mapeado:** `create_item` se llama con `TrackerItem.parent_id == iid_mapeado` (el linkeo lo hace `create_item` internamente; el test NO espera ninguna llamada a `_link_parent`) **[Patrón mock: inspeccionar el `TrackerItem` pasado a `create_item`]**.
+  6. **Create con parent NO mapeado:** el item se crea con `parent_id=None`, se agrega a `orphaned[]` y se acumula warning; no aborta.
+  7. Una op falla (create_item levanta `TrackerApiError`) → acumula en `failed`, no aborta, las demás se aplican.
+  8. **Invariant read-only origen:** `mock_origin` nunca fue invocado por `execute_migration` **[Patrón mock: `assert_not_called` en todos los métodos mutadores]**.
+  9. **hydrate_map_from_destination:** con `mock_dest.fetch_open_items` devolviendo 2 items con marker → el map resultante tiene 2 entradas; `mock_dest` solo recibió `fetch_*` (read-only) **[gate C4]**.
 - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan74_migrator_executor.py -q`.
 
-**Criterio binario F4:** los 7 casos pasan; idempotencia verificada (caso 2); origen nunca mutado (caso 7).
+**Criterio binario F4:** los 9 casos pasan; idempotencia verificada (caso 2); link en create-time sin método privado (caso 5); reconciliación desde destino (caso 9); origen nunca mutado (caso 8).
 
 **Impacto por runtime:** ninguno.
 
@@ -318,11 +349,27 @@ def execute_migration(plan, dest_provider, db, *, stacky_project, migration_run)
 
 ```python
 # backend/services/migrator_attachments.py (NUEVO)
+import os, base64, tempfile, requests   # requests YA es dependencia (ado_client/gitlab_client lo usan)
+
 def compute_sha256(file_path: str) -> str: ...   # pura
 
 def download_attachment_to_temp(attachment_meta: dict, *, ado_pat: str) -> str:
-    """Descarga el binario ADO a un temp file. Reusa PAT del client_profile.
-    Retorna la ruta temporal. NO sube nada."""
+    """Descarga el binario ADO a un temp file. Retorna la ruta temporal. NO sube nada.
+
+    C3 — IMPLEMENTACIÓN EXPLÍCITA. PROHIBIDO reusar `ado_client._request` (devuelve `dict`/JSON,
+    NO sirve para binarios — ado_client.py:257). `attachment_meta` trae la URL de descarga (campo
+    `url`/`downloadUrl`, lo que devuelva `fetch_attachments`, ado_client.py:431). Hacer GET binario:
+        auth = base64.b64encode(f':{ado_pat}'.encode()).decode()   # PAT ADO va como user vacío
+        with requests.get(attachment_meta['url'],
+                          headers={'Authorization': f'Basic {auth}'},
+                          stream=True, timeout=60) as r:
+            r.raise_for_status()
+            fd, path = tempfile.mkstemp(suffix='_' + attachment_meta.get('name', 'attach'))
+            with os.fdopen(fd, 'wb') as fh:
+                for chunk in r.iter_content(8192):
+                    fh.write(chunk)
+            return path
+    El PAT viene del client_profile del proyecto ORIGEN. GET puro = read-only sobre el origen ADO."""
 
 def migrate_attachment(attachment_meta, dest_provider, *, dest_iid, ado_pat) -> dict:
     """download → compute_sha256(local) → dest_provider.upload_attachment(temp, name)
@@ -359,19 +406,37 @@ def migrate_attachment(attachment_meta, dest_provider, *, dest_iid, ado_pat) -> 
 
 **Trabajo:**
 
+**Persistencia del plan (C5 — drift real).** El `plan_id` de v1 quedaba colgando ("compara con el plan_id almacenado" sin definir dónde). v2 fija una tabla:
+```sql
+CREATE TABLE IF NOT EXISTS migrator_plan_snapshot (
+    plan_id        TEXT PRIMARY KEY,        -- uuid4 generado en POST /plan
+    stacky_project TEXT NOT NULL,
+    counts_json    TEXT NOT NULL,           -- json.dumps(counts_by_type) — base del drift
+    plan_hash      TEXT NOT NULL,           -- sha256 de (sorted ado_ids + counts) del dry-run
+    created_at     TEXT NOT NULL            -- ISO8601 UTC; TTL lógico de 30 min (no borra, compara)
+);
+```
+`POST /plan` inserta la fila; `POST /execute` re-corre `plan_migration`, recomputa `plan_hash` y lo compara con `migrator_plan_snapshot[plan_id].plan_hash`: si difiere → 409. Vive en `migrator_map.py` (mismas funciones puras de F1): `save_plan_snapshot`, `get_plan_snapshot`.
+
 ```python
 # backend/api/migrator.py (NUEVO blueprint)
-POST /api/migrator/plan
+migrator_bp = Blueprint("migrator", __name__, url_prefix="/migrator")  # C1: SIN "/api" (api_bp ya lo agrega)
+
+POST /api/migrator/plan          # ruta efectiva = url_prefix de api_bp ("/api") + "/migrator" + "/plan"
   body: {stacky_project, items_filter?, epic_policy?}
-  -> corre plan_migration (F2) SIN escribir; retorna {plan_id, counts_by_type, warnings, ops_preview (truncado a 50), total_ops}
+  -> corre plan_migration (F2) SIN escribir; persiste migrator_plan_snapshot;
+     retorna {plan_id, counts_by_type, warnings, ops_preview (truncado a 50), total_ops}
   Requiere STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED=true (sino 503).
 
 POST /api/migrator/execute
   body: {plan_id, confirmed: true}
   -> Si confirmed != true -> 400 (HITL gate).
-  -> Re-valida el plan (re-corre plan_migration, compara counts con el plan_id almacenado;
-     si difieren -> 409 "el origen cambió desde el dry-run, re-corre el plan").
-  -> execute_migration (F4); retorna {applied, skipped, failed, migration_run}.
+  -> hydrate_map_from_destination (F4b); re-corre plan_migration y recomputa plan_hash;
+     si plan_hash != migrator_plan_snapshot[plan_id].plan_hash -> 409 "el origen cambió, re-corré el plan".
+  -> execute_migration (F4) con existing_map hidratado; retorna {applied, skipped, failed, orphaned, migration_run}.
+
+GET  /api/migrator/health        # ruta efectiva /api/migrator/health (centinela F11 bis)
+  -> 200 {ok:true} con flag ON; 503 con flag OFF.
 
 GET  /api/migrator/{stacky_project}/mapping
   -> get_full_mapping (F1) en formato JSON + CSV descargable (header Accept: text/csv).
@@ -381,24 +446,24 @@ GET  /api/migrator/{stacky_project}/runs
 ```
 
 **Archivos exactos F6:**
-- `backend/api/migrator.py` (NUEVO).
-- `backend/app.py` — registrar el blueprint `migrator_bp`.
+- `backend/api/migrator.py` (NUEVO) — define `migrator_bp = Blueprint("migrator", __name__, url_prefix="/migrator")`. **NO** se registra en `app.py`; el registro va en `api/__init__.py` (F9, C1).
 - `backend/config.py` — `STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = False`, `env_only=False`.
+- `backend/services/migrator_map.py` — `save_plan_snapshot`, `get_plan_snapshot` (tabla `migrator_plan_snapshot`).
 
 **Tests F6 (TDD primero):**
 - Archivo: `backend/tests/test_plan74_migrator_api.py`.
 - Casos:
   1. `POST /plan` con flag OFF → 503.
-  2. `POST /plan` con flag ON + origen mock → 200 con `counts_by_type` y `plan_id`.
+  2. `POST /plan` con flag ON + origen mock → 200 con `counts_by_type` y `plan_id`; `migrator_plan_snapshot` tiene la fila.
   3. `POST /execute` sin `confirmed=true` → 400 (HITL gate).
-  4. `POST /execute` con `confirmed=true` pero el origen cambió desde el plan → 409.
-  5. `POST /execute` con `confirmed=true` y plan válido → 200 con `applied/skipped/failed`.
+  4. `POST /execute` con `confirmed=true` pero el origen cambió desde el plan (mock origen devuelve 1 item extra → `plan_hash` distinto) → 409.
+  5. `POST /execute` con `confirmed=true` y plan válido (hash coincide) → 200 con `applied/skipped/failed/orphaned`.
   6. `GET /mapping` devuelve JSON con las filas del mapeo.
   7. `GET /mapping` con `Accept: text/csv` devuelve CSV descargable (mismo contenido, formato distinto).
   8. `GET /runs` lista las corridas ordenadas por timestamp desc.
 - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan74_migrator_api.py -q`.
 
-**Criterio binario F6:** los 8 casos pasan; dry-run es obligatorio (caso 3); detección de drift origen-post-plan (caso 4).
+**Criterio binario F6:** los 8 casos pasan; dry-run obligatorio (caso 3); drift por `plan_hash` (caso 4); `migrator_bp` con `url_prefix="/migrator"` (sin doble `/api`).
 
 **Impacto por runtime:** ninguno (endpoint nuevo).
 
@@ -489,13 +554,13 @@ def verify_migration(plan, dest_provider, *, stacky_project, db) -> Verification
 ### F9 — Integración en `app.py` + flag en `harness_defaults.env` + UI flag
 
 **Trabajo:**
-- Registrar `migrator_bp` en `backend/app.py`.
+- **C1 — Registrar `migrator_bp` en `backend/api/__init__.py`** (NO en `app.py`). El patrón de la casa: `api_bp = Blueprint("api", __name__, url_prefix="/api")` (`api/__init__.py:43`) y cada feature-bp se registra con `api_bp.register_blueprint(<bp>)` SIN repetir `/api`. Agregar al bloque (junto a `pipelines_bp`, `tickets_bp`, etc.): `from .migrator import migrator_bp` y `api_bp.register_blueprint(migrator_bp)`. `migrator_bp` debe tener `url_prefix="/migrator"`. Resultado: rutas efectivas `/api/migrator/...` (UN solo `/api`). `app.py` NO se toca (ya hace `app.register_blueprint(api_bp)`).
 - Agregar `STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED=false` y `STACKY_MIGRATOR_EPIC_POLICY=auto` a `backend/harness_defaults.env`.
 - Exponer las 2 flags en HarnessFlagsPanel (categoría "Migrador ADO → GitLab"): toggle para `ENABLED` y dropdown de 3 valores para `EPIC_POLICY`.
 - MigratorPage solo aparece en la navegación si `STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED=true`.
 
 **Archivos exactos F9:**
-- `backend/app.py` (registro blueprint).
+- `backend/api/__init__.py` (registro del blueprint — NO `app.py`).
 - `backend/harness_defaults.env` (2 líneas nuevas).
 - `frontend/src/components/HarnessFlagsPanel.tsx` (añadir 2 entries en categoría nueva).
 - `frontend/src/App.tsx` o router (añadir ruta `/migrator` gated por flag).
@@ -503,14 +568,14 @@ def verify_migration(plan, dest_provider, *, stacky_project, db) -> Verification
 **Tests F9:**
 - Archivo: `backend/tests/test_plan74_migrator_wiring.py`.
 - Casos:
-  1. `app.test_client().get('/api/migrator/health')` con flag OFF → 503 o 404 (no registrado efectivamente).
+  1. `app.test_client().get('/api/migrator/health')` con flag OFF → 503.
   2. Flag ON → `/api/migrator/health` → 200.
   3. `harness_defaults.env` contiene las 2 líneas (test de línea presente).
   4. `config.STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED` lee `False` por defecto.
 - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan74_migrator_wiring.py -q`.
 - Frontend: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx tsc --noEmit` (0 errores).
 
-**Criterio binario F9:** los 4 casos pasan; tsc 0 errores; flag default OFF confirmado.
+**Criterio binario F9:** los 4 casos pasan; tsc 0 errores; flag default OFF confirmado; `migrator_bp` registrado en `api/__init__.py`.
 
 **Trabajo del operador F9:** ninguno.
 
@@ -560,9 +625,18 @@ def verify_migration(plan, dest_provider, *, stacky_project, db) -> Verification
   3. Test canario: un snippet intencionalmente malo (en fixture) que llama `origin.create_item(...)` es detectado como violación → el centinela lo atrapa (gate de significancia).
 - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan74_migrator_readonly_origin.py -q`.
 
-**Ratchet (F11 bis):** registrar TODOS los archivos `test_plan74_*.py` nuevos en `HARNESS_TEST_FILES` (sh + ps1) del Plan 49; meta-test F4 debe seguir verde. Archivo: `tests/conformance/test_harness_ratchet.py` (o el artefacto ratchet vigente).
+**Centinela de rutas (F11 bis — C1, OBLIGATORIO por la trampa doble-prefijo de los planes 72/73):** test que arma la app y verifica que las rutas del migrador resuelven EXACTAMENTE con un solo `/api` (jamás `/api/api/migrator`).
+- **Nuevo archivo:** `backend/tests/test_plan74_routes_registered.py`.
+- Patrón: `rules = {r.rule for r in app.url_map.iter_rules()}`; afirmar que `"/api/migrator/health"` ∈ `rules` y que NINGUNA regla matchea `re.compile(r"^/api/api/")`. Afirmar también que `"/api/migrator/plan"` y `"/api/migrator/<stacky_project>/mapping"` existen con un solo prefijo.
+- Casos:
+  1. `/api/migrator/health` está registrada (un solo `/api`).
+  2. No existe ninguna ruta con doble prefijo `/api/api/...` (gate de significancia: si alguien registra `migrator_bp` con `url_prefix="/api/migrator"` o lo cuelga mal, este test FALLA).
+  3. `migrator_bp` está registrado bajo `api_bp` (`"migrator"` ∈ nombres de blueprints de la app).
+- Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan74_routes_registered.py -q`.
 
-**Criterio binario F11:** los 3 casos pasan; ratchet verde.
+**Ratchet (F11 ter):** registrar **TODOS** los archivos `test_plan74_*.py` nuevos en `HARNESS_TEST_FILES` (sh + ps1) del Plan 49 — incluyendo `test_plan74_routes_registered.py`. No hardcodear un número: el meta-test (Plan 49 F4) falla si queda algún `test_plan74_*.py` sin registrar. Archivo: `tests/conformance/test_harness_ratchet.py` (o el artefacto ratchet vigente).
+
+**Criterio binario F11:** los 3 casos del centinela AST pasan; los 3 casos del centinela de rutas pasan (sin `/api/api/`); ratchet verde con todos los `test_plan74_*.py` registrados.
 
 **Trabajo del operador F11:** ninguno.
 
@@ -571,12 +645,12 @@ def verify_migration(plan, dest_provider, *, stacky_project, db) -> Verification
 ## 5. Riesgos y mitigaciones
 
 1. **Pérdida de datos en attachments.** Mitigación: F5 verifica hash post-subida; reintentos; reporte de fallidos en `failed[]`; cleanup garantizado de temp files.
-2. **Duplicados por idempotencia rota.** Mitigación: marker obligatorio en cada item creado; `migrator_map` consultado antes de crear; F10 corre el flujo 2x y afirma `applied==0` en la 2da corrida.
+2. **Duplicados por idempotencia rota (incl. DB Stacky vacía / otra máquina / crash post-create-pre-upsert).** Mitigación: marker obligatorio en cada item creado; `hydrate_map_from_destination` (F4b, **C4**) reconstruye el mapeo desde el DESTINO (fuente de verdad) antes de planear/ejecutar, así el migrador es idempotente aunque el SQLite local esté vacío; `migrator_map` consultado antes de crear; F10 corre el flujo 2x y afirma `applied==0` en la 2da corrida; F4 caso 9 prueba la hidratación.
 3. **Migración parcial silenciosa.** Mitigación: F8 verifica count diffs por tipo; aborta como `needs_review` si gap>0; `failed[]` acumula errores por op sin abortar el resto.
-4. **Escritura accidental en ADO (origen).** Mitigación: riel ABSOLUTO; F11 centinela AST que prohíbe mutadores sobre `origin`; F4 caso 7 (mock origen sin llamadas mutadoras).
-5. **Tier GitLab equivocado (Free vs Premium).** Mitigación: F3 política configurable `auto` (default) que reusa `_epics_native` + fallback 403 de `_link_parent`; si el operador sabe que es Free, setea `free_degrade`.
-6. **Links rotos por IDs no migrados.** Mitigación: GAP-A; los links a IDs ausentes se reportan como warnings (no abortan); el mapeo F1 se consulta al reconstruir links.
-7. **Drift del origen entre dry-run y ejecución.** Mitigación: F6 re-valida el plan antes de ejecutar (caso 4: 409 si difiere).
+4. **Escritura accidental en ADO (origen).** Mitigación: riel ABSOLUTO; F11 centinela AST que prohíbe mutadores sobre `origin`; F4 caso 8 (mock origen sin llamadas mutadoras); descarga de attachments (F5) es GET puro.
+5. **Tier GitLab equivocado (Free vs Premium).** Mitigación: F3 política configurable `auto` (default) que reusa `_epics_native` + fallback 403 de `_link_parent` (interno de `create_item`); si el operador sabe que es Free, setea `free_degrade`.
+6. **Links rotos por IDs no migrados.** Mitigación (**C2**): el link se establece en `create_item` vía `parent_id` mapeado (no por una op separada ni método privado), con orden topológico Epic→Story/Issue→Task; un padre ausente del mapeo → item creado huérfano + warning (no aborta); F4 caso 6 lo prueba.
+7. **Drift del origen entre dry-run y ejecución.** Mitigación (**C5**): `/execute` recomputa `plan_hash` y lo compara con `migrator_plan_snapshot[plan_id]` (caso 4: 409 si difiere); la tabla persiste el snapshot del dry-run.
 8. **3 runtimes.** Mitigación: el plan NO toca prompts ni runtime del agente; todo el cambio es capa de servicios/API/UI; los 3 runtimes siguen operativos.
 9. **Falsos verdes en idempotencia.** Mitigación: F10 caso 2 vs caso 3 es el gate de significancia (si `applied` no baja a 0 en la 2da corrida, el test falla); patrón mock `assert_called`/`assert_not_called` en F4/F8/F11.
 
@@ -604,7 +678,7 @@ def verify_migration(plan, dest_provider, *, stacky_project, db) -> Verification
 - **`comment_exists(item_id, marker)`:** método del puerto (`tracker_provider.py:69`); impl GitLab `gitlab_provider.py:262`, impl ADO `ado_provider.py:95`/`ado_client.py:809`.
 - **`_project_path()`:** helper de `GitLabClient` (`services/gitlab_client.py:98`) que URL-encodea `grp/sub/proj` → `grp%2Fsub%2Fproj`.
 - **`_epics_native`:** flag del `GitLabTrackerProvider` (`gitlab_provider.py:36`) que indica si se usan group epics nativos (Premium/Ultimate).
-- **`_link_parent`:** método del `GitLabTrackerProvider` (`gitlab_provider.py:99`) que vincula hijo-padre; degrada 403 → issue-links automáticamente.
+- **`_link_parent`:** método PRIVADO del `GitLabTrackerProvider` (`gitlab_provider.py:99`) que vincula hijo-padre; degrada 403 → issue-links automáticamente. **El migrador NO lo invoca** (C2): `create_item` ya lo llama internamente cuando `item.parent_id` está seteado (`gitlab_provider.py:228-229`).
 - **Política épica:** `STACKY_MIGRATOR_EPIC_POLICY ∈ {auto, premium_native, free_degrade}` (default `auto`).
 - **Plan de migración:** `MigrationPlan` (F2) = lista de `MigrationOp` + counts + warnings, producido SIN escribir.
 - **Dry-run:** ejecución de `plan_migration` que produce el plan sin tocar el destino; obligatorio antes de `execute_migration`.
@@ -625,7 +699,7 @@ def verify_migration(plan, dest_provider, *, stacky_project, db) -> Verification
 7. **F6** — API endpoints + HITL gate + drift detection.
 8. **F7** — UI wizard (5 pasos).
 9. **F8** — Verificación post-migración (count diffs).
-10. **F9** — Wiring app.py + harness_defaults.env + HarnessFlagsPanel + ruta.
+10. **F9** — Wiring en `api/__init__.py` (NO `app.py`) + harness_defaults.env + HarnessFlagsPanel + ruta.
 11. **F10** — Test idempotencia end-to-end (gate de significancia).
 12. **F11** — Centinela AST read-only + ratchet.
 
@@ -638,18 +712,19 @@ Cada fase es auto-contenida y se puede implementar/commitear de forma independie
 ## 9. DoD global (Definition of Done)
 
 - [ ] **(a)** Tabla F0 completa y verificada (6 filas, cada fila cita método puerto exacto). — **Cumplido en este doc.**
-- [ ] **(b)** `plan_migration` (F2) produce un plan SIN escribir (test F2 caso 5: mock dest nunca llamado).
-- [ ] **(c)** `execute_migration` (F4) es idempotente (test F4 caso 2: 2da corrida `skipped == N`, `create_item` no llamado).
+- [ ] **(b)** `plan_migration` (F2) produce un plan SIN escribir (test F2 caso 6: mock dest nunca llamado) y ordenado topológicamente (caso 5).
+- [ ] **(c)** `execute_migration` (F4) es idempotente (test F4 caso 2: 2da corrida `skipped == N`, `create_item` no llamado) incluso con DB local vacía gracias a `hydrate_map_from_destination` (caso 9).
 - [ ] **(d)** Mapeo `ado_id ↔ gitlab_iid` persistente y consultable (F1) + descargable como CSV (F6).
-- [ ] **(e)** Dry-run obligatorio (F6 caso 3: 400 sin `confirmed=true`); drift detection (F6 caso 4: 409 si origen cambió).
+- [ ] **(e)** Dry-run obligatorio (F6 caso 3: 400 sin `confirmed=true`); drift detection por `plan_hash` (F6 caso 4: 409 si origen cambió).
 - [ ] **(f)** Verificación post-migración (F8) marca `needs_review` si gap>0.
-- [ ] **(g)** Política épicas configurable (F3); reusa `_epics_native` + fallback `_link_parent`.
-- [ ] **(h)** Attachments migrados con hash + cleanup (F5).
-- [ ] **(i)** Centinela AST read-only (F11) verde; ratchet verde con los 9 archivos `test_plan74_*.py` registrados.
+- [ ] **(g)** Política épicas configurable (F3); reusa `_epics_native` + fallback `_link_parent` (interno de `create_item`, no llamado por el migrador).
+- [ ] **(h)** Attachments migrados con descarga binaria autenticada + hash + cleanup (F5).
+- [ ] **(i)** Centinela AST read-only (F11) verde; ratchet verde con **todos** los `test_plan74_*.py` registrados (sin hardcodear el número).
 - [ ] **(j)** Test idempotencia end-to-end F10 verde (caso 2 vs caso 3 = gate de significancia).
 - [ ] **(k)** Flag `STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED` default **OFF**; UI (wizard + HarnessFlagsPanel) visible solo con flag ON.
 - [ ] **(l)** Los 3 runtimes (Codex, Claude Code, GitHub Copilot Pro) operativos sin cambios (el plan no toca prompts/runtime del agente).
 - [ ] **(m)** `tsc` 0 errores en frontend.
+- [ ] **(n)** **(C1)** Centinela de rutas (F11 bis) verde: `/api/migrator/*` con un solo `/api`, NINGUNA ruta `/api/api/...`; `migrator_bp` registrado en `api/__init__.py`.
 
 ---
 

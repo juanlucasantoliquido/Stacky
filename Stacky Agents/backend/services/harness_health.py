@@ -114,6 +114,8 @@ class HarnessHealth:
     _exec_verification: dict = field(default_factory=dict)
     # A2.2 — KPIs del contrato de aceptación (asignado si habilitado)
     _acceptance_contract: dict = field(default_factory=dict)
+    # Plan 71 F7 -- cobertura efimera del sub-puerto CIProvider (efimero: resetea en restart)
+    ci_provider_coverage: dict = field(default_factory=dict)
 
     def _rate(self, num: int, den: int) -> float | None:
         return round(num / den, 4) if den else None
@@ -182,6 +184,8 @@ class HarnessHealth:
             "exec_verification_kpis": self._exec_verification,
             # A2.2 — KPIs del contrato de aceptación (solo si habilitado; {} si no)
             "acceptance_contract_kpis": self._acceptance_contract,
+            # Plan 71 F7 -- cobertura efimera del sub-puerto CIProvider
+            "ci_provider_coverage": self.ci_provider_coverage,
         }
 
 
@@ -394,6 +398,12 @@ def compute_health(
         from config import config as _cfg_ac
         if getattr(_cfg_ac, "STACKY_ACCEPTANCE_KPIS_ENABLED", False):
             h._acceptance_contract = _compute_acceptance_contract_kpis(window_days)
+    except Exception:  # noqa: BLE001
+        pass
+    # Plan 71 F7 -- cobertura efimera CIProvider
+    try:
+        from api.tickets import _ci_provider_coverage  # noqa: PLC0415
+        h.ci_provider_coverage = dict(_ci_provider_coverage)
     except Exception:  # noqa: BLE001
         pass
     return h

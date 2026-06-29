@@ -77,6 +77,7 @@ def init_db() -> None:
         StackyMemorySyncChunk,
         StackyMemorySyncOutbox,
     )
+    import services.ci_inference_cache  # noqa: F401  (Plan 71 — caché CI agnóstico)
 
     Base.metadata.create_all(engine)
     _migrate_add_columns()

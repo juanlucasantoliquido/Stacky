@@ -30,7 +30,8 @@ from services.ado_pipeline_inference import infer_pipeline, invalidate_cache
 from services.ado_client import AdoClient, AdoApiError as _AdoApiError, AdoConfigError as _AdoConfigError
 from services.project_context import ProjectContextError, build_ado_client, resolve_project_context
 from services.tracker_provider import get_tracker_provider, TrackerConfigError  # Plan 70 F2
-import config  # Plan 70 F2 — flag STACKY_TICKETS_PROVIDER_ENABLED
+from services.ci_provider import get_ci_provider, ItemRef, ItemPipelineResult  # Plan 71 F5
+import config  # Plan 70 F2 — flag STACKY_TICKETS_PROVIDER_ENABLED / Plan 71 F5
 
 logger = logging.getLogger("stacky_agents.api.tickets")
 
@@ -410,6 +411,73 @@ def _provider_for_ticket(ticket: "Ticket | None" = None, project_name: str | Non
         return None  # caller cae a fallback ADO
 
 
+# ---------------------------------------------------------------------------
+# Plan 71 F5 — Helpers CIProvider para ado-pipeline-status / ado-pipeline-batch
+# ---------------------------------------------------------------------------
+
+# Contador efímero de cobertura por tipo de tracker (módulo-level, resetea en restart)
+_ci_provider_coverage: dict[str, int] = {}
+
+
+def _tracker_type_for(ticket: "Ticket") -> str:
+    """Retorna el tracker_type del ticket o 'azure_devops' como default."""
+    return (getattr(ticket, "tracker_type", None) or "azure_devops").strip().lower()
+
+
+def _item_ref_for_ticket(ticket: "Ticket") -> "ItemRef | None":
+    """Construye ItemRef para un ticket. Retorna None si no hay item_id válido."""
+    ado_id = getattr(ticket, "ado_id", None)
+    if not ado_id:
+        return None
+    ttype = _tracker_type_for(ticket)
+    return ItemRef(item_id=str(ado_id), tracker_type=ttype)
+
+
+def _ci_provider_for_ticket(ticket: "Ticket | None" = None) -> "object | None":
+    """Plan 71 F5 — Devuelve el CIProvider si la flag está ON, o None.
+
+    Con flag OFF retorna None y el caller usa infer_pipeline (fallback legacy).
+    """
+    if not getattr(config.config, "STACKY_PIPELINE_PROVIDER_ENABLED", False):
+        return None
+    proj = getattr(ticket, "stacky_project_name", None) if ticket is not None else None
+    try:
+        return get_ci_provider(proj)
+    except Exception:
+        return None  # fallback a legacy
+
+
+def _coverage_snapshot() -> dict:
+    """Retorna snapshot efímero del contador de cobertura CI."""
+    return dict(_ci_provider_coverage)
+
+
+def _resolve_ci_result(
+    ticket: "Ticket",
+) -> "tuple[dict, str] | None":
+    """Intenta resolver el pipeline por CIProvider.
+
+    Retorna (result_dict, tracker_type) si tuvo éxito, o None si debe usar legacy.
+    """
+    provider = _ci_provider_for_ticket(ticket)
+    if provider is None:
+        return None
+
+    ref = _item_ref_for_ticket(ticket)
+    if ref is None:
+        return None
+
+    ttype = _tracker_type_for(ticket)
+    # Actualizar contador de cobertura
+    _ci_provider_coverage[ttype] = _ci_provider_coverage.get(ttype, 0) + 1
+
+    result: ItemPipelineResult = provider.infer_item_pipeline(ref)
+    d = result.to_dict()
+    d["tracker_type"] = ttype
+    d["ci_provider_coverage"] = _coverage_snapshot()
+    return d, ttype
+
+
 def _resolve_me_unique_name(project_name: str | None) -> str:
     """uniqueName ADO del operador para el filtro 'Mis tareas'.
 
@@ -748,6 +816,8 @@ def get_ado_pipeline_status(ticket_id: int):
     Query params:
       force_refresh=true  — ignora cache y re-llama al LLM
       model=gpt-4o-mini   — modelo LLM a usar (default: gpt-4o-mini)
+
+    Plan 71 F5 — Con STACKY_PIPELINE_PROVIDER_ENABLED=true enruta por CIProvider.
     """
     with session_scope() as session:
         t = session.get(Ticket, ticket_id)
@@ -755,6 +825,22 @@ def get_ado_pipeline_status(ticket_id: int):
             abort(404)
         ado_id = t.ado_id
 
+    # Plan 71 F5 — branch por flag STACKY_PIPELINE_PROVIDER_ENABLED
+    if getattr(config.config, "STACKY_PIPELINE_PROVIDER_ENABLED", False):
+        try:
+            resolved = _resolve_ci_result(t)
+            if resolved is not None:
+                result_dict, _ = resolved
+                return jsonify(result_dict)
+            # fallback a legacy si _resolve_ci_result no pudo (ref=None, etc.)
+        except Exception as e:
+            logger.exception(
+                "ado-pipeline-status (CIProvider) falló para ticket %s (ADO-%s)",
+                ticket_id, ado_id,
+            )
+            return jsonify({"error": str(e)}), 500
+
+    # Legacy path (flag OFF o fallback)
     force = request.args.get("force_refresh", "").lower() in ("1", "true", "yes")
     model = request.args.get("model") or None
 
@@ -780,6 +866,9 @@ def ado_pipeline_batch():
     Retorna: { "results": { "1": {...}, "2": {...} } }
 
     Usa cache — solo re-infiere los que no tienen cache fresco.
+
+    Plan 71 F5 — Con STACKY_PIPELINE_PROVIDER_ENABLED=true resuelve CIProvider
+    POR ITEM (C9: el batch no asume un único provider para todo el batch).
     """
     body = request.get_json(silent=True) or {}
     ticket_ids: list[int] = [int(x) for x in (body.get("ticket_ids") or [])]
@@ -789,10 +878,12 @@ def ado_pipeline_batch():
     if not ticket_ids:
         return jsonify({"results": {}})
 
-    # Resolver ado_ids desde BD
+    # Resolver tickets desde BD
     with session_scope() as session:
         tickets = session.query(Ticket).filter(Ticket.id.in_(ticket_ids)).all()
         ticket_by_id = {t.id: t for t in tickets}
+
+    use_provider = getattr(config.config, "STACKY_PIPELINE_PROVIDER_ENABLED", False)
 
     results: dict[str, dict] = {}
     for tid in ticket_ids:
@@ -801,6 +892,15 @@ def ado_pipeline_batch():
             results[str(tid)] = {"error": "not_found"}
             continue
         try:
+            # Plan 71 F5 C9 — provider POR ITEM
+            if use_provider:
+                resolved = _resolve_ci_result(ticket)
+                if resolved is not None:
+                    result_dict, _ = resolved
+                    results[str(tid)] = result_dict
+                    continue
+                # fallback a legacy si no pudo resolver
+
             r = infer_pipeline(
                 ado_id=ticket.ado_id,
                 force_refresh=force,

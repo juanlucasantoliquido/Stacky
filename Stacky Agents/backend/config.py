@@ -810,6 +810,13 @@ class Config:
     STACKY_GITLAB_CI_INFERENCE: bool = os.getenv(
         "STACKY_GITLAB_CI_INFERENCE", "true"
     ).lower() in ("1", "true", "yes")
+    # Plan 71 — Si ON, los endpoints ado-pipeline-status y ado-pipeline-batch
+    # enrutan por el sub-puerto CIProvider (AdoCIProvider / GitLabCIProvider)
+    # en vez de llamar directamente a infer_pipeline. OFF (default): comportamiento
+    # pre-Plan-71 byte-idéntico.
+    STACKY_PIPELINE_PROVIDER_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_PROVIDER_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
 
 
 config = Config()

@@ -122,6 +122,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_ADAPTIVE_SELECTOR_ENABLED", "STACKY_PROJECT_AUTOPROFILE_ENABLED",
         "STACKY_COMMENT_FULL_SCAN_ENABLED",
         "STACKY_TICKETS_PROVIDER_ENABLED",   # Plan 70 — consumers por puerto TrackerProvider
+        "STACKY_PIPELINE_PROVIDER_ENABLED",  # Plan 71 — sub-puerto CIProvider
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1675,6 +1676,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "_ado_client_for_ticket; cae al fallback ADO si el provider del "
             "proyecto no está disponible (ej. GitLab sin STACKY_GITLAB_ENABLED). "
             "OFF (default): byte-idéntico al comportamiento pre-Plan-70."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    FlagSpec(
+        key="STACKY_PIPELINE_PROVIDER_ENABLED",
+        type="bool",
+        label="CIProvider sub-puerto (Plan 71)",
+        description=(
+            "Plan 71 — Si ON, los endpoints ado-pipeline-status y ado-pipeline-batch "
+            "enrutan por el sub-puerto CIProvider (AdoCIProvider / GitLabCIProvider) "
+            "en vez de llamar directamente a infer_pipeline. Habilita inferencia CI "
+            "agnóstica del tracker (ADO + GitLab). OFF (default): comportamiento "
+            "pre-Plan-71 byte-idéntico."
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)

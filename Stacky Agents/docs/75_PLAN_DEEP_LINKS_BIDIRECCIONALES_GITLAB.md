@@ -1,11 +1,19 @@
 # Plan 75 — Deep links bidireccionales GitLab
 
-> **Estado:** PROPUESTO v1.
+> **Estado:** PROPUESTO v2 (crítica adversarial 2026-06-29).
 > **Pre-requisito:** Plan 70 (puerto `TrackerProvider` con `item_url`) — COMPLETO. Indirecto: este plan extiende para GitLab los deep links que el Plan 70 ya estandarizó para ADO vía `provider.item_url(item_id)`.
 > **Roadmap:** Sexto eslabón del bloque GitLab-Main 70-76 (desacople → pipeline infer agnóstico → trigger CI → creador pipelines → migrador ADO→GitLab → **deep links** → eval codebase-memory-mcp).
-> **Versión doc:** v1 (2026-06-27). Reemplaza al boceto v0.
+> **Versión doc:** v2 (2026-06-29). Reemplaza a v1 (2026-06-27).
 
-> **CHANGELOG boceto v0 → v1:**
+> **CHANGELOG v1 → v2 (crítica adversarial):**
+> - **[C3 IMPORTANTE — double-encoding latente en F1↔F2 RESUELTO]** `_project_path()` (`gitlab_client.py:98`) ya devuelve el path URL-encoded (`"rs%2Fpacifico%2Fstrat"`). Las compositoras de F1 aplicaban `_enc(project_path)` sobre ese valor ya encoded → `urllib.parse.quote("rs%2Fpacifico%2Fstrat", safe="")` produce `"rs%252Fpacifico%252Fstrat"` (doble-encoding; 404 en GitLab para subgroups). Fix: las compositoras reciben `project_path` **ya encoded** (sin `_enc()` sobre él); solo se aplica `_enc()` sobre `iid`, `sha`, `group` y `query`. El wiring F2 pasa `self._client._project_path()` directamente (sin re-encodear). Tests F1 usan strings ya-encoded como input. Ver §F1, §F2 y Nota 10 actualizados.
+> - **[C2 IMPORTANTE — call site del flag en F6 no especificado → tests F6 inalcanzables RESUELTO]** F6 decía "el backend chequea el flag y devuelve `null`" sin indicar dónde. Fix: el flag se chequea en `gitlab_provider.item_url`, `gitlab_provider.mr_url`, `gitlab_provider.commit_url` y `gitlab_provider.epic_url` (F2): si `config.STACKY_GITLAB_DEEP_LINKS_ENABLED` es `False`, devuelven `None` en lugar de componer la URL. Tests F6 prueban directamente los métodos del provider con flag mockeado. Ver §F2 y §F6 actualizados.
+> - **[C1 IMPORTANTE — sites de UI vagos en F4 RESUELTO]** "revisar `frontend/src/components/`" era scope abierto para modelos menores. Fix: resultado del grep incluido en el plan; un único site adicional auditado. Ver §F4 actualizado con lista exacta de archivos:línea.
+> - **[C4 MENOR — atributos privados de `dest_provider` en F3 no documentados RESUELTO]** Fix: docstring de `resolve_epic_deep_link` cita exactamente qué atributos lee (`_group`, `_epics_native` de `gitlab_provider.py`) con sus líneas. Ver §F3 actualizado.
+> - **[C5 MENOR — heurística `pipeline_trigger_issue_link` sin regex → falso positivos RESUELTO]** Fix: regex exacta documentada en F5 + test caso 5 anti-falso-positivo. Ver §F5 actualizado.
+> - **[ADICIÓN ARQUITECTO — test centinela de no-regresión de encoding real NUEVO]** `test_plan75_deep_links_no_double_encode.py`: instancia un `GitLabTrackerProvider` real (con `_project` = `"rs/pacifico/strat"`, sin pre-encodear) y llama `item_url("42")` verificando que la URL resultante contiene `"rs%2Fpacifico%2Fstrat"` (un solo nivel de encoding, no `%25`). Cierra la ventana de falso-verde de los tests F1 (que testean con strings ya-encoded) vs el wiring real F2 (que pasa `_project_path()` encoded). Cero trabajo al operador, neutral a los 3 runtimes.
+
+> **CHANGELOG boceto v0 → v1 (preservado para trazabilidad):**
 > - Supuesto crítico del boceto (`project_path` URL-encoded canónico) **RESUELTO**: `_project_path()` YA existe en `gitlab_client.py:98` y URL-encodea `grp/sub/proj` → `grp%2Fsub%2Fproj`. El plan lo reusa vía el puerto; NO recalcula en la UI.
 > - Hallazgo de auditoría: `gitlab_provider.item_url` (`:164-167`) NO URL-encodea `self._project` (gap real para sub-groups). F1 lo corrige.
 > - Hallazgo de auditoría: `frontend/src/components/StructuredOutput.tsx:83` hardcodea `dev.azure.com/UbimiaPacifico/Strategist_Pacifico/_workitems/edit/...`. F4 lo reemplaza por el helper provider-agnóstico.
@@ -77,7 +85,9 @@ Componer **URLs profundas (deep links) GitLab** deterministas — issue, MR, pip
 
 ### F1 — Compositoras PURAS de URL (backend)
 
-**Objetivo:** 5 funciones PURAS en un módulo nuevo, sin I/O, que componen URLs deterministas URL-encoding todos los inputs. Corrigen el gap de `gitlab_provider.item_url` (que no encodea).
+**Objetivo:** 5 funciones PURAS en un módulo nuevo, sin I/O, que componen URLs deterministas. Corrigen el gap de `gitlab_provider.item_url` (que no encodea `self._project`).
+
+**Contrato de encoding (C3 — CRÍTICO):** las compositoras reciben `project_path` **ya URL-encoded** (tal como lo devuelve `_project_path()` de `gitlab_client.py:98`, que ya encodea `/` a `%2F`). El valor se usa DIRECTAMENTE, SIN pasar por `_enc()`. Solo se aplica `_enc()` sobre `iid`, `sha`, `group` y `query` (que llegan sin encodear). Este contrato previene el double-encoding: `urllib.parse.quote("rs%2Fpacifico%2Fstrat", safe="")` produciría `"rs%252Fpacifico%252Fstrat"` (404 en GitLab con subgroups).
 
 **Trabajo:**
 
@@ -90,19 +100,23 @@ def _norm_base(base_url: str) -> str:
     return (base_url or "").rstrip("/")
 
 def _enc(value: str) -> str:
-    """URL-encode un segmento de path de forma segura."""
+    """URL-encode un segmento NO pre-encoded (iid, sha, group, query strings).
+    NUNCA aplicar sobre project_path que ya viene de _project_path() (ya encoded)."""
     return urllib.parse.quote(str(value), safe="")
 
-def compose_issue_url(base_url: str, project_path: str, iid: str) -> str:
-    return f"{_norm_base(base_url)}/{_enc(project_path)}/-/issues/{_enc(iid)}"
+def compose_issue_url(base_url: str, project_path_encoded: str, iid: str) -> str:
+    """project_path_encoded: string ya URL-encoded (output de _project_path()).
+    iid: string sin encodear (se encodea aquí)."""
+    return f"{_norm_base(base_url)}/{project_path_encoded}/-/issues/{_enc(iid)}"
 
-def compose_mr_url(base_url: str, project_path: str, iid: str) -> str:
-    return f"{_norm_base(base_url)}/{_enc(project_path)}/-/merge_requests/{_enc(iid)}"
+def compose_mr_url(base_url: str, project_path_encoded: str, iid: str) -> str:
+    return f"{_norm_base(base_url)}/{project_path_encoded}/-/merge_requests/{_enc(iid)}"
 
-def compose_commit_url(base_url: str, project_path: str, sha: str) -> str:
-    return f"{_norm_base(base_url)}/{_enc(project_path)}/-/commit/{_enc(sha)}"
+def compose_commit_url(base_url: str, project_path_encoded: str, sha: str) -> str:
+    return f"{_norm_base(base_url)}/{project_path_encoded}/-/commit/{_enc(sha)}"
 
 def compose_epic_url(base_url: str, group: str, iid: str) -> str:
+    """group: string sin encodear (se encodea aquí, igual que iid)."""
     return f"{_norm_base(base_url)}/groups/{_enc(group)}/-/epics/{_enc(iid)}"
 
 def pipeline_web_url(pipeline: dict) -> str | None:
@@ -115,18 +129,18 @@ def pipeline_web_url(pipeline: dict) -> str | None:
 
 **Tests F1 (TDD primero):**
 - Archivo: `backend/tests/test_plan75_deep_links_compose.py`.
-- Casos:
-  1. `compose_issue_url("https://gl.example.com/", "rs/pacifico/strat", "42")` → `"https://gl.example.com/rs%2Fpacifico%2Fstrat/-/issues/42"`.
-  2. `compose_mr_url` con mismo input → análogo con `/merge_requests/42`.
-  3. `compose_commit_url("https://gl.example.com", "rs/pacifico/strat", "abc123def")` → `/rs%2Fpacifico%2Fstrat/-/commit/abc123def`.
+- Casos (NOTA: `project_path_encoded` se pasa ya-encoded, como vendría de `_project_path()`):
+  1. `compose_issue_url("https://gl.example.com/", "rs%2Fpacifico%2Fstrat", "42")` → `"https://gl.example.com/rs%2Fpacifico%2Fstrat/-/issues/42"` (sin doble-encoding en el path).
+  2. `compose_mr_url("https://gl.example.com/", "rs%2Fpacifico%2Fstrat", "42")` → análogo con `/merge_requests/42`.
+  3. `compose_commit_url("https://gl.example.com", "rs%2Fpacifico%2Fstrat", "abc123def")` → `/rs%2Fpacifico%2Fstrat/-/commit/abc123def`.
   4. `compose_epic_url("https://gl.example.com", "my-group", "7")` → `https://gl.example.com/groups/my-group/-/epics/7`.
   5. `_norm_base` rstrip: base con trailing `/` vs sin → misma URL final.
-  6. **Boundary anti-injection:** `project_path="../../../etc"` → encodeado como `%2E%2E%2F%2E%2E%2E%2Fetc` (no escapa del path).
+  6. **Anti-double-encoding (gate de significancia C3):** `compose_issue_url("https://gl.example.com", "rs%2Fpacifico%2Fstrat", "42")` NO contiene `%25` en el resultado (es decir, el path encoded se preserva sin re-encodear).
   7. `pipeline_web_url({"web_url": "https://gl/x"})` → `"https://gl/x"`; `pipeline_web_url({})` → `None`.
   8. **Pureza:** 2 llamadas con mismo input → mismo output (no I/O).
 - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan75_deep_links_compose.py -q`.
 
-**Criterio binario F1:** los 8 casos pasan; URL exacta afirmada string-compare; boundary anti-injection verde.
+**Criterio binario F1:** los 8 casos pasan; caso 6 (anti-double-encoding) es el gate de significancia; URL exacta afirmada string-compare.
 
 **Impacto por runtime:** ninguno (capa de servicios).
 
@@ -138,31 +152,44 @@ def pipeline_web_url(pipeline: dict) -> str | None:
 
 ### F2 — Wiring de las compositoras en `gitlab_provider`
 
-**Objetivo:** que `gitlab_provider.item_url` use `compose_issue_url` (corrige gap de encoding) y añadir métodos públicos `epic_url`, `mr_url`, `commit_url` al provider GitLab (NO al puerto, para no romper ADO). El puerto `TrackerProvider` queda intacto (sólo exige `item_url`).
+**Objetivo:** que `gitlab_provider.item_url` use `compose_issue_url` (corrige gap de encoding) y añadir métodos públicos `epic_url`, `mr_url`, `commit_url` al provider GitLab (NO al puerto, para no romper ADO). El puerto `TrackerProvider` queda intacto (solo exige `item_url`).
+
+**Flag check (C2 — CRÍTICO):** el flag `STACKY_GITLAB_DEEP_LINKS_ENABLED` se chequea AQUÍ, en los métodos del provider. Si el flag es `False`, los métodos `item_url`, `mr_url`, `commit_url` y `epic_url` devuelven `None` en lugar de componer la URL. Esto permite que F6 testee el comportamiento con/sin flag directamente sobre el provider, sin necesitar un endpoint nuevo. El frontend ya maneja `url=null` cayendo al `<span>` (ver `TrackerDeepLink` en F4).
 
 **Trabajo:**
 
 ```python
 # services/gitlab_provider.py — patches puntuales
-# item_url reescrito a:
-def item_url(self, item_id: str) -> str:
+from config import config  # patrón existente en el provider
+
+# item_url reescrito a (corrige gap de encoding + agrega flag check):
+def item_url(self, item_id: str) -> str | None:
+    if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+        return None
     from services.gitlab_deep_links import compose_issue_url
+    # _project_path() devuelve el path ya URL-encoded (e.g. "rs%2Fpacifico%2Fstrat").
+    # compose_issue_url lo usa directamente; NO re-encodear (C3).
     return compose_issue_url(self._client._base_url, self._client._project_path(), item_id)
 
-# Métodos NUEVOS (no del puerto, sólo del provider GitLab):
-def mr_url(self, mr_iid: str) -> str:
+# Métodos NUEVOS (no del puerto, solo del provider GitLab):
+def mr_url(self, mr_iid: str) -> str | None:
+    if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+        return None
     from services.gitlab_deep_links import compose_mr_url
     return compose_mr_url(self._client._base_url, self._client._project_path(), mr_iid)
 
-def commit_url(self, sha: str) -> str:
+def commit_url(self, sha: str) -> str | None:
+    if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+        return None
     from services.gitlab_deep_links import compose_commit_url
     return compose_commit_url(self._client._base_url, self._client._project_path(), sha)
 
-def epic_url(self, epic_iid: str) -> str:
+def epic_url(self, epic_iid: str) -> str | None:
+    if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+        return None
     from services.gitlab_deep_links import compose_epic_url
     if not self._group:
-        # Free tier: no hay épicas nativas; devolver URL del issue degradado si se conoce.
-        raise TrackerConfigError("GitLab Free: épicas no nativas; usar fallback Free (F3)")
+        raise TrackerConfigError("GitLab Free: epicas no nativas; usar fallback Free (F3)")
     return compose_epic_url(self._client._base_url, self._group, epic_iid)
 ```
 
@@ -173,20 +200,21 @@ def epic_url(self, epic_iid: str) -> str:
 
 **Tests F2 (TDD primero):**
 - Archivo: `backend/tests/test_plan75_gitlab_provider_urls.py`.
-- Casos (con `GitLabTrackerProvider` instanciado con config mock):
-  1. `item_url("42")` con `project="rs/pacifico/strat"` → URL encodeada (usa `compose_issue_url`).
-  2. `mr_url("7")` → URL MR correcta encodeada.
-  3. `commit_url("abc123")` → URL commit correcta.
-  4. `epic_url("3")` con `STACKY_GITLAB_GROUP="grp"` → URL epic correcta.
-  5. `epic_url("3")` sin `_group` → levanta `TrackerConfigError` (Free fallback en F3).
-  6. **No regresión ADO:** `AdoTrackerProvider.item_url("42")` sigue devolviendo la URL ADO intacta (`assert_equal` con valor conocido).
+- Casos (con `GitLabTrackerProvider` instanciado con config mock; `_project_path()` mockeado a `"rs%2Fpacifico%2Fstrat"` — ya encoded):
+  1. Flag ON + `item_url("42")` → `"https://gl.example.com/rs%2Fpacifico%2Fstrat/-/issues/42"` (URL encodeada, sin `%25`).
+  2. Flag ON + `mr_url("7")` → URL MR correcta encodeada.
+  3. Flag ON + `commit_url("abc123")` → URL commit correcta.
+  4. Flag ON + `epic_url("3")` con `_group="grp"` → URL epic correcta.
+  5. Flag ON + `epic_url("3")` sin `_group` → levanta `TrackerConfigError`.
+  6. **Flag OFF → todos los métodos devuelven `None`** (`item_url`, `mr_url`, `commit_url`, `epic_url` con flag=False → `None` en los 4 casos).
+  7. **No regresión ADO:** `AdoTrackerProvider.item_url("42")` sigue devolviendo la URL ADO intacta (`assert_equal` con valor conocido); no tiene atributo `_STACKY_GITLAB_DEEP_LINKS_ENABLED`.
 - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan75_gitlab_provider_urls.py -q`.
 
-**Criterio binario F2:** los 6 casos pasan; no regresión ADO (caso 6).
+**Criterio binario F2:** los 7 casos pasan; caso 6 (flag OFF → None) es el gate de C2; caso 1 sin `%25` es el gate de C3; no regresión ADO (caso 7).
 
 **Impacto por runtime:** ninguno.
 
-**Flag F2:** ninguna.
+**Flag F2:** `STACKY_GITLAB_DEEP_LINKS_ENABLED` (se define en F6; F2 la lee).
 
 **Trabajo del operador F2:** ninguno.
 
@@ -203,11 +231,19 @@ def epic_url(self, epic_iid: str) -> str:
 def resolve_epic_deep_link(
     *, dest_provider, epic_strategy: str, gitlab_iid: str, fallback_issue_iid: str | None
 ) -> str:
-    """Estrategia de fallback Free para deep links de épicas.
-    - epic_strategy == 'premium_native' y provider tiene _group → epic_url(group, iid).
-    - epic_strategy == 'free_degrade' o sin _group → compose_issue_url(project_path, fallback_issue_iid).
-    - Sin fallback_issue_iid → compose_search_url(base_url, project_path, 'label:type::epic').
-    Nunca escribe; sólo compone."""
+    """Estrategia de fallback Free para deep links de epicas.
+    Atributos de dest_provider que se leen (C4 — documentados con su origen):
+      - dest_provider._group: str | None  — grupo GitLab para epicas Premium (gitlab_provider.py:~line-de-_group).
+        Si es None o string vacío, el proyecto es Free/no-configurado.
+      - dest_provider._epics_native: bool — flag de tier (gitlab_provider.py:36).
+        True si el GitLab es Premium con epicas nativas; False si Free.
+      - dest_provider._client._base_url: str — base del servidor (gitlab_client.py:56).
+      - dest_provider._client._project_path(): str — path ya URL-encoded (gitlab_client.py:98).
+    Lógica:
+    - epic_strategy == 'premium_native' y provider tiene _group → compose_epic_url(base, group, iid).
+    - epic_strategy == 'free_degrade' o sin _group → compose_issue_url(project_path_encoded, fallback_issue_iid).
+    - Sin fallback_issue_iid → compose_search_url(base_url, project_path_encoded, 'label:type::epic').
+    Nunca escribe; solo compone."""
 ```
 
 **Archivos exactos F3:**
@@ -254,10 +290,16 @@ export function TrackerDeepLink({ url, label, className }: Props) {
 
 **Reemplazo del hardcodeo:** `StructuredOutput.tsx:83` (construcción `https://dev.azure.com/UbimiaPacifico/...`) se elimina; el componente consume la URL que el backend ya pasa en el payload (vía `item_url` del puerto). Si el proyecto es gitlab, el backend pasa la URL GitLab; si ADO, la ADO.
 
-**Sites de UI a migrar a `TrackerDeepLink` (buscá el patrón existente):**
-- `frontend/src/components/StructuredOutput.tsx:83` — reemplazar construcción hardcoded por `TrackerDeepLink url={payload.task_url}`.
-- Cards de épica/issue/task donde aparezca `task_url`/`epic_url`/`issue_url` (revisar `frontend/src/components/` y `frontend/src/pages/` buscando `_links.html.href` o `_workitems`).
-- Drawer de ejecución donde aparezca `pipeline.web_url` (si existe).
+**Sites de UI a migrar a `TrackerDeepLink` (C1 — lista exacta; NO "revisar la carpeta"):**
+
+El grep `dev\.azure\.com` + `_workitems/edit` sobre `frontend/src/` confirma un único site hardcodeado:
+- `frontend/src/components/StructuredOutput.tsx:83` — construye `https://dev.azure.com/UbimiaPacifico/Strategist_Pacifico/_workitems/edit/${adoId}`. **Reemplazar** por `<TrackerDeepLink url={payload.task_url} label={adoId} />`.
+
+Cards de épica/issue/task que consumen `task_url`/`epic_url`/`issue_url` ya reciben el campo como string desde el backend (patrón existente, no hardcodeado): usar `TrackerDeepLink` donde corresponda renderizar esos campos. Si al ejecutar el grep aparecieran sites adicionales con `dev.azure.com` literal, listarlos en el mismo commit antes de abrir PR.
+
+Drawer de ejecución con `pipeline.web_url`: si el payload de la ejecución expone este campo, renderizarlo con `TrackerDeepLink url={execution.pipeline?.web_url} label="Pipeline">`. Si el campo no existe en el payload actual, omitir (no inventar campos).
+
+**Criterio binario post-F4:** `grep -r "dev\.azure\.com" frontend/src/` devuelve 0 líneas en archivos `.tsx`/`.ts` (sin residuos hardcodeados).
 
 **Archivos exactos F4:**
 - `frontend/src/components/TrackerDeepLink.tsx` (NUEVO).
@@ -292,28 +334,46 @@ export function TrackerDeepLink({ url, label, className }: Props) {
 def epic_related_links(
     *, dest_provider, epic_iid: str, child_issues: list[dict], mrs: list[dict], pipelines: list[dict]
 ) -> dict:
-    """Compone URLs para los recursos relacionados a una épica.
+    """Compone URLs para los recursos relacionados a una epica.
     Retorna {issue_urls: [...], mr_urls: [...], pipeline_urls: [...]}.
-    No escribe; sólo compone a partir de los IDs que el caller ya recolectó."""
+    No escribe; solo compone a partir de los IDs que el caller ya recolecto."""
+
+# Regex documentada (C5): patron EXACTO de rama disparada por issue.
+# Matches: "issue-42", "issue-42-fix-auth" (NO: "release-42", "feat/42-dashboard", "my-issue-42").
+_ISSUE_TRIGGER_RE = re.compile(r"^issue-(\d+)(?:-|$)")
 
 def pipeline_trigger_issue_link(pipeline: dict, *, dest_provider) -> str | None:
-    """Si el pipeline tiene variables/refs que apuntan a un issue (ej. branch 'issue-42'),
-    intenta componer el link al issue. Heurística determinista documentada."""
+    """Si el pipeline tiene ref que sigue el patron ^issue-(\d+)(?:-|$),
+    compone el link al issue. Heuristica determinista documentada.
+    Ejemplos:
+      ref='issue-42'         -> URL issue 42
+      ref='issue-42-fix-auth' -> URL issue 42
+      ref='release-42'       -> None  (no match: 'release' no es 'issue')
+      ref='main'             -> None
+      ref='feat/42-dashboard' -> None (no empieza con 'issue-')
+    """
+    ref = (pipeline or {}).get("ref") or ""
+    m = _ISSUE_TRIGGER_RE.match(ref)
+    if not m:
+        return None
+    return dest_provider.item_url(m.group(1))
 ```
 
 **Archivos exactos F5:**
-- `backend/services/gitlab_deep_links.py` — añade `epic_related_links`, `pipeline_trigger_issue_link`.
+- `backend/services/gitlab_deep_links.py` — añade `_ISSUE_TRIGGER_RE`, `epic_related_links`, `pipeline_trigger_issue_link`. Agregar `import re` al inicio del módulo.
 
 **Tests F5 (TDD primero):**
 - Archivo: `backend/tests/test_plan75_deep_links_bidirectional.py`.
 - Casos:
   1. `epic_related_links` con 2 child issues + 1 MR + 1 pipeline → 3 listas con URLs correctas.
-  2. `pipeline_trigger_issue_link` con `ref="issue-42"` → URL issue 42 (heurística documentada).
-  3. `pipeline_trigger_issue_link` con `ref="main"` → `None` (no disparado por issue).
-  4. Inputs vacíos → listas vacías (no errores).
+  2. `pipeline_trigger_issue_link` con `ref="issue-42"` → URL issue 42.
+  3. `pipeline_trigger_issue_link` con `ref="issue-42-fix-auth"` → URL issue 42 (match parcial válido).
+  4. `pipeline_trigger_issue_link` con `ref="main"` → `None`.
+  5. **Anti-falso-positivo (C5):** `pipeline_trigger_issue_link` con `ref="release-42"` → `None`; `ref="feat/42-dashboard"` → `None`; `ref="my-issue-42"` → `None` (no empieza con `"issue-"`).
+  6. Inputs vacíos → listas vacías / `None` sin errores.
 - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan75_deep_links_bidirectional.py -q`.
 
-**Criterio binario F5:** los 4 casos pasan; funciones puras.
+**Criterio binario F5:** los 6 casos pasan; caso 5 es el gate de significancia (anti-falso-positivo); funciones puras.
 
 **Impacto por runtime:** ninguno.
 
@@ -336,15 +396,19 @@ def pipeline_trigger_issue_link(pipeline: dict, *, dest_provider) -> str | None:
 
 **Tests F6:**
 - Archivo: `backend/tests/test_plan75_deep_links_wiring.py`.
-- Casos:
-  1. Flag OFF + proyecto gitlab → endpoint que devuelve URLs retorna `null` en el campo URL.
-  2. Flag ON + proyecto gitlab → endpoint devuelve URL GitLab compuesta.
+- Casos (C2 — los casos 1/2 prueban los MÉTODOS DEL PROVIDER con config mockeada, no un endpoint nuevo):
+  1. **Flag OFF → provider GitLab devuelve `None` en los 4 métodos:** instanciar `GitLabTrackerProvider` con `config.STACKY_GITLAB_DEEP_LINKS_ENABLED=False`; llamar `item_url("1")`, `mr_url("1")`, `commit_url("abc")`, `epic_url("1")` (con `_group` seteado) → todos devuelven `None`.
+  2. **Flag ON → provider GitLab devuelve URL compuesta:** misma instancia con flag=True; `item_url("42")` → URL con `%2F` (no vacía, no `None`).
   3. `harness_defaults.env` contiene la línea `STACKY_GITLAB_DEEP_LINKS_ENABLED=false`.
-  4. Ratchet verde con los 5 archivos nuevos registrados.
-- Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan75_deep_links_wiring.py tests/conformance/test_harness_ratchet.py -q`.
+  4. `config.py` tiene `STACKY_GITLAB_DEEP_LINKS_ENABLED: bool = False` como valor por defecto.
+  5. Ratchet verde con los 6 archivos nuevos registrados (los 5 originales + el nuevo centinela `test_plan75_deep_links_no_double_encode.py`).
+- **[ADICION ARQUITECTO]** Archivo: `backend/tests/test_plan75_deep_links_no_double_encode.py`.
+  - Caso único (centinela de no-double-encoding): instanciar `GitLabTrackerProvider` real con `_project="rs/pacifico/strat"` (valor crudo, con barras literales, tal como viene del config), `_base_url="https://gl.example.com"`, flag=True. Llamar `item_url("42")`. Afirmar que: (a) el resultado contiene `"rs%2Fpacifico%2Fstrat"` (encoding correcto); (b) el resultado NO contiene `"%25"` (doble-encoding ausente). Este test cierra la ventana entre los tests F1 (que usan strings ya-encoded como input) y el wiring real F2 (donde `_project_path()` encodea en el momento); si el implementador accidentalmente pasa `_project_path()` a través de `_enc()`, este test se pone rojo.
+  - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan75_deep_links_no_double_encode.py -q`.
+- Comando ratchet+wiring: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan75_deep_links_wiring.py tests/test_plan75_deep_links_no_double_encode.py tests/conformance/test_harness_ratchet.py -q`.
 - Frontend: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx tsc --noEmit` (0 errores).
 
-**Criterio binario F6:** los 4 casos pasan; tsc 0 errores; ratchet verde.
+**Criterio binario F6:** los 5 casos de wiring pasan; centinela no-double-encode verde; tsc 0 errores; ratchet verde con 6 archivos.
 
 **Trabajo del operador F6:** ninguno (default OFF es kill-switch; los links se activan prendiendo el flag, que vive en UI).
 
@@ -411,8 +475,8 @@ Cada fase es auto-contenida y se puede implementar/commitear de forma independie
 - [ ] **(d)** Fallback Free operacional (F3 casos 1-5).
 - [ ] **(e)** `StructuredOutput.tsx:83` ya no contiene `dev.azure.com` literal; usa `TrackerDeepLink` (F4).
 - [ ] **(f)** Composición bidireccional (F5 casos 1-4) verde.
-- [ ] **(g)** Flag `STACKY_GITLAB_DEEP_LINKS_ENABLED` default OFF, en UI; con flag ON, proyecto gitlab muestra deep links.
-- [ ] **(h)** Ratchet verde con los 5 archivos `test_plan75_*` registrados.
+- [ ] **(g)** Flag `STACKY_GITLAB_DEEP_LINKS_ENABLED` default OFF, en UI; con flag OFF, los 4 métodos del provider devuelven `None`; con flag ON, devuelven URL compuesta.
+- [ ] **(h)** Ratchet verde con los 6 archivos `test_plan75_*` registrados (incluye `test_plan75_deep_links_no_double_encode.py`).
 - [ ] **(i)** `tsc` 0 errores.
 - [ ] **(j)** Los 3 runtimes (Codex, Claude Code, GitHub Copilot Pro) operativos sin cambios.
 
@@ -421,10 +485,13 @@ Cada fase es auto-contenida y se puede implementar/commitear de forma independie
 ## 10. Notas de implementación (para el modelo menor que ejecute esto)
 
 - **Venv del repo:** `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest <test> -q`. El venv es py3.13 (ver memoria `stacky-backend-dev-test-env`); correr tests por archivo.
-- **Patrón mock (TDD):** los tests de compositoras son string-compare exacto (no mock de red). Los tests de provider (F2) mockean `_client._base_url`/`_project_path()` con valores fijos.
+- **Patrón mock (TDD):** los tests de compositoras (F1) son string-compare exacto (no mock de red). Los tests de provider (F2) mockean `_client._base_url` con `"https://gl.example.com"` y `_client._project_path()` con `"rs%2Fpacifico%2Fstrat"` (ya-encoded).
 - **Cada commit deja el sistema verde y backward-compatible.**
-- **`_project_path()` YA URL-encodea** (`gitlab_client.py:98`); no reimplementarlo en `gitlab_deep_links.py` — las compositoras toman `project_path` ya resuelto y lo re-encodean (defensivo, idempotente).
+- **REGLA DE ENCODING (C3 — crítica):** `_project_path()` (`gitlab_client.py:98`) devuelve el path YA URL-encoded. Las compositoras de F1 usan el valor DIRECTAMENTE sin pasar por `_enc()`. Solo aplicas `_enc()` sobre `iid`, `sha`, `group` y `query`. Si por error pasas el output de `_project_path()` por `_enc()`, obtendrás `%25` en la URL (doble-encoding); el test `test_plan75_deep_links_no_double_encode.py` lo detectará.
+- **El flag se chequea en el PROVIDER (F2), no en un endpoint nuevo.** `gitlab_provider.item_url`/`mr_url`/`commit_url`/`epic_url` devuelven `None` si `STACKY_GITLAB_DEEP_LINKS_ENABLED=False`. Los tests F6 prueban los métodos del provider directamente.
 - **No tocar el puerto `TrackerProvider`.** Los métodos `mr_url`/`commit_url`/`epic_url` son del provider GitLab, no del puerto. ADO no los necesita.
-- **Anti-injection:** todo input externo se URL-encodea con `_enc()` antes de componer. F1 caso 6 es el gate de significancia.
-- **Frontend:** el frontend NO compone URLs; renderiza strings que el backend pasa. `TrackerDeepLink` es un thin wrapper sobre `<a target="_blank" rel="noopener noreferrer">`.
+- **Anti-injection:** `_enc()` encodea `iid`, `sha`, `group` y `query`. F1 caso 6 (anti-double-encoding) es el gate de significancia principal.
+- **Frontend:** el frontend NO compone URLs; renderiza strings que el backend pasa. `TrackerDeepLink` es un thin wrapper sobre `<a target="_blank" rel="noopener noreferrer">`. URL `null` o vacía → `<span>`.
+- **Sites hardcodeados en frontend:** un único site confirmado por grep: `StructuredOutput.tsx:83`. Si el grep revela más, agregarlos en el mismo commit antes de abrir PR.
+- **Agregar `import re` al inicio de `gitlab_deep_links.py`** (necesario para `_ISSUE_TRIGGER_RE` en F5).
 - **Si una fase revela un GAP no listado en F0**, detener y actualizar este doc antes de seguir.

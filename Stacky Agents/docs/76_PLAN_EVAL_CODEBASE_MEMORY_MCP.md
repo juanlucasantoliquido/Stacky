@@ -1,10 +1,19 @@
 # Plan 76 — Evaluación de adopción de `codebase-memory-mcp`
 
-> **Estado:** PROPUESTO v2 (criticado por juez adversarial, v1 → v2).
+> **Estado:** PROPUESTO v3 (segunda pasada del juez adversarial — verificación de la v2 contra código real, v2 → v3).
 > **Pre-requisito:** ninguno (paralelo, aislado del bloque GitLab 70-75). No depende de ningún plan previo.
 > **Roadmap:** Séptimo eslabón del bloque GitLab-Main 70-76 (desacople → pipeline infer agnóstico → trigger CI → creador pipelines → migrador ADO→GitLab → deep links → **eval codebase-memory-mcp**).
-> **Versión doc:** v2 (2026-06-29). Reemplaza a v1 (2026-06-27), que reemplazó al boceto v0.
+> **Versión doc:** v3 (2026-06-29). Reemplaza a v2 (2026-06-29, 1ª crítica), que reemplazó a v1 (2026-06-27) y al boceto v0.
 
+> **CHANGELOG v2 → v3 (juez 2ª pasada — los bloqueantes C1/C2 de la v1 quedaron BIEN resueltos, verificados contra código; se hallaron residuales nuevos):**
+> - **VERIFICADO C1 (BLOQUEANTE v1) RESUELTO:** patrón blueprint correcto confirmado en código vivo: `api/__init__.py:44` (`api_bp` con `url_prefix="/api"`) + línea 84 (`api_bp.register_blueprint(ci_bp)`), sub-blueprint `api/ci.py:26` (`url_prefix="/ci"` → `/api/ci/...`). El centinela real `test_plan72_routes_registered.py` bootea `create_app()` y asierta ruta + anti-doble-prefijo; la réplica F5 (`test_plan76_routes_registered.py`) calca ese patrón. Correcto.
+> - **VERIFICADO C2 (BLOQUEANTE v1) RESUELTO:** firma real de `FlagSpec` (`harness_flags.py:19-27`) = `key,type,label,description,group,pair?,env_only,default`; el `FlagSpec` propuesto en F5 (`type="bool"`, `group="global"`, `env_only=False`, `default=False`) coincide EXACTO. Categoría `"avanzado"` real (`CategorySpec` línea 62 + `_CATEGORY_KEYS["avanzado"]` línea 171); la `NOTA` en línea 177 ya FUERZA por test que toda flag nueva esté categorizada. Correcto.
+> - **VERIFICADO C3 RESUELTO:** patrón `os.getenv("...","false").lower() in ("1","true","yes")` confirmado en `config.py:817-824` (`STACKY_PIPELINE_TRIGGER_ENABLED`). El F5 lo copia tal cual.
+> - **C10 (IMPORTANTE — NUEVO, lo perdió la 1ª pasada) — assert de byte-identidad F6 con falso-fallo:** F6 caso 2 aserta que `build_agent_env` "no contiene la subcadena `mcpServers`". Pero el MCP INTERNO de Stacky YA emite `mcpServers` (`services/stacky_mcp.py:64-65`, clave de server `"stacky"`; `tests/test_cli_resume_mcp_config.py`). Con `CLAUDE_CODE_CLI_MCP_ENABLED` ON ese assert da FALSO-FALLO. Corregido: el assert se hace SOLO sobre el token específico del plan (`codebase-memory-mcp`), NUNCA sobre el genérico `mcpServers`/`mcp_servers`.
+> - **C11 (MENOR — NUEVO) — test de pureza sin mecanismo:** F5 caso 8 ("no hace red") no decía CÓMO asertarlo. Corregido: `monkeypatch` de `socket.socket` para que levante; afirmar que `mcp_installation_status()` retorna igual (no toca red).
+> - **C12 (MENOR/INFO — NUEVO) — `CLAUDE.md` referencia un script inexistente:** `CLAUDE.md` dice "Regenerar: `python repo_map.py`" pero `repo_map.py` NO existe (Glob `**/repo_map.py` → vacío, reconfirmado 2026-06-29). NO es defecto del plan (el plan ya lo refuta); se añade nota en D4 de que la propia referencia de `CLAUDE.md` está stale, reforzando el "no solapamiento".
+> - **[ADICIÓN ARQUITECTO v2→v3]** — **clave de server MCP namespaced y única:** se fija por contrato que el server externo use la clave `"codebase-memory-mcp"` en `mcpServers`, DISTINTA de la interna `"stacky"` (`stacky_mcp.py:65`). Esto (1) vuelve concreto el C4 ("conflicto de nombres" deja de ser vago: el blanco real es la clave `"stacky"`), y (2) le da al assert de byte-identidad C10 un token preciso, libre de colisión. Un solo contrato resuelve la coexistencia (C4) y el falso-fallo (C10). Reusa la estructura `mcpServers` ya viva en `stacky_mcp.py`.
+>
 > **CHANGELOG v1 → v2 (juez adversarial — resuelve C1..C9):**
 > - **C1 (BLOQUEANTE) — doble-prefijo `/api/api`:** v1 decía "registrar blueprint en `app.py`" + endpoint `GET /api/codebase-memory-mcp/status`. Es EXACTAMENTE el bug que rompió 72/73/74/75. Corregido en F5: el blueprint se declara con `url_prefix="/codebase-memory-mcp"` y se registra en `api/__init__.py` vía `api_bp.register_blueprint(...)` (api_bp ya monta `/api`). NUNCA en `app.py`, NUNCA `url_prefix="/api/..."`. + centinela `test_plan76_routes_registered.py` (réplica del patrón `test_plan72_routes_registered.py`).
 > - **C2 (BLOQUEANTE) — flag invisible en UI (viola regla dura operator-config-always-via-ui):** v1 agregaba la flag solo a `config.py` y "tocaba `HarnessFlagsPanel.tsx` + categoría nueva". `services/harness_flags.py:5-7` dice que toda flag va al `FLAG_REGISTRY` "para que aparezca en la UI **sin tocar el frontend**". Corregido en F5: agregar `FlagSpec(env_only=False)` a `FLAG_REGISTRY` + key en `_CATEGORY_KEYS["avanzado"]` (NO categoría nueva, NO tocar `HarnessFlagsPanel.tsx`).
@@ -48,8 +57,9 @@ Evaluar rigurosamente si Stacky debe adoptar `codebase-memory-mcp` (https://gith
 - Blueprints se registran en `backend/api/__init__.py` (`api_bp.register_blueprint(...)`, líneas 45-84); `backend/app.py:187` monta `api_bp` (que ya prefija `/api`). Patrón sub-blueprint: `api/ci.py:26` → `Blueprint("ci", __name__, url_prefix="/ci")` → rutas `/api/ci/...`.
 - `backend/services/harness_flags.py:5-7` (regla del módulo): toda flag nueva va a `FLAG_REGISTRY` para aparecer en la UI **sin tocar el frontend**.
 - Patrón de flag bool en `backend/config.py:817-824`.
-- Egress check existente: `STACKY_CLI_EGRESS_ENABLED` (`harness_flags.py:356`), `backend/tests/test_cli_egress.py`.
-- Glob `**/repo_map.py` → vacío. **No existe.**
+- Egress check existente: `STACKY_CLI_EGRESS_ENABLED` (`harness_flags.py:356`, `env_only=True`), `backend/tests/test_cli_egress.py` (incl. `test_flag_registry_has_cli_egress_flag`). El D9 reusa el **espíritu** (sandbox deny-egress), no el código.
+- **MCP interno de Stacky:** `services/stacky_mcp.py:64-65` emite `{"mcpServers": {"stacky": {...}}}` (clave de server `"stacky"`). **El server externo DEBE usar otra clave** (`"codebase-memory-mcp"`) para no colisionar — y el assert de byte-identidad (C10) debe mirar ese token específico, NO el genérico `mcpServers` (que ya existe).
+- Glob `**/repo_map.py` → vacío (reconfirmado 2026-06-29). **No existe.** (Ojo: `CLAUDE.md` aún dice "Regenerar: `python repo_map.py`" — referencia stale del propio `CLAUDE.md`, no del plan.)
 - Repo objetivo de la eval: https://github.com/DeusData/codebase-memory-mcp (F0-E1 confirma existencia y lectura real).
 
 ---
@@ -213,9 +223,12 @@ E7 — Leer LICENSE del repo para D7.
 ```text
 # E5 — Integración MCP por runtime (D1):
 - Claude Code CLI: declarar server en el config MCP (mcpServers).
-  * Documentar JSON EXACTO que el operador pegaría.
-  * [C4] Verificar coexistencia con el server MCP interno de Stacky
-    (CLAUDE_CODE_CLI_MCP_ENABLED): ¿conflicto de nombres? ¿se pueden montar ambos?
+  * Documentar JSON EXACTO que el operador pegaría, con clave de server
+    `"codebase-memory-mcp"` (NO `"stacky"`).
+  * [C4] Coexistencia con el server MCP interno de Stacky concreta: el interno usa
+    la clave `"stacky"` (services/stacky_mcp.py:65). El externo DEBE usar
+    `"codebase-memory-mcp"` → ambos coexisten en `mcpServers` sin colisión de claves.
+    Verificar que el config del runtime admite 2+ servers simultáneos.
 - Codex CLI: confirmar soporte MCP (config.toml mcp_servers).
   * Si Codex NO soporta MCP → D1 = DUDOSO (2/3 runtimes).
 - GitHub Copilot Pro (VS Code): confirmar soporte MCP vía extensión.
@@ -361,11 +374,11 @@ def build_installation_guide(runtime: str) -> str:
   1. `config.STACKY_CODEBASE_MEMORY_MCP_ENABLED` lee `False` por defecto.
   2. `mcp_installation_status()` con flag OFF → `{"enabled": False, ...}`.
   3. `mcp_installation_status()` con flag ON → `{"enabled": True, ...}` (parchear config).
-  4. `build_installation_guide("claude_code")` retorna markdown no vacío que cita el config MCP.
+  4. `build_installation_guide("claude_code")` retorna markdown no vacío que cita el config MCP con la clave de server **`"codebase-memory-mcp"`** (y NO `"stacky"`, para no colisionar con el MCP interno — C4/v3).
   5. `build_installation_guide("codex")` retorna markdown no vacío.
   6. `build_installation_guide("copilot_pro")` retorna markdown no vacío.
   7. `build_installation_guide` con runtime inválido → levanta `ValueError`.
-  8. **Pureza:** `mcp_installation_status` no hace red (no llama a `socket`/`requests`; sólo lee config).
+  8. **Pureza (mecanismo concreto) [C11]:** `monkeypatch.setattr("socket.socket", _raise)` donde `_raise` levanta `RuntimeError`; afirmar que `mcp_installation_status()` retorna normalmente (no abre red). Idéntico para `build_installation_guide`.
   9. `GET /api/codebase-memory-mcp/status` con flag OFF → 200 con `enabled: false` + `guides` incluido.
   10. **[C2] Registro UI:** `FLAG_REGISTRY` contiene `STACKY_CODEBASE_MEMORY_MCP_ENABLED` con `env_only=False`, y la key está en `_CATEGORY_KEYS["avanzado"]` (no en "otros").
 - Archivo centinela **[C1, ADICIÓN ARQUITECTO]**: `backend/tests/test_plan76_routes_registered.py` (réplica de `test_plan72_routes_registered.py`):
@@ -407,7 +420,7 @@ def build_installation_guide(runtime: str) -> str:
 **Tests F6 (TDD primero, si F5 implementado):**
 - Archivo: `backend/tests/test_plan76_ratchet_byteidentical.py`. Casos:
   1. Flag OFF → `GET /api/codebase-memory-mcp/status` devuelve `enabled: false` (200, no rota nada).
-  2. **[C8] Byte-identidad concreta:** con flag OFF, `build_agent_env(...)` (o el prompt final que arma el runner) **no contiene** la subcadena `codebase-memory-mcp` ni `mcpServers` añadida por este plan — assert sobre el dict/str real, no afirmación vaga.
+  2. **[C8/C10] Byte-identidad concreta (token específico, NO genérico):** con flag OFF, `build_agent_env(...)` (o el prompt final que arma el runner) **no contiene** la subcadena **`codebase-memory-mcp`** — assert sobre el dict/str real. **NO asertar contra `mcpServers`/`mcp_servers`**: ese substring YA existe del MCP interno (`stacky_mcp.py:64-65`, clave `"stacky"`), por lo que asertarlo daría FALSO-FALLO con `CLAUDE_CODE_CLI_MCP_ENABLED` ON. El token del plan es único y libre de colisión.
   3. Ratchet verde: `test_plan76_codebase_memory_mcp.py`, `test_plan76_routes_registered.py` y `test_plan76_ratchet_byteidentical.py` registrados en `HARNESS_TEST_FILES` (Plan 49).
 - Comando: `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .\.venv\Scripts\python.exe -m pytest tests/test_plan76_ratchet_byteidentical.py tests/conformance/test_harness_ratchet.py -q`.
 
@@ -437,6 +450,8 @@ def build_installation_guide(runtime: str) -> str:
 8. **R8 — Doble-prefijo `/api/api` o blueprint en app.py.** Mitigación **[C1]**: F5 registra el blueprint en `api/__init__.py` con `url_prefix="/codebase-memory-mcp"`; centinela `test_plan76_routes_registered.py` lo hace imposible de falsear.
 9. **R9 — Flag invisible en la UI (viola regla dura).** Mitigación **[C2]**: F5 registra `FlagSpec(env_only=False)` en FLAG_REGISTRY + key en `_CATEGORY_KEYS["avanzado"]`; test caso 10 lo verifica.
 10. **R10 — Falsos verdes en la PoC.** Mitigación: F2 reporta números crudos + commit SHA; reproducible con `queries.md`.
+11. **R11 — Falso-fallo del ratchet por colisión `mcpServers`.** Mitigación **[C10]**: el MCP interno (`stacky_mcp.py:64-65`, clave `"stacky"`) ya emite `mcpServers`; el server externo usa clave única `"codebase-memory-mcp"` y el assert de byte-identidad (F6 caso 2) mira SOLO ese token, nunca el genérico `mcpServers`.
+12. **R12 — Colisión de claves de server MCP.** Mitigación **[ADICIÓN ARQUITECTO v3]**: contrato fijo — clave externa `"codebase-memory-mcp"` ≠ interna `"stacky"`; F3 verifica coexistencia de ambos servers en el config del runtime.
 
 ---
 

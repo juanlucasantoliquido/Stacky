@@ -10,6 +10,7 @@ import DiagnosticsPage from "./pages/DiagnosticsPage";
 import MemoryPage from "./pages/MemoryPage";
 import ExecutionHistoryPage from "./pages/ExecutionHistoryPage";
 import ReviewInboxPage from "./pages/ReviewInboxPage";
+import MigratorPage from "./pages/MigratorPage"; // Plan 74
 import TopBar from "./components/TopBar";
 import HealthBanner from "./components/HealthBanner";
 import CommandPalette from "./components/CommandPalette";
@@ -25,7 +26,7 @@ import { useUiSectionsStore } from "./store/uiSectionsStore";
 import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history";
+type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador";
 
 const TAB_PATHS: Record<Tab, string> = {
   team: "/",
@@ -39,6 +40,7 @@ const TAB_PATHS: Record<Tab, string> = {
   memory: "/memory",
   diagnostics: "/diagnostics",
   history: "/history",
+  migrador: "/migrador",
 };
 
 function tabFromPath(pathname: string): Tab {
@@ -52,6 +54,8 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const sections = useUiSectionsStore((s) => s.sections);
+  // Plan 74: tab migrador visible solo si el flag está ON en el backend
+  const [migradorEnabled, setMigradorEnabled] = useState(false);
 
   useGlobalExecutionNotifier();
 
@@ -74,6 +78,11 @@ export default function App() {
   useEffect(() => {
     initPreferences();
     initUiSections();
+    // Plan 74: comprobar si el migrador está habilitado (flag backend)
+    fetch("/api/migrator/health")
+      .then((r) => r.json())
+      .then((d: { flag_enabled?: boolean }) => setMigradorEnabled(d.flag_enabled === true))
+      .catch(() => setMigradorEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -116,7 +125,8 @@ export default function App() {
     else if (tab === "logs" && !sections.logs) selectTab("team");
     else if (tab === "docs" && !sections.docs) selectTab("team");
     else if (tab === "memory" && !sections.memory) selectTab("team");
-  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory]);
+    else if (tab === "migrador" && !migradorEnabled) selectTab("team");
+  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled]);
 
   return (
     <div className={styles.appRoot}>
@@ -200,6 +210,14 @@ export default function App() {
         >
           📋 Historial
         </button>
+        {migradorEnabled && (
+          <button
+            className={`${styles.navTab} ${tab === "migrador" ? styles.active : ""}`}
+            onClick={() => selectTab("migrador")}
+          >
+            Migrador
+          </button>
+        )}
       </nav>
 
       {tab === "team"     && <TeamScreen />}
@@ -213,6 +231,7 @@ export default function App() {
       {tab === "memory"   && sections.memory && <MemoryPage />}
       {tab === "diagnostics" && <DiagnosticsPage />}
       {tab === "history"     && <ExecutionHistoryPage />}
+      {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
 
       <CommandPalette
         open={paletteOpen}

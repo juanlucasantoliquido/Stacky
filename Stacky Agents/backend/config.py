@@ -829,5 +829,18 @@ class Config:
         "STACKY_PIPELINE_GENERATOR_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
+    # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
+    STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(
+        "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 74 — Política de épicas en la migración ADO→GitLab.
+    # Valores: auto | premium_native | free_degrade. Default: auto.
+    # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
+    STACKY_MIGRATOR_EPIC_POLICY: str = os.getenv(
+        "STACKY_MIGRATOR_EPIC_POLICY", "auto"
+    )
+
 
 config = Config()

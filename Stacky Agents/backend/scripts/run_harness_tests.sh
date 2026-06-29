@@ -166,6 +166,18 @@ HARNESS_TEST_FILES=(
   tests/test_plan73_generator_endpoint.py
   tests/test_plan73_routes_registered.py
   tests/test_plan73_round_trip.py
+  # Plan 74 - Migrador ADO->GitLab seguro e idempotente
+  tests/test_plan74_migrator_map.py
+  tests/test_plan74_migrator_core.py
+  tests/test_plan74_migrator_epics.py
+  tests/test_plan74_migrator_attachments.py
+  tests/test_plan74_migrator_executor.py
+  tests/test_plan74_migrator_verify.py
+  tests/test_plan74_migrator_api.py
+  tests/test_plan74_migrator_wiring.py
+  tests/test_plan74_migrator_idempotency.py
+  tests/test_plan74_migrator_readonly_origin.py
+  tests/test_plan74_routes_registered.py
 )
 
 pass=0

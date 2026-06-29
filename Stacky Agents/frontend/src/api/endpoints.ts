@@ -2929,3 +2929,75 @@ export const CIPipeline = {
       `/api/ci/${encodeURIComponent(project)}/pipeline/${encodeURIComponent(pipelineId)}`
     ),
 };
+
+// ── Plan 74 F7 — Migrador ADO → GitLab ──────────────────────────────────────
+
+export interface MigrationPlanResponse {
+  ok: boolean;
+  plan_id: string;
+  plan_hash: string;
+  total_ops: number;
+  counts_by_type: Record<string, number>;
+  warnings: string[];
+  skipped_at_plan: number;
+}
+
+export interface MigrationExecuteResponse {
+  ok: boolean;
+  migration_run: string;
+  applied: number;
+  skipped: number;
+  failed: Array<{ ado_id: string; op_kind: string; error: string }>;
+  orphaned: string[];
+}
+
+export interface MigrationMappingRow {
+  ado_id: string;
+  ado_type: string;
+  gitlab_iid: string;
+  gitlab_web_url: string;
+  marker: string;
+  migration_run: string;
+  created_at: string;
+}
+
+export interface MigrationRun {
+  migration_run: string;
+  count: number;
+  last_created_at: string;
+}
+
+export const Migrator = {
+  /** Health check del migrador (gated by STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED). */
+  health: () => api.get<{ ok: boolean; flag_enabled: boolean }>("/api/migrator/health"),
+
+  /** Genera un plan de migración (dry-run). */
+  plan: (stacky_project: string, epic_policy = "auto"): Promise<MigrationPlanResponse> =>
+    api.post<MigrationPlanResponse>("/api/migrator/plan", { stacky_project, epic_policy }),
+
+  /** Ejecuta el plan con confirmación HITL. */
+  execute: (
+    stacky_project: string,
+    plan_id: string,
+    plan_hash: string,
+    confirmed = true
+  ): Promise<MigrationExecuteResponse> =>
+    api.post<MigrationExecuteResponse>("/api/migrator/execute", {
+      stacky_project,
+      plan_id,
+      plan_hash,
+      confirmed,
+    }),
+
+  /** Descarga el mapa de migración (JSON). */
+  mapping: (stacky_project: string): Promise<{ ok: boolean; rows: MigrationMappingRow[] }> =>
+    api.get<{ ok: boolean; rows: MigrationMappingRow[] }>(
+      `/api/migrator/${encodeURIComponent(stacky_project)}/mapping`
+    ),
+
+  /** Lista las corridas de migración del proyecto. */
+  runs: (stacky_project: string): Promise<{ ok: boolean; runs: MigrationRun[] }> =>
+    api.get<{ ok: boolean; runs: MigrationRun[] }>(
+      `/api/migrator/${encodeURIComponent(stacky_project)}/runs`
+    ),
+};

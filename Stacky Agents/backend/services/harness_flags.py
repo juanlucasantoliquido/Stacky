@@ -61,6 +61,8 @@ FLAG_CATEGORIES: tuple[CategorySpec, ...] = (
         "Directiva de acceso read-only a la BD, caché y pre-warm de lecturas caras de ADO."),
     CategorySpec("avanzado", "Avanzado / experimental",
         "Kill-switches internos y features beta: egress check, especulación anticipatoria."),
+    CategorySpec("migrador_ado_gitlab", "Migrador ADO → GitLab",
+        "Plan 74 — Migración segura e idempotente de work items ADO (épicas, issues, tasks, comentarios, attachments) hacia GitLab."),
     CategorySpec("otros", "Otros / sin categorizar",
         "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza)."),
 )
@@ -125,6 +127,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PIPELINE_PROVIDER_ENABLED",  # Plan 71 — sub-puerto CIProvider
         "STACKY_PIPELINE_TRIGGER_ENABLED",   # Plan 72 — trigger y monitoreo CI (HITL)
         "STACKY_PIPELINE_GENERATOR_ENABLED", # Plan 73 — generador declarativo PipelineSpec→YAML
+    ),
+    "migrador_ado_gitlab": (
+        "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",  # Plan 74 — habilita el migrador
+        "STACKY_MIGRATOR_EPIC_POLICY",             # Plan 74 — política de épicas (auto|premium_native|free_degrade)
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1723,6 +1729,35 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui, C9)
+    ),
+    # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────
+    FlagSpec(
+        key="STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",
+        type="bool",
+        label="Migrador ADO → GitLab (Plan 74)",
+        description=(
+            "Plan 74 — Habilita la migración segura e idempotente de work items ADO→GitLab. "
+            "Expone POST /api/migrator/plan (dry-run) y POST /api/migrator/execute (HITL confirm=True). "
+            "La migración es read-only sobre ADO; el dry-run es obligatorio antes de ejecutar. "
+            "Default OFF. Con OFF, los endpoints retornan 503."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (categoría 'migrador_ado_gitlab')
+    ),
+    FlagSpec(
+        key="STACKY_MIGRATOR_EPIC_POLICY",
+        type="str",
+        label="Política de épicas en migración ADO→GitLab (Plan 74)",
+        description=(
+            "Plan 74 — Cómo migrar épicas ADO en GitLab. "
+            "auto: detecta si GitLab tiene licencia Premium (group epics) y elige el modo; "
+            "premium_native: fuerza epic nativo (falla si no hay licencia); "
+            "free_degrade: siempre issue + label type::epic (compatible con GitLab Free). "
+            "Default: auto."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (categoría 'migrador_ado_gitlab')
+        default="auto",
     ),
 )
 

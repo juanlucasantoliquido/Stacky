@@ -41,6 +41,7 @@ from .ui_sections import bp as ui_sections_bp
 from .webhooks import bp as webhooks_bp
 from .ci import bp as ci_bp  # Plan 72 — trigger/monitor CI (HITL)
 from .pipeline_generator import bp as pipeline_generator_bp  # Plan 73 — generador declarativo PipelineSpec→YAML
+from .migrator import bp as migrator_bp  # Plan 74 — Migrador ADO→GitLab seguro e idempotente
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -84,6 +85,7 @@ api_bp.register_blueprint(client_profile_bp)
 api_bp.register_blueprint(db_query_bp)
 api_bp.register_blueprint(ci_bp)  # Plan 72 — url_prefix="/ci" → /api/ci/...
 api_bp.register_blueprint(pipeline_generator_bp)  # Plan 73 — url_prefix="/pipeline-generator" → /api/pipeline-generator/...
+api_bp.register_blueprint(migrator_bp)  # Plan 74 — url_prefix="/migrator" → /api/migrator/...
 
 
 @api_bp.get("/health")

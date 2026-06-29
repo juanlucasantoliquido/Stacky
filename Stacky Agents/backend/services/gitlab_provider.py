@@ -11,10 +11,13 @@ Fases implementadas:
   F7 — Jerarquía épica + fallback (native epics vs issue-links)
   F8 — Updates/edit-learning (fetch_item_updates)
   F9 — Pipeline CI (fetch_pipelines)
+  Plan 73 F4 — RepoWriter: commit_file + _detect_commit_action (sub-puerto separado de CIProvider).
 """
 from __future__ import annotations
 
+import base64
 import re
+import urllib.parse
 from typing import Optional
 
 from services.tracker_provider import TrackerItem, TrackerQuery, TrackerApiError
@@ -512,4 +515,66 @@ class GitLabTrackerProvider:
             "ref": body.get("ref") or "",
             "sha": body.get("sha") or "",
             "web_url": body.get("web_url") or "",
+        }
+
+    # ── Plan 73 F4 — RepoWriter (sub-puerto separado de CIProvider) ─────────────
+
+    def _decode_file_content(self, body: dict) -> str:
+        """Decodifica el contenido base64 que devuelve la API de archivos de GitLab."""
+        raw = body.get("content") or ""
+        try:
+            return base64.b64decode(raw).decode("utf-8", errors="replace")
+        except Exception:
+            return raw
+
+    def _detect_commit_action(self, path: str, branch: str) -> tuple[str, str | None]:
+        """Devuelve ("create", None) si el archivo no existe; ("update", contenido_actual) si existe.
+        GET /projects/:id/repository/files/:path?ref=branch.
+        Captura TrackerApiError(404) → create. Propaga cualquier otro error (C1).
+        """
+        from services.tracker_provider import TrackerApiError  # lazy import — patrón del repo
+        proj_path = self._client._project_path()
+        encoded_path = urllib.parse.quote(path, safe="")
+        try:
+            body, _ = self._client._request(
+                "GET",
+                f"/projects/{proj_path}/repository/files/{encoded_path}",
+                params={"ref": branch},
+            )
+            return "update", self._decode_file_content(body)
+        except TrackerApiError as e:
+            if e.status == 404:
+                return "create", None
+            raise
+
+    def commit_file(self, path: str, content: str, branch: str, message: str) -> dict:
+        """POST /projects/:id/repository/commits — crea/actualiza archivo en 1 commit.
+        FIX C1: body, _ = _request(...); NO compara status; TrackerApiError ya se lanza y propaga.
+        FIX C7: si el contenido es idéntico al actual, NO commitea (retorna status 'unchanged').
+        """
+        proj_path = self._client._project_path()
+        action, current = self._detect_commit_action(path, branch)
+        if action == "update" and current == content:
+            return {
+                "sha": "",
+                "branch": branch,
+                "path": path,
+                "web_url": "",
+                "status": "unchanged",
+            }
+        body, _ = self._client._request(
+            "POST",
+            f"/projects/{proj_path}/repository/commits",
+            json_body={
+                "branch": branch,
+                "commit_message": message,
+                "actions": [{"action": action, "file_path": path, "content": content}],
+            },
+        )
+        return {
+            "sha": str(body.get("id") or ""),
+            "branch": branch,
+            "path": path,
+            "web_url": body.get("web_url", ""),
+            "status": action,
         }

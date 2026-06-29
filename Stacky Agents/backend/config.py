@@ -823,5 +823,11 @@ class Config:
         "STACKY_PIPELINE_TRIGGER_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 73 — Generador declarativo de pipelines ADO/GitLab (PipelineSpec). Default OFF.
+    # Editable por UI (HarnessFlagsPanel, categoría "Pipelines / CI").
+    STACKY_PIPELINE_GENERATOR_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_GENERATOR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
 
 config = Config()

@@ -124,6 +124,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TICKETS_PROVIDER_ENABLED",   # Plan 70 — consumers por puerto TrackerProvider
         "STACKY_PIPELINE_PROVIDER_ENABLED",  # Plan 71 — sub-puerto CIProvider
         "STACKY_PIPELINE_TRIGGER_ENABLED",   # Plan 72 — trigger y monitoreo CI (HITL)
+        "STACKY_PIPELINE_GENERATOR_ENABLED", # Plan 73 — generador declarativo PipelineSpec→YAML
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1708,6 +1709,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    FlagSpec(
+        key="STACKY_PIPELINE_GENERATOR_ENABLED",
+        type="bool",
+        label="Generador declarativo de pipelines ADO/GitLab (Plan 73)",
+        description=(
+            "Plan 73 — Si ON, habilita el generador declarativo PipelineSpec→YAML. "
+            "Endpoints: POST /api/pipeline-generator/preview (render ADO+GitLab puro, sin commit) "
+            "y POST /api/pipeline-generator/commit (commit en repo vía HITL confirm=True). "
+            "PAT GitLab debe tener scope api para commit. "
+            "Default OFF. OFF: guard 404 per-request; el blueprint siempre está registrado."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui, C9)
     ),
 )
 

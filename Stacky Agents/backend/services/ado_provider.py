@@ -139,3 +139,13 @@ class AdoTrackerProvider:
         if since:
             updates = [u for u in updates if (u.get("revisedDate") or "") >= since]
         return updates
+
+    # ── Plan 73 F4 — RepoWriter (ADO: render-only v1, C12) ───────────────────
+
+    def commit_file(self, path: str, content: str, branch: str, message: str) -> dict:
+        """ADO commit diferido post-v1. Lanza NotImplementedError (C12 — render-only en v1)."""
+        raise NotImplementedError(
+            "commit_file no implementado para ADO en v1. "
+            "Usa to_ado_yaml() para renderizar y commitea manualmente. "
+            "El commit ADO está diferido post-v1."
+        )

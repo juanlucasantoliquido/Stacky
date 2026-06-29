@@ -157,6 +157,15 @@ HARNESS_TEST_FILES=(
   tests/test_plan72_ado_trigger_not_implemented.py
   tests/test_plan72_preview_endpoint.py
   tests/test_plan72_monitor_endpoint.py
+  # Plan 73 - Generador declarativo PipelineSpec->ADO/GitLab
+  tests/test_plan73_pipeline_spec.py
+  tests/test_plan73_validate.py
+  tests/test_plan73_render_ado.py
+  tests/test_plan73_render_gitlab.py
+  tests/test_plan73_repo_writer.py
+  tests/test_plan73_generator_endpoint.py
+  tests/test_plan73_routes_registered.py
+  tests/test_plan73_round_trip.py
 )
 
 pass=0

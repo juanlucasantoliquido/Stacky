@@ -63,6 +63,8 @@ FLAG_CATEGORIES: tuple[CategorySpec, ...] = (
         "Kill-switches internos y features beta: egress check, especulación anticipatoria."),
     CategorySpec("migrador_ado_gitlab", "Migrador ADO → GitLab",
         "Plan 74 — Migración segura e idempotente de work items ADO (épicas, issues, tasks, comentarios, attachments) hacia GitLab."),
+    CategorySpec("gitlab_deep_links", "GitLab / Deep Links",
+        "Plan 75 — Deep links bidireccionales GitLab: issue, MR, pipeline, commit, épica. Kill-switch con default OFF."),
     CategorySpec("otros", "Otros / sin categorizar",
         "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza)."),
 )
@@ -131,6 +133,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     "migrador_ado_gitlab": (
         "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",  # Plan 74 — habilita el migrador
         "STACKY_MIGRATOR_EPIC_POLICY",             # Plan 74 — política de épicas (auto|premium_native|free_degrade)
+    ),
+    "gitlab_deep_links": (
+        "STACKY_GITLAB_DEEP_LINKS_ENABLED",  # Plan 75 — deep links bidireccionales GitLab
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1758,6 +1763,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,  # editable por UI (categoría 'migrador_ado_gitlab')
         default="auto",
+    ),
+    # ── Plan 75 — Deep links bidireccionales GitLab ───────────────────────────
+    FlagSpec(
+        key="STACKY_GITLAB_DEEP_LINKS_ENABLED",
+        type="bool",
+        label="Deep links GitLab bidireccionales (Plan 75)",
+        description=(
+            "Plan 75 — Si ON, habilita la composición de deep links GitLab (issue, MR, "
+            "commit, épica) en el backend. Con OFF, item_url/mr_url/commit_url/epic_url "
+            "del provider GitLab devuelven None y el frontend muestra el ID como texto plano. "
+            "Default OFF. Activa cuando el proyecto use GitLab y quieras links clickeables."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (categoría 'gitlab_deep_links')
     ),
 )
 

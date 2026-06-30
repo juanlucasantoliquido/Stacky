@@ -178,6 +178,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan74_migrator_idempotency.py
   tests/test_plan74_migrator_readonly_origin.py
   tests/test_plan74_routes_registered.py
+  tests/test_plan75_deep_links_compose.py
+  tests/test_plan75_gitlab_provider_urls.py
+  tests/test_plan75_deep_links_epic_fallback.py
+  tests/test_plan75_deep_links_bidirectional.py
+  tests/test_plan75_deep_links_wiring.py
+  tests/test_plan75_deep_links_no_double_encode.py
 )
 
 pass=0

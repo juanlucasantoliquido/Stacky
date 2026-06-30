@@ -12,6 +12,7 @@ import rehypeHighlight from "rehype-highlight";
 import type { AgentType } from "../types";
 import MermaidDiagram from "./MermaidDiagram";
 import { TrackerDeepLink } from "./TrackerDeepLink";
+import { adoUrl } from "../utils/trackerUrls";
 import styles from "./StructuredOutput.module.css";
 
 // FA-21 — Intercepts ```mermaid blocks and replaces with <MermaidDiagram>.
@@ -80,10 +81,6 @@ function vscodeUrl(file: string, line: number): string {
   return `vscode://file/${file}:${line}`;
 }
 
-function adoUrl(adoId: string): string {
-  return `https://dev.azure.com/UbimiaPacifico/Strategist_Pacifico/_workitems/edit/${adoId}`;
-}
-
 // Reemplaza citaciones en una string por nodos React.
 function linkifyCitations(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -100,17 +97,12 @@ function linkifyCitations(text: string): ReactNode[] {
     const adoId = match[4];
     if (adoId) {
       nodes.push(
-        <a
+        <TrackerDeepLink
           key={`${match.index}-ado`}
-          href={adoUrl(adoId)}
-          target="_blank"
-          rel="noopener noreferrer"
+          url={adoUrl(adoId)}
+          label={fullMatch}
           className={styles.citation}
-          data-kind="ado"
-          title={`Abrir ADO-${adoId} en Azure DevOps`}
-        >
-          {fullMatch}
-        </a>
+        />
       );
     } else if (filePart && lineNum) {
       nodes.push(

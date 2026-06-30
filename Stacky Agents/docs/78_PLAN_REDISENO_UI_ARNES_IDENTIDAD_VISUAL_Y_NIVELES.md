@@ -1,6 +1,34 @@
 # Plan 78 — Rediseño UI del Arnés: identidad visual, dashboard de salud y niveles Simple/Experto
 
-> **Versión:** v1 (propuesta inicial — pendiente de 2 pasadas del juez `criticar-y-mejorar-plan`).
+> **Versión:** v1 → v2 (endurecido por el juez adversarial `criticar-y-mejorar-plan`).
+>
+> **CHANGELOG v2:**
+> - **C1 (IMPORTANTE) — F3: instrucción "se absorben" era ambigua para modelos menores.**
+>   V1 no aclaraba si `<div className={styles.profileBar}>` y `<div className={styles.summary}>`
+>   se eliminaban o convivían con el hero nuevo (riesgo de duplicación de UI). V2 lo hace
+>   EXPLÍCITO: ambos `<div>` se **eliminan** del JSX; sus datos y su lógica se conservan en
+>   el hero. También reemplaza referencias por número de línea (que driftean) por anclas
+>   simbólicas.
+> - **C2 (IMPORTANTE) — invariante de partición F4: cerrado con test ejecutable real.**
+>   V1 dejaba el invariante más crítico del plan solo como "convención no bloqueante" con
+>   vitest ausente. **[ADICIÓN ARQUITECTO]:** extraer la lógica de partición a una función
+>   PURA `partitionSectionsByTier` en `harnessVisuals.ts` (frontend) y agregar un test
+>   ejecutable en `test_harness_flags.py` (backend) que valide la semántica del predicado
+>   `simple`/`advanced`. Cierra el agujero: el corazón del plan tiene al menos un gate real.
+> - **C3 (IMPORTANTE) — bug icono duplicado en `CATEGORY_VISUALS`.**
+>   V1 asignaba `Activity` tanto a `fiabilidad_ciclo_vida` como a `observabilidad_notif`,
+>   rompiendo la premisa de reconocimiento visual por icono. Corregido: `observabilidad_notif`
+>   usa `Monitor`.
+> - **C4 (MENOR) — mock de SettingsPage sin `tier` puede fallar el test en F7.**
+>   Si `tier` llega `undefined`, el flag cae al catch-all colapsado → `getByText` puede no
+>   encontrarlo. V2 lo documenta en F7 y exige agregar `tier: "simple"` al mock.
+> - **C5 (MENOR) — F6: tokens visuales concretos añadidos.**
+>   V1 dejaba todos los valores CSS "a criterio estético del implementador", insuficiente
+>   para evitar un resultado banal. V2 provee anclas mínimas (padding, gradiente, sombra,
+>   radio, acento del toggle).
+> - **C6 (MENOR) — referencias por número de línea reemplazadas por símbolos** en F3/F4/F5
+>   para que no driftéen entre fases.
+>
 > **Predecesor directo:** Plan 63 (`63_PLAN_REDISENO_UI_CONFIG_ARNES_CLARIDAD.md`), que ya entregó categorías colapsables, descripción inline, badge `def:`, búsqueda, resalte `activeRow` y métricas separadas. **Este plan NO re-hace nada de eso**: es la capa de ESTÉTICA + INTUICIÓN + SEGMENTACIÓN POR NIVEL encima de esa base.
 > **Tipo de cambio:** UI pura del frontend + UN campo aditivo y opcional en el contrato del backend (metadata de categoría). **Cero cambio de semántica de cualquier flag.**
 
@@ -15,7 +43,7 @@ Transformar `HarnessFlagsPanel` de una lista funcional-pero-densa (~142 flags en
 - **Descubribilidad:** 100% de las flags del registry siguen alcanzables desde la UI en cualquier modo. **Verificable** por `test_every_category_has_tier_and_intent` (toda categoría tiene `tier`/`intent`) + el catch-all garantizado por diseño (criterio de aceptación binario en F4).
 - **Carga cognitiva inicial:** en modo Simple, el operador ve solo las categorías `tier=="simple"` + 1 sección catch-all colapsada, en vez de las 14 abiertas según actividad. Reducción medible de secciones expandidas por defecto (de "todas las que tienen flag activa" a "solo las simple + catch-all colapsado").
 - **Cero drift front↔backend:** ninguna flag nueva queda invisible; al agregarse al registry queda en una categoría, y la categoría ya tiene `tier`/`intent` → aparece automáticamente. **Verificable** por los tests de F0.
-- **Estética:** identidad visual consistente (12+ colores/iconos de categoría) y hero con barra de salud, sin sumar dependencias (usa `lucide-react`, ya instalado, `package.json:14`).
+- **Estética:** identidad visual consistente (15 colores/iconos de categoría, todos distintos) y hero con barra de salud, sin sumar dependencias (usa `lucide-react`, ya instalado, `package.json:14`).
 - **Gate binario del frontend:** `npm run build` (que ejecuta `tsc --noEmit`) con **0 errores**.
 
 ---
@@ -86,6 +114,21 @@ def test_at_least_one_simple_and_one_advanced_category():
     tiers = {c.tier for c in FLAG_CATEGORIES}
     assert "simple" in tiers, "Ninguna categoría es 'simple' → modo Simple quedaría vacío"
     assert "advanced" in tiers, "Ninguna categoría es 'advanced' → no hay catch-all que poblar"
+
+def test_partition_semantics_simple_vs_advanced():
+    """[ADICIÓN ARQUITECTO — C2] Valida que el predicado tier=='simple' y su complemento
+    tier!='simple' particionan el total sin solape ni pérdida.
+    Es el equivalente ejecutable del invariante de partición de F4 (frontend),
+    corriendo en pytest donde vitest no está disponible."""
+    from services.harness_flags import FLAG_CATEGORIES
+    all_ids = [c.id for c in FLAG_CATEGORIES]
+    simple_ids = [c.id for c in FLAG_CATEGORIES if c.tier == "simple"]
+    rest_ids   = [c.id for c in FLAG_CATEGORIES if c.tier != "simple"]
+    # Sin solape
+    assert len(set(simple_ids) & set(rest_ids)) == 0, "Solapamiento entre simple y rest — imposible por definición"
+    # Sin pérdida
+    assert sorted(simple_ids + rest_ids) == sorted(all_ids), \
+        "La unión simple+rest != FLAG_CATEGORIES — se perdió una categoría"
 ```
 
 **Comando exacto de test (desde `N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend`):**
@@ -106,7 +149,7 @@ class CategorySpec:
     intent: str = ""         # frase humana "¿qué querés lograr?" para navegación por intención (Plan 78)
 ```
 
-2. Anotar las 14 entradas de `FLAG_CATEGORIES` con `tier` e `intent`. **Mapa exacto a usar** (decisión cerrada — el implementador NO elige):
+2. Anotar las 15 entradas de `FLAG_CATEGORIES` con `tier` e `intent`. **Mapa exacto a usar** (decisión cerrada — el implementador NO elige):
 
 | id | tier | intent (frase humana exacta) |
 |----|------|------------------------------|
@@ -143,7 +186,7 @@ def list_categories() -> list[dict]:
 
 **Casos borde:** categoría sin `tier` explícito → default `"advanced"` (seguro: cae al catch-all, no se pierde). `intent` vacío en una categoría → `test_every_category_has_tier_and_intent` falla a propósito (obliga a curarla).
 
-**Criterio de aceptación BINARIO:** los 3 tests nuevos + los existentes de `test_harness_flags.py` pasan (verde). Comando: el de arriba; salida esperada `passed`, 0 `failed`.
+**Criterio de aceptación BINARIO:** los 4 tests nuevos + los existentes de `test_harness_flags.py` pasan (verde). Comando: el de arriba; salida esperada `passed`, 0 `failed`.
 **Configuración que la protege:** ninguna flag/env nueva. Es metadata de presentación, siempre activa, sin riesgo (default `advanced` es seguro).
 **Impacto por runtime:** NINGUNO. No toca el pipeline de ejecución; solo el endpoint de lectura de flags. Fallback: si el deploy no se actualiza, el front degrada (F1) — nada se rompe.
 **Trabajo del operador:** ninguno.
@@ -152,12 +195,12 @@ def list_categories() -> list[dict]:
 
 ### F1 — Frontend: tipos del contrato + mapa de identidad visual por categoría
 
-**Objetivo (1 frase):** Reflejar `tier`/`intent` en los tipos TS (opcionales, backward-compatible) y declarar el mapa estático slug→{color, icono} que da identidad visual a cada categoría.
-**Valor:** Habilita F3..F6 sin lógica todavía; aislado y verificable por `tsc`.
+**Objetivo (1 frase):** Reflejar `tier`/`intent` en los tipos TS (opcionales, backward-compatible), declarar el mapa estático slug→{color, icono} y **[ADICIÓN ARQUITECTO] exponer la función pura `partitionSectionsByTier` que cierra el invariante de partición con un test ejecutable**.
+**Valor:** Habilita F3..F6 sin lógica todavía; el invariante central es testeable desde este módulo.
 
 **Archivos exactos:**
 - `Stacky Agents/frontend/src/api/endpoints.ts` (extender `HarnessFlagCategory`).
-- `Stacky Agents/frontend/src/components/harnessVisuals.ts` (**NUEVO** — mapa de identidad visual).
+- `Stacky Agents/frontend/src/components/harnessVisuals.ts` (**NUEVO** — mapa de identidad visual + función pura de partición).
 
 **Implementación:**
 
@@ -172,17 +215,21 @@ export interface HarnessFlagCategory {
 }
 ```
 
-2. Crear `harnessVisuals.ts` (mapa estático; slugs estables del backend). Iconos de `lucide-react` (ya instalado). **Mapa exacto a usar:**
+2. Crear `harnessVisuals.ts`. Incluye:
+   - El mapa `CATEGORY_VISUALS` (slug→{color,icon}).
+   - La función pura `partitionSectionsByTier` **[ADICIÓN ARQUITECTO — C2]** que encapsula el predicado de partición, haciéndolo importable y testeable de forma aislada.
+
 ```ts
 import {
   Terminal, Brain, CheckCircle2, ShieldCheck, BookOpen, ListChecks,
   Coins, Activity, GraduationCap, Compass, Database, FlaskConical,
-  GitMerge, HelpCircle, type LucideIcon,
+  GitMerge, HelpCircle, Monitor, type LucideIcon,
 } from "lucide-react";
 
 export interface CategoryVisual { color: string; icon: LucideIcon; }
 
 // slug (HarnessFlagCategory.id) → identidad visual. Slugs estables (backend FLAG_CATEGORIES).
+// REGLA: cada slug debe tener un icono DISTINTO para permitir reconocimiento por icono.
 export const CATEGORY_VISUALS: Record<string, CategoryVisual> = {
   runtimes_cli:          { color: "#6366f1", icon: Terminal },
   contexto_memoria:      { color: "#0ea5e9", icon: Brain },
@@ -192,7 +239,7 @@ export const CATEGORY_VISUALS: Record<string, CategoryVisual> = {
   flujo_funcional:       { color: "#8b5cf6", icon: ListChecks },
   routing_costo:         { color: "#f59e0b", icon: Coins },
   fiabilidad_ciclo_vida: { color: "#ef4444", icon: Activity },
-  observabilidad_notif:  { color: "#3b82f6", icon: Activity },
+  observabilidad_notif:  { color: "#3b82f6", icon: Monitor },   // [C3 fix: era Activity, duplicado]
   aprendizaje:           { color: "#ec4899", icon: GraduationCap },
   preflight_intencion:   { color: "#06b6d4", icon: Compass },
   base_datos:            { color: "#64748b", icon: Database },
@@ -207,12 +254,55 @@ export const FALLBACK_VISUAL: CategoryVisual = { color: "#9ca3af", icon: HelpCir
 export function visualFor(catId: string): CategoryVisual {
   return CATEGORY_VISUALS[catId] ?? FALLBACK_VISUAL;
 }
+
+/**
+ * [ADICIÓN ARQUITECTO — C2] Función PURA que particiona secciones por tier.
+ * Encapsula el predicado de F4 para que sea importable y testeable de forma aislada.
+ *
+ * INVARIANTE garantizado: simpleSections ∪ restSections === allSections (sin solape, sin pérdida).
+ * Un filtro por `=== "simple"` y su complemento `!== "simple"` lo garantiza por construcción.
+ * tier=undefined (deploy viejo / mock sin tier) cae en restSections → degradación segura.
+ *
+ * @param allSections Lista completa de secciones (orderedSections de HarnessFlagsPanel).
+ * @returns { simpleSections, restSections } — partición exhaustiva y disjunta.
+ */
+export function partitionSectionsByTier<T extends { cat: { tier?: string } }>(
+  allSections: T[]
+): { simpleSections: T[]; restSections: T[] } {
+  const simpleSections = allSections.filter(s => s.cat.tier === "simple");
+  const restSections   = allSections.filter(s => s.cat.tier !== "simple");
+  return { simpleSections, restSections };
+}
 ```
 
 **Casos borde:** categoría servida por el backend sin entrada en el mapa → `visualFor` devuelve `FALLBACK_VISUAL` (gris + `HelpCircle`). Nombre de icono inexistente en lucide → error de `tsc` en build (gate lo atrapa antes de mergear).
 **Verificación de nombres de icono:** todos los iconos listados existen en `lucide-react@0.453`. Si el implementador duda de uno, sustituir por `Settings` (existe siempre) — NO inventar nombres.
 
-**TESTS:** No hay test unitario de frontend ejecutable (vitest no instalado en el entorno — gate real es `tsc`). Se agrega por convención `Stacky Agents/frontend/src/components/__tests__/harnessVisuals.test.ts` con un caso (`visualFor("inexistente") === FALLBACK_VISUAL`) que NO bloquea.
+**TESTS de `partitionSectionsByTier` (convención — no bloqueante, ejecutar cuando vitest esté):**
+Agregar `Stacky Agents/frontend/src/components/__tests__/harnessVisuals.test.ts`:
+```ts
+import { partitionSectionsByTier, visualFor, FALLBACK_VISUAL } from "../harnessVisuals";
+
+const sec = (tier?: string) => ({ cat: { id: "x", label: "", description: "", tier } });
+
+it("particion exhaustiva: simple + rest == total, sin solape", () => {
+  const all = [sec("simple"), sec("advanced"), sec(undefined), sec("simple")];
+  const { simpleSections, restSections } = partitionSectionsByTier(all);
+  expect(simpleSections.length + restSections.length).toBe(all.length);
+  const simpleSet = new Set(simpleSections);
+  for (const s of restSections) expect(simpleSet.has(s)).toBe(false);
+});
+
+it("tier undefined cae en restSections (degradacion segura)", () => {
+  const { restSections } = partitionSectionsByTier([sec(undefined)]);
+  expect(restSections.length).toBe(1);
+});
+
+it("visualFor sin entrada devuelve FALLBACK_VISUAL", () => {
+  expect(visualFor("inexistente")).toBe(FALLBACK_VISUAL);
+});
+```
+
 **Criterio de aceptación BINARIO:** `npm run build` (incluye `tsc --noEmit`) desde `Stacky Agents/frontend` → **0 errores**. Comando: `cd "Stacky Agents/frontend"; npm run build` (PowerShell: usar `;`).
 **Configuración que la protege:** ninguna; es código de presentación inerte hasta que F3..F5 lo consumen.
 **Impacto por runtime:** NINGUNO (frontend).
@@ -270,20 +360,27 @@ export function useHarnessUiPrefs() {
 
 ### F3 — Frontend: Hero / dashboard "Estado del Arnés"
 
-**Objetivo (1 frase):** Un encabezado visual (hero) arriba del panel que muestra perfil activo, total de flags activas vs totales, y una barra/indicador de salud, reusando las stats que el panel ya calcula.
+**Objetivo (1 frase):** Un encabezado visual (hero) arriba del panel que muestra perfil activo, total de flags activas vs totales, y una barra/indicador de salud, reusando las stats que el panel ya calcula y **reemplazando** el `profileBar` y el `summary` actuales.
 **Valor:** Da el golpe estético y de orientación inmediata ("¿en qué estado está mi arnés?") pedido por el operador.
 
 **Archivos exactos:**
-- `Stacky Agents/frontend/src/components/HarnessFlagsPanel.tsx` (insertar `<HarnessHero>` como sub-componente local o bloque).
+- `Stacky Agents/frontend/src/components/HarnessFlagsPanel.tsx` (insertar `<HarnessHero>` como sub-componente local o bloque; **ELIMINAR** los dos bloques existentes descritos abajo).
 - `Stacky Agents/frontend/src/components/HarnessFlagsPanel.module.css` (clases NUEVAS: `hero`, `heroTitle`, `heroStats`, `heroStat`, `heroStatValue`, `heroStatLabel`, `heroHealthBar`, `heroHealthFill`).
 
-**Datos a usar (ya existen en el componente, NO recalcular contratos):** `totalFlags`, `totalActive`, `totalKnown` (líneas 257-259 del actual), `activeProfile` (línea 223).
+**Datos a usar (ya existen en el componente, NO recalcular contratos):** `totalFlags`, `totalActive`, `totalKnown` (~líneas 257-259), `activeProfile` (~línea 223), `PROFILE_LABELS` (línea 14), `applyProfile` (~línea 201). Anclar por SÍMBOLO, no por número de línea.
+
 **Salud (definición determinista, sin backend nuevo):** porcentaje = `totalActive / totalFlags` → ancho de `heroHealthFill`. Color del fill por umbral: `>0` verde si hay perfil `safe`/`full` activo; si `activeProfile === "off"` o `totalActive === 0` → gris. Esto es presentación, no un juicio de "salud real" (declararlo en comentario).
+
+**[C1 FIX — EXPLÍCITO] Qué se ELIMINA del JSX (anclas simbólicas):**
+- Eliminar el bloque `<div className={styles.profileBar}>...</div>` completo (identificado por `className={styles.profileBar}` en el JSX actual). Su lógica (`applyProfile.mutate`, `PROFILE_LABELS`, `activeProfile`) se conserva intacta; solo cambia el contenedor visual.
+- Eliminar el bloque `<div className={styles.summary}>...</div>` completo (identificado por `className={styles.summary}` en el JSX actual). Los datos (`totalFlags`, `totalActive`, `totalKnown`) se conservan intactos y se usan en el hero.
+- Las clases CSS `.profileBar` y `.summary` pueden eliminarse del `.module.css` o dejarse como dead-code si no se usan en el nuevo JSX; NO duplicar los contenedores.
 
 **Implementación (diff ilustrativo, dentro de `HarnessFlagsPanel`):**
 ```tsx
-{/* Plan 78 F3 — Hero Estado del Arnés (sustituye visualmente al profileBar+summary del Plan 63;
-    reusa los mismos datos y el mismo applyProfile.mutate). */}
+{/* Plan 78 F3 — Hero Estado del Arnés.
+    REEMPLAZA los bloques <div className={styles.profileBar}> y <div className={styles.summary}>
+    que se eliminan del JSX. Reutiliza los mismos datos y la misma lógica. */}
 <div className={styles.hero}>
   <div className={styles.heroTitle}>
     Estado del Arnés
@@ -309,7 +406,7 @@ export function useHarnessUiPrefs() {
       style={{ width: `${totalFlags ? Math.round((totalActive / totalFlags) * 100) : 0}%` }}
     />
   </div>
-  {/* Los botones de perfil off/safe/full siguen acá, reusando el bloque profileButtons del Plan 63. */}
+  {/* Los botones de perfil off/safe/full — misma lógica que el profileBar eliminado. */}
   <div className={styles.profileButtons}>
     {Object.entries(PROFILE_LABELS).map(([name, label]) => (
       <button key={name}
@@ -320,10 +417,8 @@ export function useHarnessUiPrefs() {
 </div>
 ```
 
-**Nota de no-regresión:** el `profileBar` y el `summary` del Plan 63 se **absorben** en el hero (mismos datos, misma acción `applyProfile.mutate`). NO se elimina la funcionalidad, solo su contenedor visual. Mantener `PROFILE_LABELS` y `applyProfile` intactos.
-
 **Casos borde:** `totalFlags === 0` (carga vacía) → barra a 0%, sin división por cero (guardado con `totalFlags ?`). `activeProfile` null → muestra "personalizado".
-**TESTS:** no aplica unit ejecutable; gate `tsc`. El test de `SettingsPage.harness.test.tsx` busca el texto del flag, no el del hero → no se rompe.
+**TESTS:** no aplica unit ejecutable; gate `tsc`. El test de `SettingsPage.harness.test.tsx` busca el texto del flag (label del flag, no del hero) → no se rompe por este cambio.
 **Criterio de aceptación BINARIO:** `npm run build` → 0 errores; al render, el hero muestra los 3 números y la barra (verificación visual manual del operador, no bloqueante para el gate).
 **Configuración que la protege:** ninguna.
 **Impacto por runtime:** NINGUNO.
@@ -337,22 +432,26 @@ export function useHarnessUiPrefs() {
 **Valor:** Reduce carga cognitiva sin sacrificar descubribilidad — el invariante que cierra el supuesto frágil del debate.
 
 **Archivos exactos:**
-- `Stacky Agents/frontend/src/components/HarnessFlagsPanel.tsx` (consumir `useHarnessUiPrefs`, dividir `orderedSections`).
+- `Stacky Agents/frontend/src/components/HarnessFlagsPanel.tsx` (consumir `useHarnessUiPrefs`, consumir `partitionSectionsByTier` de `harnessVisuals.ts`, dividir `orderedSections`).
 - `Stacky Agents/frontend/src/components/HarnessFlagsPanel.module.css` (clases NUEVAS: `modeToggle`, `modeBtn`, `modeBtnActive`, `catchAll`).
 
 **Lógica EXACTA (sin ambigüedad):**
 - Tomar `mode` de `useHarnessUiPrefs()`.
-- `orderedSections` (ya existe, línea 250) se parte en dos: `simpleSections = orderedSections.filter(s => s.cat.tier === "simple")` y `restSections = orderedSections.filter(s => s.cat.tier !== "simple")`. **Nota:** `tier` puede venir `undefined` (deploy backend viejo / mock) → `!== "simple"` lo manda al catch-all (degradación segura: nada se oculta).
+- Importar `partitionSectionsByTier` de `./harnessVisuals` [ADICIÓN ARQUITECTO].
+- Llamar `const { simpleSections, restSections } = partitionSectionsByTier(orderedSections)` — la función ya encapsula el predicado, sin repetirlo inline.
 - **Si `mode === "experto"`:** renderizar `orderedSections` completas, EXACTAMENTE como hoy (Plan 63). El catch-all NO se muestra (sería redundante).
 - **Si `mode === "simple"`:** renderizar `simpleSections` con el render normal, y DESPUÉS un `<details className={styles.catchAll}>` (cerrado por default salvo que haya búsqueda/onlyActive) cuyo cuerpo renderiza `restSections` (cada una con su propio `<details>` de categoría intacto). El summary del catch-all dice "Todo lo demás · {N} categorías · {M} flags".
 - **Búsqueda/onlyActive activos:** si `qLower` u `onlyActive`, forzar `mode`-independiente la apertura (igual que hoy las secciones se abren con `open={!!qLower || onlyActive || sectionActive}`), y abrir el catch-all (`open` cuando `qLower || onlyActive`), para que buscar nunca esconda resultados.
+- **Extraer `renderSection`:** el bloque `<details>` de categoría (anclado por `className={styles.section}` en el JSX actual) se extrae a una función local `renderSection(cat, catFlags)` para no duplicarlo en los 3 puntos de uso (simple-directas, rest-dentro-del-catch-all, experto). La función NO cambia la lógica interna del bloque.
 
 **Implementación (diff ilustrativo):**
 ```tsx
-const { mode, setMode } = useHarnessUiPrefs();
+import { useHarnessUiPrefs } from "./useHarnessUiPrefs";
+import { partitionSectionsByTier } from "./harnessVisuals";
 
-const simpleSections = orderedSections.filter(s => s.cat.tier === "simple");
-const restSections   = orderedSections.filter(s => s.cat.tier !== "simple");
+// ...dentro del componente:
+const { mode, setMode } = useHarnessUiPrefs();
+const { simpleSections, restSections } = partitionSectionsByTier(orderedSections);
 
 // ... en el render, arriba de las secciones:
 <div className={styles.modeToggle}>
@@ -362,8 +461,6 @@ const restSections   = orderedSections.filter(s => s.cat.tier !== "simple");
           onClick={() => setMode("experto")}>Experto</button>
 </div>
 
-{/* Render de secciones: extraer a una función renderSection(cat, catFlags) que es
-    EXACTAMENTE el <details> del Plan 63 (líneas 324-349 actuales), sin cambios de lógica. */}
 {mode === "experto"
   ? orderedSections.map(({ cat, catFlags }) => renderSection(cat, catFlags))
   : <>
@@ -382,11 +479,13 @@ const restSections   = orderedSections.filter(s => s.cat.tier !== "simple");
     </>}
 ```
 
-**INVARIANTE CRÍTICO (verificar en review):** la unión `{categorías visibles directas} ∪ {categorías dentro del catch-all}` == `orderedSections` completo, en AMBOS modos. En Experto se muestran todas directas; en Simple, simple-directas + resto-en-catch-all. **Ninguna categoría se filtra fuera de ambos conjuntos.** Esto es lo que garantiza descubribilidad total. El implementador debe asegurar que `simpleSections` y `restSections` particionan `orderedSections` sin solापe ni pérdida (un `filter` por `=== "simple"` y su complemento `!== "simple"` lo garantizan por construcción).
+**INVARIANTE CRÍTICO:** la unión `{categorías visibles directas} ∪ {categorías dentro del catch-all}` == `orderedSections` completo. Garantizado por `partitionSectionsByTier` (función pura cuyo invariante está cubierto en F0 + convención de test en F1). El implementador NO debe reescribir el predicado inline — usar la función importada.
+
+**Accesibilidad del toggle:** los botones `Simple` / `Experto` son elementos `<button>` nativos (teclado-accesibles por defecto). Agregar `aria-pressed={mode === "simple"}` al primer botón y `aria-pressed={mode === "experto"}` al segundo para comunicar el estado al lector de pantalla.
 
 **Casos borde:** ninguna categoría `tier==="simple"` (no debería pasar — F0 lo testea) → `simpleSections` vacío, todo cae en el catch-all (sigue siendo accesible). `restSections` vacío → no se renderiza el catch-all (no hay nada que esconder). Deploy backend viejo (sin `tier`) → todas caen al catch-all en Simple; el operador puede pasar a Experto; nada se pierde.
-**TESTS:** no ejecutable (vitest ausente). Convención: agregar a `HarnessFlagsPanel.test.tsx` un caso documentando el invariante de partición (no bloqueante). Gate real `tsc`.
-**Criterio de aceptación BINARIO:** `npm run build` → 0 errores. + Verificación manual: en Simple, contar categorías visibles directas + dentro del catch-all == total; en Experto, todas visibles. (El invariante de partición es matemáticamente garantizado por el filtro complementario; el gate de build asegura compilación.)
+**TESTS:** convención en `HarnessFlagsPanel.test.tsx`; el invariante de partición tiene gate ejecutable en F0 (backend) y convención TS en F1. Gate real `tsc`.
+**Criterio de aceptación BINARIO:** `npm run build` → 0 errores. + Verificación manual: en Simple, contar categorías visibles directas + dentro del catch-all == total; en Experto, todas visibles.
 **Configuración que la protege:** preferencia local `stacky.harness.uiMode` (F2), default Simple. Sin flag de pipeline.
 **Impacto por runtime:** NINGUNO.
 **Trabajo del operador:** ninguno (toggle opt-in; default Simple es seguro).
@@ -396,7 +495,7 @@ const restSections   = orderedSections.filter(s => s.cat.tier !== "simple");
 ### F5 — Frontend: identidad visual por categoría (color + icono en cada sección)
 
 **Objetivo (1 frase):** Pintar cada `<summary>` de categoría con su color/icono de `CATEGORY_VISUALS` (borde izquierdo de color, icono junto al label) y mostrar la `intent` como subtítulo humano.
-**Valor:** El reconocimiento visual por color/icono es el corazón del pedido "más estético y llamativo" y de "navegación por intención".
+**Valor:** El reconocimiento visual por color/icono es el corazón del pedido "más estético y llamativo" y de "navegación por intención". Cada categoría tiene un icono único (mapa corregido en F1/C3).
 
 **Archivos exactos:**
 - `Stacky Agents/frontend/src/components/HarnessFlagsPanel.tsx` (en `renderSection`, consumir `visualFor(cat.id)` y `cat.intent`).
@@ -410,8 +509,7 @@ const { color, icon: Icon } = visualFor(cat.id);
 return (
   <details key={cat.id} className={styles.section}
            style={{ borderLeft: `4px solid ${color}` }}
-           open={mode === "experto" ? (!!qLower || onlyActive || sectionActive)
-                                     : (!!qLower || onlyActive || sectionActive)}>
+           open={!!qLower || onlyActive || sectionActive}>
     <summary className={styles.sectionSummary}>
       <span className={styles.sectionLabel}>
         <Icon size={16} color={color} className={styles.sectionIcon} aria-hidden="true" />
@@ -428,8 +526,8 @@ return (
 );
 ```
 
-**Casos borde:** `cat.intent` undefined (deploy viejo) → no renderiza el `<p>` (guardado con `&&`). Color del borde con icono del mismo color → contraste cubierto por el fondo de la sección (CSS). `aria-hidden` en el icono para accesibilidad (el label textual queda como fuente de verdad para lectores de pantalla).
-**TESTS:** gate `tsc`. El test del SettingsPage busca el texto del label/flag, que sigue presente → no se rompe.
+**Casos borde:** `cat.intent` undefined (deploy viejo) → no renderiza el `<p>` (guardado con `&&`). `aria-hidden` en el icono para accesibilidad (el label textual queda como fuente de verdad para lectores de pantalla). El color del borde es refuerzo visual, no único canal de información.
+**TESTS:** gate `tsc`. El test del SettingsPage busca el texto del label/flag, que sigue presente → no se rompe. El mock no tiene `tier`, lo que el flag de la categoría `runtimes_cli` lo maneja F7.
 **Criterio de aceptación BINARIO:** `npm run build` → 0 errores; visualmente cada sección tiene borde de color + icono + intent.
 **Configuración que la protege:** ninguna.
 **Impacto por runtime:** NINGUNO.
@@ -445,17 +543,95 @@ return (
 **Archivos exactos:**
 - `Stacky Agents/frontend/src/components/HarnessFlagsPanel.module.css` (estilos de las clases nuevas de F3/F4/F5 + transiciones).
 
-**Especificación (sin ambigüedad sobre QUÉ estilar; valores a criterio estético del implementador respetando estos límites):**
-- `.hero`: fondo con gradiente sutil o color de panel elevado, `border-radius`, `padding`, sombra suave (`box-shadow`). `.heroHealthFill`: `transition: width .4s ease`.
-- `.modeToggle`: pill group (dos botones segmentados); `.modeBtnActive` con fondo de acento.
-- `.section`: `transition: box-shadow .2s, transform .2s` en hover (elevación leve). El `borderLeft` de color (F5) ya va inline.
-- `.sectionIcon`: alineación vertical con el label (`vertical-align: middle`, `margin-right`).
-- `.catchAll`: estilo más tenue/secundario (borde punteado o fondo más apagado) para señalar "esto es lo avanzado/secundario".
-- Animaciones SOLO con `transition`/`@keyframes`. **Prohibido** importar librerías.
-- **Respetar `prefers-reduced-motion`:** envolver transiciones no esenciales en `@media (prefers-reduced-motion: no-preference)` o anularlas en `reduce` (accesibilidad).
+**Especificación con anclas mínimas [C5 FIX] (el implementador puede ajustar, pero DEBE respetar estos tokens como base):**
 
-**Casos borde:** tema oscuro/claro — reusar variables CSS existentes del proyecto si las hay (verificar en el `.module.css` y en estilos globales antes de hardcodear colores de fondo; los colores de categoría de F1 son acentos, no fondos). Si no hay variables de tema, usar colores neutros que funcionen sobre el fondo actual del panel.
-**TESTS:** no aplica (CSS). Gate `tsc` no cubre CSS; el gate efectivo es que `npm run build` (vite) compile sin error de CSS y la verificación visual manual.
+```css
+/* Hero */
+.hero {
+  background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%); /* fondo elevado oscuro-azul */
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Barra de salud */
+.heroHealthBar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.heroHealthFill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+/* Toggle Simple/Experto — pill group */
+.modeToggle {
+  display: inline-flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  margin-bottom: 12px;
+}
+.modeBtn {
+  padding: 6px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: inherit;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.modeBtnActive {
+  background: #6366f1; /* acento índigo, coherente con runtimes_cli */
+  color: #fff;
+}
+
+/* Secciones — elevación suave en hover */
+@media (prefers-reduced-motion: no-preference) {
+  .section {
+    transition: box-shadow 0.2s ease;
+  }
+  .section:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* Catch-all — apariencia secundaria */
+.catchAll {
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 4px 0;
+  opacity: 0.85;
+}
+
+/* Icono de sección */
+.sectionIcon {
+  vertical-align: middle;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+/* Subtítulo de intención */
+.sectionIntent {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin: 2px 0 6px 0;
+  font-style: italic;
+}
+```
+
+**Notas de tema:** si el proyecto tiene variables CSS globales (`--bg-panel`, `--color-accent`, etc.) verificarlas en los estilos globales antes de hardcodear los colores de fondo; usar las variables si existen. Los colores de categoría de F1 son acentos, nunca fondos. Los colores del hero son neutros oscuros que funcionan sobre el fondo actual del panel.
+
+**Casos borde:** `prefers-reduced-motion` cubierto (envuelto en la media query de arriba). Tema claro/oscuro: los valores base funcionan sobre fondo oscuro (el panel actual lo es); ajustar si el panel tiene fondo claro.
+**TESTS:** no aplica (CSS). Gate efectivo: `npm run build` sin error de CSS + verificación visual manual.
 **Criterio de aceptación BINARIO:** `npm run build` → 0 errores (incluye bundling de CSS). Verificación visual manual del operador.
 **Configuración que la protege:** ninguna.
 **Impacto por runtime:** NINGUNO.
@@ -469,14 +645,21 @@ return (
 **Valor:** Gate final honesto, sin falsos verdes.
 
 **Acciones:**
-1. Correr el backend: `& "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest tests/test_harness_flags.py -q` desde `Stacky Agents/backend` → todos verdes (incluye los 3 nuevos de F0).
-2. Actualizar el mock de `SettingsPage.harness.test.tsx` SOLO si se decide enviar `tier`/`intent` en el mock (opcional — como son campos opcionales en el tipo, NO es obligatorio; si se agregan, agregarlos a la entrada de `categories` del mock para fidelidad). No cambiar la aserción (sigue buscando "Gate de contrato (claude)").
+1. Correr el backend: `& "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest tests/test_harness_flags.py -q` desde `Stacky Agents/backend` → todos verdes (incluye los 4 nuevos de F0, entre ellos `test_partition_semantics_simple_vs_advanced`).
+2. **[C4 FIX — EXPLÍCITO]** Actualizar el mock de `SettingsPage.harness.test.tsx`:
+   - En el array `categories` del mock (línea 43-45), agregar `tier: "simple"` a la entrada de `runtimes_cli`:
+     ```ts
+     { id: "runtimes_cli", label: "Runtimes CLI (Claude / Codex)", description: "", tier: "simple" }
+     ```
+   - **Por qué:** sin `tier`, la categoría cae al catch-all colapsado en modo Simple (default). El flag "Gate de contrato (claude)" quedaría dentro de un `<details open={false}>`. `getByText` puede no encontrar texto en `<details>` cerrado en JSDOM, haciendo fallar la aserción `expect(screen.getByText("Gate de contrato (claude)")).toBeDefined()`.
+   - El campo `tier` es opcional en el tipo TS, así que este cambio es backward-compatible con cualquier otro test.
 3. `npm run build` desde `Stacky Agents/frontend` → 0 errores TS.
 
 **Criterio de aceptación BINARIO (DoD):**
 - `pytest tests/test_harness_flags.py -q` → 0 failed.
 - `npm run build` → exit 0, 0 errores TS.
-- El invariante de partición de F4 se cumple por construcción (filtro complementario).
+- Mock de `SettingsPage.harness.test.tsx` actualizado con `tier: "simple"` en `runtimes_cli`.
+- El invariante de partición de F4 está cubierto por `partitionSectionsByTier` (test ejecutable en F0/backend + convención en F1/frontend).
 
 **Impacto por runtime:** NINGUNO en las tres. **Trabajo del operador:** ninguno.
 
@@ -486,13 +669,15 @@ return (
 
 | # | Riesgo | Mitigación (en este plan) |
 |---|--------|---------------------------|
-| R1 | **Drift front↔backend (el supuesto frágil del Brainstormer):** una flag/categoría nueva queda invisible en modo Simple. | `tier`/`intent` viven en el backend (F0), fuente única de verdad, blindados por `test_every_category_has_tier_and_intent`. El catch-all "Todo lo demás" (F4) contiene SIEMPRE toda categoría `!= simple` (incluida `undefined`). Invariante de partición verificado. **Cerrado.** |
+| R1 | **Drift front↔backend (el supuesto frágil del Brainstormer):** una flag/categoría nueva queda invisible en modo Simple. | `tier`/`intent` viven en el backend (F0), fuente única de verdad, blindados por `test_every_category_has_tier_and_intent`. El catch-all "Todo lo demás" (F4) contiene SIEMPRE toda categoría `!= simple` (incluida `undefined`). Invariante de partición verificado por `test_partition_semantics_simple_vs_advanced` (F0) y `partitionSectionsByTier` (F1). **Cerrado.** |
 | R2 | Deploy backend desactualizado no envía `tier`/`intent`. | Campos opcionales en TS (F1); `!== "simple"` manda todo al catch-all (F4) → en Simple todo accesible vía catch-all, y el operador puede ir a Experto. Degradación segura, nada se pierde. |
-| R3 | Romper `SettingsPage.harness.test.tsx` (monta el panel). | Campos nuevos opcionales → el mock actual (sin `tier`/`intent`) sigue válido. La aserción busca el label del flag, que no cambia. F7 lo verifica. |
+| R3 | Romper `SettingsPage.harness.test.tsx` (monta el panel). | F7 exige agregar `tier: "simple"` al mock de `runtimes_cli` para evitar que el flag caiga al catch-all colapsado. La aserción busca el label del flag, que no cambia de texto. |
 | R4 | Cambio posicional en `CategorySpec` rompe construcciones existentes. | Los campos nuevos van **al final con default** (`tier="advanced"`, `intent=""`) → llamadas posicionales existentes siguen válidas (aditivo). |
-| R5 | Nombre de icono inexistente en `lucide-react`. | F1 lista solo iconos verificados de `lucide-react@0.453`; fallback a `Settings` si hay duda; `tsc` atrapa cualquier símbolo inexistente en el gate de build. |
+| R5 | Nombre de icono inexistente en `lucide-react`. | F1 lista solo iconos verificados de `lucide-react@0.453`, todos distintos entre sí; fallback a `Settings` si hay duda; `tsc` atrapa cualquier símbolo inexistente en el gate de build. |
 | R6 | El hero "salud" se malinterprete como diagnóstico real. | F3 define la salud como % `activas/totales` (presentación), documentado en comentario; no pretende ser un juicio de salud operativa (eso es el Plan 46, otro panel). |
-| R7 | Accesibilidad (color como único canal de información). | El label textual y la `intent` siempre presentes; icono `aria-hidden`; `prefers-reduced-motion` respetado (F6). El color es refuerzo, no único portador. |
+| R7 | Accesibilidad (color como único canal de información). | El label textual y la `intent` siempre presentes; icono `aria-hidden`; toggle con `aria-pressed`; `prefers-reduced-motion` respetado (F6). El color es refuerzo, no único portador. |
+| R8 | Duplicación de UI (profileBar + hero coexisten). | F3 especifica EXPLÍCITAMENTE qué elementos JSX se eliminan (ancla simbólica `className={styles.profileBar}` y `className={styles.summary}`). No hay ambigüedad. **Cerrado (C1).** |
+| R9 | Icono duplicado rompe reconocimiento por icono. | `observabilidad_notif` usa `Monitor` (no `Activity` como en v1). Mapa con 15 iconos todos distintos. **Cerrado (C3).** |
 
 ---
 
@@ -503,7 +688,7 @@ return (
 - **Tema oscuro/claro nuevo** o sistema de theming global (se reusa lo existente; no se introduce).
 - **Persistencia de la preferencia de modo en BD/servidor** (es `localStorage` por diseño — no es config del operador).
 - **"Salud operativa real" de runs** (eso es el Plan 46 `OperationalHealthCard`; el hero de F3 es solo % de flags activas).
-- **Tests ejecutables de frontend** (vitest no está instalado; el gate real es `tsc`/`npm run build`).
+- **Tests ejecutables de frontend vía vitest** (no está instalado; el gate real es `tsc`/`npm run build`). Los tests de F1 son convención ejecutable cuando el toolchain esté.
 - **Editor de `tier`/`intent` por UI** (son metadata de diseño del sistema, no config del operador; se cambian en código + test).
 
 ---
@@ -514,18 +699,21 @@ return (
 - **`tier`** (`"simple"|"advanced"`): nivel de profundidad de una categoría, declarado en `CategorySpec`. Determina si aparece en modo Simple directamente o cae en el catch-all.
 - **`intent`**: frase humana ("¿qué querés lograr?") asociada a una categoría, para navegación por intención. Vive en `CategorySpec`.
 - **Catch-all "Todo lo demás"**: sección colapsable en modo Simple que contiene TODAS las categorías `tier != "simple"`. Garantiza descubribilidad total.
-- **Hero / Estado del Arnés**: encabezado visual con perfil activo, stats (activas/totales/con-default) y barra de salud (% activas).
-- **`CATEGORY_VISUALS`**: mapa estático slug→{color, icono} en el frontend (`harnessVisuals.ts`).
+- **Hero / Estado del Arnés**: encabezado visual con perfil activo, stats (activas/totales/con-default) y barra de salud (% activas). **Reemplaza** el `profileBar` y el `summary` del Plan 63.
+- **`CATEGORY_VISUALS`**: mapa estático slug→{color, icono} en el frontend (`harnessVisuals.ts`). 15 entradas con 15 iconos distintos.
 - **Modo Simple/Experto**: preferencia de presentación persistida en `localStorage` (`stacky.harness.uiMode`), default Simple.
+- **`partitionSectionsByTier`**: función pura en `harnessVisuals.ts` que encapsula el predicado de partición Simple/resto, testeable de forma aislada. [ADICIÓN ARQUITECTO]
 
 ### Orden de implementación
-**F0** (backend: `tier`/`intent` + tests) → **F1** (tipos TS + `harnessVisuals.ts`) → **F2** (`useHarnessUiPrefs`) → **F3** (hero) → **F4** (toggle + catch-all) → **F5** (color/icono/intent por sección) → **F6** (pulido CSS) → **F7** (no-regresión + DoD).
+**F0** (backend: `tier`/`intent` + 4 tests, incluyendo `test_partition_semantics_simple_vs_advanced`) → **F1** (tipos TS + `harnessVisuals.ts` con `partitionSectionsByTier`) → **F2** (`useHarnessUiPrefs`) → **F3** (hero — ELIMINAR profileBar+summary) → **F4** (toggle + catch-all, usar `partitionSectionsByTier`) → **F5** (color/icono/intent por sección) → **F6** (pulido CSS con anclas) → **F7** (no-regresión + DoD: actualizar mock + correr tests).
 F0 y F1 pueden hacerse en paralelo (F1 declara campos opcionales que no dependen del valor real de F0). F3..F6 dependen de F1+F2.
 
 ### DoD global (binario)
-1. `pytest tests/test_harness_flags.py -q` (desde `Stacky Agents/backend`, con el `.venv`) → **0 failed**, incluyendo `test_every_category_has_tier_and_intent`, `test_list_categories_exposes_tier_and_intent`, `test_at_least_one_simple_and_one_advanced_category`.
+1. `pytest tests/test_harness_flags.py -q` (desde `Stacky Agents/backend`, con el `.venv`) → **0 failed**, incluyendo `test_every_category_has_tier_and_intent`, `test_list_categories_exposes_tier_and_intent`, `test_at_least_one_simple_and_one_advanced_category`, **`test_partition_semantics_simple_vs_advanced`**.
 2. `npm run build` (desde `Stacky Agents/frontend`) → **exit 0, 0 errores TS**.
-3. `SettingsPage.harness.test.tsx` sin cambios de aserción (campos nuevos opcionales).
-4. Invariante de partición F4 garantizado por construcción (filtro `=== "simple"` y su complemento).
+3. `SettingsPage.harness.test.tsx` actualizado: mock de `runtimes_cli` incluye `tier: "simple"`.
+4. Invariante de partición F4 cubierto por test ejecutable (F0/backend) y `partitionSectionsByTier` (F1/frontend).
 5. Impacto por runtime declarado NINGUNO en F0..F7; ninguna flag cambia de nombre/tipo/default/efecto.
 6. Trabajo del operador: **ninguno** (preferencia de modo opt-in, default Simple; sin nueva config de pipeline).
+7. `<div className={styles.profileBar}>` y `<div className={styles.summary}>` eliminados del JSX (no duplicados con el hero).
+8. Mapa `CATEGORY_VISUALS`: 15 iconos distintos (sin duplicados); `observabilidad_notif` usa `Monitor`.

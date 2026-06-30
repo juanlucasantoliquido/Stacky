@@ -184,6 +184,9 @@ HARNESS_TEST_FILES=(
   tests/test_plan75_deep_links_bidirectional.py
   tests/test_plan75_deep_links_wiring.py
   tests/test_plan75_deep_links_no_double_encode.py
+  tests/test_plan76_codebase_memory_mcp.py
+  tests/test_plan76_routes_registered.py
+  tests/test_plan76_ratchet_byteidentical.py
 )
 
 pass=0

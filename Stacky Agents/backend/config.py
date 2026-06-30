@@ -850,5 +850,12 @@ class Config:
         "STACKY_GITLAB_DEEP_LINKS_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 76 — Integración opcional con codebase-memory-mcp (externo). Default OFF.
+    # Editable por UI (HarnessFlagsPanel, categoría "Avanzado / experimental").
+    # Con flag OFF, Stacky es byte-idéntico a hoy (sin endpoints activos ni config MCP inyectada).
+    STACKY_CODEBASE_MEMORY_MCP_ENABLED: bool = os.getenv(
+        "STACKY_CODEBASE_MEMORY_MCP_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
 
 config = Config()

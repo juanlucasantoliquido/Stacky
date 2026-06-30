@@ -182,6 +182,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "avanzado": (
         "STACKY_CLI_EGRESS_ENABLED", "STACKY_SPECULATIVE_ENABLED", "STACKY_SPECULATIVE_MODE",
+        "STACKY_CODEBASE_MEMORY_MCP_ENABLED",  # Plan 76 — eval codebase-memory-mcp
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -1777,6 +1778,22 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (categoría 'gitlab_deep_links')
+    ),
+    # ── Plan 76 — Integración opcional codebase-memory-mcp (externo) ──────────
+    FlagSpec(
+        key="STACKY_CODEBASE_MEMORY_MCP_ENABLED",
+        type="bool",
+        label="Codebase Memory MCP (externo, opt-in) — Plan 76",
+        description=(
+            "Plan 76 — Si ON, el operador puede integrar el servidor externo "
+            "codebase-memory-mcp (instalado aparte) para indexar el codebase. "
+            "Stacky NO empaqueta el binario; solo expone estado + guía de instalación. "
+            "OFF (default): byte-idéntico a hoy, sin endpoints activos ni config MCP inyectada. "
+            "Ver /api/codebase-memory-mcp/status para instrucciones de instalación."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        default=False,
     ),
 )
 

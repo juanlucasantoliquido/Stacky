@@ -1,0 +1,12 @@
+{
+  "name": "epica_modulo_inventado",
+  "html": "<p>el modulo XYZ procesa</p>",
+  "catalog": [
+    {
+      "name": "RSCore"
+    }
+  ],
+  "expect_unknown": [
+    "XYZ"
+  ]
+}

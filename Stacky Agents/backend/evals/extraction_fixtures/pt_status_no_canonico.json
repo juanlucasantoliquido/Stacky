@@ -1,0 +1,6 @@
+{
+  "name": "pt_status_no_canonico",
+  "kind": "pending_task",
+  "raw": "{\"generated_at\":\"2026-01-01T00:00:00Z\",\"generated_by\":\"functional-agent\",\"epic_id\":900001,\"rf_id\":\"RF-001\",\"title\":\"Tarea sintetica\",\"description_html\":\"<p>x</p>\",\"plan_de_pruebas_path\":\"p.md\",\"parent_link_type\":\"child\",\"status\":\"done\"}",
+  "expect": { "json_ok": true, "status_canonical": false }
+}

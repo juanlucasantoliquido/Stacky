@@ -1,0 +1,10 @@
+{
+  "name": "epic_html_uppercase_fence",
+  "kind": "epic",
+  "raw": "preambulo\n```HTML\n<h1>Epica mayus</h1><h2>RF-003 beta</h2><p>z</p>\n```\nresumen",
+  "expect": {
+    "extracted_html_contains": ["RF-003"],
+    "extracted_html_excludes": ["preambulo", "resumen"],
+    "looks_like_epic": true
+  }
+}

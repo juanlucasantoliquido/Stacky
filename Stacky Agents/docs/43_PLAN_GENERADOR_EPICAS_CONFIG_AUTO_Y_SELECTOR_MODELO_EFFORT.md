@@ -1,7 +1,7 @@
 # Plan 43 — Generador de Épicas: Config Auto-Silenciosa + Selector Modelo/Effort Completo
 
 **Versión:** v2 — 2026-06-18
-**Estado:** PROPUESTO
+**Estado:** IMPLEMENTADO 2026-06-19 (F0–F4). Backend: `llm_router.clamp_model(allow_opus)` + `_OPUS_ALLOWLIST={"claude-opus-4-8"}` (llm_router.py:32-51), `_clamp_effort_for_model` + whitelist {low,medium,high,xhigh,max} + `allow_opus=True` en run_brief (agents.py:544-609). Frontend: `CLAUDE_MODELS` (sonnet-4-6/opus-4-8/haiku-4-5), `CLAUDE_EFFORTS` 5 niveles + `isEffortValidForModel`, probe auto al montar y selectores (EpicFromBriefModal.tsx:24-47,96-170,436-456), `endpoints.ts` effort ampliado (endpoints.ts:994). Verde: test_llm_router_opus_flag.py, test_run_brief_efforts.py, test_run_brief_model_override.py; tsc --noEmit exit 0. (Header "PROPUESTO" original era stale.)
 **Autor:** StackyArchitectaUltraEficientCode
 
 ### Changelog

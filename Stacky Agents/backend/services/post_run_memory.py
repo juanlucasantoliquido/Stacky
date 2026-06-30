@@ -182,3 +182,78 @@ def capture_on_approval(execution_id: int) -> str | None:
     except Exception:  # noqa: BLE001
         logger.warning("post_run_memory.capture_on_approval falló exec=%s", execution_id, exc_info=True)
         return None
+
+
+# ── Plan 47 F2 — Promoción de la NOTA del operador a memoria colaborativa ─────
+
+_OPERATOR_NOTE_TYPE = "operator_note"  # canal USER, NO reservado (no FA-*)
+_OPERATOR_NOTE_MAX = 2000
+
+
+def _operator_note_enabled() -> bool:
+    return os.getenv("STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED", "false").lower() in {
+        "1", "true", "on", "yes",
+    }
+
+
+def capture_operator_note(execution_id: int) -> str | None:
+    """Hook (plan 47): promueve la NOTA HUMANA de una run a memoria operator_note.
+
+    OFF por default. Distinto de capture_on_approval: NO usa el output del
+    agente; usa metadata_json["human_review"]["note"]. Si no hay nota, no captura
+    (un veredicto sin nota no aporta conocimiento reutilizable).
+    """
+    if not _operator_note_enabled():
+        return None
+    try:
+        from services import human_review as hr
+        from services import memory_store, pii_masker
+        with session_scope() as session:
+            ex = session.get(AgentExecution, execution_id)
+            if ex is None:
+                return None
+            block = (ex.metadata_dict or {}).get(hr.METADATA_KEY) or {}
+            note = (block.get("note") or "").strip()
+            if not note:
+                return None  # veredicto sin nota → nada reutilizable
+            verdict = block.get("verdict")
+            agent_type = ex.agent_type or "agent"
+            tk = session.get(Ticket, ex.ticket_id) if ex.ticket_id else None
+            project = (tk.stacky_project_name or tk.project) if tk else None
+            ado_id = tk.ado_id if tk else None
+            reviewed_by = block.get("reviewed_by")
+        if not project:
+            return None
+        body = pii_masker.redact_irreversible(note[:_OPERATOR_NOTE_MAX])
+        title = f"Nota del operador — {agent_type}" + (f" (ado {ado_id})" if ado_id else "")
+        content = f"Veredicto: {verdict}\n\n{body}"
+        # topic_key estable por run → re-revisar la misma run upsertea (no duplica).
+        topic_key = (
+            f"opnote/ado-{ado_id}-{agent_type}" if ado_id
+            else f"opnote/exec-{execution_id}-{agent_type}"
+        )
+        # Auto-categorización por veredicto (multiplica reuso en épicas futuras):
+        # rejected → "rejected_reason"; approved_with_notes → "approval_condition".
+        tags = [agent_type, "operator_note", verdict or "review"]
+        if verdict == "rejected":
+            tags.append("rejected_reason")
+        elif verdict == "approved_with_notes":
+            tags.append("approval_condition")
+
+        return memory_store.save_observation(
+            project=project,
+            type=_OPERATOR_NOTE_TYPE,
+            title=title,
+            content=content,
+            topic_key=topic_key,
+            status="active",
+            scope="project",
+            source_kind="operator",
+            source_execution_id=execution_id,
+            source_agent_type=agent_type,
+            author_email=reviewed_by,
+            tags=tags,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("capture_operator_note falló exec=%s", execution_id, exc_info=True)
+        return None

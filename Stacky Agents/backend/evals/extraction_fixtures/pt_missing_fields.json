@@ -1,0 +1,6 @@
+{
+  "name": "pt_missing_fields",
+  "kind": "pending_task",
+  "raw": "{\"generated_at\":\"2026-01-01T00:00:00Z\",\"generated_by\":\"functional-agent\",\"epic_id\":900002,\"rf_id\":\"RF-002\",\"title\":\"t\",\"description_html\":\"<p>x</p>\",\"plan_de_pruebas_path\":\"p.md\"}",
+  "expect": { "json_ok": true, "missing_fields": ["parent_link_type", "status"] }
+}

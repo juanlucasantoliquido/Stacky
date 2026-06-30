@@ -52,6 +52,9 @@ logger = logging.getLogger("stacky_agents.api.client_profile")
 
 bp = Blueprint("client_profile", __name__, url_prefix="")
 
+# Plan 45 F5 (C5) — tipos válidos para cada entrada del catálogo de procesos.
+ALLOWED_PROCESS_KINDS = {"entry", "processing", "output"}
+
 
 def _actor() -> str:
     return (request.headers.get("X-User-Email") or "operator").strip() or "operator"
@@ -130,6 +133,26 @@ def put_client_profile(project_name: str):
 
     if not isinstance(profile, dict):
         return jsonify({"ok": False, "error": "Body debe traer 'profile' como objeto JSON."}), 400
+
+    # Plan 45 F5 (C5) — validar process_catalog[*].kind contra la allowlist.
+    # Solo se valida lo que el operador envía; si la key no viene, no hay cambio.
+    catalog = profile.get("process_catalog")
+    if catalog is not None:
+        if not isinstance(catalog, list):
+            return jsonify({"ok": False, "error": "process_catalog debe ser una lista."}), 400
+        for idx, item in enumerate(catalog):
+            if not isinstance(item, dict):
+                return jsonify({"ok": False, "error": f"process_catalog[{idx}] debe ser un objeto."}), 400
+            kind = item.get("kind")
+            # kind vacío/ausente se tolera (borrador en edición); si viene, debe ser válido.
+            if kind and kind not in ALLOWED_PROCESS_KINDS:
+                return jsonify({
+                    "ok": False,
+                    "error": "invalid_process_kind",
+                    "value": kind,
+                    "allowed": sorted(ALLOWED_PROCESS_KINDS),
+                    "index": idx,
+                }), 400
 
     previous = load_client_profile(project_name)
 

@@ -1,6 +1,6 @@
 # Plan 42 — Épicas grounded en documentación del proyecto + selector de modelo de Claude CLI
 
-> **Versión: v3** · Fecha: 2026-06-18 · Estado: PROPUESTO (no implementado)
+> **Versión: v3** · Fecha: 2026-06-18 · Estado: IMPLEMENTADO 2026-06-19 (F0–F6). F0 process_catalog (context_enrichment + test_process_dictionary_block.py), F1 technical_master (test_client_profile_tech_index.py), F2 R-GROUNDING en BusinessAgent.agent.md + preflight + confidence (test_epic_grounding.py, test_epic_confidence_extraction.py), F3 selector modelo/effort (consolidado con plan 43), F4 epic_summary (telemetría plan 44), F5 project_autoprofile.py (test_project_autoprofile.py), F6 botón "Detener generación" reusando Executions.cancel (EpicFromBriefModal.tsx:102,335,526). Verde: tests citados; tsc --noEmit exit 0. (Header "no implementado" original era stale.)
 > Numeración consecutiva calculada listando `Stacky Agents/docs/` (máx previo = 41).
 >
 > **CHANGELOG v2→v3:**

@@ -94,6 +94,7 @@ def run_agent(
     runtime: str = "github_copilot",
     vscode_agent_filename: str | None = None,
     project_name: str | None = None,
+    work_item_type: str = "Epic",
 ) -> int:
     agent = agents.get(agent_type)
     if agent is None:
@@ -150,6 +151,7 @@ def run_agent(
             model_override=model_override,
             effort_override=effort_override,
             project_name=project_name,
+            work_item_type=work_item_type,
         )
 
     with session_scope() as session:
@@ -169,6 +171,11 @@ def run_agent(
         # faltaba. setdefault garantiza que no se sobreescriba si ya fue puesto.
         md = dict(exec_row.metadata_dict or {})
         md.setdefault("runtime", runtime)
+        # Plan 45 F2 — sellar el tipo de work item destino (Epic/Issue) desde el
+        # inicio para que el frontend pueda mostrarlo. La autopublicación de Issue
+        # vive en el finalizador del runner CLI; este path (github_copilot) no
+        # autopublica, pero igual deja la trazabilidad.
+        md.setdefault("work_item_type", work_item_type)
         exec_row.metadata_dict = md
         session.add(exec_row)
         session.flush()
@@ -399,6 +406,7 @@ def _start_cli_runtime(
     model_override: str | None,
     effort_override: str | None = None,
     project_name: str | None,
+    work_item_type: str = "Epic",
 ) -> int:
     workspace_root: str | None = None
     with session_scope() as session:
@@ -441,6 +449,7 @@ def _start_cli_runtime(
             workspace_root=workspace_root,
             model_override=model_override,
             effort_override=effort_override,
+            work_item_type=work_item_type,
         )
 
     raise ValueError(f"unsupported cli runtime: {runtime}")

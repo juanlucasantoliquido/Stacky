@@ -79,6 +79,88 @@ function safeStringify(value: unknown): string {
 
 // ── Sub-componentes de formulario ────────────────────────────────────────────
 
+type ProcessCatalogItem = {
+  name?: string;
+  kind?: string;
+  purpose?: string;
+};
+
+function ProcessCatalogField({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (next: ProcessCatalogItem[]) => void;
+}) {
+  const items = Array.isArray(value)
+    ? (value as ProcessCatalogItem[])
+    : [];
+
+  const updateItem = (index: number, patch: Partial<ProcessCatalogItem>) => {
+    const next = [...items];
+    next[index] = { ...items[index], ...patch };
+    onChange(next);
+  };
+
+  const removeItem = (index: number) => {
+    onChange(items.filter((_, i) => i !== index));
+  };
+
+  const addItem = () => {
+    onChange([...items, { name: "", kind: "processing", purpose: "" }]);
+  };
+
+  return (
+    <div className={`${styles.field} ${styles.fieldFull}`}>
+      <div className={styles.kvList}>
+        {items.length === 0 && (
+          <p className={styles.hint} style={{ marginBottom: 10 }}>
+            No hay procesos en el catálogo.
+          </p>
+        )}
+        {items.map((item, idx) => (
+          <div key={idx} className={styles.kvRow}>
+            <input
+              className={`${styles.input} ${styles.kvKey}`}
+              placeholder="Nombre del proceso"
+              value={item.name ?? ""}
+              onChange={(e) => updateItem(idx, { name: e.target.value })}
+              spellCheck={false}
+            />
+            <select
+              className={styles.input}
+              value={item.kind ?? "processing"}
+              onChange={(e) => updateItem(idx, { kind: e.target.value })}
+            >
+              <option value="entry">entry</option>
+              <option value="processing">processing</option>
+              <option value="output">output</option>
+            </select>
+            <input
+              className={`${styles.input} ${styles.kvVal}`}
+              placeholder="Propósito"
+              value={item.purpose ?? ""}
+              onChange={(e) => updateItem(idx, { purpose: e.target.value })}
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className={styles.iconBtn}
+              title="Quitar"
+              onClick={() => removeItem(idx)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button type="button" className={styles.addBtn} onClick={addItem}>
+          + Agregar proceso
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Section({
   title,
   required,
@@ -899,6 +981,14 @@ export default function ClientProfileEditor() {
                 />
               ))}
             </div>
+          </Section>
+
+          {/* ── Catálogo de procesos ── */}
+          <Section title="Catálogo de procesos">
+            <ProcessCatalogField
+              value={asArr(g(["process_catalog"]))}
+              onChange={(next) => set(["process_catalog"], next)}
+            />
           </Section>
         </>
       )}

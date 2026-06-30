@@ -88,6 +88,17 @@ El dashboard incluye:
 La variante HTTP (`--port`) sigue disponible para visualización en vivo con auto-refresco.
 El botón **STOP** en la variante HTTP pide la parada cooperativa.
 
+## Verificar la maquinaria (CI del loop)
+
+```sh
+python kaizen.py check
+# CHECK: TODO VERDE  [5/5 grupos OK | 102 tests unitarios]
+```
+
+Corre 5 grupos: `doctor` → `selfcheck` → `validate` (sesiones cerradas) → `test_core`
+(64 tests puros) → `test_aotl` (38 tests de maquinaria AOTL). Exit 0 solo si todo pasa.
+Corré `kaizen check` antes de activar el loop y tras cualquier cambio en `scripts/`.
+
 ## Costo
 Un loop `--forever` con Opus puede gastar bastante. Para iterar seguido conviene `sonnet` (default)
 o el driver `mock` (gratis, offline) para ensayar el flujo. Todo es configurable en el adapter.

@@ -32,6 +32,11 @@ logger = logging.getLogger("stacky_agents.ado")
 _API_VERSION = "7.1"
 _TIMEOUT_SEC = 30
 
+# Plan 52 F1 — tope duro de páginas para la búsqueda idempotente de comentarios.
+# Evita loops si ADO devolviera continuationToken indefinidamente.
+_COMMENT_PAGE_CAP = 40          # 40 páginas * 200 = 8000 comentarios máximos inspeccionados
+_COMMENT_PAGE_SIZE = 200        # $top por página
+
 # Retry configuration (CA-09)
 _MAX_RETRIES = 3
 _RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
@@ -761,17 +766,65 @@ class AdoClient:
             )
         return response
 
+    def fetch_all_comments(self, ado_id: int, marker: str | None = None) -> list[dict]:
+        """Recorre TODAS las páginas de comentarios del work item (Plan 52 F1).
+
+        Sigue `continuationToken` de la API de comments de ADO hasta agotar páginas
+        o alcanzar `_COMMENT_PAGE_CAP`. Si se pasa `marker`, hace short-circuit:
+        devuelve apenas encuentra una página que contenga el marker (no sigue
+        paginando). Tolerante a fallos: ante cualquier AdoApiError devuelve lo
+        acumulado hasta ahí. Si ADO no expone `continuationToken` corta tras 1
+        página (degradación al comportamiento legacy). Devuelve dicts con la misma
+        forma que fetch_comments: {author, date, text}.
+        """
+        out: list[dict] = []
+        token: str | None = None
+        for _page in range(_COMMENT_PAGE_CAP):
+            url = (
+                f"{self._base_proj}/_apis/wit/workitems/{ado_id}/comments"
+                f"?api-version=7.1-preview.3&$top={_COMMENT_PAGE_SIZE}&order=asc"
+            )
+            if token:
+                url += f"&continuationToken={urllib.parse.quote(str(token))}"
+            try:
+                data = self._request("GET", url)
+            except AdoApiError as e:
+                logger.warning("fetch_all_comments(%s) fallo en pagina %s: %s", ado_id, _page, e)
+                return out
+            for c in (data.get("comments") or []):
+                text_html = (c.get("text") or "").strip()
+                if not text_html:
+                    continue
+                revised_by = c.get("revisedBy") or c.get("createdBy") or {}
+                author = revised_by.get("displayName") or revised_by.get("uniqueName") or "?"
+                date = (c.get("revisedDate") or c.get("createdDate") or "")[:10]
+                out.append({"author": author, "date": date, "text": text_html})
+                if marker and marker in text_html:
+                    return out  # short-circuit: ya basta para idempotencia
+            token = data.get("continuationToken")
+            if not token:
+                break
+        return out
+
     def comment_exists(self, ado_id: int, marker: str, top: int = 50) -> dict | None:
         """Busca un comentario que contenga el marcador Stacky dado.
 
-        Util para verificacion idempotente post-publicacion (Fase 1).
-        Retorna el dict del comentario (con keys de fetch_comments) o None.
-        No lanza: si la API preview falla, devuelve None.
+        Plan 52 F1: recorre TODAS las páginas (no solo las `top` más recientes)
+        vía fetch_all_comments con short-circuit en el marker, para que el marker
+        idempotente viejo se encuentre aunque el work item tenga >50 comentarios.
+        `top` se conserva en la firma por compatibilidad pero ya no limita.
+        Retorna el dict del comentario o None. No lanza.
         """
         if not marker:
             return None
+        # Plan 52 F1 — rollback barato sin redeploy: STACKY_COMMENT_FULL_SCAN_ENABLED
+        # (default ON) escanea todas las páginas; OFF restaura el legacy de 1 página.
+        _full_scan = os.getenv("STACKY_COMMENT_FULL_SCAN_ENABLED", "true").strip().lower() != "false"
         try:
-            comments = self.fetch_comments(ado_id, top=top)
+            if _full_scan:
+                comments = self.fetch_all_comments(ado_id, marker=marker)
+            else:
+                comments = self.fetch_comments(ado_id, top=top)
         except Exception:  # noqa: BLE001 — defensivo
             return None
         for c in comments:

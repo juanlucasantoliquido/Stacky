@@ -1339,6 +1339,56 @@
       "status": "closed",
       "tags": [],
       "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T145632Z__test-aotl-smoke-test-de-autoloop-run-iteration-camino-accept-con-mocks-pesados-b-92",
+      "objective": "test_aotl: smoke test de autoloop.run_iteration camino accept con mocks pesados (B-92)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:56:32+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T145822Z__test-aotl-run-iteration-caminos-escalated-e-iterate-b-93",
+      "objective": "test_aotl: run_iteration caminos escalated e iterate (B-93)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:58:22+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T145957Z__sincronizar-conteos-test-aotl-py-a-70-tests-y-docs-02-usage-md-a-202-132-70-b-94",
+      "objective": "sincronizar conteos: test_aotl.py a 70 tests y docs/02_USAGE.md a 202 (132+70) (B-94)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T14:59:57+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T150157Z__test-aotl-apply-delete-rollback-restaura-refuta-rq-01-y-actualizar-backlog-b-95",
+      "objective": "test_aotl: apply delete + rollback restaura (refuta RQ-01) y actualizar BACKLOG (B-95)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T15:01:57+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
+    },
+    {
+      "id": "2026-06-22T150341Z__test-core-tests-de-run-session-load-profile-y-run-session-utc-now-b-96",
+      "objective": "test_core: tests de run_session.load_profile y run_session.utc_now (B-96)",
+      "mode": "aotl",
+      "adapter": "claude",
+      "created_utc": "2026-06-22T15:03:41+00:00",
+      "status": "closed",
+      "tags": [],
+      "verdict": "accept"
     }
   ]
 }

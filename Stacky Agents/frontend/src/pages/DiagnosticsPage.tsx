@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -10,6 +11,8 @@ import {
 } from "lucide-react";
 import { LocalDiagnostics, type LocalDiagnosticCheck } from "../api/endpoints";
 import HarnessHealthCard from "../components/HarnessHealthCard";
+import OperationalHealthCard from "../components/OperationalHealthCard";
+import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import styles from "./DiagnosticsPage.module.css";
 
 const STATUS_LABEL = {
@@ -44,6 +47,8 @@ function DetailBlock({ detail }: { detail: unknown }) {
 
 export default function DiagnosticsPage() {
   const queryClient = useQueryClient();
+  const [detailId, setDetailId] = useState<number | null>(null);
+
   const diagnostics = useQuery({
     queryKey: ["local-diagnostics"],
     queryFn: LocalDiagnostics.get,
@@ -196,6 +201,12 @@ export default function DiagnosticsPage() {
 
       {/* H8 — KPIs de valor agregado del arnés */}
       <HarnessHealthCard />
+
+      {/* Plan 46 F3 — Panel de Salud Operativa (triage pasivo) */}
+      <OperationalHealthCard onOpenExecution={setDetailId} />
+
+      {/* Drawer para detalle de ejecución (Plan 38 C2) */}
+      <ExecutionDetailDrawer executionId={detailId} onClose={() => setDetailId(null)} />
     </main>
   );
 }

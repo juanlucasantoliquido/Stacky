@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ubimia · ¿Por qué Stacky? Una plataforma, no herramientas sueltas</title>
+<!--
+  Deck COMERCIAL/ESTRATÉGICO "¿Por qué Stacky?" — familia visual de ROLLOUT_STACKY.html (misma marca/tokens).
+  Narrativa distinta: el de al lado responde "cómo escalarlo por equipos"; este responde "por qué una plataforma única".
+  Contenido grounded en docs reales del repo:
+    - Stacky Agents/docs/sistema/01-overview.md (qué es / propósito / casos de uso / human-in-the-loop)
+    - Stacky Agents/docs/sistema/02-arquitectura.md (orquestación: monolito + daemons de cierre)
+    - Stacky Agents/docs/sistema/05-agentes-runtimes.md (registry de agentes, runtimes, LLM router, cap de modelos)
+    - Stacky Agents/docs/sistema/09-integraciones.md (trackers ADO/Jira/Mantis, escritura idempotente, webhooks, auditoría/egress)
+    - Stacky Agents/backend/Stacky/agents/*.agent.md (Business/Functional/Technical/Developer/QA: cadena punta a punta, no-DML, trazabilidad, Stacky publica)
+    - Stacky Agents/docs/_roadmap/ROLLOUT_STACKY.html (anexo de capacidades reales: grounding, gates, memoria, gobernanza)
+  Anti-alucinación: lo no documentado se omite. Métricas comerciales sin fuente cuantitativa van como pendiente y NO se inventan cifras.
+-->
+<style>
+  :root{
+    --navy0:#0f2129; --navy1:#162A35; --navy2:#1b3744;
+    --mint:#00F2B8; --mint-bright:#00F7B7; --mint-soft:rgba(0,242,184,.12); --mint-line:rgba(0,242,184,.34);
+    --teal:#0BAC8A; --teal-deep:#0b6157;
+    --white:#ffffff; --ink:#EAF3F0; --muted:#94aaab; --faint:#6e8587;
+    --card:rgba(255,255,255,.045); --card2:rgba(0,242,184,.06);
+    --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.06);
+    --font:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,"Apple Color Emoji","Segoe UI Emoji",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font);color:var(--ink);overflow:hidden;
+    background:
+      radial-gradient(900px 620px at 100% -12%, rgba(0,242,184,.15), transparent 55%),
+      radial-gradient(820px 620px at -8% 112%, rgba(11,172,138,.11), transparent 55%),
+      linear-gradient(158deg,var(--navy0),var(--navy1) 55%,var(--navy2));
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- deck / slides ---------- */
+  .deck{position:fixed;inset:0}
+  .slide{
+    position:absolute;inset:0;overflow:hidden;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:clamp(34px,5.6vw,104px);
+    opacity:0;visibility:hidden;transform:translateY(12px) scale(.992);
+    transition:opacity .5s ease,transform .5s ease,visibility .5s;
+  }
+  .slide.active{opacity:1;visibility:visible;transform:none}
+  .wrap{max-width:1180px;width:100%;margin:0 auto;position:relative;z-index:2}
+
+  /* ---------- brand arc (signature ubimia ring) ---------- */
+  .arc{position:absolute;z-index:0;pointer-events:none;border-radius:50%;opacity:.95}
+  .arc.tr{width:1180px;height:1180px;top:-400px;right:-380px;
+    background:radial-gradient(circle, transparent 0 45.5%, var(--teal-deep) 46%, var(--teal) 66%, var(--mint) 100%);}
+  .arc.bl{width:760px;height:760px;bottom:-430px;left:-300px;
+    background:radial-gradient(circle, transparent 0 52%, var(--teal-deep) 52.4%, var(--teal) 74%, var(--mint) 100%);opacity:.5}
+
+  /* ---------- type ---------- */
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:clamp(.7rem,1.05vw,.85rem);
+    font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--mint);
+    padding:7px 15px;border:1px solid var(--mint-line);border-radius:999px;background:var(--mint-soft);margin-bottom:22px}
+  h1{font-size:clamp(2.05rem,5.3vw,4.1rem);line-height:1.05;font-weight:800;letter-spacing:-.02em;color:var(--white)}
+  h2{font-size:clamp(1.65rem,3.7vw,2.85rem);line-height:1.1;font-weight:800;letter-spacing:-.015em;color:var(--white);margin-bottom:6px}
+  .lead{font-size:clamp(1.02rem,1.6vw,1.42rem);color:var(--muted);line-height:1.5;max-width:64ch;margin-top:16px}
+  .sub{font-size:clamp(1.15rem,2.2vw,1.8rem);color:var(--ink);font-weight:600;margin-top:10px}
+  .grad{background:linear-gradient(100deg,var(--mint),var(--teal) 80%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .note{margin-top:24px;font-size:clamp(.9rem,1.3vw,1.1rem);color:var(--faint);line-height:1.5;max-width:72ch}
+  .note b{color:var(--muted);font-weight:600}
+  .bigidea{font-size:clamp(1.28rem,2.5vw,2rem);font-weight:700;line-height:1.25;margin-top:22px;max-width:28ch;color:var(--ink)}
+  .bigidea .hl{color:var(--mint)}
+
+  /* ---------- logo (wordmark reproducido como SVG, autocontenido) ---------- */
+  .logo{display:inline-flex;align-items:flex-end;line-height:.9;font-weight:800;letter-spacing:-.03em;color:var(--white)}
+  .logo .w{font-size:1em}
+  .logo .r{font-size:.34em;font-weight:700;transform:translateY(-1.05em);margin-left:.05em;color:var(--mint)}
+  .logo.big{font-size:clamp(2.6rem,6.6vw,4.6rem);margin-bottom:26px}
+  .brandmark{position:fixed;bottom:20px;right:26px;z-index:35;opacity:.6;font-weight:800;letter-spacing:-.02em;
+    color:var(--ink);font-size:1.02rem;display:inline-flex;align-items:flex-end;line-height:.9}
+  .brandmark .r{font-size:.4em;color:var(--mint);transform:translateY(-1em);margin-left:.04em}
+  body[data-edge="1"] .brandmark{display:none}
+
+  /* ---------- cards / grid ---------- */
+  .grid{display:grid;gap:18px;margin-top:30px}
+  .g3{grid-template-columns:repeat(3,1fr)} .g2{grid-template-columns:repeat(2,1fr)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px 22px;transition:transform .25s,border-color .25s}
+  .card .ic{font-size:2rem;line-height:1;margin-bottom:13px;display:block}
+  .card h3{font-size:clamp(1.02rem,1.55vw,1.3rem);font-weight:700;margin-bottom:7px;color:var(--white)}
+  .card p{font-size:clamp(.88rem,1.22vw,1.04rem);color:var(--muted);line-height:1.45}
+  .card.mint{border-top:3px solid var(--mint)} .card.teal{border-top:3px solid var(--teal)}
+
+  /* ---------- vs / compare ---------- */
+  .vs{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:stretch;margin-top:30px}
+  .vs .col{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px}
+  .vs .col.now{border-left:3px solid var(--faint)}
+  .vs .col.next{border-left:3px solid var(--mint);background:linear-gradient(180deg,var(--mint-soft),transparent)}
+  .vs .col .tag{font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--faint);margin-bottom:14px}
+  .vs .col.next .tag{color:var(--mint)}
+  .vs ul{list-style:none;display:flex;flex-direction:column;gap:12px}
+  .vs li{font-size:clamp(.92rem,1.35vw,1.14rem);color:var(--muted);line-height:1.4;padding-left:24px;position:relative}
+  .vs li::before{content:"";position:absolute;left:3px;top:.6em;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+  .vs .col.next li{color:var(--ink)} .vs .col.next li::before{background:var(--mint)}
+  .vs .arrow{display:flex;align-items:center;font-size:2.4rem;color:var(--mint);font-weight:300}
+
+  /* ---------- flow / steps ---------- */
+  .flow{display:flex;align-items:stretch;gap:10px;margin-top:34px;flex-wrap:wrap}
+  .step{flex:1 1 150px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 14px;text-align:center;position:relative}
+  .step .n{position:absolute;top:-12px;left:50%;transform:translateX(-50%);width:26px;height:26px;border-radius:50%;
+    background:var(--mint);color:#06231d;font-weight:800;font-size:.82rem;display:flex;align-items:center;justify-content:center}
+  .step .ic{font-size:2rem;display:block;margin:6px 0 11px}
+  .step p{font-size:clamp(.9rem,1.2vw,1.04rem);color:var(--white);font-weight:700;line-height:1.3}
+  .step small{display:block;color:var(--muted);font-weight:400;margin-top:5px;font-size:.8rem;line-height:1.35}
+  .flow .sep{display:flex;align-items:center;color:var(--mint);font-size:1.5rem;font-weight:300}
+
+  /* ---------- benefits grid (por tipo de usuario) ---------- */
+  .benefits{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:28px}
+  .ben{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--mint);border-radius:14px;padding:18px 20px}
+  .ben:nth-child(even){border-left-color:var(--teal)}
+  .ben h4{display:flex;align-items:center;gap:10px;font-size:clamp(1rem,1.45vw,1.16rem);font-weight:700;color:var(--white);margin-bottom:6px}
+  .ben h4 .ic{font-size:1.3rem}
+  .ben p{font-size:clamp(.86rem,1.18vw,1rem);color:var(--muted);line-height:1.42}
+
+  /* ---------- big stat row ---------- */
+  .statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:30px}
+  .stat{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--mint);border-radius:16px;padding:22px 18px;text-align:center}
+  .stat:nth-child(even){border-top-color:var(--teal)}
+  .stat .big{font-size:clamp(1.9rem,3.6vw,2.8rem);font-weight:800;color:var(--white);line-height:1;letter-spacing:-.02em}
+  .stat .big .grad{font-weight:800}
+  .stat small{display:block;color:var(--muted);font-size:clamp(.82rem,1.1vw,.96rem);margin-top:9px;line-height:1.35}
+
+  /* ---------- case study (caso práctico) ---------- */
+  .case{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:28px}
+  .case .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 22px}
+  .case .panel.before{border-left:3px solid var(--faint)}
+  .case .panel.after{border-left:3px solid var(--mint);background:linear-gradient(180deg,var(--mint-soft),transparent)}
+  .case .panel .tag{font-size:.74rem;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--faint);margin-bottom:12px}
+  .case .panel.after .tag{color:var(--mint)}
+  .case ol{list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:11px}
+  .case li{position:relative;padding-left:30px;font-size:clamp(.88rem,1.22vw,1.02rem);color:var(--muted);line-height:1.4}
+  .case li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:0;width:21px;height:21px;border-radius:6px;
+    background:rgba(255,255,255,.06);color:var(--faint);font-weight:800;font-size:.74rem;display:flex;align-items:center;justify-content:center}
+  .case .panel.after li{color:var(--ink)}
+  .case .panel.after li::before{background:var(--mint);color:#06231d}
+
+  /* ---------- closing ---------- */
+  .closing{text-align:center;align-items:center}
+  .closing h2{font-size:clamp(1.9rem,4.3vw,3.4rem);max-width:22ch;margin:0 auto}
+  .closing .sub{margin-top:18px;color:var(--ink);font-weight:600}
+  .closing .mini{display:flex;gap:13px;justify-content:center;flex-wrap:wrap;margin-top:26px}
+  .closing .mini span{border:1px solid var(--mint-line);border-radius:999px;padding:11px 19px;color:var(--ink);font-weight:600;font-size:clamp(.88rem,1.3vw,1.06rem);background:var(--mint-soft)}
+  .closing .grad{background:none;color:var(--mint);-webkit-text-fill-color:var(--mint)}
+  .tagbrand{margin-top:26px;color:var(--mint);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:clamp(.8rem,1.1vw,.95rem)}
+
+  /* ---------- chrome ---------- */
+  .progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--mint),var(--teal));width:0;transition:width .45s ease;z-index:40;box-shadow:0 0 12px rgba(0,242,184,.5)}
+  .pageno{position:fixed;top:17px;left:24px;z-index:40;font-size:.82rem;color:var(--faint);font-weight:700;letter-spacing:.05em}
+  .chrome{position:fixed;bottom:20px;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:20px;z-index:40;pointer-events:none}
+  .chrome>*{pointer-events:auto}
+  .dots{display:flex;gap:8px}
+  .dot{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.2);border:none;cursor:pointer;transition:transform .2s,background .2s;padding:0}
+  .dot:hover{background:rgba(255,255,255,.45)} .dot.on{background:var(--mint);transform:scale(1.35)}
+  .nav{display:flex;align-items:center;gap:13px}
+  .nav button{width:38px;height:38px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink);font-size:1.15rem;cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center}
+  .nav button:hover{background:var(--mint-soft);border-color:var(--mint-line);color:var(--mint)}
+  .counter{font-variant-numeric:tabular-nums;font-size:.9rem;color:var(--muted);min-width:52px;text-align:center}
+  .counter b{color:var(--ink)}
+  .fsbtn{position:fixed;top:14px;right:22px;z-index:40;background:none;border:none;color:var(--faint);cursor:pointer;font-size:.82rem;display:flex;align-items:center;gap:6px}
+  .fsbtn:hover{color:var(--mint)}
+
+  @media (max-width:880px){
+    .g3,.statrow{grid-template-columns:1fr 1fr}
+    .g2,.benefits,.case{grid-template-columns:1fr}
+    .vs{grid-template-columns:1fr} .vs .arrow{transform:rotate(90deg);justify-content:center}
+    .fsbtn,.brandmark{display:none}
+  }
+  @media print{
+    body{overflow:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .slide{position:relative;opacity:1!important;visibility:visible!important;transform:none!important;page-break-after:always;min-height:100vh}
+    .chrome,.fsbtn,.progress,.pageno,.brandmark{display:none!important}
+  }
+</style>
+</head>
+<body data-edge="1">
+
+<div class="progress" id="progress"></div>
+<div class="pageno" id="pageno">01</div>
+<button class="fsbtn" id="fsBtn" title="Pantalla completa (F)">⛶ Pantalla completa</button>
+<div class="brandmark"><span class="w">ubimia</span><span class="r">®</span></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 · PORTADA -->
+  <section class="slide active cover" style="justify-content:center">
+    <div class="arc tr"></div>
+    <div class="wrap">
+      <span class="logo big"><span class="w">ubimia</span><span class="r">®</span></span>
+      <span class="eyebrow">La pregunta que importa</span>
+      <h1>¿Por qué <span class="grad">Stacky</span>?</h1>
+      <p class="sub">Una plataforma para todo el ciclo de desarrollo. No otra herramienta de IA suelta.</p>
+      <p class="note">No vendemos agentes de IA. Vendemos un <b>sistema de trabajo</b> donde personas, procesos, herramientas e IA quedan conectados en un solo lugar.</p>
+    </div>
+  </section>
+
+  <!-- 2 · EL PROBLEMA ACTUAL -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">El problema actual</span>
+      <h2>La IA ya entró a desarrollo. Pero entró en desorden.</h2>
+      <p class="bigidea">Cada persona usa <span class="hl">su</span> herramienta, a <span class="hl">su</span> manera, en <span class="hl">su</span> ventana.</p>
+      <div class="grid g3">
+        <div class="card mint"><span class="ic">🧩</span><h3>Herramientas separadas</h3><p>ChatGPT, Claude, Copilot por un lado; Jira, GitLab, Mantis o Azure DevOps por otro. Nada se habla entre sí.</p></div>
+        <div class="card mint"><span class="ic">🔀</span><h3>Cada uno a su modo</h3><p>Sin un proceso común, el resultado depende de quién pregunta y cómo lo pregunta ese día.</p></div>
+        <div class="card mint"><span class="ic">🕳️</span><h3>El trabajo se pierde</h3><p>Lo bueno que produce la IA queda en un chat, sin volver al ticket, al código ni al equipo.</p></div>
+      </div>
+      <p class="note">La IA suelta da chispazos de productividad individual. No cambia <b>cómo entrega la organización</b>.</p>
+    </div>
+  </section>
+
+  <!-- 3 · QUÉ PASA CON HERRAMIENTAS AISLADAS -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">Herramientas aisladas</span>
+      <h2>El trabajo vive saltando de ventana en ventana</h2>
+      <p class="lead">Una idea recorre cinco aplicaciones distintas antes de convertirse en código entregado. En cada salto, alguien copia, pega, reescribe y reinterpreta.</p>
+      <div class="flow">
+        <div class="step"><span class="ic">💬</span><p>Chat de IA</p><small>Se piensa la solución en una ventana aparte</small></div>
+        <div class="sep">→</div>
+        <div class="step"><span class="ic">📋</span><p>Gestor de tickets</p><small>Alguien lo transcribe a mano al tablero</small></div>
+        <div class="sep">→</div>
+        <div class="step"><span class="ic">🧑‍💻</span><p>Editor / Copilot</p><small>Otra IA, sin saber qué se decidió antes</small></div>
+        <div class="sep">→</div>
+        <div class="step"><span class="ic">🔧</span><p>Repositorio</p><small>El cambio entra sin rastro de por qué</small></div>
+        <div class="sep">→</div>
+        <div class="step"><span class="ic">✅</span><p>QA / cierre</p><small>Se vuelve a explicar todo desde cero</small></div>
+      </div>
+      <p class="note"><b>Cada salto cuesta tiempo, contexto y consistencia.</b> Y nada de eso queda registrado para la próxima vez.</p>
+    </div>
+  </section>
+
+  <!-- 4 · EL COSTO OCULTO -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">El costo oculto</span>
+      <h2>Lo que esta forma de trabajar cuesta de verdad</h2>
+      <p class="lead">No aparece en ninguna factura. Aparece en los tiempos, en los reprocesos y en lo que se olvida.</p>
+      <div class="grid g3">
+        <div class="card teal"><span class="ic">🧠</span><h3>Conocimiento que se evapora</h3><p>El criterio queda en chats privados. Si esa persona no está, el equipo arranca de cero.</p></div>
+        <div class="card teal"><span class="ic">🔁</span><h3>Cambio de contexto constante</h3><p>Saltar de app en app fragmenta la atención y multiplica los errores de traspaso.</p></div>
+        <div class="card teal"><span class="ic">🎲</span><h3>Resultados impredecibles</h3><p>Sin un estándar, la calidad varía con cada persona y cada día.</p></div>
+        <div class="card teal"><span class="ic">🔍</span><h3>Cero trazabilidad</h3><p>¿Quién decidió esto y por qué? Nadie lo sabe. Auditar y mejorar se vuelve imposible.</p></div>
+        <div class="card teal"><span class="ic">✋</span><h3>Trabajo manual repetido</h3><p>Pasar de la idea al ticket, del ticket al código y del código al cierre se hace a mano una y otra vez.</p></div>
+        <div class="card teal"><span class="ic">⚠️</span><h3>Riesgo invisible</h3><p>Datos sensibles en herramientas que nadie gobierna, sin control de qué entra ni qué sale.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · QUÉ PROPONE STACKY -->
+  <section class="slide">
+    <div class="arc bl"></div>
+    <div class="wrap">
+      <span class="eyebrow">Qué propone Stacky</span>
+      <h2>Un solo ecosistema donde <span class="grad">todo está conectado</span></h2>
+      <p class="bigidea">El producto no es la IA. El producto es la <span class="hl">orquestación</span>.</p>
+      <p class="lead">Stacky no compite contra ChatGPT, Claude o Copilot. Los integra, los coordina y los convierte en un proceso de trabajo continuo, gobernado y reutilizable.</p>
+      <div class="grid g3">
+        <div class="card mint"><span class="ic">🎯</span><h3>IA orquestada</h3><p>Agentes especializados que se pasan el trabajo entre sí, con el contexto correcto en cada paso.</p></div>
+        <div class="card mint"><span class="ic">🔗</span><h3>Conectado a tus sistemas</h3><p>Vive sobre tu gestor de tickets actual: Azure DevOps, Jira, Mantis o GitLab. No cambia tu mundo, lo unifica.</p></div>
+        <div class="card mint"><span class="ic">🧭</span><h3>Con control humano</h3><p>La persona aprueba, revisa y decide. La IA amplifica al equipo; nunca trabaja a ciegas.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 · CÓMO CONECTA EL CICLO -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">Cómo conecta el ciclo</span>
+      <h2>Del pedido del cliente al código entregado, sin cortes</h2>
+      <p class="lead">Cada etapa la cubre un agente especializado que recibe el trabajo del anterior y se lo entrega al siguiente. Todo dentro de la misma plataforma y sobre el mismo ticket.</p>
+      <div class="flow">
+        <div class="step"><span class="n">1</span><span class="ic">🗣️</span><p>Negocio</p><small>Convierte el brief del cliente en una épica estructurada</small></div>
+        <div class="sep">→</div>
+        <div class="step"><span class="n">2</span><span class="ic">📐</span><p>Funcional</p><small>Análisis funcional y plan de pruebas a partir de la épica</small></div>
+        <div class="sep">→</div>
+        <div class="step"><span class="n">3</span><span class="ic">🏗️</span><p>Técnico</p><small>Traduce el funcional a una solución técnica</small></div>
+        <div class="sep">→</div>
+        <div class="step"><span class="n">4</span><span class="ic">🛠️</span><p>Desarrollo</p><small>Implementa el cambio con trazabilidad en el código</small></div>
+        <div class="sep">→</div>
+        <div class="step"><span class="n">5</span><span class="ic">✅</span><p>QA</p><small>Valida lo desarrollado y deja evidencia</small></div>
+      </div>
+      <p class="note">Lo que produce cada agente se publica de forma <b>automática y trazable</b> en el ticket. El conocimiento no se pierde: queda en el flujo.</p>
+    </div>
+  </section>
+
+  <!-- 7 · EJEMPLO DE FLUJO COMPLETO -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">Ejemplo de flujo completo</span>
+      <h2>Una idea entra como texto. Sale como cambio entregado.</h2>
+      <p class="lead">Así recorre Stacky un requerimiento de punta a punta, con la persona aprobando en los puntos clave.</p>
+      <div class="grid g2">
+        <div class="card mint"><span class="ic">📝</span><h3>1 · Llega el brief</h3><p>El operador pega el pedido del cliente en texto libre. Stacky genera una épica de negocio bien formada y la publica en el tablero.</p></div>
+        <div class="card mint"><span class="ic">🔎</span><h3>2 · Se profundiza</h3><p>El agente funcional analiza la épica con la terminología real del producto y arma el plan de pruebas; el técnico define cómo resolverlo.</p></div>
+        <div class="card mint"><span class="ic">⌨️</span><h3>3 · Se implementa</h3><p>El agente de desarrollo implementa el cambio respetando las convenciones del proyecto y deja trazabilidad en cada línea modificada.</p></div>
+        <div class="card mint"><span class="ic">📌</span><h3>4 · Se valida y se cierra</h3><p>QA verifica el comportamiento pedido y la plataforma cierra el ticket sola, sin que nadie copie y pegue resultados.</p></div>
+      </div>
+      <p class="note">Todo ocurre <b>en un mismo lugar</b>, sobre el mismo ticket, con un registro completo de qué pasó en cada paso.</p>
+    </div>
+  </section>
+
+  <!-- 8 · CAPACIDADES PRINCIPALES (en clave de valor) -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">Capacidades principales</span>
+      <h2>Lo que hace fuerte a la plataforma</h2>
+      <p class="lead">No es una lista de funciones. Es lo que cada capacidad le aporta al negocio.</p>
+      <div class="grid g3">
+        <div class="card mint"><span class="ic">🎯</span><h3>IA orquestada</h3><p>Varios agentes y modelos coordinados, eligiendo el adecuado para cada tarea. <b>Más calidad sin pensar en tecnología.</b></p></div>
+        <div class="card mint"><span class="ic">🔍</span><h3>Trazabilidad total</h3><p>Cada decisión y cada cambio queda registrado en el ticket y en el código. <b>Auditable y defendible.</b></p></div>
+        <div class="card mint"><span class="ic">📚</span><h3>Conocimiento reutilizable</h3><p>La plataforma aprende de lo aprobado y de lo corregido. <b>El criterio deja de depender de personas.</b></p></div>
+        <div class="card mint"><span class="ic">🧱</span><h3>Estandarización</h3><p>Todos siguen el mismo proceso, con controles de calidad automáticos. <b>Resultados consistentes.</b></p></div>
+        <div class="card mint"><span class="ic">🔌</span><h3>Integrada a lo que ya usás</h3><p>Funciona sobre Azure DevOps, Jira, Mantis o GitLab. <b>Suma valor sin reemplazar tu stack.</b></p></div>
+        <div class="card mint"><span class="ic">🛡️</span><h3>Gobernanza y seguridad</h3><p>Enmascarado de datos sensibles, control de qué sale, auditoría y aprobación humana. <b>Menos riesgo.</b></p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 · BENEFICIOS POR TIPO DE USUARIO -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">Beneficios por rol</span>
+      <h2>Cada quien gana algo concreto</h2>
+      <div class="benefits">
+        <div class="ben"><h4><span class="ic">🧑‍💼</span>Dirección</h4><p>Visibilidad real del trabajo, menor dependencia de personas clave y una inversión que se capitaliza en toda la organización.</p></div>
+        <div class="ben"><h4><span class="ic">📊</span>Gerencia / PMO</h4><p>Procesos estandarizados, trazabilidad punta a punta y tiempos de entrega más cortos y predecibles.</p></div>
+        <div class="ben"><h4><span class="ic">🧑‍🔧</span>Líderes técnicos</h4><p>Calidad consistente, criterios que quedan documentados y menos retrabajo por traspasos perdidos.</p></div>
+        <div class="ben"><h4><span class="ic">📋</span>Product Owners</h4><p>Del pedido del cliente a una épica clara en minutos, con el contexto del negocio siempre presente.</p></div>
+        <div class="ben"><h4><span class="ic">👩‍💻</span>Equipos de desarrollo</h4><p>Menos tareas manuales y repetitivas; la IA hace el trabajo pesado y la persona decide.</p></div>
+        <div class="ben"><h4><span class="ic">🔄</span>Transformación digital</h4><p>Una plataforma que escala equipo por equipo, con aislamiento y gobierno desde el primer día.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 · BENEFICIOS PARA LA ORGANIZACIÓN -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">Beneficios para la organización</span>
+      <h2>El valor no es la suma. Es la conexión.</h2>
+      <p class="bigidea">Cada capacidad suma. Pero el salto llega cuando <span class="hl">todas trabajan juntas</span>.</p>
+      <div class="statrow">
+        <div class="stat"><div class="big grad">−</div><small>Menos tiempo de entrega: del pedido al cierre sin cortes ni copiar y pegar</small></div>
+        <div class="stat"><div class="big grad">↓</div><small>Menor costo operativo: menos trabajo manual y menos reprocesos</small></div>
+        <div class="stat"><div class="big grad">↑</div><small>Mayor calidad y consistencia, gracias a un proceso estándar con controles</small></div>
+        <div class="stat"><div class="big grad">∞</div><small>Conocimiento que queda en la plataforma, no en las personas</small></div>
+      </div>
+      <p class="note">Productividad, calidad, gobierno y escala. <b>No como funciones sueltas, sino como un solo sistema.</b></p>
+    </div>
+  </section>
+
+  <!-- 11 · COMPARACIÓN -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">La comparación honesta</span>
+      <h2>Herramientas separadas vs. Stacky</h2>
+      <div class="vs">
+        <div class="col now">
+          <div class="tag">Herramientas de IA sueltas</div>
+          <ul>
+            <li>Cada uno usa la suya, a su modo</li>
+            <li>El trabajo salta de ventana en ventana</li>
+            <li>El conocimiento queda en chats privados</li>
+            <li>Sin trazabilidad de qué se decidió y por qué</li>
+            <li>Calidad que depende de la persona del día</li>
+            <li>Datos sensibles sin gobierno</li>
+          </ul>
+        </div>
+        <div class="arrow">→</div>
+        <div class="col next">
+          <div class="tag">Stacky como plataforma</div>
+          <ul>
+            <li>Un proceso común para todo el equipo</li>
+            <li>Todo el ciclo en un mismo lugar</li>
+            <li>El conocimiento vive en la plataforma</li>
+            <li>Trazabilidad completa en ticket y código</li>
+            <li>Calidad estándar con controles automáticos</li>
+            <li>Gobierno, auditoría y aprobación humana</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12 · CASO PRÁCTICO -->
+  <section class="slide">
+    <div class="wrap">
+      <span class="eyebrow">Caso práctico</span>
+      <h2>El mismo requerimiento, dos formas de trabajar</h2>
+      <p class="lead">Un cliente pide un cambio. ¿Cómo lo recorre la organización hoy y cómo lo recorre con Stacky?</p>
+      <div class="case">
+        <div class="panel before">
+          <div class="tag">Hoy, con herramientas sueltas</div>
+          <ol>
+            <li>Alguien le pregunta a una IA en un chat aparte</li>
+            <li>Copia y pega la respuesta a un ticket, reescribiéndola</li>
+            <li>Otro retoma sin saber qué se decidió antes</li>
+            <li>El código entra sin rastro del por qué</li>
+            <li>QA vuelve a pedir todo el contexto desde cero</li>
+            <li>Lo aprendido se queda en el chat y se pierde</li>
+          </ol>
+        </div>
+        <div class="panel after">
+          <div class="tag">Con Stacky, como plataforma</div>
+          <ol>
+            <li>El brief entra y se vuelve épica estructurada</li>
+            <li>Cada agente toma el trabajo del anterior con su contexto</li>
+            <li>El desarrollo queda con trazabilidad en cada línea</li>
+            <li>El cierre es automático sobre el mismo ticket</li>
+            <li>La persona aprueba en los puntos clave</li>
+            <li>Lo aprobado y lo corregido alimentan a la plataforma</li>
+          </ol>
+        </div>
+      </div>
+      <p class="note">El mismo requerimiento, recorrido de dos maneras: una pierde contexto en cada paso; la otra lo acumula. Esa es la diferencia entre <strong>usar IA</strong> y <strong>tener una plataforma</strong>.</p>
+    </div>
+  </section>
+
+  <!-- 13 · CONCLUSIÓN / CIERRE -->
+  <section class="slide closing" style="justify-content:center">
+    <div class="arc tr"></div><div class="arc bl"></div>
+    <div class="wrap">
+      <span class="logo big" style="margin:0 auto 24px"><span class="w">ubimia</span><span class="r">®</span></span>
+      <h2>Stacky no es otra herramienta de IA.<br><span class="grad">Es el sistema que las pone a trabajar juntas.</span></h2>
+      <p class="sub">El verdadero producto es la orquestación. El verdadero valor, la conexión.</p>
+      <div class="mini">
+        <span>Una sola plataforma</span>
+        <span>Todo el ciclo conectado</span>
+        <span>Conocimiento que queda</span>
+      </div>
+      <div class="tagbrand">Impulsando confianza</div>
+    </div>
+  </section>
+
+</div>
+
+<div class="chrome">
+  <div class="dots" id="dots"></div>
+  <div class="nav">
+    <button id="prev" aria-label="Anterior">‹</button>
+    <span class="counter"><b id="cur">1</b> / <span id="tot">13</span></span>
+    <button id="next" aria-label="Siguiente">›</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total = slides.length, i = 0;
+  var dotsBox=document.getElementById('dots'), curEl=document.getElementById('cur'),
+      prog=document.getElementById('progress'), pageno=document.getElementById('pageno');
+  document.getElementById('tot').textContent = total;
+
+  slides.forEach(function(_,n){
+    var d=document.createElement('button');
+    d.className='dot'+(n===0?' on':'');
+    d.setAttribute('aria-label','Ir a la diapositiva '+(n+1));
+    d.addEventListener('click',function(e){e.stopPropagation();go(n);});
+    dotsBox.appendChild(d);
+  });
+  var dots=Array.prototype.slice.call(dotsBox.children);
+
+  function go(n){
+    n=Math.max(0,Math.min(total-1,n)); if(n===i)return;
+    slides[i].classList.remove('active'); dots[i].classList.remove('on');
+    i=n;
+    slides[i].classList.add('active'); dots[i].classList.add('on');
+    curEl.textContent=i+1;
+    prog.style.width=((i+1)/total*100)+'%';
+    pageno.textContent=String(i+1).padStart(2,'0');
+    document.body.setAttribute('data-edge',(i===0||i===total-1)?'1':'0');
+  }
+  function nextS(){go(i+1);} function prevS(){go(i-1);}
+  prog.style.width=(1/total*100)+'%';
+
+  document.getElementById('next').addEventListener('click',function(e){e.stopPropagation();nextS();});
+  document.getElementById('prev').addEventListener('click',function(e){e.stopPropagation();prevS();});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();nextS();}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prevS();}
+    else if(e.key==='Home'){e.preventDefault();go(0);}
+    else if(e.key==='End'){e.preventDefault();go(total-1);}
+    else if(e.key==='f'||e.key==='F'){toggleFs();}
+  });
+  document.getElementById('deck').addEventListener('click',function(e){
+    if(e.target.closest('button')||e.target.closest('.chrome')||e.target.closest('.fsbtn'))return;
+    if(e.clientX<window.innerWidth*0.28)prevS();else nextS();
+  });
+  var x0=null;
+  document.addEventListener('touchstart',function(e){x0=e.touches[0].clientX;},{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(x0===null)return;
+    var dx=e.changedTouches[0].clientX-x0;
+    if(Math.abs(dx)>50){dx<0?nextS():prevS();}
+    x0=null;
+  },{passive:true});
+  function toggleFs(){ if(!document.fullscreenElement){(document.documentElement.requestFullscreen||function(){})();}else{(document.exitFullscreen||function(){})();} }
+  document.getElementById('fsBtn').addEventListener('click',function(e){e.stopPropagation();toggleFs();});
+})();
+</script>
+</body>
+</html>

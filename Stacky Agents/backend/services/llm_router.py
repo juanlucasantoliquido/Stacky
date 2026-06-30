@@ -28,19 +28,28 @@ MOCK_MODELS = ["mock-1.0"]
 # Cualquier tier prohibido (opus / fable) se mapea a este tope.
 CLAUDE_CAP_MODEL = "claude-sonnet-4-6"
 _FORBIDDEN_CLAUDE_TIER = ("opus", "fable")
+# Plan 43 F1 — Opus explícitamente permitido cuando allow_opus=True (solo brief→épica).
+_OPUS_ALLOWLIST = {"claude-opus-4-8"}
 
 
-def clamp_model(model: str | None) -> str:
+def clamp_model(model: str | None, allow_opus: bool = False) -> str:
     """Aplica el cap duro de §5.2 sobre un id de modelo Claude.
 
     Mapea cualquier modelo de tier prohibido (opus, fable) a CLAUDE_CAP_MODEL.
     Modelos permitidos (haiku/sonnet) y no-Claude (copilot/mock) pasan sin tocar.
     Es la ÚNICA función que decide qué está capado; toda decisión Claude pasa por acá.
+
+    allow_opus=True (lo usa SOLO el flujo brief→épica, Plan 43) exime de clamp a los
+    modelos en _OPUS_ALLOWLIST. fable y cualquier Opus fuera de la allowlist siguen
+    capados aun con allow_opus=True. El default (False) preserva el cap global para
+    todos los demás callers.
     """
     if not model:
         return CLAUDE_CAP_MODEL
     low = model.lower()
     if low.startswith("claude-") and any(t in low for t in _FORBIDDEN_CLAUDE_TIER):
+        if allow_opus and model in _OPUS_ALLOWLIST:
+            return model
         return CLAUDE_CAP_MODEL
     return model
 

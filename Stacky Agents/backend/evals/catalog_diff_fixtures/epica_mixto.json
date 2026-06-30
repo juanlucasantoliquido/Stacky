@@ -1,0 +1,13 @@
+{
+  "name": "epica_mixto",
+  "html": "<p>proceso RSCore, proceso Fantasma1, proceso Fantasma2</p>",
+  "catalog": [
+    {
+      "name": "RSCore"
+    }
+  ],
+  "expect_unknown": [
+    "Fantasma1",
+    "Fantasma2"
+  ]
+}

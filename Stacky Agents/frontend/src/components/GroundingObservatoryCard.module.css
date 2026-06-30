@@ -1,0 +1,316 @@
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin: 16px 12px;
+}
+
+.cardError {
+  border-color: var(--danger);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Métricas principales */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metricBox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--mono-bg);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+}
+
+.metricLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.metricValue {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nota de cobertura */
+.coverageNote {
+  padding: 10px 12px;
+  background: var(--warning-bg, rgba(255, 193, 7, 0.1));
+  border: 1px solid var(--warning-border, rgba(255, 193, 7, 0.3));
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+/* Sparkline */
+.trendSection {
+  margin-bottom: 16px;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 8px 0;
+}
+
+.sparklineContainer {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 60px;
+}
+
+.sparklineBar {
+  flex: 1;
+  background: var(--accent);
+  opacity: 0.7;
+  border-radius: 2px;
+  min-height: 4px;
+}
+
+/* Listas (módulos/procesos) */
+.listSection {
+  margin-bottom: 16px;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.list li:last-child {
+  border-bottom: none;
+}
+
+.listName {
+  flex: 1;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.listCount {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-left: 12px;
+}
+
+/* Procesos sugeridos */
+.suggestionsSection {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.suggestionsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.suggestionItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.suggestionItem:last-child {
+  border-bottom: none;
+}
+
+.suggestionName {
+  flex: 1;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.suggestionCount {
+  color: var(--text-muted);
+  margin: 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Botón Agregar */
+.btnAdd {
+  padding: 4px 10px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+  cursor: pointer;
+  transition: opacity 0.12s;
+}
+
+.btnAdd:hover {
+  opacity: 0.9;
+}
+
+.btnAdd:active {
+  opacity: 0.8;
+}
+
+/* Form inline */
+.formInline {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--mono-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.formLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.formSelect,
+.formInput {
+  padding: 6px 8px;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.formSelect:focus,
+.formInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.1);
+}
+
+.formError {
+  padding: 6px 8px;
+  background: rgba(211, 47, 47, 0.1);
+  border: 1px solid rgba(211, 47, 47, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 11px;
+  margin: 0;
+}
+
+.formActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btnConfirm,
+.btnCancel {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity 0.12s;
+  font-family: inherit;
+}
+
+.btnConfirm {
+  background: var(--accent);
+  color: white;
+}
+
+.btnConfirm:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btnConfirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnCancel {
+  background: var(--border-muted);
+  color: var(--text-muted);
+}
+
+.btnCancel:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+.btnCancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Empty state */
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 12px 0;
+}
+
+.loading {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.errorMsg {
+  color: var(--danger);
+  font-size: 13px;
+}

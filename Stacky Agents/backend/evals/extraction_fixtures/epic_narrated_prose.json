@@ -1,0 +1,9 @@
+{
+  "name": "epic_narrated_prose",
+  "kind": "epic",
+  "raw": "Voy a leer el archivo de entrada. La epica para EP-31 ya existe en disco. Listo.",
+  "expect": {
+    "extracted_html_excludes": ["<h1"],
+    "looks_like_epic": false
+  }
+}

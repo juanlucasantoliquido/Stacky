@@ -34,8 +34,11 @@ tener que inferir nada.
    vos mismo los mismos pasos con el mismo prompt.
 4. **Validar.** Revisá el documento contra el "Checklist de aceptación" de abajo. Si algo falla,
    corregilo antes de cerrar.
-5. **Cerrar.** Devolvé la ruta del archivo creado + el resumen de 5 líneas. No hagas commit salvo que
-   el operador lo pida.
+5. **Commitear el plan.** Hacé un commit con el doc nuevo en la rama de trabajo (si estás en `main`, creá
+   rama antes): `git add` del `<NN>_PLAN_*.md` + `git commit -m "docs(plan-<NN>): <slug corto>"`. El mensaje
+   DEBE terminar con `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. NO `git push`
+   salvo pedido del operador; nunca `--no-verify`.
+6. **Cerrar.** Devolvé la ruta del archivo creado + el hash del commit + el resumen de 5 líneas.
 
 ## Restricciones no negociables (van SÍ o SÍ en el plan)
 - **3 runtimes con paridad:** Codex CLI, Claude Code CLI y GitHub Copilot Pro. Todo ítem funciona en los
@@ -128,3 +131,5 @@ por qué NO agrega trabajo al operador, cómo respeta los 3 runtimes).
 - [ ] No degrada performance/seguridad/estabilidad/DX; backward-compatible; reusa lo existente.
 - [ ] Incluye Glosario, Orden de implementación y DoD.
 - [ ] No se implementó código; solo el documento del plan.
+- [ ] Se commiteó el doc del plan en la rama (mensaje `docs(plan-<NN>)` + trailer de co-autoría, sin
+      `--no-verify`); el `push` NO se hizo salvo pedido del operador.

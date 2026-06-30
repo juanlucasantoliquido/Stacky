@@ -1,0 +1,9 @@
+{
+  "name": "epic_duplicated_blocks",
+  "kind": "epic",
+  "raw": "```html\n<h1>Epica dup</h1><h2>RF-001 alfa</h2><p>x</p>\n```\n```html\n<h1>Epica dup</h1><h2>RF-001 alfa</h2><p>x</p>\n```",
+  "expect": {
+    "extracted_html_contains": ["RF-001"],
+    "looks_like_epic": true
+  }
+}

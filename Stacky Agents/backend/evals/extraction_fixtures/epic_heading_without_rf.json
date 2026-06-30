@@ -1,0 +1,9 @@
+{
+  "name": "epic_heading_without_rf",
+  "kind": "epic",
+  "raw": "<h1>Epica sin requisitos</h1><p>Cuerpo descriptivo sin bloque RF.</p>",
+  "expect": {
+    "extracted_html_contains": ["<h1"],
+    "looks_like_epic": false
+  }
+}

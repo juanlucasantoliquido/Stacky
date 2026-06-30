@@ -378,3 +378,56 @@ def test_get_profile_regression_existing_fields_intact(client):
     assert "tracker_type" in body
     # validation solo se incluye cuando has_profile es True.
     assert "validation" in body
+
+
+# ── Plan 45 F5 — validación de process_catalog[*].kind en PUT ─────────────────
+
+def test_put_accepts_valid_process_catalog(client):
+    profile = {
+        "schema_version": 1,
+        "process_catalog": [
+            {"name": "Mul2Bane", "kind": "entry", "purpose": "Convierte lotes"},
+            {"name": "RSCore", "kind": "processing", "purpose": "Aplica reglas"},
+            {"name": "RsExtrae", "kind": "output", "purpose": "Genera salida"},
+        ],
+    }
+    r = client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
+    assert r.status_code == 200, r.get_json()
+
+
+def test_put_rejects_invalid_process_kind(client):
+    profile = {
+        "schema_version": 1,
+        "process_catalog": [{"name": "X", "kind": "wololo", "purpose": "p"}],
+    }
+    r = client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
+    assert r.status_code == 400
+    body = r.get_json()
+    assert body["error"] == "invalid_process_kind"
+    assert body["value"] == "wololo"
+
+
+def test_put_tolerates_empty_kind_during_edit(client):
+    """Una fila recién agregada (kind vacío) no debe bloquear el guardado."""
+    profile = {
+        "schema_version": 1,
+        "process_catalog": [{"name": "", "kind": "", "purpose": ""}],
+    }
+    r = client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
+    assert r.status_code == 200, r.get_json()
+
+
+def test_put_rejects_non_list_catalog(client):
+    profile = {"schema_version": 1, "process_catalog": "nope"}
+    r = client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
+    assert r.status_code == 400
+
+
+# ── Plan 45 F3 — flag issue_from_brief_enabled expuesto al frontend ───────────
+
+def test_frontend_config_exposes_issue_flag(client):
+    r = client.get("/api/tickets/config/frontend")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert "issue_from_brief_enabled" in body
+    assert isinstance(body["issue_from_brief_enabled"], bool)

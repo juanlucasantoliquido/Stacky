@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Executions, type ExecutionHistoryItem } from "../api/endpoints";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
+import GroundingObservatoryCard from "../components/GroundingObservatoryCard";
 import { useWorkbench } from "../store/workbench";
 import styles from "./ExecutionHistoryPage.module.css";
 
@@ -120,6 +121,9 @@ export default function ExecutionHistoryPage() {
           {activeProject?.name ?? "Todos los proyectos"} · {isLoading ? "cargando…" : `${items.length} resultado${items.length !== 1 ? "s" : ""}`}
         </span>
       </div>
+
+      {/* Plan 44 F4 — Observatorio de grounding (solo-lectura) */}
+      <GroundingObservatoryCard />
 
       {/* Filtros */}
       <div className={styles.filters}>

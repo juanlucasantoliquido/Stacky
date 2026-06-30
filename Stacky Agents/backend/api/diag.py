@@ -20,6 +20,9 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request, send_file
 
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+
 from db import session_scope
 from models import AgentExecution, Ticket
 from services.heartbeat_monitor import (
@@ -549,3 +552,60 @@ def _diagnose(
 
 def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() + "Z" if dt else None
+
+
+# ── Plan 46 — Panel de Salud Operativa (triage solo-lectura) ──────────────────
+
+def _recent_executions(session, limit: int) -> list:
+    """C4: joinedload evita N+1 al leer ex.ticket.stacky_project_name en el loop."""
+    stmt = (
+        select(AgentExecution)
+        .options(joinedload(AgentExecution.ticket))
+        .order_by(AgentExecution.started_at.desc())
+        .limit(limit)
+    )
+    return list(session.execute(stmt).scalars().all())
+
+
+@bp.get("/operational-health")
+def operational_health():
+    """Plan 46 — Triage solo-lectura de runs recientes. No muta nada.
+
+    GET /api/diag/operational-health[?limit=&cost_usd=&zombie_minutes=&needs_review_stale_days=]
+    Gated por STACKY_OPERATIONAL_HEALTH_ENABLED (default true). OFF → 404.
+    """
+    if os.getenv("STACKY_OPERATIONAL_HEALTH_ENABLED", "true").lower() == "false":
+        return jsonify({"ok": False, "error": "disabled"}), 404
+
+    from services.operational_health import aggregate_operational_health
+
+    # C2 — parse defensivo de limit (no romper con ?limit=abc).
+    try:
+        limit = int(request.args.get("limit", 200))
+    except (TypeError, ValueError):
+        limit = 200
+    limit = max(1, min(limit, 500))
+
+    # Umbrales: zombie default = timeout real del sistema (single source of truth);
+    # los overrides del operador (query params) siguen ganando.
+    thresholds: dict = {"zombie_minutes": EXECUTION_TIMEOUT_MINUTES}
+    for k in ("cost_usd", "zombie_minutes", "needs_review_stale_days"):
+        v = request.args.get(k)
+        if v is not None:
+            try:
+                thresholds[k] = float(v) if k == "cost_usd" else int(float(v))
+            except (TypeError, ValueError):
+                pass
+
+    rows = []
+    with session_scope() as session:
+        for ex in _recent_executions(session, limit):
+            d = ex.to_dict(include_output=False)
+            d["project"] = ex.ticket.stacky_project_name if ex.ticket else None
+            rows.append(d)
+
+    result = aggregate_operational_health(
+        rows, now_iso=datetime.utcnow().isoformat(), thresholds=thresholds or None
+    )
+    result["ok"] = True
+    return jsonify(result)

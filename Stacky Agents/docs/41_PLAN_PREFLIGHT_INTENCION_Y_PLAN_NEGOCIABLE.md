@@ -1,6 +1,14 @@
 # Plan 41 — Pre-vuelo de Intención: que Stacky te diga "esto es lo que entendí y así lo voy a hacer" ANTES de gastar el run, y vos lo confirmes o corrijas en 1 click
 
-> **Estado:** PROPUESTO (ningún ítem implementado).
+> **Estado:** IMPLEMENTADO 2026-06-19 (F0–F4).
+>
+> **Validación (2026-06-19):** test_intent_preflight_contract.py (6), test_intent_preflight_generate.py (5),
+> test_intent_preflight_ranking.py (5), test_run_brief_preflight.py (7), test_corrections_block_priority.py (2);
+> sin regresión en run_brief/flags; tsc --noEmit exit 0. Modal IntentPreflightModal.tsx integrado en EpicFromBriefModal.
+> **Nota de implementación:** la pasada corta (`invoke_short_llm`) usa el LLM backend interno (copilot_bridge),
+> server-side y agnóstico al runtime del agente; si el bridge no está disponible → PreflightRuntimeUnavailable →
+> fallback al camino normal (idéntico a flag OFF). Esto respeta el contrato (nunca bloquea) aunque no abra una
+> sesión CLI corta por runtime (decisión arquitectónica: el cerebro de Stacky usa LLM_BACKEND, no el runtime).
 > **Numeración:** 41 (consecutiva; máximo previo real en `Stacky Agents/docs/` = `40_PLAN_BUSINESS_AGENT_EPICA_GENERICA_AUTONOMA.md`. La secuencia es compartida planes/checklists/incidentes; 41 es el siguiente libre sin huecos).
 > **Autor:** StackyArquitectoBrainstormer (frente divergente) — para pasar por el juez `criticar-y-mejorar-plan`.
 > **Audiencia de implementación:** dev agéntico junior / modelo menor (Haiku, Codex CLI, GitHub Copilot Pro). Cada fase es autocontenida: objetivo en 1 frase, archivos EXACTOS, símbolos EXACTOS, pseudocódigo/diff, tests primero con comando exacto, criterio binario, flag + default seguro, impacto por runtime con fallback, y línea "Trabajo del operador".

@@ -1,0 +1,13 @@
+{
+  "name": "epica_solo_procesos_validos",
+  "html": "<h1>E</h1><p>usa el proceso RSCore y el modulo IncHost</p>",
+  "catalog": [
+    {
+      "name": "RSCore"
+    },
+    {
+      "name": "IncHost"
+    }
+  ],
+  "expect_unknown": []
+}

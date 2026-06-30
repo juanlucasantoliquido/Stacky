@@ -24,6 +24,8 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request
 
 from runtime_paths import backend_root
+from services.gitlab_client import GitLabClient  # importado a nivel módulo para parchear en tests
+from services.tracker_provider import TrackerConfigError as _TrackerConfigError  # ídem
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +72,18 @@ _MANAGED_KEYS = [
     "CLAUDE_CODE_CLI_EFFORT",
     "CLAUDE_CODE_CLI_PERMISSION_MODE",
     "CLAUDE_CODE_CLI_SKIP_PERMISSIONS",
+    # GitLab (Plan 65) — NUNCA incluir GITLAB_TOKEN aquí (secret)
+    "GITLAB_URL",
+    "GITLAB_PROJECT",
+    "STACKY_GITLAB_GROUP",
+    "STACKY_GITLAB_ENABLED",
+    "STACKY_GITLAB_EPICS_NATIVE",
+    "STACKY_GITLAB_CI_INFERENCE",
 ]
 
 # Claves que contienen secrets -- no se devuelven en GET
 _SECRET_KEYS = {"ADO_PAT", "JIRA_TOKEN", "MANTIS_TOKEN", "MANTIS_PASSWORD", "OPENAI_API_KEY"}
+# GITLAB_TOKEN no está en _MANAGED_KEYS (nunca persiste por esta ruta)
 
 # Valores por defecto para campos Codex cuando no estan en el .env
 _CODEX_DEFAULTS = {
@@ -264,6 +274,45 @@ def test_global_tracker_connection():
             # (get_project_statuses no disponible todavia en WS1)
             projects = client.list_projects()
             msg = f"Mantis -- conexion OK. {len(projects)} proyecto(s) visible(s)."
+
+        elif t_type == "gitlab":
+            base = _merge("gitlab_url", "GITLAB_URL").rstrip("/")
+            proj = _merge("gitlab_project", "GITLAB_PROJECT")
+            if not base or not proj:
+                return jsonify({"ok": False, "error": "Falta GITLAB_URL o GITLAB_PROJECT"})
+
+            try:
+                c = GitLabClient(base_url=base, project=proj)
+            except _TrackerConfigError as e:
+                return jsonify({"ok": False, "error": str(e)})
+
+            checks: dict[str, object] = {"auth": False, "read": False, "write_permission": None}
+            user: dict = {}
+
+            try:
+                user, _ = c._request("GET", "/user")
+                checks["auth"] = bool(user.get("id"))
+            except Exception as exc_gl:
+                return jsonify({"ok": False, "error": f"Auth GitLab falló: {exc_gl}"})
+
+            try:
+                c._request("GET", f"/projects/{c._project_path()}/issues", params={"per_page": 1})
+                checks["read"] = True
+            except Exception:
+                pass
+
+            try:
+                uid = user.get("id")
+                if uid:
+                    member, _ = c._request(
+                        "GET", f"/projects/{c._project_path()}/members/all/{uid}"
+                    )
+                    checks["write_permission"] = (member.get("access_level", 0) >= 30)
+            except Exception:
+                checks["write_permission"] = None  # desconocido
+
+            ok = bool(checks["auth"] and checks["read"])
+            msg = f"GitLab -- conexion {'OK' if ok else 'PARCIAL'}. Checks: {checks}"
 
         else:
             return jsonify({"ok": False, "error": f"Tipo de tracker desconocido: {t_type}"}), 400

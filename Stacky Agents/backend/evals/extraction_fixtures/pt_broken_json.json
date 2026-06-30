@@ -1,0 +1,6 @@
+{
+  "name": "pt_broken_json",
+  "kind": "pending_task",
+  "raw": "{ rf_id: 12,",
+  "expect": { "json_ok": false }
+}

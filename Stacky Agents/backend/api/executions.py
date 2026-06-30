@@ -11,6 +11,7 @@ import log_streamer
 from db import session_scope
 from models import AgentExecution, Ticket
 from ._helpers import current_user
+from services import human_review as human_review_svc
 from services.project_context import resolve_project_context
 from project_manager import (
     PROJECTS_DIR,
@@ -172,6 +173,106 @@ def _set_verdict(execution_id: int, verdict: str):
                 result["stacky_memory_id"] = memory_id
         except Exception:  # noqa: BLE001
             logger.warning("post_run_memory approval hook falló exec=%s", execution_id, exc_info=True)
+    return jsonify(result)
+
+
+# ── Plan 47 — Veredicto humano de runs (anotación, no transición de estado) ───
+
+# Estados sobre los que el operador PUEDE emitir veredicto humano: completed
+# (legacy) + needs_review (gap del Plan 46). NO incluye running/error/failed.
+_HUMAN_REVIEWABLE_STATUSES = ("completed", "needs_review")
+
+
+@bp.post("/<int:execution_id>/human-review")
+def human_review_route(execution_id: int):
+    """Plan 47 F1 — Persiste el veredicto humano + nota en metadata_json.
+
+    Anotación, NO transición: una run en needs_review con veredicto "rejected"
+    SIGUE en needs_review (el status no cambia). Funciona sobre completed y
+    needs_review. La promoción a memoria (F2) es opt-in vía flag y best-effort.
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    try:
+        block = human_review_svc.build_human_review(
+            verdict=payload.get("verdict"),
+            note=payload.get("note"),
+            reviewed_by=current_user(),
+        )
+    except ValueError as exc:
+        abort(400, str(exc))
+
+    # Datos para captura de goldens (Plan 56 F2): extraídos dentro del scope.
+    _review_snapshot: dict = {}
+
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        if row is None:
+            abort(404)
+        if row.status not in _HUMAN_REVIEWABLE_STATUSES:
+            abort(409, f"execution not reviewable in status '{row.status}'")
+        meta = row.metadata_dict
+        meta[human_review_svc.METADATA_KEY] = block
+        row.metadata_dict = meta  # setter → reserializa metadata_json
+        # Reflejar en la columna verdict existente (sin romper legacy).
+        row.verdict = (
+            "approved" if block["verdict"] in ("approved", "approved_with_notes") else "rejected"
+        )
+        result = row.to_dict(include_output=False)
+        # Snapshot para golden capture (fuera del scope no hay acceso lazy)
+        _review_snapshot = {
+            "id": row.id,
+            "agent_type": row.agent_type,
+            "output": row.output,
+            "metadata_dict": dict(row.metadata_dict),
+            "project": (row.ticket.stacky_project_name if row.ticket else None),
+            "work_item_type": (row.ticket.work_item_type if row.ticket else "Epic"),
+        }
+
+    # C3 — persistencia del veredicto vs captura opt-in a memoria, separadas.
+    result["human_review_persisted"] = True
+    result["operator_note_captured"] = False
+
+    # F2 — promoción opt-in a memoria (flag OFF por default). Best-effort.
+    try:
+        from services import post_run_memory
+        memory_id = post_run_memory.capture_operator_note(execution_id)
+        if memory_id:
+            result["stacky_memory_id"] = memory_id
+            result["operator_note_captured"] = True
+    except Exception:  # noqa: BLE001 — el veredicto ya se persistió; nunca romper el request
+        logger.warning("capture_operator_note falló exec=%s", execution_id, exc_info=True)
+
+    # Plan 56 F2 — captura de golden positivo/negativo. Best-effort, siempre activo.
+    try:
+        from services.regression_capture import save_goldens_from_review
+
+        class _ExecSnapshot:
+            """Duck-type compatible con AgentExecution para regression_capture."""
+            def __init__(self, snap: dict):
+                self.id = snap["id"]
+                self.agent_type = snap["agent_type"]
+                self.output = snap["output"]
+                self._metadata_dict = snap["metadata_dict"]
+
+                class _T:
+                    pass
+                t = _T()
+                t.stacky_project_name = snap["project"]
+                t.work_item_type = snap["work_item_type"]
+                self.ticket = t
+
+            @property
+            def metadata_dict(self):
+                return self._metadata_dict
+
+        save_goldens_from_review(
+            execution=_ExecSnapshot(_review_snapshot),
+            verdict=block["verdict"],
+            note=payload.get("note") or "",
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("save_goldens_from_review falló exec=%s", execution_id, exc_info=True)
+
     return jsonify(result)
 
 

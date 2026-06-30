@@ -99,6 +99,19 @@ class BaseAgent(ABC):
                     meta["anti_patterns_count"] = len(patterns)
                 else:
                     meta["anti_patterns_count"] = 0
+                # Plan 54 F1 — lecciones de rechazo vía helper compartido (paridad 3 runtimes).
+                _rej_existing = {
+                    " ".join((p.pattern or "").lower().split()) for p in patterns
+                }
+                from services.memory_prefix import build_memory_prefix as _bmp  # noqa: PLC0415
+                _rej_prefix, _rej_meta = _bmp(
+                    project=run_ctx.project,
+                    agent_type=self.type,
+                    existing_patterns=_rej_existing,
+                )
+                if _rej_prefix:
+                    prefix_parts.append(_rej_prefix)
+                meta.update(_rej_meta)
             except Exception as exc:  # noqa: BLE001
                 meta["anti_patterns_error"] = str(exc)
                 meta["anti_patterns_count"] = 0

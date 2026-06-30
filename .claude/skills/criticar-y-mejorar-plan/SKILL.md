@@ -24,7 +24,7 @@ Al ejecutarse, la skill produce:
 2. Una crítica adversarial con hallazgos numerados C1..Cn, rankeados por severidad (BLOQUEANTE / IMPORTANTE / MENOR). Cada hallazgo incluye: qué está mal, por qué importa, y el fix concreto.
 3. Un VEREDICTO de juez binario: APROBADO / APROBADO-CON-CAMBIOS / RECHAZADO, con los criterios binarios que lo sustentan.
 4. Al menos una adición proactiva de alto valor, marcada explícitamente como "[ADICIÓN ARQUITECTO]" (regla innegociable: nunca "nada que agregar").
-5. Un resumen final de 5 líneas. No hace commit salvo que el operador lo pida.
+5. Un resumen final de 5 líneas y un commit del plan v2 en la rama de trabajo (mensaje `docs(plan-<NN>): critica v1->v2` + trailer de co-autoría). El `push` NO se hace salvo pedido del operador. Si se eligió la alternativa de patches, no hay commit.
 
 ## Pasos de ejecución
 
@@ -32,7 +32,8 @@ Al ejecutarse, la skill produce:
 2. Orientarte barato: leé el plan objetivo completo y escaneá 2-3 planes vecinos (por número, los inmediatamente anteriores) solo para coherencia y para detectar lo ya implementado o ya decidido. No releer todo el repo.
 3. Delegar el trabajo pesado al subagente `StackyArchitectaUltraEficientCode` (tool Agent) pasándole el "Prompt para el arquitecto-juez" embebido más abajo y la ruta del plan objetivo. Si ese subagente NO está disponible, ejecutar los mismos pasos inline con el mismo prompt. Pasale solo la ruta del plan y, si aplica, las rutas de los vecinos — nada de contexto de más.
 4. Validar la salida contra la "Checklist de aceptación" antes de cerrar: que existan C1..Cn rankeados, veredicto binario, al menos una "[ADICIÓN ARQUITECTO]", y el plan v2 (o el bloque de patches).
-5. Cerrar devolviendo: la ruta del plan v2 (o de los patches), el veredicto, y un resumen de 5 líneas. Sin commit salvo que el operador lo pida.
+5. Commitear la v2: hacé un commit con el plan reescrito en la rama de trabajo (si estás en `main`, creá rama antes): `git add` del `<NN>_PLAN_*.md` + `git commit -m "docs(plan-<NN>): critica v1->v2"`. El mensaje DEBE terminar con `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. NO `git push` salvo pedido del operador; nunca `--no-verify`. (Si el operador eligió la alternativa de patches en vez de reescribir in place, no hay commit: entregás el bloque de patches.)
+6. Cerrar devolviendo: la ruta del plan v2 (o de los patches), el hash del commit, el veredicto, y un resumen de 5 líneas.
 
 ## Restricciones no negociables
 
@@ -109,4 +110,5 @@ RESTRICCIONES NO NEGOCIABLES (valen para tus críticas Y tus fixes): paridad de 
 - [ ] El entregado es el plan reescrito a v2 in place con encabezado de versión (v1 -> v2) + changelog corto, O un bloque de patches concretos (default = reescribir in place); con trazabilidad de versión.
 - [ ] Todos los fixes respetan las restricciones no negociables (3 runtimes, cero trabajo extra, human-in-the-loop, mono-operador sin auth, no degradar, reuso, flags seguros).
 - [ ] El trabajo pesado se delegó al subagente `StackyArchitectaUltraEficientCode` (o se ejecutó inline con el mismo prompt si no estaba disponible), pasándole solo la ruta del plan y vecinos — sin contexto de más.
-- [ ] Se devolvió un resumen final de 5 líneas y NO se hizo commit (salvo pedido explícito del operador).
+- [ ] Se commiteó el plan v2 en la rama (mensaje `docs(plan-<NN>): critica v1->v2` + trailer de co-autoría, sin `--no-verify`); el `push` NO se hizo salvo pedido del operador. (Salvo que se haya elegido la alternativa de patches, donde no hay commit.)
+- [ ] Se devolvió un resumen final de 5 líneas + el hash del commit.

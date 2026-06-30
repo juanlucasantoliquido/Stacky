@@ -1,0 +1,10 @@
+{
+  "name": "epic_html_in_prose",
+  "kind": "epic",
+  "raw": "Voy a leer el archivo de entrada.\n\n```html\n<h1>Epica: Carga de procesos batch</h1>\n<h2>RF-001 Validar entrada</h2><p>El sistema valida el formato.</p>\n```\n\nListo, escribi la epica en disco.",
+  "expect": {
+    "extracted_html_contains": ["<h1>Epica", "RF-001"],
+    "extracted_html_excludes": ["Voy a leer", "Listo, escribi"],
+    "looks_like_epic": true
+  }
+}

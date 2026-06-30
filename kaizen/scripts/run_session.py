@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -254,6 +255,17 @@ def main(argv: list[str]) -> int:
         print("verdict=%s status=%s total=%d escalated=%s" % (
             decision["verdict"], status, decision["_meta"]["computed_total"],
             decision["escalated_to_human"]))
+
+    # Regenerar dashboard estático (best-effort: silencia errores para no romper el gate).
+    # Solo si el directorio dashboard/ ya existe (no lo crea en tests sin dashboard).
+    if (ROOT / "dashboard").is_dir():
+        try:
+            subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "dashboard_static.py")],
+                cwd=str(ROOT), capture_output=True, timeout=15)
+        except Exception:  # noqa: BLE001
+            pass  # silencioso: el dashboard es best-effort
+
     return 0
 
 

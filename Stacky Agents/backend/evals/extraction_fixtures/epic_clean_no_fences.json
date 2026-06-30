@@ -1,0 +1,9 @@
+{
+  "name": "epic_clean_no_fences",
+  "kind": "epic",
+  "raw": "<h1>Epica limpia</h1><h2>RF-002 requisito</h2><p>detalle</p>",
+  "expect": {
+    "extracted_html_contains": ["<h2"],
+    "looks_like_epic": true
+  }
+}

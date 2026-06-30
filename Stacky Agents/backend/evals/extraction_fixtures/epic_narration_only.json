@@ -1,0 +1,9 @@
+{
+  "name": "epic_narration_only",
+  "kind": "epic",
+  "raw": "Analice el brief y guarde el resultado en un archivo local. No hay nada mas que reportar.",
+  "expect": {
+    "extracted_html_excludes": ["<h1"],
+    "looks_like_epic": false
+  }
+}

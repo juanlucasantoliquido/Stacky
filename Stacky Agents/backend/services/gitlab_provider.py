@@ -20,7 +20,7 @@ import re
 import urllib.parse
 from typing import Optional
 
-from services.tracker_provider import TrackerItem, TrackerQuery, TrackerApiError
+from services.tracker_provider import TrackerItem, TrackerQuery, TrackerApiError, TrackerConfigError
 from services.gitlab_client import GitLabClient  # importado a nivel módulo para poder parchear en tests
 import config  # importado a nivel módulo para poder parchear en tests
 
@@ -164,10 +164,50 @@ class GitLabTrackerProvider:
         body, _ = self._client._request("GET", f"/projects/{proj_path}/issues/{item_id}")
         return self._normalize_issue(body)
 
-    def item_url(self, item_id: str) -> str:
-        base = self._client._base_url
-        proj = self._project
-        return f"{base}/{proj}/-/issues/{item_id}"
+    def item_url(self, item_id: str) -> "str | None":
+        """URL de issue GitLab. Devuelve None si STACKY_GITLAB_DEEP_LINKS_ENABLED=False.
+
+        Plan 75 F2: reescrito para usar compose_issue_url (corrige gap de encoding para
+        sub-groups) y gateado por el flag. _project_path() devuelve el path ya URL-encoded;
+        compose_issue_url lo usa directamente sin re-encodear (C3).
+        """
+        if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+            return None
+        from services.gitlab_deep_links import compose_issue_url
+        return compose_issue_url(self._client._base_url, self._client._project_path(), item_id)
+
+    def mr_url(self, mr_iid: str) -> "str | None":
+        """URL de merge request GitLab. Devuelve None si STACKY_GITLAB_DEEP_LINKS_ENABLED=False.
+
+        Plan 75 F2 — método NUEVO del provider GitLab (no del puerto TrackerProvider).
+        """
+        if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+            return None
+        from services.gitlab_deep_links import compose_mr_url
+        return compose_mr_url(self._client._base_url, self._client._project_path(), mr_iid)
+
+    def commit_url(self, sha: str) -> "str | None":
+        """URL de commit GitLab. Devuelve None si STACKY_GITLAB_DEEP_LINKS_ENABLED=False.
+
+        Plan 75 F2 — método NUEVO del provider GitLab (no del puerto TrackerProvider).
+        """
+        if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+            return None
+        from services.gitlab_deep_links import compose_commit_url
+        return compose_commit_url(self._client._base_url, self._client._project_path(), sha)
+
+    def epic_url(self, epic_iid: str) -> "str | None":
+        """URL de épica GitLab (Premium). Devuelve None si STACKY_GITLAB_DEEP_LINKS_ENABLED=False.
+
+        Plan 75 F2 — método NUEVO del provider GitLab (no del puerto TrackerProvider).
+        Requiere _group configurado; levanta TrackerConfigError si Free sin _group.
+        """
+        if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+            return None
+        from services.gitlab_deep_links import compose_epic_url
+        if not self._group:
+            raise TrackerConfigError("GitLab Free: epicas no nativas; usar fallback Free (F3)")
+        return compose_epic_url(self._client._base_url, self._group, epic_iid)
 
     def fetch_states(self) -> list[str]:
         """Devuelve los estados lógicos disponibles (del state map)."""

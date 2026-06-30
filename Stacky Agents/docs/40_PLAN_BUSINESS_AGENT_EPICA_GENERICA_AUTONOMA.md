@@ -1,6 +1,6 @@
 # Plan 40 — Business Agent: Épica genérica, rica, autónoma + modelo configurable
 
-> **Estado:** propuesto (v2 del plan; reescrito tras auditoría crítica).
+> **Estado:** IMPLEMENTADO (verificado contra código 2026-06-19). F1 BusinessAgent.agent.md (v1.5.0, R-BATCH), F2 .agent.md versionados, F3 wiring model_override+effort en run_brief (agents.py:589-649), tests test_run_brief_model_override.py verdes. (La cabecera "propuesto" original era stale.)
 > **Entregable triple:**
 > 1. Reescritura ya aplicada de `backend/Stacky/agents/BusinessAgent.agent.md` (v1.1.0) — ver F1.
 > 2. `.agent.md` versionados en git (ya un-ignorados; ver F2 — verificación, no cambio).

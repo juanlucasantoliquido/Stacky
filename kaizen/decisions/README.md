@@ -4,6 +4,29 @@
 
 | Num | Titulo | Veredicto |
 |-----|--------|----------|
+| 0085-t | ADR 0085 — test_core: tests de run_session.load_profile y ru | accept |
+| 0084-t | ADR 0084 — test_aotl: apply delete + rollback restaura (refu | accept |
+| 0083-s | ADR 0083 — sincronizar conteos: test_aotl.py a 70 tests y do | accept |
+| 0082-t | ADR 0082 — test_aotl: run_iteration caminos escalated e iter | accept |
+| 0081-t | ADR 0081 — test_aotl: smoke test de autoloop.run_iteration c | accept |
+| 0080-t | ADR 0080 — test_aotl: tests de autoloop.measure y autoloop.p | accept |
+| 0079-d | ADR 0079 — docs/04_HUMAN_REVIEW.md: corregir .md -> .json y  | accept |
+| 0078-d | ADR 0078 — docs/03_SESSIONS.md: sincronizar artefactos reale | accept |
+| 0077-t | ADR 0077 — test_core: tests de check.run_and_capture y engin | accept |
+| 0076-t | ADR 0076 — test_core: spawn_child.max_iterations, write_json | accept |
+| 0075-t | ADR 0075 — test_core: tests de metrics.print_report, read_in | accept |
+| 0074-t | ADR 0074 — test_aotl: tests de apply.commit_applied con mock | accept |
+| 0073-t | ADR 0073 — test_aotl: tests de create_session y run_gate con | accept |
+| 0072-t | ADR 0072 — test_core: tests de validate.validate_session (B- | accept |
+| 0071-s | ADR 0071 — Sincronizar docstrings + 02_USAGE.md + backlog tr | accept |
+| 0070-t | ADR 0070 — test_core: test de run_session.load_json — 3 caso | accept |
+| 0069-t | ADR 0069 — test_aotl: test de ClaudeEngine._context_block (B | accept |
+| 0068-s | ADR 0068 — Sincronizar docstring test_core.py a 113, docs/02 | accept |
+| 0067-t | ADR 0067 — test_core: test de run_session.update_index_statu | accept |
+| 0066-s | ADR 0066 — Sincronizar docstring test_core.py y docs/02_USAG | accept |
+| 0065-t | ADR 0065 — test_core: test de build_context en autoloop.py — | accept |
+| 0064-t | ADR 0064 — Reclasificar B-73 (ya cubierto) y ejecutar B-75:  | accept |
+| 0063-a | ADR 0063 — Actualizar BACKLOG_AUTOMEJORA.md: marcar B-69/B-7 | accept |
 | 0062-a | ADR 0062 — Anotar latido de automejora #1 | accept |
 | 0061-t | ADR 0061 — tests de validate.check_scores (B-50) | accept |
 | 0060-t | ADR 0060 — tests de forensic.py sha256 y Forensic.log (B-49) | accept |

@@ -1,0 +1,12 @@
+{
+  "name": "epica_proceso_inventado",
+  "html": "<h1>E</h1><p>usa el proceso FacturacionFantasma</p>",
+  "catalog": [
+    {
+      "name": "RSCore"
+    }
+  ],
+  "expect_unknown": [
+    "FacturacionFantasma"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "epica_sin_html",
+  "html": "",
+  "catalog": [
+    {
+      "name": "RSCore"
+    }
+  ],
+  "expect_unknown": []
+}

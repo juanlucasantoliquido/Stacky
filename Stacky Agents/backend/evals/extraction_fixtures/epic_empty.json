@@ -1,0 +1,8 @@
+{
+  "name": "epic_empty",
+  "kind": "epic",
+  "raw": "",
+  "expect": {
+    "looks_like_epic": false
+  }
+}

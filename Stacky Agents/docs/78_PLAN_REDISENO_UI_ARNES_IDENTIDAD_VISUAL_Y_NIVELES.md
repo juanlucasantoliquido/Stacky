@@ -1,6 +1,36 @@
-# Plan 78 — Rediseño UI del Arnés: identidad visual, dashboard de salud y niveles Simple/Experto
+# Plan 78 — Rediseño UI del Arnés: identidad visual, panel de configuración activa y niveles Simple/Experto
 
-> **Versión:** v2 → v3 (segunda pasada adversarial — juez `criticar-y-mejorar-plan`).
+> **Versión:** v3 → v4 (tercera pasada adversarial — juez `criticar-y-mejorar-plan`, verificada contra código).
+>
+> **CHANGELOG v4:**
+> - **C14 (BLOQUEANTE) — F4/C9: la "navegación por intención" es un NO-OP y cita código inexistente.**
+>   El changelog v3 (C9) instruye "extender el filtro de `orderedSections`... donde el código hace
+>   `cat.label.toLowerCase().includes(qLower) || cat.description...`". **Ese predicado de sección NO
+>   EXISTE** (verificado: `HarnessFlagsPanel.tsx:227-234` filtra FLAGS individuales por
+>   `f.label/f.description/f.key`; `orderedSections:250-254` agrupa flags YA filtradas y **descarta
+>   con `.filter(catFlags.length > 0)` toda categoría sin flag que matchee**). Consecuencia doble:
+>   (1) un modelo menor busca el predicado citado, no lo encuentra y lo inventa mal; (2) aunque
+>   agregue `intent` a nivel sección, la categoría igual se cae en `:253` porque ningún flag
+>   individual matcheó → buscar "publicar épica" **no muestra nada**. Fix reescrito en F4/C9 con la
+>   mecánica REAL: cambiar `orderedSections` para retener una categoría cuando matchea un flag
+>   **O** cuando `qLower` matchea `cat.label`/`cat.intent`, y en el caso intent-match mostrar todas
+>   sus flags. Anclado a `HarnessFlagsPanel.tsx:250-254` por símbolo, con diff exacto.
+> - **C15 (IMPORTANTE) — C7 cita falsa: `SettingsPage.harness.test.tsx` NO es inexistente y TAMBIÉN monta el panel.**
+>   El changelog v3 afirmó que `SettingsPage.harness.test.tsx` "INEXISTENTE". **Existe**
+>   (`frontend/src/pages/__tests__/SettingsPage.harness.test.tsx`) y monta `HarnessFlagsPanel`
+>   (asersa "Gate de contrato (claude)" en `:102`). Su mock de `categories` (`:43-45`) NO trae `tier`
+>   → en modo Simple su único flag (`runtimes_cli`) renderiza directo SOLO porque F0 marca
+>   `runtimes_cli` como `tier="simple"` — frágil e implícito. F7 ahora lista AMBOS archivos de test
+>   y exige agregar `tier: "simple"` a `categories[runtimes_cli]` en `SettingsPage.harness.test.tsx`
+>   también, para que el invariante no dependa de un mock sin `tier`.
+> - **C16 (MENOR) — [ADICIÓN ARQUITECTO] centinela de paridad de mocks de categorías en tests.**
+>   Para que el supuesto "el mock que monta el panel trae al menos una categoría `tier:simple`" deje
+>   de ser implícito, F7 agrega un comentario-contrato en ambos mocks y un criterio en el DoD. Hace
+>   explícita la dependencia que hoy es tácita.
+> - **C17 (MENOR) — título del documento desalineado con el contenido (C8).**
+>   El título sigue diciendo "dashboard de salud" cuando C8 (v3) renombró todo a "Configuración
+>   activa / % de flags activas". Título corregido a "panel de configuración activa" para no
+>   reintroducir la confusión de salud que C8 cerró.
 >
 > **CHANGELOG v3:**
 > - **C7 (IMPORTANTE) — F3+F7: test `HarnessFlagsPanel.test.tsx` rompe con la eliminación del profileBar.**

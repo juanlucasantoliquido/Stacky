@@ -70,11 +70,14 @@ def _render_run_footer(execution: AgentExecution) -> str:
     if isinstance(telem, dict):
         cost = telem.get("total_cost_usd")
 
+    tracker_provider = str(md.get("tracker_provider") or "ado")
+
     parts: list[str] = ["Stacky", str(execution.agent_type)]
     if model:
         parts.append(f"{runtime}/{model}")
     else:
         parts.append(runtime)
+    parts.append(f"tracker:{tracker_provider}")
     if duration:
         parts.append(duration)
     if cost is not None:

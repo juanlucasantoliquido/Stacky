@@ -758,7 +758,8 @@ return (
 | R8 | Duplicación de UI (profileBar + hero coexisten). | F3 especifica EXPLÍCITAMENTE qué elementos JSX se eliminan (ancla simbólica `className={styles.profileBar}` y `className={styles.summary}`). No hay ambigüedad. **Cerrado (C1).** |
 | R9 | Icono duplicado rompe reconocimiento por icono. | `observabilidad_notif` usa `Monitor` (no `Activity` como en v1). Mapa con 15 iconos todos distintos. **Cerrado (C3).** |
 | R10 | Test `HarnessFlagsPanel.test.tsx` rompe por eliminación del profileBar. | F7 exige actualizar la aserción `/Perfil activo/i` → `/Perfil:/i` y el mock de categoría. **Cerrado (C7).** |
-| R11 | "Navegación por intención" es decorativa si `intent` no está en el predicado de búsqueda. | [ADICIÓN ARQUITECTO C9] F4 exige extender el filtro de `orderedSections` con `cat.intent` en el predicado de búsqueda. **Cerrado (C9).** |
+| R11 | "Navegación por intención" es decorativa si `intent` no está en la búsqueda. | [ADICIÓN ARQUITECTO C9, corregido C14] F4 reescribe `orderedSections` (`:250-254`) para retener la categoría cuando `qLower` matchea `cat.intent`/`cat.label`. **NO existe un predicado de sección preexistente** (la búsqueda v3 era un NO-OP que citaba código inexistente). **Cerrado (C14).** |
+| R12 | El test `SettingsPage.harness.test.tsx` también monta el panel y rompe/oculta su flag en modo Simple si su mock de `categories` no trae `tier`. | F7 exige `tier: "simple"` en `categories[runtimes_cli]` de **ambos** archivos de test + comentario-contrato. **Cerrado (C15+C16).** |
 
 ---
 
@@ -799,5 +800,7 @@ F0 y F1 pueden hacerse en paralelo (F1 declara campos opcionales que no dependen
 7. `<div className={styles.profileBar}>` y `<div className={styles.summary}>` eliminados del JSX (no duplicados con el hero).
 8. Mapa `CATEGORY_VISUALS`: 15 iconos distintos (sin duplicados); `observabilidad_notif` usa `Monitor`.
 9. **[C8]** Hero titulado "Arnés — Configuración activa"; barra = `heroActivityBar`/`heroActivityFill` con comentario explícito "NO es indicador de salud".
-10. **[C9 ADICIÓN ARQUITECTO]** Predicado de búsqueda de `orderedSections` incluye `cat.intent` → buscar "publicar épica" matchea la categoría correcta.
+10. **[C9 ADICIÓN ARQUITECTO + C14]** `orderedSections` (`HarnessFlagsPanel.tsx:250-254`) reescrito para retener una categoría cuando `qLower` matchea su `cat.intent`/`cat.label` (no solo cuando matchea un flag), mostrando todas sus flags en ese caso. Verificación manual: buscar "publicar épica" muestra la sección `epicas_ado`. (NO hay predicado de sección preexistente — el fix cambia `orderedSections`, no un `sectionMatch` imaginario.)
 11. **[C12]** Toggle `<div role="group" aria-label="Nivel de configuración">` con `aria-pressed` en ambos botones.
+12. **[C15+C16]** Los DOS archivos de test que montan el panel (`HarnessFlagsPanel.test.tsx` y `SettingsPage.harness.test.tsx`) tienen `tier: "simple"` en la categoría del flag que aseran + comentario-contrato; ninguno depende de un mock sin `tier`.
+13. **[C17]** Título del documento sin la palabra "salud" (alineado con C8): "panel de configuración activa".

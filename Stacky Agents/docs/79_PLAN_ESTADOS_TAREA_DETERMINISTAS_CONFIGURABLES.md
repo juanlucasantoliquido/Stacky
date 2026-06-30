@@ -1,7 +1,24 @@
 # Plan 79 — Estados de tarea DETERMINISTAS y CONFIGURABLES por el operador
 
 > **Estado:** PROPUESTO (sin implementar) · **Autor:** StackyArchitectaUltraEficientCode · **Fecha:** 2026-06-30
-> **Versión:** v2 (criticado v1→v2, juez adversarial) · **Siguiente número libre verificado:** el doc de mayor `NN_` en `Stacky Agents/docs/` es `78_PLAN_...` → este es **79**.
+> **Versión:** v3 (criticado v1→v2→v3, juez adversarial, 2 pasadas) · **Siguiente número libre verificado:** el doc de mayor `NN_` en `Stacky Agents/docs/` es `78_PLAN_...` → este es **79**.
+
+> ## Changelog v2 → v3 (crítica adversarial, pasada 2 — audita que la pasada 1 se aplicó)
+> - **Auditoría pasada 1:** C1 (paridad 3 runners), C2 (`flujo_funcional`), C3 (reuso
+>   `_resolve_agent_block_states`), C4 (lector vía `Config`), F8 (idempotencia) — **verificados aplicados**
+>   en el texto v2. ✓
+> - **C6 (IMPORTANTE) resuelto** — *supuesto no verificado introducido por F8 en la pasada 1*: F8 v2 leía
+>   `provider.get_item(...).get("state")`. Verificado contra código: **GitLab** normaliza y SÍ expone
+>   `"state"` (`gitlab_provider.py:74`), pero **ADO** `get_item` devuelve el JSON crudo de la API
+>   (`ado_provider.py:67` → `ado_client.get_work_item:836-849`), donde el estado vive en
+>   `fields["System.State"]`, **NO** en `"state"` top-level. ⇒ la idempotencia quedaba MUERTA para ADO (el
+>   tracker primario). Fix: F8 ahora usa `_extract_current_state(item)` que prueba ambos shapes
+>   (`item["state"]` y `item["fields"]["System.State"]`), con su propio test. No bloqueante (era best-effort)
+>   pero degradaba la feature en ADO; ahora funciona en ambos trackers.
+> - **C7 (MENOR) confirmado sin cambio** — la rama determinista de F3 deja el bloque legacy `:1325-1361`
+>   intacto en el `else`, por lo que el `block_guard` (`tickets.py:1313-1323`) sigue operando solo en modo
+>   legacy. Correcto por diseño: en modo determinista no hay estado del agente que bloquear. Se documenta
+>   explícitamente para que el implementador no "mueva" el block_guard a la rama determinista.
 
 > ## Changelog v1 → v2 (crítica adversarial, pasada 1)
 > - **C1 (BLOQUEANTE) resuelto** — paridad de 3 runtimes + ambigüedad en F2: el "estado-en-progreso al
@@ -571,11 +588,29 @@ una sola superficie que vigilar.
 
 **Archivo a editar:** `Stacky Agents/backend/harness/task_states.py` (agregar `_safe_transition`).
 
-**Contenido (firma EXACTA):**
+**Contenido (firmas EXACTAS):**
 ```python
+def _extract_current_state(item: dict) -> "str | None":
+    """Estado actual tolerante a ambos shapes de provider.get_item():
+    - GitLab normaliza → item['state'] (gitlab_provider.py:74).
+    - ADO devuelve crudo → item['fields']['System.State'] (ado_client.get_work_item:842).
+    Pura, nunca lanza."""
+    if not isinstance(item, dict):
+        return None
+    top = item.get("state")
+    if isinstance(top, str) and top.strip():
+        return top.strip()
+    fields = item.get("fields")
+    if isinstance(fields, dict):
+        sysst = fields.get("System.State")
+        if isinstance(sysst, str) and sysst.strip():
+            return sysst.strip()
+    return None
+
 def _safe_transition(provider, ado_id, target, *, phase, legacy_client_fn=None, correlation_id=None) -> dict:
     """ÚNICA función que escribe estado. Idempotente y defensiva; nunca lanza.
-    - Si provider expone get_item, lee el estado actual; si ya == target (case-insensitive) → skip 'already_in_state'.
+    - Si provider expone get_item, lee el estado actual (via _extract_current_state, tolerante ADO/GitLab);
+      si ya == target (case-insensitive) → skip 'already_in_state'.
     - Aplica via provider.update_item_state(str(ado_id), target); si provider es None y hay legacy_client_fn,
       usa legacy_client_fn().update_work_item_state(int(ado_id), target).
     - Devuelve {ok|skipped|error, to, phase, ...}."""
@@ -586,8 +621,8 @@ def _safe_transition(provider, ado_id, target, *, phase, legacy_client_fn=None, 
     # Idempotencia (best-effort: si get_item falla, seguimos a la transición).
     try:
         if provider is not None and hasattr(provider, "get_item"):
-            current = (provider.get_item(str(ado_id)) or {}).get("state")
-            if isinstance(current, str) and current.strip().lower() == target.strip().lower():
+            current = _extract_current_state(provider.get_item(str(ado_id)) or {})
+            if current and current.lower() == target.strip().lower():
                 return {"skipped": True, "reason": "already_in_state", "to": target, "phase": phase}
     except Exception:
         log.debug("get_item falló en _safe_transition (no crítico)", exc_info=True)
@@ -604,14 +639,20 @@ def _safe_transition(provider, ado_id, target, *, phase, legacy_client_fn=None, 
         return {"ok": False, "to": target, "error": str(exc), "type": type(exc).__name__, "phase": phase}
 ```
 
-> Nota de contrato: el dict que devuelve `provider.get_item` ya usa la clave `"state"` (ver `TrackerItem`
-> en `tracker_provider.py:23` con `state: str = "open"` y los providers que la pueblan). Si un provider no
-> la expone, la rama de idempotencia simplemente no aplica (best-effort).
+> Nota de contrato (verificada): los dos providers devuelven `get_item` con shapes DISTINTOS — GitLab
+> normaliza a `{"state": ...}` (`gitlab_provider.py:74`), ADO devuelve el JSON crudo con el estado en
+> `fields["System.State"]` (`ado_client.get_work_item:842`). Por eso `_extract_current_state` prueba ambas
+> ubicaciones. Si ningún shape matchea, la rama de idempotencia no aplica (best-effort → transiciona igual).
 
 **Test primero:** `Stacky Agents/backend/tests/test_plan79_safe_transition.py`
-- `test_skips_when_already_in_target`: `get_item` devuelve `{"state":"Done"}` y target="Done" → skip
+- `test_extract_state_gitlab_shape`: `_extract_current_state({"state":"Done"}) == "Done"`.
+- `test_extract_state_ado_shape`: `_extract_current_state({"fields":{"System.State":"Active"}}) == "Active"`.
+- `test_extract_state_none_when_absent`: `{}`, `{"fields":{}}`, `None`, `123` → `None` (nunca lanza).
+- `test_skips_when_already_in_target_gitlab`: `get_item` `{"state":"Done"}`, target="Done" → skip
   `already_in_state`; `update_item_state` NO se llama.
-- `test_applies_when_state_differs`: `get_item` devuelve `{"state":"Active"}`, target="Done" → llama
+- `test_skips_when_already_in_target_ado`: `get_item` `{"fields":{"System.State":"Done"}}`, target="Done"
+  → skip `already_in_state` (prueba que la idempotencia funciona también en ADO, no solo GitLab).
+- `test_applies_when_state_differs`: `get_item` `{"state":"Active"}`, target="Done" → llama
   `update_item_state(ado_id,"Done")` 1 vez.
 - `test_get_item_failure_still_transitions`: `get_item` lanza → igual llama `update_item_state` (best-effort).
 - `test_provider_none_uses_legacy`: provider None + `legacy_client_fn` provisto → usa
@@ -621,7 +662,7 @@ def _safe_transition(provider, ado_id, target, *, phase, legacy_client_fn=None, 
   diferencia de mayúsculas).
 
 **Comando:** `... -m pytest tests/test_plan79_safe_transition.py -q`
-**Criterio binario:** 6 tests verdes.
+**Criterio binario:** 10 tests verdes.
 **Flag:** N/A (la idempotencia siempre aplica cuando se transiciona; no agrega comportamiento bajo OFF
 porque con OFF nadie llama a `_safe_transition`). **Impacto por runtime:** idéntico en los 3 (es el helper
 común). **Trabajo del operador:** ninguno.
@@ -635,10 +676,11 @@ común). **Trabajo del operador:** ninguno.
 | R1 | **Asimetría de vocabulario ADO (estados nativos) vs GitLab (lógicos)**: el operador configura "Done" pero GitLab espera "accepted". | F5 valida contra `fetch_states()` del tracker activo y avisa por UI. La config es **por proyecto**, y cada proyecto tiene un solo tracker → el operador configura los estados de SU tracker. |
 | R2 | Romper el flujo legacy donde el agente manda `target_ado_state`. | Flag default **OFF** + rama `else` que deja el bloque `:1330-1361` **intacto**. Tests `*_noop_when_flag_off` lo prueban. |
 | R3 | El provider de un proyecto no soporta `update_item_state`. | `try/except` en `_apply_task_state` → log + skip; el run/completion no se rompe (tests de fallo del provider devuelven 200/continúan). |
-| R4 | El gancho de inicio (F2) se inserta en el lugar equivocado (duplica transición o no dispara). | F2 obliga a **reconciliar con grep** el punto de arranque del run; helper único compartido con F3 (no duplica lógica). Idempotente: re-aplicar el mismo estado es no-dañino. |
+| R4 | El gancho de inicio (F2) se inserta en el lugar equivocado o solo en 1 runtime (rompe paridad). | F2 da los **3 archivo:línea exactos** (`agents.py:1213`, `claude_code_cli_runner.py:119`, `codex_cli_runner.py:99`); helper único `apply_task_start_state` (no duplica lógica) + `test_start_parity_helper_is_runner_agnostic`. Idempotente (F8): re-aplicar el mismo estado es no-dañino. |
 | R5 | Alguien agrega una 3ª clave "aplicable" y rompe el determinismo. | `_APPLICABLE_KEYS` congelado + `test_vocabulary_frozen_guard` (F4) rompe CI si cambia sin actualizar el test. |
 | R6 | El agente sigue mandando `target_ado_state` por costumbre aun con flag ON. | Con flag ON el código lo **ignora** (no es un fallback: es "a rajatabla"). Tests `test_final_uses_config_not_agent_target` lo garantizan. La nota en `.agent.md` (F7) reduce ruido. |
 | R7 | `load_effective_client_profile` agrega latencia en cada inicio/completion. | Es la misma función que ya usa el `block_guard` (`tickets.py:505`); costo ya presente en el flujo. Sin nueva fuente de I/O. |
+| R8 | **Shapes distintos de `get_item` por provider** (GitLab `{"state":...}` vs ADO `fields["System.State"]`) → la idempotencia podría quedar muerta en ADO. | Resuelto en v3 (C6): `_extract_current_state` (F8) prueba ambos shapes; test `test_skips_when_already_in_target_ado` lo cubre. Si ningún shape matchea, transiciona igual (best-effort, sin romper). |
 
 ## 6. Fuera de scope
 

@@ -5,11 +5,14 @@ import {
   type HarnessFlagView,
   type HarnessFlagCategory,
 } from "../api/endpoints";
+import { visualFor, partitionSectionsByTier } from "./harnessVisuals";
+import { useHarnessUiPrefs } from "./useHarnessUiPrefs";
 import styles from "./HarnessFlagsPanel.module.css";
 
 // Plan 63 F3 — Panel de flags por categorías colapsables.
 // Plan 33 F1.1 — Lee el registry dinámicamente: cualquier flag nuevo en el backend
 // aparece aquí sin tocar este archivo.
+// Plan 78 — Hero, identidad visual, modo Simple/Experto, catch-all, navegación por intención.
 
 const PROFILE_LABELS: Record<string, string> = {
   off:  "off",
@@ -186,6 +189,9 @@ export default function HarnessFlagsPanel() {
   const [q, setQ] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
 
+  // Plan 78 F2 — preferencia de modo (Simple/Experto) persistida en localStorage
+  const { mode, setMode } = useHarnessUiPrefs();
+
   const update = useMutation({
     mutationFn: (updates: Record<string, boolean | number | string>) =>
       HarnessFlags.update(updates),
@@ -246,12 +252,44 @@ export default function HarnessFlagsPanel() {
     return map;
   }, [flags]);
 
-  // Secciones en el orden del backend
+  // Secciones en el orden del backend.
+  // [C9+C14] Retener una categoría cuando qLower matchea un flag O cuando
+  // matchea cat.label/cat.intent (navegación por intención real).
+  // Si la categoría matchea por label/intent, mostrar TODOS sus flags (sin filtrar por matches()).
   const orderedSections = useMemo(() => {
     return categories
-      .map((cat) => ({ cat, catFlags: flagsByCat.get(cat.id) ?? [] }))
-      .filter(({ catFlags }) => catFlags.length > 0);
-  }, [categories, flagsByCat]);
+      .map((cat) => {
+        const allCatFlags = flagsByCat.get(cat.id) ?? [];
+        if (allCatFlags.length === 0) return null;
+
+        if (!qLower && !onlyActive) {
+          // Sin búsqueda: incluir todas las categorías con flags
+          return { cat, catFlags: allCatFlags };
+        }
+
+        // Con búsqueda: primero filtrar flags individuales
+        const flagMatches = allCatFlags.filter(matches);
+
+        if (flagMatches.length > 0) {
+          // Hay flags que matchean individualmente → incluir solo esos
+          return { cat, catFlags: flagMatches };
+        }
+
+        // Sin flag que matchee: ver si la categoría matchea por label o intent [C9/C14]
+        if (qLower) {
+          const catMatchesByLabel = cat.label.toLowerCase().includes(qLower);
+          const catMatchesByIntent = (cat.intent ?? "").toLowerCase().includes(qLower);
+          if (catMatchesByLabel || catMatchesByIntent) {
+            // Mostrar TODAS las flags de la categoría (navegación por intención)
+            const filtered = onlyActive ? allCatFlags.filter((f) => f.active) : allCatFlags;
+            if (filtered.length > 0) return { cat, catFlags: filtered };
+          }
+        }
+
+        return null;
+      })
+      .filter((s): s is { cat: HarnessFlagCategory; catFlags: HarnessFlagView[] } => s !== null);
+  }, [categories, flagsByCat, qLower, onlyActive]);
 
   // Stats globales
   const totalFlags = flags.length;
@@ -262,16 +300,85 @@ export default function HarnessFlagsPanel() {
     update.mutate({ [key]: value });
   };
 
+  // Plan 78 F5 — renderSection extrae el bloque <details> para reusar en simple/experto/catch-all
+  const renderSection = (cat: HarnessFlagCategory, catFlags: HarnessFlagView[]) => {
+    const { color, icon: Icon } = visualFor(cat.id);
+    const sectionActive = catFlags.some((f) => f.active);
+    const visibleActive = catFlags.filter((f) => f.active).length;
+
+    return (
+      <details
+        key={cat.id}
+        className={styles.section}
+        style={{ borderLeft: `4px solid ${color}` }}
+        open={!!qLower || onlyActive || sectionActive}
+      >
+        <summary className={styles.sectionSummary}>
+          <span className={styles.sectionLabel}>
+            <Icon size={16} color={color} className={styles.sectionIcon} aria-hidden="true" />
+            {cat.label}
+          </span>
+          <span className={styles.sectionMeta}>
+            {catFlags.length} flags · {visibleActive} activas
+          </span>
+        </summary>
+        {cat.intent && <p className={styles.sectionIntent}>{cat.intent}</p>}
+        {cat.description && (
+          <p className={styles.sectionDesc}>{cat.description}</p>
+        )}
+        {catFlags.map((flag) => (
+          <FlagRow
+            key={flag.key}
+            flag={flag}
+            allFlags={flags}
+            onUpdate={handleUpdate}
+            saving={saving}
+          />
+        ))}
+      </details>
+    );
+  };
+
+  // Plan 78 F4 — partición Simple/Experto usando función pura importada
+  const { simpleSections, restSections } = partitionSectionsByTier(orderedSections);
+
   if (isLoading) return <div className={styles.status}>Cargando flags...</div>;
   if (isError) return <div className={styles.errorText}>Error al cargar flags: {String((error as Error)?.message ?? error)}</div>;
 
   return (
     <div className={styles.root}>
-      {/* Perfil activo */}
-      <div className={styles.profileBar}>
-        <span className={styles.profileLabel}>
-          Perfil activo: <strong>{activeProfile ?? "personalizado"}</strong>
-        </span>
+      {/* Plan 78 F3 — Hero "Arnés — Configuración activa".
+          REEMPLAZA los bloques <div className={styles.profileBar}> y <div className={styles.summary}>
+          que se eliminaron del JSX. Reutiliza los mismos datos y la misma lógica.
+          [C8] El título y la barra son presentación, NO indicadores de salud operativa.
+          Ver Plan 46 (OperationalHealthCard) para salud real de runs. */}
+      <div className={styles.hero}>
+        <div className={styles.heroTitle}>
+          Arnés — Configuración activa
+          <span className={styles.heroProfile}>Perfil: <strong>{activeProfile ?? "personalizado"}</strong></span>
+        </div>
+        <div className={styles.heroStats}>
+          <div className={styles.heroStat}>
+            <span className={styles.heroStatValue}>{totalActive}</span>
+            <span className={styles.heroStatLabel}>flags activas</span>
+          </div>
+          <div className={styles.heroStat}>
+            <span className={styles.heroStatValue}>{totalFlags}</span>
+            <span className={styles.heroStatLabel}>flags totales</span>
+          </div>
+          <div className={styles.heroStat}>
+            <span className={styles.heroStatValue}>{totalKnown}</span>
+            <span className={styles.heroStatLabel}>con default</span>
+          </div>
+        </div>
+        {/* % de flags activas — NO es indicador de salud. Ver Plan 46 para salud real de runs. */}
+        <div className={styles.heroActivityBar}>
+          <div
+            className={styles.heroActivityFill}
+            style={{ width: `${totalFlags ? Math.round((totalActive / totalFlags) * 100) : 0}%` }}
+          />
+        </div>
+        {/* Los botones de perfil off/safe/full — misma lógica que el profileBar eliminado. */}
         <div className={styles.profileButtons}>
           {Object.entries(PROFILE_LABELS).map(([name, label]) => (
             <button
@@ -305,49 +412,46 @@ export default function HarnessFlagsPanel() {
         </label>
       </div>
 
-      {/* Resumen global */}
-      <div className={styles.summary}>
-        {totalFlags} flags · {totalActive} activas/con valor · {totalKnown} con default conocido
-      </div>
-
       {saving && <div className={styles.status}>Guardando...</div>}
       {apiError && <div className={styles.errorText}>{apiError}</div>}
 
-      {/* Secciones colapsables por categoría */}
-      {orderedSections.map(({ cat, catFlags }) => {
-        const visibleFlags = catFlags.filter(matches);
-        if (visibleFlags.length === 0) return null;
+      {/* Plan 78 F4 — Toggle Simple ↔ Experto.
+          [C12] role="group" + aria-label comunican selección mutuamente excluyente. */}
+      <div role="group" aria-label="Nivel de configuración" className={styles.modeToggle}>
+        <button
+          className={`${styles.modeBtn} ${mode === "simple" ? styles.modeBtnActive : ""}`}
+          aria-pressed={mode === "simple"}
+          onClick={() => setMode("simple")}
+        >
+          Simple
+        </button>
+        <button
+          className={`${styles.modeBtn} ${mode === "experto" ? styles.modeBtnActive : ""}`}
+          aria-pressed={mode === "experto"}
+          onClick={() => setMode("experto")}
+        >
+          Experto
+        </button>
+      </div>
 
-        const sectionActive = catFlags.some((f) => f.active);
-        const visibleActive = visibleFlags.filter((f) => f.active).length;
-
-        return (
-          <details
-            key={cat.id}
-            className={styles.section}
-            open={!!qLower || onlyActive || sectionActive}
-          >
-            <summary className={styles.sectionSummary}>
-              <span className={styles.sectionLabel}>{cat.label}</span>
-              <span className={styles.sectionMeta}>
-                {visibleFlags.length} flags · {visibleActive} activas
-              </span>
-            </summary>
-            {cat.description && (
-              <p className={styles.sectionDesc}>{cat.description}</p>
+      {/* Secciones colapsables por categoría — Plan 78 F4 modo Simple/Experto */}
+      {mode === "experto"
+        ? orderedSections.map(({ cat, catFlags }) => renderSection(cat, catFlags))
+        : <>
+            {simpleSections.map(({ cat, catFlags }) => renderSection(cat, catFlags))}
+            {restSections.length > 0 && (
+              <details className={styles.catchAll} open={!!qLower || onlyActive}>
+                <summary className={styles.sectionSummary}>
+                  <span className={styles.sectionLabel}>Todo lo demás</span>
+                  <span className={styles.sectionMeta}>
+                    {restSections.length} categorías · {restSections.reduce((n, s) => n + s.catFlags.length, 0)} flags
+                  </span>
+                </summary>
+                {restSections.map(({ cat, catFlags }) => renderSection(cat, catFlags))}
+              </details>
             )}
-            {visibleFlags.map((flag) => (
-              <FlagRow
-                key={flag.key}
-                flag={flag}
-                allFlags={flags}
-                onUpdate={handleUpdate}
-                saving={saving}
-              />
-            ))}
-          </details>
-        );
-      })}
+          </>
+      }
     </div>
   );
 }

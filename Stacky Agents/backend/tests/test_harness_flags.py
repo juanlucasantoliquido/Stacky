@@ -689,3 +689,48 @@ def test_rag_flags_pair_linkage():
     from services.harness_flags import FLAG_REGISTRY
     spec = next(s for s in FLAG_REGISTRY if s.key == "STACKY_RAG_CATALOG_ENABLED")
     assert spec.pair == "STACKY_RAG_CATALOG_TOP_K"
+
+
+# ---------------------------------------------------------------------------
+# Plan 78 F0 — metadata tier/intent en CategorySpec
+# ---------------------------------------------------------------------------
+
+def test_every_category_has_tier_and_intent():
+    """Bidireccional: toda CategorySpec declara tier válido e intent no vacío.
+    Impide drift — una categoría nueva sin tier/intent rompe CI a propósito."""
+    from services.harness_flags import FLAG_CATEGORIES
+    valid_tiers = {"simple", "advanced"}
+    for c in FLAG_CATEGORIES:
+        assert c.tier in valid_tiers, f"Categoría '{c.id}' tiene tier inválido: {c.tier!r}"
+        assert isinstance(c.intent, str) and c.intent.strip(), \
+            f"Categoría '{c.id}' tiene intent vacío"
+
+
+def test_list_categories_exposes_tier_and_intent():
+    """list_categories() expone tier e intent de forma ADITIVA (sin romper id/label/description)."""
+    from services.harness_flags import list_categories
+    for c in list_categories():
+        assert {"id", "label", "description", "tier", "intent"} <= set(c.keys())
+        assert c["tier"] in {"simple", "advanced"}
+
+
+def test_at_least_one_simple_and_one_advanced_category():
+    """Garantiza que el modo Simple no quede vacío ni absorba todo (sanidad del diseño de niveles)."""
+    from services.harness_flags import FLAG_CATEGORIES
+    tiers = {c.tier for c in FLAG_CATEGORIES}
+    assert "simple" in tiers, "Ninguna categoría es 'simple' → modo Simple quedaría vacío"
+    assert "advanced" in tiers, "Ninguna categoría es 'advanced' → no hay catch-all que poblar"
+
+
+def test_partition_semantics_simple_vs_advanced():
+    """[ADICIÓN ARQUITECTO — C2] Valida que el predicado tier=='simple' y su complemento
+    tier!='simple' particionan el total sin solape ni pérdida."""
+    from services.harness_flags import FLAG_CATEGORIES
+    all_ids = [c.id for c in FLAG_CATEGORIES]
+    simple_ids = [c.id for c in FLAG_CATEGORIES if c.tier == "simple"]
+    rest_ids   = [c.id for c in FLAG_CATEGORIES if c.tier != "simple"]
+    # Sin solape
+    assert len(set(simple_ids) & set(rest_ids)) == 0, "Solapamiento entre simple y rest — imposible por definición"
+    # Sin pérdida
+    assert sorted(simple_ids + rest_ids) == sorted(all_ids), \
+        "La unión simple+rest != FLAG_CATEGORIES — se perdió una categoría"

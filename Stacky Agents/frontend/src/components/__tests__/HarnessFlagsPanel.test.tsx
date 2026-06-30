@@ -80,10 +80,31 @@ const PAIR_CSV: HarnessFlagView = {
   value: "RSPACIFICO",
 };
 
+// [Plan 78 C4+C7] categories con tier:"simple" para que los flags sean visibles
+// en modo Simple (default). Sin tier, el flag caería al catch-all colapsado.
+// Comentario-contrato: todo mock que monte HarnessFlagsPanel DEBE incluir al menos
+// una categoría tier:"simple" con el flag que aseran; de lo contrario el test
+// dependería del modo Experto, que no es el default.
 const MOCK_RESPONSE = {
   ok: true,
   flags: [BOOL_FLAG, JSON_FLAG, BOOL_WITH_PAIR, PAIR_CSV],
   active_profile: "safe",
+  categories: [
+    {
+      id: "claude_code_cli",
+      label: "Claude Code CLI",
+      description: "Flags del runtime Claude Code CLI",
+      tier: "simple" as const,
+      intent: "Elegir cómo y con qué modelo corren los agentes",
+    },
+    {
+      id: "global",
+      label: "Global",
+      description: "Flags globales",
+      tier: "simple" as const,
+      intent: "Configuración global del arnés",
+    },
+  ],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -169,7 +190,8 @@ describe("HarnessFlagsPanel", () => {
 
   it("botón de perfil 'safe' llama al endpoint de perfiles", async () => {
     wrap(<HarnessFlagsPanel />);
-    await waitFor(() => screen.getByText(/Perfil activo/i));
+    // [Plan 78 C7] El hero nuevo muestra "Perfil:" (no "Perfil activo:").
+    await waitFor(() => screen.getByText(/Perfil:/i));
 
     const safeBtn = screen.getByRole("button", { name: "safe" });
     fireEvent.click(safeBtn);

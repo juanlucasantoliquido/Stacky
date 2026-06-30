@@ -32,41 +32,60 @@ class CategorySpec:
     id: str          # slug estable (no cambia)
     label: str       # título humano para la UI (español)
     description: str # 1 línea: qué controla esta categoría
+    tier: str = "advanced"  # "simple" | "advanced" — nivel de profundidad para la UI (Plan 78)
+    intent: str = ""        # frase humana "¿qué querés lograr?" para navegación por intención (Plan 78)
 
 
 FLAG_CATEGORIES: tuple[CategorySpec, ...] = (
+    # Plan 78 — tier/intent aditivos. Default tier="advanced" si no se declara (seguro: cae al catch-all).
     CategorySpec("runtimes_cli", "Runtimes CLI (Claude / Codex)",
-        "Comportamiento de los agentes que corren como CLI: gates de contrato, autocorrección, hooks, resume, MCP, modelos."),
+        "Comportamiento de los agentes que corren como CLI: gates de contrato, autocorrección, hooks, resume, MCP, modelos.",
+        tier="simple", intent="Elegir cómo y con qué modelo corren los agentes"),
     CategorySpec("contexto_memoria", "Contexto y memoria",
-        "Qué información recibe el agente: presupuesto/dedup/rerank de contexto, memoria colaborativa, skills, few-shot, catálogo."),
+        "Qué información recibe el agente: presupuesto/dedup/rerank de contexto, memoria colaborativa, skills, few-shot, catálogo.",
+        tier="advanced", intent="Qué información y memoria recibe el agente"),
     CategorySpec("calidad_verificacion", "Calidad y verificación del entregable",
-        "Criterios de aceptación, verificación ejecutable, contrato de aceptación, anti-verde-falso, convergencia, self-review, esfuerzo."),
+        "Criterios de aceptación, verificación ejecutable, contrato de aceptación, anti-verde-falso, convergencia, self-review, esfuerzo.",
+        tier="simple", intent="Asegurar que el entregable cumpla y esté verificado"),
     CategorySpec("integridad_grounding", "Integridad y grounding del resultado",
-        "Verifica que lo que el agente afirma sea real: precondiciones, verificación post-create de tasks, anclado de referencias."),
+        "Verifica que lo que el agente afirma sea real: precondiciones, verificación post-create de tasks, anclado de referencias.",
+        tier="advanced", intent="Verificar que lo que el agente afirma sea real"),
     CategorySpec("epicas_ado", "Épicas, briefs y publicación en ADO",
-        "Generación, saneamiento, gates, preview, descomposición y selector de modelo de épicas/issues hacia Azure DevOps."),
+        "Generación, saneamiento, gates, preview, descomposición y selector de modelo de épicas/issues hacia Azure DevOps.",
+        tier="simple", intent="Generar y publicar épicas e issues en ADO"),
     CategorySpec("flujo_funcional", "Flujo funcional (Tasks)",
-        "Creación de Tasks funcionales en ADO y su gate determinista."),
+        "Creación de Tasks funcionales en ADO y su gate determinista.",
+        tier="advanced", intent="Crear Tasks funcionales en ADO"),
     CategorySpec("routing_costo", "Routing de modelo y costo",
-        "Estimación de complejidad, routing por dificultad, advisor de runtime, presupuesto por ticket, caché de runs, evals."),
+        "Estimación de complejidad, routing por dificultad, advisor de runtime, presupuesto por ticket, caché de runs, evals.",
+        tier="simple", intent="Controlar el costo y a qué modelo va cada ticket"),
     CategorySpec("fiabilidad_ciclo_vida", "Fiabilidad y ciclo de vida del run",
-        "Higiene de procesos: reaping, watchdog, validación pending-task, idempotencia, retries, runaway guard, auto-reparación, intake."),
+        "Higiene de procesos: reaping, watchdog, validación pending-task, idempotencia, retries, runaway guard, auto-reparación, intake.",
+        tier="advanced", intent="Mantener sanos los procesos y reintentos"),
     CategorySpec("observabilidad_notif", "Observabilidad y notificaciones",
-        "KPIs en harness-health, historial, footer ADO, webhooks, notificaciones, telemetría en vivo, salud operativa, pipelines, trazabilidad."),
+        "KPIs en harness-health, historial, footer ADO, webhooks, notificaciones, telemetría en vivo, salud operativa, pipelines, trazabilidad.",
+        tier="simple", intent="Ver salud, KPIs y recibir notificaciones"),
     CategorySpec("aprendizaje", "Aprendizaje y memoria que empuja",
-        "Rechazos como anti-patrones, nota del operador a memoria, aprendizaje desde ediciones humanas en ADO."),
+        "Rechazos como anti-patrones, nota del operador a memoria, aprendizaje desde ediciones humanas en ADO.",
+        tier="advanced", intent="Que Stacky aprenda de rechazos y ediciones"),
     CategorySpec("preflight_intencion", "Pre-vuelo de intención",
-        "Brief de intención negociable que el operador aprueba antes del run."),
+        "Brief de intención negociable que el operador aprueba antes del run.",
+        tier="advanced", intent="Aprobar la intención antes de que el agente corra"),
     CategorySpec("base_datos", "Base de datos y caché ADO",
-        "Directiva de acceso read-only a la BD, caché y pre-warm de lecturas caras de ADO."),
+        "Directiva de acceso read-only a la BD, caché y pre-warm de lecturas caras de ADO.",
+        tier="advanced", intent="Acceso read-only y caché de la base ADO"),
     CategorySpec("avanzado", "Avanzado / experimental",
-        "Kill-switches internos y features beta: egress check, especulación anticipatoria."),
+        "Kill-switches internos y features beta: egress check, especulación anticipatoria.",
+        tier="advanced", intent="Kill-switches internos y features beta"),
     CategorySpec("migrador_ado_gitlab", "Migrador ADO → GitLab",
-        "Plan 74 — Migración segura e idempotente de work items ADO (épicas, issues, tasks, comentarios, attachments) hacia GitLab."),
+        "Plan 74 — Migración segura e idempotente de work items ADO (épicas, issues, tasks, comentarios, attachments) hacia GitLab.",
+        tier="advanced", intent="Migrar work items de ADO a GitLab"),
     CategorySpec("gitlab_deep_links", "GitLab / Deep Links",
-        "Plan 75 — Deep links bidireccionales GitLab: issue, MR, pipeline, commit, épica. Kill-switch con default OFF."),
+        "Plan 75 — Deep links bidireccionales GitLab: issue, MR, pipeline, commit, épica. Kill-switch con default OFF.",
+        tier="advanced", intent="Activar deep links bidireccionales con GitLab"),
     CategorySpec("otros", "Otros / sin categorizar",
-        "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza)."),
+        "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza).",
+        tier="advanced", intent="Flags sin categorizar (no debería haber ninguna)"),
 )
 
 _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
@@ -1857,8 +1876,10 @@ def is_active(spec: FlagSpec, value: object) -> bool:
 
 
 def list_categories() -> list[dict]:
-    """Categorías ordenadas para el frontend (id/label/description)."""
-    return [{"id": c.id, "label": c.label, "description": c.description}
+    """Categorías ordenadas para el frontend (id/label/description/tier/intent).
+    Plan 78 F0 — tier e intent expuestos de forma ADITIVA (no rompe campos previos)."""
+    return [{"id": c.id, "label": c.label, "description": c.description,
+             "tier": c.tier, "intent": c.intent}
             for c in FLAG_CATEGORIES]
 
 

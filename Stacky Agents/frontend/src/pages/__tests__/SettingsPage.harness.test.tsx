@@ -40,8 +40,13 @@ vi.mock("../../api/endpoints", () => ({
         },
       ],
       active_profile: null,
+      // [Plan 78 C15+C16] tier:"simple" en la categoría del flag que aserta (runtimes_cli).
+      // Sin tier, el flag caería al catch-all colapsado en modo Simple (default) y el
+      // test fallaría porque getByText("Gate de contrato (claude)") no lo encontraría.
+      // Comentario-contrato: todo mock que monte HarnessFlagsPanel DEBE incluir al menos
+      // una categoría tier:"simple" con el flag que aseran.
       categories: [
-        { id: "runtimes_cli", label: "Runtimes CLI (Claude / Codex)", description: "" },
+        { id: "runtimes_cli", label: "Runtimes CLI (Claude / Codex)", description: "", tier: "simple" as const, intent: "Elegir cómo y con qué modelo corren los agentes" },
       ],
     })),
     update: vi.fn(async () => ({ ok: true })),

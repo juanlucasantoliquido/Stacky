@@ -668,6 +668,8 @@ export interface HarnessFlagCategory {
   id: string;
   label: string;
   description: string;
+  tier?: "simple" | "advanced";   // Plan 78 — nivel de profundidad (default tratado como "advanced")
+  intent?: string;                 // Plan 78 — frase humana de intención
 }
 
 export interface StackyMemoryFinding {

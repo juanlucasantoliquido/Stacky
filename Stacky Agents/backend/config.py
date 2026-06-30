@@ -749,6 +749,12 @@ class Config:
         "STACKY_ISSUE_FROM_BRIEF_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 77 — Postea análisis funcional/técnico/implementación de un Issue como
+    # comentarios idempotentes en el mismo WI (sin tickets hijos). Default OFF.
+    STACKY_ISSUE_PHASE_COMMENTS_ENABLED: bool = os.getenv(
+        "STACKY_ISSUE_PHASE_COMMENTS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Fix robusto brief→épica — pase correctivo: si el BusinessAgent (one-shot)
     # devuelve narración en vez del HTML de la épica, se le pide UNA vez por stdin
     # que re-emita SOLO el HTML antes de cerrar la sesión. Reusa el presupuesto de

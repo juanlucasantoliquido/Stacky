@@ -125,6 +125,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EPIC_PORTFOLIO_ENABLED", "STACKY_EPIC_DECOMPOSITION_ENABLED",
         "STACKY_ADAPTIVE_SELECTOR_ENABLED", "STACKY_PROJECT_AUTOPROFILE_ENABLED",
         "STACKY_COMMENT_FULL_SCAN_ENABLED",
+        "STACKY_ISSUE_PHASE_COMMENTS_ENABLED",  # Plan 77 — fases de Issue como comentarios idempotentes
         "STACKY_TICKETS_PROVIDER_ENABLED",   # Plan 70 — consumers por puerto TrackerProvider
         "STACKY_PIPELINE_PROVIDER_ENABLED",  # Plan 71 — sub-puerto CIProvider
         "STACKY_PIPELINE_TRIGGER_ENABLED",   # Plan 72 — trigger y monitoreo CI (HITL)
@@ -1497,6 +1498,19 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,  # se lee con os.getenv en ado_client.comment_exists
         default=True,
+    ),
+    # ── Plan 77 — Issue como épica de un ticket: fases como comentarios ────────
+    FlagSpec(
+        key="STACKY_ISSUE_PHASE_COMMENTS_ENABLED",
+        type="bool",
+        label="Comentarios de fase del Issue (funcional/técnico/implementación)",
+        description=(
+            "Plan 77 — Postea el análisis funcional/técnico/implementación de un "
+            "Issue como comentarios idempotentes en el mismo work item (no crea hijos). "
+            "Los 3 runtimes participan (paridad real). Default OFF."
+        ),
+        group="global",
+        # env_only no seteado (default False) → atributo de Config, editable en UI
     ),
     FlagSpec(
         key="STACKY_EPIC_GATE_ENABLED",

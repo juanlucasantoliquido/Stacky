@@ -1518,6 +1518,19 @@ def _run_in_background(
                     metadata.setdefault("produced_files", _collect_produced_files(None))
                 except Exception:
                     pass
+            # Plan 77 F3 (Claude CLI) — Postea análisis de fase del Issue (si aplica). No-fatal.
+            try:
+                from api.tickets import publish_issue_phase_from_run as _pub_issue_phase  # noqa: PLC0415
+                _ipm = _pub_issue_phase(
+                    ticket_id=ticket_id,
+                    agent_type=agent_type,
+                    output=output or "",
+                    project_name=project_name,
+                )
+                if _ipm is not None:
+                    metadata["issue_phase"] = _ipm
+            except Exception:  # noqa: BLE001
+                pass
             _mark_terminal(
                 execution_id,
                 status=final_status,

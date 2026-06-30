@@ -1,12 +1,40 @@
 # Plan 77 — Issue como épica de un solo ticket: fases (funcional → técnico → implementación) como comentarios idempotentes + color propio
 
 > Estado: PROPUESTO (no implementado). Autor: StackyArchitectaUltraEficientCode. Fecha: 2026-06-29.
-> **Versión: v2** (criticado v1 → v2 por el juez adversarial el 2026-06-29).
+> **Versión: v3** (v3 2026-06-30: pre-flight resuelve ambigüedades de F3 y F6 — ubicaciones
+> archivo:línea exactas de los 3 finalizadores y ruta correcta del ratchet, antes de implementar).
 > Origen: pedido del operador — "Stacky debe admitir Issues tratados como una épica, pero con dos
 > diferencias: (1) color distinto al de las épicas en la UI, y (2) todo ocurre en el MISMO ticket:
 > el análisis funcional, el técnico y la implementación se publican como COMENTARIOS en el work item
 > del Issue, NO como tickets hijos."
 > Implementable por un modelo menor (Haiku / Codex CLI / GitHub Copilot Pro) SIN inferir nada.
+
+---
+
+## Changelog v2 → v3 (pre-flight implementador — 2026-06-30)
+
+> **VEREDICTO v2: APROBADO-CON-CAMBIOS** (v3 cierra las ambigüedades pre-flight).
+
+- **F3 — Ubicaciones exactas de los 3 finalizadores** (v2 decía "localizar con grep"):
+  - **Copilot** (`agent_runner.py`): insertar ANTES de la apertura del `with session_scope()` en
+    línea ~860 (después de `result.output = pii_masker.unmask(...)` en línea 841), guardar
+    `_issue_phase` en variable local, y dentro del bloque de sesión (antes de
+    `row.metadata_dict = md` en línea 895) hacer `if _issue_phase: md["issue_phase"] = _issue_phase`.
+    Locales: `result.output`, `agent_type`, `ticket_id`,
+    `project_ctx.stacky_project_name if project_ctx else None`.
+  - **Claude CLI** (`services/claude_code_cli_runner.py`): insertar ANTES de `_mark_terminal`
+    en línea ~1521, dentro del bloque `elif _outcome_kind == "success":` (~1482). Locales:
+    `output`, `agent_type`, `ticket_id`, `project_name` (ya computado en línea 475 como
+    `project_ctx.stacky_project_name if project_ctx else None`). Usar `metadata` (dict local).
+  - **Codex CLI** (`services/codex_cli_runner.py`): insertar ANTES de `_mark_terminal` en
+    línea ~937, dentro del bloque `if return_code == 0:` (~749). Locales: `output`, `agent_type`,
+    `ticket_id`, `metadata`. Para `project_name` usar `_codex_project_name` (ya computado en
+    línea 338 como `project_ctx.stacky_project_name if project_ctx else None`) — NO `None`.
+  - El directorio `tests/conformance/` NO existe: usar la opción del archivo nuevo
+    `tests/test_issue_phase_runtime_parity.py`.
+- **F6 — Ruta correcta del ratchet**: el archivo es `scripts/run_harness_tests.sh` (bajo
+  `backend/scripts/`, NO `backend/tests/`). Los archivos `.ps1` no existen — solo editar el `.sh`.
+  El meta-test a correr es `tests/test_harness_ratchet_meta.py`.
 
 ---
 

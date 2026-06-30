@@ -3865,6 +3865,28 @@ def create_child_task(ado_id: int):
             "operation_id": operation_id,
         }), 400
 
+    # Plan 77 F4 [C3] — Guard: los Issues son épicas de 1 ticket (sin hijos).
+    # Buscamos el Ticket por ado_id (NO usamos una var de request: C3 del plan).
+    with session_scope() as _sess77:
+        _parent_t = _sess77.query(Ticket).filter(Ticket.ado_id == ado_id).first()
+        _parent_wi_type = (_parent_t.work_item_type or "").strip() if _parent_t else ""
+    if _parent_wi_type == "Issue":
+        logger.warning(
+            "create_child_task BLOCKED: ado_id=%s es un Issue (plan 77); "
+            "los Issues no crean hijos, se usan comentarios de fase.",
+            ado_id,
+        )
+        return jsonify({
+            "ok": False,
+            "error": "ISSUE_CANNOT_HAVE_CHILDREN",
+            "message": (
+                "Este work item es un Issue. Los Issues no crean tickets hijos; "
+                "las fases se publican como comentarios idempotentes en el mismo WI."
+            ),
+            "correlation_id": correlation_id,
+            "operation_id": operation_id,
+        }), 400
+
     repo_root, scan = _resolve_artifact_repo_root(body)
     pt_file = repo_root / pending_task_path_str
 
@@ -6571,6 +6593,25 @@ _ISSUE_PHASE_MARKERS = {
     "implementacion": "<!-- stacky:issue-phase:implementacion -->",
 }
 
+# Plan 77 F0 — mapeo agent_type → fase del Issue. business NO es una fase de
+# comentario (es el one-shot que crea el WI). Agentes fuera del pipeline → None.
+_AGENT_TYPE_TO_ISSUE_PHASE: dict[str, str] = {
+    "functional": "funcional",
+    "technical": "tecnico",
+    "developer": "implementacion",
+}
+
+
+def agent_type_to_issue_phase(agent_type: str | None) -> str | None:
+    """Traduce el agent_type de Stacky a la fase del Issue, o None si no aplica.
+
+    Plan 77 F0: las tres fases (funcional/tecnico/implementacion) tienen marker en
+    _ISSUE_PHASE_MARKERS. business y el resto de agentes → None (no postean fase).
+    """
+    if not agent_type:
+        return None
+    return _AGENT_TYPE_TO_ISSUE_PHASE.get(str(agent_type).strip().lower())
+
 
 def _persist_issue_ticket(
     ado_id: int, title: str, description_html: str, url: str, project_name: str | None
@@ -6812,6 +6853,100 @@ def publish_issue_from_run(
         grounding_warnings=grounding_warnings,
         epic_summary=epic_summary,
     )
+
+
+# ---------------------------------------------------------------------------
+# Plan 77 F2 — Publicación de fases del Issue como comentarios idempotentes
+# ---------------------------------------------------------------------------
+
+def _issue_phase_comments_enabled() -> bool:
+    """[Plan 77 C1] Lee STACKY_ISSUE_PHASE_COMMENTS_ENABLED como atributo de Config.
+
+    NO usa harness_flags.is_enabled (esa función no existe). Un flag con
+    env_only=False es atributo de Config (patrón real: config.STACKY_EPIC_FROM_BRIEF_ENABLED).
+    """
+    from config import config  # noqa: PLC0415
+    return bool(getattr(config, "STACKY_ISSUE_PHASE_COMMENTS_ENABLED", False))
+
+
+def _marker_already_present(tracker, ado_id: int, phase: str) -> bool:
+    """[Plan 77 ADICIÓN C6] Pre-chequeo de existencia del marker de fase.
+
+    Distingue 'posteado ahora' de 'ya estaba' para darle al operador señal
+    visible (reason='phase_already_present') en vez de skip silencioso.
+    Reusa la lógica is_provider de _post_phase_comment. No-fatal.
+    """
+    marker = _ISSUE_PHASE_MARKERS.get(phase)
+    if not marker:
+        return False
+    is_provider = hasattr(tracker, "name") and isinstance(
+        getattr(tracker, "name", None), str
+    )
+    try:
+        return bool(tracker.comment_exists(
+            str(ado_id) if is_provider else ado_id, marker
+        ))
+    except Exception:  # noqa: BLE001 — pre-chequeo nunca rompe
+        return False
+
+
+def publish_issue_phase_from_run(
+    *,
+    ticket_id: int,
+    agent_type: str | None,
+    output: str | None,
+    project_name: str | None,
+) -> dict | None:
+    """Plan 77 F2 — Postea la salida de un agente de fase como comentario del Issue.
+
+    Reglas (short-circuit):
+      1. Si STACKY_ISSUE_PHASE_COMMENTS_ENABLED OFF → None (no-op byte-idéntico).
+      2. Si agent_type no mapea a fase (business/qa/...) → None.
+      3. Carga Ticket por ticket_id; si no existe o work_item_type != 'Issue'
+         o ado_id no válido → None.
+      4. Si output vacío → {"phase": fase, "posted": False, "reason": "empty_output"}.
+      5. Extrae HTML (reusa _extract_epic_html; si vacío usa output crudo).
+         Pre-chequea marker: si ya existe → {"posted": False, "reason": "phase_already_present"}.
+      6. Postea vía _post_phase_comment usando _provider_for_ticket o _ado_client_for_ticket.
+         Devuelve {"phase": fase, "posted": True, "ado_id": ado_id}.
+
+    NUNCA lanza. No crea tickets hijos.
+    """
+    if not _issue_phase_comments_enabled():
+        return None
+    phase = agent_type_to_issue_phase(agent_type)
+    if phase is None:
+        return None
+    try:
+        with session_scope() as sess:
+            t = sess.query(Ticket).filter(Ticket.id == ticket_id).first()
+            if t is None:
+                return None
+            wi_type = (t.work_item_type or "").strip()
+            ado_id = t.ado_id
+            proj = project_name or t.stacky_project_name or t.project or None
+        if wi_type != "Issue" or not ado_id or int(ado_id) <= 0:
+            return None
+        if not output or not str(output).strip():
+            return {"phase": phase, "posted": False, "reason": "empty_output"}
+        clean_html = _extract_epic_html(output) or output
+        tracker = _provider_for_ticket(project_name=proj) or _ado_client_for_ticket(
+            project_name=proj
+        )
+        # [ADICIÓN C6] señal explícita de idempotencia (visible para el operador).
+        if _marker_already_present(tracker, int(ado_id), phase):
+            return {
+                "phase": phase,
+                "posted": False,
+                "reason": "phase_already_present",
+                "ado_id": int(ado_id),
+            }
+        _post_phase_comment(tracker, int(ado_id), phase, clean_html)
+        return {"phase": phase, "posted": True, "ado_id": int(ado_id)}
+    except Exception as exc:  # noqa: BLE001 — fase nunca tumba el finalizador
+        logger.warning("publish_issue_phase_from_run: no fatal err=%s", exc)
+        return {"phase": phase if "phase" in dir() else "unknown",
+                "posted": False, "reason": f"error:{exc}"}
 
 
 @bp.post("/epics/from-brief")

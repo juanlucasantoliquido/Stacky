@@ -28,6 +28,7 @@ import { useWorkbench } from "../store/workbench";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import styles from "./TicketBoard.module.css";
+import { getWorkItemTypeColor } from "../utils/workItemTypeColor";
 
 // Resuelve el tipo del agente. Prioriza el override explícito que el operador
 // fija en EmployeeEditDrawer; cae a heurística sobre el filename si no hay override.
@@ -613,7 +614,12 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
         >
           {collapsed ? "▶" : "▼"}
         </button>
-        <span className={styles.epicBadge}>EPIC</span>
+        <span
+          className={styles.epicBadge}
+          style={{ color: getWorkItemTypeColor(epic.work_item_type) }}
+        >
+          {(epic.work_item_type ?? "EPIC").toUpperCase()}
+        </span>
         <span className={styles.epicAdoId}>ADO-{epic.ado_id}</span>
         <span
           className={styles.epicState}

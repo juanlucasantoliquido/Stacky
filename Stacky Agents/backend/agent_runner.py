@@ -840,6 +840,19 @@ def _run_in_background(
         if mask_map:
             result.output = pii_masker.unmask(result.output or "", mask_map)
 
+        # Plan 77 F3 (Copilot) — Postea análisis de fase del Issue (si aplica).
+        # No-fatal: devuelve None o dict; nunca lanza.
+        try:
+            from api.tickets import publish_issue_phase_from_run as _pub_issue_phase  # noqa: PLC0415
+            _issue_phase_meta = _pub_issue_phase(
+                ticket_id=ticket_id,
+                agent_type=agent_type,
+                output=result.output or "",
+                project_name=None,  # el helper lo lee de la Ticket
+            )
+        except Exception:  # noqa: BLE001
+            _issue_phase_meta = None
+
         # N1 — Contract Validator: valida el output antes de persistir
         log("info", "validando contrato del output…")
         cv_result = contract_validator.validate(agent_type, result.output or "")
@@ -892,6 +905,9 @@ def _run_in_background(
                     except Exception:
                         _out_dir = None
                     md["produced_files"] = _collect_produced_files(_out_dir)
+            # Plan 77 F3 — persiste metadatos de fase del Issue en execution row.
+            if _issue_phase_meta is not None:
+                md["issue_phase"] = _issue_phase_meta
             row.metadata_dict = md
             row.contract_result = cv_result.to_dict()
             row.status = "completed"

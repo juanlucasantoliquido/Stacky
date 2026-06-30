@@ -602,6 +602,24 @@ def test_is_active_semantics():
     assert is_active(csv_spec, "proj-a") is True
 
 
+def test_issue_phase_comments_flag_registered_default_false():
+    """Plan 77 F1 — flag STACKY_ISSUE_PHASE_COMMENTS_ENABLED registrado, env_only=False, categorizado."""
+    from services.harness_flags import FLAG_REGISTRY, _CATEGORY_KEYS, categorize
+
+    spec = next(
+        (s for s in FLAG_REGISTRY if s.key == "STACKY_ISSUE_PHASE_COMMENTS_ENABLED"),
+        None,
+    )
+    assert spec is not None, "STACKY_ISSUE_PHASE_COMMENTS_ENABLED no está en FLAG_REGISTRY"
+    assert spec.type == "bool"
+    # env_only=False (default): el flag es atributo de Config, visible en la UI
+    assert spec.env_only is False, "env_only debe ser False para que sea editable por UI"
+    # [C2] debe estar categorizado (en epicas_ado)
+    category = categorize("STACKY_ISSUE_PHASE_COMMENTS_ENABLED")
+    assert category == "epicas_ado", f"Categoría inesperada: {category!r}"
+    assert "STACKY_ISSUE_PHASE_COMMENTS_ENABLED" in _CATEGORY_KEYS["epicas_ado"]
+
+
 def test_flagspec_backward_compatible():
     """FlagSpec con construcción legacy (sin default) no rompe; default es None."""
     from services.harness_flags import FlagSpec

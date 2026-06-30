@@ -187,6 +187,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan76_codebase_memory_mcp.py
   tests/test_plan76_routes_registered.py
   tests/test_plan76_ratchet_byteidentical.py
+  # — Plan 77 — Issue pipeline fases comentarios + color —
+  tests/test_issue_phase_mapper.py
+  tests/test_issue_phase_publisher.py
+  tests/test_issue_no_children_guard.py
+  tests/test_issue_phase_runtime_parity.py
+  tests/test_harness_flags.py
 )
 
 pass=0

@@ -119,7 +119,36 @@ $HarnessTestFiles = @(
   "tests/test_plan73_repo_writer.py",
   "tests/test_plan73_generator_endpoint.py",
   "tests/test_plan73_routes_registered.py",
-  "tests/test_plan73_round_trip.py"
+  "tests/test_plan73_round_trip.py",
+  # Plan 74 — Migrador ADO→GitLab
+  "tests/test_plan74_migrator_map.py",
+  "tests/test_plan74_migrator_core.py",
+  "tests/test_plan74_migrator_epics.py",
+  "tests/test_plan74_migrator_attachments.py",
+  "tests/test_plan74_migrator_executor.py",
+  "tests/test_plan74_migrator_verify.py",
+  "tests/test_plan74_migrator_api.py",
+  "tests/test_plan74_migrator_wiring.py",
+  "tests/test_plan74_migrator_idempotency.py",
+  "tests/test_plan74_migrator_readonly_origin.py",
+  "tests/test_plan74_routes_registered.py",
+  # Plan 75 — Deep links bidireccionales GitLab
+  "tests/test_plan75_deep_links_compose.py",
+  "tests/test_plan75_gitlab_provider_urls.py",
+  "tests/test_plan75_deep_links_epic_fallback.py",
+  "tests/test_plan75_deep_links_bidirectional.py",
+  "tests/test_plan75_deep_links_wiring.py",
+  "tests/test_plan75_deep_links_no_double_encode.py",
+  # Plan 76 — Eval codebase-memory-mcp
+  "tests/test_plan76_codebase_memory_mcp.py",
+  "tests/test_plan76_routes_registered.py",
+  "tests/test_plan76_ratchet_byteidentical.py",
+  # Plan 77 — Issue pipeline fases comentarios + color
+  "tests/test_issue_phase_mapper.py",
+  "tests/test_issue_phase_publisher.py",
+  "tests/test_issue_no_children_guard.py",
+  "tests/test_issue_phase_runtime_parity.py",
+  "tests/test_harness_flags.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

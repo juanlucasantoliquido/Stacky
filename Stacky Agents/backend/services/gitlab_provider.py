@@ -171,7 +171,7 @@ class GitLabTrackerProvider:
         sub-groups) y gateado por el flag. _project_path() devuelve el path ya URL-encoded;
         compose_issue_url lo usa directamente sin re-encodear (C3).
         """
-        if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+        if not getattr(config.config, "STACKY_GITLAB_DEEP_LINKS_ENABLED", False):
             return None
         from services.gitlab_deep_links import compose_issue_url
         return compose_issue_url(self._client._base_url, self._client._project_path(), item_id)
@@ -181,7 +181,7 @@ class GitLabTrackerProvider:
 
         Plan 75 F2 — método NUEVO del provider GitLab (no del puerto TrackerProvider).
         """
-        if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+        if not getattr(config.config, "STACKY_GITLAB_DEEP_LINKS_ENABLED", False):
             return None
         from services.gitlab_deep_links import compose_mr_url
         return compose_mr_url(self._client._base_url, self._client._project_path(), mr_iid)
@@ -191,7 +191,7 @@ class GitLabTrackerProvider:
 
         Plan 75 F2 — método NUEVO del provider GitLab (no del puerto TrackerProvider).
         """
-        if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+        if not getattr(config.config, "STACKY_GITLAB_DEEP_LINKS_ENABLED", False):
             return None
         from services.gitlab_deep_links import compose_commit_url
         return compose_commit_url(self._client._base_url, self._client._project_path(), sha)
@@ -202,7 +202,7 @@ class GitLabTrackerProvider:
         Plan 75 F2 — método NUEVO del provider GitLab (no del puerto TrackerProvider).
         Requiere _group configurado; levanta TrackerConfigError si Free sin _group.
         """
-        if not config.STACKY_GITLAB_DEEP_LINKS_ENABLED:
+        if not getattr(config.config, "STACKY_GITLAB_DEEP_LINKS_ENABLED", False):
             return None
         from services.gitlab_deep_links import compose_epic_url
         if not self._group:

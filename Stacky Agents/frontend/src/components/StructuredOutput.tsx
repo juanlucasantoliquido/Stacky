@@ -11,6 +11,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { AgentType } from "../types";
 import MermaidDiagram from "./MermaidDiagram";
+import { TrackerDeepLink } from "./TrackerDeepLink";
 import styles from "./StructuredOutput.module.css";
 
 // FA-21 — Intercepts ```mermaid blocks and replaces with <MermaidDiagram>.

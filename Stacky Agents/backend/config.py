@@ -842,5 +842,13 @@ class Config:
         "STACKY_MIGRATOR_EPIC_POLICY", "auto"
     )
 
+    # Plan 75 — Deep links bidireccionales GitLab. Default OFF.
+    # Kill-switch que gatea la composición de URLs GitLab en el provider.
+    # Editable por UI (HarnessFlagsPanel, categoría "GitLab / Deep Links").
+    # Con flag OFF, item_url/mr_url/commit_url/epic_url devuelven None (frontend cae a <span>).
+    STACKY_GITLAB_DEEP_LINKS_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_DEEP_LINKS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
 
 config = Config()

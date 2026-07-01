@@ -159,6 +159,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
+        "STACKY_DETERMINISTIC_TASK_STATES_ENABLED",
     ),
     "routing_costo": (
         "STACKY_COMPLEXITY_ESTIMATION_ENABLED", "STACKY_DIFFICULTY_ROUTING_ENABLED",
@@ -1580,6 +1581,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+    ),
+    # ── Plan 79 — Estados de tarea deterministas y configurables ─────────────
+    FlagSpec(
+        key="STACKY_DETERMINISTIC_TASK_STATES_ENABLED",
+        type="bool",
+        label="Estados de tarea deterministas",
+        description=(
+            "Plan 79 — Stacky aplica el estado-en-progreso (al iniciar) y el "
+            "estado-final (al completar) desde la config del proyecto "
+            "(tracker_state_machine por agente), ignorando el estado que "
+            "proponga el agente. Default OFF."
+        ),
+        group="global",
+        env_only=False,
     ),
     # ── Plan 53 — Selector adaptativo de modelo/effort por confidence ──────────
     FlagSpec(

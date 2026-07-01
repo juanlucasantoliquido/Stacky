@@ -1732,10 +1732,18 @@ export interface ClientProfileGetResponse {
   error?: string;
 }
 
+export interface ClientProfileStateWarning {
+  agent_type: string;
+  field: "in_progress" | "next_state_ok";
+  value: string;
+  reason: string;
+}
+
 export interface ClientProfileSaveResponse {
   ok: boolean;
   profile?: ClientProfile;
   warnings?: string[];
+  state_warnings?: ClientProfileStateWarning[];
   error?: string;
 }
 

@@ -114,6 +114,24 @@ def start_codex_cli_run(
         session.flush()
         execution_id = exec_row.id
 
+        # Plan 79 F2 — estado-en-progreso determinista al iniciar (paridad 3
+        # runtimes). No crítico: nunca debe romper el arranque del run.
+        try:
+            from harness.task_states import apply_task_start_state
+            from services.tracker_provider import get_tracker_provider
+
+            _ticket = session.query(Ticket).filter(Ticket.id == ticket_id).first()
+            if _ticket is not None and _ticket.ado_id is not None:
+                _provider = get_tracker_provider(_ticket.stacky_project_name)
+                apply_task_start_state(
+                    project_name=_ticket.stacky_project_name,
+                    agent_type=agent_type,
+                    ado_id=_ticket.ado_id,
+                    provider=_provider,
+                )
+        except Exception:
+            logger.debug("apply_task_start_state falló (no crítico)", exc_info=True)
+
     log_streamer.open(execution_id)
     log_streamer.push(
         execution_id,

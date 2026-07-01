@@ -193,6 +193,16 @@ HARNESS_TEST_FILES=(
   tests/test_issue_no_children_guard.py
   tests/test_issue_phase_runtime_parity.py
   tests/test_harness_flags.py
+  # — Plan 79 — Estados de tarea deterministas y configurables —
+  tests/test_plan79_flag.py
+  tests/test_plan79_resolver.py
+  tests/test_plan79_safe_transition.py
+  tests/test_plan79_apply_start.py
+  tests/test_plan79_apply_final.py
+  tests/test_plan79_centinela_estados.py
+  tests/test_plan79_validate_states.py
+  tests/test_plan79_agent_md_note.py
+  tests/test_plan79_ratchet.py
 )
 
 pass=0

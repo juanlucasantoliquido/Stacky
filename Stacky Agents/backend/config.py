@@ -812,6 +812,15 @@ class Config:
     STACKY_GITLAB_EPICS_NATIVE: bool = os.getenv(
         "STACKY_GITLAB_EPICS_NATIVE", "false"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 79 — Estados de tarea deterministas y configurables ─────────────
+    # ON: Stacky aplica el estado-en-progreso (al iniciar) y el estado-final
+    # (al completar) desde client_profile.tracker_state_machine.<agent_type>,
+    # ignorando el target_ado_state que proponga el agente. OFF (default):
+    # byte-idéntico al comportamiento actual (el agente sigue proponiendo el
+    # estado vía el body del run).
+    STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
+        "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
     # Si true (default), infiere pipelines CI de GitLab cuando el tracker es gitlab.
     STACKY_GITLAB_CI_INFERENCE: bool = os.getenv(
         "STACKY_GITLAB_CI_INFERENCE", "true"

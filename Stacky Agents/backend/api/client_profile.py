@@ -43,6 +43,7 @@ from services.client_profile import (
     validate_client_profile,
 )
 from services.config_transfer import record_event
+from services.tracker_provider import get_tracker_provider  # Plan 79 F5
 from services.secrets_store import (
     set_encrypted_secret,
     write_json_file,
@@ -178,10 +179,25 @@ def put_client_profile(project_name: str):
 
     tracker_type = _tracker_type_for(project_name)
     validation = validate_client_profile(complete_client_profile(normalized, tracker_type))
+
+    # Plan 79 F5 — warnings NO bloqueantes si in_progress/next_state_ok no
+    # existen en el tracker activo. Defensivo: si fetch_states falla, sin
+    # warnings (nunca impide guardar).
+    state_warnings: list = []
+    try:
+        from harness.task_states import validate_states_against_tracker
+
+        prov = get_tracker_provider(project_name)
+        valid_states = prov.fetch_states() if prov else []
+        state_warnings = validate_states_against_tracker(normalized, valid_states)
+    except Exception:  # noqa: BLE001
+        state_warnings = []
+
     return jsonify({
         "ok": True,
         "profile": normalized,
         "warnings": validation.warnings,
+        "state_warnings": state_warnings,
     })
 
 

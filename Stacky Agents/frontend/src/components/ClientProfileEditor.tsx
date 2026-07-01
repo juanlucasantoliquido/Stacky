@@ -12,6 +12,7 @@ import {
   DbReadonlyAuth,
   type ClientProfile,
   type ClientProfilePathCheck,
+  type ClientProfileStateWarning,
 } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
 import styles from "./ClientProfileEditor.module.css";
@@ -451,6 +452,7 @@ export default function ClientProfileEditor() {
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [stateWarnings, setStateWarnings] = useState<ClientProfileStateWarning[]>([]);
 
   const [dbServer, setDbServer] = useState("");
   const [dbDatabase, setDbDatabase] = useState("");
@@ -605,6 +607,7 @@ export default function ClientProfileEditor() {
       } else {
         setSaveNotice("Perfil guardado correctamente.");
         setWarnings(res.warnings ?? []);
+        setStateWarnings(res.state_warnings ?? []);
         await qc.invalidateQueries({ queryKey: ["client-profile", projectName] });
         await qc.invalidateQueries({ queryKey: ["projects"] });
       }
@@ -1001,6 +1004,20 @@ export default function ClientProfileEditor() {
             <ul className={styles.warningsList}>
               {warnings.map((w, i) => (
                 <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {stateWarnings.length > 0 && (
+          <div className={styles.warningsBox}>
+            <strong className={styles.warningsTitle}>
+              Estados de tarea no reconocidos por el tracker:
+            </strong>
+            <ul className={styles.warningsList}>
+              {stateWarnings.map((w, i) => (
+                <li key={i}>
+                  {w.agent_type}.{w.field}: "{w.value}" no existe en el tracker
+                </li>
               ))}
             </ul>
           </div>

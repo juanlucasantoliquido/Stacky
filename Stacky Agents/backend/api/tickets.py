@@ -31,6 +31,11 @@ from services.ado_client import AdoClient, AdoApiError as _AdoApiError, AdoConfi
 from services.project_context import ProjectContextError, build_ado_client, resolve_project_context
 from services.tracker_provider import get_tracker_provider, TrackerConfigError  # Plan 70 F2
 from services.ci_provider import get_ci_provider, ItemRef, ItemPipelineResult  # Plan 71 F5
+from services.client_profile import load_effective_client_profile  # Plan 79
+from harness.task_states import (  # Plan 79
+    _safe_transition,
+    deterministic_task_states_enabled,
+)
 import config  # Plan 70 F2 — flag STACKY_TICKETS_PROVIDER_ENABLED / Plan 71 F5
 
 logger = logging.getLogger("stacky_agents.api.tickets")
@@ -511,6 +516,37 @@ def _resolve_agent_block_states(
     except Exception:  # noqa: BLE001
         logger.debug("no se pudo resolver block/review states para %s/%s", project_name, agent_type, exc_info=True)
         return (None, None)
+
+
+def _apply_task_state(*, ticket, agent_type, phase, correlation_id, publish_ok=True) -> dict:
+    """Plan 79 F3 — phase ∈ {"start","final"}. Aplica el estado determinista de
+    la config (tracker_state_machine.<agent_type>), IGNORANDO cualquier estado
+    propuesto por el agente. Devuelve un dict de telemetría
+    {skipped|ok|error,...}. Nunca lanza."""
+    from harness.task_states import applicable_states, resolve_task_state_plan
+
+    try:
+        profile = load_effective_client_profile(getattr(ticket, "stacky_project_name", None)) or {}
+    except Exception:  # noqa: BLE001
+        profile = {}
+    plan = resolve_task_state_plan(profile, agent_type)
+    target = plan.in_progress if phase == "start" else plan.final_ok
+    if not target:
+        return {"skipped": True, "reason": f"no_{phase}_state", "source": plan.source}
+    # CENTINELA EN RUNTIME: jamás aplicar un estado fuera del conjunto cerrado.
+    if target not in applicable_states(plan):
+        return {"skipped": True, "reason": "state_not_applicable"}  # defensa imposible-por-construcción
+    ado_id = getattr(ticket, "ado_id", None)
+    if ado_id is None:
+        return {"skipped": True, "reason": "no_ado_id"}
+    if phase == "final" and not publish_ok:
+        return {"skipped": True, "reason": "publish_not_ok"}
+    prov = _provider_for_ticket(ticket=ticket)
+    return _safe_transition(
+        prov, ado_id, target, phase=phase,
+        legacy_client_fn=lambda: _ado_client_for_ticket(ticket=ticket),
+        correlation_id=correlation_id,
+    )
 
 
 def _check_finish_manifest_gate(execution_id: int | None) -> dict | None:
@@ -1327,7 +1363,17 @@ def set_stacky_status_by_ado(ado_id: int):
     # Si el publish falló o se saltó, no cambiamos estado (no queremos un
     # ticket en "Done" sin comentario publicado).
     state_change_result: dict = {"skipped": True, "reason": "not_requested"}
-    if target_ado_state:
+    if deterministic_task_states_enabled() and new_status == "completed":
+        # Plan 79 — Determinista: el estado-final sale de la config, NO del
+        # body del agente. El target_ado_state que mandó el agente se IGNORA
+        # a rajatabla cuando el flag está ON. El block_guard de arriba
+        # (:1300-1323) solo aplica en la rama legacy (else): en modo
+        # determinista no hay estado del agente que bloquear.
+        state_change_result = _apply_task_state(
+            ticket=t, agent_type=agent_type, phase="final",
+            correlation_id=correlation_id, publish_ok=bool(publish_result.get("ok")),
+        )
+    elif target_ado_state:
         if ado_id is None:
             state_change_result = {"skipped": True, "reason": "no_ado_id"}
         elif not publish_result.get("ok"):

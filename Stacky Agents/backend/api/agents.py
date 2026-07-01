@@ -1233,6 +1233,23 @@ def open_chat():
         except Exception as _track_exc:
             logger.warning("open_chat — no se pudo registrar ejecución: %s", _track_exc)
 
+    # Plan 79 F2 — estado-en-progreso determinista al iniciar (paridad 3
+    # runtimes: GitHub Copilot). No crítico: nunca debe romper el arranque.
+    if created_new_execution and ado_id_for_enrich is not None:
+        try:
+            from harness.task_states import apply_task_start_state
+            from services.tracker_provider import get_tracker_provider
+
+            _provider = get_tracker_provider(project_ctx.stacky_project_name)
+            apply_task_start_state(
+                project_name=project_ctx.stacky_project_name,
+                agent_type=inferred_type,
+                ado_id=ado_id_for_enrich,
+                provider=_provider,
+            )
+        except Exception:
+            logger.debug("apply_task_start_state falló (no crítico)", exc_info=True)
+
     # Transicionar stacky_status del ticket a 'running' cuando arrancamos una
     # nueva ejecución. Sin esto, un ticket que quedó en 'completed' por un run
     # anterior se sigue mostrando como completed; combinado con la execution

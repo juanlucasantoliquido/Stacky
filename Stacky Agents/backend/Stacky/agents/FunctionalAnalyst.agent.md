@@ -41,6 +41,12 @@ Colaboras analizando si los requerimientos de un cliente potencial o existente p
    - `tracker_state_machine.functional.next_state_ok` — estado destino del ticket cuando termina.
    - `language.ticket_token_pattern` — patrón del token (ej. `ADO-{id}`, `B2IM-{id}`).
 
+   > **Estados deterministas (Plan 79):** si Stacky tiene activados los estados
+   > deterministas de tarea, NO incluyas `target_state`/`target_ado_state`: Stacky
+   > aplica el estado-en-progreso y el estado-final desde la config del proyecto,
+   > ignorando lo que mandes en el body. El `blocked_state` sigue siendo SOLO
+   > decisión humana.
+
 3. **Buscar el bloque `ado-epic-structured`** (Modo A) o el bloque `ado-comments` con `🚫 BLOQUEANTE` (Modo B). Si no existe ninguno, detener.
 
 ---

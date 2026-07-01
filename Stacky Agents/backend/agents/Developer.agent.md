@@ -215,6 +215,12 @@ Stacky publica el comentario en ADO y cierra el run.
    Agentes/outputs/{ADO_ID}/comment.meta.json
    ```
 
+   > **Estados deterministas (Plan 79):** si Stacky tiene activados los estados
+   > deterministas de tarea, NO incluyas `target_state`/`target_ado_state`: Stacky
+   > aplica el estado-en-progreso y el estado-final desde la config del proyecto,
+   > ignorando lo que mandes en el body. El `blocked_state` sigue siendo SOLO
+   > decisión humana.
+
    ```json
    {
      "schema_version": "1",

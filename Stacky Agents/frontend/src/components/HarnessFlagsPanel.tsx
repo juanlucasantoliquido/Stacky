@@ -124,6 +124,18 @@ function FlagRow({ flag, allFlags, onUpdate, saving }: FlagRowProps) {
         />
       );
     }
+    if (flag.type === "str") {
+      return (
+        <input
+          type="text"
+          className={styles.textInput}
+          value={localText}
+          disabled={saving}
+          onChange={(e) => setLocalText(e.target.value)}
+          onBlur={() => onUpdate(flag.key, localText)}
+        />
+      );
+    }
     if (flag.type === "json") {
       return (
         <JsonInput

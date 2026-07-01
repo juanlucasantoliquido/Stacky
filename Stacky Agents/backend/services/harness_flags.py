@@ -204,6 +204,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     "avanzado": (
         "STACKY_CLI_EGRESS_ENABLED", "STACKY_SPECULATIVE_ENABLED", "STACKY_SPECULATIVE_MODE",
         "STACKY_CODEBASE_MEMORY_MCP_ENABLED",  # Plan 76 — eval codebase-memory-mcp
+        "STACKY_CODEBASE_MEMORY_MCP_PROJECTS", "STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH",  # Plan 80
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -1843,6 +1844,32 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
         default=False,
     ),
+    # ── Plan 80 — Wiring real codebase-memory-mcp: allowlist + ruta del binario ──
+    FlagSpec(
+        key="STACKY_CODEBASE_MEMORY_MCP_PROJECTS",
+        type="csv",
+        label="Codebase Memory MCP — proyectos (CSV) — Plan 80",
+        description=(
+            "Plan 80 — Lista CSV de proyectos donde inyectar el MCP externo codebase-memory-mcp. "
+            "Vacío = todos (si el master STACKY_CODEBASE_MEMORY_MCP_ENABLED está ON). "
+            "Requiere también STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH seteado."
+        ),
+        group="global",
+        pair="STACKY_CODEBASE_MEMORY_MCP_ENABLED",  # renderiza junto al master toggle
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH",
+        type="str",
+        label="Codebase Memory MCP — ruta del binario — Plan 80",
+        description=(
+            "Plan 80 — Ruta absoluta al ejecutable codebase-memory-mcp instalado por el operador. "
+            "Vacío = no se inyecta el 2º server (seguro). Stacky NO empaqueta el binario. "
+            "Ejemplo: C:\\\\tools\\\\codebase-memory-mcp.exe"
+        ),
+        group="global",
+        env_only=False,
+    ),
 )
 
 # Índice rápido para lookups O(1)
@@ -1861,7 +1888,7 @@ def categorize(key: str) -> str:
 def _type_zero(flag_type: str) -> object:
     if flag_type == "bool":
         return False
-    if flag_type in ("csv", "json"):
+    if flag_type in ("csv", "json", "str"):
         return ""
     if flag_type == "float":
         return 0.0
@@ -2016,4 +2043,6 @@ def _cast(spec: FlagSpec, raw: object) -> object:
                 f"Flag {spec.key!r}: valor no válido para json: {raw!r}."
             )
         return s
+    if spec.type == "str":
+        return "" if raw is None else str(raw)
     raise ValueError(f"Tipo desconocido en FLAG_REGISTRY para {spec.key!r}: {spec.type!r}")

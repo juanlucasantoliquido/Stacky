@@ -389,6 +389,10 @@ def _run_in_background(
                 log("info", "Plan 54: rejection_lessons inyectadas en prompt (Codex)", group="operator")
         except Exception as _exc_mp_codex:  # noqa: BLE001
             log("warn", f"Plan 54: memory_prefix falló en codex (no crítico): {_exc_mp_codex}")
+        # Plan 80 — MCP externo: Codex no auto-inyecta. Ver plan 80b y guía install-codex.md.
+        from services import cli_feature_flags as _cff_codex  # noqa: PLC0415
+        if _cff_codex.codebase_memory_mcp_enabled(_codex_project_name):
+            log("info", "Codex: MCP externo activado (flag ON) pero requiere config manual. Ver install-codex.md (Plan 76/80).")
         prompt = _build_codex_prompt(
             selected_agent=selected_agent,
             all_agents=all_agents,

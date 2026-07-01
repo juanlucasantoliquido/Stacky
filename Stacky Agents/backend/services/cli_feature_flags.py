@@ -147,3 +147,14 @@ def skills_enabled(project_name: str | None) -> bool:
         projects_csv=config.STACKY_SKILLS_PROJECTS,
         project_name=project_name,
     )
+
+
+def codebase_memory_mcp_enabled(project_name: str | None) -> bool:
+    """Plan 80 — server MCP externo codebase-memory-mcp, por proyecto."""
+    from config import config
+
+    return project_enabled(
+        enabled=config.STACKY_CODEBASE_MEMORY_MCP_ENABLED,
+        projects_csv=config.STACKY_CODEBASE_MEMORY_MCP_PROJECTS,
+        project_name=project_name,
+    )

@@ -158,7 +158,17 @@ $HarnessTestFiles = @(
   "tests/test_plan79_centinela_estados.py",
   "tests/test_plan79_validate_states.py",
   "tests/test_plan79_agent_md_note.py",
-  "tests/test_plan79_ratchet.py"
+  "tests/test_plan79_ratchet.py",
+  # Plan 80 — Wiring real codebase-memory-mcp
+  "tests/test_plan80_flags.py",
+  "tests/test_plan80_wiring_pure.py",
+  "tests/test_plan80_writer.py",
+  "tests/test_plan80_codex.py",
+  "tests/test_plan80_copilot.py",
+  "tests/test_plan80_savings.py",
+  "tests/test_plan80_status_shape.py",
+  "tests/test_plan80_ratchet_byteidentical.py",
+  "tests/test_plan80_routes_registered.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

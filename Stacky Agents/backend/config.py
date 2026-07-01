@@ -872,5 +872,16 @@ class Config:
         "STACKY_CODEBASE_MEMORY_MCP_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 80 — Allowlist por proyecto para el MCP externo codebase-memory-mcp.
+    # Master = STACKY_CODEBASE_MEMORY_MCP_ENABLED (Plan 76, ya existe). Vacío = todos los proyectos.
+    STACKY_CODEBASE_MEMORY_MCP_PROJECTS: str = os.getenv(
+        "STACKY_CODEBASE_MEMORY_MCP_PROJECTS", ""
+    )
+    # Plan 80 — Ruta absoluta del binario codebase-memory-mcp en la máquina del operador.
+    # Vacío (default) => NO se inyecta el 2º server aunque el master esté ON (degradación segura).
+    STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH: str = os.getenv(
+        "STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH", ""
+    )
+
 
 config = Config()

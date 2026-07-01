@@ -59,3 +59,32 @@ La reducción de tokens en queries de "dónde está X" es structuralmente espera
 2. Completar la tabla de métricas
 3. Actualizar D5 y D9 en este archivo y en `decision.md`
 4. Si D9 = RECHAZADO: actualizar F4/F5 y deshacer el flag
+
+---
+
+## Plan 80 F5 — Protocolo automatizado de estimación (PoC manual, no telemetría)
+
+`services/codebase_memory_mcp_wiring.py::estimate_query_savings(chars_baseline, chars_mcp_response)`
+es una función pura (heurística ~4 chars/token) que reemplaza el cálculo manual de
+`delta_tokens`/`delta_pct` de la tabla de arriba. **No hay productor automático en el
+runtime** — el operador la invoca a mano por cada query de `queries.md`.
+
+Comando exacto (por cada query Q1..Q10 de `queries.md`, con el repo en el commit SHA
+registrado en la fila `commit_sha_subtree`):
+
+```
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+.\.venv\Scripts\python.exe -c "from services.codebase_memory_mcp_wiring import estimate_query_savings; print(estimate_query_savings(<chars_baseline>, <chars_mcp_response>))"
+```
+
+Donde:
+- `chars_baseline` = caracteres totales leídos por el agente en modo grep/Read (archivos
+  candidatos completos) para responder la query.
+- `chars_mcp_response` = caracteres de la respuesta de la tool MCP (`get_code_snippet`,
+  `search_graph`, `trace_call_path`) para la misma query.
+
+El resultado (`tokens_baseline`, `tokens_mcp`, `delta`, `delta_pct`) se vuelca a la tabla
+de métricas de arriba, fila por fila. `GET /api/codebase-memory-mcp/savings` expone el
+estado agregado honesto (`samples: 0`, `delta_pct: null`) hasta que exista un consumidor
+que llame `aggregate_savings()` con datos reales — **fuera de scope de este plan**
+(ver §6 Fuera de scope del Plan 80: "NO store persistente de métricas de ahorro").

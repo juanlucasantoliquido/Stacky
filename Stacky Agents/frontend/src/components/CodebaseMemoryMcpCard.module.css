@@ -1,0 +1,48 @@
+.card {
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--card-bg, #1a1a1a);
+}
+
+.title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.loading,
+.empty,
+.errorMsg {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.metricBox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metricLabel {
+  font-size: 0.72rem;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.metricValue {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.link {
+  font-size: 0.8rem;
+}

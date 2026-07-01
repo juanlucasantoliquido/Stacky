@@ -3011,3 +3011,29 @@ export const Migrator = {
       `/api/migrator/${encodeURIComponent(stacky_project)}/runs`
     ),
 };
+
+// ── Plan 76/80 — Codebase Memory MCP (externo, opt-in) ──────────────────────
+
+export interface CodebaseMemoryMcpStatusResponse {
+  enabled: boolean;
+  installed_hint: string;
+  flag: string;
+  external_repo: string;
+  guides: Record<string, string>;
+  wiring: { binary_path_set: boolean; injects_external: boolean };
+}
+
+export interface CodebaseMemoryMcpSavingsResponse {
+  samples: number;
+  delta_pct: number | null;
+  note: string;
+}
+
+export const CodebaseMemoryMcp = {
+  /** GET /api/codebase-memory-mcp/status — estado + guías + wiring (Plan 80 F6). */
+  status: (): Promise<CodebaseMemoryMcpStatusResponse> =>
+    api.get<CodebaseMemoryMcpStatusResponse>("/api/codebase-memory-mcp/status"),
+  /** GET /api/codebase-memory-mcp/savings — ahorro estimado (PoC manual, Plan 80 F5). */
+  savings: (): Promise<CodebaseMemoryMcpSavingsResponse> =>
+    api.get<CodebaseMemoryMcpSavingsResponse>("/api/codebase-memory-mcp/savings"),
+};

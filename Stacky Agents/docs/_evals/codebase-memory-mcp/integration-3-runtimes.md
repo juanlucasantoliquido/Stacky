@@ -96,3 +96,40 @@ El README incluye explícitamente Codex CLI en la tabla de compatibilidad multi-
 | Externo Plan 76 | `"codebase-memory-mcp"` | Indexación de código del proyecto |
 
 Claves distintas → sin colisión → ambos servers conviven en el config de Claude Code CLI.
+
+---
+
+## Plan 80: Estado de auto-inyección por runtime
+
+> Plan 80 — wiring real. Generado: 2026-07-01. Este apéndice corrige la promesa
+> del F3 original de este doc ("D1 Codex CLI = APROBADO" solo evaluaba soporte
+> TOML documentado por el README externo, NO implica wiring automático de Stacky).
+
+| Runtime         | Auto-inyección | Ruta soportada | Razón |
+|---|---|---|---|
+| Claude Code CLI | SÍ (F2)        | `--mcp-config` automático | `claude_code_cli_runner.py:595` ya escribe el config; `stacky_mcp.py::maybe_write_mcp_config` inyecta el 2º server (Plan 80 F2) |
+| Codex CLI       | NO (3b)        | Guía manual `install-codex.md` | Sin rama MCP en `codex_cli_runner.py`; soporte TOML del binario documentado por el README externo, pero Stacky no lo cablea aún |
+| Copilot Pro     | NO (F4)        | Guía manual `install-copilot-pro.md` | Bridge HTTP; no spawnea CLI |
+
+### Nota crítica — Indexación previa (obligatoria antes de usar el MCP externo)
+
+El server externo `{"command": binary_path, "args": []}` arranca **sin índice**. Las tools
+`search_graph`, `get_code_snippet`, `trace_call_path` devuelven vacío si no se corrió
+`index_repository` primero. El operador debe ejecutar **una sola vez** (y luego cuando el
+codebase cambie significativamente):
+
+```
+codebase-memory-mcp index_repository --path "N:\GIT\RS\STACKY\Stacky"
+```
+
+O configurar indexación automática: `codebase-memory-mcp config set auto_index true`
+(re-indexa cambios en background vía git polling). **Sin este paso, activar el flag produce
+un MCP funcional pero con tools que devuelven vacío — el agente degrada silenciosamente.**
+
+### Plan 80b (futuro): Opción 3a para Codex
+
+Prerequisito: verificar que Codex CLI acepta `[mcp_servers.X] command="..." args=[]` en un
+`config.toml` pasado por-run (o flag `--config`).
+Si se verifica: crear `build_codex_mcp_toml_block(binary_path) -> str | None` en
+`codebase_memory_mcp_wiring.py` y cablear en `codex_cli_runner.py` análogo a F2 de este
+plan, con su propio catch que no rompa el run.

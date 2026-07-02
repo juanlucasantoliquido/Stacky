@@ -1,6 +1,28 @@
 # Plan 84 — Aplicación en caliente honesta: flags de startup del arnés (`restart_required` + "pendiente de reinicio")
 
-**Estado:** PROPUESTO v1 (2026-07-02)
+**Estado:** PROPUESTO v2 (2026-07-02) — v1 → v2 tras crítica adversarial (`criticar-y-mejorar-plan`)
+
+### Changelog v1 → v2
+- **C1:** el refactor de `read_current()` a `_current_value()` NO es byte-idéntico: para flags
+  `type="str"` env_only sin configurar, el bloque inline actual devuelve `0` (no contempla `"str"`,
+  harness_flags.py:1936-1942) y `_type_zero` devuelve `""`. Se declara como CORRECCIÓN deliberada
+  (el zero de un str es `""`) con test explícito `test_read_current_str_env_only_unset_is_empty_string`.
+- **C2:** los tests del PUT (F2) monkeypatchean OBLIGATORIAMENTE
+  `api.harness_flags._ENV_PATH` a `tmp_path / ".env"` (el módulo lo prevé, api/harness_flags.py:23);
+  sin eso escribirían el `.env` vivo del repo.
+- **C3:** eliminado el hedge "localizar y correr ESE archivo": comando determinista que corre TODOS
+  los archivos que devuelva `grep -rl "read_current" tests`.
+- **C4:** receta literal para `test_snapshot_boot_values_captures_only_restart_required` en F0 con
+  registry sintético (`monkeypatch.setattr(harness_flags, "FLAG_REGISTRY", (...))`), sin depender de F1.
+- **C5:** documentado el escape hatch del centinela de F1: una lectura call-time legítima nueva en
+  `app.py` se resuelve moviéndola a un módulo de servicio, o declarando `restart_required=True` tras
+  auditar que es consumo boot-time.
+- **C6:** F3.4 determinista: grep del handler del PUT en el Panel; si no refetchea tras PUT, agregar
+  la llamada al loader existente.
+- **[ADICIÓN ARQUITECTO v2]:** `read_current()` serializa `boot_value` (solo con valor cuando
+  `pending_restart` es true, si no `null`) y la nota de fila muestra
+  "el proceso corre con `<boot_value>`": el operador ve exactamente qué valor está ACTIVO versus
+  qué guardó. Con tests en F0 y F3.
 
 ## 1. Objetivo e impacto
 
@@ -143,17 +165,25 @@ def pending_restart(spec: FlagSpec, value: object) -> bool:
     return value != _BOOT_VALUES[spec.key]
 ```
 
-   Nota: `read_current()` ya calcula el valor con la MISMA lógica (harness_flags.py:1934-1946);
-   `_current_value` la extrae para reusar sin duplicar. Refactorizar `read_current()` para llamar
-   `value = _current_value(spec)` en lugar del bloque inline (comportamiento idéntico, cubierto por
-   los tests existentes del panel).
+   Nota (C1-v2): `read_current()` hoy calcula el valor con un bloque inline (harness_flags.py:1934-1946)
+   que NO contempla `type="str"`: una flag str env_only sin configurar cae al else y devuelve `0`.
+   `_current_value` usa `_type_zero`, que devuelve `""` para str. Refactorizar `read_current()` para
+   llamar `value = _current_value(spec)` — es un delta DELIBERADO y correcto solo para ese caso
+   (str env_only sin configurar: `0` → `""`); para bool/int/float/csv/json el comportamiento es
+   byte-idéntico. Cubierto por el test `test_read_current_str_env_only_unset_is_empty_string` (abajo).
 
-3. En el dict que arma `read_current()` (harness_flags.py:1948-1961) agregar DOS claves al final:
+3. En el dict que arma `read_current()` (harness_flags.py:1948-1961) agregar TRES claves al final
+   ([ADICIÓN ARQUITECTO v2] `boot_value`):
 
 ```python
             "restart_required": spec.restart_required,
             "pending_restart": pending_restart(spec, value),
+            "boot_value": (_BOOT_VALUES.get(spec.key)
+                           if pending_restart(spec, value) else None),
 ```
+
+   `boot_value` solo lleva valor cuando hay un cambio pendiente (si no, `null`): la UI puede decir
+   "el proceso corre con `<boot_value>`" sin ambigüedad y sin ensanchar el payload en el caso común.
 
 4. En `app.py`, dentro de `create_app()`, ANTES del bloque del digest daemon (hoy `app.py:364`),
    agregar:
@@ -175,22 +205,31 @@ def pending_restart(spec: FlagSpec, value: object) -> bool:
   y `pending_restart(spec, 0) is False`.
 - `test_pending_restart_false_for_normal_flag` — spec con `restart_required=False` devuelve False
   aunque haya snapshot con valor distinto.
-- `test_snapshot_boot_values_captures_only_restart_required` — tras
-  `snapshot_boot_values()`, `set(_BOOT_VALUES) == {k for spec restart_required}` (usar el mapa de
-  F1 una vez exista; en F0, con un registry parcheado con `monkeypatch`).
+- `test_snapshot_boot_values_captures_only_restart_required` — (C4-v2, receta literal) construir
+  DOS specs sintéticos `spec_a = FlagSpec(key="STACKY_TEST_A", type="int", label="", description="",
+  group="global", env_only=True, restart_required=True)` y `spec_b = FlagSpec(key="STACKY_TEST_B",
+  type="int", label="", description="", group="global", env_only=True)`; parchear
+  `monkeypatch.setattr(harness_flags, "FLAG_REGISTRY", (spec_a, spec_b))`; tras
+  `snapshot_boot_values()`, `set(harness_flags._BOOT_VALUES) == {"STACKY_TEST_A"}`.
 - `test_read_current_serializes_restart_fields` — todo item del GET tiene las claves
-  `restart_required` (bool) y `pending_restart` (bool).
+  `restart_required` (bool), `pending_restart` (bool) y `boot_value` (None cuando no hay pendiente).
 - `test_read_current_pending_restart_reflects_env_change` — para
   `STACKY_ADO_EDIT_SWEEP_HOURS` (env_only): snapshot con env sin setear (boot=0/`_type_zero`),
   luego `monkeypatch.setenv("STACKY_ADO_EDIT_SWEEP_HOURS", "12")` → el item del GET tiene
-  `pending_restart is True`.
+  `pending_restart is True` y `boot_value == 0`.
+- `test_read_current_str_env_only_unset_is_empty_string` — (C1-v2) para una flag `type="str"`
+  env_only del registry (localizarla con `grep -n 'type="str"' services/harness_flags.py`) con la
+  env var sin setear (`monkeypatch.delenv(key, raising=False)`), el item del GET tiene
+  `value == ""` (antes del refactor devolvía `0`; delta deliberado documentado en el Changelog).
 
 **Comando:** `cd "Stacky Agents/backend"` y
 `.venv\Scripts\python.exe -m pytest tests\test_harness_flags_restart_required.py -q`
 
-**Criterio binario:** los 7 tests pasan Y los tests existentes del panel siguen verdes
-(`.venv\Scripts\python.exe -m pytest tests\test_harness_flags.py -q` — localizar el archivo real
-con `grep -rl "read_current" tests\` y correr ESE archivo).
+**Criterio binario:** los 8 tests pasan Y los tests existentes del panel siguen verdes. Comando
+determinista (C3-v2), desde `Stacky Agents/backend`:
+`grep -rl "read_current" tests | %{ .venv\Scripts\python.exe -m pytest $_ -q }` (PowerShell) o
+`for f in $(grep -rl "read_current" tests); do .venv/Scripts/python.exe -m pytest "$f" -q; done`
+(bash) — TODOS los archivos que devuelva el grep deben terminar verdes.
 
 **Flag:** ninguna (metadata + GET; sin rama de comportamiento).
 **Runtimes:** impacto nulo en los 3 (ningún runner importa estos símbolos).
@@ -250,6 +289,12 @@ def test_app_startup_flag_reads_are_all_declared():
     )
 ```
 
+   Escape hatch documentado (C5-v2, dejar como comentario junto al test): si en el futuro `app.py`
+   necesita leer una key del registry en CALL-TIME (no boot), hay exactamente DOS salidas válidas —
+   (a) mover esa lectura a un módulo de servicio (preferida), o (b) si la auditoría confirma que es
+   consumo boot-time, declararla `restart_required=True` y agregarla al mapa congelado. Prohibido
+   agregar excepciones al regex.
+
 4. Verificar y NO romper: `test_default_known_only_for_curated` (correr el archivo que lo contiene,
    localizarlo con `grep -rl "default_known_only_for_curated" tests\`).
 
@@ -284,7 +329,11 @@ estable, el frontend no necesita `in`.
 
 **Tests (`test_harness_flags_endpoint_restart.py`, patrón del test client Flask existente —
 espejar el setup de los tests del endpoint actuales, localizados con
-`grep -rl "put_harness_flags\|harness-flags" tests\`):**
+`grep -rl "put_harness_flags\|harness-flags" tests\`). REGLA DURA (C2-v2): TODO test que haga PUT
+debe monkeypatchear `monkeypatch.setattr(api.harness_flags, "_ENV_PATH", tmp_path / ".env")`
+(el módulo lo prevé para tests, api/harness_flags.py:23); sin eso el test ESCRIBE el `.env` vivo
+del repo. Verificar además que los tests no dejen residuos en `os.environ`
+(`monkeypatch.delenv` en teardown implícito de monkeypatch):**
 - `test_put_normal_flag_returns_empty_restart_keys` — PUT de una flag no-startup (p. ej.
   `STACKY_MAX_CONCURRENT_RUNS`) → `restart_required_keys == []`.
 - `test_put_startup_flag_returns_key` — PUT de `STACKY_DIGEST_INTERVAL_HOURS=2` →
@@ -310,19 +359,26 @@ cambio pendiente ahora mismo.
 
 **Cambios exactos:**
 
-1. Tipo: agregar `restart_required?: boolean` y `pending_restart?: boolean` al tipo del flag
-   (tolerar ausencia: leer con `?? false`).
+1. Tipo: agregar `restart_required?: boolean`, `pending_restart?: boolean` y
+   `boot_value?: string | number | boolean | null` al tipo del flag (tolerar ausencia: leer con
+   `?? false` / `?? null`).
 2. `FlagRow`: junto a los badges existentes (patrón del badge `def:`, Panel:165-167 hoy), si
    `flag.restart_required` renderizar badge `reinicio` con
    `title="Esta flag se lee al arrancar el backend; los cambios aplican tras reiniciar"`.
 3. `FlagRow`: si `flag.pending_restart` renderizar nota bajo el control (mismo estilo visual que
    las notas de fila de los planes 82/83 si ya existen; si no, un `<div className={styles.rowNote}>`
-   nuevo): texto exacto `Cambio pendiente de reinicio del backend`.
+   nuevo). Texto exacto ([ADICIÓN ARQUITECTO v2], usa `boot_value` del GET):
+   `Cambio pendiente de reinicio del backend — el proceso corre con <boot_value>` (formatear
+   `boot_value` con `String(...)`; si `boot_value` es `null` por carrera, omitir el sufijo " — el
+   proceso corre con ...").
 4. Tras un PUT exitoso, si `restart_required_keys.length > 0`, mostrar el aviso no-bloqueante que el
    panel ya use para feedback (espejar el mecanismo de `apiError`/mensajes del Panel — localizar con
    `grep -n "apiError" HarnessFlagsPanel.tsx`): texto
-   `Guardado. Requiere reiniciar el backend: <keys separadas por coma>`. Además, refrescar el GET
-   (el panel ya refetchea tras PUT; verificar y reusar).
+   `Guardado. Requiere reiniciar el backend: <keys separadas por coma>`. Refetch (C6-v2, paso
+   determinista): localizar el handler del PUT en el Panel con `grep -n "update(" HarnessFlagsPanel.tsx`
+   (o el nombre del método de `endpoints.ts` que haga el PUT); verificar que tras el PUT se llama al
+   loader del GET (la función que puebla `flags`); si NO lo hace, agregar esa llamada reusando el
+   loader existente (sin crear fetch nuevo).
 5. Hero: chip `N pendientes de reinicio` renderizado SOLO si `N > 0`
    (`N = flags.filter(f => f.pending_restart).length`), mismo patrón visual que el chip
    "N fuera de rango" del Plan 83 si ya existe; al click activa un filtro `onlyPendingRestart`
@@ -407,8 +463,10 @@ corridos", sin marcar verde).
       `test_default_known_only_for_curated` verde.
 - [ ] Las 4 keys verificadas (y SOLO esas) tienen `restart_required=True`; mapa congelado + centinela
       de `app.py` verdes.
-- [ ] `read_current()` serializa `restart_required` y `pending_restart` (fail-open sin snapshot);
-      `create_app()` llama `snapshot_boot_values()`.
+- [ ] `read_current()` serializa `restart_required`, `pending_restart` y `boot_value` (fail-open
+      sin snapshot); `create_app()` llama `snapshot_boot_values()`; el delta str-env_only-unset
+      (`0`→`""`) está cubierto por test.
+- [ ] Los tests del endpoint monkeypatchean `_ENV_PATH` (jamás escriben el `.env` vivo).
 - [ ] El PUT devuelve `restart_required_keys` (lista, siempre presente) y sigue persistiendo el
       cambio (nunca bloquea).
 - [ ] UI: badge "reinicio" por fila, nota "Cambio pendiente de reinicio del backend", aviso post-PUT

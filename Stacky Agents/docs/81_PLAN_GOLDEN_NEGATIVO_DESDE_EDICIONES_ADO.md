@@ -1,6 +1,22 @@
 # Plan 81 — El golden que nace del tache: lo que el operador BORRA en ADO se vuelve golden NEGATIVO determinista (mitad negativa del aprendizaje bidireccional)
 
-> **Estado:** PROPUESTO v1 (no implementado). Autor: StackyArchitectaUltraEficientCode. Fecha: 2026-07-01.
+> **Estado:** PROPUESTO v2 (no implementado). Autor: StackyArchitectaUltraEficientCode. Fecha: 2026-07-01.
+> **Versión: v1 -> v2** (crítica adversarial 2026-07-02, veredicto APROBADO-CON-CAMBIOS).
+>
+> **CHANGELOG v1 -> v2:**
+> - **C1 (IMPORTANTE):** nueva fase **F0b [ADICIÓN ARQUITECTO]** — matching tag-agnóstico en la rama
+>   negativa de `evaluate_regression`. En v1 el golden negativo NO detectaba la reaparición más probable:
+>   `_normalize` (`regression_goldens.py:46-48`) no quita tags, y una épica futura con
+>   `El proceso <strong>Mul2Bane</strong> transfiere…` no matchea el snippet plano → miss silencioso.
+> - **C2 (IMPORTANTE):** corregidos los claims falsos de v1: "lo bloquea, garantizado" y "no toca el gate".
+>   El plan SÍ toca `regression_goldens.evaluate_regression` (fix puro F0b); `epic_gate.py` sigue intacto.
+> - **C3 (IMPORTANTE):** F3 gana el caso 5 (frase interrumpida por `<strong>` en la épica futura) — sin él,
+>   la suite de v1 daba verde sin probar el escenario real (falso verde).
+> - **C4 (MENOR):** F1 agrega `negative_goldens_written` a la línea de log del sweep (observabilidad, 1 línea).
+> - **C5 (MENOR):** zonas del ratchet corregidas a instrucción literal (después de `tests/test_ado_edit_sweep.py`).
+> - **C6 (MENOR):** documentado que el import del bloque 7b va DENTRO del try (degradación limpia); no mover.
+> - **C7 (MENOR):** el comentario stale del bloque 7 (`api/tickets.py:6103-6107`) NO se corrige (fuera de scope).
+> - Total de tests: 18 → **22** (F0b: +3, F3: +1).
 > **Origen:** ganador único del 5º debate adversarial (`docs/_roadmap/TOP5_2026-07-01_POST80_MITAD_NEGATIVA_GOLDEN.md`),
 > promoción de la "burbuja" del debate #4 (`docs/TOP5_2026-06-21_POST61_LOOP_PREVENCION_MUERTO.md` §pieza 2).
 > **Pre-requisitos (todos IMPLEMENTADOS y verificados 2026-07-01):**
@@ -9,8 +25,9 @@
 >   autopublish ya carga goldens y los pasa al gate (`api/tickets.py:6508-6528`).
 > - Plan 60 + supervisión 2026-06-21 (mitad POSITIVA viva): `services/ado_edit_learning.py:161-180` deriva
 >   golden positivo desde la edición humana; sweep automático cableado en `app.py:410-417`.
-> **Este plan agrega SOLO la mitad NEGATIVA:** `EditDelta.removed_snippets` → goldens negativos. No toca el
-> gate, no toca el sweep, no toca los runners.
+> **Este plan agrega la mitad NEGATIVA:** `EditDelta.removed_snippets` → goldens negativos, más UN fix puro
+> de matching en `harness/regression_goldens.py::evaluate_regression` (F0b, rama negativa solamente).
+> No toca `epic_gate.py`, no toca el sweep, no toca los runners.
 > Implementable por un modelo menor (Haiku / Codex CLI / GitHub Copilot Pro) SIN inferir nada.
 
 ---
@@ -21,9 +38,12 @@
 ya se aprende dos veces (lección blanda + golden positivo, plan 60), pero lo que **borra** se aprende solo una
 (lección blanda "Evitá: …", `services/ado_edit_learning.py:49-53`) — es decir, la recurrencia del defecto
 depende de que el LLM del próximo run obedezca un texto en el prompt (azar). Este plan convierte cada frase
-borrada en un **golden negativo determinista** (`absent_substring`): si el mismo texto reaparece en una épica
-futura, el gate de regresión (plan 56) lo marca (`regression_negative:<value>`) y — con el flag de blocking ya
-existente — lo **bloquea, garantizado**. Cierra la última arista del loop observar→actuar→aprender→PREVENIR.
+borrada en un **golden negativo determinista** (`absent_substring`): si el mismo texto normalizado reaparece
+en una épica futura (con o sin markup inline — F0b lo hace tag-agnóstico), el gate de regresión (plan 56) lo
+marca (`regression_negative:<value>`) y — con el flag de blocking ya existente — lo **bloquea de forma
+determinista** (garantía acotada: match exacto del texto normalizado sin tags; una re-redacción con otras
+palabras NO se detecta, límite ya documentado en `derive_negative_golden`). Cierra la última arista del loop
+observar→actuar→aprender→PREVENIR.
 
 **KPI / impacto esperado:**
 1. Cada edición humana material con borrados produce ≥0 y ≤5 goldens negativos persistidos automáticamente
@@ -161,6 +181,68 @@ tocó ninguna función existente).
 
 ---
 
+### F0b — [ADICIÓN ARQUITECTO] Matching tag-agnóstico en la rama negativa de `evaluate_regression` (fix C1)
+
+**Por qué (evidencia):** hoy `evaluate_regression` compara `g.value in _normalize(clean_html)`
+(`harness/regression_goldens.py:142,153`) y `_normalize` NO quita tags HTML (`:46-48`). Los
+`removed_snippets` son TEXTO PLANO (ya pasaron por `strip_html_to_text`). Resultado: si la épica futura
+escribe la misma frase con markup inline — `El proceso <strong>Mul2Bane</strong> transfiere los archivos…`,
+patrón habitual en las épicas de Stacky — el substring plano NO matchea y la regresión pasa en silencio.
+Sin este fix, el plan entero detecta solo el caso improbable (frase 100% sin tags).
+
+**Archivo a editar:** `Stacky Agents/backend/harness/regression_goldens.py`
+
+**Cambio 1 — helper puro** (debajo de `_normalize`, nombres EXACTOS):
+
+```python
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _normalize_html_text(html: str) -> str:
+    """Plan 81 F0b — quita tags HTML y luego normaliza (matching tag-agnóstico)."""
+    return _normalize(_TAG_RE.sub(" ", html or ""))
+```
+
+**Cambio 2 — rama negativa de `evaluate_regression`** (líneas 142-154). Calcular UNA vez, junto a
+`html_norm = _normalize(clean_html)`, la variante sin tags:
+
+```python
+    html_norm = _normalize(clean_html)
+    text_norm = _normalize_html_text(clean_html)  # Plan 81 F0b
+```
+
+y cambiar SOLO la condición del negativo (línea 153) a:
+
+```python
+            if g.value in text_norm:
+```
+
+La rama positiva (`present_heading`, línea 156-159) queda INTACTA con `html_norm` — cero cambio de
+comportamiento para los goldens del plan 60.
+
+**Backward-compat (binario):** con flags OFF no se cargan goldens → byte-idéntico. Con gate ON, los
+negativos existentes (notas de rechazo, plan 56) ahora TAMBIÉN matchean a través de tags — estrictamente
+más detección de lo que ya se pedía, en modo warning default.
+
+**Tests PRIMERO** — mismo archivo de test del plan, sección F0b:
+1. `test_f0b_negative_matches_through_inline_tags` — golden negativo con
+   `value=_normalize("El proceso Mul2Bane transfiere los archivos")`; `clean_html` que contiene
+   `"<p>El proceso <strong>Mul2Bane</strong> transfiere los archivos</p>"` →
+   `evaluate_regression` devuelve `[f"regression_negative:{value}"]`.
+2. `test_f0b_negative_plain_text_still_matches` — mismo golden, HTML con la frase sin tags inline →
+   sigue detectando (no-regresión del matching v1).
+3. `test_f0b_positive_branch_unchanged` — golden positivo `present_heading` presente dentro de
+   `<h2>…RF-01…</h2>` → `[]` (sin defectos); y ausente → `["regression_positive_missing:…"]`
+   (la rama positiva no cambió de fuente de comparación).
+
+**Comando:** `.\.venv\Scripts\python.exe -m pytest tests\test_plan81_negative_golden_from_edits.py -q -k f0b`
+**Criterio binario:** 3 tests F0b verdes + `pytest tests\test_regression_goldens.py tests\test_epic_gate_regression.py -q`
+sigue verde (no-regresión plan 56).
+**Flag:** ninguna (el fix solo se observa cuando el gate carga goldens, ya gateado por
+`STACKY_REGRESSION_GATE_ENABLED`). **Runtimes:** neutral. **Trabajo del operador:** ninguno.
+
+---
+
 ### F1 — Wiring en `learn_from_work_item` (bloque 7b) + `LearnResult.negative_goldens_written`
 
 **Objetivo:** que el sweep existente (plan 60) derive y persista los goldens negativos cuando la flag nueva
@@ -195,6 +277,12 @@ def _negative_golden_enabled() -> bool:
 **Cambio 3 — bloque 7b** (insertar ENTRE el bloque 7 — golden positivo, que termina en la línea ~180 con el
 `except` de `logger.warning("learn_from_work_item: golden falló...")` — y el bloque 8 `# 8. Marcar ledger`):
 
+Notas para el implementador (C6, C7):
+- El `from harness.regression_goldens import ...` va DENTRO del `try` a propósito (degradación limpia si
+  el símbolo no existe); NO moverlo fuera ni agregar el símbolo nuevo a `_golden_available()`.
+- El comentario del bloque 7 existente cita `api/tickets.py:6103-6107` (líneas hoy corridas a 6513-6517);
+  NO corregirlo — está fuera del scope de este plan.
+
 ```python
     # 7b. Goldens negativos (plan 81) — lo que el humano BORRÓ no debe reaparecer.
     #     MISMAS keys que lee el gate del autopublish (api/tickets.py:6513-6517):
@@ -224,6 +312,16 @@ def _negative_golden_enabled() -> bool:
 **Cambio 4 — return** (línea ~188): agregar `negative_goldens_written=negative_goldens_written,` al
 `LearnResult(...)` final. Los `return LearnResult(...)` tempranos (reasons `ado_unavailable`,
 `no_human_edit`, `already_learned`, `not_material`) NO se tocan (el default `0` cubre).
+
+**Cambio 5 — log del sweep (C4, observabilidad):** en `sweep_recent_runs`, reemplazar la línea de log
+existente (`"ado edit learning: WI %s rev %s => lección nueva (run %s)"`, línea ~272-275) por:
+
+```python
+                    logger.info(
+                        "ado edit learning: WI %s rev %s => lección nueva (run %s, neg_goldens=%s)",
+                        ado_id, res.rev, run.id, res.negative_goldens_written,
+                    )
+```
 
 **Tests PRIMERO** — mismo archivo de test, sección F1 (reusar el patrón de stubs de
 `tests/test_ado_edit_learning.py`: ado_client fake con `fetch_work_item_updates`, monkeypatch de
@@ -328,9 +426,14 @@ marca la reaparición; y que con flags OFF nada cambia.
 4. `test_f3_flags_off_byte_identical` — flag del plan 81 OFF: `learn_from_work_item` sobre la misma edición
    produce `LearnResult` idéntico al pre-plan (campos previos iguales, `negative_goldens_written == 0`) y el
    directorio de goldens queda sin archivos nuevos de kind negative.
+5. `test_f3_e2e_tagged_reappearance_detected` (C3, anti falso-verde) — mismo escenario que el caso 1, pero
+   la épica futura reincluye la frase CON markup inline:
+   `"<p>El proceso <strong>Mul2Bane</strong> transfiere los archivos a la carpeta temporal</p>"` →
+   `verdict.regression_defects == [f"regression_negative:{valor_normalizado}"]`. Este caso FALLA sin F0b:
+   es la prueba de que la suite cubre el escenario del mundo real y no solo el texto sin tags.
 
 **Comando:** `.\.venv\Scripts\python.exe -m pytest tests\test_plan81_negative_golden_from_edits.py -q -k f3`
-**Criterio binario:** 4 tests F3 verdes.
+**Criterio binario:** 5 tests F3 verdes.
 **Flag:** las existentes (`STACKY_REGRESSION_GATE_ENABLED`/`_BLOCKING` se pasan RESUELTAS al gate en el test;
 no se tocan). **Runtimes:** neutral. **Trabajo del operador:** ninguno.
 
@@ -340,14 +443,15 @@ no se tocan). **Runtimes:** neutral. **Trabajo del operador:** ninguno.
 
 **Objetivo:** que el meta-test del plan 49 F4 no falle y el archivo quede en la batería estable.
 
-**Archivos a editar (2):**
-1. `Stacky Agents/backend/scripts/run_harness_tests.sh` — agregar `tests/test_plan81_negative_golden_from_edits.py`
-   a la lista `HARNESS_TEST_FILES` (zona línea ~106, orden alfabético-posicional junto a los test_ado_edit_*).
+**Archivos a editar (2)** (C5 — instrucción literal, sin inferir zonas):
+1. `Stacky Agents/backend/scripts/run_harness_tests.sh` — en la lista `HARNESS_TEST_FILES`, agregar la línea
+   `tests/test_plan81_negative_golden_from_edits.py` INMEDIATAMENTE DESPUÉS de la línea
+   `tests/test_ado_edit_sweep.py` (hoy línea 107).
 2. `Stacky Agents/backend/scripts/run_harness_tests.ps1` — agregar `"tests/test_plan81_negative_golden_from_edits.py",`
-   en la lista espejo (zona línea ~99).
+   INMEDIATAMENTE DESPUÉS de la línea `"tests/test_ado_edit_sweep.py",` (hoy línea 100).
 
 **Criterio binario:** el meta-test de sincronía del ratchet (plan 49 F4, en `tests/`) queda verde; correr
-`.\.venv\Scripts\python.exe -m pytest tests\test_plan81_negative_golden_from_edits.py -q` completo → 18 tests verdes.
+`.\.venv\Scripts\python.exe -m pytest tests\test_plan81_negative_golden_from_edits.py -q` completo → 22 tests verdes.
 **Flag:** ninguna. **Runtimes:** neutral. **Trabajo del operador:** ninguno.
 
 ---
@@ -356,7 +460,8 @@ no se tocan). **Runtimes:** neutral. **Trabajo del operador:** ninguno.
 
 | Riesgo | Mitigación (determinista) |
 |---|---|
-| Falso positivo: el operador borró una frase por REDUNDANTE (no por incorrecta) y el gate marca una épica futura legítima | Modo warning default (`STACKY_REGRESSION_GATE_BLOCKING` OFF, ya existente); guard #2 de F0 (si el contenido sigue en la edición, no es borrado); el defecto solo aparece si el agente reproduce la frase EXACTA normalizada |
+| Falso positivo: el operador borró una frase por REDUNDANTE (no por incorrecta) y el gate marca una épica futura legítima | Modo warning default (`STACKY_REGRESSION_GATE_BLOCKING` OFF, ya existente); guard #2 de F0 (si el contenido sigue en la edición, no es borrado); el defecto solo aparece si el agente reproduce la frase EXACTA normalizada (F0b: sin tags) |
+| Falso negativo: la frase borrada reaparece con markup inline (`<strong>`, `<em>`) y el matching plano no la ve | F0b: la rama negativa de `evaluate_regression` compara contra el texto normalizado SIN tags (`_normalize_html_text`); cubierto por `test_f0b_negative_matches_through_inline_tags` y el E2E F3 caso 5. Límite residual documentado: re-redacción con otras palabras no se detecta (igual que plan 56) |
 | Envenenamiento del catálogo (muchos goldens basura) | `_NEG_FROM_EDIT_MIN_LEN=15` + cap `_NEG_FROM_EDIT_MAX=5` por edición + dedup en F0 + idempotencia de `save_golden` (dedup por `(kind, check, value)`, `regression_goldens.py:166-190`) |
 | Snippet borrado con texto sensible queda en el JSON de goldens | Aceptado y documentado: los goldens ya persisten contenido del dominio del WI en disco local (mono-operador); NO se aplica `pii_masker` porque redactar rompería el matching contra HTML futuro |
 | Doble derivación entre sweep runs | Ya resuelto por el ledger del plan 60 (`ado_edit_ledger.mark_learned`, idempotencia por `(ado_id, rev)`); el bloque 7b corre dentro del mismo learn idempotente |
@@ -395,14 +500,15 @@ no se tocan). **Runtimes:** neutral. **Trabajo del operador:** ninguno.
 ## 8. Orden de implementación
 
 1. F0 (derivador puro + 7 tests) — sin dependencias.
-2. F1 (wiring + LearnResult + 4 tests) — depende de F0.
-3. F2 (flag UI + env files + 3 tests) — depende de F1 (la key ya se lee ahí).
-4. F3 (E2E + no-regresión, 4 tests) — depende de F0-F2.
-5. F4 (ratchet) — al final.
+2. F0b (matching tag-agnóstico + 3 tests) — sin dependencias de F0 (puede ir antes o después; ambas puras).
+3. F1 (wiring + LearnResult + log del sweep + 4 tests) — depende de F0.
+4. F2 (flag UI + env files + 3 tests) — depende de F1 (la key ya se lee ahí).
+5. F3 (E2E + no-regresión, 5 tests) — depende de F0-F2 (el caso 5 depende de F0b).
+6. F4 (ratchet) — al final.
 
 ## 9. Definición de Hecho (DoD) global
 
-- [ ] `pytest tests\test_plan81_negative_golden_from_edits.py -q` → 18/18 verdes (venv del repo).
+- [ ] `pytest tests\test_plan81_negative_golden_from_edits.py -q` → 22/22 verdes (venv del repo).
 - [ ] No-regresión: `pytest tests\test_regression_goldens.py tests\test_regression_capture.py
       tests\test_ado_edit_learning.py tests\test_ado_edit_sweep.py tests\test_epic_gate.py
       tests\test_epic_gate_regression.py tests\test_harness_flags.py -q` → verde.
@@ -421,5 +527,5 @@ no se tocan). **Runtimes:** neutral. **Trabajo del operador:** ninguno.
 3. Cero trabajo del operador: la señal es su edición actual; feature opt-in default OFF editable por UI.
 4. 3 runtimes: neutral por construcción — todo ocurre en el sweep backend y en el gate backend que los tres
    runtimes ya atraviesan; ningún runner se toca.
-5. Reusa íntegros los planes 56 (gate+persistencia) y 60 (sweep+diff+ledger): solo agrega 1 función pura,
-   1 bloque de wiring, 1 flag y 18 tests.
+5. Reusa íntegros los planes 56 (gate+persistencia) y 60 (sweep+diff+ledger): agrega 2 funciones puras
+   (derivador + matching tag-agnóstico F0b), 1 bloque de wiring, 1 flag y 22 tests.

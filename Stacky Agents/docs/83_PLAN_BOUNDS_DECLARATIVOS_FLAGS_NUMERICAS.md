@@ -1,6 +1,27 @@
 # Plan 83 — Bounds declarativos para flags numéricas del arnés (validación de rango + rango visible en UI)
 
-**Estado:** PROPUESTO v2 (2026-07-02) — v1 → v2 tras crítica adversarial (`criticar-y-mejorar-plan`)
+**Estado:** PROPUESTO v3 (2026-07-02) — v2 → v3 tras segunda crítica adversarial (`criticar-y-mejorar-plan`)
+
+### Changelog v2 → v3
+- **C1:** el gate anti-ruido se mueve de la UI al BACKEND: `read_current()` calcula
+  `in_bounds = True` SOLO para flags `env_only` sin configurar (`raw is None`); para todo lo demás
+  evalúa de verdad. Motivo: el gate v2 por `flag.active` ocultaba el caso más peligroso — un `0`
+  configurado explícitamente (ej. `STACKY_EXEC_VERIFICATION_TIMEOUT_S=0` con min 1) tiene
+  `is_active == False` (harness_flags.py:1912-1914) y no mostraba aviso. Para flags no-env_only el
+  default de `config.py` es sano, así que un valor fuera de rango solo puede ser configurado. La UI
+  usa `in_bounds === false` a secas (nota y chip), sin mirar `active`.
+- **C2:** corregido el comando `-k` de F2: `profiles_within` no es substring de
+  `test_profiles_values_within_bounds` (habría corrido 0 tests de perfiles = verde vacío). Ahora
+  `-k "within_bounds or apply_updates or put_endpoint"`.
+- **C3:** coherencia post-C1: nota de payload de F0, tests de F0/F3, R6, glosario de `active` y DoD
+  actualizados (el gate por `active` desaparece).
+- **C4:** `test_apply_updates_rejects_above_max` sin hedge: key primaria
+  `INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF` (max 1 en la tabla), alternativa determinista
+  `STACKY_SELF_REVIEW_MIN_SCORE` si la primaria fue descartada en F1.
+- **[ADICIÓN ARQUITECTO v3]:** test centinela `test_harness_defaults_env_within_bounds` (F1) que
+  parsea `backend/harness_defaults.env` — el snapshot que el deploy hornea como `.env` — y verifica
+  que todo valor numérico de keys del registry cumple sus bounds: imposible hornear un deploy con un
+  default inválido.
 
 ### Changelog v1 → v2
 - **C1:** el aviso "Valor actual fuera de rango" y sus tests se muestran SOLO cuando
@@ -169,23 +190,29 @@ def validate_bounds_registry() -> list[str]:
     return errors
 ```
 
-3. [C4] En `read_current()` el dict por-flag se construye en `result.append({...})`
+3. [C4-v2 + C1-v3] En `read_current()` el dict por-flag se construye en `result.append({...})`
    (harness_flags.py:1948-1961) y la variable local con el valor actual se llama `value` (asignada en
-   1937/1944 para `env_only` y 1946 vía `getattr(config, spec.key)`). Agregar TRES claves a ese dict,
-   después de `"active"`:
+   1937/1944 para `env_only` y 1946 vía `getattr(config, spec.key)`). En la rama `env_only`
+   (harness_flags.py:1934-1944) capturar si la flag está sin configurar: inmediatamente después de
+   `raw = os.getenv(spec.key)` agregar `unset = raw is None`; en la rama `else` (1945-1946) agregar
+   `unset = False`. Luego agregar TRES claves al dict, después de `"active"`:
 
 ```python
             "min_value": spec.min_value,
             "max_value": spec.max_value,
-            "in_bounds": value_in_bounds(spec, value),
+            "in_bounds": True if unset else value_in_bounds(spec, value),
 ```
 
    NO recalcular `value`; usar la misma variable local existente.
 
-   Nota de honestidad del payload: para una flag `env_only` numérica SIN configurar, `read_current()`
-   serializa `0`/`0.0` (harness_flags.py:1936-1942); si esa flag tiene `min_value=1`, su `in_bounds`
-   viajará `false`. Es CORRECTO en el payload (el valor efectivo 0 está fuera de rango) pero la UI
-   NO debe avisar en ese caso: el aviso se gatea por `flag.active` (ver F3, regla C1).
+   [C1-v3] Racional del `unset`: una flag `env_only` numérica SIN configurar serializa `0`/`0.0`
+   (harness_flags.py:1936-1942); con `min_value=1` marcaría fuera-de-rango decenas de flags intactas
+   (ruido). Con `unset` el payload solo marca `in_bounds: false` cuando el valor ES configurado —
+   incluido el caso peligroso del `0` explícito (`is_active` lo trata como inactivo,
+   harness_flags.py:1912-1914, por eso NO sirve gatear por `active`). Para flags no-env_only el
+   default de `config.py` está dentro de bounds (regla R3 de `validate_bounds_registry` sobre
+   `spec.default` + defaults de config sanos), así que un valor fuera de rango solo puede provenir de
+   configuración explícita.
 
 **Tests (escribir PRIMERO, verificar que fallan, luego implementar):**
 `Stacky Agents/backend/tests/test_harness_flags_bounds.py`
@@ -203,6 +230,11 @@ def validate_bounds_registry() -> list[str]:
 - `test_read_current_exposes_bounds_fields` — cada dict de `read_current()` tiene keys `min_value`,
   `max_value`, `in_bounds` (monkeypatchear config exactamente como lo hace
   `tests/test_harness_flags.py` en sus tests de `read_current`).
+- `test_read_current_unset_env_only_in_bounds_true` — [C1-v3] con una flag `env_only` numérica del
+  registry SIN env var seteada (monkeypatch.delenv si hiciera falta) y un spec con `min_value=1`
+  inyectado vía `monkeypatch.setattr` sobre el spec de prueba, su dict trae `in_bounds is True`
+  (unset = sin aviso); la MISMA flag con `monkeypatch.setenv(key, "0")` trae `in_bounds is False`
+  (0 explícito = aviso).
 - El gotcha de defaults NO lleva test nuevo: lo cubre el test EXISTENTE
   `test_default_known_only_for_curated` (lista congelada Plan 63), que se corre como criterio de F0
   (segundo comando de abajo).
@@ -300,6 +332,14 @@ Reglas duras de esta fase:
   (harness_profiles.py:143) con `except ValueError: continue` (144-145) — un bound que invalide un
   perfil rompería el POST /profile con 400 Y haría que ese perfil nunca se detecte como activo. Si
   este test falla, el bound está mal elegido; NO se toca el perfil.
+- `test_harness_defaults_env_within_bounds` — **[ADICIÓN ARQUITECTO v3]** parsear
+  `Stacky Agents/backend/harness_defaults.env` (formato `KEY=valor`, ignorar líneas vacías y `#`;
+  ruta relativa al repo con `Path(__file__).parent.parent / "harness_defaults.env"`): para cada key
+  presente en `_REGISTRY_INDEX` con type int/float, castear con `_cast` y verificar
+  `value_in_bounds(spec, valor) is True`. Ese archivo es el snapshot que el deploy hornea como `.env`
+  (precedente: harness_defaults.env horneado en cada release); este centinela hace imposible
+  publicar un deploy con un default numérico inválido. Si el archivo no existe en el entorno de test,
+  `pytest.skip` con mensaje (no falso verde ni falso rojo).
 
 **Comando:** el mismo de F0.
 **Criterio binario:** exit 0; el mapa congelado coincide 1:1 con el registry; perfiles dentro de bounds.
@@ -340,8 +380,11 @@ Por eso `test_profiles_values_within_bounds` es criterio binario de ESTA fase ad
   (elegir la primera del dict del test de F1), `apply_updates({key: min-1})` lanza `ValueError` cuyo
   mensaje contiene `"fuera de rango"` y la representación del rango.
 - `test_apply_updates_accepts_boundary` — `apply_updates({key: min})` NO lanza (inclusive).
-- `test_apply_updates_rejects_above_max` — con una key con `max_value` (ej.
-  `STACKY_SELF_REVIEW_MIN_SCORE` si sobrevivió, o la que tenga max en el mapa), valor `max+0.5` lanza.
+- `test_apply_updates_rejects_above_max` — [C4-v3, sin hedge] key primaria:
+  `INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF` (max 1 en la tabla de F1); si fue descartada en F1, usar
+  `STACKY_SELF_REVIEW_MIN_SCORE`; si ambas fueron descartadas, el test se escribe contra la PRIMERA
+  key con `max_value` del dict congelado de `test_bounds_map_is_frozen`. Valor `max+0.5` lanza
+  `ValueError`.
 - `test_apply_updates_no_bounds_unchanged` — [C5] receta exacta: construir un
   `FlagSpec(key="STACKY_TEST_NO_BOUNDS", type="int", label="t", description="t", group="global")`
   sintético e inyectarlo con `monkeypatch.setitem(harness_flags._REGISTRY_INDEX, "STACKY_TEST_NO_BOUNDS", spec)`;
@@ -351,19 +394,22 @@ Por eso `test_profiles_values_within_bounds` es criterio binario de ESTA fase ad
   `tests/test_harness_flags.py` usa para el PUT): PUT con valor fuera de rango → status 400 y
   `"fuera de rango"` en `error`; y el `.env` de test NO contiene la key escrita.
 
-**Comando:** el mismo de F0, MÁS re-correr el test de perfiles:
+**Comando:** el mismo de F0, MÁS re-correr los tests de esta fase y el de perfiles [C2-v3 — el `-k`
+anterior (`profiles_within`) no matcheaba ningún test y daba verde vacío]:
 ```
-.venv\Scripts\python.exe -m pytest tests\test_harness_flags_bounds.py -q -k "profiles_within or apply_updates or put_endpoint"
+.venv\Scripts\python.exe -m pytest tests\test_harness_flags_bounds.py -q -k "within_bounds or apply_updates or put_endpoint"
 ```
+(verificar que la corrida reporta >0 tests seleccionados; 0 seleccionados = comando mal escrito, NO verde).
 **Criterio binario:** exit 0; PUT fuera de rango → 400 sin persistir;
 `test_profiles_values_within_bounds` verde.
 **Flag:** ninguna. **Runtimes:** impacto nulo (la validación vive en el endpoint del panel; ningún
 runner llama `apply_updates`). **Trabajo del operador:** ninguno.
 
-### F3 — UI: `min`/`max` en inputs, rango visible, aviso "fuera de rango" (gateado por `active`) y chip de triage en el hero
+### F3 — UI: `min`/`max` en inputs, rango visible, aviso "fuera de rango" y chip de triage en el hero
 
 **Objetivo:** que el operador VEA el rango válido y cualquier valor CONFIGURADO fuera de rango, con
-triage de un click.
+triage de un click. [C1-v3] El anti-ruido ya viene resuelto del backend (`in_bounds` es `True` para
+env_only sin configurar), así que la UI consume `in_bounds` a secas — sin gates locales.
 
 **Archivos:**
 - Editar: `Stacky Agents/frontend/src/api/endpoints.ts` — en el tipo `HarnessFlagView` agregar
@@ -395,20 +441,21 @@ triage de un click.
    )}
 ```
 
-3. [C1] Calcular `const isOutOfBounds = flag.active && flag.in_bounds === false;` y SOLO cuando
-   `isOutOfBounds` renderizar debajo de la descripción:
+3. [C1-v3] Calcular `const isOutOfBounds = flag.in_bounds === false;` y SOLO cuando `isOutOfBounds`
+   renderizar debajo de la descripción:
 
 ```tsx
    <p className={styles.outOfBoundsNote}>Valor actual fuera de rango válido</p>
 ```
 
-   Motivo del gate por `active`: una flag `env_only` numérica sin configurar viaja con `value 0` e
-   `in_bounds false` si su min es 1 (harness_flags.py:1936-1942); avisar en ese caso sería ruido
-   masivo en flags intactas. PROHIBIDO deshabilitar el control por esta condición: el operador lo
-   corrige editándolo (el PUT con un valor válido lo sana; el PUT con otro inválido da 400 por F2).
+   NO gatear por `flag.active`: el backend ya emite `in_bounds: true` para flags sin configurar
+   (F0), y `active` es `false` para el valor `0` explícito (harness_flags.py:1912-1914), que es
+   justamente el caso que hay que mostrar. PROHIBIDO deshabilitar el control por esta condición: el
+   operador lo corrige editándolo (el PUT con un valor válido lo sana; el PUT con otro inválido da
+   400 por F2).
 4. **[ADICIÓN ARQUITECTO v2] Chip de triage en el hero:** en el Panel (componente contenedor):
    - Estado nuevo: `const [onlyOutOfBounds, setOnlyOutOfBounds] = useState(false);`
-   - Contador: `const outOfBoundsCount = flags.filter((f) => f.active && f.in_bounds === false).length;`
+   - Contador [C1-v3]: `const outOfBoundsCount = flags.filter((f) => f.in_bounds === false).length;`
    - En el hero (junto a los `heroStat` existentes, HarnessFlagsPanel.tsx:370-390), SOLO si
      `outOfBoundsCount > 0`, renderizar:
 
@@ -423,7 +470,7 @@ triage de un click.
 ```
 
    - Extender `matches()` (Panel:246-254) con, como primera condición junto a `onlyActive`:
-     `if (onlyOutOfBounds && !(f.active && f.in_bounds === false)) return false;`
+     `if (onlyOutOfBounds && f.in_bounds !== false) return false;`
      y agregar `onlyOutOfBounds` a las dependencias del `useMemo` de `orderedSections` (Panel:304) y
      al `open` de las secciones igual que `onlyActive`.
    - Si `outOfBoundsCount` pasa a 0 (el operador corrigió todo), el chip desaparece; para no dejar el
@@ -441,12 +488,11 @@ pequeña con el color de warning ya usado por `.errorText`, cursor pointer) y `.
 - `test_bounds_hint_rendered` — flag con `min_value:0, max_value:1` muestra `0–1`; con solo min
   muestra `≥ 0`.
 - `test_no_bounds_no_hint` — flag numérica con ambos `null` no renderiza `.boundsHint`.
-- `test_out_of_bounds_note_rendered` — flag con `active:true, in_bounds:false` muestra
-  `Valor actual fuera de rango válido`; con `in_bounds:true` no.
-- `test_out_of_bounds_note_hidden_when_inactive` — [C1] flag con `active:false, in_bounds:false` NO
-  muestra la nota.
+- `test_out_of_bounds_note_rendered` — [C1-v3] flag con `in_bounds:false` muestra
+  `Valor actual fuera de rango válido` (incluso con `active:false`, caso 0 explícito); con
+  `in_bounds:true` no.
 - `test_out_of_bounds_control_stays_enabled` — el input NO tiene `disabled` aunque `in_bounds:false`.
-- `test_hero_chip_shows_count_and_filters` — con 2 flags `active && !in_bounds`, el hero muestra
+- `test_hero_chip_shows_count_and_filters` — con 2 flags `in_bounds:false`, el hero muestra
   `2 fuera de rango`; click → solo esas flags visibles [ADICIÓN ARQUITECTO v2].
 - `test_hero_chip_hidden_when_zero` — sin flags fuera de rango, el chip no se renderiza.
 
@@ -461,7 +507,7 @@ npx vitest --version
   exit 0; los tests quedan escritos para CI y el reporte final DEBE decir "tests de UI escritos, no
   ejecutados (vitest ausente)" SIN marcarlos verdes.
 
-**Criterio binario:** `tsc --noEmit` exit 0; si vitest disponible, los 8 tests verdes.
+**Criterio binario:** `tsc --noEmit` exit 0; si vitest disponible, los 7 tests verdes.
 **Flag:** ninguna. **Runtimes:** impacto nulo (solo UI del panel). **Trabajo del operador:** ninguno.
 
 ### F4 — Ratchet: registrar el test nuevo
@@ -494,8 +540,11 @@ con `.venv\Scripts\python.exe -m pytest <archivo> -q`, exit 0).
   honesto (idéntico a Plan 82 C4).
 - **R5: romper `test_default_known_only_for_curated`.** Mitigación: prohibición explícita de tocar
   `default` (guardarraíles + F1 reglas duras) + el test existente corre como criterio de F0/F1.
-- **R6: ruido de avisos en flags no configuradas.** Mitigación: gate por `flag.active` en nota y chip
-  (C1); el payload `in_bounds` queda honesto para telemetría futura.
+- **R6: ruido de avisos en flags no configuradas.** Mitigación [C1-v3]: `read_current()` emite
+  `in_bounds: true` para env_only sin configurar (`unset`); solo valores CONFIGURADOS marcan aviso —
+  incluido el `0` explícito, que un gate por `active` habría ocultado.
+- **R7: `harness_defaults.env` hornea un default inválido en el deploy.** Mitigación
+  [ADICIÓN ARQUITECTO v3]: centinela `test_harness_defaults_env_within_bounds` (F1).
 
 ## 6. Fuera de scope
 
@@ -515,7 +564,8 @@ con `.venv\Scripts\python.exe -m pytest <archivo> -q`, exit 0).
 - **`_cast`:** función que castea el valor recibido al tipo del spec (harness_flags.py:1998); NO se
   toca en este plan (la validación de rango vive en `apply_updates`).
 - **`active`:** campo del payload por-flag (`is_active`, harness_flags.py:1908-1917): el valor
-  difiere de su type-zero. Gatea los avisos de UI para no marcar flags intactas.
+  difiere de su type-zero. OJO: NO gatea los avisos de bounds (un `0` explícito es inactivo pero
+  debe avisar); el anti-ruido lo resuelve `unset` en el backend (F0, C1-v3).
 - **`env_only`:** la flag no es atributo de `Config`; vive en `os.environ` (igual editable por UI).
 - **Perfil (off/safe/full):** conjuntos predefinidos en `services/harness_profiles.py`; se aplican con
   `apply_profile` (POST `/api/harness-flags/profile`, `api/harness_flags.py:86`) y se detectan con
@@ -541,11 +591,15 @@ con `.venv\Scripts\python.exe -m pytest <archivo> -q`, exit 0).
 - [ ] `tests/test_harness_flags.py` (existente) sigue verde sin modificar asserts previos.
 - [ ] `test_default_known_only_for_curated` sigue verde (ningún `default` nuevo).
 - [ ] PUT `/api/harness-flags` con valor fuera de rango → 400 con `"fuera de rango"` y NO persiste.
-- [ ] GET `/api/harness-flags` incluye `min_value`, `max_value`, `in_bounds` por flag.
+- [ ] GET `/api/harness-flags` incluye `min_value`, `max_value`, `in_bounds` por flag; `in_bounds`
+      es `true` para env_only sin configurar y `false` para un `0` explícito bajo `min_value=1`
+      (`test_read_current_unset_env_only_in_bounds_true` verde).
+- [ ] `test_harness_defaults_env_within_bounds` verde (snapshot del deploy dentro de bounds).
 - [ ] Los perfiles off/safe/full aplican sin error y siguen detectables
       (`test_profiles_values_within_bounds` verde).
-- [ ] Inputs numéricos del panel con `min`/`max` y rango visible; valor CONFIGURADO fuera de rango
-      muestra el aviso y sigue editable; flag no configurada (inactive) NO muestra aviso.
+- [ ] Inputs numéricos del panel con `min`/`max` y rango visible; toda flag con `in_bounds:false`
+      (valor configurado, incluido el 0 explícito) muestra el aviso y sigue editable; flag sin
+      configurar NO muestra aviso (lo garantiza el backend, no la UI).
 - [ ] Chip "N fuera de rango" en el hero solo cuando N>0; click filtra; N=0 lo oculta y resetea el
       filtro.
 - [ ] El mensaje 400 del backend llega textual a la UI (`apiError`).

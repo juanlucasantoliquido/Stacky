@@ -1,6 +1,22 @@
 # Plan 82 — Claridad de configuración del arnés (dependencias visibles, origen del valor y desvío de perfil)
 
-**Estado:** PROPUESTO v2 (2026-07-02) — v1 → v2 tras crítica adversarial (`criticar-y-mejorar-plan`)
+**Estado:** PROPUESTO v3 (2026-07-02) — v2 → v3 tras segunda crítica adversarial (`criticar-y-mejorar-plan`)
+
+### Changelog v2 → v3
+- **C1:** la nota "Sin efecto: requiere X" y la atenuación `inertRow` ahora solo se muestran cuando
+  `flag.active && !flag.requires_met` (hija CONFIGURADA con master OFF = flag muerta real); una hija
+  en default con master OFF no genera ruido. Tests de F2 ajustados.
+- **C2:** el setup de `test_deltas_zero_for_applied_profile` quedó determinista: espejar el patrón de
+  los tests existentes de perfiles (localizados con el grep de F4.4) y aplicar el perfil con
+  `apply_profile()` real dentro del test env.
+- **C3:** simplificada `requires_met` (rama redundante `master_value is None and ...` colapsada a
+  `spec.requires not in values_by_key`).
+- **C4:** documentado que los contadores "modificadas" cuentan sobre el payload de la categoría,
+  incluidas flags gestionadas como `pair` que no renderizan fila propia (comportamiento esperado).
+- **C5:** instrucción CSS concreta para el 4to stat del hero (`.heroStats` con `flex-wrap: wrap`).
+- **[ADICIÓN ARQUITECTO v3]:** botón "ver master" en la nota de dependencia: setea la búsqueda del
+  panel a la key del master (prop `onLocate` en `FlagRow` → `setQ`), navegación de un click desde la
+  hija muerta al toggle que la revive; con test `test_requires_note_locate_master_sets_search`.
 
 ### Changelog v1 → v2
 - **C1:** eliminado el hedge sobre `_REGISTRY_INDEX`: el símbolo EXISTE (lo usa `apply_updates`,
@@ -112,10 +128,9 @@ def requires_met(spec: FlagSpec, values_by_key: dict[str, object]) -> bool:
     """
     if spec.requires is None:
         return True
-    master_value = values_by_key.get(spec.requires)
-    if master_value is None and spec.requires not in values_by_key:
+    if spec.requires not in values_by_key:  # [C3 v3] fail-open simple
         return True
-    return bool(master_value)
+    return bool(values_by_key[spec.requires])
 
 
 def validate_requires_graph() -> list[str]:
@@ -278,17 +293,32 @@ Reglas duras de esta fase:
 
 **Cambios exactos en `FlagRow` (Panel:61-190):**
 1. Calcular master para el aviso: `const requiresMaster = flag.requires ? allFlags.find(f => f.key === flag.requires) : null;`
-2. Después del `<p className={styles.flagDesc}>` (línea 169) renderizar, SOLO cuando
-   `flag.requires && !flag.requires_met`:
+   y la condición [C1 v3]: `const isInert = Boolean(flag.requires) && !flag.requires_met && flag.active;`
+   (solo una hija CONFIGURADA — `active` — con master OFF es una "flag muerta"; una hija en default
+   con master OFF NO muestra nada, para no generar ruido en decenas de filas).
+2. Después del `<p className={styles.flagDesc}>` (línea 169) renderizar, SOLO cuando `isInert`:
 
 ```tsx
    <p className={styles.requiresNote}>
      Sin efecto: requiere “{requiresMaster?.label ?? flag.requires}” activada
+     {" "}
+     <button
+       type="button"
+       className={styles.locateMasterBtn}
+       onClick={() => onLocate(flag.requires!)}
+     >
+       ver master
+     </button>
    </p>
 ```
 
+   **[ADICIÓN ARQUITECTO v3]** `onLocate` es una prop nueva de `FlagRow`
+   (`onLocate: (key: string) => void`) que el Panel pasa como `onLocate={setQ}` (Panel:201 ya tiene
+   `const [q, setQ] = useState("")`): setear la búsqueda a la key del master la localiza al instante
+   porque `matches()` ya matchea por `f.key` (Panel:252). Navegación de un click desde la hija muerta
+   al toggle que la revive. CSS `.locateMasterBtn`: estilo de link inline, sin borde.
 3. En el contenedor raíz de la fila (línea 161) agregar la clase condicional
-   `${flag.requires && !flag.requires_met ? styles.inertRow : ""}` (CSS: `opacity: 0.55`).
+   `${isInert ? styles.inertRow : ""}` (CSS: `opacity: 0.55`).
    PROHIBIDO poner `disabled` en los controles por esta condición: el operador puede editar igual.
 4. Badge de origen junto al `defaultBadge` (líneas 165-167): cuando `flag.env_only === true`
    renderizar `<span className={styles.envBadge} title="Vive solo en .env/os.environ (se aplica en caliente); no es atributo de Config">env</span>`.
@@ -313,11 +343,15 @@ usado por `.errorText` pero en tono atenuado), `.inertRow { opacity: 0.55; }`, `
 estilo base que `.defaultBadge`, otro color de fondo), `.flagKey` (mono 11px atenuado, cursor pointer).
 
 **Tests (Vitest — mismo patrón/mocks que el archivo existente):**
-- `test_shows_requires_note_when_master_off` — flag hija con `requires_met:false` renderiza el texto
-  `Sin efecto: requiere`.
+- `test_shows_requires_note_when_master_off` — hija con `requires_met:false` Y `active:true` renderiza
+  el texto `Sin efecto: requiere` [C1 v3].
 - `test_hides_requires_note_when_master_on` — con `requires_met:true` NO aparece.
+- `test_hides_requires_note_when_child_inactive` — hija con `requires_met:false` pero `active:false`
+  NO muestra la nota ni la clase `inertRow` [C1 v3].
 - `test_child_control_stays_enabled_when_master_off` — el input de la hija NO tiene `disabled` aunque
   `requires_met:false`.
+- `test_requires_note_locate_master_sets_search` — click en "ver master" deja el input de búsqueda con
+  el valor de `flag.requires` [ADICIÓN ARQUITECTO v3].
 - `test_env_badge_rendered_for_env_only` — flag con `env_only:true` muestra el badge `env`; con
   `env_only:false` no.
 - `test_flag_key_rendered_in_row` — la fila muestra el texto exacto de `flag.key`.
@@ -361,8 +395,13 @@ export function isModifiedFromDefault(flag: { default_known: boolean; default: u
      `<span className={styles.modifiedBadge}>modificada</span>`.
   2. `renderSection` (316-352): calcular `const modified = catFlags.filter(isModifiedFromDefault).length;`
      y extender el meta (línea 334) a: `` {catFlags.length} flags · {visibleActive} activas{modified > 0 ? ` · ${modified} modificadas` : ""} ``.
+     [C4 v3] El conteo opera sobre TODAS las flags del payload de la categoría, incluidas las
+     gestionadas como `pair` que no renderizan fila propia (Panel:70-71); un descuadre contador vs
+     filas visibles es comportamiento esperado y NO debe "corregirse".
   3. Hero (372-385): agregar un cuarto `heroStat` con `flags.filter(isModifiedFromDefault).length` y
-     label `fuera de default`.
+     label `fuera de default`. [C5 v3] En `HarnessFlagsPanel.module.css` asegurar que `.heroStats`
+     tenga `flex-wrap: wrap;` (o equivalente si es grid: `grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));`)
+     para que el 4to stat no desborde en anchos chicos.
   4. **[ADICIÓN ARQUITECTO]** Filtro "Solo modificadas": agregar un checkbox junto a "Solo activas"
      (bloque `styles.search`, Panel:409-425) con estado `const [onlyModified, setOnlyModified] = useState(false);`
      y extender `matches()` (Panel:246-254) con, como primera condición junto a `onlyActive`:
@@ -421,8 +460,10 @@ def profile_deltas() -> dict[str, int]:
   y renderizar `Perfil: <strong>personalizado</strong> <span className={styles.nearestProfile}>(más cercano: {nearest[0]}, {nearest[1]} diferencia{nearest[1]===1?"":"s"})</span>`.
   Si `activeProfile` tiene valor, comportamiento actual sin cambios.
 - Crear (test PRIMERO): `Stacky Agents/backend/tests/test_harness_profile_deltas.py`:
-  - `test_deltas_zero_for_applied_profile` — aplicar (monkeypatch de valores) el perfil `off` →
-    `profile_deltas()["off"] == 0`.
+  - `test_deltas_zero_for_applied_profile` — [C2 v3] espejar el patrón de setup de los tests
+    existentes de perfiles (los archivos que devuelve el grep del paso 4: mismos fixtures/monkeypatch
+    de config y entorno) y aplicar el perfil con `apply_profile("off")` REAL dentro del test env;
+    luego `profile_deltas()["off"] == 0`.
   - `test_deltas_counts_divergent_keys` — desviar 2 keys del perfil `safe` → `["safe"] == 2`.
   - `test_deltas_keys_match_profiles` — `set(profile_deltas()) == set(PROFILES)`.
   - `test_get_endpoint_includes_profile_deltas` — el GET `/api/harness-flags` incluye la clave
@@ -510,7 +551,8 @@ y correr ESE archivo).
       `npx vitest --version` exit 0; si no, reporte honesto "no ejecutados").
 - [ ] Cada fila del panel muestra la key técnica (`flag.key`) y existe el filtro "Solo modificadas".
 - [ ] El GET `/api/harness-flags` incluye `requires`, `requires_met` por flag y `profile_deltas` global.
-- [ ] Hija con master OFF muestra "Sin efecto: requiere ... activada" y su control sigue editable.
+- [ ] Hija CONFIGURADA (`active`) con master OFF muestra "Sin efecto: requiere ... activada" con botón
+      "ver master"; hija en default con master OFF no muestra nada; el control sigue editable siempre.
 - [ ] Ratchet verde con los 2 archivos de test registrados (sh + ps1).
 - [ ] Cero cambios en runners/gates/prompts: `git diff` no toca `*_runner.py`, `harness/` de runtime,
       ni prompts de agentes.

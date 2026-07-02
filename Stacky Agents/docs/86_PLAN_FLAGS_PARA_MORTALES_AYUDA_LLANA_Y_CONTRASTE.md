@@ -1,9 +1,17 @@
 # Plan 86 — Flags para mortales: ayuda en lenguaje llano, contraste ON/OFF y navegación por secciones
 
-**Versión:** v2 (propuesto, 2026-07-02) — crítica adversarial v1→v2 aplicada (veredicto v1: RECHAZADO por C1)
+**Versión:** v3 (propuesto, 2026-07-02) — 2ª crítica adversarial v2→v3 aplicada (veredicto v2: APROBADO-CON-CAMBIOS; última crítica antes de implementar)
 **Estado:** PROPUESTO — no implementado
 **Origen:** pedido textual del operador: *"Que cambie la forma de activar o desactivar flags: que sea mucho más estético y con mejores contrastes de colores alineados a la herramienta, que estén más sectorizados y, por sobre todo, que sean fáciles de entender sobre todo para personas que no entienden nada de IA (podrían tener cada uno un signito de exclamación que te dé una explicación de para qué sirve, con ejemplos claros para un mortal), y cualquier otra mejora que facilite el uso de esta configuración."*
-**Dependencias:** ninguna dura. CONMUTATIVO con los planes propuestos 82 (requires/origen), 83 (bounds), 84 (restart_required) y 85 (reserved): este plan **NO agrega campos a `FlagSpec`** ni toca el hero — el contenido nuevo vive en un módulo aparte y la UI nueva ocupa espacio propio (ver sección 3.7). Complementa (no duplica) los rediseños ya implementados 62/63 (categorías colapsables + búsqueda) y 78 (hero + color/icono + Simple/Experto).
+**Dependencias:** ninguna dura. CONMUTATIVO con los planes propuestos 82 (requires/origen), 83 (bounds), 84 (restart_required) y 85 (reserved): este plan **NO agrega campos a `FlagSpec`** ni toca el hero — el contenido nuevo vive en un módulo aparte y la UI nueva ocupa espacio propio (ver sección 3.7). Evidencia citada (v3/C7): 82 interviene el hero (`82_PLAN:16`, C5 `.heroStats`) y ancla su badge "junto al `defaultBadge` (líneas 165-167)" (`82_PLAN:323`); 85 agrega `reserved`/`reserved_reason` a `FlagSpec` (`85_PLAN:5,47`) — cero solape con este plan. Nota (v3/C9): el plan 85 menciona "135 flags"; el conteo canónico verificado 2026-07-02 es **158**. Regla de anclas (v3/C6): los números de línea citados corresponden al working tree del 2026-07-02 (incluye el fix de supervisión sin commitear en `harness_flags.py`); al implementar, ubicar SIEMPRE por símbolo/texto citado — el número es orientativo. Complementa (no duplica) los rediseños ya implementados 62/63 (categorías colapsables + búsqueda) y 78 (hero + color/icono + Simple/Experto).
+
+**Changelog v2 → v3 (2ª crítica, máxima severidad, todo verificado contra código):**
+- **C1 (IMPORTANTE, resuelto):** el ejemplo ORO de `STACKY_MAX_CONCURRENT_RUNS` contradecía la spec real — la description documenta "0 = ilimitado (retro-compat)" (`harness_flags.py:491-494`) y el oro decía "Si lo bajás: los trabajos hacen fila": bajar a 0 QUITA el tope. Corregido con la cláusula de cero (regla que la propia plantilla ya exigía). También `STACKY_RUNAWAY_MAX_COST_USD` ahora dice honesto que el freno hoy solo funciona con el agente de Claude (description :480-483: "codex no reporta costo").
+- **C2 (IMPORTANTE, resuelto):** claim de tokens FALSO — `--color-success`, `--color-border-strong` y hasta `--color-primary` NO están definidos en ningún archivo de `frontend/src` (verificado por grep): TODOS los `var()` del CSS existente resuelven siempre a su fallback. Nota de contraste reescrita honesta: el patrón vigente es `var(--token, literal)` donde el literal ES el color efectivo.
+- **C3 (IMPORTANTE, resuelto):** F3.4 era un condicional irresoluble ("SI vitest está operativo"). Verificado: vitest NO está en `package.json` Y `tsconfig.json` EXCLUYE `src/**/__tests__/**` y `*.test.tsx` → los casos de test de componente NO tienen gate alguno (ni corren ni compilan). F3.4 reescrito determinista: casos como documentación ejecutable futura en el archivo EXISTENTE, sin gate; el criterio binario de F3 es SOLO `tsc`.
+- **C4 (IMPORTANTE, resuelto):** el meta-test del ratchet nombrado literal: `tests/test_harness_ratchet_meta.py` (listado en `run_harness_tests.sh:60` y `.ps1:53`; parsea la lista del `.sh`). Agregado al comando de F6. Nota transitoria en F0: entre F0 y F6 ese meta-test acusa el archivo nuevo — esperado, NO "arreglarlo" antes de F6.
+- **C5:** "no colisiona" matizado — colisión de MERGE textual con 82/83/84 es posible (líneas adyacentes del mismo dict); la imposible es la semántica. **C6:** regla de anclas — los números de línea son del working tree 2026-07-02 (incluye fix de supervisión sin commitear en `harness_flags.py`): ubicar SIEMPRE por símbolo/texto citado; el número es orientativo. **C7:** conmutatividad ahora con evidencia citada de los docs vecinos (82_PLAN:16 y :323; 85_PLAN:5 y :47). **C9:** el plan 85 menciona "135 flags" — el conteo canónico verificado es **158**.
+- **C8 [ADICIÓN ARQUITECTO v3]:** accesibilidad real para mortales — el checkbox del toggle NO tiene nombre accesible (el `<label>` solo contiene el slider visual, tsx:78-86): F4 agrega `aria-label={flag.label}` al input; F3 enlaza botón ⓘ ↔ bloque con `id="plain-help-<key>"` + `aria-controls`. Cero dependencias, cero costo.
 
 **Changelog v1 → v2 (crítica adversarial, todo verificado contra código):**
 - **C1 (BLOQUEANTE, resuelto):** posición EXACTA del estado `showHelp` en `FlagRow` — debe declararse ANTES del early-return `if (isManagedAsPair) return null;` (HarnessFlagsPanel.tsx:71); después viola la regla de hooks de React, crashea el panel en runtime y `tsc` NO lo detecta (falso verde).
@@ -186,6 +194,8 @@ def test_no_runtime_imports_plain_help():
 
 **Criterio de aceptación binario F0 (v2/C2 — exacto por test):** los 5 tests que importan `PLAIN_HELP` fallan con `ModuleNotFoundError` (`services.harness_flags_help` no existe); `test_plain_help_module_is_pure` falla con `FileNotFoundError` (lee el archivo directo); `test_no_runtime_imports_plain_help` **PASA verde ya en F0** (módulo inexistente ⇒ nadie lo referencia ⇒ 0 offenders — verde trivial ESPERADO, no es señal de error). Resultado esperado exacto: `6 failed, 1 passed`. Cualquier otro resultado = investigar antes de seguir.
 
+**Nota transitoria (v3/C4):** desde que F0 crea `tests/test_harness_flags_help.py` y HASTA que F6 lo registre en `HARNESS_TEST_FILES`, el meta-test `tests/test_harness_ratchet_meta.py` acusará el archivo nuevo. Es ESPERADO: NO "arreglarlo" antes de F6 (ni agregarlo a `tests/harness_ratchet_allowlist.txt` — va al ratchet, no a la allowlist).
+
 **Flag protectora:** no aplica (test puro). **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno.
 
 ---
@@ -274,12 +284,14 @@ def plain_help_for(key: str) -> dict | None:
     "STACKY_MAX_CONCURRENT_RUNS": PlainHelp(
         what="Cuántos agentes pueden estar trabajando al mismo tiempo como máximo.",
         on_effect="Si subís el número: más trabajos corren en paralelo, pero la máquina y el gasto suben.",
-        off_effect="Si lo bajás: los trabajos hacen fila y salen de a menos, con la máquina más tranquila y gasto más previsible.",
+        # v3/C1 — la spec documenta "0 = ilimitado": bajar a cero QUITA el tope, no lo endurece.
+        off_effect="Si lo bajás: menos trabajos a la vez y la máquina más tranquila; ojo, si lo dejás en cero se quita el tope y vuelve a ser ilimitado.",
         example="Como las cajas abiertas de un supermercado: más cajas = menos fila, pero más cajeros que pagar.",
     ),
     "STACKY_RUNAWAY_MAX_COST_USD": PlainHelp(
         what="Freno de emergencia por costo: cuánto puede gastar un trabajo antes de que se lo frene.",
-        on_effect="Si le ponés un valor: un trabajo que se desboca y gasta de más se corta y queda marcado para que lo revises.",
+        # v3/C1 — honesto: la spec aclara que codex no reporta costo; el freno hoy solo aplica con Claude.
+        on_effect="Si le ponés un valor: un trabajo que se desboca y gasta de más se corta y queda marcado para que lo revises (hoy este freno solo funciona con el agente de Claude).",
         off_effect="Si lo dejás en cero: no hay tope, y un trabajo descontrolado puede gastar sin límite.",
         example="Como el límite de la tarjeta de crédito: si algo intenta gastar de más, la operación se bloquea.",
     ),
@@ -356,7 +368,7 @@ def test_read_current_exposes_plain_help():
    ```python
             "plain_help": plain_help_for(spec.key),
    ```
-   (Aditiva y en línea propia — no colisiona con las líneas que agregan 82/83/84/85 al mismo dict.)
+   (Aditiva y en línea propia. v3/C5 — claim honesto: 82/83/84 también agregan líneas a este mismo dict, así que un conflicto de MERGE textual en líneas adyacentes ES posible si se implementan en paralelo; lo que no puede pasar es una colisión SEMÁNTICA — cada plan agrega su propia clave. Resolución del conflicto: conservar ambas líneas.)
 
 **Criterio binario F2:**
 ```
@@ -394,6 +406,7 @@ def test_read_current_exposes_plain_help():
        type="button"
        className={styles.helpBtn}
        aria-expanded={showHelp}
+       aria-controls={`plain-help-${flag.key}`}
        aria-label={`Explicación simple de ${flag.label}`}
        title="¿Para qué sirve esto?"
        onClick={() => setShowHelp((v) => !v)}
@@ -401,10 +414,11 @@ def test_read_current_exposes_plain_help():
        <Info size={14} aria-hidden="true" />
      </button>
      ```
+     (v3/C8 [ADICIÓN ARQUITECTO]: `aria-controls` enlaza el botón con el bloque de ayuda de abajo, que lleva `id={`plain-help-${flag.key}`}`.)
    - Inmediatamente DESPUÉS de `<p className={styles.flagDesc}>` (línea ~169), agregar:
      ```tsx
      {showHelp && (
-       <div className={styles.plainHelp}>
+       <div id={`plain-help-${flag.key}`} className={styles.plainHelp}>
          {flag.plain_help ? (
            <>
              <p className={styles.plainWhat}>{flag.plain_help.what}</p>
@@ -423,7 +437,7 @@ def test_read_current_exposes_plain_help():
      )}
      ```
      (Fallback HONESTO: nunca se inventa texto en el frontend.)
-   - **(v2/C9) Ayuda para la flag pair.** Las flags `*_PROJECTS` gestionadas como par NO renderizan `FlagRow` propio (`isManagedAsPair` → `return null`, líneas 70-71): sin este paso su ayuda llana sería INALCANZABLE (incluida la key oro `CLAUDE_CODE_CLI_MCP_PROJECTS`). En el bloque `pairRow` (líneas 174-187), inmediatamente DESPUÉS de `<span className={styles.pairLabel}>{pairFlag.label}</span>`, agregar el mismo botón (usando `showPairHelp`/`setShowPairHelp` y `aria-label={`Explicación simple de ${pairFlag.label}`}`), y DESPUÉS del `<input ...>` del par, agregar el mismo bloque `{showPairHelp && (...)}` leyendo `pairFlag.plain_help` (mismo fallback honesto con `pairFlag.description`).
+   - **(v2/C9) Ayuda para la flag pair.** Las flags `*_PROJECTS` gestionadas como par NO renderizan `FlagRow` propio (`isManagedAsPair` → `return null`, líneas 70-71): sin este paso su ayuda llana sería INALCANZABLE (incluida la key oro `CLAUDE_CODE_CLI_MCP_PROJECTS`). En el bloque `pairRow` (líneas 174-187), inmediatamente DESPUÉS de `<span className={styles.pairLabel}>{pairFlag.label}</span>`, agregar el mismo botón (usando `showPairHelp`/`setShowPairHelp`, `aria-label={`Explicación simple de ${pairFlag.label}`}` y `aria-controls={`plain-help-${pairFlag.key}`}`), y DESPUÉS del `<input ...>` del par, agregar el mismo bloque `{showPairHelp && (...)}` con `id={`plain-help-${pairFlag.key}`}` leyendo `pairFlag.plain_help` (mismo fallback honesto con `pairFlag.description`). Los `id` no colisionan: `flag.key !== pairFlag.key`.
    - Búsqueda (v2/C6 corregido + **[ADICIÓN ARQUITECTO v2/C13]** insensible a acentos). `matches()` (líneas 246-254) **YA tiene cuerpo `{ ... }`** con dos early-returns (`onlyActive`, `!qLower`) y un `return (...)` final — NO reescribirla; solo insertar/reemplazar. Pasos exactos:
      1. Junto a `const qLower = q.trim().toLowerCase();` (línea 245), agregar:
         ```tsx
@@ -478,7 +492,7 @@ def test_read_current_exposes_plain_help():
    .plainPending { margin: 0; color: var(--color-text-secondary, #777); }
    ```
 
-4. `Stacky Agents/frontend/src/components/__tests__/HarnessFlagsPanel.test.tsx` — SI vitest está operativo en el entorno, agregar 2 casos: (a) click en el botón de ayuda de un flag con `plain_help` muestra `what`; (b) flag sin `plain_help` muestra el texto "Explicación simple pendiente". SI vitest no corre (limitación conocida del repo), el criterio de F3 es solo el typecheck.
+4. `Stacky Agents/frontend/src/components/__tests__/HarnessFlagsPanel.test.tsx` — **(v3/C3, decisión determinista, sin condicional):** hechos verificados 2026-07-02: (a) vitest NO está en `frontend/package.json` (ni dependencia ni script); (b) `tsconfig.json` EXCLUYE `src/**/__tests__/**` y `src/**/*.test.tsx` del typecheck; (c) el archivo YA existe con imports de vitest (patrón "casos como documentación" del Plan 33 F1.2). Conclusión: los casos de componente NO tienen gate alguno (ni corren ni compilan). Instrucción literal: AGREGAR igualmente los 2 casos al archivo existente — (a) click en el botón de ayuda de un flag con `plain_help` muestra `what`; (b) flag sin `plain_help` muestra "Explicación simple pendiente" — como documentación ejecutable futura, declarando en un comentario `// SIN GATE: vitest no instalado, __tests__ excluido de tsc (Plan 86 v3/C3)`. El criterio binario de F3 es SOLO `npx tsc --noEmit`.
 
 **Criterio binario F3 (desde `Stacky Agents/frontend`):**
 ```
@@ -505,6 +519,7 @@ npx tsc --noEmit
            type="checkbox"
            checked={Boolean(flag.value)}
            disabled={saving}
+           aria-label={flag.label}
            onChange={(e) => onUpdate(flag.key, e.target.checked)}
          />
          <span className={styles.toggleSlider} />
@@ -517,7 +532,7 @@ npx tsc --noEmit
      </div>
    );
    ```
-   (El `<input type="checkbox">` sigue siendo el control accesible; la etiqueta es refuerzo visual.)
+   (El `<input type="checkbox">` sigue siendo el control accesible; la etiqueta es refuerzo visual. **v3/C8 [ADICIÓN ARQUITECTO]:** se agrega `aria-label={flag.label}` porque hoy el checkbox NO tiene nombre accesible — el `<label>` que lo envuelve solo contiene el slider visual, sin texto (HarnessFlagsPanel.tsx:78-86).)
 
 2. `Stacky Agents/frontend/src/components/HarnessFlagsPanel.module.css`:
    - Cambiar el color ON del slider (línea ~310) de primary a success, para que "encendida" no se confunda con el azul de acento del tema:
@@ -543,7 +558,7 @@ npx tsc --noEmit
      ```
    - Micro-mejora de claridad (1 atributo): en el JSX del badge `def:` (`HarnessFlagsPanel.tsx` línea ~166) agregar `title="Valor de fábrica"` al `<span className={styles.defaultBadge}>`.
 
-**Nota de contraste (criterio de elección de colores):** `#15803d` sobre fondo claro y como fondo del slider con perilla blanca cumple contraste AA (≥3:1 para componentes UI); los fallbacks elegidos son los que ya usa la familia de tokens del tema (`--color-success`, `--color-border-strong`) — NO se agregan variables globales nuevas; si el token no existe, aplica el fallback local.
+**Nota de contraste (criterio de elección de colores — v3/C2, honesta):** `#15803d` como fondo del slider con perilla blanca cumple contraste AA (≥3:1 para componentes UI). HECHO VERIFICADO 2026-07-02: NINGUNO de los tokens `--color-*` usados por este panel (`--color-primary`, `--color-success`, `--color-border-strong`, etc.) está definido en `frontend/src` — todos los `var()` del CSS existente resuelven SIEMPRE a su fallback literal. Es decir: el patrón `var(--token, literal)` es la convención vigente del repo y el LITERAL es el color efectivo. Este plan sigue esa misma convención (no agrega variables globales; si algún día se define el token, se adopta solo).
 
 **Criterio binario F4 (desde `Stacky Agents/frontend`):**
 ```
@@ -660,17 +675,17 @@ npx tsc --noEmit
 - `Stacky Agents/backend/scripts/run_harness_tests.ps1` — ídem en la lista equivalente.
 
 **Criterio binario F6:**
-1. Desde `Stacky Agents/backend`:
+1. Desde `Stacky Agents/backend` (v3/C4 — el meta-test del ratchet vive en `tests/test_harness_ratchet_meta.py`, listado en `run_harness_tests.sh:60` y `.ps1:53`, y parsea la lista del `.sh`):
    ```
-   .venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py tests/test_harness_flags.py -q
+   .venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py tests/test_harness_flags.py tests/test_harness_ratchet_meta.py -q
    ```
-   → todo verde (incluye el meta-test del ratchet si vive en `test_harness_flags.py`; si el meta-test del Plan 49 F4 vive en otro archivo, correrlo también por nombre).
+   → todo verde (el meta-test confirma que el archivo nuevo quedó registrado en `HARNESS_TEST_FILES`).
 2. Desde `Stacky Agents/frontend`:
    ```
    npx tsc --noEmit
    ```
    → exit code 0.
-3. `git diff --stat` limitado a: `services/harness_flags_help.py` (nuevo), `services/harness_flags.py` (2 líneas), `tests/test_harness_flags_help.py` (nuevo), `frontend/src/api/endpoints.ts`, `frontend/src/components/HarnessFlagsPanel.tsx`, `frontend/src/components/HarnessFlagsPanel.module.css`, opcional `__tests__/HarnessFlagsPanel.test.tsx`, y los 2 scripts de ratchet. **Ningún archivo de runners/runtime tocado.**
+3. `git diff --stat` limitado a: `services/harness_flags_help.py` (nuevo), `services/harness_flags.py` (2 líneas), `tests/test_harness_flags_help.py` (nuevo), `frontend/src/api/endpoints.ts`, `frontend/src/components/HarnessFlagsPanel.tsx`, `frontend/src/components/HarnessFlagsPanel.module.css`, `__tests__/HarnessFlagsPanel.test.tsx` (casos sin gate, v3/C3), y los 2 scripts de ratchet. **Ningún archivo de runners/runtime tocado.**
 
 **Flag protectora:** no aplica. **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno.
 
@@ -687,7 +702,7 @@ npx tsc --noEmit
 | `color-mix` / `:focus-visible` en navegadores viejos | Ambos ya se usan o se proponen en el repo (plan 85 F3 usa `color-mix`); la app corre en navegadores modernos del operador. Si `color-mix` no aplica, el summary queda sin tinte (degradación cosmética, no funcional). |
 | El bloque de ayuda abierto empuja el layout | Es colapsable por flag (estado local, cerrado por default); no hay estado global ni persistencia. |
 | Suite completa del backend contaminada (~40F/449E conocidos) | Validar por archivo (`test_harness_flags_help.py` + `test_harness_flags.py`), patrón estándar del repo. |
-| vitest no operativo para los tests de UI | Igual que planes 78/85: criterio binario = `npx tsc --noEmit`; los casos vitest quedan escritos como opcionales. |
+| vitest no operativo para los tests de UI | Hecho verificado (v3/C3): vitest no está en `package.json` y `tsconfig.json` excluye `__tests__` del typecheck — los casos de componente NO tienen gate (ni corren ni compilan). Quedan como documentación ejecutable futura con comentario "SIN GATE"; criterio binario = `npx tsc --noEmit`. |
 
 ## 6. Fuera de scope
 
@@ -728,7 +743,7 @@ npx tsc --noEmit
 - [ ] `GET /api/harness-flags` expone `plain_help` por flag (clave presente en todas; objeto o `null`).
 - [ ] Cada flag del panel tiene botón ⓘ que despliega la ayuda llana — INCLUIDAS las flags pair `*_PROJECTS` dentro del `pairRow` (v2/C9); flags sin ayuda muestran el fallback honesto "Explicación simple pendiente".
 - [ ] La búsqueda matchea también el texto de la ayuda llana y es insensible a acentos (deaccent NFD) [ADICIÓN ARQUITECTO v2/C13].
-- [ ] Toggle ON verde (token success) + OFF con borde, etiqueta textual "Activada/Desactivada", foco visible por teclado.
+- [ ] Toggle ON verde + OFF con borde, etiqueta textual "Activada/Desactivada", foco visible por teclado, y `aria-label={flag.label}` en el checkbox (hoy sin nombre accesible) + `aria-controls`/`id` enlazando ⓘ↔bloque de ayuda [ADICIÓN ARQUITECTO v3/C8].
 - [ ] Chips índice de categorías con color+icono (reusando `visualFor`) que abren y scrollean a su sección; encabezados de sección tintados con el color de su categoría.
 - [ ] `test_no_runtime_imports_plain_help` verde (impacto NULO en los 3 runtimes, probado mecánicamente).
 - [ ] `test_harness_flags.py` completo sigue verde (categorización y `test_default_known_only_for_curated` intactos; no se creó ninguna FlagSpec).

@@ -105,6 +105,7 @@ HARNESS_TEST_FILES=(
   tests/test_ado_edit_ledger.py
   tests/test_ado_edit_learning.py
   tests/test_ado_edit_sweep.py
+  tests/test_plan81_negative_golden_from_edits.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

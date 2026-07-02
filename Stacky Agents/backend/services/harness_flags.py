@@ -191,7 +191,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
         "STACKY_ADO_EDIT_LEARNING_ENABLED", "STACKY_ADO_EDIT_SWEEP_HOURS",
-        "STACKY_ADO_SERVICE_IDENTITY",
+        "STACKY_ADO_SERVICE_IDENTITY", "STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED",
     ),
     "preflight_intencion": (
         "INTENT_PREFLIGHT_ENABLED", "INTENT_PREFLIGHT_AUTO_APPROVE",
@@ -1729,6 +1729,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,
     ),
+    # ── Plan 81 — Golden negativo desde ediciones humanas en ADO ──────────────
+    FlagSpec(
+        key="STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED",
+        type="bool",
+        label="Golden negativo desde ediciones ADO (plan 81)",
+        description=(
+            "Plan 81 — Si ON, lo que el operador BORRA al editar un WI publicado se convierte en "
+            "golden NEGATIVO determinista: el gate de regresión (plan 56) marca su reaparición en "
+            "épicas futuras (y bloquea si STACKY_REGRESSION_GATE_BLOCKING=true). Productor: requiere "
+            "STACKY_ADO_EDIT_LEARNING_ENABLED=true. Default OFF."
+        ),
+        group="global",
+        env_only=False,
+    ),
     FlagSpec(
         key="STACKY_TICKETS_PROVIDER_ENABLED",
         type="bool",
@@ -1812,7 +1826,9 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (categoría 'migrador_ado_gitlab')
-        default="auto",
+        # default="auto" removido (supervisión 2026-07-02): config.py:856 ya provee "auto"
+        # como default de runtime; un default= explícito sin curar rompía el centinela
+        # test_default_known_only_for_curated del Plan 63 (gotcha harness-flags-default-explicit-gotcha).
     ),
     # ── Plan 75 — Deep links bidireccionales GitLab ───────────────────────────
     FlagSpec(
@@ -1842,7 +1858,9 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
-        default=False,
+        # default=False removido (supervisión 2026-07-02): config.py:871 ya provee "false"
+        # (bool type-zero=False); un default= explícito sin curar rompía el centinela
+        # test_default_known_only_for_curated del Plan 63 (gotcha harness-flags-default-explicit-gotcha).
     ),
     # ── Plan 80 — Wiring real codebase-memory-mcp: allowlist + ruta del binario ──
     FlagSpec(

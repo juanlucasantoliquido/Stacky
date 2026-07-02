@@ -48,6 +48,14 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower()).strip()
 
 
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _normalize_html_text(html: str) -> str:
+    """Plan 81 F0b — quita tags HTML y luego normaliza (matching tag-agnóstico)."""
+    return _normalize(_TAG_RE.sub(" ", html or ""))
+
+
 def derive_negative_golden(
     *,
     rejection_note: str,
@@ -75,6 +83,54 @@ def derive_negative_golden(
         work_item_type=work_item_type,
         confidence_band=None,
     )
+
+
+_NEG_FROM_EDIT_MIN_LEN = 15  # Plan 81 — snippet normalizado más corto no es señal confiable
+_NEG_FROM_EDIT_MAX = 5       # Plan 81 — cap por edición (anti-envenenamiento del catálogo)
+
+
+def derive_negative_goldens_from_removed(
+    *,
+    removed_snippets: list,
+    edited_text: str,
+    project: str | None,
+    agent_type: str,
+    work_item_type: str,
+) -> list:
+    """PURA. Plan 81 — snippets borrados por el humano → goldens negativos (absent_substring).
+
+    Guards deterministas, en orden:
+      1. snippet normalizado (_normalize) con len < _NEG_FROM_EDIT_MIN_LEN → skip.
+      2. snippet aún presente (como substring) en edited_text normalizado → skip
+         (fue re-formateo/merge de frases, NO un borrado de contenido).
+      3. dedup por valor normalizado dentro de la misma edición.
+      4. cap _NEG_FROM_EDIT_MAX, preservando el orden de aparición.
+    Lista vacía / None / todo filtrado → []. Nunca lanza.
+    """
+    edited_norm = _normalize(edited_text or "")
+    out: list = []
+    seen: set = set()
+    for s in (removed_snippets or []):
+        v = _normalize(str(s))
+        if len(v) < _NEG_FROM_EDIT_MIN_LEN:
+            continue
+        if v in seen:
+            continue
+        if v in edited_norm:
+            continue
+        g = derive_negative_golden(
+            rejection_note=str(s),
+            project=project,
+            agent_type=agent_type,
+            work_item_type=work_item_type,
+        )
+        if g is None:
+            continue
+        seen.add(v)
+        out.append(g)
+        if len(out) >= _NEG_FROM_EDIT_MAX:
+            break
+    return out
 
 
 def _extract_first_rf_heading(clean_html: str) -> str | None:
@@ -140,6 +196,7 @@ def evaluate_regression(
         return []
 
     html_norm = _normalize(clean_html)
+    text_norm = _normalize_html_text(clean_html)  # Plan 81 F0b
     defects: list[str] = []
 
     for g in goldens:
@@ -150,7 +207,9 @@ def evaluate_regression(
 
         if g.kind == "negative" and g.check == "absent_substring":
             # Defecto: el substring rechazado reaparece
-            if g.value in html_norm:
+            # Plan 81 F0b: comparar contra texto sin tags inline (los removed_snippets
+            # vienen de texto plano; sin esto una épica con <strong>Mul2Bane</strong> escapa).
+            if g.value in text_norm:
                 defects.append(f"regression_negative:{g.value}")
 
         elif g.kind == "positive" and g.check == "present_heading":

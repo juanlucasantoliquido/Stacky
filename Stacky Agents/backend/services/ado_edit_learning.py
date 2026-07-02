@@ -36,6 +36,7 @@ class LearnResult:
     golden_written: bool
     rev: int | None
     reason: str  # "ok"|"not_material"|"no_human_edit"|"already_learned"|"ado_unavailable"
+    negative_goldens_written: int = 0   # Plan 81
 
 
 def edit_to_lesson_content(delta, *, ado_id: int) -> str:
@@ -69,6 +70,12 @@ def _golden_available() -> bool:
         )
     except Exception:
         return False
+
+
+def _negative_golden_enabled() -> bool:
+    """Plan 81 — lee STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED (default OFF) en call time."""
+    import os
+    return os.getenv("STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", "false").strip().lower() in ("1", "true", "on")
 
 
 def learn_from_work_item(
@@ -179,6 +186,30 @@ def learn_from_work_item(
     except Exception as exc:
         logger.warning("learn_from_work_item: golden falló (no crítico) para WI %s: %s", ado_id, exc)
 
+    # 7b. Goldens negativos (plan 81) — lo que el humano BORRÓ no debe reaparecer.
+    #     MISMAS keys que lee el gate del autopublish (api/tickets.py:6513-6517):
+    #     agent_type="BusinessAgent", work_item_type="Epic" — si no, el golden queda huérfano.
+    negative_goldens_written = 0
+    try:
+        if _negative_golden_enabled() and _golden_available():
+            from harness.regression_goldens import (
+                derive_negative_goldens_from_removed,
+                save_golden,
+            )
+            for g in derive_negative_goldens_from_removed(
+                removed_snippets=delta.removed_snippets,
+                edited_text=delta.edited_text,
+                project=project_name,
+                agent_type="BusinessAgent",
+                work_item_type="Epic",
+            ):
+                save_golden(g)
+                negative_goldens_written += 1
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "learn_from_work_item: negative golden falló (no crítico) para WI %s: %s", ado_id, exc
+        )
+
     # 8. Marcar ledger (idempotencia entre sweeps)
     try:
         ado_edit_ledger.mark_learned(ado_id, he.rev, run_id)
@@ -191,6 +222,7 @@ def learn_from_work_item(
         golden_written=golden_written,
         rev=he.rev,
         reason="ok",
+        negative_goldens_written=negative_goldens_written,
     )
 
 
@@ -270,8 +302,8 @@ def sweep_recent_runs(
                 if res.learned:
                     new_lessons += 1
                     logger.info(
-                        "ado edit learning: WI %s rev %s => lección nueva (run %s)",
-                        ado_id, res.rev, run.id,
+                        "ado edit learning: WI %s rev %s => lección nueva (run %s, neg_goldens=%s)",
+                        ado_id, res.rev, run.id, res.negative_goldens_written,
                     )
             except Exception as exc:
                 logger.warning("sweep_recent_runs: error en WI %s (no crítico): %s", ado_id, exc)

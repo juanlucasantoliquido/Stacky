@@ -789,6 +789,13 @@ class Config:
         "STACKY_PUSH_REJECTIONS_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 81 — Si ON, las frases borradas por el operador en ADO se derivan
+    # como goldens negativos deterministas durante el sweep de edit-learning.
+    # Default OFF (opt-in), editable por UI via HarnessFlagsPanel.
+    STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED: bool = os.getenv(
+        "STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # ── Plan 65 — GitLab como tracker de primer nivel ─────────────────────────
     # STACKY_GITLAB_ENABLED: master switch para el adapter GitLab. OFF default.
     # Sin este flag, issue_tracker.type=gitlab rechaza en la fábrica.

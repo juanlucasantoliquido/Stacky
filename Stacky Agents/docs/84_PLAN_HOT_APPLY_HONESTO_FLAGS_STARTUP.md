@@ -1,6 +1,28 @@
 # Plan 84 — Aplicación en caliente honesta: flags de startup del arnés (`restart_required` + "pendiente de reinicio")
 
-**Estado:** PROPUESTO v2 (2026-07-02) — v1 → v2 tras crítica adversarial (`criticar-y-mejorar-plan`)
+**Estado:** PROPUESTO v3 (2026-07-02) — v2 → v3 tras segunda crítica adversarial (`criticar-y-mejorar-plan`)
+
+### Changelog v2 → v3
+- **C1 (era BLOQUEANTE de exactitud, corregido):** el mapa curado tenía 4 keys pero son **5**:
+  `STACKY_EVALS_INTERVAL_HOURS` (spec harness_flags.py:610, `env_only=True`) también se consume UNA
+  sola vez en `create_app()` para armar el daemon de evals (app.py:336-347, `_evals_interval` +
+  gate `0 = off`). Se auditó el inventario COMPLETO de tokens `STACKY_` de app.py: el resto
+  (watchers/reaper/recovery/manifest) NO está en `FLAG_REGISTRY` (kill-switches internos env-only,
+  fuera del panel) — no aplican. Tabla, mapa congelado, KPI y DoD actualizados a 5.
+- **C2:** el regex del centinela de F1 NO atrapaba lecturas multilínea (la lectura REAL de
+  `STACKY_ADO_EDIT_LEARNING_ENABLED` es `os.environ.get(` + salto de línea, app.py:410-411).
+  Reemplazado por token-scan a prueba de saltos: `re.findall(r"STACKY_[A-Z_]+", src)` ∩ keys del
+  registry ⊆ mapa congelado. Un token de una key del registry incluso en un COMENTARIO de app.py
+  exige decisión consciente (escape hatch ya documentado) — más estricto y sin falsos verdes.
+- **C3:** en `read_current()`, `pending_restart(spec, value)` se computa UNA vez en variable local
+  `is_pending` y se reusa para las claves `pending_restart` y `boot_value` (evita doble evaluación).
+- **C4:** documentado en F2: un PUT que setea el MISMO valor con el que arrancó el proceso igual
+  lista la key en `restart_required_keys` (mensaje honesto pero conservador); tras el refetch la fila
+  NO muestra "pendiente" porque `pending_restart` compara contra el snapshot. Comportamiento esperado.
+- **[ADICIÓN ARQUITECTO v3]:** test centinela de wiring `test_create_app_populates_boot_snapshot`
+  (F1): tras `create_app()` (mismo patrón que los centinelas de rutas de los planes 72/74),
+  `set(_BOOT_VALUES) == _EXPECTED_RESTART_REQUIRED` — imposible que el snapshot quede como wiring
+  muerto (lección del bridge fantasma del plan 60).
 
 ### Changelog v1 → v2
 - **C1:** el refactor de `read_current()` a `_current_value()` NO es byte-idéntico: para flags
@@ -33,7 +55,7 @@ consumidores que leen `config.STACKY_X`/`os.getenv` en call-time ven el cambio a
 verificó por grep que NO existe ningún módulo que congele una flag del registry en una constante de
 import-time.
 
-**EXCEPCIÓN verificada:** 4 flags del panel se consumen UNA sola vez dentro de `create_app()` para
+**EXCEPCIÓN verificada:** 5 flags del panel se consumen UNA sola vez dentro de `create_app()` para
 decidir si arrancan daemons de fondo, y capturan el intervalo en una variable local del closure:
 
 | Key | Consumo boot-time | Spec en registry | `env_only` |
@@ -42,8 +64,9 @@ decidir si arrancan daemons de fondo, y capturan el intervalo en una variable lo
 | `STACKY_MEMORY_REVIEW_SWEEP_HOURS` | `app.py:386-387` (gate + `_review_sweep_seconds`) | harness_flags.py:358 | False (config.py:257) |
 | `STACKY_ADO_EDIT_LEARNING_ENABLED` | `app.py:410-413` (gate del daemon plan 60) | harness_flags.py:1700 | True |
 | `STACKY_ADO_EDIT_SWEEP_HOURS` | `app.py:414` (`_ado_edit_seconds`) | harness_flags.py:1711 | True |
+| `STACKY_EVALS_INTERVAL_HOURS` | `app.py:336-347` (gate + `_evals_interval`, daemon de evals) | harness_flags.py:610 | True |
 
-Para estas 4, el PUT responde `{ok, applied}` (`api/harness_flags.py:167`) = **éxito FALSO**: el
+Para estas 5, el PUT responde `{ok, applied}` (`api/harness_flags.py:167`) = **éxito FALSO**: el
 cambio queda persistido pero es inerte hasta reiniciar el backend. Peor caso 0→ON: el hilo nunca se
 creó al boot, así que "prender" desde la UI no arranca NADA. Caso crítico real:
 `STACKY_ADO_EDIT_LEARNING_ENABLED` es el master del aprendizaje bidireccional (planes 60/81) — el
@@ -59,7 +82,7 @@ triage en el hero.
 **KPI/impacto esperado:**
 - 0 PUTs falsamente exitosos sin aviso: todo cambio a una flag de startup devuelve
   `restart_required_keys` y la fila muestra "pendiente de reinicio del backend".
-- El operador distingue de un vistazo qué flags aplican en caliente (todas menos 4) y cuáles no.
+- El operador distingue de un vistazo qué flags aplican en caliente (todas menos 5) y cuáles no.
 - Impacto runtime NULO: ningún runner/gate/daemon lee los símbolos nuevos; los loops de `app.py`
   NO se tocan.
 
@@ -67,7 +90,7 @@ triage en el hero.
 
 Los planes 82 (PROPUESTO v3: `requires`, badge `env`, deltas de perfil) y 83 (PROPUESTO v3: bounds
 numéricos) cierran relaciones, origen, desvío y validez del valor. Ninguno cubre la **vigencia**
-del valor: ¿el proceso que corre está usando lo que dice el panel? Para 4 flags la respuesta puede
+del valor: ¿el proceso que corre está usando lo que dice el panel? Para 5 flags la respuesta puede
 ser NO y hoy es indetectable desde la UI. Es la última clase de "flag muerta silenciosa" del panel
 (se auditó: no hay constantes import-time; `STACKY_MAX_CONCURRENT_RUNS` se lee call-time en
 `services/run_slots.py:23`; el resto de consumidores lee `config.X`/`os.getenv` por llamada). Reusa
@@ -81,8 +104,8 @@ el patrón ya probado: campo aditivo en `FlagSpec` + mapa curado congelado + ser
   Ningún runner los importa. No hay rama de comportamiento nueva en tiempo de run.
 - **NO cambiar el comportamiento de los loops (fuera de scope explícito):** prohibido re-leer config
   por iteración, arrancar/parar hilos en caliente o tocar `_digest_loop`/`_memory_review_sweep_loop`/
-  `_ado_edit_sweep_loop`. Este plan es metadata + presentación honesta; la mecánica de reinicio
-  sigue siendo humana (human-in-the-loop).
+  `_ado_edit_sweep_loop`/el daemon de evals. Este plan es metadata + presentación honesta; la
+  mecánica de reinicio sigue siendo humana (human-in-the-loop).
 - **Cero trabajo extra al operador:** todo informativo/automático. Los controles NUNCA se bloquean;
   el PUT sigue aceptando y persistiendo el cambio (sobrevive al reinicio vía `.env`, que es
   exactamente lo deseado). Solo se informa.
@@ -176,10 +199,10 @@ def pending_restart(spec: FlagSpec, value: object) -> bool:
    ([ADICIÓN ARQUITECTO v2] `boot_value`):
 
 ```python
+            # C3-v3: computar UNA vez antes del dict: is_pending = pending_restart(spec, value)
             "restart_required": spec.restart_required,
-            "pending_restart": pending_restart(spec, value),
-            "boot_value": (_BOOT_VALUES.get(spec.key)
-                           if pending_restart(spec, value) else None),
+            "pending_restart": is_pending,
+            "boot_value": _BOOT_VALUES.get(spec.key) if is_pending else None,
 ```
 
    `boot_value` solo lleva valor cuando hay un cambio pendiente (si no, `null`): la UI puede decir
@@ -237,8 +260,8 @@ determinista (C3-v2), desde `Stacky Agents/backend`:
 
 ### F1 — Mapa curado CONGELADO de flags restart_required (backend, TDD)
 
-**Objetivo:** marcar exactamente las 4 flags verificadas y congelar la lista por test para que nadie
-agregue una quinta sin evidencia (mismo patrón que Plan 82 F1 / Plan 83 F1).
+**Objetivo:** marcar exactamente las 5 flags verificadas y congelar la lista por test para que nadie
+agregue una sexta sin evidencia (mismo patrón que Plan 82 F1 / Plan 83 F1).
 
 **Archivos:**
 - Editar: `Stacky Agents/backend/services/harness_flags.py` (los 4 `FlagSpec`)
@@ -246,24 +269,28 @@ agregue una quinta sin evidencia (mismo patrón que Plan 82 F1 / Plan 83 F1).
 
 **Cambios exactos:**
 
-1. Agregar `restart_required=True` (SOLO ese kwarg; prohibido tocar `default`) a los 4 specs:
+1. Agregar `restart_required=True` (SOLO ese kwarg; prohibido tocar `default`) a los 5 specs:
    - `STACKY_DIGEST_INTERVAL_HOURS` (spec en harness_flags.py, buscar `key="STACKY_DIGEST_INTERVAL_HOURS"`)
    - `STACKY_MEMORY_REVIEW_SWEEP_HOURS`
    - `STACKY_ADO_EDIT_LEARNING_ENABLED`
    - `STACKY_ADO_EDIT_SWEEP_HOURS`
+   - `STACKY_EVALS_INTERVAL_HOURS` (C1-v3; daemon de evals, app.py:336-347)
 
 2. Test de congelamiento (con la receta de auditoría como comentario, para futuros planes):
 
 ```python
 # Receta de auditoría (determinista) para decidir si una flag es restart_required:
-# grep -n 'config\.STACKY_\|os\.environ\.get("STACKY_\|os\.getenv("STACKY_' backend/app.py
-# → toda key del registry consumida dentro de create_app() (gate o intervalo de un
-#   daemon) es restart_required. Cualquier otra key NO lo es (se lee call-time).
+# grep -o 'STACKY_[A-Z_]*' backend/app.py | sort -u  → cruzar contra FLAG_REGISTRY.
+# Toda key del registry consumida dentro de create_app() (gate o intervalo de un
+# daemon) es restart_required. Cualquier otra key NO lo es (se lee call-time).
+# Auditoría 2026-07-02: watchers/reaper/recovery/manifest de app.py NO están en el
+# registry (kill-switches internos env-only) → no aplican.
 _EXPECTED_RESTART_REQUIRED = frozenset({
     "STACKY_DIGEST_INTERVAL_HOURS",
     "STACKY_MEMORY_REVIEW_SWEEP_HOURS",
     "STACKY_ADO_EDIT_LEARNING_ENABLED",
     "STACKY_ADO_EDIT_SWEEP_HOURS",
+    "STACKY_EVALS_INTERVAL_HOURS",
 })
 
 
@@ -274,17 +301,21 @@ def test_restart_required_map_is_frozen():
 
 3. Test centinela anti-drift de `app.py` (que el mapa no quede stale si alguien agrega un daemon):
 
+   (C2-v3: token-scan a prueba de lecturas multilínea — la lectura real de
+   `STACKY_ADO_EDIT_LEARNING_ENABLED` es `os.environ.get(` + salto de línea, app.py:410-411, y un
+   regex por patrón de llamada la perdería en silencio):
+
 ```python
 def test_app_startup_flag_reads_are_all_declared():
-    """Toda key STACKY_* del registry leída en app.py debe estar en el mapa congelado."""
+    """Todo token STACKY_* de app.py que sea key del registry debe estar declarado."""
     import re
     from pathlib import Path
     src = (Path(__file__).parent.parent / "app.py").read_text(encoding="utf-8")
-    keys_in_app = set(re.findall(r'(?:config\.|environ\.get\(\"|getenv\(\")(STACKY_[A-Z_]+)', src))
+    tokens_in_app = set(re.findall(r"STACKY_[A-Z_]+", src))
     registry_keys = {s.key for s in FLAG_REGISTRY}
-    startup_reads = keys_in_app & registry_keys
+    startup_reads = tokens_in_app & registry_keys
     assert startup_reads <= _EXPECTED_RESTART_REQUIRED, (
-        f"Flags del registry leídas en app.py sin declarar restart_required: "
+        f"Keys del registry mencionadas en app.py sin declarar restart_required: "
         f"{sorted(startup_reads - _EXPECTED_RESTART_REQUIRED)}"
     )
 ```
@@ -295,7 +326,14 @@ def test_app_startup_flag_reads_are_all_declared():
    consumo boot-time, declararla `restart_required=True` y agregarla al mapa congelado. Prohibido
    agregar excepciones al regex.
 
-4. Verificar y NO romper: `test_default_known_only_for_curated` (correr el archivo que lo contiene,
+4. [ADICIÓN ARQUITECTO v3] Test centinela de wiring `test_create_app_populates_boot_snapshot`
+   (anti wiring-muerto, lección del bridge fantasma del plan 60): construir la app con el MISMO
+   patrón que los centinelas de rutas existentes (localizar con
+   `grep -rl "routes_registered\|create_app()" tests\` y espejar su setup/fixtures) y verificar
+   `set(harness_flags._BOOT_VALUES) == _EXPECTED_RESTART_REQUIRED`. Si `create_app()` no llamara
+   `snapshot_boot_values()`, este test falla.
+
+5. Verificar y NO romper: `test_default_known_only_for_curated` (correr el archivo que lo contiene,
    localizarlo con `grep -rl "default_known_only_for_curated" tests\`).
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests\test_harness_flags_restart_required.py -q`
@@ -338,7 +376,9 @@ del repo. Verificar además que los tests no dejen residuos en `os.environ`
   `STACKY_MAX_CONCURRENT_RUNS`) → `restart_required_keys == []`.
 - `test_put_startup_flag_returns_key` — PUT de `STACKY_DIGEST_INTERVAL_HOURS=2` →
   `restart_required_keys == ["STACKY_DIGEST_INTERVAL_HOURS"]` y `ok is True` (el cambio SÍ se
-  persiste; solo se informa).
+  persiste; solo se informa). Nota (C4-v3): la key se lista aunque el valor seteado coincida con el
+  del boot (criterio conservador y barato); la fila no mostrará "pendiente" tras el refetch porque
+  `pending_restart` compara contra el snapshot. Comportamiento esperado, no bug.
 - `test_put_mixed_returns_only_startup_keys` — PUT con una de cada → solo la startup en la lista.
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests\test_harness_flags_endpoint_restart.py -q`
@@ -419,8 +459,8 @@ corridos", sin marcar verde).
   la lectura de los daemons ocurren en el mismo boot sin PUTs intercalados (el server aún no
   atiende requests). Riesgo nulo en la práctica; el test de F0 cubre la semántica.
 - **R3 — Drift del mapa curado (nuevo daemon sin declarar):** centinela
-  `test_app_startup_flag_reads_are_all_declared` (F1) — regex sobre `app.py` cruzada con el
-  registry; falla si aparece una lectura startup no declarada.
+  `test_app_startup_flag_reads_are_all_declared` (F1) — token-scan de `app.py` cruzado con el
+  registry (a prueba de lecturas multilínea); falla si aparece una key del registry no declarada.
 - **R4 — Colisión textual con planes 82/83 no implementados:** los tres planes agregan campos/claves
   aditivas en los mismos puntos; este plan referencia símbolos, no líneas. Orden de campos: al final
   de `FlagSpec`. Conmutativo.
@@ -433,7 +473,10 @@ corridos", sin marcar verde).
   comportamiento runtime; expresamente prohibido en este plan).
 - Reinicio del backend desde la UI (botón "reiniciar"): decisión de operación, no de claridad.
 - Bounds (Plan 83), `requires`/badge env/deltas (Plan 82): planes independientes.
-- Cualquier flag fuera de las 4 verificadas (la receta de auditoría queda documentada en F1).
+- Cualquier flag fuera de las 5 verificadas (la receta de auditoría queda documentada en F1).
+- Keys de startup de `app.py` que NO están en `FLAG_REGISTRY` (watchers, reaper, recovery,
+  manifest): son kill-switches internos env-only, no flags del panel; sumarlas al panel sería otro
+  plan.
 
 ## 7. Glosario
 
@@ -461,8 +504,9 @@ corridos", sin marcar verde).
 
 - [ ] `FlagSpec.restart_required` existe, default `False`; NINGÚN spec cambió su campo `default`;
       `test_default_known_only_for_curated` verde.
-- [ ] Las 4 keys verificadas (y SOLO esas) tienen `restart_required=True`; mapa congelado + centinela
-      de `app.py` verdes.
+- [ ] Las 5 keys verificadas (y SOLO esas) tienen `restart_required=True`; mapa congelado +
+      centinela token-scan de `app.py` + centinela de wiring `test_create_app_populates_boot_snapshot`
+      verdes.
 - [ ] `read_current()` serializa `restart_required`, `pending_restart` y `boot_value` (fail-open
       sin snapshot); `create_app()` llama `snapshot_boot_values()`; el delta str-env_only-unset
       (`0`→`""`) está cubierto por test.
@@ -472,5 +516,5 @@ corridos", sin marcar verde).
 - [ ] UI: badge "reinicio" por fila, nota "Cambio pendiente de reinicio del backend", aviso post-PUT
       y chip en hero solo si N>0; `tsc --noEmit` exit 0; vitest corrido o degradación reportada.
 - [ ] Tests nuevos registrados en `HARNESS_TEST_FILES` (sh y ps1); meta-test del ratchet verde.
-- [ ] Cero cambios en `_digest_loop`/`_memory_review_sweep_loop`/`_ado_edit_sweep_loop` y en los 3
-      runtimes.
+- [ ] Cero cambios en `_digest_loop`/`_memory_review_sweep_loop`/`_ado_edit_sweep_loop`/el daemon
+      de evals (app.py:336-347) y en los 3 runtimes.

@@ -1,9 +1,20 @@
 # Plan 86 — Flags para mortales: ayuda en lenguaje llano, contraste ON/OFF y navegación por secciones
 
-**Versión:** v1 (propuesto, 2026-07-02)
+**Versión:** v2 (propuesto, 2026-07-02) — crítica adversarial v1→v2 aplicada (veredicto v1: RECHAZADO por C1)
 **Estado:** PROPUESTO — no implementado
 **Origen:** pedido textual del operador: *"Que cambie la forma de activar o desactivar flags: que sea mucho más estético y con mejores contrastes de colores alineados a la herramienta, que estén más sectorizados y, por sobre todo, que sean fáciles de entender sobre todo para personas que no entienden nada de IA (podrían tener cada uno un signito de exclamación que te dé una explicación de para qué sirve, con ejemplos claros para un mortal), y cualquier otra mejora que facilite el uso de esta configuración."*
 **Dependencias:** ninguna dura. CONMUTATIVO con los planes propuestos 82 (requires/origen), 83 (bounds), 84 (restart_required) y 85 (reserved): este plan **NO agrega campos a `FlagSpec`** ni toca el hero — el contenido nuevo vive en un módulo aparte y la UI nueva ocupa espacio propio (ver sección 3.7). Complementa (no duplica) los rediseños ya implementados 62/63 (categorías colapsables + búsqueda) y 78 (hero + color/icono + Simple/Experto).
+
+**Changelog v1 → v2 (crítica adversarial, todo verificado contra código):**
+- **C1 (BLOQUEANTE, resuelto):** posición EXACTA del estado `showHelp` en `FlagRow` — debe declararse ANTES del early-return `if (isManagedAsPair) return null;` (HarnessFlagsPanel.tsx:71); después viola la regla de hooks de React, crashea el panel en runtime y `tsc` NO lo detecta (falso verde).
+- **C2:** criterio F0 corregido — `test_no_runtime_imports_plain_help` PASA verde ya en F0 (módulo inexistente ⇒ 0 offenders); resultado esperado exacto: `6 failed, 1 passed`.
+- **C3:** el centinela poda `.venv/__pycache__/node_modules/data/dist/build` (`backend\.venv` EXISTE; sin poda rglob lee miles de archivos del venv en cada corrida del ratchet).
+- **C4:** conteo real: **158 flags** (104 bool / 25 int / 22 csv / 4 float / 2 str / 1 json), no ~139. Corregido en evidencia, riesgos, glosario y DoD.
+- **C5:** eliminado el hedge vago de F2 — `read_current()` importa `config` LAZY (harness_flags.py:1934) y `test_harness_flags.py:523-529` ya lo llama sin mock: el test corre tal cual.
+- **C6:** instrucción de `matches()` corregida — ya tiene cuerpo `{...}` con 3 `return` (tsx:246-254); se INSERTA antes del `return (` final, no se reescribe.
+- **C9:** las flags pair (`*_PROJECTS`) no renderizan `FlagRow` propio (`isManagedAsPair`, tsx:70-71) → su ayuda llana era INALCANZABLE; F3 ahora agrega ⓘ + bloque también en el `pairRow`.
+- **C7:** anclas actualizadas (`read_current()`:1932, dict :1952-1965). **C8:** `onToggle` libera `focusCat` al cerrar la sección a mano. **C10:** denylist con plural opcional (`s?`): "tokens" ya no se escapa. **C11:** removido `import pytest` muerto. **C12:** claim honesto — la denylist garantiza 0 apariciones de SUS términos, no "0 jerga" absoluta.
+- **C13 [ADICIÓN ARQUITECTO]:** búsqueda insensible a acentos (deaccent NFD) — "notificacion" encuentra "notificación"; clave para el objetivo "mortales".
 
 ---
 
@@ -15,11 +26,11 @@
 - `FlagSpec.description` (`Stacky Agents/backend/services/harness_flags.py:23`) es técnica y críptica para un no-experto: *"F1.1 — Si ON, outputs con errores duros degradan el run a needs_review."* (línea 219). Referencias a fases de planes ("F1.1"), jerga ("outputs", "run", "needs_review").
 - El toggle ON usa `--color-primary` azul (`HarnessFlagsPanel.module.css:310-311`) — mismo color que botones/acentos del tema: ON no se distingue de "elemento acentuado". OFF es gris sin borde ni etiqueta. No hay texto "Activada/Desactivada"; el estado se comunica SOLO por color (falla de accesibilidad y de claridad para mortales).
 - No existe ningún afordance de ayuda por flag: solo el `description` técnico inline (`HarnessFlagsPanel.tsx:169`).
-- Con ~139 flags en 16 categorías, ir de una sección a otra exige scroll ciego; no hay índice de navegación.
+- Con **158 flags** en 16 categorías (conteo verificado 2026-07-02 con el venv: 104 bool / 25 int / 22 csv / 4 float / 2 str / 1 json), ir de una sección a otra exige scroll ciego; no hay índice de navegación.
 - La búsqueda (`HarnessFlagsPanel.tsx:246-254`) matchea solo `label/description/key` técnicos: un mortal que busca "costo" o "avisos" no encuentra nada si la description no usa esa palabra.
 
 **KPI/impacto:**
-- 100% de las flags del registry con ayuda en lenguaje llano (cobertura garantizada por test centinela; 0 jerga de IA, garantizado por denylist mecánica en test).
+- 100% de las flags del registry (158) con ayuda en lenguaje llano (cobertura garantizada por test centinela; 0 apariciones de los términos de la denylist de jerga — garantía mecánica sobre la denylist, que es finita: no es un detector semántico universal).
 - Estado ON/OFF distinguible sin depender del color (etiqueta textual "Activada/Desactivada" + contraste AA + foco visible).
 - Navegación a cualquier categoría en 1 click (chips índice).
 - Búsqueda encuentra flags por palabras "de mortal" (busca también en la ayuda llana).
@@ -72,8 +83,6 @@ y que NINGÚN módulo de runtime importa.
 """
 import re
 from pathlib import Path
-
-import pytest
 
 from services.harness_flags import FLAG_REGISTRY
 
@@ -133,7 +142,8 @@ def test_plain_help_avoids_jargon_denylist():
     for key, entry in PLAIN_HELP.items():
         for field in _all_fields(entry):
             for term in JARGON_DENYLIST:
-                if re.search(rf"\b{re.escape(term)}\b", field, re.IGNORECASE):
+                # v2/C10 — plural opcional: "token" y "tokens" caen igual.
+                if re.search(rf"\b{re.escape(term)}s?\b", field, re.IGNORECASE):
                     violations.append(f"{key}: '{term}'")
             if _KEY_RE.search(field):
                 violations.append(f"{key}: cita una key SCREAMING_SNAKE")
@@ -148,12 +158,19 @@ def test_plain_help_module_is_pure():
         assert forbidden not in src, f"harness_flags_help.py no debe contener '{forbidden}'"
 
 
+# v2/C3 — poda de directorios que NO son código de la app (backend\.venv EXISTE:
+# sin poda, rglob leería miles de archivos del venv en cada corrida del ratchet).
+_EXCLUDED_DIRS = {".venv", "venv", "__pycache__", "node_modules", "data", "dist", "build"}
+
+
 def test_no_runtime_imports_plain_help():
     """Centinela de impacto NULO en los 3 runtimes: solo el registry (y este
     módulo/los tests) pueden referirse a harness_flags_help."""
     allowed = {"services/harness_flags.py", "services/harness_flags_help.py"}
     offenders = []
     for path in sorted(BACKEND_ROOT.rglob("*.py")):
+        if _EXCLUDED_DIRS & set(path.parts):
+            continue
         rel = path.relative_to(BACKEND_ROOT).as_posix()
         if rel.startswith("tests/") or rel in allowed:
             continue
@@ -167,7 +184,7 @@ def test_no_runtime_imports_plain_help():
 .venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q
 ```
 
-**Criterio de aceptación binario F0:** los tests FALLAN con `ModuleNotFoundError: services.harness_flags_help` (el módulo aún no existe) — salvo `test_no_runtime_imports_plain_help` y `test_plain_help_module_is_pure`, que pueden fallar por archivo inexistente (`FileNotFoundError`), también aceptado. Fallar por OTRA razón = investigar antes de seguir.
+**Criterio de aceptación binario F0 (v2/C2 — exacto por test):** los 5 tests que importan `PLAIN_HELP` fallan con `ModuleNotFoundError` (`services.harness_flags_help` no existe); `test_plain_help_module_is_pure` falla con `FileNotFoundError` (lee el archivo directo); `test_no_runtime_imports_plain_help` **PASA verde ya en F0** (módulo inexistente ⇒ nadie lo referencia ⇒ 0 offenders — verde trivial ESPERADO, no es señal de error). Resultado esperado exacto: `6 failed, 1 passed`. Cualquier otro resultado = investigar antes de seguir.
 
 **Flag protectora:** no aplica (test puro). **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno.
 
@@ -225,7 +242,7 @@ def plain_help_for(key: str) -> dict | None:
 ```
 
 **Procedimiento de poblado (determinista, para modelo menor):**
-1. Recorrer `_CATEGORY_KEYS` de `services/harness_flags.py` categoría por categoría, en el orden del archivo; escribir la entrada de cada key en ese mismo orden (así el diff es revisable y ninguna key se salta). Las keys que no estén en `_CATEGORY_KEYS` no existen (el test de Plan 63 lo garantiza); la cobertura la verifica `test_plain_help_covers_all_registry_keys`.
+1. Recorrer `_CATEGORY_KEYS` de `services/harness_flags.py` (línea 91) categoría por categoría, en el orden del archivo; escribir la entrada de cada key en ese mismo orden (así el diff es revisable y ninguna key se salta). Son **158 entradas** en total (v2/C4: 104 bool / 25 int / 22 csv / 4 float / 2 str / 1 json — verificado con el venv). Las keys que no estén en `_CATEGORY_KEYS` no existen (el test de Plan 63 lo garantiza); la cobertura la verifica `test_plain_help_covers_all_registry_keys`.
 2. Para redactar cada entrada, leer `label` + `description` de la spec correspondiente y aplicar la plantilla por tipo (tabla siguiente). Está PROHIBIDO inventar comportamiento que la description no respalde; si la description es ambigua, describir el efecto en términos del resultado visible para el operador ("el trabajo queda marcado para revisar", "aparece un aviso", "se gasta menos").
 3. Verificar cada lote de categoría corriendo el comando de F0 (los tests de formato/jerga acusan la key exacta que viola).
 
@@ -331,11 +348,11 @@ def test_read_current_exposes_plain_help():
     # Toda flag expone la clave (aunque una futura sin entrada daría None):
     assert all("plain_help" in f for f in flags.values())
 ```
-(Si `read_current()` requiere `config`, seguir el patrón de mocking ya usado en `tests/test_harness_flags.py`: import lazy dentro de la función → parchear en el módulo origen.)
+(Verificado v2/C5: `read_current()` importa `config` LAZY dentro de la función — `services/harness_flags.py:1934` — y `tests/test_harness_flags.py:523-529` ya lo llama tal cual, sin mock ni fixture: este test corre igual, a pelo.)
 
 **Archivo a editar:** `Stacky Agents/backend/services/harness_flags.py`
 1. Import al tope del módulo (junto a los imports existentes): `from services.harness_flags_help import plain_help_for`
-2. En `read_current()` (línea ~1928), dentro del dict de `result.append({...})` (línea ~1948), agregar UNA línea:
+2. En `read_current()` (línea 1932), dentro del dict de `result.append({...})` (líneas 1952-1965), agregar UNA línea inmediatamente después de `"active": is_active(spec, value),`:
    ```python
             "plain_help": plain_help_for(spec.key),
    ```
@@ -370,7 +387,7 @@ def test_read_current_exposes_plain_help():
 
 2. `Stacky Agents/frontend/src/components/HarnessFlagsPanel.tsx`:
    - Import: `import { Info } from "lucide-react";` (icono existente en lucide-react@0.453; NO usar `HelpCircle`, ya reservado como fallback de categoría en `harnessVisuals.ts:59`).
-   - En `FlagRow` (línea ~61), agregar estado local: `const [showHelp, setShowHelp] = useState(false);`
+   - En `FlagRow`, agregar los estados locales `const [showHelp, setShowHelp] = useState(false);` y `const [showPairHelp, setShowPairHelp] = useState(false);` (v2/C9) INMEDIATAMENTE DESPUÉS del `useEffect` de `localPair` (línea 67) y **ANTES** del early-return `if (isManagedAsPair) return null;` (línea 71). **(v2/C1 — BLOQUEANTE corregido):** si un hook se declara después de ese `return null;` condicional se viola la regla de hooks de React → el panel entero crashea en runtime y `npx tsc --noEmit` NO lo detecta (falso verde). La posición es OBLIGATORIA, no estilística.
    - En el JSX de `flagMeta` (línea ~163), inmediatamente DESPUÉS de `<span className={styles.flagName}>` y ANTES del badge `def:`, agregar:
      ```tsx
      <button
@@ -406,15 +423,30 @@ def test_read_current_exposes_plain_help():
      )}
      ```
      (Fallback HONESTO: nunca se inventa texto en el frontend.)
-   - En `matches()` (línea ~246), agregar antes del `return` final:
-     ```tsx
-     const ph = f.plain_help;
-     if (ph) {
-       const plainBlob = `${ph.what} ${ph.on_effect} ${ph.off_effect} ${ph.example}`.toLowerCase();
-       if (plainBlob.includes(qLower)) return true;
-     }
-     ```
-     (OJO: `matches()` hoy es una arrow function con un único `return (...)`; reescribirla con cuerpo `{ ... }` manteniendo las condiciones existentes tal cual.)
+   - **(v2/C9) Ayuda para la flag pair.** Las flags `*_PROJECTS` gestionadas como par NO renderizan `FlagRow` propio (`isManagedAsPair` → `return null`, líneas 70-71): sin este paso su ayuda llana sería INALCANZABLE (incluida la key oro `CLAUDE_CODE_CLI_MCP_PROJECTS`). En el bloque `pairRow` (líneas 174-187), inmediatamente DESPUÉS de `<span className={styles.pairLabel}>{pairFlag.label}</span>`, agregar el mismo botón (usando `showPairHelp`/`setShowPairHelp` y `aria-label={`Explicación simple de ${pairFlag.label}`}`), y DESPUÉS del `<input ...>` del par, agregar el mismo bloque `{showPairHelp && (...)}` leyendo `pairFlag.plain_help` (mismo fallback honesto con `pairFlag.description`).
+   - Búsqueda (v2/C6 corregido + **[ADICIÓN ARQUITECTO v2/C13]** insensible a acentos). `matches()` (líneas 246-254) **YA tiene cuerpo `{ ... }`** con dos early-returns (`onlyActive`, `!qLower`) y un `return (...)` final — NO reescribirla; solo insertar/reemplazar. Pasos exactos:
+     1. Junto a `const qLower = q.trim().toLowerCase();` (línea 245), agregar:
+        ```tsx
+        // Plan 86 — búsqueda "de mortal": sin acentos ("notificacion" encuentra "notificación").
+        const deaccent = (s: string) => s.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
+        const qPlain = deaccent(qLower);
+        ```
+     2. Dentro de `matches()`, INMEDIATAMENTE ANTES del `return (` final (línea 249), insertar:
+        ```tsx
+        const ph = f.plain_help;
+        if (ph) {
+          const plainBlob = deaccent(`${ph.what} ${ph.on_effect} ${ph.off_effect} ${ph.example}`.toLowerCase());
+          if (plainBlob.includes(qPlain)) return true;
+        }
+        ```
+     3. Reemplazar el `return (...)` final por (mismas 3 condiciones, ahora sin acentos en label/description; las keys son ASCII y siguen con `qLower`):
+        ```tsx
+        return (
+          deaccent(f.label.toLowerCase()).includes(qPlain) ||
+          deaccent(f.description.toLowerCase()).includes(qPlain) ||
+          f.key.toLowerCase().includes(qLower)
+        );
+        ```
 
 3. `Stacky Agents/frontend/src/components/HarnessFlagsPanel.module.css` — agregar clases:
    ```css
@@ -535,7 +567,13 @@ npx tsc --noEmit
    ```
 2. En `renderSection` (línea ~316):
    - Agregar `id={`harness-cat-${cat.id}`}` al `<details>`.
-   - Cambiar el `open` a: `open={!!qLower || onlyActive || sectionActive || focusCat === cat.id}`.
+   - Cambiar el `open` (línea 326) a: `open={!!qLower || onlyActive || sectionActive || focusCat === cat.id}`.
+   - (v2/C8) Agregar al mismo `<details>` un `onToggle` que libere el foco cuando el usuario cierra la sección a mano (evita que quede "pegada" abierta por `focusCat`):
+     ```tsx
+     onToggle={(e) => {
+       if (!e.currentTarget.open && focusCat === cat.id) setFocusCat(null);
+     }}
+     ```
    - Al `<summary className={styles.sectionSummary}>` agregarle tinte del color de la categoría (inline, porque el color es dinámico):
      ```tsx
      style={{ background: `color-mix(in srgb, ${color} 8%, transparent)` }}
@@ -642,7 +680,7 @@ npx tsc --noEmit
 
 | Riesgo | Mitigación |
 |---|---|
-| Redactar ~139 entradas llanas es laborioso y un modelo menor puede alucinar comportamiento | Procedimiento determinista (recorrer `_CATEGORY_KEYS` en orden), prohibición explícita de inventar más allá de la `description`, plantillas por tipo, 10 ejemplos oro textuales, y tests que acusan la key exacta (formato/jerga/longitud). El texto es DATO: corregirlo después es editar 1 string. |
+| Redactar 158 entradas llanas es laborioso y un modelo menor puede alucinar comportamiento | Procedimiento determinista (recorrer `_CATEGORY_KEYS` en orden), prohibición explícita de inventar más allá de la `description`, plantillas por tipo, 10 ejemplos oro textuales, y tests que acusan la key exacta (formato/jerga/longitud). El texto es DATO: corregirlo después es editar 1 string. |
 | La denylist de jerga rompe una redacción legítima (p.ej. "Azure DevOps") | La denylist es corta y congelada; nombres de productos (Azure DevOps, GitLab, Claude, Codex, Copilot) NO están prohibidos. Ampliarla/reducirla exige editar el test a propósito (patrón Plan 61/63). |
 | Colisión con 82/83/84/85 en `harness_flags.py` / `FlagRow` / hero | Diseño conmutativo (sección 3.7): módulo aparte, 1 línea aditiva en `read_current()`, UI en espacio propio (botón junto a `flagName`, bloque bajo `flagDesc`, `catNav` fuera del hero). Quien implemente segundo solo edita líneas distintas. |
 | Cambiar el ON del toggle de azul a verde confunde a quien ya se acostumbró | El verde + etiqueta "Activada" es estrictamente más informativo; `activeRow` ya tinta la fila igual que antes. Reversible en 1 línea de CSS. |
@@ -663,7 +701,7 @@ npx tsc --noEmit
 
 ## 7. Glosario
 
-- **FLAG_REGISTRY / FlagSpec:** catálogo declarativo de ~139 flags del arnés (`backend/services/harness_flags.py`); fuente única que la UI renderiza dinámicamente (Planes 33/62/63).
+- **FLAG_REGISTRY / FlagSpec:** catálogo declarativo de 158 flags del arnés (`backend/services/harness_flags.py:214`; conteo verificado 2026-07-02); fuente única que la UI renderiza dinámicamente (Planes 33/62/63).
 - **Ayuda llana / `PlainHelp`:** texto por flag SIN jerga de IA, con formato fijo (`what`, `on_effect`, `off_effect`, `example`), pensado para un operador no técnico (este plan).
 - **HarnessFlagsPanel:** panel React (`frontend/src/components/HarnessFlagsPanel.tsx`) que renderiza el registry por categorías (Planes 62/63/78).
 - **harnessVisuals.ts:** mapa slug de categoría → color+icono (Plan 78); este plan lo REUSA (`visualFor`) para chips y tintes, no lo modifica.
@@ -686,10 +724,10 @@ npx tsc --noEmit
 ## 9. Definición de Hecho (DoD)
 
 - [ ] `tests/test_harness_flags_help.py` existe con los 8 tests nombrados (7 de F0 + 1 de F2) y pasa con el venv del repo.
-- [ ] `services/harness_flags_help.py` cubre el 100% de `FLAG_REGISTRY`, sin huérfanas, formato y denylist verdes; módulo puro.
+- [ ] `services/harness_flags_help.py` cubre el 100% de `FLAG_REGISTRY` (158 keys), sin huérfanas, formato y denylist verdes; módulo puro.
 - [ ] `GET /api/harness-flags` expone `plain_help` por flag (clave presente en todas; objeto o `null`).
-- [ ] Cada flag del panel tiene botón ⓘ que despliega la ayuda llana; flags sin ayuda muestran el fallback honesto "Explicación simple pendiente".
-- [ ] La búsqueda matchea también el texto de la ayuda llana.
+- [ ] Cada flag del panel tiene botón ⓘ que despliega la ayuda llana — INCLUIDAS las flags pair `*_PROJECTS` dentro del `pairRow` (v2/C9); flags sin ayuda muestran el fallback honesto "Explicación simple pendiente".
+- [ ] La búsqueda matchea también el texto de la ayuda llana y es insensible a acentos (deaccent NFD) [ADICIÓN ARQUITECTO v2/C13].
 - [ ] Toggle ON verde (token success) + OFF con borde, etiqueta textual "Activada/Desactivada", foco visible por teclado.
 - [ ] Chips índice de categorías con color+icono (reusando `visualFor`) que abren y scrollean a su sección; encabezados de sección tintados con el color de su categoría.
 - [ ] `test_no_runtime_imports_plain_help` verde (impacto NULO en los 3 runtimes, probado mecánicamente).

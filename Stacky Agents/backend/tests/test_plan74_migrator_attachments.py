@@ -4,6 +4,7 @@
 """
 import os
 import pathlib
+import shutil
 import tempfile
 from unittest.mock import MagicMock, patch, call
 
@@ -17,6 +18,21 @@ _SAMPLE = _FIXTURES / "sample.txt"
 # Hash SHA-256 conocido del archivo de fixture
 import hashlib
 _SAMPLE_SHA256 = hashlib.sha256(_SAMPLE.read_bytes()).hexdigest()
+
+
+def _copy_sample_to_temp() -> str:
+    """Copia el fixture a un temp file y devuelve su ruta.
+
+    Test-isolation: migrate_attachment() hace os.unlink(tmp_path) en su finally
+    (services/migrator_attachments.py). Si parcheamos download_attachment_to_temp
+    para devolver el fixture REAL (_SAMPLE), el cleanup borra el fixture comprometido
+    y rompe TODAS las corridas siguientes (la collection falla en _SAMPLE.read_bytes()
+    del module-level). Esta copia evita ese side-effect destructivo.
+    """
+    fd, tmp_path = tempfile.mkstemp(suffix="_sample.txt")
+    os.close(fd)
+    shutil.copyfile(_SAMPLE, tmp_path)
+    return tmp_path
 
 
 def test_compute_sha256_determinista():
@@ -41,7 +57,7 @@ def test_migrate_attachment_llama_upload_y_link_en_orden():
     }
 
     with patch("services.migrator_attachments.download_attachment_to_temp",
-               return_value=str(_SAMPLE)):
+               return_value=_copy_sample_to_temp()):
         result = migrate_attachment(
             attachment_meta, dest,
             dest_iid="10", ado_pat="PAT",
@@ -61,7 +77,7 @@ def test_migrate_attachment_upload_falla_devuelve_verified_false():
     attachment_meta = {"id": "a1", "name": "sample.txt", "url": "http://x.com/a1"}
 
     with patch("services.migrator_attachments.download_attachment_to_temp",
-               return_value=str(_SAMPLE)):
+               return_value=_copy_sample_to_temp()):
         result = migrate_attachment(attachment_meta, dest, dest_iid="10", ado_pat="PAT")
 
     assert result["verified"] is False

@@ -202,6 +202,159 @@
         "F5-ratchet": "scripts/run_harness_tests.ps1:102-104 + .sh:109-111"
       },
       "notas": "Paridad-3 trivial (gate en endpoint backend, runtime-agnostico). Flags env_only pero UI-editables. Warning por default, blocking opt-in-dentro-de-opt-in. Byte-identico con flag OFF. CORRECCION SUPERVISION 2026-06-21: el hash anterior (73fed0...) quedo STALE porque la critica v1->v2 (commit 68c9a863) y un retoque (f20ce1ac) modificaron el doc DESPUES de la 1a auditoria. La v2 marcaba como pendiente la [ADICION ARQUITECTO] (centinela de vocabulario); estaba REALMENTE sin implementar (el 11vo test era test_defects_list_is_deterministic, NO el centinela). Construido ahora test-first (_ALL_CODES + test_defect_vocabulary_is_frozen) -> 12 passed. v2 100% completo. Hash actualizado al doc v2 sincronizado."
+    },
+    "74": {
+      "plan": "74",
+      "ruta": "Stacky Agents/docs/74_PLAN_MIGRADOR_ADO_A_GITLAB_SEGURO.md",
+      "doc_sha256": "f0acf12e596561b43ff2bbdb5d5b46af59a194978dcc642d0f34f98690fcc6a4",
+      "veredicto": "TERMINADO-POR-SUPERVISOR",
+      "fecha": "2026-07-02",
+      "tests": [
+        "tests/test_plan74_*.py (11 archivos) -> 63 passed/0 failed (venv py3.13, PYTHONPATH=backend)",
+        "tests/test_plan74_migrator_attachments.py corrido 2x -> 5 passed cada uno (isolation bug fixed, fixture sobrevive)"
+      ],
+      "evidencia": {
+        "F1-mapa": "services/migrator_map.py ensure_map_schema/upsert_mapping/get_gitlab_iid/save_plan_snapshot",
+        "F2-core": "services/migrator_core.py plan_migration (puro, _TYPE_ORDER topologico)",
+        "F3-epics": "services/migrator_epics.py resolve_epic_strategy + config.py:856 STACKY_MIGRATOR_EPIC_POLICY",
+        "F4-executor": "services/migrator_executor.py execute_migration + hydrate_map_from_destination (F4b)",
+        "F5-attachments": "services/migrator_attachments.py compute_sha256/download_attachment_to_temp(C3 GET binario)/migrate_attachment",
+        "F6-api": "api/migrator.py POST /plan + /execute(HITL confirm) + /health + mapping(CSV); migrator_bp en api/__init__.py:44,89 (sin doble /api)",
+        "F7-ui": "frontend MigratorPage + MigratorWizard + MigratorPlanPreview + MigratorMappingTable + MigratorWizard.logic.ts",
+        "F8-verify": "services/migrator_verify.py verify_migration",
+        "F9-wiring": "config.py:849 STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED + harness_flags.py:1790 (env_only=False, UI via registry dinamico)",
+        "F10-idempotencia": "tests/test_plan74_migrator_idempotency.py (corrida2 applied=0)",
+        "F11-centinelas": "tests/test_plan74_migrator_readonly_origin.py (AST read-only ADO) + tests/test_plan74_routes_registered.py (rutas sin doble prefijo)"
+      },
+      "notas": "COMPLETADO POR SUPERVISOR 2026-07-02: (1) harness_defaults.env faltaba STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED=false y STACKY_MIGRATOR_EPIC_POLICY=auto (test_plan74_migrator_wiring caso 3 las exigi) -> anadidas; (2) BUG test-isolation F5: test_migrate_attachment_llama_upload_y_link_en_orden y test_migrate_attachment_upload_falla_devuelve_verified_false parcheaban download_attachment_to_temp con el fixture REAL (_SAMPLE), y el cleanup os.unlink de migrate_attachment (migrator_attachments.py:89) BORRABA el fixture comprometido -> la 2da corrida rompia collection en _SAMPLE.read_bytes(); arreglado con helper _copy_sample_to_temp() (copia al temp, cleanup borra la copia). DRIFT (FUERA de scope, ver [[plan-76-status]]/notas): STACKY_MIGRATOR_EPIC_POLICY default='auto' rompe test_default_known_only_for_curated (Plan 63, pre-existing en main)."
+    },
+    "75": {
+      "plan": "75",
+      "ruta": "Stacky Agents/docs/75_PLAN_DEEP_LINKS_BIDIRECCIONALES_GITLAB.md",
+      "doc_sha256": "a0028e91aabaa2f3cf297b0f168117ee2a13fa2bf6b315c34e937b71f8edd165",
+      "veredicto": "TERMINADO-POR-SUPERVISOR",
+      "fecha": "2026-07-02",
+      "tests": [
+        "tests/test_plan75_*.py (6 archivos) -> 32 passed/0 failed (venv, PYTHONPATH=backend)"
+      ],
+      "evidencia": {
+        "F1-compositoras": "services/gitlab_deep_links.py compose_issue_url/compose_mr_url/compose_commit_url/compose_epic_url/pipeline_web_url",
+        "F2-wiring-provider": "services/gitlab_provider.py:167-210 item_url/mr_url/commit_url/epic_url (gateados por flag)",
+        "F3-fallback-free": "services/gitlab_deep_links.py compose_search_url/resolve_epic_deep_link",
+        "F4-ui": "frontend/components/TrackerDeepLink.tsx + StructuredOutput.tsx:100-106 (sin hardcodeo dev.azure.com)",
+        "F5-bidireccional": "services/gitlab_deep_links.py epic_related_links/pipeline_trigger_issue_link",
+        "F6-flag": "config.py:864-866 STACKY_GITLAB_DEEP_LINKS_ENABLED default False + harness_flags.py:1819 env_only=False (UI via registry) + ratchet run_harness_tests.sh"
+      },
+      "notas": "COMPLETADO POR SUPERVISOR 2026-07-02: harness_defaults.env faltaba STACKY_GITLAB_DEEP_LINKS_ENABLED=false (test_f6_3_harness_defaults_contains_flag lo exigi) -> anadida. FALSO GAP del 1er subagente: afirmo que faltaba un 'toggle hardcoded' en HarnessFlagsPanel, pero el panel renderiza flags dinamicamente desde el registry (categoria gitlab_deep_links) -> flag SI es UI-editable. Tests frontend TrackerDeepLink.test.tsx no existen (vitest NO instalado en el repo; el Plan 75 contempla test de logica como alternativa) -> no bloqueante. DRIFT: no aplica (flag sin default= explicito, default_is_known=False)."
+    },
+    "76": {
+      "plan": "76",
+      "ruta": "Stacky Agents/docs/76_PLAN_EVAL_CODEBASE_MEMORY_MCP.md",
+      "doc_sha256": "2c7a9eee3dae6cdd39abfee07eedc79ac9340598d83ed5f5bafd048957f00673",
+      "veredicto": "TERMINADO-POR-SUPERVISOR",
+      "fecha": "2026-07-02",
+      "tests": [
+        "tests/test_plan76_*.py (3 archivos) -> 15 passed/0 failed (venv, PYTHONPATH=backend)",
+        "DoD-h/F6 binario: docs/_evals/codebase-memory-mcp/report.md EXISTE (autorisado por orquestador)"
+      ],
+      "evidencia": {
+        "F0-investigacion": "docs/_evals/codebase-memory-mcp/notes-E1-E2-E4-E7.md (E1,E2,E4,E7)",
+        "F1-gate-SLSA": "docs/_evals/codebase-memory-mcp/decision-A-gate.md (D3=DUDOSO -> A descartada)",
+        "F2-poc": "docs/_evals/codebase-memory-mcp/queries.md (10 queries Q1-Q10) + poc-metrics.md (metricas pendientes)",
+        "F3-3runtimes": "docs/_evals/codebase-memory-mcp/integration-3-runtimes.md + maintenance-model.md + install-{claude-code,codex,copilot-pro}.md",
+        "F4-decision": "docs/_evals/codebase-memory-mcp/decision.md -> (B) ADOPTAR-OPCIONAL-NO-CORE",
+        "F5-flag-endpoint": "config.py:871 + harness_flags.py:1833 STACKY_CODEBASE_MEMORY_MCP_ENABLED (env_only=False, cat avanzado) + api/codebase_memory_mcp.py:12 /status + services/codebase_memory_mcp_status.py helpers",
+        "F6-reporte-ratchet": "docs/_evals/codebase-memory-mcp/report.md (NUEVO, F6/DoD-h) + tests/test_plan76_ratchet_byteidentical.py (3 casos, byte-identidad token codebase-memory-mcp) + tests/test_plan76_routes_registered.py"
+      },
+      "notas": "COMPLETADO POR SUPERVISOR 2026-07-02: F6/DoD-h report.md FALTABA (criterio binario F6: 'report.md existe y es reproducible'). El 1er subagente (Haiku) CLAIMIO FALSAMENTE haberlo escrito (clasic false-green); el orquestador verifico con ls que NO existia y lo autoria consolidando decision.md+notes+poc-metrics+queries+decision-A-gate, cero alucinacion (metricas PoC marcadas pendiente/[NO_VERIFICADO]). DRIFT (FUERA de scope): STACKY_CODEBASE_MEMORY_MCP_ENABLED default=False rompe test_default_known_only_for_curated (Plan 63, ver [[plan-74-status]])."
+    },
+    "77": {
+      "plan": "77",
+      "ruta": "Stacky Agents/docs/77_PLAN_ISSUE_PIPELINE_FASES_COMENTARIOS_Y_COLOR.md",
+      "doc_sha256": "34ae2e7830d1eef6d981f64d3e541fa079841e87f236e8c5518e07b6a1432e5f",
+      "veredicto": "APROBADO",
+      "fecha": "2026-07-02",
+      "tests": [
+        "tests/test_issue_phase_mapper.py + test_issue_phase_publisher.py + test_issue_phase_runtime_parity.py + test_issue_no_children_guard.py -> todos green (Plan 77 aportes)",
+        "tests/test_harness_flags.py -> 52 passed/1 failed (el 1 fallo = test_default_known_only_for_curated, centinela Plan 63, NO de 77)"
+      ],
+      "evidencia": {
+        "F0-mapper": "tickets.py issue phase mapper (fases -> comentarios idempotentes en MISMO WI)",
+        "F1-flag": "harness_flags.py:1525 STACKY_ISSUE_PHASE_COMMENTS_ENABLED env_only=False (UI-editable, cat epicas_ado) + config.py:754 + reader config.",
+        "F2-publisher": "tickets.py:6908-6995 publish (idempotencia por marcador, C6 phase_already_present en metadata)",
+        "F3-runtimes": "agent_runner.py:846 + claude_code_cli_runner.py:1541 + codex_cli_runner.py:961 (paridad 3 runtimes)",
+        "F4-guard": "tickets.py:3914-3934 guard sin variable parent_ticket (C3)",
+        "F5-ui": "frontend workItemTypeColor.ts + SprintBoardPage:85 + TicketBoard:619 + UnblockerPage:241",
+        "F6-ratchet": "run_harness_tests.sh:191-194 (5 archivos plan 77)"
+      },
+      "notas": "APROBADO 2026-07-02. Issue=epica de 1 ticket, fases como comentarios idempotentes en el MISMO WI. Flag env_only=False UI-editable confirmado. Correcciones C1-C9 del plan v2 verificadas. Cross-cutting (no bloquea 77): drift test_default_known_only_for_curated (Plan 63) rojo por flags 74/76."
+    },
+    "78": {
+      "plan": "78",
+      "ruta": "Stacky Agents/docs/78_PLAN_REDISENO_UI_ARNES_IDENTIDAD_VISUAL_Y_NIVELES.md",
+      "doc_sha256": "b7f037dd474ffc0347c1e39935cd1ae8ca007dbc8a616fb33a10feb1c0933a22",
+      "veredicto": "APROBADO",
+      "fecha": "2026-07-02",
+      "tests": [
+        "tests/test_harness_flags.py (porciones Plan 78: tier/intent en CategorySpec) -> green",
+        "frontend npx tsc --noEmit -> 0 errores (exit 0)"
+      ],
+      "evidencia": {
+        "F0-flags-tier-intent": "harness_flags.py:31-89,1920 CategorySpec con tier/intent + test_harness_flags.py:698-734 (4 tests F0)",
+        "F1-harnessVisuals": "frontend harnessVisuals.ts (mapa color/icono + partitionSectionsByTier) + endpoints.ts:671-672",
+        "F2-prefs": "frontend useHarnessUiPrefs.ts (toggle Simple/Experto persistente)",
+        "F3-hero": "HarnessFlagsPanel.tsx:367-425 hero (barra NO es indicador de salud, C8)",
+        "F4-toggle-catchall": "HarnessFlagsPanel.tsx:432-465 (Simple/Experto + 'Todo lo demas') + :271-299 (busqueda C14 matchea intent)",
+        "F5-identidad": "HarnessFlagsPanel.tsx:317-337 (color/icono/intent por categoria)",
+        "F6-css": "HarnessFlagsPanel.module.css:349-467 (estilos hero/modeToggle/catchAll/sectionIntent)",
+        "F7-noregresion": "HarnessFlagsPanel.test.tsx + SettingsPage.harness.test.tsx (C4/C7/C15/C16 corregidos)"
+      },
+      "notas": "APROBADO 2026-07-02. C14 (busqueda por intención REAL, no NO-OP) verificado HarnessFlagsPanel.tsx:290-298. 16 categorias (backend) == 16 entradas CATEGORY_VISUALS (frontend). tsc 0 errores."
+    },
+    "79": {
+      "plan": "79",
+      "ruta": "Stacky Agents/docs/79_PLAN_ESTADOS_TAREA_DETERMINISTAS_CONFIGURABLES.md",
+      "doc_sha256": "b41e28cadd2c8140915b08dee0fdde9160be7d4d7f2ea914cdd9124d5bbce662",
+      "veredicto": "APROBADO",
+      "fecha": "2026-07-02",
+      "tests": [
+        "tests/test_plan79_*.py (9 archivos) per-file -> 48 passed/0 failed: flag 4, resolver 7, safe_transition 10, apply_start 5, apply_final 6, centinela_estados 5, validate_states 8, agent_md_note 2, ratchet 1",
+        "frontend npx tsc --noEmit -> 0 errores (exit 0)"
+      ],
+      "evidencia": {
+        "F0-flag": "harness_flags.py:1588 STACKY_DETERMINISTIC_TASK_STATES_ENABLED (env_only=False, cat flujo_funcional, default OFF) + harness_defaults.env:29 + config.py:821 + harness/task_states.py:19 reader (desde Config, no os.getenv)",
+        "F1-resolver": "harness/task_states.py:37-79 resolve_task_state_plan/applicable_states (_APPLICABLE_KEYS frozenset congelado)",
+        "F8-safe-transition": "harness/task_states.py:86-141 _extract_current_state/_safe_transition (idempotente, ADO+GitLab, nunca lanza)",
+        "F3-final": "api/tickets.py:1366-1375 rama determinista (ignora target_ado_state del agente) + :1376-1405 legacy byte-identico OFF",
+        "F2-start-paridad": "harness/task_states.py:148 apply_task_start_state + api/agents.py:1240 (Copilot) + claude_code_cli_runner.py:141 + codex_cli_runner.py:120",
+        "F4-centinela": "tests/test_plan79_centinela_estados.py (only_configured_states/agent_target_never_reaches/blocked_never_auto/vocabulary_frozen/final_noop)",
+        "F5-validate": "harness/task_states.py:171 validate_states_against_tracker + api/client_profile.py:188 state_warnings + ClientProfileEditor.tsx:1011",
+        "F6-ui": "ClientProfileEditor.tsx:975 TrackerRoleField (in_progress/next_state_ok editables)",
+        "F7-agentmd-ratchet": "Functional/Technical/Developer.agent.md nota 'Estados deterministas (Plan 79)' + run_harness_tests.ps1:153-161 (9 archivos)"
+      },
+      "notas": "APROBADO 2026-07-02. Centinela F4 verde (invariante: solo 2 estados configurados aplicados). Flag default OFF + UI-editable. GOTCHA de corrida: los 9 archivos corridos EN UN SOLO batch producen 3 errores SQLAlchemy ('Table agent_html_publish already defined') por polucion cross-file (ado_publisher AgentHtmlPublish redef); per-file (como el ratchet los invoca, un proceso por archivo) todo verde. Es bug de aislamiento de test pre-existing, NO de Plan 79."
+    },
+    "80": {
+      "plan": "80",
+      "ruta": "Stacky Agents/docs/80_PLAN_CODEBASE_MEMORY_MCP_WIRING_REAL.md",
+      "doc_sha256": "c969fbe226ad44760eab6822c6dbce0d200df31e3b9389f725795ae35e13b51c",
+      "veredicto": "APROBADO",
+      "fecha": "2026-07-02",
+      "tests": [
+        "tests/test_plan80_*.py (9 archivos) -> 55 passed/0 failed (venv, PYTHONPATH=backend)",
+        "frontend npx tsc --noEmit -> 0 errores (exit 0)"
+      ],
+      "evidencia": {
+        "F0-flags-tipo-str": "config.py:877 STACKY_CODEBASE_MEMORY_MCP_PROJECTS/BINARY_PATH + cli_feature_flags.py:152 + harness_flags.py:1848/1861 (pair master, env_only=False, type=csv/str) + :1888 _type_zero('str') fix + :2046 _cast branch str + frontend HarnessFlagsPanel.tsx:127 rama str",
+        "F1-pura": "services/codebase_memory_mcp_wiring.py EXTERNAL_MCP_KEY='codebase-memory-mcp' + build_external_server_entry(guard ..) + merge_external_server + estimate_query_savings + aggregate_savings(delta_pct None)",
+        "F2-writer": "services/stacky_mcp.py:22 _build_internal_server_block + :60 maybe_write_mcp_config (merge aditivo, None si servers vacio -> byte-identico OFF)",
+        "F3-codex": "services/codex_cli_runner.py:392 log informativo (Opcion 3b guia manual) + docs/_evals/.../integration-3-runtimes.md apendice Plan 80",
+        "F4-copilot": "tests/test_plan80_copilot.py centinela anti-promesa (Copilot='NO' documentado)",
+        "F5-savings": "api/codebase_memory_mcp.py:40 GET /savings + frontend endpoints.ts:3036",
+        "F6-card-status": "api/codebase_memory_mcp.py:34 wiring en /status (no rompe shape Plan 76) + frontend CodebaseMemoryMcpCard.tsx",
+        "F7-ratchet": "scripts/run_harness_tests.sh:207-215 + .ps1:163-171 (9 tests, sync) + tests/test_plan80_ratchet_byteidentical.py + routes_registered.py"
+      },
+      "notas": "APROBADO 2026-07-02. Pre-requisitos bloqueantes cerrados: _type_zero('str') + _cast branch str + _build_internal_server_block extraido. Guard path traversal '..' en build_external_server_entry (v3). aggregate_savings honesto (delta_pct: None sin datos). tsc 0 errores. Construye sobre Plan 76 (master flag/blueprint/helpers) reusando, sin duplicar."
     }
   }
 }

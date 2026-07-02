@@ -1,6 +1,24 @@
 # Plan 82 — Claridad de configuración del arnés (dependencias visibles, origen del valor y desvío de perfil)
 
-**Estado:** PROPUESTO v1 (2026-07-02)
+**Estado:** PROPUESTO v2 (2026-07-02) — v1 → v2 tras crítica adversarial (`criticar-y-mejorar-plan`)
+
+### Changelog v1 → v2
+- **C1:** eliminado el hedge sobre `_REGISTRY_INDEX`: el símbolo EXISTE (lo usa `apply_updates`,
+  harness_flags.py:1979); F0 lo reusa sin condicionales.
+- **C2:** eliminado el caso de test convoluto `test_no_flagspec_gains_explicit_default`; el gotcha
+  queda cubierto por el test existente `test_default_known_only_for_curated`, que pasa a ser criterio
+  binario explícito de F0 y del DoD.
+- **C3:** F4 reescrita sin hedge: se crea SIEMPRE el helper `_current_value(key)` en
+  `harness_profiles.py`, `detect_profile()` pasa a consumirlo, y se localizan/corren los tests
+  existentes de perfiles con comando determinista.
+- **C4:** detección determinista de vitest en F2/F3: `npx vitest --version` (exit 0 = correr tests;
+  exit ≠0 = degradar a `tsc --noEmit` y reportarlo SIN marcar verde).
+- **C5:** los candidatos de F1 descartados se documentan como comentario en el test de congelamiento
+  (no en el commit message).
+- **C6:** explicitado que una flag gestionada como `pair` no renderiza fila propia (Panel:70-71), por
+  lo que su `requires` no tiene efecto visual y se descarta si falla la verificación.
+- **C7 + [ADICIÓN ARQUITECTO]:** F2 ahora muestra la KEY técnica de la env var en cada fila (mono +
+  click-copy) y F3 agrega el filtro "Solo modificadas" junto a "Solo activas".
 
 ## 1. Objetivo e impacto
 
@@ -127,8 +145,8 @@ def validate_requires_graph() -> list[str]:
     return errors
 ```
 
-   Nota: si `_REGISTRY_INDEX` no existiera con ese nombre exacto, usar el índice key→spec que ya usa
-   `apply_updates` (harness_flags.py:1979); si es un dict módulo-level, reutilizarlo tal cual.
+   Nota [C1]: `_REGISTRY_INDEX` EXISTE como índice key→spec módulo-level (lo usa `apply_updates`,
+   harness_flags.py:1979). Reutilizarlo tal cual; NO crear otro índice.
 
 3. En `read_current()` (harness_flags.py:1948-1961) agregar al dict de cada flag, después de
    `"active"`:
@@ -158,12 +176,9 @@ def validate_requires_graph() -> list[str]:
 - `test_validate_requires_graph_empty_registry_ok` — con el registry real, `validate_requires_graph() == []`.
 - `test_read_current_exposes_requires_fields` — cada dict de `read_current()` tiene keys `requires` y
   `requires_met` (monkeypatchear config como hace `tests/test_harness_flags.py`).
-- `test_no_flagspec_gains_explicit_default` — ningún spec del registry con `requires is not None`
-  declara `default` no-None nuevo respecto de su estado previo (guardia del gotcha: se implementa
-  asertando que el set de keys con `default is not None` es EXACTAMENTE el mismo que captura hoy
-  `test_default_known_only_for_curated`; si ese test ya lo congela, este caso puede ser
-  `pytest.skip("cubierto por test_default_known_only_for_curated")` — decisión binaria: si el test
-  del Plan 63 existe y pasa, skip; si no existe, implementar el assert aquí).
+- [C2] El gotcha de defaults NO lleva test nuevo aquí: lo cubre el test EXISTENTE
+  `test_default_known_only_for_curated` (lista congelada Plan 63), que se corre como parte del
+  criterio de F0 (está dentro de `tests\test_harness_flags.py`, segundo comando de abajo).
 
 **Comando:**
 ```
@@ -172,7 +187,8 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests\test_harness_flags.py -q
 ```
 
-**Criterio binario:** ambos comandos exit 0; `read_current()[i]` contiene `requires`/`requires_met`.
+**Criterio binario:** ambos comandos exit 0 (el segundo incluye `test_default_known_only_for_curated`
+verde = gotcha intacto); `read_current()[i]` contiene `requires`/`requires_met`.
 **Flag:** ninguna (metadata aditiva; ver guardarraíles).
 **Runtimes:** impacto nulo en los 3 (ningún runner importa estos símbolos).
 **Trabajo del operador:** ninguno.
@@ -191,7 +207,8 @@ Para CADA fila de la tabla de abajo, ANTES de agregar `requires`:
 2. Abrir el consumidor y verificar que la lectura de la hija está dentro de (o después de) un chequeo
    del master (patrón `if <master>: ... <leer hija>` o retorno temprano si master OFF).
 3. Si el consumidor NO gatea por el master (la hija tiene efecto propio), NO agregar `requires` a esa
-   fila y anotarla en el commit message como "descartada: consumo no gateado".
+   fila y [C5] documentar el descarte como comentario en `test_requires_map_is_frozen`
+   (`# descartado Plan 82 F1: <KEY> — consumo no gateado por <MASTER> (<archivo:línea>)`).
 
 **Tabla de candidatos (hija → master esperado):**
 
@@ -228,7 +245,9 @@ Reglas duras de esta fase:
 - NO agregar `requires` a las `*_PROJECTS` que ya se renderizan como `pair` de otro bool, EXCEPTO
   `STACKY_CODEBASE_MEMORY_MCP_PROJECTS` que se lista arriba (el `pair` ya la deshabilita en UI,
   Panel:181; el `requires` solo la hace consistente en el payload — si el paso 2 del procedimiento
-  falla para ella, se descarta sin más).
+  falla para ella, se descarta sin más). [C6] Tener presente que una flag gestionada como `pair` NO
+  renderiza fila propia (`FlagRow` devuelve `null`, HarnessFlagsPanel.tsx:70-71): su `requires` no
+  produce efecto visual, solo consistencia del payload.
 - NO inventar filas fuera de la tabla. Si durante el grep aparece otra dependencia evidente, se anota
   como comentario `# candidato requires Plan 82 F1 descartado/futuro` y NO se agrega.
 - NO tocar `default`, `env_only`, `pair`, `type`, `label`, `description`, `group` de ningún spec.
@@ -273,10 +292,25 @@ Reglas duras de esta fase:
    PROHIBIDO poner `disabled` en los controles por esta condición: el operador puede editar igual.
 4. Badge de origen junto al `defaultBadge` (líneas 165-167): cuando `flag.env_only === true`
    renderizar `<span className={styles.envBadge} title="Vive solo en .env/os.environ (se aplica en caliente); no es atributo de Config">env</span>`.
+5. **[ADICIÓN ARQUITECTO — C7]** Mostrar la KEY técnica de la env var en la fila: debajo del
+   `<p className={styles.flagDesc}>` renderizar
+
+```tsx
+   <code
+     className={styles.flagKey}
+     title="Click para copiar la key"
+     onClick={() => { void navigator.clipboard?.writeText(flag.key); }}
+   >
+     {flag.key}
+   </code>
+```
+
+   CSS `.flagKey`: fuente mono, tamaño ~11px, color atenuado, `cursor: pointer`. Hoy la fila solo
+   muestra `label` (Panel:164) y el operador no puede correlacionar la fila con `.env`, docs o planes.
 
 **CSS (`HarnessFlagsPanel.module.css`):** agregar `.requiresNote` (texto pequeño, color de warning ya
 usado por `.errorText` pero en tono atenuado), `.inertRow { opacity: 0.55; }`, `.envBadge` (mismo
-estilo base que `.defaultBadge`, otro color de fondo).
+estilo base que `.defaultBadge`, otro color de fondo), `.flagKey` (mono 11px atenuado, cursor pointer).
 
 **Tests (Vitest — mismo patrón/mocks que el archivo existente):**
 - `test_shows_requires_note_when_master_off` — flag hija con `requires_met:false` renderiza el texto
@@ -286,16 +320,18 @@ estilo base que `.defaultBadge`, otro color de fondo).
   `requires_met:false`.
 - `test_env_badge_rendered_for_env_only` — flag con `env_only:true` muestra el badge `env`; con
   `env_only:false` no.
+- `test_flag_key_rendered_in_row` — la fila muestra el texto exacto de `flag.key`.
 
-**Comandos:**
+**Comandos [C4 — detección determinista]:**
 ```
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"
-npx vitest run src/components/__tests__/HarnessFlagsPanel.test.tsx
-npx tsc --noEmit
+npx vitest --version
 ```
-(Si `vitest` no está instalado en el entorno — situación conocida del repo — el criterio de F2 degrada
-a: `npx tsc --noEmit` exit 0 + los tests quedan escritos y nombrados para CI. Registrar esta condición
-en el resumen final SIN marcarla verde.)
+- Si exit 0 → correr `npx vitest run src/components/__tests__/HarnessFlagsPanel.test.tsx` y ese
+  resultado ES el criterio.
+- Si exit ≠ 0 (vitest no instalado — situación conocida del repo) → el criterio degrada a
+  `npx tsc --noEmit` exit 0; los tests quedan escritos y nombrados para CI y el reporte final DEBE
+  decir "tests de UI escritos, no ejecutados (vitest ausente)" SIN marcarlos verdes.
 
 **Criterio binario:** `tsc --noEmit` exit 0; si vitest disponible, 4 tests verdes.
 **Flag:** ninguna. **Runtimes:** impacto nulo (solo UI del panel). **Trabajo del operador:** ninguno.
@@ -327,6 +363,13 @@ export function isModifiedFromDefault(flag: { default_known: boolean; default: u
      y extender el meta (línea 334) a: `` {catFlags.length} flags · {visibleActive} activas{modified > 0 ? ` · ${modified} modificadas` : ""} ``.
   3. Hero (372-385): agregar un cuarto `heroStat` con `flags.filter(isModifiedFromDefault).length` y
      label `fuera de default`.
+  4. **[ADICIÓN ARQUITECTO]** Filtro "Solo modificadas": agregar un checkbox junto a "Solo activas"
+     (bloque `styles.search`, Panel:409-425) con estado `const [onlyModified, setOnlyModified] = useState(false);`
+     y extender `matches()` (Panel:246-254) con, como primera condición junto a `onlyActive`:
+     `if (onlyModified && !isModifiedFromDefault(f)) return false;`
+     (agregar `onlyModified` a las dependencias del `useMemo` de `orderedSections`, Panel:304, y al
+     `open` de las secciones igual que `onlyActive`). Convierte el badge en triage de un click:
+     "mostrame solo lo que toqué".
 - Editar CSS: `.modifiedBadge` (estilo base de `.defaultBadge`, color distinto de `env`).
 - Editar (test PRIMERO): `HarnessFlagsPanel.test.tsx` + crear
   `Stacky Agents/frontend/src/components/__tests__/harnessVisuals.isModified.test.ts`:
@@ -334,9 +377,10 @@ export function isModifiedFromDefault(flag: { default_known: boolean; default: u
   - `test_default_unknown_never_modified`
   - `test_csv_empty_equals_null_default_not_modified`
   - `test_int_string_vs_number_same_value_not_modified` (ej. default 3, value "3")
-  - Panel: `test_section_meta_shows_modified_count`, `test_hero_shows_out_of_default_total`.
+  - Panel: `test_section_meta_shows_modified_count`, `test_hero_shows_out_of_default_total`,
+    `test_only_modified_filter_hides_default_flags`.
 
-**Comandos:** los mismos de F2 (vitest si disponible + `tsc --noEmit`).
+**Comandos:** los mismos de F2 (detección `npx vitest --version` [C4] + `tsc --noEmit`).
 **Criterio binario:** `tsc --noEmit` exit 0; tests de `isModifiedFromDefault` verdes si vitest disponible.
 **Flag:** ninguna. **Runtimes:** impacto nulo. **Trabajo del operador:** ninguno.
 
@@ -356,9 +400,18 @@ def profile_deltas() -> dict[str, int]:
     """
 ```
 
-  Implementación: iterar `PROFILES[name]` (dict key→valor esperado del perfil), leer el valor actual
-  con la MISMA función/lógica que ya usa `detect_profile()` para comparar (no duplicar lecturas ad
-  hoc: extraer helper `_current_value(key)` si `detect_profile` lo tiene inline), contar desigualdades.
+  Implementación [C3 — sin hedge, pasos deterministas]:
+  1. Leer `services/harness_profiles.py` y localizar cómo `detect_profile()` obtiene el valor actual
+     de cada key para compararlo con el perfil.
+  2. Extraer esa obtención a un helper módulo-level `_current_value(key: str) -> object` (si un helper
+     con ese nombre ya existe, reusarlo sin duplicar). `detect_profile()` DEBE quedar consumiendo
+     `_current_value` (refactor sin cambio de comportamiento).
+  3. `profile_deltas()` itera `PROFILES[name].items()` y cuenta `1` por cada key cuyo
+     `_current_value(key)` difiere del valor esperado, con la MISMA normalización de comparación que
+     usa `detect_profile()` (si compara con `==` sobre valores casteados, usar exactamente eso).
+  4. Verificar el refactor: localizar los tests existentes de perfiles con
+     `grep -rl "detect_profile" "Stacky Agents/backend/tests"` y correr ESOS archivos; deben seguir
+     verdes sin modificar sus asserts.
 - Editar: `Stacky Agents/backend/api/harness_flags.py:78-83` — agregar al JSON del GET:
   `"profile_deltas": profile_deltas(),` (import junto a `detect_profile`).
 - Editar: `Stacky Agents/frontend/src/api/endpoints.ts` — tipo de respuesta del list:
@@ -453,7 +506,9 @@ y correr ESE archivo).
 - [ ] `test_harness_flags_requires.py` y `test_harness_profile_deltas.py` verdes con el venv del repo.
 - [ ] `tests/test_harness_flags.py` (existente) sigue verde sin modificaciones de asserts previos.
 - [ ] `test_default_known_only_for_curated` sigue verde (ningún default nuevo).
-- [ ] `npx tsc --noEmit` exit 0 en frontend; tests de Panel/visuals escritos (verdes si vitest disponible).
+- [ ] `npx tsc --noEmit` exit 0 en frontend; tests de Panel/visuals escritos (verdes si
+      `npx vitest --version` exit 0; si no, reporte honesto "no ejecutados").
+- [ ] Cada fila del panel muestra la key técnica (`flag.key`) y existe el filtro "Solo modificadas".
 - [ ] El GET `/api/harness-flags` incluye `requires`, `requires_met` por flag y `profile_deltas` global.
 - [ ] Hija con master OFF muestra "Sin efecto: requiere ... activada" y su control sigue editable.
 - [ ] Ratchet verde con los 2 archivos de test registrados (sh + ps1).

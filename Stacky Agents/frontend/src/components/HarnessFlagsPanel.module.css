@@ -396,13 +396,21 @@ details[open] > .sectionSummary::before {
   position: absolute;
   inset: 0;
   background: var(--color-border, #ccc);
+  border: 1px solid var(--color-border-strong, #9ca3af);
+  box-sizing: border-box;
   border-radius: 9999px;
   cursor: pointer;
   transition: background 0.2s;
 }
 
+/* Plan 86 F4 — ON verde (distinto del azul de acento del tema) + foco visible por teclado. */
 .toggle input:checked + .toggleSlider {
-  background: var(--color-primary, #2563eb);
+  background: var(--color-success, #15803d);
+}
+
+.toggle input:focus-visible + .toggleSlider {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 2px;
 }
 
 .toggleSlider::before {
@@ -424,6 +432,114 @@ details[open] > .sectionSummary::before {
 .toggle input:disabled + .toggleSlider {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Plan 86 F4 — estado ON/OFF inconfundible sin depender solo del color. */
+.boolControl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stateLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 82px;
+}
+
+.stateOn {
+  color: var(--color-success, #15803d);
+}
+
+.stateOff {
+  color: var(--color-text-secondary, #6b7280);
+}
+
+/* Plan 86 F3 — botón de ayuda (ⓘ) por flag + bloque expandible de ayuda llana. */
+.helpBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  margin-left: 4px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-primary, #2563eb);
+  cursor: pointer;
+}
+
+.helpBtn:hover {
+  background: var(--color-primary-light, #dce8ff);
+}
+
+.helpBtn:focus-visible {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 2px;
+}
+
+.plainHelp {
+  margin: 6px 0 4px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--color-primary, #2563eb);
+  border-radius: 4px;
+  background: var(--color-primary-light-subtle, #f0f6ff);
+  font-size: 0.85rem;
+  color: var(--color-text, #222);
+}
+
+.plainWhat {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.plainList {
+  margin: 0 0 4px;
+  padding-left: 18px;
+}
+
+.plainExample {
+  margin: 0;
+  font-style: italic;
+  color: var(--color-text-secondary, #555);
+}
+
+.plainPending {
+  margin: 0;
+  color: var(--color-text-secondary, #777);
+}
+
+/* Plan 86 F5 — chips índice de categorías (navegación en 1 click). */
+.catNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.catChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid;
+  border-radius: 14px;
+  background: var(--color-surface, #fff);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.catChip:hover {
+  filter: brightness(0.92);
+}
+
+.catChip:focus-visible {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 2px;
+}
+
+.catChipCount {
+  font-size: 0.7rem;
+  opacity: 0.75;
 }
 
 /* ── Estados ─────────────────────────────────────────────────────────────── */

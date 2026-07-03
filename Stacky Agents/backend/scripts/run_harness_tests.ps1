@@ -180,6 +180,8 @@ $HarnessTestFiles = @(
   "tests/test_harness_flags_endpoint_restart.py"
   # Plan 85 - Cableado honesto: flags reservadas sin consumidor
   "tests/test_flag_wiring.py"
+  # Plan 86 - Flags para mortales: ayuda en lenguaje llano
+  "tests/test_harness_flags_help.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

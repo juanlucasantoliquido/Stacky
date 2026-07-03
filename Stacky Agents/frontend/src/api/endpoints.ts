@@ -662,6 +662,12 @@ export interface HarnessFlagView {
   default: boolean | number | string;
   default_known: boolean;
   active: boolean;
+  plain_help?: {              // Plan 86 — ayuda en lenguaje llano (null/ausente = sin ayuda aún)
+    what: string;
+    on_effect: string;
+    off_effect: string;
+    example: string;
+  } | null;
   requires: string | null;      // Plan 82 — key de la flag bool master, o null
   requires_met: boolean;        // Plan 82 — true si no hay master o el master está ON
   min_value: number | null;     // Plan 83 — mínimo válido inclusive (solo numéricas)

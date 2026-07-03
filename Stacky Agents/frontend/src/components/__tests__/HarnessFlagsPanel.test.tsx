@@ -709,3 +709,70 @@ describe("HarnessFlagsPanel — Plan 83 (bounds declarativos)", () => {
     expect(screen.queryByText(/fuera de rango/)).toBeNull();
   });
 });
+
+// ─── Plan 86 — ayuda en lenguaje llano (ⓘ) por flag ──────────────────────────
+// SIN GATE: vitest no instalado, __tests__ excluido de tsc (Plan 86 v3/C3).
+// Documentación ejecutable futura: el criterio binario de F3 es solo `tsc`.
+
+const FLAG_WITH_PLAIN_HELP: HarnessFlagView = {
+  ...BOOL_FLAG,
+  plain_help: {
+    what: "Un control de calidad automático que revisa el trabajo del agente antes de darlo por bueno.",
+    on_effect: "Si la activás: el trabajo queda marcado 'para revisar' si tiene errores graves.",
+    off_effect: "Si la apagás: el trabajo se da por terminado aunque tenga errores graves.",
+    example: "Es como la inspección final de una fábrica.",
+  },
+};
+
+const FLAG_WITHOUT_PLAIN_HELP: HarnessFlagView = {
+  ...BOOL_FLAG,
+  key: "STACKY_FLAG_SIN_AYUDA_LLANA_TEST",
+  plain_help: null,
+};
+
+describe("HarnessFlagsPanel — Plan 86 (ayuda en lenguaje llano)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUpdate.mockResolvedValue({ ok: true, applied: {} });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, active_profile: "safe" }),
+    });
+  });
+
+  it("click en el botón de ayuda muestra el texto llano 'what' de la flag", async () => {
+    mockList.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      flags: [FLAG_WITH_PLAIN_HELP],
+    });
+    wrap(<HarnessFlagsPanel />);
+    await waitFor(() => screen.getByText(FLAG_WITH_PLAIN_HELP.label));
+
+    const helpBtn = screen.getByRole("button", {
+      name: `Explicación simple de ${FLAG_WITH_PLAIN_HELP.label}`,
+    });
+    fireEvent.click(helpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(FLAG_WITH_PLAIN_HELP.plain_help!.what)).toBeDefined();
+    });
+  });
+
+  it("flag sin ayuda llana muestra el fallback honesto 'Explicación simple pendiente'", async () => {
+    mockList.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      flags: [FLAG_WITHOUT_PLAIN_HELP],
+    });
+    wrap(<HarnessFlagsPanel />);
+    await waitFor(() => screen.getByText(FLAG_WITHOUT_PLAIN_HELP.label));
+
+    const helpBtn = screen.getByRole("button", {
+      name: `Explicación simple de ${FLAG_WITHOUT_PLAIN_HELP.label}`,
+    });
+    fireEvent.click(helpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Explicación simple pendiente/)).toBeDefined();
+    });
+  });
+});

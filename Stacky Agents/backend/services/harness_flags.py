@@ -14,6 +14,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from services.harness_flags_help import plain_help_for  # Plan 86 — ayuda en lenguaje llano
+
 
 @dataclass(frozen=True)
 class FlagSpec:
@@ -2192,6 +2194,7 @@ def read_current() -> list[dict]:
             "default": declared_default(spec),
             "default_known": default_is_known(spec),
             "active": is_active(spec, value),
+            "plain_help": plain_help_for(spec.key),  # Plan 86 — ayuda en lenguaje llano
             "requires": spec.requires,
             "requires_met": True,   # se corrige en el pase de abajo
             "min_value": spec.min_value,

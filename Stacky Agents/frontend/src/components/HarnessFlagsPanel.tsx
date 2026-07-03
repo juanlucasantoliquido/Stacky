@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Info } from "lucide-react"; // Plan 86 — botón de ayuda en lenguaje llano
 import {
   HarnessFlags,
   type HarnessFlagView,
@@ -67,6 +68,12 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
   const [localPair, setLocalPair] = useState(String(pairFlag?.value ?? ""));
   useEffect(() => { setLocalPair(String(pairFlag?.value ?? "")); }, [pairFlag?.value]);
 
+  // Plan 86 [v2/C1 BLOQUEANTE] — DEBE declararse ANTES del early-return de abajo:
+  // un hook después de un return condicional viola las reglas de hooks de React
+  // (crashea el panel en runtime; tsc no lo detecta).
+  const [showHelp, setShowHelp] = useState(false);
+  const [showPairHelp, setShowPairHelp] = useState(false);
+
   // Si este flag es el par (csv) de otro bool, se renderiza junto al bool → no duplicar
   const isManagedAsPair = allFlags.some((f) => f.pair === flag.key);
   if (isManagedAsPair) return null;
@@ -84,15 +91,23 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
   const control = () => {
     if (flag.type === "bool") {
       return (
-        <label className={styles.toggle}>
-          <input
-            type="checkbox"
-            checked={Boolean(flag.value)}
-            disabled={saving}
-            onChange={(e) => onUpdate(flag.key, e.target.checked)}
-          />
-          <span className={styles.toggleSlider} />
-        </label>
+        <div className={styles.boolControl}>
+          <label className={styles.toggle}>
+            <input
+              type="checkbox"
+              checked={Boolean(flag.value)}
+              disabled={saving}
+              aria-label={flag.label}
+              onChange={(e) => onUpdate(flag.key, e.target.checked)}
+            />
+            <span className={styles.toggleSlider} />
+          </label>
+          <span
+            className={`${styles.stateLabel} ${Boolean(flag.value) ? styles.stateOn : styles.stateOff}`}
+          >
+            {Boolean(flag.value) ? "Activada" : "Desactivada"}
+          </span>
+        </div>
       );
     }
     if (flag.type === "int") {
@@ -175,6 +190,17 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
       <div className={styles.flagLabel}>
         <div className={styles.flagMeta}>
           <span className={styles.flagName}>{flag.label}</span>
+          <button
+            type="button"
+            className={styles.helpBtn}
+            aria-expanded={showHelp}
+            aria-controls={`plain-help-${flag.key}`}
+            aria-label={`Explicación simple de ${flag.label}`}
+            title="¿Para qué sirve esto?"
+            onClick={() => setShowHelp((v) => !v)}
+          >
+            <Info size={14} aria-hidden="true" />
+          </button>
           {flag.reserved && (
             <span
               className={styles.reservedBadge}
@@ -184,7 +210,7 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
             </span>
           )}
           {defLabel !== null && (
-            <span className={styles.defaultBadge}>def: {defLabel}</span>
+            <span className={styles.defaultBadge} title="Valor de fábrica">def: {defLabel}</span>
           )}
           {isModifiedFromDefault(flag) && (
             <span className={styles.modifiedBadge}>modificada</span>
@@ -207,6 +233,24 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
           )}
         </div>
         <p className={styles.flagDesc}>{flag.description}</p>
+        {showHelp && (
+          <div id={`plain-help-${flag.key}`} className={styles.plainHelp}>
+            {flag.plain_help ? (
+              <>
+                <p className={styles.plainWhat}>{flag.plain_help.what}</p>
+                <ul className={styles.plainList}>
+                  <li>{flag.plain_help.on_effect}</li>
+                  <li>{flag.plain_help.off_effect}</li>
+                </ul>
+                <p className={styles.plainExample}>Ejemplo: {flag.plain_help.example}</p>
+              </>
+            ) : (
+              <p className={styles.plainPending}>
+                Explicación simple pendiente para esta opción. Descripción técnica: {flag.description}
+              </p>
+            )}
+          </div>
+        )}
         {flag.pending_restart === true && (
           <p className={styles.pendingRestartNote}>
             Cambio pendiente de reinicio del backend
@@ -254,6 +298,17 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
         {flag.type === "bool" && pairFlag && (
           <div className={styles.pairRow}>
             <span className={styles.pairLabel}>{pairFlag.label}</span>
+            <button
+              type="button"
+              className={styles.helpBtn}
+              aria-expanded={showPairHelp}
+              aria-controls={`plain-help-${pairFlag.key}`}
+              aria-label={`Explicación simple de ${pairFlag.label}`}
+              title="¿Para qué sirve esto?"
+              onClick={() => setShowPairHelp((v) => !v)}
+            >
+              <Info size={14} aria-hidden="true" />
+            </button>
             <input
               type="text"
               className={styles.textInput}
@@ -263,6 +318,24 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
               onChange={(e) => setLocalPair(e.target.value)}
               onBlur={() => onUpdate(pairFlag.key, localPair)}
             />
+            {showPairHelp && (
+              <div id={`plain-help-${pairFlag.key}`} className={styles.plainHelp}>
+                {pairFlag.plain_help ? (
+                  <>
+                    <p className={styles.plainWhat}>{pairFlag.plain_help.what}</p>
+                    <ul className={styles.plainList}>
+                      <li>{pairFlag.plain_help.on_effect}</li>
+                      <li>{pairFlag.plain_help.off_effect}</li>
+                    </ul>
+                    <p className={styles.plainExample}>Ejemplo: {pairFlag.plain_help.example}</p>
+                  </>
+                ) : (
+                  <p className={styles.plainPending}>
+                    Explicación simple pendiente para esta opción. Descripción técnica: {pairFlag.description}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -285,6 +358,8 @@ export default function HarnessFlagsPanel() {
   const [onlyOutOfBounds, setOnlyOutOfBounds] = useState(false);
   // Plan 84 — chip de triage "N pendientes de reinicio" en el hero.
   const [onlyPendingRestart, setOnlyPendingRestart] = useState(false);
+  // Plan 86 F5 — categoría enfocada por click en un chip de navegación.
+  const [focusCat, setFocusCat] = useState<string | null>(null);
 
   // Plan 78 F2 — preferencia de modo (Simple/Experto) persistida en localStorage
   const { mode, setMode } = useHarnessUiPrefs();
@@ -337,15 +412,23 @@ export default function HarnessFlagsPanel() {
 
   // Filtro de búsqueda
   const qLower = q.trim().toLowerCase();
+  // Plan 86 [v2/C13] — búsqueda "de mortal": sin acentos ("notificacion" encuentra "notificación").
+  const deaccent = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const qPlain = deaccent(qLower);
   const matches = (f: HarnessFlagView): boolean => {
     if (onlyOutOfBounds && f.in_bounds !== false) return false;
     if (onlyPendingRestart && f.pending_restart !== true) return false;
     if (onlyModified && !isModifiedFromDefault(f)) return false;
     if (onlyActive && !f.active) return false;
     if (!qLower) return true;
+    const ph = f.plain_help;
+    if (ph) {
+      const plainBlob = deaccent(`${ph.what} ${ph.on_effect} ${ph.off_effect} ${ph.example}`.toLowerCase());
+      if (plainBlob.includes(qPlain)) return true;
+    }
     return (
-      f.label.toLowerCase().includes(qLower) ||
-      f.description.toLowerCase().includes(qLower) ||
+      deaccent(f.label.toLowerCase()).includes(qPlain) ||
+      deaccent(f.description.toLowerCase()).includes(qPlain) ||
       f.key.toLowerCase().includes(qLower)
     );
   };
@@ -445,11 +528,20 @@ export default function HarnessFlagsPanel() {
     return (
       <details
         key={cat.id}
+        id={`harness-cat-${cat.id}`}
         className={styles.section}
         style={{ borderLeft: `4px solid ${color}` }}
-        open={!!qLower || onlyActive || onlyModified || onlyOutOfBounds || onlyPendingRestart || sectionActive}
+        open={!!qLower || onlyActive || onlyModified || onlyOutOfBounds || onlyPendingRestart || sectionActive || focusCat === cat.id}
+        onToggle={(e) => {
+          // Plan 86 [v2/C8] — liberar el foco cuando el usuario cierra la sección a mano
+          // (evita que quede "pegada" abierta por focusCat tras el click en el chip).
+          if (!e.currentTarget.open && focusCat === cat.id) setFocusCat(null);
+        }}
       >
-        <summary className={styles.sectionSummary}>
+        <summary
+          className={styles.sectionSummary}
+          style={{ background: `color-mix(in srgb, ${color} 8%, transparent)` }}
+        >
           <span className={styles.sectionLabel}>
             <Icon size={16} color={color} className={styles.sectionIcon} aria-hidden="true" />
             {cat.label}
@@ -607,6 +699,41 @@ export default function HarnessFlagsPanel() {
           Experto
         </button>
       </div>
+
+      {/* Plan 86 F5 — chips índice de categorías: navegación en 1 click.
+          En modo simple, las categorías del catch-all "Todo lo demás" no tienen
+          chip propio (mantiene el modo simple simple). */}
+      {(() => {
+        const navSections = mode === "experto" ? orderedSections : simpleSections;
+        if (navSections.length < 2) return null;
+        return (
+          <nav aria-label="Ir a categoría" className={styles.catNav}>
+            {navSections.map(({ cat, catFlags }) => {
+              const { color, icon: CatIcon } = visualFor(cat.id);
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={styles.catChip}
+                  style={{ borderColor: color, color }}
+                  onClick={() => {
+                    setFocusCat(cat.id);
+                    requestAnimationFrame(() => {
+                      document
+                        .getElementById(`harness-cat-${cat.id}`)
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    });
+                  }}
+                >
+                  <CatIcon size={13} aria-hidden="true" />
+                  {cat.label}
+                  <span className={styles.catChipCount}>{catFlags.length}</span>
+                </button>
+              );
+            })}
+          </nav>
+        );
+      })()}
 
       {/* Secciones colapsables por categoría — Plan 78 F4 modo Simple/Experto */}
       {mode === "experto"

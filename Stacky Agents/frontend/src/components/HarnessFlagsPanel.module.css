@@ -296,6 +296,17 @@ details[open] > .sectionSummary::before {
   flex-shrink: 0;
 }
 
+/* ── Plan 85 F3 — Badge "reservada — sin efecto" ──────────────────────────── */
+.reservedBadge {
+  font-size: 0.7rem;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-warning, #b8860b) 18%, transparent);
+  color: var(--color-warning, #b8860b);
+  border: 1px solid color-mix(in srgb, var(--color-warning, #b8860b) 40%, transparent);
+  white-space: nowrap;
+}
+
 /* ── Plan 84 F3 — Nota de "pendiente de reinicio" ─────────────────────────── */
 .pendingRestartNote {
   font-size: 0.72rem;

@@ -35,6 +35,8 @@ class FlagSpec:
                                     # create_app (arranque de daemons); un cambio por UI
                                     # persiste pero NO aplica hasta reiniciar el backend.
                                     # Solo informativo para la UI; ningún runner lo evalúa.
+    reserved: bool = False        # Plan 85 — True = declarada para fase diferida, SIN consumidor aún
+    reserved_reason: str = ""     # Plan 85 — obligatoria si reserved=True (qué fase la cablea)
 
 
 @dataclass(frozen=True)
@@ -620,6 +622,8 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+        reserved=True,
+        reserved_reason="Plan 22 V2.2 (smart dispatch enforce) declarada anticipadamente; el enforcement nunca se implementó.",
     ),
     FlagSpec(
         # Plan 83 F1 — descartado: sin consumidor real en código (grep fuera de
@@ -635,6 +639,8 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+        reserved=True,
+        reserved_reason="Plan 22 V2.2 (budget por ticket) declarada anticipadamente; el tope de costo nunca se implementó. Hoy NO limita nada.",
     ),
     # ── V2.3 — Evals programados + gate endurecible ────────────────────────────
     FlagSpec(
@@ -1354,6 +1360,8 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         env_only=True,  # leído via os.getenv; no es atributo de Config
         group="agents",
+        reserved=True,
+        reserved_reason="Superseded por Plan 43: el selector model/effort de run-brief quedó siempre activo, sin gate. Esta flag nunca se cableó.",
     ),
     FlagSpec(
         key="STACKY_INJECT_PROCESS_CATALOG",
@@ -1739,6 +1747,8 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+        reserved=True,
+        reserved_reason="Plan 57 v1 solo opera modo eager; la lectura del modo quedó diferida a v1.1 (F2a post-GA).",
     ),
     # ── Plan 59 — Descomposición vertical épica→hijos ────────────────────────
     FlagSpec(
@@ -2191,6 +2201,9 @@ def read_current() -> list[dict]:
             "restart_required": spec.restart_required,
             "pending_restart": is_pending,
             "boot_value": _BOOT_VALUES.get(spec.key) if is_pending else None,
+            # Plan 85 — metadata de cableado honesto
+            "reserved": spec.reserved,
+            "reserved_reason": spec.reserved_reason,
         })
 
     values_by_key = {r["key"]: r["value"] for r in result}

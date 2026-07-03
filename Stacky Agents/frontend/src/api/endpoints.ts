@@ -670,6 +670,8 @@ export interface HarnessFlagView {
   restart_required?: boolean;   // Plan 84 — true = solo se lee al arranque del backend
   pending_restart?: boolean;   // Plan 84 — true = el valor difiere del boot (cambio pendiente)
   boot_value?: string | number | boolean | null;  // Plan 84 — valor con el que arrancó
+  reserved?: boolean;         // Plan 85 — declarada para fase diferida, sin consumidor
+  reserved_reason?: string;   // Plan 85 — por qué / qué fase la cablea
 }
 
 export interface HarnessFlagCategory {

@@ -175,6 +175,14 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
       <div className={styles.flagLabel}>
         <div className={styles.flagMeta}>
           <span className={styles.flagName}>{flag.label}</span>
+          {flag.reserved && (
+            <span
+              className={styles.reservedBadge}
+              title={flag.reserved_reason || "Declarada para una fase futura; hoy ningún código la lee."}
+            >
+              reservada — sin efecto
+            </span>
+          )}
           {defLabel !== null && (
             <span className={styles.defaultBadge}>def: {defLabel}</span>
           )}

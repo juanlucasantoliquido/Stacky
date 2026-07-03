@@ -178,6 +178,8 @@ $HarnessTestFiles = @(
   # Plan 84 - Hot-apply honesto: flags de startup (restart_required)
   "tests/test_harness_flags_restart_required.py"
   "tests/test_harness_flags_endpoint_restart.py"
+  # Plan 85 - Cableado honesto: flags reservadas sin consumidor
+  "tests/test_flag_wiring.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -76,6 +76,10 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
   // Una hija en default con master OFF no genera ruido (no se muestra nada).
   const requiresMaster = flag.requires ? allFlags.find((f) => f.key === flag.requires) : null;
   const isInert = Boolean(flag.requires) && !flag.requires_met && isActive;
+  // Plan 83 [C1-v3] — el backend ya resuelve el anti-ruido (in_bounds=true para
+  // env_only sin configurar); la UI consume in_bounds a secas, sin gatear por active
+  // (un 0 explícito bajo min_value=1 es inactivo pero SÍ debe avisar).
+  const isOutOfBounds = flag.in_bounds === false;
 
   const control = () => {
     if (flag.type === "bool") {
@@ -96,6 +100,8 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
         <input
           type="number"
           step="1"
+          min={flag.min_value ?? undefined}
+          max={flag.max_value ?? undefined}
           className={styles.numInput}
           value={localText}
           disabled={saving}
@@ -109,6 +115,8 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
         <input
           type="number"
           step="0.01"
+          min={flag.min_value ?? undefined}
+          max={flag.max_value ?? undefined}
           className={styles.numInput}
           value={localText}
           disabled={saving}
@@ -183,6 +191,9 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
           )}
         </div>
         <p className={styles.flagDesc}>{flag.description}</p>
+        {isOutOfBounds && (
+          <p className={styles.outOfBoundsNote}>Valor actual fuera de rango válido</p>
+        )}
         <code
           className={styles.flagKey}
           title="Click para copiar la key"
@@ -206,6 +217,15 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
       </div>
       <div className={styles.flagControl}>
         {control()}
+        {(flag.min_value !== null || flag.max_value !== null) && (
+          <span className={styles.boundsHint}>
+            {flag.min_value !== null && flag.max_value !== null
+              ? `${flag.min_value}–${flag.max_value}`
+              : flag.min_value !== null
+                ? `≥ ${flag.min_value}`
+                : `≤ ${flag.max_value}`}
+          </span>
+        )}
         {/* Par CSV inmediatamente debajo del bool master */}
         {flag.type === "bool" && pairFlag && (
           <div className={styles.pairRow}>
@@ -237,6 +257,8 @@ export default function HarnessFlagsPanel() {
   const [q, setQ] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
   const [onlyModified, setOnlyModified] = useState(false);
+  // Plan 83 [ADICIÓN ARQUITECTO v2] — chip de triage "N fuera de rango" en el hero.
+  const [onlyOutOfBounds, setOnlyOutOfBounds] = useState(false);
 
   // Plan 78 F2 — preferencia de modo (Simple/Experto) persistida en localStorage
   const { mode, setMode } = useHarnessUiPrefs();
@@ -290,6 +312,7 @@ export default function HarnessFlagsPanel() {
   // Filtro de búsqueda
   const qLower = q.trim().toLowerCase();
   const matches = (f: HarnessFlagView): boolean => {
+    if (onlyOutOfBounds && f.in_bounds !== false) return false;
     if (onlyModified && !isModifiedFromDefault(f)) return false;
     if (onlyActive && !f.active) return false;
     if (!qLower) return true;
@@ -321,7 +344,7 @@ export default function HarnessFlagsPanel() {
         const allCatFlags = flagsByCat.get(cat.id) ?? [];
         if (allCatFlags.length === 0) return null;
 
-        if (!qLower && !onlyActive && !onlyModified) {
+        if (!qLower && !onlyActive && !onlyModified && !onlyOutOfBounds) {
           // Sin búsqueda ni filtros: incluir todas las categorías con flags
           return { cat, catFlags: allCatFlags };
         }
@@ -350,13 +373,20 @@ export default function HarnessFlagsPanel() {
         return null;
       })
       .filter((s): s is { cat: HarnessFlagCategory; catFlags: HarnessFlagView[] } => s !== null);
-  }, [categories, flagsByCat, qLower, onlyActive, onlyModified]);
+  }, [categories, flagsByCat, qLower, onlyActive, onlyModified, onlyOutOfBounds]);
 
   // Stats globales
   const totalFlags = flags.length;
   const totalActive = flags.filter((f) => f.active).length;
   const totalKnown = flags.filter((f) => f.default_known).length;
   const totalModified = flags.filter(isModifiedFromDefault).length;
+  // Plan 83 [ADICIÓN ARQUITECTO v2] — cuenta de flags con valor configurado fuera de rango.
+  const outOfBoundsCount = flags.filter((f) => f.in_bounds === false).length;
+
+  // Si el operador corrigió todo, no dejar el filtro fantasma activo.
+  useEffect(() => {
+    if (outOfBoundsCount === 0 && onlyOutOfBounds) setOnlyOutOfBounds(false);
+  }, [outOfBoundsCount, onlyOutOfBounds]);
 
   const handleUpdate = (key: string, value: boolean | number | string) => {
     update.mutate({ [key]: value });
@@ -377,7 +407,7 @@ export default function HarnessFlagsPanel() {
         key={cat.id}
         className={styles.section}
         style={{ borderLeft: `4px solid ${color}` }}
-        open={!!qLower || onlyActive || onlyModified || sectionActive}
+        open={!!qLower || onlyActive || onlyModified || onlyOutOfBounds || sectionActive}
       >
         <summary className={styles.sectionSummary}>
           <span className={styles.sectionLabel}>
@@ -448,6 +478,15 @@ export default function HarnessFlagsPanel() {
             <span className={styles.heroStatValue}>{totalModified}</span>
             <span className={styles.heroStatLabel}>fuera de default</span>
           </div>
+          {outOfBoundsCount > 0 && (
+            <button
+              type="button"
+              className={`${styles.outOfBoundsChip} ${onlyOutOfBounds ? styles.outOfBoundsChipActive : ""}`}
+              onClick={() => setOnlyOutOfBounds((v) => !v)}
+            >
+              {outOfBoundsCount} fuera de rango
+            </button>
+          )}
         </div>
         {/* % de flags activas — NO es indicador de salud. Ver Plan 46 para salud real de runs. */}
         <div className={styles.heroActivityBar}>

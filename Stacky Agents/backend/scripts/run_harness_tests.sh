@@ -217,6 +217,8 @@ HARNESS_TEST_FILES=(
   # — Plan 82 — Claridad de configuración del arnés (requires + profile_deltas) —
   tests/test_harness_flags_requires.py
   tests/test_harness_profile_deltas.py
+  # — Plan 83 — Bounds declarativos para flags numéricas —
+  tests/test_harness_flags_bounds.py
 )
 
 pass=0

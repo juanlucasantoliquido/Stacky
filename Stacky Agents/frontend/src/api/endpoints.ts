@@ -664,6 +664,9 @@ export interface HarnessFlagView {
   active: boolean;
   requires: string | null;      // Plan 82 — key de la flag bool master, o null
   requires_met: boolean;        // Plan 82 — true si no hay master o el master está ON
+  min_value: number | null;     // Plan 83 — mínimo válido inclusive (solo numéricas)
+  max_value: number | null;     // Plan 83 — máximo válido inclusive (solo numéricas)
+  in_bounds: boolean;           // Plan 83 — false solo si el valor CONFIGURADO viola bounds
 }
 
 export interface HarnessFlagCategory {
@@ -843,8 +846,20 @@ export const Memory = {
 // Plan 26 M0.2/M3.1 — flags del arnés (reusa el registry; fuente única).
 export const HarnessFlags = {
   list: () => api.get<{ ok: boolean; flags: HarnessFlagView[]; active_profile: string | null; categories: HarnessFlagCategory[]; profile_deltas?: Record<string, number> }>("/api/harness-flags"),
+  // Plan 83 [C3] — fetch directo (no api.put) para que el mensaje "fuera de rango
+  // [..]" del 400 llegue LIMPIO (json.error), espejando applyProfile
+  // (HarnessFlagsPanel.tsx). api.put/request() envuelve el texto crudo del body en
+  // el Error, lo que ensucia el mensaje mostrado en apiError.
   update: (updates: Record<string, boolean | number | string>) =>
-    api.put<{ ok: boolean; applied?: Record<string, unknown>; error?: string }>("/api/harness-flags", { updates }),
+    fetch(`${apiBase}/api/harness-flags`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates }),
+    }).then(async (r) => {
+      const json = await r.json();
+      if (!r.ok || !json.ok) throw new Error(json.error ?? `HTTP ${r.status}`);
+      return json as { ok: boolean; applied?: Record<string, unknown>; error?: string };
+    }),
 };
 
 export interface AgentHistoryEntry {

@@ -28,6 +28,13 @@ class FlagSpec:
     requires: str | None = None  # Plan 82 — key de una flag bool que debe estar ON para que
                                  # esta flag tenga efecto. None = sin dependencia. Solo
                                  # informativo para la UI; NINGÚN runner lo evalúa.
+    min_value: float | None = None  # Plan 83 — mínimo válido inclusive (solo type int/float).
+    max_value: float | None = None  # Plan 83 — máximo válido inclusive. None = sin límite.
+                                    # Solo los evalúan apply_updates y read_current; NINGÚN runner.
+    restart_required: bool = False  # Plan 84 — True = la flag se consume UNA vez en
+                                    # create_app (arranque de daemons); un cambio por UI
+                                    # persiste pero NO aplica hasta reiniciar el backend.
+                                    # Solo informativo para la UI; ningún runner lo evalúa.
 
 
 @dataclass(frozen=True)
@@ -236,6 +243,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Máximo de mensajes correctivos por run (default 2).",
         group="claude_code_cli",
         requires="CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED",
+        min_value=0,  # Plan 83 — 0 = sin reintentos.
     ),
     FlagSpec(
         key="CLAUDE_CODE_CLI_HOOKS_ENABLED",
@@ -311,6 +319,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Presupuesto global de tokens estimados (default 25000).",
         group="global",
         requires="STACKY_CONTEXT_BUDGET_ENABLED",
+        min_value=0,  # Plan 83 — context_enrichment.py: budget<=0 → no-op.
     ),
     # ── I0.1 — Dedup léxico entre bloques de contexto ────────────────────────
     FlagSpec(
@@ -368,6 +377,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "vencido. 0 = off (default)."
         ),
         group="global",
+        min_value=0,  # Plan 83 — app.py: gate `if hours > 0`, 0 = daemon nunca arranca.
     ),
     # ── M1.2 — Presupuesto de directivas ──────────────────────────────────────
     FlagSpec(
@@ -379,6 +389,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "dentro del bloque de memoria (default 4000)."
         ),
         group="global",
+        min_value=0,  # Plan 83 — chars negativos sin sentido; 0 cae al fallback agent_max_chars.
     ),
     # ── M3.1 — Scopes inyectables ─────────────────────────────────────────────
     FlagSpec(
@@ -425,6 +436,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Máximo de resumes correctivos por run codex (default 2).",
         group="codex_cli",
         requires="CODEX_CLI_AUTOCORRECT_ENABLED",
+        min_value=0,  # Plan 83 — 0 = sin reintentos.
     ),
     FlagSpec(
         key="CODEX_CLI_MODEL_DENYLIST",
@@ -478,6 +490,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Al superar: señal de cierre + needs_review."
         ),
         group="global",
+        min_value=0,  # Plan 83 — 0 = sin límite (desactivado, doc propia).
     ),
     FlagSpec(
         key="STACKY_RUNAWAY_MAX_COST_USD",
@@ -488,6 +501,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Solo disponible en claude (codex no reporta costo en stream)."
         ),
         group="global",
+        min_value=0,  # Plan 83 — 0.0 = sin límite (desactivado, doc propia).
     ),
     # ── V0.3 — Cap de concurrencia de runs CLI ────────────────────────────────
     FlagSpec(
@@ -499,6 +513,9 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "0 = ilimitado (retro-compat). Al superar: 429 en el launch."
         ),
         group="global",
+        # Plan 83 — DESVÍO de la tabla F1 (proponía min=1): run_slots.py:6,19,23,33
+        # confirma 0 = ilimitado (retro-compat), NO "bloquea todo run". min=0.
+        min_value=0,
     ),
     FlagSpec(
         key="STACKY_ADO_RUN_FOOTER_ENABLED",
@@ -541,6 +558,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Self-review score mínimo",
         description="U1.2 — Umbral de score (0..1) usado cuando mode=gate.",
         group="global",
+        min_value=0, max_value=1,  # Plan 83 — score normalizado.
     ),
     FlagSpec(
         key="STACKY_ADO_FAILURE_COMMENT_ENABLED",
@@ -555,6 +573,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Intervalo digest (horas)",
         description="U1.5 — 0 desactiva; >0 emite digest.ready periódico por webhooks.",
         group="global",
+        min_value=0,  # Plan 83 — app.py: gate `if hours > 0`, 0 = daemon nunca arranca.
     ),
     FlagSpec(
         key="STACKY_PIPELINES_ENABLED",
@@ -601,6 +620,10 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=True,
     ),
     FlagSpec(
+        # Plan 83 F1 — descartado: sin consumidor real en código (grep fuera de
+        # services/harness_flags.py, config.py y tests/ no encuentra lectura del
+        # valor; la degradación de modelo/402 que describe la nota V2.2 no está
+        # cableada). NO se declaran bounds (procedimiento F1 paso 4).
         key="STACKY_BUDGET_PER_TICKET_USD",
         type="float",
         label="Presupuesto por ticket (USD)",
@@ -619,6 +642,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="V2.3 — Corre 'evals run all' cada N horas en daemon. 0 = off.",
         group="global",
         env_only=True,
+        min_value=0,  # Plan 83 — app.py: gate `if interval > 0`, 0 = daemon nunca arranca.
     ),
     FlagSpec(
         key="STACKY_EVAL_GATE_MODE",
@@ -637,6 +661,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "V2.4 — Ventana para sugerir reusar un run idéntico (mismo fingerprint). "
             "0 = off. Nunca auto-skip: el operador decide."
         ),
+        min_value=0,  # Plan 83 — 0 = off (doc propia).
         group="global",
         env_only=True,
     ),
@@ -687,6 +712,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Escritura exitosa en outbox invalida el key automáticamente."
         ),
         group="global",
+        min_value=0,  # Plan 83 — 0 = sin caché (doc propia).
     ),
     # ── I2.3 — Expansión y normalización de query ─────────────────────────────
     FlagSpec(
@@ -791,6 +817,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Reaper de huérfanos: intervalo (segundos)",
         description="R0.3 — 0 = solo al arrancar. >0 = barrido periódico cada N segundos.",
         group="global",
+        min_value=0,  # Plan 83 — orphan_reaper.py:192-193: `if interval_sec <= 0: return`.
     ),
     FlagSpec(
         key="STACKY_STALL_WATCHDOG_SECONDS",
@@ -801,6 +828,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "eventos por N segundos. Independiente del timeout de sesión total."
         ),
         group="global",
+        min_value=0,  # Plan 83 — 0 = desactivado (doc propia; codex_cli_runner.py confirma).
     ),
     FlagSpec(
         key="STACKY_PENDING_TASK_STRICT_VALIDATION_ENABLED",
@@ -884,6 +912,11 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
     ),
     FlagSpec(
+        # Plan 83 F1 — descartado: sin consumidor real. claude_code_cli_runner.py:900-920
+        # gatea el pase correctivo solo por STACKY_CRITERIA_REPAIR_ENABLED y lo corre
+        # una única vez (`_criteria_repair_done[0]`); el retries_budget que de hecho
+        # se pasa es CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES, NO esta key. NO se
+        # declaran bounds (procedimiento F1 paso 4).
         key="STACKY_CRITERIA_REPAIR_MAX_RETRIES",
         type="int",
         label="Max reintentos pase correctivo",
@@ -908,6 +941,11 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Q1.2 — Número máximo de ejemplos a inyectar (default 2).",
         group="global",
         requires="STACKY_CLI_FEWSHOT_ENABLED",
+        # Plan 83 — DESVÍO de la tabla F1 (proponía min=1): context_enrichment.py:1458
+        # pasa k crudo a few_shot.pick_examples, que hace `scored[:k*3]`; k=0 da lista
+        # vacía (benigno, "sin ejemplos"), pero k negativo produce slicing con índice
+        # negativo (comportamiento silenciosamente incorrecto). min=0, no min=1.
+        min_value=0,
     ),
     FlagSpec(
         key="STACKY_CLI_FEWSHOT_PROJECTS",
@@ -998,6 +1036,10 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
     ),
     FlagSpec(
+        # Plan 83 F1 — descartado: sin consumidor real. La propia label/description
+        # lo marca "DIFERIDO" (G2.2 nunca se cableó, ver comentario del spec anterior
+        # STACKY_TRANSIENT_RUN_RETRY_ENABLED). NO se declaran bounds (procedimiento
+        # F1 paso 4).
         key="STACKY_TRANSIENT_RUN_RETRY_MAX",
         type="int",
         label="Retry transitorio: máx reintentos (G2.2 - DIFERIDO)",
@@ -1035,6 +1077,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="E0.1 — Timeout máximo por verificador individual (default 120s).",
         group="global",
         requires="STACKY_EXEC_VERIFICATION_ENABLED",
+        min_value=1,  # Plan 83 — exec_verification.py:538 NO clampa; 0/negativo rompe el timeout.
     ),
     FlagSpec(
         key="STACKY_EXEC_VERIFICATION_BUDGET_S",
@@ -1043,6 +1086,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="E0.1 — Budget total para todos los verificadores del run (default 300s).",
         group="global",
         requires="STACKY_EXEC_VERIFICATION_ENABLED",
+        min_value=1,  # Plan 83 — exec_verification.py:539 NO clampa; idem timeout.
     ),
     FlagSpec(
         key="STACKY_EXEC_VERIFICATION_PROJECTS",
@@ -1069,6 +1113,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="E1.1 — Máximo de pases correctivos por fallo ejecutable (default 1).",
         group="global",
         requires="STACKY_EXEC_REPAIR_ENABLED",
+        min_value=0,  # Plan 83 — harness/exec_repair.py:120 `hard_failed[:max_retries]`, 0 = sin pase.
     ),
     FlagSpec(
         key="STACKY_FAKE_GREEN_GUARD_ENABLED",
@@ -1142,6 +1187,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="A0.1 — Cap de chequeos ejecutables derivados por complejidad (default 4).",
         group="global",
         requires="STACKY_ACCEPTANCE_CONTRACT_ENABLED",
+        min_value=1,  # Plan 83 — acceptance_contract.py:342 `min(cap_complejidad, global_max)`; 0 checks sin sentido para un gate de integridad.
     ),
     FlagSpec(
         key="STACKY_ACCEPTANCE_CONTRACT_PROJECTS",
@@ -1171,6 +1217,10 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
     ),
     FlagSpec(
+        # Plan 83 F1 — descartado: sin consumidor real (grep fuera de
+        # services/harness_flags.py, config.py y tests/ solo encuentra un docstring
+        # en services/acceptance_gate.py:17; el valor nunca se lee en el código).
+        # NO se declaran bounds (procedimiento F1 paso 4).
         key="STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES",
         type="int",
         label="Contrato: max reintentos pase correctivo",
@@ -1283,6 +1333,11 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         env_only=True,  # leído via os.environ.get en unblocker_board(); default 50 inline
         group="observabilidad_notif",
+        # Plan 83 — DESVÍO de la tabla F1 (proponía min=1): api/tickets.py:2825-2829
+        # ya clampa `cap = max(0, cap_raw)` y solo aplica el recorte `if cap > 0`;
+        # con cap=0 el bloque de recorte se salta ENTERO (0 = sin cota, doc propia),
+        # NO "vacía el panel" como asumía la tabla. min=0, no min=1.
+        min_value=0,
     ),
     # Plan 42 — flags nuevos
     FlagSpec(
@@ -1333,6 +1388,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,  # leído via os.getenv en _inject_process_catalog_block
         requires="STACKY_RAG_CATALOG_ENABLED",
+        min_value=1,  # Plan 83 — consumidor ya clampa max(1,..) (context_enrichment.py:800); redundante pero informativo.
     ),
     FlagSpec(
         key="STACKY_PROCESS_DISCIPLINE_ENABLED",
@@ -1459,6 +1515,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 41 — Umbral de confianza para auto-aprobar sin modal (default 0.8).",
         group="preflight",
         requires="INTENT_PREFLIGHT_ENABLED",
+        min_value=0, max_value=1,  # Plan 83 — confidence normalizada.
     ),
     FlagSpec(
         key="STACKY_ARTIFACT_RESCUE_ENABLED",
@@ -1713,6 +1770,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         requires="STACKY_QUALITY_CONVERGENCE_ENABLED",
+        min_value=1,  # Plan 83 — consumidor ya clampa max(1,..) (claude_code_cli_runner.py:983); doc propia ">=1".
     ),
     # ── Plan 60 — Aprendizaje bidireccional: ediciones humanas en ADO ─────────
     FlagSpec(
@@ -1737,6 +1795,11 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,
         requires="STACKY_ADO_EDIT_LEARNING_ENABLED",
+        # Plan 83 — DESVÍO de la tabla F1 (proponía min=0 "0 = sin barrido"): app.py:414-424
+        # NO tiene gate `if hours > 0` (a diferencia de digest/memory-review/evals); una
+        # vez STACKY_ADO_EDIT_LEARNING_ENABLED=true, hours=0 produce `time.sleep(0)` en
+        # un bucle infinito — busy-loop real, no "sin barrido". min=1.
+        min_value=1,
     ),
     FlagSpec(
         key="STACKY_ADO_SERVICE_IDENTITY",
@@ -2009,25 +2072,97 @@ def validate_requires_graph() -> list[str]:
     return errors
 
 
+def value_in_bounds(spec: FlagSpec, value: object) -> bool:
+    """True si `value` respeta los bounds declarados (o no hay bounds).
+
+    Casos borde (todos deterministas):
+    - spec sin bounds (ambos None) → True.
+    - spec.type no es "int" ni "float" → True (bounds solo aplican a numéricas).
+    - value None o no convertible a float → True (fail-open: nunca marcar
+      fuera-de-rango por un bug de datos; el tipo lo valida _cast aparte).
+    - comparación INCLUSIVE: min_value <= v <= max_value.
+    """
+    if spec.min_value is None and spec.max_value is None:
+        return True
+    if spec.type not in ("int", "float"):
+        return True
+    try:
+        v = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return True
+    if spec.min_value is not None and v < spec.min_value:
+        return False
+    if spec.max_value is not None and v > spec.max_value:
+        return False
+    return True
+
+
+def validate_bounds_registry() -> list[str]:
+    """Valida los bounds declarados en FLAG_REGISTRY. Lista vacía = OK.
+
+    Reglas estructurales:
+    R1: bounds solo en specs con type "int" o "float".
+    R2: si ambos declarados, min_value <= max_value.
+    R3: si el spec declara `default` (no None) numérico, debe cumplir sus propios bounds.
+    """
+    errors: list[str] = []
+    for spec in FLAG_REGISTRY:
+        if spec.min_value is None and spec.max_value is None:
+            continue
+        if spec.type not in ("int", "float"):
+            errors.append(f"{spec.key}: bounds declarados sobre type {spec.type!r} (solo int/float)")
+            continue
+        if spec.min_value is not None and spec.max_value is not None and spec.min_value > spec.max_value:
+            errors.append(f"{spec.key}: min_value {spec.min_value} > max_value {spec.max_value}")
+        if spec.default is not None and not value_in_bounds(spec, spec.default):
+            errors.append(f"{spec.key}: default {spec.default!r} fuera de sus propios bounds")
+    return errors
+
+
+# Plan 84 — snapshot de los valores boot-time de las flags restart_required.
+# Lo llena create_app() vía snapshot_boot_values(). Vacío = fail-open (tests).
+_BOOT_VALUES: dict[str, object] = {}
+
+
+def _current_value(spec: FlagSpec) -> object:
+    """Valor vigente de la flag: os.getenv casteado (env_only) o atributo de config."""
+    if spec.env_only:
+        raw = os.getenv(spec.key)
+        if raw is None:
+            return _type_zero(spec.type)
+        return _cast(spec, raw)
+    from config import config
+    return getattr(config, spec.key)
+
+
+def snapshot_boot_values() -> None:
+    """Captura el valor boot-time de cada flag restart_required. Idempotente NO:
+    pisa siempre (create_app la llama UNA vez, al principio, antes de armar daemons)."""
+    _BOOT_VALUES.clear()
+    for spec in FLAG_REGISTRY:
+        if spec.restart_required:
+            _BOOT_VALUES[spec.key] = _current_value(spec)
+
+
+def pending_restart(spec: FlagSpec, value: object) -> bool:
+    """True si la flag es restart_required, hay snapshot, y el valor actual difiere
+    del valor con el que arrancó el proceso. Fail-open: sin snapshot → False."""
+    if not spec.restart_required:
+        return False
+    if spec.key not in _BOOT_VALUES:
+        return False
+    return value != _BOOT_VALUES[spec.key]
+
+
 def read_current() -> list[dict]:
     """Devuelve spec + valor actual de cada flag del registry."""
-    from config import config
-
     result = []
     for spec in FLAG_REGISTRY:
-        if spec.env_only:
-            raw = os.getenv(spec.key)
-            if raw is None:
-                value: object = (
-                    False if spec.type == "bool"
-                    else ("" if spec.type in ("csv", "json")
-                    else (0.0 if spec.type == "float"
-                    else 0))
-                )
-            else:
-                value = _cast(spec, raw)
-        else:
-            value = getattr(config, spec.key)
+        value = _current_value(spec)
+        unset = spec.env_only and os.getenv(spec.key) is None
+
+        # Plan 84 — computar UNA vez antes del dict: is_pending = pending_restart(spec, value)
+        is_pending = pending_restart(spec, value)
 
         result.append({
             "key": spec.key,
@@ -2044,6 +2179,13 @@ def read_current() -> list[dict]:
             "active": is_active(spec, value),
             "requires": spec.requires,
             "requires_met": True,   # se corrige en el pase de abajo
+            "min_value": spec.min_value,
+            "max_value": spec.max_value,
+            "in_bounds": True if unset else value_in_bounds(spec, value),
+            # Plan 84 — metadata de restart
+            "restart_required": spec.restart_required,
+            "pending_restart": is_pending,
+            "boot_value": _BOOT_VALUES.get(spec.key) if is_pending else None,
         })
 
     values_by_key = {r["key"]: r["value"] for r in result}
@@ -2073,6 +2215,12 @@ def apply_updates(updates: dict[str, object]) -> dict[str, object]:
             )
         spec = _REGISTRY_INDEX[key]
         result[key] = _cast(spec, raw_value)
+        if not value_in_bounds(spec, result[key]):
+            lo = "-inf" if spec.min_value is None else spec.min_value
+            hi = "inf" if spec.max_value is None else spec.max_value
+            raise ValueError(
+                f"Flag {spec.key!r}: valor {result[key]!r} fuera de rango [{lo}..{hi}]."
+            )
     return result
 
 

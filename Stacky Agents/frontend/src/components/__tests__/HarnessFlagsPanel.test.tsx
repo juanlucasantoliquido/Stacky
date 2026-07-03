@@ -51,6 +51,9 @@ const BOOL_FLAG: HarnessFlagView = {
   active: false,
   requires: null,
   requires_met: true,
+  min_value: null,
+  max_value: null,
+  in_bounds: true,
 };
 
 const JSON_FLAG: HarnessFlagView = {
@@ -68,6 +71,9 @@ const JSON_FLAG: HarnessFlagView = {
   active: false,
   requires: null,
   requires_met: true,
+  min_value: null,
+  max_value: null,
+  in_bounds: true,
 };
 
 const BOOL_WITH_PAIR: HarnessFlagView = {
@@ -85,6 +91,9 @@ const BOOL_WITH_PAIR: HarnessFlagView = {
   active: true,
   requires: null,
   requires_met: true,
+  min_value: null,
+  max_value: null,
+  in_bounds: true,
 };
 
 const PAIR_CSV: HarnessFlagView = {
@@ -102,6 +111,9 @@ const PAIR_CSV: HarnessFlagView = {
   active: true,
   requires: null,
   requires_met: true,
+  min_value: null,
+  max_value: null,
+  in_bounds: true,
 };
 
 // ── Plan 82 — fixtures de dependencias master→hija, badge env, modificada ───
@@ -120,6 +132,9 @@ const MASTER_ENABLED: HarnessFlagView = {
   active: false,
   requires: null,
   requires_met: true,
+  min_value: null,
+  max_value: null,
+  in_bounds: true,
 };
 
 const CHILD_CONFIGURED_MASTER_OFF: HarnessFlagView = {
@@ -137,6 +152,9 @@ const CHILD_CONFIGURED_MASTER_OFF: HarnessFlagView = {
   active: true,
   requires: "STACKY_EXEC_VERIFICATION_ENABLED",
   requires_met: false,
+  min_value: 1,
+  max_value: null,
+  in_bounds: true,
 };
 
 const CHILD_DEFAULT_MASTER_OFF: HarnessFlagView = {
@@ -169,6 +187,9 @@ const ENV_ONLY_FLAG: HarnessFlagView = {
   active: true,
   requires: null,
   requires_met: true,
+  min_value: null,
+  max_value: null,
+  in_bounds: true,
 };
 
 const NON_ENV_FLAG: HarnessFlagView = {
@@ -193,6 +214,9 @@ const MODIFIED_BOOL: HarnessFlagView = {
   active: true,
   requires: null,
   requires_met: true,
+  min_value: null,
+  max_value: null,
+  in_bounds: true,
 };
 
 const UNMODIFIED_BOOL: HarnessFlagView = {
@@ -493,5 +517,195 @@ describe("HarnessFlagsPanel — Plan 82 F3 (modificada + contadores + filtro)", 
       expect(screen.queryByText(UNMODIFIED_BOOL.label)).toBeNull();
       expect(screen.getByText(MODIFIED_BOOL.label)).toBeDefined();
     });
+  });
+});
+
+// ─── Plan 83 — bounds declarativos: min/max, aviso, chip de triage ───────────
+
+const BOUND_RANGE_FLAG: HarnessFlagView = {
+  key: "STACKY_SELF_REVIEW_MIN_SCORE",
+  type: "float",
+  label: "Self-review score mínimo",
+  description: "Umbral de score (0..1) usado cuando mode=gate.",
+  group: "global",
+  pair: null,
+  env_only: false,
+  value: 0.8,
+  category: "global",
+  default: 0.8,
+  default_known: false,
+  active: true,
+  requires: null,
+  requires_met: true,
+  min_value: 0,
+  max_value: 1,
+  in_bounds: true,
+};
+
+const BOUND_MIN_ONLY_FLAG: HarnessFlagView = {
+  key: "STACKY_MAX_CONCURRENT_RUNS",
+  type: "int",
+  label: "Concurrencia: runs CLI simultáneos máx",
+  description: "Techo de subprocesos CLI simultáneos.",
+  group: "global",
+  pair: null,
+  env_only: false,
+  value: 3,
+  category: "global",
+  default: 0,
+  default_known: false,
+  active: true,
+  requires: null,
+  requires_met: true,
+  min_value: 0,
+  max_value: null,
+  in_bounds: true,
+};
+
+const NO_BOUNDS_NUMERIC_FLAG: HarnessFlagView = {
+  key: "STACKY_CONTEXT_BUDGET_TOKENS_NOBOUNDS_TEST",
+  type: "int",
+  label: "Flag numérica sin bounds",
+  description: "Flag de prueba sin min/max declarados.",
+  group: "global",
+  pair: null,
+  env_only: false,
+  value: 25000,
+  category: "global",
+  default: 25000,
+  default_known: false,
+  active: true,
+  requires: null,
+  requires_met: true,
+  min_value: null,
+  max_value: null,
+  in_bounds: true,
+};
+
+const OUT_OF_BOUNDS_FLAG: HarnessFlagView = {
+  key: "STACKY_EXEC_VERIFICATION_TIMEOUT_S",
+  type: "int",
+  label: "Timeout por verificador (segundos)",
+  description: "Timeout máximo por verificador individual.",
+  group: "global",
+  pair: null,
+  env_only: false,
+  value: 0,
+  category: "global",
+  default: 120,
+  default_known: false,
+  // [C1-v3] caso peligroso real: 0 explícito bajo min_value=1 → active=false
+  // (difiere del type-zero es falso porque 0 ES el type-zero de int), pero
+  // in_bounds=false SÍ debe avisar (el gate NO es por `active`).
+  active: false,
+  requires: null,
+  requires_met: true,
+  min_value: 1,
+  max_value: null,
+  in_bounds: false,
+};
+
+const OUT_OF_BOUNDS_FLAG_2: HarnessFlagView = {
+  ...OUT_OF_BOUNDS_FLAG,
+  key: "STACKY_EXEC_VERIFICATION_BUDGET_S",
+  label: "Budget global de verificación (segundos)",
+};
+
+describe("HarnessFlagsPanel — Plan 83 (bounds declarativos)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUpdate.mockResolvedValue({ ok: true, applied: {} });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, active_profile: "safe" }),
+    });
+  });
+
+  // test_number_input_has_min_max_attrs
+  it("el input numérico trae min/max cuando la flag declara bounds", async () => {
+    mockList.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      flags: [BOUND_MIN_ONLY_FLAG],
+    });
+    wrap(<HarnessFlagsPanel />);
+    await waitFor(() => screen.getByDisplayValue(String(BOUND_MIN_ONLY_FLAG.value)));
+    const input = screen.getByDisplayValue(String(BOUND_MIN_ONLY_FLAG.value)) as HTMLInputElement;
+    expect(input.min).toBe("0");
+  });
+
+  // test_bounds_hint_rendered
+  it("muestra el rango '0–1' con min y max, y '≥ N' con solo min", async () => {
+    mockList.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      flags: [BOUND_RANGE_FLAG, BOUND_MIN_ONLY_FLAG],
+    });
+    wrap(<HarnessFlagsPanel />);
+    await waitFor(() => {
+      expect(screen.getByText("0–1")).toBeDefined();
+      expect(screen.getByText("≥ 0")).toBeDefined();
+    });
+  });
+
+  // test_no_bounds_no_hint
+  it("no renderiza el hint de rango para una flag numérica sin bounds", async () => {
+    mockList.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      flags: [NO_BOUNDS_NUMERIC_FLAG],
+    });
+    wrap(<HarnessFlagsPanel />);
+    await waitFor(() => screen.getByText(NO_BOUNDS_NUMERIC_FLAG.label));
+    expect(screen.queryByText(/^[≥≤]|–/)).toBeNull();
+  });
+
+  // test_out_of_bounds_note_rendered
+  it("muestra el aviso 'fuera de rango válido' cuando in_bounds es false, incluso con active false", async () => {
+    mockList.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      flags: [OUT_OF_BOUNDS_FLAG],
+    });
+    wrap(<HarnessFlagsPanel />);
+    await waitFor(() => {
+      expect(screen.getByText("Valor actual fuera de rango válido")).toBeDefined();
+    });
+  });
+
+  // test_out_of_bounds_control_stays_enabled
+  it("el control de una flag fuera de rango NO se deshabilita", async () => {
+    mockList.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      flags: [OUT_OF_BOUNDS_FLAG],
+    });
+    wrap(<HarnessFlagsPanel />);
+    await waitFor(() => screen.getByDisplayValue(String(OUT_OF_BOUNDS_FLAG.value)));
+    const input = screen.getByDisplayValue(String(OUT_OF_BOUNDS_FLAG.value)) as HTMLInputElement;
+    expect(input.disabled).toBe(false);
+  });
+
+  // test_hero_chip_shows_count_and_filters
+  it("el hero muestra 'N fuera de rango' y el click filtra solo esas flags", async () => {
+    mockList.mockResolvedValue({
+      ...MOCK_RESPONSE,
+      flags: [OUT_OF_BOUNDS_FLAG, OUT_OF_BOUNDS_FLAG_2, BOUND_RANGE_FLAG],
+    });
+    wrap(<HarnessFlagsPanel />);
+    await waitFor(() => {
+      expect(screen.getByText("2 fuera de rango")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText("2 fuera de rango"));
+
+    await waitFor(() => {
+      expect(screen.getByText(OUT_OF_BOUNDS_FLAG.label)).toBeDefined();
+      expect(screen.getByText(OUT_OF_BOUNDS_FLAG_2.label)).toBeDefined();
+      expect(screen.queryByText(BOUND_RANGE_FLAG.label)).toBeNull();
+    });
+  });
+
+  // test_hero_chip_hidden_when_zero
+  it("el chip de fuera de rango no se renderiza cuando no hay ninguna", async () => {
+    mockList.mockResolvedValue(MOCK_RESPONSE);
+    wrap(<HarnessFlagsPanel />);
+    await waitFor(() => screen.getByText(/Perfil:/i));
+    expect(screen.queryByText(/fuera de rango/)).toBeNull();
   });
 });

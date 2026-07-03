@@ -363,6 +363,11 @@ def create_app() -> Flask:
 
     # ── U1.5 — Digest periódico a webhooks (opcional) ──────────────────────
     # STACKY_DIGEST_INTERVAL_HOURS=0 => apagado (default).
+
+    # Plan 84 — snapshot boot-time para "pendiente de reinicio" del panel de flags.
+    from services.harness_flags import snapshot_boot_values
+    snapshot_boot_values()
+
     if int(config.STACKY_DIGEST_INTERVAL_HOURS) > 0:
         interval_seconds = int(config.STACKY_DIGEST_INTERVAL_HOURS) * 3600
 

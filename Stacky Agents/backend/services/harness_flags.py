@@ -378,6 +378,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         min_value=0,  # Plan 83 — app.py: gate `if hours > 0`, 0 = daemon nunca arranca.
+        restart_required=True,  # Plan 84 — consumido una vez en app.py:386-387.
     ),
     # ── M1.2 — Presupuesto de directivas ──────────────────────────────────────
     FlagSpec(
@@ -574,6 +575,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="U1.5 — 0 desactiva; >0 emite digest.ready periódico por webhooks.",
         group="global",
         min_value=0,  # Plan 83 — app.py: gate `if hours > 0`, 0 = daemon nunca arranca.
+        restart_required=True,  # Plan 84 — consumido una vez en app.py:366-367.
     ),
     FlagSpec(
         key="STACKY_PIPELINES_ENABLED",
@@ -643,6 +645,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,
         min_value=0,  # Plan 83 — app.py: gate `if interval > 0`, 0 = daemon nunca arranca.
+        restart_required=True,  # Plan 84 — consumido una vez en app.py:336-347.
     ),
     FlagSpec(
         key="STACKY_EVAL_GATE_MODE",
@@ -1783,6 +1786,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+        restart_required=True,  # Plan 84 — consumido una vez en app.py:410-413.
     ),
     FlagSpec(
         key="STACKY_ADO_EDIT_SWEEP_HOURS",
@@ -1800,6 +1804,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # vez STACKY_ADO_EDIT_LEARNING_ENABLED=true, hours=0 produce `time.sleep(0)` en
         # un bucle infinito — busy-loop real, no "sin barrido". min=1.
         min_value=1,
+        restart_required=True,  # Plan 84 — consumido una vez en app.py:414.
     ),
     FlagSpec(
         key="STACKY_ADO_SERVICE_IDENTITY",

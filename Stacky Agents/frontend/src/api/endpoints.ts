@@ -667,6 +667,9 @@ export interface HarnessFlagView {
   min_value: number | null;     // Plan 83 — mínimo válido inclusive (solo numéricas)
   max_value: number | null;     // Plan 83 — máximo válido inclusive (solo numéricas)
   in_bounds: boolean;           // Plan 83 — false solo si el valor CONFIGURADO viola bounds
+  restart_required?: boolean;   // Plan 84 — true = solo se lee al arranque del backend
+  pending_restart?: boolean;   // Plan 84 — true = el valor difiere del boot (cambio pendiente)
+  boot_value?: string | number | boolean | null;  // Plan 84 — valor con el que arrancó
 }
 
 export interface HarnessFlagCategory {
@@ -858,7 +861,7 @@ export const HarnessFlags = {
     }).then(async (r) => {
       const json = await r.json();
       if (!r.ok || !json.ok) throw new Error(json.error ?? `HTTP ${r.status}`);
-      return json as { ok: boolean; applied?: Record<string, unknown>; error?: string };
+      return json as { ok: boolean; applied?: Record<string, unknown>; error?: string; restart_required_keys?: string[] };
     }),
 };
 

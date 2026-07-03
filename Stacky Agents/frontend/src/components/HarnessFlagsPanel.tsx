@@ -189,8 +189,24 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
               env
             </span>
           )}
+          {flag.restart_required === true && (
+            <span
+              className={styles.restartBadge}
+              title="Esta flag se lee al arrancar el backend; los cambios aplican tras reiniciar"
+            >
+              reinicio
+            </span>
+          )}
         </div>
         <p className={styles.flagDesc}>{flag.description}</p>
+        {flag.pending_restart === true && (
+          <p className={styles.pendingRestartNote}>
+            Cambio pendiente de reinicio del backend
+            {flag.boot_value !== null && flag.boot_value !== undefined
+              ? ` — el proceso corre con ${String(flag.boot_value)}`
+              : ""}
+          </p>
+        )}
         {isOutOfBounds && (
           <p className={styles.outOfBoundsNote}>Valor actual fuera de rango válido</p>
         )}
@@ -259,6 +275,8 @@ export default function HarnessFlagsPanel() {
   const [onlyModified, setOnlyModified] = useState(false);
   // Plan 83 [ADICIÓN ARQUITECTO v2] — chip de triage "N fuera de rango" en el hero.
   const [onlyOutOfBounds, setOnlyOutOfBounds] = useState(false);
+  // Plan 84 — chip de triage "N pendientes de reinicio" en el hero.
+  const [onlyPendingRestart, setOnlyPendingRestart] = useState(false);
 
   // Plan 78 F2 — preferencia de modo (Simple/Experto) persistida en localStorage
   const { mode, setMode } = useHarnessUiPrefs();
@@ -313,6 +331,7 @@ export default function HarnessFlagsPanel() {
   const qLower = q.trim().toLowerCase();
   const matches = (f: HarnessFlagView): boolean => {
     if (onlyOutOfBounds && f.in_bounds !== false) return false;
+    if (onlyPendingRestart && f.pending_restart !== true) return false;
     if (onlyModified && !isModifiedFromDefault(f)) return false;
     if (onlyActive && !f.active) return false;
     if (!qLower) return true;
@@ -344,7 +363,7 @@ export default function HarnessFlagsPanel() {
         const allCatFlags = flagsByCat.get(cat.id) ?? [];
         if (allCatFlags.length === 0) return null;
 
-        if (!qLower && !onlyActive && !onlyModified && !onlyOutOfBounds) {
+        if (!qLower && !onlyActive && !onlyModified && !onlyOutOfBounds && !onlyPendingRestart) {
           // Sin búsqueda ni filtros: incluir todas las categorías con flags
           return { cat, catFlags: allCatFlags };
         }
@@ -373,7 +392,7 @@ export default function HarnessFlagsPanel() {
         return null;
       })
       .filter((s): s is { cat: HarnessFlagCategory; catFlags: HarnessFlagView[] } => s !== null);
-  }, [categories, flagsByCat, qLower, onlyActive, onlyModified, onlyOutOfBounds]);
+  }, [categories, flagsByCat, qLower, onlyActive, onlyModified, onlyOutOfBounds, onlyPendingRestart]);
 
   // Stats globales
   const totalFlags = flags.length;
@@ -382,14 +401,27 @@ export default function HarnessFlagsPanel() {
   const totalModified = flags.filter(isModifiedFromDefault).length;
   // Plan 83 [ADICIÓN ARQUITECTO v2] — cuenta de flags con valor configurado fuera de rango.
   const outOfBoundsCount = flags.filter((f) => f.in_bounds === false).length;
+  // Plan 84 — cuenta de flags con cambios pendientes de reinicio.
+  const pendingRestartCount = flags.filter((f) => f.pending_restart === true).length;
 
   // Si el operador corrigió todo, no dejar el filtro fantasma activo.
   useEffect(() => {
     if (outOfBoundsCount === 0 && onlyOutOfBounds) setOnlyOutOfBounds(false);
   }, [outOfBoundsCount, onlyOutOfBounds]);
+  useEffect(() => {
+    if (pendingRestartCount === 0 && onlyPendingRestart) setOnlyPendingRestart(false);
+  }, [pendingRestartCount, onlyPendingRestart]);
 
   const handleUpdate = (key: string, value: boolean | number | string) => {
-    update.mutate({ [key]: value });
+    update.mutate({ [key]: value }, {
+      onSuccess: (data) => {
+        // Plan 84 F3.4 — aviso post-PUT si hay keys que requieren reinicio
+        if (data.restart_required_keys && data.restart_required_keys.length > 0) {
+          const keys = data.restart_required_keys.join(", ");
+          setApiError(`Guardado. Requiere reiniciar el backend: ${keys}`);
+        }
+      },
+    });
   };
 
   // Plan 78 F5 — renderSection extrae el bloque <details> para reusar en simple/experto/catch-all
@@ -407,7 +439,7 @@ export default function HarnessFlagsPanel() {
         key={cat.id}
         className={styles.section}
         style={{ borderLeft: `4px solid ${color}` }}
-        open={!!qLower || onlyActive || onlyModified || onlyOutOfBounds || sectionActive}
+        open={!!qLower || onlyActive || onlyModified || onlyOutOfBounds || onlyPendingRestart || sectionActive}
       >
         <summary className={styles.sectionSummary}>
           <span className={styles.sectionLabel}>
@@ -485,6 +517,15 @@ export default function HarnessFlagsPanel() {
               onClick={() => setOnlyOutOfBounds((v) => !v)}
             >
               {outOfBoundsCount} fuera de rango
+            </button>
+          )}
+          {pendingRestartCount > 0 && (
+            <button
+              type="button"
+              className={`${styles.pendingRestartChip} ${onlyPendingRestart ? styles.pendingRestartChipActive : ""}`}
+              onClick={() => setOnlyPendingRestart((v) => !v)}
+            >
+              {pendingRestartCount} pendientes de reinicio
             </button>
           )}
         </div>

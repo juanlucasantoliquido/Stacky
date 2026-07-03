@@ -175,6 +175,9 @@ $HarnessTestFiles = @(
   "tests/test_harness_profile_deltas.py",
   # Plan 83 - Bounds declarativos para flags numericas
   "tests/test_harness_flags_bounds.py"
+  # Plan 84 - Hot-apply honesto: flags de startup (restart_required)
+  "tests/test_harness_flags_restart_required.py"
+  "tests/test_harness_flags_endpoint_restart.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

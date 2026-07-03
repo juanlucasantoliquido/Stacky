@@ -165,4 +165,10 @@ def put_harness_flags():
 
     applied_keys = list(typed.keys())
     logger.info("harness-flags actualizado: %s", applied_keys)
-    return jsonify({"ok": True, "applied": typed})
+
+    # Plan 84 — reportar keys que requieren reinicio
+    restart_keys = sorted(
+        k for k in typed if _REGISTRY_INDEX[k].restart_required
+    )
+
+    return jsonify({"ok": True, "applied": typed, "restart_required_keys": restart_keys})

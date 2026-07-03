@@ -284,6 +284,27 @@ details[open] > .sectionSummary::before {
   flex-shrink: 0;
 }
 
+/* ── Plan 84 F3 — Badge "reinicio" para flags restart_required ────────────── */
+.restartBadge {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background: #fecaca;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Plan 84 F3 — Nota de "pendiente de reinicio" ─────────────────────────── */
+.pendingRestartNote {
+  font-size: 0.72rem;
+  color: #dc2626;
+  margin: 0.2rem 0 0 0;
+  line-height: 1.35;
+  font-weight: 500;
+}
+
 /* ── Plan 82 F4 — Perfil más cercano cuando es "personalizado" ───────────── */
 .nearestProfile {
   font-size: 0.75rem;
@@ -567,6 +588,26 @@ details[open] > .sectionSummary::before {
 .outOfBoundsChipActive {
   background: #f59e0b;
   border-color: #f59e0b;
+  color: #1e1e2e;
+  font-weight: 600;
+}
+
+/* ── Plan 84 F3 — Chip "N pendientes de reinicio" ─────────────────────────── */
+.pendingRestartChip {
+  align-self: center;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: #fecaca;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pendingRestartChipActive {
+  background: #dc2626;
+  border-color: #dc2626;
   color: #1e1e2e;
   font-weight: 600;
 }

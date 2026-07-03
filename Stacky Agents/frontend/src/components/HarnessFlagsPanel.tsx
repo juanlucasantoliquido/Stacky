@@ -5,7 +5,7 @@ import {
   type HarnessFlagView,
   type HarnessFlagCategory,
 } from "../api/endpoints";
-import { visualFor, partitionSectionsByTier } from "./harnessVisuals";
+import { visualFor, partitionSectionsByTier, isModifiedFromDefault } from "./harnessVisuals";
 import { useHarnessUiPrefs } from "./useHarnessUiPrefs";
 import styles from "./HarnessFlagsPanel.module.css";
 
@@ -55,10 +55,11 @@ interface FlagRowProps {
   flag: HarnessFlagView;
   allFlags: HarnessFlagView[];
   onUpdate: (key: string, value: boolean | number | string) => void;
+  onLocate: (key: string) => void;
   saving: boolean;
 }
 
-function FlagRow({ flag, allFlags, onUpdate, saving }: FlagRowProps) {
+function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
   const [localText, setLocalText] = useState(String(flag.value ?? ""));
   useEffect(() => { setLocalText(String(flag.value ?? "")); }, [flag.value]);
 
@@ -71,6 +72,10 @@ function FlagRow({ flag, allFlags, onUpdate, saving }: FlagRowProps) {
   if (isManagedAsPair) return null;
 
   const isActive = flag.active;
+  // Plan 82 F2/C1v3 — hija CONFIGURADA (active) con master OFF = flag muerta real.
+  // Una hija en default con master OFF no genera ruido (no se muestra nada).
+  const requiresMaster = flag.requires ? allFlags.find((f) => f.key === flag.requires) : null;
+  const isInert = Boolean(flag.requires) && !flag.requires_met && isActive;
 
   const control = () => {
     if (flag.type === "bool") {
@@ -158,15 +163,46 @@ function FlagRow({ flag, allFlags, onUpdate, saving }: FlagRowProps) {
   })();
 
   return (
-    <div className={`${styles.flagRow} ${isActive ? styles.activeRow : ""}`}>
+    <div className={`${styles.flagRow} ${isActive ? styles.activeRow : ""} ${isInert ? styles.inertRow : ""}`}>
       <div className={styles.flagLabel}>
         <div className={styles.flagMeta}>
           <span className={styles.flagName}>{flag.label}</span>
           {defLabel !== null && (
             <span className={styles.defaultBadge}>def: {defLabel}</span>
           )}
+          {isModifiedFromDefault(flag) && (
+            <span className={styles.modifiedBadge}>modificada</span>
+          )}
+          {flag.env_only === true && (
+            <span
+              className={styles.envBadge}
+              title="Vive solo en .env/os.environ (se aplica en caliente); no es atributo de Config"
+            >
+              env
+            </span>
+          )}
         </div>
         <p className={styles.flagDesc}>{flag.description}</p>
+        <code
+          className={styles.flagKey}
+          title="Click para copiar la key"
+          onClick={() => { void navigator.clipboard?.writeText(flag.key); }}
+        >
+          {flag.key}
+        </code>
+        {isInert && (
+          <p className={styles.requiresNote}>
+            Sin efecto: requiere &ldquo;{requiresMaster?.label ?? flag.requires}&rdquo; activada
+            {" "}
+            <button
+              type="button"
+              className={styles.locateMasterBtn}
+              onClick={() => onLocate(flag.requires!)}
+            >
+              ver master
+            </button>
+          </p>
+        )}
       </div>
       <div className={styles.flagControl}>
         {control()}
@@ -200,6 +236,7 @@ export default function HarnessFlagsPanel() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
+  const [onlyModified, setOnlyModified] = useState(false);
 
   // Plan 78 F2 — preferencia de modo (Simple/Experto) persistida en localStorage
   const { mode, setMode } = useHarnessUiPrefs();
@@ -239,11 +276,21 @@ export default function HarnessFlagsPanel() {
   const flags = data?.flags ?? [];
   const categories: HarnessFlagCategory[] = data?.categories ?? [];
   const activeProfile = data?.active_profile;
+  const profileDeltas = data?.profile_deltas;
   const saving = update.isPending || applyProfile.isPending;
+
+  // Plan 82 F4 — cuando el perfil es "personalizado", el perfil más cercano (menor delta).
+  const nearestProfile = useMemo(() => {
+    if (activeProfile || !profileDeltas) return null;
+    const entries = Object.entries(profileDeltas);
+    if (entries.length === 0) return null;
+    return entries.sort((a, b) => a[1] - b[1])[0];
+  }, [activeProfile, profileDeltas]);
 
   // Filtro de búsqueda
   const qLower = q.trim().toLowerCase();
   const matches = (f: HarnessFlagView): boolean => {
+    if (onlyModified && !isModifiedFromDefault(f)) return false;
     if (onlyActive && !f.active) return false;
     if (!qLower) return true;
     return (
@@ -274,8 +321,8 @@ export default function HarnessFlagsPanel() {
         const allCatFlags = flagsByCat.get(cat.id) ?? [];
         if (allCatFlags.length === 0) return null;
 
-        if (!qLower && !onlyActive) {
-          // Sin búsqueda: incluir todas las categorías con flags
+        if (!qLower && !onlyActive && !onlyModified) {
+          // Sin búsqueda ni filtros: incluir todas las categorías con flags
           return { cat, catFlags: allCatFlags };
         }
 
@@ -293,7 +340,9 @@ export default function HarnessFlagsPanel() {
           const catMatchesByIntent = (cat.intent ?? "").toLowerCase().includes(qLower);
           if (catMatchesByLabel || catMatchesByIntent) {
             // Mostrar TODAS las flags de la categoría (navegación por intención)
-            const filtered = onlyActive ? allCatFlags.filter((f) => f.active) : allCatFlags;
+            const filtered = allCatFlags.filter(
+              (f) => (!onlyActive || f.active) && (!onlyModified || isModifiedFromDefault(f)),
+            );
             if (filtered.length > 0) return { cat, catFlags: filtered };
           }
         }
@@ -301,12 +350,13 @@ export default function HarnessFlagsPanel() {
         return null;
       })
       .filter((s): s is { cat: HarnessFlagCategory; catFlags: HarnessFlagView[] } => s !== null);
-  }, [categories, flagsByCat, qLower, onlyActive]);
+  }, [categories, flagsByCat, qLower, onlyActive, onlyModified]);
 
   // Stats globales
   const totalFlags = flags.length;
   const totalActive = flags.filter((f) => f.active).length;
   const totalKnown = flags.filter((f) => f.default_known).length;
+  const totalModified = flags.filter(isModifiedFromDefault).length;
 
   const handleUpdate = (key: string, value: boolean | number | string) => {
     update.mutate({ [key]: value });
@@ -317,13 +367,17 @@ export default function HarnessFlagsPanel() {
     const { color, icon: Icon } = visualFor(cat.id);
     const sectionActive = catFlags.some((f) => f.active);
     const visibleActive = catFlags.filter((f) => f.active).length;
+    // [C4 v3] Cuenta sobre TODAS las flags del payload de la categoría, incluidas
+    // las gestionadas como `pair` que no renderizan fila propia — comportamiento
+    // esperado, no se "corrige" contra las filas visibles.
+    const modified = catFlags.filter(isModifiedFromDefault).length;
 
     return (
       <details
         key={cat.id}
         className={styles.section}
         style={{ borderLeft: `4px solid ${color}` }}
-        open={!!qLower || onlyActive || sectionActive}
+        open={!!qLower || onlyActive || onlyModified || sectionActive}
       >
         <summary className={styles.sectionSummary}>
           <span className={styles.sectionLabel}>
@@ -331,7 +385,7 @@ export default function HarnessFlagsPanel() {
             {cat.label}
           </span>
           <span className={styles.sectionMeta}>
-            {catFlags.length} flags · {visibleActive} activas
+            {catFlags.length} flags · {visibleActive} activas{modified > 0 ? ` · ${modified} modificadas` : ""}
           </span>
         </summary>
         {cat.intent && <p className={styles.sectionIntent}>{cat.intent}</p>}
@@ -344,6 +398,7 @@ export default function HarnessFlagsPanel() {
             flag={flag}
             allFlags={flags}
             onUpdate={handleUpdate}
+            onLocate={setQ}
             saving={saving}
           />
         ))}
@@ -367,7 +422,14 @@ export default function HarnessFlagsPanel() {
       <div className={styles.hero}>
         <div className={styles.heroTitle}>
           Arnés — Configuración activa
-          <span className={styles.heroProfile}>Perfil: <strong>{activeProfile ?? "personalizado"}</strong></span>
+          <span className={styles.heroProfile}>
+            Perfil: <strong>{activeProfile ?? "personalizado"}</strong>
+            {!activeProfile && nearestProfile && (
+              <span className={styles.nearestProfile}>
+                {" "}(más cercano: {nearestProfile[0]}, {nearestProfile[1]} diferencia{nearestProfile[1] === 1 ? "" : "s"})
+              </span>
+            )}
+          </span>
         </div>
         <div className={styles.heroStats}>
           <div className={styles.heroStat}>
@@ -381,6 +443,10 @@ export default function HarnessFlagsPanel() {
           <div className={styles.heroStat}>
             <span className={styles.heroStatValue}>{totalKnown}</span>
             <span className={styles.heroStatLabel}>con default</span>
+          </div>
+          <div className={styles.heroStat}>
+            <span className={styles.heroStatValue}>{totalModified}</span>
+            <span className={styles.heroStatLabel}>fuera de default</span>
           </div>
         </div>
         {/* % de flags activas — NO es indicador de salud. Ver Plan 46 para salud real de runs. */}
@@ -421,6 +487,14 @@ export default function HarnessFlagsPanel() {
             onChange={(e) => setOnlyActive(e.target.checked)}
           />
           Solo activas / con valor
+        </label>
+        <label className={styles.onlyActiveLabel}>
+          <input
+            type="checkbox"
+            checked={onlyModified}
+            onChange={(e) => setOnlyModified(e.target.checked)}
+          />
+          Solo modificadas
         </label>
       </div>
 

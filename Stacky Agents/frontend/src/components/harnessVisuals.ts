@@ -80,3 +80,26 @@ export function partitionSectionsByTier<T extends { cat: { tier?: string } }>(
   const restSections = allSections.filter((s) => s.cat.tier !== "simple");
   return { simpleSections, restSections };
 }
+
+/**
+ * Plan 82 F3 — True si el valor actual de la flag difiere de su default declarado.
+ *
+ * PURA. Normaliza por tipo para evitar falsos positivos ("" vs null, 0 vs "0"):
+ * - bool: compara como boolean.
+ * - resto: castea a string, tratando null/undefined como "" (csv vacío == default null).
+ * - default_known=false → nunca "modificada" (no hay base de comparación confiable).
+ */
+export function isModifiedFromDefault(flag: {
+  default_known: boolean;
+  default: unknown;
+  value: unknown;
+  type: string;
+}): boolean {
+  if (!flag.default_known) return false;
+  const norm = (v: unknown): string => {
+    if (flag.type === "bool") return String(Boolean(v));
+    if (v === null || v === undefined) return "";
+    return String(v);
+  };
+  return norm(flag.value) !== norm(flag.default);
+}

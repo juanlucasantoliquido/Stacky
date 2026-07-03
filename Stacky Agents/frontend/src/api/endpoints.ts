@@ -662,6 +662,8 @@ export interface HarnessFlagView {
   default: boolean | number | string;
   default_known: boolean;
   active: boolean;
+  requires: string | null;      // Plan 82 — key de la flag bool master, o null
+  requires_met: boolean;        // Plan 82 — true si no hay master o el master está ON
 }
 
 export interface HarnessFlagCategory {
@@ -840,7 +842,7 @@ export const Memory = {
 
 // Plan 26 M0.2/M3.1 — flags del arnés (reusa el registry; fuente única).
 export const HarnessFlags = {
-  list: () => api.get<{ ok: boolean; flags: HarnessFlagView[]; active_profile: string | null; categories: HarnessFlagCategory[] }>("/api/harness-flags"),
+  list: () => api.get<{ ok: boolean; flags: HarnessFlagView[]; active_profile: string | null; categories: HarnessFlagCategory[]; profile_deltas?: Record<string, number> }>("/api/harness-flags"),
   update: (updates: Record<string, boolean | number | string>) =>
     api.put<{ ok: boolean; applied?: Record<string, unknown>; error?: string }>("/api/harness-flags", { updates }),
 };

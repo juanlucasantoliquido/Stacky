@@ -214,6 +214,9 @@ HARNESS_TEST_FILES=(
   tests/test_plan80_status_shape.py
   tests/test_plan80_ratchet_byteidentical.py
   tests/test_plan80_routes_registered.py
+  # — Plan 82 — Claridad de configuración del arnés (requires + profile_deltas) —
+  tests/test_harness_flags_requires.py
+  tests/test_harness_profile_deltas.py
 )
 
 pass=0

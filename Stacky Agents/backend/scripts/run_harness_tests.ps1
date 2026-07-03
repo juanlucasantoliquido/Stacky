@@ -169,7 +169,10 @@ $HarnessTestFiles = @(
   "tests/test_plan80_savings.py",
   "tests/test_plan80_status_shape.py",
   "tests/test_plan80_ratchet_byteidentical.py",
-  "tests/test_plan80_routes_registered.py"
+  "tests/test_plan80_routes_registered.py",
+  # Plan 82 - Claridad de configuracion del arnes (requires + profile_deltas)
+  "tests/test_harness_flags_requires.py",
+  "tests/test_harness_profile_deltas.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -25,6 +25,9 @@ class FlagSpec:
     pair: str | None = None    # key del *_PROJECTS asociado (UI los renderiza juntos)
     env_only: bool = False     # True = no existe como atributo de Config
     default: object | None = None  # NUEVO — default DECLARADO (hint de UI). None = usar type-zero.
+    requires: str | None = None  # Plan 82 — key de una flag bool que debe estar ON para que
+                                 # esta flag tenga efecto. None = sin dependencia. Solo
+                                 # informativo para la UI; NINGÚN runner lo evalúa.
 
 
 @dataclass(frozen=True)
@@ -232,6 +235,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Max reintentos autocorrección",
         description="Máximo de mensajes correctivos por run (default 2).",
         group="claude_code_cli",
+        requires="CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED",
     ),
     FlagSpec(
         key="CLAUDE_CODE_CLI_HOOKS_ENABLED",
@@ -306,6 +310,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Tokens máx contexto",
         description="Presupuesto global de tokens estimados (default 25000).",
         group="global",
+        requires="STACKY_CONTEXT_BUDGET_ENABLED",
     ),
     # ── I0.1 — Dedup léxico entre bloques de contexto ────────────────────────
     FlagSpec(
@@ -419,6 +424,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Max reintentos autocorrección (codex)",
         description="Máximo de resumes correctivos por run codex (default 2).",
         group="codex_cli",
+        requires="CODEX_CLI_AUTOCORRECT_ENABLED",
     ),
     FlagSpec(
         key="CODEX_CLI_MODEL_DENYLIST",
@@ -901,6 +907,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Few-shot: cantidad de ejemplos (k)",
         description="Q1.2 — Número máximo de ejemplos a inyectar (default 2).",
         group="global",
+        requires="STACKY_CLI_FEWSHOT_ENABLED",
     ),
     FlagSpec(
         key="STACKY_CLI_FEWSHOT_PROJECTS",
@@ -1019,6 +1026,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "'gate' + E1.1 bloquea si hay hard failures no recuperados."
         ),
         group="global",
+        requires="STACKY_EXEC_VERIFICATION_ENABLED",
     ),
     FlagSpec(
         key="STACKY_EXEC_VERIFICATION_TIMEOUT_S",
@@ -1026,6 +1034,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Timeout por verificador (segundos)",
         description="E0.1 — Timeout máximo por verificador individual (default 120s).",
         group="global",
+        requires="STACKY_EXEC_VERIFICATION_ENABLED",
     ),
     FlagSpec(
         key="STACKY_EXEC_VERIFICATION_BUDGET_S",
@@ -1033,6 +1042,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Budget global de verificación (segundos)",
         description="E0.1 — Budget total para todos los verificadores del run (default 300s).",
         group="global",
+        requires="STACKY_EXEC_VERIFICATION_ENABLED",
     ),
     FlagSpec(
         key="STACKY_EXEC_VERIFICATION_PROJECTS",
@@ -1058,6 +1068,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Max reintentos reparación ejecutable",
         description="E1.1 — Máximo de pases correctivos por fallo ejecutable (default 1).",
         group="global",
+        requires="STACKY_EXEC_REPAIR_ENABLED",
     ),
     FlagSpec(
         key="STACKY_FAKE_GREEN_GUARD_ENABLED",
@@ -1122,6 +1133,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "'gate' inyecta como blanco de alta prioridad y gatea en finalize_run."
         ),
         group="global",
+        requires="STACKY_ACCEPTANCE_CONTRACT_ENABLED",
     ),
     FlagSpec(
         key="STACKY_ACCEPTANCE_CONTRACT_MAX_CHECKS",
@@ -1129,6 +1141,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Contrato: máx chequeos por run",
         description="A0.1 — Cap de chequeos ejecutables derivados por complejidad (default 4).",
         group="global",
+        requires="STACKY_ACCEPTANCE_CONTRACT_ENABLED",
     ),
     FlagSpec(
         key="STACKY_ACCEPTANCE_CONTRACT_PROJECTS",
@@ -1319,6 +1332,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,  # leído via os.getenv en _inject_process_catalog_block
+        requires="STACKY_RAG_CATALOG_ENABLED",
     ),
     FlagSpec(
         key="STACKY_PROCESS_DISCIPLINE_ENABLED",
@@ -1436,6 +1450,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "confianza supera el umbral."
         ),
         group="preflight",
+        requires="INTENT_PREFLIGHT_ENABLED",
     ),
     FlagSpec(
         key="INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF",
@@ -1443,6 +1458,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Pre-vuelo: confianza mínima para auto-aprobar",
         description="Plan 41 — Umbral de confianza para auto-aprobar sin modal (default 0.8).",
         group="preflight",
+        requires="INTENT_PREFLIGHT_ENABLED",
     ),
     FlagSpec(
         key="STACKY_ARTIFACT_RESCUE_ENABLED",
@@ -1557,6 +1573,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en api/tickets
+        requires="STACKY_EPIC_GATE_ENABLED",
     ),
     # ── Plan 61 — Gate determinista del flujo funcional (Task) ──────────────────
     FlagSpec(
@@ -1582,6 +1599,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+        requires="STACKY_TASK_GATE_ENABLED",
     ),
     # ── Plan 79 — Estados de tarea deterministas y configurables ─────────────
     FlagSpec(
@@ -1694,6 +1712,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 58 — Máximo de pases correctivos del bucle (>=1). 1 = single-shot. Default 2."
         ),
         group="global",
+        requires="STACKY_QUALITY_CONVERGENCE_ENABLED",
     ),
     # ── Plan 60 — Aprendizaje bidireccional: ediciones humanas en ADO ─────────
     FlagSpec(
@@ -1717,6 +1736,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+        requires="STACKY_ADO_EDIT_LEARNING_ENABLED",
     ),
     FlagSpec(
         key="STACKY_ADO_SERVICE_IDENTITY",
@@ -1875,6 +1895,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         pair="STACKY_CODEBASE_MEMORY_MCP_ENABLED",  # renderiza junto al master toggle
         env_only=False,
+        requires="STACKY_CODEBASE_MEMORY_MCP_ENABLED",  # ya cubierta por `pair`; refuerza el payload
     ),
     FlagSpec(
         key="STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH",
@@ -1887,6 +1908,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,
+        requires="STACKY_CODEBASE_MEMORY_MCP_ENABLED",
     ),
 )
 
@@ -1943,6 +1965,50 @@ def list_categories() -> list[dict]:
             for c in FLAG_CATEGORIES]
 
 
+def requires_met(spec: FlagSpec, values_by_key: dict[str, object]) -> bool:
+    """True si la dependencia declarada está satisfecha (o no hay dependencia).
+
+    values_by_key: mapa key→valor actual (el que arma read_current).
+    Casos borde:
+    - spec.requires is None → True.
+    - la key requerida no está en values_by_key → True (fail-open: nunca
+      marcar 'sin efecto' por un bug de datos).
+    - valor del master truthy (bool True) → True; False/None/'' → False.
+    """
+    if spec.requires is None:
+        return True
+    if spec.requires not in values_by_key:  # [C3 v3] fail-open simple
+        return True
+    return bool(values_by_key[spec.requires])
+
+
+def validate_requires_graph() -> list[str]:
+    """Valida el grafo de dependencias del registry. Devuelve lista de errores ('' vacía = OK).
+
+    Reglas (todas estructurales, deterministas):
+    R1: spec.requires debe ser la key de un FlagSpec existente en FLAG_REGISTRY.
+    R2: el master apuntado debe tener type == 'bool'.
+    R3: prohibida la auto-referencia (spec.requires != spec.key).
+    R4: profundidad máxima 1 — un master apuntado NO puede tener a su vez requires
+        (sin cadenas ni ciclos por construcción).
+    """
+    errors: list[str] = []
+    for spec in FLAG_REGISTRY:
+        if spec.requires is None:
+            continue
+        master = _REGISTRY_INDEX.get(spec.requires)
+        if master is None:
+            errors.append(f"{spec.key}: requires apunta a key inexistente {spec.requires!r}")
+            continue
+        if master.type != "bool":
+            errors.append(f"{spec.key}: requires apunta a {spec.requires} de tipo {master.type!r}, debe ser bool")
+        if spec.requires == spec.key:
+            errors.append(f"{spec.key}: requires auto-referencial")
+        if master.requires is not None:
+            errors.append(f"{spec.key}: cadena prohibida — {spec.requires} también declara requires")
+    return errors
+
+
 def read_current() -> list[dict]:
     """Devuelve spec + valor actual de cada flag del registry."""
     from config import config
@@ -1976,7 +2042,14 @@ def read_current() -> list[dict]:
             "default": declared_default(spec),
             "default_known": default_is_known(spec),
             "active": is_active(spec, value),
+            "requires": spec.requires,
+            "requires_met": True,   # se corrige en el pase de abajo
         })
+
+    values_by_key = {r["key"]: r["value"] for r in result}
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    for r in result:
+        r["requires_met"] = requires_met(by_key[r["key"]], values_by_key)
     return result
 
 

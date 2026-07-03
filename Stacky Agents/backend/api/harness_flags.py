@@ -72,7 +72,7 @@ def _write_env(updates: dict[str, str]) -> None:
 def get_harness_flags():
     """Devuelve todos los flags del arnés con sus valores actuales."""
     from services.harness_flags import read_current, list_categories
-    from services.harness_profiles import detect_profile
+    from services.harness_profiles import detect_profile, profile_deltas
 
     flags = read_current()
     return jsonify({
@@ -80,6 +80,7 @@ def get_harness_flags():
         "flags": flags,
         "active_profile": detect_profile(),  # V0.1 — "off"|"safe"|"full"|None(custom)
         "categories": list_categories(),
+        "profile_deltas": profile_deltas(),  # Plan 82 F4 — cuántas keys difieren por perfil
     })
 
 

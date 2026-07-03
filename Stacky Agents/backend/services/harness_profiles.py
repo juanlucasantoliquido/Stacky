@@ -148,23 +148,64 @@ def detect_profile() -> str | None:
     return None
 
 
+def _current_value(key: str) -> object:
+    """Valor actual de `key`, misma normalización que usa `_matches()`/`detect_profile()`.
+
+    - key fuera del registry → None (la comparación de valor fallará de forma segura).
+    - env_only=True → cast desde os.getenv (mismo `_cast_like` del resto del módulo).
+    - env_only=False → getattr(config, key, None).
+
+    Plan 82 F4 — extraído de `_matches()` para que `profile_deltas()` reuse
+    exactamente la misma lectura sin duplicar la lógica (evita que ambas divergan).
+    """
+    from services.harness_flags import _REGISTRY_INDEX
+    from config import config
+
+    spec = _REGISTRY_INDEX.get(key)
+    if spec is None:
+        return None
+    if spec.env_only:
+        return _cast_like(spec.type, os.getenv(key))
+    return getattr(config, key, None)
+
+
 def _matches(expected: dict[str, object]) -> bool:
     """True si TODAS las claves gestionadas tienen el valor esperado actualmente."""
     from services.harness_flags import _REGISTRY_INDEX
-    from config import config
 
     for key, exp_val in expected.items():
         spec = _REGISTRY_INDEX.get(key)
         if spec is None:
             return False
-        if spec.env_only:
-            raw = os.getenv(key)
-            cur = _cast_like(spec.type, raw)
-        else:
-            cur = getattr(config, key, None)
-        if not _value_eq(spec.type, cur, exp_val):
+        if not _value_eq(spec.type, _current_value(key), exp_val):
             return False
     return True
+
+
+def profile_deltas() -> dict[str, int]:
+    """Para cada perfil en PROFILES, cuántas de SUS keys difieren del valor actual.
+
+    Reusa `_current_value()` (misma lectura/normalización que `detect_profile()`)
+    y `apply_updates()` para castear el preset esperado exactamente igual que
+    `detect_profile()`. Determinista, sin side effects (no escribe nada).
+    """
+    from services.harness_flags import apply_updates, _REGISTRY_INDEX
+
+    result: dict[str, int] = {}
+    for name in PROFILES:
+        preset = _resolved_preset(name)
+        try:
+            expected = apply_updates(preset)
+        except ValueError:
+            result[name] = len(preset)
+            continue
+        count = 0
+        for key, exp_val in expected.items():
+            spec = _REGISTRY_INDEX.get(key)
+            if spec is None or not _value_eq(spec.type, _current_value(key), exp_val):
+                count += 1
+        result[name] = count
+    return result
 
 
 def _cast_like(flag_type: str, raw: str | None):

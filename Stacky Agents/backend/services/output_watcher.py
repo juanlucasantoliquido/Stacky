@@ -974,7 +974,7 @@ def _auto_create_pending_tasks(
         # pasa por validate_and_normalize ANTES de encolarse: reparación
         # determinista + schema + regla anti-ordinal. Si falla → cuarentena con
         # errores legibles (nunca llega inválido a ADO). Si OFF → path actual.
-        if os.getenv("STACKY_ARTIFACT_INTAKE_ENABLED", "false").lower() in ("1", "true", "yes", "on"):
+        if os.getenv("STACKY_ARTIFACT_INTAKE_ENABLED", "true").lower() in ("1", "true", "yes", "on"):
             try:
                 from services import artifact_intake
                 raw_text = pt_file.read_text(encoding="utf-8")

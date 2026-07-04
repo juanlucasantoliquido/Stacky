@@ -458,8 +458,12 @@ def test_ado_service_identity_is_env_only_csv():
 # Plan 63 — F0: taxonomía de categorías + helpers
 # ---------------------------------------------------------------------------
 
-# Keys con default=True curadas en el plan (12 exactas).
+# Keys con default=True curadas con confianza (ratchet Plan 63).
+# El set ES la lista de defaults ON curados: toda flag con spec.default=True DEBE estar
+# aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
+# es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 63 — 12 originales ──
     "STACKY_EPIC_SANITIZE_ENABLED",
     "STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED",
     "STACKY_COMMENT_FULL_SCAN_ENABLED",
@@ -472,6 +476,31 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_ORPHAN_REAPER_ENABLED",
     "STACKY_PENDING_TASK_STRICT_VALIDATION_ENABLED",
     "STACKY_RUNNER_REAP_ON_CLOSE_ENABLED",
+    # ── Promoción de defaults a ON — Grupo A (bajo riesgo, costo de tokens nulo/negativo) ──
+    "STACKY_PARALLEL_INJECTORS_ENABLED",
+    "STACKY_CONTEXT_DEDUP_ENABLED",
+    "STACKY_CONTEXT_BUDGET_ENABLED",
+    "STACKY_CONTEXT_RERANK_ENABLED",
+    "STACKY_COMPLEXITY_ESTIMATION_ENABLED",
+    "STACKY_ARTIFACT_INTAKE_ENABLED",
+    "STACKY_LOG_FLUSH_INCREMENTAL_ENABLED",
+    "STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED",
+    "STACKY_RELIABILITY_KPIS_ENABLED",
+    "STACKY_INTEGRITY_KPIS_ENABLED",
+    "STACKY_EXEC_VERIFICATION_KPIS_ENABLED",
+    "STACKY_ACCEPTANCE_KPIS_ENABLED",
+    "STACKY_QUALITY_KPIS_ENABLED",
+    "STACKY_EXECUTION_HISTORY_ENABLED",
+    # ── Promoción de defaults a ON — Grupo B (valioso; algunas gastan tokens/CPU) ──
+    "STACKY_DIFFICULTY_ROUTING_ENABLED",
+    "STACKY_RUN_REPAIR_ENABLED",
+    "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED",
+    "STACKY_SKILLS_ENABLED",
+    "STACKY_ADAPTIVE_EFFORT_ENABLED",
+    "STACKY_FAKE_GREEN_GUARD_ENABLED",   # soft-warn (HARD queda OFF)
+    "STACKY_EXEC_VERIFICATION_ENABLED",  # modo annotate (NUNCA gate; EXEC_REPAIR OFF)
+    "STACKY_PUSH_REJECTIONS_ENABLED",
+    "STACKY_DB_READONLY_DIRECTIVE_ENABLED",
 }
 
 

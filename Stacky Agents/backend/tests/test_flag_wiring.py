@@ -25,15 +25,16 @@ def _production_corpus() -> str:
     """Concatena el código productivo donde un consumo cuenta como real.
 
     Incluye: backend/**/*.py y frontend/src/**/*.{ts,tsx}.
-    Excluye: backend/tests/** (los tests no son consumo) y
-             backend/services/harness_flags.py (el registry se define ahí).
+    Excluye: backend/tests/** (los tests no son consumo),
+             backend/services/harness_flags.py (el registry se define ahí),
+             backend/services/harness_flags_help.py (Plan 86: ayuda UI, no consumo lógico).
     NOTA: harness_profiles.py y config.py SÍ cuentan (baseline de la
     auditoría 2026-07-02; endurecerlo es fuera de scope, sección 6).
     """
     parts: list[str] = []
     for path in sorted(BACKEND_ROOT.rglob("*.py")):
         rel = path.relative_to(BACKEND_ROOT).as_posix()
-        if rel.startswith("tests/") or rel == "services/harness_flags.py":
+        if rel.startswith("tests/") or rel in ("services/harness_flags.py", "services/harness_flags_help.py"):
             continue
         parts.append(path.read_text(encoding="utf-8", errors="ignore"))
     if FRONTEND_SRC.exists():

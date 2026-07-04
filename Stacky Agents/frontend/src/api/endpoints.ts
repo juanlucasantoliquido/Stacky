@@ -3065,3 +3065,27 @@ export const CodebaseMemoryMcp = {
   savings: (): Promise<CodebaseMemoryMcpSavingsResponse> =>
     api.get<CodebaseMemoryMcpSavingsResponse>("/api/codebase-memory-mcp/savings"),
 };
+
+// ── Plan 87 — Panel DevOps (creador gráfico de pipelines) ─────────────────────
+
+export const DevOps = {
+  /** GET /api/devops/health — health del panel (flag + generator + trigger). */
+  health: () =>
+    api.get<{ flag_enabled: boolean; generator_enabled: boolean; trigger_enabled: boolean }>(
+      "/api/devops/health"
+    ),
+  /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
+  parseYaml: (source: "ado" | "gitlab", yaml: string) =>
+    api.post<{ spec: object }>("/api/devops/parse-yaml", { source, yaml }),
+};
+
+export const PipelineGenerator = {
+  /** POST /api/pipeline-generator/preview — spec → {ado, gitlab} (200) o {errors} (400). */
+  preview: (spec: object) =>
+    api.post<{ ado: string; gitlab: string }>("/api/pipeline-generator/preview", spec),
+  /**
+   * POST /api/pipeline-generator/commit — commit HITL con confirm.
+   * El spec va en el body ROOT junto a confirm/target/branch/project.
+   */
+  commit: (body: object) => api.post<object>("/api/pipeline-generator/commit", body),
+};

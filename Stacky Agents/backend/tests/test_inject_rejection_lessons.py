@@ -23,7 +23,8 @@ def _inject(blocks=None, project="Proj", agent_type="functional"):
 
 
 def test_disabled_does_not_inject(monkeypatch):
-    monkeypatch.delenv("STACKY_PUSH_REJECTIONS_ENABLED", raising=False)
+    # Default ahora ON (Grupo B); fijamos OFF explícito para el caso deshabilitado.
+    monkeypatch.setenv("STACKY_PUSH_REJECTIONS_ENABLED", "false")
     with patch("services.rejection_lessons.load_for_run") as m_load:
         out = _inject()
     assert not any(b.get("id") == "rejection-lessons" for b in out)

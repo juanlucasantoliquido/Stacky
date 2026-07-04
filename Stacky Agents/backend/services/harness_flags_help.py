@@ -598,6 +598,13 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: esa generación automática de configuración no está disponible.",
         example="Como un generador de contratos que te muestra el borrador antes de firmarlo.",
     ),
+    # ── devops ────────────────────────────────────────────────────────────────
+    "STACKY_DEVOPS_PANEL_ENABLED": PlainHelp(
+        what="Un editor visual para crear y modificar pipelines de integración continua, sin escribir YAML a mano.",
+        on_effect="Si la activás: aparece una sección 'DevOps' donde podés armar pipelines con bloques, previsualizar el YAML y aplicarlo al repositorio.",
+        off_effect="Si la apagás: esa sección DevOps no aparece.",
+        example="Como un editor de diagramas donde cada bloque es una etapa del pipeline, y el YAML se genera solo.",
+    ),
     # ── migrador_ado_gitlab ───────────────────────────────────────────────
     "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED": PlainHelp(
         what="Permite mover épicas, tareas y comentarios de Azure DevOps hacia GitLab de forma segura, sin duplicar nada si se repite.",

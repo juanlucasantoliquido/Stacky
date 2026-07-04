@@ -54,6 +54,7 @@ def test_claude_cli_no_injection_when_flag_off_and_no_style(monkeypatch):
         prefix, meta = build_memory_prefix(
             project="test-project",
             agent_type="BusinessAgent",
+            push_rejections_enabled=False,  # default ahora ON (Grupo B): fija OFF explícito
         )
 
     assert prefix == ""
@@ -109,6 +110,7 @@ def test_codex_cli_no_injection_when_flag_off(monkeypatch):
         prefix, meta = build_memory_prefix(
             project="otro-proyecto",
             agent_type="FunctionalAgent",
+            push_rejections_enabled=False,  # default ahora ON (Grupo B): fija OFF explícito
         )
 
     assert prefix == ""

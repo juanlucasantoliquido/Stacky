@@ -22,11 +22,17 @@ def _make_rej_item(pattern="NO hagas X", reason="Operador lo rechazó"):
 # ---------------------------------------------------------------------------
 
 def test_flag_off_returns_empty(monkeypatch):
-    """Flag OFF → prefix vacío, count=0, nunca llama a rejection_lessons."""
+    """Flag OFF → prefix vacío, count=0, nunca llama a rejection_lessons.
+
+    El default ahora es ON (Grupo B) y build_memory_prefix con push_rejections_enabled=None
+    lee config; pasamos el flag explícito=False para probar el caso OFF de forma determinista.
+    """
     monkeypatch.setenv("STACKY_PUSH_REJECTIONS_ENABLED", "false")
     with patch("services.rejection_lessons.load_for_run") as mock_load:
         from services.memory_prefix import build_memory_prefix
-        prefix, meta = build_memory_prefix(project="proj", agent_type="BusinessAgent")
+        prefix, meta = build_memory_prefix(
+            project="proj", agent_type="BusinessAgent", push_rejections_enabled=False
+        )
     assert prefix == ""
     assert meta["rejection_lessons_count"] == 0
     mock_load.assert_not_called()

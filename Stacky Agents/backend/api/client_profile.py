@@ -155,6 +155,26 @@ def put_client_profile(project_name: str):
                     "index": idx,
                 }), 400
 
+    # Plan 87 F2 — validar devops_pipeline_drafts (aditivo; ausente = no-op).
+    drafts = profile.get("devops_pipeline_drafts")
+    if drafts is not None:
+        if not isinstance(drafts, list):
+            return jsonify({"ok": False, "error": "devops_pipeline_drafts debe ser una lista."}), 400
+        if len(drafts) > 50:
+            return jsonify({"ok": False, "error": "devops_pipeline_drafts: maximo 50 borradores."}), 400
+        seen_names = set()
+        for idx, d in enumerate(drafts):
+            if not isinstance(d, dict) or not isinstance(d.get("name"), str) or not d.get("name").strip():
+                return jsonify({"ok": False, "error": f"devops_pipeline_drafts[{idx}].name es obligatorio (string no vacio)."}), 400
+            name = d["name"].strip()
+            if len(name) > 120:
+                return jsonify({"ok": False, "error": f"devops_pipeline_drafts[{idx}].name supera 120 caracteres."}), 400
+            if name in seen_names:
+                return jsonify({"ok": False, "error": f"devops_pipeline_drafts[{idx}].name duplicado: '{name}'."}), 400
+            seen_names.add(name)
+            if not isinstance(d.get("spec"), dict):
+                return jsonify({"ok": False, "error": f"devops_pipeline_drafts[{idx}].spec debe ser un objeto."}), 400
+
     previous = load_client_profile(project_name)
 
     try:

@@ -34,6 +34,43 @@ from services.harness_flags import FLAG_REGISTRY  # noqa: E402
 
 HARNESS_KEYS = frozenset(spec.key for spec in FLAG_REGISTRY)
 
+
+def _bool_to_env(val: object) -> str:
+    return "true" if val else "false"
+
+
+def registry_default_values() -> dict[str, str]:
+    """Defaults EFECTIVOS del arnés (código) como {key: valor .env}.
+
+    Fuente de verdad = el estado real que aplica el backend con env limpio:
+    para las flags que son atributo de Config se lee `config.<KEY>` (así el
+    snapshot refleja EXEC_VERIFICATION_MODE=annotate, FAKE_GREEN_GUARD_HARD=false,
+    etc., no el type-zero declarado). Las env_only bool caen a su default seguro
+    (False). Las env_only no-bool SIN default declarado se OMITEN (su default real
+    vive en el call-site y el type-zero podría violar bounds). Semilla de MENOR
+    precedencia.
+    """
+    from config import config as _cfg  # noqa: PLC0415
+
+    out: dict[str, str] = {}
+    for spec in FLAG_REGISTRY:
+        if not spec.env_only and hasattr(_cfg, spec.key):
+            # Fuente de verdad: el atributo efectivo de Config (default real).
+            val = getattr(_cfg, spec.key)
+            out[spec.key] = _bool_to_env(val) if spec.type == "bool" else str(val)
+        elif spec.type == "bool":
+            # env_only bool: type-zero = False es el default seguro y válido.
+            out[spec.key] = _bool_to_env(spec.default)
+        elif spec.default is not None:
+            # env_only no-bool CON default declarado explícito.
+            out[spec.key] = str(spec.default)
+        # else: env_only no-bool SIN default declarado (int/float/csv). El default
+        # REAL vive en el call-site (os.getenv(key, ...)) y el type-zero podría
+        # violar sus bounds (p.ej. ADO_EDIT_SWEEP_HOURS min=1). Se OMITE del
+        # snapshot: el frozen no hornea un valor inventado y el call-site aplica
+        # su propio default válido.
+    return out
+
 _HEADER = (
     "# harness_defaults.env — Snapshot del arnés que se hornea como default del deploy.\n"
     "# GENERADO por deployment/export_harness_defaults.py desde el deploy vivo.\n"
@@ -96,14 +133,35 @@ def main() -> int:
         required=True,
         help="Destino versionado (típicamente backend/harness_defaults.env).",
     )
+    parser.add_argument(
+        "--seed-registry-defaults",
+        action="store_true",
+        help=(
+            "Siembra el snapshot con los defaults DECLARADOS del FLAG_REGISTRY "
+            "(código) como fuente de MENOR precedencia. El deploy vivo, si existe, "
+            "los pisa. Úsalo cuando no hay deploy vivo pero querés hornear los "
+            "defaults del código (p.ej. tras cambiar defaults en harness_flags/config)."
+        ),
+    )
     args = parser.parse_args()
 
     out = Path(args.out).resolve()
+
+    # Precedencia creciente (la última gana):
+    #   1. defaults EFECTIVOS del código (opt-in, --seed-registry-defaults): la
+    #      línea base de "el arnés por default" cuando no hay deploy vivo. Refleja
+    #      config.py exactamente (MODE=annotate, HARD=false, etc.), sin arrastrar el
+    #      snapshot viejo (que podía contradecir un cambio de default del código).
+    #   2. deploy vivo (--deploy-root), autoritativo (si se pasa, pisa la semilla).
+    # Sin ninguna fuente, se conserva el snapshot vigente (rama `if not defaults`).
+    defaults: dict[str, str] = {}
+    if args.seed_registry_defaults:
+        defaults.update(registry_default_values())
+
     sources: list[Path] = []
     if args.deploy_root:
         sources = deploy_env_sources(Path(args.deploy_root).resolve())
-
-    defaults = collect_harness_defaults(sources)
+    defaults.update(collect_harness_defaults(sources))
 
     if not defaults:
         if out.is_file():

@@ -97,6 +97,9 @@ FLAG_CATEGORIES: tuple[CategorySpec, ...] = (
     CategorySpec("gitlab_deep_links", "GitLab / Deep Links",
         "Plan 75 — Deep links bidireccionales GitLab: issue, MR, pipeline, commit, épica. Kill-switch con default OFF.",
         tier="advanced", intent="Activar deep links bidireccionales con GitLab"),
+    CategorySpec("devops", "DevOps",
+        "Panel DevOps: creación gráfica de pipelines y operaciones de publicación.",
+        tier="advanced", intent="Crear y gestionar pipelines de CI/CD visualmente"),
     CategorySpec("otros", "Otros / sin categorizar",
         "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza).",
         tier="advanced", intent="Flags sin categorizar (no debería haber ninguna)"),
@@ -170,6 +173,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "gitlab_deep_links": (
         "STACKY_GITLAB_DEEP_LINKS_ENABLED",  # Plan 75 — deep links bidireccionales GitLab
+    ),
+    "devops": (
+        "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 87 — panel DevOps: creador gráfico de pipelines
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -308,6 +314,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="F2.4 — Ranking + truncado de bloques de contexto.",
         group="global",
         pair="STACKY_CONTEXT_BUDGET_PROJECTS",
+        default=True,  # Grupo A — determinista, ahorra tokens (topa el contexto).
     ),
     FlagSpec(
         key="STACKY_CONTEXT_BUDGET_PROJECTS",
@@ -336,6 +343,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         pair="STACKY_CONTEXT_DEDUP_PROJECTS",
+        default=True,  # Grupo A — determinista, ahorra tokens (dedup de contexto).
     ),
     FlagSpec(
         key="STACKY_CONTEXT_DEDUP_PROJECTS",
@@ -461,6 +469,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         pair="STACKY_SKILLS_PROJECTS",
+        default=True,  # Grupo B — paridad 3 runtimes; tokens marginales-moderados; no-op si no hay skills.
     ),
     FlagSpec(
         key="STACKY_SKILLS_PROJECTS",
@@ -600,6 +609,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+        default=True,  # Grupo A — validación/reparación determinista anti-ordinal (causa raíz task-not-created).
     ),
     # ── V1.2 — Smart dispatch v1 (advisor) ─────────────────────────────────────
     FlagSpec(
@@ -687,6 +697,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = routing byte-idéntico (fingerprint_complexity=None)."
         ),
         group="global",
+        default=True,  # Grupo A — heurística sin LLM; habilita routing/effort adaptativos.
     ),
     # ── I1.1 — Auto-reparación de run ante output vacío/malformado ───────────
     FlagSpec(
@@ -699,6 +710,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Comparte presupuesto con el autocorrect. OFF = sin cambio."
         ),
         group="global",
+        default=True,  # Grupo B — tokens marginales y condicionales (solo si el output falla).
     ),
     # ── I1.2 — Routing por dificultad estimada dentro del clamp ──────────────
     FlagSpec(
@@ -711,6 +723,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = decide() comportamiento actual."
         ),
         group="global",
+        default=True,  # Grupo B — net token-negativo (S→haiku); requiere COMPLEXITY_ESTIMATION.
     ),
     # ── I3.2 — Caché en memoria de lecturas caras de ADO ─────────────────────
     FlagSpec(
@@ -749,6 +762,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = _apply_context_budget byte-idéntico."
         ),
         group="global",
+        default=True,  # Grupo A — TF-IDF local, sin tokens; mejora qué contexto sobrevive al recorte.
     ),
     # ── I3.1 — Paralelización de injectors ───────────────────────────────────
     FlagSpec(
@@ -762,6 +776,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = serial byte-idéntico."
         ),
         group="global",
+        default=True,  # Grupo A — sin tokens; solo paraleliza injectors (orden byte-idéntico).
     ),
     # ── I0.3 — Pre-warming del caché ADO ──────────────────────────────────────
     FlagSpec(
@@ -810,6 +825,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Append idempotente por secuencia. OFF = solo en close() (comportamiento actual)."
         ),
         group="global",
+        default=True,  # Grupo A — higiene de logs; evita perder logs de runs que mueren (zombies).
     ),
     FlagSpec(
         key="STACKY_ORPHAN_REAPER_ENABLED",
@@ -861,6 +877,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Reintento detecta marker existente → no re-postea. OFF = comportamiento actual."
         ),
         group="global",
+        default=True,  # Grupo A — determinista; evita publicaciones duplicadas en ADO.
     ),
     FlagSpec(
         key="STACKY_RELIABILITY_KPIS_ENABLED",
@@ -872,6 +889,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "duracion_saneada. Read-only; degrada con gracia si fuente ausente."
         ),
         group="global",
+        default=True,  # Grupo A — KPIs read-only; degrada con gracia si la fuente está ausente.
     ),
     # ── Plan 29 — Calidad del resultado a la primera ──────────────────────────
     FlagSpec(
@@ -885,6 +903,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         pair="STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
+        default=True,  # Grupo B — tokens marginales (bloque de contexto); mejora aprobado-a-la-primera.
     ),
     FlagSpec(
         key="STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -903,6 +922,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = effort fijo (byte-idéntico)."
         ),
         group="global",
+        default=True,  # Grupo B — moderado en L/XL (más razonamiento), ahorra en S.
     ),
     FlagSpec(
         key="STACKY_EFFORT_FLOOR",
@@ -975,6 +995,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "few-shot/criterios. Read-only; degrada con gracia. OFF = byte-idéntico."
         ),
         group="global",
+        default=True,  # Grupo A — KPIs read-only; degrada con gracia.
     ),
     # ── Plan 30 — Integridad verificada contra la realidad ────────────────────
     FlagSpec(
@@ -1034,6 +1055,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "tasa_exito_real_creacion. Read-only; degrada con gracia. OFF = byte-idéntico."
         ),
         group="global",
+        default=True,  # Grupo A — KPIs read-only; degrada con gracia.
     ),
     FlagSpec(
         key="STACKY_TRANSIENT_RUN_RETRY_ENABLED",
@@ -1069,6 +1091,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         pair="STACKY_EXEC_VERIFICATION_PROJECTS",
+        default=True,  # Grupo B — modo 'annotate' por default (nunca 'gate'); sin tokens LLM, gasta CPU. EXEC_REPAIR queda OFF.
     ),
     FlagSpec(
         key="STACKY_EXEC_VERIFICATION_MODE",
@@ -1136,6 +1159,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Solo archivos de test en changed_files. OFF = byte-idéntico."
         ),
         group="global",
+        default=True,  # Grupo B — soft-warn (HARD queda OFF); determinista, no bloquea.
     ),
     FlagSpec(
         key="STACKY_FAKE_GREEN_GUARD_HARD",
@@ -1166,6 +1190,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "verde_falso_atrapado, costo_medio_verificacion_ms. Read-only; degrada con gracia."
         ),
         group="global",
+        default=True,  # Grupo A — KPIs read-only; degrada con gracia.
     ),
     # ── Plan 32 — Contrato de Aceptación Ejecutable ───────────────────────────
     FlagSpec(
@@ -1270,6 +1295,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "intentos_de_gameo_atrapados, cobertura_media. Read-only; degrada con gracia."
         ),
         group="global",
+        default=True,  # Grupo A — KPIs read-only; degrada con gracia.
     ),
     # ── Plan 38 — Versión visible, épica desde brief, trazabilidad ──────────
     FlagSpec(
@@ -1319,6 +1345,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "integrada de Windows. OFF = build_client_profile_block byte-idéntico."
         ),
         group="database",
+        default=True,  # Grupo B — tokens marginales; no aporta si el proyecto no tiene db_readonly configurado.
     ),
     FlagSpec(
         key="STACKY_EXECUTION_HISTORY_ENABLED",
@@ -1331,6 +1358,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = endpoint devuelve 404 feature_disabled."
         ),
         group="observability",
+        default=True,  # Grupo A — endpoint de lectura; observabilidad sin costo de tokens.
     ),
     FlagSpec(
         key="STACKY_UNBLOCKER_COMPLETED_CAP",
@@ -1553,6 +1581,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "(copilot/claude_code_cli/codex). Default OFF."
         ),
         group="global",
+        default=True,  # Grupo B — paridad 3 runtimes; tokens marginales; solo actúa si hay rechazos guardados.
     ),
     FlagSpec(
         key="STACKY_EPIC_SANITIZE_ENABLED",
@@ -1898,6 +1927,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui, C9)
+    ),
+    # ── Plan 87 — Panel DevOps ─────────────────────────────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_PANEL_ENABLED",
+        type="bool",
+        label="Panel DevOps (Plan 87)",
+        description=(
+            "Plan 87 — Muestra la seccion DevOps en la UI (creador grafico de "
+            "pipelines). Expone GET /api/devops/health y POST /api/devops/parse-yaml. "
+            "Default OFF. Con OFF la tab no aparece y parse-yaml retorna 404."
+        ),
+        group="global",  # mismo group que STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (harness_flags.py:1936)
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_PIPELINE_GENERATOR_ENABLED",  # Plan 82 — el preview/commit viven detras de esa flag
     ),
     # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────
     FlagSpec(

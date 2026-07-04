@@ -106,6 +106,10 @@ HARNESS_TEST_FILES=(
   tests/test_ado_edit_learning.py
   tests/test_ado_edit_sweep.py
   tests/test_plan81_negative_golden_from_edits.py
+  # — Plan 87 · Panel DevOps: creador gráfico de pipelines —
+  tests/test_plan87_devops_flag.py
+  tests/test_plan87_devops_endpoints.py
+  tests/test_plan87_drafts_validation.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

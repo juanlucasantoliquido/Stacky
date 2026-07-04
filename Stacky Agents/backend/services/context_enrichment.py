@@ -932,7 +932,8 @@ def _inject_stacky_memory_block(
 
 def _push_rejections_enabled() -> bool:
     import os
-    return os.getenv("STACKY_PUSH_REJECTIONS_ENABLED", "false").lower() in {
+    # Default ON (Grupo B) coherente con config.STACKY_PUSH_REJECTIONS_ENABLED.
+    return os.getenv("STACKY_PUSH_REJECTIONS_ENABLED", "true").lower() in {
         "1", "true", "on", "yes",
     }
 

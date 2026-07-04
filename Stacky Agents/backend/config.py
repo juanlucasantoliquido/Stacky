@@ -230,7 +230,7 @@ class Config:
     # F2.4 — Presupuesto de contexto con ranking en enrich_blocks. El budget es
     # global (en tokens estimados); el encendido es por proyecto.
     STACKY_CONTEXT_BUDGET_ENABLED = os.getenv(
-        "STACKY_CONTEXT_BUDGET_ENABLED", "false"
+        "STACKY_CONTEXT_BUDGET_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_CONTEXT_BUDGET_PROJECTS = os.getenv(
         "STACKY_CONTEXT_BUDGET_PROJECTS", ""
@@ -241,7 +241,7 @@ class Config:
     # I0.1 — Dedup léxico de hechos repetidos entre bloques de contexto.
     # OFF default (retro-compat byte-idéntica). El dedup corre ANTES del budget.
     STACKY_CONTEXT_DEDUP_ENABLED: bool = os.getenv(
-        "STACKY_CONTEXT_DEDUP_ENABLED", "false"
+        "STACKY_CONTEXT_DEDUP_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_CONTEXT_DEDUP_PROJECTS: str = os.getenv("STACKY_CONTEXT_DEDUP_PROJECTS", "")
     # F2.5 — Memoria colaborativa en el CLI, por proyecto. Reusa el flag global
@@ -276,7 +276,7 @@ class Config:
     # H4.3 — Inyección de skills en el system prompt. OFF por default; allowlist
     # CSV de proyectos vacía = todos (escape hatch cuando master está ON).
     STACKY_SKILLS_ENABLED: bool = os.getenv(
-        "STACKY_SKILLS_ENABLED", "false"
+        "STACKY_SKILLS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_SKILLS_PROJECTS: str = os.getenv("STACKY_SKILLS_PROJECTS", "")
     # ── H5 — Runaway guard in-run ─────────────────────────────────────────────
@@ -339,11 +339,12 @@ class Config:
     # ── Plan 31 — Verificación ejecutable del entregable (E0.1-E2.2) ─────────
     # E0.1 — Motor de verificación ejecutable. Todos OFF por default → retro-compat.
     STACKY_EXEC_VERIFICATION_ENABLED: bool = os.getenv(
-        "STACKY_EXEC_VERIFICATION_ENABLED", "false"
+        "STACKY_EXEC_VERIFICATION_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
-    # off | annotate | gate — governs whether hard failures block completion
+    # off | annotate | gate — governs whether hard failures block completion.
+    # Default 'annotate' (Grupo B): solo anota, NUNCA bloquea. EXEC_REPAIR queda OFF.
     STACKY_EXEC_VERIFICATION_MODE: str = os.getenv(
-        "STACKY_EXEC_VERIFICATION_MODE", "off"
+        "STACKY_EXEC_VERIFICATION_MODE", "annotate"
     ).strip().lower()
     STACKY_EXEC_VERIFICATION_TIMEOUT_S: int = int(
         os.getenv("STACKY_EXEC_VERIFICATION_TIMEOUT_S", "120")
@@ -364,7 +365,7 @@ class Config:
     )
     # E1.2 — Guard anti-verde-falso (soft por defecto; HARD si _HARD=true).
     STACKY_FAKE_GREEN_GUARD_ENABLED: bool = os.getenv(
-        "STACKY_FAKE_GREEN_GUARD_ENABLED", "false"
+        "STACKY_FAKE_GREEN_GUARD_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_FAKE_GREEN_GUARD_HARD: bool = os.getenv(
         "STACKY_FAKE_GREEN_GUARD_HARD", "false"
@@ -375,7 +376,7 @@ class Config:
     ).lower() in ("1", "true", "yes")
     # E2.2 — KPIs de verificación ejecutable en harness_health.
     STACKY_EXEC_VERIFICATION_KPIS_ENABLED: bool = os.getenv(
-        "STACKY_EXEC_VERIFICATION_KPIS_ENABLED", "false"
+        "STACKY_EXEC_VERIFICATION_KPIS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 32 — Contrato de Aceptación Ejecutable (A0.1-A2.2) ─────────────
@@ -413,14 +414,14 @@ class Config:
     ).lower() in ("1", "true", "yes")
     # A2.2 — KPIs del contrato en harness_health.
     STACKY_ACCEPTANCE_KPIS_ENABLED: bool = os.getenv(
-        "STACKY_ACCEPTANCE_KPIS_ENABLED", "false"
+        "STACKY_ACCEPTANCE_KPIS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 39 — Historial de runs, fix épica CLI y BD read-only ────────────
     # C2 — Inyecta directiva de acceso a BD read-only en el perfil del cliente.
     #      NUNCA incluye el password. OFF por default (retro-compat).
     STACKY_DB_READONLY_DIRECTIVE_ENABLED: bool = os.getenv(
-        "STACKY_DB_READONLY_DIRECTIVE_ENABLED", "false"
+        "STACKY_DB_READONLY_DIRECTIVE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 58 — Bucle de convergencia de calidad determinista (épica) ────────
@@ -434,7 +435,7 @@ class Config:
     )
     # A1 — Habilita GET /api/executions/history con historial completo de runs.
     STACKY_EXECUTION_HISTORY_ENABLED: bool = os.getenv(
-        "STACKY_EXECUTION_HISTORY_ENABLED", "false"
+        "STACKY_EXECUTION_HISTORY_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 67 — Disciplina de procesos: reutilizar por default ──────────────
@@ -497,21 +498,21 @@ class Config:
     # OFF default: routing byte-idéntico. ON: estimate_complexity() se invoca
     # en los 3 runtimes y se pasa a llm_router.decide().
     STACKY_COMPLEXITY_ESTIMATION_ENABLED: bool = os.getenv(
-        "STACKY_COMPLEXITY_ESTIMATION_ENABLED", "false"
+        "STACKY_COMPLEXITY_ESTIMATION_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── I1.1 — Auto-reparación del run ante output vacío/malformado ──────────
     # OFF default: comportamiento actual exacto. ON: un único reintento si el
     # output queda vacío/malformado y el runtime soporta resume.
     STACKY_RUN_REPAIR_ENABLED: bool = os.getenv(
-        "STACKY_RUN_REPAIR_ENABLED", "false"
+        "STACKY_RUN_REPAIR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── I1.2 — Routing por dificultad estimada dentro del clamp ──────────────
     # OFF default: decide() comportamiento actual. ON: reglas de downgrade (S)
     # y upgrade (L/XL) dentro del clamp. Cap duro NUNCA se supera.
     STACKY_DIFFICULTY_ROUTING_ENABLED: bool = os.getenv(
-        "STACKY_DIFFICULTY_ROUTING_ENABLED", "false"
+        "STACKY_DIFFICULTY_ROUTING_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── I3.2 — Caché en memoria de lecturas caras de ADO ─────────────────────
@@ -533,14 +534,14 @@ class Config:
     # OFF default: _apply_context_budget byte-idéntico. ON: la relevancia al
     # ticket (TF-IDF coseno) desempata el orden de conservación bajo presupuesto.
     STACKY_CONTEXT_RERANK_ENABLED: bool = os.getenv(
-        "STACKY_CONTEXT_RERANK_ENABLED", "false"
+        "STACKY_CONTEXT_RERANK_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── I3.1 — Paralelización de injectors independientes ────────────────────
     # OFF default: serial byte-idéntico. ON: similar_tickets + ado_context
     # corren en paralelo con ThreadPoolExecutor(max_workers=2).
     STACKY_PARALLEL_INJECTORS_ENABLED: bool = os.getenv(
-        "STACKY_PARALLEL_INJECTORS_ENABLED", "false"
+        "STACKY_PARALLEL_INJECTORS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── I0.3 — Pre-warming del caché ADO al seleccionar el ticket ────────────
@@ -569,7 +570,7 @@ class Config:
     # OFF default. ON: persiste el buffer de log a DB antes de matar el proceso
     # (en reap) y periódicamente en el heartbeat.
     STACKY_LOG_FLUSH_INCREMENTAL_ENABLED: bool = os.getenv(
-        "STACKY_LOG_FLUSH_INCREMENTAL_ENABLED", "false"
+        "STACKY_LOG_FLUSH_INCREMENTAL_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # R0.3 — Reaper de huérfanos + watchdog reconciliador.
@@ -604,14 +605,14 @@ class Config:
     # OFF default. ON: persiste intención de publicación (idempotency_key) antes
     # del POST a ADO. Reintento sin doble POST; si check falla → fallback actual.
     STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED: bool = os.getenv(
-        "STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED", "false"
+        "STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # R2.1/R2.2 — KPIs de fiabilidad en harness-health.
     # OFF default. ON: agrega bloque "reliability" con dead_letter/cuarentenas/
     # reaped/stalled/persist_failures y KPIs tasa_exito_creacion/duracion_saneada.
     STACKY_RELIABILITY_KPIS_ENABLED: bool = os.getenv(
-        "STACKY_RELIABILITY_KPIS_ENABLED", "false"
+        "STACKY_RELIABILITY_KPIS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 29 — Calidad del resultado a la primera ──────────────────────────
@@ -619,7 +620,7 @@ class Config:
     # Q0.1 — Inyección de criterios como checklist en el briefing.
     # OFF default: enrich_blocks byte-idéntico.
     STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED: bool = os.getenv(
-        "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "false"
+        "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_ACCEPTANCE_CRITERIA_PROJECTS: str = os.getenv(
         "STACKY_ACCEPTANCE_CRITERIA_PROJECTS", ""
@@ -628,7 +629,7 @@ class Config:
     # Q0.2 — Esfuerzo adaptativo según dificultad estimada.
     # OFF default: effort fijo (byte-idéntico).
     STACKY_ADAPTIVE_EFFORT_ENABLED: bool = os.getenv(
-        "STACKY_ADAPTIVE_EFFORT_ENABLED", "false"
+        "STACKY_ADAPTIVE_EFFORT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # Piso de effort: nunca bajar por debajo de este valor.
     STACKY_EFFORT_FLOOR: str = os.getenv("STACKY_EFFORT_FLOOR", "medium").strip().lower()
@@ -653,7 +654,7 @@ class Config:
     # Q2.2 — KPI de "aprobado a la primera".
     # OFF default: harness_health byte-idéntico.
     STACKY_QUALITY_KPIS_ENABLED: bool = os.getenv(
-        "STACKY_QUALITY_KPIS_ENABLED", "false"
+        "STACKY_QUALITY_KPIS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 30 — Integridad verificada contra la realidad ────────────────────
@@ -684,7 +685,7 @@ class Config:
     # G2.1 — KPIs de integridad en harness-health (read-only).
     # OFF default: harness_health byte-idéntico.
     STACKY_INTEGRITY_KPIS_ENABLED: bool = os.getenv(
-        "STACKY_INTEGRITY_KPIS_ENABLED", "false"
+        "STACKY_INTEGRITY_KPIS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # G2.2 — Retry transitorio (diferido: clasificación de exit-codes no es
@@ -786,7 +787,7 @@ class Config:
     # ON: notas de rechazo del operador se inyectan como anti-patrones imperativos
     # en el próximo run del mismo proyecto, en los 3 runtimes (copilot/claude_cli/codex).
     STACKY_PUSH_REJECTIONS_ENABLED: bool = os.getenv(
-        "STACKY_PUSH_REJECTIONS_ENABLED", "false"
+        "STACKY_PUSH_REJECTIONS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 81 — Si ON, las frases borradas por el operador en ADO se derivan
@@ -849,6 +850,12 @@ class Config:
     # Editable por UI (HarnessFlagsPanel, categoría "Pipelines / CI").
     STACKY_PIPELINE_GENERATOR_ENABLED: bool = os.getenv(
         "STACKY_PIPELINE_GENERATOR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 87 — Panel DevOps (creador gráfico de pipelines). Default OFF.
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_PANEL_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_PANEL_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.

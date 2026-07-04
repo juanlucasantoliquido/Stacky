@@ -11,6 +11,7 @@ import MemoryPage from "./pages/MemoryPage";
 import ExecutionHistoryPage from "./pages/ExecutionHistoryPage";
 import ReviewInboxPage from "./pages/ReviewInboxPage";
 import MigratorPage from "./pages/MigratorPage"; // Plan 74
+import { DevOpsPage } from "./pages/DevOpsPage"; // Plan 87
 import TopBar from "./components/TopBar";
 import HealthBanner from "./components/HealthBanner";
 import CommandPalette from "./components/CommandPalette";
@@ -26,7 +27,7 @@ import { useUiSectionsStore } from "./store/uiSectionsStore";
 import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador";
+type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops";
 
 const TAB_PATHS: Record<Tab, string> = {
   team: "/",
@@ -41,6 +42,7 @@ const TAB_PATHS: Record<Tab, string> = {
   diagnostics: "/diagnostics",
   history: "/history",
   migrador: "/migrador",
+  devops: "/devops",
 };
 
 function tabFromPath(pathname: string): Tab {
@@ -56,6 +58,8 @@ export default function App() {
   const sections = useUiSectionsStore((s) => s.sections);
   // Plan 74: tab migrador visible solo si el flag está ON en el backend
   const [migradorEnabled, setMigradorEnabled] = useState(false);
+  // Plan 87: tab DevOps visible solo si el flag está ON en el backend
+  const [devopsEnabled, setDevopsEnabled] = useState(false);
 
   useGlobalExecutionNotifier();
 
@@ -83,6 +87,11 @@ export default function App() {
       .then((r) => r.json())
       .then((d: { flag_enabled?: boolean }) => setMigradorEnabled(d.flag_enabled === true))
       .catch(() => setMigradorEnabled(false));
+    // Plan 87: comprobar si DevOps está habilitado (flag backend)
+    fetch("/api/devops/health")
+      .then((r) => r.json())
+      .then((d: { flag_enabled?: boolean }) => setDevopsEnabled(d.flag_enabled === true))
+      .catch(() => setDevopsEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -126,7 +135,8 @@ export default function App() {
     else if (tab === "docs" && !sections.docs) selectTab("team");
     else if (tab === "memory" && !sections.memory) selectTab("team");
     else if (tab === "migrador" && !migradorEnabled) selectTab("team");
-  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled]);
+    else if (tab === "devops" && !devopsEnabled) selectTab("team");
+  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled]);
 
   return (
     <div className={styles.appRoot}>
@@ -218,6 +228,14 @@ export default function App() {
             Migrador
           </button>
         )}
+        {devopsEnabled && (
+          <button
+            className={`${styles.navTab} ${tab === "devops" ? styles.active : ""}`}
+            onClick={() => selectTab("devops")}
+          >
+            DevOps
+          </button>
+        )}
       </nav>
 
       {tab === "team"     && <TeamScreen />}
@@ -232,6 +250,7 @@ export default function App() {
       {tab === "diagnostics" && <DiagnosticsPage />}
       {tab === "history"     && <ExecutionHistoryPage />}
       {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
+      {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
 
       <CommandPalette
         open={paletteOpen}

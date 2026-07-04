@@ -1,14 +1,65 @@
 # Plan 90 — Agente DevOps interactivo multi-turno en el panel DevOps
 
 **Estado:** PROPUESTO
-**Versión:** v1 → v2 (crítica adversarial `criticar-y-mejorar-plan`, verificación
-contra código real, 2026-07-04)
-**Fecha:** 2026-07-04
+**Versión:** v1 → v2 → v3 (3ª crítica adversarial `criticar-y-mejorar-plan` — foco:
+coherencia con contrato de extensión 87 v3 + usabilidad, 2026-07-04)
+**Fecha:** 2026-07-04 (v1) / 2026-07-04 (v2) / 2026-07-04 (v3)
 **Serie DevOps:** plan 4 (se monta sobre el panel del plan 87; hermano de 88/89, no
 depende de ellos).
 **Dependencias:** plan 87 (host del panel — solo sus fases F0/F1/F4; ver F0 de este
 plan para el bootstrap controlado si el 87 aún no está implementado). NO depende de
 88 ni 89.
+
+---
+
+## CHANGELOG v2 → v3 (coherencia con contrato de extensión 87 v3 + red-team adicional)
+
+> El 87 v3 (F4, líneas 662-698) formalizó el contrato `DEVOPS_SECTIONS`: el SHELL
+> decide el gate de flag-off vía `healthKey?/gateFlagKey?/gateMessage?` y renderiza
+> `FlagGateBanner` (movido a F4 del 87 — ya existe cuando F4 del 87 está
+> implementado). Los hermanos 88/89 v3 ya siguen el contrato. El propio 87 v3 (§3.12,
+> líneas 935-938) **ya anticipa textualmente** la entrada de este plan:
+> `{id:"agente", healthKey:"agent_enabled", gateFlagKey:"STACKY_DEVOPS_AGENT_ENABLED", ...}`
+> con "CERO cambios en `DevOpsPage.tsx`". Esta v3 alinea el 90 a esa firma exacta.
+
+- **C6 (IMPORTANTE — drift de contrato entre planes hermanos ya críticados):** F3 de
+  90 (v2) declaraba la entrada de `DEVOPS_SECTIONS` SIN `healthKey`/`gateFlagKey`/
+  `gateMessage` y hacía que `DevOpsAgentSection.tsx` hand-rolleara el aviso de
+  flag-off ("El agente DevOps está apagado...") en vez de delegarlo al shell. Esto
+  es el ÚNICO plan de la serie 87-90 que no sigue el contrato de extensión que el
+  propio 87 v3 formalizó (y que 88/89 v3 ya cumplen) — y el 87 v3 lo cita
+  explícitamente como caso de verificación de su propia escalabilidad (§3.12). Dejarlo
+  así no rompe al 90 en aislamiento, pero rompe la coherencia de la serie que ya fue
+  críticada asumiendo que los 4 planes se implementan juntos bajo un contrato único.
+  **Fix:** la entrada `DEVOPS_SECTIONS` de F3 pasa a declarar
+  `healthKey: "agent_enabled"`, `gateFlagKey: "STACKY_DEVOPS_AGENT_ENABLED"`,
+  `gateMessage` en llano; `DevOpsAgentSection.tsx` deja de hand-rollear el aviso de
+  flag-off (el shell ya lo cubre antes de montar la sección); el criterio binario (e)
+  de F3 se separa en dos (contrato declarativo vs aviso global de continuidad, que
+  SÍ sigue siendo texto plano porque no es un gate de flag); la nota sobre
+  `FlagGateBanner` "puede no existir aún" se corrige (ya existe vía F4 del 87, exigido
+  por el propio F0.a de este plan) y se reformula como "no aplica: es un aviso de
+  resume, no un gate de flag".
+- **C7 (MENOR):** el DoD (línea 979-980, antes de esta v3) y el checklist de F4 no
+  mencionaban el nuevo criterio de "no regresión del hand-roll" — se agrega el
+  criterio grep-negativo (ver ADICIÓN ARQUITECTO v3 más abajo) al checklist de F4.
+- **C8 (MENOR, cosmético — no amerita cambio de código):** F3 punto 4 describe
+  "Continuar" como visible solo si `last_status !== "running"`, y el aviso global del
+  punto 5 (ahora 6, renumerado por el fix de C6) ya cubre el caso "flag ON pero para
+  otro proyecto" — ambos redactados de forma coherente entre sí; se deja intacto tras
+  revisar que no colisiona con el fix de C6 (el aviso global sigue siendo un aviso de
+  *continuidad de memoria*, no de *flag-off de sección*, por eso no migra al gate del
+  shell).
+- **[ADICIÓN ARQUITECTO v3]:** se agrega un criterio binario grep-negativo en F3 que
+  impide que el hand-roll de C6 regrese en una futura edición: grep en
+  `DevOpsAgentSection.tsx` NO debe encontrar el literal `está apagado` (el aviso de
+  flag-off es responsabilidad exclusiva del shell vía `FlagGateBanner`), combinado con
+  grep que SÍ encuentra `healthKey` en la entrada de `DEVOPS_SECTIONS` de este plan.
+
+**VEREDICTO (sobre v2): APROBADO-CON-CAMBIOS** — 0 BLOQUEANTES, 1 IMPORTANTE (C6,
+resuelto en esta v3), 2 MENORES. El hallazgo no compromete la lógica de negocio del
+90 (backend F0-F2 intactos y ya sólidos tras v2) pero sí la coherencia estructural de
+la serie 87-90 ya validada como conjunto; esta v3 lo cierra antes de implementar.
 
 ---
 
@@ -798,10 +849,19 @@ export interface DevOpsConversationItem {
 **Archivo NUEVO:** `Stacky Agents/frontend/src/components/devops/DevOpsAgentSection.tsx`
 — componente de la sección (recibe `ctx: DevOpsSectionContext` del 87 F4). Contenido
 determinista:
-1. Si `ctx.health.agent_enabled !== true` → render de UN aviso:
-   `El agente DevOps está apagado. Activá "Agente DevOps interactivo (Plan 90)" en Configuración → Arnés (categoría DevOps).`
-   y nada más. (Tipo: ampliar `DevOpsHealth` del 87 con `agent_enabled?: boolean` —
-   key opcional, contrato aditivo declarado por el 87 F4.)
+1. **[C6 v3 — contrato de extensión 87 F4/§3.12]** El gate de flag-off NO lo hace
+   este componente: el SHELL (`DevOpsPage.tsx`) ya decide, ANTES de montar
+   `DevOpsAgentSection`, si `ctx.health.agent_enabled !== true` — en ese caso
+   renderiza `<FlagGateBanner .../>` en lugar de esta sección (contrato F4 del 87 v3,
+   líneas 662-698; el propio 87 v3 §3.12 ya anticipa esta entrada exacta). Por lo
+   tanto `DevOpsAgentSection.tsx` **asume que ya fue montado con la flag ON** y NO
+   debe contener ningún string hand-rolled de aviso de flag-off (nada de "El agente
+   DevOps está apagado..."). Defensa opcional trivial permitida: un early-return
+   silencioso si por algún motivo `ctx.health.agent_enabled !== true` (p. ej.
+   `if (!ctx.health.agent_enabled) return null;`), pero SIN duplicar mensaje — el
+   shell es la ÚNICA fuente del texto de flag-off. (Tipo: ampliar `DevOpsHealth` del
+   87 con `agent_enabled?: boolean` — key opcional, contrato aditivo declarado por el
+   87 F4.)
 2. Formulario "Nueva conversación": select de proyecto (opciones de
    `Projects.list()`, `endpoints.ts:1581-1582`, preseleccionando
    `Projects.getActive()`, `:1583`), select de runtime con 2 opciones
@@ -828,18 +888,34 @@ determinista:
 5. Aviso de continuidad GLOBAL (complementa el per-item de arriba): si
    `list.resume_enabled === false`, mostrar el texto:
    `Aviso: sin "Resume de sesión (claude)" activo (Configuración → Arnés, categoría Claude Code CLI), al continuar una conversación terminada el agente arranca sin memoria del hilo.`
-   — texto plano SIEMPRE (no depender de `FlagGateBanner`, que es del 87 F5 y puede
-   no existir aún). La señal PRECISA es la per-item `continuable_with_memory` (C3): el
-   aviso global cubre además el caso "el flag está ON pero para otro proyecto".
+   — texto plano SIEMPRE. **[C6 v3]** Esto NO usa `FlagGateBanner` — no porque el
+   componente "no exista aún" (ya existe: `FlagGateBanner` es del 87 F4, exigido por
+   el propio F0.a de este plan), sino porque **no aplica**: este es un aviso
+   operacional sobre continuidad de sesión (`resume_enabled`), no un gate de
+   flag-off de sección — `FlagGateBanner` solo tiene sentido para el caso
+   `healthKey`/sección-completa-apagada (punto 1), que es un caso distinto. La señal
+   PRECISA es la per-item `continuable_with_memory` (C3): el aviso global cubre
+   además el caso "el flag está ON pero para otro proyecto".
 6. Todo `await` de este componente va en try/catch que setea un área de error visible
    (`No se pudo <acción>: <mensaje>`) — patrón C16 del 87.
 
 **Archivo a editar:** `Stacky Agents/frontend/src/pages/DevOpsPage.tsx` — agregar la
-entrada al registro (contrato del 87 F4, sin refactor):
+entrada al registro (contrato del 87 F4 §3.12, **exactamente** la firma que el 87 v3
+ya anticipa en su propio checklist, líneas 935-938; sin refactor del shell):
 ```ts
-{ id: "agente", label: "Agente DevOps", render: (ctx) => <DevOpsAgentSection ctx={ctx} /> },
+{
+  id: "agente",
+  label: "Agente DevOps",
+  healthKey: "agent_enabled",
+  gateFlagKey: "STACKY_DEVOPS_AGENT_ENABLED",
+  gateMessage: "El agente DevOps interactivo necesita su flag (categoría DevOps).",
+  render: (ctx) => <DevOpsAgentSection ctx={ctx} />,
+},
 ```
-y ampliar `DevOpsHealth` con `agent_enabled?: boolean`.
+y ampliar `DevOpsHealth` con `agent_enabled?: boolean`. **[C6 v3]** Con `healthKey`
+declarado, el shell renderiza `FlagGateBanner` automáticamente cuando
+`ctx.health.agent_enabled !== true` — CERO cambios adicionales en `DevOpsPage.tsx`
+más allá de esta entrada (tal como exige el 87 v3 §3.12).
 
 **Verificación de que el dock cubre el chat:** `CodexConsoleDock` ya renderiza líneas
 del operador vs agente (`:14-23`), input con envío por
@@ -852,11 +928,19 @@ criterios por grep de abajo.
 
 **Criterio binario:** (a) `tsc` 0 errores; (b) grep en `DevOpsAgentSection.tsx`
 encuentra `setCodexConsoleExecution` (el chat reusa el dock, no hay UI de chat
-paralela); (c) grep en `DevOpsPage.tsx` encuentra `id: "agente"`; (d) grep en
-`DevOpsAgentSection.tsx` NO encuentra `fetch(` (todo pasa por `endpoints.ts`);
-(e) el aviso del punto 5 existe como string literal en el componente;
-(f) grep en `DevOpsAgentSection.tsx` encuentra `continuable_with_memory` (C3: la
-señal honesta se consume, no se ignora).
+paralela); (c) grep en `DevOpsPage.tsx` encuentra `healthKey: "agent_enabled"` Y
+`gateFlagKey: "STACKY_DEVOPS_AGENT_ENABLED"` en la entrada `id: "agente"` (**C6 v3**:
+contrato declarativo del 87 F4/§3.12, reemplaza al viejo criterio (c) que solo
+buscaba el `id`); (d) grep en `DevOpsAgentSection.tsx` NO encuentra `fetch(` (todo
+pasa por `endpoints.ts`); (e) el aviso GLOBAL de continuidad (antes punto 5, ahora
+punto 5 del listado de arriba) existe como string literal en el componente — este
+criterio se mantiene INTACTO porque ese aviso es operacional (resume), no un gate de
+flag; (f) grep en `DevOpsAgentSection.tsx` encuentra `continuable_with_memory` (C3: la
+señal honesta se consume, no se ignora); **(g) [ADICIÓN ARQUITECTO v3 / C6] grep en
+`DevOpsAgentSection.tsx` NO encuentra el literal `está apagado`** (el aviso de
+flag-off es responsabilidad exclusiva del shell vía `FlagGateBanner`; este criterio
+es la guardia anti-regresión que impide que el hand-roll de v2 vuelva a aparecer en
+una futura edición del componente).
 **Flag:** `STACKY_DEVOPS_AGENT_ENABLED` vía `ctx.health.agent_enabled` (sección
 apagada = solo aviso).
 **Runtimes:** selector claude/codex; copilot ausente del selector (el backend además
@@ -891,7 +975,7 @@ regresiones.
    - [ ] 2 conversaciones del MISMO proyecto conviven (guard C1: sin `IntegrityError` del UNIQUE) (test F2).
    - [ ] Turno sobre run vivo usa `send_input` (mode `stdin`/`resume`), turno sobre run muerto lanza run nuevo sobre el MISMO ticket (tests F2).
    - [ ] `agents.get("devops")` registrado; `.agent.md` contiene `R-HITL` y `CONFIRMO` (tests F1).
-   - [ ] `DEVOPS_SECTIONS` contiene la entrada `agente` (grep F3).
+   - [ ] `DEVOPS_SECTIONS` contiene la entrada `agente` con `healthKey:"agent_enabled"` y `gateFlagKey:"STACKY_DEVOPS_AGENT_ENABLED"` (grep F3, **C6 v3** — contrato 87 F4/§3.12); `DevOpsAgentSection.tsx` NO contiene el literal `está apagado` (grep negativo F3-g).
    - [ ] Ningún archivo de este plan modifica `claude_code_cli_runner.py`,
      `codex_cli_runner.py`, `api/executions.py` ni `CodexConsoleDock.tsx`
      (verificable por `git diff --name-only`).

@@ -1,13 +1,74 @@
 # Plan 90 — Agente DevOps interactivo multi-turno en el panel DevOps
 
 **Estado:** PROPUESTO
-**Versión:** v1
+**Versión:** v1 → v2 (crítica adversarial `criticar-y-mejorar-plan`, verificación
+contra código real, 2026-07-04)
 **Fecha:** 2026-07-04
 **Serie DevOps:** plan 4 (se monta sobre el panel del plan 87; hermano de 88/89, no
 depende de ellos).
 **Dependencias:** plan 87 (host del panel — solo sus fases F0/F1/F4; ver F0 de este
 plan para el bootstrap controlado si el 87 aún no está implementado). NO depende de
 88 ni 89.
+
+---
+
+## CHANGELOG v1 → v2 (verificación contra código real)
+
+> Metodología: se verificó CADA claim de infraestructura del plan contra el código
+> (`archivo:línea`) antes de aprobarlo. La mayoría pasó; 4 hallazgos requirieron fix.
+
+- **C1 (BLOQUEANTE, resuelto):** el `Ticket` ancla de F2 fijaba
+  `external_id=_CONVERSATION_ADO_ID` (-2). La tabla `tickets` tiene un **UNIQUE index**
+  `ux_tickets_stacky_tracker_external` sobre `(stacky_project_name, tracker_type,
+  external_id)` (`models.py:71-77`). El Brief Pool (-1) NO choca porque es
+  **1-por-proyecto** (get-or-create, `api/agents.py:711-715`), pero este plan crea
+  **1 ticket POR conversación** ⇒ la **2ª conversación del mismo proyecto** tiraba
+  `IntegrityError` (y rompía su propio `test_f2_start_two_conversations_two_tickets`).
+  **Fix (F2):** NO setear `external_id` (queda `NULL`, distinto en el UNIQUE tanto en
+  SQLite como en Postgres) ⇒ N conversaciones conviven; el discriminador sigue siendo
+  `ado_id=-2` (columna sin unique). `tracker_type` queda en su default.
+- **C2 (IMPORTANTE, resuelto):** `_current_user()` hacía
+  `from api.agents import current_user` — reexport frágil que además carga el módulo
+  **pesado** `api.agents` (riesgo de import circular desde un blueprint de imports
+  lazy). **Fix:** `from api._helpers import current_user` (ORIGEN canónico, verificado:
+  `api/_helpers.py:4`; `api/agents.py:21` solo lo reexporta).
+- **C3 (IMPORTANTE, resuelto) + [ADICIÓN ARQUITECTO]:** `harness/resume.py:96` solo
+  resume runs con `status == "completed"`. Un último turno `failed`/zombie (el timeout
+  de 1800s, `config.py:164`) **pierde el hilo AUNQUE el resume esté ON**, pero el
+  `resume_enabled` global de v1 igual mostraba "ok". **Fix:** señal HONESTA
+  por-conversación `continuable_with_memory = resume_enabled AND last_status ==
+  "completed"` en el GET; la UI avisa **por item**, no solo global (transparencia
+  human-in-the-loop: el operador sabe ANTES de continuar si va a arrancar sin memoria).
+- **C4 (IMPORTANTE, resuelto):** la identidad de la conversación colgaba de
+  `metadata.devops_chat`, escrito por `_launch_turn` **en carrera** con el thread de
+  `run_agent` (ambos hacen read-modify-write del JSON de metadata:
+  `agent_runner.py:173,274,348,723,883`) ⇒ lost-update posible ⇒ el criterio binario
+  del DoD podía fallar en PROD (verde en tests solo porque `run_agent` está mockeado).
+  **Fix:** la identidad race-free es `ticket.ado_id == -2` AND
+  `execution.agent_type == "devops"`; `devops_chat` queda best-effort/informativo y el
+  DoD se reformula sobre la identidad sólida.
+- **C5 (MENOR, resuelto):** el relanzamiento durmiente pasa
+  `model_override=last_md.get("model_override")` sin garantía de que esa key exista en
+  metadata; se agrega nota de verificación (degradación segura: si falta, `run_agent`
+  usa su default capeado — nunca Opus por guardarraíl 11).
+- **Claims VERIFICADOS que PASARON (no cambian; se documentan para el implementador):**
+  `run_agent` es **async** (lanza `threading.Thread` y retorna `execution_id`,
+  `agent_runner.py:375-394`) ⇒ el 202 es correcto y el turno NO bloquea el request;
+  todos los kwargs que usa F2 existen en la firma (`agent_runner.py:77-98`);
+  `send_input` de claude **y** codex firman `(id, text, *, user)` y devuelven `dict` /
+  levantan `RuntimeError`/`ValueError` tal como el plan asume
+  (`claude_code_cli_runner.py:297`, `codex_cli_runner.py:199,224`); `_one_shot ==
+  (ado_id == -1)` (`claude_code_cli_runner.py:858`) ⇒ con `ado_id=-2` el autopublish
+  es **doblemente inerte** (falla `_one_shot` Y `agent_type=="business"`, gate `:1302`)
+  y el **stdin queda ABIERTO** para multi-turno (el cierre solo ocurre en one-shot,
+  `:1141-1149`); `run_agent` persiste `runtime` en metadata (`:173`) ⇒ el ruteo de
+  runner en `send_message` es válido; `CodexConsoleDock` soporta `claude_code_cli`
+  (`:75`) y expone `setCodexConsoleExecution` (`:52`); `project_enabled` firma
+  `(*, enabled, projects_csv, project_name)` (`cli_feature_flags.py:25`).
+
+**VEREDICTO (sobre v1): RECHAZADO** — 1 hallazgo BLOQUEANTE (C1: colisión del UNIQUE en
+la 2ª conversación). Esta v2 lo resuelve junto con 3 IMPORTANTES y 1 MENOR ⇒ el plan
+queda **listo para implementar**.
 
 ---
 
@@ -359,7 +420,10 @@ def _flag_off() -> bool:
 
 def _current_user() -> str:
     # Mismo header sin validar que usa el resto de la app (mono-operador).
-    from api.agents import current_user
+    # C2 (v2): importar del ORIGEN canónico api._helpers (api/_helpers.py:4).
+    # api.agents:21 solo lo reexporta; importarlo de ahí carga el módulo pesado
+    # api.agents y arriesga import circular desde este blueprint de imports lazy.
+    from api._helpers import current_user
     return current_user()
 
 
@@ -394,9 +458,16 @@ def start_conversation():
     from models import Ticket
     title = f"[Stacky] DevOps Chat — {message[:60]}"
     with session_scope() as session:
+        # C1 (v2): NO setear external_id. tickets tiene UNIQUE
+        # ux_tickets_stacky_tracker_external (stacky_project_name, tracker_type,
+        # external_id) (models.py:71-77). El Brief Pool (-1) evita el choque siendo
+        # 1-por-proyecto (get-or-create); acá se crea 1 ticket POR conversación, así
+        # que fijar external_id=-2 haría colisionar la 2ª conversación del mismo
+        # proyecto (IntegrityError). external_id=None ⇒ NULLs distintos en el UNIQUE
+        # (SQLite y Postgres) ⇒ N conversaciones conviven. Discriminador = ado_id=-2
+        # (sin unique). tracker_type queda en su default ("azure_devops").
         ticket = Ticket(
             ado_id=_CONVERSATION_ADO_ID,
-            external_id=_CONVERSATION_ADO_ID,
             project=project,
             stacky_project_name=project,
             title=title,
@@ -474,6 +545,11 @@ def send_message(conversation_id: int):
     # 2) Camino DURMIENTE: nuevo run sobre el MISMO ticket. La continuidad la aporta
     #    harness.resume.resolve dentro del runner (--resume / codex exec resume) si
     #    las flags CLAUDE_CODE_CLI_RESUME_* / CODEX_CLI_RESUME_* están ON.
+    #    C5 (v2): last_md.get("model_override") depende de que run_agent persista el
+    #    modelo resuelto bajo esa key en metadata — VERIFICAR en agent_runner.py; si la
+    #    key no existe, esto queda None y run_agent usa su default (capeado, nunca Opus
+    #    por guardarraíl 11): degradación segura, solo se pierde la preferencia de
+    #    modelo del operador entre turnos durmientes (no hay fuga de modelo prohibido).
     execution_id, launch_error = _launch_turn(
         conversation_id=conversation_id,
         project=project,
@@ -493,6 +569,17 @@ def list_conversations():
         return jsonify({"error": "devops_agent_disabled"}), 404
     project = (request.args.get("project") or "").strip() or None
 
+    # C3 (v2): resume_enabled se calcula ANTES del loop para derivar la señal honesta
+    # por-conversación. project_enabled con project=None y allowlist no vacía devuelve
+    # False (conservador — avisa de más, nunca de menos).
+    from config import config as _cfg
+    from services.cli_feature_flags import project_enabled
+    resume_enabled = project_enabled(
+        enabled=getattr(_cfg, "CLAUDE_CODE_CLI_RESUME_ENABLED", False),
+        projects_csv=getattr(_cfg, "CLAUDE_CODE_CLI_RESUME_PROJECTS", ""),
+        project_name=project,
+    )
+
     from db import session_scope
     from models import AgentExecution, Ticket
     items = []
@@ -509,23 +596,26 @@ def list_conversations():
                 .order_by(AgentExecution.id.desc())
                 .first()
             )
+            last_status = last.status if last else None
             items.append({
                 "conversation_id": t.id,
                 "title": t.title,
                 "project": t.stacky_project_name,
                 "last_execution_id": last.id if last else None,
-                "last_status": last.status if last else None,
+                "last_status": last_status,
                 "last_runtime": (last.metadata_dict or {}).get("runtime") if last else None,
                 "started_at": t.created_at.isoformat() if getattr(t, "created_at", None) else None,
+                # [ADICIÓN ARQUITECTO v2] Señal HONESTA por-conversación (C3): continuar
+                # SOLO conserva el hilo si (a) el resume está activo para el proyecto Y
+                # (b) el último turno terminó "completed" — harness/resume.py:96 solo
+                # resume runs status=="completed". Un último run failed/zombie (timeout
+                # 1800s) pierde memoria aunque el flag esté ON; el resume_enabled global
+                # por sí solo mentía. La UI avisa por item (F3.4/F3.5).
+                "continuable_with_memory": bool(
+                    resume_enabled and last_status == "completed"
+                ),
             })
 
-    from config import config as _cfg
-    from services.cli_feature_flags import project_enabled
-    resume_enabled = project_enabled(
-        enabled=getattr(_cfg, "CLAUDE_CODE_CLI_RESUME_ENABLED", False),
-        projects_csv=getattr(_cfg, "CLAUDE_CODE_CLI_RESUME_PROJECTS", ""),
-        project_name=project,
-    )
     return jsonify({"conversations": items, "resume_enabled": resume_enabled})
 
 
@@ -570,7 +660,12 @@ def _launch_turn(
             "ok": False, "error": "agent_launch_failed", "message": str(exc),
         }), 502)
 
-    # Trazabilidad (patrón plan 53, api/agents.py:801-812): sellar devops_chat.
+    # Trazabilidad best-effort (patrón plan 53, api/agents.py:801-812): sellar
+    # devops_chat. C4 (v2): la IDENTIDAD de la conversación NO depende de este sello.
+    # Hay carrera con el thread de run_agent, que también hace read-modify-write del
+    # metadata (agent_runner.py:173,274,348,723,883) ⇒ lost-update posible. La
+    # identidad race-free es (ticket.ado_id == -2) AND (execution.agent_type ==
+    # "devops"); devops_chat es solo un flag informativo (nunca criterio binario duro).
     try:
         from db import session_scope
         from models import AgentExecution
@@ -624,8 +719,12 @@ patrón plan 28):
   recibió `agent_type="devops"`, `vscode_agent_filename="DevOpsAgent.agent.md"`,
   `work_item_type="Task"`, `use_few_shot=False`; en DB existe el Ticket con
   `ado_id == -2` y ese id.
-- `test_f2_start_two_conversations_two_tickets`: 2 POSTs → 2 tickets ancla distintos
-  (una conversación = un ticket; NO reuso tipo pool).
+- `test_f2_start_two_conversations_two_tickets` (**guardia de C1**): 2 POSTs al MISMO
+  proyecto → 2 tickets ancla con `ado_id == -2` e `id` DISTINTO, ambos conviviendo en
+  la DB real del fixture (si volviera `external_id=-2` fijo, el 2º INSERT tiraría
+  `IntegrityError` del UNIQUE `ux_tickets_stacky_tracker_external` y este test se
+  pondría rojo). Verificar además que el fixture usa una DB real (no mock del
+  `session_scope`) para que la constraint se ejerza de verdad.
 - `test_f2_start_clamps_model`: monkeypatch `services.llm_router.clamp_model` para
   espiar; POST con `model="opus-4.8"` → `clamp_model` fue llamado SIN
   `allow_opus=True` y `run_agent` recibió el valor clampeado.
@@ -643,6 +742,12 @@ patrón plan 28):
 - `test_f2_list_returns_conversation_and_resume_flag`: tras crear una conversación,
   GET lista la incluye con `last_execution_id`; la respuesta tiene key
   `resume_enabled` (bool).
+- `test_f2_list_item_continuable_flag` (**C3 / [ADICIÓN ARQUITECTO]**): con
+  `CLAUDE_CODE_CLI_RESUME_ENABLED=false`, todo item trae
+  `continuable_with_memory == False`; con resume ON + una última ejecución
+  `status="completed"`, el item trae `continuable_with_memory == True`; con resume ON
+  pero última ejecución `status="failed"`, vuelve a `False` (la señal no miente ante un
+  turno que no terminó OK).
 - `test_f2_route_registered`: centinela — `create_app()` y
   `"/api/devops/agent/conversations"` está en `[r.rule for r in app.url_map.iter_rules()]`
   (patrón plan 74).
@@ -651,8 +756,8 @@ patrón plan 28):
 
 **Registro ratchet:** agregar el archivo a ambos scripts.
 
-**Criterio binario:** 13 tests verdes; `tests/test_plan87_devops_endpoints.py` (si
-existe por F0.a/87) sigue verde.
+**Criterio binario:** 14 tests verdes (incluye el guard de C1 y el de C3);
+`tests/test_plan87_devops_endpoints.py` (si existe por F0.a/87) sigue verde.
 **Flag:** `STACKY_DEVOPS_AGENT_ENABLED` (guard 404 per-request en los 3 endpoints).
 **Runtimes:** claude_code_cli y codex_cli soportados; github_copilot rechazado con
 detail que apunta al flujo VS Code nativo (degradación controlada, guardarraíl 6).
@@ -686,6 +791,7 @@ export interface DevOpsConversationItem {
   last_status: string | null;
   last_runtime: string | null;
   started_at: string | null;
+  continuable_with_memory: boolean; // C3 (v2): señal honesta por-conversación
 }
 ```
 
@@ -714,13 +820,17 @@ determinista:
      es null) — reengancha el dock al run (vivo o terminado, el dock ya maneja ambos).
    - "Continuar": visible solo si `last_status !== "running"`; abre un textarea
      inline + botón enviar → `DevOpsAgentApi.message(id, texto)` → al resolver,
-     `setCodexConsoleExecution(res.execution_id)`.
+     `setCodexConsoleExecution(res.execution_id)`. **C3 (v2):** si
+     `item.continuable_with_memory === false`, mostrar junto al botón el caption
+     literal `Continuará sin memoria del hilo (resume off o el último turno no terminó OK).`
    (Si `last_status === "running"`, la respuesta se escribe DENTRO del dock, que ya
    tiene input por stdin — no duplicar canal en la sección.)
-5. Aviso de continuidad: si `list.resume_enabled === false`, mostrar el texto:
+5. Aviso de continuidad GLOBAL (complementa el per-item de arriba): si
+   `list.resume_enabled === false`, mostrar el texto:
    `Aviso: sin "Resume de sesión (claude)" activo (Configuración → Arnés, categoría Claude Code CLI), al continuar una conversación terminada el agente arranca sin memoria del hilo.`
    — texto plano SIEMPRE (no depender de `FlagGateBanner`, que es del 87 F5 y puede
-   no existir aún).
+   no existir aún). La señal PRECISA es la per-item `continuable_with_memory` (C3): el
+   aviso global cubre además el caso "el flag está ON pero para otro proyecto".
 6. Todo `await` de este componente va en try/catch que setea un área de error visible
    (`No se pudo <acción>: <mensaje>`) — patrón C16 del 87.
 
@@ -744,7 +854,9 @@ criterios por grep de abajo.
 encuentra `setCodexConsoleExecution` (el chat reusa el dock, no hay UI de chat
 paralela); (c) grep en `DevOpsPage.tsx` encuentra `id: "agente"`; (d) grep en
 `DevOpsAgentSection.tsx` NO encuentra `fetch(` (todo pasa por `endpoints.ts`);
-(e) el aviso del punto 5 existe como string literal en el componente.
+(e) el aviso del punto 5 existe como string literal en el componente;
+(f) grep en `DevOpsAgentSection.tsx` encuentra `continuable_with_memory` (C3: la
+señal honesta se consume, no se ignora).
 **Flag:** `STACKY_DEVOPS_AGENT_ENABLED` vía `ctx.health.agent_enabled` (sección
 apagada = solo aviso).
 **Runtimes:** selector claude/codex; copilot ausente del selector (el backend además
@@ -775,7 +887,8 @@ regresiones.
 3. Frontend: `npx tsc --noEmit` → 0 errores.
 4. Checklist binario final (todo verificable por comando/grep):
    - [ ] `STACKY_DEVOPS_AGENT_ENABLED=false` (default) ⇒ `GET /api/devops/agent/conversations` → 404 (test F2).
-   - [ ] Flag ON ⇒ conversación creada = 1 Ticket `ado_id=-2` + 1 ejecución `agent_type="devops"` con `metadata.devops_chat == True` (tests F2).
+   - [ ] Flag ON ⇒ conversación creada = 1 Ticket `ado_id=-2` (SIN `external_id`, C1) + 1 ejecución `agent_type="devops"` (identidad race-free, C4; `metadata.devops_chat` es best-effort y NO se usa como criterio duro) (tests F2).
+   - [ ] 2 conversaciones del MISMO proyecto conviven (guard C1: sin `IntegrityError` del UNIQUE) (test F2).
    - [ ] Turno sobre run vivo usa `send_input` (mode `stdin`/`resume`), turno sobre run muerto lanza run nuevo sobre el MISMO ticket (tests F2).
    - [ ] `agents.get("devops")` registrado; `.agent.md` contiene `R-HITL` y `CONFIRMO` (tests F1).
    - [ ] `DEVOPS_SECTIONS` contiene la entrada `agente` (grep F3).
@@ -794,10 +907,11 @@ ratchet verde + `tsc` 0 errores + checklist completo.
 | Riesgo | Mitigación |
 |---|---|
 | Tickets ancla `ado_id=-2` aparecen en listados/sweeps pensados para tickets reales | Precedente directo: Brief Pool `ado_id=-1` convive desde el plan 38 sin tratamiento especial. Si algún listado los muestra, es cosmético (título `[Stacky] DevOps Chat — …` autoexplicativo). NO agregar filtros globales en este plan (scope creep). |
-| Continuación "durmiente" sin flags de resume ⇒ el agente pierde el hilo | Nunca silencioso: `resume_enabled` viaja en el GET y la UI muestra el aviso literal (F3.5). Las flags ya son editables por UI (`harness_flags.py:275-285`). |
+| Continuación "durmiente" sin flags de resume ⇒ el agente pierde el hilo | Nunca silencioso: la señal PRECISA `continuable_with_memory` (C3, = resume ON **AND** último run `completed`) viaja por item en el GET y la UI avisa por conversación (F3.4) + aviso global (F3.5). Cubre el caso sutil que v1 ignoraba: un último turno `failed`/zombie pierde memoria aunque el flag esté ON (`harness/resume.py:96` solo resume `completed`). Flags editables por UI (`harness_flags.py:275-285`). |
 | El agente ejecuta algo mutante sin permiso (producción) | Triple capa: (1) R-HITL con `CONFIRMO` literal en `.agent.md` y en `system_prompt()`; (2) el operador ve el stream EN VIVO en el dock y puede cancelar (infra existente); (3) RunawayGuard H5 corta presupuesto/turnos desbocados. Honestidad: `--dangerously-skip-permissions` está siempre ON en el runner (decisión previa del repo) — la contención es prompt + supervisión humana + guard, y así se declara. |
 | Timeout de 1800s mata sesiones largas a mitad de tarea | Es el diseño anti-zombie (plan 37). La conversación NO se pierde: el turno siguiente relanza con `--resume`. No se toca el timeout. |
-| `run_agent` con `agent_type="devops"` dispara flujos pensados para business (autopublish, gates de épica) | Autopublish gateado por `agent_type == "business"` (`claude_code_cli_runner.py:1302`) — inerte; `work_item_type="Task"` como segunda defensa; test proxy F1. |
+| `run_agent` con `agent_type="devops"` dispara flujos pensados para business (autopublish, gates de épica) | **Doble** inertud VERIFICADA: el gate exige `_one_shot AND agent_type=="business"` (`claude_code_cli_runner.py:1302`) y `_one_shot == (ado_id == -1)` (`:858`) — con `ado_id=-2` FALLAN AMBAS condiciones; `work_item_type="Task"` como tercera defensa; test proxy F1. Bonus: el mismo `_one_shot=False` mantiene el **stdin abierto** para multi-turno (el cierre solo ocurre en one-shot, `:1141-1149`). |
+| Reinicio del backend a mitad de conversación ⇒ `_PROCESSES` en memoria se pierde pero la fila DB puede seguir `status="running"` | No rompe: el camino vivo hace `send_input`, que ante `proc is None` levanta `RuntimeError` (`claude_code_cli_runner.py:311-314`), el `try/except` de `send_message` cae al camino durmiente (nuevo run + resume). Degradación transparente, sin código nuevo. |
 | El 87 cambia al implementarse y rompe el contrato de sección | El contrato `render(ctx)` + health aditivo es EXPLÍCITO en el 87 v3 (C4/C9 y F4); este plan solo consume ese contrato y el centinela `test_f2_health_has_agent_enabled` detecta drift del health. |
 | Dos turnos simultáneos sobre la misma conversación (doble click) | El camino vivo serializa por lock de stdin (`claude_code_cli_runner.py:72`; codex `_RESUME_LOCKS:239-241` rechaza input concurrente); el camino durmiente crea runs distintos — el guard de duplicados/concurrencia existente del plan 22 V0 aplica. No se agrega mecanismo nuevo. |
 
@@ -859,7 +973,11 @@ ratchet verde + `tsc` 0 errores + checklist completo.
   (endpoints 404, sección con aviso, cero cambios en flujos existentes).
 - Con flags ON: el operador puede — solo con la UI — abrir una conversación DevOps,
   ver al agente trabajar en el dock, responderle ≥ 2 turnos, cerrar, y CONTINUAR la
-  conversación después con 1 click.
+  conversación después con 1 click; **dos conversaciones del mismo proyecto conviven**
+  (C1) y la UI le dice ANTES de continuar si el hilo tendrá memoria
+  (`continuable_with_memory`, C3).
+- Identidad de conversación race-free (C4): `ticket.ado_id == -2` (SIN `external_id`)
+  AND `execution.agent_type == "devops"`; `metadata.devops_chat` NO es criterio duro.
 - `git diff --name-only` del plan NO incluye `claude_code_cli_runner.py`,
   `codex_cli_runner.py`, `api/executions.py` ni `CodexConsoleDock.tsx`.
 - Ningún FlagSpec nuevo tiene `default=` ni `reserved=`; `harness_defaults.env`

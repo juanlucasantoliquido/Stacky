@@ -1,13 +1,97 @@
 # Plan 87 — Panel DevOps: creador GRÁFICO de pipelines
 
 **Estado:** PROPUESTO
-**Versión:** v1 → v2 (crítica adversarial `criticar-y-mejorar-plan`, 2026-07-04)
-**Fecha:** 2026-07-03 (v1) / 2026-07-04 (v2)
+**Versión:** v2 → v3 (2ª crítica adversarial `criticar-y-mejorar-plan` — foco:
+usabilidad end-to-end, 2026-07-04)
+**Fecha:** 2026-07-03 (v1) / 2026-07-04 (v2) / 2026-07-04 (v3)
 **Serie DevOps:** plan 1 de 3 (base). Los planes siguientes de la serie (publicaciones
 parametrizables de procesos batch/agenda/TODO, e inicialización de ambientes) se montan
-SOBRE este panel sin refactor.
+SOBRE este panel sin refactor — igual que toda feature DevOps futura (p.ej. el plan 90,
+agente DevOps interactivo) vía el contrato de extensión §3.12 (C20, v3).
 **Dependencias:** ninguna dentro de la serie (es la base); requiere planes 71/72/73 ya
 implementados — VERIFICADO en código:
+
+## CHANGELOG v2 → v3 (foco: feature LISTA PARA USAR, no solo técnicamente correcta)
+
+- **C10 (IMPORTANTE, resuelto):** pérdida silenciosa de trabajo — F4 v2 renderizaba
+  SOLO la sección activa (`useState` con el id): cambiar de sub-tab (p.ej. a
+  "Publicaciones" del plan 88) DESMONTABA `PipelineBuilderSection` y el `spec` en
+  edición se perdía sin aviso. v3: las secciones se montan al primer uso y NUNCA se
+  desmontan (set `mountedIds` + ocultar inactivas con `display:none`) — el estado
+  sobrevive a la navegación interna. Criterio binario nuevo en F6.
+- **C11 (IMPORTANTE, resuelto):** primera vez = lienzo en blanco sin guía:
+  `emptySpec()` (0 stages, name vacío) y "templates" fuera de scope ⇒ el operador
+  no-experto no sabía por dónde empezar. v3: función pura `starterSpec()` (1 stage /
+  1 job / 1 step válidos y editables) + botón "Empezar con ejemplo" + CTA de estado
+  vacío ("Agregá tu primer stage o importá un YAML existente"). El happy path al
+  primer YAML queda en ≤ 2 clicks (criterio binario F6). La galería completa sigue
+  fuera de scope; el ejemplo mínimo NO.
+- **C12 (IMPORTANTE, resuelto):** cero validación temprana: el único feedback era el
+  400 de `/preview` (y con `generator_enabled=false`, NI ESO). Incoherente con el
+  propio plan 88 F4, que sí define `validatePresetLocal`. v3: `validateSpecLocal`
+  puro en `specBuilder.ts`, espejo LITERAL de las 6 reglas de `_validate_spec`
+  (`pipeline_spec.py:112-132`, verificadas), con mensajes en llano, visible en vivo
+  en el builder. La fuente de verdad sigue siendo el backend.
+- **C13 (IMPORTANTE, resuelto):** faltaba la pata de deploy de la flag:
+  `backend/harness_defaults.env` no gana la línea `STACKY_DEVOPS_PANEL_ENABLED=false`
+  (la v2 lo delegaba al plan 88 C8 "si se detecta"). Causa raíz RECURRENTE (planes
+  74/75 lo corrigieron post-hoc; VERIFICADO: el archivo en HEAD tiene las líneas de
+  MIGRATOR/DEEP_LINKS pero no las de PIPELINE_*). v3: F0 la agrega + test dedicado
+  (patrón `tests/test_plan75_deep_links_wiring.py:50-58`).
+- **C14 (IMPORTANTE, resuelto — [ADICIÓN ARQUITECTO v3]):** fricción de activación:
+  usar el panel completo exige encender hasta 3 flags, y 2 de ellas
+  (`STACKY_PIPELINE_GENERATOR_ENABLED`, `STACKY_PIPELINE_TRIGGER_ENABLED`) viven en
+  la categoría "Épicas, briefs y publicación en ADO" (`harness_flags.py:164-165`) —
+  lugar contraintuitivo para un flujo DevOps. v3 crea `FlagGateBanner` (componente
+  reusable, lo heredan 88/89): cuando un boolean del health está OFF muestra el
+  aviso en llano + botón **"Activar ahora"** que llama `HarnessFlags.update({key: true})`
+  (API EXISTENTE, `endpoints.ts:858-874` — reuso, cero backend nuevo) y refetchea el
+  health. HITL intacto: es un click explícito del operador sobre una flag que ya es
+  editable por UI por diseño.
+- **C15 (IMPORTANTE, resuelto):** borradores write-only: había "guardar" y
+  "selector", pero NO borrar ni indicador de cambios sin guardar ⇒ al llegar al cap
+  de 50 el único remedio era editar JSON a mano (viola el riel "todo por UI"), y el
+  import de YAML pisaba el trabajo actual sin confirmar. v3: botón "Eliminar
+  borrador" (mismo riel GET→merge→PUT con la lista filtrada), badge "cambios sin
+  guardar" (helper puro `specsEqual`), y confirmación antes de importar si el spec
+  actual no está vacío.
+- **C16 (MENOR, resuelto):** errores no-400 morían sin camino a la UI: commit puede
+  devolver `{error, kind}` con status del tracker (`TrackerApiError`,
+  `pipeline_generator.py:83-85` — p.ej. PAT sin scope) y una red caída lanza en
+  `api.post`. v3: toda llamada async del plan va en try/catch que setea un área de
+  error visible de la sección ("No se pudo <acción>: <error>"); criterio binario por
+  grep (ninguna promesa sin catch).
+- **C17 (MENOR, resuelto):** "botón/auto refresh" del preview era ambiguo para
+  modelos menores. v3 fija: botón "Actualizar preview" SIEMPRE + auto-refresh con
+  debounce de 800 ms tras el último cambio del spec (solo si `generator_enabled` y
+  `validateSpecLocal` da 0 errores).
+- **C18 (MENOR, resuelto):** los avisos de flag OFF decían "categoría épicas/ADO"
+  (aproximado). v3: los textos usan el label REAL de la categoría y quedan
+  mayormente absorbidos por `FlagGateBanner` (C14).
+- **C19 (MENOR, resuelto):** F6 no tenía criterios BINARIOS de usabilidad. v3 agrega
+  al checklist: estado vacío con CTA, ≤ 2 clicks al primer YAML, navegación interna
+  sin pérdida de estado, borrador eliminable por UI, y errores siempre visibles.
+- **C20 (IMPORTANTE, resuelto — requisito transversal del operador: "panel escalable
+  para sumar más features DevOps"):** el registro de secciones v2 era `{id, label,
+  render}` — suficiente para 3 secciones conocidas pero SIN contrato de extensión
+  endurecido: el gating por flag quedaba hand-rolled DENTRO de cada sección (cada
+  plan nuevo reinventándolo), no había icono ni gate declarativo, y la barra de
+  sub-tabs no especificaba comportamiento con 5+ entradas. v3 formaliza el
+  **contrato de extensión DevOps** (riel §3.12 + F4): registro DECLARATIVO
+  `{id, label, icon?, healthKey?, gateFlagKey?, gateMessage?, render(ctx)}` en un
+  único lugar (`DEVOPS_SECTIONS`); el SHELL renderiza `FlagGateBanner` cuando
+  `health[healthKey] !== true` (una sección apagada NUNCA afecta a las demás);
+  montaje persistente genérico para N secciones (C10 ya usa `Set`, no hardcodea
+  cantidad); barra de sub-tabs con `flexWrap` (aguanta 5+ secciones); y convención
+  de namespacing que las futuras secciones HEREDAN (flags
+  `STACKY_DEVOPS_<FEATURE>_ENABLED`, health `<feature>_enabled`, rutas
+  `/api/devops/<feature>/...`, keys de client_profile `devops_<feature>_*`).
+  `FlagGateBanner` se crea en F4 (el shell lo necesita), F5 lo reusa. Contrato
+  VALIDADO contra el caso real del plan 90 (agente DevOps interactivo, commit
+  `edd25c7d`): se monta como sección `agente` con 1 entrada en el registro + 1 key
+  aditiva de health (`agent_enabled`) + blueprint propio `/api/devops/agent/...`,
+  CERO cambios en el shell — y su chat multi-turno depende del montaje persistente
+  de C10 para no perder la conversación al navegar.
 
 ## CHANGELOG v1 → v2
 
@@ -92,8 +176,10 @@ binarios están en F6):
 - 0 líneas de YAML escritas a mano; 100% del YAML sale de `to_ado_yaml`/`to_gitlab_yaml`.
 - Puede además **importar** un YAML existente (ADO o GitLab) al editor gráfico
   (reusa `parse_ado_yaml`/`parse_gitlab_yaml`) para editarlo visualmente.
-- Deja el contenedor extensible (registro de secciones) para los planes 2 y 3 de la
-  serie: agregar una sección DevOps nueva = 1 entrada en un array + 1 componente.
+- Deja el contenedor extensible (registro de secciones DECLARATIVO, §3.12) para los
+  planes 2 y 3 de la serie Y toda feature DevOps futura: agregar una sección nueva =
+  1 entrada en un array + 1 componente, cero cambios en el shell. Validado en papel
+  contra el plan 90 (agente DevOps interactivo, que se monta como sección `agente`).
 
 ## 2. Por qué ahora / gap que cierra
 
@@ -115,6 +201,8 @@ lectura/parseo), riesgo bajo (cero cambios de contrato en lo existente).
    categoría nueva `devops`, `env_only=False` (⇒ alta obligatoria en `config.py`,
    gotcha plan 81). **NO pasar `default=False` explícito** en el `FlagSpec` (rompe
    `test_default_known_only_for_curated`; solo `_CURATED_DEFAULTS_ON` puede).
+   Pata de deploy (C13): línea `STACKY_DEVOPS_PANEL_ENABLED=false` en
+   `backend/harness_defaults.env` + test dedicado.
 4. **Byte-idéntico con flag OFF:** con `STACKY_DEVOPS_PANEL_ENABLED=false` la tab
    DevOps NO aparece, los endpoints nuevos devuelven `flag_enabled:false` (health) o
    404 (parse-yaml), y ningún flujo existente cambia ni un byte.
@@ -133,6 +221,33 @@ lectura/parseo), riesgo bajo (cero cambios de contrato en lo existente).
     profile completo (`api/client_profile.py:161`). Todo guardado de borradores hace
     **GET del profile actual → merge en memoria → PUT del profile completo**. Prohibido
     enviar `{"devops_pipeline_drafts": [...]}` solo: borraría el resto de la config.
+11. **UX mínima garantizada (v3 — C10/C11/C12/C15/C16):** el panel debe ser usable
+    por un operador no-experto sin leer docs: (a) estado vacío con CTA + ejemplo de
+    1 click (`starterSpec`); (b) validación local en vivo con mensajes en llano
+    (`validateSpecLocal`, espejo del backend); (c) la navegación interna del panel
+    NUNCA pierde trabajo en edición (secciones montadas persistentes); (d) todo lo
+    creado por UI se puede borrar por UI (borradores); (e) todo error de backend/red
+    llega a la UI en texto visible, jamás solo a la consola.
+12. **Contrato de extensión DevOps (v3 — C20, escalabilidad):** el panel es la BASE
+    de toda el área DevOps (planes 88/89 y siguientes, p.ej. el plan 90). Sumar una
+    feature DevOps nueva = **1 entrada en `DEVOPS_SECTIONS` + 1 componente + (si
+    necesita backend) 1 blueprint/rutas propias**, CERO cambios en el shell
+    (`DevOpsPage.tsx`). Convención OBLIGATORIA que heredan las futuras secciones:
+    - Flag: `STACKY_DEVOPS_<FEATURE>_ENABLED`, categoría `devops`,
+      `requires="STACKY_DEVOPS_PANEL_ENABLED"`, las 5 patas de F0 (config, registry,
+      help, categoría, harness_defaults.env).
+    - Health: key aditiva OPCIONAL `<feature>_enabled` en `GET /api/devops/health`
+      (ampliar `DevOpsHealth` con `?: boolean`; nunca romper keys existentes).
+    - Rutas backend: bajo `/api/devops/<feature>/...` (blueprint propio con
+      `url_prefix="/devops/<feature>"` registrado en `api/__init__.py`, o rutas en
+      `api/devops.py` si son 1-2).
+    - Persistencia por proyecto: keys de client_profile con prefijo
+      `devops_<feature>_*`, validación aditiva (ausente = no-op) y riel
+      GET→merge→PUT (§3.10).
+    - Gate por sección: DECLARATIVO en la entrada del registro
+      (`healthKey`/`gateFlagKey`/`gateMessage`, F4) — el shell renderiza
+      `FlagGateBanner`; prohibido hand-rollear el aviso dentro de la sección.
+    Una sección con flag OFF muestra su banner y NO afecta ni oculta a las demás.
 
 ## 4. Fases
 
@@ -198,6 +313,10 @@ lectura/parseo), riesgo bajo (cero cambios de contrato en lo existente).
    `PlainHelp` para `STACKY_DEVOPS_PANEL_ENABLED` imitando la estructura de
    `STACKY_PIPELINE_GENERATOR_ENABLED` (línea 595): texto llano, qué pasa ON/OFF,
    ejemplo cotidiano.
+4. **(C13)** `Stacky Agents/backend/harness_defaults.env` — agregar la línea
+   `STACKY_DEVOPS_PANEL_ENABLED=false` (pata de deploy: el snapshot se hornea en
+   `backend\.env` en cada release; misma causa raíz que obligó fixes post-hoc en
+   los planes 74/75). Mantener el orden alfabético del archivo.
 
 **Tests PRIMERO** — archivo nuevo `Stacky Agents/backend/tests/test_plan87_devops_flag.py`:
 - `test_f0_flag_in_registry`: `STACKY_DEVOPS_PANEL_ENABLED` está en `FLAG_REGISTRY`,
@@ -217,13 +336,16 @@ lectura/parseo), riesgo bajo (cero cambios de contrato en lo existente).
   en algún test de flags del repo, si no, este snippet es autosuficiente).
 - `test_f0_flag_has_plain_help`: la key existe en el dict de ayuda de
   `harness_flags_help.py`.
+- `test_f0_harness_defaults_contains_flag` (C13): `backend/harness_defaults.env`
+  existe y contiene el literal `STACKY_DEVOPS_PANEL_ENABLED=false` (copiar el patrón
+  de `tests/test_plan75_deep_links_wiring.py:50-58`).
 - Correr TAMBIÉN (no-regresión de meta-tests):
   `python -m pytest tests/test_harness_flags.py tests/test_flag_wiring.py -q`.
 
 **Registro ratchet:** agregar `tests/test_plan87_devops_flag.py` a
 `scripts/run_harness_tests.sh` y `scripts/run_harness_tests.ps1`.
 
-**Criterio binario:** los 4 tests nuevos + `test_harness_flags.py` + `test_flag_wiring.py`
+**Criterio binario:** los 5 tests nuevos + `test_harness_flags.py` + `test_flag_wiring.py`
 pasan. Flag OFF por default.
 **Flag:** `STACKY_DEVOPS_PANEL_ENABLED` (default OFF).
 **Runtimes:** sin impacto (Codex/Claude/Copilot idénticos).
@@ -450,6 +572,23 @@ siguen huérfanos como hasta ahora). Por eso el comando de test es SIEMPRE por a
 - Defaults al agregar: `addStage` crea `{name: "stage-" + (n+1), jobs: []}`;
   `addJob` crea `{name: "job-1", steps: [], runner_tags: [], variables: {}, artifacts: [], services: []}`;
   `addStep` crea `{name: "step-1", script: "", env: {}}`.
+- **`starterSpec(): PipelineSpecDraft` (C11):** pipeline de ejemplo VÁLIDO y editable:
+  `{name: "mi-pipeline", stages: [{name: "build", jobs: [{name: "build-job", steps:
+  [{name: "compilar", script: "echo \"reemplazar por el comando real\"", env: {}}],
+  runner_tags: [], variables: {}, artifacts: [], services: []}]}], variables: {},
+  trigger_branches: []}` — debe dar 0 errores en `validateSpecLocal`.
+- **`validateSpecLocal(spec: PipelineSpecDraft): string[]` (C12):** espejo LITERAL de
+  las 6 reglas de `_validate_spec` (`pipeline_spec.py:112-132`), con mensajes en
+  llano: (1) name vacío → "El pipeline necesita un nombre"; (2) sin stages →
+  "Agregá al menos un stage"; (3) stage sin jobs → "El stage '<name>' no tiene jobs";
+  (4) job sin steps → "El job '<name>' no tiene steps"; (5) step con script vacío →
+  "El step '<name>' no tiene script"; (6) `raw_yaml` presente con `raw_yaml_target`
+  fuera de `("ado","gitlab",null)` → "Target de YAML crudo inválido". NO inventa
+  reglas extra (la fuente de verdad es el backend).
+- **`specsEqual(a: PipelineSpecDraft, b: PipelineSpecDraft): boolean` (C15):**
+  igualdad profunda vía `JSON.stringify(toSpecDict(a)) === JSON.stringify(toSpecDict(b))`
+  (suficiente: `toSpecDict` normaliza y el orden de keys es determinista por
+  construcción de los helpers). Se usa para el badge "cambios sin guardar".
 
 **Archivo a editar:** `Stacky Agents/frontend/src/api/endpoints.ts` — el helper real
 es `api.get`/`api.post` con path completo `/api/...` (forma de `Migrator.health`,
@@ -492,10 +631,19 @@ existe en `endpoints.ts:2942-2969` con los payloads correctos; F5 lo importa tal
   no mutó.
 - `mergeDrafts_null_profile`: `mergeDraftsIntoProfile(null, [])` →
   `{devops_pipeline_drafts: []}` (caso proyecto sin client_profile).
+- `starterSpec_valid_and_zero_local_errors` (C11): `validateSpecLocal(starterSpec())`
+  → `[]`; y tiene exactamente 1 stage / 1 job / 1 step con script no vacío.
+- `validateSpecLocal_empty_spec_errors` (C12): `emptySpec()` → errores que incluyen
+  "nombre" y "stage" (las reglas 1 y 2).
+- `validateSpecLocal_nested_errors` (C12): spec con 1 stage sin jobs y otro con job
+  sin steps → ambos mensajes presentes; agregar el step con script vacío → aparece
+  el error de script; completar el script → `[]`.
+- `specsEqual_detects_changes` (C15): `specsEqual(s, s)` true; tras
+  `updateStep(..., {script: "x"})` → false contra el original.
 Comando: `npx vitest run src/devops/specBuilder.test.ts` en `Stacky Agents/frontend`.
 
 **Criterio binario:** `npx vitest --version` funciona sin descarga; vitest verde
-(9 tests) + `npx tsc --noEmit` 0 errores.
+(13 tests) + `npx tsc --noEmit` 0 errores.
 **Flag:** ninguna (código muerto hasta F4/F5; tree-shaken; byte-idéntico en runtime).
 **Runtimes:** sin impacto.
 **Trabajo del operador:** ninguno.
@@ -510,23 +658,61 @@ para que los planes 2 y 3 de la serie agreguen secciones sin tocar el contenedor
 flag y dónde activarla → flag ON contenido):
 - `const healthQuery = useQuery({ queryKey: ["devops-health"], queryFn: () => DevOps.health(), retry: false });`
   (`useQuery` de `@tanstack/react-query`, mismo import que `MigratorPage.tsx:8`).
-- Registro extensible (EXPORTADO para los planes 2/3). Contrato v2 (FIX C4/C9): las
-  secciones RECIBEN el contexto del panel — el plan 88 asume el health por prop
-  (88 §F5) y así no hay refactor del contenedor jamás:
+- Registro extensible (EXPORTADO para los planes 2/3 y toda feature DevOps futura).
+  Contrato v3 (FIX C4/C9 + C20): las secciones RECIBEN el contexto del panel y
+  declaran su gate; el shell hace el resto — no hay refactor del contenedor jamás:
   ```ts
-  export interface DevOpsHealth { flag_enabled: boolean; generator_enabled: boolean; trigger_enabled: boolean; }
+  export interface DevOpsHealth { flag_enabled: boolean; generator_enabled: boolean; trigger_enabled: boolean; [k: string]: boolean | undefined; }
   export interface DevOpsSectionContext { health: DevOpsHealth; refetchHealth: () => void; }
-  export interface DevOpsSection { id: string; label: string; render: (ctx: DevOpsSectionContext) => ReactNode; }
+  export interface DevOpsSection {
+    id: string;               // slug único kebab-case (namespacing §3.12)
+    label: string;            // título de la sub-tab
+    icon?: string;            // opcional: string corto para la sub-tab (sin librería de íconos)
+    healthKey?: string;       // C20 — gate declarativo: si health[healthKey] !== true,
+                              // el SHELL renderiza FlagGateBanner en lugar del contenido
+    gateFlagKey?: string;     // flag que el banner ofrece activar (obligatorio si hay healthKey)
+    gateMessage?: string;     // mensaje en llano del banner (obligatorio si hay healthKey)
+    render: (ctx: DevOpsSectionContext) => ReactNode;
+  }
   export const DEVOPS_SECTIONS: DevOpsSection[] = [
+    // La sección pipelines NO declara healthKey: la gatea la flag master del panel
+    // (tab entera); sus sub-features (preview/trigger) degradan DENTRO con
+    // FlagGateBanner (F5). Las secciones futuras con flag propia SÍ lo declaran.
     { id: "pipelines", label: "Pipelines", render: (ctx) => <PipelineBuilderSection ctx={ctx} /> },
-    // Plan 88 (publicaciones) y Plan 89 (ambientes) agregan entradas ACA, sin refactor.
+    // Plan 88 (publicaciones), Plan 89 (ambientes) y features DevOps futuras (p.ej.
+    // plan 90, agente) agregan entradas ACA, sin refactor. Ejemplo de entrada futura:
+    // { id: "publicaciones", label: "Publicaciones", healthKey: "publications_enabled",
+    //   gateFlagKey: "STACKY_DEVOPS_PUBLICATIONS_ENABLED",
+    //   gateMessage: "La sección Publicaciones necesita su flag (categoría DevOps).",
+    //   render: (ctx) => <PublicationsSection ctx={ctx} /> },
     // Las keys nuevas del health (p.ej. publications_enabled, plan 88 F3) viajan por
-    // ctx.health de forma aditiva (ampliar DevOpsHealth con keys opcionales).
+    // ctx.health de forma aditiva (la index signature de DevOpsHealth las admite sin
+    // tocar este archivo).
   ];
   ```
   (`ReactNode` importado de `react`; NO usar `JSX.Element` — FIX C9.)
-- Sub-tabs internas simples (useState con el id activo; botones por sección);
-  DevOpsPage construye `ctx` desde `healthQuery` (`refetchHealth = () => healthQuery.refetch()`).
+- **Gate declarativo en el shell (C20):** al renderizar cada sección montada, si
+  `s.healthKey` está definido y `ctx.health[s.healthKey] !== true`, el shell
+  renderiza `<FlagGateBanner flagKey={s.gateFlagKey!} flagLabel={s.label}
+  message={s.gateMessage!} onEnabled={ctx.refetchHealth} />` EN LUGAR de
+  `s.render(ctx)`. Las demás secciones no se ven afectadas (el gate es por sección).
+- **Archivo NUEVO (movido de F5 a F4 porque el shell lo usa):**
+  `Stacky Agents/frontend/src/components/devops/FlagGateBanner.tsx` — spec completa
+  en F5 ítem 0.
+- **Barra de sub-tabs para N secciones (C20):** contenedor
+  `style={{ display: "flex", flexWrap: "wrap", gap: 8 }}` — con 5+ secciones los
+  botones envuelven a una segunda línea en vez de desbordar. Cada botón muestra
+  `icon ? icon + " " + label : label`.
+- Sub-tabs internas: `useState` con el id activo (botones por sección) **+ montaje
+  persistente (C10 — NO desmontar al navegar):** estado
+  `const [mountedIds, setMountedIds] = useState<Set<string>>(new Set([DEVOPS_SECTIONS[0].id]));`
+  al activar una sección se agrega su id al set; el render itera las secciones con
+  id en `mountedIds` y oculta las inactivas con
+  `<div style={{ display: activeId === s.id ? "block" : "none" }}>{s.render(ctx)}</div>`.
+  Así el spec en edición del builder (y el estado de 88/89) SOBREVIVE a cambiar de
+  sub-tab y volver. Prohibido el render condicional que desmonta
+  (`{activeId === s.id && s.render(ctx)}`).
+- DevOpsPage construye `ctx` desde `healthQuery` (`refetchHealth = () => healthQuery.refetch()`).
 
 **Archivo a editar:** `Stacky Agents/frontend/src/App.tsx` — replicar EXACTAMENTE el
 patrón migrador en sus 5 puntos:
@@ -547,7 +733,13 @@ Gate = `npx tsc --noEmit` 0 errores + verificación manual binaria del criterio.
 **Criterio binario:** (a) `tsc` 0 errores; (b) con flag OFF el fetch devuelve
 `flag_enabled:false` ⇒ la tab NO se renderiza (verificable en el código: el botón está
 dentro de `{devopsEnabled && ...}`); (c) `DEVOPS_SECTIONS` exportado con 1 entrada y
-firma `render(ctx)`.
+firma `render(ctx)`; (d) C10: el render de secciones usa `display:none` para ocultar
+(verificable por grep: `DevOpsPage.tsx` no contiene `activeId === s.id && ` como
+condición de render de sección); (e) C20: el shell es agnóstico de las secciones —
+grep: el literal `"pipelines"` aparece en `DevOpsPage.tsx` SOLO dentro del array
+`DEVOPS_SECTIONS` (ni el render loop ni la barra de sub-tabs nombran ids concretos);
+(f) C20: `flexWrap` presente en la barra de sub-tabs; (g) C20: el gate declarativo
+(`healthKey` ⇒ `FlagGateBanner`) vive en el shell, no en las secciones.
 **Flag:** `STACKY_DEVOPS_PANEL_ENABLED` (gatea tab y página).
 **Runtimes:** sin impacto.
 **Trabajo del operador:** opt-in — activar la flag desde Configuración → Arnés
@@ -559,12 +751,51 @@ firma `render(ctx)`.
 los endpoints existentes.
 
 **Archivos NUEVOS** (en `Stacky Agents/frontend/src/components/devops/`):
+0. **[ADICIÓN ARQUITECTO v3 — C14] `FlagGateBanner.tsx`** — el ARCHIVO se crea en F4
+   (el shell lo necesita para el gate declarativo C20); esta es su spec completa.
+   Componente reusable de la serie (88/89 y futuras secciones lo consumen vía el
+   registro o directamente). Props:
+   `{ flagKey: string; flagLabel: string; message: string; onEnabled: () => void }`.
+   Render: caja de aviso con `message` (en llano, nombra la flag exacta y su
+   categoría por el LABEL real) + botón **"Activar ahora"** que llama
+   `HarnessFlags.update({ [flagKey]: true })` (API existente,
+   `endpoints.ts:858-874`) y al resolver invoca `onEnabled()` (típicamente
+   `ctx.refetchHealth`). Si `update` lanza, muestra el error literal debajo del
+   botón. Si la respuesta trae `restart_required_keys` no vacío, muestra "El cambio
+   quedó guardado pero requiere reiniciar el backend" (no aplica a las flags de esta
+   serie, que no son `restart_required`; el manejo queda por robustez). HITL: nada
+   se activa sin el click explícito del operador; la flag ya es editable por UI por
+   diseño (riel `operator-config-always-via-ui`). NOTA: el banner NO aplica a la
+   flag master `STACKY_DEVOPS_PANEL_ENABLED` (con ella OFF la tab entera no existe;
+   activarla es el opt-in deliberado vía Configuración → Arnés, categoría "DevOps").
 1. `PipelineBuilderSection.tsx` — recibe `ctx: DevOpsSectionContext` (F4); orquesta:
-   estado `spec: PipelineSpecDraft` (useState, inicial `emptySpec()`), layout 2
-   columnas: izquierda árbol de bloques, derecha panel de propiedades + preview.
-   Barra superior: nombre del pipeline, selector de borrador, botón "Importar YAML"
-   (textarea + selector ado/gitlab → `DevOps.parseYaml` → `fromParsedSpec` → hidrata
-   `spec`), botones "Preview" / "Commit al repo…" / "Disparar…".
+   estado `spec: PipelineSpecDraft` (useState, inicial `emptySpec()`) + estado
+   `loadedSnapshot: PipelineSpecDraft` (última versión guardada/cargada, para C15),
+   layout 2 columnas: izquierda árbol de bloques, derecha panel de propiedades +
+   preview.
+   **Estado vacío (C11):** si `spec.stages.length === 0`, el árbol muestra el CTA
+   literal "Agregá tu primer stage o importá un YAML existente" + dos botones:
+   "Empezar con ejemplo" (`setSpec(starterSpec())`) y "+ stage" (`addStage`).
+   **Validación en vivo (C12):** `const localErrors = validateSpecLocal(spec);`
+   renderizada como lista amarilla arriba del preview; si `localErrors.length > 0`
+   los botones "Commit al repo…" y "Actualizar preview" muestran tooltip "Resolvé
+   los avisos primero" (el commit queda `disabled`; el preview manual se permite
+   igual — el backend es la fuente de verdad).
+   **Badge "cambios sin guardar" (C15):** visible si
+   `!specsEqual(spec, loadedSnapshot)`; se limpia al guardar/cargar borrador.
+   Barra superior: nombre del pipeline, selector de borrador + botón "Eliminar
+   borrador" (C15: pide confirm con `window.confirm("¿Eliminar el borrador
+   '<name>'?")` y guarda con el MISMO riel GET→merge→PUT pasando la lista SIN ese
+   draft a `mergeDraftsIntoProfile`), botón "Importar YAML" (textarea + selector
+   ado/gitlab → `DevOps.parseYaml` → `fromParsedSpec` → hidrata `spec`; C15: si
+   `!specsEqual(spec, emptySpec())` pide `window.confirm("Vas a reemplazar el
+   pipeline en edición. ¿Continuar?")` antes de pisar), botones "Actualizar preview"
+   / "Commit al repo…" / "Disparar…".
+   **Errores visibles (C16):** TODA llamada async de esta sección (parse-yaml,
+   preview, commit, trigger, GET/PUT de client-profile) va envuelta en try/catch que
+   setea `actionError: string | null`, renderizado en un área fija de la sección
+   como "No se pudo <acción>: <mensaje del backend o de red>". Prohibido `console.*`
+   como único destino de un error.
    **Flujo de borradores (FIX C1 — read-modify-write OBLIGATORIO, riel §3.10):**
    - Cargar: `GET /api/projects/<name>/client-profile` (ruta del decorador
      `client_profile.py:93`) → `drafts = json.profile?.devops_pipeline_drafts ?? []`.
@@ -586,12 +817,19 @@ los endpoints existentes.
    working_directory, condition, env key=value por línea). Pipeline (nada
    seleccionado): name, variables, trigger_branches CSV, raw_yaml/raw_yaml_target
    (escape hatch, colapsado bajo "Avanzado").
-4. `PipelineYamlPreview.tsx` — botón/auto refresh: `PipelineGenerator.preview(toSpecDict(spec))`;
-   200 ⇒ dos `<pre>` lado a lado (Azure DevOps / GitLab CI); 400 con `errors` ⇒ lista
-   `field: message` en rojo (contrato exacto: `api/pipeline_generator.py:43`); si
-   `ctx.health.generator_enabled === false`, mostrar aviso "Activá
-   STACKY_PIPELINE_GENERATOR_ENABLED (categoría épicas/ADO) para preview/commit" en
-   lugar de llamar (el endpoint daría 404, `pipeline_generator.py:37`).
+4. `PipelineYamlPreview.tsx` — refresh DEFINIDO (C17): botón "Actualizar preview"
+   SIEMPRE disponible + auto-refresh con debounce de 800 ms tras el último cambio de
+   `spec` (`useEffect` + `setTimeout`/`clearTimeout`), solo si
+   `ctx.health.generator_enabled === true` y `validateSpecLocal(spec).length === 0`.
+   Llama `PipelineGenerator.preview(toSpecDict(spec))`; 200 ⇒ dos `<pre>` lado a lado
+   (Azure DevOps / GitLab CI); 400 con `errors` ⇒ lista `field: message` en rojo
+   (contrato exacto: `api/pipeline_generator.py:43`); si
+   `ctx.health.generator_enabled === false` ⇒ render de `FlagGateBanner` (C14/C18)
+   con `flagKey="STACKY_PIPELINE_GENERATOR_ENABLED"`, message "El preview y el
+   commit necesitan el Generador de pipelines (flag
+   STACKY_PIPELINE_GENERATOR_ENABLED, categoría 'Épicas, briefs y publicación en
+   ADO')." y `onEnabled={ctx.refetchHealth}` — en lugar de llamar (el endpoint daría
+   404, `pipeline_generator.py:37`).
 5. `CommitPipelineModal.tsx` — HITL: selector target (`gitlab`; opción `ado`
    deshabilitada con nota "ADO: render-only v1 — commit devuelve 501",
    `pipeline_generator.py:86-89`), input branch (placeholder
@@ -618,8 +856,10 @@ los endpoints existentes.
      flujo no está atado a un work item; `ci.py:115-119` los tolera). Si la respuesta
      trae `status: "reused"`, mostrar "pipeline reciente reusado (idempotencia 60s)".
    - Polling de estado: `CIPipeline.monitor(project, pipelineId)` (`ci.py:174`).
-   Si `trigger_enabled:false` ⇒ sección oculta con nota que nombra la flag
-   `STACKY_PIPELINE_TRIGGER_ENABLED`.
+   Si `trigger_enabled:false` ⇒ en lugar de la sección, `FlagGateBanner` (C14) con
+   `flagKey="STACKY_PIPELINE_TRIGGER_ENABLED"`, message "Disparar y monitorear
+   pipelines necesita el Trigger CI (flag STACKY_PIPELINE_TRIGGER_ENABLED, categoría
+   'Épicas, briefs y publicación en ADO')." y `onEnabled={ctx.refetchHealth}`.
 
 **Tests:** lógica ya cubierta en F3 (vitest puro, incluye `fromParsedSpec` y
 `mergeDraftsIntoProfile`). Componentes: gate `tsc`.
@@ -628,6 +868,11 @@ los endpoints existentes.
 SOLO son alcanzables con acción explícita (checkbox/botón) — verificable por código: el
 botón de commit está `disabled={!confirmChecked}`; el guardado de borradores pasa por
 `mergeDraftsIntoProfile` (grep: ninguna llamada a PUT client-profile fuera de ese flujo).
+Además (v3): `FlagGateBanner.tsx` existe y es el ÚNICO render para
+`generator_enabled/trigger_enabled` en false (grep: ningún otro aviso hardcodeado de
+esas flags); estado vacío contiene el literal "Empezar con ejemplo"; existe botón
+"Eliminar borrador"; toda llamada async tiene catch hacia `actionError` (grep:
+cero `console.error` como único manejo).
 **Flag:** `STACKY_DEVOPS_PANEL_ENABLED` + degradación honesta según
 `generator_enabled`/`trigger_enabled` del health (vía `ctx`).
 **Runtimes:** sin impacto.
@@ -667,6 +912,32 @@ npx tsc --noEmit
 - [ ] vitest instalado como devDependency (package.json + lockfile commiteados);
       `npx vitest run src/devops/specBuilder.test.ts` verde.
 - [ ] Archivos de test registrados en ambos scripts de ratchet.
+- [ ] **Usabilidad (v3, C19 — todos verificables por código/manual binario):**
+  - [ ] Estado vacío: con 0 stages se ve el CTA y el botón "Empezar con ejemplo"
+        (literal presente en `PipelineBuilderSection.tsx`).
+  - [ ] Happy path ≤ 2 clicks: "Empezar con ejemplo" → "Actualizar preview" muestra
+        YAML ADO+GitLab (con generator ON), sin tocar el teclado.
+  - [ ] Cambiar de sub-tab del panel y volver NO pierde el spec en edición (C10).
+  - [ ] Un borrador guardado se puede ELIMINAR desde la UI (C15).
+  - [ ] Con generator o trigger OFF aparece `FlagGateBanner` con "Activar ahora";
+        tras el click y el refetch, la función queda disponible sin recargar la
+        página (C14).
+  - [ ] Apagar el backend y clickear "Actualizar preview" muestra el error en el
+        área visible de la sección, no solo en consola (C16).
+- [ ] `harness_defaults.env` contiene `STACKY_DEVOPS_PANEL_ENABLED=false`
+      (`test_f0_harness_defaults_contains_flag` verde) (C13).
+- [ ] **Escalabilidad (v3, C20 — contrato de extensión):**
+  - [ ] `DevOpsSection` incluye `icon?/healthKey?/gateFlagKey?/gateMessage?` y el
+        shell renderiza `FlagGateBanner` cuando `health[healthKey] !== true` (gate
+        por sección, las demás intactas).
+  - [ ] El shell no nombra ids de sección fuera de `DEVOPS_SECTIONS` (grep F4.e) y
+        la barra de sub-tabs tiene `flexWrap` (grep F4.f).
+  - [ ] Verificación de papel contra el plan 90 (agente DevOps): montable con 1
+        entrada `{id:"agente", healthKey:"agent_enabled", gateFlagKey:
+        "STACKY_DEVOPS_AGENT_ENABLED", ...}` + 1 key aditiva de health + blueprint
+        `/api/devops/agent/...` — CERO cambios en `DevOpsPage.tsx` (§3.12).
+  - [ ] El riel §3.12 (namespacing: flag/health/rutas/keys de client_profile) está
+        documentado y los planes 88/89 lo consumen sin mecanismos paralelos.
 
 ## 5. Riesgos y mitigaciones
 
@@ -680,8 +951,13 @@ npx tsc --noEmit
 | client_profile inflado por drafts sin límite | Cap 50 + name único ≤120 chars (FIX C7) |
 | Meta-tests del arnés (default/curated, PlainHelp, wiring, ratchet) | F0 los corre explícitamente como no-regresión; snippet FlagSpec completo con label/group (FIX C3) |
 | Frontend sin test runner de componentes | Lógica en `specBuilder.ts` puro (vitest); componentes finos; gate tsc |
-| Operador confundido si generator/trigger OFF | Health expone los 3 booleans y la UI degrada con mensajes que nombran la flag exacta (vía `ctx.health`) |
+| Operador confundido si generator/trigger OFF | Health expone los 3 booleans y la UI degrada con `FlagGateBanner` + "Activar ahora" (C14, reusa `HarnessFlags.update`) |
 | Contrato de secciones insuficiente para 88/89 | `render(ctx: DevOpsSectionContext)` desde el día 1 (FIX C4); health se amplía con keys opcionales aditivas |
+| **Pérdida de trabajo al navegar sub-tabs (C10)** | Secciones montadas persistentes (`mountedIds` + `display:none`); criterio binario F4/F6 |
+| **Operador no-experto no sabe empezar (C11/C12)** | `starterSpec()` + CTA de estado vacío + `validateSpecLocal` en vivo con mensajes en llano |
+| Borradores write-only al llegar al cap 50 (C15) | Botón "Eliminar borrador" por el mismo riel GET→merge→PUT + confirm |
+| Flag del 87 sin pata de deploy (C13) | Línea en `harness_defaults.env` + test dedicado en F0 |
+| **Cada feature DevOps futura reinventa gating/rutas/keys (C20)** | Contrato de extensión §3.12 (registro declarativo + gate en el shell + namespacing) validado contra el plan 90; criterios binarios F4.e/f/g y F6 |
 
 ## 6. Fuera de scope (v1)
 
@@ -690,7 +966,8 @@ npx tsc --noEmit
   la UI lo comunica y deshabilita).
 - Publicaciones de procesos batch/agenda/TODO ⇒ plan 2 de la serie.
 - Inicialización de ambientes ⇒ plan 3 de la serie.
-- Templates/galería de pipelines predefinidos.
+- Templates/galería COMPLETA de pipelines predefinidos (el ejemplo mínimo
+  `starterSpec()` de C11 SÍ está en scope; la galería multi-template, no).
 - Edición simultánea de múltiples pipelines (1 spec activo por vez + borradores).
 - Instalar `@testing-library/react` / tests de componentes React (gap preexistente,
   no se amplía ni se cierra acá).
@@ -708,8 +985,15 @@ npx tsc --noEmit
 - **client_profile**: JSON por proyecto editable por UI (GET/PUT en
   `api/client_profile.py`), usado para catálogo de procesos (plan 45) y ahora
   borradores. OJO: el PUT reemplaza el documento COMPLETO (§3.10).
-- **DevOpsSectionContext**: contrato v2 del registro de secciones — cada sección
-  recibe `{health, refetchHealth}`; punto de extensión de los planes 88/89.
+- **DevOpsSectionContext**: contrato del registro de secciones — cada sección
+  recibe `{health, refetchHealth}`; punto de extensión de los planes 88/89 y futuros.
+- **Contrato de extensión DevOps (v3, §3.12)**: convención que hereda toda feature
+  DevOps futura — entrada declarativa en `DEVOPS_SECTIONS`
+  (`id/label/icon?/healthKey?/gateFlagKey?/gateMessage?/render(ctx)`), flag
+  `STACKY_DEVOPS_<FEATURE>_ENABLED` (categoría `devops`, 5 patas), health aditivo
+  `<feature>_enabled`, rutas `/api/devops/<feature>/...`, keys de client_profile
+  `devops_<feature>_*` con riel GET→merge→PUT. Sumar una sección = 1 entrada + 1
+  componente, cero cambios en el shell.
 - **Ratchet**: meta-test (plan 49 F4) que obliga a registrar todo archivo de test
   nuevo en `scripts/run_harness_tests.{sh,ps1}`.
 - **Tracker**: sistema de tickets/repos (Azure DevOps o GitLab).
@@ -718,24 +1002,31 @@ npx tsc --noEmit
 
 ## 8. Orden de implementación
 
-1. F0 — flag + categoría + help (tests meta verdes).
+1. F0 — flag + categoría + help + `harness_defaults.env` (tests meta verdes).
 2. F1 — blueprint `/api/devops` (health + parse-yaml) + centinelas (ruta y spec-shape).
 3. F2 — validación aditiva de `devops_pipeline_drafts` (con límites C7).
 4. F3 — F3.0 vitest + `specBuilder.ts` puro (incl. `mergeDraftsIntoProfile`,
-   `fromParsedSpec`) + namespaces en `endpoints.ts` (vitest verde).
-5. F4 — `DevOpsPage` + `DevOpsSectionContext` + wiring App.tsx (tab gated).
-6. F5 — builder visual + preview + commit modal HITL + trigger/monitor (reusando
-   `CIPipeline`).
+   `fromParsedSpec`, `starterSpec`, `validateSpecLocal`, `specsEqual`) + namespaces
+   en `endpoints.ts` (vitest verde).
+5. F4 — `DevOpsPage` + contrato de extensión declarativo (C20) + `FlagGateBanner`
+   + montaje persistente (C10) + wiring App.tsx (tab gated).
+6. F5 — builder visual (estado vacío/ejemplo/validación en vivo) + preview + commit
+   modal HITL + trigger/monitor (reusando `CIPipeline`) + gestión completa de
+   borradores (reusa `FlagGateBanner` de F4).
 7. F6 — cierre: no-regresión total + checklist binario.
 
 ## 9. Definición de Hecho (DoD)
 
 - Todos los tests nombrados en F0-F2 verdes por archivo con el venv del repo
-  (4 + 8 + 9 = 21 tests backend).
-- vitest instalado (F3.0) y `specBuilder.test.ts` verde (9 tests); `npx tsc --noEmit`
+  (5 + 8 + 9 = 22 tests backend).
+- vitest instalado (F3.0) y `specBuilder.test.ts` verde (13 tests); `npx tsc --noEmit`
   0 errores.
+- Checklist de usabilidad de F6 completo (estado vacío, ≤2 clicks, sin pérdida de
+  estado, borrador eliminable, `FlagGateBanner`, errores visibles) (C19).
 - Tests de no-regresión (plan 73, 72, client_profile, harness meta-tests) verdes.
 - Con `STACKY_DEVOPS_PANEL_ENABLED=false` (default): comportamiento byte-idéntico.
 - Checklist de F6 completo (incluye: drafts sin pérdida de keys ajenas, spec-shape
-  congelado, `render(ctx)`).
+  congelado, `render(ctx)`, y el bloque de escalabilidad C20).
+- Contrato de extensión §3.12 vigente: sumar una sección DevOps futura no toca el
+  shell (validado en papel contra el plan 90) (C20).
 - Ningún contrato existente modificado (solo adiciones).

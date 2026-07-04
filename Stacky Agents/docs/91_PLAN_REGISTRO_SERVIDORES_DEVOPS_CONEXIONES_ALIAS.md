@@ -1,10 +1,49 @@
 # Plan 91 — Registro de servidores DevOps (conexiones con alias)
 
-**Estado:** PROPUESTO
-**Versión:** v1
+**Estado:** CRITICADO
+**Versión:** v2 (v1 -> v2, crítica adversarial 2026-07-04)
 **Fecha:** 2026-07-04
 **Serie DevOps:** extensión del panel (plan 87) — habilita scoping por servidor para 88/89/90
 **Dependencias:** plan 87 (solo F0/F1/F4, mismo patrón que plan 90 F0)
+
+### CHANGELOG v1 -> v2 (crítica C1..C10)
+
+- **C1 (IMPORTANTE):** las excepciones de `subprocess.run(["cmdkey", ...])` —
+  `TimeoutExpired` y `OSError` incluyen el COMANDO COMPLETO (con `/pass:<password>`)
+  en su mensaje— ya NO pueden propagar al error handler de Flask: F4 envuelve la
+  llamada en try/except y devuelve 502 genérico. Test nuevo
+  `test_f4_cmdkey_timeout_502_no_password_leak`.
+- **C2 (IMPORTANTE):** `host` ahora se valida con regex (`validate_host`) en
+  `upsert_server` — cierra inyección de flags/espacios/`/` en `TERMSRV/{host}` y
+  `mstsc /v:{host}`. Test nuevo `test_f2_upsert_invalid_host_raises`.
+- **C3 (IMPORTANTE):** la credencial `TERMSRV/<host>` que registra F4 queda RESIDENTE
+  en el Credential Manager tras la conexión. Documentado (§3.11) + cleanup best-effort
+  `cmdkey /delete:TERMSRV/<host>` al borrar el servidor. Test nuevo
+  `test_f2_delete_forgets_termsrv`.
+- **C4 (IMPORTANTE):** `delete_server` captura `Exception` genérica (no
+  `keyring.errors.PasswordDeleteError`): el fake keyring de los tests no tiene
+  namespace `errors` y la cláusula except de v1 habría explotado con AttributeError.
+  Test nuevo `test_f2_delete_without_credential_no_raise`.
+- **C5 (IMPORTANTE):** guard anti-CSRF/drive-by (§3.12 local): los métodos mutantes
+  (POST/PUT/DELETE, incluido `/rdp`) exigen `request.is_json` → 400 si no. Un form
+  POST cross-origin desde una web maliciosa no puede mandar `application/json` sin
+  preflight CORS. Test nuevo `test_f3_non_json_post_400`.
+- **C6 (MENOR):** el write-only de v1 impedía BORRAR un password: ahora
+  `"password": null` en PUT borra la credencial (`clear_password`) y la UI gana el
+  botón "Quitar password". Tests `test_f2_clear_password`,
+  `test_f3_put_password_null_clears`.
+- **C7 (MENOR):** `threading.Lock` módulo-level alrededor de load→mutate→save
+  (concurrencia de escritura del JSON).
+- **C8 (MENOR):** F6 define LITERAL la variable `selected` (v1 la usaba sin definir).
+- **C9 (MENOR):** verificado que `FlagSpec` soporta `requires`
+  (`harness_flags.py:30`); reforzada la nota "gana el patrón del archivo" en el
+  snippet de `config.py` (el real NO usa `.strip()`, `config.py:857-859`).
+- **C10 (MENOR):** nota de perf documentada: `list_servers()` consulta keyring una vez
+  por server (≤100 llamadas por GET) — aceptado mono-operador, sin caché prematura.
+- **[ADICIÓN ARQUITECTO]:** trazabilidad HITL `last_connected_at` — el endpoint `/rdp`
+  exitoso persiste la fecha ISO en el JSON (no es secreto) y la UI muestra "última
+  conexión" por servidor. Cero trabajo extra del operador.
+- Total de tests backend: 29 (v1) → **37** (v2).
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Toda afirmación sobre código existente
@@ -89,6 +128,21 @@ selector en el shell del panel.
 - **§3.10 Este plan NO implementa ejecución remota** (UNC/WinRM) ni amplía el alcance
   de 88/89/90. Solo deja el contrato `get_credential(alias)` documentado como EL punto
   de consumo futuro.
+- **§3.11 Superficie residual del password (C1/C3, riesgo aceptado y acotado).**
+  (a) Durante los ~ms que corre `cmdkey`, el password es visible en la command line
+  del proceso (`Win32_Process.CommandLine`) para procesos del MISMO usuario en el
+  host local. Aceptado: Stacky es mono-operador local (§3.3/§3.9); no hay usuarios
+  hostiles en la máquina. Mitigación codificada: la excepción de `subprocess`
+  (que incluye el comando) JAMÁS propaga (F4). (b) La credencial `TERMSRV/<host>`
+  queda RESIDENTE en el Credential Manager tras conectar (mstsc autologin futuro sin
+  password). Aceptado con cleanup: `delete_server` la borra best-effort
+  (`cmdkey /delete:TERMSRV/<host>`, F2). Ambos puntos van en docstrings.
+- **§3.12 (local) Guard anti-CSRF barato.** Todo método mutante del blueprint
+  (POST/PUT/DELETE, incluido `/rdp` que lanza procesos) exige `request.is_json` y
+  devuelve 400 si no: un form POST cross-origin no puede enviar `application/json`
+  sin preflight CORS, así que una página maliciosa no puede dar de alta servidores ni
+  disparar RDP. Consistente con el sustrato mono-operador (no es auth, es un cerrojo
+  de content-type). GET queda libre (no muta, no devuelve secretos).
 
 ---
 
@@ -144,7 +198,8 @@ sin romper meta-tests.
    ).strip().lower() in ("1", "true", "yes")
    ```
    (copiar la expresión exacta de parsing que usa `STACKY_DEVOPS_PANEL_ENABLED` en
-   `config.py:857-858` — si difiere de la mostrada, gana la del archivo).
+   `config.py:857-859` — VERIFICADO v2: el patrón real es `.lower() in ("1", "true",
+   "yes")` SIN `.strip()`; usar EXACTAMENTE ese, no el de arriba — C9).
 
 2. `Stacky Agents/backend/services/harness_flags.py`:
    - **FlagSpec** nuevo, inmediatamente después del bloque del Plan 87
@@ -244,7 +299,7 @@ Windows usa el backend nativo Credential Manager sin configuración extra).
 """services/server_registry.py — Plan 91: registro de servidores DevOps.
 
 Persistencia: JSON en data_dir()/devops_servers.json (patrón project_manager.py:34,87)
-con SOLO {alias, host, domain, username, notes}. El password vive EXCLUSIVAMENTE en
+con SOLO {alias, host, domain, username, notes, last_connected_at}. El password vive EXCLUSIVAMENTE en
 el Credential Manager del SO via keyring (service=KEYRING_SERVICE, key=alias).
 get_credential(alias) es EL punto de consumo para la extension remota futura
 (89_PLAN_INICIALIZACION_AMBIENTES_DEVOPS.md:958-960: "remoto exigiria credenciales y
@@ -253,6 +308,10 @@ otro plan" — este es ese plan). NUNCA loggear passwords.
 import json
 import re
 import socket
+import subprocess
+import sys
+import threading
+from datetime import datetime, timezone
 
 try:
     import keyring  # backend Windows: Credential Manager
@@ -264,6 +323,10 @@ from runtime_paths import data_dir
 KEYRING_SERVICE = "stacky-devops"
 MAX_SERVERS = 100
 _ALIAS_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
+# C2: hostname/FQDN/IP, opcional :puerto. SIN espacios, sin '/', sin comillas —
+# el host se interpola en TERMSRV/{host} y mstsc /v:{host} (F4).
+_HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,252}(:\d{1,5})?$")
+_LOCK = threading.Lock()  # C7: serializa load→mutate→save del JSON
 
 
 def _registry_path():
@@ -274,6 +337,9 @@ def keyring_available() -> bool:
 
 def validate_alias(alias: str) -> bool:
     return bool(isinstance(alias, str) and _ALIAS_RE.match(alias))
+
+def validate_host(host: str) -> bool:  # C2
+    return bool(isinstance(host, str) and _HOST_RE.match(host))
 
 def _load() -> list[dict]:
     # devuelve [] si el archivo no existe o el JSON es inválido (log warning, sin raise)
@@ -294,20 +360,43 @@ def list_servers() -> list[dict]:
 def get_server(alias: str) -> dict | None: ...
 
 def upsert_server(alias: str, host: str, domain: str, username: str, notes: str) -> dict:
-    # valida: validate_alias(alias); host str no vacío ≤253; username str no vacío;
-    # domain/notes str (pueden ser ""); cap MAX_SERVERS al CREAR (update no cuenta).
-    # raise ValueError con mensaje claro en cada violación.
+    # valida: validate_alias(alias); validate_host(host) (C2 — si no: ValueError
+    # "host inválido: solo letras/dígitos/punto/guión y ':puerto' opcional");
+    # username str no vacío; domain/notes str (pueden ser ""); cap MAX_SERVERS al
+    # CREAR (update no cuenta). raise ValueError con mensaje claro en cada violación.
+    # Preserva last_connected_at existente al actualizar. Con _LOCK (C7).
+    ...
+
+def _forget_termsrv(host: str) -> None:  # C3 — cleanup best-effort, solo win32
+    # if sys.platform != "win32": return
+    # try: subprocess.run(["cmdkey", f"/delete:TERMSRV/{host}"], capture_output=True, timeout=10)
+    # except Exception: pass  # best-effort: si no existía o falla, silencio
     ...
 
 def delete_server(alias: str) -> bool:
-    # quita del JSON Y borra la credencial: keyring.delete_password(KEYRING_SERVICE, alias)
-    # (envuelto en try/except keyring.errors.PasswordDeleteError → ignorar: no había).
-    # Devuelve False si el alias no existía.
+    # Con _LOCK (C7): quita del JSON; borra la credencial con
+    # try: keyring.delete_password(KEYRING_SERVICE, alias)
+    # except Exception: pass
+    # (C4: capturar Exception GENÉRICA, NO keyring.errors.PasswordDeleteError — el
+    # fake de tests no tiene namespace `errors` y la credencial puede no existir).
+    # Después llama _forget_termsrv(server["host"]) (C3). Devuelve False si el alias
+    # no existía.
     ...
 
 def set_password(alias: str, password: str) -> None:
     # raise RuntimeError("keyring no disponible") si not keyring_available().
     # keyring.set_password(KEYRING_SERVICE, alias, password)
+    ...
+
+def clear_password(alias: str) -> None:  # C6 — borra SOLO la credencial, no el server
+    # try: keyring.delete_password(KEYRING_SERVICE, alias)
+    # except Exception: pass  # no había credencial o keyring ausente: no-op
+    ...
+
+def touch_last_connected(alias: str) -> None:  # [ADICIÓN ARQUITECTO]
+    # Con _LOCK: setea server["last_connected_at"] =
+    # datetime.now(timezone.utc).isoformat(timespec="seconds") y _save().
+    # No-op silencioso si el alias no existe. NO es secreto: vive en el JSON.
     ...
 
 def has_password(alias: str) -> bool: ...
@@ -327,9 +416,12 @@ def test_connectivity(host: str, port: int = 3389, timeout: float = 3.0) -> tupl
 ```
 
 **Casos borde codificados:** JSON corrupto → `_load()` devuelve `[]` (warning, no
-crash); alias inválido → `ValueError`; `keyring is None` → `set_password` levanta
-`RuntimeError`, `has_password`/`get_credential` devuelven `False`/`None`; borrar
-servidor sin credencial guardada → no lanza.
+crash); alias inválido → `ValueError`; host inválido (espacios, `/`, comillas, flags)
+→ `ValueError` (C2); `keyring is None` → `set_password` levanta `RuntimeError`,
+`has_password`/`get_credential` devuelven `False`/`None`; borrar servidor sin
+credencial guardada → no lanza (C4: except Exception genérico);
+`list_servers()` hace ≤1 llamada keyring por server por GET (≤100) — aceptado
+mono-operador, PROHIBIDO agregar caché en v2 (C10).
 
 **Tests PRIMERO** — archivo nuevo
 `Stacky Agents/backend/tests/test_plan91_server_registry.py`. Setup común: fixture que
@@ -365,10 +457,22 @@ Casos (nombres exactos):
 - `test_f2_connectivity_dns_fail`: `test_connectivity("host-inexistente-stacky-91.invalid")`
   → `(False, detail)` con `"DNS"` en detail (dominio `.invalid` garantiza NXDOMAIN,
   RFC 2606 — sin red real no flaquea).
+- `test_f2_upsert_invalid_host_raises` **(C2)**: hosts `"srv con espacio"`,
+  `"evil /admin"`, `"a/b"` y `""` → `ValueError`; hosts `"srv01"`,
+  `"srv01.dominio.local"`, `"10.0.0.5:3390"` → OK.
+- `test_f2_delete_without_credential_no_raise` **(C4)**: upsert SIN `set_password` →
+  `delete_server(alias)` devuelve `True` sin excepción (el fake keyring lanza
+  `Exception("no existe")` en `delete_password` y producción la traga).
+- `test_f2_delete_forgets_termsrv` **(C3)**: monkeypatch
+  `services.server_registry.subprocess.run` (fake que captura args) y
+  `services.server_registry.sys.platform = "win32"` → `delete_server` invoca el fake
+  con `["cmdkey", "/delete:TERMSRV/<host>"]`; con platform `"linux"` NO lo invoca.
+- `test_f2_clear_password` **(C6)**: `set_password` → `clear_password(alias)` →
+  `has_password(alias) is False` y el server sigue existiendo en `list_servers()`.
 
 **Registrar** el archivo en `run_harness_tests.ps1` y `.sh`.
 **Comando:** `.venv/Scripts/python.exe -m pytest tests/test_plan91_server_registry.py -q`
-**Criterio de aceptación (binario):** 9 tests pasan; `grep -i password "Stacky
+**Criterio de aceptación (binario):** 13 tests pasan; `grep -i password "Stacky
 Agents/backend/services/server_registry.py"` solo matchea llamadas keyring/params,
 nunca escritura a JSON/log.
 **Flag protectora:** el servicio es inerte sin la API (F3); la flag gatea la API.
@@ -401,7 +505,13 @@ bp = Blueprint("devops_servers", __name__, url_prefix="/devops/servers")
 def _guard():
     if not getattr(_config.config, "STACKY_DEVOPS_SERVERS_ENABLED", False):
         abort(404)
+    # §3.12 local (C5): métodos mutantes exigen JSON — bloquea form POST cross-origin
+    # (un content-type application/json cross-origin fuerza preflight CORS).
+    if request.method in ("POST", "PUT", "DELETE") and not request.is_json:
+        abort(400, description="Content-Type application/json requerido")
 ```
+(Nota para el frontend: TODOS los `http.post/put/delete` de F5 envían body JSON —
+incluidos `/test`, `/rdp` y DELETE, que mandan `{}` como body.)
 
 **Rutas EXACTAS (todas llaman `_guard()` primero):**
 - `GET ""` → `{"servers": server_registry.list_servers(), "keyring_available": server_registry.keyring_available()}` (200).
@@ -412,8 +522,11 @@ def _guard():
   y el servidor SÍ queda guardado sin password; si disponible → `set_password`.
   201 con el server (con `has_password`).
 - `PUT "/<alias>"` → mismo body; alias de la URL manda (400 si el body trae otro
-  alias). `password` ausente o `""` = CONSERVAR la actual (write-only). 404 si el
-  alias no existe. 200.
+  alias). Semántica del campo `password` (C6, EXACTA): AUSENTE o `""` = CONSERVAR la
+  actual (write-only); `null` (JSON null explícito: `"password" in body and
+  body["password"] is None`) = BORRAR la credencial vía
+  `server_registry.clear_password(alias)`; string no vacío = reemplazar (mismas
+  reglas keyring/503 del POST). 404 si el alias no existe. 200.
 - `DELETE "/<alias>"` → `delete_server`; 404 si no existía; 200 `{"ok": true}`.
 - `POST "/<alias>/test"` → 404 si el alias no existe; `ok, detail = server_registry.test_connectivity(host)`;
   200 `{"ok": ok, "detail": detail}` (siempre 200: el resultado va en el body).
@@ -454,10 +567,17 @@ tmp + fake keyring). Casos:
 - `test_f3_test_endpoint_returns_ok_detail`: monkeypatch
   `server_registry.test_connectivity` → `(True, "TCP 3389 OK")`; POST
   `/api/devops/servers/srv1/test` → 200 `{"ok": true, "detail": "TCP 3389 OK"}`.
+- `test_f3_non_json_post_400` **(C5)**: con flag ON, POST con
+  `data="alias=x&host=y", content_type="application/x-www-form-urlencoded"` → 400
+  (el guard `is_json`); mismo body como JSON → NO 400.
+- `test_f3_put_password_null_clears` **(C6)**: POST con password → PUT con
+  `{"host": ..., "username": ..., "password": null}` → 200 y GET muestra
+  `has_password: false`; PUT SIN el campo password → sigue `has_password: false`
+  (no resucita).
 
 **Registrar** el archivo en `run_harness_tests.ps1` y `.sh`.
 **Comando:** `.venv/Scripts/python.exe -m pytest tests/test_plan91_servers_endpoints.py tests/test_plan87_devops_endpoints.py -q`
-**Criterio de aceptación (binario):** 8 tests nuevos + los del 87 pasan (no-regresión
+**Criterio de aceptación (binario):** 10 tests nuevos + los del 87 pasan (no-regresión
 del health).
 **Flag protectora:** `STACKY_DEVOPS_SERVERS_ENABLED` (guard 404 per-request), default OFF.
 **Impacto por runtime:** N/A — no toca el arnés de agentes.
@@ -488,24 +608,33 @@ def rdp_route(alias):
     username, domain, password = cred
     user_arg = f"{domain}\\{username}" if domain else username
     # lista de args, SIN shell, SIN log del comando (contiene el password) — §3.1
-    rc = subprocess.run(
-        ["cmdkey", f"/generic:TERMSRV/{srv['host']}", f"/user:{user_arg}", f"/pass:{password}"],
-        capture_output=True, timeout=15,
-    )
+    # C1: TimeoutExpired/OSError incluyen el COMANDO (con /pass:) en su mensaje —
+    # JAMÁS dejar propagar la excepción (terminaría en logs/traceback de Flask).
+    try:
+        rc = subprocess.run(
+            ["cmdkey", f"/generic:TERMSRV/{srv['host']}", f"/user:{user_arg}", f"/pass:{password}"],
+            capture_output=True, timeout=15,
+        )
+    except Exception:  # noqa: BLE001 — genérico A PROPÓSITO (C1): la excepción contiene el password
+        return jsonify({"error": "cmdkey falló (timeout o error de ejecución) al registrar la credencial TERMSRV."}), 502
     if rc.returncode != 0:
         return jsonify({"error": "cmdkey falló al registrar la credencial TERMSRV."}), 502
     subprocess.Popen(  # detached: NO bloquea el request
         ["mstsc", f"/v:{srv['host']}"],
         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
     )
+    server_registry.touch_last_connected(alias)  # [ADICIÓN ARQUITECTO] trazabilidad HITL
     return jsonify({"ok": True, "detail": f"mstsc lanzado hacia {srv['host']}."})
 ```
-(agregar `import subprocess` al tope). **Prohibido:** loggear `rc.args`, `rc.stdout`
-o el comando (contienen el password); loggear SOLO `returncode` si se desea.
+(agregar `import subprocess` al tope). **Prohibido:** loggear `rc.args`, `rc.stdout`,
+el comando, o `repr(exc)`/`str(exc)` del except (todos contienen el password);
+loggear SOLO `returncode` si se desea.
 
 **Casos borde codificados:** no-Windows → 501 (§3.6); sin password → 409 con CTA;
-`cmdkey` rc!=0 → 502 sin filtrar el comando; `mstsc` es fire-and-forget (si el
-operador cancela el diálogo RDP, no es error de Stacky).
+`cmdkey` rc!=0 → 502 sin filtrar el comando; `cmdkey` timeout/OSError → 502 genérico
+sin propagar (C1, §3.11); `mstsc` es fire-and-forget (si el operador cancela el
+diálogo RDP, no es error de Stacky — `last_connected_at` marca el LANZAMIENTO, no el
+login: documentarlo en el tooltip de la UI).
 
 **Tests PRIMERO** — archivo nuevo
 `Stacky Agents/backend/tests/test_plan91_rdp_endpoint.py` (mismos fixtures de F3;
@@ -521,10 +650,16 @@ y de `subprocess.run`/`subprocess.Popen` en el módulo `api.devops_servers`):
 - `test_f4_domain_empty_user_arg_plain`: domain `""` → `/user:usr` (sin backslash).
 - `test_f4_cmdkey_fail_502`: fake `run` rc=1 → 502 y el body NO contiene el password.
 - `test_f4_flag_off_404`.
+- `test_f4_cmdkey_timeout_502_no_password_leak` **(C1)**: fake `run` que lanza
+  `subprocess.TimeoutExpired(cmd=["cmdkey", "/pass:S3cr3t!XYZ"], timeout=15)` → 502 y
+  el TEXTO CRUDO de la respuesta NO contiene `S3cr3t!XYZ` ni `cmdkey /generic`.
+- `test_f4_success_updates_last_connected` **([ADICIÓN ARQUITECTO])**: happy path →
+  `get_server(alias)["last_connected_at"]` es un string ISO no vacío; el GET de la
+  lista lo incluye.
 
 **Registrar** el archivo en `run_harness_tests.ps1` y `.sh`.
 **Comando:** `.venv/Scripts/python.exe -m pytest tests/test_plan91_rdp_endpoint.py -q`
-**Criterio de aceptación (binario):** 7 tests pasan; grep en `api/devops_servers.py`
+**Criterio de aceptación (binario):** 9 tests pasan; grep en `api/devops_servers.py`
 de `logger`/`print` no matchea ninguna línea que referencie `password`/`cred`/`rc.args`.
 **Flag protectora:** la misma del 91 + gate de plataforma (§3.6).
 **Impacto por runtime:** N/A — no toca el arnés de agentes. El comando corre en el
@@ -544,6 +679,7 @@ construir el CRUD visual.
    export interface ServerSummary {
      alias: string; host: string; domain: string; username: string;
      notes: string; has_password: boolean;
+     last_connected_at?: string | null; // [ADICIÓN ARQUITECTO] ISO o null
    }
    export const DevOpsServers = {
      list: () => http.get<{ servers: ServerSummary[]; keyring_available: boolean }>("/devops/servers"),
@@ -565,7 +701,10 @@ construir el CRUD visual.
      `PipelineBuilderSection.tsx:37-45`).
    - **Lista** de servidores (useQuery `["devops-servers"]` → `DevOpsServers.list()`):
      por fila alias (negrita), `dominio\usuario`, host, notes, badge
-     `has_password` ("credencial guardada" verde / "sin password" gris), y botones:
+     `has_password` ("credencial guardada" verde / "sin password" gris),
+     **[ADICIÓN ARQUITECTO]** texto secundario "Última conexión: <fecha local>" si
+     `last_connected_at` no es null (tooltip: "fecha del último lanzamiento de mstsc,
+     no del login"), y botones:
      **Editar**, **Eliminar** (con `window.confirm("¿Eliminar el servidor '<alias>' y su credencial guardada?")`),
      **Probar conexión** (muestra `detail` inline con color por `ok`), y
      **Conectar por RDP** — este último SOLO renderizado si
@@ -573,7 +712,10 @@ construir el CRUD visual.
    - **Formulario** (crear/editar): campos alias (deshabilitado al editar), host,
      dominio, usuario, notes, password `type="password"`. **Write-only:** al editar,
      el campo password se muestra VACÍO con `placeholder={server.has_password ? "•••• (guardada)" : "sin password"}`;
-     enviar vacío = conservar la actual (F3 lo garantiza).
+     enviar vacío = conservar la actual (F3 lo garantiza). **(C6)** Si
+     `server.has_password`, mostrar junto al campo un botón "Quitar password" que
+     (con `window.confirm`) envía el PUT con `password: null` (borra la credencial
+     del Credential Manager sin borrar el servidor).
    - **Aviso keyring:** si `list()` devuelve `keyring_available: false`, banner
      amarillo fijo: "keyring no disponible en el backend: los passwords no se pueden
      guardar (nunca se guardan en texto plano). Instalá keyring==25.6.0.".
@@ -652,7 +794,9 @@ las secciones existentes.
 4. **Dropdown** — en la barra del shell (junto a las sub-tabs, `DevOpsPage.tsx:118`),
    renderizado SOLO si `health.servers_enabled === true` Y `servers.length >= 1`:
    `<select>` con opción `"— ninguno —"` + un `<option>` por alias.
-5. **Contexto** — al armar `ctx` (`DevOpsPage.tsx:89-92`), agregar:
+5. **Contexto** — al armar `ctx` (`DevOpsPage.tsx:89-92`): definir LITERAL (C8)
+   `const selected = (serversQuery.data?.servers ?? []).find(s => s.alias === selectedAlias) ?? null;`
+   y agregar:
    `selectedServer: selected ? { alias: selected.alias, host: selected.host } : null`
    y `servers` (la lista completa). Los planes 88/89/90 podrán leer
    `ctx.selectedServer` cuando se implementen — **este plan NO les agrega alcance**
@@ -693,7 +837,10 @@ npx vitest run src/pages/__tests__/DevOpsPage.test.ts src/pages/__tests__/Server
 ```
 
 **Checklist binario:**
-- [ ] Los 4 archivos de test del 91 pasan (29 tests: 5 F1 + 9 F2 + 8 F3 + 7 F4).
+- [ ] Los 4 archivos de test del 91 pasan (37 tests: 5 F1 + 13 F2 + 10 F3 + 9 F4).
+- [ ] Centinelas de seguridad v2 verdes: `test_f4_cmdkey_timeout_502_no_password_leak`
+      (C1), `test_f2_upsert_invalid_host_raises` (C2), `test_f2_delete_forgets_termsrv`
+      (C3), `test_f3_non_json_post_400` (C5).
 - [ ] Tests del 87 pasan sin cambios (no-regresión del health y del shell).
 - [ ] Meta-tests de flags pasan (registro, curated defaults, wiring, help).
 - [ ] `tsc` 0 errores; vitest verde.
@@ -717,6 +864,12 @@ npx vitest run src/pages/__tests__/DevOpsPage.test.ts src/pages/__tests__/Server
 |---|---|
 | Password termina en disco por un refactor futuro | Assert defensivo en `_save()` (raise si key `password`) + centinela `test_f2_password_never_in_json` + write-only en PUT |
 | Password en logs (cmdkey lleva `/pass:` en args) | Prohibición codificada F4: no loggear `rc.args`/stdout/comando; criterio grep en F4; `subprocess` con lista, sin shell |
+| Excepción de subprocess filtra el comando con `/pass:` (TimeoutExpired/OSError) | try/except genérico en F4 → 502 sin propagar (C1); centinela `test_f4_cmdkey_timeout_502_no_password_leak` |
+| Password visible en command line del proceso cmdkey (~ms) | Riesgo aceptado y documentado §3.11: mono-operador local, sin usuarios hostiles en el host |
+| Host malicioso inyecta flags en `TERMSRV/{host}` / `mstsc /v:` | `validate_host` regex en `upsert_server` (C2): sin espacios, `/`, comillas ni flags |
+| Credencial TERMSRV queda residente tras conectar | Documentado §3.11 + cleanup best-effort `cmdkey /delete:TERMSRV/<host>` en `delete_server` (C3) |
+| Form POST cross-origin (drive-by) crea servidor o dispara RDP | Guard `request.is_json` en métodos mutantes → 400 (§3.12 local, C5) |
+| Dos escrituras simultáneas del JSON se pisan | `threading.Lock` módulo-level en upsert/delete/touch (C7) |
 | `keyring` no instalado / backend de keyring falla | `keyring_available()` + 503 explícito con instrucción; servidor se guarda sin password; banner amarillo en UI; NUNCA fallback a texto plano (§3.1) |
 | Backend corre en otra máquina que el operador | Documentado §3.9 (mstsc abre en el host del backend); aceptado por riel mono-operador local; no se "arregla" con complejidad extra |
 | No-Windows (futuro deploy Linux) | 501 en `/rdp` + `rdp_available:false` en health + botón oculto en UI (§3.6); CRUD/test/selector funcionan igual |

@@ -1,6 +1,7 @@
 # Plan 82 — Claridad de configuración del arnés (dependencias visibles, origen del valor y desvío de perfil)
 
-**Estado:** PROPUESTO v3 (2026-07-02) — v2 → v3 tras segunda crítica adversarial (`criticar-y-mejorar-plan`)
+**Estado:** IMPLEMENTADO v3 (supervisado 2026-07-04 — APROBADO). v2 → v3 tras segunda crítica adversarial (`criticar-y-mejorar-plan`).
+**Supervisión:** 2026-07-04 — 8/8 tests F0 verdes + F2-F5 verificadas. Drift Plan 87 documentado (fuera de alcance). Ledger.json ✅ APROBADO (commit 712b1eb0).
 
 ### Changelog v2 → v3
 - **C1:** la nota "Sin efecto: requiere X" y la atenuación `inertRow` ahora solo se muestran cuando

@@ -1,7 +1,8 @@
 # Plan 81 — El golden que nace del tache: lo que el operador BORRA en ADO se vuelve golden NEGATIVO determinista (mitad negativa del aprendizaje bidireccional)
 
-> **Estado:** PROPUESTO v2 (no implementado). Autor: StackyArchitectaUltraEficientCode. Fecha: 2026-07-01.
+> **Estado:** IMPLEMENTADO v2 (supervisado 2026-07-04 — APROBADO). Autor: StackyArchitectaUltraEficientCode. Fecha: 2026-07-01.
 > **Versión: v1 -> v2** (crítica adversarial 2026-07-02, veredicto APROBADO-CON-CAMBIOS).
+> **Supervisión:** 2026-07-04 — 22/22 tests verdes. Ledger.json ✅ APROBADO (commit 712b1eb0).
 >
 > **CHANGELOG v1 -> v2:**
 > - **C1 (IMPORTANTE):** nueva fase **F0b [ADICIÓN ARQUITECTO]** — matching tag-agnóstico en la rama

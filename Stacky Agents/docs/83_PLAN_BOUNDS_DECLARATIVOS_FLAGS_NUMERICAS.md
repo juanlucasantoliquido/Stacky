@@ -1,6 +1,7 @@
 # Plan 83 — Bounds declarativos para flags numéricas del arnés (validación de rango + rango visible en UI)
 
-**Estado:** PROPUESTO v3 (2026-07-02) — v2 → v3 tras segunda crítica adversarial (`criticar-y-mejorar-plan`)
+**Estado:** IMPLEMENTADO v3 (supervisado 2026-07-04 — APROBADO). v2 → v3 tras segunda crítica adversarial (`criticar-y-mejorar-plan`).
+**Supervisión:** 2026-07-04 — 18/18 tests verdes. Centinela harness_defaults.env verde. Ledger.json ✅ APROBADO (commit 712b1eb0).
 
 ### Changelog v2 → v3
 - **C1:** el gate anti-ruido se mueve de la UI al BACKEND: `read_current()` calcula

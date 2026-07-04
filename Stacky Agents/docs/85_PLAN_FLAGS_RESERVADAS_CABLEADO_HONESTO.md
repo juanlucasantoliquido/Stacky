@@ -1,7 +1,8 @@
 # Plan 85 — Cableado honesto del registry de flags: fin de las perillas placebo
 
-**Versión:** v1 (propuesto, 2026-07-02)
-**Estado:** PROPUESTO — no implementado
+**Versión:** v1 (implementado 2026-07-04)
+**Estado:** IMPLEMENTADO — supervisado 2026-07-04 ✅ APROBADO
+**Supervisión:** 2026-07-04 — 5/5 tests verdes. Centinela detecta 4 flags placebo → marcadas reserved=True. Excluida harness_flags_help.py del corpus. Ledger.json ✅ APROBADO (commit 712b1eb0).
 **Dependencias:** ninguna dura. Complementa (no depende de) los planes 82 (relaciones/origen), 83 (validez del valor) y 84 (vigencia/restart). Los campos que agrega a `FlagSpec` son aditivos y no colisionan con `requires` (82) ni `min_value`/`max_value` (83) ni `restart_required` (84).
 
 ---

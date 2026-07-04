@@ -1,6 +1,7 @@
 # Plan 84 — Aplicación en caliente honesta: flags de startup del arnés (`restart_required` + "pendiente de reinicio")
 
-**Estado:** PROPUESTO v3 (2026-07-02) — v2 → v3 tras segunda crítica adversarial (`criticar-y-mejorar-plan`)
+**Estado:** IMPLEMENTADO v3 (supervisado 2026-07-04 — APROBADO). v2 → v3 tras segunda crítica adversarial (`criticar-y-mejorar-plan`).
+**Supervisión:** 2026-07-04 — 10 passed + 1 skipped (vitest). Centinela wiring boot snapshot verde. Ledger.json ✅ APROBADO (commit 712b1eb0).
 
 ### Changelog v2 → v3
 - **C1 (era BLOQUEANTE de exactitud, corregido):** el mapa curado tenía 4 keys pero son **5**:

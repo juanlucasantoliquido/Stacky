@@ -110,6 +110,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan87_devops_flag.py
   tests/test_plan87_devops_endpoints.py
   tests/test_plan87_drafts_validation.py
+  # — Plan 88 · Publicaciones parametrizables de procesos DevOps —
+  tests/test_plan88_publications_flag.py
+  tests/test_plan88_publication_spec.py
+  tests/test_plan88_presets_validation.py
+  tests/test_plan88_materialize_endpoint.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

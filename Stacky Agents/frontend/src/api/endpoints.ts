@@ -3077,6 +3077,15 @@ export const DevOps = {
   /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
   parseYaml: (source: "ado" | "gitlab", yaml: string) =>
     api.post<{ spec: object }>("/api/devops/parse-yaml", { source, yaml }),
+  /**
+   * POST /api/devops/publications/materialize — Plan 88. Preset + catálogo del
+   * proyecto → dict PipelineSpec. SOLO-LECTURA (no commitea, no dispara).
+   */
+  materializePublication: (project: string, presetName: string) =>
+    api.post<{ spec: object; resolved: string[]; unknown_processes: string[] }>(
+      "/api/devops/publications/materialize",
+      { project, preset_name: presetName },
+    ),
 };
 
 export const PipelineGenerator = {

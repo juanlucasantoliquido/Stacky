@@ -56,6 +56,9 @@ bp = Blueprint("client_profile", __name__, url_prefix="")
 # Plan 45 F5 (C5) — tipos válidos para cada entrada del catálogo de procesos.
 ALLOWED_PROCESS_KINDS = {"entry", "processing", "output"}
 
+# Plan 88 F2 — grupos de publicación válidos (ortogonal a ALLOWED_PROCESS_KINDS).
+ALLOWED_PUBLISH_GROUPS = {"batch", "agenda"}
+
 
 def _actor() -> str:
     return (request.headers.get("X-User-Email") or "operator").strip() or "operator"
@@ -154,6 +157,12 @@ def put_client_profile(project_name: str):
                     "allowed": sorted(ALLOWED_PROCESS_KINDS),
                     "index": idx,
                 }), 400
+            # Plan 88 F2 — validar publish_group (ortogonal a kind; ausente se tolera).
+            pg = item.get("publish_group")
+            if pg and pg not in ALLOWED_PUBLISH_GROUPS:
+                return jsonify({"ok": False, "error": "invalid_publish_group",
+                                "value": pg, "allowed": sorted(ALLOWED_PUBLISH_GROUPS),
+                                "index": idx}), 400
 
     # Plan 87 F2 — validar devops_pipeline_drafts (aditivo; ausente = no-op).
     drafts = profile.get("devops_pipeline_drafts")
@@ -174,6 +183,45 @@ def put_client_profile(project_name: str):
             seen_names.add(name)
             if not isinstance(d.get("spec"), dict):
                 return jsonify({"ok": False, "error": f"devops_pipeline_drafts[{idx}].spec debe ser un objeto."}), 400
+
+    # Plan 88 F2 — presets de publicación (aditivo; ausente = no-op).
+    presets = profile.get("devops_publication_presets")
+    if presets is not None:
+        if not isinstance(presets, list):
+            return jsonify({"ok": False, "error": "devops_publication_presets debe ser una lista."}), 400
+        if len(presets) > 50:
+            return jsonify({"ok": False, "error": "devops_publication_presets: maximo 50 presets."}), 400
+        seen_names = set()
+        for idx, p in enumerate(presets):
+            if not isinstance(p, dict) or not isinstance(p.get("name"), str) or not p.get("name").strip():
+                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].name es obligatorio."}), 400
+            name = p["name"].strip()
+            if len(name) > 120:
+                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].name supera 120 caracteres."}), 400
+            if name in seen_names:
+                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].name duplicado: '{name}'."}), 400
+            seen_names.add(name)
+            if p.get("mode") not in ("selection", "todo"):
+                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].mode debe ser 'selection' o 'todo'."}), 400
+            if p.get("mode") == "selection" and not isinstance(p.get("process_names"), list):
+                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].process_names debe ser una lista en mode=selection."}), 400
+            groups = p.get("groups", [])
+            if not isinstance(groups, list) or any(g not in ALLOWED_PUBLISH_GROUPS for g in groups):
+                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].groups: subset de {sorted(ALLOWED_PUBLISH_GROUPS)}."}), 400
+            if p.get("target") not in (None, "ado", "gitlab"):
+                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].target debe ser 'ado' o 'gitlab'."}), 400
+    # Plan 88 F2 — settings de publicación (aditivo; ausente = no-op).
+    pub_settings = profile.get("devops_publication_settings")
+    if pub_settings is not None:
+        if not isinstance(pub_settings, dict):
+            return jsonify({"ok": False, "error": "devops_publication_settings debe ser un objeto."}), 400
+        tpls = pub_settings.get("step_templates")
+        if tpls is not None:
+            if not isinstance(tpls, dict) or any(
+                k not in ("entry", "processing", "output", "default") or not isinstance(v, str)
+                for k, v in tpls.items()
+            ):
+                return jsonify({"ok": False, "error": "step_templates: keys en {entry,processing,output,default} y valores string."}), 400
 
     previous = load_client_profile(project_name)
 

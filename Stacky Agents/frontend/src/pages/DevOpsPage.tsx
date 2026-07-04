@@ -23,7 +23,8 @@ export interface DevOpsHealth {
   flag_enabled: boolean;
   generator_enabled: boolean;
   trigger_enabled: boolean;
-  [k: string]: boolean | undefined; // Keys futuras: publications_enabled, agent_enabled, etc.
+  publications_enabled?: boolean; // Plan 88 — sección Publicaciones
+  [k: string]: boolean | undefined; // Keys futuras: agent_enabled, etc.
 }
 
 // Contexto que recibe cada sección
@@ -45,6 +46,8 @@ export interface DevOpsSection {
 
 // Importar PipelineBuilderSection (F5)
 import { PipelineBuilderSection } from '../components/devops/PipelineBuilderSection';
+// Importar PublicationsSection (Plan 88 F5)
+import { PublicationsSection } from '../components/devops/PublicationsSection';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -54,15 +57,14 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     label: 'Pipelines',
     render: (ctx) => <PipelineBuilderSection ctx={ctx} />,
   },
-  // Ejemplo de entrada futura (plan 88 - publicaciones):
-  // {
-  //   id: 'publicaciones',
-  //   label: 'Publicaciones',
-  //   healthKey: 'publications_enabled',
-  //   gateFlagKey: 'STACKY_DEVOPS_PUBLICATIONS_ENABLED',
-  //   gateMessage: 'La sección Publicaciones necesita su flag (categoría DevOps).',
-  //   render: (ctx) => <PublicationsSection ctx={ctx} />,
-  // },
+  {
+    id: 'publicaciones',
+    label: 'Publicaciones',
+    healthKey: 'publications_enabled',
+    gateFlagKey: 'STACKY_DEVOPS_PUBLICATIONS_ENABLED',
+    gateMessage: 'La sección Publicaciones necesita la flag STACKY_DEVOPS_PUBLICATIONS_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <PublicationsSection ctx={ctx} />,
+  },
   // Plan 90 (agente DevOps):
   // {
   //   id: 'agente',

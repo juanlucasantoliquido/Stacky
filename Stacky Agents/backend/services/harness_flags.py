@@ -176,6 +176,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "devops": (
         "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 87 — panel DevOps: creador gráfico de pipelines
+        "STACKY_DEVOPS_PUBLICATIONS_ENABLED",  # Plan 88 — publicaciones parametrizables de procesos
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1941,6 +1942,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",  # mismo group que STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (harness_flags.py:1936)
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_PIPELINE_GENERATOR_ENABLED",  # Plan 82 — el preview/commit viven detras de esa flag
+    ),
+    # ── Plan 88 — Publicaciones parametrizables de procesos (seccion DevOps) ────
+    FlagSpec(
+        key="STACKY_DEVOPS_PUBLICATIONS_ENABLED",
+        type="bool",
+        label="Publicaciones DevOps (Plan 88)",
+        description=(
+            "Plan 88 — Seccion Publicaciones del panel DevOps: materializa presets "
+            "de procesos del catalogo como pipelines (preview/commit plan 73, "
+            "trigger plan 72). Default OFF. Con OFF el endpoint materialize da 404 "
+            "y la seccion no aparece."
+        ),
+        group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # Plan 82 — declarativo, informa en UI
     ),
     # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────
     FlagSpec(

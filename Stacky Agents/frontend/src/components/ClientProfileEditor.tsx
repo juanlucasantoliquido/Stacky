@@ -84,6 +84,7 @@ type ProcessCatalogItem = {
   name?: string;
   kind?: string;
   purpose?: string;
+  publish_group?: string; // Plan 88 — grupo de publicación (batch|agenda), ortogonal a kind
 };
 
 function ProcessCatalogField({
@@ -136,6 +137,16 @@ function ProcessCatalogField({
               <option value="entry">entry</option>
               <option value="processing">processing</option>
               <option value="output">output</option>
+            </select>
+            <select
+              className={styles.input}
+              value={item.publish_group ?? ""}
+              onChange={(e) => updateItem(idx, { publish_group: e.target.value || undefined })}
+              title="Grupo de publicación (Plan 88)"
+            >
+              <option value="">(sin grupo)</option>
+              <option value="batch">batch</option>
+              <option value="agenda">agenda</option>
             </select>
             <input
               className={`${styles.input} ${styles.kvVal}`}

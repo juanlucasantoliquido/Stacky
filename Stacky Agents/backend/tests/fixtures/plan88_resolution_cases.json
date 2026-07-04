@@ -1,0 +1,22 @@
+{
+  "catalog": [
+    {"name": "Mul2Bane", "kind": "entry",      "publish_group": "batch"},
+    {"name": "IncHost",  "kind": "processing", "publish_group": "batch"},
+    {"name": "RSCore",   "kind": "processing", "publish_group": "batch"},
+    {"name": "RsExtrae", "kind": "output",     "publish_group": "batch"},
+    {"name": "AgendaX",  "kind": "processing", "publish_group": "agenda"},
+    {"name": "SinGrupo", "kind": "output"}
+  ],
+  "cases": [
+    {"id": "todo_all",        "preset": {"name": "t", "mode": "todo", "groups": []},
+     "resolved": ["Mul2Bane", "IncHost", "RSCore", "RsExtrae", "AgendaX", "SinGrupo"], "unknown": []},
+    {"id": "todo_batch",      "preset": {"name": "t", "mode": "todo", "groups": ["batch"]},
+     "resolved": ["Mul2Bane", "IncHost", "RSCore", "RsExtrae"], "unknown": []},
+    {"id": "todo_agenda",     "preset": {"name": "t", "mode": "todo", "groups": ["agenda"]},
+     "resolved": ["AgendaX"], "unknown": []},
+    {"id": "selection_mixed", "preset": {"name": "t", "mode": "selection", "process_names": ["RSCore", "NoExiste", "Mul2Bane"], "groups": []},
+     "resolved": ["Mul2Bane", "RSCore"], "unknown": ["NoExiste"]},
+    {"id": "selection_none",  "preset": {"name": "t", "mode": "selection", "process_names": ["Nada"], "groups": []},
+     "resolved": [], "unknown": ["Nada"]}
+  ]
+}

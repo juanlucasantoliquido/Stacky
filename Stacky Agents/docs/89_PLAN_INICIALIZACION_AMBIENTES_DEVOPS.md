@@ -1,42 +1,95 @@
 # Plan 89 — Inicialización de ambientes desde el panel DevOps
 
 **Estado:** PROPUESTO
-**Versión:** v1 → v2 (crítica adversarial `criticar-y-mejorar-plan`, 2026-07-04)
-**Fecha:** 2026-07-03 (v1) / 2026-07-04 (v2)
+**Versión:** v2 → v3 (2ª crítica adversarial `criticar-y-mejorar-plan` — foco:
+usabilidad end-to-end + escalabilidad del panel, 2026-07-04)
+**Fecha:** 2026-07-03 (v1) / 2026-07-04 (v2) / 2026-07-04 (v3)
 **Serie DevOps:** plan 3 de 3 (CIERRE de la serie).
-**Dependencias:** plan 88 **en su versión v2** (`88_PLAN_PUBLICACIONES_PARAMETRIZABLES_PROCESOS_DEVOPS.md`,
-commit `6a233e67` — publicaciones; provee la "publicación inicial TODO", el helper
-`mergeKeysIntoProfile` y el fixture de resolución congelado), que a su vez depende del
-plan 87 **en su versión v2** (`87_PLAN_PANEL_DEVOPS_CREADOR_GRAFICO_PIPELINES.md`,
-commit `e533c283` — panel DevOps base; contrato `render(ctx: DevOpsSectionContext)`).
-Las v1 de ambos (`59918622` / `a001e544`) quedaron SUPERADAS: este doc fue reescrito
-contra los contratos v2. Además, planes 45/71/72/73 implementados — VERIFICADO:
+**Dependencias:** plan 88 **en su versión v3** (`88_PLAN_PUBLICACIONES_PARAMETRIZABLES_PROCESOS_DEVOPS.md`,
+commit `d5ced3e6` — publicaciones; provee la "publicación inicial TODO", el helper
+`mergeKeysIntoProfile` + `draftNameForPreset` y el fixture de resolución congelado),
+que a su vez depende del plan 87 **en su versión v3**
+(`87_PLAN_PANEL_DEVOPS_CREADOR_GRAFICO_PIPELINES.md`, commit `f3d2234d` — panel
+DevOps base; contrato de extensión §3.12/C20: registro DECLARATIVO con
+`healthKey`/`gateFlagKey`/`gateMessage` + `render(ctx)`, gate renderizado por el
+SHELL con `FlagGateBanner`, montaje persistente, namespacing heredable). Las
+versiones previas (`59918622`/`a001e544` v1; `e533c283`/`6a233e67` v2) quedaron
+SUPERADAS: este doc fue reescrito contra los contratos v3. Este plan CUMPLE el
+namespacing del §3.12: flag `STACKY_DEVOPS_ENVIRONMENTS_ENABLED`, health
+`environments_enabled`, rutas `/api/devops/environments/*`, key
+`devops_environment_settings`. Además, planes 45/71/72/73 implementados —
+VERIFICADO:
 
 | Pieza reusada | Origen |
 |---|---|
-| `DevOpsPage` + `DEVOPS_SECTIONS` con firma `render(ctx: DevOpsSectionContext)` (`{health, refetchHealth}`) | plan 87 **v2** F4 |
-| `DevOpsHealth` ampliable con keys OPCIONALES aditivas (`publications_enabled?`, y acá `environments_enabled?`) | plan 87 v2 F4 / 88 v2 F5 |
-| Blueprint `backend/api/devops.py` + health con booleans por sub-feature | plan 87 v2 F1 / 88 v2 F3 |
-| Materializador puro `build_publication_spec` (`services/publication_spec.py`) — semántica congelada por `tests/fixtures/plan88_resolution_cases.json` | plan 88 v2 F1 |
-| Endpoint materialize: `api.post("/api/devops/publications/materialize", {project, preset_name})` | plan 88 v2 F3/F4 |
-| Helper puro `mergeKeysIntoProfile` (riel GET→merge→PUT) en `frontend/src/devops/presetsModel.ts` | plan 88 v2 F4 |
-| Modelo en client_profile: `devops_publication_presets` (name único, ≤120, cap 50), `devops_publication_settings`, `publish_group` | plan 88 v2 §4 |
+| `DevOpsPage` + `DEVOPS_SECTIONS` DECLARATIVO (`id/label/icon?/healthKey?/gateFlagKey?/gateMessage?/render(ctx)`), gate en el SHELL, montaje persistente | plan 87 **v3** F4 (§3.12/C20) |
+| `FlagGateBanner` (aviso en llano + "Activar ahora" vía `HarnessFlags.update`) | plan 87 v3 F4/F5.0 (`frontend/src/components/devops/FlagGateBanner.tsx`) |
+| `DevOpsHealth` con index signature — keys aditivas (`publications_enabled?`, y acá `environments_enabled?`) sin tocar el shell | plan 87 v3 F4 / 88 v3 F5 |
+| Blueprint `backend/api/devops.py` + health con booleans por sub-feature | plan 87 v3 F1 / 88 v3 F3 |
+| Materializador puro `build_publication_spec` (`services/publication_spec.py`) — semántica congelada por `tests/fixtures/plan88_resolution_cases.json` | plan 88 v3 F1 |
+| Endpoint materialize: `api.post("/api/devops/publications/materialize", {project, preset_name})` | plan 88 v3 F3/F4 |
+| Helper puro `mergeKeysIntoProfile` (riel GET→merge→PUT) en `frontend/src/devops/presetsModel.ts` | plan 88 v3 F4 |
+| Modelo en client_profile: `devops_publication_presets` (name único, ≤120, cap 50), `devops_publication_settings`, `publish_group` | plan 88 v3 §4 |
 | `ALLOWED_PROCESS_KINDS = {"entry","processing","output"}` | `backend/api/client_profile.py:57` |
 | Preview/commit YAML HITL | `backend/api/pipeline_generator.py:34,52,59-60` (plan 73) |
 | Trigger/monitor CI HITL | `backend/api/ci.py:26,76,139,174` (plan 72) |
 | PUT client_profile con validación aditiva por key — **el PUT REEMPLAZA el profile completo** | `backend/api/client_profile.py:127,138-156,161` (plan 45; riel C2) |
-| vitest instalado como devDependency | plan 87 v2 **F3.0** (NO re-instalar; correr SIEMPRE por archivo) |
+| vitest instalado como devDependency | plan 87 v3 **F3.0** (NO re-instalar; correr SIEMPRE por archivo) |
 | FlagSpec: `label` y `group` son campos REQUERIDOS | `backend/services/harness_flags.py:21-33` |
 
-> **Nota de secuencia:** implementar 87 v2 → 88 v2 → 89 v2. Las fases F0-F2 de este
-> plan no tocan código de 87/88 y pueden adelantarse; F3-F5 requieren 87 v2 F1/F4 y
-> 88 v2 F1/F3/F4.
+> **Nota de secuencia:** implementar 87 v3 → 88 v3 → 89 v3. Las fases F0-F2 de este
+> plan no tocan código de 87/88 y pueden adelantarse; F3-F5 requieren 87 v3 F1/F4 y
+> 88 v3 F1/F3/F4.
 >
 > **Declaración de no-contacto (patrón 88 v2 C13):** este plan NO agrega campos a
-> `PipelineSpec` ⇒ el centinela `test_f1_spec_shape_frozen` (87 v2) y los tipos TS
+> `PipelineSpec` ⇒ el centinela `test_f1_spec_shape_frozen` (87 v3) y los tipos TS
 > espejo (`specBuilder.ts`) quedan INTACTOS. Tampoco toca
 > `tests/fixtures/plan88_resolution_cases.json` ni reimplementa la semántica de
 > resolución del 88: la publicación inicial se COMPONE vía el endpoint materialize.
+
+## CHANGELOG v2 → v3 (foco: feature LISTA PARA USAR + panel escalable)
+
+- **C17 (IMPORTANTE, resuelto):** gating HAND-ROLLED contra el contrato del panel:
+  F5 v2 reemplazaba la sección por un mensaje propio si
+  `ctx.health.environments_enabled !== true` (patrón MigratorPage) y el banner del
+  Paso 2 era texto plano. El 87 v3 (§3.12/C20) fija el gate DECLARATIVO en el
+  registro (el SHELL renderiza `FlagGateBanner` con "Activar ahora"). v3: la entrada
+  de `DEVOPS_SECTIONS` declara `healthKey/gateFlagKey/gateMessage`; la sección no
+  contiene ningún aviso propio de SU flag; el banner del Paso 2 (dependencia del 88)
+  pasa a ser `FlagGateBanner` con `flagKey="STACKY_DEVOPS_PUBLICATIONS_ENABLED"`
+  (gate de sub-feature DENTRO de la sección, mismo patrón que generator/trigger en
+  el 87). Dependencias re-ancladas: 87 v3 (`f3d2234d`) y 88 v3 (`d5ced3e6`).
+- **C18 (IMPORTANTE, resuelto):** primera vez sin guía: el wizard no definía qué
+  pasa sin `devops_environment_settings` guardados (el operador podía "Calcular
+  plan" sin raíz configurada y comerse un 400 crudo). v3: stepper visual con estado
+  por paso (Configuración / Carpetas / Publicación inicial); sin settings guardados,
+  el Paso 0 se abre pre-poblado con `emptyEnvironmentSettings()` (layout Pacífico
+  editable) + CTA "Configurá la raíz del ambiente para empezar" + botón "Usar
+  layout de ejemplo"; "Calcular plan" queda `disabled` hasta que haya settings
+  guardados con root válido, con hint que apunta al Paso 0. Happy path ≤ 4 clicks
+  (criterio binario F6).
+- **C19 (IMPORTANTE, resuelto):** errores async sin camino garantizado a la UI
+  (paridad 87 v3 C16 / 88 v3 C17): la v2 especificaba mensajes para 409/failed/
+  ignored pero no el catch GENÉRICO (red caída, 500 inesperado, 400 del PUT fuera
+  del flujo feliz). v3: TODA llamada async de la sección va en try/catch hacia
+  `actionError` visible en un área fija; prohibido `console.*` como único destino.
+- **C20 (MENOR, resuelto):** la nota de F0 sobre agregar las líneas de
+  harness_defaults.env de 87/88 "si faltan" quedó obsoleta: el 87 v3 (C13) y el 88
+  (C8) ya poseen las suyas. v3 la reduce a salvaguarda por orden de implementación.
+- **C21 (MENOR, resuelto):** referencias de versión stale (87 v2 F3.0, "montada
+  como sección del 87 v2", tabla de reuso) re-ancladas a los contratos v3; tabla
+  amplia con `FlagGateBanner` y el registro declarativo.
+- **C22 (MENOR, resuelto):** F6 sin criterios binarios de usabilidad (paridad 87 v3
+  C19 / 88 v3 C21). v3 agrega el bloque de usabilidad + escalabilidad al checklist.
+- **[ADICIÓN ARQUITECTO v3] Verificación automática post-apply:** tras un apply
+  exitoso, la UI re-llama `/plan` automáticamente y muestra el badge binario
+  **"Ambiente verificado: N carpetas existentes, 0 pendientes"** (todas las entries
+  en `exists_ok`) o, si queda algo (`to_create`/`conflict`/`unsafe`/`failed`), un
+  panel rojo con la lista exacta. Convierte la idempotencia (que ya estaba testeada
+  en backend) en EVIDENCIA visible para el operador: el HITL no termina en "click y
+  fe", termina en verificación en disco. Costo: 1 llamada extra al endpoint de PLAN
+  ya existente (solo-lectura), helper puro `allExistsOk(entries)` + 1 test vitest;
+  cero backend nuevo.
 
 ## CHANGELOG v1 → v2
 
@@ -279,7 +332,7 @@ Key NUEVA en client_profile (patrón plan 45/87/88):
 > Comandos de test: idénticos a planes 87 v2 / 88 v2 — backend pytest POR ARCHIVO con
 > `backend/.venv/Scripts/python.exe` desde `Stacky Agents/backend`; frontend
 > `npx tsc --noEmit` + `npx vitest run <archivo>` en `Stacky Agents/frontend`.
-> vitest queda instalado por el **87 v2 F3.0** (C16): NO re-instalarlo y NUNCA correr
+> vitest queda instalado por el **87 v3 F3.0** (C16): NO re-instalarlo y NUNCA correr
 > `npx vitest run` sin archivo (colectaría los `.tsx` huérfanos de
 > `src/components/__tests__/` que importan `@testing-library/react` inexistente).
 
@@ -322,9 +375,9 @@ del panel (misma mecánica que 87 v2 F0 / 88 v2 F0).
    "solo crea carpetas nuevas, nunca borra nada").
 4. **(C4)** `Stacky Agents/backend/harness_defaults.env`: agregar la línea
    `STACKY_DEVOPS_ENVIRONMENTS_ENABLED=false` (pata de deploy; snapshot horneado en
-   `backend\.env` en cada release). Nota: si al implementar se detecta que las flags
-   de 87/88 tampoco tienen su línea, agregarlas en el mismo commit (el 88 v2 C8 ya lo
-   ordena para las suyas).
+   `backend\.env` en cada release; mantener orden alfabético). Nota v3 (C20): el 87
+   v3 (C13) y el 88 (C8) ya agregan sus propias líneas en sus F0; si por orden de
+   implementación aún faltaran, agregarlas en el mismo commit.
 
 **Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan89_environments_flag.py`:
 - `test_f0_flag_in_registry` (`env_only is False`,
@@ -667,10 +720,11 @@ root = `tmp_path`):
 **Flag:** `STACKY_DEVOPS_ENVIRONMENTS_ENABLED` (guard per-request en ambos endpoints).
 **Runtimes:** sin impacto. **Trabajo del operador:** ninguno.
 
-### F5 — Frontend: sección "Ambientes" (wizard de 2 pasos)
+### F5 — Frontend: sección "Ambientes" (wizard de 3 pasos con stepper)
 
-**Objetivo:** UI del flujo completo: configurar → plan → aplicar → publicación inicial,
-montada como sección del 87 v2 (`render(ctx)`, C1) y guardando SIEMPRE por el riel
+**Objetivo:** UI del flujo completo: configurar → plan → aplicar → verificación →
+publicación inicial, montada como sección DECLARATIVA del 87 v3 (`render(ctx)` +
+healthKey, C1/C17), con stepper guiado (C18) y guardando SIEMPRE por el riel
 GET→merge→PUT (C2).
 
 **Archivo NUEVO:** `Stacky Agents/frontend/src/devops/environmentModel.ts` (TS puro):
@@ -685,12 +739,32 @@ GET→merge→PUT (C2).
   F3 para feedback inmediato: root no vacío/absoluto-a-simple-vista
   `/^[A-Za-z]:[\\/]|^\//`, segmentos sin `..`, sin `<>:"|?*`, sin reservados
   CON/PRN/AUX/NUL/COM1-9/LPT1-9 — la fuente de verdad sigue siendo el backend F3);
-  `summarizePlan(entries)`; `selectablePaths(entries): string[]` (solo `to_create`).
+  `summarizePlan(entries)`; `selectablePaths(entries): string[]` (solo `to_create`);
+  **`allExistsOk(entries): boolean` (ADICIÓN v3)** — true si `entries` no está vacío
+  y TODAS tienen `status === "exists_ok"` (alimenta el badge "Ambiente verificado"
+  de la verificación post-apply).
 
 **Archivo NUEVO:** `Stacky Agents/frontend/src/components/devops/EnvironmentsSection.tsx`
-— recibe `ctx: DevOpsSectionContext` (contrato 87 v2 F4; C1):
+— recibe `ctx: DevOpsSectionContext` (contrato 87 v3 F4; C1). El gating de SU flag
+NO vive acá (C17): lo declara la entrada del registro y lo renderiza el shell.
+**Wizard con stepper visual (C18):** cabecera con los 3 pasos
+(1. Configuración / 2. Carpetas / 3. Publicación inicial) y estado por paso:
+"listo" (verde) / "pendiente" (gris) — Paso 0 está "listo" si hay settings
+guardados con root válido; Paso 1 si el último plan post-apply dio
+`allExistsOk`; Paso 2 nunca se marca automáticamente (HITL).
+**Errores visibles (C19):** TODA llamada async de la sección (GET/PUT del profile,
+plan, apply, materialize) va en try/catch hacia `actionError: string | null`
+renderizado en un área fija ("No se pudo <acción>: <mensaje>"). Prohibido
+`console.*` como único destino.
 - **Paso 0 — Configuración:** editor de `devops_environment_settings` (input root,
   3+1 listas de segmentos por kind, toggle per_process_subfolder).
+  **Primera vez (C18):** si el profile no tiene la key, el editor se abre
+  pre-poblado con `emptyEnvironmentSettings()` (layout Pacífico como sugerencia
+  editable) + CTA "Configurá la raíz del ambiente para empezar" + botón "Usar
+  layout de ejemplo" (re-aplica `emptyEnvironmentSettings()` si el operador borró
+  todo). Mientras no haya settings GUARDADOS con root válido, el botón "Calcular
+  plan" del Paso 1 queda `disabled` con hint "Primero guardá la configuración del
+  Paso 1".
   **Flujo de guardado (C2 — read-modify-write OBLIGATORIO, riel §3.9):**
   1. GET fresco `/api/projects/<name>/client-profile`; `base = json.profile ?? {}`.
   2. `merged = mergeKeysIntoProfile(base, { devops_environment_settings: nuevosSettings })`
@@ -699,12 +773,15 @@ GET→merge→PUT (C2).
   PROHIBIDO PUTear solo la key nueva: el PUT REEMPLAZA el profile completo
   (`client_profile.py:161`) y borraría `process_catalog`, presets y el resto.
   Si el PUT devuelve 400 (validación F3), mostrar el `error` literal del backend.
-  Gating por flags: si `ctx.health.environments_enabled !== true` ⇒ la sección entera
-  se reemplaza por "Activá STACKY_DEVOPS_ENVIRONMENTS_ENABLED (Configuración → Arnés,
-  categoría DevOps)" (patrón MigratorPage.tsx:35-47). Si
-  `ctx.health.publications_enabled !== true` ⇒ banner en el Paso 2: "La publicación
-  inicial requiere además STACKY_DEVOPS_PUBLICATIONS_ENABLED (plan 88)" (dependencia
-  declarada por mensaje, no por `requires`).
+  **Gating (C17 — declarativo):** el gate de `environments_enabled` lo declara la
+  entrada del registro y lo renderiza el SHELL con `FlagGateBanner` (87 v3 §3.12);
+  esta sección NO contiene ningún aviso propio de su flag. La dependencia del Paso 2
+  (sub-feature del 88) SÍ vive dentro de la sección: si
+  `ctx.health.publications_enabled !== true` ⇒ en lugar del Paso 2, `FlagGateBanner`
+  con `flagKey="STACKY_DEVOPS_PUBLICATIONS_ENABLED"`, message "La publicación
+  inicial necesita la sección Publicaciones (flag
+  STACKY_DEVOPS_PUBLICATIONS_ENABLED, plan 88)." y `onEnabled={ctx.refetchHealth}`
+  (mismo patrón que generator/trigger en el 87 F5).
 - **Paso 1 — Carpetas (plan-then-apply):** botón "Calcular plan" ⇒
   `DevOps.environmentPlan(project)` ⇒ guardar `layout_fingerprint` en estado + tabla
   de entries con color por status (to_create verde, exists_ok gris, conflict rojo con
@@ -716,8 +793,15 @@ GET→merge→PUT (C2).
   ⇒ reporte created/skipped/conflicts/failed/ignored_not_in_layout (failed en rojo,
   ignored en ámbar). Respuesta 409 `plan_stale` ⇒ mensaje "El catálogo o la
   configuración cambiaron desde el último plan. Recalculá el plan." + limpiar el plan
-  mostrado (ADICIÓN). Re-correr sobre ambiente inicializado muestra "0 cambios —
+  mostrado (ADICIÓN v2). Re-correr sobre ambiente inicializado muestra "0 cambios —
   ambiente ya inicializado".
+  **Verificación automática post-apply ([ADICIÓN ARQUITECTO v3]):** tras un apply
+  con respuesta 200, la UI re-llama `DevOps.environmentPlan(project)` (solo-lectura)
+  y evalúa `allExistsOk(entries)`: si true ⇒ badge verde "Ambiente verificado:
+  N carpetas existentes, 0 pendientes" y el Paso 1 del stepper pasa a "listo"; si
+  false ⇒ panel rojo "Quedaron pendientes:" con la lista exacta de entries no
+  `exists_ok` (+ los `failed` del apply). El operador termina con evidencia de
+  disco, no con fe en el click.
 - **Paso 2 — Publicación inicial (TODO):** selector de preset (los
   `devops_publication_presets` del proyecto, preseleccionando el primero con
   `mode==="todo"`; si no hay ninguno, botón "Crear preset TODO" que construye
@@ -745,32 +829,46 @@ GET→merge→PUT (C2).
   ```
   Firma ÚNICA (C11): `confirm` es SIEMPRE argumento del caller — el componente pasa el
   estado del checkbox; el helper NUNCA lo auto-inyecta.
-- `Stacky Agents/frontend/src/pages/DevOpsPage.tsx` — `DEVOPS_SECTIONS` += (contrato
-  87 v2 F4, firma `render(ctx)` — C1):
+- `Stacky Agents/frontend/src/pages/DevOpsPage.tsx` — `DEVOPS_SECTIONS` += entrada
+  DECLARATIVA (contrato de extensión 87 v3 §3.12/C20 — C1/C17; el shell renderiza
+  `FlagGateBanner` cuando `health.environments_enabled !== true`):
   ```ts
-  { id: "ambientes", label: "Ambientes", render: (ctx) => <EnvironmentsSection ctx={ctx} /> },
+  {
+    id: "ambientes",
+    label: "Ambientes",
+    healthKey: "environments_enabled",
+    gateFlagKey: "STACKY_DEVOPS_ENVIRONMENTS_ENABLED",
+    gateMessage: "La sección Ambientes necesita la flag STACKY_DEVOPS_ENVIRONMENTS_ENABLED (Configuración → Arnés, categoría DevOps).",
+    render: (ctx) => <EnvironmentsSection ctx={ctx} />,
+  },
   ```
-  y ampliar ADITIVAMENTE la interfaz `DevOpsHealth` con la key OPCIONAL:
-  ```ts
-  environments_enabled?: boolean;
-  ```
-  (opcional para no romper usos del 87/88; el backend ya la envía desde F4).
+  Opcional (tipado explícito): ampliar `DevOpsHealth` con `environments_enabled?:
+  boolean` — la index signature del 87 v3 ya la admite sin tocar el shell; el
+  backend la envía desde F4.
 
 **Tests PRIMERO** — `Stacky Agents/frontend/src/devops/environmentModel.test.ts`
-(vitest TS puro; instalado por 87 v2 F3.0, correr POR archivo — C16):
+(vitest TS puro; instalado por 87 v3 F3.0, correr POR archivo — C16):
 - `empty_settings_pacifico_defaults` (IN_/productivas/salida presentes y editables);
 - `validate_root_relative_fails`; `validate_segment_traversal_fails`;
 - `validate_segment_windows_char_fails` (C6: `"IN|X"` y `"CON"` fallan);
-- `summarize_counts`; `selectable_only_to_create` (entries mixtos ⇒ solo to_create).
+- `summarize_counts`; `selectable_only_to_create` (entries mixtos ⇒ solo to_create);
+- `all_exists_ok_badge` (ADICIÓN v3): entries todas `exists_ok` ⇒ true; con una
+  `to_create` o `conflict` ⇒ false; lista vacía ⇒ false.
 Comando: `npx vitest run src/devops/environmentModel.test.ts`.
 
-**Criterio binario:** vitest verde (6 tests) + `npx tsc --noEmit` 0 errores; el botón
+**Criterio binario:** vitest verde (7 tests) + `npx tsc --noEmit` 0 errores; el botón
 "Crear carpetas" está `disabled` sin checkbox (HITL verificable por código); todo PUT
 de client-profile de esta sección pasa por `mergeKeysIntoProfile` (verificable: grep
 de `client-profile` en `EnvironmentsSection.tsx` — ninguna llamada PUT construye el
 body sin el helper) (C2); Paso 2 no contiene lógica propia de materialización (solo
 composición de componentes 88: `EnvironmentsSection` no importa `publication_spec` ni
-renderers).
+renderers). Además (v3): la entrada del registro declara
+`healthKey/gateFlagKey/gateMessage` y `EnvironmentsSection.tsx` NO contiene el
+literal `STACKY_DEVOPS_ENVIRONMENTS_ENABLED` (grep — solo `DevOpsPage.tsx` lo tiene)
+(C17); el banner del Paso 2 es `FlagGateBanner` (no texto plano) (C17); "Calcular
+plan" `disabled` sin settings guardados (C18); tras apply exitoso se re-llama
+`/plan` y se evalúa `allExistsOk` (ADICIÓN v3); toda llamada async tiene catch hacia
+`actionError` (C19).
 **Flag:** `STACKY_DEVOPS_ENVIRONMENTS_ENABLED` (+ master vía `requires`; + mensaje por
 `publications_enabled` para el Paso 2).
 **Runtimes:** sin impacto. **Trabajo del operador:** opt-in (activar la flag);
@@ -812,9 +910,25 @@ npx tsc --noEmit
 - [ ] Publicación inicial: 100% composición de 88/73/72 (cero lógica nueva de
       publicación; verificable: `EnvironmentsSection` no importa
       `publication_spec`/renderers, solo componentes del 88).
-- [ ] `test_f1_spec_shape_frozen` (87 v2) y `plan88_resolution_cases.json` INTACTOS
+- [ ] `test_f1_spec_shape_frozen` (87 v3) y `plan88_resolution_cases.json` INTACTOS
       (C14).
 - [ ] Tests registrados en ambos scripts de ratchet.
+- [ ] **Usabilidad (v3, C22 — verificables por código/manual binario):**
+  - [ ] Primera vez (sin settings): Paso 0 pre-poblado con el layout de ejemplo +
+        CTA; "Calcular plan" `disabled` con hint (C18).
+  - [ ] Happy path ≤ 4 clicks: "Usar layout de ejemplo"/guardar → "Calcular plan" →
+        checkbox HITL → "Crear carpetas" ⇒ badge "Ambiente verificado" (con las
+        flags necesarias ON).
+  - [ ] Con ambientes OFF (y panel ON) la sección muestra `FlagGateBanner` con
+        "Activar ahora"; ídem el Paso 2 con publicaciones OFF (C17).
+  - [ ] Tras el apply, la verificación automática re-planifica y muestra el badge
+        verde o el panel rojo con pendientes exactos (ADICIÓN v3).
+  - [ ] Apagar el backend y clickear "Calcular plan" muestra el error en el área
+        visible de la sección, no solo en consola (C19).
+  - [ ] Stepper con estado por paso visible (C18).
+- [ ] **Escalabilidad (87 v3 §3.12):** la sección cumple el namespacing
+      (flag/health/rutas/key de client_profile) y NO introduce mecanismos paralelos
+      de gating ni de persistencia.
 
 ## 6. Riesgos y mitigaciones
 
@@ -833,8 +947,11 @@ npx tsc --noEmit
 | Doble apply concurrente | `os.makedirs(..., exist_ok=True)` es race-safe; idempotencia por diseño |
 | Catálogo editado a mano con entradas no-dict | `build_environment_layout` las omite, nunca lanza (C10 + test) |
 | Carpetas creadas pero publicación inicial falla | Pasos independientes y re-entrantes: re-correr Paso 1 es no-op (idempotente), Paso 2 se reintenta solo |
-| Confusión de flags (panel/publicaciones/ambientes) | `requires` al master + banners con el nombre EXACTO de la flag faltante (F5) |
-| Plan 87/88 sin implementar | Dependencia y orden declarados (versiones v2); F0-F2 implementables en aislamiento |
+| Confusión de flags (panel/publicaciones/ambientes) | `FlagGateBanner` con "Activar ahora" (87 v3): el gate de la sección lo declara el registro; el del Paso 2 nombra la flag exacta del 88 (C17) |
+| Plan 87/88 sin implementar | Dependencia y orden declarados (versiones v3); F0-F2 implementables en aislamiento |
+| **Primera vez sin guía / plan sin settings ⇒ 400 crudo (C18)** | Paso 0 pre-poblado + CTA + "Calcular plan" disabled con hint + stepper con estados |
+| Apply "exitoso" sin evidencia en disco | Verificación automática post-apply: re-plan + `allExistsOk` ⇒ badge verde o panel rojo con pendientes (ADICIÓN v3) |
+| Gating hand-rolled divergente del panel (C17) | Entrada declarativa en el registro + criterio grep en F5 |
 
 ## 7. Fuera de scope (v1)
 
@@ -880,18 +997,21 @@ npx tsc --noEmit
 3. F2 — `plan_environment`/`apply_environment` + centinela anti-destrucción (13 tests).
 4. F3 — validación aditiva `devops_environment_settings` (9 tests).
 5. F4 — endpoints plan/apply (fingerprint + ignored) + health key (requiere 87 v2 F1).
-6. F5 — `environmentModel.ts` + `EnvironmentsSection` (render(ctx), riel
-   GET→merge→PUT) + registro en `DEVOPS_SECTIONS` (requiere 87 v2 F4/F5 y 88 v2
-   F3/F4/F5).
+6. F5 — `environmentModel.ts` (incl. `allExistsOk`) + `EnvironmentsSection`
+   (stepper C18, errores C19, verificación post-apply ADICIÓN v3, riel
+   GET→merge→PUT) + entrada declarativa en `DEVOPS_SECTIONS` con healthKey/gate
+   (C17) (requiere 87 v3 F4/F5 y 88 v3 F3/F4/F5).
 7. F6 — cierre de la serie.
 
 ## 10. Definición de Hecho (DoD)
 
 - 49 tests backend nombrados (F0:5, F1:11, F2:13, F3:9, F4:11) verdes por archivo con
-  el venv; vitest F5 verde (6 tests); `npx tsc --noEmit` 0 errores.
+  el venv; vitest F5 verde (7 tests, incl. `all_exists_ok_badge`);
+  `npx tsc --noEmit` 0 errores.
 - No-regresión: suites de planes 87/88/73 + meta-tests del arnés verdes;
   `test_f1_spec_shape_frozen` y `plan88_resolution_cases.json` intactos (C14).
-- Flag OFF ⇒ byte-idéntico. Checklist F6 completo.
+- Flag OFF ⇒ byte-idéntico. Checklist F6 completo (incluye los bloques de
+  usabilidad C22 y escalabilidad §3.12; cero gating hand-rolled C17).
 - Idempotencia demostrada por test (re-run ⇒ 0 cambios), centinela anti-destrucción
   verde (Stacky NO PUEDE borrar nada desde este plan, por construcción), apply
   atómicamente honesto (fingerprint 409 / failed / ignored_not_in_layout visibles).

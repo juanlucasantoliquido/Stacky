@@ -922,6 +922,10 @@ npx tsc --noEmit
 
 - Ejecutar la publicación DIRECTO sobre servidores (esto genera/commitea/dispara
   pipelines; el deploy real lo hace el pipeline en el runner de CI).
+  **[NOTA DE COMPATIBILIDAD 2026-07-04]** si a futuro se quisiera scoping por
+  servidor destino (p.ej. variables del pipeline con el host), el **plan 91** provee
+  el registro de servidores con alias y `ctx.selectedServer` en el shell del panel;
+  este plan NO lo consume en v1 y no cambia.
 - Scheduling/cron de publicaciones (violaría HITL; el trigger es siempre manual).
 - Grupos de publicación adicionales a batch/agenda (allowlist cerrada v1).
 - Plantillas de step por PROCESO individual (v1 es por kind; el escape hatch es editar

@@ -691,6 +691,13 @@ flag y dónde activarla → flag ON contenido):
   ];
   ```
   (`ReactNode` importado de `react`; NO usar `JSX.Element` — FIX C9.)
+- **[NOTA DE COMPATIBILIDAD plan 91 — 2026-07-04] El ctx es extensible ADITIVAMENTE:**
+  igual que `DevOpsHealth` admite keys nuevas por su index signature, los planes
+  futuros pueden agregar campos **opcionales** a `DevOpsSectionContext` (p.ej. plan 91:
+  `selectedServer?: { alias: string; host: string } | null` y
+  `servers?: ServerSummary[]`) SIN tocar las secciones existentes — un campo opcional
+  nuevo no rompe ningún `render(ctx)` ya escrito. Regla para extensores: SOLO campos
+  opcionales; prohibido cambiar el tipo o la obligatoriedad de `health`/`refetchHealth`.
 - **Gate declarativo en el shell (C20):** al renderizar cada sección montada, si
   `s.healthKey` está definido y `ctx.health[s.healthKey] !== true`, el shell
   renderiza `<FlagGateBanner flagKey={s.gateFlagKey!} flagLabel={s.label}

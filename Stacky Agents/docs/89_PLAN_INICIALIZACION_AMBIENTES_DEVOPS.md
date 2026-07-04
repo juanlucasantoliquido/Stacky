@@ -957,7 +957,13 @@ npx tsc --noEmit
 
 - Crear carpetas en servidores REMOTOS (SSH/UNC/agentes): v1 es filesystem local de
   la máquina del operador (justificación §3.3); remoto exigiría credenciales y otro
-  modelo de seguridad.
+  modelo de seguridad. **[NOTA DE COMPATIBILIDAD 2026-07-04]** ese "otro plan" ya
+  existe: el **plan 91** (registro de servidores DevOps con alias; credenciales en
+  Windows Credential Manager vía `keyring`, nunca en texto plano) expone
+  `get_credential(alias)` en `server_registry.py` y `ctx.selectedServer` en el shell
+  del panel como LOS puntos de consumo para una futura extensión remota (v2 de este
+  plan resolvería `environment_root` como path UNC del servidor seleccionado). Esta
+  v1 sigue siendo local-only; nada de este plan cambia.
 - Borrar/renombrar/mover carpetas o "desinicializar" ambientes (violaría §3.2).
 - Plantillas de contenido inicial DENTRO de las carpetas (archivos seed).
 - Múltiples ambientes por proyecto (v1: un `environment_root` por client_profile; N

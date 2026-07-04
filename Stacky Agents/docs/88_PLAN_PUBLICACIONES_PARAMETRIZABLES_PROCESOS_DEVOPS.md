@@ -1,13 +1,19 @@
 # Plan 88 — Publicaciones parametrizables de procesos batch/agenda/TODO desde el panel DevOps
 
 **Estado:** PROPUESTO
-**Versión:** v1 → v2 (crítica adversarial `criticar-y-mejorar-plan`, 2026-07-04)
-**Fecha:** 2026-07-03 (v1) / 2026-07-04 (v2)
+**Versión:** v2 → v3 (2ª crítica adversarial `criticar-y-mejorar-plan` — foco:
+usabilidad end-to-end + escalabilidad del panel, 2026-07-04)
+**Fecha:** 2026-07-03 (v1) / 2026-07-04 (v2) / 2026-07-04 (v3)
 **Serie DevOps:** plan 2 de 3.
 **Dependencias:** plan 87 (`87_PLAN_PANEL_DEVOPS_CREADOR_GRAFICO_PIPELINES.md`,
-**en su versión v2**, commit `e533c283` — panel DevOps base; la v1 `59918622` quedó
-superada). Este plan agrega la sección **Publicaciones** a `DEVOPS_SECTIONS` (punto de
-extensión del plan 87 v2 F4: `render(ctx: DevOpsSectionContext)`). El plan 3 de la
+**en su versión v3**, commit `f3d2234d` — panel DevOps base; v1 `59918622` y v2
+`e533c283` quedaron superadas). Este plan agrega la sección **Publicaciones** a
+`DEVOPS_SECTIONS` consumiendo el **contrato de extensión del 87 v3 (riel §3.12 /
+C20)**: entrada DECLARATIVA con `healthKey`/`gateFlagKey`/`gateMessage` +
+`render(ctx)`; el gate lo renderiza el SHELL con `FlagGateBanner` (87 v3 F4) —
+prohibido hand-rollearlo en la sección. Este plan CUMPLE el namespacing del §3.12:
+flag `STACKY_DEVOPS_PUBLICATIONS_ENABLED`, health `publications_enabled`, ruta
+`/api/devops/publications/materialize`, keys `devops_publication_*`. El plan 3 de la
 serie (inicialización de ambientes, plan 89) dependerá de ÉSTE (reusa el
 materializador). Además requiere implementados los planes 45/71/72/73 — VERIFICADO:
 
@@ -21,14 +27,72 @@ materializador). Además requiere implementados los planes 45/71/72/73 — VERIF
 | Renderers YAML | `backend/services/pipeline_renderers.py:23,126` |
 | POST /api/pipeline-generator/preview y /commit (HITL) | `backend/api/pipeline_generator.py:34,52,59-60` |
 | Trigger/monitor CI HITL | `backend/api/ci.py:26,76,139,174` |
-| Panel DevOps: `DEVOPS_SECTIONS` con `render(ctx)`, `api/devops.py`, flag master | plan 87 v2 F1/F4 (`frontend/src/pages/DevOpsPage.tsx`, `backend/api/devops.py`) |
+| Panel DevOps: `DEVOPS_SECTIONS` declarativo (id/icon?/healthKey?/gateFlagKey?/gateMessage?/render(ctx)) + gate en el shell + `FlagGateBanner` + montaje persistente, `api/devops.py`, flag master | plan 87 **v3** F1/F4/F5.0 (`frontend/src/pages/DevOpsPage.tsx`, `frontend/src/components/devops/FlagGateBanner.tsx`, `backend/api/devops.py`) |
+| Editor de entradas del process_catalog en UI (para el select `publish_group`, C15) | `frontend/src/components/ClientProfileEditor.tsx:111-140` (alta de item :111, select de `kind` :133-134; wiring del catálogo :992-993) |
 | FlagSpec: `label` y `group` son campos REQUERIDOS | `backend/services/harness_flags.py:21-33` (87 v2 C3) |
 | Pata de deploy de flags nuevas | `backend/harness_defaults.env` + patrón de test `tests/test_plan75_deep_links_wiring.py:50-58` |
 
-> **Nota de secuencia:** si al implementar este plan el 87 (v2) aún no está
+> **Nota de secuencia:** si al implementar este plan el 87 (v3) aún no está
 > implementado, implementarlo primero. Este doc NO redefine nada del 87; solo lo
-> extiende. Este plan fue reescrito contra el **87 v2** (contratos: `render(ctx)`,
+> extiende. Este plan fue reescrito contra el **87 v3** (contratos: registro
+> declarativo con gate en el shell §3.12/C20, `render(ctx)`, `FlagGateBanner`,
 > GET→merge→PUT, vitest instalado en 87 F3.0, `api.get/api.post` con path `/api/...`).
+
+## CHANGELOG v2 → v3 (foco: feature LISTA PARA USAR + panel escalable)
+
+- **C14 (IMPORTANTE, resuelto):** el gating de la sección estaba HAND-ROLLED: F5 v2
+  decía "si `ctx.health.publications_enabled !== true` ⇒ la sección entera se
+  reemplaza por el mensaje ... (patrón MigratorPage)". El 87 v3 (C20) introdujo el
+  gate DECLARATIVO en el shell (`healthKey`/`gateFlagKey`/`gateMessage` en la
+  entrada del registro ⇒ el shell renderiza `FlagGateBanner` con "Activar ahora").
+  v3: la entrada de `DEVOPS_SECTIONS` declara su gate y la sección NO contiene
+  ningún aviso propio de flag; dependencias re-ancladas a 87 v3 (`f3d2234d`).
+  Además `DevOpsHealth` del 87 v3 tiene index signature ⇒ la ampliación con
+  `publications_enabled?: boolean` es opcional-tipada, sin tocar el shell.
+- **C15 (IMPORTANTE, resuelto):** el select de `publish_group` quedaba como
+  "decisión binaria en implementación" ("grep... SOLO SI existe un editor de
+  entradas") = inferencia prohibida + riesgo de feature de papel (sin editor UI, el
+  filtro por grupos solo se alimentaba editando JSON a mano). VERIFICADO: el editor
+  de entradas del catálogo EXISTE (`ClientProfileEditor.tsx:111-140`; select de
+  `kind` en :133-134; wiring del catálogo en :992-993). v3 fija SIN rama
+  alternativa: agregar ahí el select `publish_group` (vacío/batch/agenda).
+- **C16 (IMPORTANTE, resuelto):** primera vez sin guía: con 0 presets la UI quedaba
+  en lista vacía; con catálogo vacío, "Materializar" produce un spec inválido
+  (stages=[]) que revienta recién en el preview. v3: estado vacío con CTA + botón
+  **"Crear preset TODO"** (1 click: `{name:"todo-completo", mode:"todo", groups:[],
+  target:"gitlab"}` por el riel GET→merge→PUT); y si el catálogo está vacío, banner
+  accionable "El catálogo de procesos está vacío — cargalo en Configuración →
+  Perfil del cliente" ANTES de permitir materializar. Happy path ≤ 3 clicks (criterio
+  binario F6).
+- **C17 (IMPORTANTE, resuelto):** errores sin camino a la UI (paridad con 87 v3
+  C16): solo el 400 del PUT mostraba error; el 404 `preset_not_found`, los errores
+  de red y los 400 del preview morían en consola. v3: toda llamada async de la
+  sección va en try/catch hacia `actionError` visible; los `kind` conocidos se
+  muestran en llano.
+- **C18 (MENOR, resuelto):** el spec del materialize se pasaba crudo a los
+  componentes del 87 (que esperan `PipelineSpecDraft`). v3 fija: hidratar con
+  `fromParsedSpec(result.spec)` (87 F3) antes de pasarlo a
+  `PipelineYamlPreview`/`CommitPipelineModal`.
+- **C19 (MENOR, resuelto):** `step_templates` sin defaults visibles: el operador no
+  sabía qué script se usaría si no escribía nada. v3: cada textarea usa como
+  `placeholder` el template default EFECTIVO (los literales de §4) y mantiene el
+  hint de `{process_name}`.
+- **C20 (MENOR, resuelto):** editor de presets sin indicador de persistencia. v3:
+  badge "sin guardar" comparando la lista editada contra la última cargada
+  (helper puro `presetsEqual`, JSON.stringify) — el estado ya sobrevive a la
+  navegación por el montaje persistente del 87 C10.
+- **C21 (MENOR, resuelto):** F6 sin criterios binarios de usabilidad (paridad 87 v3
+  C19). v3 agrega el bloque de usabilidad al checklist.
+- **[ADICIÓN ARQUITECTO v3] Puente preset → builder ("Guardar como borrador"):** el
+  escape hatch declarado en §7 ("editar el pipeline resultante en el builder del
+  plan 87") era una promesa sin flujo: no había NINGÚN camino de un spec
+  materializado al builder. v3: tras materializar, botón **"Guardar como
+  borrador"** que persiste el spec como draft del 87 (`devops_pipeline_drafts`,
+  MISMO riel GET→merge→PUT con `mergeKeysIntoProfile` + nombre único por helper
+  puro `draftNameForPreset` con sufijo `-2/-3...` si colisiona; un 400 del backend
+  — p.ej. cap 50 — se muestra literal) + hint "Abrilo en la sección Pipelines para
+  editarlo bloque a bloque". Cero mecanismos nuevos: reusa 87 F2 (validación de
+  drafts) + helpers existentes; convierte el ciclo preset→ajuste fino en 1 click.
 
 ## CHANGELOG v1 → v2
 
@@ -300,10 +364,9 @@ colgada de la del panel.
    key (modelo: la de `STACKY_PIPELINE_GENERATOR_ENABLED`, línea 595).
 4. **(C8)** `Stacky Agents/backend/harness_defaults.env`: agregar la línea
    `STACKY_DEVOPS_PUBLICATIONS_ENABLED=false` (pata de deploy: el snapshot se hornea
-   en `backend\.env` en cada release). Nota: si al implementar se detecta que la flag
-   del 87 (`STACKY_DEVOPS_PANEL_ENABLED`) tampoco tiene su línea, agregarla en el
-   mismo commit (1 línea; el 87 v2 no la incluyó y es la misma causa raíz que obligó
-   fixes post-hoc en los planes 74/75).
+   en `backend\.env` en cada release; mantener orden alfabético). Nota v3: el 87 v3
+   (C13) ya agrega su propia línea en su F0; si por orden de implementación aún
+   faltara, agregarla en el mismo commit.
 
 **Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan88_publications_flag.py`:
 - `test_f0_flag_in_registry`: key en `FLAG_REGISTRY`, `env_only is False`,
@@ -612,6 +675,15 @@ client_profile (C2); llamadas tipadas.
   verificada contra el fixture compartido); `excluded` (candidatos que el filtro de
   groups dejó fuera) es DERIVADO UI-ONLY, el backend no lo computa. La fuente de
   verdad sigue siendo el backend: el spec siempre viene del endpoint.
+- **`presetsEqual(a: PublicationPreset[], b: PublicationPreset[]): boolean` (C20):**
+  igualdad profunda vía `JSON.stringify(a) === JSON.stringify(b)` (los helpers
+  construyen las listas con orden de keys determinista). Alimenta el badge
+  "sin guardar" de F5.
+- **`draftNameForPreset(existingNames: string[], presetName: string): string`
+  (ADICIÓN v3):** nombre único para el puente preset→borrador: base
+  `"preset-" + presetName` recortada a ≤120 chars; si colisiona (case-sensitive,
+  igual que la validación del 87 F2), prueba `-2`, `-3`, ... hasta encontrar libre
+  (el sufijo cuenta dentro del límite de 120).
 
 **Archivo a editar:** `Stacky Agents/frontend/src/api/endpoints.ts` — extender el
 namespace `DevOps` del plan 87 v2 F3 (helper real `api.post` con path COMPLETO
@@ -649,9 +721,16 @@ const fixture = JSON.parse(
   no mutó.
 - `mergeKeys_null_profile` (C2): `mergeKeysIntoProfile(null, {devops_publication_presets: []})`
   ⇒ `{devops_publication_presets: []}` (proyecto sin client_profile).
+- `presetsEqual_detects_changes` (C20): igual consigo misma; distinta tras
+  `upsertPreset` con un cambio.
+- `draftName_no_collision` (ADICIÓN v3): `draftNameForPreset([], "quincena")` ⇒
+  `"preset-quincena"`.
+- `draftName_unique_suffix` (ADICIÓN v3): con `["preset-quincena",
+  "preset-quincena-2"]` existentes ⇒ `"preset-quincena-3"`; y con un presetName de
+  120 chars el resultado sigue siendo ≤120.
 
 Comando: `npx vitest run src/devops/presetsModel.test.ts`.
-**Criterio binario:** vitest verde (7 tests nombrados; el de paridad itera 5 casos) +
+**Criterio binario:** vitest verde (10 tests nombrados; el de paridad itera 5 casos) +
 `npx tsc --noEmit` 0 errores.
 **Flag:** ninguna (código sin montar hasta F5).
 **Runtimes:** sin impacto. **Trabajo del operador:** ninguno.
@@ -659,19 +738,38 @@ Comando: `npx vitest run src/devops/presetsModel.test.ts`.
 ### F5 — Frontend: sección "Publicaciones" en el panel DevOps
 
 **Objetivo:** UI completa del flujo preset → materializar → preview YAML → commit
-HITL → trigger HITL, montada como sección del plan 87 v2.
+HITL → trigger HITL, montada como sección DECLARATIVA del plan 87 v3 (gate en el
+shell) con estados vacíos guiados y errores siempre visibles.
 
 **Archivos NUEVOS** (en `Stacky Agents/frontend/src/components/devops/`):
-1. `PublicationsSection.tsx` — recibe `ctx: DevOpsSectionContext` (contrato 87 v2 F4;
-   C1). Layout 2 columnas:
+1. `PublicationsSection.tsx` — recibe `ctx: DevOpsSectionContext` (contrato 87 v3
+   F4; C1). El gating por flag NO vive acá (C14): lo declara la entrada del registro
+   y lo renderiza el shell (`FlagGateBanner`). Layout 2 columnas:
    - Izquierda: lista de presets (leída de `devops_publication_presets` vía
      `GET /api/projects/<name>/client-profile`, ruta `client_profile.py:93` — igual
      que los drafts del plan 87 F5), botones crear/editar/borrar (usa
      `presetsModel.ts`), editor de preset: nombre; radio mode (selection/todo);
      checklist de procesos del `process_catalog` (solo mode=selection); checkboxes de
      grupos batch/agenda; select target. Debajo, editor de `step_templates` (4
-     textareas etiquetadas entry/processing/output/default con hint del placeholder
-     `{process_name}`).
+     textareas etiquetadas entry/processing/output/default; cada una con
+     `placeholder` = el template default EFECTIVO de §4 y hint del placeholder
+     `{process_name}` — C19).
+     **Estado vacío (C16):** con 0 presets, en lugar de la lista se muestra el CTA
+     "Todavía no hay presets de publicación" + botón **"Crear preset TODO"** que
+     inserta `{name: "todo-completo", mode: "todo", groups: [], target: "gitlab"}`
+     por el riel de guardado de abajo. Con `process_catalog` vacío o ausente, banner
+     amarillo accionable: "El catálogo de procesos está vacío — cargalo en
+     Configuración → Perfil del cliente (sección Catálogo de procesos)" y el botón
+     "Materializar" queda `disabled` (evita materializar un spec inválido a
+     propósito).
+     **Badge "sin guardar" (C20):** visible si `!presetsEqual(editados, cargados)`;
+     se limpia al guardar/recargar.
+     **Errores visibles (C17):** TODA llamada async de la sección (GET/PUT del
+     profile, materialize, preview/commit/trigger) en try/catch hacia
+     `actionError: string | null` renderizado en un área fija ("No se pudo
+     <acción>: <mensaje>"); un 404 con `kind == "preset_not_found"` se muestra como
+     "El preset ya no existe — recargá la lista". Prohibido `console.*` como único
+     destino.
      **Flujo de guardado (C2 — read-modify-write OBLIGATORIO, riel §3.9):**
      1. GET fresco del profile; `base = json.profile ?? {}`.
      2. `merged = mergeKeysIntoProfile(base, { devops_publication_presets: nuevosPresets })`
@@ -684,37 +782,54 @@ HITL → trigger HITL, montada como sección del plan 87 v2.
      Si el PUT devuelve 400 (validación F2), mostrar el `error` literal del backend.
    - Derecha: "Vista previa de resolución" en vivo (`resolvePreview`: entra `resolved`,
      sale `excluded`, warning con `unknown`); botón **"Materializar"** ⇒
-     `DevOps.materializePublication` ⇒ muestra `resolved`/`unknown_processes` y pasa
-     el `spec` recibido a los componentes REUSADOS del plan 87 F5:
-     `PipelineYamlPreview` (preview ADO+GitLab vía `/api/pipeline-generator/preview`),
-     `CommitPipelineModal` (HITL checkbox ⇒ `confirm:true`) y
-     `TriggerPipelineSection` (HITL plan 72; visible solo si
-     `ctx.health.trigger_enabled === true`). Si `unknown_processes` no vacío ⇒ warning
-     visible listándolos.
-   - Si `ctx.health.publications_enabled !== true` ⇒ la sección entera se reemplaza
-     por el mensaje "Activá STACKY_DEVOPS_PUBLICATIONS_ENABLED (Configuración → Arnés,
-     categoría DevOps)" (patrón MigratorPage.tsx:35-47).
-2. Además: en la checklist de procesos y el editor del catálogo YA existente del plan
-   45 (buscar el componente que edita `process_catalog` en
-   `frontend/src/components/` — grep `process_catalog` — y SOLO SI existe un editor de
-   entradas), agregar el select opcional `publish_group` (vacío/batch/agenda); su
-   guardado usa el MISMO flujo GET→merge→PUT de arriba. Si no existe editor de
-   entradas, NO crearlo: el publish_group se edita vía el JSON del client_profile como
-   hasta ahora, y la sección Publicaciones muestra el grupo como badge de solo
-   lectura. (Decisión binaria verificable: existe editor ⇒ select; no existe ⇒ badge.)
+     `DevOps.materializePublication` ⇒ muestra `resolved`/`unknown_processes`,
+     hidrata el spec con `fromParsedSpec(result.spec)` (87 F3 — los componentes del
+     87 esperan `PipelineSpecDraft`, C18) y lo pasa a los componentes REUSADOS del
+     plan 87 F5: `PipelineYamlPreview` (preview ADO+GitLab vía
+     `/api/pipeline-generator/preview`), `CommitPipelineModal` (HITL checkbox ⇒
+     `confirm:true`) y `TriggerPipelineSection` (HITL plan 72; degrada con
+     `FlagGateBanner` si `trigger_enabled` false, como en el 87). Si
+     `unknown_processes` no vacío ⇒ warning visible listándolos.
+     **[ADICIÓN ARQUITECTO v3] Botón "Guardar como borrador"** (visible tras
+     materializar): persiste el spec hidratado como draft del 87 —
+     (1) GET fresco del profile; (2) `drafts = base.devops_pipeline_drafts ?? []`;
+     (3) `name = draftNameForPreset(drafts.map(d => d.name), preset.name)`;
+     (4) `merged = mergeKeysIntoProfile(base, { devops_pipeline_drafts: [...drafts,
+     {name, spec: toSpecDict(specDraft), updated_at: new Date().toISOString()}] })`;
+     (5) PUT `{ profile: merged }`. Si el PUT da 400 (p.ej. cap 50 del 87 F2),
+     mostrar el error literal. Al éxito, hint: "Borrador '<name>' guardado — abrilo
+     en la sección Pipelines para editarlo bloque a bloque". Cero mecanismos nuevos
+     (reusa 87 F2/F3 y el riel §3.9).
+   - **Gating (C14 — declarativo, en el registro):** esta sección NO renderiza
+     ningún aviso de flag propio; ver "Archivos a editar" abajo.
+2. Select `publish_group` en el editor del catálogo (C15 — camino ÚNICO, verificado):
+   en `frontend/src/components/ClientProfileEditor.tsx`, el editor de entradas del
+   `process_catalog` YA existe (alta de item :111, select de `kind` :133-134, wiring
+   :992-993). Agregar junto al select de `kind` un select `publish_group` con
+   opciones `"" (sin grupo) / batch / agenda` que setea/borra el campo en el item
+   (`updateItem(idx, { publish_group: value || undefined })`, mismo patrón que
+   `kind`). El guardado es el del propio ClientProfileEditor (ya PUTea el profile
+   completo). La sección Publicaciones muestra además el grupo como badge junto a
+   cada proceso en la checklist.
 
 **Archivos a editar:**
-- `Stacky Agents/frontend/src/pages/DevOpsPage.tsx` — agregar a `DEVOPS_SECTIONS`
-  (punto de extensión del plan 87 v2 F4, firma `render(ctx)` — C1):
+- `Stacky Agents/frontend/src/pages/DevOpsPage.tsx` — agregar a `DEVOPS_SECTIONS` la
+  entrada DECLARATIVA (contrato de extensión 87 v3 §3.12/C20 — C1/C14; el shell
+  renderiza `FlagGateBanner` cuando `health.publications_enabled !== true`, con
+  "Activar ahora" y refetch):
   ```ts
-  { id: "publicaciones", label: "Publicaciones", render: (ctx) => <PublicationsSection ctx={ctx} /> },
+  {
+    id: "publicaciones",
+    label: "Publicaciones",
+    healthKey: "publications_enabled",
+    gateFlagKey: "STACKY_DEVOPS_PUBLICATIONS_ENABLED",
+    gateMessage: "La sección Publicaciones necesita la flag STACKY_DEVOPS_PUBLICATIONS_ENABLED (Configuración → Arnés, categoría DevOps).",
+    render: (ctx) => <PublicationsSection ctx={ctx} />,
+  },
   ```
-  y ampliar ADITIVAMENTE la interfaz `DevOpsHealth` (definida en DevOpsPage.tsx, 87 v2
-  F4) con la key OPCIONAL:
-  ```ts
-  publications_enabled?: boolean;
-  ```
-  (opcional para no romper el fixture/uso del 87; el backend ya la envía desde F3).
+  Opcional (tipado explícito): ampliar `DevOpsHealth` con `publications_enabled?:
+  boolean` — la index signature del 87 v3 ya la admite sin tocar el shell; el
+  backend la envía desde F3.
 
 **Tests:** lógica cubierta en F4 (vitest). Gate componentes = `npx tsc --noEmit`.
 **Criterio binario:** `tsc` 0 errores; la sección solo es visible con AMBAS flags ON;
@@ -722,6 +837,13 @@ commit/trigger inaccesibles sin confirmación explícita (checkbox/preview HITL 
 verificable por código); todo PUT de client-profile del plan pasa por
 `mergeKeysIntoProfile` (verificable: grep de `client-profile` en
 `PublicationsSection.tsx` — ninguna llamada PUT construye el body sin el helper).
+Además (v3): la entrada del registro declara `healthKey/gateFlagKey/gateMessage` y
+`PublicationsSection.tsx` NO contiene ningún literal de la flag propia (grep:
+`STACKY_DEVOPS_PUBLICATIONS_ENABLED` aparece en `DevOpsPage.tsx` — registro — y no
+en la sección) (C14); estado vacío contiene el literal "Crear preset TODO" (C16);
+existe el botón "Guardar como borrador" y usa `draftNameForPreset` (ADICIÓN);
+`ClientProfileEditor.tsx` tiene el select `publish_group` junto al de `kind` (C15);
+toda llamada async tiene catch hacia `actionError` (C17).
 **Flag:** `STACKY_DEVOPS_PUBLICATIONS_ENABLED` (+ master del panel vía `requires`).
 **Runtimes:** sin impacto. **Trabajo del operador:** opt-in (activar la flag en
 Configuración → Arnés); definir presets es USO de la feature, no configuración previa.
@@ -757,8 +879,24 @@ npx tsc --noEmit
       read-modify-write) (C2).
 - [ ] `test_f1_shared_fixture_cases` (pytest) y `resolvePreview_shared_fixture_parity`
       (vitest) verdes leyendo el MISMO archivo JSON (paridad por datos).
-- [ ] `test_f1_spec_shape_frozen` (87 v2) sigue verde SIN modificaciones (C13).
+- [ ] `test_f1_spec_shape_frozen` (87 v3) sigue verde SIN modificaciones (C13).
 - [ ] Archivos de test registrados en ambos scripts de ratchet.
+- [ ] **Usabilidad (v3, C21 — verificables por código/manual binario):**
+  - [ ] Con 0 presets se ve el CTA + botón "Crear preset TODO"; con catálogo vacío,
+        banner accionable y "Materializar" deshabilitado (C16).
+  - [ ] Happy path ≤ 3 clicks: "Crear preset TODO" → "Materializar" → YAML visible
+        en el preview (con panel+publicaciones+generator ON).
+  - [ ] Con publicaciones OFF (y panel ON) la sección muestra `FlagGateBanner` con
+        "Activar ahora"; tras el click y refetch, la sección funciona sin recargar
+        (C14).
+  - [ ] `publish_group` editable desde `ClientProfileEditor` (select junto a
+        `kind`), sin tocar JSON a mano (C15).
+  - [ ] "Guardar como borrador" crea un draft visible en la sección Pipelines del
+        87 (ADICIÓN v3).
+  - [ ] Apagar el backend y materializar muestra el error en el área visible, no
+        solo en consola (C17).
+- [ ] **Escalabilidad (87 v3 §3.12):** la sección cumple el namespacing (flag/health/
+      ruta/keys) y NO introduce mecanismos paralelos de gating ni de persistencia.
 
 ## 6. Riesgos y mitigaciones
 
@@ -774,7 +912,11 @@ npx tsc --noEmit
 | Preset apunta a procesos borrados del catálogo | `unknown_processes` reportado (nunca aborta) + warning en UI |
 | Preset duplicado ⇒ selector ambiguo | Unicidad + cap 50 + ≤120 chars validados en F2 (C4, mismo patrón drafts 87 v2 C7) |
 | Flag 88 ON con flag 87 OFF (env directo) | `requires` es declarativo (plan 82): la sección UI no existe sin el panel; el endpoint materialize sigue siendo SOLO-LECTURA y commit/trigger conservan sus propios guards (73/72) — sin efecto colateral posible |
-| Plan 87 no implementado aún | Dependencia declarada arriba (87 **v2**); F0-F2 de este plan no dependen de código del 87 (solo F3 toca `api/devops.py` y F5 la página) — orden de implementación lo respeta |
+| Plan 87 no implementado aún | Dependencia declarada arriba (87 **v3**); F0-F2 de este plan no dependen de código del 87 (solo F3 toca `api/devops.py` y F5 la página) — orden de implementación lo respeta |
+| **Gating hand-rolled divergente del panel (C14)** | Gate DECLARATIVO en la entrada del registro; el shell renderiza `FlagGateBanner`; criterio grep en F5 |
+| **Primera vez sin guía / catálogo vacío ⇒ spec inválido (C16)** | CTA + "Crear preset TODO" + banner accionable + "Materializar" deshabilitado |
+| publish_group inaccesible por UI (C15) | Select en `ClientProfileEditor.tsx` junto a `kind` (editor verificado :111-140) |
+| Spec materializado sin camino al ajuste fino | Puente "Guardar como borrador" → sección Pipelines (ADICIÓN v3, reusa 87 F2) |
 
 ## 7. Fuera de scope (v1)
 
@@ -814,17 +956,21 @@ npx tsc --noEmit
 3. F2 — validación aditiva client_profile (13 tests).
 4. F3 — endpoint materialize + health key (requiere plan 87 F1 implementado).
 5. F4 — `presetsModel.ts` (incl. `mergeKeysIntoProfile`) + endpoints.ts (vitest).
-6. F5 — `PublicationsSection` + registro `render(ctx)` en `DEVOPS_SECTIONS` +
-   `DevOpsHealth` ampliada (requiere plan 87 F4/F5).
+6. F5 — `PublicationsSection` (estados vacíos C16, errores C17, puente a borrador
+   ADICIÓN) + entrada declarativa en `DEVOPS_SECTIONS` con healthKey/gate (C14) +
+   select `publish_group` en `ClientProfileEditor` (C15) (requiere plan 87 v3
+   F4/F5).
 7. F6 — cierre.
 
 ## 10. Definición de Hecho (DoD)
 
 - 40 tests backend nombrados (F0:5, F1:15, F2:13, F3:7) verdes por archivo con el venv.
-- Vitest F4 verde (7 tests, incl. paridad por fixture compartido);
-  `npx tsc --noEmit` 0 errores.
+- Vitest F4 verde (10 tests, incl. paridad por fixture compartido, `presetsEqual` y
+  `draftNameForPreset`); `npx tsc --noEmit` 0 errores.
 - No-regresión: tests planes 87/73 + meta-tests del arnés verdes;
   `test_f1_spec_shape_frozen` intacto (C13).
-- Flag OFF ⇒ byte-idéntico; checklist F6 completo.
+- Flag OFF ⇒ byte-idéntico; checklist F6 completo (incluye los bloques de
+  usabilidad C21 y escalabilidad §3.12).
 - Cero YAML generado a mano (criterio binario C12); cero nombres de procesos
-  hardcodeados en producción; ningún PUT parcial de client_profile (C2).
+  hardcodeados en producción; ningún PUT parcial de client_profile (C2); cero
+  gating hand-rolled (C14).

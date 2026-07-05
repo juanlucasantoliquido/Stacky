@@ -1,6 +1,11 @@
 # Plan 87 — Panel DevOps: creador GRÁFICO de pipelines
 
-**Estado:** PROPUESTO
+**Estado:** IMPLEMENTADO (2026-07-04, commit 84a9ecb5 — F0..F6; 22 tests backend +
+25 vitest + tsc 0 err). SUPERVISADO 2026-07-05: el `requires="STACKY_PIPELINE_GENERATOR_ENABLED"`
+de F0 se RETIRÓ de la flag master — violaba la regla R4 del Plan 82 (profundidad máx 1,
+`validate_requires_graph`) al combinarse con las hijas de la serie §3.12 (88/89/90/91
+declaran `requires=PANEL`) y contradecía la degradación por `FlagGateBanner` (C14) del
+propio plan; ver `tests/test_harness_flags_requires.py`.
 **Versión:** v2 → v3 (2ª crítica adversarial `criticar-y-mejorar-plan` — foco:
 usabilidad end-to-end, 2026-07-04)
 **Fecha:** 2026-07-03 (v1) / 2026-07-04 (v2) / 2026-07-04 (v3)

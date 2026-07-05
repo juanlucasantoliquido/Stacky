@@ -30,7 +30,11 @@ class TestF0FlagInRegistry:
         # Encontrar el spec
         spec = next(f for f in FLAG_REGISTRY if f.key == "STACKY_DEVOPS_PANEL_ENABLED")
         assert spec.env_only is False
-        assert spec.requires == "STACKY_PIPELINE_GENERATOR_ENABLED"
+        # Supervisión 2026-07-05: el plan 87 F0 declaraba requires=GENERATOR, pero esa
+        # arista viola la regla R4 del Plan 82 (profundidad máx 1) al combinarse con las
+        # hijas de la serie (88/89/90/91 requieren el PANEL) y contradice el diseño de
+        # degradación del propio 87 (FlagGateBanner). La flag master queda SIN requires.
+        assert spec.requires is None
         assert spec.group == "global"
         assert spec.label != ""  # label no vacío
 

@@ -430,7 +430,7 @@
                               "veredicto":  "APROBADO",
                               "plan":  "82",
                               "ruta":  "Stacky Agents/docs/82_PLAN_CLARIDAD_CONFIGURACION_ARNES.md",
-                              "notas":  "Supervisión 2026-07-04: Plan 82 100% per especificación. DRIFT ESPERADO: Plan 87 agregó STACKY_DEVOPS_PANEL_ENABLED → STACKY_PIPELINE_GENERATOR_ENABLED. TDD honrada — entrada NO agregada a congelado porque Plan 87 aún no APROBADO. Cuando Plan 87 pase a APROBADO, agregar entrada a _REQUIRES_MAP_FROZEN en test line 140.",
+                              "notas":  "Supervisión 2026-07-04: Plan 82 100% per especificación. RESUELTO 2026-07-05 (supervisión 87-91): la arista PANEL->GENERATOR NO entró al mapa congelado — se retiró el requires de STACKY_DEVOPS_PANEL_ENABLED porque violaba R4 (profundidad máx 1) al combinarse con las 4 hijas de la serie §3.12 (88/89/90/91 requieren PANEL, sí agregadas a _REQUIRES_MAP_FROZEN). test_harness_flags_requires.py -> 9 passed.",
                               "evidencia":  {
                                                 "F2":  "frontend badge \u0027Sin efecto: requiere...\u0027 + botón \u0027ver master\u0027",
                                                 "F4":  "backend profile_deltas() en hero",
@@ -438,6 +438,129 @@
                                                 "F1":  "20 specs con requires (mapa congelado test line 120-140), 6/26 tabla descartadas",
                                                 "F0":  "backend/services/harness_flags.py:2091-2134 requires_met + validate_requires_graph"
                                             }
+                          },
+                   "87":  {
+                              "plan":  "87",
+                              "ruta":  "Stacky Agents/docs/87_PLAN_PANEL_DEVOPS_CREADOR_GRAFICO_PIPELINES.md",
+                              "doc_sha256":  "7aec6b3a07a1de3a1308b36ccf70fe3f0158c4f5e2747b7d543dc43bb5cded1b",
+                              "veredicto":  "TERMINADO-POR-SUPERVISOR",
+                              "fecha":  "2026-07-05",
+                              "tests":  [
+                                            "tests/test_plan87_devops_flag.py -> 5 passed/0 failed",
+                                            "tests/test_plan87_devops_endpoints.py -> 8 passed/0 failed",
+                                            "tests/test_plan87_drafts_validation.py -> 9 passed/0 failed",
+                                            "tests/test_harness_flags_requires.py -> 9 passed/0 failed (tras fix supervision)",
+                                            "frontend npx vitest run src/devops/specBuilder.test.ts -> 25 passed",
+                                            "frontend npx tsc --noEmit -> 0 errores (exit 0)"
+                                        ],
+                              "evidencia":  {
+                                                "F0-flag":  "config.py:857 + harness_flags.py:178 categoria devops + :1937 FlagSpec + harness_flags_help.py:602 + harness_defaults.env:34",
+                                                "F1-blueprint":  "api/devops.py health:30 + parse-yaml:44 + registro api/__init__.py:45,93 + centinela spec-shape en test_plan87_devops_endpoints.py",
+                                                "F2-drafts":  "api/client_profile.py:167-185 validacion aditiva devops_pipeline_drafts (cap 50, name unico <=120)",
+                                                "F3-specBuilder":  "frontend/src/devops/specBuilder.ts + endpoints.ts DevOps/PipelineGenerator + vitest instalado (package.json vitest ^4.1.9)",
+                                                "F4-shell":  "frontend/src/pages/DevOpsPage.tsx:68 DEVOPS_SECTIONS declarativo + FlagGateBanner.tsx + App.tsx:14,30,45,62,91,138,231,253 (tab gated)",
+                                                "F5-builder":  "components/devops/{PipelineBuilderSection,BlockTree,BlockProperties,PipelineYamlPreview,CommitPipelineModal,TriggerPipelineSection}.tsx",
+                                                "F6-ratchet":  "run_harness_tests.sh:110-112 + .ps1:103-105"
+                                            },
+                              "notas":  "COMPLETADO POR SUPERVISOR 2026-07-05: (1) doc header decia PROPUESTO estando implementado (commit 84a9ecb5) -> actualizado a IMPLEMENTADO (regla estado-en-doc); (2) CONFLICTO CROSS-PLAN 82<->87-91: el requires PANEL->GENERATOR de F0 + las 4 hijas requires=PANEL (88/89/90/91, contrato §3.12 del propio 87 v3) formaban cadena de profundidad 2, prohibida por R4 de validate_requires_graph (Plan 82) -> test_harness_flags_requires.py 3 failed en HEAD (ningun plan de la serie corre ese archivo en sus comandos: gap de integracion que la auditoria per-plan no ve). Fix minimo: requires RETIRADO de la flag master (semanticamente correcto: el panel degrada con FlagGateBanner, no requiere el generator) + 4 aristas hijas agregadas a _REQUIRES_MAP_FROZEN + assert del test F0 ajustado. RECOMENDACION (no construida): agregar test_harness_flags_requires.py a los comandos F-cierre de futuros planes con flags requires."
+                          },
+                   "88":  {
+                              "plan":  "88",
+                              "ruta":  "Stacky Agents/docs/88_PLAN_PUBLICACIONES_PARAMETRIZABLES_PROCESOS_DEVOPS.md",
+                              "doc_sha256":  "ac1bc79f78226461e0e04977ea6b4a8b4f3f9a8812580cf411c876ff789f55cd",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-05",
+                              "tests":  [
+                                            "tests/test_plan88_publications_flag.py -> 5 passed/0 failed",
+                                            "tests/test_plan88_publication_spec.py -> 19 passed/0 failed (14 nombrados + 5 casos fixture compartido)",
+                                            "tests/test_plan88_presets_validation.py -> 13 passed/0 failed",
+                                            "tests/test_plan88_materialize_endpoint.py -> 7 passed/0 failed",
+                                            "frontend npx vitest run src/devops/presetsModel.test.ts -> 10 passed (incl. paridad fixture compartido)",
+                                            "frontend npx tsc --noEmit -> 0 errores"
+                                        ],
+                              "evidencia":  {
+                                                "F0-flag":  "config.py + harness_flags.py:1950 FlagSpec requires=PANEL + help + harness_defaults.env",
+                                                "F1-materializador":  "services/publication_spec.py:25 resolve_processes, :66 _script_for, :79 build_publication_spec + tests/fixtures/plan88_resolution_cases.json",
+                                                "F2-validacion":  "api/client_profile.py:60 ALLOWED_PUBLISH_GROUPS, :162 publish_group, :188-215 presets/settings",
+                                                "F3-endpoint":  "api/devops.py:58 POST /publications/materialize + :33 publications_enabled en health",
+                                                "F4-presetsModel":  "frontend/src/devops/presetsModel.ts + endpoints.ts:3092 materializePublication",
+                                                "F5-seccion":  "components/devops/PublicationsSection.tsx + DevOpsPage.tsx:75 entrada declarativa + ClientProfileEditor.tsx:87,143-144 select publish_group",
+                                                "F6-ratchet":  "run_harness_tests.sh:114-117 + .ps1:107-110"
+                                            },
+                              "notas":  "APROBADO 2026-07-05. Paridad por datos py<->ts via fixture compartido verificada (test_f1_shared_fixture_cases + resolvePreview_shared_fixture_parity leen el MISMO json). Cross-cutting: su flag requires=PANEL quedo blessed en _REQUIRES_MAP_FROZEN (ver notas plan 87)."
+                          },
+                   "89":  {
+                              "plan":  "89",
+                              "ruta":  "Stacky Agents/docs/89_PLAN_INICIALIZACION_AMBIENTES_DEVOPS.md",
+                              "doc_sha256":  "4bf4ad30afd381a3d6b54d899a0a1c196e9718ef296fad85b2559af620d6ba27",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-05",
+                              "tests":  [
+                                            "tests/test_plan89_environments_flag.py -> 5 passed/0 failed",
+                                            "tests/test_plan89_environment_layout.py -> 11 passed/0 failed",
+                                            "tests/test_plan89_environment_plan_apply.py -> 12 passed/1 skipped (skip = symlink no soportado en Windows sin dev-mode, PREVISTO por el plan F2)",
+                                            "tests/test_plan89_env_settings_validation.py -> 9 passed/0 failed",
+                                            "tests/test_plan89_environments_endpoints.py -> 11 passed/0 failed",
+                                            "frontend npx vitest run src/devops/environmentModel.test.ts -> 7 passed",
+                                            "frontend npx tsc --noEmit -> 0 errores"
+                                        ],
+                              "evidencia":  {
+                                                "F0-flag":  "harness_flags.py:1965 FlagSpec requires=PANEL + config + help + harness_defaults.env",
+                                                "F1-layout":  "services/environment_init.py:18 _slug, :28 is_safe_segment, :45 build_environment_layout, :87 layout_fingerprint",
+                                                "F2-plan-apply":  "services/environment_init.py:95 validate_root, :110 plan_environment, :162 apply_environment + centinela anti-destruccion test_f2_source_has_no_destructive_calls",
+                                                "F3-validacion":  "api/client_profile.py devops_environment_settings (root/layout/pps)",
+                                                "F4-endpoints":  "api/devops.py:103 /environments/plan + :114 /environments/apply (fingerprint 409 plan_stale + ignored_not_in_layout) + :34 environments_enabled",
+                                                "F5-seccion":  "frontend/src/devops/environmentModel.ts + components/devops/EnvironmentsSection.tsx + DevOpsPage.tsx:83 entrada declarativa",
+                                                "F6-ratchet":  "run_harness_tests.sh:119-123 + .ps1:112-116"
+                                            },
+                              "notas":  "APROBADO 2026-07-05. 48 passed + 1 skipped (skip sancionado por el plan: test_f2_plan_symlink_escape_unsafe requiere privilegio symlink). Idempotencia y anti-destruccion verificadas por test real. Cross-cutting requires: ver notas plan 87."
+                          },
+                   "90":  {
+                              "plan":  "90",
+                              "ruta":  "Stacky Agents/docs/90_PLAN_AGENTE_DEVOPS_INTERACTIVO_MULTITURNO.md",
+                              "doc_sha256":  "8aeb68e309607dc0846933bd3d2348c8355d17a0828b8a459fb2384172588a0e",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-05",
+                              "tests":  [
+                                            "tests/test_plan90_devops_agent_flag.py -> 5 passed/0 failed",
+                                            "tests/test_plan90_devops_agent_registry.py -> 4 passed/0 failed",
+                                            "tests/test_plan90_devops_agent_endpoints.py -> 14 passed/0 failed (incl. guard C1 dos conversaciones + C3 continuable_with_memory)",
+                                            "frontend npx tsc --noEmit -> 0 errores"
+                                        ],
+                              "evidencia":  {
+                                                "F0-flag":  "harness_flags.py:1981 FlagSpec requires=PANEL + config + help + harness_defaults.env",
+                                                "F1-agente":  "agents/devops.py:4 DevOpsAgent type=devops + backend/Stacky/agents/DevOpsAgent.agent.md (R-HITL + CONFIRMO)",
+                                                "F2-blueprint":  "api/devops_agent.py (start/message/list) + registro api/__init__.py:46,94 + api/devops.py:35 agent_enabled",
+                                                "F2-external-id":  "api/devops_agent.py:59-81 DESVIO JUSTIFICADO: external_id=-ticket.id (no NULL como decia C1 v2) porque db._backfill_multi_project_ticket_columns rellena COALESCE(external_id, ado_id) en cada init_db y dos NULL del mismo proyecto colisionarian en el UNIQUE; documentado en codigo y en Estado del doc; test_f2_start_two_conversations_two_tickets verde",
+                                                "F3-frontend":  "endpoints.ts:3122 DevOpsAgentApi + components/devops/DevOpsAgentSection.tsx + DevOpsPage.tsx:92 entrada agente healthKey=agent_enabled",
+                                                "F4-ratchet":  "run_harness_tests.sh:125-127 + .ps1:118-120"
+                                            },
+                              "notas":  "APROBADO 2026-07-05. Desvio external_id declarado en el Estado del doc (cuerpo C1 del doc sigue diciendo NULL — drift menor de cuerpo, no de header). Sin vitest propio (el plan no define logica TS pura). Cross-cutting requires: ver notas plan 87."
+                          },
+                   "91":  {
+                              "plan":  "91",
+                              "ruta":  "Stacky Agents/docs/91_PLAN_REGISTRO_SERVIDORES_DEVOPS_CONEXIONES_ALIAS.md",
+                              "doc_sha256":  "b61fc8241cc654e5ad4b31a867148dcbd375755170afac060a191d2d660c1b9f",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-05",
+                              "tests":  [
+                                            "tests/test_plan91_servers_flag.py -> 5 passed/0 failed",
+                                            "tests/test_plan91_server_registry.py -> 13 passed/0 failed",
+                                            "tests/test_plan91_servers_endpoints.py -> 10 passed/0 failed",
+                                            "tests/test_plan91_rdp_endpoint.py -> 9 passed/0 failed (incl. test_f4_cmdkey_timeout_502_no_password_leak)",
+                                            "frontend npx vitest run src/pages/__tests__/ServersSection.test.ts -> 4 passed + DevOpsPage.test.ts -> 7 passed",
+                                            "frontend npx tsc --noEmit -> 0 errores"
+                                        ],
+                              "evidencia":  {
+                                                "F1-flag":  "harness_flags.py:1997 FlagSpec requires=PANEL + config + help + harness_defaults.env",
+                                                "F2-registry":  "services/server_registry.py:34 _LOCK(C7), :51 validate_host(C2), :137 _forget_termsrv(C3), :162 delete except Exception(C4), :183 touch_last_connected, :205 get_credential + requirements.txt:11 keyring==25.6.0",
+                                                "F3-api":  "api/devops_servers.py:24 guard is_json(C5) + CRUD + registro api/__init__.py:47,95 + api/devops.py:36-37 servers_enabled/rdp_available",
+                                                "F4-rdp":  "api/devops_servers.py:148-164 try/except generico cmdkey(C1) + mstsc detached + touch_last_connected",
+                                                "F5-seccion":  "components/devops/ServersSection.tsx + endpoints.ts:3156 DevOpsServers + DevOpsPage.tsx:102 entrada servidores",
+                                                "F6-selector":  "DevOpsPage.tsx:131-136 selectedAlias + localStorage stacky.devops.selectedServer + ctx.selectedServer aditivo",
+                                                "F7-ratchet":  "run_harness_tests.sh:129-132 + .ps1:122-125"
+                                            },
+                              "notas":  "APROBADO 2026-07-05. Los 5 centinelas de seguridad C1-C5 verificados en codigo (archivo:linea arriba) y sus tests corridos en verde. Doc header ya decia IMPLEMENTADO (regla estado-en-doc cumplida por el implementador). Cross-cutting requires: ver notas plan 87."
                           }
                }
 }

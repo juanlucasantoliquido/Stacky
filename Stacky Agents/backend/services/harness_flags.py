@@ -1944,7 +1944,11 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",  # mismo group que STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (harness_flags.py:1936)
         env_only=False,  # editable por UI (categoría 'devops')
-        requires="STACKY_PIPELINE_GENERATOR_ENABLED",  # Plan 82 — el preview/commit viven detras de esa flag
+        # SIN requires (supervisión 2026-07-05): la arista PANEL→GENERATOR violaba la
+        # regla R4 del Plan 82 (profundidad máx 1, validate_requires_graph) al combinarse
+        # con las hijas de la serie §3.12 (88/89/90/91 declaran requires=PANEL), y era
+        # semánticamente incorrecta: el panel NO requiere el generator — degrada con
+        # FlagGateBanner (87 v3 C14) y sus secciones agente/servidores/ambientes no lo usan.
     ),
     # ── Plan 88 — Publicaciones parametrizables de procesos (seccion DevOps) ────
     FlagSpec(

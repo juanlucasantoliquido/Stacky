@@ -26,6 +26,8 @@ export interface DevOpsHealth {
   publications_enabled?: boolean; // Plan 88 — sección Publicaciones
   environments_enabled?: boolean; // Plan 89 — sección Ambientes
   agent_enabled?: boolean; // Plan 90 — sección Agente DevOps
+  servers_enabled?: boolean; // Plan 91 — sección Servidores
+  rdp_available?: boolean; // Plan 91 — RDP disponible (Windows + keyring)
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -33,6 +35,9 @@ export interface DevOpsHealth {
 export interface DevOpsSectionContext {
   health: DevOpsHealth;
   refetchHealth: () => void;
+  // Plan 91 — aditivo/opcional: scoping por servidor para secciones que lo consuman
+  selectedServer?: { alias: string; host: string } | null;
+  servers?: ServerSummary[];
 }
 
 // Contrato de sección del registro (§3.12 C20)
@@ -54,6 +59,9 @@ import { PublicationsSection } from '../components/devops/PublicationsSection';
 import { EnvironmentsSection } from '../components/devops/EnvironmentsSection';
 // Importar DevOpsAgentSection (Plan 90 F3)
 import { DevOpsAgentSection } from '../components/devops/DevOpsAgentSection';
+// Importar ServersSection (Plan 91 F5)
+import { ServersSection } from '../components/devops/ServersSection';
+import { DevOpsServers, type ServerSummary } from '../api/endpoints';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -89,6 +97,16 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateMessage: 'El agente DevOps interactivo necesita su flag (categoría DevOps).',
     render: (ctx) => <DevOpsAgentSection ctx={ctx} />,
   },
+  // Plan 91 — Registro de servidores DevOps
+  {
+    id: 'servidores',
+    label: 'Servidores',
+    icon: '🖥️',
+    healthKey: 'servers_enabled',
+    gateFlagKey: 'STACKY_DEVOPS_SERVERS_ENABLED',
+    gateMessage: 'La sección Servidores necesita su flag (categoría DevOps).',
+    render: (ctx) => <ServersSection ctx={ctx} />,
+  },
 ];
 
 export const DevOpsPage: React.FC = () => {
@@ -102,9 +120,30 @@ export const DevOpsPage: React.FC = () => {
   // C10 - Montaje persistente: las secciones NUNCA se desmontan (display:none)
   const [mountedIds, setMountedIds] = useState<Set<string>>(new Set([DEVOPS_SECTIONS[0].id]));
 
+  // Plan 91 F6 — servidores para el selector de scoping (solo si la flag ON: KPI-3).
+  const serversQuery = useQuery({
+    queryKey: ['devops-servers'],
+    queryFn: () => DevOpsServers.list(),
+    retry: false,
+    enabled: healthQuery.data?.servers_enabled === true,
+  });
+  const [selectedAlias, setSelectedAlias] = useState<string | null>(
+    () => localStorage.getItem('stacky.devops.selectedServer'),
+  );
+  const onSelectServer = (alias: string | null) => {
+    setSelectedAlias(alias);
+    if (alias) localStorage.setItem('stacky.devops.selectedServer', alias);
+    else localStorage.removeItem('stacky.devops.selectedServer');
+  };
+
+  // C8 — LITERAL: si el alias persistido ya no existe, es null (no crashear).
+  const selected = (serversQuery.data?.servers ?? []).find((s) => s.alias === selectedAlias) ?? null;
+
   const ctx: DevOpsSectionContext = {
     health: healthQuery.data ?? { flag_enabled: false, generator_enabled: false, trigger_enabled: false },
     refetchHealth: () => healthQuery.refetch(),
+    selectedServer: selected ? { alias: selected.alias, host: selected.host } : null,
+    servers: serversQuery.data?.servers ?? [],
   };
 
   // Al cambiar de sub-tab, marcar como montada (C10)
@@ -150,6 +189,20 @@ export const DevOpsPage: React.FC = () => {
             {s.label}
           </button>
         ))}
+        {/* Plan 91 F6 — selector de servidor activo (scoping aditivo) */}
+        {ctx.health.servers_enabled === true && (ctx.servers?.length ?? 0) >= 1 && (
+          <select
+            value={selectedAlias ?? ''}
+            onChange={(e) => onSelectServer(e.target.value || null)}
+            style={{ padding: '8px', marginLeft: 'auto' }}
+            title="Servidor activo para las secciones que lo usen"
+          >
+            <option value="">— ninguno —</option>
+            {(ctx.servers ?? []).map((s) => (
+              <option key={s.alias} value={s.alias}>{s.alias}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Render de secciones con gate declarativo (C20) */}

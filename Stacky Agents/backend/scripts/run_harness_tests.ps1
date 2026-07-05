@@ -118,6 +118,11 @@ $HarnessTestFiles = @(
   "tests/test_plan90_devops_agent_flag.py",
   "tests/test_plan90_devops_agent_registry.py",
   "tests/test_plan90_devops_agent_endpoints.py",
+  # Plan 91 - Registro de servidores DevOps
+  "tests/test_plan91_servers_flag.py",
+  "tests/test_plan91_server_registry.py",
+  "tests/test_plan91_servers_endpoints.py",
+  "tests/test_plan91_rdp_endpoint.py",
   # Plan 61 - Gate determinista del flujo funcional (Task)
   "tests/test_task_gate_flags.py",
   "tests/test_task_gate.py",

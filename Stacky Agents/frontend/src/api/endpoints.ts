@@ -3070,11 +3070,18 @@ export const CodebaseMemoryMcp = {
 // ── Plan 87 — Panel DevOps (creador gráfico de pipelines) ─────────────────────
 
 export const DevOps = {
-  /** GET /api/devops/health — health del panel (flag + generator + trigger). */
+  /** GET /api/devops/health — health del panel (keys aditivas por plan: 88/89/90/91). */
   health: () =>
-    api.get<{ flag_enabled: boolean; generator_enabled: boolean; trigger_enabled: boolean }>(
-      "/api/devops/health"
-    ),
+    api.get<{
+      flag_enabled: boolean;
+      generator_enabled: boolean;
+      trigger_enabled: boolean;
+      publications_enabled?: boolean; // Plan 88
+      environments_enabled?: boolean; // Plan 89
+      agent_enabled?: boolean; // Plan 90
+      servers_enabled?: boolean; // Plan 91
+      rdp_available?: boolean; // Plan 91
+    }>("/api/devops/health"),
   /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
   parseYaml: (source: "ado" | "gitlab", yaml: string) =>
     api.post<{ spec: object }>("/api/devops/parse-yaml", { source, yaml }),
@@ -3133,6 +3140,40 @@ export const DevOpsAgentApi = {
     api.get<{ conversations: DevOpsConversationItem[]; resume_enabled: boolean }>(
       `/api/devops/agent/conversations${project ? `?project=${encodeURIComponent(project)}` : ""}`,
     ),
+};
+
+export interface ServerSummary {
+  alias: string;
+  host: string;
+  domain: string;
+  username: string;
+  notes: string;
+  has_password: boolean;
+  last_connected_at?: string | null; // [ADICIÓN ARQUITECTO] ISO o null
+}
+
+/** Plan 91 — registro de servidores DevOps (CRUD + test conectividad + RDP 1-click). */
+export const DevOpsServers = {
+  list: () =>
+    api.get<{ servers: ServerSummary[]; keyring_available: boolean }>("/api/devops/servers"),
+  create: (body: {
+    alias: string;
+    host: string;
+    domain?: string;
+    username: string;
+    notes?: string;
+    password?: string;
+  }) => api.post<ServerSummary>("/api/devops/servers", body),
+  update: (
+    alias: string,
+    body: { host: string; domain?: string; username: string; notes?: string; password?: string | null },
+  ) => api.put<ServerSummary>(`/api/devops/servers/${encodeURIComponent(alias)}`, body),
+  remove: (alias: string) =>
+    api.delete<{ ok: boolean }>(`/api/devops/servers/${encodeURIComponent(alias)}`),
+  testConnection: (alias: string) =>
+    api.post<{ ok: boolean; detail: string }>(`/api/devops/servers/${encodeURIComponent(alias)}/test`, {}),
+  connectRdp: (alias: string) =>
+    api.post<{ ok: boolean; detail: string }>(`/api/devops/servers/${encodeURIComponent(alias)}/rdp`, {}),
 };
 
 export const PipelineGenerator = {

@@ -3,9 +3,11 @@
 url_prefix="/devops" → rutas finales /api/devops/... (NO poner /api/ en el prefix,
 ver FIX C2 del plan 73 en api/pipeline_generator.py:7-8).
 """
+import sys
 from dataclasses import asdict
 from flask import Blueprint, jsonify, request, abort
 import config as _config
+from services import server_registry  # Plan 91 — rdp_available en health
 from services.pipeline_renderers import parse_ado_yaml, parse_gitlab_yaml
 from services.publication_spec import build_publication_spec
 from services.client_profile import load_client_profile  # services/client_profile.py:266
@@ -31,6 +33,8 @@ def devops_health_route():
         "publications_enabled": bool(getattr(cfg, "STACKY_DEVOPS_PUBLICATIONS_ENABLED", False)),
         "environments_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENVIRONMENTS_ENABLED", False)),
         "agent_enabled": bool(getattr(cfg, "STACKY_DEVOPS_AGENT_ENABLED", False)),  # Plan 90
+        "servers_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SERVERS_ENABLED", False)),  # Plan 91
+        "rdp_available": (sys.platform == "win32") and server_registry.keyring_available(),  # Plan 91
     })
 
 

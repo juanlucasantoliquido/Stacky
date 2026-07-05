@@ -608,20 +608,26 @@ PLAIN_HELP: dict[str, PlainHelp] = {
     "STACKY_DEVOPS_PUBLICATIONS_ENABLED": PlainHelp(
         what="Genera pipelines de publicación a partir de los procesos ya cargados en el catálogo del cliente, sin armarlos a mano.",
         on_effect="Si la activás: aparece la sección 'Publicaciones' del panel DevOps, donde podés definir presets (selección, agenda o todo el catálogo) y materializarlos como pipeline.",
-        off_effect="Si la apagás: esa sección no aparece y el endpoint de materialización responde 404.",
+        off_effect="Si la apagás: esa sección no aparece y la función de materialización queda deshabilitada.",
         example="Como una plantilla que arma el itinerario de entregas a partir de la lista de paquetes que ya tenés cargada, en vez de escribirlo de cero cada vez.",
     ),
     "STACKY_DEVOPS_ENVIRONMENTS_ENABLED": PlainHelp(
         what="Crea la estructura de carpetas que necesita un ambiente nuevo (entrada, procesamiento, salida) a partir del catálogo del cliente, y lanza la primera publicación.",
         on_effect="Si la activás: aparece la sección 'Ambientes' del panel DevOps, donde podés ver qué carpetas faltan (sin tocar nada) y crearlas recién con tu confirmación. Solo crea carpetas nuevas, nunca borra nada.",
-        off_effect="Si la apagás: esa sección no aparece y los endpoints de inicialización responden 404.",
+        off_effect="Si la apagás: esa sección no aparece y la inicialización de ambientes queda deshabilitada.",
         example="Como armar los cajones vacíos de un mueble nuevo siguiendo el plano del catálogo, antes de guardar la primera caja adentro.",
     ),
     "STACKY_DEVOPS_AGENT_ENABLED": PlainHelp(
         what="Un asistente DevOps con el que podés chatear ida y vuelta desde la solapa DevOps para diagnosticar, revisar configuraciones y preparar despliegues.",
         on_effect="Si la activás: aparece la sección 'Agente DevOps' donde abrís una conversación y le respondés varios turnos; el agente NUNCA ejecuta algo que cambie estado sin que vos escribas CONFIRMO.",
-        off_effect="Si la apagás: esa sección no aparece y los endpoints de conversación responden 404.",
+        off_effect="Si la apagás: esa sección no aparece y las conversaciones con el agente quedan deshabilitadas.",
         example="Encendela para chatear con el agente DevOps desde la solapa DevOps; apagala y la sección desaparece.",
+    ),
+    "STACKY_DEVOPS_SERVERS_ENABLED": PlainHelp(
+        what="Una libreta de servidores Windows con alias: guardás host, usuario y contraseña una vez y te conectás por escritorio remoto con un click.",
+        on_effect="Si la activás: aparece la sección 'Servidores' del panel DevOps; podés guardar servidores con alias y conectarte por RDP con 1 click. La contraseña se guarda en el Administrador de credenciales de Windows, nunca en archivos de Stacky.",
+        off_effect="Si la apagás: no cambia nada; la sección no aparece y la libreta de servidores queda deshabilitada.",
+        example="Como una agenda de contactos, pero de servidores: cargás cada uno una vez y después te conectás sin volver a tipear host ni credenciales.",
     ),
     # ── migrador_ado_gitlab ───────────────────────────────────────────────
     "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED": PlainHelp(

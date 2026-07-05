@@ -876,6 +876,12 @@ class Config:
         "STACKY_DEVOPS_AGENT_ENABLED", "false"
     ).strip().lower() == "true"
 
+    # Plan 91 — Registro de servidores DevOps (conexiones con alias). Default OFF.
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_SERVERS_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_SERVERS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

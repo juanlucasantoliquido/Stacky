@@ -179,6 +179,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_PUBLICATIONS_ENABLED",  # Plan 88 — publicaciones parametrizables de procesos
         "STACKY_DEVOPS_ENVIRONMENTS_ENABLED",  # Plan 89 — inicialización de ambientes
         "STACKY_DEVOPS_AGENT_ENABLED",  # Plan 90 — agente DevOps interactivo multi-turno
+        "STACKY_DEVOPS_SERVERS_ENABLED",  # Plan 91 — registro de servidores DevOps
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1991,6 +1992,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 F0)
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # sin panel no hay seccion donde usarlo
+    ),
+    # ── Plan 91 — Registro de servidores DevOps ────────────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_SERVERS_ENABLED",
+        type="bool",
+        label="Servidores DevOps (Plan 91)",
+        description=(
+            "Plan 91 — Registro de servidores con alias (host+usuario+dominio; "
+            "password en Windows Credential Manager, nunca en disco). Habilita "
+            "/api/devops/servers (CRUD, test de conectividad, conexion RDP 1-click) "
+            "y la seccion Servidores del panel DevOps. Default OFF."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla operator-config-always-via-ui)
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # la sección vive dentro del panel 87
     ),
     # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────
     FlagSpec(

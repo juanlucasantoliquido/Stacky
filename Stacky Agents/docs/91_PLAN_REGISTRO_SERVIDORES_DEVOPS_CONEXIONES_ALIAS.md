@@ -1,6 +1,7 @@
 # Plan 91 — Registro de servidores DevOps (conexiones con alias)
 
-**Estado:** CRITICADO
+**Estado:** IMPLEMENTADO (2026-07-05 — F0..F7 verdes; 37 tests backend + 4 vitest;
+tsc 0 err; keyring + RDP 1-click; centinelas de seguridad C1-C5 verdes)
 **Versión:** v2 (v1 -> v2, crítica adversarial 2026-07-04)
 **Fecha:** 2026-07-04
 **Serie DevOps:** extensión del panel (plan 87) — habilita scoping por servidor para 88/89/90

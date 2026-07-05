@@ -1,5 +1,6 @@
 import { api, apiBase, rawPost, type RawResponse, type GatewayErrorBody } from "./client";
 export type { RawResponse, GatewayErrorBody };
+import type { EnvironmentPlanResponse, EnvironmentApplyResponse } from "../devops/environmentModel";
 import type {
   ActiveProjectResponse,
   AgentDefinition,
@@ -3086,6 +3087,17 @@ export const DevOps = {
       "/api/devops/publications/materialize",
       { project, preset_name: presetName },
     ),
+  /** POST /api/devops/environments/plan — Plan 89. Dry-run SOLO-LECTURA del árbol de carpetas. */
+  environmentPlan: (project: string) =>
+    api.post<EnvironmentPlanResponse>("/api/devops/environments/plan", { project }),
+  /**
+   * POST /api/devops/environments/apply — Plan 89. Crea SOLO to_create. HITL:
+   * confirm es SIEMPRE argumento del caller (el componente pasa el estado del
+   * checkbox; este helper NUNCA lo auto-inyecta).
+   */
+  environmentApply: (project: string, paths: string[], confirm: boolean, fingerprint: string) =>
+    api.post<EnvironmentApplyResponse>("/api/devops/environments/apply",
+      { project, paths, confirm, fingerprint }),
 };
 
 export const PipelineGenerator = {

@@ -611,6 +611,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: esa sección no aparece y el endpoint de materialización responde 404.",
         example="Como una plantilla que arma el itinerario de entregas a partir de la lista de paquetes que ya tenés cargada, en vez de escribirlo de cero cada vez.",
     ),
+    "STACKY_DEVOPS_ENVIRONMENTS_ENABLED": PlainHelp(
+        what="Crea la estructura de carpetas que necesita un ambiente nuevo (entrada, procesamiento, salida) a partir del catálogo del cliente, y lanza la primera publicación.",
+        on_effect="Si la activás: aparece la sección 'Ambientes' del panel DevOps, donde podés ver qué carpetas faltan (sin tocar nada) y crearlas recién con tu confirmación. Solo crea carpetas nuevas, nunca borra nada.",
+        off_effect="Si la apagás: esa sección no aparece y los endpoints de inicialización responden 404.",
+        example="Como armar los cajones vacíos de un mueble nuevo siguiendo el plano del catálogo, antes de guardar la primera caja adentro.",
+    ),
     # ── migrador_ado_gitlab ───────────────────────────────────────────────
     "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED": PlainHelp(
         what="Permite mover épicas, tareas y comentarios de Azure DevOps hacia GitLab de forma segura, sin duplicar nada si se repite.",

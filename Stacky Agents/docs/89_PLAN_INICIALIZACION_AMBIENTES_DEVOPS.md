@@ -1,6 +1,7 @@
 # Plan 89 — Inicialización de ambientes desde el panel DevOps
 
-**Estado:** PROPUESTO
+**Estado:** IMPLEMENTADO (2026-07-04) — F0..F6 completas, 49 tests backend + 7 vitest
++ tsc 0 errores. Cierre de la serie DevOps (87→88→89).
 **Versión:** v2 → v3 (2ª crítica adversarial `criticar-y-mejorar-plan` — foco:
 usabilidad end-to-end + escalabilidad del panel, 2026-07-04)
 **Fecha:** 2026-07-03 (v1) / 2026-07-04 (v2) / 2026-07-04 (v3)

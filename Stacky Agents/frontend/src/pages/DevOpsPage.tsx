@@ -24,6 +24,7 @@ export interface DevOpsHealth {
   generator_enabled: boolean;
   trigger_enabled: boolean;
   publications_enabled?: boolean; // Plan 88 — sección Publicaciones
+  environments_enabled?: boolean; // Plan 89 — sección Ambientes
   [k: string]: boolean | undefined; // Keys futuras: agent_enabled, etc.
 }
 
@@ -48,6 +49,8 @@ export interface DevOpsSection {
 import { PipelineBuilderSection } from '../components/devops/PipelineBuilderSection';
 // Importar PublicationsSection (Plan 88 F5)
 import { PublicationsSection } from '../components/devops/PublicationsSection';
+// Importar EnvironmentsSection (Plan 89 F5)
+import { EnvironmentsSection } from '../components/devops/EnvironmentsSection';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -64,6 +67,14 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_DEVOPS_PUBLICATIONS_ENABLED',
     gateMessage: 'La sección Publicaciones necesita la flag STACKY_DEVOPS_PUBLICATIONS_ENABLED (Configuración → Arnés, categoría DevOps).',
     render: (ctx) => <PublicationsSection ctx={ctx} />,
+  },
+  {
+    id: 'ambientes',
+    label: 'Ambientes',
+    healthKey: 'environments_enabled',
+    gateFlagKey: 'STACKY_DEVOPS_ENVIRONMENTS_ENABLED',
+    gateMessage: 'La sección Ambientes necesita la flag STACKY_DEVOPS_ENVIRONMENTS_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <EnvironmentsSection ctx={ctx} />,
   },
   // Plan 90 (agente DevOps):
   // {

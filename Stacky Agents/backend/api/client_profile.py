@@ -223,6 +223,29 @@ def put_client_profile(project_name: str):
             ):
                 return jsonify({"ok": False, "error": "step_templates: keys en {entry,processing,output,default} y valores string."}), 400
 
+    # Plan 89 F3 — settings de ambiente (aditivo).
+    env_settings = profile.get("devops_environment_settings")
+    if env_settings is not None:
+        if not isinstance(env_settings, dict):
+            return jsonify({"ok": False, "error": "devops_environment_settings debe ser un objeto."}), 400
+        root = env_settings.get("environment_root")
+        if root is not None:
+            from services.environment_init import validate_root
+            err = validate_root(root)
+            if err:
+                return jsonify({"ok": False, "error": f"environment_root: {err}"}), 400
+        layout = env_settings.get("folder_layout")
+        if layout is not None:
+            from services.environment_init import is_safe_segment  # público (C12)
+            if not isinstance(layout, dict) or any(k not in ("entry", "processing", "output", "default") for k in layout):
+                return jsonify({"ok": False, "error": "folder_layout: keys en {entry,processing,output,default}."}), 400
+            for k, segs in layout.items():
+                if not isinstance(segs, list) or any(not isinstance(s, str) or not is_safe_segment(s) for s in segs):
+                    return jsonify({"ok": False, "error": f"folder_layout.{k}: lista de rutas relativas seguras (sin '..', sin caracteres invalidos de Windows, sin nombres reservados, no absolutas)."}), 400
+        pps = env_settings.get("per_process_subfolder")
+        if pps is not None and not isinstance(pps, bool):
+            return jsonify({"ok": False, "error": "per_process_subfolder debe ser booleano."}), 400
+
     previous = load_client_profile(project_name)
 
     try:

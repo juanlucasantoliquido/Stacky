@@ -177,6 +177,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     "devops": (
         "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 87 — panel DevOps: creador gráfico de pipelines
         "STACKY_DEVOPS_PUBLICATIONS_ENABLED",  # Plan 88 — publicaciones parametrizables de procesos
+        "STACKY_DEVOPS_ENVIRONMENTS_ENABLED",  # Plan 89 — inicialización de ambientes
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1953,6 +1954,22 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "de procesos del catalogo como pipelines (preview/commit plan 73, "
             "trigger plan 72). Default OFF. Con OFF el endpoint materialize da 404 "
             "y la seccion no aparece."
+        ),
+        group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # Plan 82 — declarativo, informa en UI
+    ),
+    # ── Plan 89 — Inicialización de ambientes (seccion DevOps) ──────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_ENVIRONMENTS_ENABLED",
+        type="bool",
+        label="Ambientes DevOps (Plan 89)",
+        description=(
+            "Plan 89 — Seccion Ambientes del panel DevOps: crea el arbol de "
+            "carpetas del ambiente derivado del catalogo (plan-then-apply con "
+            "confirmacion, NUNCA borra ni sobrescribe) y lanza la publicacion "
+            "inicial reusando el plan 88. Default OFF. Con OFF los endpoints "
+            "/api/devops/environments/* dan 404 y la seccion no aparece."
         ),
         group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
         env_only=False,  # editable por UI (categoría 'devops')

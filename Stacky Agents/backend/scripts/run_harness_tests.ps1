@@ -108,6 +108,12 @@ $HarnessTestFiles = @(
   "tests/test_plan88_publication_spec.py",
   "tests/test_plan88_presets_validation.py",
   "tests/test_plan88_materialize_endpoint.py",
+  # Plan 89 - Inicializacion de ambientes DevOps
+  "tests/test_plan89_environments_flag.py",
+  "tests/test_plan89_environment_layout.py",
+  "tests/test_plan89_environment_plan_apply.py",
+  "tests/test_plan89_env_settings_validation.py",
+  "tests/test_plan89_environments_endpoints.py",
   # Plan 61 - Gate determinista del flujo funcional (Task)
   "tests/test_task_gate_flags.py",
   "tests/test_task_gate.py",

@@ -617,6 +617,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: esa sección no aparece y los endpoints de inicialización responden 404.",
         example="Como armar los cajones vacíos de un mueble nuevo siguiendo el plano del catálogo, antes de guardar la primera caja adentro.",
     ),
+    "STACKY_DEVOPS_AGENT_ENABLED": PlainHelp(
+        what="Un asistente DevOps con el que podés chatear ida y vuelta desde la solapa DevOps para diagnosticar, revisar configuraciones y preparar despliegues.",
+        on_effect="Si la activás: aparece la sección 'Agente DevOps' donde abrís una conversación y le respondés varios turnos; el agente NUNCA ejecuta algo que cambie estado sin que vos escribas CONFIRMO.",
+        off_effect="Si la apagás: esa sección no aparece y los endpoints de conversación responden 404.",
+        example="Encendela para chatear con el agente DevOps desde la solapa DevOps; apagala y la sección desaparece.",
+    ),
     # ── migrador_ado_gitlab ───────────────────────────────────────────────
     "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED": PlainHelp(
         what="Permite mover épicas, tareas y comentarios de Azure DevOps hacia GitLab de forma segura, sin duplicar nada si se repite.",

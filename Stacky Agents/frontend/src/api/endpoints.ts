@@ -3100,6 +3100,41 @@ export const DevOps = {
       { project, paths, confirm, fingerprint }),
 };
 
+export interface DevOpsConversationItem {
+  conversation_id: number;
+  title: string;
+  project: string | null;
+  last_execution_id: number | null;
+  last_status: string | null;
+  last_runtime: string | null;
+  started_at: string | null;
+  continuable_with_memory: boolean; // C3 (v2): señal honesta por-conversación
+}
+
+/** Plan 90 — conversaciones del agente DevOps (multi-turno sobre runtimes CLI). */
+export const DevOpsAgentApi = {
+  start: (body: {
+    project: string;
+    message: string;
+    runtime?: "claude_code_cli" | "codex_cli";
+    model?: string;
+    effort?: string;
+  }) =>
+    api.post<{ ok: boolean; conversation_id: number; execution_id: number; runtime: string }>(
+      "/api/devops/agent/conversations",
+      body,
+    ),
+  message: (conversationId: number, message: string) =>
+    api.post<{ ok: boolean; mode: "stdin" | "resume" | "new_run"; execution_id: number }>(
+      `/api/devops/agent/conversations/${conversationId}/message`,
+      { message },
+    ),
+  list: (project?: string) =>
+    api.get<{ conversations: DevOpsConversationItem[]; resume_enabled: boolean }>(
+      `/api/devops/agent/conversations${project ? `?project=${encodeURIComponent(project)}` : ""}`,
+    ),
+};
+
 export const PipelineGenerator = {
   /** POST /api/pipeline-generator/preview — spec → {ado, gitlab} (200) o {errors} (400). */
   preview: (spec: object) =>

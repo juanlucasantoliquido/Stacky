@@ -178,6 +178,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 87 — panel DevOps: creador gráfico de pipelines
         "STACKY_DEVOPS_PUBLICATIONS_ENABLED",  # Plan 88 — publicaciones parametrizables de procesos
         "STACKY_DEVOPS_ENVIRONMENTS_ENABLED",  # Plan 89 — inicialización de ambientes
+        "STACKY_DEVOPS_AGENT_ENABLED",  # Plan 90 — agente DevOps interactivo multi-turno
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1974,6 +1975,22 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # Plan 82 — declarativo, informa en UI
+    ),
+    # ── Plan 90 — Agente DevOps interactivo multi-turno (seccion DevOps) ────────
+    FlagSpec(
+        key="STACKY_DEVOPS_AGENT_ENABLED",
+        type="bool",
+        label="Agente DevOps interactivo (Plan 90)",
+        description=(
+            "Plan 90 — Habilita el agente DevOps conversacional del panel DevOps: "
+            "conversaciones multi-turno sobre runtimes CLI (claude/codex) con "
+            "confirmacion explicita para acciones mutantes. Expone "
+            "/api/devops/agent/conversations. Default OFF: los endpoints devuelven "
+            "404 y la seccion muestra aviso."
+        ),
+        group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 F0)
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # sin panel no hay seccion donde usarlo
     ),
     # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────
     FlagSpec(

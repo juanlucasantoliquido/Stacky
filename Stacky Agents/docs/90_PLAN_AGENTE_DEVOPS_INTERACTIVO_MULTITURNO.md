@@ -1,6 +1,7 @@
 # Plan 90 — Agente DevOps interactivo multi-turno en el panel DevOps
 
-**Estado:** PROPUESTO
+**Estado:** IMPLEMENTADO (2026-07-05 — F0..F4 verdes; 23 tests del plan + no-regresión;
+tsc 0 err; gotcha backfill external_id resuelto con external_id=-ticket.id)
 **Versión:** v1 → v2 → v3 (3ª crítica adversarial `criticar-y-mejorar-plan` — foco:
 coherencia con contrato de extensión 87 v3 + usabilidad, 2026-07-04)
 **Fecha:** 2026-07-04 (v1) / 2026-07-04 (v2) / 2026-07-04 (v3)

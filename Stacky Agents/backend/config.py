@@ -870,6 +870,12 @@ class Config:
         "STACKY_DEVOPS_ENVIRONMENTS_ENABLED", "false"
     ).strip().lower() == "true"
 
+    # Plan 90 — Agente DevOps interactivo multi-turno (seccion del panel DevOps).
+    # Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_AGENT_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_AGENT_ENABLED", "false"
+    ).strip().lower() == "true"
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

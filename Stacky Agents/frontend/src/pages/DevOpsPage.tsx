@@ -25,7 +25,8 @@ export interface DevOpsHealth {
   trigger_enabled: boolean;
   publications_enabled?: boolean; // Plan 88 — sección Publicaciones
   environments_enabled?: boolean; // Plan 89 — sección Ambientes
-  [k: string]: boolean | undefined; // Keys futuras: agent_enabled, etc.
+  agent_enabled?: boolean; // Plan 90 — sección Agente DevOps
+  [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
 // Contexto que recibe cada sección
@@ -51,6 +52,8 @@ import { PipelineBuilderSection } from '../components/devops/PipelineBuilderSect
 import { PublicationsSection } from '../components/devops/PublicationsSection';
 // Importar EnvironmentsSection (Plan 89 F5)
 import { EnvironmentsSection } from '../components/devops/EnvironmentsSection';
+// Importar DevOpsAgentSection (Plan 90 F3)
+import { DevOpsAgentSection } from '../components/devops/DevOpsAgentSection';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -76,16 +79,16 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateMessage: 'La sección Ambientes necesita la flag STACKY_DEVOPS_ENVIRONMENTS_ENABLED (Configuración → Arnés, categoría DevOps).',
     render: (ctx) => <EnvironmentsSection ctx={ctx} />,
   },
-  // Plan 90 (agente DevOps):
-  // {
-  //   id: 'agente',
-  //   label: 'Agente',
-  //   icon: '🤖',
-  //   healthKey: 'agent_enabled',
-  //   gateFlagKey: 'STACKY_DEVOPS_AGENT_ENABLED',
-  //   gateMessage: 'El Agente DevOps necesita su flag (categoría DevOps).',
-  //   render: (ctx) => <AgentSection ctx={ctx} />,
-  // },
+  // Plan 90 — Agente DevOps interactivo multi-turno
+  {
+    id: 'agente',
+    label: 'Agente DevOps',
+    icon: '🛠️',
+    healthKey: 'agent_enabled',
+    gateFlagKey: 'STACKY_DEVOPS_AGENT_ENABLED',
+    gateMessage: 'El agente DevOps interactivo necesita su flag (categoría DevOps).',
+    render: (ctx) => <DevOpsAgentSection ctx={ctx} />,
+  },
 ];
 
 export const DevOpsPage: React.FC = () => {

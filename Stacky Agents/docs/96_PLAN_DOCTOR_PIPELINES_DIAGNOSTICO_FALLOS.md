@@ -1,9 +1,63 @@
 # Plan 96 — Doctor de pipelines: el fallo explicado en llano (ADO + GitLab)
 
-**Estado:** PROPUESTO
-**Versión:** v1
-**Fecha:** 2026-07-05
+**Estado:** CRITICADO (juez adversarial, listo para implementar)
+**Versión:** v2 (v1 → v2, crítica adversarial 2026-07-06)
+**Fecha:** 2026-07-05 (crítica: 2026-07-06)
+**Veredicto del juez:** APROBADO-CON-CAMBIOS (0 bloqueantes, 5 importantes, 1 menor).
 **Serie DevOps E2E:** plan 4 de 4 (93 preflight / 94 variables / 95 producción / 96 doctor).
+
+## Changelog v1 → v2
+
+- **C1 (IMPORTANTE, resuelto en F0/F5):** F0 decía "5 casos patrón" pero la flag
+  declara `requires=` ⇒ faltaba la **6ª pata**: arista
+  `STACKY_DEVOPS_DOCTOR_ENABLED → STACKY_DEVOPS_PANEL_ENABLED` en
+  `_REQUIRES_MAP_FROZEN` (`tests/test_harness_flags_requires.py`, junto a las de
+  88-95). Sin ella el meta-test R4 queda ROJO en silencio — misma omisión que 93
+  C1 / 94 C1 / 95 C1 ya corrigieron en sus propios v2. F0 ahora es de 6 patas y
+  F5 corre ese test explícitamente.
+- **C2 (IMPORTANTE, resuelto en F4):** F4 v1 monta `<PipelineDoctorPanel
+  ctx={ctx} .../>` dentro de `TriggerPipelineSection.tsx`, pero ese componente
+  NO recibe `ctx` como prop hoy (`TriggerPipelineSectionProps` solo tiene
+  `project`/`lastBranch`, verificado en el archivo real) y se monta desde
+  `PipelineBuilderSection.tsx:481` sin pasarlo — aunque `ctx` SÍ está disponible
+  ahí (`PipelineBuilderSection.tsx:51`). Un modelo menor implementando F4 al pie
+  de la letra rompería `tsc` o tendría que inferir el prop-threading. F4 ahora
+  especifica literalmente el cambio de prop + el call site.
+- **C3 (IMPORTANTE, resuelto en F2):** la instrucción de F2 para el trace de
+  GitLab delegaba la decisión ("usar la variante raw... el adapter documenta
+  cuál usa tras leer el helper real") a tiempo de implementación — ambigüedad
+  para modelos menores. Verificado contra el código real
+  (`services/gitlab_client.py:107-175`): `_request` YA sniffea `Content-Type` y
+  devuelve `resp.text` cuando la respuesta no es JSON (líneas 164-175) — no
+  existe ni hace falta ninguna "variante raw". F2 ahora da la llamada literal.
+- **C4 (IMPORTANTE, resuelto en §3/F3):** contradicción entre el Principio §3.1
+  ("ADO sin run que inspeccionar ⇒ 409 honesto con CTA") y F2/F3, que no
+  implementaban ningún path que produjera ese 409 — cualquier error caía en el
+  catch-all genérico (502 `logs_unavailable`) o en el status crudo de
+  `TrackerApiError`. Prometer un 409 que el código nunca construye es el tipo de
+  brecha que un supervisor detecta después como "plan no implementado según su
+  propio texto". Se ajustó el principio para describir el comportamiento REAL
+  (propagación honesta del status real, nunca 409 inventado) en vez de un 409
+  especial no cableado.
+- **C5 (IMPORTANTE, resuelto en F3/F4):** el KPI §1 promete "0 fallos
+  silenciosos", pero el cap defensivo `failed[:10]` de F3 descartaba los jobs
+  11+ sin ninguna señal en la respuesta ni en la UI — un fallo silencioso de
+  cobertura que contradice el propio KPI. F3 ahora expone
+  `failed_jobs_total` y F4 muestra el aviso de truncado cuando corresponde.
+- **C6 (MENOR, documentado):** un par de citas de línea de la tabla de
+  evidencia tenían desvíos menores (p. ej. `DevOpsAgentApi` real vive en
+  `endpoints.ts:3126`, no `:3122`) — grep-ables por símbolo, no bloquean, se
+  corrigen para no sembrar desconfianza en supervisiones futuras.
+- **[ADICIÓN ARQUITECTO] (nueva §4.1, opcional/diferible a v1.1):** conectar la
+  clasificación de capa 1 con el sistema de "memoria que empuja" YA EXISTENTE
+  (planes 48-54, `services/memory_prefix.py:10` `build_memory_prefix`) — se
+  registra SOLO el `id` de la clase de fallo (nunca el log ni el snippet) como
+  una lección de proyecto, para que la PRÓXIMA vez que un agente edite el
+  pipeline de ese proyecto reciba un prefijo informativo ("este proyecto falló
+  antes por: comando inexistente en el runner"). Cero subsistema nuevo (reusa
+  el canal existente), cero secretos (solo un id de clase, nunca texto de log),
+  cero carga al operador (automático, bajo la misma flag), no toca HITL
+  (informativo, no mutante).
 **Requisito textual del operador (riel #1):** compatible con **Azure DevOps Y GitLab
 desde el día 1**.
 **Dependencias:** plan 87 IMPLEMENTADO (`84a9ecb5` — TriggerPipelineSection con
@@ -11,7 +65,9 @@ monitor). Plan 90 IMPLEMENTADO (`5859ceba` — agente DevOps conversacional): la
 **capa 2** de este plan lo consume OPCIONALMENTE (gate por `agent_enabled` del
 health; si está OFF, la capa 1 heurística alcanza sola). Plan 95: la pata ADO de
 logs necesita que exista un run/build ADO — si el proyecto ADO aún no puede
-disparar (95 sin implementar/activar), este plan degrada honesto (409 con CTA).
+disparar (95 sin implementar/activar), este plan degrada honesto (**[C4]** el
+error real del tracker propaga tal cual — nunca un 409 inventado; en la
+práctica la UI ni siquiera muestra el botón porque no hay `pipeline_id`).
 Verificado en working tree 2026-07-05:
 
 | Pieza existente reusada | Evidencia (archivo:línea) |
@@ -21,7 +77,7 @@ Verificado en working tree 2026-07-05:
 | Cliente REST GitLab (delegate) | `backend/services/gitlab_provider.py` (`_request`; `poll_pipeline:545`) |
 | Cliente REST ADO con PAT | `backend/services/ado_client.py:257` (`_request`) |
 | Fábrica por tracker_type (patrón) | `backend/services/ci_provider.py:107`; `CI_PORT_METHODS:100` CONGELADO (⇒ sub-puerto nuevo, patrón ISP `repo_writer.py:13`) |
-| Agente DevOps conversacional (capa 2) | `backend/api/devops_agent.py:28` (`POST /api/devops/agent/conversations`), `:102` (`.../message`); UI `frontend/src/components/devops/DevOpsAgentSection.tsx`; namespace `DevOpsAgentApi` (`endpoints.ts:3122`) |
+| Agente DevOps conversacional (capa 2) | `backend/api/devops_agent.py:28` (`POST /api/devops/agent/conversations`), `:102` (`.../message`); UI `frontend/src/components/devops/DevOpsAgentSection.tsx`; namespace `DevOpsAgentApi` (`endpoints.ts:3126`, corregido **[C6]**) |
 | Salud del panel con booleans aditivos (`agent_enabled` ya existe) | `backend/api/devops.py:25-38` |
 | `FlagGateBanner` + contrato §3.12 | `frontend/src/components/devops/FlagGateBanner.tsx`, `frontend/src/pages/DevOpsPage.tsx:44,68` |
 | Matriz de runtimes del chat (copilot ⇒ 400 controlado) | plan 90 §3.6 (`devops_chat_requires_cli_runtime`, `api/devops_agent.py`) |
@@ -67,7 +123,11 @@ ya implementado, sin duplicar ningún mecanismo de chat.
 
 1. **PARIDAD ADO + GITLAB:** sub-puerto `CILogsProvider` con DOS adapters y
    fábrica por tracker_type; tests de ambos con mocks HTTP. Donde ADO no tenga
-   run que inspeccionar (plan 95 pendiente), 409 honesto con CTA — nunca inventar.
+   run que inspeccionar (plan 95 pendiente), el error del tracker propaga
+   HONESTO con su status y mensaje reales (404/502 según corresponda) —
+   **[C4] nunca se inventa un 409 especial no cableado**: si en la práctica
+   nunca hay `pipeline_id` para ADO sin el 95 (el monitor no lo genera), la UI
+   simplemente no muestra el botón; ver F3 para el único catch-all real.
 2. **Solo-lectura absoluto (capa 1):** el doctor lee logs; no re-lanza, no
    cancela, no escribe. Test centinela de no-escritura.
 3. **HITL (capa 2):** abrir la conversación del agente es un click explícito; el
@@ -96,17 +156,31 @@ ya implementado, sin duplicar ningún mecanismo de chat.
 > desde `Stacky Agents/backend`; frontend `npx tsc --noEmit` + `npx vitest run
 > <archivo>`.
 
-### F0 — Flag `STACKY_DEVOPS_DOCTOR_ENABLED` (5 patas)
+### F0 — Flag `STACKY_DEVOPS_DOCTOR_ENABLED` (6 patas — C1)
 
-Misma mecánica EXACTA que 93 F0 (espejo `test_plan91_servers_flag.py`).
+Misma mecánica EXACTA que 93/95 F0 v2 (espejo `test_plan91_servers_flag.py`).
 `label="Doctor de pipelines (Plan 96)"`, description en llano: "Cuando un
 pipeline falla, el botón '¿Qué pasó?' baja el log del job y te lo explica en
 lenguaje llano; opcionalmente se lo pasa al agente DevOps. Solo lee, nunca
 ejecuta. Default OFF."
 
+Las 6 patas: (1) `config.py`; (2) `harness_flags.py` FlagSpec (SIN `default=`,
+`env_only=False`, `requires="STACKY_DEVOPS_PANEL_ENABLED"`, `group="global"`);
+(3) `PlainHelp`; (4) `harness_defaults.env` línea
+`STACKY_DEVOPS_DOCTOR_ENABLED=false` en orden alfabético — nota: hay drift
+PREEXISTENTE de ese archivo en el working tree (centinelas 87-91): solo
+AGREGAR la línea nueva, NUNCA revertir líneas ajenas ni regenerar el archivo;
+(5) test patrón; (6) **[C1] arista en `_REQUIRES_MAP_FROZEN`**
+(`tests/test_harness_flags_requires.py`, junto a las de 88-95):
+```python
+"STACKY_DEVOPS_DOCTOR_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 96
+```
+
 **Tests PRIMERO** — `tests/test_plan96_doctor_flag.py` (5 casos patrón +
 no-regresión meta-tests; nota plan 85: F0+F3 juntos si el wiring acusa).
-**Ratchet:** registrar. **Criterio binario:** 5+2 verdes; default OFF.
+No-regresión: `tests/test_harness_flags.py` + `tests/test_flag_wiring.py` +
+`tests/test_harness_flags_requires.py` ([C1] R4 exige la arista).
+**Ratchet:** registrar. **Criterio binario:** 5+3 verdes; default OFF.
 **Runtimes:** sin impacto. **Trabajo del operador:** ninguno.
 
 ### F1 — Clasificador PURO (`services/failure_doctor.py`)
@@ -237,9 +311,12 @@ def get_ci_logs_provider(project: Optional[str] = None) -> CILogsProvider:
   `GitLabTrackerProvider(project_name=project)` y su `_request`):
   - `list_failed_jobs`: `GET /projects/:id/pipelines/{pipeline_id}/jobs?scope[]=failed`
     → `[{job_id: str(j["id"]), name: j["name"], stage: j["stage"]}]`.
-  - `get_job_log`: `GET /projects/:id/jobs/{job_id}/trace` (respuesta text/plain —
-    si el helper `_request` solo parsea JSON, usar la variante raw del cliente o
-    leer `response.text`; el adapter documenta cuál usa tras leer el helper real).
+  - `get_job_log`: `GET /projects/:id/jobs/{job_id}/trace` (respuesta text/plain).
+    **[C3] Literal, sin variante raw:** `body, _ = self._client._request("GET",
+    f"/projects/{{proj_path}}/jobs/{{job_id}}/trace")` alcanza — verificado en
+    `services/gitlab_client.py:107-175`: `_request` ya sniffea `Content-Type` y
+    devuelve `resp.text` cuando la respuesta no es JSON (líneas 164-175); `body`
+    llega como `str` directamente, sin helper adicional.
 - **Archivo NUEVO:** `Stacky Agents/backend/services/ado_ci_logs.py`
   - `class AdoCILogsProvider` (`name="azure_devops"`; `AdoClient._request`):
   - `list_failed_jobs`: `GET {base_proj}/_apis/build/builds/{pipeline_id}/timeline?api-version=7.1`
@@ -301,12 +378,20 @@ def doctor_diagnose_route():
             diagnosis = {"matches": [], "snippet": f"(no pude bajar el log: {e})"}
         jobs.append({**j, "diagnosis": diagnosis})
     return jsonify({"provider": provider.name, "jobs": jobs,
-                    "no_failures_found": len(failed) == 0})
+                    "no_failures_found": len(failed) == 0,
+                    "failed_jobs_total": len(failed)})   # [C5] honestidad del cap
 ```
-(`TrackerApiError` importado arriba como en `pipeline_generator.py:21`.)
-Caso ADO sin plan 95: `get_ci_logs_provider` funciona igual (los ids vienen del
-monitor); si el proyecto ADO nunca disparó desde Stacky, la UI ni muestra el
-botón (no hay pipeline_id) — no hace falta guard extra, se documenta.
+(`TrackerApiError` importado arriba como en `api/pipeline_generator.py:21`.)
+**[C5]** `failed_jobs_total` puede ser mayor que `len(jobs)` (cap de 10); F4 usa
+esa diferencia para avisar "mostrando 10 de N" — nunca desaparecer jobs sin señal
+(cumple el KPI "0 fallos silenciosos" de §1).
+**[C4]** Caso ADO sin plan 95: `get_ci_logs_provider` funciona igual (los ids
+vienen del monitor); si el proyecto ADO nunca disparó desde Stacky, la UI ni
+muestra el botón (no hay `pipeline_id`) — no hace falta guard extra. Si el
+`build_id`/`log_id` codificado deja de existir (build purgado, etc.), el error
+cae en el catch-all de arriba (502 `logs_unavailable`) o en el
+`TrackerApiError` real que lance `AdoClient._request` — **nunca** un 409
+artificial: es el mismo criterio de honestidad que el resto del endpoint.
 Health: `"doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_DOCTOR_ENABLED", False)),`
 en `devops_health_route` (`api/devops.py:29-38`).
 
@@ -322,8 +407,10 @@ provider mockeado vía `unittest.mock.patch("api.devops.get_ci_logs_provider", .
 - `test_f3_readonly_no_writes` (saver de client_profile + commit_file mockeados
   ⇒ assert_not_called — centinela).
 - `test_f3_health_has_doctor_enabled` / `test_f3_route_registered`.
+- `test_f3_failed_jobs_total_exposed_when_capped` **[C5]** (fixture con 12
+  fallidos ⇒ `len(jobs) == 10` y `failed_jobs_total == 12`).
 
-**Ratchet:** registrar. **Criterio binario:** 9 tests verdes.
+**Ratchet:** registrar. **Criterio binario:** 10 tests verdes.
 **Flag:** `STACKY_DEVOPS_DOCTOR_ENABLED` (guard per-request).
 **Runtimes:** sin impacto. **Trabajo del operador:** ninguno.
 
@@ -354,8 +441,11 @@ provider mockeado vía `unittest.mock.patch("api.devops.get_ci_logs_provider", .
   job: tarjeta con `name`, títulos de matches (o el fallback honesto "No reconocí
   un patrón conocido — mirá el final del log"), hints, y `<details>` con el
   snippet en `<pre>`.
+- **[C5]** Si `failed_jobs_total > jobs.length`, encabezado adicional
+  "Mostrando {jobs.length} de {failed_jobs_total} jobs fallidos" — nunca ocultar
+  el faltante en silencio.
 - **Capa 2:** si `ctx.health.agent_enabled === true` ⇒ botón "Explicar con el
-  agente DevOps" ⇒ `DevOpsAgentApi` (endpoints.ts:3122) `startConversation` con
+  agente DevOps" ⇒ `DevOpsAgentApi` (endpoints.ts:3126 **[C6]**) `startConversation` con
   `message = buildAgentPrompt(...)` ⇒ al 202, hint "Conversación abierta — seguila
   en la sección Agente DevOps" (el montaje persistente del 87 C10 conserva el
   chat al navegar). Si el 90 responde 400 `devops_chat_requires_cli_runtime`
@@ -367,9 +457,17 @@ provider mockeado vía `unittest.mock.patch("api.devops.get_ci_logs_provider", .
 - `frontend/src/api/endpoints.ts` — en el namespace `DevOps` (:3072):
   `doctorDiagnose: (project: string, pipelineId: string) => api.post<...>(
   "/api/devops/doctor/diagnose", { project, pipeline_id: pipelineId })`.
-- `frontend/src/components/devops/TriggerPipelineSection.tsx` — cuando el estado
-  del monitor sea `failed`, montar `<PipelineDoctorPanel ctx={ctx}
+- **[C2] `frontend/src/components/devops/TriggerPipelineSection.tsx`** — HOY
+  `TriggerPipelineSectionProps` solo tiene `project`/`lastBranch` (verificado en
+  el archivo real: no recibe `ctx`). Agregar `ctx: DevOpsSectionContext` a la
+  interface y a la firma del componente (el import de `DevOpsSectionContext` ya
+  existe en el archivo, línea 8 — solo falta usarlo como prop). Luego, cuando
+  `monitorStatus?.status === 'failed'`, montar `<PipelineDoctorPanel ctx={ctx}
   project={project} pipelineId={pipelineId} />` debajo del estado.
+- **[C2] `frontend/src/components/devops/PipelineBuilderSection.tsx:481`** —
+  el único call site de `<TriggerPipelineSection .../>` HOY pasa solo
+  `project`/`lastBranch`; agregar `ctx={ctx}` (el componente contenedor ya tiene
+  `ctx: DevOpsSectionContext` disponible como prop, línea 51).
 - `frontend/src/pages/DevOpsPage.tsx` — SIN cambios (§3.12).
 
 **Tests** — `frontend/src/devops/doctorModel.test.ts` (vitest TS puro):
@@ -380,8 +478,10 @@ provider mockeado vía `unittest.mock.patch("api.devops.get_ci_logs_provider", .
 Componentes: gate `tsc`.
 
 **Criterio binario:** vitest verde (3 tests) + `tsc` 0 errores; grep:
-`PipelineDoctorPanel` en `TriggerPipelineSection.tsx`; el botón del agente está
-dentro de `{ctx.health.agent_enabled === true && ...}` (grep del literal
+`PipelineDoctorPanel` en `TriggerPipelineSection.tsx`; **[C2]** grep `ctx` en
+`TriggerPipelineSectionProps` (`TriggerPipelineSection.tsx`) y en el call site
+`<TriggerPipelineSection` de `PipelineBuilderSection.tsx`; el botón del agente
+está dentro de `{ctx.health.agent_enabled === true && ...}` (grep del literal
 `agent_enabled` en `PipelineDoctorPanel.tsx`); `DevOpsPage.tsx` sin diff.
 **Flag:** `doctor_enabled` (gate inline) + `agent_enabled` (capa 2).
 **Runtimes:** capa 1 sin impacto; capa 2 hereda matriz del 90 (copilot degrada
@@ -393,7 +493,7 @@ con el 400 controlado). **Trabajo del operador:** opt-in.
 ```
 cd "Stacky Agents/backend"
 .venv/Scripts/python.exe -m pytest tests/test_plan96_doctor_flag.py tests/test_plan96_failure_doctor.py tests/test_plan96_logs_providers.py tests/test_plan96_doctor_endpoint.py -q
-.venv/Scripts/python.exe -m pytest tests/test_plan87_devops_endpoints.py tests/test_plan90_devops_agent_endpoints.py tests/test_harness_flags.py tests/test_flag_wiring.py -q
+.venv/Scripts/python.exe -m pytest tests/test_plan87_devops_endpoints.py tests/test_plan90_devops_agent_endpoints.py tests/test_harness_flags.py tests/test_flag_wiring.py tests/test_harness_flags_requires.py -q
 cd "../frontend"
 npx vitest run src/devops/doctorModel.test.ts
 npx tsc --noEmit
@@ -411,7 +511,42 @@ npx tsc --noEmit
 - [ ] Capa 2: con `agent_enabled` ON abre conversación del 90 con la plantilla
       (contiene "CONFIRMO"); con OFF el botón no existe; con copilot muestra el
       400 del 90 y la capa 1 queda completa.
+- [ ] **[C1]** Arista `DOCTOR → PANEL` en `_REQUIRES_MAP_FROZEN` y
+      `test_harness_flags_requires.py` verde.
+- [ ] **[C2]** `ctx` llega a `PipelineDoctorPanel` vía `TriggerPipelineSection`
+      (prop agregada + call site en `PipelineBuilderSection.tsx:481` actualizado);
+      `tsc` 0 errores confirma el threading.
+- [ ] **[C5]** Con >10 jobs fallidos, `failed_jobs_total` viaja en la respuesta y
+      la UI avisa el truncado — nunca desaparecen jobs sin señal.
 - [ ] Tests registrados en ambos scripts de ratchet.
+
+### 4.1 [ADICIÓN ARQUITECTO] — Lección de proyecto (opcional, diferible a v1.1)
+
+**NO es parte del DoD de v1** (no infla F0-F5 ni sus criterios binarios); se deja
+especificada para no perder la idea y para que un futuro plan la levante sin
+re-descubrirla.
+
+**Objetivo:** que el diagnóstico de capa 1 deje de ser un callejón sin salida —
+la MISMA clase de fallo (`id` del catálogo, NUNCA el log/snippet) se registra
+como una lección de proyecto reusando el sistema de "memoria que empuja" YA
+EXISTENTE (planes 48-54; wiring real en `services/memory_prefix.py:10`
+`build_memory_prefix`, consumido por los 3 runtimes). Así, la próxima vez que un
+agente edite el pipeline de ese proyecto, el prefijo de memoria incluye algo
+como "este proyecto falló antes por: comando inexistente en el runner" —
+convierte un diagnóstico puntual en aprendizaje compuesto del proyecto, que es
+exactamente el diferencial ya construido de Stacky.
+
+**Guardrails (heredados, sin excepción):**
+- Cero subsistema nuevo: se reusa el canal existente de rejection_lessons/memoria
+  colaborativa; NO se crea una tabla ni un store nuevo.
+- Cero secretos: se persiste solo el `id` de la clase (p. ej. `"cmd_not_found"`),
+  nunca el log, nunca el snippet.
+- Cero carga al operador: automático, bajo la misma flag `STACKY_DEVOPS_DOCTOR_ENABLED`
+  (o un sub-flag propio con default OFF si se prefiere aislar el rollout).
+- HITL intacto: es informativo (un prefijo de contexto), no dispara ninguna
+  acción; el agente sigue exigiendo `CONFIRMO` para todo lo mutante.
+- Paridad 3 runtimes: hereda la paridad ya lograda por el plan 54 para
+  `build_memory_prefix` (los 3 runtimes ya la consumen idéntico).
 
 ## 5. Riesgos y mitigaciones
 
@@ -421,7 +556,7 @@ npx tsc --noEmit
 | Falsos diagnósticos del regex | Orden de prioridad + fallback honesto sin match + 12 tests con logs reales por clase |
 | Secretos visibles en logs | El doctor no persiste nada; muestra lo que el tracker ya muestra; capa 2 manda el MISMO snippet visible (sin ampliación de superficie) |
 | ADO: mapping timeline→log frágil | Records sin `log` omitidos + id compuesto validado + tests de fixture mixto |
-| Trace GitLab no-JSON rompe el helper `_request` | El adapter documenta y usa la variante raw del cliente (verificar el helper REAL al implementar — instrucción explícita en F2, no inferencia silenciosa) |
+| Trace GitLab no-JSON | Resuelto **[C3]**: `_request` (`gitlab_client.py:107-175`) ya sniffea `Content-Type` y devuelve `resp.text`; no hace falta variante raw ni verificación adicional al implementar |
 | Capa 2 sin plan 90 activo | Botón no renderizado si `agent_enabled !== true`; capa 1 autosuficiente |
 | Drift de la regla CONFIRMO | Test de la plantilla exige el literal "CONFIRMO" |
 
@@ -449,7 +584,7 @@ npx tsc --noEmit
 
 ## 8. Orden de implementación
 
-1. F0 — flag (5 patas).
+1. F0 — flag (6 patas).
 2. F1 — clasificador puro + catálogo (12 clases).
 3. F2 — sub-puerto + adapters gitlab/ado.
 4. F3 — endpoint diagnose + health key.
@@ -458,9 +593,11 @@ npx tsc --noEmit
 
 ## 9. Definición de Hecho (DoD)
 
-- 39 tests backend nombrados (F0:5, F1:18, F2:7, F3:9) verdes por archivo con el
-  venv; no-regresión 87/90 y meta-tests verdes.
-- Vitest F4 verde; `tsc` 0 errores.
+- 40 tests backend nombrados (F0:5, F1:18, F2:7, F3:10 **[C5]**) verdes por
+  archivo con el venv; no-regresión 87/90 + meta-tests (`test_harness_flags.py`,
+  `test_flag_wiring.py`, `test_harness_flags_requires.py` **[C1]**) verdes.
+- Vitest F4 verde (3 tests); `tsc` 0 errores; **[C2]** `ctx` threading verificado
+  (`TriggerPipelineSection.tsx` + `PipelineBuilderSection.tsx:481`).
 - Paridad ADO+GitLab por tests de ambos adapters (mocks HTTP).
 - Capa 1 100% funcional sin el plan 90; capa 2 gated por `agent_enabled` y con
   la matriz de runtimes del 90 declarada.

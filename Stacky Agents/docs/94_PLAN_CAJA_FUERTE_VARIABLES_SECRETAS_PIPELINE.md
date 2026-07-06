@@ -1,7 +1,7 @@
 # Plan 94 — Caja fuerte de variables: secretos del pipeline fuera del YAML (ADO + GitLab)
 
-**Estado:** CRITICADO (juez adversarial 2026-07-05 — veredicto: **APROBADO-CON-CAMBIOS**, aplicados en esta v2)
-**Versión:** v2 (v1 → v2)
+**Estado:** CRITICADO (2ª ronda adversarial 2026-07-05 — veredicto: **APROBADO-CON-CAMBIOS**, aplicados en esta v3)
+**Versión:** v3 (v1 → v2 → v3)
 **Fecha:** 2026-07-05
 **Serie DevOps E2E:** plan 2 de 4 (93 preflight / 94 variables / 95 producción / 96 doctor).
 **Requisito textual del operador (riel #1):** compatible con **Azure DevOps Y GitLab
@@ -11,6 +11,49 @@ ADITIVAS/OPCIONALES: plan 93 (el preflight consume `list_variables` si esta flag
 está ON — ver 93 F3), plan 95 (la definición ADO que este plan necesita se crea con
 "Llevar a producción"; sin ella, la pata ADO degrada honesta), plan 91 (bridge de
 credenciales: SOLO nota de compatibilidad §6). Verificado en working tree 2026-07-05.
+
+## Changelog v2 → v3 (2ª crítica adversarial C12..C16 + adición A3)
+
+- **C12 (IMPORTANTE, resuelto en F2/F5):** riesgo de **wipe de secretos hermanos**
+  en el PUT full-definition de ADO: el GET devuelve las variables `isSecret` con
+  `value: null`; el PUT de v2 reenviaba el documento completo — si ADO interpreta
+  ese `null` como "borrar el valor", CADA `set_variable` de OTRA key destruye los
+  secretos preexistentes (el test anti-lost-update de v2 solo chequeaba que las
+  KEYS siguieran; no protegía el contenido). v3: regla explícita "las entradas
+  preexistentes viajan BYTE-IDÉNTICAS a como vinieron del GET (incluido
+  `value:null` + `isSecret:true`), solo se muta/agrega LA key pedida" + test
+  `test_f2_ado_set_preserves_secret_sibling` + ítem manual en F5 (la semántica del
+  `null` en PUT es ambigüedad documentada de la API de ADO: se verifica UNA vez
+  contra un ADO real antes de dar el plan por cerrado — honestidad, no fe).
+- **C13 (IMPORTANTE, resuelto en F4):** "Mover a variable segura" en v2 sacaba la
+  key del `spec` LOCAL, pero el YAML ya commiteado en HEAD sigue conteniendo el
+  valor en texto plano hasta que el operador recommittee. A1 solo hablaba de la
+  HISTORIA de git; faltaba el CTA sobre el PRESENTE. v3: el hint post-move agrega
+  literal "recommitteá el pipeline (botón Commit) para sacar el valor del YAML
+  actual del repo" + grep en el criterio binario de F4.
+- **C14 (IMPORTANTE, resuelto en F3):** `_call_provider` de v2 mapeaba "cualquier
+  otra excepción → 502": (a) `TrackerConfigError` de la fábrica
+  (`ci_provider.py:113-133` — p. ej. `STACKY_GITLAB_ENABLED=false` o tracker sin
+  provider) NO tiene `.status` y es un problema de CONFIG, no de gateway ⇒ 400
+  `kind:"tracker_config"`; (b) una excepción inesperada (bug) a 502 con `str(e)`
+  arriesga fuga del value en un mensaje no sanitizado ⇒ 500 con mensaje GENÉRICO
+  fijo ("error interno de variables") sin `str(e)`, log solo de
+  `type(e).__name__`. +2 tests (F3 pasa de 12 a 14).
+- **C15 (MENOR, resuelto en F3):** `GET` sin `project` quedaba sin especificar:
+  se fija literal — `get_variables_provider(None)` resuelve el proyecto ACTIVO vía
+  `resolve_project_context` (mismo contrato que `get_ci_provider`).
+- **C16 (MENOR, resuelto en F4):** el regex de `canBeMasked` (A2) incluía `_` y
+  `-`, que NO están en las reglas documentadas de masking de GitLab (alfabeto
+  Base64 + `@ : . ~`) ⇒ falso "sí se puede enmascarar". Regex corregido a
+  `^[a-zA-Z0-9+/=@:.~]{8,}$` (el backend C8 sigue siendo la fuente de verdad).
+- **[ADICIÓN ARQUITECTO] A3 (F2):** GitLab EXPANDE `$` dentro del value como
+  referencia a otra variable salvo que la variable se cree con `raw: true` —
+  una password con `$` (comunísimo) llega CORROMPIDA al job en silencio. v3: el
+  adapter GitLab envía `"raw": True` cuando `secret=True` (GitLab ≥15.7; el
+  reintento C8 conserva `raw` — solo `masked` conmuta) + test
+  `test_f2_gitlab_secret_sends_raw_true`. Paridad: ADO no expande `$(VAR)` dentro
+  de valores de variables, no necesita equivalente.
+- **DoD recontado:** 35 tests backend (F0:5, F1:3, F2:13, F3:14) + 5 vitest.
 
 ## Changelog v1 → v2 (crítica adversarial C1..C11 + adiciones)
 
@@ -171,6 +214,14 @@ con `masked:false`; si el reintento también falla, propaga sanitizado. Devuelve
 `masked:false` — la UI muestra "guardada como secreta pero NO enmascarable en logs
 de GitLab (el valor no cumple las reglas de masking)". Honestidad, no magia.
 
+**Nota GitLab `raw` (A3):** sin `raw: true`, GitLab trata `$ALGO` dentro del VALUE
+como referencia a otra variable y lo expande en el job — una password con `$`
+llega corrompida sin error visible. El adapter envía `"raw": True` siempre que
+`secret=True` (soportado desde GitLab 15.7, piso razonable; el reintento C8 NO
+toca `raw` — la escalera determinista solo conmuta `masked`). Si un GitLab
+prehistórico rechazara el atributo, el flujo C8 termina propagando sanitizado
+(degradación honesta, nunca corrupción silenciosa).
+
 **Limitación honesta GitLab (C5):** GitLab NO tiene bit "secreta" separado de
 `masked`/`protected`. Con `protected:false` fijo (v1), una variable guardada con el
 fallback `masked:false` es INDISTINGUIBLE de una normal en el próximo
@@ -322,7 +373,9 @@ def get_variables_provider(project: Optional[str] = None) -> CIVariablesProvider
     2. `except TrackerApiError as e:` si `e.status == 404` ⇒ no existe ⇒ verbo
        `POST /projects/{proj}/variables`; cualquier otro status ⇒ propagar
        sanitizado (regla de abajo).
-    3. Body `{ "key": key, "value": value, "masked": secret, "protected": False }`.
+    3. Body `{ "key": key, "value": value, "masked": secret, "protected": False }`
+       — **y si `secret` es True, además `"raw": True` (A3: evita que GitLab
+       expanda `$` dentro del value; el reintento del paso 4 conserva `raw`)**.
     4. **Reintento masking (C8, determinista):** si el POST/PUT con `masked:true`
        levanta `TrackerApiError` con `e.status == 400` ⇒ reintento ÚNICO con
        `masked:false` (mismo verbo); si el reintento también falla ⇒ propagar
@@ -352,7 +405,12 @@ def get_variables_provider(project: Optional[str] = None) -> CIVariablesProvider
     devuelto por el GET, mutando SOLO
     `variables[key] = {"value": value, "isSecret": secret, "allowOverride": False}`
     — **el campo `revision` del GET viaja TAL CUAL en el PUT** (ADO lo exige;
-    sin él rechaza el update). `PUT .../definitions/{id}?api-version=7.1`.
+    sin él rechaza el update). **Regla C12 (anti-wipe de secretos hermanos):
+    TODA entrada preexistente de `variables` distinta de `key` viaja
+    BYTE-IDÉNTICA a como vino del GET — incluidas las `isSecret:true` cuyo
+    `value` el GET devuelve `null` (NO rellenar, NO borrar, NO normalizar ese
+    `null`). Prohibido reconstruir el dict: mutar el JSON del GET in place.**
+    `PUT .../definitions/{id}?api-version=7.1`.
     Si el tracker rechaza por revision desactualizada (status 409/400) ⇒ propagar
     sanitizado (sin el value). Retorno `{"key", "is_secret": secret, "masked": None}`.
   - `delete_variable`: GET → si la key no está en `get("variables") or {}` ⇒
@@ -370,7 +428,10 @@ NUNCA red):
 - `test_f2_gitlab_set_post_then_put` (GET por key ⇒ 404 ⇒ POST; GET ⇒ 200 ⇒ PUT — C3).
 - `test_f2_gitlab_masked_rejected_fallback` (400 en el primer intento con
   `masked:true` ⇒ reintento con `masked:false` y retorno `masked False`; segundo
-  400 ⇒ excepción sanitizada — C8).
+  400 ⇒ excepción sanitizada — C8; **assert adicional: AMBOS intentos llevan
+  `raw: True` — A3**).
+- `test_f2_gitlab_secret_sends_raw_true` (A3: `set_variable(k, "pa$$word", True)`
+  ⇒ el body capturado tiene `raw is True`; con `secret=False` ⇒ `raw` ausente).
 - `test_f2_gitlab_delete_404_false`.
 - `test_f2_ado_no_definition_raises_unavailable` (find ⇒ None ⇒
   `VariablesUnavailableError` con "plan 95" en el mensaje).
@@ -379,13 +440,18 @@ NUNCA red):
 - `test_f2_ado_set_merges_full_definition` (el PUT lleva el documento completo con
   la variable nueva Y las preexistentes intactas — anti-lost-update — **y el campo
   `revision` idéntico al del GET** — C4).
+- `test_f2_ado_set_preserves_secret_sibling` (C12: el GET del fixture trae una
+  variable hermana `{"OTRA_SECRETA": {"value": None, "isSecret": True}}`;
+  tras `set_variable("NUEVA", "v", False)`, el body del PUT contiene
+  `OTRA_SECRETA` EXACTAMENTE como vino — `value` sigue `None`, `isSecret` sigue
+  `True`, sin claves agregadas ni quitadas).
 - `test_f2_ado_delete_absent_false`.
 - `test_f2_port_structural_conformance` (patrón `test_plan73_repo_writer.py:34-44`).
 - `test_f2_no_value_in_exceptions`: forzar excepción del `_request` durante
   `set_variable("K","S3cr3t!XYZ",True)` en AMBOS adapters ⇒ el `str()` de la
   excepción propagada NO contiene `S3cr3t!XYZ` (patrón 91 C1).
 
-**Ratchet:** registrar. **Criterio binario:** 11 tests verdes; grep en los 2
+**Ratchet:** registrar. **Criterio binario:** 13 tests verdes; grep en los 2
 adapters: cero `logger`/`print` que referencien `value`; grep en
 `ci_variables.py`: los imports de la fábrica están DENTRO de la función (C9).
 **Flag:** ninguna (sin consumidores hasta F3). **Runtimes:** sin impacto.
@@ -408,13 +474,21 @@ def _guard():
         abort(400, description="Content-Type application/json requerido")  # 91 C5
 
 def _call_provider(fn):
-    """C6 — mapeo ÚNICO para TODAS las rutas: ejecuta fn() y traduce:
+    """C6/C14 — mapeo ÚNICO para TODAS las rutas: ejecuta fn() y traduce EN ESTE ORDEN:
     VariablesUnavailableError -> (409, {"error": str(e), "kind": "variables_unavailable"})
-    TrackerApiError/otra      -> (502, {"error": str(e)})   # ya viene sanitizada de F2
+    TrackerConfigError        -> (400, {"error": str(e), "kind": "tracker_config"})
+                                 # C14a: la fábrica la levanta sin .status (config, no gateway)
+    TrackerApiError           -> (502, {"error": str(e)})   # ya viene sanitizada de F2
+    Exception (cualquier otra)-> (500, {"error": "error interno de variables"})
+                                 # C14b: mensaje GENÉRICO FIJO — PROHIBIDO str(e)
+                                 # (podría contener el value); loggear SOLO
+                                 # type(e).__name__, jamás el repr/str.
     éxito                     -> el retorno de fn."""
 ```
 Rutas (todas llaman `_guard()` y envuelven el provider con `_call_provider`;
-el project SIEMPRE en query/body):
+el project SIEMPRE en query/body; **C15: si `project` viene vacío/ausente,
+`get_variables_provider(None)` resuelve el proyecto ACTIVO vía
+`resolve_project_context` — mismo contrato que `get_ci_provider`**):
 - `GET ""?project=` → `{variables: [...], provider: "gitlab"|"azure_devops"}`.
 - `POST ""` body `{project, key, value, secret, confirm:true}` →
   `validate_variable_key` (400 si error); `confirm is not True` ⇒ 400 (HITL);
@@ -443,10 +517,16 @@ on/off; provider mockeado con `unittest.mock.patch(
 - `test_f3_ado_unavailable_409_kind` (GET: provider lanza `VariablesUnavailableError`).
 - `test_f3_post_unavailable_409` (POST: la MISMA excepción mapea igual — C6, NUEVO).
 - `test_f3_delete_absent_404`.
+- `test_f3_tracker_config_400_kind` (C14a: el provider-factory mockeado lanza
+  `TrackerConfigError("issue_tracker.type=gitlab pero ...")` ⇒ 400 con
+  `kind == "tracker_config"` y el mensaje visible).
+- `test_f3_unexpected_error_500_generic` (C14b: el provider lanza
+  `RuntimeError("boom S3cr3t!XYZ")` ⇒ 500, body == mensaje genérico fijo, y el
+  texto crudo de la respuesta NO contiene `S3cr3t!XYZ`).
 - `test_f3_health_has_variables_enabled`.
 - `test_f3_route_registered` (centinela url_map).
 
-**Ratchet:** registrar. **Criterio binario:** 12 tests verdes; grep en
+**Ratchet:** registrar. **Criterio binario:** 14 tests verdes; grep en
 `api/devops_variables.py`: cero `logger`/`print` con `value`.
 **Flag:** `STACKY_DEVOPS_VARIABLES_ENABLED` (guard per-request).
 **Runtimes:** sin impacto. **Trabajo del operador:** ninguno.
@@ -463,9 +543,11 @@ on/off; provider mockeado con `unittest.mock.patch(
 - `splitSpecVariables(spec): {secretLooking: string[], plain: string[]}` (inmutable).
 - **[ADICIÓN ARQUITECTO] A2** — `canBeMasked(value: string): boolean` — espejo
   PURO de las reglas de masking de GitLab: una sola línea (sin `\n`/`\r`),
-  longitud ≥ 8, y todos los chars en `[a-zA-Z0-9+/=@:.~_-]` (regex literal
-  `^[a-zA-Z0-9+\/=@:.~_-]{8,}$`). El value NUNCA se persiste: la función se evalúa
-  on-change sobre el input y se descarta.
+  longitud ≥ 8, y todos los chars en el alfabeto Base64 más `@ : . ~` (regex
+  literal `^[a-zA-Z0-9+\/=@:.~]{8,}$` — **C16: SIN `_` ni `-`, que GitLab NO
+  acepta para masking; incluirlos daba falso "sí se puede"**). El value NUNCA se
+  persiste: la función se evalúa on-change sobre el input y se descarta. El
+  backend (reintento C8) sigue siendo la fuente de verdad.
 
 **Archivo NUEVO:** `Stacky Agents/frontend/src/components/devops/VariablesSection.tsx`
 - Props `{ ctx: DevOpsSectionContext }`. El gate de SU flag NO vive acá (lo
@@ -516,6 +598,10 @@ on/off; provider mockeado con `unittest.mock.patch(
   confirm → `DevOpsVariables.create` → al 201, quitar la key de `spec.variables`
   vía helper puro `removeSpecVariable(spec, key)` (agregar a `specBuilder.ts`,
   inmutable) → hint "Movida al tracker: usala igual, $VAR (GitLab) o $(VAR) (ADO)".
+  **C13 — el mismo hint agrega, literal: "recommitteá el pipeline (botón Commit)
+  para sacar el valor del YAML actual del repo" — mover la key del spec solo
+  cambia el estado local; el YAML en HEAD sigue teniendo el secreto en texto
+  plano hasta el próximo commit (modal del 87).**
   **[ADICIÓN ARQUITECTO] A1 — aviso de rotación (mismo bloque del hint, literal):**
   "Ojo: si este YAML ya se commiteó al repo, el valor sigue viviendo en la
   historia de git — rotá la credencial en el destino y actualizá la variable
@@ -535,8 +621,8 @@ Componentes: gate `tsc`.
 **Criterio binario:** vitest verde (5 tests, 1 parametrizado); `tsc` 0 errores;
 la entrada del registro declara `healthKey/gateFlagKey/gateMessage` y
 `VariablesSection.tsx` NO contiene el literal de su flag (gate del shell — grep);
-`PipelineBuilderSection.tsx` contiene los literales "Mover a variable segura" Y
-"historia de git" (A1 — grep).
+`PipelineBuilderSection.tsx` contiene los literales "Mover a variable segura",
+"historia de git" (A1 — grep) Y "recommitteá el pipeline" (C13 — grep).
 **Flag:** `variables_enabled` (gate declarativo del shell + inline en builder).
 **Runtimes:** sin impacto. **Trabajo del operador:** opt-in (flag por UI); cargar
 variables ES la feature.
@@ -568,6 +654,15 @@ npx tsc --noEmit
       (efímero, con el copy C5).
 - [ ] Crear Y borrar exigen confirm server-side (400 sin él — C6).
 - [ ] `test_requires_map_is_frozen` verde con la arista nueva (C1).
+- [ ] Secreta GitLab se crea con `raw:true` (A3 — test del body) ⇒ un value con
+      `$` NO se expande en el job.
+- [ ] `set_variable` ADO NO altera las variables hermanas `isSecret` que vienen
+      con `value:null` del GET (C12 — test del body del PUT) + **verificación
+      manual ÚNICA contra un ADO real: crear secreta A, luego setear variable B,
+      confirmar en la web de ADO que A conserva su valor** (ambigüedad
+      documentada de la API; una sola vez, antes de dar el plan por cerrado).
+- [ ] `TrackerConfigError` ⇒ 400 `tracker_config`; excepción inesperada ⇒ 500
+      genérico sin `str(e)` (C14).
 - [ ] `PipelineSpec`/renderers/`test_f1_spec_shape_frozen` intactos.
 - [ ] Tests registrados en ambos scripts de ratchet.
 
@@ -577,6 +672,9 @@ npx tsc --noEmit
 |---|---|
 | Secreto fugado en excepción/log del tracker | Sanitización de excepciones (test `test_f2_no_value_in_exceptions`, patrón 91 C1) + grep centinela sin logger/print de value |
 | ADO exige PUT full-definition ⇒ lost-update de variables ajenas o rechazo por `revision` | GET→merge→PUT con el JSON completo del GET (incluido `revision` — C4) + `test_f2_ado_set_merges_full_definition` |
+| PUT ADO con `value:null` de secretos hermanos podría BORRARLOS (semántica ambigua de la API) | C12: entradas preexistentes viajan byte-idénticas (mutar el JSON del GET in place) + `test_f2_ado_set_preserves_secret_sibling` + verificación manual única en F5 |
+| GitLab expande `$` dentro del value ⇒ password corrompida en silencio | A3: `raw:true` en secretas + `test_f2_gitlab_secret_sends_raw_true` |
+| YAML en HEAD conserva el secreto tras "Mover a variable segura" | C13: CTA literal "recommitteá el pipeline (botón Commit)" en el hint post-move + grep |
 | GitLab rechaza masked por reglas de valor | Aviso pre-guardado `canBeMasked` (A2) + reintento determinista `masked:false` (C8) + badge honesto en UI |
 | Secreta no enmascarable pierde el candado al refrescar (GitLab sin bit "secreta") | Limitación documentada (§4 C5) + copy explícito en el badge + caso en test de list |
 | GitLab pagina `GET /variables` de a 20 ⇒ listado truncado | `_request_paginated` obligatorio (C2) + fixture paginada en el test de list |
@@ -625,7 +723,7 @@ npx tsc --noEmit
 
 ## 10. Definición de Hecho (DoD)
 
-- 31 tests backend nombrados (F0:5, F1:3, F2:11, F3:12) verdes por archivo con el
+- 35 tests backend nombrados (F0:5, F1:3, F2:13, F3:14) verdes por archivo con el
   venv + los 3 archivos de no-regresión de flags (incluido
   `test_harness_flags_requires.py` — C1).
 - Vitest F4 verde (5 tests); `tsc` 0 errores; paridad heurística py↔ts por fixture

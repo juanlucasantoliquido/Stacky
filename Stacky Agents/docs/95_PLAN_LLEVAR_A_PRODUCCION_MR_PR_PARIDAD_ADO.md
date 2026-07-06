@@ -1,8 +1,43 @@
 # Plan 95 — "Llevar a producción": MR/PR con merge HITL + paridad ADO E2E real (commit/trigger/monitor)
 
-**Estado:** PROPUESTO
-**Versión:** v1
+**Estado:** CRITICADO
+**Versión:** v1 → v2 (crítica adversarial aplicada)
 **Fecha:** 2026-07-05
+**Veredicto del juez:** APROBADO-CON-CAMBIOS (0 bloqueantes, 4 importantes, 4 menores).
+
+## Changelog v1 → v2
+
+- **C1 (IMPORTANTE, resuelto en F0/F5):** F0 decía "5 patas" pero la flag declara
+  `requires=` ⇒ faltaba la **6ª pata**: arista
+  `STACKY_DEVOPS_PRODUCTION_ENABLED → STACKY_DEVOPS_PANEL_ENABLED` en
+  `_REQUIRES_MAP_FROZEN` (`tests/test_harness_flags_requires.py`, junto a las de
+  88-93). Sin ella el meta-test R4 quedaba ROJO en silencio (misma omisión que
+  93 C1 / 94 C1). F0 ahora es de 6 patas y F5 corre ese test.
+- **C2 (IMPORTANTE, resuelto en F3/F4):** incoherencia de gating — §3.4 dice que
+  la paridad ADO de F1 NO depende de la flag nueva, pero F4 v1 habilitaba el
+  commit ADO del modal con `production_enabled === true`. Ahora el modal habilita
+  por la capability aditiva `ado_commit_supported: true` en `devops_health_route`
+  (existe solo en builds con F1); deploys viejos no tienen la key ⇒ disabled ⇒
+  no-regresión binaria.
+- **C3 (IMPORTANTE, resuelto en F1.a):** "leer cómo resuelve el módulo y COPIAR"
+  era frase vaga. Ahora hay helpers literales `_resolve_repo_id` y
+  `_default_branch` con reglas cerradas y tests propios.
+- **C4 (IMPORTANTE, resuelto en F1):** el criterio decía 14 tests pero enumeraba
+  13. Se agrega `test_f1_resolve_repo_id_rules` (cierra C3) ⇒ 14 reales.
+- **C5 (MENOR, F4):** polling del MR con tope (60 polls / 5 min) + pausa con
+  `document.hidden` + botón "Actualizar" manual.
+- **C6 (MENOR, F0):** nota de drift preexistente de `harness_defaults.env`
+  (espejo 93/94): solo AGREGAR la línea nueva, nunca regenerar el archivo.
+- **C7 (MENOR, F2/§6):** declarado que el `pipeline_status` del PR ADO es el
+  último build de la SOURCE branch; los PR validation builds (`refs/pull/*/merge`)
+  quedan fuera de scope v1.
+- **C8 (MENOR, F4):** asimetría HITL declarada a propósito: crear MR/PR usa
+  `window.confirm` (reversible); mergear exige checkbox literal + confirm
+  server-side. NO emparejar hacia abajo.
+- **[ADICIÓN ARQUITECTO] (F4):** paso 4 opcional post-merge "Correr pipeline en
+  la rama default" reusando los endpoints EXISTENTES de `/api/ci`
+  (trigger/monitor del 87/72, paritarios post-F1). Cero backend nuevo; cierra el
+  ciclo "mi proyecto publica de verdad".
 **Serie DevOps E2E:** plan 3 de 4 (93 preflight / 94 variables / 95 producción / 96 doctor).
 **Requisito textual del operador (riel #1):** compatible con **Azure DevOps Y GitLab
 desde el día 1**. Este plan es la PIEDRA ANGULAR de esa paridad: además del flujo
@@ -87,7 +122,8 @@ plan ES ese post-v1, más el tramo MR/PR que ningún plan cubrió.
    succeeds (v1).
 4. **Flag propia** `STACKY_DEVOPS_PRODUCTION_ENABLED`: categoría `devops`,
    `env_only=False`, `requires="STACKY_DEVOPS_PANEL_ENABLED"`, SIN `default=`,
-   CON `label`/`group`, `PlainHelp`, `harness_defaults.env` + test. Default OFF.
+   CON `label`/`group`, `PlainHelp`, `harness_defaults.env` + test,
+   **Y la arista en `_REQUIRES_MAP_FROZEN` (C1 — 6ª pata, ver F0)**. Default OFF.
    **Matiz importante:** la paridad ADO de F1 (commit/trigger/monitor) NO va detrás
    de esta flag — completa contratos EXISTENTES ya gateados por sus propias flags
    (`STACKY_PIPELINE_GENERATOR_ENABLED` / `STACKY_PIPELINE_TRIGGER_ENABLED`).
@@ -109,18 +145,32 @@ plan ES ese post-v1, más el tramo MR/PR que ningún plan cubrió.
 > desde `Stacky Agents/backend`; frontend `npx tsc --noEmit` + `npx vitest run
 > <archivo>`.
 
-### F0 — Flag `STACKY_DEVOPS_PRODUCTION_ENABLED` (5 patas)
+### F0 — Flag `STACKY_DEVOPS_PRODUCTION_ENABLED` (6 patas — C1)
 
-Misma mecánica EXACTA que 93 F0 (espejo `test_plan91_servers_flag.py`).
+Misma mecánica EXACTA que 93 F0 v2 (espejo `test_plan91_servers_flag.py`).
 `label="Llevar a producción (Plan 95)"`, description en llano: "Crea el Merge
 Request (GitLab) o Pull Request (ADO) del pipeline commiteado, muestra su pipeline
 y permite mergear con confirmación. Default OFF: /api/devops/production/* da 404 y
 el botón no aparece. Nota: la paridad ADO de commit/trigger/monitor NO depende de
 esta flag (completa contratos existentes)."
 
+Las 6 patas: (1) `config.py`; (2) `harness_flags.py` FlagSpec (SIN `default=`,
+`env_only=False`, `requires="STACKY_DEVOPS_PANEL_ENABLED"`, `group="global"`);
+(3) `PlainHelp`; (4) `harness_defaults.env` línea
+`STACKY_DEVOPS_PRODUCTION_ENABLED=false` en orden alfabético — **nota C6:** hay
+drift PREEXISTENTE de ese archivo en el working tree (centinelas 87-91): solo
+AGREGAR la línea nueva, NUNCA revertir líneas ajenas ni regenerar el archivo;
+(5) test patrón; (6) **[C1] arista en `_REQUIRES_MAP_FROZEN`**
+(`tests/test_harness_flags_requires.py`, junto a las de 88-93):
+```python
+"STACKY_DEVOPS_PRODUCTION_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 95
+```
+
 **Tests PRIMERO** — `tests/test_plan95_production_flag.py` (los 5 casos patrón +
 no-regresión meta-tests; misma nota plan 85: F0+F3 juntos si el wiring acusa).
-**Ratchet:** registrar. **Criterio binario:** 5+2 verdes; default OFF.
+No-regresión: `tests/test_harness_flags.py` + `tests/test_flag_wiring.py` +
+`tests/test_harness_flags_requires.py` ([C1] R4 exige la arista).
+**Ratchet:** registrar. **Criterio binario:** 5+3 verdes; default OFF.
 **Runtimes:** sin impacto. **Trabajo del operador:** ninguno.
 
 ### F1 — Paridad ADO E2E: commit_file + definition + trigger/monitor/last_pipeline_for_ref
@@ -135,13 +185,20 @@ def commit_file(self, path: str, content: str, branch: str, message: str) -> dic
     """Plan 95 F1.a — commit real vía Git Pushes API (cierra el TODO del plan 73 C12).
     Contrato IDÉNTICO a gitlab_provider.py:590: {sha, branch, path, web_url, status}
     con status 'create'|'update'|'unchanged'. Lanza TrackerApiError (propaga status)."""
-    # 1) repo_id: GET {base_proj}/_apis/git/repositories?api-version=7.1 →
-    #    tomar el repo configurado del proyecto (mismo criterio de resolución que
-    #    el resto de AdoClient; si hay 1 solo repo, ese; si el project_config
-    #    define repository, ese — leer cómo resuelve el módulo y COPIAR).
+    # 1) repo_id: _resolve_repo_id(project) — helper NUEVO en el mismo módulo,
+    #    reglas CERRADAS (C3), en este orden:
+    #    (a) si el project_config define `repository` (nombre o id), matchear
+    #        contra GET {base_proj}/_apis/git/repositories?api-version=7.1
+    #        (por id exacto o name case-insensitive); sin match ⇒
+    #        TrackerApiError(status=404, kind="ado_repo_not_found").
+    #    (b) sin config y la lista tiene EXACTAMENTE 1 repo ⇒ ese.
+    #    (c) sin config y >1 repos ⇒ TrackerApiError(status=400,
+    #        kind="ado_repo_ambiguous", mensaje con los nombres disponibles).
     # 2) old_object_id del branch: GET .../repositories/{id}/refs?filter=heads/{branch}
     #    - branch existe → oldObjectId = objectId del ref.
-    #    - branch NO existe → resolver el ref de la DEFAULT branch y usar su
+    #    - branch NO existe → resolver la DEFAULT branch con _default_branch()
+    #      (helper NUEVO del módulo, C3: GET .../repositories/{id} →
+    #      campo `defaultBranch`, STRIP del prefijo "refs/heads/") y usar su
     #      objectId como base (el push crea la rama): refUpdate con name
     #      refs/heads/{branch} y oldObjectId = "0000000000000000000000000000000000000000"
     #      NO sirve para ramas con base; ADO exige crear la rama apuntando al commit
@@ -217,6 +274,9 @@ def last_pipeline_for_ref(self, ref: str) -> dict | None:
 - `test_f1_commit_new_branch_creates_ref` (branch inexistente ⇒ POST refs previo
   con newObjectId = sha de la default).
 - `test_f1_commit_tracker_error_propagates` (403 ⇒ TrackerApiError con status).
+- `test_f1_resolve_repo_id_rules` [C3/C4] (parametrizado: config con match /
+  config sin match ⇒ 404 kind / 1 repo sin config / >1 repos sin config ⇒ 400
+  `ado_repo_ambiguous`; y `_default_branch` strippea `refs/heads/`).
 - `test_f1_ensure_definition_found_no_create` / 
   `test_f1_ensure_definition_missing_requires_confirm` (sin confirm ⇒
   DefinitionConfirmRequired) / `test_f1_ensure_definition_creates_with_confirm`
@@ -297,7 +357,10 @@ agregar a `GitLabTrackerProvider` (junto a `commit_file:590`):
   (active→open, completed→merged, abandoned→closed); `pipeline_status` = último
   build del sourceRef (`GET _apis/build/builds?branchName=<sourceRef>&$top=1` →
   `_map_status` de F1.c; sin builds ⇒ "none"); `mergeable` =
-  `mergeStatus == "succeeded"`.
+  `mergeStatus == "succeeded"`. **Nota C7:** se muestra el build de la SOURCE
+  branch; los PR validation builds de branch policy (`refs/pull/{id}/merge`)
+  quedan fuera de scope v1 (ver §6) — con policy activa el operador puede ver
+  "none" acá y el build real en la web del PR (link siempre presente).
 - `merge_merge_request`: GET del PR (necesita `lastMergeSourceCommit`) →
   `PATCH .../pullrequests/{id}` con `{"status": "completed",
   "lastMergeSourceCommit": {"commitId": <sha>},
@@ -343,8 +406,12 @@ patrón 91 C5):
   `{"error": "solo aplica a proyectos ADO"}`.
 
 **Registro:** `api/__init__.py` (import + register, junto a los devops).
-**Health:** `"production_enabled": bool(getattr(cfg, "STACKY_DEVOPS_PRODUCTION_ENABLED", False)),`
-en `devops_health_route` (`api/devops.py:29-38`).
+**Health:** en `devops_health_route` (`api/devops.py:29-38`), DOS keys aditivas:
+- `"production_enabled": bool(getattr(cfg, "STACKY_DEVOPS_PRODUCTION_ENABLED", False)),`
+- `"ado_commit_supported": True,` — **[C2] capability, NO flag:** literal `True`
+  porque este build incluye F1 (el commit ADO real). Deploys viejos no tienen la
+  key ⇒ el modal (F4) la lee ausente ⇒ opción ADO sigue disabled ⇒ no-regresión.
+  Independiente de `production_enabled` (coherente con §3.4).
 
 **Tests PRIMERO** — `tests/test_plan95_production_endpoints.py` (fixtures flag
 on/off; providers mockeados vía `unittest.mock.patch(
@@ -358,7 +425,8 @@ on/off; providers mockeados vía `unittest.mock.patch(
 - `test_f3_get_mr_polls_provider`.
 - `test_f3_merge_happy` / `test_f3_merge_conflict_status_propagated`.
 - `test_f3_ensure_definition_ado_only`.
-- `test_f3_health_has_production_enabled` / `test_f3_route_registered`.
+- `test_f3_health_has_production_enabled` (asserta también
+  `ado_commit_supported is True` — C2) / `test_f3_route_registered`.
 
 **Ratchet:** registrar. **Criterio binario:** 11 tests verdes.
 **Flag:** `STACKY_DEVOPS_PRODUCTION_ENABLED` (guard per-request).
@@ -374,6 +442,9 @@ on/off; providers mockeados vía `unittest.mock.patch(
   (el pipeline_status NO bloquea — se MUESTRA; decisión del operador, HITL).
 - `pipelineStatusLabel(status): string` en llano ("está corriendo…", "pasó ✅",
   "falló ❌", "sin pipeline").
+- `shouldContinuePolling(pollCount, state, documentHidden): boolean` [C5] =
+  `state === "open" && !documentHidden && pollCount < 60` (lógica del tope,
+  pura y testeable).
 
 **Archivo NUEVO:** `Stacky Agents/frontend/src/components/devops/ProductionFlow.tsx`
 - Props `{ ctx: DevOpsSectionContext; project: string; sourceBranch: string }`
@@ -383,11 +454,23 @@ on/off; providers mockeados vía `unittest.mock.patch(
 - Paso 1: botón "Crear Merge Request / Pull Request" (label según tracker si se
   conoce; genérico "Crear MR/PR" si no) + `window.confirm` ⇒
   `DevOpsProduction.createMr(...)` ⇒ muestra link `web_url`.
-- Paso 2: polling `getMr` cada 5s mientras `state === "open"`; render
-  `pipelineStatusLabel` + link.
+  **Nota C8 (asimetría HITL a propósito):** crear el MR/PR es reversible ⇒
+  alcanza `window.confirm`; mergear NO ⇒ checkbox literal + confirm server-side.
+  NO "emparejar" quitando el checkbox del paso 3.
+- Paso 2: polling `getMr` cada 5s mientras `state === "open"`, **con tope (C5):**
+  se pausa cuando `document.hidden === true` y se detiene tras 60 polls (~5 min);
+  al detenerse queda un botón "Actualizar" que hace un `getMr` manual por click.
+  Nunca pollea con state merged/closed.
 - Paso 3: checkbox literal **"Confirmo el merge a la rama principal"** que
   habilita "Mergear" ⇒ `mergeMr(...)`; éxito ⇒ "🎉 Mergeado: el pipeline del
   proyecto quedó actualizado"; error ⇒ mensaje literal del backend.
+- **[ADICIÓN ARQUITECTO] Paso 4 (opcional, post-merge):** botón "Correr pipeline
+  en `<default branch>`" que reusa los endpoints EXISTENTES de `/api/ci`
+  (`api/ci.py:26,76` — trigger + monitor del 87/72, ya paritarios en ADO
+  post-F1) con `ref` = la target branch del MR mergeado, con su confirmación
+  HITL existente; el estado se muestra con el mismo patrón de monitor del 87.
+  Cero backend nuevo. Cierra el ciclo: el YAML mergeado corre de verdad en la
+  rama del proyecto sin visitar el tracker.
 - Caso ADO `ado_definition_missing` (del trigger o del preflight): botón
   "Crear la definición del pipeline en ADO" ⇒ confirm ⇒
   `DevOpsProduction.ensureAdoDefinition(project)`.
@@ -400,24 +483,25 @@ on/off; providers mockeados vía `unittest.mock.patch(
   exitoso, montar `<ProductionFlow ctx={ctx} project={project}
   sourceBranch={lastCommitBranch} />` (visible SOLO con commit previo en la
   sesión). Reuso en `PublicationsSection.tsx` (mismo componente post-commit).
-- `frontend/src/components/devops/CommitPipelineModal.tsx` — la opción `ado`
-  deja el `disabled` condicionado: habilitada si
-  `ctx.health.production_enabled === true` O si el commit ADO ya no da 501
-  (criterio simple y binario: habilitar cuando `production_enabled` — la flag
-  del plan que trae F1; nota en tooltip: "commit ADO habilitado por el plan 95").
-  Con la flag OFF, el modal queda EXACTAMENTE como hoy (nota 501) —
-  no-regresión visual binaria.
+- `frontend/src/components/devops/CommitPipelineModal.tsx` — **[C2]** la opción
+  `ado` habilita si y solo si `ctx.health.ado_commit_supported === true`
+  (capability de F3 — presente solo en builds con F1; NO depende de
+  `production_enabled`, coherente con §3.4). Tooltip: "commit ADO habilitado por
+  el plan 95". Contra un backend viejo (key ausente) el modal queda EXACTAMENTE
+  como hoy (nota 501) — no-regresión visual binaria.
 - `frontend/src/pages/DevOpsPage.tsx` — SIN cambios (todo es sub-feature de la
   sección Pipelines/Publicaciones; §3.12).
 
 **Tests** — `frontend/src/devops/productionModel.test.ts` (vitest TS puro):
 `merge_enabled_only_open_and_mergeable`, `labels_en_llano`,
-`status_none_handled`. Componentes: gate `tsc`.
+`status_none_handled`, `polling_stops_on_cap_hidden_or_not_open` [C5].
+Componentes: gate `tsc`.
 
-**Criterio binario:** vitest verde (3 tests) + `tsc` 0 errores; grep:
+**Criterio binario:** vitest verde (4 tests) + `tsc` 0 errores; grep:
 `ProductionFlow` presente en `PipelineBuilderSection.tsx` y
-`PublicationsSection.tsx`; `DevOpsPage.tsx` sin diff; con flag OFF el modal de
-commit muestra la nota 501 actual (literal presente en la rama disabled).
+`PublicationsSection.tsx`; `DevOpsPage.tsx` sin diff; contra un health SIN
+`ado_commit_supported` el modal de commit muestra la nota 501 actual (literal
+presente en la rama disabled) [C2].
 **Flag:** `production_enabled` (gate inline).
 **Runtimes:** sin impacto. **Trabajo del operador:** opt-in.
 
@@ -428,7 +512,7 @@ commit muestra la nota 501 actual (literal presente en la rama disabled).
 cd "Stacky Agents/backend"
 .venv/Scripts/python.exe -m pytest tests/test_plan95_production_flag.py tests/test_plan95_ado_parity.py tests/test_plan95_mr_providers.py tests/test_plan95_production_endpoints.py -q
 .venv/Scripts/python.exe -m pytest tests/test_plan72_ci_provider_trigger_port.py tests/test_plan73_generator_endpoint.py tests/test_plan73_repo_writer.py -q
-.venv/Scripts/python.exe -m pytest tests/test_plan87_devops_endpoints.py tests/test_harness_flags.py tests/test_flag_wiring.py -q
+.venv/Scripts/python.exe -m pytest tests/test_plan87_devops_endpoints.py tests/test_harness_flags.py tests/test_flag_wiring.py tests/test_harness_flags_requires.py -q
 cd "../frontend"
 npx vitest run src/devops/productionModel.test.ts
 npx tsc --noEmit
@@ -446,6 +530,12 @@ npx tsc --noEmit
 - [ ] ADO sin definition ⇒ `ado_definition_missing` con CTA y ensure con confirm.
 - [ ] Conflictos/policies del tracker ⇒ error visible con el mensaje real (nunca
       500 genérico ni éxito falso).
+- [ ] Arista `PRODUCTION → PANEL` en `_REQUIRES_MAP_FROZEN` y
+      `test_harness_flags_requires.py` verde [C1].
+- [ ] Modal de commit: opción ADO gobernada por `ado_commit_supported`, NO por
+      `production_enabled` [C2].
+- [ ] Paso 4 post-merge "Correr pipeline en la default" visible y reusando
+      `/api/ci` existente [ADICIÓN ARQUITECTO].
 - [ ] Tests registrados en ambos scripts de ratchet.
 
 ## 5. Riesgos y mitigaciones
@@ -457,7 +547,8 @@ npx tsc --noEmit
 | Merge con policies ADO (reviewers requeridos) | El PATCH falla con el mensaje de policy ⇒ visible en UI con link al PR (el operador resuelve en la web si su org lo exige — degradación honesta, no bypass) |
 | MR duplicado (ya existe para esa rama) | TrackerApiError propagado con mensaje del tracker + link; v1 no auto-detecta |
 | `pipeline_generator.py` cambiaría de contrato | NO se toca: el 501 muere solo al implementar commit_file; test de integración F1 lo verifica |
-| Habilitar ADO en el modal antes de F1 implementado | El enable está atado a `production_enabled` (flag de ESTE plan) — sin el plan, el modal no cambia |
+| Habilitar ADO en el modal antes de F1 implementado | El enable está atado a la capability `ado_commit_supported` del health (solo existe en builds que incluyen F1) — contra un backend viejo el modal no cambia [C2] |
+| Polling del MR martilla el tracker | Tope 60 polls + pausa con `document.hidden` + botón manual [C5] |
 | PAT sin scope Code RW / Build RX | TrackerApiError con status real ⇒ UI muestra el error; scopes en PlainHelp |
 | Auto-merge accidental | No existe camino: merge requiere confirm server-side + checkbox; sin scheduling |
 
@@ -468,7 +559,11 @@ npx tsc --noEmit
 - Resolución de conflictos desde la UI (link al tracker).
 - Políticas de branch (reviewers, checks) — se respetan las del tracker, no se
   configuran desde Stacky.
-- Multi-repo ADO por proyecto (v1 usa el repo resuelto por AdoClient).
+- Multi-repo ADO por proyecto (v1 usa `_resolve_repo_id` — config → único →
+  error honesto `ado_repo_ambiguous` [C3]).
+- PR validation builds de ADO (`refs/pull/{id}/merge` por branch policy): el
+  `pipeline_status` del PR muestra el build de la source branch; el de policy se
+  ve en la web del PR vía link [C7].
 
 ## 7. Glosario
 
@@ -495,9 +590,11 @@ npx tsc --noEmit
 
 ## 9. Definición de Hecho (DoD)
 
-- 40 tests backend nombrados (F0:5, F1:14, F2:10, F3:11) verdes por archivo con
-  el venv; no-regresión 72/73/87 y meta-tests verdes.
-- Vitest F4 verde; `tsc` 0 errores.
+- 40 tests backend nombrados (F0:5, F1:14 [C4: conteo verificado — 5 commit +
+  1 resolve_repo_id + 3 ensure + 2 trigger + 1 monitor + 1 last + 1 integración],
+  F2:10, F3:11) verdes por archivo con el venv; no-regresión 72/73/87 +
+  meta-tests + `test_harness_flags_requires.py` [C1] verdes.
+- Vitest F4 verde (4 tests); `tsc` 0 errores.
 - ADO E2E real: commit → MR/PR → pipeline visible → merge, todo desde el panel
   (verificación manual binaria contra un proyecto ADO de prueba).
 - GitLab E2E intacto y con el mismo flujo nuevo.

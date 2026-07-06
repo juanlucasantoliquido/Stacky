@@ -1,7 +1,7 @@
 # Plan 97 — Presets de pasos de pipeline por stack técnico (compilar/test/lint) con detección opcional
 
-**Estado:** CRITICADO (v1 → v2 — APROBADO-CON-CAMBIOS)
-**Versión:** v2
+**Estado:** CRITICADO (v2 → v3 — APROBADO-CON-CAMBIOS)
+**Versión:** v3
 **Fecha:** 2026-07-05
 **Serie DevOps:** complementa la serie base 87-91 (builder gráfico) y la serie E2E
 93-96 (preflight/variables/producción/doctor) — NO es el plan 5 de esa serie
@@ -85,6 +85,34 @@ defecto BLOQUEANTE en la letra, resuelto acá). Hallazgos y fixes aplicados:
 
 ---
 
+## Changelog v2 → v3 (2ª crítica adversarial — foco: MÁS acciones prehechas)
+
+Segunda pasada del juez el 2026-07-05 (el operador REITERÓ el pedido de "muchas
+acciones de pipeline prehechas"). Veredicto: **APROBADO-CON-CAMBIOS**. Cambios:
+
+- **C1 (IMPORTANTE, resuelto):** el inserter de acciones de F1-bis solo aparecía
+  con un job YA seleccionado, así que en el builder VACÍO (0 stages) el operador
+  no-experto no llegaba a la biblioteca en su primer contacto. v3 agrega, en el
+  estado vacío, un botón "Insertá acciones sueltas (job vacío)" que scaffolda
+  stage+job y lo selecciona, reusando `addStage`/`addJob`/`setSelected` (F1-ter).
+- **C2 (IMPORTANTE, resuelto):** no había garantía AUTOMATIZADA de paridad YAML
+  para los snippets (riel duro #5). v3 fija el invariante testeable "todo script
+  de snippet es de UNA sola línea, no vacío, sin `$(`"
+  (`every_snippet_script_is_single_line`) — el camino que ambos renderers ya
+  manejan idéntico (F1-bis/F1-ter).
+- **C3 (IMPORTANTE — pedido reiterado, [ADICIÓN ARQUITECTO]):** el catálogo pasa
+  de ≥20 a **≥40 acciones** (categorías nuevas `seguridad` y `versionar`; stacks
+  Go/Rust/Java-Maven/Gradle/PHP) y se agregan **Recetas**: bundles ordenados de
+  acciones que se insertan de una en el job (CI Python/Node/.NET/Go, Docker
+  build+push, Calidad Python), reusando `appendStep` en un fold (F1-ter).
+- **C4 (MENOR, resuelto):** con 40+ acciones el `<select>` se vuelve inmanejable;
+  v3 agrega un filtro por texto sobre la biblioteca (F1-ter).
+- **C5 (MENOR, resuelto):** el inserter podía quedar visible con un `selected`
+  fuera de rango tras borrar stage/job; v3 lo condiciona a que el índice exista
+  realmente (F1-ter).
+
+---
+
 ## 1. Objetivo + KPI
 
 Ofrecer, en el mismo punto donde hoy solo existe "Empezar con ejemplo"
@@ -107,12 +135,16 @@ decisión final y la edición en manos del operador (HITL).
 - 4 presets de pipeline completo desde el día 1 (Python, Node, .NET, Genérico),
   cada uno generando YAML válido para ADO y GitLab (paridad dura, criterio
   binario F2/F3).
-- **[ADICIÓN ARQUITECTO]** ≥ 20 acciones de pipeline prehechas (step snippets)
+- **[ADICIÓN ARQUITECTO]** ≥ 40 acciones de pipeline prehechas (step snippets)
   disponibles desde el día 1 (instalar deps, lint, test, cobertura, compilar,
-  empaquetar, publicar artefacto/imagen, calidad), insertables con 1 click en el
-  job seleccionado y editables después — el "muchos elementos scripts de acciones
-  prehechas" que pidió el operador (F1-bis). Provider-neutrales: el mismo snippet
-  vale para ADO y GitLab (sin interpolación `$(VAR)`/`$VAR`).
+  empaquetar, publicar artefacto/imagen, calidad, seguridad, versionar) para
+  Python/Node/.NET/Go/Rust/Java/PHP, insertables con 1 click en el job
+  seleccionado y editables después. Además **≥ 6 recetas** (bundles ordenados:
+  CI Python/Node/.NET/Go, Docker build+push, Calidad Python) que insertan varios
+  pasos de una sola vez — el "muchos elementos scripts de acciones prehechas" que
+  pidió el operador, ahora accesible incluso desde el builder vacío (F1-bis +
+  F1-ter). Provider-neutrales: el mismo snippet/receta vale para ADO y GitLab
+  (sin interpolación `$(VAR)`/`$VAR`, scripts de una sola línea).
 - 0% de falsos "detecté tu stack": si hay ambigüedad o cero señales, el detector
   degrada a "no pude detectar, elegí manualmente" — nunca inventa.
 - 0 líneas de config nuevas para el operador: el detector es un botón, no un
@@ -428,8 +460,9 @@ pipeline COMPLETO desde cero, pero no cubren el caso "ya tengo un job y quiero
 AGREGARLE una acción concreta" (docker build, publicar artefacto, correr
 cobertura, un lint puntual). El operador pidió textualmente "muchos elementos
 scripts de acciones de pipeline prehechas". Esta fase entrega una **biblioteca de
-≥20 acciones individuales**, cada una un `StepDraft` real y editable, insertable
-con 1 click en el job seleccionado. Es datos estáticos TypeScript puros (mismo
+acciones individuales** (base ≥26 acá; ampliada a **≥40 + recetas** en F1-ter),
+cada una un `StepDraft` real y editable, insertable con 1 click en el job
+seleccionado. Es datos estáticos TypeScript puros (mismo
 patrón y mismo "siempre visible sin flag" que los presets de F0), reusa el
 contrato `StepDraft` y el patrón inmutable de `addStep` ya existente
 (`specBuilder.ts:329`), y no toca ningún renderer ni el backend.
@@ -453,10 +486,12 @@ cambia. Así el mismo snippet es válido en ADO y en GitLab sin bifurcar.
 import type { StepDraft } from "./specBuilder";
 
 export type SnippetCategory =
-  | "dependencias" | "lint" | "test" | "build" | "publicar" | "calidad";
+  | "dependencias" | "lint" | "test" | "build" | "publicar" | "calidad"
+  | "seguridad" | "versionar";  // F1-ter — categorías nuevas
 
 export const SNIPPET_CATEGORIES: readonly SnippetCategory[] = [
   "dependencias", "lint", "test", "build", "publicar", "calidad",
+  "seguridad", "versionar",
 ];
 
 export interface StepSnippet {
@@ -587,17 +622,20 @@ cuando `selected?.si != null && selected?.ji != null` y que muta vía
 **Tests PRIMERO** — archivo nuevo
 `Stacky Agents/frontend/src/devops/pipelineStepSnippets.test.ts` (vitest, TS puro):
 - `all_snippets_have_unique_ids`: los `id` de `PIPELINE_STEP_SNIPPETS` son únicos.
-- `at_least_20_snippets`: `PIPELINE_STEP_SNIPPETS.length >= 20` (criterio binario
-  de "muchos").
+- `at_least_20_snippets`: `PIPELINE_STEP_SNIPPETS.length >= 20` (piso base; la
+  ampliación a ≥40 se verifica en F1-ter con `at_least_40_snippets`).
 - `every_snippet_builds_valid_step`: para cada snippet, `build()` da un
   `StepDraft` con `name` no vacío, `script` no vacío y `env` objeto.
 - `no_snippet_uses_echo_or_ado_macro`: ningún `script` empieza con `"echo "` ni
   contiene `"$("` (evita el placeholder de relleno y la macro de variable de
   ADO — paridad).
+- `every_snippet_script_is_single_line` (C2): ningún `script` contiene `"\n"`
+  ni `"\r"` — invariante de paridad: un script de UNA línea renderiza igual en
+  ADO y en GitLab (mismo camino que los presets ya validados).
 - `every_snippet_category_is_declared`: la `category` de cada snippet ∈
   `SNIPPET_CATEGORIES`.
 - `getSnippetsByCategory_covers_all`: la suma de `getSnippetsByCategory(c)` sobre
-  las 6 categorías reconstruye exactamente `PIPELINE_STEP_SNIPPETS` (sin
+  las 8 categorías reconstruye exactamente `PIPELINE_STEP_SNIPPETS` (sin
   huérfanos).
 - `build_is_pure_and_immutable`: `build()` dos veces da objetos `!==` pero
   deep-equal (mismo patrón que los presets de F0).
@@ -609,17 +647,220 @@ cuando `selected?.si != null && selected?.ji != null` y que muta vía
 Comando: `npx vitest run src/devops/pipelineStepSnippets.test.ts` en
 `Stacky Agents/frontend`.
 
-**Criterio de aceptación BINARIO:** los 8 tests nuevos pasan +
-`npx tsc --noEmit` 0 errores; `PIPELINE_STEP_SNIPPETS.length >= 20`; ningún
-snippet usa `echo`/`$(`; los botones y presets de F0/F1 siguen intactos (grep
-negativo: el diff de `specBuilder.ts` solo AGREGA `appendStep`, no toca
-`addStep`).
+**Criterio de aceptación BINARIO:** los 9 tests nuevos pasan +
+`npx tsc --noEmit` 0 errores; `PIPELINE_STEP_SNIPPETS.length >= 20` (piso base;
+F1-ter lo sube a ≥40); ningún snippet usa `echo`/`$(` y todos son de una sola
+línea; los botones y presets de F0/F1 siguen intactos (grep negativo: el diff de
+`specBuilder.ts` solo AGREGA `appendStep`, no toca `addStep`).
 **Flag:** ninguna (datos estáticos puros, mismo nivel que los presets de F0;
 siempre visibles, cero configuración).
 **Impacto por runtime:** Codex CLI / Claude Code CLI / GitHub Copilot Pro:
 NINGUNO (UI pura, sin ejecución de agentes). Fallback: no aplica.
 **Trabajo del operador:** ninguno (la biblioteca está siempre disponible; usar un
 snippet es un click opcional, y el step insertado es 100% editable — HITL).
+
+### F1-ter — [ADICIÓN ARQUITECTO] Catálogo ampliado (≥40) + Recetas + filtro + acceso desde el builder vacío
+
+**Por qué (pedido REITERADO del operador, C3):** el operador volvió a pedir
+"muchas acciones de pipeline prehechas". F1-ter (a) amplía el catálogo de F1-bis
+a **≥40 acciones** con 2 categorías nuevas (`seguridad`, `versionar`) y más
+stacks (Go/Rust/Java-Maven/Gradle/PHP), (b) agrega **Recetas** (bundles ordenados
+de acciones que se insertan de una), (c) un **filtro por texto** para navegar 40+
+acciones, y (d) un acceso a la biblioteca **desde el builder vacío** (C1). Todo es
+datos estáticos + helpers puros + UI mínima, reusando `appendStep` — sin flag,
+sin backend, sin tocar renderers.
+
+**(a) Ampliación del catálogo — AGREGAR estas entradas a
+`PIPELINE_STEP_SNIPPETS`** (`pipelineStepSnippets.ts`), respetando el invariante
+de una sola línea y sin `$(`:
+
+```ts
+  // ── dependencias (más stacks) ──
+  { id: "dep-composer-install", category: "dependencias", label: "composer install", description: "Instala dependencias PHP con Composer.", build: () => step("instalar-dependencias", "composer install --no-interaction --prefer-dist") },
+  { id: "dep-go-download", category: "dependencias", label: "go mod download", description: "Descarga módulos Go.", build: () => step("instalar-dependencias", "go mod download") },
+  { id: "dep-cargo-fetch", category: "dependencias", label: "cargo fetch", description: "Descarga dependencias Rust.", build: () => step("instalar-dependencias", "cargo fetch") },
+  // ── lint (más stacks) ──
+  { id: "lint-go-vet", category: "lint", label: "go vet", description: "Análisis estático de Go.", build: () => step("lint", "go vet ./...") },
+  { id: "lint-cargo-clippy", category: "lint", label: "cargo clippy", description: "Linter de Rust con Clippy (falla en warnings).", build: () => step("lint", "cargo clippy -- -D warnings") },
+  // ── build (más stacks) ──
+  { id: "build-go", category: "build", label: "go build", description: "Compila todos los paquetes Go.", build: () => step("compilar", "go build ./...") },
+  { id: "build-cargo-release", category: "build", label: "cargo build (release)", description: "Compila Rust en modo release.", build: () => step("compilar", "cargo build --release") },
+  { id: "build-maven", category: "build", label: "mvn package", description: "Empaqueta un proyecto Maven (sin tests).", build: () => step("compilar", "mvn -B -DskipTests package") },
+  { id: "build-gradle", category: "build", label: "gradle build", description: "Compila y arma con Gradle.", build: () => step("compilar", "./gradlew build") },
+  // ── test (más stacks) ──
+  { id: "test-go", category: "test", label: "go test", description: "Corre los tests de Go.", build: () => step("test", "go test ./...") },
+  { id: "test-cargo", category: "test", label: "cargo test", description: "Corre los tests de Rust.", build: () => step("test", "cargo test") },
+  { id: "test-maven", category: "test", label: "mvn verify", description: "Corre la fase verify de Maven (tests + checks).", build: () => step("test", "mvn -B verify") },
+  { id: "test-phpunit", category: "test", label: "phpunit", description: "Corre los tests PHP con PHPUnit.", build: () => step("test", "vendor/bin/phpunit") },
+  // ── publicar (más) ──
+  { id: "pub-twine-check", category: "publicar", label: "twine check", description: "Valida los artefactos Python antes de publicar.", build: () => step("validar-artefacto", "python -m twine check dist/*") },
+  // ── seguridad ──
+  { id: "sec-npm-audit", category: "seguridad", label: "npm audit", description: "Reporta vulnerabilidades de dependencias Node.", build: () => step("auditar-seguridad", "npm audit --audit-level=high") },
+  { id: "sec-pip-audit", category: "seguridad", label: "pip-audit", description: "Reporta vulnerabilidades de dependencias Python (requiere pip-audit).", build: () => step("auditar-seguridad", "python -m pip_audit") },
+  { id: "sec-dotnet-vuln", category: "seguridad", label: "dotnet list --vulnerable", description: "Lista paquetes NuGet con vulnerabilidades conocidas.", build: () => step("auditar-seguridad", "dotnet list package --vulnerable") },
+  { id: "sec-trivy-fs", category: "seguridad", label: "trivy fs", description: "Escanea el filesystem por vulnerabilidades con Trivy (requiere trivy en el runner).", build: () => step("auditar-seguridad", "trivy fs .") },
+  // ── versionar ──
+  { id: "ver-git-describe", category: "versionar", label: "git describe", description: "Imprime la versión derivada del último tag Git.", build: () => step("version", "git describe --tags --always") },
+  { id: "ver-git-short-sha", category: "versionar", label: "git short SHA", description: "Imprime el SHA corto del commit actual.", build: () => step("version", "git rev-parse --short HEAD") },
+```
+
+Con estas 20 entradas el total pasa de 26 a **46** (≥40). Todas son de una línea
+y sin `$(` (cumplen `every_snippet_script_is_single_line` y
+`no_snippet_uses_echo_or_ado_macro`).
+
+**(b) Recetas — Archivo NUEVO:**
+`Stacky Agents/frontend/src/devops/pipelineRecipes.ts`
+
+```ts
+/**
+ * pipelineRecipes.ts — Plan 97 F1-ter
+ * Recetas = bundles ORDENADOS de acciones prehechas que se insertan de una en un
+ * job. NO duplican scripts: referencian snippets de pipelineStepSnippets.ts por
+ * id y reusan el helper inmutable appendStep.
+ */
+import type { StepDraft } from "./specBuilder";
+import { PIPELINE_STEP_SNIPPETS } from "./pipelineStepSnippets";
+
+export interface StepRecipe {
+  id: string;
+  label: string;
+  description: string;
+  stepIds: readonly string[];  // ids EXISTENTES de PIPELINE_STEP_SNIPPETS, en orden
+}
+
+export const PIPELINE_RECIPES: readonly StepRecipe[] = [
+  { id: "ci-python", label: "CI Python completo", description: "pip install, flake8 y pytest con cobertura.", stepIds: ["dep-pip-install", "lint-flake8", "test-pytest-cov"] },
+  { id: "ci-node", label: "CI Node completo", description: "npm ci, lint, test y build.", stepIds: ["dep-npm-ci", "lint-eslint", "test-npm-test", "build-npm"] },
+  { id: "ci-dotnet", label: "CI .NET completo", description: "restore, build Release y test.", stepIds: ["dep-dotnet-restore", "build-dotnet-release", "test-dotnet"] },
+  { id: "ci-go", label: "CI Go completo", description: "vet, build y test de Go.", stepIds: ["lint-go-vet", "build-go", "test-go"] },
+  { id: "docker-build-push", label: "Docker build + push", description: "Construye y publica la imagen (editá el tag).", stepIds: ["build-docker", "pub-docker-push"] },
+  { id: "quality-python", label: "Calidad Python", description: "ruff, black --check, pytest con cobertura y reporte.", stepIds: ["lint-ruff", "lint-black-check", "test-pytest-cov", "qual-coverage-report"] },
+];
+
+export function buildRecipeSteps(recipe: StepRecipe): StepDraft[] {
+  return recipe.stepIds.map((id) => {
+    const snip = PIPELINE_STEP_SNIPPETS.find((s) => s.id === id);
+    if (!snip) throw new Error(`Receta '${recipe.id}' referencia snippet inexistente: ${id}`);
+    return snip.build();
+  });
+}
+```
+
+**(c)+(d) UI — editar `PipelineBuilderSection.tsx`:**
+
+1. **Acceso desde el builder vacío (C1):** en el bloque del estado vacío de F1
+   (junto a la galería de presets), agregar un botón que scaffolda un job y lo
+   selecciona, dejando visible el inserter de acciones (reusa `addStage`/`addJob`
+   YA importados, y `setSelected`):
+
+```tsx
+// Plan 97 F1-ter (C1) — acceso a las acciones sueltas sin partir de un preset
+const handleStartEmptyJob = () => {
+  const scaffolded = addJob(addStage(emptySpec()), 0); // stage-1 + job-1
+  setSpec(scaffolded);
+  setSelected({ si: 0, ji: 0 });
+};
+// ...botón en el estado vacío, junto a "Empezar con ejemplo":
+<button onClick={handleStartEmptyJob} className={styles.btnSecondary} style={{ padding: '8px 16px' }}>
+  Insertá acciones sueltas (job vacío)
+</button>
+```
+
+2. **Filtro (c) + Recetas (b):** ampliar el inserter de F1-bis. Cambiar el guard
+   de render de F1-bis para exigir que el índice EXISTA de verdad (C5), agregar
+   el filtro y el selector de recetas:
+
+```tsx
+import { PIPELINE_RECIPES, buildRecipeSteps } from '../../devops/pipelineRecipes';
+
+const [snippetFilter, setSnippetFilter] = useState('');
+const [recipeId, setRecipeId] = useState('');
+
+// C5 — el job seleccionado debe existir realmente en el spec actual
+const jobSelected =
+  selected?.si != null && selected?.ji != null &&
+  selected.si < spec.stages.length &&
+  selected.ji < (spec.stages[selected.si]?.jobs.length ?? 0);
+
+const filteredSnippets = PIPELINE_STEP_SNIPPETS.filter((s) => {
+  const q = snippetFilter.trim().toLowerCase();
+  return q === '' || `${s.label} ${s.description} ${s.category}`.toLowerCase().includes(q);
+});
+
+const handleInsertRecipe = () => {
+  if (!jobSelected || !recipeId) return;
+  const rec = PIPELINE_RECIPES.find((r) => r.id === recipeId);
+  if (!rec) return;
+  setSpec((prev) => buildRecipeSteps(rec).reduce(
+    (acc, st) => appendStep(acc, selected!.si!, selected!.ji!, st), prev));
+};
+
+// JSX (reemplaza el `{selected?.si != null && selected?.ji != null && (` de F1-bis
+// por `{jobSelected && (`), y DENTRO agrega, antes del <select> de acciones:
+<input
+  type="text"
+  value={snippetFilter}
+  onChange={(e) => setSnippetFilter(e.target.value)}
+  placeholder="Filtrar acciones…"
+  style={{ padding: '4px 8px' }}
+/>
+// ...el <select> de acciones ahora mapea `filteredSnippets` agrupados por
+// categoría (usar getSnippetsByCategory pero filtrando por `filteredSnippets`,
+// o simplemente mapear `filteredSnippets` directo si el filtro está activo).
+// ...y un segundo control para recetas:
+<label className={styles.textMuted}>Insertar receta (varios pasos):</label>
+<select value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
+  <option value="">— elegí una receta —</option>
+  {PIPELINE_RECIPES.map((r) => (
+    <option key={r.id} value={r.id} title={r.description}>{r.label}</option>
+  ))}
+</select>
+<button onClick={handleInsertRecipe} disabled={!recipeId} className={styles.btnPrimary} style={{ padding: '6px 12px' }}>
+  Insertar receta
+</button>
+```
+
+(NOTA: `addStage`/`addJob`/`emptySpec` ya están importados en el componente
+—verificado en el bloque de imports de `specBuilder`—; `setSelected` es el setter
+del estado `selected` de la línea 61. El `btnSecondary` es opcional: si no existe
+esa clase en `devops.module.css`, usar `btnPrimary` o un estilo inline, sin
+introducir un sistema de estilos nuevo.)
+
+**Tests PRIMERO** — extender `pipelineStepSnippets.test.ts` (F1-bis) con:
+- `at_least_40_snippets`: `PIPELINE_STEP_SNIPPETS.length >= 40`.
+- `snippet_categories_include_seguridad_and_versionar`: ambas ∈ `SNIPPET_CATEGORIES`
+  y cada una tiene ≥1 snippet.
+
+**Archivo NUEVO** `Stacky Agents/frontend/src/devops/pipelineRecipes.test.ts`
+(vitest, TS puro):
+- `all_recipes_have_unique_ids`: los `id` de `PIPELINE_RECIPES` son únicos.
+- `every_recipe_references_existing_snippets` (clave anti-drift): cada `stepId`
+  de cada receta existe en `PIPELINE_STEP_SNIPPETS` (si alguien borra/renombra un
+  snippet referenciado, este test se pone rojo).
+- `every_recipe_has_at_least_two_steps`: `recipe.stepIds.length >= 2` (una receta
+  es un bundle, no un solo paso).
+- `buildRecipeSteps_returns_valid_steps`: para cada receta, `buildRecipeSteps`
+  devuelve `StepDraft[]` con `name`/`script` no vacíos y del mismo largo que
+  `stepIds`.
+- `buildRecipeSteps_unknown_snippet_throws`: una receta ad-hoc con un `stepId`
+  inexistente hace lanzar a `buildRecipeSteps` (defensivo).
+- `inserting_recipe_into_empty_job_keeps_spec_valid`: partiendo de un spec 1
+  stage / 1 job vacío, hacer `reduce(appendStep)` con los steps de una receta deja
+  el job con N steps, no muta el spec original, y `validateSpecLocal` da `[]`.
+
+Comando:
+`npx vitest run src/devops/pipelineStepSnippets.test.ts src/devops/pipelineRecipes.test.ts`
+en `Stacky Agents/frontend`.
+
+**Criterio de aceptación BINARIO:** `PIPELINE_STEP_SNIPPETS.length >= 40`;
+`PIPELINE_RECIPES.length >= 6`; los 2 tests nuevos de snippets + 6 de recetas
+pasan; `npx tsc --noEmit` 0 errores; desde el builder vacío, el botón "Insertá
+acciones sueltas" deja seleccionado un job y visible el inserter (verificación
+manual/grep de `handleStartEmptyJob`); el inserter NO se muestra si `selected`
+apunta fuera de rango (C5, cubierto por `jobSelected`).
+**Flag:** ninguna (datos estáticos + UI, igual que F1-bis).
+**Impacto por runtime:** NINGUNO en los 3 runtimes (UI pura). Fallback: no aplica.
+**Trabajo del operador:** ninguno (todo opcional y editable — HITL).
 
 ### F2 — Backend: detector de stack por archivos de manifiesto (función pura + endpoint solo-lectura)
 
@@ -991,7 +1232,7 @@ cd "Stacky Agents/backend"
 .venv/Scripts/python.exe -m pytest tests/test_plan97_stack_detector.py tests/test_plan97_stack_detect_endpoint.py tests/test_plan97_stack_detect_flag.py -q
 .venv/Scripts/python.exe -m pytest tests/test_plan87_devops_endpoints.py tests/test_harness_flags.py tests/test_flag_wiring.py tests/test_harness_flags_requires.py -q
 cd "../frontend"
-npx vitest run src/devops/pipelinePresets.test.ts src/devops/pipelineStepSnippets.test.ts
+npx vitest run src/devops/pipelinePresets.test.ts src/devops/pipelineStepSnippets.test.ts src/devops/pipelineRecipes.test.ts
 npx tsc --noEmit
 ```
 
@@ -999,9 +1240,14 @@ npx tsc --noEmit
 - [ ] Los 4 presets (`python`/`node`/`dotnet`/`generic`) generan spec válido
       (`validateSpecLocal` → `[]`) y ninguno usa el literal placeholder de
       `starterSpec`, salvo `generic` que lo declara explícitamente distinto.
-- [ ] La biblioteca de acciones prehechas (F1-bis) tiene ≥20 snippets; insertar
-      uno con `appendStep` en un job deja el spec válido; ningún snippet usa
-      `echo`/`$(` (paridad ADO+GitLab); `addStep` queda intacto (grep negativo).
+- [ ] La biblioteca de acciones prehechas tiene ≥40 snippets (F1-bis+F1-ter) y
+      ≥6 recetas; insertar un snippet o una receta con `appendStep` deja el spec
+      válido; ningún snippet usa `echo`/`$(` y todos son de una sola línea
+      (paridad ADO+GitLab); toda receta referencia solo snippets existentes;
+      `addStep` queda intacto (grep negativo).
+- [ ] Desde el builder VACÍO, "Insertá acciones sueltas (job vacío)" scaffolda
+      stage+job, lo selecciona y muestra el inserter de acciones; el inserter no
+      aparece si `selected` apunta fuera de rango (C5).
 - [ ] La galería de presets aparece en el estado vacío del builder JUNTO a
       (no en reemplazo de) "Empezar con ejemplo" y "+ stage" — ambos botones
       preexistentes intactos.
@@ -1043,8 +1289,14 @@ npx tsc --noEmit
 
 ## 6. Fuera de scope (v1)
 
-- Presets para más stacks (Go, Rust, Java/Maven, PHP, etc.) — se agregan en un
-  plan futuro incremental sobre `PIPELINE_PRESETS` sin romper el contrato.
+- Presets de pipeline COMPLETO para más stacks (Go, Rust, Java/Maven, PHP) —
+  quedan 4 presets (Python/Node/.NET/Genérico); esos stacks SÍ están cubiertos a
+  nivel de acciones sueltas y recetas (F1-ter), pero un preset entero por stack se
+  agrega en un plan futuro sobre `PIPELINE_PRESETS` sin romper el contrato.
+- Acciones que NO son un script sino una directiva del pipeline: cache nativo
+  (ADO `Cache@2` / GitLab `cache:`) y deploy con target concreto — se excluyen a
+  propósito porque no son un `StepDraft` de script y romperían la neutralidad de
+  provider; se tratarían en un plan futuro con soporte de campos nativos.
 - Detección por contenido de archivos (parsear `package.json` para saber si es
   React vs Vue, o `requirements.txt` para saber si es Django vs Flask) — v1
   detecta únicamente por PRESENCIA de manifiesto, no por contenido.
@@ -1066,9 +1318,13 @@ npx tsc --noEmit
   reales (no placeholders) para un stack técnico específico.
 - **Acción prehecha / step snippet (F1-bis, [ADICIÓN ARQUITECTO])**: un
   `StepDraft` individual real y editable (un solo paso: instalar deps, lint,
-  test, compilar, empaquetar, publicar, calidad) insertable con 1 click en un
-  job existente. A diferencia del preset, no arma un pipeline entero: AGREGA una
-  acción concreta al job seleccionado.
+  test, compilar, empaquetar, publicar, calidad, seguridad, versionar) insertable
+  con 1 click en un job existente. A diferencia del preset, no arma un pipeline
+  entero: AGREGA una acción concreta al job seleccionado.
+- **Receta / bundle (F1-ter, [ADICIÓN ARQUITECTO])**: conjunto ORDENADO de
+  acciones prehechas (referenciadas por id) que se insertan de una sola vez en un
+  job (ej. "CI Node completo" = install→lint→test→build). No duplica scripts:
+  reusa los snippets y `appendStep`.
 - **Stack técnico**: el lenguaje/ecosistema de un proyecto (Python, Node,
   .NET) inferido por la presencia de sus archivos de manifiesto estándar.
 - **Manifiesto**: archivo que declara dependencias/config de un proyecto
@@ -1089,18 +1345,24 @@ npx tsc --noEmit
    (`pipelineStepSnippets.ts`) + helper `appendStep` + inserter UI + tests
    vitest (siempre visible, sin flag; independiente de F2/F3, puede ir junto a
    F1 o inmediatamente después).
-4. F0-bis — flag `STACKY_DEVOPS_STACK_DETECT_ENABLED` (5 patas) + tests.
-5. F2 — detector de stack (`pipeline_stack_detector.py`) + endpoint + tests
+4. F1-ter — [ADICIÓN ARQUITECTO] catálogo ampliado (≥40) + recetas
+   (`pipelineRecipes.ts`) + filtro + acceso desde builder vacío + tests vitest
+   (mismo commit que F1-bis o inmediatamente después; sube el piso a ≥40).
+5. F0-bis — flag `STACKY_DEVOPS_STACK_DETECT_ENABLED` (5 patas) + tests.
+6. F2 — detector de stack (`pipeline_stack_detector.py`) + endpoint + tests
    (implementar EN EL MISMO commit que F0-bis o inmediatamente después, nunca
    antes — la flag debe existir para que el guard del endpoint compile).
-6. F3 — botón de detección en el frontend, gateado por health.
-7. F4 — cierre y checklist binario.
+7. F3 — botón de detección en el frontend, gateado por health.
+8. F4 — cierre y checklist binario.
 
 ## 9. Definición de Hecho (DoD)
 
 - F0: 9 tests vitest verdes (`pipelinePresets.test.ts`) + `tsc` 0 errores.
-- F1-bis: 8 tests vitest verdes (`pipelineStepSnippets.test.ts`) + `tsc` 0
-  errores; `PIPELINE_STEP_SNIPPETS.length >= 20`; ningún snippet usa `echo`/`$(`.
+- F1-bis: 9 tests vitest verdes (`pipelineStepSnippets.test.ts`) + `tsc` 0
+  errores; ningún snippet usa `echo`/`$(` y todos son de una sola línea.
+- F1-ter: `PIPELINE_STEP_SNIPPETS.length >= 40` + `PIPELINE_RECIPES.length >= 6`;
+  2 tests vitest nuevos de snippets + 6 de recetas (`pipelineRecipes.test.ts`)
+  verdes; toda receta referencia solo snippets existentes.
 - F0-bis: 5 tests backend verdes + 3 meta-tests no-regresión verdes.
 - F2: 10 + 6 = 16 tests backend verdes (`test_plan97_stack_detector.py` +
   `test_plan97_stack_detect_endpoint.py`, incluido el test de cableado de C1 que
@@ -1111,8 +1373,10 @@ npx tsc --noEmit
   al comportamiento previo a este plan (endpoint 404, botón ausente).
 - Los 4 presets pasan `validateSpecLocal` en 0 errores y ninguno duplica el
   literal placeholder de `starterSpec` (salvo `generic`, declarado distinto).
-- La biblioteca de acciones prehechas (F1-bis) ofrece ≥20 snippets; insertar
-  cualquiera vía `appendStep` deja el spec válido (`validateSpecLocal` limpio).
+- La biblioteca de acciones prehechas ofrece ≥40 snippets (F1-bis+F1-ter) + ≥6
+  recetas; insertar cualquier snippet o receta vía `appendStep` deja el spec
+  válido (`validateSpecLocal` limpio); las acciones sueltas son accesibles desde
+  el builder vacío (botón "Insertá acciones sueltas").
 - Paridad ADO+GitLab preservada: presets Y snippets usan el mismo
   `PipelineSpecDraft`/`StepDraft` y los mismos renderers ya existentes, sin
   bifurcación por tracker (snippets provider-neutrales, sin `$(VAR)`/`$VAR`).

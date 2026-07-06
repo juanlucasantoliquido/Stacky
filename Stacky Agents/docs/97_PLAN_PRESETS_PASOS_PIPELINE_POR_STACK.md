@@ -1,7 +1,7 @@
 # Plan 97 — Presets de pasos de pipeline por stack técnico (compilar/test/lint) con detección opcional
 
-**Estado:** PROPUESTO
-**Versión:** v1
+**Estado:** CRITICADO (v1 → v2 — APROBADO-CON-CAMBIOS)
+**Versión:** v2
 **Fecha:** 2026-07-05
 **Serie DevOps:** complementa la serie base 87-91 (builder gráfico) y la serie E2E
 93-96 (preflight/variables/producción/doctor) — NO es el plan 5 de esa serie
@@ -48,6 +48,43 @@ construye desde cero, sin duplicar nada existente.**
 
 ---
 
+## Changelog v1 → v2 (crítica adversarial)
+
+Crítica del juez el 2026-07-05. Veredicto: **APROBADO-CON-CAMBIOS** (v1 tenía 1
+defecto BLOQUEANTE en la letra, resuelto acá). Hallazgos y fixes aplicados:
+
+- **C1 (BLOQUEANTE, resuelto):** F2 leía las keys `local_path`/`path`, que **no
+  existen** en `project_manager.get_project_config`. La key real es
+  **`workspace_root`** (`project_manager.py:12,152,155`). Con la letra de v1 el
+  detector nacía **muerto en producción** (`root` siempre `None` → `detected`
+  siempre `null`) y — peor — los tests del endpoint mockean
+  `get_project_config`, así que quedaba **verde-falso**. v2 usa `workspace_root`
+  y agrega un test de cableado que fija la key real (F2, C1).
+- **C2 (IMPORTANTE, resuelto):** F3 usaba una variable `project` que el
+  componente NO tiene. `PipelineBuilderSection` deriva el proyecto activo de
+  `useWorkbench((s) => s.activeProject)?.name` como `activeProject`
+  (`PipelineBuilderSection.tsx:50-51`). Además faltaba guard para proyecto
+  activo vacío (`''` → 400 innecesario). v2 usa `activeProject`, desactiva el
+  botón y hace early-return si está vacío (F3, C2).
+- **C3 (IMPORTANTE — pedido explícito del operador, resuelto con
+  [ADICIÓN ARQUITECTO]):** v1 entregaba SOLO 4 presets de pipeline completo
+  (2-4 steps c/u). El operador pidió *"muchos elementos scripts de acciones de
+  pipeline prehechas"*. Un preset entero no cubre el caso "quiero AGREGAR una
+  acción concreta (docker build, publicar artefacto, cobertura, lint…) a un job
+  que ya tengo". v2 agrega **F1-bis: biblioteca de ≥20 acciones de pipeline
+  prehechas (step snippets)** insertables con 1 click en el job seleccionado,
+  reusando el helper inmutable de steps de `specBuilder.ts`.
+- **C4 (MENOR, resuelto):** `detect_stack` calculaba la profundidad con
+  `dirpath[len(project_root):]`, que se desfasa si `project_root` trae separador
+  final. v2 normaliza con `os.path.normpath` al entrar (F2, C4).
+- **C5 (MENOR, resuelto):** el KPI decía "nunca un `echo` de relleno / 0%" y el
+  preset `generic` sí trae `echo`. v2 reformula el KPI para que sea consistente
+  con la excepción documentada de `generic` (§1, C5).
+- **C6 (MENOR, resuelto):** contadores de tests actualizados por el test de
+  cableado nuevo de C1 (F2: 10 + 6 = 16; F1-bis: 8 vitest) en F2/F4/§9.
+
+---
+
 ## 1. Objetivo + KPI
 
 Ofrecer, en el mismo punto donde hoy solo existe "Empezar con ejemplo"
@@ -61,12 +98,21 @@ proyecto activo y **pre-selecciona** el preset más probable, dejando SIEMPRE la
 decisión final y la edición en manos del operador (HITL).
 
 **KPI (aspiracional, no criterio de done — los binarios están en cada fase):**
-- El operador llega de "lienzo vacío" a un pipeline con pasos REALES (no `echo`)
-  de compilar+test en ≤ 2 clicks (elegir preset + opcionalmente confirmar
+- El operador llega de "lienzo vacío" a un pipeline con pasos REALES de
+  compilar+test en ≤ 2 clicks (elegir preset + opcionalmente confirmar
   detección), igual que hoy con "Empezar con ejemplo" (mismo costo de UX, más
-  valor).
-- 4 presets cubiertos desde el día 1 (Python, Node, .NET, Genérico), cada uno
-  generando YAML válido para ADO y GitLab (paridad dura, criterio binario F2/F3).
+  valor). Ningún preset de stack usa `echo` de relleno; el único con `echo` es
+  el preset `generic` (plantilla neutra explícita, sin stack identificable) —
+  ver nota de diseño en F0 (C5).
+- 4 presets de pipeline completo desde el día 1 (Python, Node, .NET, Genérico),
+  cada uno generando YAML válido para ADO y GitLab (paridad dura, criterio
+  binario F2/F3).
+- **[ADICIÓN ARQUITECTO]** ≥ 20 acciones de pipeline prehechas (step snippets)
+  disponibles desde el día 1 (instalar deps, lint, test, cobertura, compilar,
+  empaquetar, publicar artefacto/imagen, calidad), insertables con 1 click en el
+  job seleccionado y editables después — el "muchos elementos scripts de acciones
+  prehechas" que pidió el operador (F1-bis). Provider-neutrales: el mismo snippet
+  vale para ADO y GitLab (sin interpolación `$(VAR)`/`$VAR`).
 - 0% de falsos "detecté tu stack": si hay ambigüedad o cero señales, el detector
   degrada a "no pude detectar, elegí manualmente" — nunca inventa.
 - 0 líneas de config nuevas para el operador: el detector es un botón, no un
@@ -375,6 +421,206 @@ archivo NO borra esas líneas, solo agrega antes).
 **Trabajo del operador:** ninguno (botones nuevos, ningún paso obligatorio —
 seguir usando "Empezar con ejemplo" sigue funcionando igual que hoy).
 
+### F1-bis — [ADICIÓN ARQUITECTO] Biblioteca de acciones de pipeline prehechas (step snippets)
+
+**Por qué (pedido explícito del operador, C3):** los 4 presets de F0 arman un
+pipeline COMPLETO desde cero, pero no cubren el caso "ya tengo un job y quiero
+AGREGARLE una acción concreta" (docker build, publicar artefacto, correr
+cobertura, un lint puntual). El operador pidió textualmente "muchos elementos
+scripts de acciones de pipeline prehechas". Esta fase entrega una **biblioteca de
+≥20 acciones individuales**, cada una un `StepDraft` real y editable, insertable
+con 1 click en el job seleccionado. Es datos estáticos TypeScript puros (mismo
+patrón y mismo "siempre visible sin flag" que los presets de F0), reusa el
+contrato `StepDraft` y el patrón inmutable de `addStep` ya existente
+(`specBuilder.ts:329`), y no toca ningún renderer ni el backend.
+
+**Regla de paridad dura (ADO+GitLab):** el CUERPO del script se pasa VERBATIM a
+ambos renderers, y la sintaxis de interpolación de variables difiere entre
+providers (ADO `$(VAR)` vs GitLab `$VAR`). Por eso **ningún snippet usa
+interpolación de variables del runner**: donde haría falta un valor (ej. tag de
+imagen), el snippet trae un literal editable (`myapp:latest`) que el operador
+cambia. Así el mismo snippet es válido en ADO y en GitLab sin bifurcar.
+
+**Archivo NUEVO:** `Stacky Agents/frontend/src/devops/pipelineStepSnippets.ts`
+
+```ts
+/**
+ * pipelineStepSnippets.ts — Plan 97 F1-bis
+ * Biblioteca ESTÁTICA de acciones de pipeline prehechas (step snippets).
+ * Cada snippet produce un StepDraft real y editable (specBuilder.ts).
+ * Provider-neutral: sin interpolación $(VAR)/$VAR (paridad ADO+GitLab).
+ */
+import type { StepDraft } from "./specBuilder";
+
+export type SnippetCategory =
+  | "dependencias" | "lint" | "test" | "build" | "publicar" | "calidad";
+
+export const SNIPPET_CATEGORIES: readonly SnippetCategory[] = [
+  "dependencias", "lint", "test", "build", "publicar", "calidad",
+];
+
+export interface StepSnippet {
+  id: string;               // único, kebab-case
+  category: SnippetCategory;
+  label: string;            // texto corto en la UI (español)
+  description: string;      // 1 frase en llano
+  build: () => StepDraft;   // función pura, siempre devuelve StepDraft NUEVO
+}
+
+function step(name: string, script: string): StepDraft {
+  return { name, script, env: {} };
+}
+
+export const PIPELINE_STEP_SNIPPETS: readonly StepSnippet[] = [
+  // ── dependencias ──
+  { id: "dep-pip-install", category: "dependencias", label: "pip install (requirements.txt)", description: "Instala dependencias Python con pip.", build: () => step("instalar-dependencias", "pip install -r requirements.txt") },
+  { id: "dep-poetry-install", category: "dependencias", label: "poetry install", description: "Instala dependencias con Poetry.", build: () => step("instalar-dependencias", "poetry install --no-interaction") },
+  { id: "dep-npm-ci", category: "dependencias", label: "npm ci", description: "Instala dependencias Node de forma reproducible.", build: () => step("instalar-dependencias", "npm ci") },
+  { id: "dep-yarn-install", category: "dependencias", label: "yarn install (frozen)", description: "Instala dependencias con Yarn sin tocar el lockfile.", build: () => step("instalar-dependencias", "yarn install --frozen-lockfile") },
+  { id: "dep-dotnet-restore", category: "dependencias", label: "dotnet restore", description: "Restaura paquetes NuGet.", build: () => step("restaurar", "dotnet restore") },
+  // ── lint ──
+  { id: "lint-flake8", category: "lint", label: "flake8", description: "Chequeo de estilo Python con flake8.", build: () => step("lint", "python -m flake8 .") },
+  { id: "lint-black-check", category: "lint", label: "black --check", description: "Verifica formato Python con black (sin modificar).", build: () => step("lint-formato", "python -m black --check .") },
+  { id: "lint-ruff", category: "lint", label: "ruff check", description: "Linter Python rápido con ruff.", build: () => step("lint", "python -m ruff check .") },
+  { id: "lint-eslint", category: "lint", label: "npm run lint", description: "Corre el script de lint de Node si existe.", build: () => step("lint", "npm run lint --if-present") },
+  { id: "lint-prettier-check", category: "lint", label: "prettier --check", description: "Verifica formato con Prettier (sin modificar).", build: () => step("lint-formato", "npx prettier --check .") },
+  { id: "lint-dotnet-format", category: "lint", label: "dotnet format --verify", description: "Verifica formato .NET sin aplicar cambios.", build: () => step("lint-formato", "dotnet format --verify-no-changes") },
+  // ── test ──
+  { id: "test-pytest", category: "test", label: "pytest", description: "Corre la suite de tests Python.", build: () => step("test", "python -m pytest -q") },
+  { id: "test-pytest-cov", category: "test", label: "pytest + cobertura", description: "Corre pytest generando reporte de cobertura XML.", build: () => step("test-cobertura", "python -m pytest --cov --cov-report=xml") },
+  { id: "test-npm-test", category: "test", label: "npm test", description: "Corre el script de tests de Node si existe.", build: () => step("test", "npm test --if-present") },
+  { id: "test-jest", category: "test", label: "jest --ci", description: "Corre Jest en modo CI.", build: () => step("test", "npx jest --ci") },
+  { id: "test-dotnet", category: "test", label: "dotnet test", description: "Corre los tests .NET en Release.", build: () => step("test", "dotnet test --no-build --configuration Release") },
+  // ── build ──
+  { id: "build-npm", category: "build", label: "npm run build", description: "Compila el proyecto Node si existe el script.", build: () => step("compilar", "npm run build --if-present") },
+  { id: "build-dotnet-release", category: "build", label: "dotnet build (Release)", description: "Compila la solución .NET en Release.", build: () => step("compilar", "dotnet build --configuration Release --no-restore") },
+  { id: "build-python", category: "build", label: "python -m build", description: "Empaqueta el proyecto Python (sdist+wheel).", build: () => step("compilar", "python -m build") },
+  { id: "build-docker", category: "build", label: "docker build", description: "Construye la imagen Docker (editá el tag).", build: () => step("docker-build", "docker build -t myapp:latest .") },
+  // ── publicar / artefactos ──
+  { id: "pub-docker-push", category: "publicar", label: "docker push", description: "Publica la imagen Docker (editá el tag).", build: () => step("docker-push", "docker push myapp:latest") },
+  { id: "pub-dotnet-publish", category: "publicar", label: "dotnet publish", description: "Publica el binario .NET a ./publish.", build: () => step("publicar", "dotnet publish -c Release -o ./publish") },
+  { id: "pub-npm-pack", category: "publicar", label: "npm pack", description: "Genera el tarball del paquete npm.", build: () => step("empaquetar", "npm pack") },
+  { id: "pub-tar-dist", category: "publicar", label: "tar dist/", description: "Empaqueta la carpeta dist en un .tgz (tar disponible en Windows y Linux modernos).", build: () => step("empaquetar", "tar -czf dist.tgz dist") },
+  // ── calidad ──
+  { id: "qual-sonar", category: "calidad", label: "sonar-scanner", description: "Análisis de calidad con SonarQube (lee sonar-project.properties).", build: () => step("calidad", "sonar-scanner") },
+  { id: "qual-coverage-report", category: "calidad", label: "coverage report", description: "Muestra el reporte de cobertura Python en consola.", build: () => step("cobertura", "python -m coverage report") },
+];
+
+export function getSnippetsByCategory(cat: SnippetCategory): readonly StepSnippet[] {
+  return PIPELINE_STEP_SNIPPETS.filter((s) => s.category === cat);
+}
+```
+
+**Archivo a editar (helper inmutable, reuso):**
+`Stacky Agents/frontend/src/devops/specBuilder.ts` — agregar UNA función pura
+espejo de `addStep` (misma firma inmutable + guards NOOP idénticos), que
+inserta un `StepDraft` YA armado en vez de uno vacío:
+
+```ts
+// Plan 97 F1-bis — inserta un step prefabricado (snippet) en un job, inmutable.
+// Mismo patrón/guards que addStep (specBuilder.ts:329); solo cambia que el step
+// llega ya construido en vez de crear el placeholder "step-1".
+export function appendStep(
+  spec: PipelineSpecDraft, stageIndex: number, jobIndex: number, step: StepDraft
+): PipelineSpecDraft {
+  if (stageIndex < 0 || stageIndex >= spec.stages.length) return spec;
+  const stages = spec.stages.map((s, si) => {
+    if (si !== stageIndex) return s;
+    if (jobIndex < 0 || jobIndex >= s.jobs.length) return s;
+    const jobs = s.jobs.map((j, ji) =>
+      ji !== jobIndex ? j : { ...j, steps: [...j.steps, { ...step }] });
+    return { ...s, jobs };
+  });
+  return { ...spec, stages };
+}
+```
+
+**Archivo a editar (UI):**
+`Stacky Agents/frontend/src/components/devops/PipelineBuilderSection.tsx` —
+reusar el estado `selected` YA existente (`{ si?, ji?, sti? }`, línea 61) y
+`setSpec` (línea 54). Cuando hay un JOB seleccionado (`selected?.si != null &&
+selected?.ji != null`), mostrar un selector categorizado de acciones + botón
+"Insertar acción". Agregar al import de `../../devops/specBuilder` el símbolo
+`appendStep`, e importar la biblioteca:
+
+```tsx
+// Plan 97 F1-bis — biblioteca de acciones prehechas
+import { PIPELINE_STEP_SNIPPETS, SNIPPET_CATEGORIES, getSnippetsByCategory } from '../../devops/pipelineStepSnippets';
+// ... y agregar `appendStep` a la lista de imports existente de specBuilder ...
+
+const [snippetId, setSnippetId] = useState<string>('');
+
+const handleInsertSnippet = () => {
+  if (selected?.si == null || selected?.ji == null || !snippetId) return;
+  const snip = PIPELINE_STEP_SNIPPETS.find((s) => s.id === snippetId);
+  if (!snip) return;
+  setSpec((prev) => appendStep(prev, selected.si!, selected.ji!, snip.build()));
+};
+
+// JSX — solo cuando hay un job seleccionado (junto a los controles del job):
+{selected?.si != null && selected?.ji != null && (
+  <div style={{ marginTop: '8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+    <label className={styles.textMuted}>Insertar acción prehecha:</label>
+    <select value={snippetId} onChange={(e) => setSnippetId(e.target.value)}>
+      <option value="">— elegí una acción —</option>
+      {SNIPPET_CATEGORIES.map((cat) => (
+        <optgroup key={cat} label={cat}>
+          {getSnippetsByCategory(cat).map((s) => (
+            <option key={s.id} value={s.id} title={s.description}>{s.label}</option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+    <button onClick={handleInsertSnippet} disabled={!snippetId} className={styles.btnPrimary} style={{ padding: '6px 12px' }}>
+      Insertar acción
+    </button>
+  </div>
+)}
+```
+
+(NOTA: la ubicación exacta del bloque JSX — junto al árbol de bloques
+`BlockTree`/panel `BlockProperties` — la elige el implementador para que quede
+al lado de la vista del job seleccionado; lo único fijo es que se renderiza SOLO
+cuando `selected?.si != null && selected?.ji != null` y que muta vía
+`setSpec(appendStep(...))`, sin prop nueva.)
+
+**Tests PRIMERO** — archivo nuevo
+`Stacky Agents/frontend/src/devops/pipelineStepSnippets.test.ts` (vitest, TS puro):
+- `all_snippets_have_unique_ids`: los `id` de `PIPELINE_STEP_SNIPPETS` son únicos.
+- `at_least_20_snippets`: `PIPELINE_STEP_SNIPPETS.length >= 20` (criterio binario
+  de "muchos").
+- `every_snippet_builds_valid_step`: para cada snippet, `build()` da un
+  `StepDraft` con `name` no vacío, `script` no vacío y `env` objeto.
+- `no_snippet_uses_echo_or_ado_macro`: ningún `script` empieza con `"echo "` ni
+  contiene `"$("` (evita el placeholder de relleno y la macro de variable de
+  ADO — paridad).
+- `every_snippet_category_is_declared`: la `category` de cada snippet ∈
+  `SNIPPET_CATEGORIES`.
+- `getSnippetsByCategory_covers_all`: la suma de `getSnippetsByCategory(c)` sobre
+  las 6 categorías reconstruye exactamente `PIPELINE_STEP_SNIPPETS` (sin
+  huérfanos).
+- `build_is_pure_and_immutable`: `build()` dos veces da objetos `!==` pero
+  deep-equal (mismo patrón que los presets de F0).
+- `appendStep_inserts_snippet_and_keeps_spec_valid`: partiendo de un spec con 1
+  stage / 1 job vacío, `appendStep(spec, 0, 0, snip.build())` deja el step en el
+  job, no muta el `spec` original (inmutable) y `validateSpecLocal` del
+  resultado no reporta "el job no tiene steps".
+
+Comando: `npx vitest run src/devops/pipelineStepSnippets.test.ts` en
+`Stacky Agents/frontend`.
+
+**Criterio de aceptación BINARIO:** los 8 tests nuevos pasan +
+`npx tsc --noEmit` 0 errores; `PIPELINE_STEP_SNIPPETS.length >= 20`; ningún
+snippet usa `echo`/`$(`; los botones y presets de F0/F1 siguen intactos (grep
+negativo: el diff de `specBuilder.ts` solo AGREGA `appendStep`, no toca
+`addStep`).
+**Flag:** ninguna (datos estáticos puros, mismo nivel que los presets de F0;
+siempre visibles, cero configuración).
+**Impacto por runtime:** Codex CLI / Claude Code CLI / GitHub Copilot Pro:
+NINGUNO (UI pura, sin ejecución de agentes). Fallback: no aplica.
+**Trabajo del operador:** ninguno (la biblioteca está siempre disponible; usar un
+snippet es un click opcional, y el step insertado es 100% editable — HITL).
+
 ### F2 — Backend: detector de stack por archivos de manifiesto (función pura + endpoint solo-lectura)
 
 **Objetivo:** dado el proyecto activo, leer (solo-lectura) sus archivos de
@@ -410,6 +656,7 @@ def detect_stack(project_root: str) -> str | None:
     con un tope de 500 entradas escaneadas para no colgar en árboles gigantes."""
     if not project_root or not os.path.isdir(project_root):
         return None
+    project_root = os.path.normpath(project_root)  # C4: normaliza separador final (evita off-by-one de profundidad)
     try:
         scanned = 0
         found: set[str] = set()
@@ -460,18 +707,22 @@ def detect_stack_route():
     # en disco; NO inventar una ruta nueva de resolución).
     from project_manager import get_project_config
     cfg = get_project_config(project)
-    root = (cfg or {}).get("local_path") or (cfg or {}).get("path")
+    # C1 (BLOQUEANTE resuelto): la key REAL de la ruta del repo en el dict de
+    # get_project_config es `workspace_root` (project_manager.py:12,152,155).
+    # v1 usaba `local_path`/`path`, que NO existen -> el detector nacía muerto.
+    root = (cfg or {}).get("workspace_root")
     detected = detect_stack(root) if root else None
     return jsonify({"detected": detected})
 ```
 
-(NOTA para el implementador: `get_project_config` y la key exacta de la ruta
-local del proyecto — `local_path` vs `path` vs otra — deben confirmarse leyendo
-`Stacky Agents/backend/project_manager.py` antes de escribir esta ruta; usar
-`grep -n "def get_project_config" -A 20 project_manager.py` y tomar la key
-REAL que ese diccionario devuelve. Si el proyecto no tiene ruta local
-configurada, `root` queda `None` y `detect_stack(None)` ya está cubierto por
-el guard `if not project_root` → devuelve `None`, nunca lanza.)
+(NOTA para el implementador — key RESUELTA por la crítica (C1): la ruta del repo
+del proyecto vive en la key `workspace_root` del dict que devuelve
+`get_project_config` — verificado en `project_manager.py:12` (docstring del
+schema), `:152` y `:155` (se persiste como `workspace_root`). NO usar
+`local_path` ni `path`: no existen en ese dict y dejarían el detector siempre en
+`None`. Si el proyecto no tiene `workspace_root` configurado, `root` queda `None`
+y `detect_stack(None)` ya está cubierto por el guard `if not project_root` →
+devuelve `None`, nunca lanza.)
 
 **Registro:** ninguno nuevo — la ruta se agrega al blueprint `devops` YA
 registrado en `api/__init__.py` (sin tocar ese archivo).
@@ -508,11 +759,17 @@ fixtures `app_flag_on`/`app_flag_off` del patrón de
   404.
 - `test_missing_project_400`: flag ON, sin query param `project` → 400.
 - `test_unknown_project_returns_null_detected`: flag ON, proyecto sin
-  `local_path`/`path` configurado (mock de `get_project_config` → `None` o
-  dict sin esas keys) → 200 con `{"detected": null}` (nunca error).
+  `workspace_root` configurado (mock de `get_project_config` → `None` o dict
+  SIN la key `workspace_root`) → 200 con `{"detected": null}` (nunca error).
 - `test_detects_and_returns_stack`: flag ON, `get_project_config` mockeado a
-  una carpeta `tmp_path` con `package.json` → 200 con
-  `{"detected": "node"}`.
+  `{"workspace_root": str(tmp_path)}` con un `package.json` dentro de `tmp_path`
+  → 200 con `{"detected": "node"}`.
+- `test_endpoint_uses_workspace_root_key` (C1, anti-verde-falso): mock de
+  `get_project_config` → dict con `workspace_root` apuntando a un `tmp_path` que
+  tiene `requirements.txt`, PERO además con las keys legacy
+  `{"local_path": "/no/existe", "path": "/no/existe"}`; el endpoint DEBE
+  devolver `{"detected": "python"}` (lee `workspace_root`, ignora las legacy).
+  Este test se pone en rojo si alguien vuelve a leer `local_path`/`path`.
 - `test_route_registered`: centinela — `"/api/devops/detect-stack"` está en
   `[r.rule for r in app.url_map.iter_rules()]`.
 
@@ -523,8 +780,9 @@ Comando:
 `test_plan97_stack_detect_endpoint.py` en `backend/scripts/run_harness_tests.sh`
 **y** `backend/scripts/run_harness_tests.ps1`.
 
-**Criterio de aceptación BINARIO:** 10 + 5 = 15 tests nuevos verdes; ningún
-test existente (`test_plan87_devops_endpoints.py`) se rompe.
+**Criterio de aceptación BINARIO:** 10 + 6 = 16 tests nuevos verdes (10 del
+detector puro + 6 del endpoint, incluido `test_endpoint_uses_workspace_root_key`
+de C1); ningún test existente (`test_plan87_devops_endpoints.py`) se rompe.
 **Flag:** `STACKY_DEVOPS_STACK_DETECT_ENABLED` — ver F0-bis abajo (alta de la
 flag antes de que esta fase pueda mergearse activa; si se implementa F2 antes
 que la flag, el endpoint debe quedar detrás de un `getattr(..., False)` que
@@ -655,10 +913,16 @@ const [detecting, setDetecting] = useState(false);
 const [detectError, setDetectError] = useState<string | null>(null);
 
 const handleDetectStack = async () => {
+  // C2: el proyecto activo se deriva de useWorkbench (YA existe en el componente,
+  // PipelineBuilderSection.tsx:50-51) como `activeProject`; NO hay prop `project`.
+  if (!activeProject) {
+    setDetectError('Seleccioná un proyecto activo primero.');
+    return;
+  }
   setDetecting(true);
   setDetectError(null);
   try {
-    const { detected } = await DevOps.detectStack(project);
+    const { detected } = await DevOps.detectStack(activeProject);
     if (detected) {
       const preset = PIPELINE_PRESETS.find((p) => p.id === detected);
       if (preset) {
@@ -680,7 +944,7 @@ const handleDetectStack = async () => {
 // JSX, antes de la galería de F1, solo si ctx.health.stack_detect_enabled:
 {ctx.health.stack_detect_enabled && (
   <div style={{ marginBottom: '12px' }}>
-    <button onClick={() => void handleDetectStack()} disabled={detecting} className={styles.btnPrimary} style={{ padding: '8px 16px' }}>
+    <button onClick={() => void handleDetectStack()} disabled={detecting || !activeProject} className={styles.btnPrimary} style={{ padding: '8px 16px' }}>
       {detecting ? 'Detectando…' : 'Detectar stack de mi proyecto'}
     </button>
     {detectError && <p className={styles.textWarn} style={{ marginTop: '8px' }}>{detectError}</p>}
@@ -688,12 +952,14 @@ const handleDetectStack = async () => {
 )}
 ```
 
-(NOTA: `ctx`/`project` deben tomarse de las props REALES que
-`PipelineBuilderSection` ya recibe — confirmar leyendo la firma del componente
-en el archivo antes de escribir esto; si el componente hoy no recibe `project`
-como prop, usar la misma fuente que usa `handleSaveDraft`/`handleLoadDraft`
-para saber el proyecto activo, sin inventar una prop nueva si ya hay una vía
-existente.)
+(NOTA — RESUELTO por la crítica (C2): `PipelineBuilderSection` recibe SOLO la
+prop `ctx: DevOpsSectionContext` (`PipelineBuilderSection.tsx:45-49`) y NO recibe
+`project`. El proyecto activo YA está disponible en el componente como
+`activeProject`, derivado de `useWorkbench((s) => s.activeProject)?.name`
+(`PipelineBuilderSection.tsx:50-51`). Usar `activeProject` — no inventar prop
+nueva. `ctx.health` expone las flags booleanas del panel (mismo patrón que
+`ctx.health.generator_enabled`/`trigger_enabled`, líneas 86 y 305 del
+componente).)
 
 **Fallback explícito si la flag está OFF:** el botón simplemente no se
 renderiza (`ctx.health.stack_detect_enabled` es `undefined`/`false`) — la
@@ -725,7 +991,7 @@ cd "Stacky Agents/backend"
 .venv/Scripts/python.exe -m pytest tests/test_plan97_stack_detector.py tests/test_plan97_stack_detect_endpoint.py tests/test_plan97_stack_detect_flag.py -q
 .venv/Scripts/python.exe -m pytest tests/test_plan87_devops_endpoints.py tests/test_harness_flags.py tests/test_flag_wiring.py tests/test_harness_flags_requires.py -q
 cd "../frontend"
-npx vitest run src/devops/pipelinePresets.test.ts
+npx vitest run src/devops/pipelinePresets.test.ts src/devops/pipelineStepSnippets.test.ts
 npx tsc --noEmit
 ```
 
@@ -733,6 +999,9 @@ npx tsc --noEmit
 - [ ] Los 4 presets (`python`/`node`/`dotnet`/`generic`) generan spec válido
       (`validateSpecLocal` → `[]`) y ninguno usa el literal placeholder de
       `starterSpec`, salvo `generic` que lo declara explícitamente distinto.
+- [ ] La biblioteca de acciones prehechas (F1-bis) tiene ≥20 snippets; insertar
+      uno con `appendStep` en un job deja el spec válido; ningún snippet usa
+      `echo`/`$(` (paridad ADO+GitLab); `addStep` queda intacto (grep negativo).
 - [ ] La galería de presets aparece en el estado vacío del builder JUNTO a
       (no en reemplazo de) "Empezar con ejemplo" y "+ stage" — ambos botones
       preexistentes intactos.
@@ -765,9 +1034,10 @@ npx tsc --noEmit
 | Riesgo | Mitigación |
 |---|---|
 | Monorepo con más de un stack (ej. backend Python + frontend Node) | Precedencia documentada y determinista (Python > Node > .NET); el operador siempre puede ignorar la sugerencia y elegir manualmente (HITL) |
-| Proyecto sin ruta local configurada (`local_path` ausente) | `detect_stack(None)` devuelve `None` sin lanzar; endpoint responde 200 con `detected: null` |
+| Proyecto sin ruta local configurada (`workspace_root` ausente) | `detect_stack(None)` devuelve `None` sin lanzar; endpoint responde 200 con `detected: null` |
 | Árbol de archivos gigante (repo grande) cuelga el detector | Tope de 500 entradas escaneadas + profundidad máxima 2 + exclusión de carpetas pesadas conocidas (`node_modules`, `.git`, `venv`, etc.) |
 | Presets quedan desactualizados si cambia una convención (ej. `npm ci` deja de ser el estándar) | Son datos estáticos editables por el operador tras aplicarlos; no hay acoplamiento a versiones de herramientas — si cambia la convención, se edita `pipelinePresets.ts` en un plan futuro sin tocar el contrato |
+| Un snippet (F1-bis) usa un comando que no aplica al proyecto (ej. `sonar-scanner` sin SonarQube) | El snippet es un punto de partida editable/borrable (HITL); nada se ejecuta al insertarlo. Los snippets son provider-neutrales y no interpolan variables del runner, así que no rompen la paridad ADO+GitLab |
 | Confusión entre "preset" (este plan) y "template de publicación" (plan 88) | Nombres y archivos distintos (`pipelinePresets.ts` vs `publication_spec.py`); ámbitos distintos (pipeline de CI vs. publicación de proceso batch/agenda) — sin colisión de conceptos ni de flags |
 | El detector encuentra un `.csproj`/`package.json` de una herramienta interna (ej. carpeta de tooling) y detecta mal | Aceptable en v1: es solo una SUGERENCIA preseleccionada, nunca se aplica sin click explícito del operador; documentado como fuera de scope refinar la heurística más allá de manifiestos en la raíz/nivel 1-2 |
 
@@ -794,6 +1064,11 @@ npx tsc --noEmit
 
 - **Preset de pipeline**: `PipelineSpecDraft` completo y editable con pasos
   reales (no placeholders) para un stack técnico específico.
+- **Acción prehecha / step snippet (F1-bis, [ADICIÓN ARQUITECTO])**: un
+  `StepDraft` individual real y editable (un solo paso: instalar deps, lint,
+  test, compilar, empaquetar, publicar, calidad) insertable con 1 click en un
+  job existente. A diferencia del preset, no arma un pipeline entero: AGREGA una
+  acción concreta al job seleccionado.
 - **Stack técnico**: el lenguaje/ecosistema de un proyecto (Python, Node,
   .NET) inferido por la presencia de sus archivos de manifiesto estándar.
 - **Manifiesto**: archivo que declara dependencias/config de un proyecto
@@ -810,29 +1085,39 @@ npx tsc --noEmit
 
 1. F0 — catálogo de presets estáticos (`pipelinePresets.ts`) + tests vitest.
 2. F1 — galería de presets en el builder (siempre visible, sin flag).
-3. F0-bis — flag `STACKY_DEVOPS_STACK_DETECT_ENABLED` (5 patas) + tests.
-4. F2 — detector de stack (`pipeline_stack_detector.py`) + endpoint + tests
+3. F1-bis — [ADICIÓN ARQUITECTO] biblioteca de acciones prehechas
+   (`pipelineStepSnippets.ts`) + helper `appendStep` + inserter UI + tests
+   vitest (siempre visible, sin flag; independiente de F2/F3, puede ir junto a
+   F1 o inmediatamente después).
+4. F0-bis — flag `STACKY_DEVOPS_STACK_DETECT_ENABLED` (5 patas) + tests.
+5. F2 — detector de stack (`pipeline_stack_detector.py`) + endpoint + tests
    (implementar EN EL MISMO commit que F0-bis o inmediatamente después, nunca
    antes — la flag debe existir para que el guard del endpoint compile).
-5. F3 — botón de detección en el frontend, gateado por health.
-6. F4 — cierre y checklist binario.
+6. F3 — botón de detección en el frontend, gateado por health.
+7. F4 — cierre y checklist binario.
 
 ## 9. Definición de Hecho (DoD)
 
 - F0: 9 tests vitest verdes (`pipelinePresets.test.ts`) + `tsc` 0 errores.
+- F1-bis: 8 tests vitest verdes (`pipelineStepSnippets.test.ts`) + `tsc` 0
+  errores; `PIPELINE_STEP_SNIPPETS.length >= 20`; ningún snippet usa `echo`/`$(`.
 - F0-bis: 5 tests backend verdes + 3 meta-tests no-regresión verdes.
-- F2: 10 + 5 = 15 tests backend verdes (`test_plan97_stack_detector.py` +
-  `test_plan97_stack_detect_endpoint.py`).
+- F2: 10 + 6 = 16 tests backend verdes (`test_plan97_stack_detector.py` +
+  `test_plan97_stack_detect_endpoint.py`, incluido el test de cableado de C1 que
+  fija la key `workspace_root`).
 - F1/F3: `tsc --noEmit` 0 errores + greps de integración verificados (sin
   suite de componente React, gap preexistente fuera de scope).
 - Flag `STACKY_DEVOPS_STACK_DETECT_ENABLED` default OFF; con OFF, byte-idéntico
   al comportamiento previo a este plan (endpoint 404, botón ausente).
 - Los 4 presets pasan `validateSpecLocal` en 0 errores y ninguno duplica el
   literal placeholder de `starterSpec` (salvo `generic`, declarado distinto).
-- Paridad ADO+GitLab preservada: los presets usan el mismo `PipelineSpecDraft`
-  y los mismos renderers ya existentes, sin bifurcación por tracker.
+- La biblioteca de acciones prehechas (F1-bis) ofrece ≥20 snippets; insertar
+  cualquiera vía `appendStep` deja el spec válido (`validateSpecLocal` limpio).
+- Paridad ADO+GitLab preservada: presets Y snippets usan el mismo
+  `PipelineSpecDraft`/`StepDraft` y los mismos renderers ya existentes, sin
+  bifurcación por tracker (snippets provider-neutrales, sin `$(VAR)`/`$VAR`).
 - Cero cambios de contrato en `starterSpec`, `emptySpec`, `validateSpecLocal`,
-  `PipelineSpec`/`_validate_spec`, `to_ado_yaml`/`to_gitlab_yaml`,
-  `DevOpsPage.tsx` (shell intacto).
+  `addStep`, `PipelineSpec`/`_validate_spec`, `to_ado_yaml`/`to_gitlab_yaml`,
+  `DevOpsPage.tsx` (shell intacto). `appendStep` es ADITIVO (no toca `addStep`).
 - Tests registrados en `run_harness_tests.sh` y `run_harness_tests.ps1`.
 - `_REQUIRES_MAP_FROZEN` actualizado con la arista nueva y su meta-test verde.

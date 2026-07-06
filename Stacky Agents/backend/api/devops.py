@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, request, abort
 import config as _config
 from services import server_registry  # Plan 91 — rdp_available en health
 from services.pipeline_renderers import parse_ado_yaml, parse_gitlab_yaml
+from services.pipeline_stack_detector import detect_stack  # Plan 97 F2
 from services.publication_spec import build_publication_spec
 from services.client_profile import load_client_profile  # services/client_profile.py:266
 from services.environment_init import (
@@ -35,7 +36,30 @@ def devops_health_route():
         "agent_enabled": bool(getattr(cfg, "STACKY_DEVOPS_AGENT_ENABLED", False)),  # Plan 90
         "servers_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SERVERS_ENABLED", False)),  # Plan 91
         "rdp_available": (sys.platform == "win32") and server_registry.keyring_available(),  # Plan 91
+        "stack_detect_enabled": bool(getattr(cfg, "STACKY_DEVOPS_STACK_DETECT_ENABLED", False)),  # Plan 97
     })
+
+
+@bp.get("/detect-stack")
+def detect_stack_route():
+    """Detecta el stack técnico del proyecto activo por archivos de manifiesto.
+    SOLO-LECTURA. Flag propia STACKY_DEVOPS_STACK_DETECT_ENABLED."""
+    if not getattr(_config.config, "STACKY_DEVOPS_STACK_DETECT_ENABLED", False):
+        abort(404)
+    project = request.args.get("project")
+    if not project:
+        return jsonify({"error": "project es obligatorio"}), 400
+    # Reusar la resolución de ruta YA existente del proyecto (mismo helper que
+    # usa el resto de api/devops.py y api/projects.py para ir de nombre -> ruta
+    # en disco; NO inventar una ruta nueva de resolución).
+    from project_manager import get_project_config
+    cfg = get_project_config(project)
+    # La key REAL de la ruta del repo en el dict que devuelve get_project_config
+    # es `workspace_root` (project_manager.py) — NO `local_path`/`path`: no
+    # existen en ese dict y dejarían el detector siempre en None.
+    root = (cfg or {}).get("workspace_root")
+    detected = detect_stack(root) if root else None
+    return jsonify({"detected": detected})
 
 
 @bp.post("/parse-yaml")

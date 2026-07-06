@@ -1,6 +1,13 @@
 # Plan 97 — Presets de pasos de pipeline por stack técnico (compilar/test/lint) con detección opcional
 
-**Estado:** CRITICADO (v3 → v4 — APROBADO-CON-CAMBIOS)
+**Estado:** IMPLEMENTADO (2026-07-06 — F0..F4 verdes: 31 vitest de presets/
+snippets/recetas + 21 tests backend propios (detector 10 + endpoint 6 + flag 5)
++ 75 tests de no-regresión; `tsc --noEmit` 0 errores; paridad ADO+GitLab de los
+4 presets verificada manualmente vía `dict_to_spec`+renderers. Nota: 4 archivos
+—`config.py`, `harness_flags.py`, `harness_defaults.env`,
+`PipelineBuilderSection.tsx`— quedaron con cambios sin commitear por
+superposición con WIP ajena preexistente del operador (activación 2026-07-05
+de 8 flags de riesgo); detalle en el reporte de implementación.)
 **Versión:** v4
 **Fecha:** 2026-07-05
 **Serie DevOps:** complementa la serie base 87-91 (builder gráfico) y la serie E2E

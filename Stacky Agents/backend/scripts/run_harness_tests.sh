@@ -130,6 +130,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan91_server_registry.py
   tests/test_plan91_servers_endpoints.py
   tests/test_plan91_rdp_endpoint.py
+  # — Plan 97 · Presets de pasos de pipeline por stack + deteccion opcional —
+  tests/test_plan97_stack_detect_flag.py
+  tests/test_plan97_stack_detector.py
+  tests/test_plan97_stack_detect_endpoint.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

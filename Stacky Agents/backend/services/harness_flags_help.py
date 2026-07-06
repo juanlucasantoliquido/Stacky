@@ -629,6 +629,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: no cambia nada; la sección no aparece y la libreta de servidores queda deshabilitada.",
         example="Como una agenda de contactos, pero de servidores: cargás cada uno una vez y después te conectás sin volver a tipear host ni credenciales.",
     ),
+    "STACKY_DEVOPS_STACK_DETECT_ENABLED": PlainHelp(
+        what="Un botón te sugiere el tipo de proyecto (Python/Node/.NET) para armar el pipeline con los comandos correctos.",
+        on_effect="Si la activás: aparece el botón 'Detectar stack de mi proyecto' en el builder de pipelines, que lee (sin modificar nada) los archivos del proyecto y preselecciona el preset más probable.",
+        off_effect="Si la apagás: elegís el preset vos mismo de una lista, sin detección automática.",
+        example="Como cuando un formulario te sugiere el país según tu número de teléfono, pero siempre podés cambiarlo vos.",
+    ),
     # ── migrador_ado_gitlab ───────────────────────────────────────────────
     "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED": PlainHelp(
         what="Permite mover épicas, tareas y comentarios de Azure DevOps hacia GitLab de forma segura, sin duplicar nada si se repite.",

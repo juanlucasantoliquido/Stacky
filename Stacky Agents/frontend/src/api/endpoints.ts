@@ -3081,6 +3081,7 @@ export const DevOps = {
       agent_enabled?: boolean; // Plan 90
       servers_enabled?: boolean; // Plan 91
       rdp_available?: boolean; // Plan 91
+      stack_detect_enabled?: boolean; // Plan 97
     }>("/api/devops/health"),
   /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
   parseYaml: (source: "ado" | "gitlab", yaml: string) =>
@@ -3105,6 +3106,9 @@ export const DevOps = {
   environmentApply: (project: string, paths: string[], confirm: boolean, fingerprint: string) =>
     api.post<EnvironmentApplyResponse>("/api/devops/environments/apply",
       { project, paths, confirm, fingerprint }),
+  /** GET /api/devops/detect-stack — Plan 97. Detección opt-in de stack por manifiestos, SOLO-LECTURA. */
+  detectStack: (project: string) =>
+    api.get<{ detected: string | null }>(`/api/devops/detect-stack?project=${encodeURIComponent(project)}`),
 };
 
 export interface DevOpsConversationItem {

@@ -360,6 +360,23 @@ export function addStep(spec: PipelineSpecDraft, stageIndex: number, jobIndex: n
   return { ...spec, stages };
 }
 
+// Plan 97 F1-bis — inserta un step prefabricado (snippet) en un job, inmutable.
+// Mismo patrón/guards que addStep; solo cambia que el step llega ya construido
+// en vez de crear el placeholder "step-1".
+export function appendStep(
+  spec: PipelineSpecDraft, stageIndex: number, jobIndex: number, step: StepDraft
+): PipelineSpecDraft {
+  if (stageIndex < 0 || stageIndex >= spec.stages.length) return spec;
+  const stages = spec.stages.map((s, si) => {
+    if (si !== stageIndex) return s;
+    if (jobIndex < 0 || jobIndex >= s.jobs.length) return s;
+    const jobs = s.jobs.map((j, ji) =>
+      ji !== jobIndex ? j : { ...j, steps: [...j.steps, { ...step }] });
+    return { ...s, jobs };
+  });
+  return { ...spec, stages };
+}
+
 export function removeStep(spec: PipelineSpecDraft, stageIndex: number, jobIndex: number, stepIndex: number): PipelineSpecDraft {
   if (stageIndex < 0 || stageIndex >= spec.stages.length) {
     return spec; // NOOP

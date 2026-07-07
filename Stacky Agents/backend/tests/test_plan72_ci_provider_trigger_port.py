@@ -70,15 +70,10 @@ def test_gitlab_ci_provider_monitor_delegates():
 
 
 # ---------------------------------------------------------------------------
-# Caso 3 — AdoCIProvider.monitor_pipeline lanza NotImplementedError
+# Caso 3 — (ELIMINADO) AdoCIProvider.monitor_pipeline lanza NotImplementedError
 # ---------------------------------------------------------------------------
-def test_ado_ci_provider_monitor_not_implemented():
-    from services.ado_ci_provider import AdoCIProvider
-
-    provider = AdoCIProvider.__new__(AdoCIProvider)
-    with pytest.raises(NotImplementedError, match="v1"):
-        provider.monitor_pipeline("99")
-
+# NOTA: Este test se eliminó en Plan 95 F1.c porque monitor_pipeline ADO ahora está implementado.
+# Originalmente verificaba NotImplementedError para v1, pero F1 lo implementó.
 
 # ---------------------------------------------------------------------------
 # Caso 4 — GitLabTrackerProvider.trigger_pipeline POST correcto

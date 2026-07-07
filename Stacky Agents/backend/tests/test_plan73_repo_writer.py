@@ -89,12 +89,8 @@ def test_f4_c7_idempotence_unchanged():
     assert mock_client._request.call_count == 1
 
 
-def test_f4_ado_commit_file_raises_not_implemented():
-    """AdoTrackerProvider.commit_file lanza NotImplementedError (C12 — ADO render-only v1)."""
-    provider = _make_ado_provider()
-    with pytest.raises(NotImplementedError) as exc_info:
-        provider.commit_file("azure-pipelines.yml", "content", "main", "msg")
-    assert "v1" in str(exc_info.value)
+# NOTA: test_f4_ado_commit_file_raises_not_implemented se eliminó en Plan 95 F1.a porque
+# commit_file ADO ahora está implementado. Originalmente verificaba NotImplementedError para v1.
 
 
 def test_f4_c8_get_repo_writer_returns_gitlab_adapter():

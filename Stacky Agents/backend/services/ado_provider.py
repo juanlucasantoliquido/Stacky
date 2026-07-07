@@ -141,11 +141,121 @@ class AdoTrackerProvider:
         return updates
 
     # ── Plan 73 F4 — RepoWriter (ADO: render-only v1, C12) ───────────────────
+    # Plan 95 F1.a — commit_file real vía Git Pushes API (cierra TODO del plan 73 C12).
 
     def commit_file(self, path: str, content: str, branch: str, message: str) -> dict:
-        """ADO commit diferido post-v1. Lanza NotImplementedError (C12 — render-only en v1)."""
-        raise NotImplementedError(
-            "commit_file no implementado para ADO en v1. "
-            "Usa to_ado_yaml() para renderizar y commitea manualmente. "
-            "El commit ADO está diferido post-v1."
-        )
+        """Plan 95 F1.a — commit real vía Git Pushes API (cierra el TODO del plan 73 C12).
+        Contrato IDÉNTICO a gitlab_provider.py:590: {sha, branch, path, web_url, status}
+        con status 'create'|'update'|'unchanged'. Lanza TrackerApiError (propaga status).
+        """
+        from services.ado_pipeline_definitions import _resolve_repo_id, _default_branch  # noqa: PLC0415
+        from services.tracker_provider import TrackerApiError  # noqa: PLC0415
+
+        project = self._project
+        client = self._client
+
+        # 1) repo_id: _resolve_repo_id(project)
+        repo_id = _resolve_repo_id(project)
+
+        # 2) old_object_id del branch
+        ref_url = f"{client._base_proj}/_apis/git/repositories/{repo_id}/refs?filter=heads/{branch}&api-version=7.1"
+        try:
+            ref_body = client._request("GET", ref_url)
+            refs_list = ref_body.get("value", [])
+            if refs_list:
+                # Branch existe
+                old_object_id = refs_list[0].get("objectId")
+            else:
+                # Branch NO existe → usar default branch como base
+                default_branch = _default_branch(None, project)  # noqa: PLW0621
+                # Crear la rama apuntando al commit de la default
+                default_ref_url = f"{client._base_proj}/_apis/git/repositories/{repo_id}/refs?filter=heads/{default_branch}&api-version=7.1"
+                default_ref_body = client._request("GET", default_ref_url)
+                default_refs = default_ref_body.get("value", [])
+                if not default_refs:
+                    raise TrackerApiError(
+                        status=404,
+                        kind="ado_default_branch_not_found",
+                        message=f"Default branch '{default_branch}' no encontrado",
+                    )
+                base_sha = default_refs[0].get("objectId")
+
+                # POST refs para crear la rama
+                create_ref_url = f"{client._base_proj}/_apis/git/repositories/{repo_id}/refs?api-version=7.1"
+                create_ref_body = [{
+                    "name": f"refs/heads/{branch}",
+                    "oldObjectId": "0" * 40,  # 40 ceros para crear rama nueva
+                    "newObjectId": base_sha,
+                }]
+                client._request("POST", create_ref_url, body=create_ref_body)
+                old_object_id = base_sha
+        except Exception as e:
+            raise TrackerApiError(
+                status=500,
+                kind="ado_ref_resolution_failed",
+                message=f"Error resolviendo ref para branch '{branch}': {e}",
+            ) from e
+
+        # 3) ¿create o update? GET items
+        item_url = f"{client._base_proj}/_apis/git/repositories/{repo_id}/items?path={path}&versionDescriptor.version={branch}&api-version=7.1"
+        try:
+            item_body = client._request("GET", item_url)
+            # 200 ⇒ existe
+            # Ver si el contenido es idéntico
+            existing_content = item_body.get("content")
+            if existing_content:
+                # ADO devuelve base64
+                import base64  # noqa: PLC0415
+                try:
+                    decoded = base64.b64decode(existing_content).decode("utf-8")
+                    if decoded == content:
+                        # Contenido idéntico ⇒ unchanged sin pushear
+                        web_url = f"{client._base_project_url}/_git/{repo_id}?path=/{path.lstrip('/')}&version=GB{branch}"
+                        return {
+                            "sha": old_object_id,
+                            "branch": branch,
+                            "path": path,
+                            "web_url": web_url,
+                            "status": "unchanged",
+                        }
+                except Exception:
+                    pass  # Falla decode ⇒ treat como update
+            change_type = "edit"
+        except Exception:
+            # 404 ⇒ no existe ⇒ add
+            change_type = "add"
+
+        # 4) POST push
+        push_url = f"{client._base_proj}/_apis/git/repositories/{repo_id}/pushes?api-version=7.1"
+        push_body = {
+            "refUpdates": [{
+                "name": f"refs/heads/{branch}",
+                "oldObjectId": old_object_id,
+            }],
+            "commits": [{
+                "comment": message,
+                "changes": [{
+                    "changeType": change_type,
+                    "item": {"path": "/" + path.lstrip("/")},
+                    "newContent": {"content": content, "contentType": "rawtext"},
+                }],
+            }],
+        }
+
+        try:
+            push_response = client._request("POST", push_url, body=push_body)
+            commit_sha = push_response.get("commits", [{}])[0].get("commitId")
+            web_url = f"{client._base_project_url}/_git/{repo_id}?path=/{path.lstrip('/')}&version=GB{branch}"
+            return {
+                "sha": commit_sha,
+                "branch": branch,
+                "path": path,
+                "web_url": web_url,
+                "status": "create" if change_type == "add" else "update",
+            }
+        except Exception as e:
+            raise TrackerApiError(
+                status=500,
+                kind="ado_push_failed",
+                message=f"Error haciendo push a ADO: {e}",
+            ) from e

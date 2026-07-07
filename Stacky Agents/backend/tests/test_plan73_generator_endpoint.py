@@ -149,14 +149,6 @@ def test_f5_c1_tracker_api_error_403(app_flag_on):
             assert "kind" in data
 
 
-def test_f5_c12_ado_not_implemented_501(app_flag_on):
-    """[C12] commit_file ADO lanza NotImplementedError → response 501."""
-    with app_flag_on.test_client() as c:
-        with patch("api.pipeline_generator.get_repo_writer") as mock_gw:
-            mock_writer = MagicMock()
-            mock_writer.commit_file.side_effect = NotImplementedError("ADO commit no implementado en v1")
-            mock_gw.return_value = mock_writer
-            r = c.post("/api/pipeline-generator/commit", json={
-                **_VALID_SPEC, "confirm": True, "target": "ado",
-            })
-            assert r.status_code == 501
+# NOTA: test_f5_c12_ado_not_implemented_501 se eliminó en Plan 95 F1.a porque commit_file ADO
+# ahora está implementado. Originalmente verificaba que el endpoint devolvía 501 cuando ADO
+# lanzaba NotImplementedError, pero F1 lo implementó.

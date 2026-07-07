@@ -181,7 +181,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_AGENT_ENABLED",  # Plan 90 — agente DevOps interactivo multi-turno
         "STACKY_DEVOPS_SERVERS_ENABLED",  # Plan 91 — registro de servidores DevOps
         "STACKY_DEVOPS_PREFLIGHT_ENABLED",  # Plan 93 — preflight semáforo de pipelines
+        "STACKY_DEVOPS_VARIABLES_ENABLED",  # Plan 94 — caja fuerte variables secretas
         "STACKY_DEVOPS_STACK_DETECT_ENABLED",  # Plan 97 — deteccion de stack para presets
+        "STACKY_DEVOPS_PRODUCTION_ENABLED",  # Plan 95 — llevar a producción MR/PR
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2047,6 +2049,39 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",
         # SIN default= (gotcha _CURATED_DEFAULTS_ON). SIN reserved= (consumidor real en F3).
+    ),
+    # ── Plan 94 — Caja fuerte de variables (secretos del pipeline fuera del YAML) ───
+    FlagSpec(
+        key="STACKY_DEVOPS_VARIABLES_ENABLED",
+        type="bool",
+        label="Variables del pipeline (Plan 94)",
+        description=(
+            "Plan 94 — Caja fuerte de variables: las secretas se guardan en el tracker "
+            "(GitLab masked / ADO isSecret), nunca en el YAML ni en archivos de Stacky. "
+            "Default OFF: /api/devops/variables da 404 y la sección no aparece."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON).
+    ),
+    # ── Plan 95 — Llevar a producción (Merge Request / Pull Request + merge HITL) ──
+    FlagSpec(
+        key="STACKY_DEVOPS_PRODUCTION_ENABLED",
+        type="bool",
+        label="Llevar a producción (Plan 95)",
+        description=(
+            "Plan 95 — Crea el Merge Request (GitLab) o Pull Request (ADO) del "
+            "pipeline commiteado, muestra su pipeline en vivo y permite mergear con "
+            "confirmación HITL. Default OFF: /api/devops/production/* da 404, el botón "
+            "no aparece y el modal de commit de ADO sigue con la nota 501. Nota: la "
+            "paridad ADO de commit/trigger/monitor NO depende de esta flag (completa "
+            "contratos existentes ya gateados por sus propias flags del arnés)."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON).
     ),
     # ── Plan 97 — Detección de stack técnico para presets de pipeline ───────────
     FlagSpec(

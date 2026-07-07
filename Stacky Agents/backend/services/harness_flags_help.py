@@ -635,6 +635,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: no cambia nada; el botón no aparece y seguís commiteando/disparando igual que siempre.",
         example="Como el chequeo previo al despegue de un avión: revisa todo antes, pero quien decide despegar seguís siendo vos.",
     ),
+    "STACKY_DEVOPS_VARIABLES_ENABLED": PlainHelp(
+        what="Gestiona variables del pipeline (credenciales, tokens) desde una sección 'Variables' del panel DevOps, marcando cada una como secreta para que se guarde en el tracker (GitLab masked / ADO isSecret) y nunca en el YAML del repo.",
+        on_effect="Si la activás: aparece la sección 'Variables' con candado 🔒, y el builder te avisa si una variable 'parece secreto' (PASSWORD/TOKEN/etc.) para moverla a variable segura en un click. Las secretas se crean en el tracker y JAMÁS aparecen en el YAML ni en logs.",
+        off_effect="Si la apagás: no cambia nada; las variables siguen viviendo en el YAML commiteado (riesgo de seguridad si son credenciales).",
+        example="Como una caja fuerte: las credenciales van al tracker (que ya tiene los mecanismos correctos de inyección en runtime), el YAML queda limpio.",
+    ),
+    "STACKY_DEVOPS_PRODUCTION_ENABLED": PlainHelp(
+        what="Crea el Merge Request (GitLab) o Pull Request (ADO) hacia la rama principal, muestra el estado del pipeline en vivo y permite mergear con confirmación HITL.",
+        on_effect="Si la activás: tras commitear el pipeline, aparece el flujo 'Llevar a producción' con 3 pasos: (1) crear MR/PR, (2) ver el pipeline correr en vivo, (3) mergear con checkbox literal. Nunca auto-merge. ADO gana paridad completa con GitLab (commit/trigger/monitor).",
+        off_effect="Si la apagás: no hay MR/PR desde el panel, y el commit ADO sigue con la nota 501 (la paridad ADO de commit/trigger/monitor NO depende de esta flag).",
+        example="Como un botón 'Publicar' que primero te muestra el resultado del test en staging, te deja revisarlo y recién con tu confirmación explícita lo lleva a producción.",
+    ),
     "STACKY_DEVOPS_STACK_DETECT_ENABLED": PlainHelp(
         what="Un botón te sugiere el tipo de proyecto (Python/Node/.NET) para armar el pipeline con los comandos correctos.",
         on_effect="Si la activás: aparece el botón 'Detectar stack de mi proyecto' en el builder de pipelines, que lee (sin modificar nada) los archivos del proyecto y preselecciona el preset más probable.",

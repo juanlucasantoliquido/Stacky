@@ -135,6 +135,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan93_preflight_pure.py
   tests/test_plan93_preflight_providers.py
   tests/test_plan93_preflight_endpoint.py
+  # — Plan 95 · Llevar a producción: MR/PR + merge HITL + paridad ADO commit/trigger/monitor —
+  tests/test_plan95_production_flag.py
+  tests/test_plan95_ado_parity.py
+  tests/test_plan95_mr_providers.py
+  tests/test_plan95_production_endpoints.py
   # — Plan 97 · Presets de pasos de pipeline por stack + deteccion opcional —
   tests/test_plan97_stack_detect_flag.py
   tests/test_plan97_stack_detector.py

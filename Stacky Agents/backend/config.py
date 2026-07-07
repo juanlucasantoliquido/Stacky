@@ -897,6 +897,18 @@ class Config:
         "STACKY_DEVOPS_PREFLIGHT_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 95 — Llevar a producción (Merge Request / Pull Request + merge HITL).
+    # Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_PRODUCTION_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_PRODUCTION_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 94 — Caja fuerte de variables: secretos del pipeline fuera del YAML
+    # (ADO + GitLab). Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_VARIABLES_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_VARIABLES_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 97 — Deteccion opt-in de stack tecnico para presets de pipeline. Default OFF.
     STACKY_DEVOPS_STACK_DETECT_ENABLED: bool = os.getenv(
         "STACKY_DEVOPS_STACK_DETECT_ENABLED", "false"

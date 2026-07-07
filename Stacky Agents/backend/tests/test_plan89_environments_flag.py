@@ -19,11 +19,11 @@ def test_f0_flag_in_category_devops():
     assert "STACKY_DEVOPS_ENVIRONMENTS_ENABLED" in _CATEGORY_KEYS["devops"]
 
 
-def test_f0_config_default_off(monkeypatch):
+def test_f0_config_default_on(monkeypatch):
     monkeypatch.delenv("STACKY_DEVOPS_ENVIRONMENTS_ENABLED", raising=False)
     import config
     importlib.reload(config)
-    assert config.config.STACKY_DEVOPS_ENVIRONMENTS_ENABLED is False
+    assert config.config.STACKY_DEVOPS_ENVIRONMENTS_ENABLED is True
     monkeypatch.delenv("STACKY_DEVOPS_ENVIRONMENTS_ENABLED", raising=False)
     importlib.reload(config)
 
@@ -38,4 +38,4 @@ def test_f0_flag_has_plain_help():
 def test_f0_harness_defaults_contains_flag():
     from pathlib import Path
     text = (Path(__file__).parent.parent / "harness_defaults.env").read_text(encoding="utf-8")
-    assert "STACKY_DEVOPS_ENVIRONMENTS_ENABLED=false" in text
+    assert "STACKY_DEVOPS_ENVIRONMENTS_ENABLED=true" in text

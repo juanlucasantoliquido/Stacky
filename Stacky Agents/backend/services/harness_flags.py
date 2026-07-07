@@ -180,6 +180,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_ENVIRONMENTS_ENABLED",  # Plan 89 — inicialización de ambientes
         "STACKY_DEVOPS_AGENT_ENABLED",  # Plan 90 — agente DevOps interactivo multi-turno
         "STACKY_DEVOPS_SERVERS_ENABLED",  # Plan 91 — registro de servidores DevOps
+        "STACKY_DEVOPS_PREFLIGHT_ENABLED",  # Plan 93 — preflight semáforo de pipelines
+        "STACKY_DEVOPS_STACK_DETECT_ENABLED",  # Plan 97 — deteccion de stack para presets
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -1871,10 +1873,12 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 81 — Si ON, lo que el operador BORRA al editar un WI publicado se convierte en "
             "golden NEGATIVO determinista: el gate de regresión (plan 56) marca su reaparición en "
             "épicas futuras (y bloquea si STACKY_REGRESSION_GATE_BLOCKING=true). Productor: requiere "
-            "STACKY_ADO_EDIT_LEARNING_ENABLED=true. Default OFF."
+            "STACKY_ADO_EDIT_LEARNING_ENABLED=true. Default ON (activado 2026-07-05, decisión "
+            "explícita del operador)."
         ),
         group="global",
         env_only=False,
+        default=True,
     ),
     FlagSpec(
         key="STACKY_TICKETS_PROVIDER_ENABLED",
@@ -1912,11 +1916,13 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 72 — Si ON, habilita los endpoints POST /api/ci/<project>/trigger "
             "(dispara pipeline CI con confirm=True obligatorio — HITL) y "
             "GET /api/ci/<project>/pipeline/<id> (monitoreo). "
-            "PAT GitLab debe tener scope api. Default OFF. "
+            "PAT GitLab debe tener scope api. Default ON (activado 2026-07-05, decisión "
+            "explícita del operador). "
             "OFF: guard 404 per-request; el blueprint siempre está registrado."
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        default=True,
     ),
     FlagSpec(
         key="STACKY_PIPELINE_GENERATOR_ENABLED",
@@ -1927,10 +1933,12 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Endpoints: POST /api/pipeline-generator/preview (render ADO+GitLab puro, sin commit) "
             "y POST /api/pipeline-generator/commit (commit en repo vía HITL confirm=True). "
             "PAT GitLab debe tener scope api para commit. "
-            "Default OFF. OFF: guard 404 per-request; el blueprint siempre está registrado."
+            "Default ON (activado 2026-07-05, decisión explícita del operador). "
+            "OFF: guard 404 per-request; el blueprint siempre está registrado."
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui, C9)
+        default=True,
     ),
     # ── Plan 87 — Panel DevOps ─────────────────────────────────────────────────
     FlagSpec(
@@ -1940,10 +1948,12 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 87 — Muestra la seccion DevOps en la UI (creador grafico de "
             "pipelines). Expone GET /api/devops/health y POST /api/devops/parse-yaml. "
-            "Default OFF. Con OFF la tab no aparece y parse-yaml retorna 404."
+            "Default ON (activado 2026-07-05, decisión explícita del operador). "
+            "Con OFF la tab no aparece y parse-yaml retorna 404."
         ),
         group="global",  # mismo group que STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (harness_flags.py:1936)
         env_only=False,  # editable por UI (categoría 'devops')
+        default=True,
         # SIN requires (supervisión 2026-07-05): la arista PANEL→GENERATOR violaba la
         # regla R4 del Plan 82 (profundidad máx 1, validate_requires_graph) al combinarse
         # con las hijas de la serie §3.12 (88/89/90/91 declaran requires=PANEL), y era
@@ -1958,12 +1968,13 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 88 — Seccion Publicaciones del panel DevOps: materializa presets "
             "de procesos del catalogo como pipelines (preview/commit plan 73, "
-            "trigger plan 72). Default OFF. Con OFF el endpoint materialize da 404 "
-            "y la seccion no aparece."
+            "trigger plan 72). Default ON (activado 2026-07-05, decisión explícita "
+            "del operador). Con OFF el endpoint materialize da 404 y la seccion no aparece."
         ),
         group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # Plan 82 — declarativo, informa en UI
+        default=True,
     ),
     # ── Plan 89 — Inicialización de ambientes (seccion DevOps) ──────────────────
     FlagSpec(
@@ -1974,12 +1985,14 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 89 — Seccion Ambientes del panel DevOps: crea el arbol de "
             "carpetas del ambiente derivado del catalogo (plan-then-apply con "
             "confirmacion, NUNCA borra ni sobrescribe) y lanza la publicacion "
-            "inicial reusando el plan 88. Default OFF. Con OFF los endpoints "
+            "inicial reusando el plan 88. Default ON (activado 2026-07-05, decisión "
+            "explícita del operador). Con OFF los endpoints "
             "/api/devops/environments/* dan 404 y la seccion no aparece."
         ),
         group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # Plan 82 — declarativo, informa en UI
+        default=True,
     ),
     # ── Plan 90 — Agente DevOps interactivo multi-turno (seccion DevOps) ────────
     FlagSpec(
@@ -1990,12 +2003,15 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 90 — Habilita el agente DevOps conversacional del panel DevOps: "
             "conversaciones multi-turno sobre runtimes CLI (claude/codex) con "
             "confirmacion explicita para acciones mutantes. Expone "
-            "/api/devops/agent/conversations. Default OFF: los endpoints devuelven "
-            "404 y la seccion muestra aviso."
+            "/api/devops/agent/conversations. Default ON (activado 2026-07-05, decisión "
+            "explícita del operador, con conocimiento de que cada turno consume una "
+            "llamada LLM completa). Con OFF los endpoints devuelven 404 y la seccion "
+            "muestra aviso."
         ),
         group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 F0)
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # sin panel no hay seccion donde usarlo
+        default=True,
     ),
     # ── Plan 91 — Registro de servidores DevOps ────────────────────────────────
     FlagSpec(
@@ -2006,11 +2022,49 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 91 — Registro de servidores con alias (host+usuario+dominio; "
             "password en Windows Credential Manager, nunca en disco). Habilita "
             "/api/devops/servers (CRUD, test de conectividad, conexion RDP 1-click) "
-            "y la seccion Servidores del panel DevOps. Default OFF."
+            "y la seccion Servidores del panel DevOps. Default ON (activado 2026-07-05, "
+            "decisión explícita del operador, con conocimiento de que maneja credenciales "
+            "y conexiones RDP)."
         ),
         group="global",
         env_only=False,  # editable por UI (regla operator-config-always-via-ui)
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # la sección vive dentro del panel 87
+        default=True,
+    ),
+    # ── Plan 93 — Preflight de pipelines DevOps (semáforo "¿Va a funcionar?") ───
+    FlagSpec(
+        key="STACKY_DEVOPS_PREFLIGHT_ENABLED",
+        type="bool",
+        label="Preflight de pipelines (Plan 93)",
+        description=(
+            "Plan 93 — Boton '¿Va a funcionar?' del panel DevOps: chequea el "
+            "pipeline ANTES de commit/trigger (YAML valido en el tracker real, "
+            "steps placeholder, runners/agents disponibles, variables sin "
+            "definir) para ADO y GitLab. Solo-lectura. Default OFF: el endpoint "
+            "/api/devops/preflight/check da 404 y el boton no aparece."
+        ),
+        group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON). SIN reserved= (consumidor real en F3).
+    ),
+    # ── Plan 97 — Detección de stack técnico para presets de pipeline ───────────
+    FlagSpec(
+        key="STACKY_DEVOPS_STACK_DETECT_ENABLED",
+        type="bool",
+        label="Detección de stack para presets (Plan 97)",
+        description=(
+            "Plan 97 — Agrega el boton 'Detectar stack de mi proyecto' en el "
+            "builder de pipelines: lee (solo lectura) los archivos de manifiesto "
+            "del proyecto (requirements.txt, package.json, *.csproj) y "
+            "preselecciona el preset de pasos mas probable. Default OFF: sin "
+            "esta flag, la galeria de presets sigue disponible pero manual."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
+        # lista curada de defaults ON, así que debe quedar sin default explícito.
     ),
     # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────
     FlagSpec(

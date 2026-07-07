@@ -25,13 +25,13 @@ def test_f0_flag_in_category_devops():
     assert "STACKY_DEVOPS_PUBLICATIONS_ENABLED" in _CATEGORY_KEYS["devops"]
 
 
-def test_f0_config_default_off(monkeypatch):
+def test_f0_config_default_on(monkeypatch):
     monkeypatch.delenv("STACKY_DEVOPS_PUBLICATIONS_ENABLED", raising=False)
     import config
 
     importlib.reload(config)
     try:
-        assert config.config.STACKY_DEVOPS_PUBLICATIONS_ENABLED is False
+        assert config.config.STACKY_DEVOPS_PUBLICATIONS_ENABLED is True
     finally:
         importlib.reload(config)
 
@@ -46,4 +46,4 @@ def test_f0_harness_defaults_contains_flag():
     env_path = Path(__file__).resolve().parents[1] / "harness_defaults.env"
     assert env_path.exists()
     content = env_path.read_text(encoding="utf-8")
-    assert "STACKY_DEVOPS_PUBLICATIONS_ENABLED=false" in content
+    assert "STACKY_DEVOPS_PUBLICATIONS_ENABLED=true" in content

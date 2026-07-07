@@ -123,6 +123,11 @@ $HarnessTestFiles = @(
   "tests/test_plan91_server_registry.py",
   "tests/test_plan91_servers_endpoints.py",
   "tests/test_plan91_rdp_endpoint.py",
+  # Plan 93 - Preflight "va a funcionar": semaforo de pipelines (ADO + GitLab)
+  "tests/test_plan93_preflight_flag.py",
+  "tests/test_plan93_preflight_pure.py",
+  "tests/test_plan93_preflight_providers.py",
+  "tests/test_plan93_preflight_endpoint.py",
   # Plan 97 - Presets de pasos de pipeline por stack + deteccion opcional
   "tests/test_plan97_stack_detect_flag.py",
   "tests/test_plan97_stack_detector.py",

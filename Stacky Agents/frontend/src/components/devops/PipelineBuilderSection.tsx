@@ -21,6 +21,7 @@ import {
   removeJob,
   addStep,
   removeStep,
+  appendStep,
   updateStage,
   updateJob,
   updateStep,
@@ -34,12 +35,19 @@ import {
   type JobDraft,
   type StepDraft,
 } from '../../devops/specBuilder';
+import { PIPELINE_PRESETS, type PipelinePreset } from '../../devops/pipelinePresets';
+import { PIPELINE_STEP_SNIPPETS, SNIPPET_CATEGORIES } from '../../devops/pipelineStepSnippets';
+import { PIPELINE_RECIPES, buildRecipeSteps } from '../../devops/pipelineRecipes';
+import { DevOps } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { BlockTree } from './BlockTree';
 import { BlockProperties } from './BlockProperties';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
 import { CommitPipelineModal } from './CommitPipelineModal';
 import { TriggerPipelineSection } from './TriggerPipelineSection';
+import { PreflightPanel } from './PreflightPanel';
+import { summaryLine, type PreflightResult } from '../../devops/preflightModel';
+import styles from './devops.module.css';
 
 export interface PipelineBuilderSectionProps {
   ctx: DevOpsSectionContext;
@@ -58,6 +66,11 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const [selectedDraftName, setSelectedDraftName] = useState<string>('');
   // Selección en el árbol
   const [selected, setSelected] = useState<{ si?: number; ji?: number; sti?: number } | null>(null);
+  // Plan 97 F1-bis — acción prehecha elegida para insertar en el job seleccionado
+  const [snippetId, setSnippetId] = useState<string>('');
+  // Plan 97 F1-ter — filtro de texto sobre la biblioteca + receta elegida
+  const [snippetFilter, setSnippetFilter] = useState<string>('');
+  const [recipeId, setRecipeId] = useState<string>('');
   // UI states
   const [showImportModal, setShowImportModal] = useState(false);
   const [importYaml, setImportYaml] = useState('');
@@ -68,9 +81,15 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const [actionError, setActionError] = useState<string | null>(null);
   // Debounce para auto-refresh preview (C17)
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Plan 93 — último resultado de preflight + el spec (serializado) sobre el
+  // que se corrió, para saber si quedó desactualizado (badge -> "sin correr").
+  const [lastPreflight, setLastPreflight] = useState<{ result: PreflightResult; specJson: string } | null>(null);
 
   const localErrors = validateSpecLocal(spec);
   const hasUnsavedChanges = !specsEqual(spec, loadedSnapshot);
+  // Plan 93 — memoizado: sin llamadas extra al backend, solo comparación local.
+  const currentSpecJson = React.useMemo(() => JSON.stringify(toSpecDict(spec)), [spec]);
+  const preflightStale = !lastPreflight || lastPreflight.specJson !== currentSpecJson;
 
   // Cargar borradores al montar
   useEffect(() => {
@@ -198,6 +217,79 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
     setShowCommitModal(false);
   };
 
+  // Plan 97 F1 — aplica un preset completo de pipeline (galería del estado vacío)
+  const handleUsePreset = (preset: PipelinePreset) => {
+    setSpec(preset.build());
+  };
+
+  // Plan 97 F3 — detección opt-in de stack (solo si la flag está ON vía health)
+  const [detecting, setDetecting] = useState(false);
+  const [detectError, setDetectError] = useState<string | null>(null);
+
+  const handleDetectStack = async () => {
+    if (!activeProject) {
+      setDetectError('Seleccioná un proyecto activo primero.');
+      return;
+    }
+    setDetecting(true);
+    setDetectError(null);
+    try {
+      const { detected } = await DevOps.detectStack(activeProject);
+      if (detected) {
+        const preset = PIPELINE_PRESETS.find((p) => p.id === detected);
+        if (preset) {
+          if (!isEmpty && !window.confirm('Vas a reemplazar el pipeline en edición con el preset detectado. ¿Continuar?')) {
+            return;
+          }
+          setSpec(preset.build());
+          return;
+        }
+      }
+      setDetectError('No pude detectar el stack de tu proyecto. Elegí un preset de la lista.');
+    } catch (e) {
+      setDetectError(`No se pudo detectar el stack: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  // Plan 97 F1-bis — inserta la acción prehecha elegida en el job seleccionado
+  const handleInsertSnippet = () => {
+    if (selected?.si == null || selected?.ji == null || !snippetId) return;
+    const snip = PIPELINE_STEP_SNIPPETS.find((s) => s.id === snippetId);
+    if (!snip) return;
+    setSpec((prev) => appendStep(prev, selected.si!, selected.ji!, snip.build()));
+  };
+
+  // Plan 97 F1-ter (C5) — el job seleccionado debe existir de verdad en el spec actual
+  const jobSelected =
+    selected?.si != null && selected?.ji != null &&
+    selected.si < spec.stages.length &&
+    selected.ji < (spec.stages[selected.si]?.jobs.length ?? 0);
+
+  // Plan 97 F1-ter (c) — biblioteca filtrada por texto (label+description+category)
+  const filteredSnippets = PIPELINE_STEP_SNIPPETS.filter((s) => {
+    const q = snippetFilter.trim().toLowerCase();
+    return q === '' || `${s.label} ${s.description} ${s.category}`.toLowerCase().includes(q);
+  });
+
+  // Plan 97 F1-ter (b) — inserta todos los pasos de una receta, en orden, en el job seleccionado
+  const handleInsertRecipe = () => {
+    if (!jobSelected || !recipeId) return;
+    const rec = PIPELINE_RECIPES.find((r) => r.id === recipeId);
+    if (!rec) return;
+    setSpec((prev) => buildRecipeSteps(rec).reduce(
+      (acc, st) => appendStep(acc, selected!.si!, selected!.ji!, st), prev));
+  };
+
+  // Plan 97 F1-ter (C1) — scaffolda stage+job vacío y lo selecciona, para llegar al
+  // inserter de acciones sueltas sin partir de un preset completo
+  const handleStartEmptyJob = () => {
+    const scaffolded = addJob(addStage(emptySpec()), 0);
+    setSpec(scaffolded);
+    setSelected({ si: 0, ji: 0 });
+  };
+
   // C11 - estado vacío
   const isEmpty = spec.stages.length === 0;
 
@@ -237,7 +329,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
             Guardar
           </button>
           {hasUnsavedChanges && (
-            <span style={{ color: '#ffc107', fontSize: '0.9em' }}>Cambios sin guardar</span>
+            <span className={styles.textWarn} style={{ fontSize: '0.9em' }}>Cambios sin guardar</span>
           )}
         </div>
 
@@ -249,22 +341,66 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
 
         {/* C11 - CTA estado vacío */}
         {isEmpty ? (
-          <div style={{ padding: '40px', textAlign: 'center', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-            <p style={{ marginBottom: '16px', color: '#6c757d' }}>
+          <div className={styles.emptyState}>
+            {/* Plan 97 F3 — detección opt-in (solo si la flag está ON vía health) */}
+            {ctx.health.stack_detect_enabled && (
+              <div style={{ marginBottom: '12px' }}>
+                <button
+                  onClick={() => void handleDetectStack()}
+                  disabled={detecting || !activeProject}
+                  className={styles.btnPrimary}
+                  style={{ padding: '8px 16px' }}
+                >
+                  {detecting ? 'Detectando…' : 'Detectar stack de mi proyecto'}
+                </button>
+                {detectError && <p className={styles.textWarn} style={{ marginTop: '8px' }}>{detectError}</p>}
+              </div>
+            )}
+            {/* Plan 97 F1 — galería de presets por stack (antes del CTA genérico) */}
+            <div style={{ marginBottom: '16px' }}>
+              <p className={styles.textMuted} style={{ marginBottom: '8px' }}>
+                Elegí un preset para tu proyecto:
+              </p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {PIPELINE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => handleUsePreset(preset)}
+                    className={styles.btnPrimary}
+                    style={{ padding: '10px 16px', textAlign: 'left' }}
+                    title={preset.description}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className={styles.textMuted} style={{ marginBottom: '16px' }}>
               Agregá tu primer stage o importá un YAML existente
             </p>
             <button
               onClick={() => setSpec(starterSpec())}
-              style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}
+              className={styles.btnSuccess}
+              style={{ padding: '10px 20px' }}
             >
               Empezar con ejemplo
             </button>
             {' '}
             <button
               onClick={() => setSpec(addStage(spec))}
-              style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}
+              className={styles.btnPrimary}
+              style={{ padding: '10px 20px' }}
             >
               + stage
+            </button>
+            {' '}
+            <button
+              onClick={handleStartEmptyJob}
+              className={styles.btnPrimary}
+              style={{ padding: '10px 20px' }}
+              title="Crea un stage y un job vacíos y los selecciona, para insertar acciones prehechas sueltas"
+            >
+              Insertá acciones sueltas (job vacío)
             </button>
           </div>
         ) : (
@@ -273,7 +409,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
 
         {/* C16 - área de error visible */}
         {actionError && (
-          <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px', color: '#721c24' }}>
+          <div className={styles.alertError} style={{ marginTop: '16px' }}>
             {actionError}
           </div>
         )}
@@ -283,19 +419,92 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
         <BlockProperties spec={spec} setSpec={setSpec} selected={selected} />
 
+        {/* Plan 97 F1-bis/F1-ter — inserter de acciones prehechas + recetas (solo con un job seleccionado que existe de verdad, C5) */}
+        {jobSelected && (
+          <div style={{ marginTop: '8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className={styles.textMuted}>Insertar acción prehecha:</label>
+            <input
+              type="text"
+              value={snippetFilter}
+              onChange={(e) => setSnippetFilter(e.target.value)}
+              placeholder="Filtrar acciones…"
+              style={{ padding: '4px 8px' }}
+            />
+            <select value={snippetId} onChange={(e) => setSnippetId(e.target.value)}>
+              <option value="">— elegí una acción —</option>
+              {SNIPPET_CATEGORIES
+                .map((cat) => ({ cat, items: filteredSnippets.filter((s) => s.category === cat) }))
+                .filter((g) => g.items.length > 0)
+                .map((g) => (
+                  <optgroup key={g.cat} label={g.cat}>
+                    {g.items.map((s) => (
+                      <option key={s.id} value={s.id} title={s.description}>{s.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+            </select>
+            <button onClick={handleInsertSnippet} disabled={!snippetId} className={styles.btnPrimary} style={{ padding: '6px 12px' }}>
+              Insertar acción
+            </button>
+            {(() => {
+              const s = PIPELINE_STEP_SNIPPETS.find((x) => x.id === snippetId);
+              if (!s || (!s.needsEdit && !s.requires)) return null;
+              return (
+                <p className={styles.textWarn} style={{ margin: 0, width: '100%' }}>
+                  {s.needsEdit && '⚠ Editá el valor de ejemplo antes de usar. '}
+                  {s.requires && `Requiere '${s.requires}' en el runner.`}
+                </p>
+              );
+            })()}
+            <label className={styles.textMuted}>Insertar receta (varios pasos):</label>
+            <select value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
+              <option value="">— elegí una receta —</option>
+              {PIPELINE_RECIPES.map((r) => (
+                <option key={r.id} value={r.id} title={r.description}>{r.label}</option>
+              ))}
+            </select>
+            <button onClick={handleInsertRecipe} disabled={!recipeId} className={styles.btnPrimary} style={{ padding: '6px 12px' }}>
+              Insertar receta
+            </button>
+          </div>
+        )}
+
         <div style={{ marginTop: '16px' }}>
           <PipelineYamlPreview spec={spec} ctx={ctx} localErrors={localErrors} />
         </div>
 
-        <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
+        {/* Plan 93 — preflight "¿Va a funcionar?" (solo-lectura, informativo) */}
+        <PreflightPanel
+          ctx={ctx}
+          spec={toSpecDict(spec)}
+          project={activeProject ?? ''}
+          onResult={(result) => setLastPreflight({ result, specJson: currentSpecJson })}
+        />
+
+        <div style={{ marginTop: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button
             onClick={() => setShowCommitModal(true)}
             disabled={localErrors.length > 0}
             title={localErrors.length > 0 ? 'Resolvé los avisos primero' : undefined}
-            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}
+            className={styles.btnSuccess}
+            style={{ padding: '10px 20px' }}
           >
             Commit al repo…
           </button>
+          {/* Plan 93 — badge informativo: NUNCA deshabilita ni bloquea (HITL §3.3) */}
+          <span className={styles.textMuted} style={{ fontSize: '0.9em' }} title={
+            !lastPreflight ? 'Todavía no corriste el preflight' :
+            preflightStale ? 'El pipeline cambió desde el último preflight' :
+            summaryLine(lastPreflight.result.checks)
+          }>
+            {!lastPreflight || preflightStale
+              ? 'Preflight: – sin correr'
+              : `Preflight: ${
+                  lastPreflight.result.checks.some((c) => c.status === 'fail') ? '✖ con problemas'
+                  : lastPreflight.result.checks.some((c) => c.status === 'warn' || c.status === 'unavailable') ? '⚠ con avisos'
+                  : '✔ verde'
+                } — ${summaryLine(lastPreflight.result.checks)}`}
+          </span>
         </div>
 
         {ctx.health.trigger_enabled && (
@@ -305,8 +514,8 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
 
       {/* Modales */}
       {showImportModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '4px', width: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalBodyWide}>
             <h3>Importar YAML</h3>
             <select
               value={importSource}
@@ -329,7 +538,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
               <button
                 onClick={() => void handleImportYaml()}
                 disabled={!importYaml.trim()}
-                style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}
+                className={styles.btnPrimary}
               >
                 Importar
               </button>

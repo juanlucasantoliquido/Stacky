@@ -16,7 +16,7 @@ def test_f1_flag_in_registry():
     assert spec is not None
     assert spec.type == "bool"
     assert spec.env_only is False
-    assert spec.default is None
+    assert spec.default is True  # activación operador 2026-07-05
     assert spec.requires == "STACKY_DEVOPS_PANEL_ENABLED"
 
 
@@ -29,15 +29,15 @@ def test_f1_harness_defaults_contains_flag():
     defaults_path = backend_root / "harness_defaults.env"
     assert defaults_path.exists()
     content = defaults_path.read_text(encoding="utf-8")
-    assert "STACKY_DEVOPS_SERVERS_ENABLED=false" in content
+    assert "STACKY_DEVOPS_SERVERS_ENABLED=true" in content
 
 
-def test_f1_config_default_is_false(monkeypatch):
+def test_f1_config_default_is_true(monkeypatch):
     monkeypatch.delenv("STACKY_DEVOPS_SERVERS_ENABLED", raising=False)
     import importlib
     import config
     importlib.reload(config)
-    assert config.config.STACKY_DEVOPS_SERVERS_ENABLED is False
+    assert config.config.STACKY_DEVOPS_SERVERS_ENABLED is True
 
 
 def test_f1_flag_has_plain_help():

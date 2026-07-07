@@ -501,6 +501,17 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_EXEC_VERIFICATION_ENABLED",  # modo annotate (NUNCA gate; EXEC_REPAIR OFF)
     "STACKY_PUSH_REJECTIONS_ENABLED",
     "STACKY_DB_READONLY_DIRECTIVE_ENABLED",
+    # ── Activación operador 2026-07-05 — serie pipelines/DevOps (decisión explícita,
+    # incluye flags de mayor riesgo: RDP+credenciales, disparo de pipelines CI reales,
+    # commit de YAML a repo, y consumo de tokens del agente DevOps) ──
+    "STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED",
+    "STACKY_PIPELINE_TRIGGER_ENABLED",
+    "STACKY_PIPELINE_GENERATOR_ENABLED",
+    "STACKY_DEVOPS_PANEL_ENABLED",
+    "STACKY_DEVOPS_PUBLICATIONS_ENABLED",
+    "STACKY_DEVOPS_ENVIRONMENTS_ENABLED",
+    "STACKY_DEVOPS_AGENT_ENABLED",
+    "STACKY_DEVOPS_SERVERS_ENABLED",
 }
 
 

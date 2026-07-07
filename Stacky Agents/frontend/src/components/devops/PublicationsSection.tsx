@@ -27,6 +27,8 @@ import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
 import { CommitPipelineModal } from './CommitPipelineModal';
 import { TriggerPipelineSection } from './TriggerPipelineSection';
+import { PreflightPanel } from './PreflightPanel';
+import styles from './devops.module.css';
 
 export interface PublicationsSectionProps {
   ctx: DevOpsSectionContext;
@@ -51,7 +53,7 @@ interface MaterializeResult {
   unknown_processes: string[];
 }
 
-export const PublicationsSection: React.FC<PublicationsSectionProps> = () => {
+export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx }) => {
   const activeProjectObj = useWorkbench((s) => s.activeProject);
   const activeProject = activeProjectObj?.name ?? '';
 
@@ -221,21 +223,22 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = () => {
       {/* Izquierda: lista + editor de presets */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
         {catalogEmpty && (
-          <div style={{ padding: '12px', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', marginBottom: '12px' }}>
+          <div className={styles.alertWarning} style={{ marginBottom: '12px' }}>
             El catálogo de procesos está vacío — cargalo en Configuración → Perfil del cliente (sección Catálogo de procesos).
           </div>
         )}
 
         {hasUnsaved && (
-          <div style={{ marginBottom: '8px', color: '#ffc107', fontSize: '0.9em' }}>Sin guardar</div>
+          <div className={styles.textWarn} style={{ marginBottom: '8px', fontSize: '0.9em' }}>Sin guardar</div>
         )}
 
         {presets.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-            <p style={{ marginBottom: '16px', color: '#6c757d' }}>Todavía no hay presets de publicación</p>
+          <div className={styles.emptyState}>
+            <p className={styles.textMuted} style={{ marginBottom: '16px' }}>Todavía no hay presets de publicación</p>
             <button
               onClick={() => void handleCreateTodoPreset()}
-              style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}
+              className={styles.btnSuccess}
+              style={{ padding: '10px 20px' }}
             >
               Crear preset TODO
             </button>
@@ -291,7 +294,7 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = () => {
           </div>
 
           {editing.mode === 'selection' && (
-            <div style={{ border: '1px solid #dee2e6', borderRadius: '4px', padding: '8px' }}>
+            <div className={styles.panel} style={{ padding: '8px' }}>
               {catalog.map((entry) => (
                 <label key={entry.name} style={{ display: 'block' }}>
                   <input
@@ -323,7 +326,7 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = () => {
             <option value="ado">Azure DevOps</option>
           </select>
 
-          <button onClick={() => void handleSaveEditing()} style={{ padding: '8px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}>
+          <button onClick={() => void handleSaveEditing()} className={styles.btnPrimary} style={{ padding: '8px' }}>
             Guardar preset
           </button>
         </div>
@@ -353,7 +356,7 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = () => {
         </div>
 
         {actionError && (
-          <div style={{ padding: '12px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px', color: '#721c24' }}>
+          <div className={styles.alertError}>
             No se pudo completar la acción: {actionError}
           </div>
         )}
@@ -365,14 +368,15 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = () => {
         <p>Resueltos: {preview.resolved.join(', ') || '(ninguno)'}</p>
         {preview.excluded.length > 0 && <p style={{ opacity: 0.6 }}>Excluidos por grupo: {preview.excluded.join(', ')}</p>}
         {preview.unknown.length > 0 && (
-          <p style={{ color: '#856404' }}>Procesos desconocidos: {preview.unknown.join(', ')}</p>
+          <p className={styles.textWarn}>Procesos desconocidos: {preview.unknown.join(', ')}</p>
         )}
 
         <button
           onClick={() => void handleMaterialize()}
           disabled={catalogEmpty || !editing.name}
           title={catalogEmpty ? 'El catálogo de procesos está vacío' : undefined}
-          style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', marginBottom: '16px' }}
+          className={styles.btnSuccess}
+          style={{ padding: '10px 20px', marginBottom: '16px' }}
         >
           Materializar
         </button>
@@ -380,7 +384,7 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = () => {
         {materializeResult && materializedDraft && (
           <>
             {materializeResult.unknown_processes.length > 0 && (
-              <p style={{ color: '#856404' }}>
+              <p className={styles.textWarn}>
                 Procesos no encontrados en el catálogo: {materializeResult.unknown_processes.join(', ')}
               </p>
             )}
@@ -389,10 +393,19 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = () => {
               ctx={{ health: { flag_enabled: true, generator_enabled: true, trigger_enabled: false, publications_enabled: true }, refetchHealth: () => {} }}
               localErrors={[]}
             />
+
+            {/* Plan 93 — preflight "¿Va a funcionar?" reusado (solo-lectura, informativo) */}
+            <PreflightPanel
+              ctx={ctx}
+              spec={toSpecDict(materializedDraft)}
+              project={activeProject ?? ''}
+            />
+
             <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
               <button
                 onClick={() => setShowCommitModal(true)}
-                style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}
+                className={styles.btnSuccess}
+                style={{ padding: '10px 20px' }}
               >
                 Commit al repo…
               </button>
@@ -400,7 +413,7 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = () => {
                 Guardar como borrador
               </button>
             </div>
-            {savedDraftHint && <p style={{ color: '#155724' }}>{savedDraftHint}</p>}
+            {savedDraftHint && <p className={styles.textSuccess}>{savedDraftHint}</p>}
 
             <TriggerPipelineSection project={activeProject ?? ''} lastBranch="" />
 

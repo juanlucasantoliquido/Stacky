@@ -36,6 +36,7 @@ def devops_health_route():
         "agent_enabled": bool(getattr(cfg, "STACKY_DEVOPS_AGENT_ENABLED", False)),  # Plan 90
         "servers_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SERVERS_ENABLED", False)),  # Plan 91
         "rdp_available": (sys.platform == "win32") and server_registry.keyring_available(),  # Plan 91
+        "preflight_enabled": bool(getattr(cfg, "STACKY_DEVOPS_PREFLIGHT_ENABLED", False)),  # Plan 93
         "stack_detect_enabled": bool(getattr(cfg, "STACKY_DEVOPS_STACK_DETECT_ENABLED", False)),  # Plan 97
     })
 
@@ -160,3 +161,71 @@ def environment_apply_route():
     result = apply_environment(root, approved)
     result["ignored_not_in_layout"] = sorted(set(requested) - set(rel_paths))  # C8: visible
     return jsonify(result)
+
+
+@bp.post("/preflight/check")
+def preflight_check_route():
+    """Semáforo pre-vuelo. SOLO-LECTURA (no commitea, no dispara, no escribe)."""
+    if not getattr(_config.config, "STACKY_DEVOPS_PREFLIGHT_ENABLED", False):
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    project = body.get("project")
+    spec_dict = body.get("spec")
+    target = body.get("target") or "auto"      # [C11] "auto" | "ado" | "gitlab" | "both"
+    if not project or not isinstance(spec_dict, dict) or target not in ("auto", "ado", "gitlab", "both"):
+        return jsonify({"error": "project, spec (objeto) y target ('auto'|'ado'|'gitlab'|'both') son obligatorios"}), 400
+    # [C11] "auto" = el tracker REAL del proyecto (menos ruido); fallback "both":
+    if target == "auto":
+        try:
+            from services.project_context import resolve_project_context
+            tt = resolve_project_context(project_name=project).tracker_type
+            target = "gitlab" if tt == "gitlab" else "ado"
+        except Exception:
+            target = "both"
+    checks = []
+    # 1) estructural (reusa el validador del 87 — fuente de verdad)
+    from services.pipeline_spec import dict_to_spec
+    try:
+        spec = dict_to_spec(spec_dict)
+    except Exception as exc:  # [C5] spec malformado (p.ej. stages string) => 400, nunca 500
+        return jsonify({"error": f"spec malformado: {exc}"}), 400
+    errors = spec.validate()
+    checks.append({"id": "estructura", "status": "fail" if errors else "ok",
+                   "title": "Estructura del pipeline",
+                   "detail": "; ".join(f"{e.field}: {e.message}" for e in errors) or "OK",
+                   "fix_hint": "Resolvé los avisos del builder" if errors else ""})
+    # 2) placeholders + 3) variables (F1, por target resuelto)
+    from services.pipeline_preflight import (
+        check_placeholders, check_undefined_variables, normalize_check, runners_check,
+    )
+    checks.append(check_placeholders(spec_dict))
+    defined_keys = None
+    # Integración ADITIVA plan 94 (si no está implementado/ON, queda None):
+    if getattr(_config.config, "STACKY_DEVOPS_VARIABLES_ENABLED", False):
+        try:
+            from services.ci_variables import get_variables_provider
+            defined_keys = [v["key"] for v in get_variables_provider(project).list_variables()]
+        except Exception:
+            defined_keys = None
+    for t in (("ado", "gitlab") if target == "both" else (target,)):
+        checks.append({**check_undefined_variables(spec_dict, t, defined_keys),
+                       "id": f"variables_{t}"})
+    # 4) lint remoto + 5) runners (F2, del tracker REAL del proyecto)
+    if not errors:
+        from services.pipeline_renderers import to_ado_yaml, to_gitlab_yaml
+        from services.ci_preflight import get_preflight_provider
+        try:
+            provider = get_preflight_provider(project)
+            yaml_str = to_ado_yaml(spec) if provider.name == "azure_devops" else to_gitlab_yaml(spec)
+            lint = provider.lint_yaml(yaml_str)
+            # [C6] normalize_check completa title/detail/fix_hint y aplana errors:
+            checks.append(normalize_check(lint, "lint_tracker",
+                                          f"YAML válido en {provider.name}"))
+            runners = provider.list_runners()
+            checks.append(runners_check(runners, spec_dict))  # [C4] puro, F1
+        except Exception as exc:   # nunca 500 (§3.9)
+            checks.append({"id": "tracker", "status": "unavailable",
+                           "title": "Chequeos remotos", "detail": str(exc)[:500], "fix_hint": ""})
+    summary = {s: sum(1 for c in checks if c["status"] == s)
+               for s in ("ok", "warn", "fail", "unavailable")}
+    return jsonify({"checks": checks, "summary": summary})

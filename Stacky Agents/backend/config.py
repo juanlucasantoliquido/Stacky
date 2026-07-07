@@ -792,9 +792,10 @@ class Config:
 
     # Plan 81 — Si ON, las frases borradas por el operador en ADO se derivan
     # como goldens negativos deterministas durante el sweep de edit-learning.
-    # Default OFF (opt-in), editable por UI via HarnessFlagsPanel.
+    # Default ON (activado 2026-07-05, decisión explícita del operador),
+    # editable por UI via HarnessFlagsPanel.
     STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED: bool = os.getenv(
-        "STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", "false"
+        "STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 65 — GitLab como tracker de primer nivel ─────────────────────────
@@ -840,46 +841,65 @@ class Config:
     STACKY_PIPELINE_PROVIDER_ENABLED: bool = os.getenv(
         "STACKY_PIPELINE_PROVIDER_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
-    # Plan 72 — Trigger y monitoreo de pipelines CI (HITL). Default OFF.
+    # Plan 72 — Trigger y monitoreo de pipelines CI (HITL). Default ON
+    # (activado 2026-07-05, decisión explícita del operador).
     # Editable por UI (HarnessFlagsPanel, categoría "Pipelines / CI").
     STACKY_PIPELINE_TRIGGER_ENABLED: bool = os.getenv(
-        "STACKY_PIPELINE_TRIGGER_ENABLED", "false"
+        "STACKY_PIPELINE_TRIGGER_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
-    # Plan 73 — Generador declarativo de pipelines ADO/GitLab (PipelineSpec). Default OFF.
+    # Plan 73 — Generador declarativo de pipelines ADO/GitLab (PipelineSpec). Default ON
+    # (activado 2026-07-05, decisión explícita del operador).
     # Editable por UI (HarnessFlagsPanel, categoría "Pipelines / CI").
     STACKY_PIPELINE_GENERATOR_ENABLED: bool = os.getenv(
-        "STACKY_PIPELINE_GENERATOR_ENABLED", "false"
+        "STACKY_PIPELINE_GENERATOR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
-    # Plan 87 — Panel DevOps (creador gráfico de pipelines). Default OFF.
+    # Plan 87 — Panel DevOps (creador gráfico de pipelines). Default ON
+    # (activado 2026-07-05, decisión explícita del operador).
     # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_PANEL_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_PANEL_ENABLED", "false"
+        "STACKY_DEVOPS_PANEL_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 88 — Publicaciones parametrizables de procesos (seccion del panel
-    # DevOps). Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    # DevOps). Default ON (activado 2026-07-05, decisión explícita del operador).
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_PUBLICATIONS_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_PUBLICATIONS_ENABLED", "false"
+        "STACKY_DEVOPS_PUBLICATIONS_ENABLED", "true"
     ).strip().lower() == "true"
 
     # Plan 89 — Inicialización de ambientes (seccion del panel DevOps). Default
-    # OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    # ON (activado 2026-07-05, decisión explícita del operador).
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_ENVIRONMENTS_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_ENVIRONMENTS_ENABLED", "false"
+        "STACKY_DEVOPS_ENVIRONMENTS_ENABLED", "true"
     ).strip().lower() == "true"
 
     # Plan 90 — Agente DevOps interactivo multi-turno (seccion del panel DevOps).
-    # Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    # Default ON (activado 2026-07-05, decisión explícita del operador, con
+    # conocimiento de que cada turno consume una llamada LLM completa).
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_AGENT_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_AGENT_ENABLED", "false"
+        "STACKY_DEVOPS_AGENT_ENABLED", "true"
     ).strip().lower() == "true"
 
-    # Plan 91 — Registro de servidores DevOps (conexiones con alias). Default OFF.
+    # Plan 91 — Registro de servidores DevOps (conexiones con alias). Default ON
+    # (activado 2026-07-05, decisión explícita del operador, con conocimiento
+    # de que maneja credenciales y conexiones RDP).
     # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_SERVERS_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_SERVERS_ENABLED", "false"
+        "STACKY_DEVOPS_SERVERS_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 93 — Preflight de pipelines DevOps. Default OFF. Editable por UI.
+    STACKY_DEVOPS_PREFLIGHT_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_PREFLIGHT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 97 — Deteccion opt-in de stack tecnico para presets de pipeline. Default OFF.
+    STACKY_DEVOPS_STACK_DETECT_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_STACK_DETECT_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.

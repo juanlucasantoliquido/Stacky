@@ -629,6 +629,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: no cambia nada; la sección no aparece y la libreta de servidores queda deshabilitada.",
         example="Como una agenda de contactos, pero de servidores: cargás cada uno una vez y después te conectás sin volver a tipear host ni credenciales.",
     ),
+    "STACKY_DEVOPS_PREFLIGHT_ENABLED": PlainHelp(
+        what="Un botón te dice si el pipeline va a funcionar antes de dispararlo: revisa el YAML contra Azure DevOps o GitLab de verdad, si quedaron pasos de ejemplo sin editar, si hay algún runner disponible y si usás variables que no definiste.",
+        on_effect="Si la activás: aparece el botón '¿Va a funcionar?' en Pipelines (y en Publicaciones). Solo lee información, nunca commitea ni dispara nada — el resultado es un semáforo con el problema y cómo arreglarlo.",
+        off_effect="Si la apagás: no cambia nada; el botón no aparece y seguís commiteando/disparando igual que siempre.",
+        example="Como el chequeo previo al despegue de un avión: revisa todo antes, pero quien decide despegar seguís siendo vos.",
+    ),
     "STACKY_DEVOPS_STACK_DETECT_ENABLED": PlainHelp(
         what="Un botón te sugiere el tipo de proyecto (Python/Node/.NET) para armar el pipeline con los comandos correctos.",
         on_effect="Si la activás: aparece el botón 'Detectar stack de mi proyecto' en el builder de pipelines, que lee (sin modificar nada) los archivos del proyecto y preselecciona el preset más probable.",

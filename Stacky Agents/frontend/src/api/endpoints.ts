@@ -1,6 +1,7 @@
 import { api, apiBase, rawPost, type RawResponse, type GatewayErrorBody } from "./client";
 export type { RawResponse, GatewayErrorBody };
 import type { EnvironmentPlanResponse, EnvironmentApplyResponse } from "../devops/environmentModel";
+import type { PreflightCheck } from "../devops/preflightModel";
 import type {
   ActiveProjectResponse,
   AgentDefinition,
@@ -3081,6 +3082,7 @@ export const DevOps = {
       agent_enabled?: boolean; // Plan 90
       servers_enabled?: boolean; // Plan 91
       rdp_available?: boolean; // Plan 91
+      preflight_enabled?: boolean; // Plan 93
       stack_detect_enabled?: boolean; // Plan 97
     }>("/api/devops/health"),
   /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
@@ -3109,6 +3111,16 @@ export const DevOps = {
   /** GET /api/devops/detect-stack — Plan 97. Detección opt-in de stack por manifiestos, SOLO-LECTURA. */
   detectStack: (project: string) =>
     api.get<{ detected: string | null }>(`/api/devops/detect-stack?project=${encodeURIComponent(project)}`),
+  /**
+   * POST /api/devops/preflight/check — Plan 93. Semáforo "¿Va a funcionar?"
+   * SOLO-LECTURA (no commitea, no dispara). target: "auto" resuelve el
+   * tracker real del proyecto (default recomendado).
+   */
+  preflightCheck: (project: string, spec: object, target: "auto" | "ado" | "gitlab" | "both" = "auto") =>
+    api.post<{ checks: PreflightCheck[]; summary: Record<string, number> }>(
+      "/api/devops/preflight/check",
+      { project, spec, target },
+    ),
 };
 
 export interface DevOpsConversationItem {

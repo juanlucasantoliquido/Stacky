@@ -46,15 +46,15 @@ class TestF0FlagInRegistry:
 
 
 class TestF0ConfigDefault:
-    """Config default OFF sin importar env del runner (FIX C8 — monkeypatch)."""
+    """Config default ON sin importar env del runner (activación operador 2026-07-05)."""
 
-    def test_f0_config_default_off(self, monkeypatch):
-        """Sin la env var, config.STACKY_DEVOPS_PANEL_ENABLED es False."""
+    def test_f0_config_default_on(self, monkeypatch):
+        """Sin la env var, config.STACKY_DEVOPS_PANEL_ENABLED es True."""
         monkeypatch.delenv("STACKY_DEVOPS_PANEL_ENABLED", raising=False)
         # Recargar config para limpiar cache
         import importlib, config
         importlib.reload(config)
-        assert config.config.STACKY_DEVOPS_PANEL_ENABLED is False
+        assert config.config.STACKY_DEVOPS_PANEL_ENABLED is True
 
 
 class TestF0PlainHelp:
@@ -82,4 +82,4 @@ class TestF0HarnessDefaults:
         env_file = backend_root / "harness_defaults.env"
         assert env_file.exists(), f"{env_file} no existe"
         content = env_file.read_text(encoding="utf-8")
-        assert "STACKY_DEVOPS_PANEL_ENABLED=false" in content
+        assert "STACKY_DEVOPS_PANEL_ENABLED=true" in content

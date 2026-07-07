@@ -1,8 +1,18 @@
 # Plan 93 — Preflight "¿Va a funcionar?": semáforo E2E de pipelines (ADO + GitLab)
 
-**Estado:** CRITICADO (juez adversarial, listo para implementar)
+**Estado:** IMPLEMENTADO (2026-07-07 — F0..F5 verdes; 47 tests backend nombrados
+del plan (F0:5, F1:16, F2:15, F3:11) + 6 vitest + `tsc --noEmit` 0 errores,
+todos corridos de verdad; no-regresión: `test_plan87_devops_endpoints.py` (8),
+`test_harness_flags.py` (53), `test_flag_wiring.py` (5),
+`test_harness_flags_requires.py` (9) verdes. Commit `70eb01b6` en la rama
+`codex/subida-cambios-pendientes` — ese commit también arrastra, sin tocarlo
+más allá de la línea propia, un cambio ajeno preexistente en `config.py` /
+`services/harness_flags.py` / `harness_defaults.env` /
+`tests/test_harness_flags.py` / `tests/test_plan91_servers_flag.py` (ver
+disclosure completo en el mensaje del commit y memoria
+`harness-defaults-env-drift-devops-87-91`))
 **Versión:** v2 (v1 → v2, crítica 2026-07-05)
-**Fecha:** 2026-07-05
+**Fecha:** 2026-07-05 (implementado 2026-07-07)
 **Serie DevOps E2E:** plan 1 de 4 (93 preflight / 94 variables / 95 producción / 96 doctor).
 Los 4 planes nacen de la revisión 2026-07-04 de la serie 86-91: el panel DevOps crea,
 commitea y dispara pipelines, pero NADA verifica ANTES que el pipeline vaya a

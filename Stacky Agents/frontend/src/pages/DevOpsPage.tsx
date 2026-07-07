@@ -28,6 +28,7 @@ export interface DevOpsHealth {
   agent_enabled?: boolean; // Plan 90 — sección Agente DevOps
   servers_enabled?: boolean; // Plan 91 — sección Servidores
   rdp_available?: boolean; // Plan 91 — RDP disponible (Windows + keyring)
+  doctor_enabled?: boolean; // Plan 96 — Doctor de pipelines
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 

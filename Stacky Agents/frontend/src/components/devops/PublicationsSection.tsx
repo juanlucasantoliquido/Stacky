@@ -415,7 +415,7 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
             </div>
             {savedDraftHint && <p className={styles.textSuccess}>{savedDraftHint}</p>}
 
-            <TriggerPipelineSection project={activeProject ?? ''} lastBranch="" />
+            <TriggerPipelineSection ctx={ctx} project={activeProject ?? ''} lastBranch="" />
 
             {showCommitModal && (
               <CommitPipelineModal

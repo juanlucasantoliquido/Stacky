@@ -903,6 +903,12 @@ class Config:
         "STACKY_DEVOPS_PRODUCTION_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 96 — Doctor de pipelines: diagnóstico en llano del fallo (ADO + GitLab).
+    # Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_DOCTOR_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_DOCTOR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 94 — Caja fuerte de variables: secretos del pipeline fuera del YAML
     # (ADO + GitLab). Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_VARIABLES_ENABLED: bool = os.getenv(

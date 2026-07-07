@@ -647,6 +647,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: no hay MR/PR desde el panel, y el commit ADO sigue con la nota 501 (la paridad ADO de commit/trigger/monitor NO depende de esta flag).",
         example="Como un botón 'Publicar' que primero te muestra el resultado del test en staging, te deja revisarlo y recién con tu confirmación explícita lo lleva a producción.",
     ),
+    "STACKY_DEVOPS_DOCTOR_ENABLED": PlainHelp(
+        what="Cuando un pipeline falla, un botón '¿Qué pasó?' baja el log del job y te explica en llano qué salió mal (comando inexistente, permiso denegado, timeout, etc.) con un fragmento del log y una sugerencia de arreglo.",
+        on_effect="Si la activás: en el monitor de un pipeline fallido aparece el botón '¿Qué pasó?'. Solo lee el log del job (ADO o GitLab) y lo clasifica con un catálogo de patrones conocidos; nunca reintenta ni cancela nada. Si el agente DevOps está activo, podés pasarle el diagnóstico para que te explique más y proponga un fix (siempre con tu CONFIRMO).",
+        off_effect="Si la apagás: no cambia nada; el botón no aparece y seguís yendo a la web del tracker a leer el log manualmente.",
+        example="Como un mecánico que lee el código de error del auto y te dice en criollo qué pieza falló, en vez de mostrarte el manual técnico completo.",
+    ),
     "STACKY_DEVOPS_STACK_DETECT_ENABLED": PlainHelp(
         what="Un botón te sugiere el tipo de proyecto (Python/Node/.NET) para armar el pipeline con los comandos correctos.",
         on_effect="Si la activás: aparece el botón 'Detectar stack de mi proyecto' en el builder de pipelines, que lee (sin modificar nada) los archivos del proyecto y preselecciona el preset más probable.",

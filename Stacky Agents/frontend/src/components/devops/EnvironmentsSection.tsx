@@ -38,6 +38,7 @@ import { FlagGateBanner } from './FlagGateBanner';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
 import { CommitPipelineModal } from './CommitPipelineModal';
 import { TriggerPipelineSection } from './TriggerPipelineSection';
+import styles from './devops.module.css';
 
 export interface EnvironmentsSectionProps {
   ctx: DevOpsSectionContext;
@@ -224,26 +225,26 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Stepper visual (C18) */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
-        <span style={{ color: step0Ready ? '#155724' : '#6c757d' }}>
+        <span className={step0Ready ? styles.textSuccess : styles.textMuted}>
           {step0Ready ? '✓' : '○'} 1. Configuración
         </span>
-        <span style={{ color: step1Ready ? '#155724' : '#6c757d' }}>
+        <span className={step1Ready ? styles.textSuccess : styles.textMuted}>
           {step1Ready ? '✓' : '○'} 2. Carpetas
         </span>
-        <span style={{ color: '#6c757d' }}>○ 3. Publicación inicial</span>
+        <span className={styles.textMuted}>○ 3. Publicación inicial</span>
       </div>
 
       {actionError && (
-        <div style={{ padding: '12px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px', color: '#721c24' }}>
+        <div className={styles.alertError}>
           No se pudo completar la acción: {actionError}
         </div>
       )}
 
       {/* Paso 0 — Configuración */}
-      <div style={{ border: '1px solid #dee2e6', borderRadius: '4px', padding: '12px' }}>
+      <div className={styles.panel}>
         <h4>Paso 1 — Configuración</h4>
         {!hasSavedSettings && (
-          <div style={{ padding: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', marginBottom: '8px' }}>
+          <div className={styles.alertWarning} style={{ marginBottom: '8px' }}>
             Configurá la raíz del ambiente para empezar.{' '}
             <button onClick={handleUseExampleLayout} style={{ padding: '4px 8px' }}>Usar layout de ejemplo</button>
           </div>
@@ -272,30 +273,31 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
           Crear subcarpeta por proceso
         </label>
         {localErrors.length > 0 && (
-          <div style={{ color: '#856404', marginTop: '8px' }}>{localErrors.join(' ')}</div>
+          <div className={styles.textWarn} style={{ marginTop: '8px' }}>{localErrors.join(' ')}</div>
         )}
         <button
           onClick={() => void saveSettings(settings)}
-          style={{ padding: '8px 16px', marginTop: '8px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}
+          className={styles.btnPrimary}
+          style={{ marginTop: '8px' }}
         >
           Guardar configuración
         </button>
       </div>
 
       {/* Paso 1 — Carpetas (plan-then-apply) */}
-      <div style={{ border: '1px solid #dee2e6', borderRadius: '4px', padding: '12px' }}>
+      <div className={styles.panel}>
         <h4>Paso 2 — Carpetas</h4>
         <button
           onClick={() => void handleCalculatePlan()}
           disabled={!canCalculatePlan}
           title={!canCalculatePlan ? 'Primero guardá la configuración del Paso 1' : undefined}
-          style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}
+          className={styles.btnSuccess}
         >
           Calcular plan
         </button>
 
         {rootExists === false && (
-          <div style={{ padding: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', marginTop: '8px' }}>
+          <div className={styles.alertWarning} style={{ marginTop: '8px' }}>
             La raíz no existe: se creará completa al aplicar. Verificá la ruta.
           </div>
         )}
@@ -308,12 +310,11 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
                   <tr key={e.path}>
                     <td>{e.path}</td>
                     <td
-                      style={{
-                        color:
-                          e.status === 'to_create' ? '#155724' :
-                          e.status === 'exists_ok' ? '#6c757d' :
-                          '#721c24',
-                      }}
+                      className={
+                        e.status === 'to_create' ? styles.textSuccess :
+                        e.status === 'exists_ok' ? styles.textMuted :
+                        styles.textDanger
+                      }
                     >
                       {e.status}
                       {e.status === 'conflict' && ' — existe un archivo con ese nombre; Stacky NUNCA lo toca'}
@@ -333,7 +334,7 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
             <button
               onClick={() => void handleCreateFolders()}
               disabled={!confirmChecked}
-              style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}
+              className={styles.btnSuccess}
             >
               Crear carpetas
             </button>
@@ -341,12 +342,12 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
         )}
 
         {applyResult && verified === true && (
-          <div style={{ padding: '8px', backgroundColor: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '4px', marginTop: '8px', color: '#155724' }}>
+          <div className={styles.alertSuccess} style={{ marginTop: '8px' }}>
             Ambiente verificado: {entries.length} carpetas existentes, 0 pendientes
           </div>
         )}
         {applyResult && verified === false && (
-          <div style={{ padding: '8px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px', marginTop: '8px', color: '#721c24' }}>
+          <div className={styles.alertError} style={{ marginTop: '8px' }}>
             Quedaron pendientes:
             <ul>
               {pendingEntries.map((e) => <li key={e.path}>{e.path} — {e.status}</li>)}
@@ -355,14 +356,14 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
           </div>
         )}
         {applyResult && applyResult.ignored_not_in_layout.length > 0 && (
-          <div style={{ color: '#856404', marginTop: '8px' }}>
+          <div className={styles.textWarn} style={{ marginTop: '8px' }}>
             Ignorados (fuera del layout): {applyResult.ignored_not_in_layout.join(', ')}
           </div>
         )}
       </div>
 
       {/* Paso 2 — Publicación inicial (TODO) */}
-      <div style={{ border: '1px solid #dee2e6', borderRadius: '4px', padding: '12px' }}>
+      <div className={styles.panel}>
         <h4>Paso 3 — Publicación inicial</h4>
         {!publicationsEnabled ? (
           <FlagGateBanner
@@ -388,7 +389,8 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
             <button
               onClick={() => void handleMaterialize()}
               disabled={!selectedPresetName}
-              style={{ padding: '8px 16px', marginLeft: '8px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}
+              className={styles.btnSuccess}
+              style={{ marginLeft: '8px' }}
             >
               Materializar publicación inicial
             </button>
@@ -396,19 +398,20 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
             {materializeResult && materializedDraft && (
               <>
                 {materializeResult.unknown_processes.length > 0 && (
-                  <p style={{ color: '#856404' }}>
+                  <p className={styles.textWarn}>
                     Procesos no encontrados en el catálogo: {materializeResult.unknown_processes.join(', ')}
                   </p>
                 )}
                 <PipelineYamlPreview spec={materializedDraft} ctx={ctx} localErrors={[]} />
                 <button
                   onClick={() => setShowCommitModal(true)}
-                  style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', marginTop: '8px' }}
+                  className={styles.btnSuccess}
+                  style={{ padding: '10px 20px', marginTop: '8px' }}
                 >
                   Commit al repo…
                 </button>
                 {ctx.health.trigger_enabled === true && (
-                  <TriggerPipelineSection project={activeProject} lastBranch="" />
+                  <TriggerPipelineSection ctx={ctx} project={activeProject} lastBranch="" />
                 )}
                 {showCommitModal && (
                   <CommitPipelineModal

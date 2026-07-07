@@ -508,7 +508,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
         </div>
 
         {ctx.health.trigger_enabled && (
-          <TriggerPipelineSection project={activeProject ?? ''} lastBranch={lastCommitBranch} />
+          <TriggerPipelineSection ctx={ctx} project={activeProject ?? ''} lastBranch={lastCommitBranch} />
         )}
       </div>
 

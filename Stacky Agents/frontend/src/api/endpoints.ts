@@ -2,6 +2,7 @@ import { api, apiBase, rawPost, type RawResponse, type GatewayErrorBody } from "
 export type { RawResponse, GatewayErrorBody };
 import type { EnvironmentPlanResponse, EnvironmentApplyResponse } from "../devops/environmentModel";
 import type { PreflightCheck } from "../devops/preflightModel";
+import type { DoctorJob } from "../devops/doctorModel";
 import type {
   ActiveProjectResponse,
   AgentDefinition,
@@ -3121,6 +3122,17 @@ export const DevOps = {
       "/api/devops/preflight/check",
       { project, spec, target },
     ),
+  /**
+   * POST /api/devops/doctor/diagnose — Plan 96. Jobs fallidos + clasificación
+   * en llano. SOLO-LECTURA (no persiste logs, no re-lanza, no cancela).
+   */
+  doctorDiagnose: (project: string, pipelineId: string) =>
+    api.post<{
+      provider: string;
+      jobs: DoctorJob[];
+      no_failures_found: boolean;
+      failed_jobs_total: number;
+    }>("/api/devops/doctor/diagnose", { project, pipeline_id: pipelineId }),
 };
 
 export interface DevOpsConversationItem {

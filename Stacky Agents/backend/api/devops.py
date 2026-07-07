@@ -37,7 +37,9 @@ def devops_health_route():
         "servers_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SERVERS_ENABLED", False)),  # Plan 91
         "rdp_available": (sys.platform == "win32") and server_registry.keyring_available(),  # Plan 91
         "preflight_enabled": bool(getattr(cfg, "STACKY_DEVOPS_PREFLIGHT_ENABLED", False)),  # Plan 93
+        "variables_enabled": bool(getattr(cfg, "STACKY_DEVOPS_VARIABLES_ENABLED", False)),  # Plan 94
         "stack_detect_enabled": bool(getattr(cfg, "STACKY_DEVOPS_STACK_DETECT_ENABLED", False)),  # Plan 97
+        "doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_DOCTOR_ENABLED", False)),  # Plan 96
     })
 
 
@@ -229,3 +231,37 @@ def preflight_check_route():
     summary = {s: sum(1 for c in checks if c["status"] == s)
                for s in ("ok", "warn", "fail", "unavailable")}
     return jsonify({"checks": checks, "summary": summary})
+
+
+@bp.post("/doctor/diagnose")
+def doctor_diagnose_route():
+    """Jobs fallidos + clasificación en llano. SOLO-LECTURA; el log NO se persiste. Plan 96."""
+    if not getattr(_config.config, "STACKY_DEVOPS_DOCTOR_ENABLED", False):
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    project, pipeline_id = body.get("project"), body.get("pipeline_id")
+    if not project or not pipeline_id:
+        return jsonify({"error": "project y pipeline_id son obligatorios"}), 400
+    from services.ci_logs_provider import get_ci_logs_provider
+    from services.failure_doctor import classify_failure
+    from services.tracker_provider import TrackerApiError, TrackerConfigError
+    try:
+        provider = get_ci_logs_provider(project)
+        failed = provider.list_failed_jobs(str(pipeline_id))
+    except TrackerConfigError as e:            # fábrica: tracker/flag sin soporte
+        return jsonify({"error": str(e), "kind": "tracker_config"}), 400
+    except TrackerApiError as e:
+        return jsonify({"error": str(e), "kind": getattr(e, "kind", "")}), e.status
+    except Exception as e:
+        return jsonify({"error": str(e), "kind": "logs_unavailable"}), 502
+    jobs = []
+    for j in failed[:10]:                      # cap defensivo de jobs por request
+        try:
+            log = provider.get_job_log(j["job_id"])
+            diagnosis = classify_failure(log)
+        except Exception as e:                 # log inaccesible ⇒ honesto, sigue
+            diagnosis = {"matches": [], "snippet": f"(no pude bajar el log: {e})"}
+        jobs.append({**j, "diagnosis": diagnosis})
+    return jsonify({"provider": provider.name, "jobs": jobs,
+                    "no_failures_found": len(failed) == 0,
+                    "failed_jobs_total": len(failed)})   # honestidad del cap

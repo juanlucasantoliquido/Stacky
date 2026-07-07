@@ -1,6 +1,6 @@
 # Plan 96 — Doctor de pipelines: el fallo explicado en llano (ADO + GitLab)
 
-**Estado:** CRITICADO x2 (re-crítica adversarial v2 → v3, listo para implementar)
+**Estado:** IMPLEMENTADO (F0..F5, 2026-07-07, commit pendiente de hash — ver commit `docs(plan-96)` siguiente)
 **Versión:** v3 (v1 → v2 → v3, re-crítica adversarial 2026-07-06)
 **Fecha:** 2026-07-05 (crítica v2: 2026-07-06; re-crítica v3: 2026-07-06)
 **Veredicto del juez (v3):** APROBADO-CON-CAMBIOS (0 bloqueantes, 5 importantes, 5 menores).

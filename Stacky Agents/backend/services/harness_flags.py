@@ -184,6 +184,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_VARIABLES_ENABLED",  # Plan 94 — caja fuerte variables secretas
         "STACKY_DEVOPS_STACK_DETECT_ENABLED",  # Plan 97 — deteccion de stack para presets
         "STACKY_DEVOPS_PRODUCTION_ENABLED",  # Plan 95 — llevar a producción MR/PR
+        "STACKY_DEVOPS_DOCTOR_ENABLED",  # Plan 96 — doctor de pipelines: diagnóstico en llano
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2077,6 +2078,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "no aparece y el modal de commit de ADO sigue con la nota 501. Nota: la "
             "paridad ADO de commit/trigger/monitor NO depende de esta flag (completa "
             "contratos existentes ya gateados por sus propias flags del arnés)."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON).
+    ),
+    # ── Plan 96 — Doctor de pipelines: diagnóstico del fallo en llano (ADO+GitLab) ──
+    FlagSpec(
+        key="STACKY_DEVOPS_DOCTOR_ENABLED",
+        type="bool",
+        label="Doctor de pipelines (Plan 96)",
+        description=(
+            "Plan 96 — Cuando un pipeline falla, el botón '¿Qué pasó?' baja el log "
+            "del job y te lo explica en lenguaje llano; opcionalmente se lo pasa al "
+            "agente DevOps. Solo lee, nunca ejecuta. Default OFF."
         ),
         group="global",
         env_only=False,  # editable por UI (categoría 'devops')

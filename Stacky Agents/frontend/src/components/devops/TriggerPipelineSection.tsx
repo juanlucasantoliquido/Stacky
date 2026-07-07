@@ -6,13 +6,16 @@ import React, { useState } from 'react';
 import { CIPipeline, type CIPreviewResponse, type CITriggerResponse, type CIMonitorResponse } from '../../api/endpoints';
 import { FlagGateBanner } from './FlagGateBanner';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
+import { PipelineDoctorPanel } from './PipelineDoctorPanel';
+import styles from './devops.module.css';
 
 export interface TriggerPipelineSectionProps {
+  ctx: DevOpsSectionContext; // Plan 96 — necesario para gatear PipelineDoctorPanel
   project: string;
   lastBranch: string; // FIX C6 - branch del último commit exitoso como default
 }
 
-export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ project, lastBranch }) => {
+export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ ctx, project, lastBranch }) => {
   const [ref, setRef] = useState(lastBranch);
   const [previewData, setPreviewData] = useState<CIPreviewResponse | null>(null);
   const [triggerResult, setTriggerResult] = useState<CITriggerResponse | null>(null);
@@ -21,11 +24,6 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
   const [monitorStatus, setMonitorStatus] = useState<CIMonitorResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const ctx: DevOpsSectionContext = React.useMemo(() => ({
-    health: { flag_enabled: true, generator_enabled: true, trigger_enabled: true },
-    refetchHealth: () => {},
-  }), []);
 
   // C14 - FlagGateBanner si trigger_enabled=false (esto no debería pasar porque el padre ya chequea)
   if (!ctx.health.trigger_enabled) {
@@ -103,7 +101,7 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
   }, [polling, pipelineId]);
 
   return (
-    <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#e7f3ff', borderRadius: '4px' }}>
+    <div className={styles.panelMuted} style={{ marginTop: '16px' }}>
       <h3 style={{ marginTop: 0 }}>Trigger CI</h3>
 
       <div style={{ marginBottom: '12px' }}>
@@ -129,7 +127,7 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
         <button
           onClick={() => void handleTrigger()}
           disabled={loading}
-          style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}
+          className={styles.btnPrimary}
         >
           Disparar
         </button>
@@ -137,17 +135,17 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
 
       {/* Preview HITL informado */}
       {previewData && (
-        <div style={{ marginBottom: '12px', padding: '8px', backgroundColor: '#d1ecf1', border: '1px solid #bee5eb', borderRadius: '3px', fontSize: '13px' }}>
+        <div className={styles.alertInfo} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
           <strong>Preview:</strong> ref resuelto = "{previewData.ref}"
           {previewData.would_reuse && (
-            <span style={{ marginLeft: '8px', color: '#0c5460' }}>→ pipeline reciente reusado (idempotencia 60s)</span>
+            <span style={{ marginLeft: '8px' }}>→ pipeline reciente reusado (idempotencia 60s)</span>
           )}
         </div>
       )}
 
       {/* Resultado del trigger */}
       {triggerResult && (
-        <div style={{ marginBottom: '12px', padding: '8px', backgroundColor: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '3px', fontSize: '13px' }}>
+        <div className={styles.alertSuccess} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
           <strong>Trigger exitoso:</strong> status = {triggerResult.status}
           {triggerResult.pipeline_id && (
             <span>, pipeline_id = {triggerResult.pipeline_id}</span>
@@ -157,7 +155,7 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
 
       {/* Monitoreo */}
       {monitorStatus && (
-        <div style={{ marginBottom: '12px', padding: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '3px', fontSize: '13px' }}>
+        <div className={styles.alertWarning} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
           <strong>Estado:</strong>
           <pre style={{ margin: '4px 0 0 0', whiteSpace: 'pre-wrap' }}>
             {JSON.stringify(monitorStatus, null, 2)}
@@ -165,9 +163,14 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
         </div>
       )}
 
+      {/* Doctor de pipelines (Plan 96) — solo cuando el pipeline falló */}
+      {monitorStatus?.status === 'failed' && pipelineId && (
+        <PipelineDoctorPanel ctx={ctx} project={project} pipelineId={pipelineId} />
+      )}
+
       {/* Errores */}
       {error && (
-        <div style={{ marginBottom: '12px', padding: '8px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '3px', fontSize: '13px', color: '#721c24' }}>
+        <div className={styles.alertError} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
           {error}
         </div>
       )}

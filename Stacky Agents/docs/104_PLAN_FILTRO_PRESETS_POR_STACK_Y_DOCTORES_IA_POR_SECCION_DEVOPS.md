@@ -1,8 +1,136 @@
-# Plan 100 — Filtro de presets por stack + Doctores IA por sección del panel DevOps
+# Plan 104 — Filtro de presets por stack + Doctores IA por sección del panel DevOps
 
-**Estado:** PROPUESTO v1 (2026-07-06)
-**Versión:** v1
-**Fecha:** 2026-07-06
+**Estado:** CRITICADO v2 → v3 (2026-07-06, APROBADO-CON-CAMBIOS — 2 BLOQUEANTES + 2 IMPORTANTES + 1 MENOR nuevos resueltos)
+**Versión:** v3 (v1 → v2 → v3, 2ª crítica adversarial 2026-07-06)
+**Fecha:** 2026-07-06 (crítica v3: 2026-07-06)
+**Veredicto del juez (v3):** APROBADO-CON-CAMBIOS (2 BLOQUEANTES nuevos —C10 external_id, C11 import— resueltos en F2; contradicciones stale v1 purgadas de §5/F3/DoD).
+
+## Changelog v2 → v3 (2ª crítica adversarial — verificado contra código real)
+
+- **C10 (BLOQUEANTE, resuelto en F2):** el `Ticket` ancla de v2 (F2) NO sellaba
+  `external_id = -ticket.id`, pero el plan 90 —del que v2 dice copiar el "patrón EXACTO"—
+  descubrió DURANTE la implementación (`devops_agent.py:58-81`, comentario "HALLAZGO impl")
+  que la **2ª conversación del mismo proyecto NO puede dejar `external_id=NULL`**: en cada
+  `init_db()`, `db._backfill_multi_project_ticket_columns` (`db.py:158-196`) rellena
+  `external_id = COALESCE(external_id, ado_id)` ⇒ dos tickets doctor NULL del mismo proyecto
+  terminan ambos con `external_id=-3` y **colisionan en el UNIQUE
+  `ux_tickets_stacky_tracker_external (stacky_project_name, tracker_type, external_id)`**.
+  v2 dropeó la única línea que el 90 aprendió a los golpes. Peor: el propio test C9
+  `test_two_clicks_create_two_distinct_tickets` PROBARÍA el crash tras el próximo backfill.
+  v3 replica el patrón COMPLETO del 90: `session.flush()` → `ticket.external_id = -ticket.id`
+  → `session.flush()`, y setea también `project=project, work_item_type="Task",
+  ado_state="Active"` (el 90 los pone). Nuevo test **[ADICIÓN ARQUITECTO v3]**
+  `test_second_doctor_ticket_same_project_no_collision` corre el backfill real y verifica 0
+  IntegrityError + `external_id` distintos. `session_scope` commitea en `__exit__`
+  (`db.py:306`) ⇒ el ticket es visible para el preflight de `run_agent` (patrón 90 probado).
+- **C11 (BLOQUEANTE, resuelto en F2):** v2 importaba `from services import _config` y leía
+  `_config.config`. **NO existe `services/_config.py`** — todos los endpoints reales
+  (incluido el plan 90, `devops_agent.py:8`) usan `import config as _config` (módulo
+  top-level). El import de v2 lanzaría `ImportError` al registrar el blueprint ⇒ `api/__init__`
+  falla ⇒ **la app no bootea**. v3 corrige a `import config as _config` (paridad con el 90 y
+  con `ci.py:18`, `devops.py:9`, `devops_servers.py:13`, `pipeline_generator.py:15`).
+- **C12 (IMPORTANTE, resuelto en §5):** la tabla de Riesgos de v2 era stale v1 —citaba
+  `run_agent no acepta ticket_id=None`, el test `test_doctor_launches_without_ticket` y
+  "github_copilot → 400 fallback", TODO removido por C1/C3. Un modelo menor que leyera §5
+  re-introduciría los bugs que el changelog ya arregló. v3 reescribe la tabla a la realidad v2/v3.
+- **C13 (IMPORTANTE, resuelto en F3 + DoD):** "Impacto por runtime" de F3 y la DoD todavía
+  decían "Copilot puede caer a 400 / copilot con fallback 400" —contradice C3 (copilot ES
+  runtime válido de `run_agent`, `agent_runner.py:94,219,373`; NO se rechaza). v3 alinea:
+  los 3 runtimes funcionan; el único 400 es para runtimes inventados (`"foo"`).
+- **C14 (MENOR, resuelto en DoD):** la DoD decía "12 tests backend verdes" pero F2 lista 13
+  (ahora 14 con la regresión de C10). v3 unifica el conteo a **14**.
+
+## Changelog v1 → v2 (crítica adversarial)
+
+- **C1 (BLOQUEANTE, resuelto en F2):** v1 decía que `agent_runner.run_agent` aceptaba
+  `ticket_id=None` ("fire-and-forget, sin conversación ancla"). **FALSO verificado contra
+  el código real**: el signature es `def run_agent(*, agent_type, ticket_id: int, ...)`
+  (`agent_runner.py:77-98`) — `ticket_id` es OBLIGATORIO y se usa en el preflight G0.1
+  (`session.query(Ticket).filter_by(id=ticket_id).first()`, `:108`), en el guard de resume
+  (`:637`) y para crear el `AgentExecution`. El propio plan 90 —del que v1 dice "reuso el
+  cableado"— crea SIEMPRE un `Ticket` de conversación ANTES de llamar a `run_agent`
+  (`devops_agent.py:70` `Ticket(...)`, `:82` `conversation_id = ticket.id`, `:241`
+  `ticket_id=conversation_id`). Con la letra de v1, `run_agent(ticket_id=None)` lanzaría
+  `TypeError` o rompería en el preflight — el doctor NUNCA arrancaba, y el test
+  `test_doctor_launches_without_ticket` era una trampa verde-falsa (v1 decía "si None no
+  funciona, cae al fallback -3" sin especificar el fallback). v2 FIJA el camino real: el
+  endpoint doctor crea un `Ticket` ancla **exacto** al patrón del plan 90 (`Ticket(...,
+  ado_id=_DOCTOR_CONVERSATION_ADO_ID, title=f"Doctor DevOps · {section_id} · {project}")`)
+  y pasa su `id` como `ticket_id`. Se reusa la constante `_CONVERSATION_ADO_ID` del 90 con
+  un valor DISTINTO (`_DOCTOR_CONVERSATION_ADO_ID = -3`) para distinguir doctor de chat en
+  el historial. El ticket se persiste (igual que el plan 90 persiste el de conversación);
+  no es "fire-and-forget invisible" — es "ancla determinista, como el 90". Nuevo test
+  `test_doctor_creates_anchor_ticket` blinda este invariante.
+- **C2 (IMPORTANTE, resuelto en F2):** v1 importaba `current_user` de `api._helpers` con
+  el alias `from api._helpers import current_user as _cu` y la llamaba `_cu()`. Verificado:
+  el plan 90 la importa vía `_current_user()` local (`devops_agent.py:21-25`) que a su vez
+  llama a `current_user` de `api._helpers`. v2 usa el MISMO helper `_current_user` del
+  módulo `devops_agent` (no duplica la indirección): `from api.devops_agent import
+  _current_user` — paridad canónica con el 90, sin riesgo de drift si el plan 90 cambia el
+  origen de `current_user`.
+- **C3 (IMPORTANTE, resuelto en F2 + §3):** v1 declaraba paridad 3 runtimes "ya probada en
+  el plan 90 (claude_code_cli + codex_cli)" y trataba `github_copilot` como "probablemente
+  no registrado como runtime de agente ⇒ 400 controlado". Esto es una contradicción no
+  resuelta: `run_agent` tiene `runtime: str = "github_copilot"` como DEFAULT
+  (`agent_runner.py:94`) y lo despacha al `copilot_bridge` (`:219`, `:373`, `:537`) — o
+  sea, github_copilot ES un runtime de agente perfectamente válido, no un caso a rechazar.
+  v2 corrige: los 3 runtimes están soportados (`claude_code_cli`, `codex_cli`,
+  `github_copilot`), el backend NO rechaza copilot (no hay 400). El test
+  `test_runtime_no_soportado_400` se mantiene SOLO para runtimes inventados (`"foo"`). Se
+  elimina el "fallback 400 para copilot" — era un falso síntoma heredado de confundir el
+  guard del chat del plan 90 (que rechaza copilot para **chat conversacional** por
+  `devops_chat_requires_cli_runtime`, `devops_agent.py`) con el dispatcher de run_agent
+  (que SÍ acepta copilot). El doctor NO es chat conversacional, es run_agent puro ⇒ copilot
+  válido. Documentado en §3.1.
+- **C4 (IMPORTANTE, resuelto en F2 + F5):** v1 decía "la respuesta markdown se consume vía
+  el canal EXISTENTE de logs/streams del execution_id" SIN especificar cuál. El plan 90
+  consume la respuesta vía el stream de logs del `execution_id`
+  (`DevOpsAgentSection.tsx` + `endpoints.ts:3126`). v2 FIJA el camino: el frontend reusa el
+  endpoint `GET /api/executions/<id>/logs` (stream SSE) ya existente, y muestra la
+  respuesta en el panel del **agente DevOps del 90** referenciado por `execution_id` +
+  `conversation_id` (el ticket ancla creado en C1). El operador ve "Análisis lanzado
+  (execution #N, conversación #M). Ver en el panel Agente DevOps" con un link que cambia el
+  tab activo. NO se inventa canal nuevo, NO se duplica renderer markdown.
+- **C5 (IMPORTANTE, resuelto en F1):** v1 permitía que el botón "Detectar stack" del plan
+  97 auto-setee `setStackFilter(detected)` "si la flag del 97 está ON" — pero NO verificaba
+  que `detected` sea un `StackId` válido del plan 104. El detector del 97 devuelve
+  `"python" | "node" | "dotnet" | null` (`pipeline_stack_detector.py:1036`) — los 3 son
+  `StackId` válidos, PERO si el 97 evoluciona y agrega un stack nuevo, el cast
+  `detected as StackId` introduce un bug silencioso. v2 añade un guard `isStackId(x)` que
+  valida contra `STACK_OPTIONS` antes de setear el filtro; si no es válido, no muta el
+  filtro (degrada silencioso, sin romper). Test `isStackId_rejects_unknown` en F0.
+- **C6 (MENOR, resuelto en F2):** v1 usaba `kind: "raw-conversation"` en el
+  `context_blocks` del doctor. Verificado: el plan 90 usa `{"source": {"type":
+  "devops_panel"}}` y el `kind` real del canal de conversación es manejado por
+  `_launch_turn`. v2 deja `kind` sin hardcodear (omite la key) para heredar el default del
+  `agent_runner`/plan 90 — paridad canónica.
+- **C7 (MENOR, resuelto en F3):** v1 usaba `styles.btnPrimary`/`styles.textMuted` en
+  `SectionDoctorButton.tsx` sin verificar que existan. El plan 87/96 ya los usa en otros
+  componentes devops — verificado existen. v2 lo mantiene PERO añade una NOTA literal: si
+  un modelo menor no encuentra esas clases, cae a estilos inline (no rompe `tsc`).
+- **C8 (MENOR, resuelto en F4):** v1 decía "editar `test_harness_flags.py` (
+  `_REQUIRES_MAP_FROZEN`)" en F4 pero la memoria `harness-requires-r4-depth1` documenta
+  que el mapa vive en `tests/test_harness_flags_requires.py` (archivo DISTINTO). v2
+  corrige la cita literal (F4 ya lo tenía bien en el cuerpo, pero el encabezado de la
+  sección lo confundía — unificado).
+- **C9 (MENOR, resuelto en §3 + F2):** v1 no especificaba qué pasa si el operador clickea
+  "Doctor" dos veces seguidas (run pegado en "running" / duplicación). v2 añade: el botón
+  se deshabilita mientras `busy` (ya en v1) Y el backend es idempotente porque crea un
+  `Ticket` nuevo por invocación (no reutiliza el anterior) — cada click es una conversación
+  doctor distinta, sin ancla compartida. El operador puede abortar vía el
+  `ActiveRunsPanel`/cancel del plan 90 (reuso del `copilot_bridge.cancel` /
+  `claude_code_cli_runner.cancel`).
+- **[ADICIÓN ARQUITECTO v2] (F2 + F3):** el doctor RECIBE el YAML renderizado del pipeline
+  ACTIVO (no solo el `spec` draft) cuando la sección lo expone, vía un parámetro opcional
+  `rendered` en el payload. Hoy el builder renderiza YAML ADO+GitLab via preview (plan
+  88/99). El doctor pasa AMBOS YAML al contexto de la IA — así la IA razona sobre el
+  pipeline REAL que se commitearía, no sobre una abstracción. Cero costo extra, paridad
+  ADO+GitLab reforzada, HITL intacto (solo lectura). v1 pasaba solo `spec` + previews
+  opcionales "si existen"; v2 los hace PARTE DEL CONTRATO del payload (keys `yaml_ado` /
+  `yaml_gitlab` tipadas, `null` si la sección no los tiene — el backend los ignora si
+  faltan).
+
+## Pedido textual del operador
 **Pedido textual del operador:** "En la sección de DevOps aparecen muchos presets de DevOps y
 me ensucian. Debería tener una parte donde, una vez que selecciono un stack como .NET, filtre solo
 los de .NET. Y también que haya un doctor de pipelines y despliegues en cada sección, un doctor
@@ -14,7 +142,7 @@ multi-turno + `_launch_turn` + `run_agent(agent_type="devops", ...)`), plan 87 I
 (`84a9ecb5` — host del panel + contrato de extensión §3.12 + `DEVOPS_SECTIONS` + `FlagGateBanner`).
 **No depende de** la serie 93-96 (todas CRITICADAS, sin implementar): el plan 96 (doctor de
 diagnóstico post-fallo por regex) es COMPLEMENTARIO y NO se superpone (el 96 clasifica fallos ya
-ocurridos sin invocar IA; este plan 100 invoca IA para ANALIZAR/MEJORAR el pipeline o despliegue).
+ocurridos sin invocar IA; este plan 104 invoca IA para ANALIZAR/MEJORAR el pipeline o despliegue).
 Puede implementarse en paralelo a 93-96.
 
 ---
@@ -127,7 +255,7 @@ export interface PipelinePreset {
   id: PresetId;
   label: string;
   description: string;
-  stack: StackId;            // Plan 100 F0 — clasificación para el filtro
+  stack: StackId;            // Plan 104 F0 — clasificación para el filtro
   build: () => PipelineSpecDraft;
 }
 // python  -> stack: "python"
@@ -146,7 +274,7 @@ snippets existentes por inspección del `id`/`script`:
 export interface StepSnippet {
   id: string;
   category: SnippetCategory;
-  stacks: readonly StackId[];   // Plan 100 F0 — a qué stacks aplica; [] = "all"
+  stacks: readonly StackId[];   // Plan 104 F0 — a qué stacks aplica; [] = "all"
   label: string;
   description: string;
   needsEdit?: boolean;
@@ -182,7 +310,7 @@ export interface StepRecipe {
   id: string;
   label: string;
   description: string;
-  stack: StackId | "all";      // Plan 100 F0
+  stack: StackId | "all";      // Plan 104 F0
   stepIds: readonly string[];
 }
 ```
@@ -213,7 +341,9 @@ export const STACK_OPTIONS: readonly (StackId | "all")[] = [
   `script` que contenga `pip`/`pytest`),
   `filterSnippetsByStack_python_excludes_dotnet` (simétrico),
   `generic_snippets_have_empty_stacks` (los que aplican a todos tienen `stacks=[]`),
-  `at_least_one_snippet_per_known_stack` (para cada `StackId ≠ "all"` hay ≥1 snippet).
+  `at_least_one_snippet_per_known_stack` (para cada `StackId ≠ "all"` hay ≥1 snippet),
+  **[C5]** `isStackId_rejects_unknown` (`isStackId("kotlin") === false`, `isStackId("python")
+  === true`, `isStackId(null) === false`, `isStackId(undefined) === false`).
 - `Stacky Agents/frontend/src/devops/pipelineRecipes.test.ts`: agregar
   `every_recipe_has_stack_field` y `recipe_stack_matches_step_ids` (`ci-python`→`python`).
 
@@ -267,10 +397,24 @@ Aplicar el filtro:
 
 **Integración con detección del plan 97 (opcional, sin flag):** si el operador usa el botón
 "Detectar stack" del plan 97 (F2) y este devuelve `detected: "dotnet"`, el frontend puede
-auto-setear `setStackFilter("dotnet")`. Esto es una UX aditiva: el operador puede cambiar el
-filtro manualmente después. Se implementa en el handler `handleDetect` existente (si la flag del
-97 está ON) con `setStackFilter(detected as StackId)`. Si el 97 está OFF, no pasa nada (el filtro
-sigue manual). **No introduce dependencia dura con el 97 F2.**
+auto-setear `setStackFilter("dotnet")`. **[C5]** IMPORTANTE: el detector del 97 devuelve
+hoy `"python" | "node" | "dotnet" | null` (`pipeline_stack_detector.py:1036`) — los 3 son
+`StackId` válidos, pero v2 exige un guard `isStackId(x)` antes de mutar el filtro (defensivo
+ante futura evolución del 97). Implementación literal:
+
+```tsx
+// [C5] guard defensivo — si el 97 evoluciona y devuelve un stack nuevo no listado en
+// STACK_OPTIONS, el filtro NO muta (degrada silencioso, sin romper). El operador puede
+// seguir eligiendo manualmente.
+function isStackId(x: unknown): x is StackId | "all" {
+  return typeof x === "string" && (STACK_OPTIONS as readonly string[]).includes(x);
+}
+// en handleDetect (existe del 97):
+if (isStackId(detected)) setStackFilter(detected);
+```
+
+Esto es una UX aditiva: el operador puede cambiar el filtro manualmente después. Si el 97
+está OFF, no pasa nada (el filtro sigue manual). **No introduce dependencia dura con el 97 F2.**
 
 **Casos borde:**
 - `stackFilter === "all"` (default) → comportamiento idéntico al actual (no rompe nada).
@@ -304,17 +448,27 @@ consume por el canal EXISTENTE de logs/streams del `execution_id` (no se inventa
 **Archivo NUEVO:** `Stacky Agents/backend/api/devops_section_doctor.py`
 
 ```python
-"""api/devops_section_doctor.py — Plan 100 F2.
+"""api/devops_section_doctor.py — Plan 104 F2 (v2).
 Doctores IA por seccion del panel DevOps. Reusa el cableado de invocacion del
 plan 90 (_launch_turn -> agent_runner.run_agent con agent_type="devops"). Cada
 seccion define su propio context_blocks (YAML del pipeline, environment, etc.).
 El doctor PROPONE analisis/mejoras en markdown; NUNCA aplica cambios (HITL).
+
+v2 (C1 BLOQUEANTE): run_agent exige ticket_id: int OBLIGATORIO — el doctor crea
+un Ticket ancla determinista (ado_id=-3) identico al patron del plan 90 (que usa
+_CONVERSATION_ADO_ID). NO es fire-and-forget invisible.
 """
 from __future__ import annotations
 from flask import Blueprint, jsonify, request, abort
-from services import _config
+import config as _config  # [C11] módulo top-level, NO `services._config` (no existe)
 
 bp = Blueprint("devops_section_doctor", __name__, url_prefix="/devops/sections")
+
+# [C1] ado_id negativo DISTINTO al del plan 90 para distinguir doctor de chat en
+# el historial. El plan 90 usa _CONVERSATION_ADO_ID (ver devops_agent.py); el
+# doctor usa -3. Asi el historial del 90 puede filtrar "solo conversaciones
+# reales" excluyendo doctores si hace falta.
+_DOCTOR_CONVERSATION_ADO_ID = -3
 
 # Registry declarativo: id_seccion -> (titulo, instruccion_base). El PAYLOAD lo
 # arma el frontend (que tiene el estado de la seccion) y se valida aca.
@@ -366,16 +520,22 @@ def section_doctor_route(section_id: str):
     body = request.get_json(silent=True) or {}
     project = body.get("project")
     runtime = body.get("runtime", "claude_code_cli")
-    payload = body.get("payload")  # dict estructurado por seccion: {yaml_ado, yaml_gitlab, spec, ...}
+    payload = body.get("payload")  # dict estructurado por seccion
     if not project or not isinstance(payload, dict):
         return jsonify({"error": "project y payload son obligatorios"}), 400
+    # [C3] los 3 runtimes son VALIDOS (run_agent los despacha: agent_runner.py:94,219,373).
+    # github_copilot NO se rechaza aqui — el guard del plan 90 que lo rechaza es para CHAT
+    # CONVERSACIONAL (devops_chat_requires_cli_runtime), NO aplica al doctor.
     if runtime not in ("claude_code_cli", "codex_cli", "github_copilot"):
         return jsonify({"error": "runtime_no_soportado"}), 400
 
     import json
+    # [C6] NO hardcodear kind — hereda el default del agent_runner/plan 90 (paridad).
+    # [ADICION ARQUITECTO v2] el payload incluye opcionalmente yaml_ado/yaml_gitlab
+    # renderizados (keys tipadas, null si la seccion no los tiene); el json los incluye
+    # tal cual y la IA razona sobre el pipeline REAL.
     context_blocks = [{
         "id": f"doctor-{section_id}",
-        "kind": "raw-conversation",
         "title": spec["title"],
         "content": (
             f"{spec['instruction']}\n\n"
@@ -385,17 +545,47 @@ def section_doctor_route(section_id: str):
         "source": {"type": "devops_panel", "section": section_id},
     }]
 
-    # Reuso del cableado del plan 90 (mismo agent_type, mismo runtime dispatch).
-    # NO creamos una conversacion nueva del plan 90: el doctor es fire-and-forget,
-    # el operador lee la respuesta via el stream de execution_id.
+    # [C1 BLOQUEANTE resuelto] run_agent exige ticket_id: int. Patron EXACTO del plan 90:
+    # crear un Ticket ancla ANTES de invocar (devops_agent.py:70-82). Usamos ado_id=-3 para
+    # distinguir doctor de conversacion de chat (-2 del 90). Cada click del doctor crea un
+    # Ticket nuevo (idempotente a nivel invocacion: dos clicks = dos conversaciones doctor).
+    from db import session_scope
+    from models import Ticket
+    from api.devops_agent import _current_user  # [C2] reuso el helper canonico del 90
     import agent_runner
-    from api._helpers import current_user as _cu
+
+    try:
+        with session_scope() as session:
+            # [C10 BLOQUEANTE] patrón COMPLETO del plan 90 (devops_agent.py:70-82): setear
+            # los mismos campos Y sellar external_id = -ticket.id. SIN ese sello, el 2º
+            # doctor del MISMO proyecto deja external_id=NULL → el backfill de init_db
+            # (db._backfill_multi_project_ticket_columns, db.py:158-196) lo rellena con
+            # ado_id=-3 → colisión en el UNIQUE ux_tickets_stacky_tracker_external
+            # (stacky_project_name, tracker_type, external_id). Negativo+único ⇒ nunca choca.
+            ticket = Ticket(
+                title=f"Doctor DevOps · {section_id} · {project}",
+                ado_id=_DOCTOR_CONVERSATION_ADO_ID,
+                project=project,
+                stacky_project_name=project,
+                work_item_type="Task",
+                ado_state="Active",
+            )
+            session.add(ticket)
+            session.flush()               # asigna ticket.id
+            ticket.external_id = -ticket.id  # [C10] único, negativo, no-NULL ⇒ backfill lo respeta
+            session.flush()
+            doctor_ticket_id = ticket.id
+            # session_scope commitea en __exit__ (db.py:306) ⇒ visible al preflight de run_agent.
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "anchor_ticket_failed",
+                        "message": str(exc)}), 502
+
     try:
         execution_id = agent_runner.run_agent(
             agent_type="devops",
-            ticket_id=None,           # sin conversacion ancla (fire-and-forget)
+            ticket_id=doctor_ticket_id,    # [C1] int OBLIGATORIO — NO None
             context_blocks=context_blocks,
-            user=_cu(),
+            user=_current_user(),
             runtime=runtime,
             vscode_agent_filename="DevOpsAgent.agent.md",
             project_name=project,
@@ -405,63 +595,97 @@ def section_doctor_route(section_id: str):
         )
     except agent_runner.UnknownAgentError:
         return jsonify({"ok": False, "error": "devops_agent_not_registered"}), 500
-    except Exception as exc:  # patrón run_brief
-        return jsonify({"ok": False, "error": "agent_launch_failed", "message": str(exc)}), 502
+    except Exception as exc:  # patrón run_brief (api/agents.py:782-792)
+        return jsonify({"ok": False, "error": "agent_launch_failed",
+                        "message": str(exc)}), 502
 
-    return jsonify({"ok": True, "execution_id": execution_id, "runtime": runtime, "section": section_id})
+    return jsonify({
+        "ok": True,
+        "execution_id": execution_id,
+        "conversation_id": doctor_ticket_id,   # [C4] el frontend lo usa para linkear al panel del 90
+        "runtime": runtime,
+        "section": section_id,
+    })
 ```
 
-**NOTA para el implementador (verificado contra código real):**
-- `agent_runner.run_agent` acepta `ticket_id=None` (`agent_runner.py:77-98` — `ticket_id` es
-  opcional en otros callers como `api/agents.py:766`). Si NO lo aceptara, cae al fallback:
-  crear un ticket `-3` "Doctor DevOps" análogo al `-2` del plan 90. Verificar con el test
-  `test_doctor_launches_without_ticket` antes de mergear.
-- `runtime="github_copilot"`: verificar que `run_agent` lo acepta (plan 90 solo probó
-  `claude_code_cli` y `codex_cli`). Si Copilot no está registrado como runtime de agente,
-  el endpoint rechaza con 400 y el frontend lo omite del `<select>`. Esto es el fallback
-  controlado del guardarraíl 1.
-- `current_user` se importa de `api._helpers` (origen canónico, verificado plan 90 C2).
+**NOTA para el implementador (verificado contra código real v3):**
+- **[C11] `import config as _config`** (módulo top-level) — NO `from services import _config`
+  (ese módulo no existe; usar el mismo import que `devops_agent.py:8`).
+- **[C10] Sellar `external_id = -ticket.id`** tras el primer `flush()` es OBLIGATORIO
+  (`devops_agent.py:80`): sin él, el 2º doctor del mismo proyecto colisiona en el UNIQUE
+  `ux_tickets_stacky_tracker_external` tras el backfill de `init_db` (`db.py:158-196`).
+- **[C1] `ticket_id` es `int` OBLIGATORIO** (`agent_runner.py:77-98`, `:108` preflight G0.1
+  hace `Ticket.query.filter_by(id=ticket_id).first()` — None rompería ahí). v2 crea el
+  Ticket ancla determinista antes de invocar (patrón plan 90 `devops_agent.py:70-82`).
+- **[C2] `current_user`** se reusa vía `from api.devops_agent import _current_user` (NO
+  duplicar la indirección del 90; paridad canónica con un único punto de cambio).
+- **[C3] `github_copilot` SÍ es runtime válido** para `run_agent` (`agent_runner.py:94`
+  default, `:219`/`:373` dispatch al `copilot_bridge`). El 400 controlado NO aplica al
+  doctor (eso era solo para CHAT del plan 90, `devops_chat_requires_cli_runtime`). Los 3
+  runtimes funcionan.
+- **[C6] `kind` omitido** en `context_blocks`: hereda el default del agent_runner (paridad
+  con el plan 90, que tampoco lo setea en `_launch_turn`).
+- **[ADICIÓN ARQUITECTO v2] `payload.yaml_ado` / `payload.yaml_gitlab`** son keys tipadas y
+  opcionales (null si la sección no las tiene); el backend las incluye en el JSON del
+  contexto tal cual — la IA razona sobre el pipeline REAL renderizado, no solo el `spec`.
 
 **Registro:** EDITAR `Stacky Agents/backend/api/__init__.py` — agregar:
 ```python
-from .devops_section_doctor import bp as devops_section_doctor_bp  # Plan 100
+from .devops_section_doctor import bp as devops_section_doctor_bp  # Plan 104
 # …dentro de register:
 api_bp.register_blueprint(devops_section_doctor_bp)  # url_prefix="/devops/sections" -> /api/devops/sections
 ```
 
-**Tests PRIMERO** — archivo NUEVO `Stacky Agents/backend/tests/test_plan100_section_doctor.py`:
+**Tests PRIMERO** — archivo NUEVO `Stacky Agents/backend/tests/test_plan104_section_doctor.py`:
 - `test_flag_off_404`: `STACKY_DEVOPS_SECTION_DOCTOR_ENABLED=False` → POST 404.
 - `test_agent_disabled_404`: flag doctor ON pero `STACKY_DEVOPS_AGENT_ENABLED=False` → 404.
 - `test_unknown_section_404`: flag ON, section_id `"inventada"` → 404.
 - `test_missing_project_400`: flag ON, section `"pipeline"`, body sin `project` → 400.
 - `test_missing_payload_400`: idem sin `payload` → 400.
-- `test_runtime_no_soportado_400`: runtime `"foo"` → 400.
+- `test_runtime_no_soportado_400`: runtime `"foo"` (inventado) → 400. (NO testear copilot:
+  copilot es válido, ver C3.)
 - `test_known_section_launches_agent`: mock `agent_runner.run_agent` → devuelve
-  `{ok, execution_id, runtime, section}`. Verifica que `run_agent` se llamó con
-  `agent_type="devops"` y `context_blocks[0].content` contiene el YAML enviado.
-- `test_doctor_launches_without_ticket`: el body válido no requiere `ticket_id`; verifica que
-  `run_agent` se llama con `ticket_id=None` (o el fallback `-3` si se implementó). Si `run_agent`
-  RECHAZA `None`, este test captura el requisito y fuerza el fallback `-3`.
+  `{ok, execution_id, conversation_id, runtime, section}`. Verifica que `run_agent` se llamó
+  con `agent_type="devops"` y `context_blocks[0].content` contiene el YAML enviado.
+- `test_doctor_creates_anchor_ticket` **[C1 BLOQUEANTE, anti-verde-falso]**: el endpoint
+  crea un `Ticket` con `ado_id == -3` ANTES de invocar `run_agent`, y pasa su `id` (NO None)
+  como `ticket_id`. El test mockea la sesión y verifica: (a) se creó el Ticket con título
+  `"Doctor DevOps · pipeline · <project>"` y `ado_id=-3`; (b) `run_agent` fue llamado con
+  `ticket_id=<ese id entero>` (jamás None). Este test se pone ROJO si alguien vuelve al
+  `ticket_id=None` de v1.
+- `test_two_clicks_create_two_distinct_tickets` **[C9]**: dos POST consecutivos crean dos
+  Tickets distintos (no comparten ancla) — cada click es una conversación doctor independiente.
+- `test_second_doctor_ticket_same_project_no_collision` **[C10 BLOQUEANTE, ADICIÓN ARQUITECTO
+  v3, anti-crash]**: crea DOS tickets doctor del MISMO proyecto, corre el backfill real
+  (`db._backfill_multi_project_ticket_columns` / `init_db()`) y verifica: (a) ningún
+  `IntegrityError` por el UNIQUE `ux_tickets_stacky_tracker_external`; (b) ambos tickets tienen
+  `external_id` distintos y negativos (`-id1 ≠ -id2`). Este test se pone ROJO si alguien vuelve
+  a omitir el sello `external_id = -ticket.id` de v2 — el bug exacto que el plan 90 documentó.
 - `test_route_registered`: `"/api/devops/sections/<section_id>/doctor"` ∈ `app.url_map`.
-- `test_payload_yaml_reaches_context_block`: envía `payload={"yaml_ado": "...", "spec": {...}}`
-  y verifica que el `context_blocks[0].content` pasado a `run_agent` contiene `yaml_ado` y el
-  JSON del spec (el doctor ve el pipeline real).
+- `test_payload_yaml_reaches_context_block` **[ADICIÓN ARQUITECTO v2]**: envía
+  `payload={"yaml_ado": "...", "yaml_gitlab": "...", "spec": {...}}` y verifica que el
+  `context_blocks[0].content` pasado a `run_agent` contiene los strings `yaml_ado` e
+  `yaml_gitlab` y el JSON del spec (la IA ve el pipeline renderizado REAL, no solo el spec).
 - `test_unknown_agent_500`: mock que levanta `UnknownAgentError` → 500 con
   `error: "devops_agent_not_registered"`.
-- `test_launch_failure_502`: mock que levanta `Exception("boom")` → 502 con
-  `error: "agent_launch_failed"`.
+- `test_launch_failure_502`: mock que levanta `Exception("boom")` (post-creación del Ticket)
+  → 502 con `error: "agent_launch_failed"`.
 
 Comando:
-`"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan100_section_doctor.py" -q`
+`"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan104_section_doctor.py" -q`
 
-**Ratchet:** registrar `test_plan100_section_doctor.py` en `run_harness_tests.sh` **y**
+**Ratchet:** registrar `test_plan104_section_doctor.py` en `run_harness_tests.sh` **y**
 `run_harness_tests.ps1`.
 
-**Criterio BINARIO:** los 12 tests pasan; ningún test del plan 90 (`test_plan90_*.py`) se rompe.
+**Criterio BINARIO:** los 14 tests pasan (incluido `test_doctor_creates_anchor_ticket`
+**[C1]** anti-verde-falso, `test_payload_yaml_reaches_context_block` **[ADICIÓN v2]** y
+`test_second_doctor_ticket_same_project_no_collision` **[C10]** anti-crash);
+ningún test del plan 90 (`test_plan90_*.py`) se rompe.
 **Flag:** `STACKY_DEVOPS_SECTION_DOCTOR_ENABLED` (default OFF) — ver F4.
-**Impacto por runtime:** funciona en `claude_code_cli` y `codex_cli` (probados vía plan 90);
-`github_copilot` se valida en F2 (si no es runtime de agente registrado, se rechaza con 400 y el
-frontend lo omite — fallback controlado).
+**Impacto por runtime:** los 3 (`claude_code_cli`, `codex_cli`, `github_copilot`) funcionan
+— `run_agent` los despacha a todos (`agent_runner.py:94,219,373`). **[C3]** el doctor NO
+hereda el rechazo de copilot del plan 90 (eso era para chat conversacional,
+`devops_chat_requires_cli_runtime`; el doctor es `run_agent` puro, no chat).
 **Trabajo del operador:** opt-in (activar flag por UI + elegir runtime en el botón).
 
 ---
@@ -477,14 +701,20 @@ endpoint, y muestra la respuesta markdown del `execution_id` en un panel.
 Agregar al final (junto a `DevOpsAgentApi`):
 
 ```ts
-/** Plan 100 — Doctores IA por sección del panel DevOps. */
+/** Plan 104 — Doctores IA por sección del panel DevOps. */
 export const SectionDoctorApi = {
   run: (sectionId: string, body: {
     project: string;
     runtime: "claude_code_cli" | "codex_cli" | "github_copilot";
     payload: Record<string, unknown>;
   }) =>
-    api.post<{ ok: boolean; execution_id: number; runtime: string; section: string }>(
+    api.post<{
+      ok: boolean;
+      execution_id: number;
+      conversation_id: number;   // [C4] ticket ancla — para linkear al panel del 90
+      runtime: string;
+      section: string;
+    }>(
       `/api/devops/sections/${encodeURIComponent(sectionId)}/doctor`,
       body,
     ),
@@ -606,8 +836,9 @@ DevOps"**, NO duplicar renderer (menor costo, paridad con plan 90).
 **Criterio BINARIO:** `tsc` 0 err; los greps pasan; el botón aparece disabled con mensaje cuando
 `doctorFlagOff` (manual: apagar la flag y verificar el `gateMessage`).
 **Flag:** `STACKY_DEVOPS_SECTION_DOCTOR_ENABLED` (F4).
-**Impacto por runtime:** el `<select>` ofrece los 3; el backend valida; Copilot puede caer a 400
-si no es runtime de agente registrado (mensaje en llano).
+**Impacto por runtime:** **[C13]** el `<select>` ofrece los 3 y los 3 son válidos —
+`run_agent` despacha claude_code_cli, codex_cli y github_copilot (`agent_runner.py:94,219,373`).
+El backend solo rechaza (400) runtimes inventados (`"foo"`), NO copilot (ver C3).
 **Trabajo del operador:** opt-in (flag ON + click).
 
 ---
@@ -621,7 +852,7 @@ si no es runtime de agente registrado (mensaje en llano).
 
 1. `Stacky Agents/backend/config.py` (junto a `STACKY_DEVOPS_AGENT_ENABLED`):
    ```python
-   # Plan 100 — Doctores IA por seccion del panel DevOps. Default OFF (opt-in).
+   # Plan 104 — Doctores IA por seccion del panel DevOps. Default OFF (opt-in).
    STACKY_DEVOPS_SECTION_DOCTOR_ENABLED: bool = os.getenv(
        "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", "false"
    ).lower() in ("1", "true", "yes")
@@ -641,17 +872,17 @@ si no es runtime de agente registrado (mensaje en llano).
    (junto a las de 88-91/97). **R4 profundidad 1** — verificar que no se forme cadena.
 
 6. `Stacky Agents/backend/api/devops.py` (health block, ~línea 26-40): agregar
-   `"section_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", False)),  # Plan 100`.
+   `"section_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", False)),  # Plan 104`.
 
 7. `Stacky Agents/frontend/src/pages/DevOpsPage.tsx` (`DevOpsHealth` index signature):
-   agregar `section_doctor_enabled?: boolean; // Plan 100` (aditivo, igual que plan 96 C14).
+   agregar `section_doctor_enabled?: boolean; // Plan 104` (aditivo, igual que plan 96 C14).
 
 **Tests:**
-- EXTENDER `tests/test_plan100_section_doctor.py` con `test_flag_off_404` (ya en F2).
+- EXTENDER `tests/test_plan104_section_doctor.py` con `test_flag_off_404` (ya en F2).
 - CORRER `tests/test_harness_flags_requires.py` (debe quedar verde con la nueva arista).
 - CORRER `tests/test_harness_flags.py` (flag aparece en categoría devops, sin default explícito).
 
-Comando: `"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest tests/test_harness_flags_requires.py tests/test_harness_flags.py tests/test_plan100_section_doctor.py -q`
+Comando: `"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest tests/test_harness_flags_requires.py tests/test_harness_flags.py tests/test_plan104_section_doctor.py -q`
 
 **Ratchet:** ya registrados.
 
@@ -686,12 +917,12 @@ componentes de sección. Manual: apagar la flag → los 3 botones Doctor muestra
 
 | Riesgo | Severidad | Mitigación |
 |---|---|---|
-| `run_agent` no acepta `ticket_id=None` | MEDIO | Test `test_doctor_launches_without_ticket` lo detecta; fallback a ticket `-3` análogo al `-2` del plan 90 |
-| `github_copilot` no es runtime de agente registrado (sí bridge copilot) | MEDIO | Endpoint valida y devuelve 400; frontend omite la opción si falla; documentado en guardarraíl 1 |
+| **[C10]** 2º doctor del mismo proyecto colisiona en el UNIQUE tras el backfill de `init_db` | ALTO | F2 sella `external_id = -ticket.id` (patrón COMPLETO del plan 90, `devops_agent.py:80`); test `test_second_doctor_ticket_same_project_no_collision` lo blinda |
+| **[C1]** `run_agent` exige `ticket_id: int` (no acepta None) | RESUELTO | F2 crea un `Ticket` ancla (`ado_id=-3`) y pasa su `id`; test `test_doctor_creates_anchor_ticket` (anti-verde-falso) |
 | Clasificación de snippets por stack ambigua (alguno aplica a varios) | BAJA | Campo `stacks` es array; los genéricos van a `[]` = todos; la tabla de F0 es determinista |
 | El doctor podría tentarse a "aplicar" cambios | ALTO (HITL) | Instrucción explícita "NO apliques cambios" en cada SECTION_DOCTORS; el flujo NUNCA escribe archivos (solo `run_agent` con `agent_type="devops"` que no tiene tool de escritura por defecto en este contexto) |
 | Costo de tokens por invocar IA en cada click | MEDIO | Opt-in (flag + click); el operador decide; no hay auto-invocación |
-| Paridad: el plan 90 probó solo claude+codex | MEDIO | Validar `github_copilot` en F2; fallback controlado con 400 |
+| **[C3]** Paridad 3 runtimes | BAJO | Los 3 (`claude_code_cli`, `codex_cli`, `github_copilot`) los despacha `run_agent` (`agent_runner.py:94,219,373`); el 400 es SOLO para runtimes inventados |
 | Snippets nuevos del 97 futuros sin `stacks` | BAJA | Test `every_snippet_has_stacks_array` los obliga |
 
 ## 6. Fuera de scope
@@ -728,7 +959,8 @@ componentes de sección. Manual: apagar la flag → los 3 botones Doctor muestra
   siguen verdes + los nuevos casos de F0; `tsc` 0 err.
 - Feature B: las 3 secciones (Pipeline/Environments/Publications) tienen botón Doctor; el doctor
   lanza `run_agent` con `agent_type="devops"` y el `payload` correcto; flag OFF → botones
-  deshabilitados con `gateMessage`; flag ON → flujo completo; 12 tests backend verdes; `tsc` 0 err.
-- Paridad 3 runtimes declarada y validada (claude+codex probados; copilot con fallback 400).
+  deshabilitados con `gateMessage`; flag ON → flujo completo; **14** tests backend verdes; `tsc` 0 err.
+- **[C13]** Paridad 3 runtimes: los 3 (claude_code_cli, codex_cli, github_copilot) los despacha
+  `run_agent`; el único 400 es para runtimes inventados (no para copilot).
 - Cero trabajo extra al operador (todo opt-in). HITL intacto (nunca aplica cambios).
 - Ratchet actualizado (`.sh` y `.ps1`). Health expone `section_doctor_enabled`.

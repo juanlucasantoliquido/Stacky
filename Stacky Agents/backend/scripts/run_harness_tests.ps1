@@ -128,6 +128,11 @@ $HarnessTestFiles = @(
   "tests/test_plan93_preflight_pure.py",
   "tests/test_plan93_preflight_providers.py",
   "tests/test_plan93_preflight_endpoint.py",
+  # Plan 94 - Caja fuerte de variables: secretos del pipeline fuera del YAML (ADO + GitLab)
+  "tests/test_plan94_variables_flag.py",
+  "tests/test_plan94_variables_pure.py",
+  "tests/test_plan94_variables_providers.py",
+  "tests/test_plan94_variables_endpoints.py",
   # Plan 95 - Llevar a producción: MR/PR + merge HITL + paridad ADO commit/trigger/monitor
   "tests/test_plan95_production_flag.py",
   "tests/test_plan95_ado_parity.py",

@@ -30,6 +30,7 @@ import {
   mergeDraftsIntoProfile,
   validateSpecLocal,
   specsEqual,
+  removeSpecVariable,
   type PipelineSpecDraft,
   type StageDraft,
   type JobDraft,
@@ -38,7 +39,8 @@ import {
 import { PIPELINE_PRESETS, type PipelinePreset } from '../../devops/pipelinePresets';
 import { PIPELINE_STEP_SNIPPETS, SNIPPET_CATEGORIES } from '../../devops/pipelineStepSnippets';
 import { PIPELINE_RECIPES, buildRecipeSteps } from '../../devops/pipelineRecipes';
-import { DevOps } from '../../api/endpoints';
+import { splitSpecVariables } from '../../devops/variablesModel';
+import { DevOps, DevOpsVariables } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { BlockTree } from './BlockTree';
 import { BlockProperties } from './BlockProperties';
@@ -84,6 +86,10 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   // Plan 93 — último resultado de preflight + el spec (serializado) sobre el
   // que se corrió, para saber si quedó desactualizado (badge -> "sin correr").
   const [lastPreflight, setLastPreflight] = useState<{ result: PreflightResult; specJson: string } | null>(null);
+  // Plan 94 F4 — modal "Mover a variable segura" (puente builder → caja fuerte)
+  const [moveVarModal, setMoveVarModal] = useState<{ key: string; value: string } | null>(null);
+  const [moveVarError, setMoveVarError] = useState<string | null>(null);
+  const [moveVarHint, setMoveVarHint] = useState<string | null>(null);
 
   const localErrors = validateSpecLocal(spec);
   const hasUnsavedChanges = !specsEqual(spec, loadedSnapshot);
@@ -185,6 +191,39 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
     setSelectedDraftName('');
     setSpec(emptySpec());
     setLoadedSnapshot(emptySpec());
+  };
+
+  // Plan 94 F4 — abre el modal con el value pre-cargado desde spec.variables[key]
+  const handleOpenMoveToSecureVariable = (key: string) => {
+    setMoveVarError(null);
+    setMoveVarModal({ key, value: spec.variables[key] ?? '' });
+  };
+
+  // Plan 94 F4 — confirma: crea la variable en el tracker y la saca del spec local
+  const handleConfirmMoveToSecureVariable = async () => {
+    if (!moveVarModal || !activeProject) return;
+    if (!window.confirm(`¿Crear '${moveVarModal.key}' como variable segura en el tracker?`)) return;
+    try {
+      setMoveVarError(null);
+      await DevOpsVariables.create({
+        project: activeProject,
+        key: moveVarModal.key,
+        value: moveVarModal.value,
+        secret: true,
+        confirm: true,
+      });
+      setSpec((prev) => removeSpecVariable(prev, moveVarModal.key));
+      setMoveVarHint(
+        `'${moveVarModal.key}' movida al tracker: usala igual, $VAR (GitLab) o $(VAR) (ADO). ` +
+        `recommitteá el pipeline (botón Commit) para sacar el valor del YAML actual del repo. ` +
+        `Ojo: si este YAML ya se commiteó al repo, el valor sigue viviendo en la historia de git — ` +
+        `rotá la credencial en el destino y actualizá la variable segura.`,
+      );
+      setMoveVarModal(null);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error de red';
+      setMoveVarError(`No se pudo mover la variable: ${msg}`);
+    }
   };
 
   const handleImportYaml = async () => {
@@ -338,6 +377,28 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
             Importar YAML
           </button>
         </div>
+
+        {/* Plan 94 F4 — aviso: variables que parecen secretos y quedan EN EL YAML */}
+        {moveVarHint && (
+          <div className={styles.alertSuccess} style={{ marginBottom: '16px' }}>
+            {moveVarHint}
+          </div>
+        )}
+        {ctx.health.variables_enabled === true && splitSpecVariables(spec).secretLooking.length > 0 && (
+          <div className={styles.alertWarning} style={{ marginBottom: '16px' }}>
+            <p style={{ margin: '0 0 8px 0' }}>
+              Estas variables parecen secretos y van a quedar EN EL YAML del repo:{' '}
+              {splitSpecVariables(spec).secretLooking.join(', ')}
+            </p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {splitSpecVariables(spec).secretLooking.map((k) => (
+                <button key={k} onClick={() => handleOpenMoveToSecureVariable(k)} style={{ padding: '4px 10px' }}>
+                  Mover a variable segura: {k}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* C11 - CTA estado vacío */}
         {isEmpty ? (
@@ -549,6 +610,34 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
 
       {showCommitModal && (
         <CommitPipelineModal spec={spec} project={activeProject ?? ''} onSuccess={handleCommitSuccess} onClose={() => setShowCommitModal(false)} />
+      )}
+
+      {/* Plan 94 F4 — modal "Mover a variable segura" */}
+      {moveVarModal && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalBodyWide}>
+            <h3>Mover a variable segura: {moveVarModal.key}</h3>
+            <p className={styles.textMuted}>
+              Se va a crear como variable secreta en el tracker y se va a sacar del YAML en edición.
+            </p>
+            <input
+              type="password"
+              value={moveVarModal.value}
+              onChange={(e) => setMoveVarModal({ ...moveVarModal, value: e.target.value })}
+              placeholder="valor"
+              style={{ padding: '8px', width: '100%', marginBottom: '10px' }}
+            />
+            {moveVarError && <p className={styles.textDanger}>{moveVarError}</p>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setMoveVarModal(null)} style={{ padding: '8px 16px' }}>
+                Cancelar
+              </button>
+              <button onClick={() => void handleConfirmMoveToSecureVariable()} className={styles.btnSuccess}>
+                Crear variable segura
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

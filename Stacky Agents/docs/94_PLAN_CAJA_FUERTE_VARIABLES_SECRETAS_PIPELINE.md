@@ -1,8 +1,11 @@
 # Plan 94 — Caja fuerte de variables: secretos del pipeline fuera del YAML (ADO + GitLab)
 
-**Estado:** CRITICADO (2ª ronda adversarial 2026-07-05 — veredicto: **APROBADO-CON-CAMBIOS**, aplicados en esta v3)
+**Estado:** IMPLEMENTADO (F0..F5) — 2026-07-07, commit pendiente de hash (ver historial;
+reconciliado por auditoría: 36 tests backend propios + 75 no-regresión + 30 vitest + tsc 0
+errores, todos verdes). F5 checklist completo salvo el ítem de verificación manual ÚNICA
+contra un ADO real (C12, documentado como pendiente — no bloquea el cierre del plan).
 **Versión:** v3 (v1 → v2 → v3)
-**Fecha:** 2026-07-05
+**Fecha:** 2026-07-07
 **Serie DevOps E2E:** plan 2 de 4 (93 preflight / 94 variables / 95 producción / 96 doctor).
 **Requisito textual del operador (riel #1):** compatible con **Azure DevOps Y GitLab
 desde el día 1**. Cada capacidad tiene pata en ambos trackers o degrada ámbar honesta.

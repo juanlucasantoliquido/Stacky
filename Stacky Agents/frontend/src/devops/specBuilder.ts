@@ -216,6 +216,22 @@ export function addStage(spec: PipelineSpecDraft): PipelineSpecDraft {
   };
 }
 
+/**
+ * removeSpecVariable — Plan 94 F4. Saca UNA key de spec.variables (inmutable).
+ * Usado por "Mover a variable segura": tras crear la variable en el tracker,
+ * se quita del spec local (el YAML en HEAD sigue con el valor hasta recommit).
+ */
+export function removeSpecVariable(spec: PipelineSpecDraft, key: string): PipelineSpecDraft {
+  if (!(key in spec.variables)) {
+    return spec; // NOOP
+  }
+  const { [key]: _removed, ...rest } = spec.variables;
+  return {
+    ...spec,
+    variables: rest,
+  };
+}
+
 export function removeStage(spec: PipelineSpecDraft, stageIndex: number): PipelineSpecDraft {
   if (stageIndex < 0 || stageIndex >= spec.stages.length) {
     return spec; // NOOP

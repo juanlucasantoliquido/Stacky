@@ -29,6 +29,7 @@ export interface DevOpsHealth {
   servers_enabled?: boolean; // Plan 91 — sección Servidores
   rdp_available?: boolean; // Plan 91 — RDP disponible (Windows + keyring)
   doctor_enabled?: boolean; // Plan 96 — Doctor de pipelines
+  variables_enabled?: boolean; // Plan 94 — sección Variables (caja fuerte)
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -63,6 +64,8 @@ import { DevOpsAgentSection } from '../components/devops/DevOpsAgentSection';
 // Importar ServersSection (Plan 91 F5)
 import { ServersSection } from '../components/devops/ServersSection';
 import { DevOpsServers, type ServerSummary } from '../api/endpoints';
+// Importar VariablesSection (Plan 94 F4)
+import { VariablesSection } from '../components/devops/VariablesSection';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -107,6 +110,16 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_DEVOPS_SERVERS_ENABLED',
     gateMessage: 'La sección Servidores necesita su flag (categoría DevOps).',
     render: (ctx) => <ServersSection ctx={ctx} />,
+  },
+  // Plan 94 — Caja fuerte de variables del pipeline
+  {
+    id: 'variables',
+    label: 'Variables',
+    icon: '🔒',
+    healthKey: 'variables_enabled',
+    gateFlagKey: 'STACKY_DEVOPS_VARIABLES_ENABLED',
+    gateMessage: 'La sección Variables necesita la flag STACKY_DEVOPS_VARIABLES_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <VariablesSection ctx={ctx} />,
   },
 ];
 

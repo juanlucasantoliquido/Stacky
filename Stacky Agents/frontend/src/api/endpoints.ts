@@ -3085,6 +3085,7 @@ export const DevOps = {
       rdp_available?: boolean; // Plan 91
       preflight_enabled?: boolean; // Plan 93
       stack_detect_enabled?: boolean; // Plan 97
+      variables_enabled?: boolean; // Plan 94
     }>("/api/devops/health"),
   /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
   parseYaml: (source: "ado" | "gitlab", yaml: string) =>
@@ -3202,6 +3203,28 @@ export const DevOpsServers = {
     api.post<{ ok: boolean; detail: string }>(`/api/devops/servers/${encodeURIComponent(alias)}/test`, {}),
   connectRdp: (alias: string) =>
     api.post<{ ok: boolean; detail: string }>(`/api/devops/servers/${encodeURIComponent(alias)}/rdp`, {}),
+};
+
+export interface CIVariableSummary {
+  key: string;
+  is_secret: boolean;
+  has_value: boolean;
+  masked: boolean | null;
+}
+
+/**
+ * Plan 94 — caja fuerte de variables del pipeline (ADO isSecret / GitLab masked).
+ * El value es write-only: NUNCA aparece en list ni en la respuesta de create.
+ */
+export const DevOpsVariables = {
+  list: (project: string) =>
+    api.get<{ variables: CIVariableSummary[]; provider: string }>(
+      `/api/devops/variables?project=${encodeURIComponent(project)}`,
+    ),
+  create: (body: { project: string; key: string; value: string; secret: boolean; confirm: true }) =>
+    api.post<CIVariableSummary>("/api/devops/variables", body),
+  remove: (project: string, key: string) =>
+    api.post<{ ok: boolean }>("/api/devops/variables/delete", { project, key, confirm: true }),
 };
 
 export const PipelineGenerator = {

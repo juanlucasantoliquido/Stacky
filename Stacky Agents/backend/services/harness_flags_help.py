@@ -665,6 +665,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el botón no aparece; nada cambia en el flujo actual.",
         example="Como pedirle una segunda opinión a un colega senior: lee tu pipeline y te dice qué mejoraría, pero el que decide y aplica sos vos.",
     ),
+    "STACKY_DEVOPS_BOOTSTRAP_ENABLED": PlainHelp(
+        what="El panel DevOps carga todo de un solo viaje y guarda cada cambio mandando solo lo que cambio.",
+        on_effect="Si la activás: el panel DevOps abre más rápido (un solo pedido al servidor en vez de varios) y guardar un borrador/preset/configuración manda solo esa parte, no todo el perfil.",
+        off_effect="Si la apagás: no cambia nada de lo guardado; el panel vuelve a cargar y guardar como antes (más pedidos y más datos por viaje).",
+        example="Como pedir todo el supermercado en un solo delivery en vez de un viaje por producto — y devolver solo la botella vacía en vez de re-empacar toda la compra.",
+    ),
+    "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED": PlainHelp(
+        what="Consola remota para ejecutar prompts y comandos PowerShell en el servidor seleccionado, con auditoría completa.",
+        on_effect="Si la activás: aparece la sección 'Consola remota' en el panel DevOps. Seleccionás un servidor, escribís un prompt y un agente ejecuta comandos PowerShell en ese servidor vía WinRM. Todo queda auditado en un JSONL por servidor. Modo lectura por default; podés habilitar escritura por conversación.",
+        off_effect="Si la apagás: la consola no está disponible (404 en sus endpoints, banner en la sección). Nada se ejecuta ni audita.",
+        example="Como tener una terminal SSH pero con una IA que interpreta tu pedido y ejecuta solo comandos PowerShell, dejando un rastro completo de qué se corrió en cada servidor.",
+    ),
     # ── migrador_ado_gitlab ───────────────────────────────────────────────
     "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED": PlainHelp(
         what="Permite mover épicas, tareas y comentarios de Azure DevOps hacia GitLab de forma segura, sin duplicar nada si se repite.",

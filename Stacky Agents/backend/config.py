@@ -920,11 +920,21 @@ class Config:
         "STACKY_DEVOPS_STACK_DETECT_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 98 — Bootstrap unico del panel DevOps + PATCH por clave del client-profile.
+    # Default OFF.
+    STACKY_DEVOPS_BOOTSTRAP_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_BOOTSTRAP_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 104 — Doctores IA por seccion del panel DevOps. Default OFF (opt-in).
     STACKY_DEVOPS_SECTION_DOCTOR_ENABLED: bool = os.getenv(
         "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 105 — Consola remota de prompts por servidor (default OFF).
+    STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", "false"
+    ).lower() in ("true", "1", "yes")
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

@@ -186,6 +186,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_PRODUCTION_ENABLED",  # Plan 95 — llevar a producción MR/PR
         "STACKY_DEVOPS_DOCTOR_ENABLED",  # Plan 96 — doctor de pipelines: diagnóstico en llano
         "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED",  # Plan 104 — doctores IA por sección
+        "STACKY_DEVOPS_BOOTSTRAP_ENABLED",  # Plan 98 — bootstrap unico + PATCH por clave
+        "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED",  # Plan 105 — consola remota
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2118,6 +2120,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
         # lista curada de defaults ON, así que debe quedar sin default explícito.
     ),
+    # ── Plan 98 — Bootstrap unico del panel DevOps ──────────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_BOOTSTRAP_ENABLED",
+        type="bool",
+        label="Carga rapida del panel DevOps (Plan 98)",
+        description=(
+            "Plan 98 — El panel DevOps se hidrata con un solo request "
+            "(GET /api/devops/bootstrap) y los guardados de pipelines/publicaciones/"
+            "ambientes viajan como PATCH por clave (payload chico, merge en el "
+            "backend). Con OFF todo funciona igual que antes (mas requests, "
+            "payloads completos). No cambia ningun dato guardado."
+        ),
+        group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # Plan 82 — declarativo, informa en UI
+        # SIN default= (gotcha Plan 63): esta flag no está en la lista curada de
+        # defaults ON, así que debe quedar sin default explícito.
+    ),
     # ── Plan 104 — Doctores IA por sección del panel DevOps ────────────────────
     FlagSpec(
         key="STACKY_DEVOPS_SECTION_DOCTOR_ENABLED",
@@ -2142,6 +2162,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # dependencia FUNCIONAL real con el agente DevOps (sin el 90 no hay runtime
         # IA) se sigue exigiendo en el endpoint F2 con un guard explícito de
         # STACKY_DEVOPS_AGENT_ENABLED (404 propio, independiente de esta flag).
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
+        # lista curada de defaults ON, así que debe quedar sin default explícito.
+    ),
+    # ── Plan 105 — Consola remota de prompts por servidor ─────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED",
+        type="bool",
+        label="Consola remota (Plan 105)",
+        description=(
+            "Plan 105 — Consola remota de prompts por servidor (auditada, reversible, 1-click switch). "
+            "El operador selecciona un servidor del registro del plan 91, escribe un prompt, y un agente "
+            "ejecuta comandos PowerShell EN el servidor vía WinRM con auditoría completa JSONL por alias. "
+            "Modo read-only por default (validador conservador); modo escritura opt-in por conversación. "
+            "Requiere el panel DevOps y al menos un servidor registrado. Default OFF."
+        ),
+        group="global",
+        env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",
         # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
         # lista curada de defaults ON, así que debe quedar sin default explícito.

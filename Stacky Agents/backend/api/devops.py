@@ -23,11 +23,17 @@ from services.environment_init import (
 bp = Blueprint("devops", __name__, url_prefix="/devops")
 
 
-@bp.get("/health")
-def devops_health_route():
-    """SIEMPRE 200 (la UI lo usa para decidir si muestra la tab, patrón /api/migrator/health)."""
+def _health_payload() -> dict:
+    """Payload compartido por /health y /bootstrap (Plan 98). SIEMPRE calculable.
+
+    [DESVÍO del plan 98 F3, verificado contra código real]: el doc mostraba un
+    subset de keys (snapshot de cuando se escribió, 2026-07-06); el /health real
+    ya incluía además doctor_enabled/production_enabled/ado_commit_supported/
+    section_doctor_enabled (planes 95/96/104, mergeados después). Se extraen
+    TODAS las keys actuales para no regresionar /health ni romper
+    test_bootstrap_health_matches_health_endpoint (paridad exacta)."""
     cfg = _config.config
-    return jsonify({
+    return {
         "flag_enabled": bool(getattr(cfg, "STACKY_DEVOPS_PANEL_ENABLED", False)),
         "generator_enabled": bool(getattr(cfg, "STACKY_PIPELINE_GENERATOR_ENABLED", False)),
         "trigger_enabled": bool(getattr(cfg, "STACKY_PIPELINE_TRIGGER_ENABLED", False)),
@@ -46,7 +52,56 @@ def devops_health_route():
         # modal de commit (F4) la lee ausente ⇒ opción ADO sigue disabled.
         "ado_commit_supported": True,
         "section_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", False)),  # Plan 104
-    })
+        "bootstrap_enabled": bool(getattr(cfg, "STACKY_DEVOPS_BOOTSTRAP_ENABLED", False)),  # Plan 98
+        "remote_console_enabled": bool(getattr(cfg, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", False)),  # Plan 105
+    }
+
+
+@bp.get("/health")
+def devops_health_route():
+    """SIEMPRE 200 (la UI lo usa para decidir si muestra la tab, patrón /api/migrator/health)."""
+    return jsonify(_health_payload())
+
+
+@bp.get("/bootstrap")
+def devops_bootstrap_route():
+    """Hidratacion del panel DevOps en UN round-trip. SOLO-LECTURA. Plan 98."""
+    if not getattr(_config.config, "STACKY_DEVOPS_BOOTSTRAP_ENABLED", False):
+        abort(404)
+    project = request.args.get("project")
+    if not project:
+        return jsonify({"error": "project es obligatorio"}), 400
+    health = _health_payload()
+    profile = load_client_profile(project) or {}
+
+    def _lst(k):
+        v = profile.get(k)
+        return v if isinstance(v, list) else []
+
+    def _dct(k):
+        v = profile.get(k)
+        return v if isinstance(v, dict) else None
+
+    payload = {
+        "health": health,
+        "has_profile": bool(profile),
+        "profile_keys": {
+            "devops_pipeline_drafts": _lst("devops_pipeline_drafts"),
+            "devops_publication_presets": _lst("devops_publication_presets"),
+            "devops_publication_settings": _dct("devops_publication_settings") or {},
+            # None (no {}) si ausente: EnvironmentsSection distingue "sin configurar"
+            # (hasSavedSettings=false) de "configurado vacio" — EnvironmentsSection.tsx:88-95.
+            "devops_environment_settings": _dct("devops_environment_settings"),
+            "process_catalog": _lst("process_catalog"),
+        },
+        "servers": None,
+    }
+    if health["servers_enabled"]:
+        payload["servers"] = {
+            "servers": server_registry.list_servers(),
+            "keyring_available": server_registry.keyring_available(),
+        }
+    return jsonify(payload)
 
 
 @bp.get("/detect-stack")

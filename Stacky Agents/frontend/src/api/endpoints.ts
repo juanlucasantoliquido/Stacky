@@ -3207,6 +3207,43 @@ export const DevOpsServers = {
     api.post<{ ok: boolean; detail: string }>(`/api/devops/servers/${encodeURIComponent(alias)}/rdp`, {}),
 };
 
+// Plan 105 — Consola remota por servidor
+export interface RemoteConsoleConversation {
+  id: number;
+  title: string;
+  ado_state: string;
+  created_at: string | null;
+  server_alias: string;
+  write_enabled: boolean;
+  last_execution?: { id: number; state: string };
+}
+
+export const DevOpsRemoteConsole = {
+  exec: (alias: string, command: string, conversation_id?: number) =>
+    api.post<{ ok: boolean; stdout: string; stderr: string; exit_code: number; duration_ms: number }>(
+      "/api/devops/console/exec",
+      { alias, command, conversation_id }
+    ),
+  getConversations: (serverAlias: string) =>
+    api.get<RemoteConsoleConversation[]>(`/api/devops/console/conversations?server=${encodeURIComponent(serverAlias)}`),
+  createConversation: (serverAlias: string, project: string, message: string) =>
+    api.post<{ conversation_id: number; execution_id: number }>("/api/devops/console/conversations", {
+      server_alias: serverAlias,
+      project,
+      message,
+    }),
+  sendMessage: (conversationId: number, message: string) =>
+    api.post<{ ok: boolean; execution_id?: number }>(`/api/devops/console/conversations/${conversationId}/message`, { message }),
+  setWriteMode: (conversationId: number, enabled: boolean) =>
+    api.post<{ ok: boolean; write_enabled: boolean }>(`/api/devops/console/conversations/${conversationId}/write-mode`, { enabled }),
+  getAudit: (alias: string, limit?: number, offset?: number) =>
+    api.get<Array<{ seq: number; timestamp: string; kind: string; [key: string]: any }>>(
+      `/api/devops/console/audit/${encodeURIComponent(alias)}${limit !== undefined ? `?limit=${limit}&offset=${offset}` : ''}`
+    ),
+  checkWinrm: (alias: string) =>
+    api.get<{ ok: boolean; error?: string }>(`/api/devops/console/winrm/${encodeURIComponent(alias)}`),
+};
+
 export interface CIVariableSummary {
   key: string;
   is_secret: boolean;

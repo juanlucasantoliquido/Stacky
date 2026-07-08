@@ -31,6 +31,7 @@ export interface DevOpsHealth {
   doctor_enabled?: boolean; // Plan 96 — Doctor de pipelines
   variables_enabled?: boolean; // Plan 94 — sección Variables (caja fuerte)
   section_doctor_enabled?: boolean; // Plan 104 — doctores IA por sección
+  remote_console_enabled?: boolean; // Plan 105 — Consola remota por servidor
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -67,6 +68,8 @@ import { ServersSection } from '../components/devops/ServersSection';
 import { DevOpsServers, type ServerSummary } from '../api/endpoints';
 // Importar VariablesSection (Plan 94 F4)
 import { VariablesSection } from '../components/devops/VariablesSection';
+// Importar RemoteConsoleSection (Plan 105 F4)
+import { RemoteConsoleSection } from '../components/devops/RemoteConsoleSection';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -121,6 +124,16 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_DEVOPS_VARIABLES_ENABLED',
     gateMessage: 'La sección Variables necesita la flag STACKY_DEVOPS_VARIABLES_ENABLED (Configuración → Arnés, categoría DevOps).',
     render: (ctx) => <VariablesSection ctx={ctx} />,
+  },
+  // Plan 105 — Consola remota por servidor
+  {
+    id: 'remote-console',
+    label: 'Consola',
+    icon: '💻',
+    healthKey: 'remote_console_enabled',
+    gateFlagKey: 'STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED',
+    gateMessage: 'La sección Consola remota necesita la flag STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <RemoteConsoleSection ctx={ctx} />,
   },
 ];
 

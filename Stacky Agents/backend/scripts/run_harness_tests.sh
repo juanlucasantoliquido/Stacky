@@ -156,6 +156,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan96_doctor_endpoint.py
   # — Plan 104 · Filtro de presets por stack + doctores IA por seccion DevOps —
   tests/test_plan104_section_doctor.py
+  # — Plan 105 · Consola remota prompts por servidor —
+  tests/test_plan105_remote_exec_service.py
+  tests/test_plan105_console_prompt.py
+  tests/test_plan105_remote_console_flag.py
+  tests/test_plan105_remote_console_api.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

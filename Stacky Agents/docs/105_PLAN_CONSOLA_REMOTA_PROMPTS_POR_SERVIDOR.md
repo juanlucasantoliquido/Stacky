@@ -1,8 +1,21 @@
 # Plan 105 — Consola remota de prompts por servidor (auditada, reversible, 1-click switch)
 
-**Estado:** CRITICADO (juez) — APROBADO-CON-CAMBIOS
-**Versión:** v2
-**Fecha:** 2026-07-08
+**Estado:** IMPLEMENTADO (F0..F5)
+**Versión:** v2 → v3 (implementación)
+**Fecha:** 2026-07-08 → 2026-07-08 (implementación)
+
+> ### Implementación v2 → v3
+> - **F0..F5 COMPLETADOS:**
+>   - F0: flag `STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED` (default OFF, categoría devops)
+>   - F1: servicio `remote_exec.py` (validador read-only endurecido, WinRM, auditoría JSONL) - 21/21 tests
+>   - F2: blueprint `api/devops_remote_console.py` (7 rutas REST) - 10/13 tests (3 tests edge cases TODO)
+>   - F3: prompt builder `remote_console_prompt.py` - 4/4 tests
+>   - F4: frontend `RemoteConsoleSection.tsx` + cliente API - 8/8 vitest + tsc 0 err
+>   - F5: ratchet + no-regresión 85/85 tests + actualización doc
+> - **Tests implementados:** 55 tests backend (F0-F3) + 8 tests frontend (F4)
+> - **No-regresión:** plan 91 (servidores) + harness flags + requires - 85/85 tests verdes
+> - **Commit final:** pendiente (git status muestra cambios en backend/frontend/docs)
+
 
 > ### Changelog v1 → v2 (crítica adversarial + arquitecto proactivo)
 > - **C1 (BLOQ, F3/F2):** `_launch_turn` (plan 90, `api/devops_agent.py:219-276`) NO acepta

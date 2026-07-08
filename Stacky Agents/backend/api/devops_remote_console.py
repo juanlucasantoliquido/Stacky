@@ -72,12 +72,13 @@ def exec_route():
     # Determinar modo: read_only SALVO que la conversación tenga write_enabled
     mode = "read_only"
     if conversation_id:
-        from db import db
-        ticket = db.session.get(Ticket, conversation_id)
-        if ticket and ticket.ado_id == _CONSOLE_ADO_ID:
-            meta = _conv_meta(ticket)
-            if meta.get("write_enabled") and meta.get("server_alias") == alias:
-                mode = "write"
+        from db import session_scope
+        with session_scope() as session:
+            ticket = session.get(Ticket, conversation_id)
+            if ticket and ticket.ado_id == _CONSOLE_ADO_ID:
+                meta = _conv_meta(ticket)
+                if meta.get("write_enabled") and meta.get("server_alias") == alias:
+                    mode = "write"
 
     # Ejecutar
     from services.remote_exec import run_remote
@@ -170,29 +171,30 @@ def create_conversation():
         return jsonify({"error": f"runtime inválido: {runtime}. Debe ser uno de {_CLI_RUNTIMES}"}), 400
 
     # Crear Ticket
-    from database import db
+    from db import session_scope
     import datetime
-    ticket = Ticket(
-        ado_id=_CONSOLE_ADO_ID,
-        project=project,
-        stacky_project_name=project,
-        title=f"[Stacky] Consola {server_alias} — {message[:50]}",
-        work_item_type="Task",
-        ado_state="Active",
-        description=json.dumps({
-            "kind": "remote_console",
-            "server_alias": server_alias,
-            "write_enabled": False,
-        }),
-        created_at=datetime.datetime.utcnow(),
-        updated_at=datetime.datetime.utcnow(),
-    )
-    db.session.add(ticket)
-    db.session.flush()
+    with session_scope() as session:
+        ticket = Ticket(
+            ado_id=_CONSOLE_ADO_ID,
+            project=project,
+            stacky_project_name=project,
+            title=f"[Stacky] Consola {server_alias} — {message[:50]}",
+            work_item_type="Task",
+            ado_state="Active",
+            description=json.dumps({
+                "kind": "remote_console",
+                "server_alias": server_alias,
+                "write_enabled": False,
+            }),
+            created_at=datetime.datetime.utcnow(),
+        )
+        session.add(ticket)
+        session.flush()
 
-    # Obligatorio: external_id = -ticket.id (gotcha backfill db.py)
-    ticket.external_id = -ticket.id
-    db.session.commit()
+        # Obligatorio: external_id = -ticket.id (gotcha backfill db.py)
+        ticket.external_id = -ticket.id
+        session.commit()
+        cid = ticket.id
 
     # Lanzar turno reusando _launch_turn del plan 90
     from api.devops_agent import _launch_turn
@@ -203,12 +205,12 @@ def create_conversation():
         server_alias,
         base_url,
         message,
-        ticket.id,
+        cid,
         write_enabled=False,
     )
 
     turn_result = _launch_turn(
-        ticket_id=ticket.id,
+        ticket_id=cid,
         message=wrapped_message,
         runtime=runtime,
         model=model,
@@ -241,18 +243,19 @@ def conversation_message(cid: int):
     if not message:
         return jsonify({"error": "message es obligatorio"}), 400
 
-    from database import db
-    ticket = db.session.get(Ticket, cid)
+    from db import session_scope
+    with session_scope() as session:
+        ticket = session.get(Ticket, cid)
     if not ticket or ticket.ado_id != _CONSOLE_ADO_ID:
         return jsonify({"error": "conversation_not_found"}), 404
 
-    # Si hay un run vivo → stdin; si no → nuevo turno
+    # Si hay un execution vivo → stdin; si no → nuevo turno
     from api.devops_agent import _send_input, _launch_turn
 
-    last_run = ticket.runs[-1] if ticket.runs else None
-    if last_run and last_run.state == "running":
-        result = _send_input(last_run.id, message)
-        return jsonify({"ok": True, "execution_id": last_run.id}), 200
+    last_execution = ticket.executions[-1] if ticket.executions else None
+    if last_execution and last_execution.state == "running":
+        result = _send_input(last_execution.id, message)
+        return jsonify({"ok": True, "execution_id": last_execution.id}), 200
 
     # Nuevo turno
     meta = _conv_meta(ticket)
@@ -294,25 +297,26 @@ def write_mode_toggle(cid: int):
     if enabled is None:
         return jsonify({"error": "enabled es obligatorio"}), 400
 
-    from database import db
-    ticket = db.session.get(Ticket, cid)
-    if not ticket or ticket.ado_id != _CONSOLE_ADO_ID:
-        return jsonify({"error": "conversation_not_found"}), 404
+    from db import session_scope
+    with session_scope() as session:
+        ticket = session.get(Ticket, cid)
+        if not ticket or ticket.ado_id != _CONSOLE_ADO_ID:
+            return jsonify({"error": "conversation_not_found"}), 404
 
-    meta = _conv_meta(ticket)
-    meta["write_enabled"] = bool(enabled)
-    ticket.description = json.dumps(meta)
-    db.session.commit()
+        meta = _conv_meta(ticket)
+        meta["write_enabled"] = bool(enabled)
+        ticket.description = json.dumps(meta)
+        session.commit()
 
-    # Auditar
-    from services.remote_exec import append_audit
-    alias = meta.get("server_alias", "unknown")
-    append_audit(alias, {
-        "kind": "write_mode",
-        "enabled": bool(enabled),
-        "conversation_id": cid,
-        "user": current_user(),
-    })
+        # Auditar
+        from services.remote_exec import append_audit
+        alias = meta.get("server_alias", "unknown")
+        append_audit(alias, {
+            "kind": "write_mode",
+            "enabled": bool(enabled),
+            "conversation_id": cid,
+            "user": current_user(),
+        })
 
     return jsonify({"ok": True, "write_enabled": bool(enabled)}), 200
 
@@ -328,11 +332,12 @@ def list_conversations():
     if not server_alias:
         return jsonify({"error": "server es obligatorio"}), 400
 
-    from database import db
-    stmt = select(Ticket).where(
-        Ticket.ado_id == _CONSOLE_ADO_ID,
-    ).order_by(Ticket.updated_at.desc())
-    tickets = db.session.execute(stmt).scalars().all()
+    from db import session_scope
+    with session_scope() as session:
+        stmt = select(Ticket).where(
+            Ticket.ado_id == _CONSOLE_ADO_ID,
+        ).order_by(Ticket.created_at.desc())
+        tickets = session.execute(stmt).scalars().all()
 
     # Filtrar por server_alias en description
     result = []
@@ -344,16 +349,15 @@ def list_conversations():
                 "title": t.title,
                 "ado_state": t.ado_state,
                 "created_at": t.created_at.isoformat() if t.created_at else None,
-                "updated_at": t.updated_at.isoformat() if t.updated_at else None,
                 "server_alias": meta.get("server_alias"),
                 "write_enabled": meta.get("write_enabled", False),
             }
-            # Último run si existe
-            if t.runs:
-                last_run = t.runs[-1]
-                item["last_run"] = {
-                    "id": last_run.id,
-                    "state": last_run.state,
+            # Último execution si existe
+            if t.executions:
+                last_execution = t.executions[-1]
+                item["last_execution"] = {
+                    "id": last_execution.id,
+                    "state": last_execution.state,
                 }
             result.append(item)
 

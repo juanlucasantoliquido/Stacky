@@ -43,12 +43,6 @@ def app_client(app):
     return app.test_client()
 
 
-@pytest.fixture
-def db_session(app):
-    """Sesión de DB para testing."""
-    from db import db
-    db.session.commit()
-    return db.session
 
 
 class TestF2RoutesGuard:
@@ -128,24 +122,29 @@ class TestF2ExecRoute:
                     assert r.status_code == 200
                     assert captured_mode == "read_only"
 
-    def test_f2_exec_write_requires_conversation_flag(self, app_client, db_session):
+    def test_f2_exec_write_requires_conversation_flag(self, app_client):
         """Conversación con write_enabled=False ⇒ mode=read_only; tras POST /write-mode ⇒ mode=write."""
         import config as _config
-        pass  # db ya está disponible via db_session (fixture conftest)  # noqa: F401 (fixture)
+        from db import session_scope
 
         # Crear conversación
-        ticket = Ticket(
-            ado_id=-4,
-            project="test",
-            stacky_project_name="test",
-            title="Test",
-            work_item_type="Task",
-            ado_state="Active",
-            description='{"kind":"remote_console","server_alias":"s1","write_enabled":False}',
-        )
-        db_session.add(ticket)
-        db_session.commit()
-        cid = ticket.id
+        with session_scope() as db_session:
+            ticket = Ticket(
+                ado_id=-4,
+                project="test",
+                stacky_project_name="test",
+                title="Test",
+                work_item_type="Task",
+                ado_state="Active",
+                external_id=None,  # Se sella después del commit (gotcha backfill db.py)
+                description='{"kind":"remote_console","server_alias":"s1","write_enabled":False}',
+            )
+            db_session.add(ticket)
+            db_session.commit()
+            # Sellar external_id = -ticket.id para evitar UNIQUE conflict
+            ticket.external_id = -ticket.id
+            db_session.commit()
+            cid = ticket.id
 
         captured_mode = None
         def fake_run_remote(*args, mode=None, **kwargs):
@@ -170,24 +169,29 @@ class TestF2ExecRoute:
                     assert r3.status_code == 200
                     assert captured_mode == "write"
 
-    def test_f2_write_mode_wrong_alias_stays_read_only(self, app_client, db_session):
+    def test_f2_write_mode_wrong_alias_stays_read_only(self, app_client):
         """Conversación de alias A no habilita escritura en alias B."""
         import config as _config
-        pass  # db ya está disponible via db_session (fixture conftest)
+        from db import session_scope
 
         # Crear conversación para alias A
-        ticket = Ticket(
-            ado_id=-4,
-            project="test",
-            stacky_project_name="test",
-            title="Test",
-            work_item_type="Task",
-            ado_state="Active",
-            description='{"kind":"remote_console","server_alias":"A","write_enabled":True}',
-        )
-        db_session.add(ticket)
-        db_session.commit()
-        cid = ticket.id
+        with session_scope() as db_session:
+            ticket = Ticket(
+                ado_id=-4,
+                project="test",
+                stacky_project_name="test",
+                title="Test",
+                work_item_type="Task",
+                ado_state="Active",
+                external_id=None,  # Se sella después del commit (gotcha backfill db.py)
+                description='{"kind":"remote_console","server_alias":"A","write_enabled":True}',
+            )
+            db_session.add(ticket)
+            db_session.commit()
+            # Sellar external_id = -ticket.id para evitar UNIQUE conflict
+            ticket.external_id = -ticket.id
+            db_session.commit()
+            cid = ticket.id
 
         captured_mode = None
         def fake_run_remote(*args, mode=None, **kwargs):
@@ -207,10 +211,10 @@ class TestF2ExecRoute:
 class TestF2Conversations:
     """F2 — Tests de conversaciones."""
 
-    def test_f2_conversation_created_with_external_id_sealed(self, app_client, db_session):
+    def test_f2_conversation_created_with_external_id_sealed(self, app_client):
         """external_id == -ticket.id y description JSON con server_alias."""
         import config as _config
-        pass  # db ya está disponible via db_session (fixture conftest)
+        from db import session_scope
 
         with mock.patch.object(_config.config, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", True):
             with mock.patch.object(_config.config, "STACKY_DEVOPS_SERVERS_ENABLED", True):
@@ -226,42 +230,50 @@ class TestF2Conversations:
                         assert "conversation_id" in data
 
                         cid = data["conversation_id"]
-                        ticket = db_session.get(Ticket, cid)
-                        assert ticket is not None
-                        assert ticket.external_id == -cid
-                        assert ticket.ado_id == -4
-                        import json
-                        desc = json.loads(ticket.description)
-                        assert desc["server_alias"] == "s1"
-                        assert desc["write_enabled"] is False
+                        with session_scope() as db_session:
+                            ticket = db_session.get(Ticket, cid)
+                            assert ticket is not None
+                            assert ticket.external_id == -cid
+                            assert ticket.ado_id == -4
+                            import json
+                            desc = json.loads(ticket.description)
+                            assert desc["server_alias"] == "s1"
+                            assert desc["write_enabled"] is False
 
-    def test_f2_conversations_filtered_by_alias(self, app_client, db_session):
+    def test_f2_conversations_filtered_by_alias(self, app_client):
         """KPI-4: 2 conversaciones (alias A y B) ⇒ GET /conversations?server=A devuelve solo la de A."""
         import config as _config
-        pass  # db ya está disponible via db_session (fixture conftest)
+        from db import session_scope
         import json
 
         # Crear 2 conversaciones
-        t1 = Ticket(
-            ado_id=-4,
-            project="test",
-            stacky_project_name="test",
-            title="Test A",
-            work_item_type="Task",
-            ado_state="Active",
-            description=json.dumps({"kind":"remote_console","server_alias":"A","write_enabled":False}),
-        )
-        t2 = Ticket(
-            ado_id=-4,
-            project="test",
-            stacky_project_name="test",
-            title="Test B",
-            work_item_type="Task",
-            ado_state="Active",
-            description=json.dumps({"kind":"remote_console","server_alias":"B","write_enabled":False}),
-        )
-        db_session.add_all([t1, t2])
-        db_session.commit()
+        with session_scope() as db_session:
+            t1 = Ticket(
+                ado_id=-4,
+                project="test",
+                stacky_project_name="test",
+                title="Test A",
+                work_item_type="Task",
+                ado_state="Active",
+                external_id=None,  # Se sella después del commit (gotcha backfill db.py)
+                description=json.dumps({"kind":"remote_console","server_alias":"A","write_enabled":False}),
+            )
+            t2 = Ticket(
+                ado_id=-4,
+                project="test",
+                stacky_project_name="test",
+                title="Test B",
+                work_item_type="Task",
+                ado_state="Active",
+                external_id=None,  # Se sella después del commit (gotcha backfill db.py)
+                description=json.dumps({"kind":"remote_console","server_alias":"B","write_enabled":False}),
+            )
+            db_session.add_all([t1, t2])
+            db_session.commit()
+            # Sellar external_id = -ticket.id para evitar UNIQUE conflict
+            t1.external_id = -t1.id
+            t2.external_id = -t2.id
+            db_session.commit()
 
         with mock.patch.object(_config.config, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", True):
             r = app_client.get("/api/devops/console/conversations?server=A")
@@ -277,58 +289,70 @@ class TestF2Conversations:
             r = app_client.get("/api/devops/console/conversations")
             assert r.status_code == 400
 
-    def test_f2_message_reuses_dual_path(self, app_client, db_session):
+    def test_f2_message_reuses_dual_path(self, app_client):
         """Último run running ⇒ send_input; sin run vivo ⇒ _launch_turn."""
         import config as _config
-        pass  # db ya está disponible via db_session (fixture conftest)
-        from database.models import Run
+        from db import session_scope
+        from models import AgentExecution
 
         # Crear conversación con run running
-        ticket = Ticket(
-            ado_id=-4,
-            project="test",
-            stacky_project_name="test",
-            title="Test",
-            work_item_type="Task",
-            ado_state="Active",
-            description='{"kind":"remote_console","server_alias":"s1","write_enabled":False}',
-        )
-        db_session.add(ticket)
-        db_session.commit()
-        cid = ticket.id
+        with session_scope() as db_session:
+            ticket = Ticket(
+                ado_id=-4,
+                project="test",
+                stacky_project_name="test",
+                title="Test",
+                work_item_type="Task",
+                ado_state="Active",
+                external_id=None,  # Se sella después del commit (gotcha backfill db.py)
+                description='{"kind":"remote_console","server_alias":"s1","write_enabled":False}',
+            )
+            db_session.add(ticket)
+            db_session.commit()
+            # Sellar external_id = -ticket.id para evitar UNIQUE conflict
+            ticket.external_id = -ticket.id
+            db_session.commit()
+            cid = ticket.id
 
-        run = Run(
-            ticket_id=cid,
-            state="running",
-            agent_type="devops",
-            model="model",
-            effort="medium",
-        )
-        db.session.add(run)
-        db.session.commit()
+        with session_scope() as session:
+            run = AgentExecution(
+                ticket_id=cid,
+                state="running",
+                agent_type="devops",
+                model="model",
+                effort="medium",
+            )
+            session.add(run)
+            session.commit()
 
         with mock.patch.object(_config.config, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", True):
             with mock.patch("api.devops_agent._send_input", return_value={"ok": True}):
                 r = app_client.post(f"/api/devops/console/conversations/{cid}/message", json={"message": "hi"})
                 assert r.status_code == 200
 
-    def test_f2_write_mode_toggle_audited(self, app_client, db_session):
+    def test_f2_write_mode_toggle_audited(self, app_client):
         """Toggle de write_mode escribe entrada kind=write_mode en auditoría."""
         import config as _config
-        pass  # db ya está disponible via db_session (fixture conftest)
+        from db import session_scope
 
-        ticket = Ticket(
-            ado_id=-4,
-            project="test",
-            stacky_project_name="test",
-            title="Test",
-            work_item_type="Task",
-            ado_state="Active",
-            description='{"kind":"remote_console","server_alias":"s1","write_enabled":False}',
-        )
-        db_session.add(ticket)
-        db_session.commit()
-        cid = ticket.id
+        # Crear conversación
+        with session_scope() as db_session:
+            ticket = Ticket(
+                ado_id=-4,
+                project="test",
+                stacky_project_name="test",
+                title="Test",
+                work_item_type="Task",
+                ado_state="Active",
+                external_id=None,  # Se sella después del commit (gotcha backfill db.py)
+                description='{"kind":"remote_console","server_alias":"s1","write_enabled":False}',
+            )
+            db_session.add(ticket)
+            db_session.commit()
+            # Sellar external_id = -ticket.id para evitar UNIQUE conflict
+            ticket.external_id = -ticket.id
+            db_session.commit()
+            cid = ticket.id
 
     def test_f2_audit_endpoint_paginates(self, app_client, tmp_path, monkeypatch):
         """limit/offset respetados; alias inválido 400."""

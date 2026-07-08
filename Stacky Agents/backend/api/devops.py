@@ -45,6 +45,7 @@ def devops_health_route():
         # incluye F1 (commit ADO real). Deploys viejos no tienen la key ⇒ el
         # modal de commit (F4) la lee ausente ⇒ opción ADO sigue disabled.
         "ado_commit_supported": True,
+        "section_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", False)),  # Plan 104
     })
 
 

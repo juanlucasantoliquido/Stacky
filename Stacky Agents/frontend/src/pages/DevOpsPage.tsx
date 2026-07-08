@@ -30,6 +30,7 @@ export interface DevOpsHealth {
   rdp_available?: boolean; // Plan 91 — RDP disponible (Windows + keyring)
   doctor_enabled?: boolean; // Plan 96 — Doctor de pipelines
   variables_enabled?: boolean; // Plan 94 — sección Variables (caja fuerte)
+  section_doctor_enabled?: boolean; // Plan 104 — doctores IA por sección
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 

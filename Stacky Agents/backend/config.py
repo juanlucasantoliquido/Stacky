@@ -920,6 +920,11 @@ class Config:
         "STACKY_DEVOPS_STACK_DETECT_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 104 — Doctores IA por seccion del panel DevOps. Default OFF (opt-in).
+    STACKY_DEVOPS_SECTION_DOCTOR_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

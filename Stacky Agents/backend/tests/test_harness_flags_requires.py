@@ -135,6 +135,11 @@ _REQUIRES_MAP_FROZEN = {
     "STACKY_DEVOPS_PRODUCTION_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 95
     "STACKY_DEVOPS_STACK_DETECT_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 97
     "STACKY_DEVOPS_DOCTOR_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 96
+    # Plan 104: el doc pedía requires=AGENT_ENABLED pero esa flag ya tiene requires
+    # propio (línea de arriba) -- encadenar rompe R4 (profundidad 1). Se usa el
+    # mismo master que las hermanas; el guard funcional de AGENT_ENABLED vive en
+    # el endpoint (api/devops_section_doctor.py), no en el grafo de flags.
+    "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 104
     "STACKY_EXEC_VERIFICATION_MODE": "STACKY_EXEC_VERIFICATION_ENABLED",
     "STACKY_EXEC_VERIFICATION_TIMEOUT_S": "STACKY_EXEC_VERIFICATION_ENABLED",
     "STACKY_EXEC_VERIFICATION_BUDGET_S": "STACKY_EXEC_VERIFICATION_ENABLED",

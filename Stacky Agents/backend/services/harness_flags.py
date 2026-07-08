@@ -185,6 +185,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_STACK_DETECT_ENABLED",  # Plan 97 — deteccion de stack para presets
         "STACKY_DEVOPS_PRODUCTION_ENABLED",  # Plan 95 — llevar a producción MR/PR
         "STACKY_DEVOPS_DOCTOR_ENABLED",  # Plan 96 — doctor de pipelines: diagnóstico en llano
+        "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED",  # Plan 104 — doctores IA por sección
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2113,6 +2114,34 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
+        # lista curada de defaults ON, así que debe quedar sin default explícito.
+    ),
+    # ── Plan 104 — Doctores IA por sección del panel DevOps ────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_SECTION_DOCTOR_ENABLED",
+        type="bool",
+        label="Doctores IA por sección (Plan 104)",
+        description=(
+            "Plan 104 — Agrega un botón 'Doctor' en las secciones Pipeline/Ambientes/"
+            "Publicaciones del panel DevOps: invoca a un agente IA (Claude Code CLI, "
+            "Codex CLI o GitHub Copilot Pro) con el contexto de esa sección para que "
+            "PROPONGA mejoras en markdown (nunca aplica cambios, HITL). Requiere el "
+            "agente DevOps del plan 90. Default OFF: sin esta flag, el botón no aparece."
+        ),
+        group="global",
+        env_only=False,
+        # [DESVÍO del plan 104 F4 v4, verificado contra código real]: el doc pedía
+        # requires="STACKY_DEVOPS_AGENT_ENABLED", pero ESA flag YA declara
+        # requires="STACKY_DEVOPS_PANEL_ENABLED" (línea de arriba) — encadenar
+        # rompería R4 (profundidad máxima 1, validate_requires_graph:2309,
+        # "cadena prohibida"). Se usa el mismo master que TODAS las hermanas de la
+        # sección DevOps (Publicaciones/Ambientes/Agente/Servidores/Preflight/
+        # Variables/Producción/StackDetect/Doctor): STACKY_DEVOPS_PANEL_ENABLED. La
+        # dependencia FUNCIONAL real con el agente DevOps (sin el 90 no hay runtime
+        # IA) se sigue exigiendo en el endpoint F2 con un guard explícito de
+        # STACKY_DEVOPS_AGENT_ENABLED (404 propio, independiente de esta flag).
         requires="STACKY_DEVOPS_PANEL_ENABLED",
         # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
         # lista curada de defaults ON, así que debe quedar sin default explícito.

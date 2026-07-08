@@ -659,6 +659,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: elegís el preset vos mismo de una lista, sin detección automática.",
         example="Como cuando un formulario te sugiere el país según tu número de teléfono, pero siempre podés cambiarlo vos.",
     ),
+    "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED": PlainHelp(
+        what="Un botón 'Doctor' en cada sección del panel DevOps (Pipeline, Ambientes, Publicaciones) le pide a una IA que analice esa sección y proponga mejoras en texto.",
+        on_effect="Si la activás: aparece el botón 'Doctor' que arma el contexto de la sección (YAML del pipeline, environments, publicación) y lo manda a Claude/Codex/Copilot; la respuesta se ve en la consola de logs. La IA solo PROPONE, nunca edita ni commitea nada.",
+        off_effect="Si la apagás: el botón no aparece; nada cambia en el flujo actual.",
+        example="Como pedirle una segunda opinión a un colega senior: lee tu pipeline y te dice qué mejoraría, pero el que decide y aplica sos vos.",
+    ),
     # ── migrador_ado_gitlab ───────────────────────────────────────────────
     "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED": PlainHelp(
         what="Permite mover épicas, tareas y comentarios de Azure DevOps hacia GitLab de forma segura, sin duplicar nada si se repite.",

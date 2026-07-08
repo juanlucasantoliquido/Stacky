@@ -154,6 +154,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan96_failure_doctor.py
   tests/test_plan96_logs_providers.py
   tests/test_plan96_doctor_endpoint.py
+  # — Plan 104 · Filtro de presets por stack + doctores IA por seccion DevOps —
+  tests/test_plan104_section_doctor.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

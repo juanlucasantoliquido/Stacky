@@ -23,12 +23,14 @@ import {
 } from '../../devops/presetsModel';
 import { fromParsedSpec, type PipelineSpecDraft } from '../../devops/specBuilder';
 import { SectionDoctorButton } from './SectionDoctorButton';
+import { DirTreePreview } from './DirTreePreview';
 import {
   emptyEnvironmentSettings,
   validateSettingsLocal,
   summarizePlan,
   selectablePaths,
   allExistsOk,
+  validateSandboxOverrideLocal,
   type EnvironmentSettings,
   type FolderKind,
   type PlanEntry,
@@ -68,6 +70,11 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
   const [applyResult, setApplyResult] = useState<EnvironmentApplyResponse | null>(null);
   const [verified, setVerified] = useState<boolean | null>(null);
   const [pendingEntries, setPendingEntries] = useState<PlanEntry[]>([]);
+
+  // Plan 107 F5 — modo sandbox (raíz de pruebas transitoria, NUNCA se guarda en el perfil).
+  const [sandboxMode, setSandboxMode] = useState(false);
+  const [sandboxRoot, setSandboxRoot] = useState('');
+  const [sandboxActive, setSandboxActive] = useState(false);
 
   const [presets, setPresets] = useState<PublicationPreset[]>([]);
   const [selectedPresetName, setSelectedPresetName] = useState<string>('');
@@ -139,16 +146,24 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
   };
 
   const localErrors = validateSettingsLocal(settings);
-  const canCalculatePlan = hasSavedSettings && !!settings.environment_root;
+  // Plan 107 F5 — feedback inmediato del guard local de sandbox (espejo, NO fuente de verdad).
+  const sandboxLocalError = sandboxMode
+    ? validateSandboxOverrideLocal(sandboxRoot, settings.environment_root)
+    : null;
+  const effectiveRoot = sandboxMode && sandboxRoot ? sandboxRoot : settings.environment_root;
+  const canCalculatePlan =
+    hasSavedSettings && !!settings.environment_root && !(sandboxMode && !!sandboxLocalError);
 
   const handleCalculatePlan = async () => {
     if (!activeProject) return;
     try {
       setActionError(null);
-      const resp = await DevOps.environmentPlan(activeProject);
+      const override = sandboxMode && sandboxRoot ? sandboxRoot : undefined;
+      const resp = await DevOps.environmentPlan(activeProject, override);
       setEntries(resp.entries);
       setRootExists(resp.root_exists);
       setFingerprint(resp.layout_fingerprint);
+      setSandboxActive(resp.sandbox_active === true);
       setConfirmChecked(false);
       setApplyResult(null);
       setVerified(null);
@@ -163,13 +178,15 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
     try {
       setActionError(null);
       const paths = selectablePaths(entries);
-      const resp = await DevOps.environmentApply(activeProject, paths, confirmChecked, fingerprint);
+      const override = sandboxMode && sandboxRoot ? sandboxRoot : undefined;
+      const resp = await DevOps.environmentApply(activeProject, paths, confirmChecked, fingerprint, override, sandboxMode);
       setApplyResult(resp);
       // Verificación automática post-apply (ADICIÓN v3): re-plan + allExistsOk.
-      const rePlan = await DevOps.environmentPlan(activeProject);
+      const rePlan = await DevOps.environmentPlan(activeProject, override);
       setEntries(rePlan.entries);
       setRootExists(rePlan.root_exists);
       setFingerprint(rePlan.layout_fingerprint);
+      setSandboxActive(rePlan.sandbox_active === true);
       const ok = allExistsOk(rePlan.entries);
       setVerified(ok);
       setPendingEntries(ok ? [] : rePlan.entries.filter((e) => e.status !== 'exists_ok'));
@@ -288,6 +305,43 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
       {/* Paso 1 — Carpetas (plan-then-apply) */}
       <div className={styles.panel}>
         <h4>Paso 2 — Carpetas</h4>
+
+        {/* Plan 107 F5 — modo sandbox (raíz de pruebas transitoria, opt-in). */}
+        {ctx.health.env_sandbox_enabled === true && (
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ display: 'block' }}>
+              <input
+                type="checkbox"
+                checked={sandboxMode}
+                onChange={(e) => setSandboxMode(e.target.checked)}
+              />{' '}
+              Modo sandbox (pruebas) — no toca la raíz real
+            </label>
+            {sandboxMode && (
+              <div style={{ marginTop: '6px' }}>
+                <input
+                  type="text"
+                  value={sandboxRoot}
+                  onChange={(ev) => setSandboxRoot(ev.target.value)}
+                  placeholder="C:\\temp\\stacky-sandbox"
+                  style={{ width: '100%', padding: '6px', marginBottom: '4px' }}
+                />
+                <div className={styles.textMuted} style={{ fontSize: '0.85em' }}>
+                  Producción: {settings.environment_root || '(sin configurar)'}
+                </div>
+                {sandboxLocalError && (
+                  <div className={styles.textDanger} style={{ marginTop: '4px' }}>
+                    {sandboxLocalError}
+                  </div>
+                )}
+                <span className={styles.textWarn} style={{ display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>
+                  SANDBOX — no es producción
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           onClick={() => void handleCalculatePlan()}
           disabled={!canCalculatePlan}
@@ -305,26 +359,34 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
 
         {entries.length > 0 && (
           <>
-            <table style={{ width: '100%', marginTop: '8px' }}>
-              <tbody>
-                {entries.map((e) => (
-                  <tr key={e.path}>
-                    <td>{e.path}</td>
-                    <td
-                      className={
-                        e.status === 'to_create' ? styles.textSuccess :
-                        e.status === 'exists_ok' ? styles.textMuted :
-                        styles.textDanger
-                      }
-                    >
-                      {e.status}
-                      {e.status === 'conflict' && ' — existe un archivo con ese nombre; Stacky NUNCA lo toca'}
-                      {e.status === 'unsafe' && ` — ${e.reason}`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {ctx.health.env_tree_preview_enabled === true ? (
+              <DirTreePreview
+                entries={entries}
+                sandboxActive={sandboxActive}
+                rootLabel={effectiveRoot}
+              />
+            ) : (
+              <table style={{ width: '100%', marginTop: '8px' }}>
+                <tbody>
+                  {entries.map((e) => (
+                    <tr key={e.path}>
+                      <td>{e.path}</td>
+                      <td
+                        className={
+                          e.status === 'to_create' ? styles.textSuccess :
+                          e.status === 'exists_ok' ? styles.textMuted :
+                          styles.textDanger
+                        }
+                      >
+                        {e.status}
+                        {e.status === 'conflict' && ' — existe un archivo con ese nombre; Stacky NUNCA lo toca'}
+                        {e.status === 'unsafe' && ` — ${e.reason}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             <p>
               to_create: {summary.to_create} / exists_ok: {summary.exists_ok} / conflict: {summary.conflict} / unsafe: {summary.unsafe}
             </p>

@@ -18,6 +18,7 @@ from services.environment_init import (
     apply_environment,
     validate_root,
     layout_fingerprint,
+    validate_sandbox_override,  # Plan 107
 )
 
 bp = Blueprint("devops", __name__, url_prefix="/devops")
@@ -54,6 +55,8 @@ def _health_payload() -> dict:
         "section_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", False)),  # Plan 104
         "bootstrap_enabled": bool(getattr(cfg, "STACKY_DEVOPS_BOOTSTRAP_ENABLED", False)),  # Plan 98
         "remote_console_enabled": bool(getattr(cfg, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", False)),  # Plan 105
+        "env_tree_preview_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED", False)),  # Plan 107
+        "env_sandbox_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", False)),  # Plan 107
     }
 
 
@@ -171,21 +174,41 @@ def materialize_publication_route():
 
 
 def _load_env_context(body):
-    """Helper compartido plan/apply. Retorna ((root, rel_paths), None) o (None, respuesta_error)."""
+    """Helper compartido plan/apply. Retorna ((root, rel_paths, sandbox_active), None)
+    o (None, respuesta_error). Plan 107: root_override opcional, validado server-side
+    contra el guard de solapamiento (validate_sandbox_override) cuando la flag
+    STACKY_DEVOPS_ENV_SANDBOX_ENABLED está ON; sin override el comportamiento es
+    idéntico a Plan 89 (root = production_root, sandbox_active=False)."""
     project = body.get("project")
     if not project:
         return None, (jsonify({"error": "project es obligatorio"}), 400)
     profile = load_client_profile(project) or {}
     settings = profile.get("devops_environment_settings")
     settings = settings if isinstance(settings, dict) else {}   # defensivo (clase C5 del 88)
-    root = settings.get("environment_root")
+    production_root = settings.get("environment_root") or ""
+
+    # Plan 107 — resolución de raíz efectiva (sandbox opt-in, server-side).
+    root = production_root
+    sandbox_active = False
+    override = body.get("root_override")
+    if override is not None and str(override).strip():
+        if not getattr(_config.config, "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", False):
+            return None, (jsonify({"error": "el modo sandbox está deshabilitado",
+                                   "kind": "sandbox_disabled"}), 400)
+        serr = validate_sandbox_override(str(override), production_root)
+        if serr:
+            return None, (jsonify({"error": f"raíz sandbox inválida: {serr}",
+                                   "kind": "sandbox_invalid", "reason": serr}), 400)
+        root = str(override)
+        sandbox_active = True
+
     err = validate_root(root or "")
     if err:
         return None, (jsonify({"error": f"environment_root invalido o no configurado: {err}",
                                "kind": "environment_root_invalid"}), 400)
     catalog = profile.get("process_catalog")
     rel_paths = build_environment_layout(catalog if isinstance(catalog, list) else [], settings)
-    return (root, rel_paths), None
+    return (root, rel_paths, sandbox_active), None
 
 
 @bp.post("/environments/plan")
@@ -195,8 +218,10 @@ def environment_plan_route():
         abort(404)
     ctx, err = _load_env_context(request.get_json(silent=True) or {})
     if err: return err
-    root, rel_paths = ctx
-    return jsonify(plan_environment(root, rel_paths))
+    root, rel_paths, sandbox_active = ctx
+    result = plan_environment(root, rel_paths)
+    result["sandbox_active"] = sandbox_active  # Plan 107 — la UI muestra el badge
+    return jsonify(result)
 
 
 @bp.post("/environments/apply")
@@ -207,12 +232,17 @@ def environment_apply_route():
     body = request.get_json(silent=True) or {}
     if body.get("confirm") is not True:
         return jsonify({"error": "confirm=True requerido (HITL)"}), 400
+    # Plan 107 — ack extra cuando se opera en sandbox.
+    if body.get("root_override") is not None and str(body.get("root_override")).strip():
+        if body.get("sandbox_ack") is not True:
+            return jsonify({"error": "sandbox_ack=True requerido para crear en la raíz sandbox",
+                            "kind": "sandbox_ack_required"}), 400
     fingerprint = body.get("fingerprint")
     if not isinstance(fingerprint, str) or not fingerprint:
         return jsonify({"error": "fingerprint del plan es obligatorio (respuesta de /plan)"}), 400
     ctx, err = _load_env_context(body)
     if err: return err
-    root, rel_paths = ctx
+    root, rel_paths, sandbox_active = ctx
     if fingerprint != layout_fingerprint(root, rel_paths):
         return jsonify({"error": "el layout cambio desde el ultimo plan; recalcular el plan",
                         "kind": "plan_stale"}), 409
@@ -223,6 +253,7 @@ def environment_apply_route():
     approved = [p for p in rel_paths if p in set(requested)]
     result = apply_environment(root, approved)
     result["ignored_not_in_layout"] = sorted(set(requested) - set(rel_paths))  # C8: visible
+    result["sandbox_active"] = sandbox_active  # Plan 107
     return jsonify(result)
 
 

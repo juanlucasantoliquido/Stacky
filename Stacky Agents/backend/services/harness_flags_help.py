@@ -677,6 +677,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la consola no está disponible (404 en sus endpoints, banner en la sección). Nada se ejecuta ni audita.",
         example="Como tener una terminal SSH pero con una IA que interpreta tu pedido y ejecuta solo comandos PowerShell, dejando un rastro completo de qué se corrió en cada servidor.",
     ),
+    "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED": PlainHelp(
+        what="Muestra las carpetas del ambiente como un árbol desplegable en vez de una lista.",
+        on_effect="Si la activás: en 'Ambientes' ves un árbol con las carpetas nuevas resaltadas; no cambia qué se crea.",
+        off_effect="Si la apagás: ves la lista plana de siempre.",
+        example="Como ver el explorador de archivos con carpetas anidadas, en vez de un renglón por ruta.",
+    ),
+    "STACKY_DEVOPS_ENV_SANDBOX_ENABLED": PlainHelp(
+        what="Deja probar la creación de carpetas en una ubicación descartable sin tocar la carpeta real.",
+        on_effect="Si la activás: aparece un modo 'sandbox' donde elegís una carpeta de prueba; Stacky rechaza cualquier ruta que se pise con la de producción.",
+        off_effect="Si la apagás: el ambiente usa siempre la raíz real guardada en el perfil.",
+        example="Como maquetar el mueble en el garaje antes de armarlo en el living.",
+    ),
     # ── migrador_ado_gitlab ───────────────────────────────────────────────
     "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED": PlainHelp(
         what="Permite mover épicas, tareas y comentarios de Azure DevOps hacia GitLab de forma segura, sin duplicar nada si se repite.",

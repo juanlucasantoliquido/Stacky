@@ -876,6 +876,17 @@ class Config:
         "STACKY_DEVOPS_ENVIRONMENTS_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # Plan 107 — Preview de árbol de directorios y raíz sandbox de pruebas
+    # (extiende la sección Ambientes del Plan 89). Default OFF: son mejoras
+    # opt-in del operador, a diferencia de Environments que está en "true".
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED", "false"
+    ).strip().lower() == "true"
+    STACKY_DEVOPS_ENV_SANDBOX_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", "false"
+    ).strip().lower() == "true"
+
     # Plan 90 — Agente DevOps interactivo multi-turno (seccion del panel DevOps).
     # Default ON (activado 2026-07-05, decisión explícita del operador, con
     # conocimiento de que cada turno consume una llamada LLM completa).

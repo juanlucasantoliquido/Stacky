@@ -107,6 +107,49 @@ def validate_root(root: str) -> str | None:
     return None
 
 
+def validate_sandbox_override(override: str, production_root: str) -> str | None:
+    """Plan 107 — None si el override es un sandbox seguro; string de error si no.
+    PURO salvo os.path.realpath (resuelve symlinks del tramo existente, igual
+    criterio que plan_environment). NUNCA lanza.
+
+    Normalización (C1/C8/G9): AMBOS lados pasan por
+        _norm(x) = os.path.normcase(os.path.realpath(os.path.abspath(x)))
+    - normcase => case-insensitive en Windows (FS case-insensitive), no-op en POSIX.
+    - abspath colapsa separadores finales/redundantes ('C:\\prod\\' == 'C:\\prod').
+    - realpath resuelve symlinks del tramo existente (mismo criterio que plan_environment).
+
+    Reglas, en orden:
+      1) validate_root(override) debe pasar (absoluta, no raíz de disco).
+      2) Si production_root es válido (validate_root(production_root) is None),
+         override NO puede solaparse con producción:
+           a = _norm(override); b = _norm(production_root)
+           - a == b                      -> 'sandbox_igual_a_produccion'
+           - commonpath([a, b]) == b     -> 'sandbox_dentro_de_produccion'
+           - commonpath([a, b]) == a     -> 'produccion_dentro_de_sandbox'
+           - ValueError (drives distintos) -> OK (no hay solapamiento posible)
+      Si production_root NO es válido/está vacío, se omite el chequeo de
+      solapamiento (no hay producción real que proteger) y se acepta si (1) pasó.
+    """
+    err = validate_root(override)
+    if err:
+        return err
+    if validate_root(production_root or "") is not None:
+        return None  # sin producción válida no hay nada que pisar
+    a = os.path.normcase(os.path.realpath(os.path.abspath(override)))
+    b = os.path.normcase(os.path.realpath(os.path.abspath(production_root)))
+    if a == b:
+        return "sandbox_igual_a_produccion"
+    try:
+        common = os.path.commonpath([a, b])
+    except ValueError:
+        return None  # drives distintos: imposible solapar
+    if common == b:
+        return "sandbox_dentro_de_produccion"
+    if common == a:
+        return "produccion_dentro_de_sandbox"
+    return None
+
+
 def plan_environment(root: str, rel_paths: list[str]) -> dict:
     """SOLO LECTURA. Retorna el contrato §4:
     {'root', 'root_exists': os.path.isdir(root),                  # C15

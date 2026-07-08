@@ -188,6 +188,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED",  # Plan 104 — doctores IA por sección
         "STACKY_DEVOPS_BOOTSTRAP_ENABLED",  # Plan 98 — bootstrap unico + PATCH por clave
         "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED",  # Plan 105 — consola remota
+        "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",  # Plan 107 — preview de árbol de ambientes
+        "STACKY_DEVOPS_ENV_SANDBOX_ENABLED",  # Plan 107 — raíz sandbox de pruebas
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2183,6 +2185,40 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DEVOPS_PANEL_ENABLED",
         # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
         # lista curada de defaults ON, así que debe quedar sin default explícito.
+    ),
+    # ── Plan 107 — Preview de árbol de directorios y raíz sandbox (Ambientes) ──
+    FlagSpec(
+        key="STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",
+        type="bool",
+        label="Preview de árbol de ambientes (Plan 107)",
+        description=(
+            "Plan 107 — En la sección Ambientes, muestra las carpetas a crear como "
+            "ÁRBOL jerárquico (en vez de lista plana), con estado por nodo. "
+            "SOLO-LECTURA, no cambia qué se crea. Default OFF. Con OFF la sección "
+            "usa la tabla plana de siempre."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (depth-1, NO la flag hija Environments)
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
+        # lista curada de defaults ON, así que debe quedar sin default explícito
+        # (desvío documentado respecto al pseudocódigo del plan, que traía
+        # default=False explícito -- ver docstring de test_plan107_flags.py).
+    ),
+    FlagSpec(
+        key="STACKY_DEVOPS_ENV_SANDBOX_ENABLED",
+        type="bool",
+        label="Raíz sandbox de pruebas (Plan 107)",
+        description=(
+            "Plan 107 — Permite apuntar el plan/apply de Ambientes a una carpeta "
+            "sandbox temporal para probar, SIN tocar la raíz de producción. Guard "
+            "duro: rechaza rutas que sean iguales/contengan/estén contenidas en la "
+            "raíz real. Default OFF. La raíz sandbox NUNCA se guarda en el perfil."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (depth-1)
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON): idem nota arriba.
     ),
     # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────
     FlagSpec(

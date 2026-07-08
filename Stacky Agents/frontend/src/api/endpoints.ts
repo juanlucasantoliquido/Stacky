@@ -3088,6 +3088,8 @@ export const DevOps = {
       variables_enabled?: boolean; // Plan 94
       production_enabled?: boolean; // Plan 95
       ado_commit_supported?: boolean; // Plan 95 [C2]
+      env_tree_preview_enabled?: boolean; // Plan 107
+      env_sandbox_enabled?: boolean; // Plan 107
     }>("/api/devops/health"),
   /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
   parseYaml: (source: "ado" | "gitlab", yaml: string) =>
@@ -3101,17 +3103,37 @@ export const DevOps = {
       "/api/devops/publications/materialize",
       { project, preset_name: presetName },
     ),
-  /** POST /api/devops/environments/plan — Plan 89. Dry-run SOLO-LECTURA del árbol de carpetas. */
-  environmentPlan: (project: string) =>
-    api.post<EnvironmentPlanResponse>("/api/devops/environments/plan", { project }),
+  /**
+   * POST /api/devops/environments/plan — Plan 89. Dry-run SOLO-LECTURA del árbol
+   * de carpetas. Plan 107: rootOverride opcional (sandbox de pruebas); si es
+   * undefined el body es EXACTAMENTE el de hoy (cero regresión).
+   */
+  environmentPlan: (project: string, rootOverride?: string) =>
+    api.post<EnvironmentPlanResponse>(
+      "/api/devops/environments/plan",
+      rootOverride ? { project, root_override: rootOverride } : { project },
+    ),
   /**
    * POST /api/devops/environments/apply — Plan 89. Crea SOLO to_create. HITL:
    * confirm es SIEMPRE argumento del caller (el componente pasa el estado del
-   * checkbox; este helper NUNCA lo auto-inyecta).
+   * checkbox; este helper NUNCA lo auto-inyecta). Plan 107: rootOverride +
+   * sandboxAck opcionales (sandbox_ack=True obligatorio server-side cuando hay
+   * root_override); sin rootOverride el body es EXACTAMENTE el de hoy.
    */
-  environmentApply: (project: string, paths: string[], confirm: boolean, fingerprint: string) =>
-    api.post<EnvironmentApplyResponse>("/api/devops/environments/apply",
-      { project, paths, confirm, fingerprint }),
+  environmentApply: (
+    project: string,
+    paths: string[],
+    confirm: boolean,
+    fingerprint: string,
+    rootOverride?: string,
+    sandboxAck?: boolean,
+  ) =>
+    api.post<EnvironmentApplyResponse>(
+      "/api/devops/environments/apply",
+      rootOverride
+        ? { project, paths, confirm, fingerprint, root_override: rootOverride, sandbox_ack: sandboxAck === true }
+        : { project, paths, confirm, fingerprint },
+    ),
   /** GET /api/devops/detect-stack — Plan 97. Detección opt-in de stack por manifiestos, SOLO-LECTURA. */
   detectStack: (project: string) =>
     api.get<{ detected: string | null }>(`/api/devops/detect-stack?project=${encodeURIComponent(project)}`),

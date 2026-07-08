@@ -1,8 +1,9 @@
 # Plan 107 — Preview del ÁRBOL de directorios y RAÍZ SANDBOX de pruebas (panel DevOps)
 
-> **Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS — 2026-07-08 (v1: 2026-07-08)
+> **Estado:** IMPLEMENTADO — 2026-07-08 (CRITICADO v2: 2026-07-08; v1: 2026-07-08)
 > **Serie:** DevOps (continúa 87-106). Extiende la sección **Ambientes** (Plan 89).
-> **Pipeline:** este documento pasó `proponer` → **`criticar-y-mejorar-plan` (v2, este doc)**. Sigue `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
+> **Pipeline:** este documento pasó `proponer` → `criticar-y-mejorar-plan` (v2) → **`implementar-plan-stacky` (este estado)**. Sigue `supervisar-implementaciones-planes`.
+> **Nota de implementación:** F0-F3, F5 (lógica pura) y F1-F2 backend con tests corridos y verdes de verdad. F4 (componente `DirTreePreview`) implementado, montado y `tsc --noEmit` limpio, pero su suite `.test.tsx` queda BLOQUEADA por una carencia de entorno PREEXISTENTE en todo el repo (`@testing-library/react`/`jsdom` no instalados en este checkout — ningún `.test.tsx` del repo puede ejecutar hoy, verificado contra `CreateChildTaskButton.test.tsx` como baseline). Un test centinela ajeno (`test_plan89_environments_flag.py::test_f0_harness_defaults_contains_flag`) está en rojo desde ANTES de este plan (verificado contra `git show HEAD`), drift ya documentado en memoria `harness-defaults-env-drift-devops-87-91.md`, no causado por Plan 107.
 
 ---
 

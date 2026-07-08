@@ -29,6 +29,7 @@ export interface EnvironmentPlanResponse {
   layout_fingerprint: string;
   entries: PlanEntry[];
   summary: Record<PlanEntryStatus, number>;
+  sandbox_active?: boolean; // Plan 107
 }
 
 export interface EnvironmentApplyResponse {
@@ -38,6 +39,7 @@ export interface EnvironmentApplyResponse {
   unsafe: string[];
   failed: Array<{ path: string; error: string }>;
   ignored_not_in_layout: string[];
+  sandbox_active?: boolean; // Plan 107
 }
 
 const _WINDOWS_RESERVED = new Set([
@@ -129,4 +131,29 @@ export function selectablePaths(entries: PlanEntry[]): string[] {
  */
 export function allExistsOk(entries: PlanEntry[]): boolean {
   return entries.length > 0 && entries.every((e) => e.status === "exists_ok");
+}
+
+/**
+ * validateSandboxOverrideLocal (Plan 107 F5) — espejo del guard backend
+ * (validate_sandbox_override) para feedback INMEDIATO en UI. NO es fuente de
+ * verdad (el backend re-valida siempre, api/devops.py::_load_env_context).
+ * Semántica por SEGMENTOS con frontera '/' (C2: nada de prefijo de string
+ * crudo) y case-insensitive SIEMPRE (C9/G5: más estricto que POSIX; aceptable
+ * porque el backend re-valida y Stacky corre Windows-first). No existe
+ * validateRootLocal: el chequeo de "absoluta" reusa la MISMA regex de
+ * validateSettingsLocal (línea ~91 de este archivo).
+ */
+export function validateSandboxOverrideLocal(override: string, productionRoot: string): string | null {
+  const o = (override ?? "").trim();
+  if (!o || !/^[A-Za-z]:[\\/]|^\//.test(o)) return "la raíz sandbox debe ser una ruta absoluta";
+  // normaliza: separadores a '/', sin separadores finales (G9), lowercase (G5)
+  const norm = (p: string) => p.trim().replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLowerCase();
+  const prod = (productionRoot ?? "").trim();
+  if (!prod || !/^[A-Za-z]:[\\/]|^\//.test(prod)) return null; // sin producción válida no hay nada que pisar (G7)
+  const a = norm(o);
+  const b = norm(prod);
+  if (a === b) return "sandbox_igual_a_produccion";
+  if (a.startsWith(b + "/")) return "sandbox_dentro_de_produccion"; // frontera '/': G4 (C:\prod-test) NO matchea
+  if (b.startsWith(a + "/")) return "produccion_dentro_de_sandbox";
+  return null;
 }

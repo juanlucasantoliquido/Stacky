@@ -161,6 +161,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan105_console_prompt.py
   tests/test_plan105_remote_console_flag.py
   tests/test_plan105_remote_console_api.py
+  # — Plan 107 · Preview arbol directorios + sandbox raiz DevOps —
+  tests/test_plan107_flags.py
+  tests/test_plan107_sandbox_guard.py
+  tests/test_plan107_sandbox_endpoints.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

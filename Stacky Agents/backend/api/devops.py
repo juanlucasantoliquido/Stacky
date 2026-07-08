@@ -40,6 +40,11 @@ def devops_health_route():
         "variables_enabled": bool(getattr(cfg, "STACKY_DEVOPS_VARIABLES_ENABLED", False)),  # Plan 94
         "stack_detect_enabled": bool(getattr(cfg, "STACKY_DEVOPS_STACK_DETECT_ENABLED", False)),  # Plan 97
         "doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_DOCTOR_ENABLED", False)),  # Plan 96
+        "production_enabled": bool(getattr(cfg, "STACKY_DEVOPS_PRODUCTION_ENABLED", False)),  # Plan 95
+        # Plan 95 [C2]: capability, NO flag -- literal True porque este build
+        # incluye F1 (commit ADO real). Deploys viejos no tienen la key ⇒ el
+        # modal de commit (F4) la lee ausente ⇒ opción ADO sigue disabled.
+        "ado_commit_supported": True,
     })
 
 

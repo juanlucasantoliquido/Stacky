@@ -1,9 +1,25 @@
 # Plan 106 — Modelo local Qwen 3 para análisis de código y creación de pipelines
 
-**Estado:** PROPUESTO v1
-**Fecha:** 2026-07-08
+**Estado:** CRITICADO v1 → v2 (RECHAZADO en v1; v2 corrige los bloqueantes)
+**Fecha:** 2026-07-08 (v1 propuesto y criticado el mismo día)
 **Dependencias:** planes 40-46 (runtimes), 71 (CI providers agnósticos), 87-91 (serie DevOps), 97 (presets por stack)
 **No depende de:** planes 93-96, 98-105
+
+## Changelog v1 → v2 (crítica adversarial)
+
+- **C1 (BLOQUEANTE, diseño roto):** en v1 los endpoints `/api/llm/*` llamaban `copilot_bridge.invoke()`, que despacha por `config.LLM_BACKEND` global; con el backend normal (`copilot`) las requests iban a GitHub, NO a Qwen — KPI-2/KPI-3 eran falsos. Peor: para que funcionaran había que poner `LLM_BACKEND=local_llm` global, redirigiendo TODO el tráfico del bridge al modelo local (degradación masiva). v2: los endpoints llaman una función pública nueva `invoke_local_llm()` que va SIEMPRE al endpoint local, sin depender del backend global. El modo `LLM_BACKEND=local_llm` queda como opción avanzada separada (F2) con advertencia explícita.
+- **C2 (BLOQUEANTE, crash garantizado):** v1 creaba `AgentExecution(ticket_id=None, ...)` — `ticket_id` es `nullable=False` (`models.py:211`) y faltaban los NOT NULL `input_context_json` (`models.py:215`) y `started_by` (`models.py:222`) → IntegrityError en el flush. v2: patrón de ticket interno discriminador `ado_id=-5` con `external_id` negativo único, copiado del precedente real `api/devops_agent.py:63-75`, y todos los NOT NULL seteados.
+- **C3 (BLOQUEANTE, firma inventada):** `LogFn = Callable[[str, str], None]` (`copilot_bridge.py:120`) recibe `(level, msg)`; v1 llamaba `on_log(execution_id, "info", ...)` y pasaba `lambda eid, level, msg: None` → TypeError en runtime. v2: firma correcta en todos los snippets.
+- **C4 (BLOQUEANTE, FlagSpec inventado):** v1 usaba `requires=[]` (el campo real es `str | None`, `harness_flags.py:30`) y `group="experimental"` (los valores reales son `"claude_code_cli" | "global"`, `harness_flags.py:26`); el test F0 exigía `requires==[]`, imposible. v2: FlagSpec con los campos reales.
+- **C5 (BLOQUEANTE, paridad falsa):** KPI-4 v1 prometía que "los 3 runtimes usan el modelo local vía model_override" — falso: Claude Code CLI y Codex CLI spawnan binarios propios que jamás hablan con Ollama; `LLM_BACKEND` solo aplica al camino `copilot_bridge`. v2 reencuadra la paridad: la capacidad son endpoints HTTP backend-side, runtime-agnósticos por construcción (cualquier runtime/UI los consume); no se promete selección del modelo local dentro de los 3 CLIs.
+- **C6 (IMPORTANTE, snippets con bugs):** `from __future__ annotations` (faltaba `import`); `@bp.post(..., methods=["POST"])` (Flask lanza TypeError si pasás `methods` al shortcut `.post`); `json.dumps` usado antes del `import json` local (NameError); `raw[:500]` sobre un dict (TypeError). Todos corregidos en v2.
+- **C7 (IMPORTANTE, riel de UI):** v1 configuraba endpoint/modelo SOLO por env vars, violando el riel "toda config del operador va por UI". v2: `LOCAL_LLM_ENDPOINT`, `LOCAL_LLM_MODEL` y `LOCAL_LLM_TIMEOUT_SEC` se registran como FlagSpec `type="str"`/`"int"` (el tipo str ya existe: `harness_flags.py:2203`) con `requires="LOCAL_LLM_ENABLED"`, editables desde HarnessFlagsPanel.
+- **C8 (IMPORTANTE, timeout irreal):** 30s hardcodeados matan cualquier análisis real con Qwen 32B q4 local (contextos grandes tardan minutos). v2: `LOCAL_LLM_TIMEOUT_SEC` configurable, default 120, min 10 / max 600.
+- **C9 (IMPORTANTE, ruta fantasma):** `api/health.py` no existe; health vive en `api/diag.py`. Eliminada la frase vaga "(o el endpoint de health existente)".
+- **C10 (IMPORTANTE, sin consumidor UI):** v1 dejaba los endpoints "para probar con curl/Postman" (trabajo manual del operador) y apuntaba a `frontend/src/pages/HarnessFlagsPanel.tsx` (está en `components/`). v2: F5 agrega un consumidor UI real mínimo (botón "Sugerir con IA local" en PipelineBuilderSection que pre-rellena campos editables — HITL).
+- **C11 (MENOR):** `_ANALYZE_ADO_ID = -5` estaba declarado y jamás usado; v2 lo usa de verdad (patrón C2).
+- **C12 (MENOR):** default de modelo corregido a `qwen3:32b` (tag real de Ollama para Qwen 3).
+- **[ADICIÓN ARQUITECTO] A1 — health-check del servidor local:** nuevo `GET /api/llm/local-health` que hace un ping barato (timeout 3s) al endpoint configurado y la UI muestra el estado antes de invocar. Evita que el operador espere 120s para descubrir que Ollama no está corriendo. Cero trabajo extra: automático con la flag ON.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Toda afirmación sobre código existente
@@ -22,26 +38,27 @@ determinista. NO quiero que el modelo use herramientas realmente (sin tool use).
 2. Creación de pipelines: que el modelo rellene automáticamente working directory, condition,
 environment variables con todo el contexto necesario."
 
-Se integra un **backend LLM local** (`local_llm`) que habla con un endpoint HTTP configurable
-(por defecto compatible Ollama: `http://localhost:11434/v1/chat/completions`) y expone el modelo
-local Qwen 3 32B q4 como una opción más en el ecosistema Stacky. El backend es **OpenAI-compatible**
-(para funcionar con Ollama, LM Studio, vLLM, etc.) y se integra en el `llm_router` y
-`copilot_bridge` como una opción más. Los casos de uso específicos se exponen como prompts
-especiales que NO invocan tools (solo análisis y propuesta).
+Se integra un **cliente LLM local** (`invoke_local_llm` en `copilot_bridge.py`) que habla con un
+endpoint HTTP configurable (por defecto compatible Ollama:
+`http://localhost:11434/v1/chat/completions`). Es **OpenAI-compatible** (Ollama, LM Studio, vLLM,
+text-generation-webui). Los casos de uso se exponen como 2 endpoints backend especializados que
+inyectan un prompt HITL sin tool use y van SIEMPRE al modelo local, independientemente del
+`LLM_BACKEND` global (C1). Adicionalmente (F2, opcional/avanzado) se soporta
+`LLM_BACKEND=local_llm` para quien quiera redirigir TODO el bridge al modelo local.
 
 **KPIs (binarios):**
-- **KPI-1 (config):** el operador configura 3 variables de entorno (endpoint, modelo, flag ON) y el
-  modelo local aparece en la lista de modelos disponibles. Cero pasos manuales adicionales.
-- **KPI-2 (análisis de código):** el operador invoca un endpoint `/api/llm/analyze-code` con el
-  contexto (archivos, proyecto, stack) y recibe un análisis en markdown sin que el modelo intente
-  ejecutar tools.
-- **KPI-3 (creación de pipelines):** el operador invoca un endpoint `/api/llm/suggest-pipeline` con
-  el spec parcial del pipeline y recibe sugerencias de working directory, condition, environment
-  variables, sin que el modelo intente ejecutar tools ni commitear.
-- **KPI-4 (paridad 3 runtimes):** los 3 runtimes (Codex CLI, Claude Code CLI, GitHub Copilot Pro)
-  pueden usar el modelo local vía `model_override` o selección en UI.
-- **KPI-5 (HITL):** el modelo NUNCA aplica cambios automáticamente; solo propone. El operador
-  decide qué aplicar.
+- **KPI-1 (config por UI):** el operador activa la flag y configura endpoint/modelo/timeout 100%
+  desde la UI del Arnés (HarnessFlagsPanel). Cero edición manual de `.env` obligatoria (C7).
+- **KPI-2 (análisis de código):** `POST /api/llm/analyze-code` con el contexto (archivos, proyecto,
+  stack) devuelve un análisis en markdown del modelo LOCAL (no de Copilot), sin tool use.
+- **KPI-3 (creación de pipelines):** `POST /api/llm/suggest-pipeline` con el spec parcial devuelve
+  sugerencias de working directory, condition, environment variables del modelo LOCAL, sin tool
+  use ni commits.
+- **KPI-4 (runtime-agnóstico):** los endpoints son HTTP backend-side puros: cualquier consumidor
+  (UI, los 3 runtimes vía MCP/HTTP, curl) los usa igual. NO se promete que Claude Code CLI /
+  Codex CLI seleccionen el modelo local como su motor (imposible: spawnan binarios propios) (C5).
+- **KPI-5 (HITL):** el modelo NUNCA aplica cambios; solo propone. La UI pre-rellena campos
+  EDITABLES; el operador revisa y decide (F5).
 
 ---
 
@@ -49,92 +66,96 @@ especiales que NO invocan tools (solo análisis y propuesta).
 
 | Hecho verificado | Evidencia (archivo:línea) |
 |---|---|
-| `llm_router.py` ya soporta backends `anthropic`, `copilot`, `vscode_bridge`, `mock` | `backend/services/llm_router.py:8-10` |
-| `copilot_bridge.py` ya implementa un cliente HTTP OpenAI-compatible para GitHub Models | `backend/copilot_bridge.py:63-110` |
-| `agent_runner.py` despacha runtimes y acepta `model_override` | `backend/agent_runner.py:86-94,219-373` |
-| `config.py` ya tiene `LLM_BACKEND`, `LLM_MODEL`, `COPILOT_ENDPOINT` | `backend/config.py:75-90` |
-| NO existe soporte para modelos locales/Ollama en el código actual | grep sin resultados de `ollama`/`local` en backend |
-| El plan 97 (presets por stack) ya tiene `pipeline_stack_detector.py` | `backend/services/pipeline_stack_detector.py` (verificado en plan 104) |
-| El plan 87-91 estableció el panel DevOps y su contrato de extensión | docs/planes 87-91 IMPLEMENTADOS |
+| `copilot_bridge.invoke()` despacha por `config.LLM_BACKEND` global | `backend/copilot_bridge.py:134-148` |
+| `LogFn = Callable[[str, str], None]` — on_log recibe `(level, msg)` | `backend/copilot_bridge.py:120` |
+| `BridgeResponse` tiene `text`, `format`, `metadata` | `backend/copilot_bridge.py:114-117` |
+| `AgentExecution.ticket_id` es `nullable=False`; `input_context_json` y `started_by` NOT NULL | `backend/models.py:211,215,222` |
+| `AgentExecution.metadata_dict` es property sobre `metadata_json` | `backend/models.py:260-264` |
+| Patrón de ticket interno con `ado_id` negativo + `external_id=-ticket.id` único | `backend/api/devops_agent.py:63-75` |
+| `FlagSpec.requires` es `str | None`; `group` es `"claude_code_cli" | "global"`; existe `type="str"` | `backend/services/harness_flags.py:21-41,2203` |
+| Blueprints se registran en `api/__init__.py` vía `api_bp.register_blueprint(...)` | `backend/api/__init__.py:54-73` |
+| Health vive en `api/diag.py` (NO existe `api/health.py`) | `backend/api/diag.py` (símbolo `health`) |
+| NO existe soporte para modelos locales/Ollama en el código actual | grep sin resultados de `ollama`/`local_llm` en backend |
 
 **Gap:** NO existe manera de usar un modelo local (Qwen, Llama, etc.) en Stacky Agents. El operador
 tiene Qwen 3 32B q4 corriendo localmente y quiere aprovecharlo para análisis de código y pipelines
-SIN tool use (solo lectura/propuesta). Cerrar el gap es barato: reusar el patrón OpenAI-compatible
-de `copilot_bridge` + agregar un backend `local_llm` + 2 endpoints especializados (analyze-code,
-suggest-pipeline) que inyectan un prompt HITL que prohíbe tools.
+SIN tool use (solo lectura/propuesta). Cerrar el gap es barato: una función cliente
+OpenAI-compatible en `copilot_bridge.py` + 2 endpoints especializados con prompt HITL + un
+consumidor UI mínimo.
 
 ---
 
 ## 3. Principios y guardarraíles (NO negociables)
 
-1. **3 runtimes con paridad (Codex CLI / Claude Code CLI / GitHub Copilot Pro):** el modelo local
-   es un backend más (`local_llm`) que los 3 runtimes pueden usar vía `model_override` o selección
-   en UI. Nada atado a un runtime específico.
-2. **Cero trabajo extra para el operador:** 3 variables de entorno (endpoint, modelo, flag ON) →
-   el modelo aparece disponible. Default OFF → byte-idéntico a hoy.
-3. **Human-in-the-loop innegociable:** los endpoints especializados inyectan un prompt que
-   prohíbe tool use ("NUNCA ejecutes comandos, NUNCA edites archivos, NUNCA commiteás; solo
-   analizá y proponé en markdown"). El modelo responde texto; el operador decide.
+1. **Runtime-agnóstico (C5):** la capacidad vive en endpoints HTTP backend-side; ningún runtime
+   la necesita ni la rompe. No se toca `agent_runner.py`.
+2. **Cero trabajo extra para el operador (C7):** flag + 3 configs editables desde la UI del Arnés.
+   Default OFF → byte-idéntico a hoy.
+3. **Human-in-the-loop innegociable:** los endpoints inyectan un prompt que prohíbe tool use.
+   El modelo responde texto/JSON; la UI pre-rellena campos EDITABLES; el operador decide.
 4. **Mono-operador, sin auth real:** ningún concepto de roles/permisos. El endpoint local es
    `localhost` por default (configurable).
-5. **OpenAI-compatible:** el backend habla con endpoints compatibles OpenAI (Ollama, LM Studio,
-   vLLM, text-generation-webui). Esto lo hace agnóstico a la tecnología de serving.
-6. **No degradar lo existente:** `llm_router`, `copilot_bridge`, `agent_runner`, `config.py` NO
-   cambian su comportamiento con la flag OFF. Todo es ADITIVO.
-7. **Reusar, no reinventar:** el reusar el patrón HTTP de `copilot_bridge.py` (cliente `requests`,
-   headers OpenAI, body compatible) → NO duplicar código de cliente HTTP.
+5. **OpenAI-compatible:** payload `model` + `messages` + `stream:false`; respuesta
+   `choices[0].message.content`. Agnóstico al server (Ollama/LM Studio/vLLM).
+6. **No degradar lo existente (C1):** los endpoints NUEVOS van directo al cliente local; el
+   dispatch global de `invoke()`/`llm_router` solo cambia si el operador setea explícitamente
+   `LLM_BACKEND=local_llm` (F2, avanzado, con advertencia). Todo es ADITIVO.
+7. **Reusar, no reinventar:** mismo patrón HTTP `requests` de `copilot_bridge.py` (headers,
+   timeout, manejo de status).
 8. **Ratchet de tests (plan 49):** todo test backend nuevo se registra en
    `backend/scripts/run_harness_tests.sh` **y** `run_harness_tests.ps1`.
-9. **Ayuda llana (plan 86):** la flag nueva necesita `PlainHelp`.
-10. **Nunca 500 / nunca bloquear:** si el endpoint local no responde → error descriptivo
-    ("endpoint local no responde en <URL>; verificá que Ollama/LLM server esté corriendo"),
-    nunca 500 ni bloqueo infinito (timeout).
+9. **Ayuda llana (plan 86):** cada flag nueva necesita entrada en `harness_flags_help.py`.
+10. **Nunca 500 / nunca bloquear:** endpoint local caído → error descriptivo con hint accionable
+    y timeout configurable; nunca 500 ni bloqueo infinito.
+11. **Requires R4 (profundidad 1):** las flags hijas (`LOCAL_LLM_ENDPOINT`, `LOCAL_LLM_MODEL`,
+    `LOCAL_LLM_TIMEOUT_SEC`) tienen `requires="LOCAL_LLM_ENABLED"`; la master NO tiene requires.
+    Cada arista nueva se agrega a `_REQUIRES_MAP_FROZEN` en
+    `backend/tests/test_harness_flags_requires.py`.
 
 ---
 
 ## 4. Diseño de una pasada (para entender antes de las fases)
 
 ```
-Operador (configura .env: LOCAL_LLM_ENABLED=true, LOCAL_LLM_ENDPOINT=http://localhost:11434/v1/chat/completions, LOCAL_LLM_MODEL=qwen:32b)
+Operador (UI Arnés: LOCAL_LLM_ENABLED=ON, endpoint/modelo/timeout editables)
    │
    ▼
-Stacky boot (config.py lee las 3 vars, LOCAL_LLM_ENABLED default false)
+GET /api/llm/local-health  ──ping 3s──▶ servidor local  →  badge "alcanzable / caído" en UI  [A1]
    │
    ▼
-llm_router.py: backend == "local_llm" → despacha a copilot_bridge con endpoint custom
-   │
-   ▼
-copilot_bridge.py: invoke() con backend == "local_llm" → HTTP POST a LOCAL_LLM_ENDPOINT
-   │
-   ▼
-Respuesta del modelo local (texto en markdown) → BridgeResponse → el operador la ve
-```
-
-**Endpoints especializados:**
-
-```
 POST /api/llm/analyze-code {project, stack?, files[], prompt?}
-   → prompt HITL + contexto → modelo local → markdown de análisis
-
-POST /api/llm/suggest-pipeline {spec_partial, stack, project}
-   → prompt HITL + spec → modelo local → sugerencias (working_dir, condition, env_vars)
+POST /api/llm/suggest-pipeline {project, stack, spec_partial?}
+   │
+   ▼
+api/local_llm_analysis.py: guard flag (404 si OFF) → ticket interno ado_id=-5 → AgentExecution
+   │
+   ▼
+copilot_bridge.invoke_local_llm(system=HITL, user=contexto)  ← SIEMPRE al endpoint local (C1)
+   │
+   ▼
+HTTP POST LOCAL_LLM_ENDPOINT (OpenAI-compatible, stream=false, timeout=LOCAL_LLM_TIMEOUT_SEC)
+   │
+   ▼
+Respuesta (markdown / JSON) → execution completed → UI muestra propuesta EDITABLE (HITL)
 ```
 
-Ambos endpoints usan el backend `local_llm` (vía `llm_router.decide` o directamente) e inyectan
-el prompt HITL que prohíbe tools.
+**Modo avanzado (F2, opt-in explícito):** `LLM_BACKEND=local_llm` redirige TODO el tráfico de
+`copilot_bridge.invoke()` y `llm_router` al modelo local. Documentado con advertencia: afecta a
+todos los agentes que usan el bridge. Los endpoints de este plan NO dependen de este modo.
 
 ---
 
 ## 5. Fases
 
-### F0 — Flag + configuración del modelo local (fundación)
+### F0 — Flags + configuración del modelo local (fundación)
 
-**Objetivo:** 3 variables de entorno (`LOCAL_LLM_ENABLED`, `LOCAL_LLM_ENDPOINT`,
-`LOCAL_LLM_MODEL`) visibles en config, con flag default OFF y requires correcto.
+**Objetivo:** 4 configs (`LOCAL_LLM_ENABLED` bool, `LOCAL_LLM_ENDPOINT` str, `LOCAL_LLM_MODEL` str,
+`LOCAL_LLM_TIMEOUT_SEC` int) en `config.py` + registry del Arnés, editables por UI (C7), flag
+master default OFF, health expuesto en `api/diag.py` (C9).
 
 **Archivos a editar (todos aditivos):**
 
-1. `Stacky Agents/backend/config.py` — junto al bloque de LLM (`config.py:75-90`):
+1. `Stacky Agents/backend/config.py` — junto al bloque de LLM existente (`LLM_BACKEND`/`LLM_MODEL`):
    ```python
    # Plan 106 — Modelo local (Qwen 3 32B q4 u otro, vía Ollama/LM Studio/vLLM).
    LOCAL_LLM_ENABLED: bool = os.getenv("LOCAL_LLM_ENABLED", "false").lower() in (
@@ -143,84 +164,114 @@ el prompt HITL que prohíbe tools.
    LOCAL_LLM_ENDPOINT: str = os.getenv(
        "LOCAL_LLM_ENDPOINT", "http://localhost:11434/v1/chat/completions"
    )
-   LOCAL_LLM_MODEL: str = os.getenv("LOCAL_LLM_MODEL", "qwen:32b")
+   LOCAL_LLM_MODEL: str = os.getenv("LOCAL_LLM_MODEL", "qwen3:32b")
+   LOCAL_LLM_TIMEOUT_SEC: int = int(os.getenv("LOCAL_LLM_TIMEOUT_SEC", "120"))
    ```
 
-2. `Stacky Agents/backend/services/harness_flags.py`:
-   - agregar `"LOCAL_LLM_ENABLED"` a la categoría `core` (vecinas en `harness_flags.py:150-160`);
-   - agregar el `FlagSpec`:
-     ```python
-     FlagSpec(
-         key="LOCAL_LLM_ENABLED",
-         type="bool",
-         label="Modelo local (Ollama/LM Studio/vLLM)",
-         description="Habilita el backend LLM local para usar modelos como Qwen 3 32B q4. Requiere configurar LOCAL_LLM_ENDPOINT y LOCAL_LLM_MODEL.",
-         group="experimental",
-         requires=[],  # No depende de otra flag
-     )
-     ```
-   - **NO agregar `default=`** (gotcha plan 63).
-
-3. `Stacky Agents/backend/tests/test_harness_flags_requires.py` — si esta flag tuviera `requires`,
-   agregar la arista a `_REQUIRES_MAP_FROZEN`. Como `requires=[]`, NO se toca este archivo.
-
-4. `Stacky Agents/backend/services/harness_flags_help.py` — entrada `PlainHelp`:
+2. `Stacky Agents/backend/services/harness_flags.py` — 4 `FlagSpec` nuevos con los CAMPOS REALES
+   del dataclass (`harness_flags.py:21-41`), en la categoría donde viven las flags `LLM_*`/globales
+   (buscar con grep la categoría que contiene `LLM_BACKEND` o, si no está, usar la misma categoría
+   que `DEVOPS_*`; anotar la decisión en el commit):
    ```python
-   "LOCAL_LLM_ENABLED": "Modelo local (Ollama/LM Studio/vLLM): permite usar un LLM corriendo en tu máquina para análisis de código y sugerencias de pipelines. Configurá LOCAL_LLM_ENDPOINT y LOCAL_LLM_MODEL antes de activar.",
+   FlagSpec(
+       key="LOCAL_LLM_ENABLED",
+       type="bool",
+       label="Modelo local (Ollama/LM Studio/vLLM)",
+       description="Habilita el cliente LLM local para análisis de código y sugerencias de pipeline con modelos como Qwen 3 32B q4.",
+       group="global",
+   ),
+   FlagSpec(
+       key="LOCAL_LLM_ENDPOINT",
+       type="str",
+       label="Endpoint del modelo local",
+       description="URL OpenAI-compatible del servidor local (Ollama: http://localhost:11434/v1/chat/completions).",
+       group="global",
+       requires="LOCAL_LLM_ENABLED",
+       default="http://localhost:11434/v1/chat/completions",
+   ),
+   FlagSpec(
+       key="LOCAL_LLM_MODEL",
+       type="str",
+       label="Modelo local (tag)",
+       description="Tag del modelo en el servidor local (ej. qwen3:32b).",
+       group="global",
+       requires="LOCAL_LLM_ENABLED",
+       default="qwen3:32b",
+   ),
+   FlagSpec(
+       key="LOCAL_LLM_TIMEOUT_SEC",
+       type="int",
+       label="Timeout modelo local (segundos)",
+       description="Tiempo máximo de espera por respuesta del modelo local. Modelos 32B en CPU/GPU consumer pueden tardar minutos.",
+       group="global",
+       requires="LOCAL_LLM_ENABLED",
+       default=120,
+       min_value=10,
+       max_value=600,
+   ),
+   ```
+   - **NO agregar `default=` a `LOCAL_LLM_ENABLED`** (gotcha plan 63: los bool nuevos no van en
+     `_CURATED_DEFAULTS_ON` y `default=False` explícito rompe `test_default_known_only_for_curated`).
+     Los `default=` de las flags str/int SÍ van (no son bool; el test curado solo aplica a bools).
+     Si algún test del registry falla por esos defaults, quitarlos y dejar type-zero: el default
+     EFECTIVO ya vive en `config.py`.
+
+3. `Stacky Agents/backend/tests/test_harness_flags_requires.py` — agregar 3 aristas a
+   `_REQUIRES_MAP_FROZEN` (guardarraíl 11):
+   ```python
+   "LOCAL_LLM_ENDPOINT": "LOCAL_LLM_ENABLED",
+   "LOCAL_LLM_MODEL": "LOCAL_LLM_ENABLED",
+   "LOCAL_LLM_TIMEOUT_SEC": "LOCAL_LLM_ENABLED",
+   ```
+   (respetar el formato exacto que ya usa ese archivo; verificarlo con grep antes de editar).
+
+4. `Stacky Agents/backend/services/harness_flags_help.py` — 4 entradas `PlainHelp` (una por flag),
+   estilo llano plan 86. Ejemplo para la master:
+   ```python
+   "LOCAL_LLM_ENABLED": "Modelo local (Ollama/LM Studio/vLLM): permite usar un LLM corriendo en tu máquina para análisis de código y sugerencias de pipelines. Configurá el endpoint y el modelo en las flags de al lado.",
    ```
 
-5. `Stacky Agents/backend/api/health.py` (o el endpoint de health existente) — agregar al health
-   block (buscar el bloque que expone flags de stacky):
+5. `Stacky Agents/backend/api/diag.py` (C9 — NO existe `api/health.py`) — dentro de la función
+   `health` existente, agregar al dict de respuesta:
    ```python
-   "local_llm_enabled": bool(getattr(cfg, "LOCAL_LLM_ENABLED", False)),  # Plan 106
-   "local_llm_endpoint": str(getattr(cfg, "LOCAL_LLM_ENDPOINT", "")),  # Plan 106
-   "local_llm_model": str(getattr(cfg, "LOCAL_LLM_MODEL", "")),  # Plan 106
+   "local_llm_enabled": bool(getattr(config, "LOCAL_LLM_ENABLED", False)),  # Plan 106
    ```
+   (solo la flag; endpoint/modelo se leen desde el panel de flags, no hace falta duplicarlos).
 
 **Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan106_local_llm_config.py`:
-- `test_f0_flag_default_off` — `config.config.LOCAL_LLM_ENABLED is False` con entorno limpio.
-- `test_f0_flag_registered_in_registry` — la key existe en el registry con `env_only=False`
-  y `requires==[]`.
-- `test_f0_flag_has_plain_help` — la key existe en el dict de `harness_flags_help`.
-- `test_f0_config_has_endpoint_and_model_defaults` — `LOCAL_LLM_ENDPOINT` es
-  `"http://localhost:11434/v1/chat/completions"` por default; `LOCAL_LLM_MODEL` es `"qwen:32b"`.
-- `test_f0_health_exposes_local_llm` — `GET /health` incluye `local_llm_enabled`, `endpoint`,
-  `model`.
+- `test_f0_flag_default_off` — `config.LOCAL_LLM_ENABLED is False` con entorno limpio.
+- `test_f0_flags_registered_in_registry` — las 4 keys existen en el registry; `LOCAL_LLM_ENABLED`
+  sin `requires`; las otras 3 con `requires == "LOCAL_LLM_ENABLED"` (C4: string, no lista).
+- `test_f0_flags_have_plain_help` — las 4 keys existen en el dict de `harness_flags_help`.
+- `test_f0_config_defaults` — `LOCAL_LLM_ENDPOINT ==
+  "http://localhost:11434/v1/chat/completions"`, `LOCAL_LLM_MODEL == "qwen3:32b"`,
+  `LOCAL_LLM_TIMEOUT_SEC == 120`.
+- `test_f0_health_exposes_local_llm_enabled` — el endpoint health de diag incluye
+  `local_llm_enabled`.
 
 **Comando:** `cd "Stacky Agents/backend" && venv/Scripts/python.exe -m pytest tests/test_plan106_local_llm_config.py -q`
-**También correr (no-regresión):** `venv/Scripts/python.exe -m pytest tests/test_harness_flags.py -q`
+**También correr (no-regresión):** `venv/Scripts/python.exe -m pytest tests/test_harness_flags.py tests/test_harness_flags_requires.py -q`
 
 **Criterio binario:** los 5 tests nuevos + no-regresión verde.
 **Flag:** `LOCAL_LLM_ENABLED` default OFF.
-**Runtimes:** N/A (config pura). **Trabajo del operador:** opt-in (setear las 3 vars de entorno).
+**Runtimes:** N/A (config pura). **Trabajo del operador:** opt-in 100% por UI (KPI-1).
 
 ---
 
-### F1 — Bridge HTTP al modelo local (OpenAI-compatible)
+### F1 — Cliente HTTP al modelo local (OpenAI-compatible)
 
-**Objetivo:** `copilot_bridge.py` soporta backend `local_llm` con endpoint configurable
-y modelo custom, reusando el patrón OpenAI-compatible existente.
+**Objetivo:** función pública `invoke_local_llm()` en `copilot_bridge.py` que va SIEMPRE al
+endpoint local (C1), con la firma REAL de `LogFn` (C3) y timeout configurable (C8). Además,
+dispatch aditivo en `invoke()` para el modo avanzado `LLM_BACKEND=local_llm`.
 
 **Archivo a EDITAR:** `Stacky Agents/backend/copilot_bridge.py`
 
-1. Actualizar el docstring para mencionar `local_llm`:
+1. Actualizar el docstring del módulo para mencionar `local_llm` (agregar una línea; no reescribir
+   el docstring entero).
+
+2. Agregar la función PÚBLICA `invoke_local_llm()` (nueva, cerca de `invoke()`):
    ```python
-   """
-   Bridge al engine LLM real (copilot / local / mock).
-
-   - mock: outputs canned para validar la UI sin gastar tokens.
-   - copilot: GitHub Copilot Chat API real (OpenAI-compatible).
-   - local_llm: Modelo local vía Ollama/LM Studio/vLLM (OpenAI-compatible).
-
-   Tokens OAuth:
-   - copilot: obtenido vía `gh auth token`.
-   - local_llm: ninguno (endpoint local sin auth por default).
-   """
-   ```
-
-2. Modificar `invoke()` (línea ~134) para soportar `backend == "local_llm"`:
-   ```python
-   def invoke(
+   def invoke_local_llm(
        *,
        agent_type: str,
        system: str,
@@ -228,675 +279,601 @@ y modelo custom, reusando el patrón OpenAI-compatible existente.
        on_log: LogFn,
        execution_id: int | None = None,
        model: str | None = None,
-       project_name: str | None = None,
-       workspace_root: str | None = None,
-       bridge_port: int | None = None,
    ) -> BridgeResponse:
-       backend = config.LLM_BACKEND.lower()
-       if backend == "mock":
-           return _invoke_mock(...)
-       if backend == "local_llm":  # Plan 106 F1
-           return _invoke_local_llm(
-               agent_type=agent_type,
-               system=system,
-               user=user,
-               on_log=on_log,
-               execution_id=execution_id,
-               model=model or config.LOCAL_LLM_MODEL,
-           )
-       if backend == "vscode_bridge":
-           return _invoke_vscode_bridge(...)
-       # ... resto del código (copilot)
-   ```
+       """Invoca el modelo LOCAL vía HTTP OpenAI-compatible (Ollama/LM Studio/vLLM).
 
-3. Agregar la función `_invoke_local_llm()` (nueva, al final del archivo antes de las funciones
-   de vscode_bridge):
-   ```python
-   def _invoke_local_llm(
-       *,
-       agent_type: str,
-       system: str,
-       user: str,
-       on_log: LogFn,
-       execution_id: int | None = None,
-       model: str,
-   ) -> BridgeResponse:
-       """Invoca un modelo local vía HTTP OpenAI-compatible (Ollama/LM Studio/vLLM).
-
-       Usa LOCAL_LLM_ENDPOINT de config. Si el endpoint no responde, levanta RuntimeError
-       con mensaje descriptivo (timeout=30s por default). NO usa auth; si el endpoint requiere
-       Bearer token, se puede configurar vía LOCAL_LLM_API_KEY en el futuro (fuera de scope).
+       A DIFERENCIA de invoke(), NO mira config.LLM_BACKEND: va siempre al endpoint
+       local configurado (LOCAL_LLM_ENDPOINT). Usada por api/local_llm_analysis.py.
+       Levanta RuntimeError con mensaje accionable si el endpoint no responde.
+       on_log recibe (level, msg) — firma LogFn real (copilot_bridge.py:120).
        """
-       import json
-
        endpoint = config.LOCAL_LLM_ENDPOINT
        if not endpoint:
            raise RuntimeError(
-               "LOCAL_LLM_ENDPOINT no está configurado. Setealo en .env o config.py "
+               "LOCAL_LLM_ENDPOINT no está configurado. Sételo en el panel del Arnés "
                "(ej. http://localhost:11434/v1/chat/completions para Ollama)."
            )
-
-       headers = {
-           "Content-Type": "application/json",
-       }
-       # Opcional en el futuro: LOCAL_LLM_API_KEY para Bearer auth
+       resolved_model = model or config.LOCAL_LLM_MODEL
+       timeout_sec = int(getattr(config, "LOCAL_LLM_TIMEOUT_SEC", 120))
 
        payload = {
-           "model": model,
+           "model": resolved_model,
            "messages": [
                {"role": "system", "content": system},
                {"role": "user", "content": user},
            ],
-           "stream": False,  # F1: sin streaming por simplicidad (streaming = F4 futuro si hace falta)
+           "stream": False,
        }
-
-       on_log(execution_id, "info", f"Invocando modelo local {model} en {endpoint}")
-
+       on_log("info", f"Invocando modelo local {resolved_model} en {endpoint}")
        try:
            response = requests.post(
                endpoint,
-               headers=headers,
+               headers={"Content-Type": "application/json"},
                json=payload,
-               timeout=30,  # 30s timeout
+               timeout=timeout_sec,
            )
-           if response.status_code != 200:
-               body = response.text[:500]
-               raise RuntimeError(
-                   f"Endpoint local devolvió HTTP {response.status_code}: {body}"
-               )
-
-           raw = response.json()
-           # Formato OpenAI: {"choices": [{"message": {"content": "..."}}]}
-           if "choices" not in raw or not raw["choices"]:
-               raise RuntimeError(f"Respuesta del modelo local sin 'choices': {raw[:500]}")
-
-           content = raw["choices"][0].get("message", {}).get("content", "")
-           if not content:
-               raise RuntimeError("Respuesta del modelo local vacía")
-
-           on_log(execution_id, "info", f"Modelo local respondió con {len(content)} chars")
-
-           return BridgeResponse(
-               text=content,
-               format="markdown",
-               metadata={"model": model, "backend": "local_llm"},
-           )
-
        except requests.Timeout:
            raise RuntimeError(
-               f"Endpoint local no respondió en 30s ({endpoint}). "
-               "Verificá que Ollama/LLM server esté corriendo."
+               f"Endpoint local no respondió en {timeout_sec}s ({endpoint}). "
+               "Verificá que Ollama/LLM server esté corriendo, o subí "
+               "LOCAL_LLM_TIMEOUT_SEC en el panel del Arnés."
            )
        except requests.ConnectionError as e:
            raise RuntimeError(
                f"No se pudo conectar al endpoint local ({endpoint}): {e}"
            )
+       if response.status_code != 200:
+           body = response.text[:500]
+           raise RuntimeError(
+               f"Endpoint local devolvió HTTP {response.status_code}: {body}"
+           )
+       raw = response.json()
+       choices = raw.get("choices") or []
+       if not choices:
+           raise RuntimeError(
+               f"Respuesta del modelo local sin 'choices': {str(raw)[:500]}"
+           )
+       content = (choices[0].get("message") or {}).get("content", "")
+       if not content:
+           raise RuntimeError("Respuesta del modelo local vacía")
+       on_log("info", f"Modelo local respondió con {len(content)} chars")
+       return BridgeResponse(
+           text=content,
+           format="markdown",
+           metadata={"model": resolved_model, "backend": "local_llm"},
+       )
    ```
-
-4. Actualizar `list_copilot_models()` para incluir modelos locales cuando el backend es
-   `local_llm` (opcional, pero útil para que el modelo aparezca en la UI):
+3. Modo avanzado (opt-in explícito): en `invoke()` (`copilot_bridge.py:134-148`), después del
+   branch `mock`, agregar:
    ```python
-   def list_copilot_models(timeout_sec: int = 15) -> list[dict]:
-       backend = config.LLM_BACKEND.lower()
-       if backend == "local_llm":
-           # Retornar el modelo configurado como único disponible
-           return [{
-               "id": config.LOCAL_LLM_MODEL,
-               "name": f"Modelo local ({config.LOCAL_LLM_MODEL})",
-               "vendor": "local",
-               "family": "",
-               "preview": False,
-               "capabilities": {"max_output_tokens": 8192},  # valor estimado Qwen 32B
-           }]
-       # ... resto del código original (copilot)
+   if backend == "local_llm":  # Plan 106 F1 — modo avanzado: TODO el bridge va al modelo local
+       return invoke_local_llm(
+           agent_type=agent_type, system=system, user=user,
+           on_log=on_log, execution_id=execution_id, model=model,
+       )
    ```
 
-**Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan106_local_llm_bridge.py` (mockeando `requests.post`):
-- `test_f1_local_llm_invoke_success` — mock `requests.post` → 200 con respuesta OpenAI →
-  `BridgeResponse` con el content correcto.
-- `test_f1_local_llm_invoke_timeout` — mock lanza `Timeout` → `RuntimeError` con hint del timeout.
-- `test_f1_local_llm_invoke_connection_error` — mock lanza `ConnectionError` → `RuntimeError` con hint.
-- `test_f1_local_llm_invoke_non_200` — mock → 500 → `RuntimeError` con HTTP code.
-- `test_f1_local_llm_invoke_missing_choices` — mock → 200 sin `choices` → `RuntimeError`.
-- `test_f1_local_llm_invoke_empty_content` — mock → 200 con `content=""` → `RuntimeError`.
-- `test_f1_local_llm_list_models_returns_configured_model` — con `LLM_BACKEND="local_llm"`,
-  `list_copilot_models()` devuelve 1 dict con el modelo configurado.
-- `test_f1_local_llm_endpoint_required` — con `LOCAL_LLM_ENDPOINT=""` → `RuntimeError`.
+4. `list_copilot_models()` (`copilot_bridge.py:63`): agregar al INICIO de la función:
+   ```python
+   if config.LLM_BACKEND.lower() == "local_llm":  # Plan 106
+       return [{
+           "id": config.LOCAL_LLM_MODEL,
+           "name": f"Modelo local ({config.LOCAL_LLM_MODEL})",
+           "vendor": "local",
+           "family": "",
+           "preview": False,
+           "capabilities": {"max_output_tokens": 8192},
+       }]
+   ```
+
+**Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan106_local_llm_bridge.py`
+(mockeando `requests.post` en el módulo `copilot_bridge` — gotcha plan 28: parchear en el módulo
+que lo importa, `mock.patch("copilot_bridge.requests.post", ...)`):
+- `test_f1_invoke_local_llm_success` — mock 200 con respuesta OpenAI → `BridgeResponse.text`
+  correcto y `metadata["backend"] == "local_llm"`.
+- `test_f1_invoke_local_llm_ignores_global_backend` — con `LLM_BACKEND="copilot"`,
+  `invoke_local_llm()` IGUAL pega al endpoint local (C1: el mock de requests.post recibe la URL
+  de `LOCAL_LLM_ENDPOINT`).
+- `test_f1_invoke_local_llm_timeout` — mock lanza `requests.Timeout` → `RuntimeError` que menciona
+  `LOCAL_LLM_TIMEOUT_SEC`.
+- `test_f1_invoke_local_llm_connection_error` — mock lanza `requests.ConnectionError` →
+  `RuntimeError` con hint.
+- `test_f1_invoke_local_llm_non_200` — mock 500 → `RuntimeError` con el código HTTP.
+- `test_f1_invoke_local_llm_missing_choices` — mock 200 sin `choices` → `RuntimeError`.
+- `test_f1_invoke_local_llm_empty_content` — mock 200 con `content=""` → `RuntimeError`.
+- `test_f1_invoke_local_llm_endpoint_required` — con `LOCAL_LLM_ENDPOINT=""` → `RuntimeError`.
+- `test_f1_invoke_local_llm_uses_configured_timeout` — con `LOCAL_LLM_TIMEOUT_SEC=300`, el mock
+  recibe `timeout=300` (C8).
+- `test_f1_invoke_dispatch_local_llm_backend` — con `LLM_BACKEND="local_llm"`, `invoke()` llega a
+  `invoke_local_llm` (mockear `requests.post`).
+- `test_f1_list_models_local_backend` — con `LLM_BACKEND="local_llm"`, `list_copilot_models()`
+  devuelve 1 dict con el modelo configurado.
+- `test_f1_on_log_receives_level_and_msg` — el `on_log` pasado recibe exactamente 2 argumentos
+  posicionales `(level, msg)` (C3: candado sobre la firma).
 
 **Comando:** `cd "Stacky Agents/backend" && venv/Scripts/python.exe -m pytest tests/test_plan106_local_llm_bridge.py -q`
 
-**Criterio binario:** los 8 tests en verde.
-**Flag:** consumida en invoke (1).
-**Runtimes:** N/A (bridge backend-agnóstico). **Trabajo del operador:** opt-in (configurar vars).
+**Criterio binario:** los 12 tests en verde.
+**Flag:** el cliente per-se no gatea por flag (gatea el endpoint F3/F4); el modo avanzado gatea
+por `LLM_BACKEND=local_llm` explícito.
+**Runtimes:** N/A (cliente backend). **Trabajo del operador:** ninguno adicional.
 
 ---
 
-### F2 — Integración en llm_router
+### F2 — Integración en llm_router (modo avanzado, opt-in)
 
-**Objetivo:** `llm_router.py` reconoce backend `local_llm` y lo despacha correctamente,
-incluyéndolo en la lista de modelos disponibles.
+**Objetivo:** si el operador setea explícitamente `LLM_BACKEND=local_llm`, `llm_router` lo
+reconoce sin romperse. Los endpoints F3/F4 NO dependen de esta fase (C1).
 
 **Archivo a EDITAR:** `Stacky Agents/backend/services/llm_router.py`
 
-1. Actualizar docstring para mencionar `local_llm`:
+1. `_available_models()` (`llm_router.py:107`): agregar, después del branch `copilot`:
    ```python
-   """
-   FA-04 — Multi-LLM routing.
-
-   Por agente + complejidad estimada del input, elegir el modelo óptimo.
-
-   Backends soportados:
-   - anthropic / mock: Claude Haiku/Sonnet/Opus.
-   - copilot: modelos reales habilitados en GitHub Copilot del usuario (consulta `/models`).
-   - local_llm: modelo local vía Ollama/LM Studio/vLLM (OpenAI-compatible).
-   """
+   if backend == "local_llm":  # Plan 106 F2
+       return [config.LOCAL_LLM_MODEL]
    ```
 
-2. Modificar `_available_models()` (línea ~107) para incluir `local_llm`:
+2. `decide()` (`llm_router.py:183`): agregar, ANTES del branch de copilot (después del early
+   return de mock en `llm_router.py:219`):
    ```python
-   def _available_models() -> list[str]:
-       backend = (config.LLM_BACKEND or "mock").lower()
-       if backend == "vscode_bridge":
-           from copilot_bridge import list_vscode_bridge_models
-           live = list_vscode_bridge_models()
-           return [m["id"] for m in live]
-       if backend == "copilot":
-           live = get_copilot_models()
-           return [m["id"] for m in live]
-       if backend == "local_llm":  # Plan 106 F2
-           return [config.LOCAL_LLM_MODEL]
-       if backend == "mock":
-           return MOCK_MODELS + CLAUDE_MODELS
-       return CLAUDE_MODELS + MOCK_MODELS
+   if backend == "local_llm":  # Plan 106 F2
+       return RoutingDecision(
+           model=config.LOCAL_LLM_MODEL,
+           reason="backend local_llm (modelo local configurado)",
+       )
    ```
+   (verificar con lectura los kwargs reales de `RoutingDecision` en el mismo archivo y usar
+   exactamente esos; si tiene campos obligatorios extra, completarlos como hace el branch mock
+   de `llm_router.py:219`).
 
-3. Modificar `decide()` (línea ~183) para manejar backend `local_llm`:
-   ```python
-   def decide(
-       *,
-       agent_type: str,
-       blocks: list[dict],
-       fingerprint_complexity: str | None = None,
-       override: str | None = None,
-       backend: str | None = None,
-       project_name: str | None = None,
-   ) -> RoutingDecision:
-       backend = (backend or config.LLM_BACKEND or "anthropic").lower()
-
-       # ... código existente (vscode_bridge health check, mock, override)
-
-       # Plan 106 F2 — local_llm: siempre usar el modelo configurado
-       if backend == "local_llm":
-           return RoutingDecision(
-               model=config.LOCAL_LLM_MODEL,
-               reason="backend local_llm (modelo configurado)",
-           )
-
-       # ... resto del código (copilot, anthropic)
-   ```
-
-4. Actualizar `_pick_copilot_default()` (opcional) para no fallar si no hay modelos
-   Copilot pero hay `local_llm`:
-   ```python
-   def _pick_copilot_default(agent_type: str, available: list[str]) -> str:
-       if not available:
-           # Si el backend es local_llm, no deberíamos estar acá, pero por seguridad:
-           if (config.LLM_BACKEND or "").lower() == "local_llm":
-               return config.LOCAL_LLM_MODEL
-           # ... resto del código original (raise RuntimeError)
-       # ...
-   ```
+3. NO tocar `_pick_copilot_default()`: con el early-return del punto 2, ese camino nunca se
+   alcanza con backend `local_llm`.
 
 **Tests PRIMERO** — EXTENDER `tests/test_plan106_local_llm_config.py`:
-- `test_f2_available_models_includes_local_llm_when_backend_set` — con
-  `LLM_BACKEND="local_llm"`, `_available_models()` devuelve `[config.LOCAL_LLM_MODEL]`.
-- `test_f2_decide_returns_local_model_when_backend_local_llm` — con `backend="local_llm"`,
-  `decide()` devuelve `RoutingDecision` con `model=config.LOCAL_LLM_MODEL` y reason correcto.
-- `test_f2_available_models_excludes_local_llm_when_backend_not_set` — con
-  `LLM_BACKEND="anthropic"`, `_available_models()` NO incluye `LOCAL_LLM_MODEL`.
+- `test_f2_available_models_local_backend` — con `LLM_BACKEND="local_llm"`,
+  `_available_models() == [config.LOCAL_LLM_MODEL]`.
+- `test_f2_decide_local_backend` — con `backend="local_llm"`, `decide()` devuelve
+  `model == config.LOCAL_LLM_MODEL`.
+- `test_f2_available_models_other_backend_unchanged` — con `LLM_BACKEND="anthropic"`,
+  `_available_models()` NO incluye `config.LOCAL_LLM_MODEL` (salvo colisión de nombre, usar un
+  `LOCAL_LLM_MODEL` de test único tipo `"qwen-test:1b"`).
 
 **Comando:** `cd "Stacky Agents/backend" && venv/Scripts/python.exe -m pytest tests/test_plan106_local_llm_config.py -q`
 
 **Criterio binario:** los 3 tests nuevos + los 5 de F0 (8 total) en verde.
-**Flag:** heredada de F0.
-**Runtimes:** backend-agnóstico (los 3 runtimes pueden usarlo). **Trabajo del operador:** opt-in.
+**Runtimes:** N/A. **Trabajo del operador:** solo si opta por el modo avanzado (documentado con
+advertencia en la PlainHelp de `LOCAL_LLM_ENABLED`: "el modo LLM_BACKEND=local_llm redirige TODOS
+los agentes del bridge al modelo local").
 
 ---
 
-### F3 — Endpoint /api/llm/analyze-code (análisis de código HITL)
+### F3 — Blueprint + /api/llm/analyze-code + /api/llm/local-health [A1]
 
-**Objetivo:** endpoint especializado que recibe contexto de código (archivos, proyecto, stack)
-y devuelve un análisis markdown del modelo local SIN tool use (solo lectura).
+**Objetivo:** endpoint de análisis de código HITL contra el modelo local + health-check barato
+del servidor local (ADICIÓN ARQUITECTO A1).
 
 **Archivo NUEVO:** `Stacky Agents/backend/api/local_llm_analysis.py`
 
 ```python
-"""api/local_llm_analysis.py — Plan 106 F3. Endpoints especializados para modelo local.
+"""api/local_llm_analysis.py — Plan 106 F3/F4. Endpoints del modelo local (HITL, sin tools).
 
-POST /api/llm/analyze-code → análisis de código (HITL, sin tools).
+GET  /api/llm/local-health     → ping barato al servidor local (A1).
+POST /api/llm/analyze-code     → análisis de código (markdown).
 POST /api/llm/suggest-pipeline → sugerencias de pipeline (F4).
 """
-from __future__ annotations
+from __future__ import annotations
+
+import json
+from datetime import datetime
+
+import requests
 from flask import Blueprint, jsonify, request
 
-import config as _config
+import config
+from db import session_scope
+from models import AgentExecution, Ticket
 
 bp = Blueprint("local_llm_analysis", __name__, url_prefix="/llm")
 
-_ANALYZE_ADO_ID = -5  # discriminador (ticket interno, sin ADO real)
+# Discriminador de identidad del ticket interno (sin ADO real), patrón
+# api/devops_agent.py:63-75: ado_id negativo compartido + external_id=-ticket.id único.
+_LOCAL_LLM_ADO_ID = -5
+
+_HITL_RULES = (
+    "\n\nREGLA ABSOLUTA (HITL):\n"
+    "- NUNCA ejecutes comandos.\n"
+    "- NUNCA edites archivos.\n"
+    "- NUNCA commitees cambios.\n"
+    "- NUNCA sugieras comandos que muten el estado del repo.\n"
+    "- Solo analizá, explicá y proponé; el operador humano decide qué aplicar.\n"
+)
+
 
 def _flag_off() -> bool:
-    return not getattr(_config.config, "LOCAL_LLM_ENABLED", False)
+    return not getattr(config, "LOCAL_LLM_ENABLED", False)
+
 
 def _guard():
-    """Guard común: 404 si flag OFF, 400 si POST sin JSON."""
+    """404 si flag OFF; 503 si endpoint vacío; 400 si POST sin JSON."""
     if _flag_off():
         return jsonify({"error": "local_llm_disabled"}), 404
-    if not _config.config.LOCAL_LLM_ENDPOINT:
+    if not getattr(config, "LOCAL_LLM_ENDPOINT", ""):
         return jsonify({"error": "local_llm_endpoint_not_configured"}), 503
-    if request.method != "GET" and not request.is_json:
+    if request.method == "POST" and not request.is_json:
         return jsonify({"error": "body_required_json"}), 400
     return None
 
 
-@bp.post("/analyze-code", methods=["POST"])
+def _ensure_internal_ticket(session, project: str) -> Ticket:
+    """Busca/crea el ticket interno del modelo local para este proyecto.
+
+    Copia el patrón de api/devops_agent.py:63-75: ado_id=-5 discriminador (sin unique),
+    external_id negativo único (=-ticket.id, seteado post-flush) para no chocar con el
+    UNIQUE ux_tickets_stacky_tracker_external ni con el backfill de db.py.
+    LEER devops_agent.py antes de implementar y replicar EXACTAMENTE los campos
+    obligatorios de Ticket que ese código setea (title, work_item_type, project, etc.).
+    """
+    existing = (
+        session.query(Ticket)
+        .filter(Ticket.ado_id == _LOCAL_LLM_ADO_ID, Ticket.project == project)
+        .first()
+    )
+    if existing:
+        return existing
+    ticket = Ticket(
+        ado_id=_LOCAL_LLM_ADO_ID,
+        project=project,
+        stacky_project_name=project,
+        title=f"[interno] Modelo local — {project}",
+        work_item_type="Task",
+        # completar el resto de campos NOT NULL igual que devops_agent.py:70-75
+    )
+    session.add(ticket)
+    session.flush()
+    ticket.external_id = -ticket.id
+    return ticket
+
+
+def _create_execution(session, ticket_id: int, agent_type: str, payload: dict) -> int:
+    exec_row = AgentExecution(
+        ticket_id=ticket_id,                       # NOT NULL (models.py:211)
+        agent_type=agent_type,
+        status="running",
+        input_context_json=json.dumps(payload, ensure_ascii=False),  # NOT NULL (models.py:215)
+        started_by="local_llm_api",                # NOT NULL (models.py:222)
+        started_at=datetime.utcnow(),
+    )
+    exec_row.metadata_dict = {
+        "backend": "local_llm",
+        "model": getattr(config, "LOCAL_LLM_MODEL", ""),
+    }
+    session.add(exec_row)
+    session.flush()
+    return exec_row.id
+
+
+def _finish_execution(execution_id: int, *, status: str, output: str = "", error: str = "") -> None:
+    with session_scope() as session:
+        exec_row = session.query(AgentExecution).filter_by(id=execution_id).first()
+        if not exec_row:
+            return
+        exec_row.status = status
+        exec_row.completed_at = datetime.utcnow()
+        if output:
+            exec_row.output = output[:10000]
+        if error:
+            exec_row.error_message = error[:500]
+
+
+@bp.get("/local-health")
+def local_health_route():
+    """Ping barato (3s) al servidor local para que la UI muestre el estado. [A1]"""
+    guard = _guard()
+    if guard:
+        return guard
+    endpoint = config.LOCAL_LLM_ENDPOINT
+    # Derivar la base del server: para .../v1/chat/completions probamos .../v1/models.
+    base = endpoint.split("/v1/")[0] if "/v1/" in endpoint else endpoint
+    try:
+        resp = requests.get(f"{base}/v1/models", timeout=3)
+        reachable = resp.status_code == 200
+    except requests.RequestException:
+        reachable = False
+    return jsonify({
+        "ok": True,
+        "reachable": reachable,
+        "endpoint": endpoint,
+        "model": config.LOCAL_LLM_MODEL,
+    })
+
+
+@bp.post("/analyze-code")
 def analyze_code_route():
     """Analiza código con el modelo local (sin tool use).
 
-    Body: {
-        "project": str (required),
-        "stack": "dotnet" | "node" | "python" | "go" | "rust" | "java" | "php" | "generic" (optional),
-        "files": [{"path": str, "content": str}] (optional),
-        "prompt": str (optional, pregunta específica del operador)
-    }
-
-    Respuesta: {
-        "ok": true,
-        "analysis": str (markdown),
-        "model": str,
-        "execution_id": int  # para seguimiento
-    }
-
-    El endpoint NO ejecuta tools; inyecta un prompt HITL que prohíbe tool use.
+    Body: {"project": str (required), "stack": str (optional, default "generic"),
+           "files": [{"path": str, "content": str}] (optional), "prompt": str (optional)}
+    200: {"ok": true, "analysis": str, "model": str, "execution_id": int}
     """
     guard = _guard()
     if guard:
         return guard
-
     body = request.get_json(silent=True) or {}
     project = body.get("project")
     if not project:
         return jsonify({"error": "project_required"}), 400
-
     stack = body.get("stack", "generic")
-    files = body.get("files", [])
-    custom_prompt = body.get("prompt", "")
+    files = body.get("files") or []
+    custom_prompt = body.get("prompt") or ""
 
-    # Prompt HITL que prohíbe tools
     system = (
-        "Sos un ingeniero senior experto en análisis de código estatico. "
-        "Tu UNICA tarea es analizar y explicar en markdown. "
-        "\n\n"
-        "REGLA ABSOLUTA (HITL):\n"
-        "- NUNCA ejecutes comandos.\n"
-        "- NUNCA edites archivos.\n"
-        "- NUNCA commitees cambios.\n"
-        "- NUNCA sugieras comandos que muten el estado del repo.\n"
-        "- Solo analizá, explicá y proponé mejoras en texto plano.\n"
+        "Sos un ingeniero senior experto en análisis de código estático. "
+        "Tu ÚNICA tarea es analizar y explicar en markdown." + _HITL_RULES
+    )
+    files_context = ""
+    for f in files:
+        files_context += f"\n--- {f.get('path', '')} ---\n{f.get('content', '')}\n"
+    if files_context:
+        files_context = "\n\n== ARCHIVOS ==\n" + files_context
+    question = custom_prompt or "¿Qué observaciones tenés sobre este código?"
+    user_prompt = (
+        f'Analizá el código del proyecto "{project}" (stack: {stack}).'
+        f"{files_context}\nPregunta del operador: {question}\n\n"
+        "Respondé en markdown con secciones:\n"
+        "1. Hallazgos (bugs, smells, riesgos)\n"
+        "2. Sugerencias (refactors, patrones, mejores prácticas)\n"
+        "3. Preguntas (para el operador)\n"
     )
 
-    # Armar el contexto de archivos
-    files_context = ""
-    if files:
-        files_context = "\n\n== ARCHIVOS ==\n"
-        for f in files:
-            path = f.get("path", "")
-            content = f.get("content", "")
-            files_context += f"\n--- {path} ---\n{content}\n"
-
-    user_prompt = f"""Analizá el código del proyecto "{project}" (stack: {stack}).
-{files_context}
-Pregunta del operador: {custom_prompt if custom_prompt else "¿Qué observaciones tenés sobre este código?"}
-
-Respondé en markdown con secciones:
-1. Hallazgos (bugs, smells, riesgos)
-2. Sugerencias (refactors, patrones, mejores prácticas)
-3. Preguntas (para el operador)
-"""
-
-    # Invocar el modelo local vía copilot_bridge
-    from copilot_bridge import invoke
-    from db import session_scope
-    from models import AgentExecution
-    from datetime import datetime
+    from copilot_bridge import invoke_local_llm  # import lazy (patrón del repo)
 
     with session_scope() as session:
-        exec_row = AgentExecution(
-            ticket_id=None,  # sin ticket
-            agent_type="local_llm_analyzer",
-            started_at=datetime.utcnow(),
-            status="running",
-            metadata_dict={
-                "backend": "local_llm",
-                "model": _config.config.LOCAL_LLM_MODEL,
-                "project": project,
-                "stack": stack,
-            },
+        ticket = _ensure_internal_ticket(session, project)
+        execution_id = _create_execution(
+            session, ticket.id, "local_llm_analyzer",
+            {"project": project, "stack": stack, "files": len(files)},
         )
-        session.add(exec_row)
-        session.flush()
-        execution_id = exec_row.id
-
     try:
-        response = invoke(
+        response = invoke_local_llm(
             agent_type="local_llm_analyzer",
             system=system,
             user=user_prompt,
-            on_log=lambda eid, level, msg: None,  # sin logging por ahora
+            on_log=lambda level, msg: None,  # firma LogFn real (level, msg) — C3
             execution_id=execution_id,
-            model=_config.config.LOCAL_LLM_MODEL,
         )
-
-        # Marcar como completado
-        with session_scope() as session:
-            exec_row = session.query(AgentExecution).filter_by(id=execution_id).first()
-            if exec_row:
-                exec_row.status = "completed"
-                exec_row.completed_at = datetime.utcnow()
-                exec_row.output = response.text[:10000]  # truncar para la DB
-                exec_row.metadata_dict = dict(exec_row.metadata_dict or {})
-                exec_row.metadata_dict["backend"] = "local_llm"
-
-        return jsonify({
-            "ok": True,
-            "analysis": response.text,
-            "model": _config.config.LOCAL_LLM_MODEL,
-            "execution_id": execution_id,
-        })
-
     except Exception as e:
-        with session_scope() as session:
-            exec_row = session.query(AgentExecution).filter_by(id=execution_id).first()
-            if exec_row:
-                exec_row.status = "error"
-                exec_row.completed_at = datetime.utcnow()
-                exec_row.error_message = str(e)[:500]
-        return jsonify({
-            "ok": False,
-            "error": str(e),
-            "execution_id": execution_id,
-        }), 502
+        _finish_execution(execution_id, status="error", error=str(e))
+        return jsonify({"ok": False, "error": str(e), "execution_id": execution_id}), 502
+    _finish_execution(execution_id, status="completed", output=response.text)
+    return jsonify({
+        "ok": True,
+        "analysis": response.text,
+        "model": config.LOCAL_LLM_MODEL,
+        "execution_id": execution_id,
+    })
 ```
 
-**Registro del blueprint:** en `Stacky Agents/backend/api/__init__.py`:
+**Registro del blueprint:** en `Stacky Agents/backend/api/__init__.py`, junto a los imports y
+registros existentes (`api/__init__.py:54-73`):
 ```python
 from .local_llm_analysis import bp as local_llm_analysis_bp  # Plan 106
-# ... dentro de register:
 api_bp.register_blueprint(local_llm_analysis_bp)
 ```
+(OJO gotcha plan 74: el blueprint ya tiene `url_prefix="/llm"`; NO agregar otro prefijo al
+registrarlo — queda `/api/llm/...`.)
 
-**Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan106_analyze_code_api.py`:
-- `test_f3_flag_off_404` — `LOCAL_LLM_ENABLED=False` → 404.
+**Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan106_analyze_code_api.py`
+(mockear `copilot_bridge.invoke_local_llm` — se importa lazy dentro de la ruta, así que
+parchear en el módulo origen: `mock.patch("copilot_bridge.invoke_local_llm", ...)`, gotcha plan 28):
+- `test_f3_flag_off_404` — `LOCAL_LLM_ENABLED=False` → 404 en analyze-code Y en local-health.
+- `test_f3_endpoint_empty_503` — flag ON + `LOCAL_LLM_ENDPOINT=""` → 503.
 - `test_f3_no_project_400` — body sin `project` → 400.
 - `test_f3_no_json_400` — POST form-encoded → 400.
-- `test_f3_success_returns_markdown_analysis` — mock `invoke` → devuelve `analysis` markdown.
-- `test_f3_invoke_receives_hitl_prompt` — mock `invoke` → verifica que `system` contiene
+- `test_f3_success_returns_markdown_analysis` — mock → 200 con `analysis` y `execution_id`.
+- `test_f3_invoke_receives_hitl_prompt` — el `system` que recibe el mock contiene
   "REGLA ABSOLUTA (HITL)" y "NUNCA ejecutes comandos".
-- `test_f3_execution_created_and_marked_completed` — mock `invoke` → verifica que se creó
-  `AgentExecution` y quedó `status="completed"`.
-- `test_f3_error_marks_execution_as_error` — mock `invoke` levanta `Exception` →
-  `exec_row.status="error"`.
+- `test_f3_execution_created_and_completed` — se creó `AgentExecution` con
+  `started_by="local_llm_api"`, `ticket` interno con `ado_id==-5`, y quedó `status="completed"`.
+- `test_f3_error_marks_execution_error_502` — mock levanta `RuntimeError` → 502 y
+  `status="error"` con `error_message` seteado.
+- `test_f3_local_health_reachable_and_unreachable` — mock de `requests.get` en el módulo
+  `api.local_llm_analysis`: 200 → `reachable=True`; `ConnectionError` → `reachable=False` (A1).
 
 **Comando:** `cd "Stacky Agents/backend" && venv/Scripts/python.exe -m pytest tests/test_plan106_analyze_code_api.py -q`
 
-**Criterio binario:** los 7 tests en verde.
+**Criterio binario:** los 9 tests en verde.
 **Flag:** `LOCAL_LLM_ENABLED` (gate duro 404).
-**Runtimes:** backend-agnóstico (endpoint HTTP puro). **Trabajo del operador:** opt-in (flag ON).
+**Runtimes:** endpoint HTTP puro (KPI-4). **Trabajo del operador:** opt-in (flag ON por UI).
 
 ---
 
-### F4 — Endpoint /api/llm/suggest-pipeline (sugerencias de pipeline)
+### F4 — /api/llm/suggest-pipeline (sugerencias de pipeline)
 
-**Objetivo:** endpoint especializado que recibe un spec parcial de pipeline (stack, project,
-nombre) y devuelve sugerencias de working directory, condition, environment variables SIN tool use.
+**Objetivo:** endpoint que recibe un spec parcial de pipeline y devuelve sugerencias de
+working directory, condition, environment variables SIN tool use.
 
-**Archivo a EDITAR:** `Stacky Agents/backend/api/local_llm_analysis.py` (agregar ruta):
+**Archivo a EDITAR:** `Stacky Agents/backend/api/local_llm_analysis.py` (agregar ruta; `json` ya
+está importado a nivel módulo — C6):
 
 ```python
-@bp.post("/suggest-pipeline", methods=["POST"])
+@bp.post("/suggest-pipeline")
 def suggest_pipeline_route():
     """Sugiere campos de pipeline con el modelo local (sin tool use).
 
-    Body: {
-        "project": str (required),
-        "stack": "dotnet" | "node" | "python" | "go" | "rust" | "java" | "php" | "generic" (required),
-        "spec_partial": dict (optional, el spec parcial del pipeline)
-    }
-
-    Respuesta: {
-        "ok": true,
-        "suggestions": {
-            "working_directory": str,
-            "condition": str,
-            "environment_variables": {key: value},
-            "justification": str (markdown)
-        },
-        "model": str,
-        "execution_id": int
-    }
-
-    El endpoint NO ejecuta tools; inyecta un prompt HITL que prohíbe tool use.
+    Body: {"project": str (required), "stack": str (required),
+           "spec_partial": dict (optional)}
+    200: {"ok": true, "suggestions": {working_directory, condition,
+          environment_variables, justification}, "model": str, "execution_id": int}
     """
     guard = _guard()
     if guard:
         return guard
-
     body = request.get_json(silent=True) or {}
     project = body.get("project")
     stack = body.get("stack")
     if not project or not stack:
         return jsonify({"error": "project_and_stack_required"}), 400
+    spec_partial = body.get("spec_partial") or {}
 
-    spec_partial = body.get("spec_partial", {})
-
-    # Prompt HITL
     system = (
         "Sos un ingeniero DevOps senior experto en pipelines CI/CD. "
-        "Tu UNICA tarea es sugerir campos de pipeline en formato JSON. "
-        "\n\n"
-        "REGLA ABSOLUTA (HITL):\n"
-        "- NUNCA ejecutes comandos.\n"
-        "- NUNCA edites archivos.\n"
-        "- NUNCA commitees cambios.\n"
-        "- Solo sugerí valores en JSON; el operador los aplicará.\n"
+        "Tu ÚNICA tarea es sugerir campos de pipeline en formato JSON." + _HITL_RULES
+    )
+    spec_context = json.dumps(spec_partial, ensure_ascii=False, indent=2)
+    user_prompt = (
+        f'Dado el proyecto "{project}" (stack: {stack}) y el spec parcial:\n'
+        f"== SPEC PARCIAL ==\n{spec_context}\n\n"
+        "Sugerí valores para estos campos del pipeline:\n"
+        "1. working_directory: directorio de trabajo relativo a la raíz del repo\n"
+        "2. condition: condición (branch/tag) que dispara el pipeline\n"
+        "3. environment_variables: variables de entorno sugeridas (dict JSON)\n\n"
+        "Respondé EXCLUSIVAMENTE con un objeto JSON (sin markdown) con las keys:\n"
+        '{"working_directory": "...", "condition": "...", '
+        '"environment_variables": {"VAR": "valor"}, '
+        '"justification": "explicación breve en castellano"}\n'
+        "Si no estás seguro de un campo, dejalo vacío (string vacío o dict vacío).\n"
     )
 
-    # Armar el contexto del spec parcial
-    spec_context = f"\n\n== SPEC PARCIAL ==\n{json.dumps(spec_partial, ensure_ascii=False, indent=2)}"
-
-    user_prompt = f"""Dado el proyecto "{project}" (stack: {stack}) y el spec parcial:
-{spec_context}
-
-Sugerí valores para los siguientes campos del pipeline:
-1. working_directory: el directorio de trabajo relativo a la raíz del repo
-2. condition: la condición (branch/tag) que dispara el pipeline
-3. environment_variables: variables de entorno sugeridas (como dict JSON)
-
-Respondé EXCLUSIVAMENTE en este formato JSON (sin markdown):
-{{
-    "working_directory": "...",
-    "condition": "...",
-    "environment_variables": {{"VAR1": "value1", "VAR2": "value2"}},
-    "justification": "explicación breve en castellano"
-}}
-
-Si no estás seguro, dejá el campo vacío (string vacío o dict vacío).
-"""
-
-    # Invocar el modelo local vía copilot_bridge
-    from copilot_bridge import invoke
-    from db import session_scope
-    from models import AgentExecution
-    from datetime import datetime
-    import json
+    from copilot_bridge import invoke_local_llm
 
     with session_scope() as session:
-        exec_row = AgentExecution(
-            ticket_id=None,
-            agent_type="local_llm_pipeline_suggester",
-            started_at=datetime.utcnow(),
-            status="running",
-            metadata_dict={
-                "backend": "local_llm",
-                "model": _config.config.LOCAL_LLM_MODEL,
-                "project": project,
-                "stack": stack,
-            },
+        ticket = _ensure_internal_ticket(session, project)
+        execution_id = _create_execution(
+            session, ticket.id, "local_llm_pipeline_suggester",
+            {"project": project, "stack": stack, "spec_partial": spec_partial},
         )
-        session.add(exec_row)
-        session.flush()
-        execution_id = exec_row.id
-
     try:
-        response = invoke(
+        response = invoke_local_llm(
             agent_type="local_llm_pipeline_suggester",
             system=system,
             user=user_prompt,
-            on_log=lambda eid, level, msg: None,
+            on_log=lambda level, msg: None,
             execution_id=execution_id,
-            model=_config.config.LOCAL_LLM_MODEL,
         )
+    except Exception as e:
+        _finish_execution(execution_id, status="error", error=str(e))
+        return jsonify({"ok": False, "error": str(e), "execution_id": execution_id}), 502
 
-        # Parsear el JSON de la respuesta (el modelo puede devolver markdown con ```json)
-        text = response.text.strip()
-        if text.startswith("```"):
-            # Quitar markdown code block
-            text = "\n".join(text.split("\n")[1:-1])
+    text = response.text.strip()
+    if text.startswith("```"):
+        # Quitar fence markdown (```json ... ```)
+        lines = text.split("\n")
+        text = "\n".join(lines[1:-1]) if len(lines) >= 3 else text
+    try:
         suggestions = json.loads(text)
-
-        # Marcar como completado
-        with session_scope() as session:
-            exec_row = session.query(AgentExecution).filter_by(id=execution_id).first()
-            if exec_row:
-                exec_row.status = "completed"
-                exec_row.completed_at = datetime.utcnow()
-                exec_row.output = text[:10000]
-                exec_row.metadata_dict = dict(exec_row.metadata_dict or {})
-                exec_row.metadata_dict["backend"] = "local_llm"
-
-        return jsonify({
-            "ok": True,
-            "suggestions": suggestions,
-            "model": _config.config.LOCAL_LLM_MODEL,
-            "execution_id": execution_id,
-        })
-
     except json.JSONDecodeError as e:
-        with session_scope() as session:
-            exec_row = session.query(AgentExecution).filter_by(id=execution_id).first()
-            if exec_row:
-                exec_row.status = "error"
-                exec_row.completed_at = datetime.utcnow()
-                exec_row.error_message = f"JSON parse error: {e}"
+        _finish_execution(execution_id, status="error", error=f"JSON parse error: {e}")
         return jsonify({
             "ok": False,
             "error": "json_parse_error",
-            "message": "El modelo no devolvió JSON válido",
+            "message": "El modelo no devolvió JSON válido; reintentá.",
             "raw_response": response.text[:500],
-        }), 502
-    except Exception as e:
-        with session_scope() as session:
-            exec_row = session.query(AgentExecution).filter_by(id=execution_id).first()
-            if exec_row:
-                exec_row.status = "error"
-                exec_row.completed_at = datetime.utcnow()
-                exec_row.error_message = str(e)[:500]
-        return jsonify({
-            "ok": False,
-            "error": str(e),
             "execution_id": execution_id,
         }), 502
+    _finish_execution(execution_id, status="completed", output=text)
+    return jsonify({
+        "ok": True,
+        "suggestions": suggestions,
+        "model": config.LOCAL_LLM_MODEL,
+        "execution_id": execution_id,
+    })
 ```
 
-**Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan106_suggest_pipeline_api.py`:
+**Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan106_suggest_pipeline_api.py`
+(mismo patrón de mock que F3):
 - `test_f4_flag_off_404` — flag OFF → 404.
-- `test_f4_no_project_or_stack_400` — body sin `project` o `stack` → 400.
-- `test_f4_success_returns_suggestions_json` — mock `invoke` → devuelve JSON con
-  `working_directory`, `condition`, `environment_variables`, `justification`.
-- `test_f4_parse_json_strips_markdown_code_blocks` — mock `invoke` → devuelve
-  `"```json\n{...}\n```"` → parsea correctamente el JSON interno.
-- `test_f4_json_parse_error_502` — mock `invoke` → devuelve texto no-JSON → 502 con
-  `error="json_parse_error"`.
-- `test_f4_invoke_receives_hitl_prompt` — mock `invoke` → verifica que `system` contiene
-  "REGLA ABSOLUTA (HITL)" y "Solo sugerí valores en JSON".
+- `test_f4_no_project_or_stack_400` — body sin `project` o sin `stack` → 400.
+- `test_f4_success_returns_suggestions_json` — mock devuelve JSON plano → 200 con
+  `suggestions.working_directory/condition/environment_variables/justification`.
+- `test_f4_parse_strips_markdown_fence` — mock devuelve `"```json\n{...}\n```"` → parsea OK.
+- `test_f4_json_parse_error_502` — mock devuelve texto no-JSON → 502 con
+  `error="json_parse_error"` y `raw_response`, y la execution queda `status="error"`.
+- `test_f4_invoke_receives_hitl_prompt` — el `system` del mock contiene "REGLA ABSOLUTA (HITL)".
 
 **Comando:** `cd "Stacky Agents/backend" && venv/Scripts/python.exe -m pytest tests/test_plan106_suggest_pipeline_api.py -q`
 
 **Criterio binario:** los 6 tests en verde.
-**Flag:** heredada de F0.
-**Runtimes:** backend-agnóstico. **Trabajo del operador:** opt-in.
+**Flag:** heredada de F0. **Runtimes:** endpoint HTTP puro. **Trabajo del operador:** opt-in.
 
 ---
 
-### F5 — Frontend: integración UI mínima (opt-in)
+### F5 — Frontend: clientes API + consumidor UI mínimo (HITL)
 
-**Objetivo:** el modelo local aparece en la UI Arnés (si flag ON) y los 2 endpoints
-especializados son accesibles desde una nueva sección "Análisis IA local" o desde las secciones
-existentes.
+**Objetivo (C10):** el operador usa la feature desde la UI, no desde curl: botón
+"Sugerir con IA local" en el builder de pipelines que PRE-RELLENA campos editables, y badge de
+alcanzabilidad del servidor local [A1].
 
 **Archivos:**
 
-1. `Stacky Agents/frontend/src/api/endpoints.ts` — agregar:
+1. `Stacky Agents/frontend/src/api/endpoints.ts` — agregar (respetar el patrón de los `*Api`
+   existentes en el archivo; verificar con grep cómo exportan y tipan los vecinos):
    ```ts
    /** Plan 106 — Modelo local (Ollama/LM Studio/vLLM). */
    export const LocalLlmApi = {
+     localHealth: () =>
+       api.get<{ ok: boolean; reachable: boolean; endpoint: string; model: string }>(
+         "/api/llm/local-health",
+       ),
      analyzeCode: (body: {
        project: string;
        stack?: string;
        files?: Array<{ path: string; content: string }>;
        prompt?: string;
      }) =>
-       api.post<{
-       ok: boolean;
-       analysis: string;
-       model: string;
-       execution_id: number;
-     }>("/api/llm/analyze-code", body),
-
+       api.post<{ ok: boolean; analysis: string; model: string; execution_id: number }>(
+         "/api/llm/analyze-code",
+         body,
+       ),
      suggestPipeline: (body: {
        project: string;
        stack: string;
        spec_partial?: Record<string, unknown>;
      }) =>
        api.post<{
-       ok: boolean;
-       suggestions: {
-         working_directory: string;
-         condition: string;
-         environment_variables: Record<string, string>;
-         justification: string;
-       };
-       model: string;
-       execution_id: number;
-     }>("/api/llm/suggest-pipeline", body),
+         ok: boolean;
+         suggestions: {
+           working_directory: string;
+           condition: string;
+           environment_variables: Record<string, string>;
+           justification: string;
+         };
+         model: string;
+         execution_id: number;
+       }>("/api/llm/suggest-pipeline", body),
    };
    ```
 
-2. `Stacky Agents/frontend/src/pages/HarnessFlagsPanel.tsx` — verificar que la flag
-   `LOCAL_LLM_ENABLED` aparece correctamente (debería aparecer automáticamente por
-   `harness_flags.py` si el harness health la expone; si no, agregarla al index signature).
+2. `Stacky Agents/frontend/src/components/devops/PipelineBuilderSection.tsx` — consumidor mínimo
+   (C10). Ubicar con grep la zona donde se editan los campos del pipeline (working directory /
+   variables; el plan 97 integró su detector cerca de `starterSpec`). Agregar:
+   - un botón `Sugerir con IA local` visible SOLO si el health del arnés reporta
+     `local_llm_enabled=true` (leerlo de la misma fuente que la sección ya usa para gatear
+     features por flag; si la sección no tiene esa fuente, obtenerlo con `LocalLlmApi.localHealth()`
+     y ocultar el botón si responde 404);
+   - al click: llama `LocalLlmApi.suggestPipeline({project, stack, spec_partial})` con el estado
+     actual del builder, muestra spinner, y al éxito PRE-RELLENA los inputs de working directory /
+     condition / variables SOLO si están vacíos (nunca pisa lo que el operador ya escribió) y
+     muestra `justification` como texto ayuda. El operador puede editar todo antes de guardar
+     (KPI-5, HITL);
+   - junto al botón, un badge con el resultado de `localHealth()` ("IA local: disponible" /
+     "IA local: sin conexión") [A1].
+   - Si la llamada falla (502/timeout), mostrar el mensaje de error del backend en el mismo patrón
+     de error que la sección ya usa; NUNCA romper el builder.
 
-3. (OPCIONAL, fuera de scope v1) `Stacky Agents/frontend/src/components/LocalLlmSection.tsx` —
-   componente para probar los endpoints. Para F5 v1, alcanza con que existan los clientes API;
-   la UI se puede probar via `curl` o Postman.
+3. La flag `LOCAL_LLM_ENABLED` y las 3 configs aparecen automáticamente en
+   `frontend/src/components/HarnessFlagsPanel.tsx` vía el registry genérico (plan 33); no editar
+   ese archivo salvo que `tsc` falle.
 
-**Tests:** sin test de React. Verificación:
-- `npx tsc --noEmit` 0 errores.
-- Grep: `grep -n "LocalLlmApi" frontend/src/api/endpoints.ts` → ≥2 ocurrencias.
+**Tests:**
+- `npx tsc --noEmit` → 0 errores.
+- `grep -n "LocalLlmApi" "Stacky Agents/frontend/src/api/endpoints.ts"` → ≥1 ocurrencia.
+- `grep -n "LocalLlmApi" "Stacky Agents/frontend/src/components/devops/PipelineBuilderSection.tsx"` → ≥1 ocurrencia.
+- (Opcional si el harness de vitest de la sección ya existe: test de que el botón no renderiza
+  con flag OFF. Correr vitest POR ARCHIVO.)
 
-**Criterio binario:** `tsc` 0 err; los greps pasan.
-**Flag:** expuesta en health.
-**Runtimes:** UI runtime-agnóstica. **Trabajo del operador:** opt-in (flag ON + configuración).
+**Criterio binario:** `tsc` 0 err + los 2 greps pasan.
+**Flag:** botón y badge gateados por `LOCAL_LLM_ENABLED`. **Runtimes:** UI runtime-agnóstica.
+**Trabajo del operador:** cero (aparece solo con la flag ON).
 
 ---
 
@@ -905,22 +882,21 @@ existentes.
 **Objetivo:** blindaje e higiene de serie.
 
 1. **Ratchet de tests (plan 49):** agregar los 4 archivos de test backend nuevos a
-   `HARNESS_TEST_FILES` en `.sh` y `.ps1`:
+   `HARNESS_TEST_FILES` en `backend/scripts/run_harness_tests.sh` **y** `run_harness_tests.ps1`:
    - `test_plan106_local_llm_config.py`
    - `test_plan106_local_llm_bridge.py`
    - `test_plan106_analyze_code_api.py`
    - `test_plan106_suggest_pipeline_api.py`
 
 2. **harness_defaults.env:** NO editar a mano. Dejar constancia en la sección de estado
-   de ESTE doc de que la flag nueva nace `false` y que el export
-   (`deployment/export_harness_defaults.py`) la incorporará en la próxima corrida del
-   operador.
+   de ESTE doc de que las flags nuevas nacen con sus defaults de `config.py` y que el export
+   (`deployment/export_harness_defaults.py`) las incorporará en la próxima corrida del operador.
 
 3. **Actualizar encabezado de estado de ESTE doc** al implementar (riel del pipeline).
 
 4. **No-regresión dirigida (por archivo, venv):**
    ```bash
-   venv/Scripts/python.exe -m pytest tests/test_llm_router.py tests/test_agent_runner.py tests/test_harness_flags.py -q
+   venv/Scripts/python.exe -m pytest tests/test_llm_router.py tests/test_harness_flags.py tests/test_harness_flags_requires.py -q
    ```
 
 **Criterio binario:** ratchet verde + no-regresión verde.
@@ -932,11 +908,11 @@ existentes.
 
 | KPI | Mecanismo | Verificación |
 |---|---|---|
-| **KPI-1 (config)** | 3 vars de entorno (LOCAL_LLM_ENABLED, LOCAL_LLM_ENDPOINT, LOCAL_LLM_MODEL) → modelo aparece | `test_f0_flag_default_off`, `test_f2_available_models_includes_local_llm_when_backend_set` |
-| **KPI-2 (análisis código)** | `POST /api/llm/analyze-code` con prompt HITL → markdown sin tools | `test_f3_invoke_receives_hitl_prompt`, `test_f3_success_returns_markdown_analysis` |
-| **KPI-3 (creación pipelines)** | `POST /api/llm/suggest-pipeline` con prompt HITL → JSON de sugerencias | `test_f4_success_returns_suggestions_json`, `test_f4_invoke_receives_hitl_prompt` |
-| **KPI-4 (paridad 3 runtimes)** | backend `local_llm` es agnóstico; los 3 runtimes pueden usarlo vía `model_override` | `agent_runner.py:219-373` (ruta github_copilot acepta cualquier model_override), F2 tests |
-| **KPI-5 (HITL)** | prompts HITL con "REGLA ABSOLUTA: NUNCA ejecutes/NUNCA edites/NUNCA commiteás" | `test_f3_invoke_receives_hitl_prompt`, `test_f4_invoke_receives_hitl_prompt` |
+| **KPI-1 (config por UI)** | 4 FlagSpec en el registry (bool + 2 str + 1 int) editables en HarnessFlagsPanel | `test_f0_flags_registered_in_registry`, `test_f0_flags_have_plain_help` |
+| **KPI-2 (análisis código)** | `POST /api/llm/analyze-code` → `invoke_local_llm()` SIEMPRE al endpoint local | `test_f3_success_returns_markdown_analysis`, `test_f1_invoke_local_llm_ignores_global_backend` |
+| **KPI-3 (creación pipelines)** | `POST /api/llm/suggest-pipeline` → JSON de sugerencias del modelo local | `test_f4_success_returns_suggestions_json`, `test_f4_invoke_receives_hitl_prompt` |
+| **KPI-4 (runtime-agnóstico)** | endpoints HTTP backend puros; ningún runtime tocado (no se edita `agent_runner.py`) | por construcción + no-regresión F6.4 |
+| **KPI-5 (HITL)** | prompts con `_HITL_RULES` + UI pre-rellena campos EDITABLES sin pisar lo escrito | `test_f3_invoke_receives_hitl_prompt`, `test_f4_invoke_receives_hitl_prompt`, F5 |
 
 ---
 
@@ -944,62 +920,67 @@ existentes.
 
 | Riesgo | Severidad | Mitigación |
 |---|---|---|
-| El endpoint local (Ollama) no responde | MEDIO | Timeout 30s + `RuntimeError` con hint accionable ("verificá que Ollama esté corriendo") |
-| El modelo local ignora el prompt HITL y devuelve tool calls | BAJO | Prompts HITL explícitos + el modelo es read-only por diseño (no se le pasa tool config); riesgo residual aceptado (el operador NO aplica nada sin revisar) |
-| El modelo local devuelve JSON inválido en `suggest-pipeline` | BAJO | `json.JSONDecodeError` → 502 con error + raw_response para debug; el operador reintentá |
-| La URL del endpoint local está mal configurada | BAJO | Validación en `_invoke_local_llm` → `RuntimeError` con hint ("seteá LOCAL_LLM_ENDPOINT") |
-| Costo de tokens del modelo local | BAJO | Es local → costo monetario 0; costo de cómputo lo asume el operador (su máquina) |
-| Streaming no soportado en F1 | BAJO | `stream=False` por simplicidad; si hace falta streaming, es F4 futuro fuera de scope |
-| El modelo local no es OpenAI-compatible | BAJO | Ollama, LM Studio, vLLM son OpenAI-compatible; si el modelo no lo es, el operador elige otro server |
+| El endpoint local (Ollama) no responde | MEDIO | health-check A1 con badge en UI + timeout configurable (`LOCAL_LLM_TIMEOUT_SEC`) + `RuntimeError` con hint accionable |
+| Timeout corto mata análisis grandes con 32B q4 | MEDIO | default 120s, configurable por UI hasta 600s (C8) |
+| El modelo local ignora el prompt HITL | BAJO | no se le pasa tool config (imposible ejecutar); la UI solo PRE-RELLENA campos editables; el operador aplica |
+| JSON inválido en `suggest-pipeline` | BAJO | fence-strip + `json.JSONDecodeError` → 502 con `raw_response` para debug; el operador reintenta |
+| `LLM_BACKEND=local_llm` redirige TODO el bridge sin querer | MEDIO | modo avanzado separado del feature principal (C1); advertencia en PlainHelp; los endpoints nunca lo requieren |
+| Tickets internos `ado_id=-5` chocan con backfill/unique | BAJO | patrón probado de `devops_agent.py:63-75` (`external_id=-ticket.id`) |
+| El modelo local no es OpenAI-compatible | BAJO | Ollama, LM Studio, vLLM lo son; si no, el operador elige otro server |
 
 ---
 
 ## 8. Fuera de scope
 
-- Streaming de respuestas (F1 usa `stream=False`; streaming = mejora futura).
+- Streaming de respuestas (`stream=False`; streaming = mejora futura).
 - Auth con Bearer token para el endpoint local (asumimos `localhost` sin auth; si hace falta,
   `LOCAL_LLM_API_KEY` futuro).
-- UI completa para los endpoints (F5 v1 solo clientes API; UI rich = mejora futura).
+- Sección UI dedicada para `analyze-code` (v2 entrega el cliente API; el consumidor UI mínimo
+  es el de pipelines, que es el caso de uso con campos estructurados).
+- Usar el modelo local como MOTOR de los 3 runtimes CLI (imposible por diseño de los CLIs — C5).
 - Integración con la "memoria que empuja" (planes 48-54) — diferible.
-- Casos de uso más allá de análisis de código y pipelines (el operador puede extender).
 
 ---
 
 ## 9. Glosario
 
-- **backend LLM:** implementación de cómo se invoca un modelo (anthropic, copilot, vscode_bridge,
-  local_llm, mock).
-- **local_llm:** backend para modelos locales vía endpoint HTTP OpenAI-compatible (Ollama,
-  LM Studio, vLLM).
-- **OpenAI-compatible:** endpoint que acepta payloads OpenAI (`/v1/chat/completions`,
-  `model`, `messages`, `stream`) y responde con `choices[0].message.content`.
-- **Ollama:** servidor de LLMs local (https://ollama.com/), default `http://localhost:11434`.
-- **LM Studio:** app de serving de LLMs local, OpenAI-compatible.
-- **vLLM:** servidor de LLMs de alta performance, OpenAI-compatible.
-- **model_override:** parámetro de `agent_runner.run_agent` para forzar un modelo específico.
-- **HITL:** Human-in-the-loop. Los endpoints especializados prohíben tools y solo proponen.
+- **cliente LLM local (`invoke_local_llm`):** función de `copilot_bridge.py` que va SIEMPRE al
+  endpoint local configurado, sin mirar `LLM_BACKEND` global.
+- **modo avanzado `LLM_BACKEND=local_llm`:** opt-in explícito que redirige TODO el tráfico del
+  bridge (y `llm_router`) al modelo local. Separado del feature principal.
+- **OpenAI-compatible:** endpoint que acepta payloads OpenAI (`/v1/chat/completions`, `model`,
+  `messages`, `stream`) y responde `choices[0].message.content`.
+- **Ollama / LM Studio / vLLM:** servers locales de LLMs OpenAI-compatible; Ollama default
+  `http://localhost:11434`.
+- **ticket interno `ado_id=-5`:** ticket discriminador sin ADO real que ancla las
+  `AgentExecution` de este plan (patrón `devops_agent.py`).
+- **HITL:** Human-in-the-loop. Los endpoints prohíben tools; la UI pre-rellena campos editables;
+  el operador decide.
 
 ---
 
 ## 10. Orden de implementación
 
-1. F0 (flag + configuración) — tests → código → verde.
-2. F1 (bridge HTTP al modelo local) — tests → código → verde.
-3. F2 (integración en llm_router) — tests → código → verde.
-4. F3 (endpoint analyze-code) — tests → código → verde.
-5. F4 (endpoint suggest-pipeline) — tests → código → verde.
-6. F5 (frontend clientes API) — código → tsc 0 err.
+1. F0 (flags + configuración, UI-editable) — tests → código → verde.
+2. F1 (cliente `invoke_local_llm` + dispatch avanzado) — tests → código → verde.
+3. F2 (llm_router, modo avanzado) — tests → código → verde.
+4. F3 (blueprint + analyze-code + local-health) — tests → código → verde.
+5. F4 (suggest-pipeline) — tests → código → verde.
+6. F5 (frontend: clientes + botón HITL + badge) — código → tsc 0 err + greps.
 7. F6 (ratchet + no-regresión + estado del doc).
 
 ---
 
 ## 11. Definición de Hecho (DoD)
 
-- [ ] 4 archivos de test backend nuevos verdes (≈26 tests: F0=5, F1=8, F3=7, F4=6)
+- [ ] 4 archivos de test backend nuevos verdes (≈32 tests: F0=5+F2=3, F1=12, F3=9, F4=6)
       corridos POR ARCHIVO con el venv.
 - [ ] No-regresión dirigida verde (F6.4).
-- [ ] Flag OFF ⇒ 404 en los 2 endpoints especializados (KPI-3/KPI-4 verificados por test).
-- [ ] Bridge HTTP funciona con Ollama/LM Studio/vLLM (test mock + verificación manual opcional).
+- [ ] Flag OFF ⇒ 404 en los 3 endpoints (`local-health`, `analyze-code`, `suggest-pipeline`).
+- [ ] `test_f1_invoke_local_llm_ignores_global_backend` verde (candado C1: nunca desvía a Copilot).
+- [ ] Las 4 flags visibles y editables en HarnessFlagsPanel (KPI-1) — verificación manual 1 min.
+- [ ] Botón "Sugerir con IA local" pre-rellena sin pisar valores del operador (KPI-5) —
+      verificación manual 1 min.
 - [ ] Ratchet actualizado en sh y ps1.
 - [ ] Commits por fase SOLO con archivos de este plan (jamás `git add -A`).
 - [ ] Encabezado de estado de este doc actualizado a IMPLEMENTADO con hashes.

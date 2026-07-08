@@ -1,6 +1,13 @@
 # Plan 104 — Filtro de presets por stack + Doctores IA por sección del panel DevOps
 
-**Estado:** CRITICADO v3 → v4 (2026-07-06, RECHAZADO→resuelto — 1 BLOQUEANTE + 4 IMPORTANTES + 1 MENOR nuevos)
+**Estado:** IMPLEMENTADO (F0..F5) — 2026-07-07, commits `aa6fa3c1` (Feature A: F0+F1)
+→ `94942e6b` (Feature B backend: F4+F2) → `ceaf63c0` (Feature B frontend: F3+F5).
+DESVÍO verificado contra código real en F4: la flag usa
+`requires="STACKY_DEVOPS_PANEL_ENABLED"` en vez de `STACKY_DEVOPS_AGENT_ENABLED`
+(el doc pedía esto último, pero esa flag ya declara su propio `requires` — encadenar
+rompe R4 profundidad-1, `validate_requires_graph`); la dependencia funcional con el
+agente DevOps se exige igual en el endpoint F2 con su propio guard 404. 42+16 tests
+backend/vitest de F0-F2 + 123 tests vitest devops sin regresión + tsc 0 errores.
 **Versión:** v4 (v1 → v2 → v3 → v4, 3ª crítica adversarial 2026-07-06)
 **Fecha:** 2026-07-06 (crítica v4: 2026-07-06)
 **Veredicto del juez (v4):** RECHAZADO en v3 (C15 BLOQUEANTE: la respuesta del doctor era INVISIBLE — el panel del plan 90 lista solo `ado_id=-2` y el doctor usa `-3`) → resuelto en F3 (abre `CodexConsoleDock` directo por `execution_id`). Además C16 (YAML del pipeline no existía en el frontend → render server-side), C17 (orden F5/F3 roto y circular), C18 (proyecto vacío → 400 confuso), C20 (HITL apoyado en falsa ausencia de tool de escritura), C19 MENOR (citas + rationale de `kind`).

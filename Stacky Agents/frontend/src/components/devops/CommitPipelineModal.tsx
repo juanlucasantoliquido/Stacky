@@ -5,15 +5,29 @@
 import React, { useState } from 'react';
 import { PipelineGenerator } from '../../api/endpoints';
 import { toSpecDict, type PipelineSpecDraft } from '../../devops/specBuilder';
+import styles from './devops.module.css';
 
 export interface CommitPipelineModalProps {
   spec: PipelineSpecDraft;
   project: string;
   onSuccess: (branch: string) => void;
   onClose: () => void;
+  /**
+   * Plan 95 [C2]: capability aditiva del health (`ado_commit_supported`), NO la
+   * flag `production_enabled` -- existe solo en builds que incluyen la F1 del
+   * plan 95 (commit ADO real). Contra un backend viejo la key está ausente ⇒
+   * este prop llega `false`/`undefined` ⇒ el modal queda IDÉNTICO a hoy.
+   */
+  adoCommitSupported?: boolean;
 }
 
-export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({ spec, project, onSuccess, onClose }) => {
+export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({
+  spec,
+  project,
+  onSuccess,
+  onClose,
+  adoCommitSupported = false,
+}) => {
   const [target, setTarget] = useState<'gitlab' | 'ado'>('gitlab');
   const [branch, setBranch] = useState('');
   const [confirmChecked, setConfirmChecked] = useState(false);
@@ -45,8 +59,8 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({ spec, 
   };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '4px', width: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+    <div className={styles.modalOverlay}>
+      <div className={styles.modalBody}>
         <h3 style={{ marginTop: 0 }}>Commit Pipeline al Repositorio</h3>
 
         {(!result || result.ok === false) && (
@@ -60,9 +74,15 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({ spec, 
                 style={{ width: '100%', padding: '8px' }}
               >
                 <option value="gitlab">GitLab CI (.gitlab-ci.yml)</option>
-                <option value="ado" disabled>
-                  Azure DevOps (pipeline.yml) — Render-only v1 (commit devuelve 501)
-                </option>
+                {adoCommitSupported ? (
+                  <option value="ado" title="commit ADO habilitado por el plan 95">
+                    Azure DevOps (azure-pipelines.yml)
+                  </option>
+                ) : (
+                  <option value="ado" disabled>
+                    Azure DevOps (pipeline.yml) — Render-only v1 (commit devuelve 501)
+                  </option>
+                )}
               </select>
             </div>
 
@@ -84,11 +104,12 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({ spec, 
                 type="text"
                 value={project}
                 disabled
-                style={{ width: '100%', padding: '8px', backgroundColor: '#e9ecef' }}
+                className={styles.inputDisabled}
+                style={{ width: '100%', padding: '8px' }}
               />
             </div>
 
-            <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '3px' }}>
+            <div className={styles.panelMuted} style={{ marginBottom: '16px', padding: '12px', borderRadius: '3px' }}>
               <label style={{ display: 'flex', alignItems: 'start', gap: '8px', cursor: loading ? 'not-allowed' : 'pointer' }}>
                 <input
                   type="checkbox"
@@ -105,7 +126,7 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({ spec, 
             </div>
 
             {result && result.ok === false && (
-              <div style={{ marginBottom: '16px', padding: '8px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '3px', fontSize: '13px', color: '#721c24' }}>
+              <div className={styles.alertError} style={{ marginBottom: '16px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
                 {result.error}
               </div>
             )}
@@ -117,7 +138,7 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({ spec, 
               <button
                 onClick={() => void handleSubmit()}
                 disabled={!confirmChecked || loading}
-                style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}
+                className={styles.btnSuccess}
               >
                 {loading ? 'Commiteando...' : 'Commit'}
               </button>
@@ -127,7 +148,7 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({ spec, 
 
         {result?.ok === true && (
           <>
-            <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '3px' }}>
+            <div className={styles.alertSuccess} style={{ marginBottom: '16px', padding: '12px', borderRadius: '3px' }}>
               <strong>✅ Commit exitoso</strong>
               <pre style={{ margin: '8px 0 0 0', fontSize: '12px', whiteSpace: 'pre-wrap' }}>
                 {JSON.stringify(result.data, null, 2)}

@@ -47,6 +47,7 @@ import { BlockProperties } from './BlockProperties';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
 import { CommitPipelineModal } from './CommitPipelineModal';
 import { TriggerPipelineSection } from './TriggerPipelineSection';
+import { ProductionFlow } from './ProductionFlow';
 import { PreflightPanel } from './PreflightPanel';
 import { summaryLine, type PreflightResult } from '../../devops/preflightModel';
 import styles from './devops.module.css';
@@ -571,6 +572,11 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
         {ctx.health.trigger_enabled && (
           <TriggerPipelineSection ctx={ctx} project={activeProject ?? ''} lastBranch={lastCommitBranch} />
         )}
+
+        {/* Plan 95 F4 — flujo "Llevar a producción", visible SOLO tras un commit exitoso */}
+        {lastCommitBranch && (
+          <ProductionFlow ctx={ctx} project={activeProject ?? ''} sourceBranch={lastCommitBranch} />
+        )}
       </div>
 
       {/* Modales */}
@@ -609,7 +615,13 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
       )}
 
       {showCommitModal && (
-        <CommitPipelineModal spec={spec} project={activeProject ?? ''} onSuccess={handleCommitSuccess} onClose={() => setShowCommitModal(false)} />
+        <CommitPipelineModal
+          spec={spec}
+          project={activeProject ?? ''}
+          onSuccess={handleCommitSuccess}
+          onClose={() => setShowCommitModal(false)}
+          adoCommitSupported={ctx.health.ado_commit_supported === true}
+        />
       )}
 
       {/* Plan 94 F4 — modal "Mover a variable segura" */}

@@ -3086,6 +3086,8 @@ export const DevOps = {
       preflight_enabled?: boolean; // Plan 93
       stack_detect_enabled?: boolean; // Plan 97
       variables_enabled?: boolean; // Plan 94
+      production_enabled?: boolean; // Plan 95
+      ado_commit_supported?: boolean; // Plan 95 [C2]
     }>("/api/devops/health"),
   /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
   parseYaml: (source: "ado" | "gitlab", yaml: string) =>
@@ -3225,6 +3227,35 @@ export const DevOpsVariables = {
     api.post<CIVariableSummary>("/api/devops/variables", body),
   remove: (project: string, key: string) =>
     api.post<{ ok: boolean }>("/api/devops/variables/delete", { project, key, confirm: true }),
+};
+
+export interface MrInfo {
+  id: string;
+  web_url: string;
+  state: "open" | "merged" | "closed";
+  pipeline_status?: "created" | "pending" | "running" | "success" | "failed" | "canceled" | "none";
+  mergeable?: boolean;
+}
+
+/**
+ * Plan 95 — flujo "Llevar a producción": crear MR/PR, ver su pipeline y
+ * mergear con confirmación HITL (server-side, además del checkbox en UI).
+ */
+export const DevOpsProduction = {
+  createMr: (body: { project: string; source_branch: string; target_branch?: string; title?: string; confirm: true }) =>
+    api.post<MrInfo>("/api/devops/production/mr", body),
+  getMr: (project: string, mrId: string) =>
+    api.get<MrInfo>(`/api/devops/production/mr/${encodeURIComponent(mrId)}?project=${encodeURIComponent(project)}`),
+  mergeMr: (project: string, mrId: string) =>
+    api.post<{ id: string; state: "merged" }>(`/api/devops/production/mr/${encodeURIComponent(mrId)}/merge`, {
+      project,
+      confirm: true,
+    }),
+  ensureAdoDefinition: (project: string) =>
+    api.post<{ id: number; name: string; created: boolean }>("/api/devops/production/ado/ensure-definition", {
+      project,
+      confirm: true,
+    }),
 };
 
 export const PipelineGenerator = {

@@ -27,6 +27,7 @@ import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
 import { CommitPipelineModal } from './CommitPipelineModal';
 import { TriggerPipelineSection } from './TriggerPipelineSection';
+import { ProductionFlow } from './ProductionFlow';
 import { PreflightPanel } from './PreflightPanel';
 import styles from './devops.module.css';
 
@@ -69,6 +70,8 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
   const [materializedDraft, setMaterializedDraft] = useState<PipelineSpecDraft | null>(null);
   const [savedDraftHint, setSavedDraftHint] = useState<string | null>(null);
   const [showCommitModal, setShowCommitModal] = useState(false);
+  // Plan 95 F4 — branch del último commit exitoso (trigger + ProductionFlow)
+  const [lastCommitBranch, setLastCommitBranch] = useState('');
 
   useEffect(() => {
     void loadProfile();
@@ -415,14 +418,23 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
             </div>
             {savedDraftHint && <p className={styles.textSuccess}>{savedDraftHint}</p>}
 
-            <TriggerPipelineSection ctx={ctx} project={activeProject ?? ''} lastBranch="" />
+            <TriggerPipelineSection ctx={ctx} project={activeProject ?? ''} lastBranch={lastCommitBranch} />
+
+            {/* Plan 95 F4 — flujo "Llevar a producción", visible SOLO tras un commit exitoso */}
+            {lastCommitBranch && (
+              <ProductionFlow ctx={ctx} project={activeProject ?? ''} sourceBranch={lastCommitBranch} />
+            )}
 
             {showCommitModal && (
               <CommitPipelineModal
                 spec={materializedDraft}
                 project={activeProject ?? ''}
-                onSuccess={() => setShowCommitModal(false)}
+                onSuccess={(branch) => {
+                  setLastCommitBranch(branch);
+                  setShowCommitModal(false);
+                }}
                 onClose={() => setShowCommitModal(false)}
+                adoCommitSupported={ctx.health.ado_commit_supported === true}
               />
             )}
           </>

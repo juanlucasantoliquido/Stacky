@@ -1,6 +1,12 @@
 # Plan 95 — "Llevar a producción": MR/PR con merge HITL + paridad ADO E2E real (commit/trigger/monitor)
 
-**Estado:** CRITICADO
+**Estado:** IMPLEMENTADO (F0..F5) — 2026-07-07, commits `1df750db` (F0) → `c7cb2f90` (F1)
+→ `bb698eba` (F2) → `19638158` (F3) → `3611fcc7` (F4). 43 tests backend propios (F0:5,
+F1:21, F2:11, F3:11 — nota: la enumeración F1 del DoD original quedó desactualizada tras
+reconciliar, ver detalle abajo) + 20 no-regresión (72/73) + 75 no-regresión (flags/devops)
++ 4 vitest + tsc 0 errores, todos verdes. Pendiente NO bloqueante: verificación manual E2E
+contra un proyecto ADO real (checklist F5, último ítem — requiere credenciales reales, fuera
+del alcance de este agente).
 **Versión:** v1 → v2 (crítica adversarial aplicada)
 **Fecha:** 2026-07-05
 **Veredicto del juez:** APROBADO-CON-CAMBIOS (0 bloqueantes, 4 importantes, 4 menores).

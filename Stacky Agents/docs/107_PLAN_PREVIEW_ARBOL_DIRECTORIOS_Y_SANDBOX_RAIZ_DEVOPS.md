@@ -1,8 +1,29 @@
 # Plan 107 — Preview del ÁRBOL de directorios y RAÍZ SANDBOX de pruebas (panel DevOps)
 
-> **Estado:** PROPUESTO v1 — 2026-07-08
+> **Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS — 2026-07-08 (v1: 2026-07-08)
 > **Serie:** DevOps (continúa 87-106). Extiende la sección **Ambientes** (Plan 89).
-> **Pipeline:** este documento es el paso `proponer`. Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
+> **Pipeline:** este documento pasó `proponer` → **`criticar-y-mejorar-plan` (v2, este doc)**. Sigue `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
+
+---
+
+## Changelog v1 → v2 (crítica adversarial)
+
+Veredicto del juez: **APROBADO-CON-CAMBIOS** (sin bloqueantes; 4 IMPORTANTES de correctitud/consistencia del guard + 6 menores + 2 adiciones de arquitecto). Cambios aplicados:
+
+> **Nota de pipeline:** una corrida previa del juez quedó interrumpida dejando este changelog escrito pero SIN aplicar los fixes en el cuerpo del plan. Esta pasada re-verificó TODAS las anclas contra el código real (`devops.py:173-226`, `harness_flags.py:180/1987`, `test_harness_flags_requires.py:120-130`, `harness_flags_help.py:614`, `config.py:875`, `EnvironmentsSection.tsx:306-330`, `endpoints.ts:3082/3105/3112`, `environmentModel.ts:18-22/91`) y aplicó los fixes de verdad (C8-C11, G9).
+
+- **C1 (IMPORTANTE) — resuelto en F1/§4:** `validate_sandbox_override` comparaba rutas con `commonpath` **sin `os.path.normcase`**. En Windows (FS case-insensitive) un sandbox `C:\Prod\test` con producción `C:\prod` NO se detectaba como solapado ⇒ se aceptaba crear carpetas de prueba DENTRO de producción, anulando el propósito del guard. Fix: normalizar con `os.path.normcase` ambos lados antes de comparar; test de case agregado.
+- **C2 (IMPORTANTE) — resuelto en F5:** el espejo local `validateSandboxOverrideLocal` estaba especificado como "solapamiento por prefijo de string", que produce **falsos positivos** (`C:\prod` es prefijo de `C:\prod-test`, que es disjunto) ⇒ deshabilitaría "Calcular plan" para sandboxes válidos. Fix: lógica por segmentos con frontera + case-insensitive, semántica idéntica al backend.
+- **C3 (IMPORTANTE) — [ADICIÓN ARQUITECTO]:** tabla dorada compartida de solapamiento (§4.1) como ÚNICA fuente de verdad, testeada idéntica en F1 (Python) y F5 (TS) ⇒ garantiza paridad backend/frontend y previene drift silencioso del guard.
+- **C4 (MENOR) — resuelto en F4:** F4 (antes de F5) cableaba props `sandboxActive`/`effectiveRoot` inexistentes hasta F5. Ahora F4 es autocontenida (`sandboxActive={false}`, `rootLabel=settings.environment_root`); F5 recablea.
+- **C5 (MENOR) — resuelto en F4:** el fallback "tabla plana como hoy" era un placeholder en prosa. Ahora instruye MOVER el JSX `<table>` existente verbatim al branch `else`, sin reescribir.
+- **C6 (MENOR) — resuelto global:** referencias a líneas absolutas de `endpoints.ts` (drift). Ahora se localiza por símbolo (`environments_enabled?`, `environmentPlan`), no por número de línea.
+- **C7 (MENOR) — nota en F2:** documentado que el sandbox es inerte salvo que `STACKY_DEVOPS_ENVIRONMENTS_ENABLED` también esté ON (las rutas `abort(404)` antes); el `requires` apunta al master PANEL por R4, pero la dependencia funcional es Environments.
+- **C8 (IMPORTANTE) — resuelto en F1:** el borrador declaraba C1 resuelto pero el pseudocódigo de F1 seguía SIN `os.path.normcase` y la lista de tests no tenía caso de case. Ahora el guard normaliza con `_norm(x) = normcase(realpath(abspath(x)))` en ambos lados y se agregan los tests G5 (case) y G9 (separador final). Criterio F1 pasa de 7 a 9 casos.
+- **C9 (IMPORTANTE) — resuelto en F5:** F5 referenciaba `validateRootLocal`, símbolo INEXISTENTE en `environmentModel.ts` (la validación local de raíz vive inline en `validateSettingsLocal`, regex `environmentModel.ts:91`), y aún describía la lógica como "prefijo de string" que C2 decía haber eliminado. Ahora F5 trae el pseudocódigo TS EXACTO por segmentos con frontera `/` + normalización case-insensitive, sin símbolos fantasma.
+- **C10 (MENOR) — resuelto en F2:** el import de `validate_sandbox_override` era inline dentro de `_load_env_context`; ahora se agrega al import top-level existente de `services.environment_init` (devops.py:15-21), consistente con el estilo del módulo.
+- **C11 (MENOR) — resuelto en F1:** ancla "después de `validate_root`, línea 107" corregida a símbolo: `def validate_root` está en `environment_init.py:95` (termina ~107); localizar por símbolo, no por línea.
+- **G9 (— [ADICIÓN ARQUITECTO 2]):** fila nueva en la tabla dorada §4.1: un separador final (`C:\prod\` vs `C:\prod`) NO evade el guard. En backend `abspath` ya lo colapsa; en el espejo frontend basado en strings era un bypass real — ahora ambos normalizan separadores finales y se testea en las dos suites.
 
 ---
 
@@ -52,6 +73,27 @@ Este plan cierra exactamente esas dos fricciones **reutilizando** el contrato ya
 | Health keys nuevas | `env_tree_preview_enabled`, `env_sandbox_enabled` |
 | Modelo puro tree (frontend) | `buildDirTree(entries: PlanEntry[]): DirTreeNode[]` en `src/devops/dirTreeModel.ts` |
 | Componente tree (frontend) | `DirTreePreview` en `src/components/devops/DirTreePreview.tsx` |
+
+### 4.1 — [ADICIÓN ARQUITECTO] Tabla dorada de solapamiento (fuente única de verdad para F1 y F5)
+
+Para que el guard backend (`validate_sandbox_override`, F1) y su espejo local (`validateSandboxOverrideLocal`, F5) **nunca driften**, ambos se testean contra ESTA misma tabla de casos. Rutas absolutas; usar `os.sep`/`\\` reales según plataforma. Semántica **case-insensitive en Windows** (normalizar con `normcase`), case-sensitive en POSIX.
+
+| # | override | production_root | resultado esperado |
+|---|---|---|---|
+| G1 | `C:\prod` | `C:\prod` | error `sandbox_igual_a_produccion` |
+| G2 | `C:\prod\sub` | `C:\prod` | error `sandbox_dentro_de_produccion` |
+| G3 | `C:\prod` | `C:\prod\sub` | error `produccion_dentro_de_sandbox` |
+| G4 | `C:\prod-test` | `C:\prod` | **OK (None)** — hermano disjunto, NO prefijo de string |
+| G5 | `C:\Prod\sub` | `C:\prod` | error `sandbox_dentro_de_produccion` — **case-insensitive (C1)** |
+| G6 | `D:\sandbox` | `C:\prod` | OK (None) — drives distintos |
+| G7 | `C:\sandbox` | `` (vacío/no configurado) | OK (None) — no hay producción que proteger |
+| G8 | `relativo\x` | `C:\prod` | error `validate_root` (no absoluta) |
+| G9 | `C:\prod\` (separador final) | `C:\prod` | error `sandbox_igual_a_produccion` — **[ADICIÓN ARQUITECTO 2]** el trailing separator no evade el guard |
+
+- **Backend (F1):** cada fila es un `pytest.mark.parametrize` en `test_plan107_sandbox_guard.py`. En F1 el guard aplica `_norm(x) = os.path.normcase(os.path.realpath(os.path.abspath(x)))` a ambos lados (ver pseudocódigo actualizado en F1; `abspath` ya colapsa separadores finales, cubriendo G9).
+- **Frontend (F5):** las MISMAS filas (misma tabla, replicada como const `SANDBOX_GOLDEN` en `environmentModel.sandbox.test.ts`) validan `validateSandboxOverrideLocal`. G6 (drives) se puede omitir si el runner no es Windows; G5 se assertea gracias a la normalización case-insensitive del espejo.
+- **Paridad exigida = CLASE de resultado (error vs `None`/`null`), no el string exacto:** en G8 el backend devuelve el mensaje de `validate_root` y el frontend su propio mensaje de "no absoluta"; ambos cuentan como "error". Para G1-G3, G5 y G9 los códigos (`sandbox_igual_a_produccion`, etc.) SÍ deben coincidir textualmente en ambos lados.
+- **Cero trabajo al operador, 0 runtime LLM, backward-compatible:** es sólo cobertura de test + normalización interna del guard. No cambia contrato ni UI.
 
 ---
 
@@ -164,7 +206,7 @@ venv/Scripts/python.exe -m pytest tests/test_plan107_flags.py tests/test_harness
 
 **Objetivo (1 frase).** Función pura que decide si una raíz sandbox propuesta es aceptable frente a la raíz de producción, impidiendo cualquier solapamiento. **Valor:** núcleo de seguridad del sandbox, testeable aislado.
 
-**Archivo a editar:** `Stacky Agents/backend/services/environment_init.py` — agregar función nueva (después de `validate_root`, línea 107).
+**Archivo a editar:** `Stacky Agents/backend/services/environment_init.py` — agregar función nueva inmediatamente después del cuerpo de `validate_root` (el `def validate_root` está en la línea 95; localizar por símbolo, no por línea — C11).
 
 **Pseudocódigo EXACTO:**
 ```python
@@ -173,11 +215,17 @@ def validate_sandbox_override(override: str, production_root: str) -> str | None
     PURO salvo os.path.realpath (resuelve symlinks del tramo existente, igual
     criterio que plan_environment). NUNCA lanza.
 
+    Normalización (C1/C8/G9): AMBOS lados pasan por
+        _norm(x) = os.path.normcase(os.path.realpath(os.path.abspath(x)))
+    - normcase => case-insensitive en Windows (FS case-insensitive), no-op en POSIX.
+    - abspath colapsa separadores finales/redundantes ('C:\\prod\\' == 'C:\\prod').
+    - realpath resuelve symlinks del tramo existente (mismo criterio que plan_environment).
+
     Reglas, en orden:
       1) validate_root(override) debe pasar (absoluta, no raíz de disco).
       2) Si production_root es válido (validate_root(production_root) is None),
          override NO puede solaparse con producción:
-           a = realpath(abspath(override)); b = realpath(abspath(production_root))
+           a = _norm(override); b = _norm(production_root)
            - a == b                      -> 'sandbox_igual_a_produccion'
            - commonpath([a, b]) == b     -> 'sandbox_dentro_de_produccion'
            - commonpath([a, b]) == a     -> 'produccion_dentro_de_sandbox'
@@ -190,8 +238,8 @@ def validate_sandbox_override(override: str, production_root: str) -> str | None
         return err
     if validate_root(production_root or "") is not None:
         return None  # sin producción válida no hay nada que pisar
-    a = os.path.realpath(os.path.abspath(override))
-    b = os.path.realpath(os.path.abspath(production_root))
+    a = os.path.normcase(os.path.realpath(os.path.abspath(override)))
+    b = os.path.normcase(os.path.realpath(os.path.abspath(production_root)))
     if a == b:
         return "sandbox_igual_a_produccion"
     try:
@@ -213,13 +261,15 @@ def validate_sandbox_override(override: str, production_root: str) -> str | None
 - `test_disjoint_sibling_ok` — override y production hermanos distintos → `None`.
 - `test_different_drive_ok` (skip si no Windows) — override en `D:\...`, production en `C:\...` → `None`.
 - `test_no_production_configured_accepts_valid_override` — `production_root=""` y override válido → `None`.
+- `test_case_insensitive_overlap_rejected_windows` (skip si no Windows) — override = `str(prod).upper() + os.sep + "sub"` con production `prod` en minúsculas → `'sandbox_dentro_de_produccion'` (fila G5, C8).
+- `test_trailing_separator_equal_rejected` — override = `str(prod) + os.sep` con production `prod` → `'sandbox_igual_a_produccion'` (fila G9).
 
 **Comando (desde `Stacky Agents/backend`):**
 ```
 venv/Scripts/python.exe -m pytest tests/test_plan107_sandbox_guard.py -q
 ```
 
-**Criterio BINARIO:** los 7 casos pasan. `import services.environment_init as e; e.validate_sandbox_override` es callable.
+**Criterio BINARIO:** los 9 casos pasan (en runners no-Windows: 7 pasan + 2 skip, G5 y G6). `import services.environment_init as e; e.validate_sandbox_override` es callable.
 
 **Flag/default:** protegida aguas arriba por `STACKY_DEVOPS_ENV_SANDBOX_ENABLED` (la función pura no lee flags). **Impacto runtime:** ninguno. **Trabajo del operador:** ninguno.
 
@@ -230,6 +280,8 @@ venv/Scripts/python.exe -m pytest tests/test_plan107_sandbox_guard.py -q
 **Objetivo (1 frase).** Permitir que `/environments/plan` y `/environments/apply` operen sobre la raíz sandbox cuando la flag está ON, validando siempre server-side y sin romper el contrato actual. **Valor:** hace usable el sandbox de punta a punta con HITL.
 
 **Archivo a editar:** `Stacky Agents/backend/api/devops.py`.
+
+**Cambio 0 (C10) — import top-level:** agregar `validate_sandbox_override` al import existente de `services.environment_init` (devops.py:15-21, junto a `validate_root` y `layout_fingerprint`). NO importar inline dentro de la función.
 
 **Cambio 1 — `_load_env_context(body)` (devops.py:173-188):** agregar resolución de override.
 ```python
@@ -250,8 +302,7 @@ def _load_env_context(body):
         if not getattr(_config.config, "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", False):
             return None, (jsonify({"error": "el modo sandbox está deshabilitado",
                                    "kind": "sandbox_disabled"}), 400)
-        from services.environment_init import validate_sandbox_override
-        serr = validate_sandbox_override(str(override), production_root)
+        serr = validate_sandbox_override(str(override), production_root)  # import top-level (C10)
         if serr:
             return None, (jsonify({"error": f"raíz sandbox inválida: {serr}",
                                    "kind": "sandbox_invalid", "reason": serr}), 400)
@@ -472,8 +523,27 @@ npx tsc --noEmit
 2. `Stacky Agents/frontend/src/devops/environmentModel.ts` — agregar `sandbox_active?: boolean` a `EnvironmentPlanResponse` y `EnvironmentApplyResponse`; agregar helper puro:
    ```ts
    /** validateSandboxOverrideLocal — espejo del guard backend para feedback inmediato.
-    * Devuelve mensaje de error o null. NO es fuente de verdad (backend re-valida). */
-   export function validateSandboxOverrideLocal(override: string, productionRoot: string): string | null { /* misma lógica de solapamiento por prefijo de string normalizado + validateRootLocal */ }
+    * Devuelve mensaje de error o null. NO es fuente de verdad (backend re-valida).
+    * Semántica por SEGMENTOS con frontera '/' (C2: nada de prefijo de string crudo)
+    * y case-insensitive SIEMPRE (C9/G5: más estricto que POSIX; aceptable porque el
+    * backend re-valida y Stacky corre Windows-first). No existe validateRootLocal:
+    * el chequeo de "absoluta" reusa la MISMA regex de validateSettingsLocal
+    * (environmentModel.ts:91).
+    */
+   export function validateSandboxOverrideLocal(override: string, productionRoot: string): string | null {
+     const o = (override ?? "").trim();
+     if (!o || !/^[A-Za-z]:[\\/]|^\//.test(o)) return "la raíz sandbox debe ser una ruta absoluta";
+     // normaliza: separadores a '/', sin separadores finales (G9), lowercase (G5)
+     const norm = (p: string) => p.trim().replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLowerCase();
+     const prod = (productionRoot ?? "").trim();
+     if (!prod || !/^[A-Za-z]:[\\/]|^\//.test(prod)) return null; // sin producción válida no hay nada que pisar (G7)
+     const a = norm(o);
+     const b = norm(prod);
+     if (a === b) return "sandbox_igual_a_produccion";
+     if (a.startsWith(b + "/")) return "sandbox_dentro_de_produccion";   // frontera '/': G4 (C:\prod-test) NO matchea
+     if (b.startsWith(a + "/")) return "produccion_dentro_de_sandbox";
+     return null;
+   }
    ```
 3. `Stacky Agents/frontend/src/components/devops/EnvironmentsSection.tsx` — agregar estado y UI del sandbox (solo si `ctx.health.env_sandbox_enabled === true`):
    - Estado nuevo: `const [sandboxMode, setSandboxMode] = useState(false); const [sandboxRoot, setSandboxRoot] = useState(''); const [sandboxActive, setSandboxActive] = useState(false);`
@@ -488,11 +558,16 @@ npx tsc --noEmit
    - El `sandboxRoot` **NO** se guarda en el perfil (no llamar `saveSettings` con él). Es estado de sesión.
 
 **Tests PRIMERO — archivo:** `Stacky Agents/frontend/src/devops/environmentModel.sandbox.test.ts` (vitest, sobre el helper puro; testear el componente completo es opcional pero el helper es obligatorio). Casos:
-- `local guard rejects equal path`.
-- `local guard rejects override inside production`.
-- `local guard rejects production inside override`.
-- `local guard accepts disjoint`.
-- `local guard rejects non-absolute override`.
+- `local guard rejects equal path` (G1).
+- `local guard rejects override inside production` (G2).
+- `local guard rejects production inside override` (G3).
+- `local guard accepts disjoint sibling with common prefix` (G4: `C:\prod-test` vs `C:\prod` → null).
+- `local guard is case-insensitive` (G5: `C:\Prod\sub` vs `C:\prod` → error).
+- `local guard accepts when no production configured` (G7).
+- `local guard rejects non-absolute override` (G8).
+- `local guard rejects trailing separator variant` (G9: `C:\prod\` vs `C:\prod` → error).
+
+Replicar la tabla §4.1 como const `SANDBOX_GOLDEN` y recorrerla con `it.each`. G6 (drives) SÍ se assertea en el guard local: `D:\sandbox` vs `C:\prod` cae en disjunto por segmentos → null (no requiere Windows, es string puro).
 
 **Comando (desde `Stacky Agents/frontend`):**
 ```
@@ -527,7 +602,7 @@ npx tsc --noEmit
 - [ ] Todos los comandos de F0-F5 y F6 en verde; `tsc --noEmit` 0 errores.
 - [ ] Con **ambas flags OFF**: sección Ambientes idéntica a Plan 89 (tabla plana, sin sandbox); `/plan` y `/apply` aceptan el body de hoy sin cambios (probado por `test_plan_without_override_is_bytewise_like_today`).
 - [ ] Ningún test del Plan 89 regresiona.
-- [ ] `validate_sandbox_override` rechaza todo solapamiento (7/7 casos F1).
+- [ ] `validate_sandbox_override` rechaza todo solapamiento, incluido case-insensitive y trailing separator (9/9 casos F1 en Windows).
 - [ ] Los 3 archivos de test backend registrados en ambos scripts del arnés.
 
 ---

@@ -1,0 +1,195 @@
+/**
+ * devops.module.css — paleta compartida de la sección DevOps (Plan de rediseño
+ * visual arnés+devops, 2026-07-05).
+ *
+ * Antes: cada componente devops/*.tsx usaba style={{}} inline con hex de tema
+ * CLARO (Bootstrap alert colors: #f8d7da, #d4edda, #fff3cd, #28a745, etc.),
+ * lo que producía paneles blancos/pastel chocando contra el shell oscuro
+ * (theme.css: --bg-base #0d1117, etc.). Este módulo centraliza esos estilos
+ * usando los tokens reales del tema, para no duplicar la paleta 11 veces.
+ *
+ * Convención: clases semánticas por INTENCIÓN (panel, alertError, btnPrimary,
+ * textSuccess...), NO por color crudo — así un futuro cambio de paleta se
+ * hace acá una sola vez.
+ */
+
+/* ── Paneles / tarjetas ────────────────────────────────────────────────── */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  padding: 12px;
+  background: var(--bg-panel);
+}
+
+.panelMuted {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  padding: 16px;
+  background: var(--bg-elev);
+}
+
+.emptyState {
+  padding: 40px;
+  text-align: center;
+  background: var(--bg-elev);
+  border-radius: var(--radius, 6px);
+}
+
+/* ── Alerts semánticos (chip translúcido sobre fondo oscuro) ─────────────── */
+.alertError {
+  padding: 12px;
+  border-radius: var(--radius, 6px);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+}
+
+.alertWarning {
+  padding: 8px 12px;
+  border-radius: var(--radius, 6px);
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--warn);
+}
+
+.alertSuccess {
+  padding: 8px 12px;
+  border-radius: var(--radius, 6px);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+  color: var(--success);
+}
+
+.alertInfo {
+  padding: 8px 12px;
+  border-radius: var(--radius, 6px);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent-hot);
+}
+
+/* ── Botones semánticos (además de los .button base de theme.css) ───────── */
+.btnPrimary {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnSuccess {
+  padding: 8px 16px;
+  background: var(--success);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+
+.btnSuccess:disabled {
+  background: var(--text-faint);
+  color: var(--bg-base);
+  cursor: not-allowed;
+}
+
+/* ── Texto semántico ──────────────────────────────────────────────────── */
+.textSuccess { color: var(--success); }
+.textDanger { color: var(--danger); }
+.textWarn { color: var(--warn); }
+.textMuted { color: var(--text-muted); }
+
+/* ── Editor visual de pipelines: bloques stage/job/step ──────────────────── */
+.blockStage {
+  margin-left: 8px;
+  padding: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  margin-bottom: 8px;
+}
+
+.blockStageSelected {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 2px solid var(--accent);
+}
+
+.blockJob {
+  margin-left: 16px;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  margin-bottom: 6px;
+}
+
+.blockJobSelected {
+  background: color-mix(in srgb, var(--accent-hot) 18%, transparent);
+  border: 2px solid var(--accent-hot);
+}
+
+.blockStep {
+  margin-left: 24px;
+  padding: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-muted);
+  border-radius: 2px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.blockStepSelected {
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  border: 2px solid var(--warn);
+}
+
+/* ── Preview YAML (paneles <pre>) ─────────────────────────────────────── */
+.yamlPre {
+  background: var(--mono-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px;
+  font-size: 11px;
+  max-height: 400px;
+  overflow: auto;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+/* ── Modal (commit / import YAML) ────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modalBody {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 20px;
+  border-radius: var(--radius, 6px);
+  width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modalBodyWide {
+  composes: modalBody;
+  width: 600px;
+}
+
+.inputDisabled {
+  background: var(--bg-elev);
+  color: var(--text-muted);
+}

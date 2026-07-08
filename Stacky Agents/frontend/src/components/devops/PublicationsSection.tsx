@@ -28,6 +28,7 @@ import { PipelineYamlPreview } from './PipelineYamlPreview';
 import { CommitPipelineModal } from './CommitPipelineModal';
 import { TriggerPipelineSection } from './TriggerPipelineSection';
 import { ProductionFlow } from './ProductionFlow';
+import { SectionDoctorButton } from './SectionDoctorButton';
 import { PreflightPanel } from './PreflightPanel';
 import styles from './devops.module.css';
 
@@ -439,6 +440,19 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
             )}
           </>
         )}
+
+        {/* Plan 104 F3 — Doctor IA de la sección. F3 es AUTOCONTENIDO (deriva el gate acá). */}
+        {(() => {
+          const doctorFlagOff = ctx?.health?.section_doctor_enabled === false;
+          return (
+            <SectionDoctorButton
+              sectionId="publications"
+              project={activeProject ?? ''}
+              buildPayload={() => ({ publications: { presets, editing } })}
+              gateMessage={doctorFlagOff ? 'El doctor de secciones está apagado (activá la flag en el panel Arnés).' : undefined}
+            />
+          );
+        })()}
       </div>
     </div>
   );

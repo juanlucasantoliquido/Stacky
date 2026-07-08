@@ -48,6 +48,7 @@ import { PipelineYamlPreview } from './PipelineYamlPreview';
 import { CommitPipelineModal } from './CommitPipelineModal';
 import { TriggerPipelineSection } from './TriggerPipelineSection';
 import { ProductionFlow } from './ProductionFlow';
+import { SectionDoctorButton } from './SectionDoctorButton';
 import { PreflightPanel } from './PreflightPanel';
 import { summaryLine, type PreflightResult } from '../../devops/preflightModel';
 import styles from './devops.module.css';
@@ -600,6 +601,20 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
         {lastCommitBranch && (
           <ProductionFlow ctx={ctx} project={activeProject ?? ''} sourceBranch={lastCommitBranch} />
         )}
+
+        {/* Plan 104 F3 — Doctor IA de la sección. F3 es AUTOCONTENIDO: deriva el
+            gate acá mismo (no depende de F5). */}
+        {(() => {
+          const doctorFlagOff = ctx?.health?.section_doctor_enabled === false;
+          return (
+            <SectionDoctorButton
+              sectionId="pipeline"
+              project={activeProject}
+              buildPayload={() => ({ spec })}
+              gateMessage={doctorFlagOff ? 'El doctor de secciones está apagado (activá la flag en el panel Arnés).' : undefined}
+            />
+          );
+        })()}
       </div>
 
       {/* Modales */}

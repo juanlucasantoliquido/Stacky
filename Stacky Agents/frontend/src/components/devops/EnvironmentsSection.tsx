@@ -22,6 +22,7 @@ import {
   type PublicationPreset,
 } from '../../devops/presetsModel';
 import { fromParsedSpec, type PipelineSpecDraft } from '../../devops/specBuilder';
+import { SectionDoctorButton } from './SectionDoctorButton';
 import {
   emptyEnvironmentSettings,
   validateSettingsLocal,
@@ -425,6 +426,19 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
             )}
           </>
         )}
+
+        {/* Plan 104 F3 — Doctor IA de la sección. F3 es AUTOCONTENIDO (deriva el gate acá). */}
+        {(() => {
+          const doctorFlagOff = ctx?.health?.section_doctor_enabled === false;
+          return (
+            <SectionDoctorButton
+              sectionId="environments"
+              project={activeProject}
+              buildPayload={() => ({ environments: settings })}
+              gateMessage={doctorFlagOff ? 'El doctor de secciones está apagado (activá la flag en el panel Arnés).' : undefined}
+            />
+          );
+        })()}
       </div>
     </div>
   );

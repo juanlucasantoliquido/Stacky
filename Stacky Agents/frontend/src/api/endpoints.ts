@@ -3258,6 +3258,25 @@ export const DevOpsProduction = {
     }),
 };
 
+/** Plan 104 — Doctores IA por sección del panel DevOps. */
+export const SectionDoctorApi = {
+  run: (sectionId: string, body: {
+    project: string;
+    runtime: "claude_code_cli" | "codex_cli" | "github_copilot";
+    payload: Record<string, unknown>;
+  }) =>
+    api.post<{
+      ok: boolean;
+      execution_id: number;
+      conversation_id: number;   // [C4] ticket ancla — para linkear al panel del 90
+      runtime: string;
+      section: string;
+    }>(
+      `/api/devops/sections/${encodeURIComponent(sectionId)}/doctor`,
+      body,
+    ),
+};
+
 export const PipelineGenerator = {
   /** POST /api/pipeline-generator/preview — spec → {ado, gitlab} (200) o {errors} (400). */
   preview: (spec: object) =>

@@ -259,3 +259,144 @@ class AdoTrackerProvider:
                 kind="ado_push_failed",
                 message=f"Error haciendo push a ADO: {e}",
             ) from e
+
+    # ── Plan 95 F2 — MergeRequestProvider ─────────────────────────────────────
+
+    def create_merge_request(
+        self,
+        source_branch: str,
+        target_branch: str,
+        title: str,
+        description: str,
+    ) -> dict:
+        """POST {base_proj}/_apis/git/repositories/{repo}/pullrequests?api-version=7.1"""
+        from services.ado_pipeline_definitions import _resolve_repo_id  # noqa: PLC0415
+
+        project = self._project
+        client = self._client
+        repo_id = _resolve_repo_id(project)
+
+        url = f"{client._base_proj}/_apis/git/repositories/{repo_id}/pullrequests?api-version=7.1"
+        body = {
+            "sourceRefName": f"refs/heads/{source_branch}",
+            "targetRefName": f"refs/heads/{target_branch}",
+            "title": title,
+            "description": description,
+        }
+
+        try:
+            response = client._request("POST", url, body=body)
+            return {
+                "id": str(response.get("pullRequestId") or ""),
+                "web_url": response.get("_links", {}).get("web", {}).get("href", ""),
+                "state": "open",
+            }
+        except Exception as e:
+            raise TrackerApiError(
+                status=500,
+                kind="ado_pr_creation_failed",
+                message=f"Error creando PR en ADO: {e}",
+            ) from e
+
+    def get_merge_request(self, mr_id: str) -> dict:
+        """GET .../pullrequests/{id} + builds para pipeline_status."""
+        from services.ado_pipeline_definitions import _resolve_repo_id  # noqa: PLC0415
+        from services.tracker_provider import TrackerApiError  # noqa: PLC0415
+
+        project = self._project
+        client = self._client
+        repo_id = _resolve_repo_id(project)
+
+        # GET PR
+        url = f"{client._base_proj}/_apis/git/repositories/{repo_id}/pullrequests/{mr_id}?api-version=7.1"
+        pr = client._request("GET", url)
+
+        # State map: active→open, completed→merged, abandoned→closed
+        state_map = {"active": "open", "completed": "merged", "abandoned": "closed"}
+        state = state_map.get(pr.get("status") or "", "open")
+
+        # Pipeline status: último build del source branch
+        source_ref = pr.get("sourceRefName", "")
+        builds_url = (
+            f"{client._base_proj}/_apis/build/builds?"
+            f"branchName={source_ref}&$top=1&queryOrder=queueTimeDescending&api-version=7.1"
+        )
+        try:
+            builds_response = client._request("GET", builds_url)
+            builds = builds_response.get("value", [])
+            if builds:
+                build = builds[0]
+                # Mapear status ADO → vocabulario GitLab
+                if build.get("status") == "completed":
+                    result = build.get("result") or ""
+                    if result == "succeeded":
+                        pipeline_status = "success"
+                    elif result in ("failed", "partiallySucceeded"):
+                        pipeline_status = "failed"
+                    elif result == "canceled":
+                        pipeline_status = "canceled"
+                    else:
+                        pipeline_status = "pending"
+                elif build.get("status") == "inProgress":
+                    pipeline_status = "running"
+                elif build.get("status") == "postponed":
+                    pipeline_status = "pending"
+                else:
+                    pipeline_status = "pending"
+            else:
+                pipeline_status = "none"
+        except Exception:
+            pipeline_status = "none"
+
+        # Mergeable: mergeStatus == "succeeded"
+        mergeable = pr.get("mergeStatus") == "succeeded"
+
+        return {
+            "id": str(pr.get("pullRequestId") or ""),
+            "state": state,
+            "pipeline_status": pipeline_status,
+            "mergeable": mergeable,
+            "web_url": pr.get("_links", {}).get("web", {}).get("href", ""),
+        }
+
+    def merge_merge_request(self, mr_id: str) -> dict:
+        """GET PR → PATCH con status=completed + lastMergeSourceCommit."""
+        from services.ado_pipeline_definitions import _resolve_repo_id  # noqa: PLC0415
+        from services.tracker_provider import TrackerApiError  # noqa: PLC0415
+
+        project = self._project
+        client = self._client
+        repo_id = _resolve_repo_id(project)
+
+        # GET PR para obtener lastMergeSourceCommit
+        url = f"{client._base_proj}/_apis/git/repositories/{repo_id}/pullrequests/{mr_id}?api-version=7.1"
+        pr = client._request("GET", url)
+        last_merge_sha = pr.get("lastMergeSourceCommit", {}).get("commitId")
+
+        if not last_merge_sha:
+            raise TrackerApiError(
+                status=400,
+                kind="ado_pr_merge_not_ready",
+                message="PR no listo para merge: no hay lastMergeSourceCommit",
+            )
+
+        # PATCH para completar
+        patch_url = f"{client._base_proj}/_apis/git/repositories/{repo_id}/pullrequests/{mr_id}?api-version=7.1"
+        patch_body = {
+            "status": "completed",
+            "lastMergeSourceCommit": {"commitId": last_merge_sha},
+            "completionOptions": {"mergeStrategy": "noFastForward", "deleteSourceBranch": False},
+        }
+
+        try:
+            response = client._request("PATCH", patch_url, body=patch_body)
+            return {
+                "id": str(response.get("pullRequestId") or ""),
+                "state": "merged",
+            }
+        except Exception as e:
+            raise TrackerApiError(
+                status=500,
+                kind="ado_pr_merge_failed",
+                message=f"Error mergeando PR en ADO: {e}",
+            ) from e

@@ -618,3 +618,83 @@ class GitLabTrackerProvider:
             "web_url": body.get("web_url", ""),
             "status": action,
         }
+
+    # ── Plan 95 F2 — MergeRequestProvider ─────────────────────────────────────
+
+    def create_merge_request(
+        self,
+        source_branch: str,
+        target_branch: str,
+        title: str,
+        description: str,
+    ) -> dict:
+        """POST /projects/:id/merge_requests."""
+        proj_path = self._client._project_path()
+        body, _ = self._client._request(
+            "POST",
+            f"/projects/{proj_path}/merge_requests",
+            json_body={
+                "source_branch": source_branch,
+                "target_branch": target_branch,
+                "title": title,
+                "description": description,
+            },
+        )
+        return {
+            "id": str(body.get("iid") or ""),
+            "web_url": body.get("web_url", ""),
+            "state": "open",
+        }
+
+    def get_merge_request(self, mr_id: str) -> dict:
+        """GET /projects/:id/merge_requests/:iid."""
+        proj_path = self._client._project_path()
+        body, _ = self._client._request(
+            "GET",
+            f"/projects/{proj_path}/merge_requests/{mr_id}",
+        )
+        # pipeline_status desde head_pipeline
+        head_pipeline = body.get("head_pipeline") or {}
+        pipeline_status = "none"
+        if head_pipeline:
+            status_map = {
+                "created": "created",
+                "pending": "pending",
+                "running": "running",
+                "success": "success",
+                "failed": "failed",
+                "canceled": "canceled",
+                "skipped": "canceled",
+            }
+            pipeline_status = status_map.get(head_pipeline.get("status") or "", "none")
+
+        # mergeable: si merge_status es "can_be_merged" o detailed_merge_status es "mergeable"
+        mergeable = body.get("merge_status") == "can_be_merged"
+        if not mergeable:
+            # Fallback al campo moderno detailed_merge_status si existe
+            mergeable = body.get("detailed_merge_status") == "mergeable"
+
+        # GitLab usa "opened" para MRs abiertos; normalizar al vocabulario
+        # compartido open/merged/closed (mismo que ADO).
+        state_map = {"opened": "open", "merged": "merged", "closed": "closed"}
+        state = state_map.get(body.get("state") or "", "open")
+
+        return {
+            "id": str(body.get("iid") or ""),
+            "state": state,  # open, merged, closed
+            "pipeline_status": pipeline_status,
+            "mergeable": mergeable,
+            "web_url": body.get("web_url", ""),
+        }
+
+    def merge_merge_request(self, mr_id: str) -> dict:
+        """PUT /projects/:id/merge_requests/:iid/merge."""
+        proj_path = self._client._project_path()
+        body, _ = self._client._request(
+            "PUT",
+            f"/projects/{proj_path}/merge_requests/{mr_id}/merge",
+        )
+        return {
+            "id": str(body.get("iid") or ""),
+            "state": "merged",
+        }

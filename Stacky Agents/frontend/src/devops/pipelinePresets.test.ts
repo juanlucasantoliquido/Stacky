@@ -4,7 +4,9 @@
  */
 import { describe, it, expect } from "vitest";
 import { validateSpecLocal, starterSpec } from "./specBuilder";
-import { PIPELINE_PRESETS, getPresetById, type PresetId } from "./pipelinePresets";
+import { PIPELINE_PRESETS, getPresetById, type PresetId, type StackId } from "./pipelinePresets";
+
+const STACK_IDS: readonly StackId[] = ["dotnet", "node", "python", "go", "rust", "java", "php", "generic"];
 
 describe("pipelinePresets - F0 TDD", () => {
   it("all_presets_have_unique_ids", () => {
@@ -93,5 +95,19 @@ describe("pipelinePresets - F0 TDD", () => {
 
   it("getPresetById_known_returns_preset", () => {
     expect(getPresetById("python").id).toBe("python");
+  });
+
+  // Plan 104 F0 — clasificación por stack
+  it("every_preset_has_stack_field", () => {
+    for (const preset of PIPELINE_PRESETS) {
+      expect(STACK_IDS).toContain(preset.stack);
+    }
+  });
+
+  it("stack_field_matches_id", () => {
+    expect(getPresetById("python").stack).toBe("python");
+    expect(getPresetById("node").stack).toBe("node");
+    expect(getPresetById("dotnet").stack).toBe("dotnet");
+    expect(getPresetById("generic").stack).toBe("generic");
   });
 });

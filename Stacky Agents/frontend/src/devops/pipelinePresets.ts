@@ -8,10 +8,14 @@ import type { PipelineSpecDraft } from "./specBuilder";
 
 export type PresetId = "python" | "node" | "dotnet" | "generic";
 
+// Plan 104 F0 — clasificación por stack para el filtro del builder.
+export type StackId = "dotnet" | "node" | "python" | "go" | "rust" | "java" | "php" | "generic";
+
 export interface PipelinePreset {
   id: PresetId;
   label: string;          // texto del botón/tarjeta en la galería
   description: string;    // 1 frase en llano de qué hace
+  stack: StackId;          // Plan 104 F0 — clasificación para el filtro
   build: () => PipelineSpecDraft;  // función pura, siempre devuelve spec NUEVO
 }
 
@@ -96,10 +100,10 @@ function preset_generic(): PipelineSpecDraft {
 }
 
 export const PIPELINE_PRESETS: readonly PipelinePreset[] = [
-  { id: "python", label: "Python (pip + pytest)", description: "Instala dependencias con pip, corre flake8 y pytest.", build: preset_python },
-  { id: "node", label: "Node (npm)", description: "Instala con npm ci, corre lint/test/build si existen los scripts.", build: preset_node },
-  { id: "dotnet", label: ".NET (dotnet)", description: "Restaura, compila en Release y corre los tests con dotnet test.", build: preset_dotnet },
-  { id: "generic", label: "Genérico (sin stack detectado)", description: "Plantilla neutra: reemplazá los comandos por los tuyos.", build: preset_generic },
+  { id: "python", label: "Python (pip + pytest)", description: "Instala dependencias con pip, corre flake8 y pytest.", stack: "python", build: preset_python },
+  { id: "node", label: "Node (npm)", description: "Instala con npm ci, corre lint/test/build si existen los scripts.", stack: "node", build: preset_node },
+  { id: "dotnet", label: ".NET (dotnet)", description: "Restaura, compila en Release y corre los tests con dotnet test.", stack: "dotnet", build: preset_dotnet },
+  { id: "generic", label: "Genérico (sin stack detectado)", description: "Plantilla neutra: reemplazá los comandos por los tuyos.", stack: "generic", build: preset_generic },
 ];
 
 export function getPresetById(id: PresetId): PipelinePreset {

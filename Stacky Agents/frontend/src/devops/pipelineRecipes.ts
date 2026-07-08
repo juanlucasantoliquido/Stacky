@@ -5,28 +5,30 @@
  * id y reusan el helper inmutable appendStep.
  */
 import type { StepDraft } from "./specBuilder";
+import type { StackId } from "./pipelinePresets";
 import { PIPELINE_STEP_SNIPPETS } from "./pipelineStepSnippets";
 
 export interface StepRecipe {
   id: string;
   label: string;
   description: string;
+  stack: StackId | "all";      // Plan 104 F0
   stepIds: readonly string[];  // ids EXISTENTES de PIPELINE_STEP_SNIPPETS, en orden
 }
 
 export const PIPELINE_RECIPES: readonly StepRecipe[] = [
-  { id: "ci-python", label: "CI Python completo", description: "pip install, flake8 y pytest con cobertura.", stepIds: ["dep-pip-install", "lint-flake8", "test-pytest-cov"] },
-  { id: "ci-node", label: "CI Node completo", description: "npm ci, lint, test y build.", stepIds: ["dep-npm-ci", "lint-eslint", "test-npm-test", "build-npm"] },
-  { id: "ci-dotnet", label: "CI .NET completo", description: "restore, build Release y test.", stepIds: ["dep-dotnet-restore", "build-dotnet-release", "test-dotnet"] },
-  { id: "ci-go", label: "CI Go completo", description: "vet, build y test de Go.", stepIds: ["lint-go-vet", "build-go", "test-go"] },
-  { id: "docker-build-push", label: "Docker build + push", description: "Construye y publica la imagen (editá el tag).", stepIds: ["build-docker", "pub-docker-push"] },
-  { id: "quality-python", label: "Calidad Python", description: "ruff, black --check, pytest con cobertura y reporte.", stepIds: ["lint-ruff", "lint-black-check", "test-pytest-cov", "qual-coverage-report"] },
+  { id: "ci-python", label: "CI Python completo", description: "pip install, flake8 y pytest con cobertura.", stack: "python", stepIds: ["dep-pip-install", "lint-flake8", "test-pytest-cov"] },
+  { id: "ci-node", label: "CI Node completo", description: "npm ci, lint, test y build.", stack: "node", stepIds: ["dep-npm-ci", "lint-eslint", "test-npm-test", "build-npm"] },
+  { id: "ci-dotnet", label: "CI .NET completo", description: "restore, build Release y test.", stack: "dotnet", stepIds: ["dep-dotnet-restore", "build-dotnet-release", "test-dotnet"] },
+  { id: "ci-go", label: "CI Go completo", description: "vet, build y test de Go.", stack: "go", stepIds: ["lint-go-vet", "build-go", "test-go"] },
+  { id: "docker-build-push", label: "Docker build + push", description: "Construye y publica la imagen (editá el tag).", stack: "all", stepIds: ["build-docker", "pub-docker-push"] },
+  { id: "quality-python", label: "Calidad Python", description: "ruff, black --check, pytest con cobertura y reporte.", stack: "python", stepIds: ["lint-ruff", "lint-black-check", "test-pytest-cov", "qual-coverage-report"] },
   // ── v4 C1 — recetas por stack faltantes (Rust/Java/PHP) + auditoría de seguridad ──
-  { id: "ci-rust", label: "CI Rust completo", description: "fetch, clippy, build release y test.", stepIds: ["dep-cargo-fetch", "lint-cargo-clippy", "build-cargo-release", "test-cargo"] },
-  { id: "ci-java-maven", label: "CI Java (Maven) completo", description: "package sin tests y verify.", stepIds: ["build-maven", "test-maven"] },
-  { id: "ci-php", label: "CI PHP completo", description: "composer install y PHPUnit.", stepIds: ["dep-composer-install", "test-phpunit"] },
-  { id: "sec-audit-node", label: "Auditoría de seguridad Node", description: "npm ci y npm audit.", stepIds: ["dep-npm-ci", "sec-npm-audit"] },
-  { id: "sec-audit-python", label: "Auditoría de seguridad Python", description: "pip install y pip-audit.", stepIds: ["dep-pip-install", "sec-pip-audit"] },
+  { id: "ci-rust", label: "CI Rust completo", description: "fetch, clippy, build release y test.", stack: "rust", stepIds: ["dep-cargo-fetch", "lint-cargo-clippy", "build-cargo-release", "test-cargo"] },
+  { id: "ci-java-maven", label: "CI Java (Maven) completo", description: "package sin tests y verify.", stack: "java", stepIds: ["build-maven", "test-maven"] },
+  { id: "ci-php", label: "CI PHP completo", description: "composer install y PHPUnit.", stack: "php", stepIds: ["dep-composer-install", "test-phpunit"] },
+  { id: "sec-audit-node", label: "Auditoría de seguridad Node", description: "npm ci y npm audit.", stack: "node", stepIds: ["dep-npm-ci", "sec-npm-audit"] },
+  { id: "sec-audit-python", label: "Auditoría de seguridad Python", description: "pip install y pip-audit.", stack: "python", stepIds: ["dep-pip-install", "sec-pip-audit"] },
 ];
 
 export function buildRecipeSteps(recipe: StepRecipe): StepDraft[] {

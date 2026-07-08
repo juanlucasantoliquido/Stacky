@@ -36,8 +36,8 @@ import {
   type JobDraft,
   type StepDraft,
 } from '../../devops/specBuilder';
-import { PIPELINE_PRESETS, type PipelinePreset } from '../../devops/pipelinePresets';
-import { PIPELINE_STEP_SNIPPETS, SNIPPET_CATEGORIES } from '../../devops/pipelineStepSnippets';
+import { PIPELINE_PRESETS, type PipelinePreset, type StackId } from '../../devops/pipelinePresets';
+import { PIPELINE_STEP_SNIPPETS, SNIPPET_CATEGORIES, STACK_OPTIONS, filterSnippetsByStack, isStackId } from '../../devops/pipelineStepSnippets';
 import { PIPELINE_RECIPES, buildRecipeSteps } from '../../devops/pipelineRecipes';
 import { splitSpecVariables } from '../../devops/variablesModel';
 import { DevOps, DevOpsVariables } from '../../api/endpoints';
@@ -265,6 +265,8 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   // Plan 97 F3 — detección opt-in de stack (solo si la flag está ON vía health)
   const [detecting, setDetecting] = useState(false);
   const [detectError, setDetectError] = useState<string | null>(null);
+  // Plan 104 F1 — filtro de presets/snippets/recetas por stack (default "all" = comportamiento 97)
+  const [stackFilter, setStackFilter] = useState<StackId | "all">('all');
 
   const handleDetectStack = async () => {
     if (!activeProject) {
@@ -275,6 +277,9 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
     setDetectError(null);
     try {
       const { detected } = await DevOps.detectStack(activeProject);
+      // [C5] guard defensivo Plan 104: si el 97 evoluciona y devuelve un stack no
+      // listado en STACK_OPTIONS, el filtro NO muta (degrada silencioso).
+      if (isStackId(detected)) setStackFilter(detected);
       if (detected) {
         const preset = PIPELINE_PRESETS.find((p) => p.id === detected);
         if (preset) {
@@ -307,8 +312,14 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
     selected.si < spec.stages.length &&
     selected.ji < (spec.stages[selected.si]?.jobs.length ?? 0);
 
-  // Plan 97 F1-ter (c) — biblioteca filtrada por texto (label+description+category)
-  const filteredSnippets = PIPELINE_STEP_SNIPPETS.filter((s) => {
+  // Plan 104 F1 — presets/snippets/recetas filtrados por stack (default "all" = 97 intacto)
+  const visiblePresets = PIPELINE_PRESETS.filter((p) => stackFilter === 'all' || p.stack === stackFilter);
+  const visibleSnippets = filterSnippetsByStack(PIPELINE_STEP_SNIPPETS, stackFilter);
+  const visibleRecipes = PIPELINE_RECIPES.filter((r) => stackFilter === 'all' || r.stack === stackFilter || r.stack === 'all');
+
+  // Plan 97 F1-ter (c) — biblioteca filtrada por texto (label+description+category),
+  // compuesta sobre visibleSnippets (Plan 104 F1: primero stack, después texto)
+  const filteredSnippets = visibleSnippets.filter((s) => {
     const q = snippetFilter.trim().toLowerCase();
     return q === '' || `${s.label} ${s.description} ${s.category}`.toLowerCase().includes(q);
   });
@@ -401,6 +412,18 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
           </div>
         )}
 
+        {/* Plan 104 F1 — selector de stack: filtra presets/snippets/recetas. Default "all" = 97 intacto. */}
+        <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <label className={styles.textMuted}>Stack:</label>
+          <select
+            value={stackFilter}
+            onChange={(e) => setStackFilter(e.target.value as StackId | 'all')}
+            style={{ padding: '4px 8px' }}
+          >
+            {STACK_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+
         {/* C11 - CTA estado vacío */}
         {isEmpty ? (
           <div className={styles.emptyState}>
@@ -424,7 +447,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
                 Elegí un preset para tu proyecto:
               </p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {PIPELINE_PRESETS.map((preset) => (
+                {visiblePresets.map((preset) => (
                   <button
                     key={preset.id}
                     onClick={() => handleUsePreset(preset)}
@@ -521,7 +544,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
             <label className={styles.textMuted}>Insertar receta (varios pasos):</label>
             <select value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
               <option value="">— elegí una receta —</option>
-              {PIPELINE_RECIPES.map((r) => (
+              {visibleRecipes.map((r) => (
                 <option key={r.id} value={r.id} title={r.description}>{r.label}</option>
               ))}
             </select>

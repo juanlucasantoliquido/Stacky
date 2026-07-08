@@ -6,6 +6,9 @@ import { describe, it, expect } from "vitest";
 import { emptySpec, addStage, addJob, appendStep, validateSpecLocal } from "./specBuilder";
 import { PIPELINE_STEP_SNIPPETS } from "./pipelineStepSnippets";
 import { PIPELINE_RECIPES, buildRecipeSteps, type StepRecipe } from "./pipelineRecipes";
+import type { StackId } from "./pipelinePresets";
+
+const STACK_IDS_OR_ALL: readonly (StackId | "all")[] = ["dotnet", "node", "python", "go", "rust", "java", "php", "generic", "all"];
 
 describe("pipelineRecipes - F1-ter TDD", () => {
   it("all_recipes_have_unique_ids", () => {
@@ -51,7 +54,7 @@ describe("pipelineRecipes - F1-ter TDD", () => {
   });
 
   it("buildRecipeSteps_unknown_snippet_throws", () => {
-    const fake: StepRecipe = { id: "fake", label: "Fake", description: "x", stepIds: ["no-existe"] };
+    const fake: StepRecipe = { id: "fake", label: "Fake", description: "x", stack: "all", stepIds: ["no-existe"] };
     expect(() => buildRecipeSteps(fake)).toThrow();
   });
 
@@ -75,5 +78,24 @@ describe("pipelineRecipes - F1-ter TDD", () => {
     const result = steps.reduce((acc, st) => appendStep(acc, 0, 0, st), withOneStep);
     expect(result.stages[0].jobs[0].steps).toHaveLength(1 + steps.length);
     expect(validateSpecLocal(result)).toEqual([]);
+  });
+
+  // Plan 104 F0 — clasificación por stack
+  it("every_recipe_has_stack_field", () => {
+    for (const recipe of PIPELINE_RECIPES) {
+      expect(STACK_IDS_OR_ALL).toContain(recipe.stack);
+    }
+  });
+
+  it("recipe_stack_matches_step_ids", () => {
+    const byId = Object.fromEntries(PIPELINE_RECIPES.map((r) => [r.id, r.stack]));
+    expect(byId["ci-python"]).toBe("python");
+    expect(byId["ci-node"]).toBe("node");
+    expect(byId["ci-dotnet"]).toBe("dotnet");
+    expect(byId["ci-go"]).toBe("go");
+    expect(byId["ci-rust"]).toBe("rust");
+    expect(byId["ci-java-maven"]).toBe("java");
+    expect(byId["ci-php"]).toBe("php");
+    expect(byId["docker-build-push"]).toBe("all");
   });
 });

@@ -8,7 +8,13 @@ import {
   PIPELINE_STEP_SNIPPETS,
   SNIPPET_CATEGORIES,
   getSnippetsByCategory,
+  filterSnippetsByStack,
+  STACK_OPTIONS,
+  isStackId,
 } from "./pipelineStepSnippets";
+import type { StackId } from "./pipelinePresets";
+
+const KNOWN_STACKS: readonly StackId[] = ["dotnet", "node", "python", "go", "rust", "java", "php", "generic"];
 
 describe("pipelineStepSnippets - F1-bis TDD", () => {
   it("all_snippets_have_unique_ids", () => {
@@ -108,5 +114,53 @@ describe("pipelineStepSnippets - F1-bis TDD", () => {
         expect(snip.needsEdit).toBe(true);
       }
     }
+  });
+
+  // Plan 104 F0 — clasificación por stack + filtro
+  it("every_snippet_has_stacks_array", () => {
+    for (const snip of PIPELINE_STEP_SNIPPETS) {
+      expect(Array.isArray(snip.stacks)).toBe(true);
+    }
+  });
+
+  it("filterSnippetsByStack_all_returns_everything", () => {
+    expect(filterSnippetsByStack(PIPELINE_STEP_SNIPPETS, "all")).toHaveLength(PIPELINE_STEP_SNIPPETS.length);
+  });
+
+  it("filterSnippetsByStack_dotnet_excludes_python", () => {
+    const filtered = filterSnippetsByStack(PIPELINE_STEP_SNIPPETS, "dotnet");
+    for (const s of filtered) {
+      const script = s.build().script;
+      expect(script.includes("pip ")).toBe(false);
+      expect(script.includes("pytest")).toBe(false);
+    }
+  });
+
+  it("filterSnippetsByStack_python_excludes_dotnet", () => {
+    const filtered = filterSnippetsByStack(PIPELINE_STEP_SNIPPETS, "python");
+    for (const s of filtered) {
+      expect(s.build().script.includes("dotnet")).toBe(false);
+    }
+  });
+
+  it("generic_snippets_have_empty_stacks", () => {
+    const generic = PIPELINE_STEP_SNIPPETS.filter((s) => s.build().script.includes("docker") || s.id.startsWith("infra-"));
+    for (const s of generic) {
+      expect(s.stacks).toEqual([]);
+    }
+  });
+
+  it("at_least_one_snippet_per_known_stack", () => {
+    for (const stack of KNOWN_STACKS) {
+      expect(filterSnippetsByStack(PIPELINE_STEP_SNIPPETS, stack).length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("isStackId_rejects_unknown", () => {
+    expect(isStackId("kotlin")).toBe(false);
+    expect(isStackId("python")).toBe(true);
+    expect(isStackId(null)).toBe(false);
+    expect(isStackId(undefined)).toBe(false);
+    expect(STACK_OPTIONS).toContain("all");
   });
 });

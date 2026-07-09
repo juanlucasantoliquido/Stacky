@@ -1,6 +1,17 @@
 # Plan 114 — Doctor de staleness doc↔código (detecta notas desactualizadas y encola su corrección al Documentador)
 
-> **Estado:** PROPUESTO v1 — 2026-07-09
+> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+>
+> **CHANGELOG v1 → v2:**
+> - **C1 (IMPORTANTE):** `annotate_staleness` mutaba el dict CACHEADO del plan 109 (build_graph devuelve el objeto en cache): una request con flag ON contaminaba la cache y la siguiente con flag OFF servía los campos `stale` igual — rompía el golden byte-idéntico. Ahora el wiring hace `copy.deepcopy(graph)` antes de anotar + test `test_cache_not_polluted_after_annotation`.
+> - **C2 (IMPORTANTE):** el path de la nota que se pasaba a git era `node.path` (relativo a la FUENTE), no relativo al repo → `git log` devolvía None para toda nota dentro de `docs/` y el detector quedaba muerto (el KPI central fallaba). Ahora el path git de la nota se construye con `graph["sources"]`: `posixpath.normpath(posixpath.join(source.relative_path, node.path))` por `source_id`.
+> - **C3 (IMPORTANTE):** N subprocesos `git log` por REQUEST sin tope (la anotación corre después del cache del 109, no dentro): cache propio en `doc_staleness` con TTL 60 s por `(repo_root, rel_path)` + tope duro `_MAX_GIT_LOOKUPS = 500` por anotación (excedente → `stale=False` + warning único).
+> - **C4 (IMPORTANTE):** contradicción contrato/pseudocódigo: §4 dice `stale` "solo en aristas `code_ref`" pero el código lo agregaba a TODAS las aristas. v2: las aristas no-`code_ref` NO ganan el campo (test renombrado `test_non_code_ref_edges_have_no_stale_field`).
+> - **C5 (MENOR):** el `max(git, frontmatter 'updated')` del docstring no estaba implementado: v2 lo elimina — la señal es SOLO git (objetiva); frontmatter `updated` declarado fuera de scope.
+> - **C6 (MENOR):** helper `graph_node_path` sin definir → definido literal: `code_id[len("code:"):]`.
+> - **C7 (MENOR):** el `runtime` del endpoint `fix` no estaba especificado → mismo default/selección que el `run` del 113.
+> - **[ADICIÓN ARQUITECTO]:** bloque aditivo `stale_stats: {stale_edges, stale_notes}` en el payload anotado + fila "Notas desactualizadas" en la pestaña Cobertura (109 F5) cuando el campo está presente — el operador ve el problema sin abrir el grafo. +1 test.
 > **Serie:** Documentación agéntica Obsidian (109 → 111 → 112 → 113 → **114**). El número 110 quedó tomado por un plan ajeno (Revisor de PRs).
 > **Pipeline:** este documento pasó `proponer` (este estado). Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Depende de:** Plan 109 (aristas `code_ref` nota→código en el payload §4.1). **Se integra con** Plan 111 (el Graph View ya pinta aristas `stale` punteadas rojas si vienen en el payload) y Plan 113 (encola el modo `ACTUALIZAR` del Documentador sobre una sola nota).
@@ -78,65 +89,114 @@
 
 **Pseudocódigo EXACTO:**
 ```python
-import subprocess, os
+import posixpath
+import subprocess
+import time
+
+_MAX_GIT_LOOKUPS = 500       # (C3) tope duro de consultas git por anotación
+_EPOCH_TTL_SECONDS = 60      # (C3) cache de epochs entre requests (mismo TTL que el grafo 109)
+# cache módulo: (repo_root, rel_path) -> (cached_at_monotonic, epoch | None)
+_epoch_cache: dict[tuple[str, str], tuple[float, int | None]] = {}
+
 
 def git_last_commit_epoch(repo_root: str, rel_path: str) -> int | None:
     """Epoch (int) del último commit que tocó rel_path, o None si no es git / no existe / error.
-    Comando: git -C <repo_root> log -1 --format=%ct -- <rel_path>. Timeout corto."""
+    Comando: git -C <repo_root> log -1 --format=%ct -- <rel_path>. Timeout 5 s.
+    (C3) Cachea el resultado _EPOCH_TTL_SECONDS por (repo_root, rel_path)."""
+    key = (repo_root, rel_path)
+    hit = _epoch_cache.get(key)
+    if hit and time.monotonic() - hit[0] < _EPOCH_TTL_SECONDS:
+        return hit[1]
     try:
         out = subprocess.run(
             ["git", "-C", repo_root, "log", "-1", "--format=%ct", "--", rel_path],
             capture_output=True, text=True, timeout=5)
         s = (out.stdout or "").strip()
-        return int(s) if s.isdigit() else None
+        epoch = int(s) if s.isdigit() else None
     except Exception:
+        epoch = None
+    _epoch_cache[key] = (time.monotonic(), epoch)
+    return epoch
+
+
+def _note_repo_path(node: dict, sources_by_id: dict[str, dict]) -> str | None:
+    """(C2) Path de la nota RELATIVO AL REPO: node.path es relativo a su FUENTE,
+    hay que anteponer source.relative_path (de graph['sources']).
+    relative_path == '.' → node.path directo. Fuente desconocida → None."""
+    src = sources_by_id.get(node.get("source_id", ""))
+    if not src:
         return None
+    rel = str(src.get("relative_path") or ".")
+    p = node["path"] if rel in (".", "") else posixpath.join(rel, node["path"])
+    return posixpath.normpath(p)
+
 
 def annotate_staleness(graph: dict, repo_root: str) -> dict:
-    """Agrega 'stale' a aristas code_ref y 'has_stale' a nodos nota. Determinístico.
-    Regla: arista (nota -> code) es stale si epoch(code) > epoch(nota) (ambos no-None).
-    epoch(nota) = max(git_last_commit_epoch(nota), frontmatter 'updated' si parsea) — se usa
-    el git de la nota (la fecha de frontmatter es opcional y solo sube el umbral).
-    Si falta cualquiera de los dos epochs -> stale=False (no se puede afirmar desactualización)."""
-    # cache local por archivo para no repetir git en el mismo run
-    epoch_cache: dict[str, int | None] = {}
-    def ep(rel): 
-        if rel not in epoch_cache: epoch_cache[rel] = git_last_commit_epoch(repo_root, rel)
-        return epoch_cache[rel]
-    note_epoch = {}  # id nota -> epoch
-    id_to_path = {n["id"]: n["path"] for n in graph.get("nodes", []) if n.get("kind") == "note"}
+    """Agrega 'stale' SOLO a aristas code_ref (C4) y 'has_stale' a nodos nota,
+    más 'stale_stats' [ADICIÓN ARQUITECTO]. Determinístico. NUNCA lanza.
+    Regla: arista (nota -> code) es stale si epoch_git(code) > epoch_git(nota),
+    ambos no-None. (C5) La señal es SOLO git: el 'updated' de frontmatter queda
+    fuera de scope. Si falta cualquiera de los dos epochs -> stale=False.
+    IMPORTANTE (C1): el CALLER pasa una COPIA del grafo (deepcopy en el wiring);
+    esta función asume que puede mutar su argumento."""
+    lookups = 0
+    def ep(rel):
+        nonlocal lookups
+        if lookups >= _MAX_GIT_LOOKUPS:   # (C3) excedente: no se puede afirmar nada
+            return None
+        lookups += 1
+        return git_last_commit_epoch(repo_root, rel)
+
+    sources_by_id = {s["id"]: s for s in graph.get("sources", [])}
+    notes_by_id = {n["id"]: n for n in graph.get("nodes", []) if n.get("kind") == "note"}
+    note_epoch: dict[str, int | None] = {}
     stale_notes: set[str] = set()
+    stale_edges = 0
     for e in graph.get("edges", []):
         if e.get("kind") != "code_ref":
-            e["stale"] = False; continue
+            continue                       # (C4) las demás aristas NO ganan el campo
         note_id, code_id = e["source"], e["target"]
-        code_path = graph_node_path(graph, code_id)   # 'code:<path>' -> '<path>'
-        npath = id_to_path.get(note_id)
+        code_path = code_id[len("code:"):] if str(code_id).startswith("code:") else None  # (C6)
         ce = ep(code_path) if code_path else None
-        ne = note_epoch.get(note_id)
-        if ne is None and npath:
-            ne = note_epoch[note_id] = ep(npath)
+        if note_id not in note_epoch:
+            node = notes_by_id.get(note_id)
+            npath = _note_repo_path(node, sources_by_id) if node else None
+            note_epoch[note_id] = ep(npath) if npath else None
+        ne = note_epoch[note_id]
         e["stale"] = bool(ce is not None and ne is not None and ce > ne)
-        if e["stale"]: stale_notes.add(note_id)
+        if e["stale"]:
+            stale_notes.add(note_id); stale_edges += 1
     for n in graph.get("nodes", []):
         if n.get("kind") == "note":
             n["has_stale"] = n["id"] in stale_notes
+    graph["stale_stats"] = {"stale_edges": stale_edges, "stale_notes": len(stale_notes)}  # [ADICIÓN ARQUITECTO]
     return graph
 ```
 
-**Wiring:** en `api/docs.py` `get_docs_graph()` (plan 109 F4), tras `build_graph`, si `STACKY_DOCS_STALENESS_ENABLED` → `graph = doc_staleness.annotate_staleness(graph, repo_root)` donde `repo_root` = workspace del proyecto/STACKY_AGENTS_ROOT. Con flag OFF, NO se llama (payload byte-idéntico al 109).
+**Wiring (C1 — copia obligatoria):** en `api/docs.py` `get_docs_graph()` (plan 109 F4), tras `build_graph`, si `STACKY_DOCS_STALENESS_ENABLED`:
+```python
+import copy
+graph = copy.deepcopy(graph)   # (C1) build_graph devuelve el objeto CACHEADO del 109;
+                               # anotar sin copiar contaminaría la cache y una request
+                               # posterior con flag OFF serviría los campos stale.
+graph = doc_staleness.annotate_staleness(graph, repo_root)
+```
+donde `repo_root` = workspace del proyecto/STACKY_AGENTS_ROOT. Con flag OFF, NO se llama (payload byte-idéntico al 109).
 
 **Tests PRIMERO — archivo:** `backend/tests/test_plan114_staleness.py` (repo git real en `tmp_path`; commitear nota y código en orden controlado con `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` para fechas deterministas):
 - `test_code_newer_than_note_is_stale`.
 - `test_note_newer_than_code_not_stale`.
 - `test_missing_epoch_is_not_stale`.
-- `test_non_code_ref_edges_marked_false`.
+- `test_non_code_ref_edges_have_no_stale_field` **(C4)** — las aristas `md`/`wikilink` NO tienen la key `stale`.
 - `test_node_has_stale_reflects_edges`.
-- `test_degrades_on_non_git` (repo_root sin git → todas las aristas `stale=False`, sin excepción).
+- `test_degrades_on_non_git` (repo_root sin git → todas las aristas `code_ref` con `stale=False`, sin excepción).
+- **(C2)** `test_note_path_resolved_via_source_relative_path` — nota con fuente `relative_path="docs"` y `node.path="a.md"` → el epoch se consulta con `docs/a.md` (espiar los rel_path pasados a `git_last_commit_epoch`).
+- **(C3)** `test_lookup_cap_respected` — con `_MAX_GIT_LOOKUPS` monkeypatcheado a 1, la segunda consulta no ejecuta subprocess y las aristas restantes quedan `stale=False`.
+- **[ADICIÓN ARQUITECTO]** `test_stale_stats_counts` — `stale_stats == {"stale_edges": N, "stale_notes": M}` coherente con las marcas.
 
 **Comando:** `venv/Scripts/python.exe -m pytest tests/test_plan114_staleness.py -q`
 
-**Criterio BINARIO:** 6/6 verdes.
+**Criterio BINARIO:** 9/9 verdes.
 
 **Flag/default:** anotación solo con flag ON. **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno.
 
@@ -149,12 +209,13 @@ def annotate_staleness(graph: dict, repo_root: str) -> dict:
 **Archivo a editar:** `backend/api/docs.py` (el wiring de F1) + test.
 
 **Tests PRIMERO — archivo:** `backend/tests/test_plan114_graph_payload.py` (app+client):
-- `test_graph_payload_identical_when_staleness_off` (golden: sin `stale`/`has_stale`).
+- `test_graph_payload_identical_when_staleness_off` (golden: sin `stale`/`has_stale`/`stale_stats`).
 - `test_graph_payload_has_stale_fields_when_on` (con repo git de prueba mockeado/real).
+- **(C1)** `test_cache_not_polluted_after_annotation` — request con flag ON (payload anotado) seguida de request con flag OFF → la segunda NO contiene `stale`/`has_stale`/`stale_stats` (la cache del 109 quedó limpia).
 
 **Comando:** `venv/Scripts/python.exe -m pytest tests/test_plan114_graph_payload.py -q`
 
-**Criterio BINARIO:** 2/2 verdes.
+**Criterio BINARIO:** 3/3 verdes.
 
 **Flag/default:** OFF → byte-idéntico 109. **Trabajo del operador:** ninguno.
 
@@ -166,7 +227,7 @@ def annotate_staleness(graph: dict, repo_root: str) -> dict:
 
 **Archivo a editar:** `backend/api/docs.py`.
 
-**Diseño EXACTO:** `POST /api/docs/staleness/fix` body `{note_path}` → 404 si `STACKY_DOCS_STALENESS_ENABLED` OFF **o** `STACKY_DOCS_DOCUMENTER_ENABLED` OFF (necesita el 113). Llama a un helper del orquestador 113: `doc_documenter.run_documenter(project_name, runtime, only_note=note_path, forced_modes=[ACTUALIZAR])` (extender la firma del 113 con `only_note`/`forced_modes` opcionales, backward-compatible). Devuelve `{run_id}`.
+**Diseño EXACTO:** `POST /api/docs/staleness/fix` body `{note_path}` → 404 si `STACKY_DOCS_STALENESS_ENABLED` OFF **o** `STACKY_DOCS_DOCUMENTER_ENABLED` OFF (necesita el 113). Llama a un helper del orquestador 113: `doc_documenter.run_documenter(project_name, runtime, only_note=note_path, forced_modes=[ACTUALIZAR])` (extender la firma del 113 con `only_note`/`forced_modes` opcionales, backward-compatible). **(C7)** `runtime` = el MISMO valor/selección default que usa `POST /api/docs/documenter/run` del 113 (no se pide en el body). Devuelve `{run_id}` (y hereda el 409 `documenter_busy` del 113 si hay un run activo).
 
 > **Dependencia dura:** si el plan 113 aún no está implementado, esta fase queda detrás de su flag y el endpoint responde 404 (no rompe). El resto del plan (F0-F2, detección y visual) funciona sin 113.
 
@@ -191,10 +252,12 @@ def annotate_staleness(graph: dict, repo_root: str) -> dict:
 1. `frontend/src/api/endpoints.ts` — `Docs.stalenessFix(notePath)`.
 2. `frontend/src/components/DocViewer.tsx` (o el panel de backlinks del 111) — si el nodo de la nota abierta tiene `has_stale`, mostrar chip `stale-chip` ("⚠ referencia código que cambió") + botón "Proponer actualización" → `stalenessFix`. Solo con `graph_enabled` y `staleness_enabled` (key aditiva en `/api/docs/sources`).
 3. El Graph View (plan 111) ya consume `edge.stale`; no requiere cambios salvo confirmar tolerancia del campo.
+4. **[ADICIÓN ARQUITECTO]** `DocCoveragePanel` (109 F5): si el payload trae `stale_stats`, agregar la fila "Notas desactualizadas" a la tabla de métricas (valor `stale_stats.stale_notes`); si el campo no viene (flag OFF), la fila no se renderiza.
 
 **Tests PRIMERO — archivo:** `frontend/src/docs/staleness.test.ts` (modelo puro):
 - `noteIsStale_reads_has_stale`.
 - `staleEdges_filter`.
+- **[ADICIÓN ARQUITECTO]** `coverage_summary_includes_stale_notes_when_present` (extender `summarizeGraph` del 109 para propagar `stale_stats` opcional; ausente → undefined, sin lanzar).
 
 > Disclosure entorno (plan 107): `.test.tsx` bloqueado; criterio = modelo puro + `tsc --noEmit` + verificación manual.
 
@@ -230,7 +293,8 @@ def annotate_staleness(graph: dict, repo_root: str) -> dict:
 | Riesgo | Mitigación |
 |---|---|
 | Falsos positivos por fechas de commit engañosas (rebase, squash). | Señal git de último commit es la mejor disponible; el resultado es una *sugerencia* (chip), no una acción automática; el operador decide. |
-| Costo de `git log` por archivo en grafos grandes. | Cache por archivo dentro del run + cache del grafo (109, TTL 60 s); timeout corto; solo aristas `code_ref`. |
+| Costo de `git log` por archivo en grafos grandes (la anotación corre por request, DESPUÉS del cache del 109 — C3). | Cache de epochs en `doc_staleness` con TTL 60 s por `(repo_root, rel_path)` + tope duro `_MAX_GIT_LOOKUPS=500` por anotación; timeout 5 s; solo aristas `code_ref`. |
+| Contaminar la cache del grafo 109 al anotar (C1). | `copy.deepcopy` obligatorio en el wiring antes de anotar + test `test_cache_not_polluted_after_annotation`. |
 | Repo no-git o shallow clone sin historia. | `git_last_commit_epoch` devuelve None → `stale=False`; degradación total sin excepción. |
 | Acoplamiento al plan 113 no implementado. | F3/F5 detrás de doble gate; si 113 no está, endpoint 404 y el resto (detección/visual) funciona igual. |
 | Drift del payload que confunda al 111. | Campos ADITIVOS `stale`/`has_stale`; el 111 ya los tolera ausentes; golden de no-regresión (F2). |

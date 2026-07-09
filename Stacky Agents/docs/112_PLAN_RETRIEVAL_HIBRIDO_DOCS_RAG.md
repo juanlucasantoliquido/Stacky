@@ -1,6 +1,15 @@
 # Plan 112 — Retrieval híbrido en docs-rag (léxico TF-IDF + expansión 1-hop por grafo + prior de backlinks)
 
-> **Estado:** PROPUESTO v1 — 2026-07-09
+> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C3 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+>
+> **CHANGELOG v1 → v2:**
+> - **C1 (IMPORTANTE):** `search_hybrid` devolvía la lista combinada SIN tope: base hits + TODOS los chunks de hasta 8 ficheros vecinos por hit → `/docs-rag/search` podía responder 10x el `top_k` pedido. Ahora cap literal `reranked[: top_k * _HYBRID_RESULT_CAP_FACTOR]` (factor 3) + test `test_result_count_capped`.
+> - **C2 (IMPORTANTE):** el fallback por basename del mapeo `file_path ↔ node.path` estaba solo enunciado ("documentar el fallback") pero el pseudocódigo de F1 no lo implementaba — si los paths difieren, el híbrido degradaba en silencio y el KPI moría. Fallback por basename especificado literal (colisión → se omite, determinístico) + test `test_basename_fallback_mapping`.
+> - **C3 (IMPORTANTE):** "actualizar `_REQUIRES_MAP_FROZEN` si el meta-test lo exige" era condicional/vago para un modelo menor. Instrucción literal: espejar el patrón EXISTENTE de `STACKY_RAG_CATALOG_TOP_K` (FlagSpec con `requires="STACKY_RAG_CATALOG_ENABLED"`, harness_flags.py:1447) para las 3 numéricas.
+> - **C4 (MENOR):** contradicción docstring/código en `_rerank_with_backlinks` resuelta: NO se crean DocHit nuevos ni se muta el score; el score combinado es SOLO clave de orden (los scores visibles siguen siendo los léxicos).
+> - **C5 (MENOR):** `test_backlink_prior_reorders_hubs` con valores exactos (scores 0.50 vs 0.48; backlinks 0 vs 10) — "score léxico similar" era subjetivo.
+> - **[ADICIÓN ARQUITECTO]:** parámetro opcional `debug_hybrid` en `POST /docs-rag/search` (solo con flag ON) que agrega un bloque ADITIVO `hybrid_debug` (ficheros léxicos, ficheros expandidos, pesos efectivos) — el operador ve el efecto del híbrido en 1 request, sin tocar el shape con flag OFF. +1 test en F3.
 > **Serie:** Documentación agéntica Obsidian (109 → 111 → **112**; alimenta al Documentador del plan 113). El número 110 quedó tomado por un plan ajeno (Revisor de PRs).
 > **Pipeline:** este documento pasó `proponer` (este estado). Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Depende de:** Plan 109 (`services/doc_graph.build_graph`, aristas y `in_degree` por nodo, contrato §4.1). **Reutiliza** `services/docs_rag.py` (motor TF-IDF por proyecto) — **PROHIBIDO crear un cuarto motor léxico** (ya hay 3: `rag_retriever.py`, `docs_rag.py`, `memory_store.py`).
@@ -75,7 +84,7 @@
 2. `Stacky Agents/backend/services/harness_flags.py`:
    - En `_CATEGORY_KEYS["contexto_memoria"]` agregar las 4 keys.
    - En `FLAG_REGISTRY`, 4 `FlagSpec`. La bool copia el shape de `STACKY_DOCS_GRAPH_ENABLED` (plan 109, **sin `default=`**, `env_only=False`). Las numéricas con `type="float"`/`"int"`, `min_value`/`max_value` (ver tabla §4), `env_only=False`, **sin `default=`** (gotcha `_CURATED_DEFAULTS_ON`). Descripciones que expliquen: hybrid = "expandir 1 salto por links + priorizar notas muy referenciadas"; alpha = peso del match léxico; beta = peso del prior de backlinks; max_neighbors = tope de notas vecinas traídas por hit.
-   - `requires`: las 3 numéricas y la telemetría dependen de la master → declarar `requires="STACKY_DOCS_RAG_HYBRID_ENABLED"` en las 3 numéricas (patrón requires plan 104; NO en la master). Actualizar `_REQUIRES_MAP_FROZEN` si el meta-test lo exige (seguir el patrón de las flags con requires existentes).
+   - `requires`: declarar `requires="STACKY_DOCS_RAG_HYBRID_ENABLED"` en las 3 numéricas (NO en la master). **(C3) Instrucción literal:** copiar EXACTAMENTE el patrón existente de `STACKY_RAG_CATALOG_TOP_K` (FlagSpec con `requires="STACKY_RAG_CATALOG_ENABLED"`, hoy harness_flags.py:1447 — localizar por símbolo). Es profundidad-1 contra una master bool (gotcha R4 del plan 104: OK). Si `test_harness_flags_requires.py` falla por un mapa congelado, agregar las 3 keys nuevas a ese mapa con el MISMO shape que tengan ahí las keys de `STACKY_RAG_CATALOG_*` — nada más.
 3. `Stacky Agents/backend/services/harness_flags_help.py` — 4 entradas `PlainHelp` (what/on_effect/off_effect/example en español llano).
 
 **Tests PRIMERO — archivo:** `Stacky Agents/backend/tests/test_plan112_flags.py`:
@@ -103,7 +112,7 @@ venv/Scripts/python.exe -m pytest tests/test_plan112_flags.py tests/test_harness
 
 **Objetivo (1 frase).** Traducir el grafo del plan 109 a un mapa `file_path_docs_rag -> in_degree` y a un mapa de vecindad `file_path -> [file_paths vecinos]`, resolviendo la diferencia de identidad entre ambos mundos. **Valor:** el puente sin el cual la expansión y el prior no pueden computarse.
 
-**Problema de identidad (explícito):** `docs_rag` guarda `DocChunk.file_path` = ruta del fichero **relativa a la carpeta de docs del proyecto** (como la indexa `index_project`). El grafo 109 usa ids `note:<source_id>:<path>`. La resolución es por **coincidencia de `path` de nodo con el `file_path` del chunk** dentro de las fuentes `project-docs:*`. Regla determinista: normalizar ambos con `/` y comparar `node.path == chunk.file_path` (o su basename si no matchea exacto — documentar el fallback).
+**Problema de identidad (explícito):** `docs_rag` guarda `DocChunk.file_path` = ruta del fichero **relativa a la carpeta de docs del proyecto** (como la indexa `index_project`). El grafo 109 usa ids `note:<source_id>:<path>`. La resolución es por **coincidencia de `path` de nodo con el `file_path` del chunk** dentro de las fuentes `project-docs:*`. Regla determinista (C2, implementada en el pseudocódigo de abajo): normalizar ambos con `/` y comparar exacto; **fallback por basename** para los nodos que no matchearon exacto: se indexa `basename_lower(node.path) -> node_id` y se resuelve contra `basename_lower(chunk.file_path)`; si DOS nodos comparten basename en el fallback, ese basename se OMITE del fallback (ambiguo → determinístico, sin adivinar). El fallback existe porque `doc_indexer` puede descubrir varias carpetas `docs` (fuentes anidadas) y `docs_rag` indexa una sola raíz: los relativos pueden diferir en prefijo.
 
 **Archivo a editar:** `Stacky Agents/backend/services/docs_rag.py` (agregar helpers; NO tocar `search`).
 
@@ -135,6 +144,16 @@ def _build_backlink_index(project_name: str) -> tuple[dict[str, int], dict[str, 
         id_to_path[n["id"]] = p
         backlinks[p] = int(n.get("in_degree", 0))
 
+    # (C2) Fallback por basename para chunks cuyo file_path no matchea exacto:
+    # se aplica al construir los mapas de salida, ANTES de las aristas.
+    # 1. chunk_paths = file_paths distintos presentes en la tabla DocChunk del proyecto.
+    # 2. exact = {p for p in chunk_paths if p in backlinks}  (match exacto, camino feliz)
+    # 3. Para los chunk_paths NO exactos: base_index = {basename_lower(node_path): node_path
+    #    for node_path in backlinks}, construido OMITIENDO los basenames repetidos
+    #    (ambiguos). Si basename_lower(chunk_path) está en base_index, se agrega un
+    #    alias: backlinks[chunk_path] = backlinks[node_path_resuelto] y las aristas
+    #    de ese nodo se reportan bajo chunk_path en neighbors (remap del alias).
+    # 4. Sin match ni por basename → ese chunk queda sin backlinks/vecinos (0, []).
     neighbors: dict[str, list[str]] = {}
     for e in graph.get("edges", []):
         s, t = e.get("source"), e.get("target")
@@ -158,13 +177,14 @@ def _build_backlink_index(project_name: str) -> tuple[dict[str, int], dict[str, 
 - `test_returns_empty_when_graph_flag_off`.
 - `test_returns_empty_and_logs_when_build_graph_raises` (degradación segura).
 - `test_ignores_non_project_and_code_nodes`.
+- **(C2)** `test_basename_fallback_mapping` — caso 1: chunk `file_path="a.md"` y nodo `path="sub/a.md"` → el fallback resuelve por basename y `backlinks["a.md"]` hereda el `in_degree` del nodo. Caso 2: DOS nodos `x/a.md` e `y/a.md` → el basename `a.md` es ambiguo y se omite del fallback (el chunk queda con 0 backlinks, sin alias y sin excepción).
 
 **Comando (desde `Stacky Agents/backend`):**
 ```
 venv/Scripts/python.exe -m pytest tests/test_plan112_backlink_index.py -q
 ```
 
-**Criterio BINARIO:** 5/5 verdes.
+**Criterio BINARIO:** 6/6 verdes.
 
 **Flag/default:** lee `STACKY_DOCS_GRAPH_ENABLED` (109); si OFF → `({}, {})`. **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno.
 
@@ -187,12 +207,16 @@ def _read_hybrid_weights() -> tuple[float, float, int]:
     return alpha, beta, maxn
 
 
+_HYBRID_RESULT_CAP_FACTOR = 3  # (C1) tope duro: len(resultado) <= top_k * 3
+
+
 def _rerank_with_backlinks(hits: list[DocHit], backlinks: dict[str, int],
                            alpha: float, beta: float) -> list[DocHit]:
-    """Reordena in-place-safe: score_final = alpha*score + beta*log(1+backlinks(file)).
-    Estable ante empates (mismo orden relativo previo). NO muta los DocHit originales:
-    devuelve nuevos DocHit con el score combinado (para que el golden de score no cambie
-    cuando el híbrido está OFF, que ni llama a esta función)."""
+    """Reordena: clave = alpha*score + beta*log(1+backlinks(file)).
+    Estable ante empates (sorted es estable: mismo orden relativo previo).
+    (C4) NO muta los DocHit ni crea copias: la clave combinada es SOLO para
+    ordenar; los scores visibles siguen siendo los léxicos originales
+    (los vecinos agregados muestran score 0.0)."""
     import math
     def _key(h):
         bl = backlinks.get(h.file_path, 0)
@@ -236,27 +260,29 @@ def search_hybrid(project_name: str, query: str, top_k: int = 5,
                                         score=0.0))  # relevante por vecindad, sin score léxico
     combined = base_hits + added
     reranked = _rerank_with_backlinks(combined, backlinks, alpha, beta)
+    reranked = reranked[: max(1, top_k) * _HYBRID_RESULT_CAP_FACTOR]  # (C1) tope duro
     record_hybrid_query(lexical=len(base_hits), added=len(added),
                         new_from_expansion=bool(added))
     return reranked
 ```
 
-**Casos borde cerrados:** grafo vacío → `search()` puro; `max_neighbors=0` → sin expansión, pero SÍ rerank por backlinks (sigue mejorando orden); nota vecina sin chunks indexados → no aporta; empates → orden estable.
+**Casos borde cerrados:** grafo vacío → `search()` puro; `max_neighbors=0` → sin expansión, pero SÍ rerank por backlinks (sigue mejorando orden); nota vecina sin chunks indexados → no aporta; empates → orden estable; **(C1)** el resultado final NUNCA supera `top_k * 3` elementos (los base hits, mejor rankeados, sobreviven al corte salvo que el prior los hunda — comportamiento deseado).
 
 **Tests PRIMERO — archivo:** `Stacky Agents/backend/tests/test_plan112_search_hybrid.py` (corpus fake en DB de test + monkeypatch de `_build_backlink_index` para inyectar backlinks/neighbors deterministas):
 - `test_degrades_to_search_when_no_graph` — con `_build_backlink_index` → `({},{})`, `search_hybrid == search` (mismos DocHit, mismo orden).
 - `test_pulls_neighbor_note_chunk` — **KPI CENTRAL:** query cuyo término solo está en `a.md`, respuesta en `b.md` (vecina, sin el término); `search` no trae `b.md`, `search_hybrid` sí.
-- `test_backlink_prior_reorders_hubs` — dos hits con score léxico similar; el de más backlinks queda primero.
+- `test_backlink_prior_reorders_hubs` — **(C5) valores exactos:** hit A score `0.50` con `backlinks=0` vs hit B score `0.48` con `backlinks=10`; con `alpha=1.0, beta=0.15`: clave A = 0.50, clave B = 0.48 + 0.15*log1p(10) ≈ 0.8397 → B queda primero.
 - `test_max_neighbors_zero_still_reranks` — sin expansión pero rerank aplicado.
 - `test_does_not_mutate_base_hits` — los `DocHit` de `search` conservan su `score` original.
 - `test_stable_on_ties`.
+- **(C1)** `test_result_count_capped` — corpus con muchos vecinos/chunks: `len(search_hybrid(..., top_k=5)) <= 15`.
 
 **Comando (desde `Stacky Agents/backend`):**
 ```
 venv/Scripts/python.exe -m pytest tests/test_plan112_search_hybrid.py tests/test_plan112_backlink_index.py -q
 ```
 
-**Criterio BINARIO:** 6 + 5 verdes.
+**Criterio BINARIO:** 7 + 6 verdes.
 
 **Flag/default:** `search_hybrid` NO lee la master (la ruta decide, F3); pero degrada solo si no hay grafo. **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno.
 
@@ -273,19 +299,30 @@ use_hybrid = bool(getattr(config, "STACKY_DOCS_RAG_HYBRID_ENABLED", False))
 fn = docs_rag_service.search_hybrid if use_hybrid else docs_rag_service.search
 hits = fn(name, query, top_k=top_k, expand_files=expand_files)
 ```
-(No cambiar el shape de la respuesta ni el manejo de errores existente.)
+(No cambiar el shape de la respuesta ni el manejo de errores existente con flag OFF.)
+
+**[ADICIÓN ARQUITECTO] — bloque de diagnóstico opt-in por request:** el body de `POST /docs-rag/search` acepta la key opcional `debug_hybrid` (bool, default false). SOLO cuando `use_hybrid` es True **y** `debug_hybrid` es true, la respuesta agrega la key ADITIVA:
+```json
+"hybrid_debug": {
+  "lexical_files": ["a.md"],
+  "expanded_files": ["b.md", "c.md"],
+  "weights": {"alpha": 1.0, "beta": 0.15, "max_neighbors": 8}
+}
+```
+Implementación: `search_hybrid` gana un parámetro keyword-only `collect_debug: bool = False`; cuando es True devuelve `(hits, debug_dict)` — la ruta es el único caller que lo usa (la firma pública sin `collect_debug` no cambia). Con flag OFF, `debug_hybrid` en el body se IGNORA (el golden no cambia). Así el operador mide el efecto del híbrido en 1 request desde la UI o curl, sin logs ni config.
 
 **Tests PRIMERO — archivo:** `Stacky Agents/backend/tests/test_plan112_search_route.py` (app+client, patrón `test_plan89_environments_endpoints.py`):
 - `test_search_uses_plain_when_flag_off` — flag OFF → llama `search` (monkeypatch/espía), NO `search_hybrid`.
 - `test_search_uses_hybrid_when_flag_on` — flag ON → llama `search_hybrid`.
-- `test_search_response_shape_unchanged` — **golden:** con flag OFF, el JSON de `/docs-rag/search` tiene exactamente las mismas keys/estructura que hoy (fijar el shape esperado en el test).
+- `test_search_response_shape_unchanged` — **golden:** con flag OFF, el JSON de `/docs-rag/search` tiene exactamente las mismas keys/estructura que hoy (fijar el shape esperado en el test), incluso mandando `debug_hybrid=true` en el body.
+- **[ADICIÓN ARQUITECTO]** `test_debug_block_only_when_flag_on_and_requested` — flag ON + `debug_hybrid=true` → la respuesta contiene `hybrid_debug` con las 3 keys; flag ON sin `debug_hybrid` → NO contiene `hybrid_debug`.
 
 **Comando (desde `Stacky Agents/backend`):**
 ```
 venv/Scripts/python.exe -m pytest tests/test_plan112_search_route.py -q
 ```
 
-**Criterio BINARIO:** 3/3 verdes.
+**Criterio BINARIO:** 4/4 verdes.
 
 **Flag/default:** `STACKY_DOCS_RAG_HYBRID_ENABLED` OFF → ruta idéntica a hoy. **Impacto por runtime:** ninguno. **Fallback:** flag OFF = léxico puro. **Trabajo del operador:** ninguno (opt-in default off).
 
@@ -406,7 +443,7 @@ venv/Scripts/python.exe -m pytest tests/test_plan112_doc_consultor_fallback.py -
 | Regresión del retrieval actual. | Camino híbrido en función NUEVA; `search()` intacto; golden byte-idéntico con flag OFF (F3). |
 | Grafo (109) caído rompe la búsqueda. | `_build_backlink_index` atrapa toda excepción y devuelve `({},{})`; `search_hybrid` degrada a `search()` (F1/F2). |
 | Mismatch de identidad file_path ↔ node.path. | Comparación normalizada `/`; fallback por basename documentado; solo nodos `project-docs`. Tests fijan el mapeo. |
-| Expansión trae demasiados chunks (contexto inflado). | Tope `STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS` (default 8) + los chunks vecinos entran con score 0 y quedan detrás salvo prior de backlinks. `_build_context_block` ya trunca a `_MAX_CONTEXT_CHARS`. |
+| Expansión trae demasiados chunks (contexto inflado). | Tope `STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS` (default 8) + **cap duro del resultado a `top_k * 3` (C1)** + los chunks vecinos entran con score 0 y quedan detrás salvo prior de backlinks. `_build_context_block` ya trunca a `_MAX_CONTEXT_CHARS`. |
 | Cuarto motor TF-IDF por accidente. | Guardarraíl duro de DoD: el diff no importa `rag_retriever`/`memory_store` ni crea índice nuevo; reusa `DocChunk`. |
 | Persona de fallback tapa un `.agent.md` real. | El fallback solo aplica cuando el prompt leído es vacío; agente presente tiene precedencia (test F5). |
 | Telemetría en memoria se pierde al reiniciar. | Aceptable: es señal A/B de sesión, no métrica persistida; documentado. Si se quiere persistencia, plan aparte. |
@@ -441,9 +478,9 @@ venv/Scripts/python.exe -m pytest tests/test_plan112_doc_consultor_fallback.py -
 ## 9. Orden de implementación (secuencial)
 
 1. **F0** — 4 flags + bounds + tests.
-2. **F1** — `_build_backlink_index` (puente grafo↔docs_rag) + 5 tests.
-3. **F2** — `search_hybrid` + `_rerank_with_backlinks` + 6 tests (incluye KPI central).
-4. **F3** — ruta con selección por flag + golden + 3 tests.
+2. **F1** — `_build_backlink_index` (puente grafo↔docs_rag, con fallback basename C2) + 6 tests.
+3. **F2** — `search_hybrid` + `_rerank_with_backlinks` + cap de resultados (C1) + 7 tests (incluye KPI central).
+4. **F3** — ruta con selección por flag + golden + `debug_hybrid` + 4 tests.
 5. **F4** — telemetría A/B en `/stats` + 4 tests.
 6. **F5** — fallback DocConsultor + warning + 3 tests.
 7. **F6** — cierre, no-regresión, DoD.

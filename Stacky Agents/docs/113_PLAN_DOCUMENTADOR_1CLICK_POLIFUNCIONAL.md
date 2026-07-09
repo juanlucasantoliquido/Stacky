@@ -1,6 +1,16 @@
 # Plan 113 — Documentador agéntico 1-click polifuncional (detecta y deja la doc creada/corregida en un solo click)
 
-> **Estado:** PROPUESTO v1 — 2026-07-09
+> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+>
+> **CHANGELOG v1 → v2:**
+> - **C1 (IMPORTANTE):** contradicción interna resuelta — §1/DoD decían "conservar (merge)" pero F3 decía "NO merge automático". Regla única en toda la v2: **"Conservar" NUNCA ejecuta merge** (un merge automático sobre el working tree sucio del operador podría destruir WIP); preserva la rama y muestra el comando de merge sugerido. El merge lo corre el operador cuando quiere.
+> - **C2 (IMPORTANTE):** el registro del agente citaba un mecanismo inexistente ("dict `agents` de agent_runner", agente "QAUat1"). Real: `backend/agents/__init__.py` define `registry: dict[str, BaseAgent]` con instancias (`BusinessAgent()`, `QAAgent()`, `DevOpsAgent()`, …) y `agents.get(agent_type)`. F0 reescrito: clase `DocumenterAgent(BaseAgent)` nueva en `backend/agents/documenter.py`, instancia agregada al `registry`, y test corregido (`import agents; agents.get("Documentador") is not None`).
+> - **C3 (IMPORTANTE):** la recuperación de la salida del agente no estaba especificada (`run_agent` devuelve `execution_id`, nada más) y `ticket_id=<0 si el motor lo permite>` era vago. F2 ahora manda: espejar EXACTAMENTE el mecanismo de `api/devops_agent.py:307 _launch_turn` (ticket + espera + lectura de output), con timeout literal.
+> - **C4 (IMPORTANTE):** `health_after` era incomputable tal como estaba (`build_graph` no acepta una raíz arbitraria; lee las fuentes del proyecto activo). F5 agrega el helper determinista `_health_for_root(docs_root)` que reusa los parsers puros del 109 + `classify_doc_health` sin cache.
+> - **C5 (MENOR):** concurrencia y basura: lock de un solo run activo (409 `documenter_busy`), `git worktree prune` al preparar, y branch siempre visible en `status` para recuperación manual tras un restart.
+> - **C6 (MENOR):** el mapping run→rama vive en memoria: documentado que tras un restart `decide` responde 404 con el nombre de la rama incluido en el mensaje (el operador puede mergear/borrar a mano; nada queda irrecuperable).
+> - **[ADICIÓN ARQUITECTO]:** `GET /api/docs/documenter/status` incluye `diff_stat` (salida de `git -C <worktree> diff --stat HEAD`) y el panel lo muestra ANTES de Conservar/Descartar — el operador ve el tamaño real del cambio sin salir de la UI. Refuerza human-in-the-loop con costo cero. +1 test en F5.
 > **Serie:** Documentación agéntica Obsidian (109 → 111 → 112 → **113** → 114). El número 110 quedó tomado por un plan ajeno (Revisor de PRs).
 > **Pipeline:** este documento pasó `proponer` (este estado). Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Depende de:** Plan 109 (`doc_graph.build_graph`, `classify_doc_health`, contrato §4.1, flag `STACKY_DOCS_GRAPH_ENABLED`). **Reutiliza** `agent_runner.run_agent` (motor de agentes, paridad 3 runtimes), el patrón endpoint+background de `api/devops_agent.py:307 _launch_turn`, la infra de ejecuciones (`api/executions.py`) y `doc_indexer` (fuentes/workspace del proyecto activo).
@@ -9,12 +19,12 @@
 
 ## 1. Título, objetivo y KPI
 
-**Objetivo (1 párrafo).** Un único botón **"Lanzar Documentador"** en `DocsPage` que, con **un solo click y sin ningún formulario**, dispara un pipeline autónomo que: (1) **detecta el estado real** de la documentación del proyecto activo vía `doc_health` (plan 109) — *sin docs*, *mal formateada*, *incompleta*, *desactualizada* o *sana*; (2) **decide automáticamente qué trabajo hace falta** (reconstruir desde el código, normalizar a formato Obsidian, completar lo que falta, corregir lo desactualizado, enriquecer con wikilinks) — es **polifuncional**: corre todos los modos aplicables en secuencia, el operador no elige nada; (3) **deja la documentación efectivamente escrita, en el formato correcto**, al terminar. Para respetar el riel human-in-the-loop **sin** pedirle pasos al operador antes de arrancar, todo se escribe en una **rama git dedicada y revertible** (nunca en la rama de trabajo, nunca `push`): cuando el pipeline termina, la doc **ya está creada/corregida** en esa rama, y el operador la revisa como diff y la **conserva (merge) o descarta (borra la rama) con un click**. Anti-alucinación operacionalizado: cada afirmación generada lleva marca `[V]`/`[INF]`/`[NV]` y trazabilidad `archivo:línea`; **nunca** se duplican ni pisan las docs canónicas de `docs/sistema/`.
+**Objetivo (1 párrafo).** Un único botón **"Lanzar Documentador"** en `DocsPage` que, con **un solo click y sin ningún formulario**, dispara un pipeline autónomo que: (1) **detecta el estado real** de la documentación del proyecto activo vía `doc_health` (plan 109) — *sin docs*, *mal formateada*, *incompleta*, *desactualizada* o *sana*; (2) **decide automáticamente qué trabajo hace falta** (reconstruir desde el código, normalizar a formato Obsidian, completar lo que falta, corregir lo desactualizado, enriquecer con wikilinks) — es **polifuncional**: corre todos los modos aplicables en secuencia, el operador no elige nada; (3) **deja la documentación efectivamente escrita, en el formato correcto**, al terminar. Para respetar el riel human-in-the-loop **sin** pedirle pasos al operador antes de arrancar, todo se escribe en una **rama git dedicada y revertible** (nunca en la rama de trabajo, nunca `push`): cuando el pipeline termina, la doc **ya está creada/corregida** en esa rama, y el operador la revisa como diff y la **conserva (la rama queda lista para mergear cuando él quiera — NUNCA merge automático, C1) o descarta (borra la rama) con un click**. Anti-alucinación operacionalizado: cada afirmación generada lleva marca `[V]`/`[INF]`/`[NV]` y trazabilidad `archivo:línea`; **nunca** se duplican ni pisan las docs canónicas de `docs/sistema/`.
 
 **KPI / impacto esperado.**
 - **1 click, doc lista (binario):** desde `doc_health != SANA`, un solo POST deja una rama con la doc creada/corregida en formato Obsidian (frontmatter + wikilinks), verificable: tras el run, `doc_health` recomputado sobre la rama mejora de categoría (p.ej. `SIN_DOCS`→ no-SIN_DOCS, `FORMATO_NO_OBSIDIAN`→ frontmatter_ratio > 0 y wikilink_edges > 0, `INCOMPLETA`→ menos `uncovered_modules`).
 - **Cero pasos previos al operador:** el botón no abre formularios; la selección de modos es automática por `doc_health`. Meta: 0 inputs obligatorios para lanzar.
-- **Reversible atómico:** conservar = merge de la rama; descartar = borrar la rama; en ningún caso se toca la rama de trabajo del operador ni se hace `push`. Meta binaria: el working tree del operador queda intacto durante todo el run.
+- **Reversible atómico:** conservar = la rama se preserva y la UI muestra el comando de merge sugerido (**el merge lo ejecuta el operador**, nunca Stacky — C1); descartar = borrar la rama; en ningún caso se toca la rama de trabajo del operador ni se hace `push`. Meta binaria: el working tree del operador queda intacto durante todo el run Y después de decidir.
 - **Anti-alucinación:** 100% de las afirmaciones nuevas llevan marca de confianza; las `[V]` citan `archivo:línea`; las notas nuevas nunca colisionan con `docs/sistema/`.
 - **Paridad 3 runtimes:** el pipeline corre con Codex CLI, Claude Code CLI o GitHub Copilot Pro (parámetro `runtime` de `run_agent`); si el runtime seleccionado no está disponible, degrada al fallback configurado y lo reporta.
 
@@ -32,7 +42,7 @@
 ## 3. Principios y guardarraíles (NO negociables — codificados en las fases)
 
 - **1 click, cero formularios.** El endpoint recibe a lo sumo `{project?}`; todo lo demás se infiere de `doc_health` y la config del proyecto. Prohibido pedir modo/opciones al operador antes de arrancar.
-- **Human-in-the-loop vía rama revertible, no vía bandeja previa.** El agente **nunca** escribe en la rama de trabajo. Escribe en una rama dedicada `stacky/doc-<timestamp>`; el operador revisa el diff **después** y conserva (merge) o descarta (borra rama). El working tree del operador queda intacto durante el run. **Jamás `git push`.**
+- **Human-in-the-loop vía rama revertible, no vía bandeja previa.** El agente **nunca** escribe en la rama de trabajo. Escribe en una rama dedicada `stacky/doc-<timestamp>`; el operador revisa el diff **después** y conserva (la rama queda; el merge lo corre ÉL — C1) o descarta (borra rama). El working tree del operador queda intacto durante el run y después. **Jamás `git push`. Jamás `git merge` automático. Jamás `git stash`** (incidente conocido: un stash/pop agéntico dejó conflictos sin resolver en este repo).
 - **El agente propone contenido; el código determinista escribe.** El LLM devuelve un artefacto estructurado (lista de `{path, action, content, confidence}`); un aplicador determinista valida y escribe a la rama. Así "el agente nunca escribe directo" se cumple aunque el resultado quede escrito en 1 click.
 - **No pisar lo canónico.** `docs/sistema/` (fuente única, memoria `canonical-system-docs-location`) es **read-only** para el Documentador: puede leerla como contexto y linkearla, nunca sobrescribirla ni duplicar su contenido. Regla dura en el aplicador (F4).
 - **Anti-alucinación operacionalizado.** Todo claim nuevo con `[V]` (verificado contra `archivo:línea`), `[INF]` (inferido) o `[NV]` (no verificable). El prompt del agente lo exige; el aplicador rechaza notas sin marcas.
@@ -86,13 +96,15 @@
 2. `backend/services/harness_flags.py` — 2 keys en `_CATEGORY_KEYS["contexto_memoria"]`; 2 `FlagSpec` (bool sin `default=`; int con `min_value=1,max_value=500`, `requires="STACKY_DOCS_DOCUMENTER_ENABLED"`, sin `default=`).
 3. `backend/services/harness_flags_help.py` — 2 `PlainHelp` (qué hace el Documentador; qué pasa si lo prendés/apagás).
 4. `backend/Stacky/agents/Documentador.agent.md` — persona (español): documentador técnico anti-alucinación; SIEMPRE marca `[V]/[INF]/[NV]`; cita `archivo:línea`; NUNCA toca `docs/sistema/`; produce SOLO el artefacto estructurado pedido. **Fallback:** const `_DEFAULT_DOCUMENTADOR_PROMPT` en `doc_documenter.py` usada si el `.agent.md` no está (patrón plan 112 F5, porque los `.agent.md` están gitignoreados).
-5. Registro en el dict `agents` (donde se registran QAUat1/Business/Functional/Technical/Developer/DevOpsAgent) → agregar `Documentador` apuntando a su definición.
+5. **(C2) Registro REAL del agente** — el mecanismo es `backend/agents/__init__.py`, que construye `registry: dict[str, BaseAgent]` desde instancias (`BusinessAgent()`, `FunctionalAgent()`, `TechnicalAgent()`, `DeveloperAgent()`, `DevOpsAgent()`, `QAAgent()`, `DebugAgent()`, `PRReviewAgent()`, `CustomAgent()`; agents/__init__.py:11-24) y expone `get(agent_type)` — NO existe ningún "dict agents" en `agent_runner.py` (ahí `agents` es el módulo importado). Hacer:
+   - Crear `backend/agents/documenter.py` con `class DocumenterAgent(BaseAgent)` con `type = "Documentador"` (copiar el shape de la clase más simple del paquete, p.ej. `DebugAgent` en `agents/debug.py`, incluyendo cómo define `describe()`/prompt).
+   - En `backend/agents/__init__.py`: `from .documenter import DocumenterAgent` + agregar `DocumenterAgent(),` a la lista del `registry` con comentario `# Plan 113 — Documentador`.
 
 **Tests PRIMERO — archivo:** `backend/tests/test_plan113_flags_and_agent.py`:
 - `test_flags_registered_and_default_off`.
 - `test_max_files_bounds_and_requires`.
 - `test_flags_have_plain_help`.
-- `test_documentador_agent_registered` (`from agent_runner import agents; assert "Documentador" in agents`).
+- `test_documentador_agent_registered` — **(C2)** `import agents; assert agents.get("Documentador") is not None` (así resuelve `run_agent`, agent_runner.py:99).
 - `test_documentador_has_fallback_prompt` (`_DEFAULT_DOCUMENTADOR_PROMPT` no vacío y menciona las marcas `[V]`).
 
 Registrar en `run_harness_tests.sh` **y** `.ps1`.
@@ -181,8 +193,9 @@ def plan_documenter_run(project_name: str) -> DocumenterPlan:
   - ENRIQUECER: subgrafo (nodos + huérfanas) para proponer wikilinks faltantes.
   - Siempre: un bloque read-only con el índice de `docs/sistema/` (para linkear, marcado "NO EDITAR").
 - `invoke_documenter(mode, context_blocks, project_name, runtime) -> list[DocProposal]`:
-  - `execution_id = agent_runner.run_agent(agent_type="Documentador", ticket_id=<ticket sintético o 0 si el motor lo permite>, context_blocks=context_blocks, user="documenter", runtime=runtime, project_name=project_name, system_prompt_override=_DEFAULT_DOCUMENTADOR_PROMPT if no .agent.md, work_item_type="Doc")`.
-  - Parsear la salida del agente a `list[DocProposal]` con `parse_proposals(raw) `: exige bloques con front `path:`, `action:`, `sources:` y cuerpo; **marca `marks_ok=True`** solo si el cuerpo contiene al menos una de `[V]`/`[INF]`/`[NV]`. Salidas malformadas → se descartan con log (nunca crashea).
+  - **(C3) Ticket + espera + lectura de salida — ESPEJAR `api/devops_agent.py:307 _launch_turn`:** antes de escribir esta función, LEER `_launch_turn` completo y copiar su mecanismo exacto para (a) qué `ticket_id` le pasa a `run_agent` (si crea/reusa un ticket propio de la conversación, el Documentador crea/reusa UNO equivalente con título literal `"[Documentador] <project_name>"`); (b) cómo espera a que la ejecución termine; (c) de dónde lee la salida final del agente (el mismo store/campo de la infra de `api/executions.py` que usa el DevOpsAgent). Timeout literal de espera: 1800 s por modo (mismo default anti-zombie del CLI); vencido → el modo se marca fallido y el run sigue con el modo siguiente (reportado en `skipped`).
+  - `execution_id = agent_runner.run_agent(agent_type="Documentador", ticket_id=<el del punto anterior>, context_blocks=context_blocks, user="documenter", runtime=runtime, project_name=project_name, system_prompt_override=(_DEFAULT_DOCUMENTADOR_PROMPT si no hay .agent.md, si no None), work_item_type="Doc")` — firma real verificada en agent_runner.py:77-98 (todos keyword-only; `system_prompt_override` existe).
+  - Parsear la salida del agente a `list[DocProposal]` con `parse_proposals(raw)`: exige bloques con front `path:`, `action:`, `sources:` y cuerpo; **marca `marks_ok=True`** solo si el cuerpo contiene al menos una de `[V]`/`[INF]`/`[NV]`. Salidas malformadas → se descartan con log (nunca crashea).
 
 > **Contrato de salida del agente (documentado en `Documentador.agent.md`):** el agente responde SOLO un bloque por archivo, delimitado, con encabezado `<<<DOC path="..." action="create|patch" sources="a.py:10,b.ts:3">>>` … `<<<END>>>`, cuerpo markdown con frontmatter y marcas. `parse_proposals` parsea ese formato determinista (regex), no prosa libre.
 
@@ -216,7 +229,9 @@ def prepare_doc_branch(target_root: str) -> str | None:
     mover la rama activa. Devuelve el PATH del worktree (donde se escribe) o None si
     target_root no es repo git (→ caller degrada a carpeta-sombra)."""
     # git -C target_root rev-parse --is-inside-work-tree ; si falla → None
+    # (C5) git -C target_root worktree prune   ← limpia worktrees zombie de runs crasheados
     # branch = "stacky/doc-" + utcnow.strftime("%Y%m%d-%H%M%S")
+    # tmp_worktree = tempfile.mkdtemp(prefix="stacky-doc-")  (fuera del repo)
     # git -C target_root worktree add -b <branch> <tmp_worktree> HEAD
     # return tmp_worktree
 
@@ -284,6 +299,8 @@ def discard_doc_branch(target_root: str, branch: str) -> None:
 
 **Orquestador `run_documenter(project_name, runtime) -> dict` (background, patrón `_pre_run_then_run_in_background`):**
 ```
+# (C5) lock de un solo run: si ya hay un run del Documentador en estado "running"
+# (registro en memoria del módulo), el endpoint responde 409 {"error":"documenter_busy"}.
 plan = plan_documenter_run(project_name)
 target_root = <workspace_root del proyecto activo, de doc_indexer/sources>
 worktree = prepare_doc_branch(target_root)  # None → carpeta-sombra (degraded)
@@ -293,29 +310,40 @@ for mode in plan.modes:
     props = invoke_documenter(mode, ctx, project_name, runtime)  # fallback runtime si no disponible
     all_props += props
 result = apply_proposals(all_props, worktree or shadow_dir, branch)
-# recomputar doc_health sobre la rama para el KPI (build_graph apuntando al worktree)
+# (C4) recomputar doc_health sobre la rama para el KPI: build_graph NO acepta una raíz
+# arbitraria (lee las fuentes del proyecto activo) → usar el helper nuevo:
+#   _health_for_root(docs_root: Path) -> dict
+# que enumera los *.md bajo la carpeta de docs DEL WORKTREE, construye nodos/aristas
+# localmente con los parsers PUROS del 109 (parse_markdown_links / parse_wikilinks /
+# parse_code_refs) y llama classify_doc_health — sin cache global, sin tocar doc_indexer.
+# health_before se computa igual sobre la carpeta de docs original (mismo helper).
 report = {plan, result, health_before, health_after, branch, degraded}
-persistir report asociado al run_id
+persistir report asociado al run_id  # registro en memoria del módulo; el detalle queda
+# además en el execution record de la infra de ejecuciones. (C6) Tras un restart del
+# backend el registro se pierde: `decide` responde 404 incluyendo el nombre de la rama
+# en el mensaje para que el operador la mergee/borre a mano (git branch -D stacky/doc-*).
 ```
 - **Fallback de runtime:** si `runtime` no disponible, probar el orden configurado (`github_copilot`→`claude_code_cli`→`codex`) y registrar cuál se usó en el log de la ejecución. Si ninguno, marcar el run `failed` con mensaje claro (nunca a medias sin avisar).
 - **Progreso visible:** cada modo emite eventos al `log_streamer`/infra de ejecuciones (como los agentes DevOps), así el frontend muestra avance sin polling ad-hoc.
 
 **Endpoints en `api/docs.py` (todos 404 si `STACKY_DOCS_DOCUMENTER_ENABLED` OFF):**
-- `POST /api/docs/documenter/run` body `{project?}` → lanza en background, devuelve `{run_id}`.
-- `GET /api/docs/documenter/status?run=<id>` → `{state, current_mode, written, skipped, health_before, health_after, branch, degraded}`.
-- `POST /api/docs/documenter/decide` body `{run, action}` → `keep_doc_branch`/`discard_doc_branch`; devuelve `{ok, action}`.
+- `POST /api/docs/documenter/run` body `{project?}` → lanza en background, devuelve `{run_id}`; **(C5)** 409 `{"error":"documenter_busy"}` si ya hay un run activo.
+- `GET /api/docs/documenter/status?run=<id>` → `{state, current_mode, written, skipped, health_before, health_after, branch, degraded, diff_stat}`. **[ADICIÓN ARQUITECTO]:** `diff_stat` = salida cruda de `git -C <worktree> diff --stat HEAD` (string; `""` si degraded o el worktree ya no existe) — el operador ve el tamaño real del cambio antes de decidir.
+- `POST /api/docs/documenter/decide` body `{run, action}` → `keep_doc_branch`/`discard_doc_branch`; devuelve `{ok, action, branch}`. **(C6)** run desconocido (p.ej. tras restart) → 404 con `message` que INCLUYE el nombre de la rama si se conoce, o el patrón `stacky/doc-*` para limpieza manual.
 
 **Tests PRIMERO — archivo:** `backend/tests/test_plan113_endpoints.py` (app+client; monkeypatch del orquestador para no invocar LLM):
 - `test_run_404_when_flag_off`.
 - `test_status_404_when_flag_off`.
 - `test_decide_404_when_flag_off`.
 - `test_run_returns_run_id_when_flag_on` (orquestador mockeado).
+- `test_run_busy_returns_409` **(C5)**.
 - `test_decide_keep_calls_keep_branch` / `test_decide_discard_calls_discard_branch`.
 - `test_run_selects_modes_from_health` (integra selector con orquestador mockeando build_graph + run_agent).
+- `test_status_includes_diff_stat` **[ADICIÓN ARQUITECTO]** (mock del subprocess git → el campo llega al JSON).
 
 **Comando:** `venv/Scripts/python.exe -m pytest tests/test_plan113_endpoints.py -q`
 
-**Criterio BINARIO:** 6/6 verdes.
+**Criterio BINARIO:** 8/8 verdes.
 
 **Flag/default:** master OFF → los 3 endpoints 404. **Impacto por runtime:** el pipeline corre en el runtime seleccionado con fallback; reportado. **Trabajo del operador:** 1 click para lanzar; 1 click para conservar/descartar.
 
@@ -328,7 +356,7 @@ persistir report asociado al run_id
 **Archivos:**
 1. `frontend/src/api/endpoints.ts` — en `Docs`: `documenterRun(project?)`, `documenterStatus(runId)`, `documenterDecide(runId, action)`.
 2. `frontend/src/components/docs/DocumenterButton.tsx` — botón primario; onClick → `documenterRun` → poll `documenterStatus` (react-query con `refetchInterval` mientras `state==="running"`); muestra modo actual y contador de archivos.
-3. `frontend/src/components/docs/DocumenterResultPanel.tsx` — al terminar: resumen (`health_before → health_after`, N escritos, N saltados con razón, badge `degraded` si carpeta-sombra) + lista de archivos + botones **"Conservar"** (`decide keep`) y **"Descartar"** (`decide discard`). Sin `window.confirm`.
+3. `frontend/src/components/docs/DocumenterResultPanel.tsx` — al terminar: resumen (`health_before → health_after`, N escritos, N saltados con razón, badge `degraded` si carpeta-sombra) + **`diff_stat` renderizado en `<pre>` [ADICIÓN ARQUITECTO]** + lista de archivos + botones **"Conservar rama"** (`decide keep`; al confirmarse muestra el comando sugerido `git merge <branch>` en un bloque copiable — **la UI NUNCA ejecuta el merge**, C1) y **"Descartar"** (`decide discard`). Sin `window.confirm`.
 4. `frontend/src/pages/DocsPage.tsx` — montar `DocumenterButton` en la barra superior **solo si `graph_enabled` y** una segunda flag expuesta `documenter_enabled` (agregar key aditiva `documenter_enabled` en `/api/docs/sources`, como se hizo con `graph_enabled` en 109 F0). Con flag OFF: nada nuevo.
 
 **Tests PRIMERO — archivo:** `frontend/src/docs/documenterModel.test.ts` (modelo puro; la lógica testeable = derivación del resumen de status):
@@ -359,7 +387,7 @@ npx tsc --noEmit
    venv/Scripts/python.exe -m pytest tests/test_plan113_flags_and_agent.py tests/test_plan113_plan_selector.py tests/test_plan113_invoke_and_parse.py tests/test_plan113_git_gate.py tests/test_plan113_apply.py tests/test_plan113_endpoints.py tests/test_harness_flags.py tests/test_harness_flags_help.py tests/test_harness_flags_requires.py -q
    ```
 3. Frontend: `npx vitest run src/docs/documenterModel.test.ts && npx tsc --noEmit`.
-4. **Verificación manual (flag ON)** sobre un proyecto de prueba con `doc_health` distinto de SANA: 1 click → progreso visible → al terminar hay rama `stacky/doc-*` con notas en formato Obsidian (frontmatter + wikilinks) y marcas `[V]/[INF]/[NV]`; `docs/sistema/` intacta; working tree del operador intacto; Conservar mergea / Descartar borra la rama.
+4. **Verificación manual (flag ON)** sobre un proyecto de prueba con `doc_health` distinto de SANA: 1 click → progreso visible → al terminar hay rama `stacky/doc-*` con notas en formato Obsidian (frontmatter + wikilinks) y marcas `[V]/[INF]/[NV]`; `docs/sistema/` intacta; working tree del operador intacto; el panel muestra el `diff_stat`; Conservar preserva la rama y muestra el comando de merge (que corre el operador) / Descartar borra la rama (C1).
 
 **Criterio BINARIO global (DoD):**
 - [ ] 6 suites backend nuevas + 3 del arnés + 1 vitest verdes; `tsc --noEmit` 0 errores.

@@ -40,7 +40,7 @@ import { PIPELINE_PRESETS, type PipelinePreset, type StackId } from '../../devop
 import { PIPELINE_STEP_SNIPPETS, SNIPPET_CATEGORIES, STACK_OPTIONS, filterSnippetsByStack, isStackId } from '../../devops/pipelineStepSnippets';
 import { PIPELINE_RECIPES, buildRecipeSteps } from '../../devops/pipelineRecipes';
 import { splitSpecVariables } from '../../devops/variablesModel';
-import { DevOps, DevOpsVariables } from '../../api/endpoints';
+import { DevOps, DevOpsVariables, LocalLlmApi } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { BlockTree } from './BlockTree';
 import { BlockProperties } from './BlockProperties';
@@ -92,6 +92,13 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const [moveVarModal, setMoveVarModal] = useState<{ key: string; value: string } | null>(null);
   const [moveVarError, setMoveVarError] = useState<string | null>(null);
   const [moveVarHint, setMoveVarHint] = useState<string | null>(null);
+  // Plan 106 F5 — botón "Sugerir con IA local" (HITL): null = todavía no se supo
+  // si la flag está ON; false = flag OFF (404) → botón oculto; true = disponible.
+  const [llmAvailable, setLlmAvailable] = useState<boolean | null>(null);
+  const [llmReachable, setLlmReachable] = useState<boolean>(false);
+  const [llmSuggesting, setLlmSuggesting] = useState(false);
+  const [llmError, setLlmError] = useState<string | null>(null);
+  const [llmJustification, setLlmJustification] = useState<string | null>(null);
 
   const localErrors = validateSpecLocal(spec);
   const hasUnsavedChanges = !specsEqual(spec, loadedSnapshot);
@@ -102,6 +109,22 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   // Cargar borradores al montar
   useEffect(() => {
     loadDrafts();
+  }, []);
+
+  // Plan 106 F5 — health del modelo local: 404 (flag OFF) => botón oculto (KPI-1/KPI-5).
+  useEffect(() => {
+    let cancelled = false;
+    LocalLlmApi.localHealth()
+      .then((res) => {
+        if (cancelled) return;
+        setLlmAvailable(true);
+        setLlmReachable(res.reachable === true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLlmAvailable(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
   // Auto-refresh preview con debounce (C17)
@@ -312,6 +335,57 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
     selected?.si != null && selected?.ji != null &&
     selected.si < spec.stages.length &&
     selected.ji < (spec.stages[selected.si]?.jobs.length ?? 0);
+
+  // Plan 106 F5 — el step seleccionado debe existir de verdad (working_directory/
+  // condition/env viven en StepDraft, no en JobDraft).
+  const stepSelected =
+    jobSelected && selected?.sti != null &&
+    selected.sti < (spec.stages[selected.si!]?.jobs[selected.ji!]?.steps.length ?? 0);
+  const selectedStep = stepSelected
+    ? spec.stages[selected!.si!].jobs[selected!.ji!].steps[selected!.sti!]
+    : null;
+
+  // Plan 106 F5 — pide sugerencias al modelo local y PRE-RELLENA solo lo que está
+  // vacío (KPI-5, HITL): nunca pisa lo que el operador ya escribió.
+  const handleSuggestWithLocalLlm = async () => {
+    if (!selectedStep || selected?.si == null || selected?.ji == null || selected?.sti == null) return;
+    setLlmSuggesting(true);
+    setLlmError(null);
+    setLlmJustification(null);
+    try {
+      const { suggestions } = await LocalLlmApi.suggestPipeline({
+        project: activeProject || 'proyecto-sin-nombre',
+        stack: stackFilter === 'all' ? 'generic' : stackFilter,
+        spec_partial: {
+          step_name: selectedStep.name,
+          script: selectedStep.script,
+          working_directory: selectedStep.working_directory ?? '',
+          condition: selectedStep.condition ?? '',
+          environment_variables: selectedStep.env,
+        },
+      });
+      const patch: Partial<StepDraft> = {};
+      if (!selectedStep.working_directory && suggestions.working_directory) {
+        patch.working_directory = suggestions.working_directory;
+      }
+      if (!selectedStep.condition && suggestions.condition) {
+        patch.condition = suggestions.condition;
+      }
+      if (suggestions.environment_variables && Object.keys(suggestions.environment_variables).length > 0) {
+        const mergedEnv = { ...suggestions.environment_variables, ...selectedStep.env };
+        patch.env = mergedEnv;
+      }
+      if (Object.keys(patch).length > 0) {
+        setSpec((prev) => updateStep(prev, selected.si!, selected.ji!, selected.sti!, patch));
+      }
+      setLlmJustification(suggestions.justification || null);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error desconocido';
+      setLlmError(`No se pudo obtener la sugerencia de IA local: ${msg}`);
+    } finally {
+      setLlmSuggesting(false);
+    }
+  };
 
   // Plan 104 F1 — presets/snippets/recetas filtrados por stack (default "all" = 97 intacto)
   const visiblePresets = PIPELINE_PRESETS.filter((p) => stackFilter === 'all' || p.stack === stackFilter);
@@ -552,6 +626,34 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
             <button onClick={handleInsertRecipe} disabled={!recipeId} className={styles.btnPrimary} style={{ padding: '6px 12px' }}>
               Insertar receta
             </button>
+          </div>
+        )}
+
+        {/* Plan 106 F5 — "Sugerir con IA local": solo si la flag está ON (health no 404)
+            y hay un step seleccionado (working_directory/condition/env viven ahí). HITL:
+            solo pre-rellena campos vacíos; el operador revisa y edita todo antes de guardar. */}
+        {llmAvailable === true && stepSelected && (
+          <div style={{ marginTop: '8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => void handleSuggestWithLocalLlm()}
+              disabled={llmSuggesting}
+              className={styles.btnPrimary}
+              style={{ padding: '6px 12px' }}
+              title="Pide sugerencias de working directory, condition y variables de entorno a tu modelo de IA local"
+            >
+              {llmSuggesting ? 'Consultando IA local…' : 'Sugerir con IA local'}
+            </button>
+            <span className={styles.textMuted} style={{ fontSize: '0.85em' }}>
+              IA local: {llmReachable ? 'disponible' : 'sin conexión'}
+            </span>
+            {llmJustification && (
+              <p className={styles.textMuted} style={{ margin: 0, width: '100%', fontSize: '0.9em' }}>
+                {llmJustification}
+              </p>
+            )}
+            {llmError && (
+              <p className={styles.textWarn} style={{ margin: 0, width: '100%' }}>{llmError}</p>
+            )}
           </div>
         )}
 

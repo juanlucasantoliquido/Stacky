@@ -240,6 +240,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CLI_EGRESS_ENABLED", "STACKY_SPECULATIVE_ENABLED", "STACKY_SPECULATIVE_MODE",
         "STACKY_CODEBASE_MEMORY_MCP_ENABLED",  # Plan 76 — eval codebase-memory-mcp
         "STACKY_CODEBASE_MEMORY_MCP_PROJECTS", "STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH",  # Plan 80
+        "LOCAL_LLM_ENABLED", "LOCAL_LLM_ENDPOINT", "LOCAL_LLM_MODEL", "LOCAL_LLM_TIMEOUT_SEC",  # Plan 106
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -2326,6 +2327,47 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         requires="STACKY_CODEBASE_MEMORY_MCP_ENABLED",
+    ),
+    # ── Plan 106 — Modelo local (Qwen 3 32B q4 u otro, vía Ollama/LM Studio/vLLM) ──
+    FlagSpec(
+        key="LOCAL_LLM_ENABLED",
+        type="bool",
+        label="Modelo local (Ollama/LM Studio/vLLM)",
+        description="Habilita el cliente LLM local para análisis de código y sugerencias de pipeline con modelos como Qwen 3 32B q4.",
+        group="global",
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
+        # lista curada de defaults ON, así que debe quedar sin default explícito.
+    ),
+    FlagSpec(
+        key="LOCAL_LLM_ENDPOINT",
+        type="str",
+        label="Endpoint del modelo local",
+        description="URL OpenAI-compatible del servidor local (Ollama: http://localhost:11434/v1/chat/completions).",
+        group="global",
+        requires="LOCAL_LLM_ENABLED",
+        # SIN default= (verificado: default_is_known() no distingue por type; un
+        # default explícito acá también rompería test_default_known_only_for_curated,
+        # que solo curó bools). El default EFECTIVO ya vive en config.py.
+    ),
+    FlagSpec(
+        key="LOCAL_LLM_MODEL",
+        type="str",
+        label="Modelo local (tag)",
+        description="Tag del modelo en el servidor local (ej. qwen3:32b).",
+        group="global",
+        requires="LOCAL_LLM_ENABLED",
+        # SIN default= (mismo motivo que LOCAL_LLM_ENDPOINT).
+    ),
+    FlagSpec(
+        key="LOCAL_LLM_TIMEOUT_SEC",
+        type="int",
+        label="Timeout modelo local (segundos)",
+        description="Tiempo máximo de espera por respuesta del modelo local. Modelos 32B en CPU/GPU consumer pueden tardar minutos.",
+        group="global",
+        requires="LOCAL_LLM_ENABLED",
+        min_value=10,
+        max_value=600,
+        # SIN default= (mismo motivo que LOCAL_LLM_ENDPOINT).
     ),
 )
 

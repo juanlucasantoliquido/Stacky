@@ -106,6 +106,8 @@ def get_copilot_models_status(refresh: bool = False) -> dict:
 
 def _available_models() -> list[str]:
     backend = (config.LLM_BACKEND or "mock").lower()
+    if backend == "local_llm":  # Plan 106 F2
+        return [config.LOCAL_LLM_MODEL]
     if backend == "vscode_bridge":
         from copilot_bridge import list_vscode_bridge_models
         live = list_vscode_bridge_models()
@@ -217,6 +219,12 @@ def decide(
 
     if backend == "mock":
         return RoutingDecision(model="mock-1.0", reason="LLM_BACKEND=mock")
+
+    if backend == "local_llm":  # Plan 106 F2
+        return RoutingDecision(
+            model=config.LOCAL_LLM_MODEL,
+            reason="backend local_llm (modelo local configurado)",
+        )
 
     _had_override = bool(override)  # se usará para que I1.2 no sobreescriba overrides
     if override:

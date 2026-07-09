@@ -23,6 +23,7 @@ from flask import Blueprint, jsonify, request, send_file
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
+import config as _config
 from db import session_scope
 from models import AgentExecution, Ticket
 from services.heartbeat_monitor import (
@@ -360,6 +361,7 @@ def health():
         "active_project": active_project,
         "ado_pat_present": pat_present,
         "auto_create_tasks_enabled": auto_create_tasks,
+        "local_llm_enabled": bool(getattr(_config.config, "LOCAL_LLM_ENABLED", False)),  # Plan 106
         "watchers": {"output_watcher": output_watcher_info},
         "warnings": warnings,
     })

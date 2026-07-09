@@ -4,6 +4,8 @@ Bridge al engine LLM real (copilot / mock).
 - mock: outputs canned para validar la UI sin gastar tokens.
 - copilot: GitHub Copilot Chat API real (OpenAI-compatible).
   Token OAuth obtenido vía `gh auth token`.
+- local_llm (Plan 106): invoke_local_llm() habla con un servidor local
+  OpenAI-compatible (Ollama/LM Studio/vLLM), independiente de LLM_BACKEND.
 """
 from __future__ import annotations
 
@@ -66,6 +68,15 @@ def list_copilot_models(timeout_sec: int = 15) -> list[dict]:
     Usa https://models.github.ai/catalog/models que acepta el gho_ token directamente.
     Los IDs retornados son el short name (p.ej. `gpt-4o`) que acepta el endpoint de inference.
     """
+    if config.LLM_BACKEND.lower() == "local_llm":  # Plan 106
+        return [{
+            "id": config.LOCAL_LLM_MODEL,
+            "name": f"Modelo local ({config.LOCAL_LLM_MODEL})",
+            "vendor": "local",
+            "family": "",
+            "preview": False,
+            "capabilities": {"max_output_tokens": 8192},
+        }]
     token = _get_copilot_token()
     headers = {
         "Authorization": f"Bearer {token}",
@@ -166,7 +177,87 @@ def invoke(
         return _invoke_claude_cli(
             agent_type=agent_type, system=system, user=user, on_log=on_log, execution_id=execution_id, model=model
         )
+    if backend == "local_llm":  # Plan 106 F1 — modo avanzado: TODO el bridge va al modelo local
+        return invoke_local_llm(
+            agent_type=agent_type, system=system, user=user,
+            on_log=on_log, execution_id=execution_id, model=model,
+        )
     raise NotImplementedError(f"LLM_BACKEND='{backend}' no soportado todavía")
+
+
+# ── Modelo local (Plan 106) ───────────────────────────────────────────────────
+
+def invoke_local_llm(
+    *,
+    agent_type: str,
+    system: str,
+    user: str,
+    on_log: LogFn,
+    execution_id: int | None = None,
+    model: str | None = None,
+) -> BridgeResponse:
+    """Invoca el modelo LOCAL vía HTTP OpenAI-compatible (Ollama/LM Studio/vLLM).
+
+    A DIFERENCIA de invoke(), NO mira config.LLM_BACKEND: va siempre al endpoint
+    local configurado (LOCAL_LLM_ENDPOINT). Usada por api/local_llm_analysis.py.
+    Levanta RuntimeError con mensaje accionable si el endpoint no responde.
+    on_log recibe (level, msg) — firma LogFn real (copilot_bridge.py:120).
+    """
+    endpoint = config.LOCAL_LLM_ENDPOINT
+    if not endpoint:
+        raise RuntimeError(
+            "LOCAL_LLM_ENDPOINT no está configurado. Sételo en el panel del Arnés "
+            "(ej. http://localhost:11434/v1/chat/completions para Ollama)."
+        )
+    resolved_model = model or config.LOCAL_LLM_MODEL
+    timeout_sec = int(getattr(config, "LOCAL_LLM_TIMEOUT_SEC", 120))
+
+    payload = {
+        "model": resolved_model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "stream": False,
+    }
+    on_log("info", f"Invocando modelo local {resolved_model} en {endpoint}")
+    try:
+        response = requests.post(
+            endpoint,
+            headers={"Content-Type": "application/json"},
+            json=payload,
+            timeout=timeout_sec,
+        )
+    except requests.Timeout:
+        raise RuntimeError(
+            f"Endpoint local no respondió en {timeout_sec}s ({endpoint}). "
+            "Verificá que Ollama/LLM server esté corriendo, o subí "
+            "LOCAL_LLM_TIMEOUT_SEC en el panel del Arnés."
+        )
+    except requests.ConnectionError as e:
+        raise RuntimeError(
+            f"No se pudo conectar al endpoint local ({endpoint}): {e}"
+        )
+    if response.status_code != 200:
+        body = response.text[:500]
+        raise RuntimeError(
+            f"Endpoint local devolvió HTTP {response.status_code}: {body}"
+        )
+    raw = response.json()
+    choices = raw.get("choices") or []
+    if not choices:
+        raise RuntimeError(
+            f"Respuesta del modelo local sin 'choices': {str(raw)[:500]}"
+        )
+    content = (choices[0].get("message") or {}).get("content", "")
+    if not content:
+        raise RuntimeError("Respuesta del modelo local vacía")
+    on_log("info", f"Modelo local respondió con {len(content)} chars")
+    return BridgeResponse(
+        text=content,
+        format="markdown",
+        metadata={"model": resolved_model, "backend": "local_llm"},
+    )
 
 
 # ── VS Code Bridge ────────────────────────────────────────────────────────────

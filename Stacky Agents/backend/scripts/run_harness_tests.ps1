@@ -165,6 +165,11 @@ $HarnessTestFiles = @(
   "tests/test_plan108_prompt_hardening.py",
   "tests/test_plan108_agent_server_binding.py",
   "tests/test_plan108_environment_remote.py",
+  # Plan 106 - Modelo local Qwen 3 para analisis de codigo y pipelines
+  "tests/test_plan106_local_llm_config.py",
+  "tests/test_plan106_local_llm_bridge.py",
+  "tests/test_plan106_analyze_code_api.py",
+  "tests/test_plan106_suggest_pipeline_api.py",
   # Plan 61 - Gate determinista del flujo funcional (Task)
   "tests/test_task_gate_flags.py",
   "tests/test_task_gate.py",

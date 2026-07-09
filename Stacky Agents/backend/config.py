@@ -75,6 +75,16 @@ class Config:
     LLM_BACKEND = os.getenv("LLM_BACKEND", "vscode_bridge")
     LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4.5")
 
+    # Plan 106 — Modelo local (Qwen 3 32B q4 u otro, vía Ollama/LM Studio/vLLM).
+    LOCAL_LLM_ENABLED = os.getenv("LOCAL_LLM_ENABLED", "false").lower() in (
+        "true", "1", "yes"
+    )
+    LOCAL_LLM_ENDPOINT = os.getenv(
+        "LOCAL_LLM_ENDPOINT", "http://localhost:11434/v1/chat/completions"
+    )
+    LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen3:32b")
+    LOCAL_LLM_TIMEOUT_SEC = int(os.getenv("LOCAL_LLM_TIMEOUT_SEC", "120"))
+
     # Copilot Chat API
     COPILOT_MODEL = os.getenv("COPILOT_MODEL", "gpt-4.1")
     # GitHub Models API acepta el gho_ token directamente como Bearer.

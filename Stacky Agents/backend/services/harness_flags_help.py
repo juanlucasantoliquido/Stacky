@@ -1089,6 +1089,31 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo dejás vacío: no se intenta usar ningún programa externo (opción más segura).",
         example="Como anotar en qué cajón guardaste la herramienta, para que alguien sepa dónde buscarla.",
     ),
+    # ── Plan 106 — Modelo local (Qwen 3 32B q4 u otro) ──────────────────────────
+    "LOCAL_LLM_ENABLED": PlainHelp(
+        what="Permite usar un modelo de IA corriendo en tu propia máquina (por ejemplo con Ollama) para análisis de código y sugerencias de pipelines.",
+        on_effect="Si la activás: aparece un botón de sugerencias con esa IA local; configurá la dirección y el modelo en las opciones de al lado. Hay además una opción avanzada, aparte, que redirige todos los pedidos de IA a tu máquina.",
+        off_effect="Si la apagás: no aparece nada nuevo en la pantalla y todo sigue funcionando como hoy.",
+        example="Como enchufar tu propia PC potente al sistema para que responda preguntas puntuales, en vez de usar el proveedor de siempre.",
+    ),
+    "LOCAL_LLM_ENDPOINT": PlainHelp(
+        what="La dirección web (URL) del servidor de IA que corre en tu máquina.",
+        on_effect="Si la cambiás: las consultas al modelo local van a esa dirección en vez de la de por defecto.",
+        off_effect="Si la dejás con el valor de fábrica: se usa http://localhost:11434/v1/chat/completions (Ollama por defecto).",
+        example="Como la dirección de una sucursal: si tu servidor está en otra máquina o puerto, anotás esa dirección acá.",
+    ),
+    "LOCAL_LLM_MODEL": PlainHelp(
+        what="El nombre exacto del modelo que tenés cargado en tu servidor local.",
+        on_effect="Si lo cambiás: las consultas piden ese modelo puntual al servidor local.",
+        off_effect="Si lo dejás con el valor de fábrica: se pide 'qwen3:32b'.",
+        example="Como pedir un plato por su nombre exacto del menú de tu propio servidor.",
+    ),
+    "LOCAL_LLM_TIMEOUT_SEC": PlainHelp(
+        what="Cuánto tiempo como máximo se espera la respuesta del modelo local antes de avisar que no contestó.",
+        on_effect="Si subís el número: se espera más tiempo, útil para modelos grandes que tardan minutos en responder.",
+        off_effect="Si lo dejás con el valor de fábrica: se esperan 120 segundos.",
+        example="Como el tiempo que esperás antes de decir 'no atienden' al llamar por teléfono.",
+    ),
 }
 
 

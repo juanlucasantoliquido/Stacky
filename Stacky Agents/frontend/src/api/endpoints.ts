@@ -3367,3 +3367,37 @@ export const PipelineGenerator = {
    */
   commit: (body: object) => api.post<object>("/api/pipeline-generator/commit", body),
 };
+
+/** Plan 106 — Modelo local (Ollama/LM Studio/vLLM). */
+export const LocalLlmApi = {
+  localHealth: () =>
+    api.get<{ ok: boolean; reachable: boolean; endpoint: string; model: string }>(
+      "/api/llm/local-health",
+    ),
+  analyzeCode: (body: {
+    project: string;
+    stack?: string;
+    files?: Array<{ path: string; content: string }>;
+    prompt?: string;
+  }) =>
+    api.post<{ ok: boolean; analysis: string; model: string; execution_id: number }>(
+      "/api/llm/analyze-code",
+      body,
+    ),
+  suggestPipeline: (body: {
+    project: string;
+    stack: string;
+    spec_partial?: Record<string, unknown>;
+  }) =>
+    api.post<{
+      ok: boolean;
+      suggestions: {
+        working_directory: string;
+        condition: string;
+        environment_variables: Record<string, string>;
+        justification: string;
+      };
+      model: string;
+      execution_id: number;
+    }>("/api/llm/suggest-pipeline", body),
+};

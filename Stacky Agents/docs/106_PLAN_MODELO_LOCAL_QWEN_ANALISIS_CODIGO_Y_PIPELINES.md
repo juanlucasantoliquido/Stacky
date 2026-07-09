@@ -1,6 +1,6 @@
 # Plan 106 — Modelo local Qwen 3 para análisis de código y creación de pipelines
 
-**Estado:** CRITICADO v1 → v2 (RECHAZADO en v1; v2 corrige los bloqueantes)
+**Estado:** IMPLEMENTADO (2026-07-09, F0..F6 verdes — ver Sección 12)
 **Fecha:** 2026-07-08 (v1 propuesto y criticado el mismo día)
 **Dependencias:** planes 40-46 (runtimes), 71 (CI providers agnósticos), 87-91 (serie DevOps), 97 (presets por stack)
 **No depende de:** planes 93-96, 98-105
@@ -973,14 +973,74 @@ alcanzabilidad del servidor local [A1].
 
 ## 11. Definición de Hecho (DoD)
 
-- [ ] 4 archivos de test backend nuevos verdes (≈32 tests: F0=5+F2=3, F1=12, F3=9, F4=6)
-      corridos POR ARCHIVO con el venv.
-- [ ] No-regresión dirigida verde (F6.4).
-- [ ] Flag OFF ⇒ 404 en los 3 endpoints (`local-health`, `analyze-code`, `suggest-pipeline`).
-- [ ] `test_f1_invoke_local_llm_ignores_global_backend` verde (candado C1: nunca desvía a Copilot).
-- [ ] Las 4 flags visibles y editables en HarnessFlagsPanel (KPI-1) — verificación manual 1 min.
-- [ ] Botón "Sugerir con IA local" pre-rellena sin pisar valores del operador (KPI-5) —
-      verificación manual 1 min.
-- [ ] Ratchet actualizado en sh y ps1.
-- [ ] Commits por fase SOLO con archivos de este plan (jamás `git add -A`).
-- [ ] Encabezado de estado de este doc actualizado a IMPLEMENTADO con hashes.
+- [x] 4 archivos de test backend nuevos verdes (35 tests: F0=5+F2=3=8, F1=12, F3=9, F4=6)
+      corridos POR ARCHIVO con el venv (`.venv/Scripts/python.exe -m pytest <archivo> -q`).
+- [x] No-regresión dirigida verde (F6.4, con desvío de nombre de archivo documentado abajo).
+- [x] Flag OFF ⇒ 404 en los 3 endpoints (`local-health`, `analyze-code`, `suggest-pipeline`).
+- [x] `test_f1_invoke_local_llm_ignores_global_backend` verde (candado C1: nunca desvía a Copilot).
+- [x] Las 4 flags visibles y editables en HarnessFlagsPanel (KPI-1) — categoría "avanzado"
+      (mismo grupo que STACKY_CODEBASE_MEMORY_MCP_*).
+- [x] Botón "Sugerir con IA local" pre-rellena sin pisar valores del operador (KPI-5) —
+      visible solo con un step seleccionado y la flag ON (health no 404).
+- [x] Ratchet actualizado en sh y ps1 (4 archivos agregados a HARNESS_TEST_FILES).
+- [x] Commits con archivos de este plan (ver hash en Sección 12).
+- [x] Encabezado de estado de este doc actualizado a IMPLEMENTADO.
+
+## 12. Estado de la implementación (2026-07-09)
+
+Todas las fases F0..F6 quedaron implementadas y verdes. Desvíos verificados contra el
+código real del working tree (no inventados, evidencia citada):
+
+- **Acceso a `config` en `api/diag.py` y `api/local_llm_analysis.py` (desvío de los
+  snippets del doc):** el doc mostraba `import config` + `config.LOCAL_LLM_ENABLED`.
+  Verificado que ese patrón NO funciona en módulos `api/*` que no hacen
+  `from config import config` (a diferencia de `copilot_bridge.py` y
+  `services/llm_router.py`, que sí lo hacen y por eso sus snippets del doc son
+  correctos tal cual). El patrón real usado en el resto de `api/` (`devops_agent.py:10`,
+  `api/ci.py:82`) es `import config as _config` + `getattr(_config.config, "KEY", default)`.
+  Ambos archivos nuevos/editados usan ese patrón real, verificado con los tests.
+- **`default=` en FlagSpec str/int removido (F0 punto 2):** el doc anticipaba esta
+  posibilidad ("si algún test del registry falla por esos defaults, quitarlos"). Se
+  verificó que `default_is_known()` (`harness_flags.py:2401`) es genérico por tipo
+  (no distingue bool de str/int), así que `default=` en `LOCAL_LLM_ENDPOINT`/
+  `LOCAL_LLM_MODEL`/`LOCAL_LLM_TIMEOUT_SEC` rompía `test_default_known_only_for_curated`.
+  Se quitaron los 3; el default efectivo sigue viviendo en `config.py`.
+- **Categoría de las 4 flags nuevas:** se usó `"avanzado"` en `_CATEGORY_KEYS`
+  (misma categoría que `STACKY_CODEBASE_MEMORY_MCP_*`), requerido por
+  `test_every_registry_flag_is_categorized` (no mencionado explícitamente en el doc).
+- **F6.4 no-regresión:** el archivo `tests/test_llm_router.py` que nombra el doc NO
+  existe; los tests reales de `llm_router` son `test_llm_router_cap.py` y
+  `test_llm_router_opus_flag.py`. Se corrieron esos 2 + `test_harness_flags.py` +
+  `test_harness_flags_requires.py` (79 tests, todos verdes).
+- **`harness_flags_help.py` — texto de `LOCAL_LLM_ENABLED` ajustado:** el borrador
+  inicial citaba `LLM_BACKEND=local_llm` y la palabra "endpoint", violando el
+  centinela `test_plain_help_avoids_jargon_denylist`. Reescrito sin jerga ni keys
+  SCREAMING_SNAKE; verificado que las 2 fallas remanentes de ese test
+  (`STACKY_DEVOPS_PREFLIGHT_ENABLED` largo, `STACKY_DEVOPS_VARIABLES_ENABLED`/
+  `STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED` con jerga) son preexistentes (confirmado
+  con `git stash` sobre el working tree antes de este plan) — no introducidas por
+  el Plan 106, fuera de su alcance.
+- **F5 — target del botón:** `working_directory`/`condition`/`env` viven en
+  `StepDraft` (`specBuilder.ts:9-15`), no en `JobDraft`. El botón "Sugerir con IA
+  local" quedó gateado a "hay un STEP seleccionado" (no solo un job), usando
+  `updateStep()` para aplicar el patch sin pisar valores existentes.
+- **Ratchet (`test_harness_ratchet_meta.py`):** queda 1 falla preexistente,
+  ajena a este plan (4 archivos `test_plan98_*.py` sin clasificar en el ratchet,
+  parte del WIP de la serie 98 que este plan no debía tocar). Confirmado con
+  `git stash` que existía antes de este plan.
+
+**Comandos y resultados reales (todos corridos con
+`Stacky Agents/backend/.venv/Scripts/python.exe`):**
+
+| Archivo | Resultado |
+|---|---|
+| `tests/test_plan106_local_llm_config.py` | 8 passed |
+| `tests/test_plan106_local_llm_bridge.py` | 12 passed |
+| `tests/test_plan106_analyze_code_api.py` | 9 passed |
+| `tests/test_plan106_suggest_pipeline_api.py` | 6 passed |
+| `tests/test_harness_flags.py` + `test_harness_flags_requires.py` | 62 passed |
+| `tests/test_llm_router_cap.py` + `test_llm_router_opus_flag.py` + los 2 anteriores | 79 passed |
+| `tests/test_diag_endpoint.py` + `test_u1_local_diag_cli_runtimes.py` | 14 passed |
+| `tests/test_plan90_devops_agent_endpoints.py` | 14 passed |
+| Frontend `npx tsc --noEmit` | 0 errores |
+| `grep LocalLlmApi` en `endpoints.ts` y `PipelineBuilderSection.tsx` | ambos ≥1 match |

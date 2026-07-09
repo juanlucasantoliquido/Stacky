@@ -561,6 +561,36 @@
                                                 "F7-ratchet":  "run_harness_tests.sh:129-132 + .ps1:122-125"
                                             },
                               "notas":  "APROBADO 2026-07-05. Los 5 centinelas de seguridad C1-C5 verificados en codigo (archivo:linea arriba) y sus tests corridos en verde. Doc header ya decia IMPLEMENTADO (regla estado-en-doc cumplida por el implementador). Cross-cutting requires: ver notas plan 87."
+                          },
+                   "108":  {
+                              "plan":  "108",
+                              "ruta":  "Stacky Agents/docs/108_PLAN_AGENTE_DEVOPS_EN_SERVIDOR_SELECCIONADO.md",
+                              "doc_sha256":  "212CF29299FB5AA191C32E23CF85787012193AAEE0AF6F50344CB1DDB9CC82BF",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-09",
+                              "tests":  [
+                                            "tests/test_plan108_console_repair.py -> 6 passed/0 failed",
+                                            "tests/test_plan108_flags.py -> 5 passed/0 failed",
+                                            "tests/test_plan108_winrm_diagnosis.py -> 9 passed/0 failed",
+                                            "tests/test_plan108_prompt_hardening.py -> 3 passed/0 failed",
+                                            "tests/test_plan108_agent_server_binding.py -> 9 passed/0 failed",
+                                            "tests/test_plan108_environment_remote.py -> 14 passed/0 failed",
+                                            "no-regresion: test_plan90_devops_agent_endpoints.py 14p + test_plan90_devops_agent_flag.py 4p/1F PREEXISTENTE (drift harness_defaults, flag ausente ya en 4e779d26 pre-108) + test_plan105_remote_console_api.py 12p/1F PREEXISTENTE (test_f2_exec_write_requires_conversation_flag, sqlite table-locked en ruta NO tocada por 37a80d7e) + test_plan105_remote_exec_service.py 16p + test_plan105_console_prompt.py 5p + test_plan89_environment_plan_apply.py 12p/1skip sancionado + test_plan89_environments_endpoints.py 11p + test_plan107_sandbox_endpoints.py 7p + test_plan107_flags.py 6p + test_harness_flags.py 53p + test_harness_flags_requires.py 9p",
+                                            "frontend npx vitest run agentServerBinding.test.ts -> 5 passed",
+                                            "frontend npx tsc --noEmit -> 0 errores (exit 0)"
+                                        ],
+                              "evidencia":  {
+                                                "F0-consola-reparada":  "api/devops_remote_console.py:217-227 y :314-324 _launch_turn con tupla (execution_id, launch_error) y kwargs reales; centinelas verdes: cero _send_input/ticket_id=/.executions/.state en el fuente (test 5); list_conversations dentro de session (diff 37a80d7e hunks :333-364)",
+                                                "F1-flag":  "config.py:952 + harness_flags.py:191 (categoria devops) + :2224-2238 FlagSpec env_only=False requires=PANEL SIN default= + harness_flags_help.py:680 + test_harness_flags_requires.py:145 arista _REQUIRES_MAP_FROZEN + api/devops.py:59 remote_target_enabled en _health_payload",
+                                                "F1b-winrm-diagnosis":  "services/remote_exec.py:125 classify_winrm_failure + :150 build_winrm_remediation + :237-247 check_winrm enriquecido (kind/remediation) + frontend RemoteConsoleSection.tsx:132-138 details 'Como arreglarlo' con remediation",
+                                                "F2-prompt":  "services/remote_console_prompt.py:36-38 regla PROHIBIDO usar tus herramientas locales / Esta maquina NO es el servidor",
+                                                "F3-chat-binding":  "api/devops_agent.py:30 _chat_meta + :42 _validate_remote_target + :83 gate en start + :130-131 build_console_prompt wrap + :212-215 sealed+flag OFF => 409 remote_target_disabled_for_sealed_conversation (C3) + :270 server_alias en items + :296-301 audited_remote_commands con degradacion a None (ADICION ARQUITECTO)",
+                                                "F4-frontend-chat":  "frontend agentServerBinding.ts:34 resolveAgentServerBinding + DevOpsAgentSection.tsx:63 binding, :73 spread server_alias, :117-121 badge/hint, :176-179 'N cmds remotos auditados (verificar)' + endpoints.ts:3179/3192 tipos",
+                                                "F5-ambientes-remoto":  "services/environment_remote.py:21 _CHUNK=50/:22 _MAX_CHUNKS=20 (C7) + :30 build_remote_status_command + :43 parse_status_output + :59 build_remote_mkdir_command + :68 resolve_remote_layout (C2) + :97 plan_environment_remote (C4 unsafe por-path) + :179 apply_environment_remote + api/devops.py:233 server_alias en _load_env_context (tupla 4) + :246-252 plan gate/remote + :289-296 apply gate/remote",
+                                                "F6-frontend-ambientes":  "endpoints.ts:3113 environmentPlan(serverAlias?) + :3134-3142 environmentApply spread condicional (C6) + EnvironmentsSection.tsx:83 binding reusado, :168/:190-194 alias en plan/apply, :273-277 badge/hint, :411 'remoto'",
+                                                "F7-cierre":  "run_harness_tests.sh:169-174 + .ps1:162-167 (6 archivos ratchet) + harness_defaults.env regenerado (flag 108 ausente del snapshot = esperado, deploy vivo nunca la toco) + doc header IMPLEMENTADO (linea 3)"
+                                            },
+                              "notas":  "APROBADO 2026-07-09 (supervision solo plan 108 a pedido del operador). Fases reales F0,F1,F1b,F2,F3,F4,F5,F6,F7 (9), todas mapeadas y verdes: 46/46 tests propios. Los 2 rojos de no-regresion son PREEXISTENTES verificados independientemente: (1) test_f0_harness_defaults_contains_flag = drift harness_defaults 87-91 (flag STACKY_DEVOPS_AGENT_ENABLED ya ausente en el env committeado del commit pre-108 4e779d26; el generador lee del deploy vivo que nunca la activo); (2) test_f2_exec_write_requires_conversation_flag = sqlite 'database table is locked' en el toggle de escritura (Plan 105 F3), ruta NO tocada por el commit 37a80d7e (diff: solo create_conversation/conversation_message/list_conversations). Working tree con WIP ajeno (Plan 98) NO tocado ni commiteado. RECOMENDACION (no construida): arreglar el table-locked del toggle write de Plan 105 F3 en un plan futuro, y cerrar el drift operacional del deploy vivo (redeploy .env)."
                           }
                }
 }

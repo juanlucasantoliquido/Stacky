@@ -7,6 +7,7 @@ import sys
 from dataclasses import asdict
 from flask import Blueprint, jsonify, request, abort
 import config as _config
+from api._helpers import current_user
 from services import server_registry  # Plan 91 — rdp_available en health
 from services.pipeline_renderers import parse_ado_yaml, parse_gitlab_yaml
 from services.pipeline_stack_detector import detect_stack  # Plan 97 F2
@@ -55,6 +56,7 @@ def _health_payload() -> dict:
         "section_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", False)),  # Plan 104
         "bootstrap_enabled": bool(getattr(cfg, "STACKY_DEVOPS_BOOTSTRAP_ENABLED", False)),  # Plan 98
         "remote_console_enabled": bool(getattr(cfg, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", False)),  # Plan 105
+        "remote_target_enabled": bool(getattr(cfg, "STACKY_DEVOPS_REMOTE_TARGET_ENABLED", False)),  # Plan 108
         "env_tree_preview_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED", False)),  # Plan 107
         "env_sandbox_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", False)),  # Plan 107
     }
@@ -173,12 +175,31 @@ def materialize_publication_route():
     return jsonify(result)   # {'spec':..., 'resolved':[...], 'unknown_processes':[...]}
 
 
+def _map_remote_error_status(error_key: str | None) -> int:
+    """Plan 108 F5 — mapa de errores del riel remoto (copiado de
+    api/devops_remote_console.py:95-108, mismos códigos que /console/exec)."""
+    if error_key == "command_not_read_only":
+        return 403
+    if error_key == "server_not_found":
+        return 404
+    if error_key in ("keyring_unavailable", "no_password"):
+        return 503
+    if error_key == "remote_exec_windows_only":
+        return 501
+    if error_key == "timeout":
+        return 504
+    return 502
+
+
 def _load_env_context(body):
-    """Helper compartido plan/apply. Retorna ((root, rel_paths, sandbox_active), None)
-    o (None, respuesta_error). Plan 107: root_override opcional, validado server-side
-    contra el guard de solapamiento (validate_sandbox_override) cuando la flag
-    STACKY_DEVOPS_ENV_SANDBOX_ENABLED está ON; sin override el comportamiento es
-    idéntico a Plan 89 (root = production_root, sandbox_active=False)."""
+    """Helper compartido plan/apply. Retorna ((root, rel_paths, sandbox_active,
+    server_alias), None) o (None, respuesta_error). Plan 107: root_override
+    opcional, validado server-side contra el guard de solapamiento
+    (validate_sandbox_override) cuando la flag STACKY_DEVOPS_ENV_SANDBOX_ENABLED
+    está ON; sin override el comportamiento es idéntico a Plan 89 (root =
+    production_root, sandbox_active=False). Plan 108 F5: server_alias leído SIN
+    validar acá (el caller valida vía _validate_remote_target); ausente ⇒ None
+    ⇒ camino local byte-idéntico."""
     project = body.get("project")
     if not project:
         return None, (jsonify({"error": "project es obligatorio"}), 400)
@@ -208,25 +229,39 @@ def _load_env_context(body):
                                "kind": "environment_root_invalid"}), 400)
     catalog = profile.get("process_catalog")
     rel_paths = build_environment_layout(catalog if isinstance(catalog, list) else [], settings)
-    return (root, rel_paths, sandbox_active), None
+    # Plan 108 F5 — server_alias opcional (ausente ⇒ camino local, byte-compat).
+    server_alias = (body.get("server_alias") or "").strip() or None
+    return (root, rel_paths, sandbox_active, server_alias), None
 
 
 @bp.post("/environments/plan")
 def environment_plan_route():
-    """Dry-run SOLO-LECTURA del árbol de carpetas."""
+    """Dry-run SOLO-LECTURA del árbol de carpetas. Plan 108 F5: con server_alias
+    evalúa el árbol EN el servidor remoto (mismo shape, + remote/server_alias)."""
     if not getattr(_config.config, "STACKY_DEVOPS_ENVIRONMENTS_ENABLED", False):
         abort(404)
     ctx, err = _load_env_context(request.get_json(silent=True) or {})
     if err: return err
-    root, rel_paths, sandbox_active = ctx
-    result = plan_environment(root, rel_paths)
+    root, rel_paths, sandbox_active, server_alias = ctx
+    if server_alias:
+        from api.devops_agent import _validate_remote_target
+        target_err = _validate_remote_target(server_alias)
+        if target_err:
+            return target_err
+        from services.environment_remote import plan_environment_remote
+        result = plan_environment_remote(server_alias, root, rel_paths, user=current_user())
+        if result.get("ok") is False:
+            return jsonify(result), _map_remote_error_status(result.get("error"))
+    else:
+        result = plan_environment(root, rel_paths)
     result["sandbox_active"] = sandbox_active  # Plan 107 — la UI muestra el badge
     return jsonify(result)
 
 
 @bp.post("/environments/apply")
 def environment_apply_route():
-    """Crea SOLO to_create. HITL: confirm=True + fingerprint del plan visto (ADICIÓN)."""
+    """Crea SOLO to_create. HITL: confirm=True + fingerprint del plan visto (ADICIÓN).
+    Plan 108 F5: con server_alias crea EN el servidor remoto (mismo HITL)."""
     if not getattr(_config.config, "STACKY_DEVOPS_ENVIRONMENTS_ENABLED", False):
         abort(404)
     body = request.get_json(silent=True) or {}
@@ -242,7 +277,7 @@ def environment_apply_route():
         return jsonify({"error": "fingerprint del plan es obligatorio (respuesta de /plan)"}), 400
     ctx, err = _load_env_context(body)
     if err: return err
-    root, rel_paths, sandbox_active = ctx
+    root, rel_paths, sandbox_active, server_alias = ctx
     if fingerprint != layout_fingerprint(root, rel_paths):
         return jsonify({"error": "el layout cambio desde el ultimo plan; recalcular el plan",
                         "kind": "plan_stale"}), 409
@@ -251,7 +286,18 @@ def environment_apply_route():
         return jsonify({"error": "paths (lista no vacia) es obligatorio"}), 400
     # server-side: solo la intersección con el layout derivado del catálogo REAL
     approved = [p for p in rel_paths if p in set(requested)]
-    result = apply_environment(root, approved)
+    if server_alias:
+        from api.devops_agent import _validate_remote_target
+        target_err = _validate_remote_target(server_alias)
+        if target_err:
+            return target_err
+        from services.environment_remote import resolve_remote_layout, apply_environment_remote
+        safe_pairs, _unsafe_pairs = resolve_remote_layout(root, approved)
+        result = apply_environment_remote(server_alias, root, safe_pairs, user=current_user())
+        if result.get("ok") is False:
+            return jsonify(result), _map_remote_error_status(result.get("error"))
+    else:
+        result = apply_environment(root, approved)
     result["ignored_not_in_layout"] = sorted(set(requested) - set(rel_paths))  # C8: visible
     result["sandbox_active"] = sandbox_active  # Plan 107
     return jsonify(result)

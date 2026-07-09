@@ -32,6 +32,7 @@ export interface DevOpsHealth {
   variables_enabled?: boolean; // Plan 94 — sección Variables (caja fuerte)
   section_doctor_enabled?: boolean; // Plan 104 — doctores IA por sección
   remote_console_enabled?: boolean; // Plan 105 — Consola remota por servidor
+  remote_target_enabled?: boolean; // Plan 108 — agente/ambientes anclados al servidor seleccionado
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 

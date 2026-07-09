@@ -33,11 +33,17 @@ uses passwords):
 
 Reglas:
 1. Modo actual: {mode_text}
-2. Un comando por llamada; preferí comandos cortos y componibles.
-3. La respuesta del endpoint es JSON {{ok, stdout, stderr, exit_code, error}}. Si
+2. PROHIBIDO usar tus herramientas locales (shell local, listado/lectura de archivos de esta
+   máquina, Bash, PowerShell local) para responder CUALQUIER cosa sobre el servidor
+   "{server_alias}". Esta máquina NO es el servidor. Toda exploración de directorios,
+   lectura de archivos y ejecución en el servidor pasa EXCLUSIVAMENTE por el endpoint
+   /api/devops/console/exec de arriba. Si un comando remoto falla, informalo; NUNCA lo
+   "simules" localmente.
+3. Un comando por llamada; preferí comandos cortos y componibles.
+4. La respuesta del endpoint es JSON {{ok, stdout, stderr, exit_code, error}}. Si
    ok=false explicá el error al operador en castellano llano.
-4. Todo lo que ejecutás queda auditado. No ejecutes nada que el operador no haya pedido.
-5. Al terminar, respondé al operador con un resumen claro de hallazgos y comandos usados.
+5. Todo lo que ejecutás queda auditado. No ejecutes nada que el operador no haya pedido.
+6. Al terminar, respondé al operador con un resumen claro de hallazgos y comandos usados.
 
 PEDIDO DEL OPERADOR:
 {message}

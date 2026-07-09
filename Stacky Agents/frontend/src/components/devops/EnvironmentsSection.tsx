@@ -37,6 +37,7 @@ import {
   type EnvironmentApplyResponse,
 } from '../../devops/environmentModel';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
+import { resolveAgentServerBinding } from './agentServerBinding';
 import { FlagGateBanner } from './FlagGateBanner';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
 import { CommitPipelineModal } from './CommitPipelineModal';
@@ -75,6 +76,11 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
   const [sandboxMode, setSandboxMode] = useState(false);
   const [sandboxRoot, setSandboxRoot] = useState('');
   const [sandboxActive, setSandboxActive] = useState(false);
+  // Plan 108 F6 — último plan evaluado EN el servidor (para mostrar "remoto" en el resumen).
+  const [planIsRemote, setPlanIsRemote] = useState(false);
+
+  // Plan 108 F6 — anclaje remoto: mismo helper puro que DevOpsAgentSection (F4).
+  const binding = resolveAgentServerBinding(ctx.health, ctx.selectedServer);
 
   const [presets, setPresets] = useState<PublicationPreset[]>([]);
   const [selectedPresetName, setSelectedPresetName] = useState<string>('');
@@ -159,11 +165,12 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
     try {
       setActionError(null);
       const override = sandboxMode && sandboxRoot ? sandboxRoot : undefined;
-      const resp = await DevOps.environmentPlan(activeProject, override);
+      const resp = await DevOps.environmentPlan(activeProject, override, binding.sendAlias ?? undefined);
       setEntries(resp.entries);
       setRootExists(resp.root_exists);
       setFingerprint(resp.layout_fingerprint);
       setSandboxActive(resp.sandbox_active === true);
+      setPlanIsRemote(resp.remote === true);
       setConfirmChecked(false);
       setApplyResult(null);
       setVerified(null);
@@ -179,14 +186,17 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
       setActionError(null);
       const paths = selectablePaths(entries);
       const override = sandboxMode && sandboxRoot ? sandboxRoot : undefined;
-      const resp = await DevOps.environmentApply(activeProject, paths, confirmChecked, fingerprint, override, sandboxMode);
+      const resp = await DevOps.environmentApply(
+        activeProject, paths, confirmChecked, fingerprint, override, sandboxMode, binding.sendAlias ?? undefined,
+      );
       setApplyResult(resp);
       // Verificación automática post-apply (ADICIÓN v3): re-plan + allExistsOk.
-      const rePlan = await DevOps.environmentPlan(activeProject, override);
+      const rePlan = await DevOps.environmentPlan(activeProject, override, binding.sendAlias ?? undefined);
       setEntries(rePlan.entries);
       setRootExists(rePlan.root_exists);
       setFingerprint(rePlan.layout_fingerprint);
       setSandboxActive(rePlan.sandbox_active === true);
+      setPlanIsRemote(rePlan.remote === true);
       const ok = allExistsOk(rePlan.entries);
       setVerified(ok);
       setPendingEntries(ok ? [] : rePlan.entries.filter((e) => e.status !== 'exists_ok'));
@@ -256,6 +266,15 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
         <div className={styles.alertError}>
           No se pudo completar la acción: {actionError}
         </div>
+      )}
+
+      {/* Plan 108 F6 — anclaje remoto: badge si el plan/apply va a operar EN el
+          servidor seleccionado, o aviso si falta alguna flag para anclar. */}
+      {binding.badge && (
+        <div className={styles.alertInfo}>{binding.badge}</div>
+      )}
+      {binding.hint && (
+        <div className={styles.alertWarning}>{binding.hint}</div>
       )}
 
       {/* Paso 0 — Configuración */}
@@ -389,6 +408,7 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
             )}
             <p>
               to_create: {summary.to_create} / exists_ok: {summary.exists_ok} / conflict: {summary.conflict} / unsafe: {summary.unsafe}
+              {planIsRemote && <> — <strong>remoto</strong> ({binding.sendAlias})</>}
             </p>
             <label style={{ display: 'block', marginBottom: '8px' }}>
               <input type="checkbox" checked={confirmChecked} onChange={(e) => setConfirmChecked(e.target.checked)} />{' '}

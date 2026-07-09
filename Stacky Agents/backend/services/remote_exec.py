@@ -117,25 +117,110 @@ def read_audit(alias: str, limit: int = 100, offset: int = 0) -> list[dict]:
     return rows[offset : offset + limit]
 
 
+_WINRM_PASSTHROUGH_KINDS = frozenset(
+    {"windows_only", "keyring_unavailable", "server_not_found", "server_missing_host", "test_failed"}
+)
+
+
+def classify_winrm_failure(detail: str) -> str:
+    """Plan 108 F1b (C9 v2) — PURA. Clasifica el `detail` crudo de check_winrm en
+    un tipo accionable. Passthrough exacto para los detail ya tipificados por
+    check_winrm; matching case-insensitive por substring para el resto (stderr
+    crudo de Windows, incluye variantes en inglés y español)."""
+    if detail in _WINRM_PASSTHROUGH_KINDS:
+        return detail
+    d = (detail or "").lower()
+    if any(tok in d for tok in (
+        "trustedhosts", "negotiate", "kerberos", "authentication mechanism",
+        "mecanismo de autenticación",
+    )):
+        return "trust_config"
+    if any(tok in d for tok in (
+        "access is denied", "acceso denegado", "unauthorized", "no autorizado",
+    )):
+        return "auth_denied"
+    if any(tok in d for tok in (
+        "timed out", "timeout", "tiempo de espera", "refused", "rechazó",
+        "cannot connect", "no puede conectar", "unreachable",
+    )):
+        return "unreachable_or_disabled"
+    return "winrm_error"
+
+
+def build_winrm_remediation(host: str, kind: str) -> list[dict]:
+    """Plan 108 F1b (C9 v2) — PURA. Pasos copy-paste para que el OPERADOR
+    remedie WinRM. Stacky NUNCA ejecuta estos comandos (HITL innegociable).
+    PROHIBIDO interpolar credenciales o el alias del keyring: solo `host`."""
+    if kind in ("windows_only", "keyring_unavailable", "server_not_found", "server_missing_host"):
+        return []
+    steps: list[dict] = [{
+        "where": "servidor",
+        "label": (
+            "Habilitar WinRM (correr en PowerShell como admin EN el servidor; si la red "
+            "es de perfil Público usar la variante -SkipNetworkProfileCheck)"
+        ),
+        "command": "Enable-PSRemoting -Force",
+    }]
+    if kind == "unreachable_or_disabled":
+        steps.append({
+            "where": "cliente",
+            "label": "Verificar que el puerto 5985 del servidor sea alcanzable desde esta máquina",
+            "command": f"Test-NetConnection {host} -Port 5985",
+        })
+    elif kind == "trust_config":
+        steps.append({
+            "where": "cliente",
+            "label": (
+                "Sin dominio compartido (workgroup): agregar el host a TrustedHosts de "
+                "ESTA máquina (o configurar listener HTTPS 5986)"
+            ),
+            "command": (
+                f"Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '{host}' "
+                "-Concatenate -Force"
+            ),
+        })
+    elif kind == "auth_denied":
+        steps.append({
+            "where": "servidor",
+            "label": (
+                "La credencial del alias debe ser Administrador del servidor o miembro "
+                "del grupo local 'Remote Management Users'"
+            ),
+            "command": None,
+        })
+    elif kind == "winrm_error":
+        steps.append({
+            "where": "cliente",
+            "label": "Detalle crudo del error abajo; probar Test-WSMan a mano",
+            "command": f"Test-WSMan -ComputerName {host}",
+        })
+    return steps
+
+
 def check_winrm(alias: str) -> dict:
     """Test-WSMan contra el host del alias. Devuelve {"ok": bool, "detail": str}.
-    NO usa credencial (Test-WSMan sin -Credential valida el listener)."""
+    NO usa credencial (Test-WSMan sin -Credential valida el listener).
+
+    Plan 108 F1b (C9 v2): cuando ok=False agrega "kind" (clasificación
+    tipificada, classify_winrm_failure) y "remediation" (pasos copy-paste,
+    build_winrm_remediation; [] si no aplica). Backward-compatible: "ok" y
+    "detail" NUNCA cambian; con ok=True no se agregan keys nuevas."""
     # win32-only; en otros SO {"ok": False, "detail": "windows_only"}
     if sys.platform != "win32":
-        return {"ok": False, "detail": "windows_only"}
+        return {"ok": False, "detail": "windows_only", "kind": "windows_only", "remediation": []}
 
     from services.server_registry import get_server, keyring_available
     if not keyring_available():
-        return {"ok": False, "detail": "keyring_unavailable"}
+        return {"ok": False, "detail": "keyring_unavailable", "kind": "keyring_unavailable", "remediation": []}
 
     try:
         server = get_server(alias)
     except Exception:
-        return {"ok": False, "detail": "server_not_found"}
+        return {"ok": False, "detail": "server_not_found", "kind": "server_not_found", "remediation": []}
 
     host = server.get("host")
     if not host:
-        return {"ok": False, "detail": "server_missing_host"}
+        return {"ok": False, "detail": "server_missing_host", "kind": "server_missing_host", "remediation": []}
 
     try:
         result = subprocess.run(
@@ -148,11 +233,18 @@ def check_winrm(alias: str) -> dict:
         if result.returncode == 0:
             return {"ok": True, "detail": "ok"}
         else:
-            return {"ok": False, "detail": result.stderr or "winrm_error"}
+            detail = result.stderr or "winrm_error"
+            kind = classify_winrm_failure(detail)
+            return {"ok": False, "detail": detail, "kind": kind,
+                    "remediation": build_winrm_remediation(host, kind)}
     except subprocess.TimeoutExpired:
-        return {"ok": False, "detail": "timeout"}
+        kind = classify_winrm_failure("timeout")
+        return {"ok": False, "detail": "timeout", "kind": kind,
+                "remediation": build_winrm_remediation(host, kind)}
     except Exception:
-        return {"ok": False, "detail": "test_failed"}
+        kind = classify_winrm_failure("test_failed")
+        return {"ok": False, "detail": "test_failed", "kind": kind,
+                "remediation": build_winrm_remediation(host, kind)}
 
 
 def run_remote(

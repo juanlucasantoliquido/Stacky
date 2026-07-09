@@ -946,6 +946,13 @@ class Config:
     STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED: bool = os.getenv(
         "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", "false"
     ).lower() in ("true", "1", "yes")
+
+    # Plan 108 — Anclaje remoto del agente DevOps y plan/apply de Ambientes al servidor seleccionado.
+    # Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_REMOTE_TARGET_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_REMOTE_TARGET_ENABLED", "false"
+    ).lower() in ("true", "1", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

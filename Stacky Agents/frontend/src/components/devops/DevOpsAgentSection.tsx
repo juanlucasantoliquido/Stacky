@@ -17,6 +17,8 @@ import { useWorkbench } from '../../store/workbench';
 import { Projects } from '../../api/endpoints';
 import { DevOpsAgentApi } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
+import { resolveAgentServerBinding } from './agentServerBinding';
+import styles from './devops.module.css';
 
 export interface DevOpsAgentSectionProps {
   ctx: DevOpsSectionContext;
@@ -57,11 +59,19 @@ const DevOpsAgentSectionBody: React.FC<DevOpsAgentSectionProps> = ({ ctx }) => {
   const projectOptions = projectsQuery.data?.projects ?? [];
   const canStart = !!project && !!message.trim();
 
+  // Plan 108 F4 — anclaje remoto: mismo helper puro que EnvironmentsSection (F6).
+  const binding = resolveAgentServerBinding(ctx.health, ctx.selectedServer);
+
   const handleStart = async () => {
     if (!canStart) return;
     try {
       setActionError(null);
-      const res = await DevOpsAgentApi.start({ project, message: message.trim(), runtime });
+      const res = await DevOpsAgentApi.start({
+        project,
+        message: message.trim(),
+        runtime,
+        ...(binding.sendAlias ? { server_alias: binding.sendAlias } : {}),
+      });
       setCodexConsoleExecution(res.execution_id);
       setMessage('');
       void listQuery.refetch();
@@ -97,13 +107,22 @@ const DevOpsAgentSectionBody: React.FC<DevOpsAgentSectionProps> = ({ ctx }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {actionError && (
-        <div style={{ padding: '12px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px', color: '#721c24' }}>
+        <div className={styles.alertError}>
           No se pudo completar la acción: {actionError}
         </div>
       )}
 
+      {/* Plan 108 F4 — anclaje remoto: badge si el agente va a operar EN el
+          servidor seleccionado, o aviso si falta alguna flag para anclar. */}
+      {binding.badge && (
+        <div className={styles.alertInfo}>{binding.badge}</div>
+      )}
+      {binding.hint && (
+        <div className={styles.alertWarning}>{binding.hint}</div>
+      )}
+
       {/* Nueva conversación */}
-      <div style={{ border: '1px solid #dee2e6', borderRadius: '4px', padding: '12px' }}>
+      <div className={styles.panel}>
         <h4 style={{ marginTop: 0 }}>Nueva conversación</h4>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
           <select value={project} onChange={(e) => setProject(e.target.value)} style={{ padding: '8px' }}>
@@ -127,14 +146,7 @@ const DevOpsAgentSectionBody: React.FC<DevOpsAgentSectionProps> = ({ ctx }) => {
         <button
           onClick={() => void handleStart()}
           disabled={!canStart}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: canStart ? '#28a745' : '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: canStart ? 'pointer' : 'not-allowed',
-          }}
+          className={styles.btnSuccess}
         >
           Iniciar conversación
         </button>
@@ -142,24 +154,31 @@ const DevOpsAgentSectionBody: React.FC<DevOpsAgentSectionProps> = ({ ctx }) => {
 
       {/* Aviso GLOBAL de continuidad (operacional, NO gate de flag — C6 v3). */}
       {!resumeEnabled && (
-        <div style={{ padding: '8px 12px', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', color: '#856404' }}>
+        <div className={styles.alertWarning}>
           Aviso: sin "Resume de sesión (claude)" activo (Configuración → Arnés, categoría Claude Code CLI), al continuar una conversación terminada el agente arranca sin memoria del hilo.
         </div>
       )}
 
       {/* Conversaciones */}
-      <div style={{ border: '1px solid #dee2e6', borderRadius: '4px', padding: '12px' }}>
+      <div className={styles.panel}>
         <h4 style={{ marginTop: 0 }}>Conversaciones</h4>
         {conversations.length === 0 ? (
           <p style={{ opacity: 0.7 }}>Todavía no hay conversaciones para este proyecto.</p>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {conversations.map((item) => (
-              <li key={item.conversation_id} style={{ borderBottom: '1px solid #eee', padding: '8px 0' }}>
+              <li key={item.conversation_id} style={{ borderBottom: '1px solid var(--border-muted)', padding: '8px 0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                   <span>
-                    <strong>{item.title}</strong>{' '}
+                    <strong>{item.server_alias ? `[${item.server_alias}] ` : ''}{item.title}</strong>{' '}
                     <span style={{ opacity: 0.7, fontSize: '0.85em' }}>({item.last_status ?? 'sin ejecuciones'})</span>
+                    {/* Plan 108 [ADICIÓN ARQUITECTO v2] — verificación HITL barata del anclaje. */}
+                    {typeof item.audited_remote_commands === 'number' && (
+                      <span style={{ opacity: 0.7, fontSize: '0.85em' }}>
+                        {' '}· {item.audited_remote_commands} cmds remotos auditados
+                        {item.audited_remote_commands === 0 ? ' (verificar)' : ''}
+                      </span>
+                    )}
                   </span>
                   <span style={{ display: 'flex', gap: '8px' }}>
                     <button
@@ -192,7 +211,7 @@ const DevOpsAgentSectionBody: React.FC<DevOpsAgentSectionProps> = ({ ctx }) => {
                         Enviar
                       </button>
                       {item.continuable_with_memory === false && (
-                        <span style={{ color: '#856404', fontSize: '0.82em' }}>
+                        <span className={styles.textWarn} style={{ fontSize: '0.82em' }}>
                           Continuará sin memoria del hilo (resume off o el último turno no terminó OK).
                         </span>
                       )}

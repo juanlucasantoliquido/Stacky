@@ -219,7 +219,8 @@ class TestF2Conversations:
         with mock.patch.object(_config.config, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", True):
             with mock.patch.object(_config.config, "STACKY_DEVOPS_SERVERS_ENABLED", True):
                 with mock.patch("services.server_registry.get_server", return_value={"host": "h1"}):
-                    with mock.patch("api.devops_agent._launch_turn", return_value={"execution_id": "exec1"}):
+                    # Mock del ORIGEN (agent_runner.run_agent), no del contrato interno roto
+                    with mock.patch("agent_runner.run_agent", return_value=101):
                         r = app_client.post("/api/devops/console/conversations", json={
                             "server_alias": "s1",
                             "project": "p1",
@@ -228,6 +229,7 @@ class TestF2Conversations:
                         assert r.status_code == 202
                         data = r.get_json()
                         assert "conversation_id" in data
+                        assert data["execution_id"] == 101  # Verificamos el valor retornado por el mock
 
                         cid = data["conversation_id"]
                         with session_scope() as db_session:
@@ -290,7 +292,15 @@ class TestF2Conversations:
             assert r.status_code == 400
 
     def test_f2_message_reuses_dual_path(self, app_client):
-        """Último run running ⇒ send_input; sin run vivo ⇒ _launch_turn."""
+        """Último run running ⇒ send_input del runner (ORIGEN, patrón F0/RC2).
+
+        Corregido (drift preexistente detectado durante Plan 108): la versión
+        anterior sembraba AgentExecution(state=...) — columna inexistente
+        (real: status) — y mockeaba api.devops_agent._send_input, símbolo que
+        NUNCA existió. Es exactamente el patrón de falso verde que RC2
+        diagnostica (ver doc plan 108 §2); el fix real vive en
+        services.claude_code_cli_runner.send_input (import lazy en
+        api/devops_remote_console.py::conversation_message)."""
         import config as _config
         from db import session_scope
         from models import AgentExecution
@@ -305,7 +315,7 @@ class TestF2Conversations:
                 work_item_type="Task",
                 ado_state="Active",
                 external_id=None,  # Se sella después del commit (gotcha backfill db.py)
-                description='{"kind":"remote_console","server_alias":"s1","write_enabled":False}',
+                description='{"kind":"remote_console","server_alias":"s1","write_enabled":false}',
             )
             db_session.add(ticket)
             db_session.commit()
@@ -317,16 +327,17 @@ class TestF2Conversations:
         with session_scope() as session:
             run = AgentExecution(
                 ticket_id=cid,
-                state="running",
+                status="running",
                 agent_type="devops",
-                model="model",
-                effort="medium",
+                started_by="test",
             )
+            run.input_context = []
+            run.metadata_dict = {"runtime": "claude_code_cli"}
             session.add(run)
             session.commit()
 
         with mock.patch.object(_config.config, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", True):
-            with mock.patch("api.devops_agent._send_input", return_value={"ok": True}):
+            with mock.patch("services.claude_code_cli_runner.send_input", return_value={"ok": True, "mode": "stdin"}):
                 r = app_client.post(f"/api/devops/console/conversations/{cid}/message", json={"message": "hi"})
                 assert r.status_code == 200
 

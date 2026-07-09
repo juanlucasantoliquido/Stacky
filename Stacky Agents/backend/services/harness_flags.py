@@ -188,6 +188,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED",  # Plan 104 — doctores IA por sección
         "STACKY_DEVOPS_BOOTSTRAP_ENABLED",  # Plan 98 — bootstrap unico + PATCH por clave
         "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED",  # Plan 105 — consola remota
+        "STACKY_DEVOPS_REMOTE_TARGET_ENABLED",  # Plan 108 — anclaje remoto agente/ambientes
         "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",  # Plan 107 — preview de árbol de ambientes
         "STACKY_DEVOPS_ENV_SANDBOX_ENABLED",  # Plan 107 — raíz sandbox de pruebas
     ),
@@ -2214,6 +2215,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "sandbox temporal para probar, SIN tocar la raíz de producción. Guard "
             "duro: rechaza rutas que sean iguales/contengan/estén contenidas en la "
             "raíz real. Default OFF. La raíz sandbox NUNCA se guarda en el perfil."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (depth-1)
+        # SIN default= (gotcha _CURATED_DEFAULTS_ON): idem nota arriba.
+    ),
+    FlagSpec(
+        key="STACKY_DEVOPS_REMOTE_TARGET_ENABLED",
+        type="bool",
+        label="Operar en el servidor seleccionado (Plan 108)",
+        description=(
+            "Plan 108 — Ancla el chat del agente DevOps y el plan/apply de Ambientes "
+            "al servidor seleccionado en el panel: exploración y comandos corren vía "
+            "WinRM auditado (Plan 105), nunca en la máquina local. Requiere Servidores (91) "
+            "y Consola remota (105) activos. Default OFF."
         ),
         group="global",
         env_only=False,

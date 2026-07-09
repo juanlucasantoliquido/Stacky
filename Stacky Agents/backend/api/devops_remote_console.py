@@ -161,7 +161,7 @@ def create_conversation():
     # Validar server existente
     from services.server_registry import get_server
     try:
-        server = get_server(server_alias)
+        get_server(server_alias)
     except Exception:
         return jsonify({"error": "server_not_found"}), 404
 
@@ -196,11 +196,15 @@ def create_conversation():
         session.commit()
         cid = ticket.id
 
-    # Lanzar turno reusando _launch_turn del plan 90
-    from api.devops_agent import _launch_turn
-    base_url = request.host_url.rstrip("/")
+    # Overrides con el MISMO clamp del plan 90 (api/devops_agent.py:48-53)
+    from services import llm_router as _llm_router
+    model_override = _llm_router.clamp_model(model.strip()) if model else None
+    effort_override = effort.strip().lower() if effort and effort.strip().lower() in {
+        "low", "medium", "high", "xhigh", "max"} else None
 
+    # Construir mensaje con header de consola
     from services.remote_console_prompt import build_console_prompt
+    base_url = request.host_url.rstrip("/")
     wrapped_message = build_console_prompt(
         server_alias,
         base_url,
@@ -209,19 +213,23 @@ def create_conversation():
         write_enabled=False,
     )
 
-    turn_result = _launch_turn(
-        ticket_id=cid,
+    # Lanzar turno con firma REAL del plan 90 (tupla, no dict)
+    from api.devops_agent import _launch_turn
+    execution_id, launch_error = _launch_turn(
+        conversation_id=cid,
+        project=project,
         message=wrapped_message,
         runtime=runtime,
-        model=model,
-        effort=effort,
-        user=current_user(),
+        model_override=model_override,
+        effort_override=effort_override,
     )
+    if launch_error is not None:
+        return launch_error
 
     return jsonify({
         "ok": True,
-        "conversation_id": ticket.id,
-        "execution_id": turn_result.get("execution_id"),
+        "conversation_id": cid,
+        "execution_id": execution_id,
         "runtime": runtime,
         "server_alias": server_alias,
     }), 202
@@ -243,24 +251,52 @@ def conversation_message(cid: int):
     if not message:
         return jsonify({"error": "message es obligatorio"}), 400
 
+    # Leer ticket y metadata DENTRO de session_scope
     from db import session_scope
+    from models import AgentExecution
     with session_scope() as session:
         ticket = session.get(Ticket, cid)
-    if not ticket or ticket.ado_id != _CONSOLE_ADO_ID:
-        return jsonify({"error": "conversation_not_found"}), 404
+        if not ticket or ticket.ado_id != _CONSOLE_ADO_ID:
+            return jsonify({"error": "conversation_not_found"}), 404
+        project = ticket.stacky_project_name or ticket.project
+        meta = _conv_meta(ticket)
+        server_alias = meta.get("server_alias", "")
+        write_enabled = meta.get("write_enabled", False)
 
-    # Si hay un execution vivo → stdin; si no → nuevo turno
-    from api.devops_agent import _send_input, _launch_turn
+        # Query del último execution (patrón plan 90)
+        last = (
+            session.query(AgentExecution)
+            .filter(AgentExecution.ticket_id == cid)
+            .filter(AgentExecution.agent_type == "devops")
+            .order_by(AgentExecution.id.desc())
+            .first()
+        )
+        last_id = last.id if last is not None else None
+        last_status = last.status if last is not None else None
+        last_md = dict(last.metadata_dict or {}) if last is not None else {}
 
-    last_execution = ticket.executions[-1] if ticket.executions else None
-    if last_execution and last_execution.state == "running":
-        result = _send_input(last_execution.id, message)
-        return jsonify({"ok": True, "execution_id": last_execution.id}), 200
+    # 1) Camino VIVO: proceso corriendo con stdin abierto → send_input
+    if last_id is not None and last_status == "running":
+        last_runtime = last_md.get("runtime")
+        try:
+            if last_runtime == "claude_code_cli":
+                from services.claude_code_cli_runner import send_input
+            else:
+                from services.codex_cli_runner import send_input
+            result = send_input(last_id, message, user=current_user())
+            return jsonify({
+                "ok": True,
+                "mode": result.get("mode", "stdin"),
+                "execution_id": last_id,
+            })
+        except (RuntimeError, ValueError):
+            pass  # stdin cerrado → caer al camino de turno nuevo
 
-    # Nuevo turno
-    meta = _conv_meta(ticket)
-    server_alias = meta.get("server_alias", "")
-    write_enabled = meta.get("write_enabled", False)
+    # 2) Camino NUEVO TURNO sobre el mismo ticket
+    from services import llm_router as _llm_router
+    model_override = _llm_router.clamp_model(model.strip()) if model else None
+    effort_override = effort.strip().lower() if effort and effort.strip().lower() in {
+        "low", "medium", "high", "xhigh", "max"} else None
 
     base_url = request.host_url.rstrip("/")
     from services.remote_console_prompt import build_console_prompt
@@ -272,16 +308,22 @@ def conversation_message(cid: int):
         write_enabled=write_enabled,
     )
 
-    turn_result = _launch_turn(
-        ticket_id=cid,
+    # Runtime por default: el del último execution o claude_code_cli
+    runtime = runtime or last_md.get("runtime") or "claude_code_cli"
+
+    from api.devops_agent import _launch_turn
+    execution_id, launch_error = _launch_turn(
+        conversation_id=cid,
+        project=project,
         message=wrapped_message,
         runtime=runtime,
-        model=model,
-        effort=effort,
-        user=current_user(),
+        model_override=model_override,
+        effort_override=effort_override,
     )
+    if launch_error is not None:
+        return launch_error
 
-    return jsonify({"ok": True, "execution_id": turn_result.get("execution_id")}), 200
+    return jsonify({"ok": True, "execution_id": execution_id}), 202
 
 
 @bp.post("/conversations/<int:cid>/write-mode")
@@ -333,17 +375,21 @@ def list_conversations():
         return jsonify({"error": "server es obligatorio"}), 400
 
     from db import session_scope
+    from models import AgentExecution
+
+    result = []
     with session_scope() as session:
         stmt = select(Ticket).where(
             Ticket.ado_id == _CONSOLE_ADO_ID,
         ).order_by(Ticket.created_at.desc())
         tickets = session.execute(stmt).scalars().all()
 
-    # Filtrar por server_alias en description
-    result = []
-    for t in tickets:
-        meta = _conv_meta(t)
-        if meta.get("server_alias") == server_alias:
+        # Construir items COMPLETOS DENTRO de session_scope (C1 v2)
+        for t in tickets:
+            meta = _conv_meta(t)
+            if meta.get("server_alias") != server_alias:
+                continue
+
             item = {
                 "id": t.id,
                 "title": t.title,
@@ -352,13 +398,21 @@ def list_conversations():
                 "server_alias": meta.get("server_alias"),
                 "write_enabled": meta.get("write_enabled", False),
             }
-            # Último execution si existe
-            if t.executions:
-                last_execution = t.executions[-1]
+
+            # Último execution con query correcto (patrón plan 90)
+            last = (
+                session.query(AgentExecution)
+                .filter(AgentExecution.ticket_id == t.id)
+                .filter(AgentExecution.agent_type == "devops")
+                .order_by(AgentExecution.id.desc())
+                .first()
+            )
+            if last is not None:
                 item["last_execution"] = {
-                    "id": last_execution.id,
-                    "state": last_execution.state,
+                    "id": last.id,
+                    "status": last.status,  # "status", no "state"
                 }
+
             result.append(item)
 
     return jsonify(result), 200

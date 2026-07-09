@@ -30,6 +30,8 @@ export interface EnvironmentPlanResponse {
   entries: PlanEntry[];
   summary: Record<PlanEntryStatus, number>;
   sandbox_active?: boolean; // Plan 107
+  remote?: boolean; // Plan 108 F5/F6 — el plan se evaluó EN el servidor seleccionado
+  server_alias?: string; // Plan 108 — servidor contra el que se evaluó (si remote)
 }
 
 export interface EnvironmentApplyResponse {
@@ -40,6 +42,7 @@ export interface EnvironmentApplyResponse {
   failed: Array<{ path: string; error: string }>;
   ignored_not_in_layout: string[];
   sandbox_active?: boolean; // Plan 107
+  remote?: boolean; // Plan 108 F5 — las carpetas se crearon EN el servidor seleccionado
 }
 
 const _WINDOWS_RESERVED = new Set([

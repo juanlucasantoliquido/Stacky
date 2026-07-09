@@ -677,6 +677,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la consola no está disponible (404 en sus endpoints, banner en la sección). Nada se ejecuta ni audita.",
         example="Como tener una terminal SSH pero con una IA que interpreta tu pedido y ejecuta solo comandos PowerShell, dejando un rastro completo de qué se corrió en cada servidor.",
     ),
+    "STACKY_DEVOPS_REMOTE_TARGET_ENABLED": PlainHelp(
+        what="Ancla el chat del agente DevOps y el plan/apply de Ambientes al servidor seleccionado, para que operen en ese servidor y no en tu máquina local.",
+        on_effect="Si la activás: cuando tenés un servidor seleccionado, el agente DevOps y las operaciones de Ambientes ejecutan vía WinRM auditado en ese servidor. Un badge te muestra dónde opera. Sin servidor o con flag OFF, todo es byte-idéntico a hoy (local).",
+        off_effect="Si la apagás: el agente DevOps y Ambientes operan en tu máquina local, como hasta ahora.",
+        example="Como tener una 'mano remota' que toca el servidor cuando elegís el alias, en vez de tu propia máquina.",
+    ),
     "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED": PlainHelp(
         what="Muestra las carpetas del ambiente como un árbol desplegable en vez de una lista.",
         on_effect="Si la activás: en 'Ambientes' ves un árbol con las carpetas nuevas resaltadas; no cambia qué se crea.",

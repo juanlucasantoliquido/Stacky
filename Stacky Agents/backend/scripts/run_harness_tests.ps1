@@ -158,6 +158,13 @@ $HarnessTestFiles = @(
   "tests/test_plan107_flags.py",
   "tests/test_plan107_sandbox_guard.py",
   "tests/test_plan107_sandbox_endpoints.py",
+  # Plan 108 - Agente DevOps opera EN el servidor seleccionado (anclaje remoto)
+  "tests/test_plan108_console_repair.py",
+  "tests/test_plan108_flags.py",
+  "tests/test_plan108_winrm_diagnosis.py",
+  "tests/test_plan108_prompt_hardening.py",
+  "tests/test_plan108_agent_server_binding.py",
+  "tests/test_plan108_environment_remote.py",
   # Plan 61 - Gate determinista del flujo funcional (Task)
   "tests/test_task_gate_flags.py",
   "tests/test_task_gate.py",

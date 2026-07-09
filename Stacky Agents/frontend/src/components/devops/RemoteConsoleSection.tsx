@@ -125,6 +125,31 @@ export const RemoteConsoleSection: React.FC<RemoteConsoleSectionProps> = ({ ctx 
         ) : null}
       </div>
 
+      {/* Plan 108 F1b (C9 v2): diagnóstico tipificado + remediación copy-paste.
+          HITL: Stacky NUNCA ejecuta estos comandos, solo los muestra. */}
+      {winrmQuery.data?.ok === false && (
+        <details style={{ marginBottom: '16px' }}>
+          <summary style={{ cursor: 'pointer' }}>Cómo arreglarlo</summary>
+          <div style={{ marginTop: '8px' }}>
+            <code>{winrmQuery.data.detail}</code>
+          </div>
+          {winrmQuery.data.remediation && winrmQuery.data.remediation.length > 0 && (
+            <ol style={{ marginTop: '8px' }}>
+              {winrmQuery.data.remediation.map((step, i) => (
+                <li key={i} style={{ marginBottom: '6px' }}>
+                  [{step.where}] {step.label}
+                  {step.command != null && (
+                    <div>
+                      <code>{step.command}</code>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </details>
+      )}
+
       {/* Tabs Conversación/Auditoría */}
       <div style={{ marginBottom: '16px', borderBottom: '1px solid #dee2e6' }}>
         <button

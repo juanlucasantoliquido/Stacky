@@ -3,6 +3,8 @@
 url_prefix="/devops/agent" → rutas /api/devops/agent/... (NO poner /api/ en el
 prefix; mismo gotcha C2 del plan 73).
 """
+import json
+
 from flask import Blueprint, jsonify, request
 
 import config as _config
@@ -25,6 +27,35 @@ def _current_user() -> str:
     return current_user()
 
 
+def _chat_meta(ticket) -> dict:
+    """Plan 108 F3 — description es JSON {"kind":"devops_chat","server_alias":str}
+    o {}. Tolerante (duplicado adrede de api/devops_remote_console.py:_conv_meta
+    para no crear import circular devops_agent <-> devops_remote_console)."""
+    if not ticket or not ticket.description:
+        return {}
+    try:
+        return json.loads(ticket.description) if isinstance(ticket.description, str) else {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _validate_remote_target(server_alias: str):
+    """Plan 108 F3 — None si OK; (json_response, status) si no. Gates: flag 108
+    + servers 91 + consola 105 + alias existente en el registro."""
+    cfg = _config.config
+    if not getattr(cfg, "STACKY_DEVOPS_REMOTE_TARGET_ENABLED", False):
+        return jsonify({"ok": False, "error": "remote_target_disabled"}), 400
+    if not getattr(cfg, "STACKY_DEVOPS_SERVERS_ENABLED", False) or \
+       not getattr(cfg, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", False):
+        return jsonify({"ok": False, "error": "remote_target_requires_servers_and_console"}), 409
+    from services.server_registry import get_server
+    try:
+        get_server(server_alias)
+    except Exception:
+        return jsonify({"ok": False, "error": "server_not_found"}), 404
+    return None
+
+
 @bp.post("/conversations")
 def start_conversation():
     if _flag_off():
@@ -45,6 +76,14 @@ def start_conversation():
                 "VS Code existente (open_chat)."
             ),
         }), 400
+
+    # Plan 108 F3 — anclaje remoto opt-in: server_alias ausente ⇒ byte-compat total.
+    server_alias = (body.get("server_alias") or "").strip() or None
+    if server_alias:
+        err = _validate_remote_target(server_alias)
+        if err:
+            return err
+
     # Cap de modelo SIN Opus (guardarraíl 11).
     from services import llm_router as _llm_router
     model_raw = (body.get("model") or "").strip()
@@ -74,12 +113,25 @@ def start_conversation():
             title=title,
             work_item_type="Task",
             ado_state="Active",
+            # Plan 108 F3 — sellar la conversación al servidor (si hay anclaje).
+            description=(
+                json.dumps({"kind": "devops_chat", "server_alias": server_alias})
+                if server_alias else None
+            ),
         )
         session.add(ticket)
         session.flush()  # asigna ticket.id
         ticket.external_id = -ticket.id  # único, negativo, no-NULL ⇒ backfill lo respeta
         session.flush()
         conversation_id = ticket.id
+
+    # Plan 108 F3 — envolver con el contrato de consola remota SOLO si hay anclaje.
+    if server_alias:
+        from services.remote_console_prompt import build_console_prompt
+        message = build_console_prompt(
+            server_alias, request.host_url.rstrip("/"), message, conversation_id,
+            write_enabled=False,
+        )
 
     execution_id, launch_error = _launch_turn(
         conversation_id=conversation_id,
@@ -96,6 +148,7 @@ def start_conversation():
         "conversation_id": conversation_id,
         "execution_id": execution_id,
         "runtime": runtime,
+        "server_alias": server_alias,
     }), 202
 
 
@@ -117,6 +170,8 @@ def send_message(conversation_id: int):
         if ticket is None:
             return jsonify({"ok": False, "error": "conversation_not_found"}), 404
         project = ticket.stacky_project_name or ticket.project
+        # Plan 108 F3 — server_alias sellado en la conversación (si la tiene).
+        server_alias = _chat_meta(ticket).get("server_alias")
         last = (
             session.query(AgentExecution)
             .filter(AgentExecution.ticket_id == conversation_id)
@@ -150,6 +205,21 @@ def send_message(conversation_id: int):
     #    las flags CLAUDE_CODE_CLI_RESUME_* / CODEX_CLI_RESUME_* están ON.
     #    C5 (v2): last_md.get("model_override") es degradación segura si falta la key
     #    (run_agent usa su default capeado, nunca Opus por guardarraíl 11).
+    # Plan 108 F3 (C3 v2): conversación sellada + flag 108 OFF ⇒ 409 EXPLÍCITO.
+    # NUNCA lanzar el turno sin contrato (degradación silenciosa a ejecución local
+    # es EXACTAMENTE el bug que este plan arregla).
+    if server_alias:
+        if not getattr(_config.config, "STACKY_DEVOPS_REMOTE_TARGET_ENABLED", False):
+            return jsonify({
+                "ok": False,
+                "error": "remote_target_disabled_for_sealed_conversation",
+            }), 409
+        from services.remote_console_prompt import build_console_prompt
+        message = build_console_prompt(
+            server_alias, request.host_url.rstrip("/"), message, conversation_id,
+            write_enabled=False,
+        )
+
     execution_id, launch_error = _launch_turn(
         conversation_id=conversation_id,
         project=project,
@@ -197,7 +267,8 @@ def list_conversations():
                 .first()
             )
             last_status = last.status if last else None
-            items.append({
+            server_alias_val = _chat_meta(t).get("server_alias")
+            item = {
                 "conversation_id": t.id,
                 "title": t.title,
                 "project": t.stacky_project_name,
@@ -205,13 +276,30 @@ def list_conversations():
                 "last_status": last_status,
                 "last_runtime": (last.metadata_dict or {}).get("runtime") if last else None,
                 "started_at": t.created_at.isoformat() if getattr(t, "created_at", None) else None,
+                # Plan 108 F3 — servidor al que quedó sellada la conversación (None si no).
+                "server_alias": server_alias_val,
                 # [ADICIÓN ARQUITECTO v2] Señal HONESTA por-conversación (C3): continuar
                 # SOLO conserva el hilo si (a) el resume está activo para el proyecto Y
                 # (b) el último turno terminó "completed" (harness/resume.py:96).
                 "continuable_with_memory": bool(
                     resume_enabled and last_status == "completed"
                 ),
-            })
+            }
+            # [ADICIÓN ARQUITECTO v2] Verificación HITL barata del anclaje: cuántos
+            # comandos remotos de ESTA conversación quedaron auditados (Plan 105). Degrada
+            # a None si la auditoría falla — el listado JAMÁS se cae por esto. Conversaciones
+            # sin alias: la key queda AUSENTE (no aplica).
+            if server_alias_val:
+                try:
+                    from services.remote_exec import read_audit
+                    audit_rows = read_audit(server_alias_val, limit=500)
+                    item["audited_remote_commands"] = sum(
+                        1 for row in audit_rows
+                        if row.get("kind") == "exec" and row.get("conversation_id") == t.id
+                    )
+                except Exception:
+                    item["audited_remote_commands"] = None
+            items.append(item)
 
     return jsonify({"conversations": items, "resume_enabled": resume_enabled})
 

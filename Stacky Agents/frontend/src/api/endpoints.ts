@@ -3106,19 +3106,23 @@ export const DevOps = {
   /**
    * POST /api/devops/environments/plan — Plan 89. Dry-run SOLO-LECTURA del árbol
    * de carpetas. Plan 107: rootOverride opcional (sandbox de pruebas); si es
-   * undefined el body es EXACTAMENTE el de hoy (cero regresión).
+   * undefined el body es EXACTAMENTE el de hoy (cero regresión). Plan 108 F6:
+   * serverAlias opcional (ancla el plan al servidor seleccionado); ausente ⇒
+   * body idéntico a hoy.
    */
-  environmentPlan: (project: string, rootOverride?: string) =>
-    api.post<EnvironmentPlanResponse>(
-      "/api/devops/environments/plan",
-      rootOverride ? { project, root_override: rootOverride } : { project },
-    ),
+  environmentPlan: (project: string, rootOverride?: string, serverAlias?: string) =>
+    api.post<EnvironmentPlanResponse>("/api/devops/environments/plan", {
+      project,
+      ...(rootOverride ? { root_override: rootOverride } : {}),
+      ...(serverAlias ? { server_alias: serverAlias } : {}),
+    }),
   /**
    * POST /api/devops/environments/apply — Plan 89. Crea SOLO to_create. HITL:
    * confirm es SIEMPRE argumento del caller (el componente pasa el estado del
    * checkbox; este helper NUNCA lo auto-inyecta). Plan 107: rootOverride +
    * sandboxAck opcionales (sandbox_ack=True obligatorio server-side cuando hay
-   * root_override); sin rootOverride el body es EXACTAMENTE el de hoy.
+   * root_override); sin rootOverride el body es EXACTAMENTE el de hoy. Plan 108
+   * F6: serverAlias opcional (crea EN el servidor seleccionado).
    */
   environmentApply: (
     project: string,
@@ -3127,13 +3131,16 @@ export const DevOps = {
     fingerprint: string,
     rootOverride?: string,
     sandboxAck?: boolean,
+    serverAlias?: string,
   ) =>
-    api.post<EnvironmentApplyResponse>(
-      "/api/devops/environments/apply",
-      rootOverride
-        ? { project, paths, confirm, fingerprint, root_override: rootOverride, sandbox_ack: sandboxAck === true }
-        : { project, paths, confirm, fingerprint },
-    ),
+    api.post<EnvironmentApplyResponse>("/api/devops/environments/apply", {
+      project,
+      paths,
+      confirm,
+      fingerprint,
+      ...(rootOverride ? { root_override: rootOverride, sandbox_ack: sandboxAck === true } : {}),
+      ...(serverAlias ? { server_alias: serverAlias } : {}),
+    }),
   /** GET /api/devops/detect-stack — Plan 97. Detección opt-in de stack por manifiestos, SOLO-LECTURA. */
   detectStack: (project: string) =>
     api.get<{ detected: string | null }>(`/api/devops/detect-stack?project=${encodeURIComponent(project)}`),
@@ -3169,6 +3176,9 @@ export interface DevOpsConversationItem {
   last_runtime: string | null;
   started_at: string | null;
   continuable_with_memory: boolean; // C3 (v2): señal honesta por-conversación
+  server_alias?: string | null; // Plan 108 F3 — servidor al que quedó sellada la conversación
+  // Plan 108 [ADICIÓN ARQUITECTO v2] — ausente si no hay alias; null si la auditoría falló.
+  audited_remote_commands?: number | null;
 }
 
 /** Plan 90 — conversaciones del agente DevOps (multi-turno sobre runtimes CLI). */
@@ -3179,11 +3189,15 @@ export const DevOpsAgentApi = {
     runtime?: "claude_code_cli" | "codex_cli";
     model?: string;
     effort?: string;
+    server_alias?: string; // Plan 108 F3/F4 — ancla el turno al servidor seleccionado
   }) =>
-    api.post<{ ok: boolean; conversation_id: number; execution_id: number; runtime: string }>(
-      "/api/devops/agent/conversations",
-      body,
-    ),
+    api.post<{
+      ok: boolean;
+      conversation_id: number;
+      execution_id: number;
+      runtime: string;
+      server_alias?: string | null;
+    }>("/api/devops/agent/conversations", body),
   message: (conversationId: number, message: string) =>
     api.post<{ ok: boolean; mode: "stdin" | "resume" | "new_run"; execution_id: number }>(
       `/api/devops/agent/conversations/${conversationId}/message`,
@@ -3263,7 +3277,14 @@ export const DevOpsRemoteConsole = {
       `/api/devops/console/audit/${encodeURIComponent(alias)}${limit !== undefined ? `?limit=${limit}&offset=${offset}` : ''}`
     ),
   checkWinrm: (alias: string) =>
-    api.get<{ ok: boolean; error?: string }>(`/api/devops/console/winrm/${encodeURIComponent(alias)}`),
+    api.get<{
+      ok: boolean;
+      detail?: string;
+      // Plan 108 F1b (C9 v2) — diagnóstico tipificado + remediación copy-paste.
+      // Ausentes cuando ok=true; [] cuando el kind no tiene pasos (server_not_found, etc.).
+      kind?: string;
+      remediation?: { where: string; label: string; command: string | null }[];
+    }>(`/api/devops/console/winrm/${encodeURIComponent(alias)}`),
 };
 
 export interface CIVariableSummary {

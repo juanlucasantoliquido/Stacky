@@ -1,11 +1,46 @@
 # Plan 108 — El agente DevOps opera EN el servidor seleccionado (anclaje remoto real)
 
-**Estado:** CRITICADO (juez adversarial) — APROBADO-CON-CAMBIOS, listo para implementar
+**Estado:** IMPLEMENTADO — 2026-07-09 (CRITICADO v2: 2026-07-09; v1: 2026-07-08)
 **Versión:** v2 (v1 → v2, crítica 2026-07-09)
-**Fecha:** 2026-07-08 (v1) / 2026-07-09 (v2)
+**Fecha:** 2026-07-08 (v1) / 2026-07-09 (v2, crítica) / 2026-07-09 (implementación)
 **Issue del operador:** "El agente de DevOps NO está entrando al servidor remoto seleccionado:
 busca directorios, ejecuta comandos y explora archivos en MI computadora local en vez de
 hacerlo en el servidor que seleccioné en el panel."
+
+**Nota de implementación:** las 9 fases (F0, F1, F1b, F2, F3, F4, F5, F6, F7) están
+implementadas y verdes. F0/F1 los construyó una sesión previa (verificado independientemente
+antes de continuar); F1b-F7 se implementaron test-first en esta sesión. Conteo real:
+`test_plan108_console_repair.py` 6/6, `test_plan108_flags.py` 5/5,
+`test_plan108_winrm_diagnosis.py` 9/9, `test_plan108_prompt_hardening.py` 3/3,
+`test_plan108_agent_server_binding.py` 9/9, `test_plan108_environment_remote.py` 14/14;
+no-regresión `test_plan90_devops_agent_endpoints.py` 14/14,
+`test_plan105_remote_exec_service.py` 16/16, `test_plan105_console_prompt.py` 5/5,
+`test_plan89_environment_plan_apply.py` + `test_plan89_environments_endpoints.py` +
+`test_plan107_sandbox_endpoints.py` + `test_plan107_flags.py` 36/36 (+1 skip sancionado
+preexistente), `test_harness_flags.py`/`test_harness_flags_requires.py` verdes; frontend
+`agentServerBinding.test.ts` 5/5 + `npx tsc --noEmit` 0 errores.
+De paso se reparó `test_plan105_remote_console_api.py::test_f2_message_reuses_dual_path`
+(mismo patrón de falso verde que este plan ataca: sembraba `AgentExecution(state=...)`
+—columna inexistente— y mockeaba `api.devops_agent._send_input`, símbolo que nunca
+existió); ahora 12/13 verde en ese archivo. El único rojo restante,
+`test_f2_exec_write_requires_conversation_flag`, es un bug funcional preexistente del
+toggle de escritura de la consola (Plan 105 F3) **fuera del alcance de este plan**
+(confirmado con `git stash` como drift preexistente, no causado por Plan 108).
+`harness_defaults.env` regenerado con `deployment/export_harness_defaults.py
+--deploy-root DeployStackyAgents` (nunca a mano); la flag nueva
+`STACKY_DEVOPS_REMOTE_TARGET_ENABLED` no aparece en ese snapshot porque nunca fue
+tocada en el deploy vivo — comportamiento esperado, igual que sus flags hermanas.
+Drift disclosed sin relación con este plan: el meta-test `test_harness_ratchet_meta.py`
+reporta 4 archivos `test_plan98_*.py` sin clasificar — pertenecen a WIP ajeno (Plan 98)
+presente en el mismo working tree, fuera del alcance de esta implementación. Además,
+en el sweep completo de no-regresión (197 tests) apareció
+`test_plan90_devops_agent_flag.py::test_f0_harness_defaults_contains_flag` en rojo;
+verificado con `git stash` de `harness_defaults.env` que YA fallaba contra el
+`harness_defaults.env` committeado en HEAD (antes de cualquier cambio de este plan) —
+mismo patrón de drift documentado en memoria `harness-defaults-env-drift-devops-87-91.md`
+(el deploy vivo nunca tuvo `STACKY_DEVOPS_AGENT_ENABLED=true`), un sentinela de Plan 90
+sobre SU PROPIA flag, no de Plan 108. Sweep final: 195 passed, 2 failed (ambos
+preexistentes y disclosed arriba), 1 skipped (sancionado, Plan 89).
 
 **Changelog v1 → v2 (crítica C1..C8, evidencia re-verificada contra código 2026-07-09):**
 - **C1 (IMPORTANTE):** F0 repara TAMBIÉN `list_conversations` de la consola
@@ -957,18 +992,18 @@ contra `git stash` y documentado como drift ajeno, nunca silenciado).
 
 ## 9. Definición de Hecho (DoD)
 
-- [ ] Los 6 archivos `test_plan108_*.py` verdes por archivo con el venv del repo.
-- [ ] `test_plan105_remote_console_api.py` verde SIN ningún mock de `_launch_turn`.
-- [ ] El LISTADO de conversaciones de la consola también verde (F0 test 6 — C1 v2): muere el
+- [x] Los 6 archivos `test_plan108_*.py` verdes por archivo con el venv del repo.
+- [x] `test_plan105_remote_console_api.py` verde SIN ningún mock de `_launch_turn`.
+- [x] El LISTADO de conversaciones de la consola también verde (F0 test 6 — C1 v2): muere el
       500 de `list_conversations`, no solo el de crear/mensajear.
-- [ ] Shape remoto de plan/apply con paridad de keys contra el local (F5 test 10 — C2 v2).
-- [ ] Conversación sellada + flag OFF ⇒ 409, nunca turno local silencioso (F3 test 8 — C3 v2).
-- [ ] Preflight WinRM fallido muestra diagnóstico tipificado + remediación copy-paste con el
+- [x] Shape remoto de plan/apply con paridad de keys contra el local (F5 test 10 — C2 v2).
+- [x] Conversación sellada + flag OFF ⇒ 409, nunca turno local silencioso (F3 test 8 — C3 v2).
+- [x] Preflight WinRM fallido muestra diagnóstico tipificado + remediación copy-paste con el
       host (F1b — C9 v2); Stacky nunca la ejecuta sola.
-- [ ] Vitest `agentServerBinding.test.ts` 5/5 y `tsc --noEmit` 0 errores.
-- [ ] Suites de no-regresión de F7 verdes (o rojo preexistente demostrado con `git stash`).
-- [ ] Con `STACKY_DEVOPS_REMOTE_TARGET_ENABLED=false` (default): TODO byte-idéntico a HEAD.
-- [ ] Flag visible y editable en la UI del Arnés (env_only=False), default OFF.
-- [ ] `harness_defaults.env` regenerado con `deployment/export_harness_defaults.py`.
-- [ ] Encabezado de este doc actualizado al estado real.
-- [ ] Push manual del operador (NUNCA automático).
+- [x] Vitest `agentServerBinding.test.ts` 5/5 y `tsc --noEmit` 0 errores.
+- [x] Suites de no-regresión de F7 verdes (o rojo preexistente demostrado con `git stash`).
+- [x] Con `STACKY_DEVOPS_REMOTE_TARGET_ENABLED=false` (default): TODO byte-idéntico a HEAD.
+- [x] Flag visible y editable en la UI del Arnés (env_only=False), default OFF.
+- [x] `harness_defaults.env` regenerado con `deployment/export_harness_defaults.py`.
+- [x] Encabezado de este doc actualizado al estado real.
+- [ ] Push manual del operador (NUNCA automático) — PENDIENTE, es responsabilidad del operador.

@@ -1,8 +1,16 @@
 # Plan 110 — Revisor de PRs con Claude Haiku (solo-lectura) y con Modelo Local
 
-- **Estado:** PROPUESTO v1.1 — 2026-07-09
+- **Estado:** PROPUESTO v2 — 2026-07-09 (juez adversarial: APROBADO-CON-CAMBIOS)
 - **Enmienda v1→v1.1 (operador, 2026-07-09):** la flag maestra `STACKY_PR_REVIEWER_ENABLED` pasa de **default OFF → default ON** por decisión explícita del operador ("deben ser siempre default on"). Es una excepción consciente al patrón "opt-in default OFF" de las flags devops previas. Cambios acoplados: `config.py` fallback `"true"`; `FlagSpec` con `default=True`; alta en `_CURATED_DEFAULTS_ON` (única vía canónica sin romper los meta-tests de defaults); KPI-1, guardarraíl 2, DoD y Riesgo #1 reformulados; nuevo test `test_reviewer_default_on`. El gate sigue siendo reversible con un click. **Advertencia de privacidad reforzada** (Riesgo #1): con el revisor activo por default, el camino que puede enviar el diff a un servicio externo (Haiku) queda a un click sin opt-in explícito → el aviso de la UI es obligatorio.
-- **Autor:** StackyArchitectaUltraEficientCode (perfil normal, heredado de Opus 4.8) + enmienda del orquestador
+- **CHANGELOG v1.1 → v2 (juez adversarial StackyArchitectaUltraEficientCode, perfil normal heredado de Opus 4.8):**
+  - **C1 [privacidad/PII, IMPORTANTE]:** el saneo ahora redacta también **PII básica (email)** además de secretos técnicos; y el camino **Haiku (externo)** exige un **preview del payload EXACTO que sale de la máquina + confirmación** antes de enviar (reusa `/detail`, human-in-the-loop; compensa el default ON sin revertirlo). Ver §3 guardarraíl 7, F3 (módulo saneo), F7, §6 Riesgo #1. **[ADICIÓN ARQUITECTO]**
+  - **C2 [flag fantasma, IMPORTANTE]:** `STACKY_PR_REVIEW_TIMEOUT_SEC` deja de ser decorativa: se **cablea de verdad** agregando un kwarg opcional `timeout` (default 120, backward-compatible) a `_invoke_copilot` (hoy `timeout=120` hardcodeado en `copilot_bridge.py:664`) y pasándolo desde `invoke_haiku`. Ver F4.
+  - **C3 [contradicción §2.2 vs F7, IMPORTANTE]:** se agrega endpoint mínimo **`GET /api/pr-review/models`** (gateado) que llama a `list_copilot_models` (independiente de `LLM_BACKEND`, como `invoke_haiku`; el de `pm.py` sólo sirve Copilot si `LLM_BACKEND=="copilot"` y el default es `vscode_bridge`); §2.2 (b) y F7 quedan consistentes. Ver F4bis.
+  - **C4 [`provider.name`, DESCARTADO]:** verificado que GitLab (`name="gitlab"`, `gitlab_provider.py:31`) y ADO (`name="azure_devops"`, `ado_provider.py:32`) exponen el atributo — sin cambios.
+  - **C5 [helpers de path, DESCARTADO]:** verificado que `_project_path()`, `_base_proj` y `_resolve_repo_id` existen y son usados por los métodos hermanos (`create/get/merge_merge_request`); el código nuevo los espeja. Refinamiento MENOR aplicado: GitLab `list_merge_requests` usa `params=` en vez de query embebida en el path. Ver F1.
+  - **C6 [ratchet, MENOR]:** los tests del ratchet se listan en **orden alfabético real** en F8.
+  - **C7 [drift de nombres de test, MENOR]:** el mapa KPI→test (§5) y §1.3 usan los nombres EXACTOS de los tests declarados en cada fase.
+- **Autor:** StackyArchitectaUltraEficientCode (perfil normal, heredado de Opus 4.8) + enmienda del orquestador + juez adversarial v2
 - **Serie:** DevOps (sección nueva del panel, hereda contrato de extensión §3.12 del Plan 87)
 - **Depende de:** Plan 87 (panel DevOps + `DEVOPS_SECTIONS`), Plan 95 (`MergeRequestProvider` + `devops_production`), Plan 106 (`invoke_local_llm` + `api/local_llm_analysis.py`)
 - **Flag maestra:** `STACKY_PR_REVIEWER_ENABLED` (**default ON** — decisión explícita del operador 2026-07-09; editable 100% desde el panel del Arnés, categoría `devops`). Ver §3 guardarraíl 2 para la implicación (la sección aparece out-of-the-box porque su master `STACKY_DEVOPS_PANEL_ENABLED` también es default ON, `config.py:873`).
@@ -25,7 +33,7 @@ Agregar al panel DevOps una sección **"Revisor de PRs"** que: (a) lista TODAS l
 - **KPI-2 (listado real, nunca 500):** `GET /api/pr-review/list?project=X` con flag ON devuelve la lista normalizada de PRs abiertas del tracker activo; con el tracker caído devuelve error descriptivo con hint (status 400/502), **nunca 500**. Verifica: `test_plan110_pr_review_list_endpoint.py`.
 - **KPI-3 (Haiku EXCLUSIVAMENTE + sin tools):** la revisión Haiku resuelve el modelo desde `STACKY_PR_REVIEW_HAIKU_MODEL` y **rechaza (400)** si el id no contiene `"haiku"`; la invocación es una completion de chat pura (sin herramientas). Verifica: `test_plan110_pr_review_haiku.py::test_rejects_non_haiku_model` y `::test_haiku_review_is_toolless_chat`.
 - **KPI-4 (un solo prompt local para Q&A):** la revisión local arma UN único prompt autocontenido (título, descripción, ramas, estado de pipeline, diff saneado, pregunta opcional) y responde vía `invoke_local_llm`. Verifica: `test_plan110_pr_review_local.py::test_local_review_single_self_contained_prompt`.
-- **KPI-5 (saneo + no fuga de datos):** el diff se trunca a `STACKY_PR_REVIEW_DIFF_MAX_CHARS`, se redactan secretos evidentes, y el diff crudo **nunca** se persiste en `AgentExecution.input_context_json`. Verifica: `test_plan110_pr_review_detail_diff.py::test_diff_truncated_and_redacted` y `test_plan110_pr_review_haiku.py::test_execution_row_never_stores_raw_diff`.
+- **KPI-5 (saneo + no fuga de datos):** el diff se trunca a `STACKY_PR_REVIEW_DIFF_MAX_CHARS`, se redactan secretos evidentes, y el diff crudo **nunca** se persiste en `AgentExecution.input_context_json`. Verifica: `test_plan110_pr_review_detail_diff.py::test_sanitize_diff_redacts_then_truncates` (+ `::test_redacts_email_pii`, C1) y `test_plan110_pr_review_haiku.py::test_execution_row_never_stores_raw_diff`.
 - **KPI-6 (HITL fuerte en merge):** `POST /api/pr-review/execute` con `action="merge"` exige `confirm=true` **Y** `confirm_merge=true`; faltando cualquiera → **400** y **no** llama a `merge_merge_request`. Verifica: `test_plan110_pr_review_execute.py::test_merge_requires_double_confirm`.
 - **KPI-7 (config 100% por UI + ayuda llana):** las 4 flags nuevas están en categoría `devops`, son editables por el panel del Arnés y tienen ayuda en lenguaje llano sin jerga. Verifica: `test_harness_flags_help.py::test_plain_help_covers_all_registry_keys` y `::test_plain_help_avoids_jargon_denylist` (ya existentes, deben seguir verdes).
 - **KPI-8 (extensibilidad + tsc):** sumar la sección = **1 entrada** en `DEVOPS_SECTIONS` + **1 componente** nuevo + **1 objeto** en `endpoints.ts`, cero cambios en otras secciones; `npx tsc --noEmit` = 0 errores. Verifica: F7 (vitest + tsc).
@@ -73,7 +81,7 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 
 **Por qué el engine Copilot y no `_invoke_claude_cli`:** `_invoke_claude_cli` (H9) usa `claude -p --dangerously-skip-permissions`, que en modo print habilita herramientas por defecto (superficie de ejecución) y spawnea un subproceso difícil de mockear. El engine Copilot HTTP es solo-texto, mockeable de forma trivial (`requests.post`) para TDD, y no spawnea nada. **Alternativa explícitamente descartada:** `_invoke_claude_cli` — motivo: superficie de herramientas + subproceso.
 
-**SUPUESTO EXPLÍCITO (a validar por el operador, no inventado):** el catálogo de modelos que expone el token de Copilot/GitHub Models incluye un id de Claude Haiku (p. ej. `claude-3.5-haiku`). Mitigación: (a) el id es una flag editable por UI; (b) el panel ofrece un botón "Ver modelos disponibles" que llama a `list_copilot_models` (H9, `copilot_bridge.py:65`) para que el operador elija el id exacto; (c) si el modelo no existe o el token no está, el endpoint devuelve **502 con hint accionable**, nunca 500. Si el entorno del operador no tiene un Haiku en Copilot, la revisión Haiku degrada de forma controlada (mensaje claro) y el camino de modelo local sigue funcionando.
+**SUPUESTO EXPLÍCITO (a validar por el operador, no inventado):** el catálogo de modelos que expone el token de Copilot/GitHub Models incluye un id de Claude Haiku (p. ej. `claude-3.5-haiku`). Mitigación: (a) el id es una flag editable por UI; (b) el panel ofrece un botón "Ver modelos disponibles" que llama a `list_copilot_models` (H9, `copilot_bridge.py:65`) **a través del endpoint gateado `GET /api/pr-review/models` (F4bis, C3)** para que el operador elija el id exacto; (c) si el modelo no existe o el token no está, el endpoint devuelve **502 con hint accionable**, nunca 500. Si el entorno del operador no tiene un Haiku en Copilot, la revisión Haiku degrada de forma controlada (mensaje claro) y el camino de modelo local sigue funcionando.
 
 ---
 
@@ -85,7 +93,7 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 4. **Human-in-the-loop innegociable.** El modelo SOLO propone (endpoint de review = solo-lectura, sin tools). El botón "Ejecutar" lo aprieta el humano y dispara `POST /api/pr-review/execute`. Ninguna ruta de review llama a `execute`. Merge = HITL fuerte: checkbox literal (`confirm_merge=true`) + `confirm=true` server-side, espejando la asimetría del Plan 95 (H13).
 5. **Mono-operador sin auth real.** Nada de RBAC/roles. Se reusan los patrones `current_user` sin validar existentes.
 6. **Nunca 500.** Todos los endpoints reusan el patrón `_call_provider` de `devops_production` (H13): `TrackerConfigError→400`, `TrackerApiError→status`, `HTTPException` se re-lanza, `Exception→500` solo como último recurso con mensaje genérico (no vuelca stack ni secretos). Timeout configurable (`STACKY_PR_REVIEW_TIMEOUT_SEC` para Haiku; `LOCAL_LLM_TIMEOUT_SEC` para el local).
-7. **Seguridad de datos personales/secretos en el diff (riesgo real).** El diff de una PR puede contener secretos o datos personales. Medidas obligatorias: (a) **truncado** a `STACKY_PR_REVIEW_DIFF_MAX_CHARS`; (b) **redacción** de secretos evidentes antes de enviar al modelo; (c) **advertencia explícita en la UI** de que el diff se envía al modelo (local = queda en la máquina del operador; Haiku = viaja al backend de Copilot/GitHub); (d) el diff crudo **NUNCA** se persiste en `AgentExecution.input_context_json` (solo se guardan metadatos: mr_id, conteo de chars, flag truncated). Ver §6 Riesgos.
+7. **Seguridad de datos personales/secretos en el diff (riesgo real).** El diff de una PR puede contener secretos o datos personales. Medidas obligatorias: (a) **truncado** a `STACKY_PR_REVIEW_DIFF_MAX_CHARS`; (b) **redacción** de secretos evidentes **y de PII básica (email)** antes de enviar al modelo (C1); (c) **advertencia explícita en la UI** de que el diff se envía al modelo (local = queda en la máquina del operador; Haiku = viaja al backend de Copilot/GitHub); (c-bis) **[ADICIÓN ARQUITECTO / C1] preview obligatorio del payload EXACTO que sale de la máquina en el camino Haiku (externo):** antes de llamar a `/review/haiku`, la UI muestra el diff SANEADO (el mismo que devuelve `/detail`) y exige una confirmación explícita del operador — así el default ON no envía nada a un tercero sin que el humano vea qué sale (human-in-the-loop, sin trabajo recurrente); (d) el diff crudo **NUNCA** se persiste en `AgentExecution.input_context_json` (solo se guardan metadatos: mr_id, conteo de chars, flag truncated) ni se loguea en claro. Ver §6 Riesgos.
 8. **Reusar, no reinventar.** Se reusan: `get_merge_request_provider` (H2), el patrón de `local_llm_analysis.py` (H8), `_call_provider` (H13), `DEVOPS_SECTIONS`/`FlagGateBanner` (H14/H15), `invoke_local_llm` (H7), el clamp haiku (H11).
 
 ---
@@ -273,9 +281,11 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
       """GET /projects/:id/merge_requests?state=<opened|merged|closed|all>&scope=all."""
       proj_path = self._client._project_path()
       gl_state = {"open": "opened", "merged": "merged", "closed": "closed", "all": "all"}.get(state, "opened")
+      # C5: query vía params= (firma real _request(..., params=...)), no embebida en el path.
       body, _ = self._client._request(
           "GET",
-          f"/projects/{proj_path}/merge_requests?state={gl_state}&scope=all&per_page=50&order_by=updated_at",
+          f"/projects/{proj_path}/merge_requests",
+          params={"state": gl_state, "scope": "all", "per_page": 50, "order_by": "updated_at"},
       )
       rows = body if isinstance(body, list) else []
       state_map = {"opened": "open", "merged": "merged", "closed": "closed"}
@@ -487,7 +497,8 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 **Archivos a crear/editar:**
 - `backend/services/pr_review_sanitize.py` (NUEVO, módulo PURO sin flask/IO):
   ```python
-  """pr_review_sanitize.py — Plan 110. Saneo de diffs antes de mandarlos a un modelo.
+  """pr_review_sanitize.py — Plan 110. Saneo de diffs antes de mandarlos a un modelo
+  (secretos técnicos + PII básica: email, C1).
   PURO: sin flask, sin IO, sin config. Determinístico y testeable."""
   from __future__ import annotations
   import re
@@ -505,6 +516,7 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
       re.compile(r"(?i)(api[_-]?key\s*[=:]\s*)\S+"),
       re.compile(r"://[^:@/\s]+:([^@/\s]+)@"),             # user:pass@host
       re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
+      re.compile(r"(?i)\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"),  # PII: email (C1) — se enmascara completo
   ]
   _MASK = "***REDACTED***"
 
@@ -565,6 +577,7 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 - Sobre el módulo puro:
   - `test_truncate_marks_and_caps`: texto > cap → truncado + marker + `True`.
   - `test_redacts_bearer_password_pat_privatekey`: cada patrón queda enmascarado; el prefijo (`password=`) se conserva y el valor se enmascara.
+  - `test_redacts_email_pii` (C1): un email (`juan.perez@empresa.com`) en el diff queda enmascarado a `***REDACTED***` y NO aparece el original.
   - `test_sanitize_diff_redacts_then_truncates`: un secreto dentro de los primeros N chars queda redactado aunque haya truncado.
 - Sobre el endpoint:
   - `test_detail_404_when_flag_off`.
@@ -590,7 +603,8 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 **Valor:** el corazón del pedido: "revisar con claude haiku EXCLUSIVAMENTE... dé un resumen... recomiende ejecutar alguna opción".
 
 **Archivos a crear/editar:**
-- `backend/copilot_bridge.py` — agregar función pública `invoke_haiku` (espejo de `invoke_local_llm`, H7; fuerza engine Copilot H10):
+- `backend/copilot_bridge.py` — **(C2, PRE-REQUISITO del timeout real)** cablear `STACKY_PR_REVIEW_TIMEOUT_SEC`: hoy `_invoke_copilot` (`copilot_bridge.py:603`) tiene `timeout=120` **hardcodeado** en su `requests.post` (`:664`) y su firma NO acepta timeout. Agregar un kwarg **opcional** `timeout: int = 120` a `_invoke_copilot` (backward-compatible: el default 120 replica el valor actual, ningún caller existente cambia) y usarlo en `requests.post(config.COPILOT_ENDPOINT, ..., timeout=timeout)`.
+- `backend/copilot_bridge.py` — agregar función pública `invoke_haiku` (espejo de `invoke_local_llm`, H7; fuerza engine Copilot H10; propaga el `timeout` de la flag, C2):
   ```python
   def invoke_haiku(
       *,
@@ -600,15 +614,17 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
       on_log: LogFn,
       execution_id: int | None = None,
       model: str,
+      timeout: int = 120,
   ) -> BridgeResponse:
       """Revisión Haiku solo-lectura: completion de chat pura vía el engine Copilot,
       IGNORANDO LLM_BACKEND (espejo de invoke_local_llm). SIN herramientas.
-      Exige que `model` contenga 'haiku' (criterio de api/agents.py:554)."""
+      Exige que `model` contenga 'haiku' (criterio de api/agents.py:554).
+      `timeout` proviene de STACKY_PR_REVIEW_TIMEOUT_SEC (C2)."""
       if "haiku" not in (model or "").lower():
           raise ValueError(f"invoke_haiku exige un modelo Haiku, recibido: {model!r}")
       return _invoke_copilot(
           agent_type=agent_type, system=system, user=user,
-          on_log=on_log, execution_id=execution_id, model=model,
+          on_log=on_log, execution_id=execution_id, model=model, timeout=timeout,
       )
   ```
 - `backend/api/pr_review.py` — agregar la ruta y helpers de persistencia (reusar el patrón de ticket interno de `local_llm_analysis.py`, H8; **NO** usar el mismo `ado_id=-5`: elegir `_PR_REVIEW_ADO_ID = -6` para no colisionar):
@@ -698,8 +714,10 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
       # 3) Invocar Haiku (sin tools)
       from copilot_bridge import invoke_haiku
       try:
+          _timeout = int(getattr(_config.config, "STACKY_PR_REVIEW_TIMEOUT_SEC", 120))
           resp = invoke_haiku(agent_type="pr_review_haiku", system=system, user=user,
-                              on_log=lambda level, msg: None, execution_id=execution_id, model=model)
+                              on_log=lambda level, msg: None, execution_id=execution_id,
+                              model=model, timeout=_timeout)
       except Exception as e:
           _finish_execution(execution_id, status="error", error=str(e))
           return jsonify({"ok": False, "error": str(e), "execution_id": execution_id}), 502
@@ -719,15 +737,57 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 - `test_review_json_parsed_and_action_coerced`: respuesta del modelo con `recommended_action.type="rm -rf"` → coercionada a `"none"`.
 - `test_execution_row_never_stores_raw_diff`: el `input_context_json` del `AgentExecution` creado NO contiene el texto del diff (solo `diff_chars`/`diff_truncated`).
 - `test_invoke_haiku_raises_on_non_haiku`: unit sobre `copilot_bridge.invoke_haiku` con model no-haiku → `ValueError`.
+- `test_timeout_flag_is_wired` (C2): con `STACKY_PR_REVIEW_TIMEOUT_SEC=45`, monkeypatch `copilot_bridge.invoke_haiku` captura kwargs → recibe `timeout=45`; y unit: `_invoke_copilot` acepta `timeout` y lo propaga a `requests.post` (mock de `requests.post` verifica `timeout=45`).
 
 **Criterio de aceptación (binario) + comando:**
 - `".venv/Scripts/python.exe" -m pytest tests/test_plan110_pr_review_haiku.py -q` → verde.
 
-**Flag que protege:** `STACKY_PR_REVIEWER_ENABLED`; modelo por `STACKY_PR_REVIEW_HAIKU_MODEL`; timeout por `STACKY_PR_REVIEW_TIMEOUT_SEC` (aplicado dentro de `_invoke_copilot` — si no lo respeta hoy, pasar `timeout` no es requerido en v1; documentar que el timeout efectivo del engine Copilot manda; la flag queda reservada para F futura). **Nota:** dejar la flag `STACKY_PR_REVIEW_TIMEOUT_SEC` consumida al menos como valor leído/logueado para no quedar "fantasma".
+**Flag que protege:** `STACKY_PR_REVIEWER_ENABLED`; modelo por `STACKY_PR_REVIEW_HAIKU_MODEL`; **timeout REAL por `STACKY_PR_REVIEW_TIMEOUT_SEC` (C2):** se lee en el endpoint y se pasa como kwarg `timeout` a `invoke_haiku` → `_invoke_copilot` → `requests.post(timeout=...)`. La flag NO es fantasma: cambia el tiempo máximo de espera efectivo de la revisión Haiku. Test: `test_plan110_pr_review_haiku.py::test_timeout_flag_is_wired`.
 
 **Impacto por runtime:** idéntico en Codex/Claude/Copilot (no spawnea runtime; usa `_invoke_copilot` HTTP). **Fallback:** sin token/modelo Haiku → 502 con hint.
 
 **Trabajo del operador:** ninguno más que activar la flag y confirmar el id del modelo (opt-in).
+
+---
+
+### F4bis — Endpoint de MODELOS Copilot disponibles (`GET /api/pr-review/models`) — C3
+
+**Objetivo (1 frase):** exponer, gateado, el catálogo de modelos que ve el token de Copilot/GitHub para que el operador elija el id Haiku exacto, resolviendo la contradicción §2.2(b) ↔ F7.
+
+**Por qué un endpoint propio y no reusar el de `api/pm.py`:** el endpoint de modelos de `pm.py` (:645-679) sólo lista modelos Copilot cuando `LLM_BACKEND=="copilot"`, y el default es `"vscode_bridge"` (H23). `invoke_haiku` fuerza el engine Copilot **ignorando `LLM_BACKEND`**; el listado debe seguir la MISMA semántica. Por eso llama directo a `copilot_bridge.list_copilot_models()`.
+
+**Archivos a editar:**
+- `backend/api/pr_review.py` — agregar la ruta:
+  ```python
+  @bp.get("/models")
+  def copilot_models():
+      """GET /pr-review/models — catálogo de modelos Copilot (para elegir el id Haiku). Gateado."""
+      _guard()
+      def _do():
+          import copilot_bridge  # import diferido (patrón pm.py:660)
+          try:
+              raw = copilot_bridge.list_copilot_models()
+          except Exception as e:  # noqa: BLE001
+              return {"error": "copilot_models_unavailable",
+                      "message": f"No se pudo listar modelos de Copilot: {e}"}, 502
+          models = [{"id": m.get("id") or "",
+                     "name": m.get("name") or (m.get("id") or ""),
+                     "is_haiku": "haiku" in (m.get("id") or "").lower()}
+                    for m in (raw or []) if m.get("id")]
+          return {"models": models,
+                  "configured": getattr(_config.config, "STACKY_PR_REVIEW_HAIKU_MODEL", "")}
+      return _call_provider(_do)
+  ```
+
+**Tests primero (archivo nuevo `backend/tests/test_plan110_pr_review_models.py`):**
+- `test_models_404_when_flag_off`.
+- `test_models_lists_and_flags_haiku`: monkeypatch `copilot_bridge.list_copilot_models` → la respuesta marca `is_haiku=True` en los ids con "haiku" y devuelve `configured`.
+- `test_models_502_when_copilot_unavailable`: `list_copilot_models` lanza → 502 con hint, nunca 500.
+
+**Criterio de aceptación (binario) + comando:**
+- `".venv/Scripts/python.exe" -m pytest tests/test_plan110_pr_review_models.py -q` → verde.
+
+**Flag que protege:** `STACKY_PR_REVIEWER_ENABLED`. **Impacto por runtime:** ninguno (HTTP). **Fallback:** Copilot sin token/catálogo → 502 con hint. **Trabajo del operador:** ninguno.
 
 ---
 
@@ -993,6 +1053,9 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
     actions: (project: string) =>
       api.get<{ provider: string; actions: string[] }>(
         `/api/pr-review/actions?project=${encodeURIComponent(project)}`),
+    models: () =>  // C3 — catálogo Copilot para elegir el id Haiku
+      api.get<{ models: { id: string; name: string; is_haiku: boolean }[]; configured: string }>(
+        "/api/pr-review/models"),
     execute: (b: { project: string; mr_id: string; action: string; body?: string; confirm?: boolean; confirm_merge?: boolean }) =>
       api.post<{ ok: boolean; action: string; result: unknown }>("/api/pr-review/execute", b),
   };
@@ -1030,7 +1093,8 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
     - `merge` → **checkbox literal** "Confirmo que quiero mergear esta PR a `<target_branch>`" + botón "Ejecutar" habilitado solo con el checkbox tildado (envía `confirm:true, confirm_merge:true`). Espeja Plan 95 (H13).
     - `close` → confirm simple.
     - `approve` → mostrar solo si `PrReview.actions(project).actions` incluye `"approve"`.
-  - "Ver modelos disponibles" (opcional, ayuda al SUPUESTO §2.2): botón que llama a un endpoint de listado de modelos Copilot (reusar el existente si lo hay; si no, mostrar el id configurado y un link al panel del Arnés). En v1 basta con mostrar el id configurado y un hint.
+  - "Ver modelos disponibles" (C3, ayuda al SUPUESTO §2.2): botón que llama a `PrReview.models()` (`GET /api/pr-review/models`, F4bis) y muestra la lista resaltando los `is_haiku`, junto al id `configured` actual; al elegir uno, el operador lo pega en `STACKY_PR_REVIEW_HAIKU_MODEL` en el panel del Arnés. Si el endpoint devuelve 502, mostrar el id configurado + hint (degradación controlada).
+  - **[ADICIÓN ARQUITECTO / C1] Preview del payload que sale de la máquina (obligatorio en el camino Haiku externo):** antes de habilitar "Revisar con Haiku", la UI muestra el diff SANEADO que devuelve `PrReview.detail(project, id)` en un panel colapsable "Ver exactamente qué se envía a Copilot/GitHub" y un checkbox "Reviso el contenido y confirmo el envío". El botón "Revisar con Haiku" queda deshabilitado hasta tildarlo. El camino de modelo local NO requiere este checkbox (el diff no sale de la máquina), pero muestra igual el aviso de privacidad. Esta es la compensación del default ON (human-in-the-loop).
   - Manejo de error: cualquier `!ok`/excepción → banner rojo con el `message`/`error` del backend (nunca romper la UI).
 - `frontend/src/components/devops/PrReviewerSection.module.css` (NUEVO, opcional) o reusar `devops.module.css`.
 
@@ -1040,6 +1104,7 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 - `merge action requires the literal checkbox before Ejecutar is enabled`.
 - `local review sends the operator question`.
 - `approve button hidden when actions does not include approve`.
+- `Haiku button disabled until the "confirmo el envío" checkbox is checked` (C1 — preview del payload externo).
 - Comando: desde `Stacky Agents/frontend`, `npx vitest run src/components/devops/__tests__/PrReviewerSection.test.tsx`.
 
 **Criterio de aceptación (binario) + comando:**
@@ -1059,17 +1124,18 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 **Objetivo (1 frase):** dejar la suite registrada (ratchet), demostrar no-regresión y actualizar el estado del doc.
 
 **Archivos a editar:**
-- `backend/scripts/run_harness_tests.sh` y `backend/scripts/run_harness_tests.ps1` (H21) — agregar al array/lista `HARNESS_TEST_FILES` (respetando orden alfabético del bloque correspondiente):
+- `backend/scripts/run_harness_tests.sh` y `backend/scripts/run_harness_tests.ps1` (H21) — agregar al array/lista `HARNESS_TEST_FILES` los 8 archivos **en orden alfabético real** (C6):
   ```
-  tests/test_plan110_pr_review_flags.py
   tests/test_plan110_list_merge_requests.py
-  tests/test_plan110_pr_review_list_endpoint.py
   tests/test_plan110_pr_review_detail_diff.py
-  tests/test_plan110_pr_review_haiku.py
-  tests/test_plan110_pr_review_local.py
   tests/test_plan110_pr_review_execute.py
+  tests/test_plan110_pr_review_flags.py
+  tests/test_plan110_pr_review_haiku.py
+  tests/test_plan110_pr_review_list_endpoint.py
+  tests/test_plan110_pr_review_local.py
+  tests/test_plan110_pr_review_models.py
   ```
-  (Los 7 archivos, en AMBOS scripts; deben quedar idénticos entre sh y ps1.)
+  (Los 8 archivos, en AMBOS scripts; deben quedar idénticos entre sh y ps1.)
 - Encabezado de este documento: pasar `Estado: PROPUESTO v1` → `IMPLEMENTADO <fecha> (<hash>)` cuando se cierre.
 
 **Tests primero:** N/A (fase de cierre). El "test" es correr la suite completa.
@@ -1091,7 +1157,7 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 | KPI-2 | `list_merge_requests` normaliza; `_call_provider` mapea errores | `test_plan110_list_merge_requests.py`, `test_plan110_pr_review_list_endpoint.py::test_list_tracker_error_is_not_500` |
 | KPI-3 | `invoke_haiku` exige `"haiku" in model`; endpoint valida flag y usa `_invoke_copilot` (sin tools) | `test_plan110_pr_review_haiku.py::test_rejects_non_haiku_model`, `::test_haiku_review_is_toolless_chat`, `::test_invoke_haiku_raises_on_non_haiku` |
 | KPI-4 | `_build_review_context` + `invoke_local_llm` con un solo `user` | `test_plan110_pr_review_local.py::test_local_review_single_self_contained_prompt` |
-| KPI-5 | `pr_review_sanitize.sanitize_diff` (redact+truncate); `_create_execution` guarda solo metadatos | `test_plan110_pr_review_detail_diff.py::test_diff_truncated_and_redacted`, `test_plan110_pr_review_haiku.py::test_execution_row_never_stores_raw_diff` |
+| KPI-5 | `pr_review_sanitize.sanitize_diff` (redact secretos+PII+truncate); `_create_execution` guarda solo metadatos | `test_plan110_pr_review_detail_diff.py::test_sanitize_diff_redacts_then_truncates`, `::test_redacts_email_pii` (C1), `test_plan110_pr_review_haiku.py::test_execution_row_never_stores_raw_diff` |
 | KPI-6 | `execute` exige `confirm` + `confirm_merge` para merge | `test_plan110_pr_review_execute.py::test_merge_requires_double_confirm` |
 | KPI-7 | FlagSpec `env_only=False` + PLAIN_HELP sin jerga | `test_harness_flags_help.py::test_plain_help_covers_all_registry_keys`, `::test_plain_help_avoids_jargon_denylist` |
 | KPI-8 | 1 entrada `DEVOPS_SECTIONS` + 1 componente + 1 objeto `endpoints.ts`; tsc | `npx tsc --noEmit`; vitest de F7 |
@@ -1100,7 +1166,7 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 
 ## 6. Riesgos y mitigaciones
 
-1. **[ALTO] Datos personales / secretos en el diff — agravado por el default ON.** El diff puede contener credenciales, tokens o datos personales. Al revisar con Haiku, el diff **sale de la máquina** hacia el servicio de Copilot/GitHub; con el modelo local queda en la máquina del operador. **El default ON (decisión del operador) aumenta la superficie de exposición:** la sección queda disponible out-of-the-box, sin un gesto de opt-in explícito que "avise" al operador de que hay un camino que puede exfiltrar el diff a un tercero. Ninguna revisión ocurre sin que el humano apriete un botón (no hay auto-review), pero la capacidad está a un click de distancia por default. **Mitigación:** (a) redacción de patrones de secreto (`pr_review_sanitize.redact_secrets`); (b) truncado a `STACKY_PR_REVIEW_DIFF_MAX_CHARS`; (c) **aviso de privacidad SIEMPRE visible en la UI ANTES de revisar** (F7) — obligatorio, es la compensación directa del default ON; (d) el diff crudo **nunca** se persiste en la DB (`input_context_json` solo lleva metadatos) ni se loguea en claro (`on_log=lambda ...: None`); (e) el operador puede apagar la sección con un click (gate reversible). **Residual:** la redacción por patrones no es exhaustiva y con el default ON el revisor está activo sin opt-in; el aviso de la UI traslada la decisión final al operador (human-in-the-loop). Documentar este residual en la ayuda de la sección. **Si el operador maneja repos con datos personales/regulados, evaluar apagar la revisión Haiku (externa) y usar solo el modelo local, que no saca el diff de la máquina.**
+1. **[ALTO] Datos personales / secretos en el diff — agravado por el default ON.** El diff puede contener credenciales, tokens o datos personales. Al revisar con Haiku, el diff **sale de la máquina** hacia el servicio de Copilot/GitHub; con el modelo local queda en la máquina del operador. **El default ON (decisión del operador) aumenta la superficie de exposición:** la sección queda disponible out-of-the-box, sin un gesto de opt-in explícito que "avise" al operador de que hay un camino que puede exfiltrar el diff a un tercero. Ninguna revisión ocurre sin que el humano apriete un botón (no hay auto-review), pero la capacidad está a un click de distancia por default. **Mitigación:** (a) redacción de patrones de secreto **y de PII básica (email)** (`pr_review_sanitize.redact_secrets`, C1); (b) truncado a `STACKY_PR_REVIEW_DIFF_MAX_CHARS`; (c) **aviso de privacidad + preview del payload EXACTO que sale de la máquina (el diff saneado de `/detail`) + checkbox de confirmación, SIEMPRE visible en la UI ANTES de revisar con Haiku** (F7, [ADICIÓN ARQUITECTO] C1) — obligatorio, es la compensación directa del default ON; (d) el diff crudo **nunca** se persiste en la DB (`input_context_json` solo lleva metadatos) ni se loguea en claro (`on_log=lambda ...: None`); (e) el operador puede apagar la sección con un click (gate reversible). **Residual:** la redacción por patrones no es exhaustiva y con el default ON el revisor está activo sin opt-in; el aviso de la UI traslada la decisión final al operador (human-in-the-loop). Documentar este residual en la ayuda de la sección. **Si el operador maneja repos con datos personales/regulados, evaluar apagar la revisión Haiku (externa) y usar solo el modelo local, que no saca el diff de la máquina.**
 2. **[MEDIO] SUPUESTO del id de modelo Haiku en Copilot.** Si el catálogo del operador no expone un Haiku, la revisión Haiku no funciona. **Mitigación:** flag editable + validación `"haiku"` + 502 con hint + camino local independiente que sí funciona. Ver §2.2.
 3. **[MEDIO] Tightening del Protocol MR/PR.** Sumar métodos al `Protocol` `runtime_checkable` endurece el `isinstance` de la fábrica (H2). **Mitigación:** implementar los métodos en AMBOS providers reales en la misma fase (F1/F6) y correr los tests del Plan 95 como no-regresión (F8). Los tests de este plan usan providers reales con `_client._request` mockeado.
 4. **[BAJO] ADO sin diff línea a línea (v1).** La revisión ADO recibe solo la lista de archivos + metadatos. **Mitigación:** degradación explícita (`diff_available=False` + `note`), la UI lo muestra; la revisión sigue siendo útil (título/descripción/ramas/pipeline/archivos). Full diff ADO = fuera de scope v1 (§7).
@@ -1139,24 +1205,25 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 2. **F1** — `list_merge_requests` + `get_merge_request_diff` en Protocol + GitLab + ADO.
 3. **F2** — `GET /api/pr-review/list` + registrar blueprint.
 4. **F3** — módulo `pr_review_sanitize` + `GET /api/pr-review/detail`.
-5. **F4** — `copilot_bridge.invoke_haiku` + `POST /api/pr-review/review/haiku`.
-6. **F5** — `POST /api/pr-review/review/local` (reusa `invoke_local_llm`).
-7. **F6** — métodos `comment/close/approve` en providers + `POST /api/pr-review/execute` + `GET /api/pr-review/actions`.
-8. **F7** — frontend: `endpoints.ts` + `DevOpsPage` + health key + `PrReviewerSection.tsx` + vitest + tsc.
-9. **F8** — ratchet (sh+ps1) + no-regresión + encabezado de estado.
+5. **F4** — `copilot_bridge.invoke_haiku` (+ cableado real del timeout en `_invoke_copilot`, C2) + `POST /api/pr-review/review/haiku`.
+6. **F4bis** — `GET /api/pr-review/models` (catálogo Copilot para elegir el id Haiku, C3).
+7. **F5** — `POST /api/pr-review/review/local` (reusa `invoke_local_llm`).
+8. **F6** — métodos `comment/close/approve` en providers + `POST /api/pr-review/execute` + `GET /api/pr-review/actions`.
+9. **F7** — frontend: `endpoints.ts` + `DevOpsPage` + health key + `PrReviewerSection.tsx` + vitest + tsc.
+10. **F8** — ratchet (sh+ps1) + no-regresión + encabezado de estado.
 
 ### 8.3 Definición de Hecho (DoD) global
 
 - [ ] Las 4 flags nuevas existen, están categorizadas en `devops`, son `env_only=False`, tienen `requires="STACKY_DEVOPS_PANEL_ENABLED"` y ayuda llana sin jerga; `test_harness_flags*.py` verdes.
 - [ ] **Default ON del master:** con entorno limpio `config.STACKY_PR_REVIEWER_ENABLED is True`, la `FlagSpec` tiene `default=True`, y `STACKY_PR_REVIEWER_ENABLED ∈ _CURATED_DEFAULTS_ON`; `test_default_known_only_for_curated` y `test_declared_default_true_set` verdes. Las 3 str/int quedan `default=None` y fuera del set.
-- [ ] **Gate reversible:** con `STACKY_PR_REVIEWER_ENABLED=false` (apagada por el operador): los 6 endpoints (`list`, `detail`, `review/haiku`, `review/local`, `execute`, `actions`) dan 404 y la sub-tab muestra el banner de activación (restaura el comportamiento previo a este plan).
+- [ ] **Gate reversible:** con `STACKY_PR_REVIEWER_ENABLED=false` (apagada por el operador): los 7 endpoints (`list`, `detail`, `review/haiku`, `review/local`, `execute`, `actions`, `models`) dan 404 y la sub-tab muestra el banner de activación (restaura el comportamiento previo a este plan).
 - [ ] `GET /api/pr-review/list` devuelve PRs normalizadas de GitLab y ADO; tracker caído → error descriptivo, nunca 500.
 - [ ] `GET /api/pr-review/detail` devuelve el diff **saneado** (redactado + truncado) y `diff_available` honesto por tracker.
 - [ ] La revisión Haiku usa EXCLUSIVAMENTE un modelo con `"haiku"` en el id, es una completion sin herramientas, devuelve `{summary, findings[], recommended_action∈set cerrado, confidence}`, y no persiste el diff crudo.
 - [ ] La revisión local arma UN solo prompt autocontenido con todo + pregunta opcional y responde vía `invoke_local_llm`.
 - [ ] `POST /api/pr-review/execute` ejecuta solo acciones del set cerrado; merge exige `confirm` + `confirm_merge`; approve es capability-gated; nunca 500.
 - [ ] Frontend: sección integrada con 1 entrada en `DEVOPS_SECTIONS`, botones Haiku/local, panel de resumen/hallazgos, badge de acción, botón Ejecutar con HITL (checkbox literal para merge), aviso de privacidad; `npx tsc --noEmit` = 0; vitest de la sección verde.
-- [ ] Los 7 archivos de test backend están en `HARNESS_TEST_FILES` (sh y ps1) y pasan aislados con `.venv`.
+- [ ] Los 8 archivos de test backend están en `HARNESS_TEST_FILES` (sh y ps1, orden alfabético) y pasan aislados con `.venv`.
 - [ ] No-regresión: tests de Planes 95 y 106 y de flags siguen verdes; cualquier fallo preexistente ajeno se declara y se demuestra con `git stash` que no lo causó este plan.
 - [ ] Paridad de runtimes: los caminos Haiku y local son HTTP backend, sin spawn de runtime → funcionan igual bajo Codex/Claude Code/Copilot; fallbacks (Copilot sin Haiku / local caído) devuelven 502 con hint.
 - [ ] Encabezado de estado del doc actualizado a IMPLEMENTADO con fecha y hash al cerrar.

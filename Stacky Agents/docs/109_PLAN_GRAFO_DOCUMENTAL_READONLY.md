@@ -1,6 +1,18 @@
 # Plan 109 — Grafo documental READ-ONLY + diagnóstico de estado documental
 
-> **Estado:** PROPUESTO v1 — 2026-07-09
+> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C3 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+>
+> **CHANGELOG v1 → v2:**
+> - **C1 (IMPORTANTE):** los parsers de F1 ahora ignoran bloques de código fenced (``` ... ```) para links md y wikilinks — antes, ejemplos de código en las notas generaban aristas falsas y podían burlar la regla `FORMATO_NO_OBSIDIAN` de F3. `parse_code_refs` sigue leyendo el texto completo (las refs a código legítimas viven en backticks inline). +2 tests en F1 (14 total).
+> - **C2 (IMPORTANTE):** el camino central de la cache de F2 ("TTL vencido + fingerprint distinto → rebuild") quedaba sin test (el test v1 usaba `invalidate_graph_cache()` manual). F2 ahora trae 3 tests de cache explícitos con `_GRAPH_TTL_SECONDS` monkeypatcheado (11 tests total).
+> - **C3 (IMPORTANTE):** fingerprint con `OSError` especificado literal: el archivo cuenta en `n_files` con `mtime_ns=0` y `size=0` (antes decía "(0,0)" ambiguo sobre una 3-tupla).
+> - **C4 (MENOR):** cita corrida corregida: `default_is_known` hoy vive en harness_flags.py:2444 — localizar SIEMPRE por símbolo, no por línea.
+> - **C5 (MENOR):** colisión de nodos `missing:` por basename documentada como decisión determinística en §4.1.
+> - **C6 (MENOR):** tope de entradas de cache `_MAX_CACHE_ENTRIES = 8` (evita crecimiento sin límite al alternar proyectos).
+> - **C7 (MENOR):** el 500 de F4 ya no devuelve `str(exc)` al cliente; mensaje genérico + detalle solo en log.
+> - **C8 (MENOR):** limitación documentada: links md con espacios/`%20` no matchean (test negativo incluido).
+> - **[ADICIÓN ARQUITECTO]:** query param `?refresh=1` en `GET /api/docs/graph` + botón "Recargar" en `DocCoveragePanel` — el operador fuerza re-scan sin esperar el TTL ni reiniciar el backend; el plan 111 lo hereda gratis. +1 test en F4 (5 total).
 > **Serie:** Documentación agéntica Obsidian (109 → 111 → 112; alimenta al Documentador del plan 113). Nota: el número **110 quedó tomado** por un plan ajeno (Revisor de PRs, commiteado por otra sesión), por eso esta serie salta de 109 a 111.
 > **Pipeline:** este documento pasó `proponer` (este estado). Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Dependencias:** ninguna (es la base de la serie). Los planes 111 y 112 dependen de este.
@@ -110,7 +122,7 @@ Relevamiento real del sustrato (2026-07-09, verificado en código):
 Reglas de identidad (deterministas):
 - `id` de nota = `"note:" + source_id + ":" + path` (path relativo a la raíz de la fuente, separador `/`).
 - `id` de código = `"code:" + ruta_normalizada` (backslashes → `/`, sin `./` inicial, sin sufijo `:NNN` de línea).
-- `id` de missing = `"missing:" + nombre_lower` (nombre del wikilink sin resolver, lowercase, sin extensión).
+- `id` de missing = `"missing:" + nombre_lower` (nombre del wikilink sin resolver, lowercase, sin extensión). **Decisión determinística (C5):** para links md rotos el id usa solo el basename (sin ruta); dos links rotos a rutas distintas con el mismo basename COLISIONAN en un único nodo `missing:` — aceptado y estable (el nodo missing representa "algo con ese nombre no existe", no una ruta).
 - `nodes` ordenados por `id` asc; `edges` ordenadas por `(source, target, kind)` asc; sin duplicados exactos de arista (set). Determinismo total: dos corridas sobre el mismo corpus dan el mismo JSON.
 
 ---
@@ -154,7 +166,7 @@ Reglas de identidad (deterministas):
          env_only=False,
      ),
      ```
-     > **GOTCHA `_CURATED_DEFAULTS_ON` (memoria `harness-flags-default-explicit-gotcha`):** NO pasar `default=False` ni `default=True`. `default_is_known(spec)` es `spec.default is not None` (harness_flags.py:2360-2362) y `test_default_known_only_for_curated` exige que SOLO las keys curadas tengan default declarado. Omitir el parámetro `default` (queda `None` → type-zero `False` para la UI, que es lo correcto).
+     > **GOTCHA `_CURATED_DEFAULTS_ON` (memoria `harness-flags-default-explicit-gotcha`):** NO pasar `default=False` ni `default=True`. `default_is_known(spec)` es `spec.default is not None` (localizar por símbolo `def default_is_known` en harness_flags.py — hoy línea 2444; las líneas driftean, el símbolo no — C4) y `test_default_known_only_for_curated` exige que SOLO las keys curadas tengan default declarado. Omitir el parámetro `default` (queda `None` → type-zero `False` para la UI, que es lo correcto).
      > **`requires`:** NO declarar `requires` (queda `None`): esta flag no depende de ninguna otra. Por eso NO se toca `_REQUIRES_MAP_FROZEN` en este plan.
 
 3. `Stacky Agents/backend/services/harness_flags_help.py` — agregar 1 entrada `PlainHelp` (mismo shape que las existentes; hay un meta-test de cobertura de ayuda en `tests/test_harness_flags_help.py` que falla si falta):
@@ -224,6 +236,23 @@ _MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s#]+\.md)(?:#[^)]*)?\)", re.IGNORECA
 # (b) Wikilinks: [[nombre]] o [[nombre|alias]] (nombre sin | ni ]] ; alias libre)
 _WIKILINK_RE = re.compile(r"\[\[([^\]\|\n]+?)(?:\|[^\]\n]*)?\]\]")
 
+# (C1) Bloques de código fenced: ``` ... ``` (o ~~~). Se ELIMINAN antes de
+#      parsear links md y wikilinks (ejemplos de código no son aristas).
+#      parse_code_refs NO los elimina: las refs a código legítimas suelen
+#      escribirse en backticks (inline o fenced) y son justamente lo que se busca.
+_FENCED_BLOCK_RE = re.compile(r"^(```|~~~).*?^\1\s*$", re.MULTILINE | re.DOTALL)
+
+
+def _strip_fenced_blocks(text: str) -> str:
+    """Reemplaza cada bloque fenced por '\n' (preserva el resto del texto).
+    Fence sin cerrar: se elimina desde el fence hasta el final del texto."""
+    stripped = _FENCED_BLOCK_RE.sub("\n", text or "")
+    # fence abierto sin cierre → cortar desde ahí
+    open_fence = re.search(r"^(```|~~~)", stripped, re.MULTILINE)
+    if open_fence:
+        stripped = stripped[: open_fence.start()]
+    return stripped
+
 # (c) Referencias a código: rutas con al menos un '/' y extensión de código,
 #     opcionalmente con ':NNN' de línea; o 'archivo.ext:NNN' sin directorio.
 _CODE_EXTS = r"(?:py|ts|tsx|js|jsx|cs|sql|ps1|sh|bat|ya?ml|json|toml|css|html)"
@@ -238,9 +267,11 @@ _CODE_FILELINE_RE = re.compile(
 def parse_markdown_links(text: str) -> list[str]:
     """Destinos .md de links estándar, en orden de aparición, sin duplicados.
     Excluye http(s)://, mailto: y rutas absolutas (C:\\..., /...). Devuelve la
-    ruta tal como está escrita, con backslashes normalizados a '/'."""
+    ruta tal como está escrita, con backslashes normalizados a '/'.
+    Ignora links dentro de bloques fenced (C1). Limitación documentada (C8):
+    destinos con espacios o %20 NO matchean (regex excluye whitespace)."""
     out: list[str] = []
-    for m in _MD_LINK_RE.finditer(text or ""):
+    for m in _MD_LINK_RE.finditer(_strip_fenced_blocks(text)):
         target = m.group(1).replace("\\", "/").strip()
         low = target.lower()
         if low.startswith(("http://", "https://", "mailto:")):
@@ -254,9 +285,10 @@ def parse_markdown_links(text: str) -> list[str]:
 
 def parse_wikilinks(text: str) -> list[str]:
     """Nombres de wikilinks (sin alias), trimmed, sin duplicados, orden de aparición.
-    '[[Nota Motor|el motor]]' -> 'Nota Motor'. Ignora vacíos ('[[]]')."""
+    '[[Nota Motor|el motor]]' -> 'Nota Motor'. Ignora vacíos ('[[]]').
+    Ignora wikilinks dentro de bloques fenced (C1)."""
     out: list[str] = []
-    for m in _WIKILINK_RE.finditer(text or ""):
+    for m in _WIKILINK_RE.finditer(_strip_fenced_blocks(text)):
         name = m.group(1).strip()
         if name and name not in out:
             out.append(name)
@@ -288,15 +320,18 @@ def parse_code_refs(text: str) -> list[str]:
 - Backslashes `backend\services\foo.py` → `backend/services/foo.py`.
 - `foo.py` suelto (sin `/` ni `:NNN`) → NO matchea. `foo.py:42` → matchea `foo.py`.
 - Texto `None`/`""` → lista vacía (los parsers usan `text or ""`).
+- **(C1)** `[[nota]]` o `[x](a.md)` dentro de un bloque ``` fenced ``` → NO generan resultado en `parse_wikilinks`/`parse_markdown_links`; `backend/foo.py:1` dentro del mismo bloque SÍ genera resultado en `parse_code_refs`.
+- **(C1)** Fence abierto sin cerrar → todo lo que sigue al fence se ignora para links/wikilinks (no lanza).
+- **(C8)** `[x](mi nota.md)` (espacio en el destino) → NO matchea (limitación documentada).
 
-**Tests PRIMERO — archivo:** `Stacky Agents/backend/tests/test_plan109_parsers.py`. Un test por caso borde de la lista anterior (12 tests, nombres `test_md_link_with_anchor`, `test_md_link_external_ignored`, `test_md_link_absolute_ignored`, `test_wikilink_alias`, `test_wikilink_empty_ignored`, `test_wikilink_dedup`, `test_code_ref_with_line`, `test_code_ref_backslashes`, `test_code_ref_bare_filename_not_matched`, `test_code_ref_fileline_without_dir`, `test_none_and_empty_input`, `test_order_preserved_no_dups`).
+**Tests PRIMERO — archivo:** `Stacky Agents/backend/tests/test_plan109_parsers.py`. Un test por caso borde de la lista anterior (14 tests, nombres `test_md_link_with_anchor`, `test_md_link_external_ignored`, `test_md_link_absolute_ignored`, `test_md_link_space_in_target_not_matched`, `test_wikilink_alias`, `test_wikilink_empty_ignored`, `test_wikilink_dedup`, `test_fenced_block_ignored_for_links_and_wikilinks_but_not_code_refs`, `test_unclosed_fence_ignores_rest`, `test_code_ref_with_line`, `test_code_ref_backslashes`, `test_code_ref_bare_filename_not_matched`, `test_code_ref_fileline_without_dir`, `test_none_and_empty_input`). (El caso orden-sin-duplicados de v1 queda cubierto dentro de `test_wikilink_dedup` y `test_code_ref_with_line` con inputs repetidos.)
 
 **Comando (desde `Stacky Agents/backend`):**
 ```
 venv/Scripts/python.exe -m pytest tests/test_plan109_parsers.py -q
 ```
 
-**Criterio BINARIO:** 12/12 verdes. `venv/Scripts/python.exe -c "from services.doc_graph import parse_wikilinks; print(parse_wikilinks('[[A|b]]'))"` imprime `['A']`.
+**Criterio BINARIO:** 14/14 verdes. `venv/Scripts/python.exe -c "from services.doc_graph import parse_wikilinks; print(parse_wikilinks('[[A|b]]'))"` imprime `['A']`.
 
 **Flag/default:** los parsers no leen flags (puros). **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno.
 
@@ -321,9 +356,13 @@ from services import doc_indexer
 _MAX_NOTES = 2000            # límite duro de notas a procesar
 _MAX_FILE_BYTES = 2_000_000  # archivos más grandes se saltean (con node igual, sin out-edges)
 _GRAPH_TTL_SECONDS = 60      # re-chequeo de mtimes como mucho 1 vez por minuto
+_MAX_CACHE_ENTRIES = 8       # (C6) tope de payloads cacheados; al superarlo se
+                             # elimina la entrada con built_at más viejo
 
 # cache: key -> (built_at_monotonic, fingerprint, payload)
-# fingerprint = (n_files, max_mtime_ns, total_size) sobre la lista de archivos escaneados
+# fingerprint = (n_files, max_mtime_ns, total_size) sobre la lista de archivos
+# escaneados. (C3) Si os.stat lanza OSError para un abs_path, ese archivo
+# igual cuenta en n_files y aporta mtime_ns=0 y size=0 a max/sum.
 _graph_cache: dict[tuple, tuple[float, tuple, dict]] = {}
 
 
@@ -339,7 +378,7 @@ def invalidate_graph_cache() -> None:
    - Para la fuente `stacky`: `index = doc_indexer.build_index(vscode_prompts_dir)`; recorrer `index["roots"]` recursivamente juntando nodos `kind=="file"`; la ruta absoluta de cada nota = `doc_indexer.STACKY_AGENTS_ROOT / node["path"]` (para agentes con `_absolute_path`, usar esa key).
    - Para cada fuente `kind=="project-docs"` de `sources_info["sources"]`: `idx = doc_indexer.build_project_docs_index(project_name, source_id=fuente["id"])`; recorrer recursivo; ruta absoluta = `Path(fuente["absolute_path"]) / node["path"]`.
    - Acumular `note_files: list[tuple[source_id, rel_path, abs_path]]`, cortando en `_MAX_NOTES` (determinístico: orden de fuentes según `sources_info["sources"]`, dentro de cada fuente orden del índice).
-2. **Cache:** `cache_key = ("graph", active_project or "", tuple(sorted(source_ids)), vscode_prompts_dir or "")`. Calcular `fingerprint = (len(note_files), max(st_mtime_ns), sum(st_size))` con `os.stat` sobre cada `abs_path` (los `OSError` cuentan como `(0,0)`). Si hay entrada cacheada con el MISMO fingerprint y `now - built_at < _GRAPH_TTL_SECONDS`… **corrección:** el TTL limita la frecuencia del stat-scan, no la validez: si `now - built_at < _GRAPH_TTL_SECONDS`, devolver payload cacheado SIN computar fingerprint; si TTL vencido, computar fingerprint y devolver cache si coincide (refrescando `built_at`), o reconstruir si difiere. Así un archivo tocado se refleja como mucho 60 s después, y nunca se re-parsea sin cambios.
+2. **Cache:** `cache_key = ("graph", active_project or "", tuple(sorted(source_ids)), vscode_prompts_dir or "")`. Calcular `fingerprint = (len(note_files), max(st_mtime_ns), sum(st_size))` con `os.stat` sobre cada `abs_path` — **(C3)** si `os.stat` lanza `OSError`, el archivo cuenta igual en `len` y aporta `mtime_ns=0` y `size=0` a `max`/`sum` (con 0 archivos: `fingerprint = (0, 0, 0)`). Semántica del TTL (literal): el TTL limita la frecuencia del stat-scan, no la validez: si `now - built_at < _GRAPH_TTL_SECONDS`, devolver payload cacheado SIN computar fingerprint; si TTL vencido, computar fingerprint y devolver cache si coincide (refrescando `built_at`), o reconstruir si difiere. Así un archivo tocado se refleja como mucho 60 s después, y nunca se re-parsea sin cambios. Al insertar en `_graph_cache`, si `len(_graph_cache) > _MAX_CACHE_ENTRIES`, eliminar la entrada de `built_at` más viejo (C6).
 3. **Leer y parsear cada nota:** `content = abs_path.read_text(encoding="utf-8", errors="replace")` (saltear con try/except `OSError`; si `st_size > _MAX_FILE_BYTES`, no leer: nota sin out-edges). Detectar frontmatter: `has_frontmatter = content.lstrip().startswith("---")`.
 4. **Resolver aristas:**
    - `parse_markdown_links`: destino relativo se resuelve contra el **directorio de la nota dentro de su fuente** con `posixpath.normpath(posixpath.join(posixpath.dirname(rel_path), target))`; si el resultado empieza con `..` → descartar arista (escape de la fuente); si el path resuelto existe en el set de notas de la MISMA fuente → arista `kind="md"` hacia esa nota; si no existe → arista `kind="md"` hacia nodo `missing:<basename_lower_sin_ext>`.
@@ -356,7 +395,10 @@ def invalidate_graph_cache() -> None:
 - `test_code_ref_node_and_exists_flag` — nodo `code:backend/services/foo.py` con `exists` correcto (crear el archivo en el workspace fake y assert True; borrarlo y `invalidate_graph_cache()` y assert False).
 - `test_orphan_detection` — `huerfana.md` está en `orphans`; `b.md` no.
 - `test_md_link_escaping_source_dropped` — `[x](../../fuera.md)` NO genera arista.
-- `test_cache_hit_within_ttl_and_invalidation_by_mtime` — 2ª llamada devuelve el mismo objeto (identidad o igualdad + contador de lecturas patcheado); tocar mtime de una nota + `invalidate_graph_cache()` → re-scan refleja el cambio.
+- **(C2)** `test_cache_hit_within_ttl` — 2ª llamada dentro del TTL devuelve el payload cacheado SIN re-leer archivos (contador de lecturas: monkeypatchear `Path.read_text` o el helper de lectura y assert que no se invoca en la 2ª llamada).
+- **(C2)** `test_ttl_expired_fingerprint_change_rebuilds` — con `monkeypatch.setattr(doc_graph, "_GRAPH_TTL_SECONDS", 0)`, modificar el contenido de una nota (cambia mtime/size) → la llamada siguiente reconstruye y el grafo refleja el cambio (SIN llamar `invalidate_graph_cache()`).
+- **(C2)** `test_ttl_expired_fingerprint_same_serves_cache` — con `_GRAPH_TTL_SECONDS = 0` y corpus sin cambios → la llamada siguiente devuelve el payload cacheado sin re-parsear (contador de lecturas en 0).
+- `test_invalidate_graph_cache_forces_rebuild` — `invalidate_graph_cache()` → la llamada siguiente re-lee (contador > 0).
 - `test_determinism_two_runs_equal_json` — `json.dumps(g1, sort_keys=True) == json.dumps(g2, sort_keys=True)` tras invalidar cache entre corridas.
 
 **Comando (desde `Stacky Agents/backend`):**
@@ -364,7 +406,7 @@ def invalidate_graph_cache() -> None:
 venv/Scripts/python.exe -m pytest tests/test_plan109_build_graph.py tests/test_plan109_parsers.py -q
 ```
 
-**Criterio BINARIO:** 9 casos F2 + 12 de F1 verdes.
+**Criterio BINARIO:** 12 casos F2 + 14 de F1 verdes.
 
 **Flag/default:** `build_graph` NO lee flags (el gate es del endpoint, F4). **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno.
 
@@ -470,7 +512,9 @@ venv/Scripts/python.exe -m pytest tests/test_plan109_doc_health.py -q
 def get_docs_graph():
     """Plan 109 — Grafo documental read-only del proyecto activo/indicado.
 
-    Query params: project (opcional, igual semántica que /index).
+    Query params: project (opcional, igual semántica que /index);
+                  refresh=1 (opcional, [ADICIÓN ARQUITECTO]: invalida la cache
+                  y fuerza re-scan antes de construir — read-only igual).
     404 {"ok": false, "error": "docs_graph_disabled"} si la flag está OFF.
     """
     if not bool(getattr(config, "STACKY_DOCS_GRAPH_ENABLED", False)):
@@ -479,6 +523,8 @@ def get_docs_graph():
 
     t0 = time.monotonic()
     from services import doc_graph  # import lazy: no cargar el módulo si la flag está OFF
+    if request.args.get("refresh", "").strip() == "1":  # [ADICIÓN ARQUITECTO]
+        doc_graph.invalidate_graph_cache()
     try:
         graph = doc_graph.build_graph(
             project_name=_get_project_param(),
@@ -486,7 +532,9 @@ def get_docs_graph():
         )
     except Exception as exc:  # nunca 500 sin log estructurado
         logger.warning("docs_api", "docs_graph_failed", detail=str(exc))
-        return jsonify({"ok": False, "error": "docs_graph_failed", "message": str(exc)}), 500
+        # (C7) el detalle queda en el log; al cliente va un mensaje genérico
+        return jsonify({"ok": False, "error": "docs_graph_failed",
+                        "message": "No se pudo construir el grafo documental. Ver logs (docs_graph_failed)."}), 500
 
     logger.info("docs_api", "docs_graph_built",
                 nodes=len(graph.get("nodes", [])), edges=len(graph.get("edges", [])),
@@ -502,13 +550,14 @@ def get_docs_graph():
 - `test_graph_ok_when_flag_on` — flag ON + `build_graph` mockeado → 200, `ok=True`, keys del contrato §4.1 presentes (`nodes`, `edges`, `orphans`, `stats`, `doc_health`, `sources`, `generated_at`).
 - `test_graph_500_wrapped_on_exception` — `build_graph` que lanza → 500 con `error == "docs_graph_failed"` (no traceback HTML).
 - `test_docs_endpoints_unchanged_when_flag_off` — **golden de no-regresión:** con flag OFF, `GET /api/docs/sources` devuelve exactamente las mismas keys que hoy MÁS `graph_enabled=False` (única adición sancionada, de F0), y `/api/docs/index` + `/api/docs/content` no cambian en nada (comparar sets de keys de la respuesta contra los actuales, fijados en el test).
+- **[ADICIÓN ARQUITECTO]** `test_graph_refresh_param_forces_rebuild` — flag ON, `build_graph` mockeado con contador: `GET /api/docs/graph?refresh=1` invoca `invalidate_graph_cache` (monkeypatch con MagicMock y assert `called`); sin `refresh` no la invoca.
 
 **Comando (desde `Stacky Agents/backend`):**
 ```
 venv/Scripts/python.exe -m pytest tests/test_plan109_graph_endpoint.py -q
 ```
 
-**Criterio BINARIO:** 4/4 verdes.
+**Criterio BINARIO:** 5/5 verdes.
 
 **Flag/default:** `STACKY_DOCS_GRAPH_ENABLED` OFF → 404 y cero trabajo de CPU (import lazy). **Impacto por runtime:** ninguno (endpoint HTTP; ningún runner lo llama). **Fallback:** sin flag, el endpoint no existe a efectos prácticos. **Trabajo del operador:** ninguno.
 
@@ -560,6 +609,7 @@ venv/Scripts/python.exe -m pytest tests/test_plan109_graph_endpoint.py -q
    y agregar `graph_enabled?: boolean;` al tipo `DocsSourcesResponse` existente (localizar por símbolo `DocsSourcesResponse`, no por línea). Importar los tipos desde `../docs/docGraphModel` o re-declararlos ahí — decisión fija: **importar** desde `docGraphModel.ts` (una sola fuente de tipos).
 3. **Crear** `Stacky Agents/frontend/src/components/docs/DocCoveragePanel.tsx`:
    - Props: `{ graph: DocGraphResponse | undefined; isLoading: boolean; error: string | null; onOpenNote?: (node: DocGraphNode) => void }`.
+   - **[ADICIÓN ARQUITECTO]** Prop extra `onRefresh?: () => void`: `DocsPage` la cablea a `queryClient.invalidateQueries({ queryKey: ["docs-graph"] })` tras llamar `Docs.getGraph(projectName, { refresh: true })` — implementación fija: `getGraph` acepta segundo parámetro opcional `opts?: { refresh?: boolean }` que agrega `refresh=1` al querystring; el botón "Recargar" (un `<button>` junto al badge de salud) fuerza el re-scan del backend. Si `onRefresh` es undefined, el botón no se renderiza.
    - Render: (a) badge de salud con color por status (`SANA`=verde, `INCOMPLETA`=ámbar, `FORMATO_NO_OBSIDIAN`=ámbar, `SIN_DOCS`=rojo — reusar clases existentes de `DocsPage.module.css` o agregar clases nuevas al final de ese archivo, theme-aware light/dark) + lista `reasons`; (b) `<table>` simple de métricas de `summarizeGraph` (filas: Notas, Aristas totales, Backlinks totales, Huérfanas, Fuentes, Refs a código, Wikilinks rotos=missing); (c) lista de notas huérfanas (máx 50, `<button>` por fila que llama `onOpenNote` si está definido); (d) estados loading/error/vacío.
    - Accesibilidad: botones reales, sin `window.confirm`/`alert`.
 4. **Editar** `Stacky Agents/frontend/src/pages/DocsPage.tsx`:
@@ -629,6 +679,7 @@ npx tsc --noEmit
 |---|---|
 | Escaneo caro en corpus grandes en cada request. | Cache con TTL 60 s + fingerprint por mtime/size (F2); límites `_MAX_NOTES=2000` y `_MAX_FILE_BYTES=2MB`. |
 | Falsos positivos en `parse_code_refs` (ruido). | Regex conservadora: exige `/` en la ruta o `:NNN`; `foo.py` pelado NO matchea (F1, test binario). |
+| Aristas falsas por ejemplos de código en las notas (C1). | Bloques fenced eliminados antes de parsear links md y wikilinks (`_strip_fenced_blocks`, F1, 2 tests binarios). |
 | Colisión de nombres de wikilinks entre fuentes. | Regla determinística documentada: path lexicográficamente menor gana (F2). El plan 111 usa el MISMO índice. |
 | Path traversal por links `../..`. | Aristas que escapan la fuente se descartan (F2); la lectura de archivos reusa las rutas absolutas que `doc_indexer` ya whitelistó — no hay lectura por input del usuario. |
 | Regla 3 (INCOMPLETA) escanea el workspace y puede ser lenta. | Solo subdirectorios de primer nivel, excludes de `doc_indexer`, tope `_MAX_MODULE_SCAN_ENTRIES=500` por módulo, y corre solo dentro de `build_graph` (cacheado). |
@@ -666,10 +717,10 @@ npx tsc --noEmit
 ## 9. Orden de implementación (secuencial)
 
 1. **F0** — flag + `graph_enabled` en `/sources` y sus tests.
-2. **F1** — parsers puros y sus 12 tests.
-3. **F2** — `build_graph` + cache y sus 9 tests.
+2. **F1** — parsers puros y sus 14 tests.
+3. **F2** — `build_graph` + cache y sus 12 tests.
 4. **F3** — `classify_doc_health` + wiring y sus 8 tests.
-5. **F4** — endpoint `/api/docs/graph` y sus 4 tests (incluye golden de no-regresión).
+5. **F4** — endpoint `/api/docs/graph` y sus 5 tests (incluye golden de no-regresión y `refresh=1`).
 6. **F5** — cliente + modelo puro + pestaña Cobertura (vitest + tsc).
 7. **F6** — cierre, no-regresión, DoD.
 

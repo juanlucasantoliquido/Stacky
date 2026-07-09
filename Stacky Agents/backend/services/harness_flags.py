@@ -2335,8 +2335,10 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Modelo local (Ollama/LM Studio/vLLM)",
         description="Habilita el cliente LLM local para análisis de código y sugerencias de pipeline con modelos como Qwen 3 32B q4.",
         group="global",
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
-        # lista curada de defaults ON, así que debe quedar sin default explícito.
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
+        # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
     ),
     FlagSpec(
         key="LOCAL_LLM_ENDPOINT",

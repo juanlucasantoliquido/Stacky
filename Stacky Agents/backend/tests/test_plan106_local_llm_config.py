@@ -17,11 +17,15 @@ import pytest
 
 # ── F0 ───────────────────────────────────────────────────────────────────────
 
-def test_f0_flag_default_off():
+def test_f0_flag_default_on():
+    # Cambio 2026-07-09: el operador pidió LOCAL_LLM_ENABLED ON por default
+    # (rompe el default-OFF original de Plan 106, decisión explícita y consciente).
     import importlib
+    import os
     import config as cfg
+    os.environ.pop("LOCAL_LLM_ENABLED", None)  # asegurar que se lea el default del código
     importlib.reload(cfg)
-    assert cfg.config.LOCAL_LLM_ENABLED is False
+    assert cfg.config.LOCAL_LLM_ENABLED is True
 
 
 def test_f0_flags_registered_in_registry():

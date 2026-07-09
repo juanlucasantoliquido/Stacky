@@ -1,8 +1,13 @@
-"""api/local_llm_analysis.py — Plan 106 F3/F4. Endpoints del modelo local (HITL, sin tools).
+"""api/local_llm_analysis.py — Plan 106 F3/F4 + Playground. Endpoints del modelo local (HITL, sin tools).
 
 GET  /api/llm/local-health     → ping barato al servidor local (A1).
+GET  /api/llm/local-models     → lista los modelos instalados en el server local.
 POST /api/llm/analyze-code     → análisis de código (markdown).
 POST /api/llm/suggest-pipeline → sugerencias de pipeline (F4).
+POST /api/llm/playground       → prompt libre para probar el modelo local + selector de modelo.
+
+analyze-code, suggest-pipeline y playground aceptan un `model` OPCIONAL en el body
+que se reenvía a invoke_local_llm; si no viene, se usa el default de la flag LOCAL_LLM_MODEL.
 """
 from __future__ import annotations
 
@@ -129,6 +134,66 @@ def local_health_route():
     })
 
 
+def _parse_model_ids(raw) -> list[str]:
+    """Parsea defensivamente la respuesta OpenAI-compatible de /v1/models.
+
+    Ollama/LM Studio/vLLM devuelven {"data": [{"id": "..."}]}. Toleramos:
+    - dict con "data" lista de dicts con "id" (forma OpenAI)
+    - una lista directa de dicts con "id" o de strings
+    Cualquier otra forma → [] (nunca lanza).
+    """
+    items = None
+    if isinstance(raw, dict):
+        items = raw.get("data")
+    elif isinstance(raw, list):
+        items = raw
+    if not isinstance(items, list):
+        return []
+    out: list[str] = []
+    for it in items:
+        if isinstance(it, dict):
+            mid = it.get("id") or it.get("name")
+        elif isinstance(it, str):
+            mid = it
+        else:
+            mid = None
+        if isinstance(mid, str) and mid.strip():
+            out.append(mid.strip())
+    return out
+
+
+@bp.get("/local-models")
+def local_models_route():
+    """Lista los modelos instalados en el servidor local (OpenAI-compatible /v1/models).
+
+    Nunca 500: si el server no responde o el JSON no tiene la forma esperada,
+    devuelve models vacíos con reachable=false. `current` = el modelo default de la flag.
+    """
+    guard = _guard()
+    if guard:
+        return guard
+    endpoint = _config.config.LOCAL_LLM_ENDPOINT
+    base = endpoint.split("/v1/")[0] if "/v1/" in endpoint else endpoint
+    models: list[str] = []
+    reachable = False
+    try:
+        resp = requests.get(f"{base}/v1/models", timeout=5)
+        reachable = resp.status_code == 200
+        if reachable:
+            try:
+                models = _parse_model_ids(resp.json())
+            except (ValueError, TypeError):
+                models = []
+    except requests.RequestException:
+        reachable = False
+    return jsonify({
+        "ok": True,
+        "reachable": reachable,
+        "models": models,
+        "current": _config.config.LOCAL_LLM_MODEL,
+    })
+
+
 @bp.post("/analyze-code")
 def analyze_code_route():
     """Analiza código con el modelo local (sin tool use).
@@ -182,6 +247,7 @@ def analyze_code_route():
             user=user_prompt,
             on_log=lambda level, msg: None,  # firma LogFn real (level, msg) — C3
             execution_id=execution_id,
+            model=body.get("model"),  # opcional: selector por request (None = default flag)
         )
     except Exception as e:
         _finish_execution(execution_id, status="error", error=str(e))
@@ -248,6 +314,7 @@ def suggest_pipeline_route():
             user=user_prompt,
             on_log=lambda level, msg: None,
             execution_id=execution_id,
+            model=body.get("model"),  # opcional: selector por request (None = default flag)
         )
     except Exception as e:
         _finish_execution(execution_id, status="error", error=str(e))
@@ -274,5 +341,61 @@ def suggest_pipeline_route():
         "ok": True,
         "suggestions": suggestions,
         "model": _config.config.LOCAL_LLM_MODEL,
+        "execution_id": execution_id,
+    })
+
+
+_PLAYGROUND_PROJECT = "__local_llm_playground__"
+
+_PLAYGROUND_DEFAULT_SYSTEM = (
+    "Sos un asistente técnico útil que responde en markdown claro y conciso."
+    + _HITL_RULES
+)
+
+
+@bp.post("/playground")
+def playground_route():
+    """Prompt libre para PROBAR el modelo local (HITL, sin tool use).
+
+    Body: {"prompt": str (required), "model": str (optional), "system": str (optional)}
+    200: {"ok": true, "response": str, "model": str, "execution_id": int}
+    Errores del endpoint local → 502 con mensaje accionable (patrón analyze-code).
+    """
+    guard = _guard()
+    if guard:
+        return guard
+    body = request.get_json(silent=True) or {}
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"error": "prompt_required"}), 400
+    system = (body.get("system") or "").strip() or _PLAYGROUND_DEFAULT_SYSTEM
+    model = body.get("model")
+
+    from copilot_bridge import invoke_local_llm  # import lazy (patrón del repo)
+
+    with session_scope() as session:
+        ticket = _ensure_internal_ticket(session, _PLAYGROUND_PROJECT)
+        execution_id = _create_execution(
+            session, ticket.id, "local_llm_playground",
+            {"prompt_chars": len(prompt), "model": model or _config.config.LOCAL_LLM_MODEL},
+        )
+    try:
+        response = invoke_local_llm(
+            agent_type="local_llm_playground",
+            system=system,
+            user=prompt,
+            on_log=lambda level, msg: None,
+            execution_id=execution_id,
+            model=model,
+        )
+    except Exception as e:
+        _finish_execution(execution_id, status="error", error=str(e))
+        return jsonify({"ok": False, "error": str(e), "execution_id": execution_id}), 502
+    _finish_execution(execution_id, status="completed", output=response.text)
+    resolved_model = (response.metadata or {}).get("model") or model or _config.config.LOCAL_LLM_MODEL
+    return jsonify({
+        "ok": True,
+        "response": response.text,
+        "model": resolved_model,
         "execution_id": execution_id,
     })

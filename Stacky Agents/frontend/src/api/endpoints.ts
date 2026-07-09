@@ -3374,11 +3374,23 @@ export const LocalLlmApi = {
     api.get<{ ok: boolean; reachable: boolean; endpoint: string; model: string }>(
       "/api/llm/local-health",
     ),
+  /** Lista los modelos instalados en el servidor local (selector de modelos). */
+  localModels: () =>
+    api.get<{ ok: boolean; reachable: boolean; models: string[]; current: string }>(
+      "/api/llm/local-models",
+    ),
+  /** Prompt libre para probar el modelo local (con selector de modelo opcional). */
+  playground: (body: { prompt: string; model?: string; system?: string }) =>
+    api.post<{ ok: boolean; response: string; model: string; execution_id: number }>(
+      "/api/llm/playground",
+      body,
+    ),
   analyzeCode: (body: {
     project: string;
     stack?: string;
     files?: Array<{ path: string; content: string }>;
     prompt?: string;
+    model?: string;
   }) =>
     api.post<{ ok: boolean; analysis: string; model: string; execution_id: number }>(
       "/api/llm/analyze-code",
@@ -3388,6 +3400,7 @@ export const LocalLlmApi = {
     project: string;
     stack: string;
     spec_partial?: Record<string, unknown>;
+    model?: string;
   }) =>
     api.post<{
       ok: boolean;

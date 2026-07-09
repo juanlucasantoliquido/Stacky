@@ -512,6 +512,9 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_DEVOPS_ENVIRONMENTS_ENABLED",
     "STACKY_DEVOPS_AGENT_ENABLED",
     "STACKY_DEVOPS_SERVERS_ENABLED",
+    # ── Activación operador 2026-07-09 — modelo local ON por default (decisión
+    # explícita; rompe el default-OFF original de Plan 106 conscientemente) ──
+    "LOCAL_LLM_ENABLED",
 }
 
 

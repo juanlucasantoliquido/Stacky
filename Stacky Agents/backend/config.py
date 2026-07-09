@@ -76,7 +76,9 @@ class Config:
     LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4.5")
 
     # Plan 106 — Modelo local (Qwen 3 32B q4 u otro, vía Ollama/LM Studio/vLLM).
-    LOCAL_LLM_ENABLED = os.getenv("LOCAL_LLM_ENABLED", "false").lower() in (
+    # Default ON por decisión explícita del operador (2026-07-09); espejo del
+    # default=True de la FlagSpec LOCAL_LLM_ENABLED en services/harness_flags.py.
+    LOCAL_LLM_ENABLED = os.getenv("LOCAL_LLM_ENABLED", "true").lower() in (
         "true", "1", "yes"
     )
     LOCAL_LLM_ENDPOINT = os.getenv(

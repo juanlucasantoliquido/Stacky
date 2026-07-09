@@ -99,6 +99,9 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const [llmSuggesting, setLlmSuggesting] = useState(false);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [llmJustification, setLlmJustification] = useState<string | null>(null);
+  // Playground IA local — selector de modelo reusado en "Sugerir con IA local".
+  const [llmModels, setLlmModels] = useState<string[]>([]);
+  const [llmModel, setLlmModel] = useState<string>('');
 
   const localErrors = validateSpecLocal(spec);
   const hasUnsavedChanges = !specsEqual(spec, loadedSnapshot);
@@ -119,6 +122,14 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
         if (cancelled) return;
         setLlmAvailable(true);
         setLlmReachable(res.reachable === true);
+        // Poblar el selector de modelos (best-effort: si falla, se usa el default de la flag).
+        LocalLlmApi.localModels()
+          .then((m) => {
+            if (cancelled) return;
+            setLlmModels(m.models ?? []);
+            setLlmModel((prev) => prev || m.current || '');
+          })
+          .catch(() => { /* selector opcional: silencioso */ });
       })
       .catch(() => {
         if (cancelled) return;
@@ -356,6 +367,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
       const { suggestions } = await LocalLlmApi.suggestPipeline({
         project: activeProject || 'proyecto-sin-nombre',
         stack: stackFilter === 'all' ? 'generic' : stackFilter,
+        model: llmModel || undefined,
         spec_partial: {
           step_name: selectedStep.name,
           script: selectedStep.script,
@@ -634,6 +646,18 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
             solo pre-rellena campos vacíos; el operador revisa y edita todo antes de guardar. */}
         {llmAvailable === true && stepSelected && (
           <div style={{ marginTop: '8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {llmModels.length > 0 && (
+              <select
+                value={llmModel}
+                onChange={(e) => setLlmModel(e.target.value)}
+                style={{ padding: '4px 8px' }}
+                title="Modelo de IA local a usar para la sugerencia"
+              >
+                {(llmModel && !llmModels.includes(llmModel) ? [llmModel, ...llmModels] : llmModels).map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            )}
             <button
               onClick={() => void handleSuggestWithLocalLlm()}
               disabled={llmSuggesting}

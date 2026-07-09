@@ -177,6 +177,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan106_local_llm_bridge.py
   tests/test_plan106_analyze_code_api.py
   tests/test_plan106_suggest_pipeline_api.py
+  tests/test_plan106_playground_api.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

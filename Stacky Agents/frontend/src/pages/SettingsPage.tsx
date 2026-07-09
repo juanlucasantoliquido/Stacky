@@ -3,6 +3,7 @@ import FlowConfigPage from "./FlowConfigPage";
 import ConfigTransferPanel from "../components/ConfigTransferPanel";
 import ClientProfileEditor from "../components/ClientProfileEditor";
 import HarnessFlagsPanel from "../components/HarnessFlagsPanel";
+import LocalLlmPlaygroundPanel from "../components/LocalLlmPlaygroundPanel";
 import { Webhooks } from "../api/endpoints";
 import {
   LOCKED_SECTIONS,
@@ -13,7 +14,7 @@ import {
 import { useUiSectionsStore } from "../store/uiSectionsStore";
 import styles from "./SettingsPage.module.css";
 
-type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "harness";
+type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "harness" | "playground";
 
 const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> = {
   pm:   { title: "📊 PM",          hint: "Tablero de Project Management y métricas de sprint." },
@@ -135,6 +136,12 @@ export default function SettingsPage() {
         >
           Arnes
         </button>
+        <button
+          className={`${styles.subTab} ${sub === "playground" ? styles.active : ""}`}
+          onClick={() => setSub("playground")}
+        >
+          Playground IA
+        </button>
       </div>
 
       <div className={styles.content}>
@@ -144,6 +151,7 @@ export default function SettingsPage() {
         {sub === "transfer" && <ConfigTransferPanel />}
         {sub === "webhooks" && <WebhooksPanel />}
         {sub === "harness" && <HarnessFlagsPanel />}
+        {sub === "playground" && <LocalLlmPlaygroundPanel />}
       </div>
     </div>
   );

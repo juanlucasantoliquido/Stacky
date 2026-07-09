@@ -1,6 +1,17 @@
 # Plan 111 — Graph View (canvas) + wikilinks clickeables + backlinks en DocsPage
 
-> **Estado:** PROPUESTO v1 — 2026-07-09
+> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+>
+> **CHANGELOG v1 → v2:**
+> - **C1 (IMPORTANTE):** contradicción interna resuelta — la query del grafo estaba `enabled` solo para las vistas `coverage`/`graph`, pero los wikilinks y backlinks del LECTOR también la necesitan: con la v1, en la vista `reader` todos los `[[wikilinks]]` se pintaban rotos. Ahora `enabled: graphEnabled` (todas las vistas, F4).
+> - **C2 (IMPORTANTE):** navegación cross-source de `onOpenNoteById` especificada literal (la nota destino puede vivir en OTRA fuente: hay que cambiar `selectedSourceId` y esperar el `indexData` async). Algoritmo con estado `pendingOpenPath` + `useEffect` en F4.
+> - **C3 (IMPORTANTE):** `stepLayout_keeps_nodes_in_bounds` exigía un clamp que las reglas cerradas de F2 no especificaban → un modelo menor no podía poner el test en verde. Clamp literal agregado a las reglas.
+> - **C4 (IMPORTANTE):** el import de tipos `mdast`/`unified` es transitivo y puede no resolver según config de TS: fallback literal en F0 (tipos estructurales mínimos locales, sin tocar `package.json`).
+> - **C5 (MENOR):** `LayoutEdge.stale` no existe en el payload del 109 (recién lo produce el plan 114): `initLayout` lo defaultea `false`.
+> - **C6 (MENOR):** radio de pick del hover fijado: `max(12, r + 4)` px.
+> - **C7 (MENOR):** `frac()` de la siembra definido: `frac(v) = v - Math.floor(v)`.
+> - **[ADICIÓN ARQUITECTO]:** búsqueda en la pestaña Grafo — input que resalta los nodos cuyo label matchea (helper puro `filterNodeIds(graph, query)` en `docGraphModel.ts`, 3 tests vitest). Cero dependencias, read-only.
 > **Serie:** Documentación agéntica Obsidian (109 → **111** → 112; alimenta al Documentador del plan 113). El número 110 quedó tomado por un plan ajeno (Revisor de PRs), por eso la serie salta de 109 a 111.
 > **Pipeline:** este documento pasó `proponer` (este estado). Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Depende de:** Plan 109 (endpoint `GET /api/docs/graph`, contrato §4.1, flag `STACKY_DOCS_GRAPH_ENABLED`, tipos `DocGraphResponse`/`DocGraphNode`/`DocGraphEdge` en `frontend/src/docs/docGraphModel.ts`, cliente `Docs.getGraph`, estado `docsView` y pestaña "Cobertura" en `DocsPage`). **Este plan NO parsea markdown ni computa aristas: consume el payload de 109.**
@@ -77,6 +88,15 @@ Este plan **no define contrato nuevo**: usa `DocGraphResponse` (nodes/edges/orph
 import type { Root, Text, Link, PhrasingContent } from "mdast";
 import type { Plugin } from "unified";
 // (mdast/unified ya vienen transitivamente con react-markdown@9; NO se agregan a package.json)
+// (C4) FALLBACK LITERAL si `tsc --noEmit` NO resuelve "mdast"/"unified" en este checkout:
+// borrar los dos imports de arriba y declarar tipos estructurales mínimos locales —
+//   type Text = { type: "text"; value: string };
+//   type Link = { type: "link"; url: string; children: Text[] };
+//   type PhrasingContent = Text | Link | { type: string; [k: string]: unknown };
+//   type Root = { type: "root"; children: any[] };
+//   type Plugin<A extends any[], T> = () => (tree: T) => void;
+// react-markdown consume el plugin en runtime por duck-typing; los tipos locales
+// solo tienen que tipar ESTE archivo. PROHIBIDO agregar paquetes a package.json.
 
 const WIKILINK_RE = /\[\[([^\]|\n]+?)(?:\|([^\]\n]*))?\]\]/g;
 
@@ -243,8 +263,10 @@ export function nodeRadius(inDegree: number): number { return 4 + Math.min(11, i
 ```
 
 **Reglas cerradas:**
-- Siembra determinista: `seed(id)` = suma de char codes; `x = width*(0.15+0.7*frac(seed*0.618)) `, análogo `y`. **Sin `Math.random`** (tests reproducibles).
+- Siembra determinista: `seed(id)` = suma de char codes; `frac(v) = v - Math.floor(v)` (C7); `x = width*(0.15+0.7*frac(seed*0.618))`, `y = height*(0.15+0.7*frac(seed*0.377))`. **Sin `Math.random`** (tests reproducibles).
 - `stepLayout`: repulsión solo entre pares a distancia² < 40000 (acota el O(n²) real); resorte a longitud natural 78; centro con factor 0.0016; damping 0.86.
+- **(C3) Clamp de bordes (literal, al final de cada paso, tras integrar velocidad):** para cada nodo, `x = Math.min(Math.max(x, r), width - r)` y `y = Math.min(Math.max(y, r), height - r)`; si se clampeó en un eje, la velocidad de ese eje se pone en 0. Sin este clamp el test `stepLayout_keeps_nodes_in_bounds` no puede pasar.
+- **(C5)** `initLayout` construye `LayoutEdge.stale` como `Boolean((edge as any).stale)` — el payload del 109 NO trae ese campo (lo produce el plan 114): ausente ⇒ `false`.
 - `animated=false` cuando `nodes.length > MAX_ANIMATED_NODES` **o** `reducedMotion` → el componente NO llama `stepLayout`, usa `staticLayout` una vez.
 
 **Tests PRIMERO — archivo:** `Stacky Agents/frontend/src/docs/forceLayout.test.ts` (vitest puro):
@@ -280,7 +302,12 @@ npx tsc --noEmit
 - En mount / cuando cambia `graph` o el tamaño: `initLayout(...)` leyendo `prefers-reduced-motion` vía `matchMedia`. Colores por grupo (`note` según `source_id` kind, `code`, `missing`, huérfana) leídos de CSS custom properties con `getComputedStyle` (theme-aware).
 - Bucle: `requestAnimationFrame`; si `state.animated`, `stepLayout` + `draw`; si no, `staticLayout` una vez + `draw` estático. **Cancelar el rAF** cuando el componente se desmonta o cuando su contenedor no está visible (el padre solo lo monta con `docsView === 'graph'`, así que desmontar al cambiar de pestaña ya apaga el bucle).
 - `draw`: aristas primero (stale = punteada roja `var(--stale)`, tolerando el campo ausente → sólida normal), luego nodos (radio de `nodeRadius`, color por grupo, halo en el `selectedNodeId`), labels solo en hubs (r grande), nodo hovered y huérfanas.
-- Hover: `pointermove` → nodo más cercano dentro de un radio de pick → resalta él + vecinos (atenúa el resto a alpha 0.22).
+- Hover: `pointermove` → nodo más cercano dentro de un radio de pick de `Math.max(12, r + 4)` px (C6) → resalta él + vecinos (atenúa el resto a alpha 0.22).
+- **[ADICIÓN ARQUITECTO]** Búsqueda: un `<input type="search">` sobre el canvas (placeholder "Buscar nodo..."); con texto no vacío, los nodos cuyo id está en `filterNodeIds(graph, query)` se dibujan resaltados y el resto atenuado a alpha 0.15 (misma mecánica del hover). El helper es puro y vive en `docGraphModel.ts`:
+  ```ts
+  /** Ids de nodos cuyo label matchea query (substring case-insensitive, trim). Query vacía → Set vacío. */
+  export function filterNodeIds(graph: DocGraphResponse, query: string): Set<string> { /* ... */ }
+  ```
 - Click: `pointerup` sin drag → `onOpenNoteById(node.id)` **solo si `kind === 'note'`** (los nodos `code`/`missing` no abren visor; se ignoran o muestran tooltip).
 - Drag: `pointerdown` sobre nodo fija su posición al puntero mientras se arrastra.
 - Accesibilidad: leyenda de colores en HTML al lado del canvas (no solo color); `prefers-reduced-motion` respetado por el flag `animated`.
@@ -311,9 +338,16 @@ npx tsc --noEmit
 
 2. **Editar** `Stacky Agents/frontend/src/pages/DocsPage.tsx`:
    - `docsView` pasa a `'reader' | 'coverage' | 'graph'` (extiende 109).
-   - `const nameIndex = useMemo(() => graphData ? buildNameIndex(graphData) : undefined, [graphData]);` (la query `graphData` de 109 ya existe; asegurarse de que `enabled` cubra también `docsView === 'graph'`: `enabled: graphEnabled && (docsView === 'coverage' || docsView === 'graph')`).
+   - **(C1)** La query `graphData` de 109 cambia su gate a `enabled: graphEnabled` (SIN condición de vista): los wikilinks y el panel de backlinks de la vista `reader` también la necesitan — con el gate v1 (`coverage || graph`) todos los wikilinks del lector se pintaban rotos por `nameIndex === undefined`. El costo es 1 fetch cacheado (staleTime 60 s) solo cuando la flag está ON.
+   - `const nameIndex = useMemo(() => graphData ? buildNameIndex(graphData) : undefined, [graphData]);`
    - Resolver el `currentNodeId` de la nota abierta: helper `noteIdFor(selectedDocNode, graphData)` que matchea por `path`/`source_id` contra `graphData.nodes` (best-effort; null si no mapea).
-   - Callback `onOpenNoteById(nodeId)`: busca el nodo en `graphData`, traduce a la selección de `DocTree`/`DocViewer` existente (por `path`), cambia `docsView` a `'reader'` y selecciona esa nota. Si el nodo es `code`/`missing`, no hace nada (o muestra toast).
+   - **(C2) Callback `onOpenNoteById(nodeId)` — algoritmo literal (la nota destino puede vivir en OTRA fuente):**
+     1. Buscar `target = graphData.nodes.find(n => n.id === nodeId)`. Si no existe o `target.kind !== 'note'`, no hacer nada y retornar.
+     2. `setDocsView('reader')`.
+     3. Si `target.source_id === selectedSourceId`: buscar el `DocNode` en `indexData.roots` con un helper recursivo `findDocNodeByPath(roots, target.path)` (DFS que compara `node.path === target.path` en nodos `kind !== 'folder'`); si lo encuentra, `setSelectedNode(docNode)` y retornar.
+     4. Si es OTRA fuente: `setSelectedSourceId(target.source_id)` **y** `setPendingOpenPath(target.path)` (estado nuevo `const [pendingOpenPath, setPendingOpenPath] = useState<string | null>(null)`). El `indexData` de la fuente nueva llega async.
+     5. `useEffect` sobre `[indexData, pendingOpenPath]`: si hay `pendingOpenPath` y el `indexData` actual corresponde a la fuente pedida, `findDocNodeByPath` → `setSelectedNode(...)` + `setPendingOpenPath(null)`. Si no se encuentra el path (grafo stale), limpiar `pendingOpenPath` sin lanzar.
+     Nota: el reset por cambio de proyecto (useEffect existente de DocsPage) también debe limpiar `pendingOpenPath`.
    - Barra de pestañas (solo con `graphEnabled`): agregar botón "Grafo" junto a "Lector"/"Cobertura" (`aria-pressed`).
    - Cuando `docsView === 'graph'`: el panel principal renderiza `<DocGraphView graph={graphData} onOpenNoteById={...} selectedNodeId={currentNodeId} />` (con loading/empty si `graphData` no llegó).
    - Cuando `docsView === 'reader'` y `graphEnabled`: pasar a `DocViewer` las props `wikilinksEnabled`, `nameIndex`, `onOpenNoteById`; y montar `<DocBacklinksPanel .../>` debajo del `DocViewer`.
@@ -323,6 +357,9 @@ npx tsc --noEmit
 - `backlinksOf_returns_sources_targeting_node`.
 - `backlinksOf_empty_when_no_incoming`.
 - `backlinksOf_null_node_returns_empty`.
+- **[ADICIÓN ARQUITECTO]** `filterNodeIds_matches_substring_case_insensitive`.
+- **[ADICIÓN ARQUITECTO]** `filterNodeIds_empty_query_returns_empty_set`.
+- **[ADICIÓN ARQUITECTO]** `filterNodeIds_no_match_returns_empty_set`.
 
 **Comando (desde `Stacky Agents/frontend`):**
 ```
@@ -330,7 +367,7 @@ npx vitest run src/docs/backlinks.test.ts
 npx tsc --noEmit
 ```
 
-**Criterio BINARIO:** 3/3 vitest verdes + `tsc --noEmit` 0 errores.
+**Criterio BINARIO:** 6/6 vitest verdes + `tsc --noEmit` 0 errores.
 
 **Flag/default:** `STACKY_DOCS_GRAPH_ENABLED` OFF → cero elementos nuevos, cero fetch (la query respeta `enabled`). **Impacto por runtime:** ninguno. **Fallback:** DocsPage idéntica a hoy. **Trabajo del operador:** ninguno (opt-in default off).
 
@@ -347,7 +384,7 @@ npx tsc --noEmit
    npx vitest run src/docs/remarkWikilinks.test.ts src/docs/forceLayout.test.ts src/docs/docGraphModel.test.ts src/docs/backlinks.test.ts
    npx tsc --noEmit
    ```
-3. **Verificación manual (flag ON)** con el backend levantado y `STACKY_DOCS_GRAPH_ENABLED=true`: abrir DocsPage → aparecen 3 pestañas; "Grafo" dibuja la red y el drag/hover/click funcionan; abrir una nota con `[[wikilink]]` válido navega; uno inválido se ve atenuado; el panel de backlinks lista las notas entrantes.
+3. **Verificación manual (flag ON)** con el backend levantado y `STACKY_DOCS_GRAPH_ENABLED=true`: abrir DocsPage → aparecen 3 pestañas; "Grafo" dibuja la red y el drag/hover/click funcionan; la búsqueda resalta nodos por nombre; abrir una nota con `[[wikilink]]` válido navega (incluso si la nota destino está en OTRA fuente — C2); uno inválido se ve atenuado; los wikilinks resuelven en la vista Lector SIN pasar antes por Grafo/Cobertura (C1); el panel de backlinks lista las notas entrantes.
 4. **Verificación manual (flag OFF, default):** DocsPage muestra solo el visor de siempre, sin pestañas nuevas, sin panel de backlinks, sin request a `/api/docs/graph`.
 
 **Criterio BINARIO global (DoD):**
@@ -404,7 +441,7 @@ npx tsc --noEmit
 2. **F1** — `buildNameIndex`/`resolveWikilink` + wiring `DocViewer` + tests del modelo.
 3. **F2** — `forceLayout.ts` + 7 tests.
 4. **F3** — `DocGraphView.tsx` (tsc + lectura).
-5. **F4** — `DocBacklinksPanel.tsx` + pestaña "Grafo" en `DocsPage` + `backlinksOf` + 3 tests.
+5. **F4** — `DocBacklinksPanel.tsx` + pestaña "Grafo" en `DocsPage` + `backlinksOf` + `filterNodeIds` + 6 tests.
 6. **F5** — cierre, no-regresión, verificación manual, DoD.
 
 ---

@@ -1,10 +1,11 @@
 # Plan 110 — Revisor de PRs con Claude Haiku (solo-lectura) y con Modelo Local
 
-- **Estado:** PROPUESTO v1 — 2026-07-09
-- **Autor:** StackyArchitectaUltraEficientCode (perfil normal, heredado de Opus 4.8)
+- **Estado:** PROPUESTO v1.1 — 2026-07-09
+- **Enmienda v1→v1.1 (operador, 2026-07-09):** la flag maestra `STACKY_PR_REVIEWER_ENABLED` pasa de **default OFF → default ON** por decisión explícita del operador ("deben ser siempre default on"). Es una excepción consciente al patrón "opt-in default OFF" de las flags devops previas. Cambios acoplados: `config.py` fallback `"true"`; `FlagSpec` con `default=True`; alta en `_CURATED_DEFAULTS_ON` (única vía canónica sin romper los meta-tests de defaults); KPI-1, guardarraíl 2, DoD y Riesgo #1 reformulados; nuevo test `test_reviewer_default_on`. El gate sigue siendo reversible con un click. **Advertencia de privacidad reforzada** (Riesgo #1): con el revisor activo por default, el camino que puede enviar el diff a un servicio externo (Haiku) queda a un click sin opt-in explícito → el aviso de la UI es obligatorio.
+- **Autor:** StackyArchitectaUltraEficientCode (perfil normal, heredado de Opus 4.8) + enmienda del orquestador
 - **Serie:** DevOps (sección nueva del panel, hereda contrato de extensión §3.12 del Plan 87)
 - **Depende de:** Plan 87 (panel DevOps + `DEVOPS_SECTIONS`), Plan 95 (`MergeRequestProvider` + `devops_production`), Plan 106 (`invoke_local_llm` + `api/local_llm_analysis.py`)
-- **Flag maestra:** `STACKY_PR_REVIEWER_ENABLED` (default OFF, editable 100% desde el panel del Arnés, categoría `devops`)
+- **Flag maestra:** `STACKY_PR_REVIEWER_ENABLED` (**default ON** — decisión explícita del operador 2026-07-09; editable 100% desde el panel del Arnés, categoría `devops`). Ver §3 guardarraíl 2 para la implicación (la sección aparece out-of-the-box porque su master `STACKY_DEVOPS_PANEL_ENABLED` también es default ON, `config.py:873`).
 
 ---
 
@@ -20,7 +21,7 @@ Agregar al panel DevOps una sección **"Revisor de PRs"** que: (a) lista TODAS l
 
 ### 1.3 KPIs (todos binarios y verificables por test)
 
-- **KPI-1 (OFF por default, sin trabajo del operador):** con `STACKY_PR_REVIEWER_ENABLED=false`, `GET /api/pr-review/list`, `POST /api/pr-review/review/haiku`, `POST /api/pr-review/review/local` y `POST /api/pr-review/execute` devuelven **404** y la sub-tab no muestra contenido (banner de activación). Verifica: el `test_*_404_when_flag_off` de cada archivo de endpoint (`test_plan110_pr_review_list_endpoint.py::test_list_404_when_flag_off`, `test_plan110_pr_review_detail_diff.py::test_detail_404_when_flag_off`, `test_plan110_pr_review_haiku.py::test_review_haiku_404_when_flag_off`, `test_plan110_pr_review_local.py::test_review_local_404_when_reviewer_flag_off`, `test_plan110_pr_review_execute.py::test_execute_404_when_flag_off`).
+- **KPI-1 (ON por default + gate reversible):** la flag `STACKY_PR_REVIEWER_ENABLED` nace en **ON** (default del operador), por lo que la sección está disponible out-of-the-box (sujeta a que su master `STACKY_DEVOPS_PANEL_ENABLED` esté ON — lo está por default). El gate sigue siendo **reversible desde la UI**: si el operador la apaga (`STACKY_PR_REVIEWER_ENABLED=false`), `GET /api/pr-review/list`, `POST /api/pr-review/review/haiku`, `POST /api/pr-review/review/local` y `POST /api/pr-review/execute` devuelven **404** y la sub-tab muestra el banner de activación. Verifica el default: `test_plan110_pr_review_flags.py::test_reviewer_default_on`; verifica el gate reversible: el `test_*_404_when_flag_off` de cada archivo de endpoint (`test_plan110_pr_review_list_endpoint.py::test_list_404_when_flag_off`, `test_plan110_pr_review_detail_diff.py::test_detail_404_when_flag_off`, `test_plan110_pr_review_haiku.py::test_review_haiku_404_when_flag_off`, `test_plan110_pr_review_local.py::test_review_local_404_when_reviewer_flag_off`, `test_plan110_pr_review_execute.py::test_execute_404_when_flag_off`).
 - **KPI-2 (listado real, nunca 500):** `GET /api/pr-review/list?project=X` con flag ON devuelve la lista normalizada de PRs abiertas del tracker activo; con el tracker caído devuelve error descriptivo con hint (status 400/502), **nunca 500**. Verifica: `test_plan110_pr_review_list_endpoint.py`.
 - **KPI-3 (Haiku EXCLUSIVAMENTE + sin tools):** la revisión Haiku resuelve el modelo desde `STACKY_PR_REVIEW_HAIKU_MODEL` y **rechaza (400)** si el id no contiene `"haiku"`; la invocación es una completion de chat pura (sin herramientas). Verifica: `test_plan110_pr_review_haiku.py::test_rejects_non_haiku_model` y `::test_haiku_review_is_toolless_chat`.
 - **KPI-4 (un solo prompt local para Q&A):** la revisión local arma UN único prompt autocontenido (título, descripción, ramas, estado de pipeline, diff saneado, pregunta opcional) y responde vía `invoke_local_llm`. Verifica: `test_plan110_pr_review_local.py::test_local_review_single_self_contained_prompt`.
@@ -79,7 +80,7 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 ## 3. Principios y guardarraíles (no negociables)
 
 1. **Paridad de 3 runtimes con degradación explícita.** La revisión Haiku y la local son endpoints HTTP backend (`invoke_haiku` / `invoke_local_llm`) que NO dependen del runtime del agente activo → funcionan idénticamente con Codex CLI, Claude Code CLI y GitHub Copilot Pro. Fallback: si el engine Copilot no tiene token/modelo Haiku → 502 con hint; si el servidor local no responde → 502 con hint (reusa los errores de `invoke_local_llm`).
-2. **Cero trabajo extra para el operador.** Todo detrás de `STACKY_PR_REVIEWER_ENABLED` (default OFF). Activable con un click desde `FlagGateBanner`. Backward-compatible: con la flag OFF, el sistema es byte-idéntico al actual (404 en los endpoints, sub-tab sin contenido).
+2. **Cero trabajo extra para el operador — default ON (decisión explícita del operador).** `STACKY_PR_REVIEWER_ENABLED` nace en **ON**: el operador NO tiene que activar nada, la sección aparece disponible out-of-the-box dentro del panel DevOps. Esto es una excepción consciente al patrón "opt-in default OFF" de las flags devops previas (planes 93-107, todas OFF): la pidió el operador. **Implicación de compatibilidad:** en un deploy con el panel DevOps ON (default, `config.py:873`), al actualizar aparece la sub-tab "Revisor de PRs" sin intervención — NO es byte-idéntico al comportamiento previo (aparece una capacidad nueva), pero es aditivo y no altera ninguna sección existente. El gate sigue siendo **reversible con un click** desde `FlagGateBanner`/`HarnessFlagsPanel`: apagar la flag ⇒ 404 en los endpoints + sub-tab sin contenido, restaurando el comportamiento anterior. **Ver §6 Riesgo #1:** el default ON expone el camino de revisión (que puede enviar el diff a un servicio externo) sin un opt-in explícito — el aviso de privacidad de la UI (guardarraíl 7) es por eso obligatorio y siempre visible.
 3. **Config 100% desde la UI del Arnés.** Las 4 flags nuevas (`STACKY_PR_REVIEWER_ENABLED`, `STACKY_PR_REVIEW_HAIKU_MODEL`, `STACKY_PR_REVIEW_DIFF_MAX_CHARS`, `STACKY_PR_REVIEW_TIMEOUT_SEC`) son `env_only=False` (categoría `devops`), editables desde `HarnessFlagsPanel`. Nada requiere tocar `.env` a mano.
 4. **Human-in-the-loop innegociable.** El modelo SOLO propone (endpoint de review = solo-lectura, sin tools). El botón "Ejecutar" lo aprieta el humano y dispara `POST /api/pr-review/execute`. Ninguna ruta de review llama a `execute`. Merge = HITL fuerte: checkbox literal (`confirm_merge=true`) + `confirm=true` server-side, espejando la asimetría del Plan 95 (H13).
 5. **Mono-operador sin auth real.** Nada de RBAC/roles. Se reusan los patrones `current_user` sin validar existentes.
@@ -109,7 +110,8 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 - `backend/config.py` — agregar 4 atributos (bloque cerca de las `LOCAL_LLM_*`, H23):
   ```python
   # ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ──────────
-  STACKY_PR_REVIEWER_ENABLED = os.getenv("STACKY_PR_REVIEWER_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+  # DEFAULT ON (decisión explícita del operador 2026-07-09): el fallback del getenv es "true".
+  STACKY_PR_REVIEWER_ENABLED = os.getenv("STACKY_PR_REVIEWER_ENABLED", "true").lower() in ("1", "true", "yes", "on")
   # SUPUESTO: id del modelo Haiku en el catálogo de Copilot/GitHub Models. El operador
   # lo confirma con "Ver modelos disponibles" en el panel. Ver §2.2.
   STACKY_PR_REVIEW_HAIKU_MODEL = os.getenv("STACKY_PR_REVIEW_HAIKU_MODEL", "claude-3.5-haiku")
@@ -135,12 +137,15 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
              "Plan 110 — Sección 'Revisor de PRs' del panel DevOps: lista las PRs "
              "abiertas del tracker activo y permite revisarlas con Claude Haiku "
              "(solo-lectura, recomienda una acción) o con el modelo local. "
-             "Default OFF: /api/pr-review/* da 404 y la sección no aparece."
+             "Default ON: la sección aparece; apagala si /api/pr-review/* debe dar 404."
          ),
          group="global",
          env_only=False,
          requires="STACKY_DEVOPS_PANEL_ENABLED",  # H19: master sin requires propio
-         # SIN default= (gotcha _CURATED_DEFAULTS_ON, H18)
+         default=True,  # DEFAULT ON (operador). OBLIGATORIO agregar la key a
+                        # _CURATED_DEFAULTS_ON en tests/test_harness_flags.py (ver abajo):
+                        # es la ÚNICA vía canónica de promover un default a ON sin romper
+                        # test_default_known_only_for_curated / test_declared_default_true_set.
      ),
      FlagSpec(
          key="STACKY_PR_REVIEW_HAIKU_MODEL",
@@ -202,21 +207,27 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
   "STACKY_PR_REVIEW_DIFF_MAX_CHARS": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 110
   "STACKY_PR_REVIEW_TIMEOUT_SEC": "STACKY_DEVOPS_PANEL_ENABLED",     # Plan 110
   ```
+- `backend/tests/test_harness_flags.py` — **(OBLIGATORIO por el default ON)** agregar la key **solo del master bool** al set `_CURATED_DEFAULTS_ON` (definido ~línea 465; es la lista curada de defaults ON — su comentario dice que agregar una key acá es la vía canónica para promover un default, "nunca se toca el meta-test"):
+  ```python
+  "STACKY_PR_REVIEWER_ENABLED",  # Plan 110 — default ON pedido por el operador
+  ```
+  > **Importante (H18 revisado con evidencia):** `default_is_known(spec)` es `spec.default is not None` (`harness_flags.py:2404-2406`) y el meta-test `test_default_known_only_for_curated` (`test_harness_flags.py:593-599`) exige `{keys con default explícito} == _CURATED_DEFAULTS_ON`; además `test_declared_default_true_set` (`:582-590`) exige que TODA key del set tenga `declared_default is True`. Por eso: (a) el master lleva `default=True` **y** entra al set; (b) las 3 flags **str/int** (`_HAIKU_MODEL`, `_DIFF_MAX_CHARS`, `_TIMEOUT_SEC`) van **SIN `default=`** y **NO** entran al set (su "default" es un valor, no un ON/OFF; su default efectivo vive en `config.py`). Meter una str en el set rompería `test_declared_default_true_set`.
 
 **Tests primero (archivo nuevo `backend/tests/test_plan110_pr_review_flags.py`):**
 - `test_flags_registered_and_categorized`: las 4 keys están en `FLAG_REGISTRY` y en `_CATEGORY_KEYS["devops"]`.
 - `test_flags_editable_by_ui`: las 4 tienen `env_only == False`.
-- `test_flags_no_explicit_default`: ninguna FlagSpec nueva trae `default` distinto del centinela (evita el gotcha H18).
+- `test_reviewer_default_on`: **default ON** — con entorno limpio, `config.STACKY_PR_REVIEWER_ENABLED is True`; la `FlagSpec` del master tiene `default is True`; y `"STACKY_PR_REVIEWER_ENABLED" in _CURATED_DEFAULTS_ON` (import desde `tests.test_harness_flags`). (Este test es el candado del pedido del operador.)
+- `test_subconfig_flags_no_explicit_default`: las 3 flags **str/int** (`_HAIKU_MODEL`, `_DIFF_MAX_CHARS`, `_TIMEOUT_SEC`) traen `default is None` en su `FlagSpec` (su default efectivo vive en `config.py`); NO están en `_CURATED_DEFAULTS_ON`.
 - `test_requires_all_point_to_panel_master`: las 4 tienen `requires == "STACKY_DEVOPS_PANEL_ENABLED"`.
 
 **Criterio de aceptación (binario) + comando:**
 - `".venv/Scripts/python.exe" -m pytest tests/test_plan110_pr_review_flags.py tests/test_harness_flags.py tests/test_harness_flags_requires.py tests/test_harness_flags_help.py -q` → todo verde.
 
-**Flag que protege:** las flags SON el objeto de esta fase; default OFF vía omisión (`config.py` = `"false"`).
+**Flag que protege:** las flags SON el objeto de esta fase; el master `STACKY_PR_REVIEWER_ENABLED` es **default ON** (`config.py` = `"true"` + `default=True` + entrada en `_CURATED_DEFAULTS_ON`).
 
 **Impacto por runtime:** ninguno (solo declaración). **Fallback:** N/A.
 
-**Trabajo del operador:** ninguno (opt-in, default off).
+**Trabajo del operador:** ninguno (nace activada; el operador puede apagarla con un click si no la quiere).
 
 ---
 
@@ -1089,7 +1100,7 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 
 ## 6. Riesgos y mitigaciones
 
-1. **[ALTO] Datos personales / secretos en el diff.** El diff puede contener credenciales, tokens o datos personales. Al revisar con Haiku, el diff **sale de la máquina** hacia el servicio de Copilot/GitHub; con el modelo local queda en la máquina del operador. **Mitigación:** (a) redacción de patrones de secreto (`pr_review_sanitize.redact_secrets`); (b) truncado a `STACKY_PR_REVIEW_DIFF_MAX_CHARS`; (c) aviso explícito en la UI ANTES de revisar (F7); (d) el diff crudo **nunca** se persiste en la DB (`input_context_json` solo lleva metadatos) ni se loguea en claro (`on_log=lambda ...: None`). **Residual:** la redacción por patrones no es exhaustiva; el aviso de la UI traslada la decisión final al operador (human-in-the-loop). Documentar este residual en la ayuda de la sección.
+1. **[ALTO] Datos personales / secretos en el diff — agravado por el default ON.** El diff puede contener credenciales, tokens o datos personales. Al revisar con Haiku, el diff **sale de la máquina** hacia el servicio de Copilot/GitHub; con el modelo local queda en la máquina del operador. **El default ON (decisión del operador) aumenta la superficie de exposición:** la sección queda disponible out-of-the-box, sin un gesto de opt-in explícito que "avise" al operador de que hay un camino que puede exfiltrar el diff a un tercero. Ninguna revisión ocurre sin que el humano apriete un botón (no hay auto-review), pero la capacidad está a un click de distancia por default. **Mitigación:** (a) redacción de patrones de secreto (`pr_review_sanitize.redact_secrets`); (b) truncado a `STACKY_PR_REVIEW_DIFF_MAX_CHARS`; (c) **aviso de privacidad SIEMPRE visible en la UI ANTES de revisar** (F7) — obligatorio, es la compensación directa del default ON; (d) el diff crudo **nunca** se persiste en la DB (`input_context_json` solo lleva metadatos) ni se loguea en claro (`on_log=lambda ...: None`); (e) el operador puede apagar la sección con un click (gate reversible). **Residual:** la redacción por patrones no es exhaustiva y con el default ON el revisor está activo sin opt-in; el aviso de la UI traslada la decisión final al operador (human-in-the-loop). Documentar este residual en la ayuda de la sección. **Si el operador maneja repos con datos personales/regulados, evaluar apagar la revisión Haiku (externa) y usar solo el modelo local, que no saca el diff de la máquina.**
 2. **[MEDIO] SUPUESTO del id de modelo Haiku en Copilot.** Si el catálogo del operador no expone un Haiku, la revisión Haiku no funciona. **Mitigación:** flag editable + validación `"haiku"` + 502 con hint + camino local independiente que sí funciona. Ver §2.2.
 3. **[MEDIO] Tightening del Protocol MR/PR.** Sumar métodos al `Protocol` `runtime_checkable` endurece el `isinstance` de la fábrica (H2). **Mitigación:** implementar los métodos en AMBOS providers reales en la misma fase (F1/F6) y correr los tests del Plan 95 como no-regresión (F8). Los tests de este plan usan providers reales con `_client._request` mockeado.
 4. **[BAJO] ADO sin diff línea a línea (v1).** La revisión ADO recibe solo la lista de archivos + metadatos. **Mitigación:** degradación explícita (`diff_available=False` + `note`), la UI lo muestra; la revisión sigue siendo útil (título/descripción/ramas/pipeline/archivos). Full diff ADO = fuera de scope v1 (§7).
@@ -1137,7 +1148,8 @@ El Plan 95 dio a Stacky la infraestructura MR/PR pero **solo para crear/consulta
 ### 8.3 Definición de Hecho (DoD) global
 
 - [ ] Las 4 flags nuevas existen, están categorizadas en `devops`, son `env_only=False`, tienen `requires="STACKY_DEVOPS_PANEL_ENABLED"` y ayuda llana sin jerga; `test_harness_flags*.py` verdes.
-- [ ] Con `STACKY_PR_REVIEWER_ENABLED=false`: los 6 endpoints (`list`, `detail`, `review/haiku`, `review/local`, `execute`, `actions`) dan 404 y la sub-tab muestra el banner de activación (comportamiento byte-idéntico al actual salvo la sub-tab nueva deshabilitada).
+- [ ] **Default ON del master:** con entorno limpio `config.STACKY_PR_REVIEWER_ENABLED is True`, la `FlagSpec` tiene `default=True`, y `STACKY_PR_REVIEWER_ENABLED ∈ _CURATED_DEFAULTS_ON`; `test_default_known_only_for_curated` y `test_declared_default_true_set` verdes. Las 3 str/int quedan `default=None` y fuera del set.
+- [ ] **Gate reversible:** con `STACKY_PR_REVIEWER_ENABLED=false` (apagada por el operador): los 6 endpoints (`list`, `detail`, `review/haiku`, `review/local`, `execute`, `actions`) dan 404 y la sub-tab muestra el banner de activación (restaura el comportamiento previo a este plan).
 - [ ] `GET /api/pr-review/list` devuelve PRs normalizadas de GitLab y ADO; tracker caído → error descriptivo, nunca 500.
 - [ ] `GET /api/pr-review/detail` devuelve el diff **saneado** (redactado + truncado) y `diff_available` honesto por tracker.
 - [ ] La revisión Haiku usa EXCLUSIVAMENTE un modelo con `"haiku"` en el id, es una completion sin herramientas, devuelve `{summary, findings[], recommended_action∈set cerrado, confidence}`, y no persiste el diff crudo.

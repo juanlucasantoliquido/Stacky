@@ -193,6 +193,13 @@ $HarnessTestFiles = @(
   "tests/test_plan112_search_route.py",
   "tests/test_plan112_telemetry.py",
   "tests/test_plan112_doc_consultor_fallback.py",
+  # Plan 113 - Documentador 1-click polifuncional
+  "tests/test_plan113_flags_and_agent.py",
+  "tests/test_plan113_plan_selector.py",
+  "tests/test_plan113_invoke_and_parse.py",
+  "tests/test_plan113_git_gate.py",
+  "tests/test_plan113_apply.py",
+  "tests/test_plan113_endpoints.py",
   # Plan 61 - Gate determinista del flujo funcional (Task)
   "tests/test_task_gate_flags.py",
   "tests/test_task_gate.py",

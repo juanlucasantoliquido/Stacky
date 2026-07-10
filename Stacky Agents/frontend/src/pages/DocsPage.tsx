@@ -12,6 +12,7 @@ import DocViewer from "../components/DocViewer";
 import DocCoveragePanel from "../components/docs/DocCoveragePanel";
 import DocGraphView from "../components/docs/DocGraphView";
 import DocBacklinksPanel from "../components/docs/DocBacklinksPanel";
+import DocumenterButton from "../components/docs/DocumenterButton";
 import { Docs } from "../api/endpoints";
 import type { DocNode, DocRoot, DocHeading } from "../api/endpoints";
 import { buildNameIndex, type DocGraphResponse } from "../docs/docGraphModel";
@@ -142,6 +143,7 @@ export default function DocsPage() {
 
   // -- Grafo documental (Plan 109, gateado por flag) --------------------------
   const graphEnabled = sourcesData?.graph_enabled === true;
+  const documenterEnabled = sourcesData?.documenter_enabled === true;
   const {
     data: graphData,
     isLoading: graphLoading,
@@ -331,6 +333,11 @@ export default function DocsPage() {
       </aside>
 
       <main className={styles.viewerPanel}>
+        {documenterEnabled && (
+          <div style={{ marginBottom: 8 }}>
+            <DocumenterButton projectName={projectName} />
+          </div>
+        )}
         {graphEnabled && (
           <div className={styles.docsTabs} role="tablist" aria-label="Vista de documentación">
             <button

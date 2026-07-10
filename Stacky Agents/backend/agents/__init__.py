@@ -4,6 +4,7 @@ from .custom import CustomAgent
 from .debug import DebugAgent, PRReviewAgent
 from .developer import DeveloperAgent
 from .devops import DevOpsAgent
+from .documenter import DocumenterAgent
 from .functional import FunctionalAgent
 from .qa import QAAgent
 from .technical import TechnicalAgent
@@ -19,6 +20,7 @@ registry: dict[str, BaseAgent] = {
         QAAgent(),
         DebugAgent(),       # FA-29
         PRReviewAgent(),    # FA-28
+        DocumenterAgent(),  # Plan 113 — Documentador 1-click
         CustomAgent(),      # VS Code / Copilot custom agents
     ]
 }

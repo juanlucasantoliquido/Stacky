@@ -489,6 +489,14 @@ class Config:
         os.getenv("STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS", "8") or "8"
     )
 
+    # ── Plan 113 — Documentador 1-click (default OFF, editable por UI) ─────────
+    STACKY_DOCS_DOCUMENTER_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_DOCUMENTER_ENABLED", "false"
+    ).strip().lower() == "true"
+    STACKY_DOCS_DOCUMENTER_MAX_FILES: int = int(
+        os.getenv("STACKY_DOCS_DOCUMENTER_MAX_FILES", "40") or "40"
+    )
+
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",

@@ -56,6 +56,7 @@ def get_doc_sources():
     """
     payload = doc_indexer.list_doc_sources(project_name=_get_project_param())
     payload["graph_enabled"] = bool(getattr(config, "STACKY_DOCS_GRAPH_ENABLED", False))  # Plan 109
+    payload["documenter_enabled"] = bool(getattr(config, "STACKY_DOCS_DOCUMENTER_ENABLED", False))  # Plan 113
     return jsonify(payload)
 
 
@@ -238,3 +239,85 @@ def get_docs_graph():
                 duration_ms=round((time.monotonic() - t0) * 1000),
                 doc_health=(graph.get("doc_health") or {}).get("status"))
     return jsonify({"ok": True, **graph})
+
+
+# ── Plan 113 — Documentador 1-click (gateado por STACKY_DOCS_DOCUMENTER_ENABLED) ─
+
+def _documenter_enabled() -> bool:
+    return bool(getattr(config, "STACKY_DOCS_DOCUMENTER_ENABLED", False))
+
+
+@bp.post("/documenter/run")
+def documenter_run():
+    """Lanza el pipeline del Documentador en background. 1-click, sin formularios.
+
+    Body (todo opcional): {project?, runtime?}. 404 si la flag está OFF; 409 si ya
+    hay un run activo.
+    """
+    if not _documenter_enabled():
+        return jsonify({"ok": False, "error": "documenter_disabled"}), 404
+    body = request.get_json(silent=True) or {}
+    from project_manager import get_active_project
+    project = (body.get("project") or "").strip() or get_active_project()
+    if not project:
+        return jsonify({"ok": False, "error": "no_active_project"}), 400
+    runtime = (body.get("runtime") or "claude_code_cli").strip()
+    from services import doc_documenter
+    try:
+        run_id = doc_documenter.start_documenter_run(project, runtime)
+    except doc_documenter.DocumenterBusy:
+        return jsonify({"ok": False, "error": "documenter_busy"}), 409
+    return jsonify({"ok": True, "run_id": run_id})
+
+
+@bp.get("/documenter/status")
+def documenter_status():
+    """Estado del run (progreso, salud antes/después, rama, diff_stat). 404 si flag OFF."""
+    if not _documenter_enabled():
+        return jsonify({"ok": False, "error": "documenter_disabled"}), 404
+    run_id = (request.args.get("run") or "").strip()
+    from services import doc_documenter
+    rec = doc_documenter.get_run(run_id)
+    if rec is None:
+        return jsonify({"ok": False, "error": "run_not_found"}), 404
+    return jsonify({
+        "ok": True, "run_id": run_id,
+        "state": rec.get("state"), "current_mode": rec.get("current_mode"),
+        "written": rec.get("written"), "skipped": rec.get("skipped"),
+        "health_before": rec.get("health_before"), "health_after": rec.get("health_after"),
+        "branch": rec.get("branch"), "degraded": rec.get("degraded"),
+        "diff_stat": rec.get("diff_stat", ""), "reason": rec.get("reason", ""),
+        "error": rec.get("error"),
+    })
+
+
+@bp.post("/documenter/decide")
+def documenter_decide():
+    """Conserva (keep) o descarta (discard) la rama del run. 404 si flag OFF."""
+    if not _documenter_enabled():
+        return jsonify({"ok": False, "error": "documenter_disabled"}), 404
+    body = request.get_json(silent=True) or {}
+    run_id = (body.get("run") or "").strip()
+    action = (body.get("action") or "").strip()
+    if action not in ("keep", "discard"):
+        return jsonify({"ok": False, "error": "invalid_action"}), 400
+    from services import doc_documenter
+    rec = doc_documenter.get_run(run_id)
+    if rec is None:
+        # (C6) tras un restart el registro se pierde: 404 con patrón de rama para limpieza manual.
+        return jsonify({
+            "ok": False, "error": "run_not_found",
+            "message": ("Run desconocido (¿reinicio del backend?). Podés limpiar a mano "
+                        "las ramas 'stacky/doc-*' con git branch -D."),
+        }), 404
+    target_root = rec.get("target_root")
+    branch = rec.get("branch")
+    if not branch or not target_root:
+        return jsonify({"ok": False, "error": "no_branch",
+                        "message": "El run no dejó una rama (modo carpeta-sombra)."}), 400
+    if action == "keep":
+        doc_documenter.keep_doc_branch(target_root, branch)
+    else:
+        doc_documenter.discard_doc_branch(target_root, branch)
+    doc_documenter._update_run(run_id, state=f"decided_{action}")
+    return jsonify({"ok": True, "action": action, "branch": branch})

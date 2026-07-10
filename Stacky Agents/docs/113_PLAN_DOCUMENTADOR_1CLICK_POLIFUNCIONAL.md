@@ -1,7 +1,9 @@
 # Plan 113 — Documentador agéntico 1-click polifuncional (detecta y deja la doc creada/corregida en un solo click)
 
-> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Estado:** IMPLEMENTADO — 2026-07-10 (F0..F7 por `implementar-plan-stacky`)
 > **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+>
+> **IMPLEMENTACIÓN (2026-07-10):** F0 (2 flags+requires+help+agente Documentador registrado, 5/5), F1 (`plan_documenter_run` selector determinista, 5/5), F2 (`parse_proposals`+`build_context_for_mode`+`invoke_documenter`, 6/6), F3 (gate git worktree prepare/keep/discard, sin push/merge/stash, 5/5), F4 (`apply_proposals` protege docs/sistema/+exige marcas+cap+upsert, 6/6), F5 (orquestador background+3 endpoints+`_health_for_root`+lock+diff_stat, 9/9), F6 (botón 1-click+panel+modelo puro: 3 vitest + tsc 0). No-regresión backend: 98 passed. Nota: `test_harness_flags_help.py` mantiene 2 fallas PREEXISTENTES ajenas (DEVOPS), independientes de este plan. F7 verificación manual queda al operador (flag ON). Sin cambios de frontend fuera de Docs; el botón aparece solo con `documenter_enabled`. `Documentador.agent.md` versionado (des-ignorado en .gitignore).
 >
 > **CHANGELOG v1 → v2:**
 > - **C1 (IMPORTANTE):** contradicción interna resuelta — §1/DoD decían "conservar (merge)" pero F3 decía "NO merge automático". Regla única en toda la v2: **"Conservar" NUNCA ejecuta merge** (un merge automático sobre el working tree sucio del operador podría destruir WIP); preserva la rama y muestra el comando de merge sugerido. El merge lo corre el operador cuando quiere.

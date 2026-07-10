@@ -2631,6 +2631,33 @@ export interface DocsSourcesResponse {
   note?: string | null;
   /** Plan 109 — true si STACKY_DOCS_GRAPH_ENABLED está ON (gatea la pestaña Cobertura). */
   graph_enabled?: boolean;
+  /** Plan 113 — true si STACKY_DOCS_DOCUMENTER_ENABLED está ON (gatea el botón Documentador). */
+  documenter_enabled?: boolean;
+}
+
+/** Plan 113 — salud documental recomputada (subset de doc_health). */
+export interface DocumenterHealth {
+  status: string;
+  frontmatter_ratio?: number;
+  wikilink_edges?: number;
+  uncovered_modules?: string[];
+}
+
+/** Plan 113 — estado de un run del Documentador. */
+export interface DocumenterStatusResponse {
+  ok: boolean;
+  run_id?: string;
+  state?: string;
+  current_mode?: string | null;
+  written?: string[];
+  skipped?: [string, string][];
+  health_before?: DocumenterHealth | null;
+  health_after?: DocumenterHealth | null;
+  branch?: string | null;
+  degraded?: boolean;
+  diff_stat?: string;
+  reason?: string;
+  error?: string | null;
 }
 
 export interface DocsIndexResponse {
@@ -2689,6 +2716,27 @@ export const Docs = {
     const qs = query.toString();
     return api.get<DocGraphResponse>(`/api/docs/graph${qs ? `?${qs}` : ""}`);
   },
+
+  /** Plan 113 — lanza el Documentador 1-click en background. 404 si la flag OFF, 409 si busy. */
+  documenterRun: (project?: string): Promise<{ ok: boolean; run_id?: string; error?: string }> =>
+    api.post<{ ok: boolean; run_id?: string; error?: string }>(
+      `/api/docs/documenter/run`,
+      project ? { project } : {}
+    ),
+
+  /** Plan 113 — estado del run del Documentador. */
+  documenterStatus: (runId: string): Promise<DocumenterStatusResponse> =>
+    api.get<DocumenterStatusResponse>(`/api/docs/documenter/status?run=${encodeURIComponent(runId)}`),
+
+  /** Plan 113 — conserva (keep) o descarta (discard) la rama del run. */
+  documenterDecide: (
+    runId: string,
+    action: "keep" | "discard"
+  ): Promise<{ ok: boolean; action?: string; branch?: string; error?: string }> =>
+    api.post<{ ok: boolean; action?: string; branch?: string; error?: string }>(
+      `/api/docs/documenter/decide`,
+      { run: runId, action }
+    ),
 };
 
 // ── Feature #4: FlowConfig — mapeo determinístico ado_state → agent_type ─────

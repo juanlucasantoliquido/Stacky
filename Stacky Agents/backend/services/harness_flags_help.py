@@ -295,6 +295,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás a cero: no se traen notas vecinas; solo se reordenan los resultados por importancia.",
         example="Ponerlo en 8 es como, por cada documento encontrado, mirar hasta 8 documentos que este enlaza.",
     ),
+    "STACKY_DOCS_DOCUMENTER_ENABLED": PlainHelp(
+        what="Agrega un botón que, con un click, escribe o corrige la documentación del proyecto y la deja lista para revisar.",
+        on_effect="Si la activás: aparece 'Lanzar Documentador' en la página de documentos; al usarlo, deja la doc creada o corregida en una copia aparte que vos revisás y aceptás o descartás.",
+        off_effect="Si la apagás: no aparece el botón y la página de documentos queda igual que siempre.",
+        example="El proyecto no tiene documentación: un click la genera desde el código y te la deja en una copia aparte para que la revises antes de quedártela.",
+    ),
+    "STACKY_DOCS_DOCUMENTER_MAX_FILES": PlainHelp(
+        what="Cuántos archivos de documentación puede escribir el Documentador como máximo en un solo uso (freno de seguridad).",
+        on_effect="Si subís el número: puede tocar más archivos de una sola vez, útil en proyectos grandes pero cada uso tarda más.",
+        off_effect="Si lo bajás: cada uso toca menos archivos; si el trabajo es más grande, corta al llegar al tope y te avisa.",
+        example="Ponerlo en 40 es como decirle 'escribí hasta 40 documentos por vez y si falta más, avisame'.",
+    ),
     # ── calidad_verificacion ──────────────────────────────────────────────
     "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED": PlainHelp(
         what="Le muestra al agente, como lista de tareas obligatoria, los criterios que el ticket exige cumplir.",

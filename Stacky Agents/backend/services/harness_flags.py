@@ -133,6 +133,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DOCS_RAG_HYBRID_ENABLED",  # Plan 112 — retrieval híbrido docs-rag
         "STACKY_DOCS_RAG_HYBRID_ALPHA", "STACKY_DOCS_RAG_HYBRID_BETA",
         "STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS",  # Plan 112 — pesos + tope vecinos
+        "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 113 — Documentador 1-click
+        "STACKY_DOCS_DOCUMENTER_MAX_FILES",  # Plan 113 — tope de archivos por run
     ),
     "calidad_verificacion": (
         "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -1530,6 +1532,36 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DOCS_RAG_HYBRID_ENABLED",
         min_value=0,
         max_value=100,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_DOCUMENTER_ENABLED",
+        type="bool",
+        label="Documentador 1-click (Plan 113)",
+        description=(
+            "Plan 113 — Si ON, agrega en la página Docs un botón 'Lanzar Documentador' "
+            "que con un click detecta el estado de la documentación (sin docs / mal "
+            "formato / incompleta / sana), decide qué trabajo hace falta y deja la doc "
+            "creada/corregida en formato Obsidian en una rama git dedicada y revertible "
+            "(nunca en la rama de trabajo, nunca push). El operador la revisa como diff y "
+            "la conserva o descarta. No toca docs/sistema/. Default OFF."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_DOCUMENTER_MAX_FILES",
+        type="int",
+        label="Documentador: tope de archivos por run",
+        description=(
+            "Plan 113 — Máximo de archivos de documentación que el Documentador puede "
+            "escribir en un solo run (límite de seguridad). Default 40. Solo aplica con "
+            "STACKY_DOCS_DOCUMENTER_ENABLED=true."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+        min_value=1,
+        max_value=500,
     ),
     FlagSpec(
         key="STACKY_PROCESS_DISCIPLINE_ENABLED",

@@ -3107,6 +3107,7 @@ export const DevOps = {
       ado_commit_supported?: boolean; // Plan 95 [C2]
       env_tree_preview_enabled?: boolean; // Plan 107
       env_sandbox_enabled?: boolean; // Plan 107
+      pr_reviewer_enabled?: boolean; // Plan 110
     }>("/api/devops/health"),
   /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
   parseYaml: (source: "ado" | "gitlab", yaml: string) =>
@@ -3333,6 +3334,75 @@ export interface MrInfo {
   pipeline_status?: "created" | "pending" | "running" | "success" | "failed" | "canceled" | "none";
   mergeable?: boolean;
 }
+
+// ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ────────────
+export interface PrSummary {
+  id: string;
+  title: string;
+  state: "open" | "merged" | "closed";
+  source_branch: string;
+  target_branch: string;
+  author: string;
+  web_url: string;
+  pipeline_status: string;
+}
+export interface PrReviewFinding {
+  severity: "info" | "warning" | "critical";
+  title: string;
+  detail: string;
+}
+export interface PrRecommendedAction {
+  type: "approve" | "comment" | "request_changes" | "merge" | "close" | "none";
+  label: string;
+  params: Record<string, unknown>;
+}
+export interface PrHaikuReview {
+  summary: string;
+  findings: PrReviewFinding[];
+  recommended_action: PrRecommendedAction;
+  confidence: number;
+}
+export interface PrReviewDetail {
+  id: string;
+  meta: MrInfo & { source_branch?: string; target_branch?: string };
+  files: { path: string; change_type: string }[];
+  diff_text: string;
+  diff_truncated: boolean;
+  diff_available: boolean;
+  note: string;
+}
+
+export const PrReview = {
+  list: (project: string, state = "open") =>
+    api.get<{ provider: string; merge_requests: PrSummary[] }>(
+      `/api/pr-review/list?project=${encodeURIComponent(project)}&state=${state}`,
+    ),
+  detail: (project: string, mrId: string) =>
+    api.get<PrReviewDetail>(
+      `/api/pr-review/detail?project=${encodeURIComponent(project)}&mr_id=${encodeURIComponent(mrId)}`,
+    ),
+  reviewHaiku: (project: string, mrId: string) =>
+    api.post<{ ok: boolean; review: PrHaikuReview; model: string; diff_truncated: boolean; diff_available: boolean; execution_id: number }>(
+      "/api/pr-review/review/haiku",
+      { project, mr_id: mrId },
+    ),
+  reviewLocal: (project: string, mrId: string, question?: string) =>
+    api.post<{ ok: boolean; answer: string; model: string; diff_truncated: boolean; diff_available: boolean; execution_id: number }>(
+      "/api/pr-review/review/local",
+      { project, mr_id: mrId, question },
+    ),
+  actions: (project: string) =>
+    api.get<{ provider: string; actions: string[] }>(
+      `/api/pr-review/actions?project=${encodeURIComponent(project)}`,
+    ),
+  // C3 — catálogo Copilot para elegir el id Haiku.
+  models: () =>
+    api.get<{ models: { id: string; name: string; is_haiku: boolean }[]; configured: string }>(
+      "/api/pr-review/models",
+    ),
+  execute: (b: { project: string; mr_id: string; action: string; body?: string; confirm?: boolean; confirm_merge?: boolean }) =>
+    api.post<{ ok: boolean; action: string; result: unknown }>("/api/pr-review/execute", b),
+};
 
 /**
  * Plan 95 — flujo "Llevar a producción": crear MR/PR, ver su pipeline y

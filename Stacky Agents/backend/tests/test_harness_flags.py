@@ -515,6 +515,8 @@ _CURATED_DEFAULTS_ON = {
     # ── Activación operador 2026-07-09 — modelo local ON por default (decisión
     # explícita; rompe el default-OFF original de Plan 106 conscientemente) ──
     "LOCAL_LLM_ENABLED",
+    # ── Plan 110 — Revisor de PRs: master default ON pedido por el operador ──
+    "STACKY_PR_REVIEWER_ENABLED",
 }
 
 

@@ -1120,6 +1120,37 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo dejás con el valor de fábrica: se esperan 120 segundos.",
         example="Como el tiempo que esperás antes de decir 'no atienden' al llamar por teléfono.",
     ),
+    # ── Plan 110 — Revisor de PRs ──────────────────────────────────────────
+    "STACKY_PR_REVIEWER_ENABLED": PlainHelp(
+        what="Una sección para revisar los pedidos de cambios (PRs) de tu repositorio con ayuda de un asistente que solo mira y opina.",
+        on_effect="Si la activás: aparece la sección 'Revisor de PRs' con la lista de PRs abiertas y botones para pedir una revisión.",
+        off_effect="Si la apagás: la sección no aparece y el revisor queda desactivado.",
+        example="Como tener un colega que lee el cambio y te deja un resumen, pero vos decidís qué hacer.",
+    ),
+    "STACKY_PR_REVIEW_HAIKU_MODEL": PlainHelp(
+        what="El nombre del asistente de IA en la nube que revisa los pedidos de cambios (tiene que ser uno de la familia Haiku).",
+        on_effect="Si lo cambiás: la revisión en la nube usa ese asistente puntual; tiene que ser de la familia Haiku o el sistema lo rechaza.",
+        off_effect="Si lo dejás con el valor de fábrica: se usa claude-3.5-haiku.",
+        example="Como elegir a qué revisor concreto le mandás el trabajo; podés ver la lista disponible con el botón 'Ver modelos disponibles'.",
+    ),
+    "STACKY_PR_REVIEW_DIFF_MAX_CHARS": PlainHelp(
+        what="Cuánto del cambio se le manda al asistente en la nube para revisarlo.",
+        on_effect="Si subís el número: el asistente ve una porción más grande del cambio, pero viaja más información a la nube.",
+        off_effect="Si lo bajás: se manda menos; protege datos sensibles y acelera la respuesta. De fábrica son 60000 caracteres.",
+        example="Como decidir cuántas páginas de un documento le pasás a un revisor externo.",
+    ),
+    "STACKY_PR_REVIEW_LOCAL_DIFF_MAX_CHARS": PlainHelp(
+        what="Cuánto del cambio se le pasa al asistente que corre en tu propia máquina (no manda nada afuera).",
+        on_effect="Si lo subís (o lo ponés en cero): el asistente de tu máquina ve más del cambio, hasta el cambio entero, para entender todo el contexto.",
+        off_effect="Si lo bajás: el asistente de tu máquina ve una parte más chica del cambio; útil si querés respuestas más rápidas.",
+        example="Poné cero para que vea el cambio completo, o un número para limitarlo por velocidad.",
+    ),
+    "STACKY_PR_REVIEW_TIMEOUT_SEC": PlainHelp(
+        what="Cuánto tiempo como máximo se espera la respuesta del asistente en la nube al revisar un cambio.",
+        on_effect="Si subís el número: se espera más tiempo antes de avisar que no contestó, útil para revisiones largas.",
+        off_effect="Si lo bajás: se corta antes la espera. De fábrica son 120 segundos.",
+        example="Como el tiempo que esperás al teléfono antes de cortar y volver a intentar.",
+    ),
 }
 
 

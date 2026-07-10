@@ -400,3 +400,77 @@ class AdoTrackerProvider:
                 kind="ado_pr_merge_failed",
                 message=f"Error mergeando PR en ADO: {e}",
             ) from e
+
+    # ── Plan 110 — Revisor de PRs ──────────────────────────────────────────
+    def list_merge_requests(self, state: str = "open") -> list[dict]:
+        """GET .../pullrequests?searchCriteria.status=<active|completed|abandoned|all>."""
+        from services.ado_pipeline_definitions import _resolve_repo_id  # noqa: PLC0415
+        repo_id = _resolve_repo_id(self._project)
+        ado_status = {"open": "active", "merged": "completed", "closed": "abandoned", "all": "all"}.get(state, "active")
+        url = (f"{self._client._base_proj}/_apis/git/repositories/{repo_id}/pullrequests"
+               f"?searchCriteria.status={ado_status}&$top=50&api-version=7.1")
+        resp = self._client._request("GET", url)
+        rows = resp.get("value", []) if isinstance(resp, dict) else []
+        state_map = {"active": "open", "completed": "merged", "abandoned": "closed"}
+        out = []
+        for pr in rows:
+            out.append({
+                "id": str(pr.get("pullRequestId") or ""),
+                "title": pr.get("title") or "",
+                "state": state_map.get(pr.get("status") or "", "open"),
+                "source_branch": (pr.get("sourceRefName") or "").replace("refs/heads/", ""),
+                "target_branch": (pr.get("targetRefName") or "").replace("refs/heads/", ""),
+                "author": ((pr.get("createdBy") or {}).get("displayName")) or "",
+                "web_url": pr.get("_links", {}).get("web", {}).get("href", ""),
+                "pipeline_status": "none",  # v1: no consultamos builds en el listado (barato)
+            })
+        return out
+
+    def get_merge_request_diff(self, mr_id: str) -> dict:
+        """Degradación controlada (v1): lista de archivos cambiados de la última iteración.
+        El diff línea a línea de ADO requiere varias llamadas por archivo; NO se incluye en v1.
+        """
+        from services.ado_pipeline_definitions import _resolve_repo_id  # noqa: PLC0415
+        repo_id = _resolve_repo_id(self._project)
+        base = f"{self._client._base_proj}/_apis/git/repositories/{repo_id}/pullRequests/{mr_id}"
+        files = []
+        try:
+            iters = self._client._request("GET", f"{base}/iterations?api-version=7.1")
+            it_list = iters.get("value", []) if isinstance(iters, dict) else []
+            if it_list:
+                last = it_list[-1].get("id")
+                changes = self._client._request("GET", f"{base}/iterations/{last}/changes?api-version=7.1")
+                ct_map = {"add": "added", "edit": "modified", "delete": "deleted", "rename": "renamed"}
+                for c in (changes.get("changeEntries", []) if isinstance(changes, dict) else []):
+                    item = c.get("item") or {}
+                    files.append({
+                        "path": item.get("path") or "",
+                        "change_type": ct_map.get((c.get("changeType") or "").lower().split(",")[0], "modified"),
+                    })
+        except Exception:
+            files = []
+        return {
+            "id": str(mr_id),
+            "files": files,
+            "diff_text": "",
+            "diff_available": False,
+            "note": "Azure DevOps: en esta versión se listan los archivos cambiados, no el detalle línea a línea.",
+        }
+
+    def comment_merge_request(self, mr_id: str, body: str) -> dict:
+        """POST .../pullRequests/:id/threads (comentario a nivel del PR)."""
+        from services.ado_pipeline_definitions import _resolve_repo_id  # noqa: PLC0415
+        repo_id = _resolve_repo_id(self._project)
+        url = f"{self._client._base_proj}/_apis/git/repositories/{repo_id}/pullRequests/{mr_id}/threads?api-version=7.1"
+        payload = {"comments": [{"parentCommentId": 0, "content": body, "commentType": 1}], "status": 1}
+        resp = self._client._request("POST", url, body=payload)
+        return {"ok": True, "id": str((resp or {}).get("id") or "")}
+
+    def close_merge_request(self, mr_id: str) -> dict:
+        """PATCH .../pullrequests/:id con status=abandoned."""
+        from services.ado_pipeline_definitions import _resolve_repo_id  # noqa: PLC0415
+        repo_id = _resolve_repo_id(self._project)
+        url = f"{self._client._base_proj}/_apis/git/repositories/{repo_id}/pullrequests/{mr_id}?api-version=7.1"
+        self._client._request("PATCH", url, body={"status": "abandoned"})
+        return {"ok": True, "id": str(mr_id), "state": "closed"}
+    # ADO NO define approve_merge_request en v1 → capability False.

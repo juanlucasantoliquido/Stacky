@@ -698,3 +698,84 @@ class GitLabTrackerProvider:
             "id": str(body.get("iid") or ""),
             "state": "merged",
         }
+
+    # ── Plan 110 — Revisor de PRs ──────────────────────────────────────────
+    def list_merge_requests(self, state: str = "open") -> list[dict]:
+        """GET /projects/:id/merge_requests?state=<opened|merged|closed|all>&scope=all."""
+        proj_path = self._client._project_path()
+        gl_state = {"open": "opened", "merged": "merged", "closed": "closed", "all": "all"}.get(state, "opened")
+        # C5: query vía params= (firma real _request(..., params=...)), no embebida en el path.
+        body, _ = self._client._request(
+            "GET",
+            f"/projects/{proj_path}/merge_requests",
+            params={"state": gl_state, "scope": "all", "per_page": 50, "order_by": "updated_at"},
+        )
+        rows = body if isinstance(body, list) else []
+        state_map = {"opened": "open", "merged": "merged", "closed": "closed"}
+        ps_map = {"created": "created", "pending": "pending", "running": "running",
+                  "success": "success", "failed": "failed", "canceled": "canceled",
+                  "skipped": "canceled"}
+        out = []
+        for mr in rows:
+            hp = mr.get("head_pipeline") or {}
+            out.append({
+                "id": str(mr.get("iid") or ""),
+                "title": mr.get("title") or "",
+                "state": state_map.get(mr.get("state") or "", "open"),
+                "source_branch": mr.get("source_branch") or "",
+                "target_branch": mr.get("target_branch") or "",
+                "author": ((mr.get("author") or {}).get("name")) or "",
+                "web_url": mr.get("web_url") or "",
+                "pipeline_status": ps_map.get(hp.get("status") or "", "none"),
+            })
+        return out
+
+    def get_merge_request_diff(self, mr_id: str) -> dict:
+        """GET /projects/:id/merge_requests/:iid/changes."""
+        proj_path = self._client._project_path()
+        body, _ = self._client._request(
+            "GET", f"/projects/{proj_path}/merge_requests/{mr_id}/changes",
+        )
+        changes = (body.get("changes") if isinstance(body, dict) else None) or []
+        files, parts = [], []
+        for ch in changes:
+            if ch.get("new_file"):
+                ct = "added"
+            elif ch.get("deleted_file"):
+                ct = "deleted"
+            elif ch.get("renamed_file"):
+                ct = "renamed"
+            else:
+                ct = "modified"
+            path = ch.get("new_path") or ch.get("old_path") or ""
+            files.append({"path": path, "change_type": ct})
+            if ch.get("diff"):
+                parts.append(f"--- {path} ({ct}) ---\n{ch['diff']}")
+        return {
+            "id": str(mr_id),
+            "files": files,
+            "diff_text": "\n".join(parts),
+            "diff_available": True,
+            "note": "",
+        }
+
+    def comment_merge_request(self, mr_id: str, body: str) -> dict:
+        """POST /projects/:id/merge_requests/:iid/notes."""
+        proj_path = self._client._project_path()
+        result, _ = self._client._request(
+            "POST", f"/projects/{proj_path}/merge_requests/{mr_id}/notes",
+            json_body={"body": body})
+        return {"ok": True, "id": str((result or {}).get("id") or "")}
+
+    def close_merge_request(self, mr_id: str) -> dict:
+        """PUT /projects/:id/merge_requests/:iid con state_event=close."""
+        proj_path = self._client._project_path()
+        self._client._request("PUT", f"/projects/{proj_path}/merge_requests/{mr_id}",
+                              json_body={"state_event": "close"})
+        return {"ok": True, "id": str(mr_id), "state": "closed"}
+
+    def approve_merge_request(self, mr_id: str) -> dict:
+        """POST /projects/:id/merge_requests/:iid/approve (OPCIONAL, capability)."""
+        proj_path = self._client._project_path()
+        self._client._request("POST", f"/projects/{proj_path}/merge_requests/{mr_id}/approve")
+        return {"ok": True, "id": str(mr_id), "approved": True}

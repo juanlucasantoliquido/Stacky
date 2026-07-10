@@ -33,6 +33,7 @@ export interface DevOpsHealth {
   section_doctor_enabled?: boolean; // Plan 104 — doctores IA por sección
   remote_console_enabled?: boolean; // Plan 105 — Consola remota por servidor
   remote_target_enabled?: boolean; // Plan 108 — agente/ambientes anclados al servidor seleccionado
+  pr_reviewer_enabled?: boolean; // Plan 110 — Revisor de PRs
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -71,6 +72,8 @@ import { DevOpsServers, type ServerSummary } from '../api/endpoints';
 import { VariablesSection } from '../components/devops/VariablesSection';
 // Importar RemoteConsoleSection (Plan 105 F4)
 import { RemoteConsoleSection } from '../components/devops/RemoteConsoleSection';
+// Importar PrReviewerSection (Plan 110 F7)
+import { PrReviewerSection } from '../components/devops/PrReviewerSection';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -135,6 +138,16 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED',
     gateMessage: 'La sección Consola remota necesita la flag STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED (Configuración → Arnés, categoría DevOps).',
     render: (ctx) => <RemoteConsoleSection ctx={ctx} />,
+  },
+  // Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local)
+  {
+    id: 'pr-review',
+    label: 'Revisor de PRs',
+    icon: '🔎',
+    healthKey: 'pr_reviewer_enabled',
+    gateFlagKey: 'STACKY_PR_REVIEWER_ENABLED',
+    gateMessage: 'La sección Revisor de PRs necesita la flag STACKY_PR_REVIEWER_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <PrReviewerSection ctx={ctx} />,
   },
 ];
 

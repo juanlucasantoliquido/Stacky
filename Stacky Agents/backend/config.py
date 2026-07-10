@@ -87,6 +87,20 @@ class Config:
     LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen3:32b")
     LOCAL_LLM_TIMEOUT_SEC = int(os.getenv("LOCAL_LLM_TIMEOUT_SEC", "120"))
 
+    # ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ──────────
+    # DEFAULT ON (decisión explícita del operador 2026-07-09): el fallback del getenv es "true".
+    STACKY_PR_REVIEWER_ENABLED = os.getenv("STACKY_PR_REVIEWER_ENABLED", "true").lower() in (
+        "1", "true", "yes", "on"
+    )
+    # SUPUESTO: id del modelo Haiku en el catálogo de Copilot/GitHub Models. El operador
+    # lo confirma con "Ver modelos disponibles" en el panel. Ver §2.2 del Plan 110.
+    STACKY_PR_REVIEW_HAIKU_MODEL = os.getenv("STACKY_PR_REVIEW_HAIKU_MODEL", "claude-3.5-haiku")
+    STACKY_PR_REVIEW_DIFF_MAX_CHARS = int(os.getenv("STACKY_PR_REVIEW_DIFF_MAX_CHARS", "60000"))
+    # v2.1 — cap del camino SOLO-LOCAL: es tope de VELOCIDAD/ventana de contexto, NO de privacidad.
+    # 0 = sin límite (contexto completo). El contenido no sale de la máquina (modelo local).
+    STACKY_PR_REVIEW_LOCAL_DIFF_MAX_CHARS = int(os.getenv("STACKY_PR_REVIEW_LOCAL_DIFF_MAX_CHARS", "200000"))
+    STACKY_PR_REVIEW_TIMEOUT_SEC = int(os.getenv("STACKY_PR_REVIEW_TIMEOUT_SEC", "120"))
+
     # Copilot Chat API
     COPILOT_MODEL = os.getenv("COPILOT_MODEL", "gpt-4.1")
     # GitHub Models API acepta el gho_ token directamente como Bearer.

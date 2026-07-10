@@ -37,8 +37,42 @@ class MergeRequestProvider(Protocol):
         """
         ...
 
+    def list_merge_requests(self, state: str = "open") -> list[dict]:
+        """Lista PRs/MRs. state ∈ {"open","merged","closed","all"} (default "open").
+        Retorna lista de: {'id': str, 'title': str, 'state': 'open'|'merged'|'closed',
+                           'source_branch': str, 'target_branch': str,
+                           'author': str, 'web_url': str,
+                           'pipeline_status': str}  # mismo vocabulario que get_merge_request
+        """
+        ...
 
-MR_PORT_METHODS = ("create_merge_request", "get_merge_request", "merge_merge_request")
+    def get_merge_request_diff(self, mr_id: str) -> dict:
+        """Detalle + diff de una PR/MR (crudo, SIN sanear — el saneo lo hace la capa API).
+        Retorna: {'id': str,
+                  'files': [{'path': str, 'change_type': 'added'|'modified'|'deleted'|'renamed'}],
+                  'diff_text': str,        # unified diff concatenado (GitLab); '' si no disponible
+                  'diff_available': bool,  # False en ADO v1 (degradación controlada)
+                  'note': str}             # hint humano si diff_available=False
+        """
+        ...
+
+    def comment_merge_request(self, mr_id: str, body: str) -> dict:
+        """Comenta a nivel PR/MR. Retorna {'ok': True, 'id': str}."""
+        ...
+
+    def close_merge_request(self, mr_id: str) -> dict:
+        """Cierra/abandona una PR/MR. Retorna {'ok': True, 'id': str, 'state': 'closed'}."""
+        ...
+
+    # NOTA: approve_merge_request NO está en el Protocol (capability opcional por
+    # tracker; se detecta con hasattr). GitLab lo implementa; ADO v1 no.
+
+
+MR_PORT_METHODS = (
+    "create_merge_request", "get_merge_request", "merge_merge_request",
+    "list_merge_requests", "get_merge_request_diff",  # Plan 110
+    "comment_merge_request", "close_merge_request",    # Plan 110 F6
+)
 
 
 def get_merge_request_provider(project: Optional[str] = None) -> MergeRequestProvider:

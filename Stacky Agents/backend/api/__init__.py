@@ -51,6 +51,7 @@ from .devops_section_doctor import bp as devops_section_doctor_bp  # Plan 104 �
 from .devops_remote_console import bp as devops_remote_console_bp  # Plan 105 — consola remota
 from .codebase_memory_mcp import bp as codebase_memory_mcp_bp  # Plan 76 — eval codebase-memory-mcp
 from .local_llm_analysis import bp as local_llm_analysis_bp  # Plan 106 — modelo local Qwen
+from .pr_review import bp as pr_review_bp  # Plan 110 — revisor de PRs (Haiku + modelo local)
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -104,6 +105,7 @@ api_bp.register_blueprint(devops_section_doctor_bp)  # Plan 104 — url_prefix="
 api_bp.register_blueprint(devops_remote_console_bp)  # Plan 105 — url_prefix="/devops/console" → /api/devops/console/...
 api_bp.register_blueprint(codebase_memory_mcp_bp)  # Plan 76 — url_prefix="/codebase-memory-mcp" → /api/codebase-memory-mcp/...
 api_bp.register_blueprint(local_llm_analysis_bp)  # Plan 106 — url_prefix="/llm" → /api/llm/...
+api_bp.register_blueprint(pr_review_bp)  # Plan 110 — url_prefix="/pr-review" → /api/pr-review/...
 
 
 @api_bp.get("/health")

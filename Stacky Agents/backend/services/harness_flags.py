@@ -192,6 +192,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_REMOTE_TARGET_ENABLED",  # Plan 108 — anclaje remoto agente/ambientes
         "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",  # Plan 107 — preview de árbol de ambientes
         "STACKY_DEVOPS_ENV_SANDBOX_ENABLED",  # Plan 107 — raíz sandbox de pruebas
+        "STACKY_PR_REVIEWER_ENABLED",       # Plan 110 — revisor de PRs
+        "STACKY_PR_REVIEW_HAIKU_MODEL",     # Plan 110 — modelo Haiku para la revisión
+        "STACKY_PR_REVIEW_DIFF_MAX_CHARS",  # Plan 110 — tope del diff (privacidad, camino Haiku)
+        "STACKY_PR_REVIEW_LOCAL_DIFF_MAX_CHARS",  # Plan 110 v2.1 — tope del diff del camino solo-local (velocidad, 0=sin límite)
+        "STACKY_PR_REVIEW_TIMEOUT_SEC",     # Plan 110 — timeout de la revisión Haiku
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2386,6 +2391,81 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         min_value=10,
         max_value=600,
         # SIN default= (mismo motivo que LOCAL_LLM_ENDPOINT).
+    ),
+    # ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ──────────
+    FlagSpec(
+        key="STACKY_PR_REVIEWER_ENABLED",
+        type="bool",
+        label="Revisor de PRs (Plan 110)",
+        description=(
+            "Plan 110 — Sección 'Revisor de PRs' del panel DevOps: lista las PRs "
+            "abiertas del tracker activo y permite revisarlas con Claude Haiku "
+            "(solo-lectura, recomienda una acción) o con el modelo local. "
+            "Default ON: la sección aparece; apagala si /api/pr-review/* debe dar 404."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # H19: master sin requires propio
+        # DEFAULT ON (operador). Curada en _CURATED_DEFAULTS_ON (única vía canónica
+        # sin romper test_default_known_only_for_curated / test_declared_default_true_set).
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_PR_REVIEW_HAIKU_MODEL",
+        type="str",
+        label="Modelo Haiku para revisar PRs",
+        description=(
+            "Plan 110 — Id del modelo Claude Haiku que usa la revisión de PRs "
+            "(se valida que contenga 'haiku'). Elegilo con 'Ver modelos "
+            "disponibles' en la sección. Default: claude-3.5-haiku."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # H19: NO encadenar a STACKY_PR_REVIEWER_ENABLED
+    ),
+    FlagSpec(
+        key="STACKY_PR_REVIEW_DIFF_MAX_CHARS",
+        type="int",
+        label="Tope de tamaño del diff (caracteres)",
+        description=(
+            "Plan 110 — Máximo de caracteres del diff que se le manda al modelo. "
+            "Diffs más grandes se truncan (protege privacidad y velocidad). "
+            "Default 60000."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        min_value=1000,
+        max_value=500000,
+    ),
+    FlagSpec(
+        key="STACKY_PR_REVIEW_LOCAL_DIFF_MAX_CHARS",
+        type="int",
+        label="Tope del diff en el camino solo-local (caracteres)",
+        description=(
+            "Plan 110 v2.1 — Máximo de caracteres del diff que recibe el modelo LOCAL "
+            "(que no saca nada de tu máquina). Es sólo un tope de velocidad/ventana de "
+            "contexto, NO de privacidad. 0 = sin límite (contexto completo). Default 200000."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        min_value=0,       # 0 = sin límite / contexto completo
+        max_value=2000000,
+    ),
+    FlagSpec(
+        key="STACKY_PR_REVIEW_TIMEOUT_SEC",
+        type="int",
+        label="Timeout de la revisión Haiku (segundos)",
+        description=(
+            "Plan 110 — Tiempo máximo de espera por la respuesta de Haiku. "
+            "Default 120."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        min_value=10,
+        max_value=600,
     ),
 )
 

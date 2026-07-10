@@ -59,6 +59,7 @@ def _health_payload() -> dict:
         "remote_target_enabled": bool(getattr(cfg, "STACKY_DEVOPS_REMOTE_TARGET_ENABLED", False)),  # Plan 108
         "env_tree_preview_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED", False)),  # Plan 107
         "env_sandbox_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", False)),  # Plan 107
+        "pr_reviewer_enabled": bool(getattr(cfg, "STACKY_PR_REVIEWER_ENABLED", False)),  # Plan 110
     }
 
 

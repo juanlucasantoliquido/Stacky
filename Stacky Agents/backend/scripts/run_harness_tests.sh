@@ -184,6 +184,15 @@ HARNESS_TEST_FILES=(
   tests/test_plan109_build_graph.py
   tests/test_plan109_doc_health.py
   tests/test_plan109_graph_endpoint.py
+  # — Plan 110 · Revisor de PRs (Haiku solo-lectura + modelo local) —
+  tests/test_plan110_list_merge_requests.py
+  tests/test_plan110_pr_review_detail_diff.py
+  tests/test_plan110_pr_review_execute.py
+  tests/test_plan110_pr_review_flags.py
+  tests/test_plan110_pr_review_haiku.py
+  tests/test_plan110_pr_review_list_endpoint.py
+  tests/test_plan110_pr_review_local.py
+  tests/test_plan110_pr_review_models.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

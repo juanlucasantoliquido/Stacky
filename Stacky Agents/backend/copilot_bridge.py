@@ -260,6 +260,28 @@ def invoke_local_llm(
     )
 
 
+def invoke_haiku(
+    *,
+    agent_type: str,
+    system: str,
+    user: str,
+    on_log: LogFn,
+    execution_id: int | None = None,
+    model: str,
+    timeout: int = 120,
+) -> BridgeResponse:
+    """Plan 110 — Revisión Haiku solo-lectura: completion de chat pura vía el engine
+    Copilot, IGNORANDO LLM_BACKEND (espejo de invoke_local_llm). SIN herramientas.
+    Exige que `model` contenga 'haiku' (criterio de api/agents.py:554).
+    `timeout` proviene de STACKY_PR_REVIEW_TIMEOUT_SEC (C2)."""
+    if "haiku" not in (model or "").lower():
+        raise ValueError(f"invoke_haiku exige un modelo Haiku, recibido: {model!r}")
+    return _invoke_copilot(
+        agent_type=agent_type, system=system, user=user,
+        on_log=on_log, execution_id=execution_id, model=model, timeout=timeout,
+    )
+
+
 # ── VS Code Bridge ────────────────────────────────────────────────────────────
 
 def _fallback_bridge_url() -> str:
@@ -608,8 +630,13 @@ def _invoke_copilot(
     on_log: LogFn,
     execution_id: int | None,
     model: str | None = None,
+    timeout: int = 120,
 ) -> BridgeResponse:
-    """Llama a la GitHub Copilot Chat API (OpenAI-compatible)."""
+    """Llama a la GitHub Copilot Chat API (OpenAI-compatible).
+
+    `timeout` (Plan 110 C2): tiempo máximo del requests.post. Default 120
+    (replica el valor histórico hardcodeado; backward-compatible).
+    """
     started = time.time()
     chosen_model = model or config.COPILOT_MODEL
 
@@ -661,7 +688,7 @@ def _invoke_copilot(
             config.COPILOT_ENDPOINT,
             headers=headers,
             data=json.dumps(payload),
-            timeout=120,
+            timeout=timeout,
         )
     except requests.RequestException as exc:
         on_log("error", f"error de red: {exc}")

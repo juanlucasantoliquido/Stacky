@@ -5,10 +5,13 @@ url_prefix="/devops/servers" → rutas finales /api/devops/servers/... (namespac
 (mismo patrón api/devops.py:28-29). El password entra SOLO por POST/PUT (write-only),
 JAMÁS sale en respuestas ni logs (§3.1).
 """
+import io
 import subprocess
 import sys
+import zipfile
+from pathlib import Path
 
-from flask import Blueprint, jsonify, request, abort
+from flask import Blueprint, jsonify, request, abort, send_file
 
 import config as _config
 from services import server_registry
@@ -162,3 +165,48 @@ def rdp_route(alias):
     )
     server_registry.touch_last_connected(alias)  # [ADICIÓN ARQUITECTO] trazabilidad HITL
     return jsonify({"ok": True, "detail": f"mstsc lanzado hacia {srv['host']}."})
+
+
+@bp.get("/download-setup")
+def download_setup_route():
+    """Descarga un ZIP con los scripts Enable-WinRM.ps1 y Enable-WinRM.bat para
+    configurar WinRM en un servidor (habilitar listener 5985 + firewall). Uso:
+    1. Descargar desde el botón del panel DevOps.
+    2. Extraer el ZIP.
+    3. Ejecutar Enable-WinRM.bat en el servidor (como admin).
+    """
+    _guard()
+
+    from runtime_paths import app_root
+
+    # Ubicar los scripts en app_root (root del deploy: donde está backend/, frontend/, etc.)
+    # En deploy congelado: C:\...\DeployStackyAgents\
+    # En desarrollo: N:\...\Stacky Agents\backend\...\
+    app_dir = app_root()
+    ps_script = app_dir / "Enable-WinRM.ps1"
+    bat_script = app_dir / "Enable-WinRM.bat"
+
+    # Si no están en app_root (desarrollo), probar en deployment/release_assets
+    if not ps_script.exists():
+        ps_script = Path(__file__).parents[2] / "deployment" / "release_assets" / "Enable-WinRM.ps1"
+    if not bat_script.exists():
+        bat_script = Path(__file__).parents[2] / "deployment" / "release_assets" / "Enable-WinRM.bat"
+
+    if not ps_script.exists() or not bat_script.exists():
+        return jsonify({
+            "error": "Scripts no encontrados. Verifica que Enable-WinRM.ps1 y Enable-WinRM.bat existan en el deploy."
+        }), 404
+
+    # Crear ZIP en memoria
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(ps_script, arcname="Enable-WinRM.ps1")
+        zf.write(bat_script, arcname="Enable-WinRM.bat")
+    zip_buffer.seek(0)
+
+    return send_file(
+        zip_buffer,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name="Enable-WinRM.zip"
+    ))

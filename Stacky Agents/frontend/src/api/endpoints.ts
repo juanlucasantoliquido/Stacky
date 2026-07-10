@@ -3307,6 +3307,20 @@ export const DevOpsServers = {
     api.post<{ ok: boolean; detail: string }>(`/api/devops/servers/${encodeURIComponent(alias)}/test`, {}),
   connectRdp: (alias: string) =>
     api.post<{ ok: boolean; detail: string }>(`/api/devops/servers/${encodeURIComponent(alias)}/rdp`, {}),
+  downloadSetupScripts: async () => {
+    // Descarga un ZIP con Enable-WinRM.ps1 y Enable-WinRM.bat para configurar WinRM en un servidor.
+    const response = await fetch("/api/devops/servers/download-setup");
+    if (!response.ok) throw new Error(`Descarga falló: ${response.statusText}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Enable-WinRM.zip";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 };
 
 // Plan 105 — Consola remota por servidor

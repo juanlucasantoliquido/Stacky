@@ -659,6 +659,8 @@ Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\Setup-Copilot.p
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\SETUP-COPILOT.bat") -Destination (Join-Path $releaseDir "SETUP-COPILOT.bat") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\Install-CLI-Runtimes.ps1") -Destination (Join-Path $releaseDir "Install-CLI-Runtimes.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\INSTALL-CLI-RUNTIMES.bat") -Destination (Join-Path $releaseDir "INSTALL-CLI-RUNTIMES.bat") -Force
+Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\Enable-WinRM.ps1") -Destination (Join-Path $releaseDir "Enable-WinRM.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\Enable-WinRM.bat") -Destination (Join-Path $releaseDir "Enable-WinRM.bat") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\INSTALLER.md") -Destination (Join-Path $releaseDir "INSTALLER.md") -Force
 Copy-Item -LiteralPath (Join-Path $deploymentDir "release_assets\OPERATOR_GUIDE.md") -Destination (Join-Path $releaseDir "OPERATOR_GUIDE.md") -Force
 Write-OK "Scripts copiados"

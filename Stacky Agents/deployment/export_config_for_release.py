@@ -27,6 +27,9 @@ DATA_CONFIG_FILES = [
     "preferences.json",
     "ui_sections.json",
     "runtime_config.json",
+    # Servidores DevOps registrados (alias/host/username; la password vive en el
+    # keyring de Windows y NUNCA está en este archivo, se recarga en cada máquina).
+    "devops_servers.json",
 ]
 
 

@@ -13,6 +13,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DevOpsServers, type ServerSummary } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
+import styles from './devops.module.css';
 
 export interface ServersSectionProps {
   ctx: DevOpsSectionContext;
@@ -150,22 +151,51 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
     }
   };
 
+  const handleDownloadSetup = async () => {
+    try {
+      setActionError(null);
+      await DevOpsServers.downloadSetupScripts();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error de red';
+      setActionError(`No se pudo descargar los scripts: ${msg}`);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {actionError && (
-        <div className="devops-error" style={{ padding: '12px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px', color: '#721c24' }}>
+        <div className={styles.alertError}>
           {actionError}
         </div>
       )}
 
       {!keyringAvailable && (
-        <div style={{ padding: '8px 12px', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', color: '#856404' }}>
+        <div className={styles.alertWarning}>
           keyring no disponible en el backend: los passwords no se pueden guardar (nunca se guardan en texto plano). Instalá keyring==25.6.0.
         </div>
       )}
 
+      {/* Botón para descargar scripts de configuración WinRM */}
+      <div className={styles.panel} style={{ backgroundColor: 'var(--bg-muted)', padding: '12px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
+          <div>
+            <h5 style={{ margin: '0 0 4px 0' }}>Configurar WinRM en un servidor</h5>
+            <p style={{ margin: 0, fontSize: '0.9em', opacity: 0.8 }}>
+              Descargá los scripts para habilitar la consola remota (puerto 5985) en un servidor Windows.
+            </p>
+          </div>
+          <button
+            onClick={() => void handleDownloadSetup()}
+            className={styles.btnPrimary}
+            style={{ padding: '8px 16px', borderRadius: '3px', whiteSpace: 'nowrap' }}
+          >
+            ⬇️ Descargar scripts
+          </button>
+        </div>
+      </div>
+
       {/* Formulario crear/editar */}
-      <div style={{ border: '1px solid #dee2e6', borderRadius: '4px', padding: '12px' }}>
+      <div className={styles.panel}>
         <h4 style={{ marginTop: 0 }}>{isEditing ? `Editar servidor "${editingAlias}"` : 'Nuevo servidor'}</h4>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
           <input
@@ -216,14 +246,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
           <button
             onClick={() => void handleSubmit()}
             disabled={!canSubmit}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: canSubmit ? '#28a745' : '#6c757d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: canSubmit ? 'pointer' : 'not-allowed',
-            }}
+            className={styles.btnSuccess}
           >
             {isEditing ? 'Guardar cambios' : 'Agregar servidor'}
           </button>
@@ -241,7 +264,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
       </div>
 
       {/* Lista de servidores */}
-      <div style={{ border: '1px solid #dee2e6', borderRadius: '4px', padding: '12px' }}>
+      <div className={styles.panel}>
         <h4 style={{ marginTop: 0 }}>Servidores</h4>
         {servers.length === 0 ? (
           <p style={{ opacity: 0.7 }}>Todavía no cargaste ningún servidor.</p>
@@ -250,7 +273,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
             {servers.map((s) => {
               const test = testResults[s.alias];
               return (
-                <li key={s.alias} style={{ borderBottom: '1px solid #eee', padding: '8px 0' }}>
+                <li key={s.alias} style={{ borderBottom: '1px solid var(--border-muted)', padding: '8px 0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                     <span>
                       <strong>{s.alias}</strong>{' '}
@@ -258,9 +281,9 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
                         {s.domain ? `${s.domain}\\${s.username}` : s.username} @ {s.host}
                       </span>{' '}
                       {s.has_password ? (
-                        <span style={{ color: '#155724' }}>• credencial guardada</span>
+                        <span className={styles.textSuccess}>• credencial guardada</span>
                       ) : (
-                        <span style={{ color: '#6c757d' }}>• sin password</span>
+                        <span className={styles.textMuted}>• sin password</span>
                       )}
                       {s.notes && <span style={{ opacity: 0.6 }}> — {s.notes}</span>}
                     </span>
@@ -271,7 +294,8 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
                       {rdpAvailable && (
                         <button
                           onClick={() => void handleRdp(s.alias)}
-                          style={{ padding: '4px 10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '3px' }}
+                          className={styles.btnPrimary}
+                          style={{ padding: '4px 10px', borderRadius: '3px' }}
                         >
                           Conectar por RDP
                         </button>
@@ -287,7 +311,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
                     </div>
                   )}
                   {test && (
-                    <div style={{ fontSize: '0.85em', color: test.ok ? '#155724' : '#721c24' }}>
+                    <div className={test.ok ? styles.textSuccess : styles.textDanger} style={{ fontSize: '0.85em' }}>
                       {test.detail}
                     </div>
                   )}

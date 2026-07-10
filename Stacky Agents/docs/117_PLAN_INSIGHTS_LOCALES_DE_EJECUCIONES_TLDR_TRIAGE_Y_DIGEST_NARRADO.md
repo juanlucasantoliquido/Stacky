@@ -1,8 +1,20 @@
 # Plan 117 — Insights locales de ejecuciones: TL;DR post-run, triage de fallas y digest narrado (IA local, costo cero)
 
-> **Estado:** PROPUESTO v1 — 2026-07-10
+> **Estado:** CRITICADO v2 — 2026-07-10 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+>
+> **CHANGELOG v1 → v2:**
+> - **C1 (IMPORTANTE, el más grave):** el daemon de F2 arrancaba SIEMPRE dentro de `create_app()` (app.py:182). Los dos daemons vecinos NO arrancan en tests porque sus gates de boot son config default-0 (`_digest_loop` bajo `if int(config.STACKY_DIGEST_INTERVAL_HOURS) > 0:` app.py:371; M0.3 bajo `if ... SWEEP_HOURS > 0:` app.py:391). Un thread incondicional se instanciaría en CADA `create_app()` de CADA test de la suite (los fixtures del propio molde `test_plan106_analyze_code_api.py:25,39` crean una app por test), y con los fixtures del plan (flags ON antes de `create_app`) el primer ciclo del sweep correría DE VERDAD en paralelo con el test → conteos de mock no deterministas y escrituras concurrentes a la DB de test. Fix: guard literal de 2 líneas en el bloque nuevo (`import sys` + `if "pytest" not in sys.modules:`) — en producción arranca siempre (hot-apply intacto), bajo pytest jamás; test binario nuevo `test_app_does_not_start_insights_daemon_under_pytest`.
+> - **C2 (IMPORTANTE):** burn-through con el modelo caído: cada ciclo marcaba hasta `MAX_PER_CYCLE` filas `state="failed"` PERMANENTE (§4.2 no reintenta) — con Ollama caído 1 hora y defaults (180s × 3) son ~60 filas quemadas que el operador regeneraría una por una. Fix: el camino del SWEEP distingue error de PARSEO (`ValueError` de `parse_insight_response` → determinista → SÍ persiste `failed`) de error del BRIDGE (`RuntimeError` de conectividad/timeout/HTTP → transitorio → NO persiste nada y ABORTA el ciclo; las filas quedan vírgenes para el próximo ciclo). El camino MANUAL (`force=True`, endpoint F3) persiste todo como antes (el operador ve el error). Kwarg nuevo `persist_bridge_failures` + tests `test_sweep_model_down_aborts_cycle_without_burning_rows` y `test_generate_parse_error_persists_failed`.
+> - **C3 (IMPORTANTE):** starvation por ruido: `pick_candidates` traía las `limit*4` más recientes y filtraba exclusiones SOLO en Python — una ráfaga de ejecuciones excluidas (p.ej. 12+ usos del playground, que nunca ganan insight y siempre matchean el filtro SQL) ocupaba la ventana completa y dejaba filas legítimas más viejas sin anotar indefinidamente. Fix: la exclusión gruesa por `agent_type` baja al SQL (`~in_(...)` + `~like("local_llm_%")`, portables en SQLite); `should_sweep` queda como defensa fina (cubre `metadata.backend`). Test `test_pick_candidates_noise_does_not_starve`.
+> - **C4 (IMPORTANTE):** citas falsas / vaguedades resueltas contra el código real: (a) precisión del ratchet: el meta-test parsea y hace cumplir SOLO el `.sh` (`test_harness_ratchet_meta.py:13,21`); el `.ps1` SÍ existe como espejo de conveniencia (`$HarnessTestFiles`, «Mantener en sync con run_harness_tests.sh» declarado en su encabezado) y se actualiza por convención, sin enforcement automático — §3/F6 precisados (se siguen editando AMBOS, como decía la v1; lo nuevo es saber cuál es el enforced). (b) `test_plan39_history.py` NO existe — el archivo real es `tests/test_executions_history.py`; F6 corregido sin "localizar con grep". (c) La "NOTA de verificación previa" de F5 queda RESUELTA: `invoke_local_llm` acepta `execution_id: int | None = None` (copilot_bridge.py:196) — se afirma, no se verifica. (d) "to_markdown/to_html ignoran keys desconocidas — verificar" RESUELTO: usan `.get()` puntual (run_digest.py:127-151), toleran keys nuevas. (e) M0.3 SÍ está condicionado → instrucción de inserción exacta (tras app.py:411, al nivel del `if` de app.py:391). (f) el grupo frontend de `/llm` se llama `LocalLlmApi` (endpoints.ts:3459) y el wrapper del digest es `Reports.digest` (endpoints.ts:1366-1374) — condicionales "si no existe..." eliminados. (g) el drawer ya expone `const metadata = (content?.metadata ?? {})` (ExecutionDetailDrawer.tsx:49) — se usa esa variable, sin `as any`. (h) la celda del título es `<td className={styles.ticketCell}>` (ExecutionHistoryPage.tsx:224-228) y la variable de fila real es `item`, no `it` como escribía la v1. (i) las entradas de ayuda son `PlainHelp` (harness_flags_help.py:1099-1117). (j) líneas reales: fences 323-327, `_guard` 44-52, config LOCAL_LLM 78-88 con tupla bool `("true", "1", "yes")`.
+> - **C5 (MENOR):** `_guard()` devuelve 400 `body_required_json` a POSTs sin JSON (local_llm_analysis.py:50-51) → los tests del endpoint F3 POSTean con `json={}` (explícito en cada caso).
+> - **C6 (MENOR):** falso positivo teórico del LIKE (`metadata_json` que contenga el literal `"local_insight"` dentro de OTRO valor excluiría la fila del sweep para siempre) — impacto ínfimo, documentado como limitación aceptada en R6; el endpoint manual de F3 la cubre.
+> - **[ADICIÓN ARQUITECTO] A1 — health-gate por ciclo:** `run_sweep_once` hace un ping barato (GET `{base}/v1/models`, timeout 3s — patrón exacto de `local_health_route`, api/local_llm_analysis.py:122-128) ANTES de tocar filas o invocar el modelo: modelo caído ⇒ ciclo devuelve 0 sin quemar nada ni bloquear el thread `LOCAL_LLM_TIMEOUT_SEC` segundos por fila. v1 no tenía NINGÚN chequeo de salud.
+> - **[ADICIÓN ARQUITECTO] A2 — chip de riesgo en la fila del historial:** junto al TL;DR, un chip con `local_insight.risk` (clases `riskLow|riskMedium|riskHigh` compartidas con el bloque del drawer) → triage visual de un vistazo en la tabla, cero backend extra, 3 líneas de JSX + CSS.
+>
 > **Autor:** StackyArchitectaUltraEficientCode
-> **Pipeline:** este documento pasó `proponer` (este estado). Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
+> **Pipeline:** este documento pasó `proponer` y `criticar-y-mejorar-plan` (este estado). Sigue `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Serie:** usos de la IA local (Plan 106 = sustrato modelo local vía Ollama, IMPLEMENTADO; Plan 110 = revisor de PRs con camino solo-local, IMPLEMENTADO; **117 = observabilidad inteligente local**).
 > **NO duplica:** 110 (PRs), 112 (retrieval híbrido docs), 113 (Documentador 1-click), 114 (staleness doc↔código), 115 (refactor TF-IDF), 116 (doctor conexiones DETERMINISTA, cero LLM), 104 (doctores IA por sección DevOps). Este plan opera sobre un dominio que ninguno toca: **las ejecuciones de agentes (AgentExecution) y su interpretación**.
 > **Depende de:** Plan 106 (ya implementado, commit 344f3124): `copilot_bridge.invoke_local_llm` y flags `LOCAL_LLM_*`. Nada pendiente.
@@ -27,20 +39,20 @@
 2. **Las ejecuciones son el dominio con más datos y menos interpretación.** `AgentExecution.metadata_json` (`backend/models.py:219`) ya viaja al frontend en `to_dict()` (`backend/models.py:290`), el historial arma sus items leyendo ese metadata (`backend/api/executions.py:353-373`) y el drawer de detalle carga la ejecución completa (`frontend/src/components/ExecutionDetailDrawer.tsx:36-38` → `Executions.byId`). Anotar el insight en metadata lo hace visible **sin migración de schema y casi sin plomería**.
 3. **Usos ya reservados por otros planes quedan intactos.** 116 es explícitamente "cero LLM"; 112-115 son del dominio documental; 110 es PRs. Nada interpreta runs.
 4. **Paridad de runtimes gratis por diseño.** Los 3 runtimes (claude_code_cli, codex_cli, github_copilot) persisten en la misma tabla; el runtime es un campo de metadata (`backend/api/executions.py:344`). Un insight post-hoc sobre la fila persistida cubre los 3 sin tocar ningún runner.
-5. **El patrón de daemon de fondo ya existe.** `_digest_loop` (`backend/app.py:374-387`) y `_memory_review_sweep_loop` (`backend/app.py:394-409`) son el molde exacto (thread daemon + try/except + sleep).
+5. **El patrón de daemon de fondo ya existe.** `_digest_loop` (`backend/app.py:374-387`) y `_memory_review_sweep_loop` (`backend/app.py:394-409`) son el molde exacto (thread daemon + try/except + sleep). OJO (C1): ambos arrancan GATEADOS por config default-0 (`if int(config.STACKY_DIGEST_INTERVAL_HOURS) > 0:` app.py:371; `if int(config.STACKY_MEMORY_REVIEW_SWEEP_HOURS) > 0:` app.py:391), por eso ninguno corre bajo pytest; el daemon nuevo es flag-hot (no puede gatearse por config en boot) y replica esa inocuidad con el guard `sys.modules` de F2.
 
 ---
 
 ## 3. Principios y guardarraíles (no negociables)
 
-- **3 runtimes con paridad:** el insight se computa desde la fila `AgentExecution` persistida — común a los 3 runtimes. No se toca ningún runner. Fallback: si el modelo local no está alcanzable, el insight queda `state="failed"` con botón manual de regeneración; nada más se degrada.
+- **3 runtimes con paridad:** el insight se computa desde la fila `AgentExecution` persistida — común a los 3 runtimes. No se toca ningún runner. Fallback: si el modelo local no está alcanzable, el sweep se salta el ciclo SIN quemar filas (health-gate A1 + abort C2) y el operador conserva el botón manual de regeneración; solo un error de PARSEO (modelo respondió basura) deja `state="failed"` persistido. Nada más se degrada.
 - **Cero trabajo extra para el operador:** el TL;DR/triage es 100% automático (sweep de fondo); el digest narrado es opt-in por click. Activación: una flag en el panel Arnés existente (`HarnessFlagsPanel`, plan 33/86). Sin pasos manuales nuevos obligatorios.
 - **Human-in-the-loop:** el insight **solo anota y sugiere**; jamás ejecuta comandos, edita archivos ni cambia estados de tickets/runs. Los prompts incluyen las reglas HITL (mismas del Plan 106, `api/local_llm_analysis.py:30-37`). El "siguiente paso" del triage es texto para el humano.
 - **Mono-operador sin auth:** nada de RBAC; endpoints sin validación de usuario (patrón del repo).
 - **Default OFF + UI:** flag master `STACKY_LOCAL_INSIGHTS_ENABLED` default OFF, activable desde la UI del Arnés (el registry de flags ya alimenta el panel). Gotchas obligatorios: FlagSpec nuevas **SIN `default=`** (solo `_CURATED_DEFAULTS_ON` puede; rompe `test_default_known_only_for_curated`, Plan 63); el default **efectivo** vive en `config.py`; `requires` con **profundidad 1** (hijas → master; el master **sin** `requires` estático — la dependencia de `LOCAL_LLM_ENABLED` se chequea en runtime, patrón `_guard()` de `api/local_llm_analysis.py:40-52`) y toda arista nueva se registra en `_REQUIRES_MAP_FROZEN` (`backend/tests/test_harness_flags_requires.py`).
 - **No degradar:** el sweep procesa como máximo `MAX_PER_CYCLE` ejecuciones por ciclo, la llamada al LLM ocurre **fuera** de todo `session_scope` (no retiene locks de DB minutos), el daemon nunca propaga excepciones, y con flag OFF el comportamiento es idéntico al actual.
 - **Anti-recursión dura:** las ejecuciones generadas por el propio modelo local (`agent_type` que empiece con `local_llm_`, `pr_review_local`, o `metadata.backend == "local_llm"`) **nunca** se anotan; el insight **no crea** filas `AgentExecution` nuevas (desvío consciente del patrón 106 `_create_execution`: crear una ejecución por insight duplicaría el historial y realimentaría al sweep).
-- **Ratchet de tests:** todo archivo de test backend nuevo se registra en `backend/scripts/run_harness_tests.sh` y `.ps1` (obligación Plan 49; el meta-test falla si no).
+- **Ratchet de tests:** todo archivo de test backend nuevo se registra en la lista `HARNESS_TEST_FILES` de `backend/scripts/run_harness_tests.sh` Y en su espejo `$HarnessTestFiles` de `backend/scripts/run_harness_tests.ps1` (los dos existen — verificado). El meta-test `tests/test_harness_ratchet_meta.py:13,21` parsea y hace cumplir SOLO el `.sh` (falla si un `tests/test_*.py` nuevo no está ahí ni en `tests/harness_ratchet_allowlist.txt`); el `.ps1` se mantiene en sync por convención declarada en su propio encabezado.
 
 ---
 
@@ -69,7 +81,7 @@ Variante de fallo (el modelo no respondió o devolvió basura):
 { "state": "failed", "error": "string máx 300", "attempts": 1, "generated_at": "ISO-8601 UTC", "model": "..." }
 ```
 
-Reglas: (1) `state` solo `"done"` o `"failed"`; (2) el sweep **no reintenta** filas con la key presente (evita loops contra un modelo caído) — regenerar es acción manual del operador (F3); (3) campos de triage `null` cuando el run terminó `completed`; (4) el objeto completo serializado no supera ~1.5 KB (los caps de longitud lo garantizan).
+Reglas: (1) `state` solo `"done"` o `"failed"`; (2) el sweep **no reintenta** filas con la key presente — regenerar es acción manual del operador (F3); (2bis, C2) **quién escribe `failed`:** el error de PARSEO (el modelo respondió pero devolvió basura — determinista) SIEMPRE persiste `failed`; el error del BRIDGE (conectividad/timeout/HTTP — transitorio) persiste `failed` SOLO en el camino manual (`force=True`); en el camino del sweep NO escribe nada (la fila queda virgen y el ciclo aborta — así un modelo caído no quema filas en masa); (3) campos de triage `null` cuando el run terminó `completed`; (4) el objeto completo serializado no supera ~1.5 KB (los caps de longitud lo garantizan).
 
 ---
 
@@ -215,6 +227,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 
+import requests  # lo usa _local_llm_reachable (F2, health-gate A1); dep ya presente en el backend
+
 INSIGHT_KEY = "local_insight"
 
 # Anti-recursión: ejecuciones producidas por el propio modelo local jamás se anotan.
@@ -322,13 +336,38 @@ Funciones puras (firmas y comportamiento exactos):
 **Cambios exactos en `services/local_insights.py`:**
 
 ```python
+def _local_llm_reachable(timeout: float = 3.0) -> bool:
+    """[ADICIÓN ARQUITECTO A1] Ping barato GET {base}/v1/models antes de cada ciclo.
+
+    Patrón EXACTO de local_health_route (api/local_llm_analysis.py:115-134):
+    misma derivación de base y mismo timeout 3s. Modelo caído ⇒ el ciclo entero
+    devuelve 0 sin tocar filas ni bloquear el thread LOCAL_LLM_TIMEOUT_SEC
+    segundos por candidata.
+    """
+    import config as _config
+
+    endpoint = getattr(_config.config, "LOCAL_LLM_ENDPOINT", "")
+    if not endpoint:
+        return False
+    base = endpoint.split("/v1/")[0] if "/v1/" in endpoint else endpoint
+    try:
+        return requests.get(f"{base}/v1/models", timeout=timeout).status_code == 200
+    except requests.RequestException:
+        return False
+
+
 def pick_candidates(session, *, lookback_days: int, limit: int) -> list:
     """Filas terminadas recientes sin insight, más recientes primero.
 
     El filtro SQL grueso usa LIKE sobre metadata_json (portable en SQLite);
     OJO: metadata_json puede ser NULL → hay que aceptar NULL explícitamente
     (NOT LIKE sobre NULL da NULL y excluiría filas vírgenes).
-    El filtro fino (exclusiones §3) lo hace should_sweep en Python.
+    C3: las exclusiones por agent_type van TAMBIÉN en SQL (~in_ + ~like, ambos
+    portables en SQLite) para que una ráfaga de ejecuciones excluidas (playground,
+    PR review local — que nunca ganan insight y siempre matchean el LIKE) no ocupe
+    la ventana limit*4 y deje sin anotar filas legítimas más viejas (starvation).
+    El filtro fino restante (metadata.backend == "local_llm", §3) lo hace
+    should_sweep en Python como defensa en profundidad.
     """
     from sqlalchemy import or_
     from models import AgentExecution
@@ -339,6 +378,8 @@ def pick_candidates(session, *, lookback_days: int, limit: int) -> list:
         .filter(AgentExecution.status.in_(sorted(TERMINAL_INSIGHT_STATUSES)))
         .filter(AgentExecution.completed_at.isnot(None))
         .filter(AgentExecution.started_at >= cutoff)
+        .filter(~AgentExecution.agent_type.in_(sorted(EXCLUDED_AGENT_TYPES)))  # C3
+        .filter(~AgentExecution.agent_type.like("local_llm_%"))                # C3
         .filter(or_(
             AgentExecution.metadata_json.is_(None),
             ~AgentExecution.metadata_json.contains('"local_insight"'),
@@ -364,11 +405,38 @@ def _write_insight(execution_id: int, insight: dict) -> None:
         row.metadata_dict = md   # setter serializa (models.py:263-265)
 
 
-def generate_insight_for_execution(execution_id: int, *, force: bool = False) -> dict:
+def _failed_insight(error: Exception, *, attempts: int, model: str) -> dict:
+    """Variante de fallo del contrato §4."""
+    return {
+        "state": "failed",
+        "error": str(error)[:ERROR_MAX],
+        "attempts": attempts,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "model": model,
+    }
+
+
+def generate_insight_for_execution(
+    execution_id: int,
+    *,
+    force: bool = False,
+    persist_bridge_failures: bool = True,
+) -> dict:
     """Genera y persiste el insight de UNA ejecución. Nunca lanza: devuelve {"ok": bool, ...}.
 
     La llamada al LLM ocurre FUERA de session_scope (puede tardar minutos;
     no se retienen locks de DB).
+
+    C2 — dos clases de error, dos destinos:
+    - PARSEO (ValueError de parse_insight_response: el modelo respondió pero
+      devolvió basura — determinista) → SIEMPRE persiste state="failed"
+      (reintentar sin cambiar nada daría la misma basura).
+    - BRIDGE (RuntimeError de invoke_local_llm: conectividad/timeout/HTTP —
+      transitorio; es la ÚNICA excepción que ese bridge lanza, copilot_bridge.py:203)
+      → persiste "failed" SOLO si persist_bridge_failures=True (camino manual
+      del endpoint F3: el operador ve el error). El sweep pasa False: la fila
+      queda VIRGEN y se devuelve {"transient": True} para que el ciclo aborte
+      sin quemar más filas.
     """
     import config as _config
     from db import session_scope
@@ -400,31 +468,39 @@ def generate_insight_for_execution(execution_id: int, *, force: bool = False) ->
             on_log=lambda level, msg: None,   # firma LogFn real (level, msg) — gotcha Plan 106 C3
             execution_id=execution_id,
         )
-        parsed = parse_insight_response(resp.text)
-        insight = make_insight_metadata(
-            parsed,
-            model=(getattr(resp, "metadata", None) or {}).get("model") or model_cfg,
-            attempts=prev_attempts + 1,
-        )
-        _write_insight(execution_id, insight)
-        return {"ok": True, "insight": insight}
-    except Exception as e:  # noqa: BLE001 — el sweep jamás debe morir por una fila
-        insight = {
-            "state": "failed",
-            "error": str(e)[:ERROR_MAX],
-            "attempts": prev_attempts + 1,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-            "model": model_cfg,
-        }
+    except Exception as e:  # noqa: BLE001 — BRIDGE (transitorio), C2
+        if not persist_bridge_failures:
+            return {
+                "ok": False, "error": "bridge_failed",
+                "transient": True, "detail": str(e)[:ERROR_MAX],
+            }
+        insight = _failed_insight(e, attempts=prev_attempts + 1, model=model_cfg)
         _write_insight(execution_id, insight)
         return {"ok": False, "error": "generation_failed", "insight": insight}
+
+    try:
+        parsed = parse_insight_response(resp.text)
+    except ValueError as e:  # PARSEO (determinista) → SIEMPRE persiste failed, C2
+        insight = _failed_insight(e, attempts=prev_attempts + 1, model=model_cfg)
+        _write_insight(execution_id, insight)
+        return {"ok": False, "error": "generation_failed", "insight": insight}
+
+    insight = make_insight_metadata(
+        parsed,
+        model=(getattr(resp, "metadata", None) or {}).get("model") or model_cfg,
+        attempts=prev_attempts + 1,
+    )
+    _write_insight(execution_id, insight)
+    return {"ok": True, "insight": insight}
 
 
 def run_sweep_once() -> int:
     """Un ciclo del barrido. Devuelve cuántas ejecuciones quedaron anotadas OK.
 
     Gates (en este orden, todos hot — mismos getattr que usa api/local_llm_analysis.py:41):
-    master OFF → 0; LOCAL_LLM_ENABLED OFF → 0; LOCAL_LLM_ENDPOINT vacío → 0.
+    master OFF → 0; LOCAL_LLM_ENABLED OFF → 0; LOCAL_LLM_ENDPOINT vacío → 0;
+    [A1] health-gate: si GET {base}/v1/models no responde 200 en 3s → 0 SIN
+    tocar ninguna fila (modelo caído = ciclo gratis).
     """
     import config as _config
     from db import session_scope
@@ -436,6 +512,8 @@ def run_sweep_once() -> int:
         return 0
     if not getattr(cfg, "LOCAL_LLM_ENDPOINT", ""):
         return 0
+    if not _local_llm_reachable():   # [ADICIÓN ARQUITECTO A1]
+        return 0
     limit = max(1, int(getattr(cfg, "STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE", 3)))
     lookback = max(1, int(getattr(cfg, "STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS", 7)))
 
@@ -444,58 +522,71 @@ def run_sweep_once() -> int:
 
     done = 0
     for eid in candidate_ids:
-        if generate_insight_for_execution(eid).get("ok"):
+        result = generate_insight_for_execution(eid, persist_bridge_failures=False)
+        if result.get("ok"):
             done += 1
+        elif result.get("transient"):
+            break   # C2 — el modelo se cayó a mitad de ciclo: abortar sin quemar el resto
     return done
 ```
 
-**Cambio exacto en `app.py`:** inmediatamente después del bloque M0.3 (`_memory_review_sweep_loop`, `app.py:394-409` — insertar tras el `threading.Thread(...).start()` + `logger.info` de ese bloque), copiando su patrón:
+**Cambio exacto en `app.py`:** punto de inserción EXACTO (verificado contra el código): dentro de `create_app()` (app.py:182), inmediatamente después de la línea `logger.info("memory review daemon armed (interval=%ds)", _review_sweep_seconds)` (app.py:411), al MISMO nivel de indentación que el `if` de app.py:391 — es decir, FUERA de ese `if` (el bloque M0.3 SÍ está condicionado por `STACKY_MEMORY_REVIEW_SWEEP_HOURS > 0`; el nuestro no puede gatearse por config en boot porque es flag-hot):
 
 ```python
     # ── Plan 117 — Sweep de insights locales (TL;DR/triage con el modelo local) ──
-    # El thread arranca SIEMPRE; los gates (flags) se evalúan en cada iteración
-    # dentro de run_sweep_once() → hot-apply real, sin restart_required.
-    def _local_insights_sweep_loop() -> None:
-        from services import local_insights
+    # En PRODUCCIÓN el thread arranca siempre; los gates (flags) se evalúan en
+    # cada iteración dentro de run_sweep_once() → hot-apply real, sin
+    # restart_required. C1: bajo pytest NO arranca — los daemons vecinos tampoco
+    # corren en tests (sus gates de boot son config default-0, app.py:371/391);
+    # como este es flag-hot, el guard equivalente es explícito.
+    import sys as _sys
+    if "pytest" not in _sys.modules:
+        def _local_insights_sweep_loop() -> None:
+            from services import local_insights
 
-        while True:
-            try:
-                processed = local_insights.run_sweep_once()
-                if processed:
-                    logger.info("local insights sweep: %d ejecuciones anotadas", processed)
-            except Exception:
-                logger.exception("local insights sweep daemon falló")
-            try:
-                interval = int(getattr(config, "STACKY_LOCAL_INSIGHTS_SWEEP_SEC", 180))
-            except (TypeError, ValueError):
-                interval = 180
-            time.sleep(max(30, interval))
+            while True:
+                try:
+                    processed = local_insights.run_sweep_once()
+                    if processed:
+                        logger.info("local insights sweep: %d ejecuciones anotadas", processed)
+                except Exception:
+                    logger.exception("local insights sweep daemon falló")
+                try:
+                    interval = int(getattr(config, "STACKY_LOCAL_INSIGHTS_SWEEP_SEC", 180))
+                except (TypeError, ValueError):
+                    interval = 180
+                time.sleep(max(30, interval))
 
-    threading.Thread(
-        target=_local_insights_sweep_loop,
-        name="stacky-local-insights-daemon",
-        daemon=True,
-    ).start()
-    logger.info("local insights daemon armed")
+        threading.Thread(
+            target=_local_insights_sweep_loop,
+            name="stacky-local-insights-daemon",
+            daemon=True,
+        ).start()
+        logger.info("local insights daemon armed")
 ```
 
-   Usar las referencias `config`, `threading`, `time`, `logger` YA importadas/definidas en `app.py` (las mismas que usan `_digest_loop` y `_memory_review_sweep_loop`). Si el bloque M0.3 está condicionado por una flag, el bloque nuevo va FUERA de esa condición (arranca siempre).
+   Usar las referencias `config`, `threading`, `time`, `logger` YA importadas/definidas en `app.py` (las mismas que usan `_digest_loop` y `_memory_review_sweep_loop`); `import sys as _sys` va local al bloque como está escrito (no depende de imports globales).
 
-**Tests (TDD), `tests/test_plan117_insights_sweep.py`** — usar la misma infraestructura de DB temporal/fixture que usan los tests existentes que crean `AgentExecution` (copiar el setup de `test_plan106_analyze_code_api.py`, que ya resuelve app+DB). Mock SIEMPRE en módulo origen: `mock.patch("copilot_bridge.invoke_local_llm", ...)` (gotcha documentado en `test_plan106_analyze_code_api.py:4-5`). Para las flags: `monkeypatch.setattr(config.config, "STACKY_LOCAL_INSIGHTS_ENABLED", True, raising=False)` etc.
+**Tests (TDD), `tests/test_plan117_insights_sweep.py`** — usar la misma infraestructura de DB temporal/fixture que usan los tests existentes que crean `AgentExecution` (copiar el setup de `test_plan106_analyze_code_api.py`, que ya resuelve app+DB). Mock SIEMPRE en módulo origen: `mock.patch("copilot_bridge.invoke_local_llm", ...)` (gotcha documentado en `test_plan106_analyze_code_api.py:4-5`). Para las flags: `monkeypatch.setattr(config.config, "STACKY_LOCAL_INSIGHTS_ENABLED", True, raising=False)` etc. OJO [A1]: TODOS los tests que ejercitan `run_sweep_once` parchean además `services.local_insights._local_llm_reachable` (a `True` en los caminos felices, a `False` en el del health-gate) — si no, el sweep intentaría un GET real en el test.
 - `test_sweep_annotates_terminated_runs` (**KPI central**): 2 ejecuciones `completed` recientes sin insight + flags ON + mock que devuelve `{"tldr": "ok", "labels": ["x"], "risk": "low", "probable_cause": null, "evidence": null, "next_step": null}` → `run_sweep_once() == 2` y ambas filas tienen `metadata_dict["local_insight"]["state"] == "done"` y `tldr == "ok"`.
 - `test_sweep_master_off_makes_zero_calls`: master OFF → `run_sweep_once() == 0` y `mock.assert_not_called()`.
 - `test_sweep_requires_local_llm_enabled`: master ON pero `LOCAL_LLM_ENABLED=False` → 0 llamadas.
 - `test_sweep_skips_excluded_agent_types`: una ejecución `local_llm_playground` completed → no se anota.
 - `test_sweep_skips_rows_with_insight`: fila con `local_insight` presente (incluido `state="failed"`) → no se re-procesa.
 - `test_sweep_respects_max_per_cycle`: 5 candidatas, `MAX_PER_CYCLE=2` → mock llamado exactamente 2 veces.
-- `test_generate_failure_writes_failed_state`: mock lanza `RuntimeError("boom")` → resultado `ok=False`, metadata queda `state="failed"`, `error` contiene "boom", `attempts == 1`.
+- `test_generate_failure_writes_failed_state` (camino MANUAL, default `persist_bridge_failures=True`): mock lanza `RuntimeError("boom")` → resultado `ok=False`, metadata queda `state="failed"`, `error` contiene "boom", `attempts == 1`.
+- `test_generate_parse_error_persists_failed` [C2]: mock devuelve texto NO-JSON (`"no soy json"`) → metadata queda `state="failed"` tanto con `persist_bridge_failures=True` como con `False` (el error de parseo es determinista; da igual el camino).
+- `test_sweep_model_down_aborts_cycle_without_burning_rows` [C2]: 3 candidatas + `_local_llm_reachable` parcheado a `True` + mock `invoke_local_llm` que lanza `RuntimeError("conn refused")` → `run_sweep_once() == 0`, el mock se llamó EXACTAMENTE 1 vez (abort tras la primera falla transitoria) y las 3 filas siguen SIN la key `local_insight` (vírgenes para el próximo ciclo).
+- `test_sweep_health_gate_short_circuits` [A1]: flags ON + `_local_llm_reachable` parcheado a `False` → `run_sweep_once() == 0`, mock `invoke_local_llm` NO llamado y ninguna fila gana metadata.
 - `test_generate_force_regenerates`: fila con insight `done` + `force=True` → mock SÍ se llama y `attempts` incrementa a 2.
 - `test_pick_candidates_includes_null_metadata`: fila con `metadata_json` NULL entra como candidata (regresión del gotcha NOT-LIKE-NULL).
+- `test_pick_candidates_noise_does_not_starve` [C3]: 8 filas `local_llm_playground` completed recientes + 1 fila `developer` completed más vieja (dentro de la ventana) + `limit=2` → `pick_candidates` DEVUELVE la fila developer (la exclusión en SQL impide que el ruido ocupe la ventana `limit*4`).
+- `test_app_does_not_start_insights_daemon_under_pytest` [C1]: tras `create_app()`, `threading.enumerate()` NO contiene ningún thread llamado `stacky-local-insights-daemon` (el guard `"pytest" not in sys.modules` lo impide bajo la suite).
 
 **Comando:** `.\.venv\Scripts\python.exe -m pytest tests\test_plan117_insights_sweep.py -q`
 **Criterio:** verde (0 failed).
 **Flag protectora:** `STACKY_LOCAL_INSIGHTS_ENABLED` (OFF ⇒ el daemon existe pero cada ciclo devuelve 0 sin tocar red ni DB de escritura).
-**Impacto por runtime:** anota ejecuciones de los 3 runtimes por igual (opera sobre la tabla común). Fallback: modelo local caído → `state="failed"` una sola vez por fila, sin loops.
+**Impacto por runtime:** anota ejecuciones de los 3 runtimes por igual (opera sobre la tabla común). Fallback: modelo local caído → el health-gate [A1] devuelve el ciclo en 0 sin tocar filas; si se cae a MITAD de ciclo, el abort [C2] deja vírgenes las filas restantes. Solo el JSON-basura persiste `state="failed"` (una vez por fila, sin loops).
 **Trabajo del operador:** ninguno (todo de fondo).
 
 ---
@@ -528,7 +619,8 @@ def generate_insight_route(execution_id: int):
     """Plan 117 — Genera/regenera el insight local de UNA ejecución (acción HITL del operador).
 
     Ruta final: POST /api/llm/insights/<id>/generate (blueprint url_prefix="/llm").
-    404 flag master OFF | 404 execution inexistente | 409 excluida | 502 fallo del modelo.
+    404 flag master OFF | 404 execution inexistente | 409 excluida | 502 fallo del
+    modelo | 400 POST sin body JSON (lo impone _guard, local_llm_analysis.py:50-51 — C5).
     """
     guard = _guard()   # 404 LOCAL_LLM_ENABLED OFF / 503 endpoint vacío (api/local_llm_analysis.py:40-52)
     if guard:
@@ -549,13 +641,14 @@ def generate_insight_route(execution_id: int):
     return jsonify(result), 502
 ```
 
-**Tests (TDD), `tests/test_plan117_insights_api.py`** (mismo setup de app/DB que F2; client Flask de test):
+**Tests (TDD), `tests/test_plan117_insights_api.py`** (mismo setup de app/DB que F2; client Flask de test). C5: TODOS los POST del client van con `json={}` explícito — `_guard` corta con 400 `body_required_json` cualquier POST sin body JSON (local_llm_analysis.py:50-51):
 - `test_generate_endpoint_master_off_404`: `LOCAL_LLM_ENABLED=True` pero insights OFF → 404 `local_insights_disabled`.
 - `test_generate_endpoint_local_llm_off_404`: `LOCAL_LLM_ENABLED=False` → 404 (via `_guard`).
 - `test_generate_endpoint_ok`: flags ON + mock (`copilot_bridge.invoke_local_llm`) → 200, body `ok=True` con `insight.tldr`, y la fila queda anotada.
 - `test_generate_endpoint_excluded_409`: ejecución `local_llm_playground` → 409 `insight_excluded`.
 - `test_generate_endpoint_not_found_404`: id inexistente → 404 `execution_not_found`.
-- `test_generate_endpoint_model_failure_502`: mock lanza → 502 y metadata `state="failed"`.
+- `test_generate_endpoint_model_failure_502`: mock lanza → 502 y metadata `state="failed"` (camino manual: `force=True` persiste también los fallos del bridge, C2).
+- `test_generate_endpoint_no_json_400` [C5]: POST sin body (sin `json=`) → 400 `body_required_json` (cortado por `_guard` antes de tocar la lógica del insight).
 - `test_history_includes_local_insight`: con `STACKY_EXECUTION_HISTORY_ENABLED=true` (env, gate de `executions.py:287`), una fila anotada devuelve el objeto en `local_insight` y una sin anotar devuelve `null`.
 - `test_history_shape_unchanged_when_flag_off`: master OFF y fila sin insight → el item tiene `local_insight: null` y TODAS las demás keys idénticas a las de hoy (comparar contra el set literal de keys de `executions.py:353-373` + la nueva).
 
@@ -603,7 +696,7 @@ def generate_insight_route(execution_id: int):
      }
      ```
    - En `ExecutionHistoryItem` agregar `local_insight?: ExecutionLocalInsight | null;`.
-   - En el objeto de wrappers donde viven los llamados a `/llm/...` (buscar el que usa `LocalLlmPlaygroundPanel.tsx`; si no existe un grupo `LocalLlm`, agregar el método dentro del grupo `Executions`): `generateInsight: (executionId: number) => post(`/llm/insights/${executionId}/generate`, {})` usando el helper HTTP existente del archivo (mismo `post`/`request` que usan los demás wrappers).
+   - En el grupo existente `LocalLlmApi` (endpoints.ts:3459 — verificado: ahí viven los llamados a `/llm/...`): `generateInsight: (executionId: number) => post(`/llm/insights/${executionId}/generate`, {})` usando el helper HTTP existente del archivo (mismo `post`/`request` que usan los demás métodos del grupo; el body `{}` es OBLIGATORIO — `_guard` exige JSON en los POST, C5).
 
 2. `ExecutionInsightBlock.tsx` (componente nuevo, presentacional + acción):
    - Props: `{ executionId: number; insight: ExecutionLocalInsight | null | undefined; onRegenerated?: () => void }`.
@@ -612,26 +705,41 @@ def generate_insight_route(execution_id: int):
      - Si `insight?.state === "done"`: párrafo `tldr`; chips de `labels`; badge de `risk` con clases `riskLow|riskMedium|riskHigh`; si `probable_cause || evidence || next_step`: sub-bloque "Triage" con tres filas rotuladas `Causa probable / Evidencia / Siguiente paso sugerido`; pie chico `generated_at + model`.
      - Si `insight?.state === "failed"`: texto `No se pudo generar el insight` + `insight.error` + botón `Reintentar`.
      - Si `insight` es null/undefined: botón `Generar insight (IA local)`.
-   - Acción del botón (ambos casos): `Executions.generateInsight(executionId)` (o el grupo elegido en el punto 1) con estado `loading` local; en éxito llama `onRegenerated?.()`; en error HTTP 404 con `local_insights_disabled` muestra el texto literal `Activá "Insights locales de ejecuciones" en Configuración → Arnés`; otros errores muestran el mensaje del error.
+   - Acción del botón (ambos casos): `LocalLlmApi.generateInsight(executionId)` con estado `loading` local; en éxito llama `onRegenerated?.()`; en error HTTP 404 con `local_insights_disabled` muestra el texto literal `Activá "Insights locales de ejecuciones" en Configuración → Arnés`; otros errores muestran el mensaje del error.
    - Estilos en `ExecutionInsightBlock.module.css` usando tokens de `theme.css` existentes (sin hex hardcodeado — gotcha dark theme del repo).
 
-3. `ExecutionDetailDrawer.tsx`: donde el drawer renderiza las secciones de la ejecución cargada (`execQ.data`), agregar el bloque:
+3. `ExecutionDetailDrawer.tsx`: el componente YA define `const metadata = (content?.metadata ?? {}) as Record<string, unknown>;` (ExecutionDetailDrawer.tsx:48-49 — verificado). Donde el drawer renderiza las secciones de la ejecución cargada, agregar el bloque:
    ```tsx
    <ExecutionInsightBlock
      executionId={executionId!}
-     insight={(execQ.data as any)?.metadata?.local_insight ?? null}
+     insight={(metadata.local_insight ?? null) as ExecutionLocalInsight | null}
      onRegenerated={() => execQ.refetch()}
    />
    ```
-   (el payload de `Executions.byId` incluye `metadata` — `models.py:290`; si el tipo del detalle no declara `metadata`, extenderlo con `metadata?: Record<string, unknown>`).
+   (sin `as any` nuevos: se reusa la variable `metadata` existente; el payload de `Executions.byId` incluye `metadata` — `models.py:290`).
 
-4. `ExecutionHistoryPage.tsx`: en la celda donde hoy se muestra el título del ticket de cada fila, agregar debajo:
+4. `ExecutionHistoryPage.tsx`: dentro del `<td className={styles.ticketCell}>` (ExecutionHistoryPage.tsx:224-228 — verificado; la variable de fila real es `item`, NO `it`), debajo del span/fallback del título, agregar:
    ```tsx
-   {it.local_insight?.tldr ? (
-     <div className={styles.insightTldr} title={it.local_insight.tldr}>{it.local_insight.tldr}</div>
+   {item.local_insight?.tldr ? (
+     <div className={styles.insightTldr} title={item.local_insight.tldr}>
+       {item.local_insight.state === "done" && item.local_insight.risk ? (
+         <span
+           className={
+             item.local_insight.risk === "high"
+               ? styles.riskHigh
+               : item.local_insight.risk === "medium"
+                 ? styles.riskMedium
+                 : styles.riskLow
+           }
+         >
+           {item.local_insight.risk}
+         </span>
+       ) : null}
+       {item.local_insight.tldr}
+     </div>
    ) : null}
    ```
-   y en `ExecutionHistoryPage.module.css` la clase `.insightTldr` (font-size menor, color secundario del theme, `max-width` + `overflow: hidden; text-overflow: ellipsis; white-space: nowrap`).
+   **[ADICIÓN ARQUITECTO A2]** el chip de `risk` en la fila da triage visual de un vistazo sin abrir el drawer; cero backend extra. En `ExecutionHistoryPage.module.css` agregar `.insightTldr` (font-size menor, color secundario del theme, `max-width` + `overflow: hidden; text-overflow: ellipsis; white-space: nowrap`) y las clases `.riskLow`/`.riskMedium`/`.riskHigh` (chip inline chico: `border-radius`, `padding: 0 6px`, `margin-right: 6px`, colores desde los tokens de `theme.css` — mismos NOMBRES de clase que usa `ExecutionInsightBlock.module.css` para conservar la semántica; cada module.css lleva su propia copia, CSS modules no comparte selectores entre archivos).
 
 **Tests (TDD), `frontend/src/components/__tests__/ExecutionInsightBlock.test.tsx`** (vitest + testing-library, patrón de los tests existentes en ese directorio; mockear el módulo `endpoints` con `vi.mock`):
 - `renders tldr labels and risk when insight done`.
@@ -686,7 +794,7 @@ def narrate_digest(digest: dict) -> str:
     )
     return (resp.text or "").strip()[:NARRATIVE_MAX]
 ```
-   NOTA de verificación previa: confirmar en `copilot_bridge.py:190` que `invoke_local_llm` acepta `execution_id=None` (lo acepta si el parámetro solo se usa para logging/metadata; si exigiera int, pasar `execution_id=0` y documentarlo en el código).
+   VERIFICADO (juez, v2 — C4c): `invoke_local_llm` declara `execution_id: int | None = None` (copilot_bridge.py:196) y solo lo usa para cancelación/logging — `execution_id=None` es válido tal cual; no hace falta ningún fallback.
 
 2. `api/reports.py`, dentro de `get_digest()` (`reports.py:12-20`), después de `digest = compose_digest(days=days, project=project)` y ANTES del branch `fmt == "json"`:
 
@@ -714,9 +822,9 @@ def narrate_digest(digest: dict) -> str:
                 digest["narrative"] = None
                 digest["narrative_error"] = str(e)[:200]
 ```
-   (aplica a los 3 `fmt`; `to_markdown`/`to_html` ignoran keys desconocidas — verificar; si alguno itera keys, agregar la narrativa solo en el branch `fmt == "json"` y documentarlo).
+   (aplica a los 3 `fmt`; VERIFICADO (C4d): `to_markdown`/`to_html` leen keys puntuales con `.get()` — run_digest.py:127-157 — así que toleran las keys nuevas sin renderizarlas; la card consume siempre el JSON).
 
-3. `endpoints.ts`: el wrapper existente del digest (buscar `digest` en el archivo — lo consume `WeeklyDigestCard.tsx`) gana un parámetro opcional `narrate?: boolean` que agrega `&narrate=1` al query string. Tipo del payload: `narrative?: string | null; narrative_error?: string | null;` (aditivo).
+3. `endpoints.ts`: el wrapper existente `Reports.digest` (endpoints.ts:1366-1374 — verificado; firma actual `(params?: { days?: number; project?: string })`, lo consume `WeeklyDigestCard.tsx`) gana `narrate?: boolean` en ese mismo objeto de params, que agrega `&narrate=1` al query string. Tipo del payload: `narrative?: string | null; narrative_error?: string | null;` (aditivo).
 
 4. `WeeklyDigestCard.tsx`: agregar un botón `Narrar (IA local)` que hace refetch del digest con `narrate: true` y muestra: spinner mientras carga (el modelo local puede tardar; reutilizar el patrón de loading de la card), el párrafo `narrative` en un `<p>` cuando llega, o un texto suave cuando `narrative_error`: si es `narrative_disabled` → `Activá "Narrativa local del digest" en Configuración → Arnés`; si no → `El modelo local no respondió: <narrative_error>`. El botón NO se dispara solo (opt-in por click; la card jamás bloquea su render inicial esperando al LLM).
 
@@ -749,8 +857,8 @@ npx vitest run src/components/__tests__/WeeklyDigestCard.test.tsx
 **Objetivo:** registrar los tests nuevos en el ratchet, verificar cero regresiones en las superficies tocadas y cerrar criterios binarios globales.
 
 **Archivos a editar:**
-- `Stacky Agents/backend/scripts/run_harness_tests.sh` (lista `HARNESS_TEST_FILES`)
-- `Stacky Agents/backend/scripts/run_harness_tests.ps1` (lista espejo)
+- `Stacky Agents/backend/scripts/run_harness_tests.sh` (lista `HARNESS_TEST_FILES` — la ÚNICA que el meta-test hace cumplir, C4a)
+- `Stacky Agents/backend/scripts/run_harness_tests.ps1` (lista espejo `$HarnessTestFiles` — en sync por convención; actualizar igual)
 
 **Cambios exactos:** agregar a AMBAS listas (mismo formato que las entradas `test_plan106_*` ya presentes en cada script):
 ```
@@ -769,7 +877,7 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .\.venv\Scripts\python.exe -m pytest tests\test_harness_flags.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_harness_flags_requires.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_plan106_local_llm_bridge.py tests\test_plan106_analyze_code_api.py tests\test_plan106_playground_api.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_plan39_history.py -q   # si el archivo del plan 39 tiene otro nombre, correr el/los tests que cubren /executions/history (localizar con: grep -l "executions/history" tests/)
+.\.venv\Scripts\python.exe -m pytest tests\test_executions_history.py -q   # nombre real VERIFICADO (C4b; test_plan39_history.py NO existe)
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"
 npx tsc --noEmit
 npx vitest run src/components/__tests__/ExecutionInsightBlock.test.tsx src/components/__tests__/WeeklyDigestCard.test.tsx
@@ -778,11 +886,11 @@ npx vitest run src/components/__tests__/ExecutionInsightBlock.test.tsx src/compo
 **Criterios de aceptación (binarios, TODOS):**
 1. Los 5 archivos de test del plan: verdes.
 2. `test_harness_flags.py` y `test_harness_flags_requires.py`: cero fallas NUEVAS vs. HEAD (el drift conocido de `harness_defaults.env` no cuenta como regresión del plan; documentar en el reporte cualquier fail preexistente re-demostrado en HEAD).
-3. Tests del plan 106 y del historial (plan 39): verdes (o idénticos a HEAD).
+3. Tests del plan 106 y del historial (`test_executions_history.py`): verdes (o idénticos a HEAD).
 4. `tsc --noEmit`: 0 errores nuevos.
 5. Vitest de los 2 archivos frontend: verdes.
 6. Grep del diff: cero referencias nuevas a `invoke_copilot`/`_invoke_copilot` (costo cloud cero).
-7. `run_harness_tests.sh` y `.ps1` contienen las 5 entradas nuevas (el meta-test del ratchet lo exige).
+7. `run_harness_tests.sh` y `.ps1` contienen las 5 entradas nuevas (el meta-test del ratchet hace cumplir el `.sh`; el `.ps1` va en sync por convención — C4a).
 
 **Flag / runtime / operador:** N/A (fase de verificación).
 
@@ -792,12 +900,12 @@ npx vitest run src/components/__tests__/ExecutionInsightBlock.test.tsx src/compo
 
 | # | Riesgo | Mitigación (en el diseño) |
 |---|---|---|
-| R1 | El modelo local chico devuelve JSON inválido o vacío | `parse_insight_response` defensivo (fences, caps, ValueError controlado) → `state="failed"` visible con botón Reintentar; el sweep NO reintenta solo (§4.2). |
+| R1 | El modelo local chico devuelve JSON inválido o vacío | `parse_insight_response` defensivo (fences, caps, ValueError controlado) → `state="failed"` visible con botón Reintentar; el sweep NO reintenta solo (§4.2). Modelo CAÍDO ≠ JSON inválido: el fallo del bridge NO quema filas en el sweep (health-gate [A1] + abort de ciclo [C2]). |
 | R2 | Carga de CPU/GPU de la máquina del operador | Topes duros: `MAX_PER_CYCLE` (default 3), `SWEEP_SEC` (default 180, mín 30), `LOOKBACK_DAYS` (default 7); un solo thread; `LOCAL_LLM_TIMEOUT_SEC` ya capa cada llamada (harness_flags.py:2431-2432). |
 | R3 | Recursión (el sweep anota ejecuciones que el propio LLM local genera) | Triple exclusión (`EXCLUDED_AGENT_TYPES`, prefijo `local_llm_`, `metadata.backend=="local_llm"`) + el insight NO crea filas `AgentExecution`. |
 | R4 | Race sweep vs. regeneración manual sobre la misma fila | Sweep single-thread; last-write-wins declarado aceptable (mono-operador; el insight es anotación derivada, no dato fuente). |
 | R5 | Locks de DB retenidos durante inferencias de minutos | La llamada LLM ocurre FUERA de `session_scope` (dos scopes cortos: leer view / escribir insight). |
-| R6 | Filas con `metadata_json` NULL invisibles para el sweep | `or_(is_(None), ~contains(...))` explícito en `pick_candidates` + test de regresión dedicado. |
+| R6 | Filas con `metadata_json` NULL invisibles para el sweep | `or_(is_(None), ~contains(...))` explícito en `pick_candidates` + test de regresión dedicado. Limitación aceptada [C6]: si OTRO valor del metadata contuviera el literal `"local_insight"`, esa fila queda fuera del sweep (falso positivo del LIKE, probabilidad ínfima); el endpoint manual de F3 la cubre. |
 | R7 | Crecimiento del payload de `/history` | Insight capado a ~1.5 KB por los límites del contrato §4. |
 | R8 | La card del digest se bloquea esperando al LLM | La narrativa es SOLO por click (nunca en el render inicial) y el digest degrada con `narrative_error` sin romper el payload. |
 | R9 | Privacidad | Es el punto fuerte: logs/output jamás salen de la máquina (todo por `invoke_local_llm` → endpoint local). |
@@ -820,7 +928,7 @@ npx vitest run src/components/__tests__/ExecutionInsightBlock.test.tsx src/compo
 - **Modelo local / Ollama**: servidor OpenAI-compatible en la máquina del operador (`LOCAL_LLM_ENDPOINT`, ej. `http://localhost:11434/v1/chat/completions`), modelo `LOCAL_LLM_MODEL` (ej. `qwen3:32b`). Costo por token: cero.
 - **Arnés / FlagSpec / registry**: sistema de flags configurable por UI (`services/harness_flags.py` + `HarnessFlagsPanel`). Gotchas duros: sin `default=` en FlagSpec nuevas; default efectivo en `config.py`; `requires` profundidad 1 + `_REQUIRES_MAP_FROZEN`.
 - **Sweep / daemon**: thread de fondo con loop try/except + sleep (patrón `app.py:394-409`).
-- **Ratchet**: los scripts `run_harness_tests.sh/.ps1` listan TODOS los archivos de test del arnés; un meta-test (plan 49) falla si un test nuevo no está registrado.
+- **Ratchet**: los scripts `run_harness_tests.sh/.ps1` listan TODOS los archivos de test del arnés; el meta-test (plan 49, `test_harness_ratchet_meta.py`) falla si un test nuevo no está en el `.sh` (única lista enforced); el `.ps1` se mantiene en sync por convención (C4a).
 - **Fences**: bloque markdown ```...``` que los modelos suelen envolver alrededor del JSON; hay que quitarlo antes de `json.loads` (patrón `api/local_llm_analysis.py:324-327`).
 - **HITL**: human-in-the-loop — el sistema sugiere, el operador decide; prohibido ejecutar acciones mutantes.
 - **TL;DR / triage**: resumen ultracorto / diagnóstico de falla (causa probable + evidencia + siguiente paso).
@@ -842,9 +950,10 @@ Cada fase es autocontenida: se puede mergear F0-F3 sin F4/F5 (el insight ya viaj
 
 - [ ] Las 5 flags existen, categorizadas, con bounds, default efectivo OFF en `config.py`, hijas con `requires` al master, aristas en `_REQUIRES_MAP_FROZEN`, y ayuda en `harness_flags_help.py`.
 - [ ] `services/local_insights.py` implementa el contrato §4 completo (elegibilidad, prompts, parseo, persistencia, sweep, narrativa) con la llamada LLM fuera de `session_scope`.
-- [ ] El daemon `stacky-local-insights-daemon` arranca siempre y sus gates son hot (flag ON/OFF sin restart).
+- [ ] El daemon `stacky-local-insights-daemon` arranca siempre EN PRODUCCIÓN y jamás bajo pytest (guard `"pytest" not in sys.modules`, C1); sus gates son hot (flag ON/OFF sin restart) e incluyen el health-gate [A1].
+- [ ] Modelo local caído ⇒ CERO filas quemadas: health-gate por ciclo [A1] + abort ante fallo transitorio [C2], verificados por `test_sweep_health_gate_short_circuits` y `test_sweep_model_down_aborts_cycle_without_burning_rows`.
 - [ ] `GET /api/executions/history` incluye `local_insight` (aditivo, null-safe); `POST /api/llm/insights/<id>/generate` cumple la matriz 200/404/409/502.
-- [ ] UI: TL;DR en fila del historial, bloque completo en el drawer con botón generar/reintentar, narrativa del digest a un click en la card existente; cero cambios en `ActiveRunsPanel.tsx` y `devops/*`.
+- [ ] UI: TL;DR + chip de riesgo [A2] en la fila del historial, bloque completo en el drawer con botón generar/reintentar, narrativa del digest a un click en la card existente; cero cambios en `ActiveRunsPanel.tsx` y `devops/*`.
 - [ ] Los 5 archivos de test backend + 2 frontend nombrados en este doc: verdes con los comandos literales (venv `backend\.venv`, vitest por archivo).
 - [ ] `run_harness_tests.sh` y `.ps1` registran los 5 tests backend.
 - [ ] Con la flag master OFF: payloads byte-compatibles (campo aditivo null/ausente) y cero llamadas al modelo local (verificado por tests con mock).

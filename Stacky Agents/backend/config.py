@@ -475,6 +475,20 @@ class Config:
         "STACKY_DOCS_GRAPH_ENABLED", "false"
     ).strip().lower() == "true"
 
+    # ── Plan 112 — Retrieval híbrido docs-rag (default OFF, editable por UI) ───
+    STACKY_DOCS_RAG_HYBRID_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_RAG_HYBRID_ENABLED", "false"
+    ).strip().lower() == "true"
+    STACKY_DOCS_RAG_HYBRID_ALPHA: float = float(
+        os.getenv("STACKY_DOCS_RAG_HYBRID_ALPHA", "1.0") or "1.0"
+    )
+    STACKY_DOCS_RAG_HYBRID_BETA: float = float(
+        os.getenv("STACKY_DOCS_RAG_HYBRID_BETA", "0.15") or "0.15"
+    )
+    STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS: int = int(
+        os.getenv("STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS", "8") or "8"
+    )
+
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",

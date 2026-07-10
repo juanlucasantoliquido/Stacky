@@ -193,6 +193,13 @@ HARNESS_TEST_FILES=(
   tests/test_plan110_pr_review_list_endpoint.py
   tests/test_plan110_pr_review_local.py
   tests/test_plan110_pr_review_models.py
+  # — Plan 112 · Retrieval híbrido docs-rag (léxico + 1-hop + prior backlinks) —
+  tests/test_plan112_flags.py
+  tests/test_plan112_backlink_index.py
+  tests/test_plan112_search_hybrid.py
+  tests/test_plan112_search_route.py
+  tests/test_plan112_telemetry.py
+  tests/test_plan112_doc_consultor_fallback.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

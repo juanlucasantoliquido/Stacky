@@ -271,6 +271,30 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la página Docs se ve y funciona exactamente como siempre.",
         example="Como el 'graph view' de Obsidian, pero de solo lectura y con un chequeo de salud.",
     ),
+    "STACKY_DOCS_RAG_HYBRID_ENABLED": PlainHelp(
+        what="Mejora la búsqueda de documentos: además de la palabra buscada, trae notas enlazadas y prioriza las más referenciadas.",
+        on_effect="Si la activás: cuando la respuesta vive en una nota linkeada que no repite la palabra buscada, igual aparece; y las notas centrales (muy citadas) suben en la lista.",
+        off_effect="Si la apagás: la búsqueda de documentos funciona exactamente como siempre, solo por coincidencia de palabras.",
+        example="Buscás 'pago' y la explicación está en la nota 'Facturación' que solo se enlaza desde ahí: con esto activado, esa nota vecina también aparece.",
+    ),
+    "STACKY_DOCS_RAG_HYBRID_ALPHA": PlainHelp(
+        what="Cuánto pesa la coincidencia exacta de palabras al ordenar los resultados de la búsqueda mejorada de documentos.",
+        on_effect="Si subís el número: manda más la coincidencia literal de palabras y menos la importancia de la nota.",
+        off_effect="Si lo bajás a cero: la coincidencia de palabras deja de contar y solo importa qué tan referenciada es la nota.",
+        example="Ponerlo alto es como priorizar el documento que dice tu palabra tal cual, por encima del más popular.",
+    ),
+    "STACKY_DOCS_RAG_HYBRID_BETA": PlainHelp(
+        what="Cuánto sube un documento por ser muy referenciado por otros (una nota central del proyecto).",
+        on_effect="Si subís el número: las notas muy citadas por otras suben más en los resultados aunque coincidan menos con la palabra buscada.",
+        off_effect="Si lo bajás a cero: que una nota sea muy referenciada deja de darle ninguna ventaja en el orden.",
+        example="Como darle preferencia al manual central que todos citan, por encima de una nota suelta que nadie enlaza.",
+    ),
+    "STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS": PlainHelp(
+        what="Cuántas notas vecinas (a un link de distancia) se traen como máximo por cada resultado de la búsqueda mejorada.",
+        on_effect="Si subís el número: se traen más notas enlazadas por resultado, con más contexto pero también más ruido.",
+        off_effect="Si lo bajás a cero: no se traen notas vecinas; solo se reordenan los resultados por importancia.",
+        example="Ponerlo en 8 es como, por cada documento encontrado, mirar hasta 8 documentos que este enlaza.",
+    ),
     # ── calidad_verificacion ──────────────────────────────────────────────
     "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED": PlainHelp(
         what="Le muestra al agente, como lista de tareas obligatoria, los criterios que el ticket exige cumplir.",

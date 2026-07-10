@@ -1,7 +1,9 @@
 # Plan 112 — Retrieval híbrido en docs-rag (léxico TF-IDF + expansión 1-hop por grafo + prior de backlinks)
 
-> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Estado:** IMPLEMENTADO — 2026-07-10 (F0..F6 verdes por `implementar-plan-stacky`)
 > **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C3 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+>
+> **IMPLEMENTACIÓN (2026-07-10):** F0 (4 flags+bounds+requires+help, 6/6), F1 (`_build_backlink_index` con fallback basename C2, 6/6), F2 (`search_hybrid`+`_rerank_with_backlinks`+cap C1+KPI, 7/7), F3 (ruta por flag+golden+`debug_hybrid`, 4/4), F4 (telemetría A/B en `/stats`, 4/4), F5 (fallback DocConsultor+warning, 3/3). No-regresión: 92 passed (6 suites nuevas + harness_flags + requires). Nota: `test_harness_flags_help.py` tiene 2 fallas PREEXISTENTES en HEAD por jerga/longitud en entradas DEVOPS ajenas (VARIABLES/REMOTE_CONSOLE/PREFLIGHT), independientes de este plan; las 4 entradas hybrid pasan. Sin cambios de frontend: las flags aparecen solas en `HarnessFlagsPanel` (lee `FLAG_REGISTRY`).
 >
 > **CHANGELOG v1 → v2:**
 > - **C1 (IMPORTANTE):** `search_hybrid` devolvía la lista combinada SIN tope: base hits + TODOS los chunks de hasta 8 ficheros vecinos por hit → `/docs-rag/search` podía responder 10x el `top_k` pedido. Ahora cap literal `reranked[: top_k * _HYBRID_RESULT_CAP_FACTOR]` (factor 3) + test `test_result_count_capped`.

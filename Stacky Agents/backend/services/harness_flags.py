@@ -130,6 +130,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_RAG_CATALOG_ENABLED", "STACKY_RAG_CATALOG_TOP_K",
         "STACKY_PROCESS_DISCIPLINE_ENABLED",   # Plan 67, C6 v2.1
         "STACKY_DOCS_GRAPH_ENABLED",  # Plan 109 — grafo documental read-only
+        "STACKY_DOCS_RAG_HYBRID_ENABLED",  # Plan 112 — retrieval híbrido docs-rag
+        "STACKY_DOCS_RAG_HYBRID_ALPHA", "STACKY_DOCS_RAG_HYBRID_BETA",
+        "STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS",  # Plan 112 — pesos + tope vecinos
     ),
     "calidad_verificacion": (
         "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -1467,6 +1470,66 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=True,  # leído via os.getenv en _inject_process_catalog_block
         requires="STACKY_RAG_CATALOG_ENABLED",
         min_value=1,  # Plan 83 — consumidor ya clampa max(1,..) (context_enrichment.py:800); redundante pero informativo.
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_RAG_HYBRID_ENABLED",
+        type="bool",
+        label="Retrieval híbrido docs (Plan 112)",
+        description=(
+            "Plan 112 — Si ON, la búsqueda de docs deja de ser solo por término: "
+            "expande 1 salto por los links del grafo documental (plan 109) para "
+            "traer notas vecinas enlazadas y prioriza las notas muy referenciadas "
+            "(hubs). Mejora el recall cuando la respuesta vive en una nota linkeada "
+            "que no contiene la palabra buscada. Default OFF = búsqueda byte-idéntica "
+            "a hoy. Si el grafo 109 no está disponible, degrada a búsqueda léxica pura."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_RAG_HYBRID_ALPHA",
+        type="float",
+        label="Retrieval híbrido: peso del match de término",
+        description=(
+            "Plan 112 — Peso del puntaje léxico (coincidencia de término) al ordenar "
+            "resultados del retrieval híbrido. Default 1.0. Solo aplica con "
+            "STACKY_DOCS_RAG_HYBRID_ENABLED=true."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_RAG_HYBRID_ENABLED",
+        min_value=0.0,
+        max_value=10.0,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_RAG_HYBRID_BETA",
+        type="float",
+        label="Retrieval híbrido: peso de notas referenciadas",
+        description=(
+            "Plan 112 — Peso del prior de backlinks: cuánto sube una nota por ser muy "
+            "referenciada por otras (hub). Default 0.15. Solo aplica con "
+            "STACKY_DOCS_RAG_HYBRID_ENABLED=true."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_RAG_HYBRID_ENABLED",
+        min_value=0.0,
+        max_value=10.0,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS",
+        type="int",
+        label="Retrieval híbrido: tope de notas vecinas por hit",
+        description=(
+            "Plan 112 — Máximo de notas vecinas (a 1 link) que se traen por cada "
+            "resultado léxico durante la expansión. Default 8. Solo aplica con "
+            "STACKY_DOCS_RAG_HYBRID_ENABLED=true."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_RAG_HYBRID_ENABLED",
+        min_value=0,
+        max_value=100,
     ),
     FlagSpec(
         key="STACKY_PROCESS_DISCIPLINE_ENABLED",

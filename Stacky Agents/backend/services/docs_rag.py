@@ -348,6 +348,210 @@ def search(project_name: str, query: str, top_k: int = 5, expand_files: bool = T
 
 
 # ---------------------------------------------------------------------------
+# Plan 112 — Telemetría A/B del retrieval híbrido (en memoria, señal de sesión)
+# ---------------------------------------------------------------------------
+
+_hybrid_telemetry = {"queries": 0, "queries_with_new": 0,
+                     "hits_lexical": 0, "hits_added": 0}
+
+
+def record_hybrid_query(lexical: int, added: int, new_from_expansion: bool) -> None:
+    _hybrid_telemetry["queries"] += 1
+    _hybrid_telemetry["hits_lexical"] += int(lexical)
+    _hybrid_telemetry["hits_added"] += int(added)
+    if new_from_expansion:
+        _hybrid_telemetry["queries_with_new"] += 1
+
+
+def _reset_hybrid_telemetry() -> None:  # para tests
+    for k in _hybrid_telemetry:
+        _hybrid_telemetry[k] = 0
+
+
+def get_hybrid_telemetry() -> dict:
+    return dict(_hybrid_telemetry)
+
+
+# ---------------------------------------------------------------------------
+# Plan 112 — Retrieval híbrido: puente grafo↔docs_rag (backlinks + vecindad)
+# ---------------------------------------------------------------------------
+
+def _basename_lower(path: str) -> str:
+    return path.replace("\\", "/").rsplit("/", 1)[-1].lower()
+
+
+def _build_backlink_index(project_name: str) -> tuple[dict[str, int], dict[str, list[str]]]:
+    """Devuelve (backlinks_by_path, neighbors_by_path) para las notas de PROYECTO.
+
+    - backlinks_by_path[file_path] = in_degree del nodo nota correspondiente.
+    - neighbors_by_path[file_path] = file_paths de notas a 1 arista (out o in), dedup.
+
+    Si el grafo no está disponible o la flag 109 está OFF, devuelve ({}, {}):
+    el híbrido degrada a léxico puro sin romper. (Plan 112 F1, fallback basename C2.)
+    """
+    try:
+        from services import doc_graph
+        from config import config
+        if not getattr(config, "STACKY_DOCS_GRAPH_ENABLED", False):
+            return {}, {}
+        graph = doc_graph.build_graph(project_name=project_name)
+    except Exception as exc:
+        logger.warning("docs_rag: hybrid backlink index unavailable: %s", exc)
+        return {}, {}
+
+    # nodo nota project-docs -> file_path estilo docs_rag (path relativo a la fuente)
+    id_to_path: dict[str, str] = {}
+    backlinks: dict[str, int] = {}
+    for n in graph.get("nodes", []):
+        if n.get("kind") != "note" or not str(n.get("source_id", "")).startswith("project-docs"):
+            continue
+        p = str(n["path"]).replace("\\", "/")
+        id_to_path[n["id"]] = p
+        backlinks[p] = int(n.get("in_degree", 0))
+
+    # Vecindad no dirigida (1-hop en cualquier sentido) entre nodos nota resueltos.
+    neighbors: dict[str, list[str]] = {}
+    for e in graph.get("edges", []):
+        s, t = e.get("source"), e.get("target")
+        sp, tp = id_to_path.get(s), id_to_path.get(t)
+        if sp and tp:
+            neighbors.setdefault(sp, []).append(tp)
+            neighbors.setdefault(tp, []).append(sp)
+    for k in list(neighbors):
+        seen: set[str] = set()
+        out: list[str] = []
+        for v in neighbors[k]:
+            if v not in seen and v != k:
+                seen.add(v)
+                out.append(v)
+        neighbors[k] = out
+
+    # (C2) Fallback por basename para chunk_paths cuyo file_path no matchea exacto
+    # con ningún node.path. Se construye un índice basename->node_path OMITIENDO
+    # los basenames ambiguos (repetidos); el chunk_path resuelto hereda backlinks y
+    # vecindad del nodo (alias). Sin match ni por basename → 0 backlinks, sin vecinos.
+    chunk_paths = _distinct_chunk_paths(project_name)
+    non_exact = [cp for cp in chunk_paths if cp not in backlinks]
+    if non_exact:
+        base_counts: Counter = Counter(_basename_lower(np) for np in backlinks)
+        base_index = {
+            _basename_lower(np): np
+            for np in backlinks
+            if base_counts[_basename_lower(np)] == 1
+        }
+        for cp in non_exact:
+            node_path = base_index.get(_basename_lower(cp))
+            if node_path is None:
+                continue
+            backlinks[cp] = backlinks[node_path]
+            if node_path in neighbors:
+                neighbors[cp] = list(neighbors[node_path])
+
+    return backlinks, neighbors
+
+
+def _distinct_chunk_paths(project_name: str) -> list[str]:
+    """file_paths distintos presentes en la tabla DocChunk del proyecto."""
+    with session_scope() as session:
+        rows = (session.query(DocChunk.file_path)
+                .filter_by(project_name=project_name)
+                .distinct().all())
+    return [r[0] for r in rows]
+
+
+def _read_hybrid_weights() -> tuple[float, float, int]:
+    from config import config
+
+    def _clamp(v, lo, hi):
+        return max(lo, min(hi, v))
+
+    alpha = _clamp(float(getattr(config, "STACKY_DOCS_RAG_HYBRID_ALPHA", 1.0)), 0.0, 10.0)
+    beta = _clamp(float(getattr(config, "STACKY_DOCS_RAG_HYBRID_BETA", 0.15)), 0.0, 10.0)
+    maxn = int(_clamp(int(getattr(config, "STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS", 8)), 0, 100))
+    return alpha, beta, maxn
+
+
+_HYBRID_RESULT_CAP_FACTOR = 3  # (C1) tope duro: len(resultado) <= top_k * 3
+
+
+def _rerank_with_backlinks(hits: list[DocHit], backlinks: dict[str, int],
+                           alpha: float, beta: float) -> list[DocHit]:
+    """Reordena por clave = alpha*score + beta*log(1+backlinks(file)).
+
+    (C4) NO muta los DocHit ni crea copias: la clave combinada es SOLO para
+    ordenar; los scores visibles siguen siendo los léxicos originales. `sorted`
+    es estable → empates conservan el orden relativo previo.
+    """
+    def _key(h: DocHit) -> float:
+        bl = backlinks.get(h.file_path, 0)
+        return alpha * h.score + beta * math.log1p(bl)
+
+    return sorted(hits, key=_key, reverse=True)
+
+
+def search_hybrid(project_name: str, query: str, top_k: int = 5,
+                  expand_files: bool = True, *, collect_debug: bool = False):
+    """Retrieval híbrido: léxico (search) + expansión 1-hop por grafo + prior backlinks.
+
+    Contrato: si no hay grafo (flag 109 OFF o error) degrada EXACTAMENTE a search().
+    Con collect_debug=True devuelve (hits, debug_dict) para el bloque de diagnóstico
+    opt-in de la ruta (plan 112 F3, adición arquitecto); si no, devuelve list[DocHit].
+    """
+    alpha, beta, max_neighbors = _read_hybrid_weights()
+    base_hits = search(project_name, query, top_k=top_k, expand_files=expand_files)
+    backlinks, neighbors = _build_backlink_index(project_name)
+
+    def _debug(lexical_files, expanded_files):
+        return {
+            "lexical_files": lexical_files,
+            "expanded_files": expanded_files,
+            "weights": {"alpha": alpha, "beta": beta, "max_neighbors": max_neighbors},
+        }
+
+    if not neighbors and not backlinks:
+        record_hybrid_query(lexical=len(base_hits), added=0, new_from_expansion=False)
+        lex_files = []
+        for h in base_hits:
+            if h.file_path not in lex_files:
+                lex_files.append(h.file_path)
+        if collect_debug:
+            return base_hits, _debug(lex_files, [])
+        return base_hits  # degradación a léxico puro
+
+    # 1-hop: por cada file_path de los top hits léxicos, traer chunks de vecinos.
+    lexical_files: list[str] = []
+    for h in base_hits:
+        if h.file_path not in lexical_files:
+            lexical_files.append(h.file_path)
+    neighbor_files: list[str] = []
+    for fp in lexical_files:
+        for nb in neighbors.get(fp, [])[:max_neighbors]:
+            if nb not in lexical_files and nb not in neighbor_files:
+                neighbor_files.append(nb)
+
+    added: list[DocHit] = []
+    if neighbor_files:
+        with session_scope() as session:
+            for nb in neighbor_files:
+                for fc in (session.query(DocChunk)
+                           .filter_by(project_name=project_name, file_path=nb)
+                           .order_by(DocChunk.id).all()):
+                    added.append(DocHit(file_path=fc.file_path,
+                                        section_heading=fc.section_heading,
+                                        chunk_text=fc.chunk_text,
+                                        score=0.0))  # relevante por vecindad, sin score léxico
+
+    combined = base_hits + added
+    reranked = _rerank_with_backlinks(combined, backlinks, alpha, beta)
+    reranked = reranked[: max(1, top_k) * _HYBRID_RESULT_CAP_FACTOR]  # (C1) tope duro
+    record_hybrid_query(lexical=len(base_hits), added=len(added),
+                        new_from_expansion=bool(added))
+    if collect_debug:
+        return reranked, _debug(lexical_files, neighbor_files)
+    return reranked
+
+
+# ---------------------------------------------------------------------------
 # Estadísticas
 # ---------------------------------------------------------------------------
 
@@ -356,11 +560,13 @@ def get_stats(project_name: str) -> dict:
     with session_scope() as session:
         chunks = session.query(DocChunk).filter_by(project_name=project_name).all()
         if not chunks:
-            return {"chunks": 0, "files": 0, "last_indexed": None}
+            return {"chunks": 0, "files": 0, "last_indexed": None,
+                    "hybrid": get_hybrid_telemetry()}
         files = {c.file_path for c in chunks}
         last = max((c.indexed_at for c in chunks if c.indexed_at), default=None)
         return {
             "chunks": len(chunks),
             "files": len(files),
             "last_indexed": last.isoformat() if last else None,
+            "hybrid": get_hybrid_telemetry(),  # Plan 112 F4 — señal A/B aditiva
         }

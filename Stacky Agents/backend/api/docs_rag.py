@@ -30,6 +30,14 @@ logger = logging.getLogger(__name__)
 bp = Blueprint("docs_rag", __name__, url_prefix="/docs-rag")
 
 _DEFAULT_AGENT = "DocConsultor.agent.md"
+# Plan 112 F5 — persona de fallback built-in cuando el .agent.md no existe
+# (los .agent.md están gitignoreados; sin esto el chat corría con system vacío).
+_DEFAULT_DOC_CONSULTOR_PROMPT = (
+    "Sos un consultor de documentación técnica. Respondés SOLO con base en el "
+    "contexto documental provisto; si algo no está en la doc, lo decís explícitamente "
+    "en vez de inventar. Citás el fichero de donde sale cada afirmación. Español, "
+    "conciso y accionable. No ejecutás acciones: solo informás."
+)
 _DEFAULT_TOP_K = 5
 _MAX_CONTEXT_CHARS = 40_000   # ~10k tokens de contexto documental
 
@@ -51,6 +59,9 @@ def _read_agent_system_prompt(agent_filename: str) -> str:
             filename=agent_filename,
         )
         if agent is None:
+            logger.warning(
+                "docs_rag: agent '%s' no encontrado en VSCODE_PROMPTS_DIR; "
+                "se usará persona de fallback", agent_filename)
             return ""
         return agent.system_prompt or ""
     except Exception as exc:
@@ -170,18 +181,35 @@ def route_search():
     name, _ = _resolve_project(body.get("project_name"))
     top_k = int(body.get("top_k") or _DEFAULT_TOP_K)
 
+    use_hybrid = bool(getattr(config, "STACKY_DOCS_RAG_HYBRID_ENABLED", False))
+    # (Adición arquitecto) diagnóstico opt-in por request; solo con flag ON.
+    want_debug = use_hybrid and bool(body.get("debug_hybrid"))
+
     try:
-        hits = search(name, query, top_k=top_k)
+        if use_hybrid:
+            import services.docs_rag as docs_rag_service
+            if want_debug:
+                hits, debug = docs_rag_service.search_hybrid(
+                    name, query, top_k=top_k, collect_debug=True)
+            else:
+                hits = docs_rag_service.search_hybrid(name, query, top_k=top_k)
+                debug = None
+        else:
+            hits = search(name, query, top_k=top_k)
+            debug = None
     except Exception as exc:
         logger.error("docs_rag search error: %s", exc, exc_info=True)
         return jsonify({"ok": False, "error": str(exc)}), 500
 
-    return jsonify({
+    payload = {
         "ok": True,
         "project_name": name,
         "query": query,
         "hits": [h.to_dict() for h in hits],
-    })
+    }
+    if debug is not None:
+        payload["hybrid_debug"] = debug
+    return jsonify(payload)
 
 
 @bp.post("/chat")
@@ -221,8 +249,9 @@ def route_chat():
         logger.error("docs_rag chat search error: %s", exc, exc_info=True)
         hits = []
 
-    # 2. Leer system prompt base del agente (patron WS1: vscode_agents)
-    base_system = _read_agent_system_prompt(agent_filename)
+    # 2. Leer system prompt base del agente (patron WS1: vscode_agents).
+    #    Plan 112 F5 — fallback a persona built-in si el .agent.md no existe.
+    base_system = _read_agent_system_prompt(agent_filename) or _DEFAULT_DOC_CONSULTOR_PROMPT
 
     # 3. Inyectar contexto documental al system prompt
     context_block = _build_context_block(hits)

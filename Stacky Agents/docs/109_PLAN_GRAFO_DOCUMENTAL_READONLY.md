@@ -1,7 +1,9 @@
 # Plan 109 — Grafo documental READ-ONLY + diagnóstico de estado documental
 
-> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Estado:** IMPLEMENTADO — 2026-07-09 (F0..F6 vía `implementar-plan-stacky`; ver nota de implementación abajo)
 > **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C3 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+>
+> **NOTA DE IMPLEMENTACIÓN (2026-07-09):** F0-F5 verdes con tests reales (venv real = `.venv`, no `venv`; el plan citaba `venv/`). Backend: test_plan109_flag.py 5/5, test_plan109_parsers.py 14/14, test_plan109_build_graph.py 12/12, test_plan109_doc_health.py 8/8, test_plan109_graph_endpoint.py 5/5. Frontend: docGraphModel.test.ts 5/5 (vitest) + `tsc --noEmit` 0 errores. Los 5 tests backend quedaron registrados en `run_harness_tests.sh` y `.ps1`. Desvío del plan: `STACKY_RAG_CATALOG_ENABLED` NO existe en config.py (solo en harness_flags); se usó el patrón de `STACKY_PROCESS_DISCIPLINE_ENABLED`. El commit dejó `config.py` y `services/harness_flags.py` SIN commitear a propósito (traían WIP concurrente ajeno de flags DevOps default-ON) — se stageó solo el hunk del plan 109 vía `git apply --cached`.
 >
 > **CHANGELOG v1 → v2:**
 > - **C1 (IMPORTANTE):** los parsers de F1 ahora ignoran bloques de código fenced (``` ... ```) para links md y wikilinks — antes, ejemplos de código en las notas generaban aristas falsas y podían burlar la regla `FORMATO_NO_OBSIDIAN` de F3. `parse_code_refs` sigue leyendo el texto completo (las refs a código legítimas viven en backticks inline). +2 tests en F1 (14 total).

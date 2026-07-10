@@ -456,6 +456,11 @@ class Config:
         "STACKY_PROCESS_DISCIPLINE_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # ── Plan 109 — Grafo documental READ-ONLY (default OFF, editable por UI) ───
+    STACKY_DOCS_GRAPH_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_GRAPH_ENABLED", "false"
+    ).strip().lower() == "true"
+
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",

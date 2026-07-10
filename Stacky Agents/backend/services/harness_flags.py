@@ -129,6 +129,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_INJECT_PROCESS_CATALOG", "STACKY_CAPS_ADVISOR_ENABLED",
         "STACKY_RAG_CATALOG_ENABLED", "STACKY_RAG_CATALOG_TOP_K",
         "STACKY_PROCESS_DISCIPLINE_ENABLED",   # Plan 67, C6 v2.1
+        "STACKY_DOCS_GRAPH_ENABLED",  # Plan 109 — grafo documental read-only
     ),
     "calidad_verificacion": (
         "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -1433,6 +1434,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         pair="STACKY_RAG_CATALOG_TOP_K",
         env_only=True,  # leído via os.getenv en _inject_process_catalog_block
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_GRAPH_ENABLED",
+        type="bool",
+        label="Grafo documental (Plan 109)",
+        description=(
+            "Plan 109 — Construye un grafo READ-ONLY de la documentación del "
+            "proyecto (links markdown, wikilinks [[nombre]] y referencias a "
+            "código) y lo expone en GET /api/docs/graph junto a un diagnóstico "
+            "de salud documental. Habilita la pestaña 'Cobertura' (y en Plan "
+            "111 la pestaña 'Grafo') de la página Docs. No escribe ni modifica "
+            "ningún documento. Default OFF."
+        ),
+        group="global",
+        env_only=False,
     ),
     FlagSpec(
         key="STACKY_RAG_CATALOG_TOP_K",

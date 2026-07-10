@@ -6,9 +6,10 @@
  *   - Panel derecho: DocViewer con el markdown seleccionado
  */
 import { useState, useCallback, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DocTree from "../components/DocTree";
 import DocViewer from "../components/DocViewer";
+import DocCoveragePanel from "../components/docs/DocCoveragePanel";
 import { Docs } from "../api/endpoints";
 import type { DocNode, DocHeading } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
@@ -27,11 +28,14 @@ export default function DocsPage() {
   const [selectedNode, setSelectedNode] = useState<DocNode | null>(null);
   const [filterText, setFilterText] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState("");
+  const [docsView, setDocsView] = useState<"reader" | "coverage">("reader");
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     setSelectedNode(null);
     setFilterText("");
     setSelectedSourceId("");
+    setDocsView("reader");
   }, [projectName]);
 
   // -- Fuentes/carpeta docs del proyecto activo -------------------------------
@@ -93,6 +97,28 @@ export default function DocsPage() {
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
+
+  // -- Grafo documental (Plan 109, gateado por flag) --------------------------
+  const graphEnabled = sourcesData?.graph_enabled === true;
+  const {
+    data: graphData,
+    isLoading: graphLoading,
+    error: graphError,
+  } = useQuery({
+    queryKey: ["docs-graph", projectName ?? "active"],
+    queryFn: () => Docs.getGraph(projectName),
+    enabled: graphEnabled && docsView === "coverage",
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+
+  const handleRefreshGraph = useCallback(() => {
+    Docs.getGraph(projectName, { refresh: true })
+      .catch(() => undefined)
+      .finally(() => {
+        queryClient.invalidateQueries({ queryKey: ["docs-graph", projectName ?? "active"] });
+      });
+  }, [projectName, queryClient]);
 
   // -- Selección de nodo ------------------------------------------------------
   const handleSelect = useCallback((node: DocNode, heading?: DocHeading) => {
@@ -217,7 +243,36 @@ export default function DocsPage() {
       </aside>
 
       <main className={styles.viewerPanel}>
-        {selectedNode ? (
+        {graphEnabled && (
+          <div className={styles.docsTabs} role="tablist" aria-label="Vista de documentación">
+            <button
+              type="button"
+              role="tab"
+              aria-pressed={docsView === "reader"}
+              className={`${styles.docsTab} ${docsView === "reader" ? styles.docsTabActive : ""}`}
+              onClick={() => setDocsView("reader")}
+            >
+              Lector
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-pressed={docsView === "coverage"}
+              className={`${styles.docsTab} ${docsView === "coverage" ? styles.docsTabActive : ""}`}
+              onClick={() => setDocsView("coverage")}
+            >
+              Cobertura
+            </button>
+          </div>
+        )}
+        {graphEnabled && docsView === "coverage" ? (
+          <DocCoveragePanel
+            graph={graphData}
+            isLoading={graphLoading}
+            error={graphError ? String(graphError) : null}
+            onRefresh={handleRefreshGraph}
+          />
+        ) : selectedNode ? (
           <DocViewer
             node={selectedNode}
             content={contentData?.content ?? ""}

@@ -178,6 +178,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan106_analyze_code_api.py
   tests/test_plan106_suggest_pipeline_api.py
   tests/test_plan106_playground_api.py
+  # — Plan 109 · Grafo documental READ-ONLY + salud documental —
+  tests/test_plan109_flag.py
+  tests/test_plan109_parsers.py
+  tests/test_plan109_build_graph.py
+  tests/test_plan109_doc_health.py
+  tests/test_plan109_graph_endpoint.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

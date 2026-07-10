@@ -265,6 +265,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el agente decide por su cuenta sin esa guía explícita de reutilización.",
         example="Como recordarle a un empleado 'fijate si ya existe una plantilla parecida antes de crear una nueva'.",
     ),
+    "STACKY_DOCS_GRAPH_ENABLED": PlainHelp(
+        what="Arma un mapa de cómo se conectan entre sí los documentos del proyecto (quién linkea a quién).",
+        on_effect="Si la activás: en la página Docs aparece la pestaña 'Cobertura' con métricas del corpus (notas, links, huérfanas) y un semáforo de salud documental. No cambia ningún documento.",
+        off_effect="Si la apagás: la página Docs se ve y funciona exactamente como siempre.",
+        example="Como el 'graph view' de Obsidian, pero de solo lectura y con un chequeo de salud.",
+    ),
     # ── calidad_verificacion ──────────────────────────────────────────────
     "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED": PlainHelp(
         what="Le muestra al agente, como lista de tareas obligatoria, los criterios que el ticket exige cumplir.",

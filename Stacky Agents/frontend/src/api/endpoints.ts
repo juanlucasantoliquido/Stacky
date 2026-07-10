@@ -3,6 +3,8 @@ export type { RawResponse, GatewayErrorBody };
 import type { EnvironmentPlanResponse, EnvironmentApplyResponse } from "../devops/environmentModel";
 import type { PreflightCheck } from "../devops/preflightModel";
 import type { DoctorJob } from "../devops/doctorModel";
+import type { DocGraphResponse } from "../docs/docGraphModel";
+export type { DocGraphResponse };
 import type {
   ActiveProjectResponse,
   AgentDefinition,
@@ -2627,6 +2629,8 @@ export interface DocsSourcesResponse {
   default_source_id: string;
   sources: DocSource[];
   note?: string | null;
+  /** Plan 109 — true si STACKY_DOCS_GRAPH_ENABLED está ON (gatea la pestaña Cobertura). */
+  graph_enabled?: boolean;
 }
 
 export interface DocsIndexResponse {
@@ -2671,6 +2675,19 @@ export const Docs = {
     if (params?.project) query.set("project", params.project);
     if (params?.sourceId) query.set("source_id", params.sourceId);
     return api.get<DocsContentResponse>(`/api/docs/content?${query.toString()}`);
+  },
+
+  /** Plan 109 — grafo documental read-only. 404 si la flag está OFF.
+   *  opts.refresh=true fuerza re-scan del backend (query param refresh=1). */
+  getGraph: (
+    project?: string,
+    opts?: { refresh?: boolean }
+  ): Promise<DocGraphResponse> => {
+    const query = new URLSearchParams();
+    if (project) query.set("project", project);
+    if (opts?.refresh) query.set("refresh", "1");
+    const qs = query.toString();
+    return api.get<DocGraphResponse>(`/api/docs/graph${qs ? `?${qs}` : ""}`);
   },
 };
 

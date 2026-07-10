@@ -54,7 +54,9 @@ def get_doc_sources():
     """
     Devuelve las fuentes de documentación seleccionables para el proyecto activo.
     """
-    return jsonify(doc_indexer.list_doc_sources(project_name=_get_project_param()))
+    payload = doc_indexer.list_doc_sources(project_name=_get_project_param())
+    payload["graph_enabled"] = bool(getattr(config, "STACKY_DOCS_GRAPH_ENABLED", False))  # Plan 109
+    return jsonify(payload)
 
 
 # ── GET /api/docs/index ───────────────────────────────────────────────────────
@@ -199,3 +201,40 @@ def get_doc_content():
         "content": content,
         "encoding": "utf-8",
     })
+
+
+# ── GET /api/docs/graph ──────────────────────────────────────────────────────
+
+@bp.get("/graph")
+def get_docs_graph():
+    """Plan 109 — Grafo documental read-only del proyecto activo/indicado.
+
+    Query params: project (opcional, igual semántica que /index);
+                  refresh=1 (opcional, [ADICIÓN ARQUITECTO]: invalida la cache
+                  y fuerza re-scan antes de construir — read-only igual).
+    404 {"ok": false, "error": "docs_graph_disabled"} si la flag está OFF.
+    """
+    if not bool(getattr(config, "STACKY_DOCS_GRAPH_ENABLED", False)):
+        return jsonify({"ok": False, "error": "docs_graph_disabled",
+                        "message": "El grafo documental está deshabilitado (STACKY_DOCS_GRAPH_ENABLED)."}), 404
+
+    t0 = time.monotonic()
+    from services import doc_graph  # import lazy: no cargar el módulo si la flag está OFF
+    if request.args.get("refresh", "").strip() == "1":  # [ADICIÓN ARQUITECTO]
+        doc_graph.invalidate_graph_cache()
+    try:
+        graph = doc_graph.build_graph(
+            project_name=_get_project_param(),
+            vscode_prompts_dir=_get_vscode_prompts_dir(),
+        )
+    except Exception as exc:  # nunca 500 sin log estructurado
+        logger.warning("docs_api", "docs_graph_failed", detail=str(exc))
+        # (C7) el detalle queda en el log; al cliente va un mensaje genérico
+        return jsonify({"ok": False, "error": "docs_graph_failed",
+                        "message": "No se pudo construir el grafo documental. Ver logs (docs_graph_failed)."}), 500
+
+    logger.info("docs_api", "docs_graph_built",
+                nodes=len(graph.get("nodes", [])), edges=len(graph.get("edges", [])),
+                duration_ms=round((time.monotonic() - t0) * 1000),
+                doc_health=(graph.get("doc_health") or {}).get("status"))
+    return jsonify({"ok": True, **graph})

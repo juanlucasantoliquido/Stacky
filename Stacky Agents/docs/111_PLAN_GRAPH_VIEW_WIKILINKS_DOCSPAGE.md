@@ -1,6 +1,7 @@
 # Plan 111 — Graph View (canvas) + wikilinks clickeables + backlinks en DocsPage
 
-> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Estado:** IMPLEMENTADO — 2026-07-10 (F0..F5; 27/27 vitest puros verdes + `tsc --noEmit` 0 errores; `package.json` sin cambios). F5 verificación manual con backend+flag ON queda para el operador (los tests de componente están bloqueados en el entorno, según disclosure del plan).
+> **Estado previo:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
 > **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 IMPORTANTES resueltos en esta v2; sin bloqueantes)
 >
 > **CHANGELOG v1 → v2:**

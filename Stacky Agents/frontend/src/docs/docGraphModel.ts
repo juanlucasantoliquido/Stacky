@@ -64,6 +64,71 @@ export interface DocCoverageSummary {
   health: DocHealth | null;
 }
 
+/** Índice nombre-lower-sin-extensión → nodeId, para resolver wikilinks. Mismo
+ *  criterio de colisión que el backend (109): gana el path lexicográficamente menor
+ *  (y a igual path, el source_id menor). */
+export function buildNameIndex(graph: DocGraphResponse): Map<string, string> {
+  const idx = new Map<string, string>();
+  const notes = (graph?.nodes ?? [])
+    .filter((n) => n.kind === "note")
+    .slice()
+    .sort((a, b) =>
+      a.path < b.path ? -1 : a.path > b.path ? 1 : a.source_id < b.source_id ? -1 : 1
+    );
+  for (const n of notes) {
+    const base = n.label.replace(/\.md$/i, "").toLowerCase();
+    if (!idx.has(base)) idx.set(base, n.id); // primera (menor) gana
+  }
+  return idx;
+}
+
+/** Resuelve "wikilink:<nombre>" a un nodeId o null. */
+export function resolveWikilink(
+  url: string,
+  nameIndex: Map<string, string>
+): string | null {
+  if (!url.startsWith("wikilink:")) return null;
+  const name = url.slice("wikilink:".length).trim().toLowerCase();
+  return nameIndex.get(name) ?? null;
+}
+
+/** Notas que enlazan al nodo dado (aristas entrantes: edge.target === nodeId).
+ *  Devuelve los nodos `source` resueltos, ordenados por path. null/ausente → []. */
+export function backlinksOf(
+  graph: DocGraphResponse | undefined,
+  nodeId: string | null
+): DocGraphNode[] {
+  if (!graph || !nodeId) return [];
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const seen = new Set<string>();
+  const out: DocGraphNode[] = [];
+  for (const e of graph.edges) {
+    if (e.target !== nodeId) continue;
+    if (seen.has(e.source)) continue;
+    const src = byId.get(e.source);
+    if (src) {
+      seen.add(e.source);
+      out.push(src);
+    }
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/** Ids de nodos cuyo label matchea query (substring case-insensitive, trim).
+ *  Query vacía → Set vacío. */
+export function filterNodeIds(
+  graph: DocGraphResponse,
+  query: string
+): Set<string> {
+  const q = query.trim().toLowerCase();
+  const out = new Set<string>();
+  if (!q) return out;
+  for (const n of graph?.nodes ?? []) {
+    if (n.label.toLowerCase().includes(q)) out.add(n.id);
+  }
+  return out;
+}
+
 /** Puro y total: tolera arrays vacíos y doc_health null. */
 export function summarizeGraph(graph: DocGraphResponse): DocCoverageSummary {
   const nodes = graph?.nodes ?? [];

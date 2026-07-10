@@ -15,6 +15,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { DocNode } from "../api/endpoints";
+import { remarkWikilinks } from "../docs/remarkWikilinks";
+import { resolveWikilink } from "../docs/docGraphModel";
 import styles from "./DocViewer.module.css";
 
 // rehype-highlight importa highlight.js via CSS — necesitamos importar un tema.
@@ -26,18 +28,52 @@ interface DocViewerProps {
   content: string;
   isLoading?: boolean;
   error?: string | null;
+  /** Plan 111: habilita [[wikilinks]] (solo con la flag STACKY_DOCS_GRAPH_ENABLED ON). */
+  wikilinksEnabled?: boolean;
+  /** Índice nombre→nodeId del grafo (109) para resolver wikilinks. */
+  nameIndex?: Map<string, string>;
+  /** Navegar a la nota resuelta por un wikilink. */
+  onOpenNoteById?: (nodeId: string) => void;
 }
 
 // ── Link handler — intercepta links para evitar navegación fuera de la app ────
 
-function LinkRenderer({
-  href,
-  children,
-  ...props
-}: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children?: React.ReactNode }) {
-  if (!href) {
-    return <span {...props}>{children}</span>;
-  }
+function makeLinkRenderer(
+  nameIndex?: Map<string, string>,
+  onOpenNoteById?: (nodeId: string) => void
+) {
+  return function LinkRenderer({
+    href,
+    children,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children?: React.ReactNode }) {
+    if (!href) {
+      return <span {...props}>{children}</span>;
+    }
+
+    // Plan 111: wikilinks — resolver contra el índice del grafo.
+    if (href.startsWith("wikilink:")) {
+      const target = nameIndex ? resolveWikilink(href, nameIndex) : null;
+      if (target && onOpenNoteById) {
+        return (
+          <a
+            href="#"
+            className="wikilink"
+            onClick={(e) => {
+              e.preventDefault();
+              onOpenNoteById(target);
+            }}
+          >
+            {children}
+          </a>
+        );
+      }
+      return (
+        <span className="wikilink-broken" title="Nota no encontrada">
+          {children}
+        </span>
+      );
+    }
 
   // Link externo (http/https)
   if (href.startsWith("http://") || href.startsWith("https://")) {
@@ -66,11 +102,20 @@ function LinkRenderer({
       {children}
     </a>
   );
+  };
 }
 
 // ── DocViewer ─────────────────────────────────────────────────────────────────
 
-export default function DocViewer({ node, content, isLoading, error }: DocViewerProps) {
+export default function DocViewer({
+  node,
+  content,
+  isLoading,
+  error,
+  wikilinksEnabled,
+  nameIndex,
+  onOpenNoteById,
+}: DocViewerProps) {
   if (isLoading) {
     return (
       <div className={styles.stateContainer}>
@@ -101,10 +146,10 @@ export default function DocViewer({ node, content, isLoading, error }: DocViewer
       </header>
       <div className={styles.markdownBody}>
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={wikilinksEnabled ? [remarkGfm, remarkWikilinks] : [remarkGfm]}
           rehypePlugins={[rehypeHighlight]}
           components={{
-            a: LinkRenderer as any,
+            a: makeLinkRenderer(nameIndex, onOpenNoteById) as any,
           }}
         >
           {content}

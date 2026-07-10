@@ -210,3 +210,20 @@
   color: var(--color-text-muted, #888);
   font-family: monospace;
 }
+
+/* Plan 111 — wikilinks estilo Obsidian (theme-aware, dentro del cuerpo markdown) */
+.markdownBody :global(a.wikilink) {
+  color: var(--color-accent, #4a9eff);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--color-accent, #4a9eff);
+  cursor: pointer;
+}
+.markdownBody :global(a.wikilink):hover {
+  text-decoration: none;
+  border-bottom-style: solid;
+}
+.markdownBody :global(.wikilink-broken) {
+  color: var(--color-text-muted, #888);
+  text-decoration: underline dotted;
+  cursor: help;
+}

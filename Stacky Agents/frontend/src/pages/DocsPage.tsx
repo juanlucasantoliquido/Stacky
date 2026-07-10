@@ -5,13 +5,16 @@
  *   - Panel izquierdo: selector de fuente/carpeta, búsqueda y DocTree
  *   - Panel derecho: DocViewer con el markdown seleccionado
  */
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DocTree from "../components/DocTree";
 import DocViewer from "../components/DocViewer";
 import DocCoveragePanel from "../components/docs/DocCoveragePanel";
+import DocGraphView from "../components/docs/DocGraphView";
+import DocBacklinksPanel from "../components/docs/DocBacklinksPanel";
 import { Docs } from "../api/endpoints";
-import type { DocNode, DocHeading } from "../api/endpoints";
+import type { DocNode, DocRoot, DocHeading } from "../api/endpoints";
+import { buildNameIndex, type DocGraphResponse } from "../docs/docGraphModel";
 import { useWorkbench } from "../store/workbench";
 import styles from "./DocsPage.module.css";
 
@@ -22,13 +25,51 @@ function countDocFiles(nodes: DocNode[] = []): number {
   }, 0);
 }
 
+/** DFS que devuelve el DocNode (no carpeta) cuyo path coincide, o null. */
+function searchDocNodes(nodes: DocNode[] = [], path: string): DocNode | null {
+  for (const node of nodes) {
+    if (node.kind !== "folder" && node.path === path) return node;
+    if (node.children && node.children.length) {
+      const hit = searchDocNodes(node.children, path);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/** Busca un DocNode por path recorriendo los children de cada DocRoot. */
+function findDocNodeByPath(roots: DocRoot[] = [], path: string): DocNode | null {
+  for (const root of roots) {
+    const hit = searchDocNodes(root.children ?? [], path);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Resuelve el nodeId del grafo para el DocNode abierto (best-effort; null si no mapea). */
+function noteIdFor(
+  node: DocNode | null,
+  sourceId: string,
+  graph: DocGraphResponse | undefined
+): string | null {
+  if (!node || !graph) return null;
+  const match = graph.nodes.find(
+    (n) =>
+      n.kind === "note" &&
+      n.path === node.path &&
+      (n.source_id === (node.source_id ?? sourceId))
+  );
+  return match ? match.id : null;
+}
+
 export default function DocsPage() {
   const activeProject = useWorkbench((s) => s.activeProject);
   const projectName = activeProject?.name;
   const [selectedNode, setSelectedNode] = useState<DocNode | null>(null);
   const [filterText, setFilterText] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState("");
-  const [docsView, setDocsView] = useState<"reader" | "coverage">("reader");
+  const [docsView, setDocsView] = useState<"reader" | "coverage" | "graph">("reader");
+  const [pendingOpenPath, setPendingOpenPath] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -36,6 +77,7 @@ export default function DocsPage() {
     setFilterText("");
     setSelectedSourceId("");
     setDocsView("reader");
+    setPendingOpenPath(null);
   }, [projectName]);
 
   // -- Fuentes/carpeta docs del proyecto activo -------------------------------
@@ -107,10 +149,18 @@ export default function DocsPage() {
   } = useQuery({
     queryKey: ["docs-graph", projectName ?? "active"],
     queryFn: () => Docs.getGraph(projectName),
-    enabled: graphEnabled && docsView === "coverage",
+    // (C1) enabled con la flag (todas las vistas): los wikilinks y backlinks del
+    // Lector también necesitan el grafo, no solo Cobertura/Grafo.
+    enabled: graphEnabled,
     staleTime: 60 * 1000,
     retry: 1,
   });
+
+  // Índice nombre→nodeId para resolver wikilinks (Plan 111).
+  const nameIndex = useMemo(
+    () => (graphData ? buildNameIndex(graphData) : undefined),
+    [graphData]
+  );
 
   const handleRefreshGraph = useCallback(() => {
     Docs.getGraph(projectName, { refresh: true })
@@ -130,6 +180,44 @@ export default function DocsPage() {
       }, 300);
     }
   }, []);
+
+  // -- nodeId del grafo para la nota abierta (backlinks + halo del grafo) ------
+  const currentNodeId = useMemo(
+    () => noteIdFor(selectedNode, selectedContentSourceId, graphData),
+    [selectedNode, selectedContentSourceId, graphData]
+  );
+
+  // -- (C2) Navegar a una nota por su nodeId (puede vivir en OTRA fuente) ------
+  const handleOpenNoteById = useCallback(
+    (nodeId: string) => {
+      if (!graphData) return;
+      const target = graphData.nodes.find((n) => n.id === nodeId);
+      if (!target || target.kind !== "note") return;
+      setDocsView("reader");
+      if (target.source_id === selectedSourceId) {
+        const docNode = findDocNodeByPath(indexData?.roots ?? [], target.path);
+        if (docNode) setSelectedNode(docNode);
+        return;
+      }
+      // OTRA fuente: cambiar de fuente y esperar el indexData async.
+      setSelectedSourceId(target.source_id);
+      setPendingOpenPath(target.path);
+    },
+    [graphData, selectedSourceId, indexData]
+  );
+
+  // Resolver el pendingOpenPath cuando llega el indexData de la fuente nueva.
+  useEffect(() => {
+    if (!pendingOpenPath) return;
+    const docNode = findDocNodeByPath(indexData?.roots ?? [], pendingOpenPath);
+    if (docNode) {
+      setSelectedNode(docNode);
+      setPendingOpenPath(null);
+    } else if (indexData) {
+      // el indexData llegó pero el path no existe (grafo stale): limpiar sin lanzar.
+      setPendingOpenPath(null);
+    }
+  }, [indexData, pendingOpenPath]);
 
   const loadError = sourcesError || indexError;
   if (loadError) {
@@ -263,6 +351,15 @@ export default function DocsPage() {
             >
               Cobertura
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-pressed={docsView === "graph"}
+              className={`${styles.docsTab} ${docsView === "graph" ? styles.docsTabActive : ""}`}
+              onClick={() => setDocsView("graph")}
+            >
+              Grafo
+            </button>
           </div>
         )}
         {graphEnabled && docsView === "coverage" ? (
@@ -272,19 +369,46 @@ export default function DocsPage() {
             error={graphError ? String(graphError) : null}
             onRefresh={handleRefreshGraph}
           />
+        ) : graphEnabled && docsView === "graph" ? (
+          graphData ? (
+            <DocGraphView
+              graph={graphData}
+              onOpenNoteById={handleOpenNoteById}
+              selectedNodeId={currentNodeId}
+            />
+          ) : (
+            <div className={styles.welcomeState}>
+              <div className={styles.spinner} />
+              <p className={styles.welcomeSubtitle}>
+                {graphError ? "No se pudo cargar el grafo." : "Cargando grafo..."}
+              </p>
+            </div>
+          )
         ) : selectedNode ? (
-          <DocViewer
-            node={selectedNode}
-            content={contentData?.content ?? ""}
-            isLoading={contentLoading}
-            error={
-              contentError
-                ? contentError instanceof Error
-                  ? contentError.message
-                  : "Error al cargar contenido"
-                : null
-            }
-          />
+          <>
+            <DocViewer
+              node={selectedNode}
+              content={contentData?.content ?? ""}
+              isLoading={contentLoading}
+              error={
+                contentError
+                  ? contentError instanceof Error
+                    ? contentError.message
+                    : "Error al cargar contenido"
+                  : null
+              }
+              wikilinksEnabled={graphEnabled}
+              nameIndex={nameIndex}
+              onOpenNoteById={handleOpenNoteById}
+            />
+            {graphEnabled && (
+              <DocBacklinksPanel
+                graph={graphData}
+                currentNodeId={currentNodeId}
+                onOpenNoteById={handleOpenNoteById}
+              />
+            )}
+          </>
         ) : (
           <div className={styles.welcomeState}>
             <div className={styles.welcomeIcon}>&#128196;</div>

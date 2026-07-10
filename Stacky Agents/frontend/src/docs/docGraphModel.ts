@@ -15,12 +15,16 @@ export interface DocGraphNode {
   out_degree: number;
   has_frontmatter: boolean;
   exists: boolean;
+  /** Plan 114 — true si la nota tiene ≥1 referencia a código más nueva que ella (solo con flag ON). */
+  has_stale?: boolean;
 }
 
 export interface DocGraphEdge {
   source: string;
   target: string;
   kind: "md" | "wikilink" | "code_ref";
+  /** Plan 114 — true si el código referenciado cambió después de la nota (solo aristas code_ref, flag ON). */
+  stale?: boolean;
 }
 
 export interface DocHealth {
@@ -49,6 +53,8 @@ export interface DocGraphResponse {
   orphans: string[];
   stats: Record<string, number>;
   doc_health: DocHealth | null;
+  /** Plan 114 — conteo de aristas/notas stale (solo con flag ON; ausente si OFF). */
+  stale_stats?: { stale_edges: number; stale_notes: number };
 }
 
 export interface DocCoverageSummary {
@@ -62,6 +68,8 @@ export interface DocCoverageSummary {
   orphanNotes: DocGraphNode[];
   sources: number;
   health: DocHealth | null;
+  /** Plan 114 — notas desactualizadas (de stale_stats); undefined si la flag está OFF. */
+  staleNotes?: number;
 }
 
 /** Índice nombre-lower-sin-extensión → nodeId, para resolver wikilinks. Mismo
@@ -153,5 +161,6 @@ export function summarizeGraph(graph: DocGraphResponse): DocCoverageSummary {
     orphanNotes,
     sources: graph?.sources?.length ?? 0,
     health: graph?.doc_health ?? null,
+    staleNotes: graph?.stale_stats?.stale_notes,  // Plan 114 — undefined si flag OFF
   };
 }

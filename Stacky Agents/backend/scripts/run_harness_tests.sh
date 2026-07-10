@@ -207,6 +207,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan113_git_gate.py
   tests/test_plan113_apply.py
   tests/test_plan113_endpoints.py
+  # — Plan 114 · Doctor de staleness doc↔código —
+  tests/test_plan114_flag.py
+  tests/test_plan114_staleness.py
+  tests/test_plan114_graph_payload.py
+  tests/test_plan114_fix_endpoint.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

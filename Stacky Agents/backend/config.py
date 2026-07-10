@@ -497,6 +497,11 @@ class Config:
         os.getenv("STACKY_DOCS_DOCUMENTER_MAX_FILES", "40") or "40"
     )
 
+    # ── Plan 114 — Doctor de staleness doc↔código (default OFF, editable por UI) ─
+    STACKY_DOCS_STALENESS_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_STALENESS_ENABLED", "false"
+    ).strip().lower() == "true"
+
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",

@@ -2633,6 +2633,8 @@ export interface DocsSourcesResponse {
   graph_enabled?: boolean;
   /** Plan 113 — true si STACKY_DOCS_DOCUMENTER_ENABLED está ON (gatea el botón Documentador). */
   documenter_enabled?: boolean;
+  /** Plan 114 — true si STACKY_DOCS_STALENESS_ENABLED está ON (gatea chip + acción de staleness). */
+  staleness_enabled?: boolean;
 }
 
 /** Plan 113 — salud documental recomputada (subset de doc_health). */
@@ -2736,6 +2738,17 @@ export const Docs = {
     api.post<{ ok: boolean; action?: string; branch?: string; error?: string }>(
       `/api/docs/documenter/decide`,
       { run: runId, action }
+    ),
+
+  /** Plan 114 — encola el Documentador (113) en modo ACTUALIZAR acotado a una nota.
+   *  404 si staleness o documenter OFF; 409 si ya hay un run activo. */
+  stalenessFix: (
+    notePath: string,
+    project?: string
+  ): Promise<{ ok: boolean; run_id?: string; error?: string }> =>
+    api.post<{ ok: boolean; run_id?: string; error?: string }>(
+      `/api/docs/staleness/fix`,
+      project ? { note_path: notePath, project } : { note_path: notePath }
     ),
 };
 

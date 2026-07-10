@@ -144,6 +144,7 @@ export default function DocsPage() {
   // -- Grafo documental (Plan 109, gateado por flag) --------------------------
   const graphEnabled = sourcesData?.graph_enabled === true;
   const documenterEnabled = sourcesData?.documenter_enabled === true;
+  const stalenessEnabled = sourcesData?.staleness_enabled === true;  // Plan 114
   const {
     data: graphData,
     isLoading: graphLoading,
@@ -188,6 +189,24 @@ export default function DocsPage() {
     () => noteIdFor(selectedNode, selectedContentSourceId, graphData),
     [selectedNode, selectedContentSourceId, graphData]
   );
+
+  // -- Plan 114: staleness de la nota abierta + acción "Proponer actualización" --
+  const currentGraphNode = useMemo(
+    () => (graphData && currentNodeId
+      ? graphData.nodes.find((n) => n.id === currentNodeId)
+      : undefined),
+    [graphData, currentNodeId]
+  );
+  const isCurrentStale =
+    stalenessEnabled && graphEnabled && currentGraphNode?.has_stale === true;
+  const [proposePending, setProposePending] = useState(false);
+  const handleProposeUpdate = useCallback(() => {
+    if (!selectedNode) return;
+    setProposePending(true);
+    Docs.stalenessFix(selectedNode.path, projectName)
+      .catch(() => undefined)
+      .finally(() => setProposePending(false));
+  }, [selectedNode, projectName]);
 
   // -- (C2) Navegar a una nota por su nodeId (puede vivir en OTRA fuente) ------
   const handleOpenNoteById = useCallback(
@@ -407,6 +426,9 @@ export default function DocsPage() {
               wikilinksEnabled={graphEnabled}
               nameIndex={nameIndex}
               onOpenNoteById={handleOpenNoteById}
+              isStale={isCurrentStale}
+              onProposeUpdate={documenterEnabled ? handleProposeUpdate : undefined}
+              proposeUpdatePending={proposePending}
             />
             {graphEnabled && (
               <DocBacklinksPanel

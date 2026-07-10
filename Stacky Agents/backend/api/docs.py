@@ -57,6 +57,7 @@ def get_doc_sources():
     payload = doc_indexer.list_doc_sources(project_name=_get_project_param())
     payload["graph_enabled"] = bool(getattr(config, "STACKY_DOCS_GRAPH_ENABLED", False))  # Plan 109
     payload["documenter_enabled"] = bool(getattr(config, "STACKY_DOCS_DOCUMENTER_ENABLED", False))  # Plan 113
+    payload["staleness_enabled"] = bool(getattr(config, "STACKY_DOCS_STALENESS_ENABLED", False))  # Plan 114
     return jsonify(payload)
 
 
@@ -234,6 +235,22 @@ def get_docs_graph():
         return jsonify({"ok": False, "error": "docs_graph_failed",
                         "message": "No se pudo construir el grafo documental. Ver logs (docs_graph_failed)."}), 500
 
+    # Plan 114 — Doctor de staleness (solo con flag ON). Con flag OFF el payload
+    # es byte-idéntico al del plan 109 (no se importa ni se llama nada).
+    if bool(getattr(config, "STACKY_DOCS_STALENESS_ENABLED", False)):
+        try:
+            import copy
+            from services import doc_staleness  # import lazy: solo con la flag ON
+            from services import doc_indexer
+            repo_root = doc_indexer.list_doc_sources(_get_project_param()).get("workspace_root")
+            if repo_root:
+                graph = copy.deepcopy(graph)  # (C1) build_graph devuelve el objeto CACHEADO del 109;
+                                              # anotar sin copiar contaminaría la cache y una request
+                                              # posterior con flag OFF serviría los campos stale.
+                graph = doc_staleness.annotate_staleness(graph, str(repo_root))
+        except Exception as exc:  # degradación segura: nunca rompe el grafo
+            logger.warning("docs_api", "docs_staleness_failed", detail=str(exc))
+
     logger.info("docs_api", "docs_graph_built",
                 nodes=len(graph.get("nodes", [])), edges=len(graph.get("edges", [])),
                 duration_ms=round((time.monotonic() - t0) * 1000),
@@ -289,6 +306,37 @@ def documenter_status():
         "diff_stat": rec.get("diff_stat", ""), "reason": rec.get("reason", ""),
         "error": rec.get("error"),
     })
+
+
+@bp.post("/staleness/fix")
+def staleness_fix():
+    """Plan 114 — Encola el Documentador (113) en modo ACTUALIZAR acotado a una nota.
+
+    Body: {note_path}. 404 si STACKY_DOCS_STALENESS_ENABLED OFF o
+    STACKY_DOCS_DOCUMENTER_ENABLED OFF (necesita el 113). 409 documenter_busy
+    heredado del 113. runtime = mismo default que POST /documenter/run.
+    """
+    if not bool(getattr(config, "STACKY_DOCS_STALENESS_ENABLED", False)):
+        return jsonify({"ok": False, "error": "staleness_disabled"}), 404
+    if not _documenter_enabled():
+        return jsonify({"ok": False, "error": "documenter_disabled"}), 404
+    body = request.get_json(silent=True) or {}
+    note_path = (body.get("note_path") or "").strip()
+    if not note_path:
+        return jsonify({"ok": False, "error": "note_path_required"}), 400
+    from project_manager import get_active_project
+    project = (body.get("project") or "").strip() or get_active_project()
+    if not project:
+        return jsonify({"ok": False, "error": "no_active_project"}), 400
+    runtime = (body.get("runtime") or "claude_code_cli").strip()  # (C7) mismo default que /documenter/run
+    from services import doc_documenter
+    try:
+        run_id = doc_documenter.start_documenter_run(
+            project, runtime, only_note=note_path,
+            forced_modes=[doc_documenter.DocumenterMode.ACTUALIZAR])
+    except doc_documenter.DocumenterBusy:
+        return jsonify({"ok": False, "error": "documenter_busy"}), 409
+    return jsonify({"ok": True, "run_id": run_id})
 
 
 @bp.post("/documenter/decide")

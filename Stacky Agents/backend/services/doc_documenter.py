@@ -59,38 +59,86 @@ class DocumenterPlan:
     modes: list[DocumenterMode]
     uncovered_modules: list[str] = field(default_factory=list)
     notes_to_normalize: list[str] = field(default_factory=list)  # file_paths sin frontmatter
+    notes_to_update: list[str] = field(default_factory=list)  # Plan 114 — notas stale a ACTUALIZAR
     reason: str = ""
 
 
+def _stale_notes_for_plan(graph: dict, project_name: str) -> list[str]:
+    """Plan 114 — Paths de notas stale (flag ON), o [] si OFF / sin git / error.
+
+    Anota una COPIA del grafo (no la cacheada del 109) y devuelve los path de las
+    notas con has_stale. NUNCA lanza. Determinístico (orden por path)."""
+    from config import config
+    if not bool(getattr(config, "STACKY_DOCS_STALENESS_ENABLED", False)):
+        return []
+    try:
+        import copy
+        from services import doc_staleness, doc_indexer
+        repo_root = doc_indexer.list_doc_sources(project_name).get("workspace_root")
+        if not repo_root:
+            return []
+        annotated = doc_staleness.annotate_staleness(copy.deepcopy(graph), str(repo_root))
+        return sorted(
+            n["path"] for n in annotated.get("nodes", [])
+            if n.get("kind") == "note" and n.get("has_stale")
+        )
+    except Exception as exc:  # degradación segura: nunca rompe el 1-click
+        logger.warning("doc_documenter: staleness augmentation fallo: %s", exc)
+        return []
+
+
+def _augment_plan_with_staleness(plan: DocumenterPlan, graph: dict,
+                                 project_name: str) -> DocumenterPlan:
+    """Plan 114 — Si hay notas stale, agrega ACTUALIZAR antes de ENRIQUECER (aditivo).
+    Con la flag OFF el plan queda idéntico (comportamiento del 113 sin cambios)."""
+    stale = _stale_notes_for_plan(graph, project_name)
+    if not stale or DocumenterMode.ACTUALIZAR in plan.modes:
+        return plan
+    modes = list(plan.modes)
+    if DocumenterMode.ENRIQUECER in modes:
+        modes.insert(modes.index(DocumenterMode.ENRIQUECER), DocumenterMode.ACTUALIZAR)
+    else:
+        modes.append(DocumenterMode.ACTUALIZAR)
+    plan.modes = modes
+    plan.notes_to_update = stale
+    return plan
+
+
 def plan_documenter_run(project_name: str) -> DocumenterPlan:
-    """Devuelve el plan de modos (determinista, sin LLM) según doc_health (plan 109)."""
+    """Devuelve el plan de modos (determinista, sin LLM) según doc_health (plan 109).
+
+    Plan 114: si STACKY_DOCS_STALENESS_ENABLED está ON y hay notas desactualizadas,
+    incorpora el modo ACTUALIZAR (aditivo; con flag OFF el plan no cambia)."""
     from services import doc_graph
     graph = doc_graph.build_graph(project_name=project_name)
     health = graph.get("doc_health") or {"status": "SIN_DOCS"}
     st = health.get("status", "SIN_DOCS")
 
     if st == "SIN_DOCS":
-        return DocumenterPlan(
+        plan = DocumenterPlan(
             st, [DocumenterMode.RECONSTRUIR, DocumenterMode.ENRIQUECER],
             reason="El proyecto no tiene notas; se reconstruye desde el código.")
-    if st == "FORMATO_NO_OBSIDIAN":
+    elif st == "FORMATO_NO_OBSIDIAN":
         no_fm = [
             n["path"] for n in graph.get("nodes", [])
             if n.get("kind") == "note"
             and str(n.get("source_id", "")).startswith("project-docs")
             and not n.get("has_frontmatter")
         ]
-        return DocumenterPlan(
+        plan = DocumenterPlan(
             st, [DocumenterMode.NORMALIZAR, DocumenterMode.ENRIQUECER],
             notes_to_normalize=no_fm, reason="Notas sin frontmatter ni wikilinks.")
-    if st == "INCOMPLETA":
-        return DocumenterPlan(
+    elif st == "INCOMPLETA":
+        plan = DocumenterPlan(
             st, [DocumenterMode.COMPLETAR, DocumenterMode.ENRIQUECER],
             uncovered_modules=list(health.get("uncovered_modules", [])),
             reason="Módulos de código sin nota.")
-    # SANA (o cualquier otro): solo enriquecer links.
-    return DocumenterPlan(
-        st, [DocumenterMode.ENRIQUECER], reason="Doc sana; solo enriquecer links.")
+    else:
+        # SANA (o cualquier otro): solo enriquecer links.
+        plan = DocumenterPlan(
+            st, [DocumenterMode.ENRIQUECER], reason="Doc sana; solo enriquecer links.")
+
+    return _augment_plan_with_staleness(plan, graph, project_name)
 
 
 # ---------------------------------------------------------------------------
@@ -528,15 +576,24 @@ def _new_run_record(project_name: str, runtime: str) -> dict:
             "worktree": None, "error": None, "reason": ""}
 
 
-def start_documenter_run(project_name: str, runtime: str) -> str:
-    """Lanza el pipeline en background. DocumenterBusy si ya hay uno activo (C5)."""
+def start_documenter_run(project_name: str, runtime: str, *,
+                         only_note: str | None = None,
+                         forced_modes: list[DocumenterMode] | None = None) -> str:
+    """Lanza el pipeline en background. DocumenterBusy si ya hay uno activo (C5).
+
+    Plan 114: only_note/forced_modes (opcionales, backward-compatible) acotan el run
+    a una sola nota en un conjunto de modos forzado (p. ej. [ACTUALIZAR]).
+    """
     with _registry_lock:
         if any(r.get("state") == "running" for r in _run_registry.values()):
             raise DocumenterBusy()
         run_id = uuid.uuid4().hex[:12]
         _run_registry[run_id] = _new_run_record(project_name, runtime)
-    t = threading.Thread(target=_run_documenter_thread,
-                         args=(run_id, project_name, runtime), daemon=True)
+    t = threading.Thread(
+        target=_run_documenter_thread,
+        args=(run_id, project_name, runtime),
+        kwargs={"only_note": only_note, "forced_modes": forced_modes},
+        daemon=True)
     t.start()
     return run_id
 
@@ -554,17 +611,30 @@ def get_run(run_id: str) -> dict | None:
         return dict(rec) if rec is not None else None
 
 
-def _run_documenter_thread(run_id: str, project_name: str, runtime: str) -> None:
+def _run_documenter_thread(run_id: str, project_name: str, runtime: str, *,
+                           only_note: str | None = None,
+                           forced_modes: list[DocumenterMode] | None = None) -> None:
     try:
-        run_documenter(project_name, runtime, run_id=run_id)
+        run_documenter(project_name, runtime, run_id=run_id,
+                       only_note=only_note, forced_modes=forced_modes)
     except Exception as exc:  # noqa: BLE001 - nunca deja el run colgado
         logger.error("doc_documenter: run %s fallo: %s", run_id, exc, exc_info=True)
         _update_run(run_id, state="failed", error=str(exc))
 
 
-def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None) -> dict:
-    """Ejecuta el pipeline completo (sincrono). Devuelve el report dict."""
+def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None,
+                   only_note: str | None = None,
+                   forced_modes: list[DocumenterMode] | None = None) -> dict:
+    """Ejecuta el pipeline completo (sincrono). Devuelve el report dict.
+
+    Plan 114: si forced_modes viene, reemplaza los modos del plan (p. ej. [ACTUALIZAR]);
+    si only_note viene, el run queda acotado a esa sola nota (target de ACTUALIZAR).
+    """
     plan = plan_documenter_run(project_name)
+    if forced_modes:
+        plan.modes = list(forced_modes)
+    if only_note:
+        plan.notes_to_update = [only_note]
     target_root, docs_root, workspace_root = _resolve_target_paths(project_name)
     if run_id:
         _update_run(run_id, target_root=target_root, reason=plan.reason)

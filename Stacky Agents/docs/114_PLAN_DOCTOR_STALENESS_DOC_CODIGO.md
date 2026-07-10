@@ -1,6 +1,7 @@
 # Plan 114 — Doctor de staleness doc↔código (detecta notas desactualizadas y encola su corrección al Documentador)
 
-> **Estado:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Estado:** IMPLEMENTADO — 2026-07-10 (F0..F5 verdes; ver memoria `plan-114-status`)
+> **Estado previo:** CRITICADO v2 — 2026-07-09 (v1 → v2 por `criticar-y-mejorar-plan`)
 > **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 IMPORTANTES resueltos en esta v2; sin bloqueantes)
 >
 > **CHANGELOG v1 → v2:**

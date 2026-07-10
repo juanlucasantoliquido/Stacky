@@ -34,6 +34,12 @@ interface DocViewerProps {
   nameIndex?: Map<string, string>;
   /** Navegar a la nota resuelta por un wikilink. */
   onOpenNoteById?: (nodeId: string) => void;
+  /** Plan 114: la nota abierta referencia código que cambió después (solo con flag ON). */
+  isStale?: boolean;
+  /** Plan 114: encola el Documentador en modo ACTUALIZAR sobre esta nota. */
+  onProposeUpdate?: () => void;
+  /** Plan 114: la acción "Proponer actualización" está en curso (deshabilita el botón). */
+  proposeUpdatePending?: boolean;
 }
 
 // ── Link handler — intercepta links para evitar navegación fuera de la app ────
@@ -115,6 +121,9 @@ export default function DocViewer({
   wikilinksEnabled,
   nameIndex,
   onOpenNoteById,
+  isStale,
+  onProposeUpdate,
+  proposeUpdatePending,
 }: DocViewerProps) {
   if (isLoading) {
     return (
@@ -143,6 +152,23 @@ export default function DocViewer({
             ? `${(node.size_bytes / 1024).toFixed(1)} KB`
             : `${node.size_bytes} B`}
         </span>
+        {isStale && (
+          <span className={styles.staleBox}>
+            <span className="stale-chip" title="Esta nota referencia código que cambió después de su última edición">
+              &#9888; referencia código que cambió
+            </span>
+            {onProposeUpdate && (
+              <button
+                type="button"
+                className={styles.staleAction}
+                disabled={proposeUpdatePending}
+                onClick={onProposeUpdate}
+              >
+                {proposeUpdatePending ? "Encolando..." : "Proponer actualización"}
+              </button>
+            )}
+          </span>
+        )}
       </header>
       <div className={styles.markdownBody}>
         <ReactMarkdown

@@ -307,6 +307,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás: cada uso toca menos archivos; si el trabajo es más grande, corta al llegar al tope y te avisa.",
         example="Ponerlo en 40 es como decirle 'escribí hasta 40 documentos por vez y si falta más, avisame'.",
     ),
+    "STACKY_DOCS_STALENESS_ENABLED": PlainHelp(
+        what="Detecta las notas de documentación que quedaron viejas porque el código que describen cambió después.",
+        on_effect="Si la activás: en el grafo de documentos las referencias a código que cambió se pintan en rojo punteado, y la nota muestra un aviso con un botón para pedir que el Documentador la actualice (solo esa nota).",
+        off_effect="Si la apagás: el grafo y las notas se ven igual que siempre, sin avisos de 'desactualizado'.",
+        example="Tocaste un archivo de código la semana pasada pero la nota que lo explica no se editó: aparece un aviso ⚠ y con un click encolás su corrección.",
+    ),
     # ── calidad_verificacion ──────────────────────────────────────────────
     "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED": PlainHelp(
         what="Le muestra al agente, como lista de tareas obligatoria, los criterios que el ticket exige cumplir.",

@@ -81,6 +81,10 @@ export default function DocCoveragePanel({
     ["Refs a código", summary.codeRefs],
     ["Wikilinks rotos", summary.missing],
   ];
+  // Plan 114 — fila "Notas desactualizadas" solo si el payload trae stale_stats (flag ON).
+  if (summary.staleNotes !== undefined) {
+    rows.push(["Notas desactualizadas", summary.staleNotes]);
+  }
 
   return (
     <section className={styles.panel} aria-label="Cobertura documental">

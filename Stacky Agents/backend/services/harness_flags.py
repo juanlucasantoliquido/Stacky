@@ -135,6 +135,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS",  # Plan 112 — pesos + tope vecinos
         "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 113 — Documentador 1-click
         "STACKY_DOCS_DOCUMENTER_MAX_FILES",  # Plan 113 — tope de archivos por run
+        "STACKY_DOCS_STALENESS_ENABLED",  # Plan 114 — doctor de staleness doc↔código
     ),
     "calidad_verificacion": (
         "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -1562,6 +1563,22 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DOCS_DOCUMENTER_ENABLED",
         min_value=1,
         max_value=500,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_STALENESS_ENABLED",
+        type="bool",
+        label="Doctor de staleness doc↔código (Plan 114)",
+        description=(
+            "Plan 114 — Si ON, el grafo documental (Plan 109) marca como 'stale' las "
+            "referencias nota→código cuyo archivo de código cambió en git DESPUÉS de la "
+            "última edición de la nota, y muestra un chip de advertencia en la nota con "
+            "un botón 'Proponer actualización' que encola el Documentador (Plan 113) en "
+            "modo ACTUALIZAR acotado a esa sola nota. Señal 100% git, sin LLM en la "
+            "detección; degrada a 'sin staleness' si no hay git. Default OFF."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_GRAPH_ENABLED",
     ),
     FlagSpec(
         key="STACKY_PROCESS_DISCIPLINE_ENABLED",

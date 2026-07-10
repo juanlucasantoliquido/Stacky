@@ -254,6 +254,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CODEBASE_MEMORY_MCP_ENABLED",  # Plan 76 — eval codebase-memory-mcp
         "STACKY_CODEBASE_MEMORY_MCP_PROJECTS", "STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH",  # Plan 80
         "LOCAL_LLM_ENABLED", "LOCAL_LLM_ENDPOINT", "LOCAL_LLM_MODEL", "LOCAL_LLM_TIMEOUT_SEC",  # Plan 106
+        "STACKY_LOCAL_INSIGHTS_ENABLED", "STACKY_LOCAL_INSIGHTS_SWEEP_SEC",  # Plan 117
+        "STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE", "STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS",  # Plan 117
+        "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",  # Plan 117
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -2596,6 +2599,52 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DEVOPS_PANEL_ENABLED",
         min_value=10,
         max_value=600,
+    ),
+    # ── Plan 117 — Insights locales de ejecuciones (TL;DR + triage + digest narrado) ──
+    FlagSpec(
+        key="STACKY_LOCAL_INSIGHTS_ENABLED",
+        type="bool",
+        label="Insights locales de ejecuciones",
+        description="TL;DR y triage automáticos de cada run terminado usando el modelo local (Plan 106). Requiere el modelo local habilitado y configurado.",
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_LOCAL_INSIGHTS_SWEEP_SEC",
+        type="int",
+        label="Intervalo del sweep de insights (segundos)",
+        description="Cada cuántos segundos el barrido de fondo busca ejecuciones terminadas sin insight.",
+        group="global",
+        requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+        min_value=30,
+        max_value=3600,
+    ),
+    FlagSpec(
+        key="STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE",
+        type="int",
+        label="Máximo de insights por ciclo",
+        description="Tope de ejecuciones anotadas por ciclo del barrido (protege la CPU/GPU local).",
+        group="global",
+        requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+        min_value=1,
+        max_value=20,
+    ),
+    FlagSpec(
+        key="STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS",
+        type="int",
+        label="Ventana de insights (días)",
+        description="Solo se anotan ejecuciones iniciadas dentro de esta ventana hacia atrás.",
+        group="global",
+        requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+        min_value=1,
+        max_value=90,
+    ),
+    FlagSpec(
+        key="STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",
+        type="bool",
+        label="Narrativa local del digest",
+        description="Habilita narrar el digest de ejecuciones en lenguaje natural con el modelo local (botón en la card del digest).",
+        group="global",
+        requires="STACKY_LOCAL_INSIGHTS_ENABLED",
     ),
 )
 

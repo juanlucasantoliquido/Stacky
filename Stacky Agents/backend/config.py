@@ -87,6 +87,17 @@ class Config:
     LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen3:32b")
     LOCAL_LLM_TIMEOUT_SEC = int(os.getenv("LOCAL_LLM_TIMEOUT_SEC", "120"))
 
+    # Plan 117 — Insights locales de ejecuciones. Default OFF (el operador activa por UI).
+    STACKY_LOCAL_INSIGHTS_ENABLED = os.getenv("STACKY_LOCAL_INSIGHTS_ENABLED", "false").lower() in (
+        "1", "true", "yes",
+    )
+    STACKY_LOCAL_INSIGHTS_SWEEP_SEC = int(os.getenv("STACKY_LOCAL_INSIGHTS_SWEEP_SEC", "180"))
+    STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE = int(os.getenv("STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE", "3"))
+    STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS = int(os.getenv("STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS", "7"))
+    STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED = os.getenv(
+        "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ──────────
     # DEFAULT ON (decisión explícita del operador 2026-07-09): el fallback del getenv es "true".
     STACKY_PR_REVIEWER_ENABLED = os.getenv("STACKY_PR_REVIEWER_ENABLED", "true").lower() in (

@@ -399,3 +399,29 @@ def playground_route():
         "model": resolved_model,
         "execution_id": execution_id,
     })
+
+
+@bp.post("/insights/<int:execution_id>/generate")
+def generate_insight_route(execution_id: int):
+    """Plan 117 — Genera/regenera el insight local de UNA ejecución (acción HITL).
+
+    Ruta: POST /api/llm/insights/<id>/generate. 404 flag master OFF | 404 execution
+    inexistente | 409 excluida | 502 fallo del modelo | 400 POST sin body JSON (_guard).
+    """
+    guard = _guard()  # 404 LOCAL_LLM_ENABLED OFF / 503 endpoint vacío / 400 sin JSON
+    if guard:
+        return guard
+    if not getattr(_config.config, "STACKY_LOCAL_INSIGHTS_ENABLED", False):
+        return jsonify({"error": "local_insights_disabled"}), 404
+
+    from services.local_insights import generate_insight_for_execution
+
+    result = generate_insight_for_execution(execution_id, force=True)
+    if result.get("ok"):
+        return jsonify(result)
+    err = result.get("error")
+    if err == "execution_not_found":
+        return jsonify(result), 404
+    if err == "insight_excluded":
+        return jsonify(result), 409
+    return jsonify(result), 502

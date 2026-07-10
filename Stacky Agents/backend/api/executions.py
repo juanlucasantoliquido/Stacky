@@ -370,6 +370,7 @@ def executions_history():
                 "has_prompt_text": bool(meta.get("prompt_text")),
                 "produced_files_count": len(meta.get("produced_files") or []),
                 "error_message": row.error_message or None,
+                "local_insight": meta.get("local_insight") or None,  # Plan 117 (aditivo)
             })
 
     return jsonify(items)

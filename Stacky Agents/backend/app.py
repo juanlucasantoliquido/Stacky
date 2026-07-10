@@ -410,6 +410,36 @@ def create_app() -> Flask:
         ).start()
         logger.info("memory review daemon armed (interval=%ds)", _review_sweep_seconds)
 
+    # ── Plan 117 — Sweep de insights locales (TL;DR/triage con el modelo local) ──
+    # En PRODUCCIÓN el thread arranca siempre; los gates (flags) se evalúan en cada
+    # iteración dentro de run_sweep_once() → hot-apply real, sin restart_required.
+    # C1: bajo pytest NO arranca (los daemons vecinos tampoco corren en tests: sus
+    # gates de boot son config default-0; como este es flag-hot, el guard es explícito).
+    import sys as _sys
+    if "pytest" not in _sys.modules:
+        def _local_insights_sweep_loop() -> None:
+            from services import local_insights
+
+            while True:
+                try:
+                    processed = local_insights.run_sweep_once()
+                    if processed:
+                        logger.info("local insights sweep: %d ejecuciones anotadas", processed)
+                except Exception:
+                    logger.exception("local insights sweep daemon falló")
+                try:
+                    interval = int(getattr(config, "STACKY_LOCAL_INSIGHTS_SWEEP_SEC", 180))
+                except (TypeError, ValueError):
+                    interval = 180
+                time.sleep(max(30, interval))
+
+        threading.Thread(
+            target=_local_insights_sweep_loop,
+            name="stacky-local-insights-daemon",
+            daemon=True,
+        ).start()
+        logger.info("local insights daemon armed")
+
     # ── Plan 60 — Aprendizaje bidireccional de ediciones humanas en ADO ──────
     # STACKY_ADO_EDIT_LEARNING_ENABLED=false => apagado (default, byte-idéntico).
     _ado_edit_learning_on = os.environ.get(

@@ -1162,6 +1162,37 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo dejás con el valor de fábrica: se esperan 120 segundos.",
         example="Como el tiempo que esperás antes de decir 'no atienden' al llamar por teléfono.",
     ),
+    # ── Plan 117 — Insights locales de ejecuciones ─────────────────────────
+    "STACKY_LOCAL_INSIGHTS_ENABLED": PlainHelp(
+        what="Un resumen automático (TL;DR) y un diagnóstico de fallas de cada ejecución de agente, hecho por la IA que corre en tu propia máquina.",
+        on_effect="Si la activás: cada run terminado gana solo un resumen corto (visible en el historial y el detalle) y, si falló, una causa probable y un siguiente paso sugerido. No cuesta tokens ni sale nada de tu máquina.",
+        off_effect="Si la apagás: el historial y el detalle se ven como hoy, sin resúmenes automáticos.",
+        example="Como tener a alguien que después de cada corrida te deja anotado en una línea qué pasó y, si se rompió, por dónde mirar.",
+    ),
+    "STACKY_LOCAL_INSIGHTS_SWEEP_SEC": PlainHelp(
+        what="Cada cuántos segundos el sistema busca ejecuciones terminadas sin resumen para anotarlas.",
+        on_effect="Si bajás el número: revisa más seguido (más al día, más uso de la máquina).",
+        off_effect="Si lo dejás con el valor de fábrica: revisa cada 180 segundos.",
+        example="Como pasar a ordenar la mesa cada tanto: más seguido = más prolijo pero más trabajo.",
+    ),
+    "STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE": PlainHelp(
+        what="Cuántas ejecuciones como máximo se resumen en cada pasada del barrido.",
+        on_effect="Si subís el número: se ponen al día más rápido, pero cada pasada usa más la CPU/GPU local.",
+        off_effect="Si lo dejás con el valor de fábrica: resume hasta 3 por pasada.",
+        example="Como cuántos platos lavás por vez: más de una vez cansa menos pero tarda más en terminar todo.",
+    ),
+    "STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS": PlainHelp(
+        what="Hasta qué antigüedad hacia atrás se anotan ejecuciones (en días).",
+        on_effect="Si subís el número: también resume runs más viejos.",
+        off_effect="Si lo dejás con el valor de fábrica: solo los últimos 7 días.",
+        example="Como decidir hasta qué fecha vieja revisás el correo pendiente.",
+    ),
+    "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED": PlainHelp(
+        what="Un botón para que la IA local cuente en palabras el resumen semanal de ejecuciones.",
+        on_effect="Si la activás: aparece 'Narrar' en la tarjeta del resumen; al tocarlo, la IA local escribe 5-8 líneas explicando los números.",
+        off_effect="Si la apagás: la tarjeta muestra solo los números, sin el botón de narrar.",
+        example="Como pedirle a alguien que en vez de la planilla te cuente en dos frases cómo venimos.",
+    ),
     # ── Plan 110 — Revisor de PRs ──────────────────────────────────────────
     "STACKY_PR_REVIEWER_ENABLED": PlainHelp(
         what="Una sección para revisar los pedidos de cambios (PRs) de tu repositorio con ayuda de un asistente que solo mira y opina.",

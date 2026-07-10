@@ -16,6 +16,30 @@ def get_digest():
     fmt = (request.args.get("fmt") or "json").strip().lower()
 
     digest = compose_digest(days=days, project=project)
+
+    # Plan 117 — narrativa local opt-in. Sin ?narrate=1 el payload es byte-idéntico al actual.
+    if request.args.get("narrate") == "1":
+        import config as _config
+        from services.local_insights import narrate_digest
+
+        cfg = _config.config
+        enabled = (
+            getattr(cfg, "STACKY_LOCAL_INSIGHTS_ENABLED", False)
+            and getattr(cfg, "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED", False)
+            and getattr(cfg, "LOCAL_LLM_ENABLED", False)
+            and bool(getattr(cfg, "LOCAL_LLM_ENDPOINT", ""))
+        )
+        if not enabled:
+            digest["narrative"] = None
+            digest["narrative_error"] = "narrative_disabled"
+        else:
+            try:
+                digest["narrative"] = narrate_digest(digest)
+                digest["narrative_error"] = None
+            except Exception as e:  # noqa: BLE001 — el digest NUNCA falla por la narrativa
+                digest["narrative"] = None
+                digest["narrative_error"] = str(e)[:200]
+
     if fmt == "json":
         return jsonify(digest)
 

@@ -212,6 +212,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan114_staleness.py
   tests/test_plan114_graph_payload.py
   tests/test_plan114_fix_endpoint.py
+  # — Plan 115 · Consolidación motor TF-IDF (lexical_core) —
+  tests/test_plan115_lexical_core.py
+  tests/test_plan115_golden_rag_retriever.py
+  tests/test_plan115_golden_docs_rag.py
+  tests/test_plan115_golden_memory_store.py
+  tests/test_plan115_no_duplicate_math.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

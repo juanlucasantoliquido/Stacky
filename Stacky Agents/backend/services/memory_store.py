@@ -53,6 +53,7 @@ from db import Base, session_scope
 # Reutilizamos el MISMO tokenizer que el retrieval TF-IDF existente (FA-01) para
 # que la búsqueda de memoria se comporte igual que la de ejecuciones/docs.
 from services.embeddings import _tokenize  # noqa: F401  (tokenizer compartido)
+from services import lexical_core  # Plan 115 — núcleo léxico TF-IDF compartido
 from services import pii_masker
 
 
@@ -993,33 +994,23 @@ def search(
             return results
 
         # TF-IDF sobre el corpus del proyecto (chico: scan en memoria).
+        # (Plan 115) La matemática TF-IDF vive en lexical_core; memory_store usa
+        # conteos CRUDOS (Counter) igual que antes. Comportamiento idéntico.
         doc_tfs: list[tuple[StackyMemoryObservation, Counter]] = []
-        df: Counter = Counter()
         for r in rows:
             tf = Counter(_tokenize(_doc_text(r)))
             doc_tfs.append((r, tf))
-            for term in tf:
-                df[term] += 1
-        n_docs = len(doc_tfs)
-        idf = {t: math.log((1 + n_docs) / (1 + c)) + 1.0 for t, c in df.items()}
+        idf = lexical_core.inverse_doc_frequencies([set(tf) for _, tf in doc_tfs])
 
         q_tf = Counter(query_tokens)
+        # Guard temprano preservado: sin términos de query ponderables → sin resultados.
         q_weighted = {t: c * idf.get(t, 1.0) for t, c in q_tf.items()}
-        q_norm = math.sqrt(sum(v * v for v in q_weighted.values()))
-        if q_norm == 0:
+        if math.sqrt(sum(v * v for v in q_weighted.values())) == 0:
             return []
 
         scored: list[tuple[float, float, StackyMemoryObservation]] = []
         for r, tf in doc_tfs:
-            d_weighted = {t: c * idf.get(t, 1.0) for t, c in tf.items()}
-            d_norm = math.sqrt(sum(v * v for v in d_weighted.values()))
-            if d_norm == 0:
-                continue
-            common = set(q_weighted) & set(d_weighted)
-            if not common:
-                continue
-            dot = sum(q_weighted[t] * d_weighted[t] for t in common)
-            score = dot / (q_norm * d_norm)  # coseno ∈ [0,1]
+            score = lexical_core.cosine_tfidf(q_tf, tf, idf)  # coseno ∈ [0,1]
             if score <= 0:
                 continue
             # Ranking en 2 etapas: el coseno es la relevancia; el orden final se

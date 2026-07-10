@@ -5,11 +5,11 @@ Compatible con Python 3.10+ stdlib (math, re, collections).
 """
 from __future__ import annotations
 
-import math
 import re
-from collections import Counter
 from dataclasses import dataclass, field
 from typing import Sequence
+
+from services import lexical_core  # Plan 115 — núcleo léxico TF-IDF compartido
 
 
 @dataclass(frozen=True)
@@ -28,24 +28,27 @@ class RagIndex:
     content_hash: str = ""
 
 
+# Plan 115 — política de tokenización que REPLICA el tokenizer original de
+# rag_retriever (lowercase del texto, pattern con \w, min 2 chars, sin stopwords).
+_TOKENIZE_OPTS = lexical_core.TokenizeOptions(
+    pattern=r"[a-záéíóúüñ\w]{2,}", lowercase_text=True,
+    lowercase_token=False, min_len=2,
+)
+
+
 def _tokenize(text: str) -> list[str]:
     """Tokenización simple: lower, solo alfanum + guión/subguión, min 2 chars."""
-    return [t for t in re.findall(r"[a-záéíóúüñ\w]{2,}", text.lower()) if len(t) >= 2]
+    return lexical_core.tokenize(text, _TOKENIZE_OPTS)
 
 
 def _tf(tokens: list[str]) -> dict[str, float]:
-    if not tokens:
-        return {}
-    counts = Counter(tokens)
-    n = len(tokens)
-    return {term: count / n for term, count in counts.items()}
+    # (C1) rag_retriever usa frecuencia RELATIVA (count/n), NO conteos crudos.
+    return lexical_core.normalized_term_frequencies(tokens)
 
 
 def _build_idf(token_sets: list[set[str]], n_docs: int) -> dict[str, float]:
-    df: Counter[str] = Counter()
-    for ts in token_sets:
-        df.update(ts)
-    return {term: math.log((n_docs + 1) / (cnt + 1)) + 1.0 for term, cnt in df.items()}
+    # Fórmula idéntica: log((1+n_docs)/(1+df)) + 1.0. n_docs == len(token_sets).
+    return lexical_core.inverse_doc_frequencies(token_sets)
 
 
 def _tfidf_vec(tf: dict[str, float], idf: dict[str, float]) -> dict[str, float]:
@@ -53,14 +56,8 @@ def _tfidf_vec(tf: dict[str, float], idf: dict[str, float]) -> dict[str, float]:
 
 
 def _cosine(a: dict[str, float], b: dict[str, float]) -> float:
-    if not a or not b:
-        return 0.0
-    dot = sum(a.get(t, 0.0) * v for t, v in b.items())
-    norm_a = math.sqrt(sum(v * v for v in a.values()))
-    norm_b = math.sqrt(sum(v * v for v in b.values()))
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return dot / (norm_a * norm_b)
+    # Vectores YA ponderados por IDF → coseno crudo (idf neutro {} ⇒ pesos 1.0).
+    return lexical_core.cosine_tfidf(a, b, {})
 
 
 def build_index(chunks: Sequence[RagChunk], content_hash: str = "") -> RagIndex:

@@ -24,6 +24,7 @@ from pathlib import Path
 from sqlalchemy import Column, DateTime, Float, Index, Integer, String, Text
 
 from db import Base, session_scope
+from services import lexical_core  # Plan 115 — núcleo léxico TF-IDF compartido
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,15 @@ _STOPWORDS = {
 }
 
 
+# Plan 115 — política de tokenización que REPLICA _TOKEN_RE + _STOPWORDS (min 3, ignorecase).
+_TOKENIZE_OPTS = lexical_core.TokenizeOptions(
+    pattern=r"[a-záéíóúñ0-9]{3,}", ignorecase=True,
+    lowercase_token=True, stopwords=frozenset(_STOPWORDS),
+)
+
+
 def _tokenize(text: str) -> list[str]:
-    return [t.lower() for t in _TOKEN_RE.findall(text or "")
-            if t.lower() not in _STOPWORDS]
+    return lexical_core.tokenize(text, _TOKENIZE_OPTS)
 
 
 def _compute_tf(text: str) -> tuple[Counter, float]:
@@ -212,20 +219,21 @@ def _get_idf(project_name: str, chunks: list[DocChunk]) -> dict[str, float]:
     if cached and (time.time() - cached.built_at) < _IDF_TTL:
         return cached.idf
 
-    df: Counter = Counter()
     n_docs = len(chunks)
-    for c in chunks:
-        try:
-            terms = json.loads(c.term_freqs_json or "{}")
-            for t in terms:
-                df[t] += 1
-        except Exception:
-            continue
-
     if n_docs == 0:
         return {}
 
-    idf = {t: math.log((1 + n_docs) / (1 + cnt)) + 1.0 for t, cnt in df.items()}
+    # (C2) La cache _idf_caches y su TTL quedan intactos; solo el CÁLCULO del IDF
+    # pasa a lexical_core. Se preserva n_docs=len(chunks): un chunk cuyo JSON no
+    # parsea aporta un set vacío (no suma df, pero cuenta en n) — mismo resultado.
+    token_sets: list[set] = []
+    for c in chunks:
+        try:
+            token_sets.append(set(json.loads(c.term_freqs_json or "{}")))
+        except Exception:
+            token_sets.append(set())
+
+    idf = lexical_core.inverse_doc_frequencies(token_sets)
     _idf_caches[project_name] = _IdfCache(idf=idf, built_at=time.time())
     return idf
 
@@ -273,10 +281,8 @@ def search(project_name: str, query: str, top_k: int = 5, expand_files: bool = T
     if not q_tokens:
         return []
 
-    # Vector de query: TF * IDF
+    # Vector de query: TF crudo (Counter) — el coseno IDF-ponderado vive en lexical_core.
     q_tf = Counter(q_tokens)
-    q_vec: dict[str, float] = {t: q_tf[t] * idf.get(t, 1.0) for t in q_tf}
-    q_norm = math.sqrt(sum(v * v for v in q_vec.values())) or 1.0
 
     hits: list[DocHit] = []
     for chunk in chunks:
@@ -285,19 +291,12 @@ def search(project_name: str, query: str, top_k: int = 5, expand_files: bool = T
         except Exception:
             continue
 
-        # Producto punto query · doc (con IDF ponderado)
-        dot = sum(
-            q_vec[t] * (tf.get(t, 0) * idf.get(t, 1.0))
-            for t in q_vec
-            if t in tf
-        )
-        if dot <= 0:
+        # (Plan 115) Coseno TF-IDF idéntico al anterior; el filtro dot<=0 equivale
+        # a score<=0 (norms>0 ⇒ mismo signo que el producto punto).
+        score = lexical_core.cosine_tfidf(q_tf, tf, idf)
+        if score <= 0:
             continue
 
-        doc_norm_idf = math.sqrt(
-            sum((tf.get(t, 0) * idf.get(t, 1.0)) ** 2 for t in tf)
-        ) or 1.0
-        score = dot / (q_norm * doc_norm_idf)
         hits.append(DocHit(
             file_path=chunk.file_path,
             section_heading=chunk.section_heading,

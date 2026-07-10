@@ -1,6 +1,7 @@
 # Plan 115 — Consolidación de los 3 motores TF-IDF en un núcleo léxico compartido (refactor puro, cero cambio de comportamiento)
 
-> **Estado:** CRITICADO v2 — 2026-07-10 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Estado:** IMPLEMENTADO — 2026-07-10 (F0..F5 verdes; ver memoria `plan-115-status`)
+> **Estado previo:** CRITICADO v2 — 2026-07-10 (v1 → v2 por `criticar-y-mejorar-plan`)
 > **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C3 IMPORTANTES resueltos en esta v2; sin bloqueantes)
 >
 > **CHANGELOG v1 → v2:**

@@ -122,7 +122,18 @@ def test_route(alias):
     if server is None:
         return jsonify({"error": f"Servidor '{alias}' no existe."}), 404
     ok, detail = server_registry.test_connectivity(server["host"])
-    return jsonify({"ok": ok, "detail": detail}), 200
+    payload = {"ok": ok, "detail": detail}
+    # Plan 116 — diag tipificado ADITIVO (solo con la flag del doctor de conexiones ON).
+    if getattr(_config.config, "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", False):
+        from services import connection_doctor
+        code = ("" if ok else
+                "DNS_FAIL" if detail.startswith("DNS:") else
+                "TIMEOUT" if "timed out" in detail.lower() else "TCP_REFUSED")
+        payload["diag"] = connection_doctor.build_result(
+            target=f"server:{alias}", target_label=f"Servidor {alias}", group="servers",
+            status="ok" if ok else "fail", code=code, detail=detail,
+            fmt={"host": server["host"], "port": "3389", "timeout": "3"})
+    return jsonify(payload), 200
 
 
 @bp.post("/<alias>/rdp")

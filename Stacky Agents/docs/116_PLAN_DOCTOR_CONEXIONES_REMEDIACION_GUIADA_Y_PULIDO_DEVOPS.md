@@ -1,7 +1,17 @@
 # Plan 116 — Doctor de conexiones con remediación guiada + pulido profesional del panel DevOps
 
-> **Estado:** CRITICADO v2 — 2026-07-10 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Estado:** IMPLEMENTADO-PARCIAL — 2026-07-10 (F0-F3 + F4-backend + F5-ARIA; ver memoria `plan-116-status`)
+> **Estado previo:** CRITICADO v2 — 2026-07-10 (v1 → v2 por `criticar-y-mejorar-plan`)
 > **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 resueltos en esta v2; sin bloqueantes)
+> **Nota de implementación (honesta):** F0-F2 (núcleo determinista + sondas + flag + endpoints)
+> y F3 (tira de salud + tarjetas) IMPLEMENTADOS y verificados (28 backend + 4 vitest puros + tsc 0).
+> F4-backend (diag aditivo en `test_route`) IMPLEMENTADO pero su test de ruta queda BLOQUEADO por
+> el SyntaxError preexistente ajeno en `api/devops_servers.py:212` (no importa el módulo; no lo toco).
+> F5-ARIA (roles tablist/tab/tabpanel en DevOpsPage) IMPLEMENTADO. **DIFERIDOS:** F4-frontend
+> (ServersSection.tsx) y F5 facelift de FlagGateBanner (FlagGateBanner.tsx) — ambos archivos tienen
+> WIP concurrente ajeno sin commitear y sus tests son RTL (bloqueados por gap jsdom/@testing-library
+> preexistente); tocarlos arriesga corromper trabajo concurrente. Los `.test.tsx` de F3/F4/F5 quedan
+> escritos test-first pero NO corren por ese gap de entorno (patrón plan 107 F4).
 > **Autor:** StackyArchitectaUltraEficientCode
 >
 > **CHANGELOG v1 → v2:**

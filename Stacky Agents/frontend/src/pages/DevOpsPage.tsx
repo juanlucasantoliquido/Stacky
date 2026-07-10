@@ -17,6 +17,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DevOps } from '../api/endpoints';
 import { FlagGateBanner } from '../components/devops/FlagGateBanner';
+import { ConnectionHealthStrip } from '../components/devops/ConnectionHealthStrip'; // Plan 116
 
 // Health con index signature para keys aditivas (plan 88/90)
 export interface DevOpsHealth {
@@ -34,6 +35,7 @@ export interface DevOpsHealth {
   remote_console_enabled?: boolean; // Plan 105 — Consola remota por servidor
   remote_target_enabled?: boolean; // Plan 108 — agente/ambientes anclados al servidor seleccionado
   pr_reviewer_enabled?: boolean; // Plan 110 — Revisor de PRs
+  connection_doctor_enabled?: boolean; // Plan 116 — doctor de conexiones
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -210,11 +212,19 @@ export const DevOpsPage: React.FC = () => {
     <div style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <h2 style={{ marginTop: 0 }}>DevOps</h2>
 
+      {/* Plan 116 — tira de salud de conexiones (shell; gate por health key, OFF = idéntico) */}
+      {ctx.health.connection_doctor_enabled === true && (
+        <ConnectionHealthStrip onGotoSection={handleTabClick} />
+      )}
+
       {/* Barra de sub-tabs - C20 flexWrap para soportar 5+ secciones */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+      <div role="tablist" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
         {DEVOPS_SECTIONS.map((s) => (
           <button
             key={s.id}
+            role="tab"
+            aria-selected={activeId === s.id}
+            aria-controls={`devops-panel-${s.id}`}
             onClick={() => handleTabClick(s.id)}
             disabled={!ctx.health.flag_enabled}
             style={{
@@ -268,6 +278,8 @@ export const DevOpsPage: React.FC = () => {
         return (
           <div
             key={s.id}
+            id={`devops-panel-${s.id}`}
+            role="tabpanel"
             style={{ display: activeId === s.id ? 'block' : 'none' }}
           >
             {content}

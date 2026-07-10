@@ -3149,6 +3149,41 @@ export const CodebaseMemoryMcp = {
 
 // ── Plan 87 — Panel DevOps (creador gráfico de pipelines) ─────────────────────
 
+// ── Plan 116 — Doctor de conexiones (contratos DiagResult / snapshot) ─────────
+export interface ConnectionRemediationAction {
+  kind: 'retry' | 'copy_command' | 'open_url' | 'goto_section' | 'none';
+  command?: string;
+  url?: string;
+  section_id?: string;
+}
+export interface ConnectionRemediation {
+  title: string;
+  cause: string;
+  steps: string[];
+  action: ConnectionRemediationAction;
+}
+export interface ConnectionDiagResult {
+  target: string;
+  target_label: string;
+  group: 'tracker' | 'servers' | 'clis' | 'credentials';
+  status: 'ok' | 'warn' | 'fail' | 'skip';
+  code: string;
+  detail: string;
+  latency_ms: number | null;
+  remediation: ConnectionRemediation | null;
+}
+export interface ConnectionsSnapshot {
+  generated_at: string;
+  duration_ms: number;
+  results: ConnectionDiagResult[];
+  summary: { ok: number; warn: number; fail: number; skip: number };
+}
+export interface ConnectionsHealthResponse {
+  status: 'ready' | 'never_run';
+  stale: boolean;
+  snapshot: ConnectionsSnapshot | null;
+}
+
 export const DevOps = {
   /** GET /api/devops/health — health del panel (keys aditivas por plan: 88/89/90/91). */
   health: () =>
@@ -3169,7 +3204,14 @@ export const DevOps = {
       env_tree_preview_enabled?: boolean; // Plan 107
       env_sandbox_enabled?: boolean; // Plan 107
       pr_reviewer_enabled?: boolean; // Plan 110
+      connection_doctor_enabled?: boolean; // Plan 116
     }>("/api/devops/health"),
+  /** Plan 116 — último snapshot del doctor de conexiones (HITL; 404 si flag OFF). */
+  connectionsHealth: () =>
+    api.get<ConnectionsHealthResponse>("/api/devops/connections/health"),
+  /** Plan 116 — corre el chequeo de conexiones (solo por click del operador). */
+  connectionsCheck: () =>
+    api.post<ConnectionsHealthResponse>("/api/devops/connections/check", {}),
   /** POST /api/devops/parse-yaml — YAML (ado|gitlab) → dict PipelineSpec. */
   parseYaml: (source: "ado" | "gitlab", yaml: string) =>
     api.post<{ spec: object }>("/api/devops/parse-yaml", { source, yaml }),

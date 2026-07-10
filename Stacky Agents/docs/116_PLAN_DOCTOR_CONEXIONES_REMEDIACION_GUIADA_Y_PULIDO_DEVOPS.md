@@ -1,8 +1,16 @@
 # Plan 116 — Doctor de conexiones con remediación guiada + pulido profesional del panel DevOps
 
-> **Estado:** PROPUESTO v1 — 2026-07-09
+> **Estado:** CRITICADO v2 — 2026-07-10 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 resueltos en esta v2; sin bloqueantes)
 > **Autor:** StackyArchitectaUltraEficientCode
-> **Pipeline:** este documento pasó `proponer` (este estado). Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
+>
+> **CHANGELOG v1 → v2:**
+> - **C1 (IMPORTANTE):** `probe_tracker` (F1) usaba `label` sin definir su mapa, "patrón de `local_diagnostics._check_tracker`" — pero ESE mapa (`local_diagnostics.py:69-73`) NO incluye `gitlab` (verificado: solo azure_devops/jira/mantis), así que un proyecto GitLab mostraría el label crudo `"gitlab"` en `detail` y `fmt["service"]`. v2 define el mapa LITERAL en F1 incluyendo `"gitlab": "GitLab"` (y `token_url` de GitLab = `{base_url}/-/user_settings/personal_access_tokens`, con degradación a retry si falta base). +1 caso en el test 3.
+> - **C2 (IMPORTANTE):** el KPI decía "~≤12 s peor caso" pero el tope REAL es `fut.result(timeout=_PROBE_TIMEOUT_SECONDS*3)` = 15 s por grupo, y las sondas subyacentes traen su PROPIO timeout (`test_connectivity` 3 s; `_probe_ado` el del cliente ADO), no el de la constante `_PROBE_TIMEOUT_SECONDS`. v2 corrige el KPI a "≤15 s peor caso (tope del `future.result`)" y aclara que `_PROBE_TIMEOUT_SECONDS` acota la ESPERA del agregador, no el socket de cada cliente (que ya trae el suyo).
+> - **C3 (MENOR):** anclas por número de línea en `endpoints.ts:3074` y `ServersSection.tsx:284-286` en archivos con WIP concurrente. v2 refuerza: anclar SIEMPRE por símbolo (`export const DevOps`, el bloque que renderiza `test.detail`), los números son solo orientativos.
+> - **C4 [ADICIÓN ARQUITECTO]:** el "buscar PAT en un snapshot real" (F6) era una verificación MANUAL. v2 lo convierte en un test automático de invariante `test_no_secret_leaks_in_snapshot` (F1): construye un `DiagResult` de falla con `fmt` que incluye un token de juguete `"glpat-SECRET123"` y afirma que NINGÚN campo serializado del resultado (detail/remediation/steps/command/url) lo contiene — la redacción deja de depender del ojo humano.
+> - Confirmado por lectura de código (no solo por el plan): el bug latente `local_diagnostics._check_tracker` manda GitLab (rama `else`, `:80-81`) a `_probe_ado`; este plan NO lo replica (sonda `_probe_gitlab` propia) y NO toca `local_diagnostics`. Anclajes de sustrato verificados: `server_registry.{test_connectivity:221,keyring_available:43,get_credential:205,list_servers:84}`, `GitLabClient` (`api/global_config.py:27,285` con `_request("GET","/user")`), `api/devops.py:_health_payload:28`, categoría `"devops"` (`harness_flags.py:187`).
+> **Pipeline:** este documento pasó `proponer` → `criticar` (este estado). Sigue `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Serie:** pulido profesional del dashboard DevOps. COMPLEMENTA (no duplica) al portafolio 98-103
 > (98 bootstrap+PATCH, 99 preview SWR, 100 suite-1-click, 101 bootstrap-servidor, 102 publicar-1-paso,
 > 103 monitor-persistente — todos PROPUESTOS) y al plan 104 (doctores **IA** por sección — IMPLEMENTADO).
@@ -36,8 +44,11 @@ con la flag apagada la UI y la API quedan **byte-idénticas** a hoy.
   (`test_catalog_every_code_has_complete_remediation`). Ninguna falla clasificable muestra texto crudo
   cuando la flag está ON.
 - **Tiempo-a-diagnóstico:** de "leer un traceback y adivinar" a **1 click** ("Diagnosticar") que devuelve
-  el estado de tracker + servidores + CLIs + credenciales con pasos concretos. Sondas paralelas con
-  timeout 5 s c/u ⇒ chequeo integral acotado (~≤12 s peor caso).
+  el estado de tracker + servidores + CLIs + credenciales con pasos concretos. Sondas en paralelo
+  (`ThreadPoolExecutor`, 4 grupos); **(C2)** el tope REAL por grupo es `fut.result(timeout=_PROBE_TIMEOUT_SECONDS*3)`
+  = 15 s ⇒ chequeo integral acotado a **≤15 s peor caso** (las sondas subyacentes traen además su
+  propio timeout: `test_connectivity` 3 s, cliente ADO el suyo; `_PROBE_TIMEOUT_SECONDS` acota la
+  ESPERA del agregador, no el socket de cada cliente).
 - **Regresión 0 (binario):** flag OFF ⇒ ningún endpoint nuevo responde (404), ningún componente nuevo se
   monta, `ServersSection` renderiza exactamente lo de hoy. Suites existentes verdes + `tsc --noEmit` 0 err.
 - **Cero costo por uso:** a diferencia del plan 104 (doctores IA), este doctor no lanza ningún run de
@@ -254,8 +265,13 @@ diagnóstico integral real, acotado en tiempo y sin red en tests.
      `services/local_diagnostics.py` — verificar con grep su línea de import y copiarla).
   2. Sin proyecto activo ⇒ `build_result(target="tracker", target_label="Tracker", group="tracker",
      status="warn", code="CONFIG_MISSING", detail="No hay proyecto activo.", fmt={"what": "el proyecto activo"})`.
-  3. `tracker_type = (cfg.get("issue_tracker") or {}).get("type") or "azure_devops"` (patrón de
-     `local_diagnostics._check_tracker`, `services/local_diagnostics.py:61-73`).
+  3. `tracker_type = ((cfg.get("issue_tracker") or {}).get("type") or "azure_devops").strip().lower()`
+     (patrón de `local_diagnostics._check_tracker`, `services/local_diagnostics.py:61-73`).
+     **(C1) Mapa `label` LITERAL — INCLUYE gitlab (el de `local_diagnostics` NO):**
+     ```python
+     label = {"azure_devops": "Azure DevOps", "gitlab": "GitLab",
+              "jira": "Jira", "mantis": "Mantis"}.get(tracker_type, tracker_type or "Tracker")
+     ```
   4. Ejecutar la sonda mínima según tipo, cronometrando con `time.monotonic()`:
      - `azure_devops` ⇒ `from services.local_diagnostics import _probe_ado; _probe_ado(active)`
        (REUSO literal; lanza excepción si falla — `services/local_diagnostics.py:93-100`).
@@ -325,7 +341,7 @@ lazy imports, memoria plan 94): parchear SIEMPRE en el módulo de ORIGEN:
 `mock.patch("services.local_diagnostics._find_executable", ...)`. Casos:
 1. `test_probe_tracker_no_active_project_warns` — get_active_project→None ⇒ warn CONFIG_MISSING.
 2. `test_probe_tracker_ado_401_maps_auth401` — `_probe_ado` lanza `urllib.error.HTTPError(url, 401, "u", {}, None)` ⇒ fail AUTH_401 y `remediation["action"]["url"]` contiene `_usersSettings/tokens`.
-3. `test_probe_tracker_gitlab_uses_own_probe` — tracker_type gitlab con `_probe_gitlab` mockeado OK ⇒ ok (y `_probe_ado` NO fue llamado).
+3. `test_probe_tracker_gitlab_uses_own_probe` — tracker_type gitlab con `_probe_gitlab` mockeado OK ⇒ ok, `_probe_ado` NO fue llamado, **(C1)** y `detail`/`target_label` contienen `"GitLab"` (no el crudo `"gitlab"`).
 4. `test_probe_servers_dns_fail_maps` — `test_connectivity`→`(False, "DNS: no resuelve x")` ⇒ DNS_FAIL.
 5. `test_probe_servers_ok_without_credential_warns_cred_missing` — ok TCP + get_credential→None ⇒ 2 resultados (ok + warn CRED_MISSING con action goto_section "servidores").
 6. `test_probe_clis_missing_codex_has_install_command` — `_find_executable`→None para codex ⇒ fail CLI_NOT_FOUND, `command == "npm install -g @openai/codex"`.
@@ -334,13 +350,20 @@ lazy imports, memoria plan 94): parchear SIEMPRE en el módulo de ORIGEN:
 9. `test_run_connection_check_aggregates_and_survives_probe_crash` — con `probe_tracker` parcheado para
    lanzar `RuntimeError`, el snapshot igual se arma, contiene un fail UNKNOWN para "tracker", y
    `summary` suma exactamente `len(results)`.
+10. **(C4) [ADICIÓN ARQUITECTO]** `test_no_secret_leaks_in_snapshot` — `build_result(status="fail",
+    code="AUTH_401", detail="token glpat-SECRET123 rechazado", fmt={"service":"GitLab",
+    "token_url":"https://x/-/user_settings/personal_access_tokens","host":"","status":401})` y afirmar
+    que la cadena `"glpat-SECRET123"` NO aparece en la remediación serializada (cause/steps/command/url)
+    — el catálogo jamás interpola el detail crudo en la remediación. Además, `json.dumps(result)` no
+    debe contener ninguna key `password`/`pat`/`token` con valor secreto (solo `token_url`, que es una
+    URL pública de gestión de tokens, sin el token). Automatiza el chequeo manual "buscar PAT" de F6.
 
 **Comando:**
 ```
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 venv\Scripts\python.exe -m pytest tests/test_plan116_connection_probes.py -q
 ```
-**Criterio binario:** 9/9 verdes + los de F0 siguen verdes (correr ambos archivos).
+**Criterio binario:** 10/10 verdes (incluye C4 no-fuga de secretos) + los de F0 siguen verdes (correr ambos archivos).
 **Flag:** ninguna todavía (sin consumidores; F2 expone).
 **Runtimes:** paridad explícita — codex/claude por PATH con fallbacks npm, copilot `skip` honesto.
 Fallback: cualquier sonda rota degrada a `UNKNOWN` sin romper el chequeo (test 9).
@@ -842,8 +865,9 @@ archivos de la fase (por hunk donde haya WIP ajeno). Push: SIEMPRE manual del op
 
 ## 10. Definición de Hecho (DoD) global
 
-- [ ] Los 5 archivos de test backend del plan (30 tests: 9 F0 + 9 F1 + 9 F2 [4 flag + 5 endpoints] +
-      3 F4 — el conteo exacto puede crecer, nunca bajar) verdes con el venv del repo, corridos POR ARCHIVO.
+- [ ] Los 5 archivos de test backend del plan (31 tests: 9 F0 + 10 F1 [incl. C4 no-fuga] + 9 F2
+      [4 flag + 5 endpoints] + 3 F4 — el conteo exacto puede crecer, nunca bajar) verdes con el venv
+      del repo, corridos POR ARCHIVO.
 - [ ] `test_harness_flags.py`, `test_harness_flags_requires.py`, `test_harness_ratchet_meta.py` verdes
       (5 patas de la flag + arista R4 + ratchet).
 - [ ] 12 tests vitest nuevos verdes (4 RemediationCard + 4 Strip + 1 ServersSection + 3 FlagGateBanner)

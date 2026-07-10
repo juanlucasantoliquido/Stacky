@@ -218,6 +218,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan115_golden_docs_rag.py
   tests/test_plan115_golden_memory_store.py
   tests/test_plan115_no_duplicate_math.py
+  # — Plan 116 · Doctor de conexiones con remediación guiada —
+  tests/test_plan116_connection_doctor_core.py
+  tests/test_plan116_connection_probes.py
+  tests/test_plan116_connections_endpoints.py
+  tests/test_plan116_connection_doctor_flag.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

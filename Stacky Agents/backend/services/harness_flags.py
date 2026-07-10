@@ -198,6 +198,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_REMOTE_TARGET_ENABLED",  # Plan 108 — anclaje remoto agente/ambientes
         "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",  # Plan 107 — preview de árbol de ambientes
         "STACKY_DEVOPS_ENV_SANDBOX_ENABLED",  # Plan 107 — raíz sandbox de pruebas
+        "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED",  # Plan 116 — doctor de conexiones
         "STACKY_PR_REVIEWER_ENABLED",       # Plan 110 — revisor de PRs
         "STACKY_PR_REVIEW_HAIKU_MODEL",     # Plan 110 — modelo Haiku para la revisión
         "STACKY_PR_REVIEW_DIFF_MAX_CHARS",  # Plan 110 — tope del diff (privacidad, camino Haiku)
@@ -2354,6 +2355,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (depth-1)
         # SIN default= (gotcha _CURATED_DEFAULTS_ON): idem nota arriba.
+    ),
+    # ── Plan 116 — Doctor de conexiones con remediación guiada ──
+    FlagSpec(
+        key="STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED",
+        type="bool",
+        label="Doctor de conexiones DevOps (Plan 116)",
+        description=(
+            "Plan 116 — Tira de salud de conexiones en el panel DevOps: diagnostica "
+            "tracker (ADO/GitLab/Jira/Mantis), servidores registrados, CLIs de los "
+            "runtimes y keyring con remediación paso a paso. Determinista (sin IA, "
+            "sin costo). Solo corre con click del operador. Con OFF el panel queda "
+            "idéntico a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (R4 profundidad-1)
+        # SIN default= (gotcha Plan 63): nace OFF; el default vive en config.py.
     ),
     FlagSpec(
         key="STACKY_DEVOPS_REMOTE_TARGET_ENABLED",

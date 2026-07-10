@@ -1011,6 +1011,11 @@ class Config:
         "STACKY_DEVOPS_REMOTE_TARGET_ENABLED", "false"
     ).lower() in ("true", "1", "yes")
 
+    # Plan 116 — Doctor de conexiones DevOps (determinista). Default OFF, editable por UI.
+    STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

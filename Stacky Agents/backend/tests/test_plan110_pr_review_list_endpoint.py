@@ -75,3 +75,29 @@ def test_list_config_error_400(app_on):
         resp = c.get("/api/pr-review/list?project=p")
         assert resp.status_code == 400
         assert resp.get_json()["kind"] == "tracker_config"
+
+
+def test_list_ado_config_error_400_not_500(app_on):
+    """AdoConfigError (PAT no encontrado) debe mapear a 400 con mensaje, no al 500 mudo."""
+    from services.ado_client import AdoConfigError
+    c = app_on.test_client()
+    with mock.patch("api.pr_review.get_merge_request_provider",
+                    side_effect=AdoConfigError("ADO PAT no encontrado")):
+        resp = c.get("/api/pr-review/list?project=p")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data["kind"] == "tracker_config"
+        assert "PAT" in data["error"]
+
+
+def test_list_ado_api_error_maps_status(app_on):
+    """AdoApiError conserva su status_code (p.ej. 401 PAT inválido) en vez de 500."""
+    from services.ado_client import AdoApiError
+    c = app_on.test_client()
+    provider = mock.MagicMock()
+    provider.name = "azure_devops"
+    provider.list_merge_requests.side_effect = AdoApiError("PAT inválido", status_code=401)
+    with mock.patch("api.pr_review.get_merge_request_provider", return_value=provider):
+        resp = c.get("/api/pr-review/list?project=p")
+        assert resp.status_code == 401
+        assert resp.get_json()["kind"] == "tracker_api"

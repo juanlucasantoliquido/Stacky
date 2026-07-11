@@ -16,17 +16,21 @@ Guardarraíles: nunca 500 (patrón _call_provider), el diff crudo NUNCA se persi
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 
 from flask import Blueprint, abort, request, jsonify
 from werkzeug.exceptions import HTTPException
 
 import config as _config
+from services.ado_client import AdoApiError, AdoConfigError
 from services.merge_request_provider import get_merge_request_provider
 from services.tracker_provider import TrackerConfigError, TrackerApiError
 from services.pr_review_sanitize import sanitize_diff
 
 bp = Blueprint("pr_review", __name__, url_prefix="/pr-review")
+
+logger = logging.getLogger(__name__)
 
 # Discriminador de ticket interno (patrón local_llm_analysis.py:28). -5 es del Plan 106.
 _PR_REVIEW_ADO_ID = -6
@@ -59,9 +63,16 @@ def _call_provider(fn):
         return {"error": str(e), "kind": "tracker_config"}, 400
     except TrackerApiError as e:
         return {"error": str(e), "kind": e.kind}, e.status or 502
+    except AdoConfigError as e:
+        # AdoClient lanza sus propias excepciones (no las del puerto tracker);
+        # sin este mapeo caían al 500 genérico y el operador veía "no carga".
+        return {"error": str(e), "kind": "tracker_config"}, 400
+    except AdoApiError as e:
+        return {"error": str(e), "kind": "tracker_api"}, e.status_code or 502
     except HTTPException:
         raise
     except Exception:
+        logger.exception("Error interno del revisor de PRs")
         return {"error": "error interno del revisor de PRs"}, 500
 
 

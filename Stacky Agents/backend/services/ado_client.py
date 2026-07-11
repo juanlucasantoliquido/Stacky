@@ -133,8 +133,15 @@ def _resolve_active_project_defaults(
 
     if project:
         stacky_name, cfg = find_project_for_tracker(project)
+        if not cfg:
+            # El caller puede pasar el nombre STACKY del proyecto (p.ej. la API
+            # DevOps pasa "RSPACIFICO", no el tracker_project "Strategist_Pacifico").
+            # Sin esto, cfg queda {} y nunca se resuelve el auth del proyecto.
+            candidate = get_project_config(project)
+            if candidate:
+                stacky_name, cfg = project, candidate
 
-    if cfg is None:
+    if not cfg:
         active = get_active_project()
         if active:
             cfg = get_project_config(active)

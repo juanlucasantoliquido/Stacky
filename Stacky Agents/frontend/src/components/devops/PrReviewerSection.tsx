@@ -1,7 +1,7 @@
 /**
  * PrReviewerSection (Plan 110 F7)
  *
- * Sección "Revisor de PRs" del panel DevOps. Lista las PRs abiertas del tracker
+ * Sección "Revisor de PRs" del panel DevOps. Lista las PRs del tracker
  * activo y permite:
  *  - Revisar con Claude Haiku (solo-lectura) — EXTERNO: exige preview del payload
  *    saneado + checkbox "confirmo el envío" antes de mandar nada a Copilot/GitHub (C1).
@@ -36,10 +36,34 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-const SEVERITY_COLOR: Record<string, string> = {
-  info: '#3b82f6',
-  warning: '#d97706',
-  critical: '#dc2626',
+type PrStateFilter = 'open' | 'merged' | 'closed' | 'all';
+
+const STATE_FILTERS: { value: PrStateFilter; label: string }[] = [
+  { value: 'open', label: 'Abiertas' },
+  { value: 'merged', label: 'Mergeadas' },
+  { value: 'closed', label: 'Cerradas' },
+  { value: 'all', label: 'Todas' },
+];
+
+const STATE_BADGE: Record<string, { label: string; cls: string }> = {
+  open: { label: 'Abierta', cls: 'stOpen' },
+  merged: { label: 'Mergeada', cls: 'stMerged' },
+  closed: { label: 'Cerrada', cls: 'stClosed' },
+};
+
+const PIPELINE_BADGE: Record<string, { label: string; cls: string }> = {
+  success: { label: 'Pipeline OK', cls: 'pipeSuccess' },
+  failed: { label: 'Pipeline falló', cls: 'pipeFailed' },
+  running: { label: 'Corriendo', cls: 'pipeRunning' },
+  pending: { label: 'Pendiente', cls: 'pipePending' },
+  created: { label: 'Creado', cls: 'pipePending' },
+  canceled: { label: 'Cancelado', cls: 'pipeMuted' },
+};
+
+const SEVERITY_CLASS: Record<string, string> = {
+  info: 'sevInfo',
+  warning: 'sevWarning',
+  critical: 'sevCritical',
 };
 
 export const PrReviewerSection: React.FC<PrReviewerSectionProps> = ({ ctx }) => {
@@ -47,6 +71,7 @@ export const PrReviewerSection: React.FC<PrReviewerSectionProps> = ({ ctx }) => 
   const activeProjectObj = useWorkbench((s) => s.activeProject);
   const activeProject = activeProjectObj?.name ?? '';
 
+  const [stateFilter, setStateFilter] = useState<PrStateFilter>('open');
   const [selected, setSelected] = useState<PrSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,11 +93,13 @@ export const PrReviewerSection: React.FC<PrReviewerSectionProps> = ({ ctx }) => 
   const [models, setModels] = useState<{ id: string; name: string; is_haiku: boolean }[] | null>(null);
 
   const listQuery = useQuery({
-    queryKey: ['pr-review-list', activeProject],
-    queryFn: () => PrReview.list(activeProject),
+    queryKey: ['pr-review-list', activeProject, stateFilter],
+    queryFn: () => PrReview.list(activeProject, stateFilter),
     enabled: !!activeProject,
     retry: false,
   });
+
+  const prs = listQuery.data?.merge_requests ?? [];
 
   const resetForPr = (pr: PrSummary) => {
     setSelected(pr);
@@ -115,20 +142,6 @@ export const PrReviewerSection: React.FC<PrReviewerSectionProps> = ({ ctx }) => 
     }
   };
 
-  const runLocal = async () => {
-    if (!selected) return;
-    setLocalBusy(true);
-    setError(null);
-    try {
-      const r = await PrReview.reviewLocal(activeProject, selected.id, question);
-      setLocalAnswer(r.answer);
-    } catch (e) {
-      setError(errMsg(e));
-    } finally {
-      setLocalBusy(false);
-    }
-  };
-
   const loadModels = async () => {
     setError(null);
     try {
@@ -163,15 +176,59 @@ export const PrReviewerSection: React.FC<PrReviewerSectionProps> = ({ ctx }) => 
     return <div className={styles.notice}>Elegí un proyecto activo para revisar sus PRs.</div>;
   }
 
+  const renderStateBadge = (state: string) => {
+    const b = STATE_BADGE[state] ?? STATE_BADGE.open;
+    return <span className={`${styles.badge} ${styles[b.cls]}`}>{b.label}</span>;
+  };
+
+  const renderPipelineBadge = (status: string) => {
+    const b = PIPELINE_BADGE[status];
+    if (!b) return <span className={`${styles.badge} ${styles.pipeMuted}`}>—</span>;
+    return (
+      <span className={`${styles.badge} ${styles[b.cls]}`}>
+        <span className={styles.badgeDot} />
+        {b.label}
+      </span>
+    );
+  };
+
   return (
     <div className={styles.wrap}>
-      <p className={styles.privacy}>{PRIVACY_NOTICE}</p>
+      <p className={styles.privacy}>🔒 {PRIVACY_NOTICE}</p>
 
       {error && <div className={styles.errorBanner}>{error}</div>}
 
+      {listQuery.isError && (
+        <div className={styles.errorBanner}>
+          <span>No se pudieron cargar las PRs: {errMsg(listQuery.error)}</span>
+          <button onClick={() => listQuery.refetch()}>Reintentar</button>
+        </div>
+      )}
+
       <div className={styles.toolbar}>
+        <div className={styles.segmented} role="tablist" aria-label="Filtro de estado de PRs">
+          {STATE_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              className={stateFilter === f.value ? styles.segActive : undefined}
+              aria-pressed={stateFilter === f.value}
+              onClick={() => setStateFilter(f.value)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {listQuery.data?.provider && (
+          <span className={styles.providerChip}>{listQuery.data.provider}</span>
+        )}
+        {listQuery.isSuccess && (
+          <span className={styles.countChip}>
+            {prs.length} PR{prs.length === 1 ? '' : 's'}
+          </span>
+        )}
+        <span className={styles.toolbarSpacer} />
         <button onClick={() => listQuery.refetch()} disabled={listQuery.isFetching}>
-          {listQuery.isFetching ? 'Cargando…' : 'Cargar PRs'}
+          {listQuery.isFetching ? 'Cargando…' : '↻ Actualizar'}
         </button>
         <button onClick={loadModels}>Ver modelos disponibles</button>
       </div>
@@ -186,68 +243,155 @@ export const PrReviewerSection: React.FC<PrReviewerSectionProps> = ({ ctx }) => 
         </ul>
       )}
 
-      <table className={styles.prTable}>
-        <thead>
-          <tr>
-            <th>PR</th>
-            <th>Ramas</th>
-            <th>Estado</th>
-            <th>Pipeline</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {(listQuery.data?.merge_requests ?? []).map((pr) => (
-            <tr key={pr.id}>
-              <td>
-                <a href={pr.web_url} target="_blank" rel="noreferrer">{pr.title}</a>
-              </td>
-              <td>{pr.source_branch} → {pr.target_branch}</td>
-              <td>{pr.state}</td>
-              <td>{pr.pipeline_status}</td>
-              <td>
-                <button onClick={() => resetForPr(pr)}>Revisar</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className={styles.tableCard}>
+        {listQuery.isFetching && !listQuery.data ? (
+          <div aria-label="Cargando PRs">
+            <div className={styles.skeletonRow} />
+            <div className={styles.skeletonRow} />
+            <div className={styles.skeletonRow} />
+          </div>
+        ) : prs.length === 0 ? (
+          <div className={styles.emptyState}>
+            <strong>Sin PRs {STATE_FILTERS.find((f) => f.value === stateFilter)?.label.toLowerCase()}</strong>
+            <span>
+              {listQuery.isError
+                ? 'Corregí la conexión del tracker y reintentá.'
+                : 'Cuando haya pedidos de cambios en el tracker van a aparecer acá.'}
+            </span>
+          </div>
+        ) : (
+          <table className={styles.prTable}>
+            <thead>
+              <tr>
+                <th>PR</th>
+                <th>Ramas</th>
+                <th>Estado</th>
+                <th>Pipeline</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {prs.map((pr) => (
+                <tr key={pr.id} className={selected?.id === pr.id ? styles.rowSelected : undefined}>
+                  <td>
+                    <div className={styles.prTitleCell}>
+                      <a href={pr.web_url} target="_blank" rel="noreferrer">{pr.title}</a>
+                      <span className={styles.prMeta}>
+                        #{pr.id}
+                        {pr.author ? ` · ${pr.author}` : ''}
+                      </span>
+                    </div>
+                  </td>
+                  <td>
+                    <span className={styles.branchFlow}>
+                      <span className={styles.branchChip} title={pr.source_branch}>{pr.source_branch}</span>
+                      <span className={styles.branchArrow}>→</span>
+                      <span className={styles.branchChip} title={pr.target_branch}>{pr.target_branch}</span>
+                    </span>
+                  </td>
+                  <td>{renderStateBadge(pr.state)}</td>
+                  <td>{renderPipelineBadge(pr.pipeline_status)}</td>
+                  <td>
+                    <button className={styles.reviewBtn} onClick={() => resetForPr(pr)}>Revisar</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
       {selected && (
         <div className={styles.reviewPanel}>
-          <h3>PR #{selected.id}: {selected.title}</h3>
-
-          {/* ── Camino Haiku (externo) ─────────────────────────────── */}
-          <section className={styles.haikuBlock}>
-            <h4>Revisar con Haiku (en la nube)</h4>
-            <button onClick={loadPreview}>Ver exactamente qué se envía a Copilot/GitHub</button>
-            {detail && (
-              <details open className={styles.previewBox}>
-                <summary>Vista previa del contenido que sale de tu máquina (saneado)</summary>
-                <pre>{detail.diff_text || '(sin diff disponible)'}</pre>
-                {detail.diff_truncated && <em>El diff fue truncado por tamaño.</em>}
-              </details>
-            )}
-            <label className={styles.confirmSend}>
-              <input
-                type="checkbox"
-                checked={confirmExternalSend}
-                onChange={(e) => setConfirmExternalSend(e.target.checked)}
-              />
-              Reviso el contenido y confirmo el envío
-            </label>
-            <button onClick={runHaiku} disabled={!confirmExternalSend || haikuBusy}>
-              {haikuBusy ? 'Revisando…' : 'Revisar con Haiku'}
+          <div className={styles.reviewHeader}>
+            <h3>
+              <span>PR #{selected.id}</span>
+              {selected.title}
+            </h3>
+            <button className={styles.closeBtn} onClick={() => setSelected(null)} aria-label="Cerrar revisión">
+              ✕ Cerrar
             </button>
-          </section>
+          </div>
+
+          <div className={styles.pathsGrid}>
+            {/* ── Camino Haiku (externo) ───────────────────────────── */}
+            <section className={styles.haikuBlock}>
+              <h4 className={styles.blockTitle}>
+                Revisar con Haiku
+                <span className={`${styles.blockTag} ${styles.tagCloud}`}>en la nube</span>
+              </h4>
+              <button onClick={loadPreview}>Ver exactamente qué se envía a Copilot/GitHub</button>
+              {detail && (
+                <details open className={styles.previewBox}>
+                  <summary>Vista previa del contenido que sale de tu máquina (saneado)</summary>
+                  <pre>{detail.diff_text || '(sin diff disponible)'}</pre>
+                  {detail.diff_truncated && (
+                    <em className={styles.truncNote}>El diff fue truncado por tamaño.</em>
+                  )}
+                </details>
+              )}
+              <label className={styles.confirmSend}>
+                <input
+                  type="checkbox"
+                  checked={confirmExternalSend}
+                  onChange={(e) => setConfirmExternalSend(e.target.checked)}
+                />
+                Reviso el contenido y confirmo el envío
+              </label>
+              <button className={styles.reviewBtn} onClick={runHaiku} disabled={!confirmExternalSend || haikuBusy}>
+                {haikuBusy ? 'Revisando…' : 'Revisar con Haiku'}
+              </button>
+            </section>
+
+            {/* ── Camino SOLO local (privado) ──────────────────────── */}
+            <section className={styles.localBlock}>
+              <h4 className={styles.blockTitle}>
+                Revisar solo con modelo local (nada sale de tu máquina)
+                <span className={`${styles.blockTag} ${styles.tagLocal}`}>privado</span>
+              </h4>
+              <p className={styles.localHint}>
+                Privado: el contenido no se envía a Copilot/GitHub. Recomendado para repos con datos personales.
+              </p>
+              <textarea
+                placeholder="Pregunta opcional para el modelo local…"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+              />
+              <button
+                className={styles.reviewBtn}
+                onClick={async () => {
+                  if (!selected) return;
+                  setLocalBusy(true);
+                  setError(null);
+                  try {
+                    const r = await PrReview.reviewLocal(activeProject, selected.id, question);
+                    setLocalAnswer(r.answer);
+                  } catch (e) {
+                    setError(errMsg(e));
+                  } finally {
+                    setLocalBusy(false);
+                  }
+                }}
+                disabled={localBusy}
+              >
+                {localBusy ? 'Consultando…' : localAnswer ? 'Preguntar de nuevo' : 'Revisar con modelo local'}
+              </button>
+              {localAnswer && <pre className={styles.localAnswer}>{localAnswer}</pre>}
+            </section>
+          </div>
 
           {haikuReview && (
             <div className={styles.reviewResult}>
               <p><strong>Resumen:</strong> {haikuReview.summary}</p>
               <ul>
                 {haikuReview.findings.map((f, i) => (
-                  <li key={i} style={{ color: SEVERITY_COLOR[f.severity] ?? '#333' }}>
-                    <strong>{f.title}</strong>: {f.detail}
+                  <li key={i} className={styles.finding}>
+                    <span className={`${styles.sevBadge} ${styles[SEVERITY_CLASS[f.severity] ?? 'sevInfo']}`}>
+                      {f.severity}
+                    </span>
+                    <span>
+                      <strong>{f.title}</strong>: {f.detail}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -288,23 +432,6 @@ export const PrReviewerSection: React.FC<PrReviewerSectionProps> = ({ ctx }) => 
               </div>
             </div>
           )}
-
-          {/* ── Camino SOLO local (privado) ────────────────────────── */}
-          <section className={styles.localBlock}>
-            <h4>Revisar solo con modelo local (nada sale de tu máquina)</h4>
-            <p className={styles.localHint}>
-              Privado: el contenido no se envía a Copilot/GitHub. Recomendado para repos con datos personales.
-            </p>
-            <textarea
-              placeholder="Pregunta opcional para el modelo local…"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-            />
-            <button onClick={runLocal} disabled={localBusy}>
-              {localBusy ? 'Consultando…' : localAnswer ? 'Preguntar de nuevo' : 'Revisar solo con modelo local'}
-            </button>
-            {localAnswer && <pre className={styles.localAnswer}>{localAnswer}</pre>}
-          </section>
         </div>
       )}
     </div>

@@ -60,3 +60,9 @@ Stacky Agents/backend/Stacky/agents/manifest.json
 # Repo clonado localmente para referencia
 engram/
 
+# Volcado de memoria de herramienta externa (no es código del proyecto)
+/memory/
+
+# Backups de node_modules dejados por reinstalaciones (Install-Dependencies.ps1)
+node_modules.stale-*/
+

@@ -1,8 +1,8 @@
 # Plan 120 — Centro de Despliegues: deploy multi-destino en 2 clicks, rollback instantáneo, verificación post-deploy y DORA local
 
-> **Estado:** PROPUESTO v1 — 2026-07-10
-> **Autor:** StackyArchitectaUltraEficientCode
-> **Pipeline:** este documento pasó `proponer` (este estado). Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
+> **Estado:** CRITICADO v2 (APROBADO-CON-CAMBIOS) — 2026-07-10
+> **Autor:** StackyArchitectaUltraEficientCode · **Juez v1→v2:** criticar-y-mejorar-plan (inline)
+> **Pipeline:** este documento pasó `proponer` y `criticar-y-mejorar-plan` (este estado). Sigue `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Pedido textual del operador:** "Quiero que me digas cómo mejorarías Stacky Agents para hacer MUCHO
 > más fácil la creación de pipelines y despliegues. Debe ser algo extremadamente fácil y efectivo por
 > sobre todo. Ejemplo: una parte que sea 'Despliegue' y te permita desplegar a cada servidor y también
@@ -14,6 +14,40 @@
 > detección de stack (plan 97, `services/pipeline_stack_detector.py:19`), modelo local costo-cero
 > (planes 106/117, patrón `services/local_insights.py`), doctor de conexiones (plan 116, parcial:
 > `check_winrm` + remediación ya viven en `remote_exec.py:125-247`). NADA pendiente bloquea este plan.
+
+---
+
+## Changelog v1 → v2 (crítica adversarial 2026-07-10 — 12 hallazgos: 0 BLOQUEANTES / 7 IMPORTANTES / 5 MENORES)
+
+**VEREDICTO: APROBADO-CON-CAMBIOS.** Criterios binarios: cero bloqueantes (no saca al humano del lazo,
+no rompe ningún runtime, no agrega trabajo manual, flags con default seguro); ≥1 IMPORTANTE (7 defectos
+de diseño reales, todos con fix aplicado in place en esta v2). Toda la evidencia `archivo:línea` de los
+hallazgos fue verificada por LECTURA del código al 2026-07-10.
+
+| C# | Sev. | Hallazgo (v1) | Fix aplicado (v2) |
+|---|---|---|---|
+| C1 | IMPORTANTE | `cmd /c rmdir current` incondicional rompía el PRIMER deploy (el junction aún no existe ⇒ exit≠0 ⇒ `failed`); `test_switch_commands_exactos` congelaba el defecto | `build_switch_commands` emite `cmd /c if exist ... rmdir ...` (§5.2, F1) + test `test_switch_commands_primer_deploy` + bullet en DoD |
+| C2 | IMPORTANTE | Paso `prune` no implementable: `build_deploy_plan` pre-genera comandos, pero `prune_versions` (pura) necesita el listado REAL de `releases\` del destino, desconocido en plan-time | `prune` viaja con `command: None` y el executor lo despacha por nombre en 3 sub-acciones (listar read-only → `prune_versions` pura → borrar) (F4); fallo de housekeeping NO degrada `success` (§1 KPI refinado) |
+| C3 | IMPORTANTE | Ruta del zip remoto sin convenir: `transfer`/`unpack` exigían INFERIR una convención (prohibido para modelos menores) | Convención inmutable `<install_path>\incoming\<version_id>.zip`, `ensure_dirs` crea `releases` + `incoming`, comando `Expand-Archive` exacto y paso nuevo `cleanup` (§5.2, F1, F4) |
+| C4 | IMPORTANTE | Regla "sin llaves `{}`" sin base declarada y contradictoria con `write_marker` (el JSON del marker TIENE llaves) | Regla delimitada con evidencia: `is_read_only_command` rechaza llaves SOLO en read-only (`remote_exec.py:51-55`, guard anti script-block); los comandos write PUEDEN llevarlas; `build_marker_command` definido EXACTO (§5.2, F1) + `test_drift_command_es_read_only` (F5) |
+| C5 | IMPORTANTE | F4 contradictorio: "thread por destino" vs "SECUENCIAL entre destinos"; semántica del 409 parcial multi-destino sin definir | UN solo thread por ORDEN que itera las olas en el orden recibido; locks upfront; 409 SOLO si TODOS los destinos están ocupados, mezcla ⇒ 200 con detalle por destino (F4, F5, §5.4) |
+| C6 | IMPORTANTE | `update_ledger_entry` (leer-mapear-reescribir el JSONL) desde threads de órdenes concurrentes ⇒ pérdida de líneas | El `threading.Lock` de módulo de `deploy_store` cubre TAMBIÉN append/update/read del ledger + `test_update_concurrente_no_pierde_entradas` (F3) |
+| C7 | IMPORTANTE | F8 asumía un mecanismo de navegación que NO existe: `activeId` es `useState` interno (`DevOpsPage.tsx:163`), el ctx no expone callback, no hay routing por hash; "elegir el mecanismo YA disponible" = frase vaga prohibida | Campo OPCIONAL `setActiveSection?: (id: string) => void` en `DevOpsSectionContext` + 2 líneas en `DevOpsPage` (precedente aditivo idéntico a `selectedServer` del plan 91, `DevOpsPage.tsx:46-48`), con fallback explícito si falta (F8) |
+| C8 | MENOR | `STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_S` (v1) rompía la convención `_TIMEOUT_SEC` de la casa (plan 110) | Renombrada a `STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC` en todo el doc (F0) |
+| C9 | MENOR | Smoke http impreciso ("stdout contiene un StatusCode 200-399") e `Invoke-WebRequest` LANZA excepción en ≥400 (nunca emitiría el código) | Comando exacto con try/catch (permitido: corre en write) + helper puro `parse_smoke_http_stdout` (F1, F4) |
+| C10 | MENOR | Backend reiniciado a mitad de deploy ⇒ entry `running` zombi eterna (trampa conocida de la casa: runs pegados en "running") | Resuelto por **[ADICIÓN ARQUITECTO A1]** `derive_effective_status` (F1, F5, F7, R10) |
+| C11 | MENOR | `DELETE /apps/<id>` sin guard con deploy en curso | 409 `deploy_in_progress` si hay lock activo de la app + `test_delete_app_409_con_run_activo` (F5) |
+| C12 | MENOR | El fix F2 usaba la variable `server` sin decir de dónde sale; el fake con orden viejo no estaba localizado | Verificado y anotado: `server = get_server(alias)` YA existe en scope (`remote_exec.py:300`); el fake viejo `("user","pass","host")` está en `test_plan105_remote_exec_service.py:119,153,192` (F2) |
+
+**[ADICIÓN ARQUITECTO] A1 — Runs zombis detectados en frío (cierra C10):** helper puro
+`derive_effective_status(entry, now_utc, stale_after_s=3600)` — un `running` más viejo que el umbral se
+DERIVA como `stale` en `/overview`, `/runs/<id>` y `/history` (sin demonio, sin mutar el ledger) + badge
+gris "obsoleto" en la tarjeta (F1, F5, F7). Cero trabajo del operador, determinista, idéntico en los 3
+runtimes.
+**[ADICIÓN ARQUITECTO] A2 — Preflight de espacio en disco del destino:** `/plan` sonda el espacio libre
+(remoto: `Get-PSDrive` read-only brace-free; local: `shutil.disk_usage`) y agrega warning si
+libre < 2× artefacto — helper puro `check_disk_headroom(free_bytes, artifact_bytes)` (F1, F5). Warning
+informativo en el semáforo, JAMÁS bloquea: decide el operador (HITL).
 
 ---
 
@@ -56,9 +90,11 @@ reducido a la escala mono-operador Windows/WinRM **sin agregar un solo servicio 
 - **Rollback en 1 click + 1 confirmación, sin transferencia (binario):** el plan de rollback NO contiene
   paso `transfer` ni `unpack` (test `test_rollback_plan_has_no_transfer`, F1) — como el Instant Rollback
   de Vercel, es re-apuntar el junction a una release retenida.
-- **Cero falsos verdes de deploy (binario):** un deploy solo queda `success` si TODOS los pasos
-  (incluido smoke, si está configurado) devolvieron ok; cualquier paso fallido ⇒ `failed` con el paso
-  culpable persistido en el ledger (tests F4).
+- **Cero falsos verdes de deploy (binario):** un deploy solo queda `success` si TODOS los pasos de
+  ACTIVACIÓN (hasta `smoke` inclusive) devolvieron ok; cualquier paso de activación fallido ⇒ `failed`
+  (o `failed_smoke`) con el paso culpable persistido en el ledger (tests F4). **C2 v2:** los pasos de
+  housekeeping POST-activación (`prune`, `cleanup`) registran su fallo como `ok:false` en el entry SIN
+  degradar el status — la versión ya quedó activa y verificada; el criterio sigue siendo binario.
 - **Flag OFF ⇒ byte-idéntico (binario):** con `STACKY_DEPLOYMENTS_ENABLED` OFF, `/api/devops/health`
   solo gana keys aditivas `false`, todos los endpoints nuevos devuelven 404 y la UI no muestra la
   sub-tab gateada distinta a cualquier otra sección OFF (patrón `FlagGateBanner`).
@@ -213,16 +249,31 @@ línea por acción:
 ```
 <install_path>\
   releases\<version_id>\    ← contenido desplegado, NUNCA se modifica
+  incoming\<version_id>.zip ← staging del artefacto en el destino (C3 v2; lo borra el paso cleanup)
   current                   ← junction → releases\<version_id> (lo que sirve la app)
   release.json              ← marker {version_id, app_id, deployed_at, source_sha256}
 ```
 - `version_id = "<YYYYMMDD-HHMMSS UTC>-<sha256[:8] del zip>"` — ordenable y trazable al artefacto.
 - **Switch casi-atómico sin admin:** los junctions NO requieren privilegios elevados. Comandos exactos
-  (generados por `build_switch_commands`, sin llaves `{}`):
-  `cmd /c rmdir "<install_path>\current"` (borra SOLO el link, jamás el contenido) y luego
+  (generados por `build_switch_commands`):
+  `cmd /c if exist "<install_path>\current" rmdir "<install_path>\current"` (**C1 v2:** en el PRIMER
+  deploy el junction todavía no existe y el `if exist` evita el exit≠0; el rmdir borra SOLO el link,
+  jamás el contenido — y si `current` fuera un directorio REAL no vacío, rmdir FALLA y protege el
+  contenido: error legible, nunca pisada silenciosa) y luego
   `cmd /c mklink /J "<install_path>\current" "<install_path>\releases\<version_id>"`.
+- **Regla de llaves `{}` delimitada (C4 v2, con evidencia):** `is_read_only_command` rechaza `{`/`}`
+  SOLO en comandos read-only (`remote_exec.py:51-55`, guard anti script-block). Por lo tanto: todo
+  comando que corra con `read_only=True` (drift `Get-Content`, listado de prune, sonda de disco A2)
+  DEBE ser brace-free y arrancar con verbo de lectura de la allowlist; los comandos de ESCRITURA
+  (switch, marker, smoke, hooks) PUEDEN llevar llaves sin restricción.
+- **Marker exacto (C4 v2):** `build_marker_command(install_path, marker: dict) -> str` genera
+  `Set-Content -LiteralPath '<install_path>\release.json' -Value '<json>' -Encoding utf8`, donde
+  `<json>` = `json.dumps(marker, separators=(",", ":"))`; ValueError si el JSON serializado contiene
+  una comilla simple `'` (imposible con ids slug + sha hex + ISO-8601, pero se valida defensivamente).
 - **Retención:** se conservan las últimas `STACKY_DEPLOYMENTS_RETAIN_RELEASES` releases (default 3);
-  `prune_versions()` puro decide cuáles borrar y JAMÁS incluye la activa.
+  `prune_versions()` puro decide cuáles borrar y JAMÁS incluye la activa. **C2 v2:** el listado real de
+  `releases\` se obtiene EN EJECUCIÓN (ver despacho del paso `prune` en F4): el plan pre-generado lleva
+  `prune` con `command: None`.
 
 ### 5.3 Motor (separación pura/efectos, estilo de la casa)
 
@@ -252,7 +303,7 @@ Guard por flag con `abort(404)` (patrón `api/devops.py:76-77`).
 | `GET /overview` | master | Apps + destinos (servers del registro + `__local__`) + último estado por (app,destino) desde el ledger + métricas resumidas. |
 | `POST /apps`, `PUT /apps/<id>`, `DELETE /apps/<id>` | master | CRUD validado de `deploy_apps.json`. |
 | `POST /plan` | master | **Dry-run**: versión tentativa + lista de pasos/comandos por destino + preflight (artefacto existe/tamaño, `test_connectivity`, `check_winrm` con remediación 116/108). SIN efectos. |
-| `POST /execute` | master + **EXECUTE** | 400 sin `confirm:true`; 403 con EXECUTE OFF; 409 con lock activo; destinos `protected` exigen `confirm_text == app_id`. Encola por destino (secuencial). |
+| `POST /execute` | master + **EXECUTE** | 400 sin `confirm:true`; 403 con EXECUTE OFF; 409 SOLO si TODOS los destinos pedidos están lockeados — mezcla ⇒ 200 con detalle por destino (C5 v2); destinos `protected` exigen `confirm_text == app_id`. UN thread por orden itera las olas en secuencia (C5 v2). |
 | `POST /rollback` | master + **EXECUTE** | Igual gating; plan de rollback (switch a versión retenida, sin transfer). |
 | `GET /runs/<run_id>` | master | Entry del ledger (progreso vivo). |
 | `GET /history` | master | Ledger filtrado por `app_id`/`target`/`limit`. |
@@ -309,7 +360,7 @@ keys aditivas `deployments_enabled`, `deployments_execute_enabled`, `deployments
 | `STACKY_DEPLOYMENTS_EXECUTE_ENABLED` | bool | `false` | — | `STACKY_DEVOPS_PANEL_ENABLED` |
 | `STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED` | bool | `false` | — | `STACKY_DEVOPS_PANEL_ENABLED` |
 | `STACKY_DEPLOYMENTS_RETAIN_RELEASES` | int | `3` | min 1, max 10 | copiar forma de la FlagSpec int vecina |
-| `STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_S` | int | `30` | min 5, max 300 | copiar forma de la FlagSpec int vecina |
+| `STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC` | int | `30` | min 5, max 300 | copiar forma de la FlagSpec int vecina |
 
 > **GOTCHAS OBLIGATORIOS:** (a) FlagSpec **SIN `default=`** — rompe `test_default_known_only_for_curated`
 > (lista curada congelada, plan 63); el default efectivo va SOLO en `config.py` con el patrón
@@ -332,7 +383,7 @@ keys aditivas `deployments_enabled`, `deployments_execute_enabled`, `deployments
 4. `backend/tests/test_harness_flags_requires.py` — aristas nuevas en `_REQUIRES_MAP_FROZEN`
    (`"STACKY_DEPLOYMENTS_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED"`, etc.).
 5. `backend/harness_defaults.env` — 5 líneas nuevas (`STACKY_DEPLOYMENTS_ENABLED=false`, …,
-   `STACKY_DEPLOYMENTS_RETAIN_RELEASES=3`, `STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_S=30`). Nota honesta: existe
+   `STACKY_DEPLOYMENTS_RETAIN_RELEASES=3`, `STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC=30`). Nota honesta: existe
    un drift conocido del generador (`deployment/export_harness_defaults.py`) con el deploy vivo; NO
    bloquea esta fase (mismo tratamiento que planes 93-116).
 6. `backend/api/devops.py` — en `_health_payload()` (después de `connection_doctor_enabled`,
@@ -372,15 +423,33 @@ registry). **Flag:** las propias. **Runtimes:** ortogonal (idéntico en los 3). 
 - `build_deploy_plan(app, target_key, target_cfg, version_id, retain, smoke_timeout_s) -> list[dict]` —
   pasos ordenados: `preflight` (informativo) → `ensure_dirs` → `transfer` → `unpack` → `pre_switch`
   (solo si configurado) → `switch` → `write_marker` → `post_switch` (si configurado) → `smoke` (si
-  `kind != "none"`) → `prune`. Cada paso: `{"name", "command"|None, "read_only": bool}`.
+  `kind != "none"`) → `prune` → `cleanup` (C3 v2). Cada paso: `{"name", "command"|None,
+  "read_only": bool, "housekeeping": bool}` — `housekeeping=True` SOLO en `prune` y `cleanup` (su fallo
+  no degrada el status, §1). Comandos EXACTOS (C3 v2): `ensure_dirs` =
+  `New-Item -ItemType Directory -Force -Path '<install_path>\releases','<install_path>\incoming' | Out-Null`;
+  `transfer` y `prune` viajan con `command: None` (los despacha el executor por nombre, F4); `unpack` =
+  `Expand-Archive -LiteralPath '<install_path>\incoming\<version_id>.zip' -DestinationPath '<install_path>\releases\<version_id>' -Force`;
+  `cleanup` = `Remove-Item -LiteralPath '<install_path>\incoming\<version_id>.zip' -Force`.
 - `build_rollback_plan(app, target_key, target_cfg, to_version_id, smoke_timeout_s) -> list[dict]` —
   `pre_switch → switch → write_marker → post_switch → smoke`. **SIN `transfer` NI `unpack`.**
 - `build_switch_commands(install_path, version_id) -> list[str]` — los 2 comandos EXACTOS de §5.2
-  (`cmd /c rmdir` + `cmd /c mklink /J`), con `install_path` validado absoluto y SIN comillas dobles
-  embebidas en los paths (rechazar con ValueError si las hay).
-- `build_smoke_command(smoke: dict, timeout_s: int) -> str|None` — `http` ⇒
-  `powershell` one-liner con `Invoke-WebRequest -UseBasicParsing -TimeoutSec <t> '<url>'` que emite el
-  StatusCode; `ps` ⇒ el comando del operador tal cual; `none` ⇒ `None`. Sin llaves `{}`.
+  (`cmd /c if exist ... rmdir` + `cmd /c mklink /J`, C1 v2), con `install_path` validado absoluto y SIN
+  comillas dobles embebidas en los paths (rechazar con ValueError si las hay).
+- `build_smoke_command(smoke: dict, timeout_s: int) -> str|None` — `http` ⇒ one-liner EXACTO (C9 v2;
+  corre en modo write, donde las llaves están permitidas — ver §5.2):
+  `try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec <t> -Uri '<url>').StatusCode } catch { if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 'ERR: ' + $_.Exception.Message } }`;
+  `ps` ⇒ el comando del operador tal cual; `none` ⇒ `None`.
+- `parse_smoke_http_stdout(stdout: str) -> int|None` (C9 v2) — devuelve el ÚLTIMO token numérico del
+  stdout o `None`; éxito del smoke http = valor en [200, 399].
+- `build_marker_command(install_path, marker: dict) -> str` (C4 v2) — el comando exacto de §5.2.
+- `derive_effective_status(entry: dict, now_utc, stale_after_s: int = 3600) -> str` **[ADICIÓN
+  ARQUITECTO A1]** — si `entry["status"] == "running"` y `now_utc - started_at > stale_after_s` ⇒
+  `"stale"` (backend reiniciado a mitad de deploy: el lock en memoria murió pero la línea quedó
+  `running`); en cualquier otro caso devuelve `status` tal cual. Se aplica en LECTURA (F5), jamás muta
+  el ledger.
+- `check_disk_headroom(free_bytes: int|None, artifact_bytes: int) -> str|None` **[ADICIÓN ARQUITECTO
+  A2]** — `None` si hay al menos 2× el artefacto libre (o `free_bytes` desconocido); si no, warning
+  legible con ambos números, para el preflight de `/plan` (F5).
 - `prune_versions(existing: list[str], retain: int, current: str) -> list[str]` — ordena
   lexicográficamente (los version_id son ordenables), conserva las `retain` más nuevas y NUNCA
   devuelve `current`.
@@ -396,10 +465,14 @@ registry). **Flag:** las propias. **Runtimes:** ortogonal (idéntico en los 3). 
 **Tests PRIMERO — `backend/tests/test_plan120_planner.py`:** `test_validate_app_casos` (válida, id
 inválido, kind inválido, path relativo), `test_make_version_id_determinista`,
 `test_deploy_plan_orden_y_pasos`, `test_deploy_plan_omite_hooks_y_smoke_none`,
+`test_deploy_plan_housekeeping_solo_prune_y_cleanup` (C2/C3 v2),
 `test_rollback_plan_has_no_transfer`, `test_switch_commands_exactos`,
+`test_switch_commands_primer_deploy` (C1 v2: el primer comando contiene `if exist`),
 `test_switch_commands_rechaza_comillas`, `test_prune_nunca_current`, `test_compute_drift_4_estados`,
 `test_dora_metrics_fixture` (fixture de 6 entries con 1 fallo y recuperación),
-`test_dora_metrics_vacio_sin_division_por_cero`, `test_parse_release_marker_corrupto`.
+`test_dora_metrics_vacio_sin_division_por_cero`, `test_parse_release_marker_corrupto`,
+`test_parse_smoke_http_stdout` (C9 v2), `test_marker_command_exacto_y_valida_comillas` (C4 v2),
+`test_derive_effective_status_stale_y_passthrough` (A1), `test_check_disk_headroom` (A2).
 
 **Criterio binario:** archivo de test verde; `deploy_planner.py` NO importa `requests`, `subprocess` ni
 `flask` (test `test_planner_es_puro` con introspección de imports). **Flag:** ninguna (módulo inerte
@@ -428,6 +501,12 @@ sr_user = f"{domain}\\{username}" if domain else username
 ```
 y en el env del subprocess: `"SR_USER": sr_user` (antes `username`), `"SR_HOST": host` (ya derivado del
 server, no de la credencial). Si `host` queda vacío ⇒ `error_key = "server_not_found"` (sin keys nuevas).
+
+> **Verificado (C12 v2):** `server = get_server(alias)` YA existe en el scope del fix (hoy
+> `remote_exec.py:300`); el cambio NO agrega llamadas, solo corrige el unpack y deriva `host`/`sr_user`.
+> El fake con el orden VIEJO vive en `test_plan105_remote_exec_service.py:119,153,192` (tres
+> `mock.patch("services.server_registry.get_credential", return_value=("user","pass","host"))`):
+> alinearlos al orden real `(username, domain, password)` como parte de esta fase.
 
 **Cambio 2 — `run_deploy_step(alias, command, *, timeout_s, read_only, run_id) -> dict`:** misma
 mecánica y shape de retorno que `run_remote` (`{"ok","error","stdout","stderr","exit_code","duration_ms"}`)
@@ -493,7 +572,10 @@ fakes de `server_registry` que respetan el ORDEN REAL `(username, domain, passwo
 - `append_ledger(entry: dict) -> None` / `update_ledger_entry(run_id, patch: dict) -> None` (el update
   reescribe la línea del run_id: leer todo, mapear, escribir — el archivo es chico y mono-operador) /
   `read_ledger(app_id=None, target=None, limit=100) -> list[dict]` (más recientes primero, tolerante a
-  líneas corruptas — patrón `read_audit`, `remote_exec.py:101-117`).
+  líneas corruptas — patrón `read_audit`, `remote_exec.py:101-117`). **C6 v2:** el MISMO
+  `threading.Lock` de módulo cubre TAMBIÉN `append_ledger`/`update_ledger_entry`/`read_ledger` — dos
+  ÓRDENES concurrentes corren en threads distintos (F4) y sin lock el leer-mapear-reescribir del update
+  pierde líneas.
 - `acquire_run_lock(app_id, target) -> str|None` (devuelve run_id `"dr-<ts>-<hex4>"` o None si ocupado) /
   `release_run_lock(app_id, target) -> None` — set en memoria + Lock (no persiste: un restart libera).
 - `last_success_version(app_id, target) -> str|None` y `retained_versions(app_id, target, n) -> list[str]`
@@ -504,7 +586,8 @@ OJO gotcha de la casa: parchear en el MÓDULO DE ORIGEN consumido por `deploy_st
 `test_crud_apps_roundtrip`, `test_upsert_valida`, `test_apps_json_corrupto_degrada_a_vacio`,
 `test_append_y_read_ledger_orden`, `test_update_ledger_entry_por_run_id`,
 `test_ledger_linea_corrupta_se_salta`, `test_lock_409_semantica` (segundo acquire = None; release
-libera), `test_last_success_y_retained`.
+libera), `test_last_success_y_retained`, `test_update_concurrente_no_pierde_entradas` (C6 v2: 2 threads
+× 25 `update_ledger_entry` sobre run_ids distintos; al final el ledger conserva TODAS las líneas).
 
 **Criterio binario:** archivo verde. **Flag:** ninguna (módulo inerte hasta F5). **Runtimes:** ortogonal.
 **Operador:** ninguno.
@@ -528,13 +611,23 @@ progreso persistido y cero falsos verdes.
   `remote_exec.push_file_winrm(alias, ...)`.
 - `make_transport(target_key) -> LocalTransport|WinRMTransport` — `"__local__"` ⇒ Local.
 - `execute_plan(run_id, app, target_key, plan, transport) -> dict` — SÍNCRONO: recorre pasos, tras cada
-  uno `update_ledger_entry(run_id, ...)` con el paso agregado; primer paso fallido ⇒ corta con
-  `status="failed"` (o `"failed_smoke"` si el paso era `smoke`); todos ok ⇒ `"success"`. El paso
-  `transfer` usa `push_file`; el resto `run`. Smoke http: éxito = stdout contiene un StatusCode 200-399.
-- `start_deploy_async(app, target_keys, plans) -> list[dict]` — por DESTINO: acquire lock (sin lock ⇒
-  se reporta 409 desde la API), append entry `running`, `threading.Thread(daemon=True)` que corre
-  `execute_plan` + `release_run_lock` en `finally`. SECUENCIAL entre destinos de una misma orden (olas:
-  respeta el orden recibido; el operador decide canary primero).
+  uno `update_ledger_entry(run_id, ...)` con el paso agregado; primer paso de ACTIVACIÓN fallido ⇒ corta
+  con `status="failed"` (o `"failed_smoke"` si el paso era `smoke`); pasos con `housekeeping=True`
+  (`prune`, `cleanup`) fallidos se registran `ok:false` SIN cambiar el status (C2 v2, §1); todos los de
+  activación ok ⇒ `"success"`. Despacho POR NOMBRE (C2/C3 v2): `transfer` ⇒
+  `push_file(zip_local, '<install_path>\incoming\<version_id>.zip')`; `prune` ⇒ 3 sub-acciones: (1)
+  `run("Get-ChildItem -LiteralPath '<install_path>\releases' -Name", read_only=True)` (brace-free y
+  verbo `Get-` ⇒ pasa `is_read_only_command`), (2) `prune_versions(lineas_del_stdout, retain, current)`
+  pura, (3) por cada versión a borrar `run('cmd /c rmdir /S /Q "<install_path>\releases\<v>"',
+  read_only=False)`; cualquier otro paso ⇒ `run(command)`. Smoke http: éxito =
+  `parse_smoke_http_stdout(stdout)` en [200, 399] (C9 v2).
+- `start_deploy_async(app, target_keys, plans) -> list[dict]` — semántica EXACTA (C5 v2): (1) adquiere
+  UPFRONT el lock de CADA destino pedido; los ocupados se devuelven como
+  `{"target", "error": "deploy_in_progress"}` y NO se ejecutan; (2) con los destinos lockeados appendea
+  su entry `running` y lanza UN ÚNICO `threading.Thread(daemon=True)` por ORDEN, que itera esos destinos
+  EN el orden recibido (olas: el operador decide canary primero) corriendo `execute_plan` por destino y
+  liberando el lock de cada destino en `finally` al terminar su turno; (3) devuelve la lista por destino
+  (`run_id` o error). Dos ÓRDENES distintas SÍ corren en paralelo (por eso el lock del ledger, C6).
 - `start_rollback_async(app, target_key, to_version) -> dict` — ídem con `build_rollback_plan`.
 
 **Tests PRIMERO — `backend/tests/test_plan120_executor.py`** (con `FakeTransport` que graba llamadas y
@@ -542,7 +635,11 @@ respuestas guionadas; `data_dir` a tmp): `test_zip_desde_folder_y_desde_zip`,
 `test_zip_supera_tope_error_legible`, `test_execute_plan_exito_completo_ledger_success`,
 `test_falla_en_transfer_corta_y_marca_failed`, `test_smoke_falla_marca_failed_smoke`,
 `test_smoke_http_parsea_status`, `test_rollback_no_llama_push_file`, `test_prune_lista_solo_viejas`,
-`test_lock_impide_segundo_deploy_mismo_destino`, `test_local_transport_push_valida_ruta_absoluta`.
+`test_lock_impide_segundo_deploy_mismo_destino`, `test_local_transport_push_valida_ruta_absoluta`,
+`test_orden_multi_destino_un_solo_thread_y_en_orden` (C5 v2: el FakeTransport graba la secuencia),
+`test_lock_parcial_ejecuta_libres_y_reporta_ocupados` (C5 v2),
+`test_prune_despacho_lista_filtra_borra` (C2 v2), `test_housekeeping_falla_no_degrada_success` (C2 v2),
+`test_cleanup_borra_zip_incoming` (C3 v2).
 
 **Criterio binario:** archivo verde SIN tocar red (todo fake/tmp). **Flag:** EXECUTE (heredada del
 transporte F2; LocalTransport la chequea vía executor con test propio). **Runtimes:** ortogonal.
@@ -560,8 +657,14 @@ demás), `backend/api/devops.py` (ya tocado en F0 para health).
 
 **Reglas EXACTAS de gating (tests las fijan):** master OFF ⇒ `abort(404)` en TODOS; `/execute` y
 `/rollback` además: EXECUTE OFF ⇒ 403 `{"error":"deployments_execute_disabled"}`; sin `confirm:true` ⇒
-400; destino `protected` y `confirm_text != app_id` ⇒ 400 `{"error":"confirm_text_required"}`; lock
-ocupado ⇒ 409 `{"error":"deploy_in_progress"}`. `/plan` hace preflight: artefacto (existencia/tamaño),
+400; destino `protected` y `confirm_text != app_id` ⇒ 400 `{"error":"confirm_text_required"}`; 409
+`{"error":"deploy_in_progress"}` SOLO si TODOS los destinos pedidos tienen lock ocupado — mezcla ⇒ 200
+con detalle por destino (C5 v2); `DELETE /apps/<id>` con lock activo en cualquier destino de esa app ⇒
+409 `{"error":"deploy_in_progress"}` (C11 v2). `/overview`, `/runs/<run_id>` y `/history` devuelven
+`effective_status` calculado con `derive_effective_status` (A1; el ledger NO se muta). `/plan` hace
+preflight: artefacto (existencia/tamaño), espacio en disco del destino con `check_disk_headroom` (A2:
+remoto vía `run_deploy_step(read_only=True)` con `Get-PSDrive -Name '<letra de install_path>'`
+— brace-free, verbo `Get-`; local vía `shutil.disk_usage`; warning informativo, jamás bloquea),
 `server_registry.test_connectivity(host, 5985)` y `remote_exec.check_winrm(alias)` para remotos
 (incluye `kind` + `remediation` del 108/116 en la respuesta, la UI los muestra tal cual), y para
 `__local__` solo artefacto + install_path absoluto. `/drift` construye el comando con
@@ -575,8 +678,11 @@ sin validar — riel de la casa).
 `test_apps_crud_endpoints`, `test_plan_dry_run_sin_efectos` (ningún thread, ningún subprocess),
 `test_plan_incluye_remediacion_winrm_cuando_falla_sonda`, `test_execute_403_sin_execute_flag`,
 `test_execute_400_sin_confirm`, `test_execute_protected_exige_confirm_text`,
-`test_execute_409_lock_ocupado`, `test_rollback_usa_version_retenida`,
-`test_runs_y_history_devuelven_ledger`, `test_metrics_shape`, `test_diagnose_404_sin_flag_ai`.
+`test_execute_409_solo_si_todos_lockeados` (C5 v2), `test_delete_app_409_con_run_activo` (C11 v2),
+`test_rollback_usa_version_retenida`,
+`test_runs_y_history_devuelven_ledger`, `test_effective_status_stale_en_overview` (A1),
+`test_plan_incluye_warning_disco` (A2), `test_drift_command_es_read_only` (C4 v2: el comando de `/drift`
+pasa `is_read_only_command`), `test_metrics_shape`, `test_diagnose_404_sin_flag_ai`.
 
 **Criterio binario:** archivo verde + `create_app()` importa sin romper (smoke de import del blueprint;
 si `api/devops_servers.py` u otro módulo ajeno sigue roto en el working tree, usar el patrón
@@ -627,7 +733,9 @@ existentes; CERO hex nuevos — tokens `theme.css` si hace falta algo puntual).
 **`deploymentsModel.ts` (helpers PUROS, cada uno con test):**
 - `buildTargetCards(app, servers, overviewState) -> TargetCard[]` — Local primero, luego alias
   ordenados; cada card `{key, label, kind, version, deployedAgo, status, canRollback, protected}`.
-- `cardStatus(lastEntry, driftResult) -> 'nunca'|'ok'|'failed'|'failed_smoke'|'running'|'drift'|'desconocido'`.
+- `cardStatus(lastEntry, driftResult) -> 'nunca'|'ok'|'failed'|'failed_smoke'|'running'|'stale'|'drift'|'desconocido'`
+  (`stale` = `effective_status` de A1: badge gris "obsoleto" con hint "el backend se reinició durante
+  este deploy; verificá con el botón Drift y relanzá si hace falta").
 - `rollbackChoices(history, retain) -> {version, when}[]` — solo versiones `success` retenidas.
 - `confirmRequirement(targetCfg) -> {kind: 'checkbox'|'text', expected?: string}`.
 - `waveOrder(selectedKeys: string[]) -> string[]` — respeta el orden de selección (olas).
@@ -642,7 +750,7 @@ posicionado en `prev_version_id`. Estado local persistente mínimo: app seleccio
 
 **Tests PRIMERO — `frontend/src/components/devops/deploymentsModel.test.ts`** (vitest TS-PURO sin
 render, patrón de la casa): `buildTargetCards` (local primero, server sin config de app ⇒ card
-"sin asignar"), `cardStatus` (7 estados), `rollbackChoices` (excluye fallidas y la activa),
+"sin asignar"), `cardStatus` (8 estados, incluye `stale` A1), `rollbackChoices` (excluye fallidas y la activa),
 `confirmRequirement` (protected ⇒ text), `waveOrder`, `formatDora`, `buildPendingPresetHandoff`.
 
 **Criterio binario:** `npx vitest run src/components/devops/deploymentsModel.test.ts` verde +
@@ -661,8 +769,16 @@ detectado en 1 click, y desplegar el artefacto que ese pipeline deja en la carpe
 1. CTA "Crear pipeline de deploy" en el empty-state y el header de `DeploymentsSection`: llama
    `GET /api/devops/detect-stack` (plan 97; si `stack_detect_enabled` OFF, el CTA se oculta), guarda
    `localStorage 'stacky.devops.pendingPreset' = JSON {presetId}` con `buildPendingPresetHandoff` y
-   navega a la sub-tab `pipelines` (set del `activeId` vía callback existente del shell o
-   `location.hash` — elegir el mecanismo YA disponible sin tocar `DevOpsPage` fuera del registro).
+   navega a la sub-tab `pipelines` con `ctx.setActiveSection('pipelines')`. **C7 v2 (verificado):** ese
+   mecanismo NO existía en v1 — `activeId` es `useState` interno (`DevOpsPage.tsx:163`) y el ctx no
+   expone callback ni hay routing por hash. Fix EXACTO: agregar el campo OPCIONAL
+   `setActiveSection?: (id: string) => void` a `DevOpsSectionContext` (junto a `selectedServer?`,
+   mismo precedente aditivo del plan 91, `DevOpsPage.tsx:46-48`) y pasarlo al armar el ctx
+   (`setActiveSection: handleSelect`, el handler que ya llama `setActiveId` en `DevOpsPage.tsx:195`) —
+   2 líneas en `DevOpsPage.tsx`, cambio aditivo backward-compatible que se declara HONESTAMENTE: F8
+   toca `DevOpsPage` en el registro + esas 2 líneas. Fallback explícito: si `ctx.setActiveSection` es
+   `undefined` (shell del plan 119 u otro que aún no lo propague), el CTA guarda el pendingPreset
+   igual y muestra el hint "Preset guardado — abrí la sub-tab Pipelines" (degradación sin rotura).
 2. `PipelineBuilderSection.tsx`: al montar, si existe `stacky.devops.pendingPreset`, preseleccionar ese
    preset (la galería del plan 97/104 ya sabe aplicar presets) y LIMPIAR la key (one-shot). Cambio
    acotado a un `useEffect` inicial.
@@ -694,6 +810,8 @@ renderiza (helper puro `showCreatePipelineCta(health) -> boolean` con test). **F
 | R7 | **Drift check contra servidor apagado** | `compute_drift ⇒ "unknown"` con badge gris y detail de la sonda; jamás bloquea la vista (overview no llama red; drift es botón aparte). |
 | R8 | **`harness_defaults.env` drift conocido** (saga 87-116) | Se agregan las líneas y el centinela igual que los planes previos; el drift del deploy vivo es un issue PREEXISTENTE trackeado, no de este plan. |
 | R9 | **WinRM no habilitado aún en PF** | El preflight lo detecta con `check_winrm` y muestra la remediación copy-paste YA escrita (108/116). El destino Local funciona HOY sin WinRM (demo de valor inmediata). |
+| R10 | **Backend reiniciado a mitad de deploy** (entry `running` eterna; lock en memoria perdido) | `derive_effective_status` (A1, C10 v2) la muestra `stale` en frío, sin demonio; el operador puede relanzar (el lock murió con el proceso: no hay deadlock) y el botón Drift dice qué versión quedó realmente activa. |
+| R11 | **Disco lleno en el destino** | Preflight A2: warning si libre < 2× artefacto, ANTES de transferir; informativo, jamás bloquea (HITL). |
 
 ## 8. Fuera de scope (explícito)
 
@@ -714,6 +832,8 @@ renderiza (helper puro `showCreatePipelineCta(health) -> boolean` con test). **F
 - **Marker (`release.json`):** archivo en el destino con la versión activa (fuente del drift check).
 - **Drift:** la versión del marker ≠ la última versión `success` del ledger (alguien tocó a mano).
 - **Ledger:** `deploy_ledger.jsonl`, historia append-only de deploys/rollbacks (fuente de la UI y DORA).
+- **Stale:** entry `running` cuyo backend murió a mitad de deploy; estado DERIVADO en lectura (A1), nunca persistido.
+- **Housekeeping:** pasos post-activación (`prune`, `cleanup`) cuyo fallo se registra sin degradar el `success` (C2 v2).
 - **Ola (wave):** orden de destinos elegido por el operador; canary humano = ola de 1 + promover al resto.
 - **DORA:** frecuencia de deploy, change failure rate, MTTR — calculadas del ledger local.
 - **HITL:** human-in-the-loop; acá = confirm explícito SIEMPRE antes de ejecutar/rollbackear.
@@ -739,6 +859,8 @@ renderiza (helper puro `showCreatePipelineCta(health) -> boolean` con test). **F
       `.venv\Scripts\python.exe -m pytest tests/<archivo> -q` y output pegado en el reporte.
 - [ ] `deploymentsModel.test.ts` verde + `tsc --noEmit` 0 + vitest previos verdes.
 - [ ] El fix §2.3 mergeado con su test contractual y la no-regresión 105/108 verde.
+- [ ] Primer deploy end-to-end sobre un `install_path` VIRGEN queda `success` (C1 v2: `if exist` en el
+      switch; cubierto por `test_switch_commands_primer_deploy` + `test_execute_plan_exito_completo_ledger_success`).
 - [ ] Deploy y rollback SOLO ejecutan con `confirm:true` (+ `confirm_text` si protected) y con
       `STACKY_DEPLOYMENTS_EXECUTE_ENABLED` ON — verificado por tests de gating.
 - [ ] Ningún secreto en ledger/auditoría/logs (asserts defensivos verdes).

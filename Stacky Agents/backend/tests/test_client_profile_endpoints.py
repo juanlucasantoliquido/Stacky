@@ -407,6 +407,26 @@ def test_put_rejects_invalid_process_kind(client):
     assert body["value"] == "wololo"
 
 
+def test_put_migrates_legacy_spanish_kinds(client):
+    """Perfiles pre-plan-45 con kinds en español (plan 42) se migran en el PUT
+    en vez de romper el guardado (bug: catálogo legacy bloqueaba guardar presets)."""
+    profile = {
+        "schema_version": 1,
+        "process_catalog": [
+            {"name": "Mul2Bane", "kind": "carga", "purpose": "Punto de entrada de la carga"},
+            {"name": "RSCore", "kind": "calculo", "purpose": "Aplica reglas"},
+            {"name": "RsCierre", "kind": "cierre", "purpose": "Cierra el lote"},
+            {"name": "RsExtrae", "kind": "reporte", "purpose": "Genera salida"},
+            {"name": "Misc", "kind": "otro", "purpose": "Varios"},
+        ],
+    }
+    r = client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
+    assert r.status_code == 200, r.get_json()
+    saved = r.get_json()["profile"]["process_catalog"]
+    kinds = [item["kind"] for item in saved]
+    assert kinds == ["entry", "processing", "processing", "output", ""]
+
+
 def test_put_tolerates_empty_kind_during_edit(client):
     """Una fila recién agregada (kind vacío) no debe bloquear el guardado."""
     profile = {
@@ -421,6 +441,91 @@ def test_put_rejects_non_list_catalog(client):
     profile = {"schema_version": 1, "process_catalog": "nope"}
     r = client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
     assert r.status_code == 400
+
+
+# ── GET /api/projects/<name>/process-catalog/autodetect ──────────────────────
+
+def _configure_docs_root(tmp_path: Path) -> Path:
+    """Arma un árbol de docs con headings de proceso y apunta RSPACIFICO ahí."""
+    docs_root = tmp_path / "docs"
+    tech = docs_root / "tecnica"
+    tech.mkdir(parents=True, exist_ok=True)
+    (tech / "INDEX_MASTER.md").write_text(
+        "# Índice\n\n"
+        "## El proceso Mul2Bane de carga\n\n"
+        "detalle...\n\n"
+        "## El proceso RsExtrae de salida\n",
+        encoding="utf-8",
+    )
+    cfg_file = tmp_path / "projects" / "RSPACIFICO" / "config.json"
+    cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
+    cfg["docs_root"] = str(docs_root)
+    cfg_file.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    return docs_root
+
+
+def test_autodetect_returns_docs_candidates(client, tmp_path):
+    _configure_docs_root(tmp_path)
+    r = client.get("/api/projects/RSPACIFICO/process-catalog/autodetect")
+    assert r.status_code == 200, r.get_json()
+    body = r.get_json()
+    assert body["ok"] is True
+    names = [c["name"] for c in body["candidates"]]
+    assert "El proceso Mul2Bane de carga" in names
+    assert "El proceso RsExtrae de salida" in names
+    by_name = {c["name"]: c for c in body["candidates"]}
+    # Heurística de kind por keywords: "carga" → entry, "salida" → output.
+    assert by_name["El proceso Mul2Bane de carga"]["kind"] == "entry"
+    assert by_name["El proceso RsExtrae de salida"]["kind"] == "output"
+    assert by_name["El proceso Mul2Bane de carga"]["source"] == "docs"
+    assert body["counts"]["docs"] == 2
+
+
+def test_autodetect_excludes_already_cataloged(client, tmp_path):
+    _configure_docs_root(tmp_path)
+    # Catálogo ya contiene uno de los procesos detectables (case-insensitive).
+    profile = {
+        "schema_version": 1,
+        "process_catalog": [{"name": "el proceso mul2bane de carga", "kind": "entry", "purpose": "p"}],
+    }
+    r = client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
+    assert r.status_code == 200, r.get_json()
+    r = client.get("/api/projects/RSPACIFICO/process-catalog/autodetect")
+    assert r.status_code == 200
+    names = [c["name"] for c in r.get_json()["candidates"]]
+    assert "El proceso Mul2Bane de carga" not in names
+    assert "El proceso RsExtrae de salida" in names
+
+
+def test_autodetect_without_sources_returns_empty_ok(client):
+    """Sin docs_root ni épicas: 200 con candidates=[] (nunca rompe)."""
+    r = client.get("/api/projects/RSPACIFICO/process-catalog/autodetect")
+    assert r.status_code == 200, r.get_json()
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["candidates"] == []
+
+
+def test_autodetect_project_not_found(client):
+    r = client.get("/api/projects/NOEXISTE/process-catalog/autodetect")
+    assert r.status_code == 404
+
+
+def test_autodetect_candidates_are_saveable(client, tmp_path):
+    """Los candidatos detectados deben pasar la validación del PUT tal cual
+    (kind ∈ allowlist o vacío) — cierre del loop detectar → guardar."""
+    _configure_docs_root(tmp_path)
+    r = client.get("/api/projects/RSPACIFICO/process-catalog/autodetect")
+    candidates = r.get_json()["candidates"]
+    assert candidates
+    profile = {
+        "schema_version": 1,
+        "process_catalog": [
+            {"name": c["name"], "kind": c["kind"], "purpose": c["purpose"]} for c in candidates
+        ],
+    }
+    r = client.put("/api/projects/RSPACIFICO/client-profile", json={"profile": profile})
+    assert r.status_code == 200, r.get_json()
 
 
 # ── Plan 45 F3 — flag issue_from_brief_enabled expuesto al frontend ───────────

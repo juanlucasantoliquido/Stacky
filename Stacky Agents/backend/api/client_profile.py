@@ -56,6 +56,24 @@ bp = Blueprint("client_profile", __name__, url_prefix="")
 # Plan 45 F5 (C5) — tipos válidos para cada entrada del catálogo de procesos.
 ALLOWED_PROCESS_KINDS = {"entry", "processing", "output"}
 
+# Kinds legacy (plan 42, en español) — perfiles guardados antes del cambio de
+# allowlist (plan 45) traen estos valores y rompían CUALQUIER PUT posterior del
+# perfil (el guardado de presets re-envía el perfil entero vía GET→merge→PUT).
+# En vez de rechazar, se migran automáticamente al esquema vigente y se
+# persisten normalizados. "otro" se mapea a vacío (tolerado como borrador; la
+# materialización cae a la plantilla "default").
+LEGACY_KIND_MAP = {
+    "carga": "entry",
+    "calculo": "processing",
+    "cálculo": "processing",
+    "cierre": "processing",
+    "reporte": "output",
+    "otro": "",
+    # project_autoprofile (plan 42) emite kind="batch" — no es un kind válido
+    # (batch es publish_group); se tolera como borrador sin tipo.
+    "batch": "",
+}
+
 # Plan 88 F2 — grupos de publicación válidos (ortogonal a ALLOWED_PROCESS_KINDS).
 ALLOWED_PUBLISH_GROUPS = {"batch", "agenda"}
 
@@ -148,6 +166,12 @@ def put_client_profile(project_name: str):
             if not isinstance(item, dict):
                 return jsonify({"ok": False, "error": f"process_catalog[{idx}] debe ser un objeto."}), 400
             kind = item.get("kind")
+            # Migración automática de kinds legacy en español (ver LEGACY_KIND_MAP).
+            if isinstance(kind, str):
+                mapped = LEGACY_KIND_MAP.get(kind.strip().lower())
+                if mapped is not None:
+                    kind = mapped
+                    item["kind"] = mapped  # se persiste ya migrado
             # kind vacío/ausente se tolera (borrador en edición); si viene, debe ser válido.
             if kind and kind not in ALLOWED_PROCESS_KINDS:
                 return jsonify({
@@ -164,87 +188,15 @@ def put_client_profile(project_name: str):
                                 "value": pg, "allowed": sorted(ALLOWED_PUBLISH_GROUPS),
                                 "index": idx}), 400
 
-    # Plan 87 F2 — validar devops_pipeline_drafts (aditivo; ausente = no-op).
-    drafts = profile.get("devops_pipeline_drafts")
-    if drafts is not None:
-        if not isinstance(drafts, list):
-            return jsonify({"ok": False, "error": "devops_pipeline_drafts debe ser una lista."}), 400
-        if len(drafts) > 50:
-            return jsonify({"ok": False, "error": "devops_pipeline_drafts: maximo 50 borradores."}), 400
-        seen_names = set()
-        for idx, d in enumerate(drafts):
-            if not isinstance(d, dict) or not isinstance(d.get("name"), str) or not d.get("name").strip():
-                return jsonify({"ok": False, "error": f"devops_pipeline_drafts[{idx}].name es obligatorio (string no vacio)."}), 400
-            name = d["name"].strip()
-            if len(name) > 120:
-                return jsonify({"ok": False, "error": f"devops_pipeline_drafts[{idx}].name supera 120 caracteres."}), 400
-            if name in seen_names:
-                return jsonify({"ok": False, "error": f"devops_pipeline_drafts[{idx}].name duplicado: '{name}'."}), 400
-            seen_names.add(name)
-            if not isinstance(d.get("spec"), dict):
-                return jsonify({"ok": False, "error": f"devops_pipeline_drafts[{idx}].spec debe ser un objeto."}), 400
-
-    # Plan 88 F2 — presets de publicación (aditivo; ausente = no-op).
-    presets = profile.get("devops_publication_presets")
-    if presets is not None:
-        if not isinstance(presets, list):
-            return jsonify({"ok": False, "error": "devops_publication_presets debe ser una lista."}), 400
-        if len(presets) > 50:
-            return jsonify({"ok": False, "error": "devops_publication_presets: maximo 50 presets."}), 400
-        seen_names = set()
-        for idx, p in enumerate(presets):
-            if not isinstance(p, dict) or not isinstance(p.get("name"), str) or not p.get("name").strip():
-                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].name es obligatorio."}), 400
-            name = p["name"].strip()
-            if len(name) > 120:
-                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].name supera 120 caracteres."}), 400
-            if name in seen_names:
-                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].name duplicado: '{name}'."}), 400
-            seen_names.add(name)
-            if p.get("mode") not in ("selection", "todo"):
-                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].mode debe ser 'selection' o 'todo'."}), 400
-            if p.get("mode") == "selection" and not isinstance(p.get("process_names"), list):
-                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].process_names debe ser una lista en mode=selection."}), 400
-            groups = p.get("groups", [])
-            if not isinstance(groups, list) or any(g not in ALLOWED_PUBLISH_GROUPS for g in groups):
-                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].groups: subset de {sorted(ALLOWED_PUBLISH_GROUPS)}."}), 400
-            if p.get("target") not in (None, "ado", "gitlab"):
-                return jsonify({"ok": False, "error": f"devops_publication_presets[{idx}].target debe ser 'ado' o 'gitlab'."}), 400
-    # Plan 88 F2 — settings de publicación (aditivo; ausente = no-op).
-    pub_settings = profile.get("devops_publication_settings")
-    if pub_settings is not None:
-        if not isinstance(pub_settings, dict):
-            return jsonify({"ok": False, "error": "devops_publication_settings debe ser un objeto."}), 400
-        tpls = pub_settings.get("step_templates")
-        if tpls is not None:
-            if not isinstance(tpls, dict) or any(
-                k not in ("entry", "processing", "output", "default") or not isinstance(v, str)
-                for k, v in tpls.items()
-            ):
-                return jsonify({"ok": False, "error": "step_templates: keys en {entry,processing,output,default} y valores string."}), 400
-
-    # Plan 89 F3 — settings de ambiente (aditivo).
-    env_settings = profile.get("devops_environment_settings")
-    if env_settings is not None:
-        if not isinstance(env_settings, dict):
-            return jsonify({"ok": False, "error": "devops_environment_settings debe ser un objeto."}), 400
-        root = env_settings.get("environment_root")
-        if root is not None:
-            from services.environment_init import validate_root
-            err = validate_root(root)
-            if err:
-                return jsonify({"ok": False, "error": f"environment_root: {err}"}), 400
-        layout = env_settings.get("folder_layout")
-        if layout is not None:
-            from services.environment_init import is_safe_segment  # público (C12)
-            if not isinstance(layout, dict) or any(k not in ("entry", "processing", "output", "default") for k in layout):
-                return jsonify({"ok": False, "error": "folder_layout: keys en {entry,processing,output,default}."}), 400
-            for k, segs in layout.items():
-                if not isinstance(segs, list) or any(not isinstance(s, str) or not is_safe_segment(s) for s in segs):
-                    return jsonify({"ok": False, "error": f"folder_layout.{k}: lista de rutas relativas seguras (sin '..', sin caracteres invalidos de Windows, sin nombres reservados, no absolutas)."}), 400
-        pps = env_settings.get("per_process_subfolder")
-        if pps is not None and not isinstance(pps, bool):
-            return jsonify({"ok": False, "error": "per_process_subfolder debe ser booleano."}), 400
+    # Plan 98 F1 — validadores devops (drafts/presets/settings/environment)
+    # EXTRAIDOS a services/client_profile_keys.py para que el PATCH (F2) valide
+    # exactamente igual sin duplicar codigo. Mismo orden que antes del refactor.
+    from services.client_profile_keys import validate_profile_key
+    for _key in ("devops_pipeline_drafts", "devops_publication_presets",
+                 "devops_publication_settings", "devops_environment_settings"):
+        _err = validate_profile_key(_key, profile.get(_key))
+        if _err:
+            return jsonify({"ok": False, "error": _err}), 400
 
     previous = load_client_profile(project_name)
 
@@ -290,6 +242,161 @@ def put_client_profile(project_name: str):
         "warnings": validation.warnings,
         "state_warnings": state_warnings,
     })
+
+
+# ── PATCH /api/projects/<name>/client-profile/keys/<key> (Plan 98) ───────────
+# Lock de proceso: serializa load→merge→save de PATCHes concurrentes (mono-operador,
+# un solo proceso Flask — suficiente; NO hay lock hoy en services/client_profile.py,
+# verificado por grep de threading/Lock = 0 matches).
+import threading
+_PROFILE_WRITE_LOCK = threading.Lock()
+
+
+@bp.patch("/projects/<string:project_name>/client-profile/keys/<string:key>")
+def patch_client_profile_key(project_name: str, key: str):
+    import config as _config
+    if not getattr(_config.config, "STACKY_DEVOPS_BOOTSTRAP_ENABLED", False):
+        from flask import abort
+        abort(404)  # guard per-request, patrón api/devops.py:47-48
+
+    cfg = get_project_config(project_name)
+    if not cfg:
+        return jsonify({"ok": False, "error": f"Proyecto '{project_name}' no encontrado"}), 404
+
+    from services.client_profile_keys import PATCHABLE_PROFILE_KEYS, validate_profile_key
+    if key not in PATCHABLE_PROFILE_KEYS:
+        return jsonify({"ok": False, "error": "key_not_patchable",
+                        "allowed": sorted(PATCHABLE_PROFILE_KEYS)}), 400
+
+    data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict) or "value" not in data:
+        return jsonify({"ok": False, "error": "Body debe traer 'value'."}), 400
+    value = data["value"]
+
+    err = validate_profile_key(key, value)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    with _PROFILE_WRITE_LOCK:
+        base = load_client_profile(project_name) or {}
+        if value is None:
+            base.pop(key, None)          # PATCH value=null ⇒ borrar la key
+        else:
+            base[key] = value
+        try:
+            normalized = save_client_profile(project_name, base)
+        except ClientProfileError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Error en PATCH de client_profile.%s de %s", key, project_name)
+            return jsonify({"ok": False, "error": str(exc)}), 500
+
+    record_event(
+        action="client_profile_key_patch",
+        project=project_name,
+        result="applied",
+        actor=_actor(),
+        schema_version=int(normalized.get("schema_version") or 1),
+        detail={"key": key},
+    )
+    return jsonify({"ok": True, "key": key, "value": normalized.get(key)})
+
+
+# ── GET /api/projects/<name>/process-catalog/autodetect ──────────────────────
+# Detección automática del catálogo de procesos (read-only, disparada por el
+# operador desde la UI). Nunca escribe: el frontend persiste vía el riel
+# GET→merge→PUT (human-in-the-loop). Reusa el gate de sugerencias (default ON).
+
+_KIND_ENTRY_HINTS = ("carga", "entrada", "input", "import", "recepci", "ingesta")
+_KIND_OUTPUT_HINTS = ("salida", "output", "extrae", "reporte", "export")
+
+
+def _infer_kind(text: str) -> str:
+    """Heurística determinista por keywords; si no hay señal, borrador sin tipo."""
+    lower = (text or "").lower()
+    if any(h in lower for h in _KIND_ENTRY_HINTS):
+        return "entry"
+    if any(h in lower for h in _KIND_OUTPUT_HINTS):
+        return "output"
+    return ""
+
+
+@bp.get("/projects/<string:project_name>/process-catalog/autodetect")
+def autodetect_process_catalog(project_name: str):
+    """Agrega candidatos de proceso desde dos fuentes deterministas (best-effort):
+
+      1. docs — headings reales de los docs del proyecto
+         (services.project_autoprofile, nunca inventa nombres).
+      2. executions — procesos citados en épicas publicadas
+         (grounding_observatory, nunca inventa nombres).
+
+    Excluye nombres ya presentes en el catálogo guardado. Una fuente caída no
+    anula la otra.
+    """
+    import config as _config
+    if not getattr(_config.config, "STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED", True):
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    cfg = get_project_config(project_name)
+    if not cfg:
+        return jsonify({"ok": False, "error": f"Proyecto '{project_name}' no encontrado"}), 404
+
+    existing_catalog = (load_client_profile(project_name) or {}).get("process_catalog") or []
+    seen: set[str] = {
+        (e.get("name") or "").strip().lower()
+        for e in existing_catalog
+        if isinstance(e, dict) and (e.get("name") or "").strip()
+    }
+
+    candidates: list[dict] = []
+    counts = {"docs": 0, "executions": 0}
+
+    # Fuente 1 — headings de docs (requiere docs_root configurado en el proyecto).
+    try:
+        docs_root_str = (cfg.get("docs_root") or "").strip()
+        if docs_root_str:
+            docs_root = Path(docs_root_str)
+            if docs_root.is_dir():
+                from services.project_autoprofile import draft_profile_from_docs
+                for item in (draft_profile_from_docs(docs_root).get("process_catalog") or []):
+                    name = (item.get("name") or "").strip()
+                    key = name.lower()
+                    if not name or key in seen:
+                        continue
+                    seen.add(key)
+                    candidates.append({
+                        "name": name,
+                        "purpose": item.get("purpose") or "",
+                        "kind": _infer_kind(name),
+                        "source": "docs",
+                    })
+                    counts["docs"] += 1
+    except Exception:  # noqa: BLE001 — best-effort
+        logger.exception("autodetect: fuente docs falló para %s", project_name)
+
+    # Fuente 2 — procesos citados en épicas publicadas.
+    try:
+        from api.agents import _collect_epic_summaries
+        from services.grounding_observatory import suggest_process_catalog_entries
+        summaries, _ = _collect_epic_summaries(project_name)
+        for item in suggest_process_catalog_entries(summaries, existing_catalog):
+            name = (item.get("name") or "").strip()
+            key = name.lower()
+            if not name or key in seen:
+                continue
+            seen.add(key)
+            candidates.append({
+                "name": name,
+                "purpose": f"Citado en {item.get('occurrences', 1)} épica(s) publicada(s)",
+                "kind": _infer_kind(name),
+                "source": "executions",
+            })
+            counts["executions"] += 1
+    except Exception:  # noqa: BLE001 — best-effort
+        logger.exception("autodetect: fuente ejecuciones falló para %s", project_name)
+
+    return jsonify({"ok": True, "project": project_name,
+                    "candidates": candidates, "counts": counts})
 
 
 # ── DELETE /api/projects/<name>/client-profile ───────────────────────────────

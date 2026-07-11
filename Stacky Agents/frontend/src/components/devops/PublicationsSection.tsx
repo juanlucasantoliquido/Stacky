@@ -19,6 +19,8 @@ import {
   resolvePreview,
   presetsEqual,
   draftNameForPreset,
+  applyAutodetectedCatalog,
+  type AutodetectCandidate,
   type PublicationPreset,
   type PublishGroup,
 } from '../../devops/presetsModel';
@@ -47,6 +49,7 @@ interface CatalogEntry {
   name?: string;
   kind?: string;
   publish_group?: string;
+  [key: string]: unknown;
 }
 
 interface MaterializeResult {
@@ -73,6 +76,9 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
   const [showCommitModal, setShowCommitModal] = useState(false);
   // Plan 95 F4 — branch del último commit exitoso (trigger + ProductionFlow)
   const [lastCommitBranch, setLastCommitBranch] = useState('');
+  // Autodetección del catálogo (1 click = catálogo + preset TODO)
+  const [detecting, setDetecting] = useState(false);
+  const [detectHint, setDetectHint] = useState<string | null>(null);
 
   useEffect(() => {
     void loadProfile();
@@ -126,6 +132,55 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error desconocido';
       setActionError(`No se pudieron guardar las plantillas: ${msg}`);
+    }
+  };
+
+  const handleAutoDetect = async () => {
+    if (!activeProject) return;
+    try {
+      setActionError(null);
+      setDetectHint(null);
+      setDetecting(true);
+      const res = await api.get<{ candidates?: AutodetectCandidate[] }>(
+        `/api/projects/${activeProject}/process-catalog/autodetect`,
+      );
+      const candidates = res.candidates ?? [];
+      if (candidates.length === 0) {
+        setActionError(
+          'La detección automática no encontró procesos (ni en docs del proyecto ni en épicas publicadas). Cargá el catálogo en Configuración → Perfil del cliente.',
+        );
+        return;
+      }
+      // Riel C2 GET → merge → PUT: agrega detectados y asegura el preset TODO.
+      const json = await api.get<{ profile?: Record<string, unknown> }>(`/api/projects/${activeProject}/client-profile`);
+      const base = json.profile ?? {};
+      const baseCatalog = (base.process_catalog as CatalogEntry[]) ?? [];
+      const basePresets = (base.devops_publication_presets as PublicationPreset[]) ?? [];
+      const { nextCatalog, nextPresets, added, createdTodoPreset } = applyAutodetectedCatalog(
+        baseCatalog,
+        basePresets,
+        candidates,
+      );
+      const merged = mergeKeysIntoProfile(base, {
+        process_catalog: nextCatalog,
+        devops_publication_presets: nextPresets,
+      });
+      await api.put(`/api/projects/${activeProject}/client-profile`, { profile: merged });
+      setCatalog(nextCatalog);
+      setPresets(nextPresets);
+      setLoadedPresets(nextPresets);
+      if (createdTodoPreset) {
+        setSelectedName('todo-completo');
+        setEditing(nextPresets[0]);
+      }
+      setDetectHint(
+        `Se detectaron ${added} proceso(s) y se guardaron en el catálogo${createdTodoPreset ? " junto con el preset 'todo-completo'" : ''}.`,
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error desconocido';
+      setActionError(`No se pudo detectar automáticamente: ${msg}`);
+    } finally {
+      setDetecting(false);
     }
   };
 
@@ -228,8 +283,22 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
         {catalogEmpty && (
           <div className={styles.alertWarning} style={{ marginBottom: '12px' }}>
-            El catálogo de procesos está vacío — cargalo en Configuración → Perfil del cliente (sección Catálogo de procesos).
+            <p style={{ marginBottom: '8px' }}>
+              El catálogo de procesos está vacío — detectalo automáticamente (docs del proyecto + épicas publicadas) o cargalo en Configuración → Perfil del cliente.
+            </p>
+            <button
+              onClick={() => void handleAutoDetect()}
+              disabled={detecting}
+              className={styles.btnPrimary}
+              style={{ padding: '8px 16px' }}
+            >
+              {detecting ? 'Detectando…' : 'Detectar procesos automáticamente'}
+            </button>
           </div>
+        )}
+
+        {detectHint && (
+          <div className={styles.textSuccess} style={{ marginBottom: '8px', fontSize: '0.9em' }}>{detectHint}</div>
         )}
 
         {hasUnsaved && (

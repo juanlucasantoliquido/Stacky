@@ -9,6 +9,7 @@
  */
 import React, { useState } from 'react';
 import { HarnessFlags } from '../../api/endpoints';
+import styles from './devops.module.css';
 
 export interface FlagGateBannerProps {
   flagKey: string;
@@ -49,37 +50,22 @@ export const FlagGateBanner: React.FC<FlagGateBannerProps> = ({
   };
 
   return (
-    <div
-      style={{
-        padding: '12px 16px',
-        backgroundColor: '#fff3cd',
-        border: '1px solid #ffc107',
-        borderRadius: '4px',
-        marginBottom: '16px',
-      }}
-    >
-      <div style={{ marginBottom: '8px', color: '#856404' }}>
+    <div className={styles.alertWarning} style={{ marginBottom: '16px' }}>
+      <div style={{ marginBottom: '8px' }}>
         <strong>{flagLabel}</strong>: {message}
       </div>
       <div>
         <button
           onClick={handleActivate}
           disabled={activating}
-          style={{
-            padding: '6px 12px',
-            backgroundColor: '#28a745',
-            color: 'white',
-            border: 'none',
-            borderRadius: '3px',
-            cursor: activating ? 'not-allowed' : 'pointer',
-            opacity: activating ? 0.6 : 1,
-          }}
+          className={styles.btnSuccess}
+          style={{ padding: '6px 12px', opacity: activating ? 0.6 : 1 }}
         >
           {activating ? 'Activando...' : 'Activar ahora'}
         </button>
       </div>
       {error && (
-        <div style={{ marginTop: '8px', color: '#721c24', fontSize: '0.9em' }}>
+        <div className={styles.textDanger} style={{ marginTop: '8px', fontSize: '0.9em' }}>
           {error}
         </div>
       )}

@@ -7,6 +7,7 @@ import { PipelineGenerator } from '../../api/endpoints';
 import { FlagGateBanner } from './FlagGateBanner';
 import { toSpecDict, type PipelineSpecDraft } from '../../devops/specBuilder';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
+import styles from './devops.module.css';
 
 export interface PipelineYamlPreviewProps {
   spec: PipelineSpecDraft;
@@ -64,7 +65,7 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
   }
 
   return (
-    <div style={{ padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+    <div className={styles.panelMuted}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <h3 style={{ margin: 0 }}>Preview YAML</h3>
         <button
@@ -79,11 +80,11 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
 
       {/* C12 - errores locales visibles */}
       {localErrors.length > 0 && (
-        <div style={{ marginBottom: '12px', padding: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '3px' }}>
+        <div className={styles.alertWarning} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px' }}>
           <strong>Antes del preview:</strong>
           <ul style={{ margin: '4px 0 0 20px', padding: 0 }}>
             {localErrors.map((err, i) => (
-              <li key={i} style={{ fontSize: '13px', color: '#856404' }}>{err}</li>
+              <li key={i} style={{ fontSize: '13px' }}>{err}</li>
             ))}
           </ul>
         </div>
@@ -91,11 +92,11 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
 
       {/* Errores del backend */}
       {previewErrors.length > 0 && (
-        <div style={{ marginBottom: '12px', padding: '8px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '3px' }}>
+        <div className={styles.alertError} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px' }}>
           <strong>Errores de validación:</strong>
           <ul style={{ margin: '4px 0 0 20px', padding: 0 }}>
             {previewErrors.map((err, i) => (
-              <li key={i} style={{ fontSize: '13px', color: '#721c24' }}>
+              <li key={i} style={{ fontSize: '13px' }}>
                 {err.field ? `${err.field}: ` : ''}{err.message}
               </li>
             ))}
@@ -108,35 +109,13 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
         <div style={{ display: 'flex', gap: '16px' }}>
           <div style={{ flex: 1 }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>Azure DevOps</h4>
-            <pre
-              style={{
-                backgroundColor: 'white',
-                border: '1px solid #dee2e6',
-                borderRadius: '3px',
-                padding: '8px',
-                fontSize: '11px',
-                maxHeight: '400px',
-                overflow: 'auto',
-                margin: 0,
-              }}
-            >
+            <pre className={styles.yamlPre}>
               {preview.ado}
             </pre>
           </div>
           <div style={{ flex: 1 }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>GitLab CI</h4>
-            <pre
-              style={{
-                backgroundColor: 'white',
-                border: '1px solid #dee2e6',
-                borderRadius: '3px',
-                padding: '8px',
-                fontSize: '11px',
-                maxHeight: '400px',
-                overflow: 'auto',
-                margin: 0,
-              }}
-            >
+            <pre className={styles.yamlPre}>
               {preview.gitlab}
             </pre>
           </div>

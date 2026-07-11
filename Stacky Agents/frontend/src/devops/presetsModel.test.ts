@@ -13,6 +13,7 @@ import {
   resolvePreview,
   presetsEqual,
   draftNameForPreset,
+  applyAutodetectedCatalog,
   type PublicationPreset,
 } from "./presetsModel";
 
@@ -93,5 +94,44 @@ describe("presetsModel", () => {
     const longName = "x".repeat(120);
     const result = draftNameForPreset([], longName);
     expect(result.length).toBeLessThanOrEqual(120);
+  });
+
+  it("autodetect_merges_and_creates_todo_preset", () => {
+    const { nextCatalog, nextPresets, added, createdTodoPreset } = applyAutodetectedCatalog(
+      [],
+      [],
+      [
+        { name: "Mul2Bane", kind: "entry", purpose: "carga", source: "docs" },
+        { name: "RsExtrae", kind: "output", purpose: "salida", source: "executions" },
+      ],
+    );
+    expect(added).toBe(2);
+    expect(nextCatalog.map((e) => e.name)).toEqual(["Mul2Bane", "RsExtrae"]);
+    expect(createdTodoPreset).toBe(true);
+    expect(nextPresets).toEqual([{ name: "todo-completo", mode: "todo", groups: [], target: "gitlab" }]);
+  });
+
+  it("autodetect_skips_known_names_case_insensitive_and_keeps_presets", () => {
+    const baseCatalog = [{ name: "mul2bane", kind: "entry", purpose: "p" }];
+    const basePresets: PublicationPreset[] = [{ name: "mio", mode: "selection", groups: [], process_names: [] }];
+    const { nextCatalog, nextPresets, added, createdTodoPreset } = applyAutodetectedCatalog(
+      baseCatalog,
+      basePresets,
+      [
+        { name: "Mul2Bane" }, // ya existe (case-insensitive) → no duplica
+        { name: "  " },       // vacío → se descarta
+        { name: "Nuevo" },
+      ],
+    );
+    expect(added).toBe(1);
+    expect(nextCatalog.map((e) => e.name)).toEqual(["mul2bane", "Nuevo"]);
+    expect(createdTodoPreset).toBe(false);
+    expect(nextPresets).toBe(basePresets); // presets existentes intactos
+    expect(baseCatalog.length).toBe(1);    // input no mutado
+  });
+
+  it("autodetect_defaults_missing_kind_purpose_to_empty", () => {
+    const { nextCatalog } = applyAutodetectedCatalog([], [], [{ name: "X" }]);
+    expect(nextCatalog).toEqual([{ name: "X", kind: "", purpose: "" }]);
   });
 });

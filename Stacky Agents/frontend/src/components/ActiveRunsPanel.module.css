@@ -1,7 +1,5 @@
 .panel {
   position: fixed;
-  top: 12px;
-  right: 12px;
   z-index: 1000;
   width: 320px;
   max-width: calc(100vw - 24px);
@@ -11,6 +9,27 @@
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
   overflow: hidden;
   font-size: 12px;
+}
+
+/* Esquinas donde puede vivir el panel (y el badge colapsado). */
+.posTopRight {
+  top: 12px;
+  right: 12px;
+}
+
+.posTopLeft {
+  top: 12px;
+  left: 12px;
+}
+
+.posBottomRight {
+  bottom: 12px;
+  right: 12px;
+}
+
+.posBottomLeft {
+  bottom: 12px;
+  left: 12px;
 }
 
 .head {
@@ -23,6 +42,56 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.headActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  border-color: var(--border);
+  color: var(--accent);
+}
+
+/* Indicador mínimo cuando el panel está colapsado — sigue siendo clickeable
+   y muestra el conteo de runs activos en tiempo real. */
+.miniBadge {
+  position: fixed;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.miniBadge:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .count {

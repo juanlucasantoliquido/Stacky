@@ -126,6 +126,49 @@ export function resolvePreview(
   };
 }
 
+export interface AutodetectCandidate {
+  name: string;
+  purpose?: string;
+  kind?: string;
+  source?: string;
+}
+
+/**
+ * applyAutodetectedCatalog — lógica pura del botón "Detectar procesos
+ * automáticamente" (1 click = catálogo + preset TODO listos).
+ *
+ * - Agrega al catálogo los candidatos cuyo nombre no exista todavía
+ *   (case-insensitive), preservando las entradas existentes.
+ * - Si el proyecto no tiene ningún preset, crea el preset 'todo-completo'
+ *   (mode "todo", sin filtro de grupos → resuelve TODO el catálogo).
+ * - No muta los inputs; el caller persiste vía mergeKeysIntoProfile (riel C2).
+ */
+export function applyAutodetectedCatalog(
+  baseCatalog: CatalogEntry[],
+  basePresets: PublicationPreset[],
+  candidates: AutodetectCandidate[],
+): { nextCatalog: CatalogEntry[]; nextPresets: PublicationPreset[]; added: number; createdTodoPreset: boolean } {
+  const known = new Set(
+    baseCatalog
+      .map((e) => (typeof e.name === "string" ? e.name.trim().toLowerCase() : ""))
+      .filter((n) => n),
+  );
+  const additions: CatalogEntry[] = [];
+  for (const c of candidates) {
+    const name = (c.name ?? "").trim();
+    const key = name.toLowerCase();
+    if (!name || known.has(key)) continue;
+    known.add(key);
+    additions.push({ name, kind: c.kind ?? "", purpose: c.purpose ?? "" });
+  }
+  const nextCatalog = [...baseCatalog, ...additions];
+  const createdTodoPreset = basePresets.length === 0;
+  const nextPresets = createdTodoPreset
+    ? [{ name: "todo-completo", mode: "todo" as const, groups: [], target: "gitlab" as const }]
+    : basePresets;
+  return { nextCatalog, nextPresets, added: additions.length, createdTodoPreset };
+}
+
 /**
  * presetsEqual (C20) — igualdad profunda vía JSON.stringify. Alimenta el
  * badge "sin guardar".

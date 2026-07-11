@@ -5,6 +5,7 @@
 import React from 'react';
 import type { PipelineSpecDraft } from '../../devops/specBuilder';
 import { updateStage, updateJob, updateStep } from '../../devops/specBuilder';
+import styles from './devops.module.css';
 
 export interface BlockPropertiesProps {
   spec: PipelineSpecDraft;
@@ -35,7 +36,7 @@ export const BlockProperties: React.FC<BlockPropertiesProps> = ({ spec, setSpec,
   if (!selected) {
     // Propiedades del pipeline
     return (
-      <div style={{ padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+      <div className={styles.panelMuted}>
         <h3 style={{ marginTop: 0 }}>Propiedades del Pipeline</h3>
         <div style={{ marginBottom: '12px' }}>
           <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Variables (una por línea: key=value)</label>
@@ -92,7 +93,7 @@ export const BlockProperties: React.FC<BlockPropertiesProps> = ({ spec, setSpec,
     const sti = selected.sti;
     const step = spec.stages[si].jobs[ji].steps[sti];
     return (
-      <div style={{ padding: '16px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+      <div className={styles.alertWarning} style={{ padding: '16px' }}>
         <h3 style={{ marginTop: 0 }}>Propiedades del Step</h3>
         <div style={{ marginBottom: '12px' }}>
           <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Nombre</label>
@@ -151,7 +152,7 @@ export const BlockProperties: React.FC<BlockPropertiesProps> = ({ spec, setSpec,
     const ji = selected.ji;
     const job = spec.stages[si].jobs[ji];
     return (
-      <div style={{ padding: '16px', backgroundColor: '#d1ecf1', borderRadius: '4px' }}>
+      <div className={styles.alertInfo} style={{ padding: '16px' }}>
         <h3 style={{ marginTop: 0 }}>Propiedades del Job</h3>
         <div style={{ marginBottom: '12px' }}>
           <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Nombre</label>
@@ -230,7 +231,7 @@ export const BlockProperties: React.FC<BlockPropertiesProps> = ({ spec, setSpec,
     const si = selected.si;
     const stage = spec.stages[si];
     return (
-      <div style={{ padding: '16px', backgroundColor: '#e7f3ff', borderRadius: '4px' }}>
+      <div className={styles.panelMuted} style={{ borderLeft: '3px solid var(--accent)' }}>
         <h3 style={{ marginTop: 0 }}>Propiedades del Stage</h3>
         <div style={{ marginBottom: '12px' }}>
           <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Nombre</label>

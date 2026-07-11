@@ -11,14 +11,14 @@
   flex-wrap: wrap;
   margin-bottom: 1.25rem;
   padding: 0.6rem 0.75rem;
-  background: var(--color-surface-raised, #f4f4f4);
+  background: var(--bg-elev);
   border-radius: 6px;
-  border: 1px solid var(--color-border, #e0e0e0);
+  border: 1px solid var(--border);
 }
 
 .profileLabel {
   font-size: 0.875rem;
-  color: var(--color-text-secondary, #555);
+  color: var(--text-muted);
   flex: 1;
 }
 
@@ -30,15 +30,16 @@
 .profileBtn {
   padding: 0.3rem 0.75rem;
   border-radius: 4px;
-  border: 1px solid var(--color-border, #ccc);
+  border: 1px solid var(--border);
   background: transparent;
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 0.8rem;
   transition: background 0.15s;
 }
 
 .profileBtn:hover:not(:disabled) {
-  background: var(--color-primary-light, #dce8ff);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .profileBtn:disabled {
@@ -47,9 +48,9 @@
 }
 
 .profileBtnActive {
-  background: var(--color-primary, #2563eb);
+  background: var(--accent);
   color: #fff;
-  border-color: var(--color-primary, #2563eb);
+  border-color: var(--accent);
 }
 
 /* ── Búsqueda ────────────────────────────────────────────────────────────── */
@@ -65,10 +66,11 @@
   flex: 1;
   min-width: 180px;
   padding: 0.3rem 0.6rem;
-  border: 1px solid var(--color-border, #ccc);
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 0.875rem;
-  background: var(--color-input-bg, #fff);
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
 .onlyActiveLabel {
@@ -76,23 +78,24 @@
   align-items: center;
   gap: 0.35rem;
   font-size: 0.8rem;
-  color: var(--color-text-secondary, #555);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 /* ── Resumen global ──────────────────────────────────────────────────────── */
 .summary {
   font-size: 0.75rem;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-muted);
   margin-bottom: 1rem;
 }
 
 /* ── Sección colapsable ──────────────────────────────────────────────────── */
 .section {
   margin-bottom: 0.75rem;
-  border: 1px solid var(--color-border, #e0e0e0);
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
+  background: var(--bg-panel);
 }
 
 .sectionSummary {
@@ -101,7 +104,7 @@
   justify-content: space-between;
   padding: 0.5rem 0.75rem;
   cursor: pointer;
-  background: var(--color-surface-raised, #f4f4f4);
+  background: var(--bg-elev);
   user-select: none;
   list-style: none;
   gap: 0.5rem;
@@ -114,7 +117,7 @@
 .sectionSummary::before {
   content: "▶";
   font-size: 0.65rem;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-muted);
   transition: transform 0.15s;
   flex-shrink: 0;
 }
@@ -126,23 +129,23 @@ details[open] > .sectionSummary::before {
 .sectionLabel {
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--color-text, #222);
+  color: var(--text-primary);
   flex: 1;
 }
 
 .sectionMeta {
   font-size: 0.72rem;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
 .sectionDesc {
   font-size: 0.75rem;
-  color: var(--color-text-secondary, #666);
+  color: var(--text-muted);
   margin: 0;
   padding: 0.35rem 0.75rem;
-  background: var(--color-surface, #fff);
-  border-bottom: 1px solid var(--color-border-subtle, #f0f0f0);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-muted);
 }
 
 /* ── Grupos (compatibilidad) ─────────────────────────────────────────────── */
@@ -155,8 +158,8 @@ details[open] > .sectionSummary::before {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--color-text-secondary, #777);
-  border-bottom: 1px solid var(--color-border, #e0e0e0);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
   padding-bottom: 0.35rem;
   margin-bottom: 0.6rem;
 }
@@ -168,7 +171,7 @@ details[open] > .sectionSummary::before {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.45rem 0;
-  border-bottom: 1px solid var(--color-border-subtle, #f0f0f0);
+  border-bottom: 1px solid var(--border-muted);
 }
 
 .flagLabel {
@@ -201,15 +204,15 @@ details[open] > .sectionSummary::before {
   height: 1rem;
   font-size: 0.7rem;
   border-radius: 50%;
-  border: 1px solid var(--color-border, #ccc);
-  color: var(--color-text-secondary, #888);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   cursor: help;
   flex-shrink: 0;
 }
 
 .flagDesc {
   font-size: 0.72rem;
-  color: var(--color-text-secondary, #777);
+  color: var(--text-muted);
   margin: 0;
   line-height: 1.35;
 }
@@ -218,15 +221,15 @@ details[open] > .sectionSummary::before {
   font-size: 0.68rem;
   padding: 0.1rem 0.35rem;
   border-radius: 3px;
-  background: var(--color-surface-raised, #f0f0f0);
-  border: 1px solid var(--color-border-subtle, #ddd);
-  color: var(--color-text-secondary, #666);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-muted);
+  color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .activeRow {
-  background: var(--color-primary-light-subtle, #f0f6ff);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 /* ── Plan 82 F2 — Dependencias master→hija + origen del valor ────────────── */
@@ -236,7 +239,7 @@ details[open] > .sectionSummary::before {
 
 .requiresNote {
   font-size: 0.72rem;
-  color: #b45309;
+  color: var(--warn);
   margin: 0.2rem 0 0 0;
   line-height: 1.35;
 }
@@ -245,7 +248,7 @@ details[open] > .sectionSummary::before {
   background: none;
   border: none;
   padding: 0;
-  color: var(--color-primary, #2563eb);
+  color: var(--accent-hot);
   text-decoration: underline;
   font-size: 0.72rem;
   cursor: pointer;
@@ -255,9 +258,9 @@ details[open] > .sectionSummary::before {
   font-size: 0.68rem;
   padding: 0.1rem 0.35rem;
   border-radius: 3px;
-  background: #e0f2fe;
-  border: 1px solid #bae6fd;
-  color: #0369a1;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent-hot);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -266,7 +269,7 @@ details[open] > .sectionSummary::before {
   display: block;
   font-family: monospace;
   font-size: 11px;
-  color: var(--color-text-secondary, #999);
+  color: var(--text-faint);
   cursor: pointer;
   margin-top: 0.15rem;
   user-select: all;
@@ -277,9 +280,9 @@ details[open] > .sectionSummary::before {
   font-size: 0.68rem;
   padding: 0.1rem 0.35rem;
   border-radius: 3px;
-  background: #fef3c7;
-  border: 1px solid #fde68a;
-  color: #92400e;
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--warn);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -289,9 +292,9 @@ details[open] > .sectionSummary::before {
   font-size: 0.68rem;
   padding: 0.1rem 0.35rem;
   border-radius: 3px;
-  background: #fecaca;
-  border: 1px solid #fca5a5;
-  color: #dc2626;
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -301,16 +304,16 @@ details[open] > .sectionSummary::before {
   font-size: 0.7rem;
   padding: 0 6px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-warning, #b8860b) 18%, transparent);
-  color: var(--color-warning, #b8860b);
-  border: 1px solid color-mix(in srgb, var(--color-warning, #b8860b) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
   white-space: nowrap;
 }
 
 /* ── Plan 84 F3 — Nota de "pendiente de reinicio" ─────────────────────────── */
 .pendingRestartNote {
   font-size: 0.72rem;
-  color: #dc2626;
+  color: var(--danger);
   margin: 0.2rem 0 0 0;
   line-height: 1.35;
   font-weight: 500;
@@ -341,18 +344,19 @@ details[open] > .sectionSummary::before {
 
 .pairLabel {
   font-size: 0.75rem;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-muted);
 }
 
 /* ── Controles ───────────────────────────────────────────────────────────── */
 .textInput,
 .numInput {
   padding: 0.25rem 0.5rem;
-  border: 1px solid var(--color-border, #ccc);
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 0.875rem;
   width: 180px;
-  background: var(--color-input-bg, #fff);
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
 .textInput:disabled,
@@ -365,16 +369,17 @@ details[open] > .sectionSummary::before {
   width: 100%;
   min-width: 200px;
   padding: 0.35rem 0.5rem;
-  border: 1px solid var(--color-border, #ccc);
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.8rem;
   resize: vertical;
-  background: var(--color-input-bg, #fff);
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
 .errorBorder {
-  border-color: #dc2626 !important;
+  border-color: var(--danger) !important;
 }
 
 /* ── Toggle ──────────────────────────────────────────────────────────────── */
@@ -395,8 +400,8 @@ details[open] > .sectionSummary::before {
 .toggleSlider {
   position: absolute;
   inset: 0;
-  background: var(--color-border, #ccc);
-  border: 1px solid var(--color-border-strong, #9ca3af);
+  background: var(--border);
+  border: 1px solid var(--text-faint);
   box-sizing: border-box;
   border-radius: 9999px;
   cursor: pointer;
@@ -405,11 +410,11 @@ details[open] > .sectionSummary::before {
 
 /* Plan 86 F4 — ON verde (distinto del azul de acento del tema) + foco visible por teclado. */
 .toggle input:checked + .toggleSlider {
-  background: var(--color-success, #15803d);
+  background: var(--success);
 }
 
 .toggle input:focus-visible + .toggleSlider {
-  outline: 2px solid var(--color-primary, #2563eb);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -448,11 +453,11 @@ details[open] > .sectionSummary::before {
 }
 
 .stateOn {
-  color: var(--color-success, #15803d);
+  color: var(--success);
 }
 
 .stateOff {
-  color: var(--color-text-secondary, #6b7280);
+  color: var(--text-muted);
 }
 
 /* Plan 86 F3 — botón de ayuda (ⓘ) por flag + bloque expandible de ayuda llana. */
@@ -464,27 +469,27 @@ details[open] > .sectionSummary::before {
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: var(--color-primary, #2563eb);
+  color: var(--accent-hot);
   cursor: pointer;
 }
 
 .helpBtn:hover {
-  background: var(--color-primary-light, #dce8ff);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .helpBtn:focus-visible {
-  outline: 2px solid var(--color-primary, #2563eb);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 .plainHelp {
   margin: 6px 0 4px;
   padding: 8px 10px;
-  border-left: 3px solid var(--color-primary, #2563eb);
+  border-left: 3px solid var(--accent);
   border-radius: 4px;
-  background: var(--color-primary-light-subtle, #f0f6ff);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   font-size: 0.85rem;
-  color: var(--color-text, #222);
+  color: var(--text-primary);
 }
 
 .plainWhat {
@@ -500,12 +505,12 @@ details[open] > .sectionSummary::before {
 .plainExample {
   margin: 0;
   font-style: italic;
-  color: var(--color-text-secondary, #555);
+  color: var(--text-muted);
 }
 
 .plainPending {
   margin: 0;
-  color: var(--color-text-secondary, #777);
+  color: var(--text-muted);
 }
 
 /* Plan 86 F5 — chips índice de categorías (navegación en 1 click). */
@@ -523,17 +528,18 @@ details[open] > .sectionSummary::before {
   padding: 3px 10px;
   border: 1px solid;
   border-radius: 14px;
-  background: var(--color-surface, #fff);
+  background: var(--bg-elev);
+  color: var(--text-primary);
   font-size: 0.75rem;
   cursor: pointer;
 }
 
 .catChip:hover {
-  filter: brightness(0.92);
+  filter: brightness(1.15);
 }
 
 .catChip:focus-visible {
-  outline: 2px solid var(--color-primary, #2563eb);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -545,13 +551,13 @@ details[open] > .sectionSummary::before {
 /* ── Estados ─────────────────────────────────────────────────────────────── */
 .status {
   font-size: 0.8rem;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-muted);
   margin-bottom: 0.5rem;
 }
 
 .errorText {
   font-size: 0.8rem;
-  color: #dc2626;
+  color: var(--danger);
   margin-bottom: 0.5rem;
 }
 
@@ -689,13 +695,13 @@ details[open] > .sectionSummary::before {
 .boundsHint {
   font-family: monospace;
   font-size: 11px;
-  color: var(--color-text-secondary, #999);
+  color: var(--text-faint);
   margin-left: 6px;
 }
 
 .outOfBoundsNote {
   font-size: 0.72rem;
-  color: #b45309;
+  color: var(--warn);
   margin: 0.2rem 0 0 0;
   line-height: 1.35;
 }
@@ -705,16 +711,16 @@ details[open] > .sectionSummary::before {
   font-size: 0.72rem;
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  background: #fef3c7;
-  border: 1px solid #fde68a;
-  color: #92400e;
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--warn);
   white-space: nowrap;
   cursor: pointer;
 }
 
 .outOfBoundsChipActive {
-  background: #f59e0b;
-  border-color: #f59e0b;
+  background: var(--warn);
+  border-color: var(--warn);
   color: #1e1e2e;
   font-weight: 600;
 }
@@ -725,16 +731,16 @@ details[open] > .sectionSummary::before {
   font-size: 0.72rem;
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  background: #fecaca;
-  border: 1px solid #fca5a5;
-  color: #dc2626;
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
   white-space: nowrap;
   cursor: pointer;
 }
 
 .pendingRestartChipActive {
-  background: #dc2626;
-  border-color: #dc2626;
+  background: var(--danger);
+  border-color: var(--danger);
   color: #1e1e2e;
   font-weight: 600;
 }

@@ -5,6 +5,7 @@
 import React from 'react';
 import type { PipelineSpecDraft, StageDraft, JobDraft, StepDraft } from '../../devops/specBuilder';
 import { addStage, addJob, addStep, removeStage, removeJob, removeStep } from '../../devops/specBuilder';
+import styles from './devops.module.css';
 
 export interface BlockTreeProps {
   spec: PipelineSpecDraft;
@@ -25,14 +26,7 @@ const StageBlock: React.FC<{
 
   return (
     <div
-      style={{
-        marginLeft: '8px',
-        padding: '8px',
-        backgroundColor: isSelected ? '#e7f3ff' : '#f8f9fa',
-        border: isSelected ? '2px solid #007bff' : '1px solid #dee2e6',
-        borderRadius: '4px',
-        marginBottom: '8px',
-      }}
+      className={isSelected ? `${styles.blockStage} ${styles.blockStageSelected}` : styles.blockStage}
       onClick={() => setSelected({ si })}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -75,14 +69,7 @@ const JobBlock: React.FC<{
 
   return (
     <div
-      style={{
-        marginLeft: '16px',
-        padding: '6px',
-        backgroundColor: isSelected ? '#d1ecf1' : '#ffffff',
-        border: isSelected ? '2px solid #17a2b8' : '1px solid #ced4da',
-        borderRadius: '3px',
-        marginBottom: '6px',
-      }}
+      className={isSelected ? `${styles.blockJob} ${styles.blockJobSelected}` : styles.blockJob}
       onClick={(e) => { e.stopPropagation(); setSelected({ si, ji }); }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -127,15 +114,7 @@ const StepBlock: React.FC<{
 
   return (
     <div
-      style={{
-        marginLeft: '24px',
-        padding: '4px',
-        backgroundColor: isSelected ? '#fff3cd' : '#f8f9fa',
-        border: isSelected ? '2px solid #ffc107' : '1px solid #ddd',
-        borderRadius: '2px',
-        marginBottom: '4px',
-        fontSize: '13px',
-      }}
+      className={isSelected ? `${styles.blockStep} ${styles.blockStepSelected}` : styles.blockStep}
       onClick={(e) => { e.stopPropagation(); setSelected({ si, ji, sti }); }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

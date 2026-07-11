@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Reports } from "../api/endpoints";
 import styles from "./WeeklyDigestCard.module.css";
@@ -46,6 +47,17 @@ export default function WeeklyDigestCard({ project, days = 7 }: Props) {
   const digest = digestQ.data ?? null;
   const totals = digest?.totals ?? null;
   const hasActivity = !!totals && totals.runs > 0;
+
+  // Plan 117 — narrativa local opt-in (solo por click; nunca bloquea el render inicial).
+  const [narrateRequested, setNarrateRequested] = useState(false);
+  const narrativeQ = useQuery({
+    queryKey: ["reports.digest.narrate", days, project ?? null],
+    queryFn: () => Reports.digest({ days, project, narrate: true }),
+    enabled: narrateRequested,
+    staleTime: 60_000,
+  });
+  const narrative = narrativeQ.data?.narrative ?? null;
+  const narrativeError = narrativeQ.data?.narrative_error ?? null;
 
   // URLs de descarga directa (siempre disponibles, aun sin actividad).
   const mdUrl = Reports.digestDownloadUrl({ fmt: "md", days, project });
@@ -109,6 +121,28 @@ export default function WeeklyDigestCard({ project, days = 7 }: Props) {
                 <li key={i}>{h}</li>
               ))}
             </ul>
+          )}
+          {/* Plan 117 — narrativa local del digest (opt-in por click) */}
+          <div className={styles.narrateRow}>
+            <button
+              type="button"
+              className={styles.btn}
+              disabled={narrativeQ.isFetching}
+              onClick={() => setNarrateRequested(true)}
+            >
+              {narrativeQ.isFetching ? "Narrando…" : "🗣 Narrar (IA local)"}
+            </button>
+          </div>
+          {narrateRequested && !narrativeQ.isFetching && (
+            narrative ? (
+              <p className={styles.narrative}>{narrative}</p>
+            ) : narrativeError ? (
+              <p className={styles.narrativeHint}>
+                {narrativeError === "narrative_disabled"
+                  ? 'Activá "Narrativa local del digest" en Configuración → Arnés'
+                  : `El modelo local no respondió: ${narrativeError}`}
+              </p>
+            ) : null
           )}
         </>
       ) : (

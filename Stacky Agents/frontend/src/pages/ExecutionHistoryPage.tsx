@@ -225,6 +225,25 @@ export default function ExecutionHistoryPage() {
                     {item.ticket_title
                       ? <span title={item.ticket_title}>{item.ticket_title.slice(0, 40)}{item.ticket_title.length > 40 ? "…" : ""}</span>
                       : `#${item.ticket_id}`}
+                    {/* Plan 117 — TL;DR + chip de riesgo (A2) */}
+                    {item.local_insight?.tldr ? (
+                      <div className={styles.insightTldr} title={item.local_insight.tldr}>
+                        {item.local_insight.state === "done" && item.local_insight.risk ? (
+                          <span
+                            className={
+                              item.local_insight.risk === "high"
+                                ? styles.riskHigh
+                                : item.local_insight.risk === "medium"
+                                  ? styles.riskMedium
+                                  : styles.riskLow
+                            }
+                          >
+                            {item.local_insight.risk}
+                          </span>
+                        ) : null}
+                        {item.local_insight.tldr}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               ))}

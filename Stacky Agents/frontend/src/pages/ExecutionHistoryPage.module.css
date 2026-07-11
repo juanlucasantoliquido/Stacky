@@ -173,3 +173,25 @@
   color: var(--text-muted, #666);
   font-size: 0.875rem;
 }
+
+/* Plan 117 — TL;DR + chip de riesgo (A2) en la fila del historial */
+.insightTldr {
+  font-size: 0.8rem;
+  color: var(--text-muted, #888);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.riskLow, .riskMedium, .riskHigh {
+  display: inline-block;
+  border-radius: 8px;
+  padding: 0 6px;
+  margin-right: 6px;
+  font-size: 0.72rem;
+  border: 1px solid currentColor;
+}
+.riskLow { color: var(--success, #4caf50); }
+.riskMedium { color: var(--warn, #ffb300); }
+.riskHigh { color: var(--danger, #e53935); }

@@ -1148,6 +1148,21 @@ export interface ExecutionOutputFilesResponse {
 }
 
 /** Plan 39 A1 — Item del historial de ejecuciones. */
+// Plan 117 — insight local anotado en metadata_json de la ejecución.
+export interface ExecutionLocalInsight {
+  state: "done" | "failed";
+  tldr?: string;
+  labels?: string[];
+  risk?: "low" | "medium" | "high";
+  probable_cause?: string | null;
+  evidence?: string | null;
+  next_step?: string | null;
+  model?: string;
+  generated_at?: string;
+  attempts?: number;
+  error?: string;
+}
+
 export interface ExecutionHistoryItem {
   id: number;
   ticket_id: number;
@@ -1168,6 +1183,7 @@ export interface ExecutionHistoryItem {
   has_prompt_text: boolean;
   produced_files_count: number;
   error_message: string | null;
+  local_insight?: ExecutionLocalInsight | null; // Plan 117
 }
 
 export const Executions = {
@@ -1361,14 +1377,17 @@ export interface DigestReport {
   top_failures: { kind: string; count: number }[];
   highlights: string[];
   partial: boolean;
+  narrative?: string | null; // Plan 117 (solo con ?narrate=1)
+  narrative_error?: string | null; // Plan 117
 }
 
 export const Reports = {
   /** Digest en JSON para el preview de la card (fmt=json es el default del backend). */
-  digest: (params?: { days?: number; project?: string }) => {
+  digest: (params?: { days?: number; project?: string; narrate?: boolean }) => {
     const p = new URLSearchParams();
     if (params?.days) p.set("days", String(params.days));
     if (params?.project) p.set("project", params.project);
+    if (params?.narrate) p.set("narrate", "1"); // Plan 117 — narrativa local opt-in
     const qs = p.toString();
     return api.get<DigestReport>(`/api/reports/digest${qs ? `?${qs}` : ""}`);
   },
@@ -3574,6 +3593,12 @@ export const PipelineGenerator = {
 
 /** Plan 106 — Modelo local (Ollama/LM Studio/vLLM). */
 export const LocalLlmApi = {
+  /** Plan 117 — genera/regenera el insight local de una ejecución (HITL). */
+  generateInsight: (executionId: number) =>
+    api.post<{ ok: boolean; insight?: ExecutionLocalInsight; error?: string; reason?: string }>(
+      `/api/llm/insights/${executionId}/generate`,
+      {},
+    ),
   localHealth: () =>
     api.get<{ ok: boolean; reachable: boolean; endpoint: string; model: string }>(
       "/api/llm/local-health",

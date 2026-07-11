@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X, Copy } from "lucide-react";
 import { Executions } from "../api/endpoints";
+import type { ExecutionLocalInsight } from "../api/endpoints";
+import ExecutionInsightBlock from "./ExecutionInsightBlock";
 import ContractBadge from "./ContractBadge";
 import StructuredOutput from "./StructuredOutput";
 import styles from "./ExecutionDetailDrawer.module.css";
@@ -88,6 +90,13 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
                 <ContractBadge result={content.contract_result} />
               </section>
             )}
+
+            {/* Plan 117 — insight local (TL;DR + triage) */}
+            <ExecutionInsightBlock
+              executionId={executionId}
+              insight={(metadata.local_insight ?? null) as ExecutionLocalInsight | null}
+              onRegenerated={() => execQ.refetch()}
+            />
 
             <section className={styles.section}>
               <h4>Telemetría</h4>

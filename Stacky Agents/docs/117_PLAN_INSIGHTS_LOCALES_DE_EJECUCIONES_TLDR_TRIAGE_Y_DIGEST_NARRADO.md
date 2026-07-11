@@ -1,7 +1,15 @@
 # Plan 117 — Insights locales de ejecuciones: TL;DR post-run, triage de fallas y digest narrado (IA local, costo cero)
 
-> **Estado:** CRITICADO v2 — 2026-07-10 (v1 → v2 por `criticar-y-mejorar-plan`)
+> **Estado:** IMPLEMENTADO — 2026-07-10 (F0-F6; ver memoria `plan-117-status`)
+> **Estado previo:** CRITICADO v2 — 2026-07-10 (v1 → v2 por `criticar-y-mejorar-plan`)
 > **Veredicto del juez:** APROBADO-CON-CAMBIOS (C1-C4 IMPORTANTES resueltos en esta v2; sin bloqueantes)
+> **Nota de implementación (honesta):** backend F0-F3 + F5 + F6 IMPLEMENTADOS y verificados
+> (59 tests backend verdes: 6 flags + 17 core + 14 sweep + 9 api + 4 digest + 9 requires; DB directa
+> y blueprints aislados por importlib, porque `create_app()` está roto en HEAD por WIP ajeno —
+> SyntaxError en `api/devops_servers.py:212`). Frontend F4/F5 IMPLEMENTADO (endpoints, ExecutionInsightBlock,
+> chip de riesgo A2 en el historial, bloque en el drawer, botón Narrar en la card) con `tsc --noEmit` 0
+> errores; los `.test.tsx` RTL quedan escritos test-first pero NO corren por el gap jsdom/@testing-library
+> preexistente (el propio WeeklyDigestCard.test.tsx falla igual — patrón plan 107 F4).
 >
 > **CHANGELOG v1 → v2:**
 > - **C1 (IMPORTANTE, el más grave):** el daemon de F2 arrancaba SIEMPRE dentro de `create_app()` (app.py:182). Los dos daemons vecinos NO arrancan en tests porque sus gates de boot son config default-0 (`_digest_loop` bajo `if int(config.STACKY_DIGEST_INTERVAL_HOURS) > 0:` app.py:371; M0.3 bajo `if ... SWEEP_HOURS > 0:` app.py:391). Un thread incondicional se instanciaría en CADA `create_app()` de CADA test de la suite (los fixtures del propio molde `test_plan106_analyze_code_api.py:25,39` crean una app por test), y con los fixtures del plan (flags ON antes de `create_app`) el primer ciclo del sweep correría DE VERDAD en paralelo con el test → conteos de mock no deterministas y escrituras concurrentes a la DB de test. Fix: guard literal de 2 líneas en el bloque nuevo (`import sys` + `if "pytest" not in sys.modules:`) — en producción arranca siempre (hot-apply intacto), bajo pytest jamás; test binario nuevo `test_app_does_not_start_insights_daemon_under_pytest`.

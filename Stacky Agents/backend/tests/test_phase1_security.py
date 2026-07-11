@@ -146,6 +146,43 @@ def test_update_project_empty_ado_project_clears_value(isolated_client, tmp_path
     assert saved["issue_tracker"]["project"] == ""
 
 
+def test_update_project_pat_does_not_fail_with_legacy_missing_agents_dir(isolated_client, tmp_path):
+    client, projects_dir = isolated_client
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    created = client.post(
+        "/api/init_project",
+        json={
+            "name": "LEGACYAGENTS",
+            "display_name": "LEGACYAGENTS",
+            "workspace_root": str(workspace),
+            "docs_paths": {"technical": "", "functional": ""},
+            "tracker_type": "azure_devops",
+            "organization": "Org",
+            "ado_project": "AdoProject",
+        },
+    )
+    assert created.status_code == 200
+
+    cfg_path = projects_dir / "LEGACYAGENTS" / "config.json"
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    cfg["agents_dir"] = "C:/desarrollo/GIT/RS/STACKY/Stacky/Stacky Agents/DeployStackyAgents/github_copilot_agents"
+    cfg_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    response = client.patch(
+        "/api/projects/LEGACYAGENTS",
+        json={
+            "agents_dir": "C:/desarrollo/GIT/RS/STACKY/Stacky/Stacky Agents/DeployStackyAgents/github_copilot_agents",
+            "pat": "new-test-pat",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+
+
 def test_test_docs_paths_counts_markdown_and_pdf(isolated_client, tmp_path):
     client, _ = isolated_client
     docs = tmp_path / "docs"

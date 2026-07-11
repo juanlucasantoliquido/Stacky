@@ -7181,7 +7181,8 @@ def epic_portfolio_preview():
     Devuelve lista de EpicPayloadPreview serializada.
     """
     import os as _os_port
-    _portfolio_enabled = _os_port.getenv("STACKY_EPIC_PORTFOLIO_ENABLED", "false").lower() in {"1", "true", "on", "yes"}
+    # Default ON (operador 2026-07-10): env_only, el default efectivo vive aquí.
+    _portfolio_enabled = _os_port.getenv("STACKY_EPIC_PORTFOLIO_ENABLED", "true").lower() in {"1", "true", "on", "yes"}
     if not _portfolio_enabled:
         return jsonify({"ok": False, "error": "feature_disabled"}), 404
 
@@ -7225,8 +7226,9 @@ def epic_portfolio_preview():
 def _epic_decomposition_enabled() -> bool:
     """Plan 59 F0 — Lee STACKY_EPIC_DECOMPOSITION_ENABLED con os.getenv (env_only)."""
     import os as _os_decomp
+    # Default ON (operador 2026-07-10): env_only, el default efectivo vive aquí.
     return _os_decomp.getenv(
-        "STACKY_EPIC_DECOMPOSITION_ENABLED", "false"
+        "STACKY_EPIC_DECOMPOSITION_ENABLED", "true"
     ).strip().lower() in ("1", "true", "on", "yes")
 
 

@@ -18,19 +18,20 @@ def test_f0_flag_in_registry():
     assert spec.requires == "STACKY_DEVOPS_PANEL_ENABLED"
     assert spec.group == "global"
     assert spec.label
-    assert spec.default is None
+    assert spec.default is True  # activación operador 2026-07-09 (curada en _CURATED_DEFAULTS_ON)
 
 
 def test_f0_flag_in_category_devops():
     assert _KEY in _CATEGORY_KEYS["devops"]
 
 
-def test_f0_config_default_off(monkeypatch):
+def test_f0_config_default_on(monkeypatch):
+    """Default ON desde 2026-07-09 (activación explícita del operador)."""
     monkeypatch.delenv(_KEY, raising=False)
     import importlib
     import config
     importlib.reload(config)
-    assert config.config.STACKY_DEVOPS_STACK_DETECT_ENABLED is False
+    assert config.config.STACKY_DEVOPS_STACK_DETECT_ENABLED is True
 
 
 def test_f0_flag_has_plain_help():

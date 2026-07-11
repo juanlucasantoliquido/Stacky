@@ -7,20 +7,22 @@ Patrón de fixture app/client: test_plan89_environments_endpoints.py.
 import pytest
 
 
-def test_flag_registered_in_contexto_memoria():
+def test_flag_registered_in_capacidades_optin():
+    # Activación operador 2026-07-10: movida a "Capacidades opt-in".
     from services.harness_flags import _CATEGORY_KEYS
-    assert "STACKY_DOCS_GRAPH_ENABLED" in _CATEGORY_KEYS["contexto_memoria"]
+    assert "STACKY_DOCS_GRAPH_ENABLED" in _CATEGORY_KEYS["capacidades_optin"]
 
 
-def test_flag_default_off():
+def test_flag_default_on():
+    # Promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON).
     from config import config
-    assert config.STACKY_DOCS_GRAPH_ENABLED is False
+    assert config.STACKY_DOCS_GRAPH_ENABLED is True
 
 
-def test_flag_spec_no_declared_default_and_no_requires():
+def test_flag_spec_declared_default_on_and_no_requires():
     from services.harness_flags import FLAG_REGISTRY
     spec = next(s for s in FLAG_REGISTRY if s.key == "STACKY_DOCS_GRAPH_ENABLED")
-    assert spec.default is None
+    assert spec.default is True
     assert spec.requires is None
     assert spec.env_only is False
 

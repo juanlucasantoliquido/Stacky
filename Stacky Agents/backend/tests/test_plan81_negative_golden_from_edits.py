@@ -282,7 +282,9 @@ def test_f1_flag_off_is_noop(monkeypatch, tmp_path, mem_ledger):
     from services.ado_edit_learning import learn_from_work_item
     from harness.regression_goldens import load_goldens
 
-    monkeypatch.delenv("STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", raising=False)
+    # Default pasó a ON (activación operador 2026-07-05): forzar OFF explícito
+    # para seguir cubriendo la ruta apagada.
+    monkeypatch.setenv("STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", "false")
     _use_tmp_goldens(monkeypatch, tmp_path)
 
     res = learn_from_work_item(
@@ -364,11 +366,12 @@ def test_f2_flag_categorized_aprendizaje():
     assert "STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED" in _CATEGORY_KEYS["aprendizaje"]
 
 
-def test_f2_flag_has_no_explicit_default():
+def test_f2_flag_default_is_true():
+    """Activación operador 2026-07-05: default pasó de None (OFF implícito) a True."""
     from services.harness_flags import FLAG_REGISTRY
 
     spec = next(s for s in FLAG_REGISTRY if s.key == "STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED")
-    assert spec.default is None
+    assert spec.default is True
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +385,8 @@ def _learn_and_load_goldens(monkeypatch, tmp_path, mem_ledger, *, ado_id: int, f
     if flag_on:
         monkeypatch.setenv("STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", "true")
     else:
-        monkeypatch.delenv("STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", raising=False)
+        # Default pasó a ON (activación operador 2026-07-05): forzar OFF explícito.
+        monkeypatch.setenv("STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", "false")
 
     _use_tmp_goldens(monkeypatch, tmp_path)
 

@@ -11,10 +11,9 @@ from services.harness_flags import _REGISTRY_INDEX
 class TestPlan108Flags:
     """Tests F1 — flag STACKY_DEVOPS_REMOTE_TARGET_ENABLED."""
 
-    def test_flag_default_off(self):
-        """La flag es False por default (sin env var)."""
-        # Por defecto sin env var es False
-        assert _config.config.STACKY_DEVOPS_REMOTE_TARGET_ENABLED is False
+    def test_flag_default_on(self):
+        """La flag es True por default (sin env var; activación operador 2026-07-09)."""
+        assert _config.config.STACKY_DEVOPS_REMOTE_TARGET_ENABLED is True
 
     def test_flag_registered_devops_category(self):
         """La flag está registrada en la categoría devops."""
@@ -33,8 +32,8 @@ class TestPlan108Flags:
         from api.devops import _health_payload
         payload = _health_payload()
         assert "remote_target_enabled" in payload
-        # Por default es False
-        assert payload["remote_target_enabled"] is False
+        # Por default (activación operador 2026-07-09) es True
+        assert payload["remote_target_enabled"] is True
 
     def test_flag_editable_from_ui(self):
         """La flag es editable desde UI (env_only=False)."""

@@ -515,8 +515,38 @@ _CURATED_DEFAULTS_ON = {
     # ── Activación operador 2026-07-09 — modelo local ON por default (decisión
     # explícita; rompe el default-OFF original de Plan 106 conscientemente) ──
     "LOCAL_LLM_ENABLED",
+    # ── Activación operador 2026-07-09 — flags DevOps 93-108 promovidas a default
+    # ON (decisión explícita; rompen el default-OFF original de cada plan
+    # conscientemente) ──
+    "STACKY_DEVOPS_PREFLIGHT_ENABLED",
+    "STACKY_DEVOPS_VARIABLES_ENABLED",
+    "STACKY_DEVOPS_PRODUCTION_ENABLED",
+    "STACKY_DEVOPS_DOCTOR_ENABLED",
+    "STACKY_DEVOPS_STACK_DETECT_ENABLED",
+    "STACKY_DEVOPS_BOOTSTRAP_ENABLED",
+    "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED",
+    "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED",
+    "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",
+    "STACKY_DEVOPS_ENV_SANDBOX_ENABLED",
+    "STACKY_DEVOPS_REMOTE_TARGET_ENABLED",
     # ── Plan 110 — Revisor de PRs: master default ON pedido por el operador ──
     "STACKY_PR_REVIEWER_ENABLED",
+    # ── Activación operador 2026-07-10 — "Capacidades opt-in": features que el
+    # operador invoca explícitamente (botón/tab/endpoint) y NO disparan trabajo
+    # ni costo automático dentro de otro flujo. Promovidas a default ON para que
+    # todas queden disponibles sin recordar cuál estaba prendida. Ver categoría
+    # capacidades_optin. ADO_PREWARM queda INERTE hasta STACKY_ADO_READ_CACHE_TTL_SEC>0. ──
+    "STACKY_DOCS_GRAPH_ENABLED",
+    "STACKY_DOCS_STALENESS_ENABLED",
+    "STACKY_DOCS_DOCUMENTER_ENABLED",
+    "STACKY_DOCS_RAG_HYBRID_ENABLED",
+    "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",
+    "STACKY_CAPS_ADVISOR_ENABLED",
+    "STACKY_EPIC_DECOMPOSITION_ENABLED",
+    "STACKY_EPIC_PORTFOLIO_ENABLED",
+    "STACKY_CODEBASE_MEMORY_MCP_ENABLED",
+    "STACKY_GITLAB_DEEP_LINKS_ENABLED",
+    "STACKY_ADO_PREWARM_ENABLED",
 }
 
 

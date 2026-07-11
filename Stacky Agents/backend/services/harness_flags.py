@@ -100,6 +100,9 @@ FLAG_CATEGORIES: tuple[CategorySpec, ...] = (
     CategorySpec("devops", "DevOps",
         "Panel DevOps: creación gráfica de pipelines y operaciones de publicación.",
         tier="advanced", intent="Crear y gestionar pipelines de CI/CD visualmente"),
+    CategorySpec("capacidades_optin", "Capacidades opt-in",
+        "Features que activás y usás a demanda (botón/tab/endpoint) y que NO disparan trabajo ni costo dentro de otro flujo: documentador, grafo/staleness de docs, retrieval híbrido, migrador ADO→GitLab, deep links GitLab, MCP externo, descomposición/portafolio de épicas, asesores read-only, prewarm de caché.",
+        tier="simple", intent="Activar capacidades opcionales que usás cuando querés"),
     CategorySpec("otros", "Otros / sin categorizar",
         "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza).",
         tier="advanced", intent="Flags sin categorizar (no debería haber ninguna)"),
@@ -126,16 +129,15 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_MEMORY_DIRECTIVE_MAX_CHARS", "STACKY_MEMORY_INJECT_SCOPES",
         "STACKY_SKILLS_ENABLED", "STACKY_SKILLS_PROJECTS",
         "STACKY_CLI_FEWSHOT_ENABLED", "STACKY_CLI_FEWSHOT_K", "STACKY_CLI_FEWSHOT_PROJECTS",
-        "STACKY_INJECT_PROCESS_CATALOG", "STACKY_CAPS_ADVISOR_ENABLED",
+        "STACKY_INJECT_PROCESS_CATALOG",
         "STACKY_RAG_CATALOG_ENABLED", "STACKY_RAG_CATALOG_TOP_K",
         "STACKY_PROCESS_DISCIPLINE_ENABLED",   # Plan 67, C6 v2.1
-        "STACKY_DOCS_GRAPH_ENABLED",  # Plan 109 — grafo documental read-only
-        "STACKY_DOCS_RAG_HYBRID_ENABLED",  # Plan 112 — retrieval híbrido docs-rag
+        # NOTA: los masters DOCS_GRAPH / DOCS_RAG_HYBRID / DOCS_DOCUMENTER / DOCS_STALENESS
+        # y CAPS_ADVISOR se movieron a "capacidades_optin" (features opt-in). Sus knobs
+        # de tuning (ALPHA/BETA/MAX_NEIGHBORS/MAX_FILES) quedan aquí, con requires al master.
         "STACKY_DOCS_RAG_HYBRID_ALPHA", "STACKY_DOCS_RAG_HYBRID_BETA",
         "STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS",  # Plan 112 — pesos + tope vecinos
-        "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 113 — Documentador 1-click
         "STACKY_DOCS_DOCUMENTER_MAX_FILES",  # Plan 113 — tope de archivos por run
-        "STACKY_DOCS_STALENESS_ENABLED",  # Plan 114 — doctor de staleness doc↔código
     ),
     "calidad_verificacion": (
         "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -165,7 +167,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EPIC_SANITIZE_ENABLED", "STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED",
         "STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED", "STACKY_EPIC_GATE_ENABLED",
         "STACKY_EPIC_CATALOG_GATE_ENABLED", "STACKY_ADO_PREVIEW_ENABLED",
-        "STACKY_EPIC_PORTFOLIO_ENABLED", "STACKY_EPIC_DECOMPOSITION_ENABLED",
+        # NOTA: EPIC_PORTFOLIO y EPIC_DECOMPOSITION (features opt-in) → "capacidades_optin".
         "STACKY_ADAPTIVE_SELECTOR_ENABLED", "STACKY_PROJECT_AUTOPROFILE_ENABLED",
         "STACKY_COMMENT_FULL_SCAN_ENABLED",
         "STACKY_ISSUE_PHASE_COMMENTS_ENABLED",  # Plan 77 — fases de Issue como comentarios idempotentes
@@ -175,11 +177,12 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PIPELINE_GENERATOR_ENABLED", # Plan 73 — generador declarativo PipelineSpec→YAML
     ),
     "migrador_ado_gitlab": (
-        "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",  # Plan 74 — habilita el migrador
+        # NOTA: el master STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (feature opt-in) → "capacidades_optin".
         "STACKY_MIGRATOR_EPIC_POLICY",             # Plan 74 — política de épicas (auto|premium_native|free_degrade)
     ),
     "gitlab_deep_links": (
-        "STACKY_GITLAB_DEEP_LINKS_ENABLED",  # Plan 75 — deep links bidireccionales GitLab
+        # NOTA: el master STACKY_GITLAB_DEEP_LINKS_ENABLED (feature opt-in) → "capacidades_optin".
+        # Categoría sin keys propias por ahora (solo el master, ya movido).
     ),
     "devops": (
         "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 87 — panel DevOps: creador gráfico de pipelines
@@ -246,17 +249,34 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF",
     ),
     "base_datos": (
+        # NOTA: el master STACKY_ADO_PREWARM_ENABLED (feature opt-in) → "capacidades_optin".
+        # STACKY_ADO_READ_CACHE_TTL_SEC (que lo habilita de verdad) queda aquí.
         "STACKY_DB_READONLY_DIRECTIVE_ENABLED", "STACKY_ADO_READ_CACHE_TTL_SEC",
-        "STACKY_ADO_PREWARM_ENABLED",
     ),
     "avanzado": (
         "STACKY_CLI_EGRESS_ENABLED", "STACKY_SPECULATIVE_ENABLED", "STACKY_SPECULATIVE_MODE",
-        "STACKY_CODEBASE_MEMORY_MCP_ENABLED",  # Plan 76 — eval codebase-memory-mcp
+        # NOTA: el master STACKY_CODEBASE_MEMORY_MCP_ENABLED (feature opt-in) → "capacidades_optin".
         "STACKY_CODEBASE_MEMORY_MCP_PROJECTS", "STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH",  # Plan 80
         "LOCAL_LLM_ENABLED", "LOCAL_LLM_ENDPOINT", "LOCAL_LLM_MODEL", "LOCAL_LLM_TIMEOUT_SEC",  # Plan 106
         "STACKY_LOCAL_INSIGHTS_ENABLED", "STACKY_LOCAL_INSIGHTS_SWEEP_SEC",  # Plan 117
         "STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE", "STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS",  # Plan 117
         "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",  # Plan 117
+    ),
+    "capacidades_optin": (
+        # Activación operador 2026-07-10 — features que el operador invoca a demanda
+        # (botón/tab/endpoint) y NO disparan trabajo ni costo dentro de otro flujo.
+        # Todas promovidas a default ON; agrupadas aquí para que se vean distintas.
+        "STACKY_DOCS_GRAPH_ENABLED",            # Plan 109 — grafo documental read-only (tab Docs)
+        "STACKY_DOCS_STALENESS_ENABLED",        # Plan 114 — chip staleness doc↔código
+        "STACKY_DOCS_DOCUMENTER_ENABLED",       # Plan 113 — botón "Lanzar Documentador"
+        "STACKY_DOCS_RAG_HYBRID_ENABLED",       # Plan 112 — retrieval híbrido docs
+        "STACKY_CAPS_ADVISOR_ENABLED",          # I3.3 — GET /metrics/caps-advisor (solo lectura)
+        "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",# Plan 74 — migrador ADO→GitLab (dry-run + HITL)
+        "STACKY_EPIC_DECOMPOSITION_ENABLED",    # Plan 59 — previsualizar/crear hijos de la épica
+        "STACKY_EPIC_PORTFOLIO_ENABLED",        # Plan 55 — N épicas desde un brief (beta)
+        "STACKY_CODEBASE_MEMORY_MCP_ENABLED",   # Plan 76 — MCP externo opt-in (estado + guía)
+        "STACKY_GITLAB_DEEP_LINKS_ENABLED",     # Plan 75 — deep links GitLab clickeables
+        "STACKY_ADO_PREWARM_ENABLED",           # I0.3 — prewarm caché ADO (inerte sin TTL>0)
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -813,6 +833,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     # ── I0.3 — Pre-warming del caché ADO ──────────────────────────────────────
     FlagSpec(
         key="STACKY_ADO_PREWARM_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON). Inerte hasta STACKY_ADO_READ_CACHE_TTL_SEC>0.
         type="bool",
         label="Pre-warming del caché ADO",
         description=(
@@ -826,6 +847,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     # ── I3.3 — Asesor de caps de contexto ──────────────────────────────────────
     FlagSpec(
         key="STACKY_CAPS_ADVISOR_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON)
         type="bool",
         label="Asesor de caps de contexto (solo lectura)",
         description=(
@@ -1452,6 +1474,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     ),
     FlagSpec(
         key="STACKY_DOCS_GRAPH_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON)
         type="bool",
         label="Grafo documental (Plan 109)",
         description=(
@@ -1480,6 +1503,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     ),
     FlagSpec(
         key="STACKY_DOCS_RAG_HYBRID_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON)
         type="bool",
         label="Retrieval híbrido docs (Plan 112)",
         description=(
@@ -1540,6 +1564,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     ),
     FlagSpec(
         key="STACKY_DOCS_DOCUMENTER_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON)
         type="bool",
         label="Documentador 1-click (Plan 113)",
         description=(
@@ -1570,6 +1595,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     ),
     FlagSpec(
         key="STACKY_DOCS_STALENESS_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON)
         type="bool",
         label="Doctor de staleness doc↔código (Plan 114)",
         description=(
@@ -1896,6 +1922,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     ),
     FlagSpec(
         key="STACKY_EPIC_PORTFOLIO_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON). env_only: default efectivo también en el read-site tickets.py.
         type="bool",
         label="Portafolio N épicas desde un brief (Plan 55, beta)",
         description=(
@@ -1937,6 +1964,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     # ── Plan 59 — Descomposición vertical épica→hijos ────────────────────────
     FlagSpec(
         key="STACKY_EPIC_DECOMPOSITION_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON). env_only: default efectivo también en el read-site tickets.py.
         type="bool",
         label="Descomposición vertical épica→hijos",
         description=(
@@ -2187,13 +2215,18 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 93 — Boton '¿Va a funcionar?' del panel DevOps: chequea el "
             "pipeline ANTES de commit/trigger (YAML valido en el tracker real, "
             "steps placeholder, runners/agents disponibles, variables sin "
-            "definir) para ADO y GitLab. Solo-lectura. Default OFF: el endpoint "
-            "/api/devops/preflight/check da 404 y el boton no aparece."
+            "definir) para ADO y GitLab. Solo-lectura. Default ON: el endpoint "
+            "/api/devops/preflight/check está disponible y el boton aparece de "
+            "entrada; poné esta flag en OFF para volver al comportamiento "
+            "anterior (404 y boton oculto)."
         ),
         group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON). SIN reserved= (consumidor real en F3).
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
+        # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
     ),
     # ── Plan 94 — Caja fuerte de variables (secretos del pipeline fuera del YAML) ───
     FlagSpec(
@@ -2203,12 +2236,17 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 94 — Caja fuerte de variables: las secretas se guardan en el tracker "
             "(GitLab masked / ADO isSecret), nunca en el YAML ni en archivos de Stacky. "
-            "Default OFF: /api/devops/variables da 404 y la sección no aparece."
+            "Default ON: /api/devops/variables está disponible y la sección aparece "
+            "de entrada; poné esta flag en OFF para volver al comportamiento anterior "
+            "(404 y sección oculta)."
         ),
         group="global",
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON).
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
+        # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
     ),
     # ── Plan 95 — Llevar a producción (Merge Request / Pull Request + merge HITL) ──
     FlagSpec(
@@ -2218,15 +2256,19 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 95 — Crea el Merge Request (GitLab) o Pull Request (ADO) del "
             "pipeline commiteado, muestra su pipeline en vivo y permite mergear con "
-            "confirmación HITL. Default OFF: /api/devops/production/* da 404, el botón "
-            "no aparece y el modal de commit de ADO sigue con la nota 501. Nota: la "
+            "confirmación HITL. Default ON: /api/devops/production/* está disponible, "
+            "el botón aparece y el modal de commit de ADO ya no muestra la nota 501; "
+            "poné esta flag en OFF para volver al comportamiento anterior. Nota: la "
             "paridad ADO de commit/trigger/monitor NO depende de esta flag (completa "
             "contratos existentes ya gateados por sus propias flags del arnés)."
         ),
         group="global",
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON).
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
+        # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
     ),
     # ── Plan 96 — Doctor de pipelines: diagnóstico del fallo en llano (ADO+GitLab) ──
     FlagSpec(
@@ -2236,12 +2278,17 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 96 — Cuando un pipeline falla, el botón '¿Qué pasó?' baja el log "
             "del job y te lo explica en lenguaje llano; opcionalmente se lo pasa al "
-            "agente DevOps. Solo lee, nunca ejecuta. Default OFF."
+            "agente DevOps. Solo lee, nunca ejecuta. Default ON: el botón aparece de "
+            "entrada; poné esta flag en OFF para volver al comportamiento anterior "
+            "(botón oculto)."
         ),
         group="global",
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON).
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
+        # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
     ),
     # ── Plan 97 — Detección de stack técnico para presets de pipeline ───────────
     FlagSpec(
@@ -2252,14 +2299,17 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 97 — Agrega el boton 'Detectar stack de mi proyecto' en el "
             "builder de pipelines: lee (solo lectura) los archivos de manifiesto "
             "del proyecto (requirements.txt, package.json, *.csproj) y "
-            "preselecciona el preset de pasos mas probable. Default OFF: sin "
-            "esta flag, la galeria de presets sigue disponible pero manual."
+            "preselecciona el preset de pasos mas probable. Default ON: el boton "
+            "aparece de entrada; poné esta flag en OFF para volver al comportamiento "
+            "anterior (galeria de presets manual, sin detección)."
         ),
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
-        # lista curada de defaults ON, así que debe quedar sin default explícito.
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
+        # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
     ),
     # ── Plan 98 — Bootstrap unico del panel DevOps ──────────────────────────────
     FlagSpec(
@@ -2270,14 +2320,16 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 98 — El panel DevOps se hidrata con un solo request "
             "(GET /api/devops/bootstrap) y los guardados de pipelines/publicaciones/"
             "ambientes viajan como PATCH por clave (payload chico, merge en el "
-            "backend). Con OFF todo funciona igual que antes (mas requests, "
-            "payloads completos). No cambia ningun dato guardado."
+            "backend). Default ON. Con OFF todo funciona igual que antes (mas "
+            "requests, payloads completos). No cambia ningun dato guardado."
         ),
         group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
         env_only=False,  # editable por UI (categoría 'devops')
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # Plan 82 — declarativo, informa en UI
-        # SIN default= (gotcha Plan 63): esta flag no está en la lista curada de
-        # defaults ON, así que debe quedar sin default explícito.
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
+        # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
     ),
     # ── Plan 104 — Doctores IA por sección del panel DevOps ────────────────────
     FlagSpec(
@@ -2289,7 +2341,9 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Publicaciones del panel DevOps: invoca a un agente IA (Claude Code CLI, "
             "Codex CLI o GitHub Copilot Pro) con el contexto de esa sección para que "
             "PROPONGA mejoras en markdown (nunca aplica cambios, HITL). Requiere el "
-            "agente DevOps del plan 90. Default OFF: sin esta flag, el botón no aparece."
+            "agente DevOps del plan 90. Default ON: el botón aparece de entrada; "
+            "poné esta flag en OFF para volver al comportamiento anterior (botón "
+            "oculto)."
         ),
         group="global",
         env_only=False,
@@ -2304,8 +2358,10 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # IA) se sigue exigiendo en el endpoint F2 con un guard explícito de
         # STACKY_DEVOPS_AGENT_ENABLED (404 propio, independiente de esta flag).
         requires="STACKY_DEVOPS_PANEL_ENABLED",
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
-        # lista curada de defaults ON, así que debe quedar sin default explícito.
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
+        # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
     ),
     # ── Plan 105 — Consola remota de prompts por servidor ─────────────────────
     FlagSpec(
@@ -2317,13 +2373,17 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "El operador selecciona un servidor del registro del plan 91, escribe un prompt, y un agente "
             "ejecuta comandos PowerShell EN el servidor vía WinRM con auditoría completa JSONL por alias. "
             "Modo read-only por default (validador conservador); modo escritura opt-in por conversación. "
-            "Requiere el panel DevOps y al menos un servidor registrado. Default OFF."
+            "Requiere el panel DevOps y al menos un servidor registrado. Default ON "
+            "(activado 2026-07-09, decisión explícita del operador; ya estaba en true en el "
+            "deploy vivo)."
         ),
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
-        # lista curada de defaults ON, así que debe quedar sin default explícito.
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
+        # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
     ),
     # ── Plan 107 — Preview de árbol de directorios y raíz sandbox (Ambientes) ──
     FlagSpec(
@@ -2333,16 +2393,18 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 107 — En la sección Ambientes, muestra las carpetas a crear como "
             "ÁRBOL jerárquico (en vez de lista plana), con estado por nodo. "
-            "SOLO-LECTURA, no cambia qué se crea. Default OFF. Con OFF la sección "
+            "SOLO-LECTURA, no cambia qué se crea. Default ON. Con OFF la sección "
             "usa la tabla plana de siempre."
         ),
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (depth-1, NO la flag hija Environments)
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON): esta flag no está en la
-        # lista curada de defaults ON, así que debe quedar sin default explícito
-        # (desvío documentado respecto al pseudocódigo del plan, que traía
-        # default=False explícito -- ver docstring de test_plan107_flags.py).
+        # ON por default por decisión explícita del operador (2026-07-09): rompe el
+        # default-OFF original conscientemente (el plan 107 traía default=False
+        # explícito -- ver docstring de test_plan107_flags.py). Está curada en
+        # _CURATED_DEFAULTS_ON (test_default_known_only_for_curated exige la
+        # pertenencia al set).
+        default=True,
     ),
     FlagSpec(
         key="STACKY_DEVOPS_ENV_SANDBOX_ENABLED",
@@ -2352,12 +2414,15 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 107 — Permite apuntar el plan/apply de Ambientes a una carpeta "
             "sandbox temporal para probar, SIN tocar la raíz de producción. Guard "
             "duro: rechaza rutas que sean iguales/contengan/estén contenidas en la "
-            "raíz real. Default OFF. La raíz sandbox NUNCA se guarda en el perfil."
+            "raíz real. Default ON. La raíz sandbox NUNCA se guarda en el perfil."
         ),
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (depth-1)
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON): idem nota arriba.
+        # ON por default por decisión explícita del operador (2026-07-09): idem
+        # nota arriba (rompe el default-OFF original conscientemente; curada en
+        # _CURATED_DEFAULTS_ON).
+        default=True,
     ),
     # ── Plan 116 — Doctor de conexiones con remediación guiada ──
     FlagSpec(
@@ -2384,16 +2449,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 108 — Ancla el chat del agente DevOps y el plan/apply de Ambientes "
             "al servidor seleccionado en el panel: exploración y comandos corren vía "
             "WinRM auditado (Plan 105), nunca en la máquina local. Requiere Servidores (91) "
-            "y Consola remota (105) activos. Default OFF."
+            "y Consola remota (105) activos. Default ON."
         ),
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (depth-1)
-        # SIN default= (gotcha _CURATED_DEFAULTS_ON): idem nota arriba.
+        # ON por default por decisión explícita del operador (2026-07-09): idem
+        # nota arriba (rompe el default-OFF original conscientemente; curada en
+        # _CURATED_DEFAULTS_ON).
+        default=True,
     ),
     # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────
     FlagSpec(
         key="STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON)
         type="bool",
         label="Migrador ADO → GitLab (Plan 74)",
         description=(
@@ -2425,6 +2494,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     # ── Plan 75 — Deep links bidireccionales GitLab ───────────────────────────
     FlagSpec(
         key="STACKY_GITLAB_DEEP_LINKS_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON)
         type="bool",
         label="Deep links GitLab bidireccionales (Plan 75)",
         description=(
@@ -2439,6 +2509,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     # ── Plan 76 — Integración opcional codebase-memory-mcp (externo) ──────────
     FlagSpec(
         key="STACKY_CODEBASE_MEMORY_MCP_ENABLED",
+        default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON)
         type="bool",
         label="Codebase Memory MCP (externo, opt-in) — Plan 76",
         description=(
@@ -2607,6 +2678,8 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Insights locales de ejecuciones",
         description="TL;DR y triage automáticos de cada run terminado usando el modelo local (Plan 106). Requiere el modelo local habilitado y configurado.",
         group="global",
+        # SIN default= (no curada en _CURATED_DEFAULTS_ON; el default efectivo OFF vive en config.py — gotcha Plan 63/81).
+        # SIN requires= estático hacia LOCAL_LLM_ENABLED: la dependencia se chequea en runtime (R4 prohíbe cadenas).
     ),
     FlagSpec(
         key="STACKY_LOCAL_INSIGHTS_SWEEP_SEC",

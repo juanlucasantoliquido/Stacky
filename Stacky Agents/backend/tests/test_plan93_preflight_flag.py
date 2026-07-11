@@ -1,8 +1,9 @@
 """Plan 93 F0 — flag STACKY_DEVOPS_PREFLIGHT_ENABLED (tests primero).
 
-Espejo de tests/test_plan91_servers_flag.py, con los valores correctos para
-esta flag: default OFF (SIN `default=` en el FlagSpec, gotcha
-_CURATED_DEFAULTS_ON), requires STACKY_DEVOPS_PANEL_ENABLED.
+Espejo de tests/test_plan91_servers_flag.py. Default ON desde 2026-07-09
+(activación explícita del operador): la flag tiene `default=True` en el
+FlagSpec (curada en _CURATED_DEFAULTS_ON) y config.py cae a "true" sin env var.
+requires STACKY_DEVOPS_PANEL_ENABLED.
 """
 from pathlib import Path
 
@@ -21,7 +22,7 @@ def test_f0_flag_in_registry():
     assert spec is not None
     assert spec.type == "bool"
     assert spec.env_only is False
-    assert spec.default is None  # SIN default= explícito (gotcha _CURATED_DEFAULTS_ON)
+    assert spec.default is True  # activación operador 2026-07-09 (curada en _CURATED_DEFAULTS_ON)
     assert spec.requires == "STACKY_DEVOPS_PANEL_ENABLED"
     assert spec.group == "global"
     assert spec.label  # no vacío
@@ -31,12 +32,13 @@ def test_f0_flag_in_category_devops():
     assert _KEY in _CATEGORY_KEYS["devops"]
 
 
-def test_f0_config_default_off(monkeypatch):
+def test_f0_config_default_on(monkeypatch):
+    """Default ON desde 2026-07-09 (activación explícita del operador)."""
     monkeypatch.delenv(_KEY, raising=False)
     import importlib
     import config
     importlib.reload(config)
-    assert config.config.STACKY_DEVOPS_PREFLIGHT_ENABLED is False
+    assert config.config.STACKY_DEVOPS_PREFLIGHT_ENABLED is True
 
 
 def test_f0_flag_has_plain_help():

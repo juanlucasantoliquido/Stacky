@@ -22,7 +22,7 @@ def test_f0_flag_in_registry():
     assert spec is not None, f"{_KEY} no está en FLAG_REGISTRY"
     assert spec.type == "bool"
     assert spec.env_only is False, "env_only debe ser False (editable por UI)"
-    assert spec.default is None, "default debe ser None (gotcha _CURATED_DEFAULTS_ON)"
+    assert spec.default is True, "default debe ser True (activación operador 2026-07-09, curada en _CURATED_DEFAULTS_ON)"
     assert spec.requires == "STACKY_DEVOPS_PANEL_ENABLED"
     assert spec.group == "global"
     assert spec.label, "label debe estar presente (visible en UI)"
@@ -36,13 +36,13 @@ def test_f0_flag_in_category_devops():
     assert _KEY in _CATEGORY_KEYS["devops"]
 
 
-def test_f0_config_default_off(monkeypatch):
-    """F0 — Default OFF (config.py lee false si no está seteada)."""
+def test_f0_config_default_on(monkeypatch):
+    """F0 — Default ON (config.py lee true si no está seteada; activación operador 2026-07-09)."""
     monkeypatch.delenv(_KEY, raising=False)
     import importlib
     import config
     importlib.reload(config)
-    assert config.config.STACKY_DEVOPS_DOCTOR_ENABLED is False
+    assert config.config.STACKY_DEVOPS_DOCTOR_ENABLED is True
 
 
 def test_f0_flag_has_plain_help():

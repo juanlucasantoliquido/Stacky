@@ -58,14 +58,17 @@ def test_f6_3_harness_defaults_contains_flag():
     )
 
 
-def test_f6_4_config_default_is_false():
-    """config.py: STACKY_GITLAB_DEEP_LINKS_ENABLED default False sin env var."""
+def test_f6_4_config_default_is_true():
+    """config.py: STACKY_GITLAB_DEEP_LINKS_ENABLED default True sin env var.
+
+    Activación operador 2026-07-10: promovida a capacidad opt-in default ON.
+    """
     orig = os.environ.pop("STACKY_GITLAB_DEEP_LINKS_ENABLED", None)
     try:
         import importlib
         import config as cfg_mod
         importlib.reload(cfg_mod)
-        assert cfg_mod.config.STACKY_GITLAB_DEEP_LINKS_ENABLED is False
+        assert cfg_mod.config.STACKY_GITLAB_DEEP_LINKS_ENABLED is True
     finally:
         if orig is not None:
             os.environ["STACKY_GITLAB_DEEP_LINKS_ENABLED"] = orig

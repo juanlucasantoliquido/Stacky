@@ -18,9 +18,10 @@ def _spec(key):
     return next(s for s in FLAG_REGISTRY if s.key == key)
 
 
-def test_flag_default_off():
-    assert categorize(_MASTER) == "contexto_memoria"
-    assert config.STACKY_DOCS_STALENESS_ENABLED is False
+def test_flag_default_on():
+    # Activación operador 2026-07-10: capacidad opt-in, default ON.
+    assert categorize(_MASTER) == "capacidades_optin"
+    assert config.STACKY_DOCS_STALENESS_ENABLED is True
 
 
 def test_flag_requires_graph():

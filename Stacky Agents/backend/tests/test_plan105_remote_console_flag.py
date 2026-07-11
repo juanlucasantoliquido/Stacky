@@ -15,10 +15,10 @@ from api.devops import _health_payload
 
 
 class TestF0FlagDefaults:
-    """F0 — Test que la flag existe y default OFF."""
+    """F0 — Test que la flag existe y default ON (activación operador 2026-07-09)."""
 
-    def test_f0_flag_default_off(self, monkeypatch):
-        """La flag default es False con entorno limpio."""
+    def test_f0_flag_default_on(self, monkeypatch):
+        """La flag default es True con entorno limpio (activación operador 2026-07-09)."""
         # Limpiar environment
         for k in list(os.environ.keys()):
             if "STACKY_DEVOPS_REMOTE_CONSOLE" in k:
@@ -27,7 +27,7 @@ class TestF0FlagDefaults:
         # Reload config (patrón de test_plan104_*)
         import importlib
         importlib.reload(_config)
-        assert _config.config.STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED is False
+        assert _config.config.STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED is True
 
     def test_f0_flag_registered_in_registry(self):
         """La key existe en el registry con env_only=False y requires correcto."""

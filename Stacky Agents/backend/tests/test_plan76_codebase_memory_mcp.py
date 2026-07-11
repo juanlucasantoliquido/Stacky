@@ -38,8 +38,9 @@ def test_flag_default_is_false():
         if "config" in sys.modules:
             del sys.modules["config"]
         from config import Config
-        assert Config.STACKY_CODEBASE_MEMORY_MCP_ENABLED is False, (
-            "El atributo STACKY_CODEBASE_MEMORY_MCP_ENABLED debe ser False por default"
+        # Activación operador 2026-07-10: default ON sin env var.
+        assert Config.STACKY_CODEBASE_MEMORY_MCP_ENABLED is True, (
+            "El atributo STACKY_CODEBASE_MEMORY_MCP_ENABLED debe ser True por default (operador 2026-07-10)"
         )
     finally:
         os.environ.update(env_backup)
@@ -175,11 +176,12 @@ def test_flag_registry_has_codebase_memory_mcp_flag():
     assert spec.env_only is False, (
         "env_only debe ser False para que aparezca en la UI (regla operator-config-always-via-ui)"
     )
-    assert spec.default is False, "El default debe ser False (feature OFF por defecto)"
+    # Activación operador 2026-07-10: promovida a default ON (capacidad opt-in).
+    assert spec.default is True, "El default debe ser True (promovida por el operador 2026-07-10)"
 
-    # Verificar que la key está en la categoría "avanzado" (no en "otros" ni en otra)
-    avanzado_keys = _CATEGORY_KEYS.get("avanzado", ())
-    assert "STACKY_CODEBASE_MEMORY_MCP_ENABLED" in avanzado_keys, (
-        f"La key debe estar en _CATEGORY_KEYS['avanzado']. "
-        f"Keys actuales de 'avanzado': {avanzado_keys}"
+    # Activación operador 2026-07-10: la key se movió de "avanzado" a "capacidades_optin".
+    optin_keys = _CATEGORY_KEYS.get("capacidades_optin", ())
+    assert "STACKY_CODEBASE_MEMORY_MCP_ENABLED" in optin_keys, (
+        f"La key debe estar en _CATEGORY_KEYS['capacidades_optin']. "
+        f"Keys actuales de 'capacidades_optin': {optin_keys}"
     )

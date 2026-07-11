@@ -55,13 +55,21 @@ def test_harness_defaults_env_contiene_flags():
     )
 
 
-# ── Caso 4: config.STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED default False ───────
+# ── Caso 4: config.STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED default True ────────
+# Activación operador 2026-07-10: promovida a capacidad opt-in default ON.
 
-def test_config_default_off():
-    """config.config.STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED lee False por defecto."""
+def test_config_default_on():
+    """config.py: STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED lee True por defecto sin env var."""
     import os
-    # Asegurar que no está seteada en el entorno
-    os.environ.pop("STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED", None)
-    # Re-evaluar desde el env
-    enabled = os.getenv("STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED", "false").lower() in ("1", "true", "yes")
-    assert enabled is False
+    orig = os.environ.pop("STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED", None)
+    try:
+        import importlib
+        import config as cfg_mod
+        importlib.reload(cfg_mod)
+        assert cfg_mod.config.STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED is True
+    finally:
+        if orig is not None:
+            os.environ["STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED"] = orig
+        import importlib
+        import config as cfg_mod2
+        importlib.reload(cfg_mod2)

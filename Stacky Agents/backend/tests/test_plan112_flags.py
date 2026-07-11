@@ -19,13 +19,17 @@ def _spec(key: str):
     return next(s for s in FLAG_REGISTRY if s.key == key)
 
 
-def test_flags_registered_in_contexto_memoria():
-    for key in _ALL:
+def test_flags_registered_in_categories():
+    # Activación operador 2026-07-10: el master es una capacidad opt-in;
+    # los knobs de tuning quedan en contexto_memoria (requires al master).
+    assert categorize(_MASTER) == "capacidades_optin"
+    for key in (_ALPHA, _BETA, _MAXN):
         assert categorize(key) == "contexto_memoria", key
 
 
-def test_hybrid_default_off():
-    assert config.STACKY_DOCS_RAG_HYBRID_ENABLED is False
+def test_hybrid_default_on():
+    # Promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON).
+    assert config.STACKY_DOCS_RAG_HYBRID_ENABLED is True
 
 
 def test_numeric_defaults():

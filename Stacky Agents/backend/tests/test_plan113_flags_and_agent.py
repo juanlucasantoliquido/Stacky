@@ -19,10 +19,12 @@ def _spec(key):
     return next(s for s in FLAG_REGISTRY if s.key == key)
 
 
-def test_flags_registered_and_default_off():
-    for key in (_MASTER, _MAXF):
-        assert categorize(key) == "contexto_memoria", key
-    assert config.STACKY_DOCS_DOCUMENTER_ENABLED is False
+def test_flags_registered_and_default_on():
+    # Activación operador 2026-07-10: el master es capacidad opt-in (default ON);
+    # el knob MAX_FILES queda en contexto_memoria (requires al master).
+    assert categorize(_MASTER) == "capacidades_optin"
+    assert categorize(_MAXF) == "contexto_memoria"
+    assert config.STACKY_DOCS_DOCUMENTER_ENABLED is True
 
 
 def test_max_files_bounds_and_requires():

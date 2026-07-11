@@ -1,16 +1,10 @@
 """Plan 107 F0 — flags STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED y
 STACKY_DEVOPS_ENV_SANDBOX_ENABLED (tests primero).
 
-Nota (desvío documentado, gotcha _CURATED_DEFAULTS_ON): el doc del plan trae
-`default=False` explícito en el pseudocódigo del FlagSpec (líneas 138/153),
-pero `default_is_known(spec)` en services/harness_flags.py es
-`spec.default is not None` -- CUALQUIER default explícito (True o False)
-marca la key como "curada", y `test_default_known_only_for_curated` exige
-que el set de keys curadas sea EXACTAMENTE `_CURATED_DEFAULTS_ON` (12 keys
-de Plan 63). Como estas 2 keys no están en esa lista, se omite `default=`
-del FlagSpec (mismo patrón que Planes 94/95/96/97/98/105). El default
-EFECTIVO sigue siendo False vía config.py (test_flags_default_off) y vía
-type-zero de `declared_default` (bool sin default -> False).
+Activación operador 2026-07-09: ambas keys fueron promovidas a default ON
+(`default=True` explícito en el FlagSpec, curadas en _CURATED_DEFAULTS_ON;
+config.py cae a "true" sin env var), rompiendo conscientemente el default-OFF
+original documentado más abajo en el historial de este archivo.
 """
 from services.harness_flags import FLAG_REGISTRY, _CATEGORY_KEYS
 from services.harness_flags_help import PLAIN_HELP
@@ -29,13 +23,14 @@ def test_flags_registered_in_devops_category():
         assert key in _CATEGORY_KEYS["devops"], f"{key} no está en _CATEGORY_KEYS['devops']"
 
 
-def test_flags_default_off():
+def test_flags_default_on():
+    """Default ON desde 2026-07-09 (activación explícita del operador)."""
     import importlib
     import config
 
     importlib.reload(config)
-    assert config.config.STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED is False
-    assert config.config.STACKY_DEVOPS_ENV_SANDBOX_ENABLED is False
+    assert config.config.STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED is True
+    assert config.config.STACKY_DEVOPS_ENV_SANDBOX_ENABLED is True
 
 
 def test_flags_require_panel_master():
@@ -62,8 +57,8 @@ def test_health_exposes_new_keys():
 
 
 def test_health_backcompat_without_sandbox_key():
-    """Con ambas flags OFF (default), ninguna key existente de _health_payload()
-    cambia de valor -- solo se agregan las 2 keys nuevas (aditivo puro)."""
+    """Con ambas flags ON (default desde 2026-07-09), ninguna key existente de
+    _health_payload() desaparece -- solo se agregan las 2 keys nuevas (aditivo puro)."""
     from api.devops import _health_payload
 
     payload = _health_payload()
@@ -78,9 +73,9 @@ def test_health_backcompat_without_sandbox_key():
     )
     for key in preexisting:
         assert key in payload, f"regresión: {key} desapareció de _health_payload()"
-    # Con las flags nuevas OFF por default, sus keys son False.
-    assert payload["env_tree_preview_enabled"] is False
-    assert payload["env_sandbox_enabled"] is False
+    # Con las flags nuevas ON por default (activación operador 2026-07-09), sus keys son True.
+    assert payload["env_tree_preview_enabled"] is True
+    assert payload["env_sandbox_enabled"] is True
 
 
 def test_flags_have_plain_help():

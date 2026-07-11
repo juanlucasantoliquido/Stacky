@@ -483,12 +483,12 @@ class Config:
 
     # ── Plan 109 — Grafo documental READ-ONLY (default OFF, editable por UI) ───
     STACKY_DOCS_GRAPH_ENABLED: bool = os.getenv(
-        "STACKY_DOCS_GRAPH_ENABLED", "false"
+        "STACKY_DOCS_GRAPH_ENABLED", "true"
     ).strip().lower() == "true"
 
     # ── Plan 112 — Retrieval híbrido docs-rag (default OFF, editable por UI) ───
     STACKY_DOCS_RAG_HYBRID_ENABLED: bool = os.getenv(
-        "STACKY_DOCS_RAG_HYBRID_ENABLED", "false"
+        "STACKY_DOCS_RAG_HYBRID_ENABLED", "true"
     ).strip().lower() == "true"
     STACKY_DOCS_RAG_HYBRID_ALPHA: float = float(
         os.getenv("STACKY_DOCS_RAG_HYBRID_ALPHA", "1.0") or "1.0"
@@ -502,7 +502,7 @@ class Config:
 
     # ── Plan 113 — Documentador 1-click (default OFF, editable por UI) ─────────
     STACKY_DOCS_DOCUMENTER_ENABLED: bool = os.getenv(
-        "STACKY_DOCS_DOCUMENTER_ENABLED", "false"
+        "STACKY_DOCS_DOCUMENTER_ENABLED", "true"
     ).strip().lower() == "true"
     STACKY_DOCS_DOCUMENTER_MAX_FILES: int = int(
         os.getenv("STACKY_DOCS_DOCUMENTER_MAX_FILES", "40") or "40"
@@ -510,7 +510,7 @@ class Config:
 
     # ── Plan 114 — Doctor de staleness doc↔código (default OFF, editable por UI) ─
     STACKY_DOCS_STALENESS_ENABLED: bool = os.getenv(
-        "STACKY_DOCS_STALENESS_ENABLED", "false"
+        "STACKY_DOCS_STALENESS_ENABLED", "true"
     ).strip().lower() == "true"
 
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
@@ -617,14 +617,14 @@ class Config:
     # OFF default: POST /tickets/<ado_id>/prewarm devuelve {"status":"disabled"}.
     # Depende de I3.2 (STACKY_ADO_READ_CACHE_TTL_SEC > 0).
     STACKY_ADO_PREWARM_ENABLED: bool = os.getenv(
-        "STACKY_ADO_PREWARM_ENABLED", "false"
+        "STACKY_ADO_PREWARM_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── I3.3 — Asesor de caps de contexto por telemetría ─────────────────────
     # OFF default: GET /metrics/caps-advisor devuelve {"enabled": false}.
     # NUNCA escribe: solo produce sugerencias que el operador aplica.
     STACKY_CAPS_ADVISOR_ENABLED: bool = os.getenv(
-        "STACKY_CAPS_ADVISOR_ENABLED", "false"
+        "STACKY_CAPS_ADVISOR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 28 — Lifecycle e higiene de procesos ─────────────────────────────
@@ -946,14 +946,15 @@ class Config:
     ).strip().lower() == "true"
 
     # Plan 107 — Preview de árbol de directorios y raíz sandbox de pruebas
-    # (extiende la sección Ambientes del Plan 89). Default OFF: son mejoras
-    # opt-in del operador, a diferencia de Environments que está en "true".
+    # (extiende la sección Ambientes del Plan 89). Default ON (activado
+    # 2026-07-09, decisión explícita del operador; rompe el default-OFF
+    # original conscientemente).
     # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED", "false"
+        "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED", "true"
     ).strip().lower() == "true"
     STACKY_DEVOPS_ENV_SANDBOX_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", "false"
+        "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", "true"
     ).strip().lower() == "true"
 
     # Plan 90 — Agente DevOps interactivo multi-turno (seccion del panel DevOps).
@@ -972,54 +973,63 @@ class Config:
         "STACKY_DEVOPS_SERVERS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
-    # Plan 93 — Preflight de pipelines DevOps. Default OFF. Editable por UI.
+    # Plan 93 — Preflight de pipelines DevOps. Default ON (activado 2026-07-09,
+    # decisión explícita del operador). Editable por UI.
     STACKY_DEVOPS_PREFLIGHT_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_PREFLIGHT_ENABLED", "false"
+        "STACKY_DEVOPS_PREFLIGHT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 95 — Llevar a producción (Merge Request / Pull Request + merge HITL).
-    # Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    # Default ON (activado 2026-07-09, decisión explícita del operador).
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_PRODUCTION_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_PRODUCTION_ENABLED", "false"
+        "STACKY_DEVOPS_PRODUCTION_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 96 — Doctor de pipelines: diagnóstico en llano del fallo (ADO + GitLab).
-    # Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    # Default ON (activado 2026-07-09, decisión explícita del operador).
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_DOCTOR_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_DOCTOR_ENABLED", "false"
+        "STACKY_DEVOPS_DOCTOR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 94 — Caja fuerte de variables: secretos del pipeline fuera del YAML
-    # (ADO + GitLab). Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    # (ADO + GitLab). Default ON (activado 2026-07-09, decisión explícita del
+    # operador). Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_VARIABLES_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_VARIABLES_ENABLED", "false"
+        "STACKY_DEVOPS_VARIABLES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
-    # Plan 97 — Deteccion opt-in de stack tecnico para presets de pipeline. Default OFF.
+    # Plan 97 — Deteccion opt-in de stack tecnico para presets de pipeline.
+    # Default ON (activado 2026-07-09, decisión explícita del operador).
     STACKY_DEVOPS_STACK_DETECT_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_STACK_DETECT_ENABLED", "false"
+        "STACKY_DEVOPS_STACK_DETECT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 98 — Bootstrap unico del panel DevOps + PATCH por clave del client-profile.
-    # Default OFF.
+    # Default ON (activado 2026-07-09, decisión explícita del operador).
     STACKY_DEVOPS_BOOTSTRAP_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_BOOTSTRAP_ENABLED", "false"
+        "STACKY_DEVOPS_BOOTSTRAP_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
-    # Plan 104 — Doctores IA por seccion del panel DevOps. Default OFF (opt-in).
+    # Plan 104 — Doctores IA por seccion del panel DevOps. Default ON (activado
+    # 2026-07-09, decisión explícita del operador; rompe el opt-in original).
     STACKY_DEVOPS_SECTION_DOCTOR_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", "false"
+        "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
-    # Plan 105 — Consola remota de prompts por servidor (default OFF).
+    # Plan 105 — Consola remota de prompts por servidor. Default ON (activado
+    # 2026-07-09, decisión explícita del operador; ya estaba en true en el
+    # deploy vivo vía harness_defaults.env).
     STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", "false"
+        "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", "true"
     ).lower() in ("true", "1", "yes")
 
     # Plan 108 — Anclaje remoto del agente DevOps y plan/apply de Ambientes al servidor seleccionado.
-    # Default OFF. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    # Default ON (activado 2026-07-09, decisión explícita del operador).
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
     STACKY_DEVOPS_REMOTE_TARGET_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_REMOTE_TARGET_ENABLED", "false"
+        "STACKY_DEVOPS_REMOTE_TARGET_ENABLED", "true"
     ).lower() in ("true", "1", "yes")
 
     # Plan 116 — Doctor de conexiones DevOps (determinista). Default OFF, editable por UI.
@@ -1030,7 +1040,7 @@ class Config:
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(
-        "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED", "false"
+        "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 74 — Política de épicas en la migración ADO→GitLab.
@@ -1045,14 +1055,14 @@ class Config:
     # Editable por UI (HarnessFlagsPanel, categoría "GitLab / Deep Links").
     # Con flag OFF, item_url/mr_url/commit_url/epic_url devuelven None (frontend cae a <span>).
     STACKY_GITLAB_DEEP_LINKS_ENABLED: bool = os.getenv(
-        "STACKY_GITLAB_DEEP_LINKS_ENABLED", "false"
+        "STACKY_GITLAB_DEEP_LINKS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 76 — Integración opcional con codebase-memory-mcp (externo). Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Avanzado / experimental").
     # Con flag OFF, Stacky es byte-idéntico a hoy (sin endpoints activos ni config MCP inyectada).
     STACKY_CODEBASE_MEMORY_MCP_ENABLED: bool = os.getenv(
-        "STACKY_CODEBASE_MEMORY_MCP_ENABLED", "false"
+        "STACKY_CODEBASE_MEMORY_MCP_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 80 — Allowlist por proyecto para el MCP externo codebase-memory-mcp.

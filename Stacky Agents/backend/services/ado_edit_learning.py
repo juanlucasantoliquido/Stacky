@@ -73,9 +73,10 @@ def _golden_available() -> bool:
 
 
 def _negative_golden_enabled() -> bool:
-    """Plan 81 — lee STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED (default OFF) en call time."""
+    """Plan 81 — lee STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED (default ON desde 2026-07-05,
+    decisión explícita del operador) en call time."""
     import os
-    return os.getenv("STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", "false").strip().lower() in ("1", "true", "on")
+    return os.getenv("STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED", "true").strip().lower() in ("1", "true", "on")
 
 
 def learn_from_work_item(

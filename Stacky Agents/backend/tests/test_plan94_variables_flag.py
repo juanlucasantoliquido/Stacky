@@ -18,7 +18,7 @@ def test_f0_flag_in_registry():
     assert spec is not None
     assert spec.type == "bool"
     assert spec.env_only is False  # editable por UI
-    assert spec.default is None  # SIN default= explícito (gotcha _CURATED_DEFAULTS_ON)
+    assert spec.default is True  # activación operador 2026-07-09 (curada en _CURATED_DEFAULTS_ON)
     assert spec.requires == "STACKY_DEVOPS_PANEL_ENABLED"
     assert spec.group == "global"
     assert "94" in spec.label
@@ -30,13 +30,13 @@ def test_f0_flag_in_category_devops():
     assert _KEY in _CATEGORY_KEYS["devops"]
 
 
-def test_f0_config_default_off(monkeypatch):
-    """La flag existe en config.py y default es OFF."""
+def test_f0_config_default_on(monkeypatch):
+    """La flag existe en config.py y default es ON (activación operador 2026-07-09)."""
     monkeypatch.delenv(_KEY, raising=False)
     import importlib
     import config
     importlib.reload(config)
-    assert config.config.STACKY_DEVOPS_VARIABLES_ENABLED is False
+    assert config.config.STACKY_DEVOPS_VARIABLES_ENABLED is True
 
 
 def test_f0_flag_has_plain_help():

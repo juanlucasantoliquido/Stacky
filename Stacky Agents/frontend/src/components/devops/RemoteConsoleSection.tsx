@@ -18,9 +18,11 @@ export interface RemoteConsoleSectionProps {
 export const RemoteConsoleSection: React.FC<RemoteConsoleSectionProps> = ({ ctx }) => {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'conversation' | 'audit'>('conversation');
-  const [selectedServer, setSelectedServer] = useState<string | null>(
-    ctx.selectedServer?.alias ?? null
-  );
+  // Fix reactividad (bug operador 2026-07-09): derivar SIEMPRE del contexto en
+  // cada render. Antes era un useState que congelaba el alias en el montaje y su
+  // setter nunca se invocaba, por lo que al elegir un servidor con la sección ya
+  // montada la consola no aparecía (quedaba en "Selecciona un servidor...").
+  const selectedServer = ctx.selectedServer?.alias ?? null;
   const [selectedConversation, setSelectedConversation] = useState<number | null>(null);
   const [command, setCommand] = useState('');
   const [output, setOutput] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);

@@ -220,4 +220,4 @@ def download_setup_route():
         mimetype="application/zip",
         as_attachment=True,
         download_name="Enable-WinRM.zip"
-    ))
+    )

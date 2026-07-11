@@ -165,6 +165,30 @@ def _resolve_agents_dir(data: dict, cfg: dict | None = None) -> str:
     return (cfg.get("agents_dir") or "").strip()
 
 
+def _resolve_validated_agents_dir_for_patch(data: dict, cfg: dict) -> str | None:
+    """Valida agents_dir solo cuando viene explícito en el payload.
+
+    Si el modal reenvía el mismo valor legacy inválido guardado en config,
+    no bloquea PATCH parciales (ej. cambiar PAT). Solo se rechazan rutas
+    inválidas cuando realmente cambian respecto al valor persistido.
+    """
+    if "agents_dir" not in data:
+        return None
+
+    raw = (data.get("agents_dir") or "").strip()
+    current = (cfg.get("agents_dir") or "").strip()
+    try:
+        return validate_agents_dir(raw)
+    except ValueError:
+        if raw == current:
+            logger.warning(
+                "PATCH proyecto: se ignora agents_dir legacy inválido sin cambios: %s",
+                raw,
+            )
+            return None
+        raise
+
+
 def _count_docs_files(root: str) -> dict:
     """Cuenta archivos soportados para feedback del modal sin indexar contenido."""
     raw = (root or "").strip()
@@ -395,7 +419,7 @@ def update_project(project_name: str):
     try:
         workspace_root = validate_workspace_root(_resolve_workspace_root(data, cfg))
         docs_paths = validate_docs_paths(_resolve_docs_paths(data, cfg))
-        agents_dir = validate_agents_dir(_resolve_agents_dir(data, cfg))
+        agents_dir = _resolve_validated_agents_dir_for_patch(data, cfg)
 
         if tracker_type == "jira":
             tracker   = cfg.get("issue_tracker") or {}

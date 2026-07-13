@@ -5,11 +5,11 @@
 **Superficies que EXTIENDE (sin romper):** Plan 104 (doctor de sección DevOps), Plan 96 (doctor de pipelines), Plan 117 (insights locales — solo se agregan literales a su lista de exclusión)
 **Ortogonal a:** Plan 121 (centinela de egreso — ver §6), Plan 120 (Centro de Despliegues), serie 122-126 (DB compare)
 
-> **NOTA DE NUMERACIÓN (H4):** existe una COLISIÓN: `127_PLAN_TABLERO_EVOLUCION_PLANES.md`
-> (commit 42061170) también usa el número 127. ESTE documento conserva el 127 (fue
-> propuesto por el pipeline con ese número en e922b78f). Acción recomendada APARTE de
-> este plan (no la ejecuta quien implemente esto): renumerar el TABLERO a
-> `128_PLAN_TABLERO_EVOLUCION_PLANES.md` con `git mv` y actualizar su encabezado.
+> **NOTA DE NUMERACIÓN (H4, RESUELTA):** hubo una colisión: el tablero de evolución
+> de planes también nació como "127" (commit 42061170). Ya fue renumerado a
+> `128_PLAN_TABLERO_EVOLUCION_PLANES.md` por su sesión (commit d0864ceb). ESTE
+> documento conserva el 127 (propuesto con ese número en e922b78f). No queda nada
+> pendiente por este punto.
 
 ## CHANGELOG v1 → v2 (crítica adversarial 2026-07-12)
 

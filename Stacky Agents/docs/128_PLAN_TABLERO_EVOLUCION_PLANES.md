@@ -1,8 +1,8 @@
-# Plan 127 — Tablero de Evolución de Planes (pipeline proponer→criticar→implementar→supervisar, solo lectura)
+# Plan 128 — Tablero de Evolución de Planes (pipeline proponer→criticar→implementar→supervisar, solo lectura)
 
-**Estado:** PROPUESTO (v1, 2026-07-12)
-**Dependencias:** ninguna dura. Reusa el ledger de supervisión existente (`docs/_supervision/ledger.json`) y el patrón de tab gateado por flag de los Planes 74/87. NO depende de los planes 120-126.
-**Ortogonal a:** Planes 119/120/121/122-126 (no toca DevOps, ni despliegues, ni comparador de BD).
+**Estado:** PROPUESTO (v1, 2026-07-12 — renumerado de 127→128 el mismo día: el número 127 colisionó con el plan ajeno "reuso IA local" `e922b78f` propuesto en paralelo por otra sesión. La colisión es EXACTAMENTE el bug que este plan elimina con `next_free_number`.)
+**Dependencias:** ninguna dura. Reusa el ledger de supervisión existente (`docs/_supervision/ledger.json`) y el patrón de tab gateado por flag de los Planes 74/87. NO depende de los planes 120-127.
+**Ortogonal a:** Planes 119/120/121/122-126/127 (no toca DevOps, ni despliegues, ni comparador de BD, ni la IA local).
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Los regex, contratos JSON, tablas de
@@ -26,10 +26,11 @@ plan vive desparramado en 4 lugares que solo se cruzan a mano:
 Este plan agrega un **tab "Planes" de SOLO LECTURA** que parsea esas 4 fuentes y muestra,
 por plan: estado del pipeline, veredicto del juez, aprobación del supervisor (con detección
 de drift doc-vs-aprobación por sha256), commits sin push, colisiones de numeración, el
-**próximo número libre** (mata el bug recurrente de colisiones: el 110 fue tomado dos veces
-y el 118 obligó a renumerar el 119), y una **acción sugerida copiable al portapapeles**
-(el comando de skill para Claude Code + su equivalente en lenguaje natural para Codex CLI /
-Copilot). La página **jamás ejecuta nada**: amplifica al operador, no lo reemplaza.
+**próximo número libre** (mata el bug recurrente de colisiones: el 110 fue tomado dos veces,
+el 118 obligó a renumerar el 119, y el 127 colisionó DURANTE la escritura de este mismo doc),
+y una **acción sugerida copiable al portapapeles** (el comando de skill para Claude Code +
+su equivalente en lenguaje natural para Codex CLI / Copilot). La página **jamás ejecuta
+nada**: amplifica al operador, no lo reemplaza.
 
 **KPIs (binarios):**
 
@@ -53,8 +54,9 @@ Copilot). La página **jamás ejecuta nada**: amplifica al operador, no lo reemp
   `tests`, `evidencia` y `doc_sha256` por plan (schema real verificado) — pero es
   invisible: nadie lo ve salvo el agente supervisor.
 - Colisiones de numeración REALES y recurrentes: plan 110 tomado por dos planes distintos;
-  118 colisionó con winrm-1click y obligó a renumerar el 119. Un "próximo número libre"
-  visible las elimina.
+  118 colisionó con winrm-1click y obligó a renumerar el 119; y el 2026-07-12 DOS sesiones
+  propusieron "127" en paralelo (este doc nació 127 y tuvo que renumerarse a 128). Tres
+  colisiones documentadas. Un "próximo número libre" visible las elimina.
 - "Push manual pendiente" es el estado crónico del repo (regla del pipeline: los commits
   de planes NUNCA se pushean solos). Hoy no hay forma de ver cuántos planes están en esa
   condición sin correr git a mano.
@@ -163,7 +165,7 @@ Ruta: `<docs_dir>/_supervision/ledger.json`. Schema real: `{"version": 1, "plane
 | 6 | estado `IMPLEMENTADO` o `IMPLEMENTADO_PARCIAL` | `supervisar` | `Supervisar` | `/supervisar-implementaciones-planes <NN>` | `Pedile al agente supervisar la implementación del plan <NN> contra su documento y cerrar lo que falte.` |
 | 7 | resto (`SIN_ESTADO`) | `revisar` | `Sin estado` | `null` | `El doc del plan <NN> no tiene línea **Estado:** — agregásela para que el tablero lo clasifique.` |
 
-`<NN>` = `number_str` (ej. "127"). `estado_efectivo` (para chips y totales) = `"APROBADO"`
+`<NN>` = `number_str` (ej. "128"). `estado_efectivo` (para chips y totales) = `"APROBADO"`
 si aplica fila 1 o 2; si no, el estado normalizado del doc.
 
 ### 4.4 Contratos HTTP (congelados)
@@ -182,7 +184,7 @@ si aplica fila 1 o 2; si no, el estado normalizado del doc.
   "generated_at": "2026-07-12T15:00:00+00:00",
   "docs_dir_found": true,
   "git_available": true,
-  "next_free_number": 128,
+  "next_free_number": 129,
   "totals": {"PROPUESTO": 9, "CRITICADO": 2, "IMPLEMENTADO": 3, "IMPLEMENTADO_PARCIAL": 1,
              "APROBADO": 40, "SIN_ESTADO": 2, "unpushed": 6, "duplicados": 0, "total": 57},
   "plans": [ { "...": "PlanCard, ver abajo, orden number DESC" } ]
@@ -248,7 +250,7 @@ Cuando hay entrada de ledger: `"ledger": {"veredicto": "APROBADO", "fecha": "202
      buscá la clave por nombre, no por número de línea).
 2. `Stacky Agents/backend/config.py` — patrón EXACTO del Plan 109 (`config.py:494-497`):
    ```python
-   # ── Plan 127 — Tablero de evolución de planes (default OFF, editable por UI) ──
+   # ── Plan 128 — Tablero de evolución de planes (default OFF, editable por UI) ──
    STACKY_PLANS_BOARD_ENABLED: bool = os.getenv(
        "STACKY_PLANS_BOARD_ENABLED", "false"
    ).strip().lower() == "true"
@@ -266,7 +268,7 @@ Cuando hay entrada de ledger: `"ledger": {"veredicto": "APROBADO", "fecha": "202
 4. `Stacky Agents/backend/harness_defaults.env` — insertar `STACKY_PLANS_BOARD_ENABLED=false`
    respetando el ORDEN ALFABÉTICO del archivo.
 
-**Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan127_plans_board_flag.py`
+**Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan128_plans_board_flag.py`
 (espejo de `tests/test_plan93_preflight_flag.py`; 6 casos):
 1. `test_flag_declarada_en_registry` — existe FlagSpec con esa key, `type == "bool"`.
 2. `test_flag_ui_editable` — `env_only` es False/ausente en la spec.
@@ -275,7 +277,7 @@ Cuando hay entrada de ledger: `"ledger": {"veredicto": "APROBADO", "fecha": "202
 5. `test_categoria_observabilidad` — la key está en `_CATEGORY_KEYS["observabilidad_notif"]`.
 6. `test_defaults_env_y_help` — `harness_defaults.env` contiene la línea `STACKY_PLANS_BOARD_ENABLED=false` y el dict de help contiene la key.
 
-**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan127_plans_board_flag.py tests/test_harness_flags.py -q`
+**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan128_plans_board_flag.py tests/test_harness_flags.py -q`
 **Criterio binario:** 6/6 nuevos verdes Y `test_harness_flags.py` sin regresión (los fallos preexistentes documentados de `test_default_known_only_for_curated` no cuentan como regresión SOLO si ya fallaban en HEAD antes de tocar nada — verificarlo corriéndolo ANTES de F0).
 **Flag:** `STACKY_PLANS_BOARD_ENABLED` default OFF. **Runtimes:** N/A (declaración). **Operador:** ninguno.
 
@@ -336,9 +338,9 @@ def build_board(docs_dir: Path, unpushed_paths: set[str] | None,
     # - docs_dir_found = docs_dir.exists().
 ```
 
-**Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan127_plans_board_parser.py`
+**Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan128_plans_board_parser.py`
 (todo con `tmp_path`; NUNCA contra el docs/ real; 14 casos):
-1. `test_plan_file_re` — acepta `95_PLAN_X.md` y `126_PLAN_Y.md`; rechaza `TOP5_FOO.md`, `25_CHECKLIST_NUEVO_RUNTIME.md`, `9_PLAN_X.md` (1 dígito).
+1. `test_plan_file_re` — acepta `95_PLAN_X.md` y `126_PLAN_Y.md`; rechaza `TOP5_FOO.md`, `25_CHECKLIST_NUEVO_RUNTIME.md` (como plan), `9_PLAN_X.md` (1 dígito).
 2. `test_scan_no_recursivo` — un `120_PLAN_A.md` dentro de `tmp/docs/_legacy/` NO aparece.
 3. `test_estado_variantes` — los 5 fixtures de §4.1 producen exactamente (estado, veredicto, version, fecha) esperados (parametrizado).
 4. `test_estado_trampas` — doc solo con `**Estado del arte (verificado):** X` → SIN_ESTADO; doc solo con `**Estado previo:** CRITICADO v2` → SIN_ESTADO.
@@ -353,7 +355,7 @@ def build_board(docs_dir: Path, unpushed_paths: set[str] | None,
 13. `test_unpushed_none` — `unpushed_paths=None` → cards con `unpushed None` y totals["unpushed"]==0; ledger aprobado cae en fila 2 (`ok`), no en `push`.
 14. `test_build_board_orden_y_totales` — 3 planes → orden DESC, totals consistentes, `docs_dir_found`, `generated_at` ISO.
 
-**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan127_plans_board_parser.py -q`
+**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan128_plans_board_parser.py -q`
 **Criterio binario:** 14/14 verdes.
 **Flag:** no aplica (módulo puro, nadie lo importa aún). **Runtimes:** N/A. **Operador:** ninguno.
 
@@ -388,16 +390,16 @@ def collect_unpushed_docs(root: Path | None) -> set[str] | None
 ```
 PROHIBIDO cualquier otro subcomando git. PROHIBIDO `shell=True`.
 
-**Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan127_plans_board_git.py`
+**Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan128_plans_board_git.py`
 (monkeypatch de `subprocess.run`; 6 casos):
 1. salida normal (2 paths, uno repetido en 2 commits) → set de 2.
 2. salida con path C-quoteado `"Stacky Agents/docs/X.md"` → set lo contiene SIN comillas.
 3. returncode 1 (sin remoto / sin upstream) → None.
 4. raise `subprocess.TimeoutExpired` → None; raise `FileNotFoundError` (sin git) → None.
-5. `repo_root()` sobre árbol sin `.git` (monkeypatch `__file__`-parents no hace falta: testear `collect_unpushed_docs(None) is None`).
+5. `collect_unpushed_docs(None) is None` (root None = deploy congelado sin `.git`).
 6. verificación del comando: capturar args del mock y assert de la lista EXACTA de argv (congela el contrato read-only).
 
-**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan127_plans_board_git.py -q`
+**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan128_plans_board_git.py -q`
 **Criterio binario:** 6/6 verdes.
 **Flag:** no aplica aún. **Runtimes:** N/A. **Operador:** ninguno.
 
@@ -464,12 +466,12 @@ def get_detail(number: int) -> dict | None
 
 **Registro (2 líneas en `Stacky Agents/backend/api/__init__.py`, espejo de las de Plan 110):**
 ```python
-from .plans_board import bp as plans_board_bp  # Plan 127 — tablero de evolución de planes
+from .plans_board import bp as plans_board_bp  # Plan 128 — tablero de evolución de planes
 ...
 api_bp.register_blueprint(plans_board_bp)
 ```
 
-**Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan127_plans_board_endpoints.py`
+**Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan128_plans_board_endpoints.py`
 (fixtures `app_flag_off`/`app_flag_on` COPIADAS del patrón real `tests/test_plan87_devops_endpoints.py:6-29`,
 cambiando el attr a `STACKY_PLANS_BOARD_ENABLED`; 7 casos):
 1. `test_health_200_flag_off` — `/api/plans-board/health` → 200, `flag_enabled False`.
@@ -480,7 +482,7 @@ cambiando el attr a `STACKY_PLANS_BOARD_ENABLED`; 7 casos):
 6. `test_refresh_invalida_cache` — monkeypatch `services.plans_board.build_board` con contador; 2 GET seguidos → 1 build; tercer GET con `?refresh=1` → 2 builds.
 7. `test_rutas_sin_doble_prefijo` — sentinela (patrón `test_plan74_routes_registered.py`): el url_map contiene `/api/plans-board/list` y NO contiene `/api/api/plans-board/list`.
 
-**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan127_plans_board_endpoints.py -q`
+**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan128_plans_board_endpoints.py -q`
 **Criterio binario:** 7/7 verdes.
 **Flag:** gating 404 verificado. **Runtimes:** N/A. **Operador:** ninguno.
 
@@ -553,10 +555,9 @@ export function buildCopyPayload(a: SuggestedAction): string
 **Objetivo:** el tab "🧭 Planes" visible SOLO con flag ON, con tabla, hero de contadores, filtros, drawer de detalle y copiado al portapapeles.
 **Valor:** la feature completa usable el día uno.
 
-**Archivos a crear (3):**
+**Archivos a crear (2):**
 1. `Stacky Agents/frontend/src/pages/PlansBoardPage.tsx`
 2. `Stacky Agents/frontend/src/pages/PlansBoardPage.module.css`
-3. (nada más — la lógica vive en F4)
 
 **Archivos a editar (2):**
 1. `Stacky Agents/frontend/src/api/endpoints.ts` — agregar namespace (replicando el ESTILO
@@ -580,10 +581,10 @@ export function buildCopyPayload(a: SuggestedAction): string
    DevOps/Migrador (buscar por contenido, las líneas citadas son de HEAD actual):
    - Union `Tab` (línea ~30): agregar `| "planes"`.
    - `TAB_PATHS` (líneas ~31-46): agregar `planes: "/planes",`.
-   - Estado (tras línea ~62): `// Plan 127: tab Planes visible solo si el flag está ON en el backend` + `const [planesEnabled, setPlanesEnabled] = useState(false);`
+   - Estado (tras línea ~62): `// Plan 128: tab Planes visible solo si el flag está ON en el backend` + `const [planesEnabled, setPlanesEnabled] = useState(false);`
    - Effect de montaje (tras el fetch de `/api/devops/health`, líneas ~90-94):
      ```typescript
-     // Plan 127: comprobar si el tablero de planes está habilitado (flag backend)
+     // Plan 128: comprobar si el tablero de planes está habilitado (flag backend)
      fetch("/api/plans-board/health")
        .then((r) => r.json())
        .then((d: { flag_enabled?: boolean }) => setPlanesEnabled(d.flag_enabled === true))
@@ -591,7 +592,7 @@ export function buildCopyPayload(a: SuggestedAction): string
      ```
    - Effect de fallback (líneas ~132-139): agregar rama `else if (tab === "planes" && !planesEnabled) selectTab("team");` y `planesEnabled` al array de deps.
    - Nav + render (líneas ~223-253): bloque de botón espejo del de devops con `🧭 Planes`,
-     y `{tab === "planes" && planesEnabled && <PlansBoardPage />} {/* Plan 127 */}` + import arriba.
+     y `{tab === "planes" && planesEnabled && <PlansBoardPage />} {/* Plan 128 */}` + import arriba.
 
 **Contenido EXACTO de `PlansBoardPage.tsx` (estructura; estilos en el .module.css):**
 - Carga: `useEffect` → `PlansBoard.list()`; estados `loading` (spinner de texto "Cargando planes…"), `error` (banner con mensaje y botón "Reintentar" que llama `PlansBoard.list(true)`), `data`.
@@ -622,7 +623,7 @@ export function buildCopyPayload(a: SuggestedAction): string
 **Verificación de fase (binaria):**
 - `cd "Stacky Agents/frontend" && npx tsc --noEmit` → exit 0.
 - `cd "Stacky Agents/frontend" && npx vitest run src/plansBoard/model.test.ts` → verde.
-- Greps de wiring (los 4 devuelven ≥1 match):
+- Greps de wiring (los 2 devuelven ≥1 match):
   `grep -n "planes" "Stacky Agents/frontend/src/App.tsx"` (union, paths, state, health, fallback, nav, render);
   `grep -n "PlansBoard" "Stacky Agents/frontend/src/api/endpoints.ts"`.
 - Verificación manual del operador (flag ON, backend corriendo) queda declarada como
@@ -636,17 +637,17 @@ export function buildCopyPayload(a: SuggestedAction): string
 
 **Archivos a editar:**
 1. `Stacky Agents/backend/scripts/run_harness_tests.ps1` y `.sh` — agregar los 4 archivos
-   `test_plan127_*.py` como bloque nuevo, espejo del bloque de cualquier plan reciente
+   `test_plan128_*.py` como bloque nuevo, espejo del bloque de cualquier plan reciente
    (un `pytest` por archivo, mismo estilo de las líneas de Plan 80).
-2. Este doc (`127_PLAN_TABLERO_EVOLUCION_PLANES.md`): al terminar, actualizar la línea
+2. Este doc (`128_PLAN_TABLERO_EVOLUCION_PLANES.md`): al terminar, actualizar la línea
    `**Estado:**` a `IMPLEMENTADO — <fecha> (F0..F6 …)` (regla de la casa: estado sincronizado en el doc).
 
 **Comandos de cierre (todos deben quedar verdes, corridos por archivo):**
 ```
-cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan127_plans_board_flag.py -q
-cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan127_plans_board_parser.py -q
-cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan127_plans_board_git.py -q
-cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan127_plans_board_endpoints.py -q
+cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan128_plans_board_flag.py -q
+cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan128_plans_board_parser.py -q
+cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan128_plans_board_git.py -q
+cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan128_plans_board_endpoints.py -q
 cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q
 cd "Stacky Agents/frontend" && npx vitest run src/plansBoard/model.test.ts
 cd "Stacky Agents/frontend" && npx tsc --noEmit
@@ -671,9 +672,11 @@ reporte con el conteo antes/después idéntico).
   concurrentes son la norma en este repo): staging quirúrgico por hunk, prohibido
   stash/reset/checkout (guardarraíl §3.8); `git status` al final para verificar que el WIP
   ajeno sigue intacto.
-- **R5 — Colisión del propio número 127**: quien implemente debe re-verificar que
-  `127_PLAN_TABLERO_EVOLUCION_PLANES.md` sigue siendo el único `127_*` (irónicamente,
-  el board resuelve esto para siempre a partir de su implementación).
+- **R5 — Colisión de número (YA MATERIALIZADA):** este doc nació como 127 y otra sesión
+  propuso SU 127 (`e922b78f`, reuso IA local) el mismo día → renumerado a 128. Quien
+  implemente debe re-verificar que `128_PLAN_TABLERO_EVOLUCION_PLANES.md` sigue siendo el
+  único `128_*`. El board resuelve esta clase de bug para siempre (hero "Próximo Nº libre"
+  + badge DUP).
 - **R6 — Performance con ~140 docs**: solo se leen 4000 chars por archivo + sha256 solo de
   docs en ledger + 1 git call + TTL 15 s. Si `docs/` creciera 10×, el diseño aguanta sin
   cambios (escaneo sigue O(archivos), no O(bytes)).
@@ -740,6 +743,6 @@ reporte con el conteo antes/después idéntico).
 - [ ] El backend del feature no escribe NADA: único subprocess = el `git log` congelado de
       F2 (verificable: `grep -n "subprocess" "Stacky Agents/backend/services/plans_board.py"`
       muestra solo `collect_unpushed_docs`, y `grep -n "subprocess\|open(.*w" "Stacky Agents/backend/api/plans_board.py"` → 0 matches).
-- [ ] Ratchet ps1/sh actualizados con los 4 archivos `test_plan127_*`.
+- [ ] Ratchet ps1/sh actualizados con los 4 archivos `test_plan128_*`.
 - [ ] Encabezado `**Estado:**` de este doc actualizado al cerrar.
 - [ ] `git status` final: WIP ajeno intacto (staging quirúrgico verificado).

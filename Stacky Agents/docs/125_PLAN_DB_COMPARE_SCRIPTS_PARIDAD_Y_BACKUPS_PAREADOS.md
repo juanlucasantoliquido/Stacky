@@ -1,6 +1,6 @@
 # Plan 125 — Comparador de BD entre ambientes (serie 122–126, parte 4/5): scripts de paridad + backups pareados 1:1
 
-**Estado:** PROPUESTO (v1, 2026-07-12)
+**Estado:** PROPUESTO (v1.1, 2026-07-12 — integra prior art de campo Backup-TestTables.ps1 / Invoke-DevTestParityReplay.ps1: convención `_BAK_`, verificación de counts embebida, regla de aborto; ver doc 122 §2-bis)
 **Serie:** 122 (núcleo) → 123 (motor de diff) → 124 (UI inmersiva) → **125 (scripts de paridad + backups)** → 126 (paridad de datos)
 **Dependencias:** Planes 122 y 123 IMPLEMENTADOS (SchemaDiff v1 y runs, contratos congelados en doc 123 §F1/§F2). El Plan 124 es recomendable pero NO bloqueante (la UI de este plan agrega una tab a `DbComparePage.tsx`; si el 124 no está, se monta igual sobre la página del 122).
 **Ortogonal a:** Planes 116/119/120/121.
@@ -85,12 +85,13 @@ def quote_ident(name: str, dialect: str) -> str
 def qualified(schema: str, name: str, dialect: str) -> str   # quote_ident(schema) + "." + quote_ident(name)
 
 def backup_table_name(table: str, ts: str, max_len: int) -> str
-# ts = "yyyymmddHHMM" (12 chars, UTC). candidato = f"{table}_BKP{ts}"
+# CONVENCIÓN DEL OPERADOR (Backup-TestTables.ps1 y backups manuales preexistentes en TEST:
+# IN_CLIE_BAK, RCLIE_BAK, ... — ver doc 122 §2-bis): sufijo "_BAK_" + timestamp.
+# ts = "yyyymmdd_HHMMSS" (15 chars, UTC). candidato = f"{table}_BAK_{ts}"   # sufijo fijo: 20 chars
 # si len(candidato) <= max_len → candidato
 # si no: hash6 = sha256(table.encode()).hexdigest()[:6].upper()
-#        head = table[: max_len - 12 - 7]   # 12 = len("_BKP"+hash6+ts[-8:])... NO: fórmula cerrada abajo
-#        candidato = f"{head}_BKP{hash6}{ts[4:8]}"  # _BKP + 6 hash + MMDD = 14 chars fijos de sufijo
 #        head = table[: max_len - 14]
+#        candidato = f"{head}_BAK{hash6}{ts[4:8]}"   # "_BAK" + hash6 + MMDD = 14 chars fijos de sufijo
 # determinista: mismo (table, ts, max_len) → mismo nombre. Test golden fija ambos caminos.
 
 def script_filename(seq: int, kind: str, schema: str, name: str) -> str
@@ -100,7 +101,7 @@ def script_filename(seq: int, kind: str, schema: str, name: str) -> str
 
 **Tests PRIMERO:** `tests/test_plan125_dbcompare_sqlnames.py`
 - `test_quote_sqlserver_escapa_corchete` (`ab]c` → `[ab]]c]`), `test_quote_oracle_upper_y_comillas`,
-- `test_backup_name_corto_golden` (`CLIENTES`, ts `202607121400`, 128 → `CLIENTES_BKP202607121400`),
+- `test_backup_name_corto_golden` (`CLIENTES`, ts `20260712_140000`, 128 → `CLIENTES_BAK_20260712_140000`),
 - `test_backup_name_truncado_golden` (tabla de 40 chars con max_len=30 → valor literal fijado en el test),
 - `test_backup_name_determinista`, `test_script_filename_slug`.
 
@@ -143,7 +144,7 @@ def render_column_def(col: dict, dialect: str) -> str
 | `pk_changed` | `ALTER TABLE <q> DROP CONSTRAINT <pk_dest>;` + `ALTER TABLE <q> ADD CONSTRAINT <pk_src_name_o_PK_tabla> PRIMARY KEY (<cols>);` | ídem | **sí** / sí |
 | `fk_added` / `unique_added` / `check_added` | `ALTER TABLE <q> ADD CONSTRAINT <n> FOREIGN KEY (<cols>) REFERENCES <q_ref> (<cols_ref>);` / `... UNIQUE (<cols>);` / `... CHECK (<sqltext>);` | ídem | no / sí |
 | `fk_removed` / `unique_removed` / `check_removed` | `ALTER TABLE <q> DROP CONSTRAINT <n>;` | ídem | no (unique_removed **sí** según tabla 123) / sí |
-| `fk_changed` / `check_changed` / `index_changed` | pieza DROP + pieza ADD/CREATE (dos ScriptPiece) | ídem | no / sí |
+| `fk_changed` / `check_changed` / `index_changed` | NO llegan del diff v1.1 (doc 123: los cambios de firma se reportan como `*_removed` + `*_added`, ya cubiertos arriba); si un diff futuro los emitiera: pieza DROP + pieza ADD/CREATE (dos ScriptPiece) | ídem | no / sí |
 | `index_added` | `CREATE [UNIQUE ]INDEX <n> ON <q> (<cols>);` | ídem | no / no |
 | `index_removed` | `DROP INDEX <n_q> ON <q>;` | `DROP INDEX <n_q>;` | no / sí |
 | `view_added` / `view_definition_changed` | `CREATE OR ALTER VIEW <q> AS`\n`<definition>` — si `definition` es None → TODO el script comentado con `-- DEFINICIÓN NO CAPTURADA EN SNAPSHOT; completar a mano` | `CREATE OR REPLACE VIEW <q> AS ...` misma regla | no / no |
@@ -164,9 +165,29 @@ ALTER TABLE <q> ADD CONSTRAINT [DF_<tabla>_<columna>] DEFAULT <expr> FOR [<colum
 **Reglas de resguardo (`emit_resguardo`):**
 - Pieza con `destructive=true` que toca DATOS (`table_removed`, `column_removed`,
   `column_type_changed`, `column_nullable_tightened`, `pk_changed`, `unique_removed`) →
-  **backup de datos de la tabla** (1 solo por tabla por bundle, dedupe por `(schema, tabla)`):
-  - sqlserver: `SELECT * INTO <q_schema>.[<bkp>] FROM <q>;`
-  - oracle: `CREATE TABLE <q_schema>."<BKP>" AS SELECT * FROM <q>;`
+  **backup de datos de la tabla** (1 solo por tabla por bundle, dedupe por `(schema, tabla)`),
+  CON VERIFICACIÓN DE COUNTS EMBEBIDA (doctrina Backup-TestTables.ps1: reporta OK solo si
+  origen==backup; acá la verificación viaja DENTRO del script generado). Templates literales:
+  - sqlserver:
+    ```sql
+    SELECT * INTO <q_schema>.[<bkp>] FROM <q>;
+    IF (SELECT COUNT(*) FROM <q_schema>.[<bkp>]) <> (SELECT COUNT(*) FROM <q>)
+        THROW 50001, 'BACKUP INCOMPLETO: counts no coinciden para <schema>.<tabla> - NO CONTINUAR con la paridad', 1;
+    ```
+    (SELECT INTO falla solo si `<bkp>` ya existe → nunca pisa un backup previo, mismo fail-safe del script del operador.)
+  - oracle:
+    ```sql
+    CREATE TABLE <q_schema>."<BKP>" AS SELECT * FROM <q>;
+    DECLARE v_src NUMBER; v_bak NUMBER;
+    BEGIN
+      SELECT COUNT(*) INTO v_src FROM <q>;
+      SELECT COUNT(*) INTO v_bak FROM <q_schema>."<BKP>";
+      IF v_src <> v_bak THEN
+        RAISE_APPLICATION_ERROR(-20001, 'BACKUP INCOMPLETO: counts no coinciden para <schema>.<tabla> - NO CONTINUAR con la paridad');
+      END IF;
+    END;
+    /
+    ```
   - `<bkp> = backup_table_name(tabla, ts, IDENT_MAX[dialect])` (F1).
 - Pieza que DROPea o cambia un objeto reconstruible (`index_removed`, `fk_removed`,
   `unique_removed`, `check_removed`, `view_removed`, `*_changed` estructurales,
@@ -191,7 +212,8 @@ ALTER TABLE <q> ADD CONSTRAINT [DF_<tabla>_<columna>] DEFAULT <expr> FOR [<colum
 - 1 test golden por kind de la tabla (string EXACTO, incluyendo el bloque default dinámico),
 - `test_column_added_notnull_sin_default_comenta`,
 - `test_view_sin_definicion_todo_comentado`,
-- `test_backup_dedupe_por_tabla`.
+- `test_backup_dedupe_por_tabla`,
+- `test_backup_incluye_verificacion_counts` (golden: el THROW/RAISE_APPLICATION_ERROR está en el script, por dialecto).
 
 **Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan125_dbcompare_emitters_sqlserver.py tests/test_plan125_dbcompare_emitters_oracle.py -q`
 
@@ -247,6 +269,9 @@ def bundle_zip_bytes(run_id: str) -> bytes          # zipfile en BytesIO con TOD
   toda entry con `destructive or modifies_table` tiene `backup_file or rollback_file`;
   si no se cumple → excepción (nunca se persiste un bundle inválido).
 - Regenerar un bundle existente → borra el directorio del run y lo reescribe (idempotente).
+- El `README.md` del bundle incluye SIEMPRE esta regla literal (doctrina del paso 0 de
+  `Invoke-DevTestParityReplay.ps1`, ver doc 122 §2-bis):
+  `🛑 Si CUALQUIER backup falla su verificación de counts: NO ejecutar NINGÚN script de paridad ni destructivo. Primero resolver el backup.`
 
 **Orden FK-safe (función interna `_ordered_pieces`):**
 - Grafo de dependencia con las FKs del snapshot ORIGEN para creates (`table_added`):
@@ -351,7 +376,7 @@ cd "Stacky Agents/frontend" && npx vitest run src/components/dbcompare/ && npx t
 |---|---|
 | El operador ejecuta paridad sin backup | Numeración fuerza backups primero; README + banner UI + encabezado de cada .sql lo repiten; el pareo es visible en la tabla y en el SqlViewer split. |
 | Tipos con sintaxis no portable entre versiones del motor | El tipo viene LITERAL del snapshot del mismo motor (str(col.type) del dialecto real); no traducimos tipos. |
-| Nombre de backup colisiona (2 corridas mismo minuto) | `ts` con minutos + regenerar borra el bundle previo del run; colisión entre runs distintos es imposible (directorio por run_id). En la BD real, si la tabla `_BKP...` ya existe el script falla ANTES de tocar datos (fail-safe correcto). |
+| Nombre de backup colisiona (2 corridas casi simultáneas) | `ts` con segundos + regenerar borra el bundle previo del run; colisión entre runs distintos es imposible (directorio por run_id). En la BD real, si la tabla `_BAK_...` ya existe, `SELECT * INTO`/`CREATE TABLE AS` fallan ANTES de tocar datos (fail-safe correcto, mismo comportamiento que Backup-TestTables.ps1). |
 | Path traversal en `scripts/file` | Allowlist estricta desde el manifest (test dedicado). |
 | Vistas sin definición capturada | Script completo comentado + nota; nunca un CREATE VIEW vacío ejecutable. |
 | Defaults SQL Server sin nombre de constraint en snapshot | Bloque dinámico literal de §F2 que resuelve el nombre en ejecución. |

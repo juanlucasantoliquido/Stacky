@@ -1,6 +1,6 @@
 # Plan 123 — Comparador de BD entre ambientes (serie 122–126, parte 2/5): motor de diff, severidades y corridas comparativas
 
-**Estado:** PROPUESTO (v1, 2026-07-12)
+**Estado:** PROPUESTO (v1.1, 2026-07-12 — fix por prior art de campo: identidad de constraints/índices por FIRMA ESTRUCTURAL, no por nombre; ver doc 122 §2-bis)
 **Serie:** 122 (núcleo) → **123 (motor de diff)** → 124 (UI inmersiva) → 125 (scripts de paridad + backups) → 126 (paridad de datos)
 **Dependencias:** Plan 122 IMPLEMENTADO (registro `services/dbcompare_registry.py`, engine `services/dbcompare_engine.py`, snapshot v1 `services/dbcompare_snapshot.py`, blueprint `api/db_compare.py`). Este plan NO arranca si el 122 no está verde.
 **Ortogonal a:** Planes 116/119/120/121.
@@ -131,11 +131,11 @@ def summarize(items: list[dict], objects_total: int, objects_unchanged: int) -> 
 | `column_nullable_tightened` | danger | origen `nullable=False`, destino `True` (paridad endurece → riesgo con datos existentes) |
 | `column_default_changed` | info | `default` distinto |
 | `column_autoincrement_changed` | warn | `autoincrement` distinto |
-| `pk_changed` | danger | `primary_key.columns` distinto (comparar listas ordenadas) |
-| `fk_added` / `fk_removed` / `fk_changed` | warn / warn / warn | FKs por clave `(name or columns-tuple)` |
-| `index_added` / `index_removed` / `index_changed` | warn / warn / warn | índices por `name`; changed = columns o unique distintos |
-| `unique_added` / `unique_removed` | warn / warn | unique constraints por `name` |
-| `check_added` / `check_removed` / `check_changed` | warn / warn / warn | checks por `name`; changed = `sqltext` distinto |
+| `pk_changed` | danger | `primary_key.columns` distinto (comparar listas ordenadas; el NOMBRE del constraint NO participa) |
+| `fk_added` / `fk_removed` | warn / warn | FKs por FIRMA `(tuple(columns), referred_schema.referred_table, tuple(referred_columns))`; el nombre NUNCA es identidad. `fk_changed` NO se emite en v1: un cambio de firma = `fk_removed` + `fk_added` |
+| `index_added` / `index_removed` | warn / warn | índices por FIRMA `(unique, tuple(columns))`; nombre excluido. `index_changed` NO se emite en v1 (= removed+added) |
+| `unique_added` / `unique_removed` | warn / warn | unique constraints por FIRMA `tuple(columns)`; nombre excluido |
+| `check_added` / `check_removed` | warn / warn | checks por `sqltext` NORMALIZADO (upper, colapsar espacios múltiples a uno, strip de paréntesis exteriores balanceados); nombre excluido. `check_changed` NO se emite en v1 |
 | `view_added` / `view_removed` | warn / warn | vistas por nombre |
 | `view_definition_changed` | warn | `definition_sha256` distinto (si alguno es `None` → kind `view_definition_changed` con `detail.unverifiable=true`) |
 | `sequence_added` / `sequence_removed` | info / warn | secuencias por nombre |
@@ -154,13 +154,25 @@ for schema in sorted(union(source.schemas, target.schemas)):
 ```
 - Columnas se matchean por `name` (case-sensitive tal cual snapshot); el ORDEN ordinal NO
   genera diff (decisión v1: orden de columnas no es diferencia de paridad).
-- FKs sin `name` (None) se matchean por tupla `(tuple(columns), referred_table, tuple(referred_columns))`.
+- **Doctrina de campo (Compare-DevTestDatabase.ps1, ver doc 122 §2-bis):** FKs, índices,
+  uniques y checks se matchean SIEMPRE por firma estructural — los nombres autogenerados
+  por el motor (`PK__t__hash`, `DF__...`) difieren entre BDs y matchear por nombre produce
+  falsos positivos masivos. Los nombres de ambos lados van en `detail` (`name_source`,
+  `name_target`) SOLO informativos para el drill-down.
+- `column_default_changed`: antes de comparar `default`, normalizar en ambos lados con
+  `_normalize_default(s)`: si `s` es None → None; strip; mientras empiece con `(` y
+  termine con `)` balanceados → sacar UNA capa; upper NO (defaults pueden ser strings
+  case-sensitive). SQL Server envuelve defaults en capas de paréntesis (`((0))` vs `(0)`)
+  y sin esto se generan diffs falsos.
 
 **Tests PRIMERO:** `tests/test_plan123_dbcompare_diff.py` (fixtures: dicts snapshot v1 inline mínimos, SIN BD)
 - `test_identicos_score_100_sin_items`
 - `test_tabla_added_removed_severidades` (added→warn, removed→danger)
 - `test_columna_tipo_nullable_default` (danger/danger/info según tabla; relaxed vs tightened ambos sentidos)
 - `test_pk_e_indices`
+- `test_firma_no_nombre` — mismo índice/FK/check con NOMBRES autogenerados distintos en
+  cada lado (`PK__CLIE__A1`, `PK__CLIE__B2`) → CERO items (regresión de la doctrina de campo)
+- `test_default_normalizado_parentesis` — `((0))` vs `(0)` → sin diff; `(getdate())` vs `(0)` → `column_default_changed`
 - `test_view_sha_y_unverifiable`
 - `test_engines_distintos_lanza`
 - `test_determinismo_json_byte_identico` (KPI-1)
@@ -168,7 +180,7 @@ for schema in sorted(union(source.schemas, target.schemas)):
 
 **Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan123_dbcompare_diff.py -q`
 
-**Criterio binario:** 8 tests verdes.
+**Criterio binario:** 10 tests verdes.
 
 **Flag:** ninguna (módulo puro). **Runtimes:** N/A. **Operador:** ninguno.
 

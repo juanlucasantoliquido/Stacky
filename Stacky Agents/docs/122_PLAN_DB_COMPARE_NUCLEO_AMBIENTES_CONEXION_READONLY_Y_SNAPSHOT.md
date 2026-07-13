@@ -1,6 +1,6 @@
 # Plan 122 — Comparador de BD entre ambientes (serie 122–126, parte 1/5): núcleo de ambientes, conexión read-only real y snapshot de esquema
 
-**Estado:** PROPUESTO (v1, 2026-07-12)
+**Estado:** PROPUESTO (v1.1, 2026-07-12 — integra prior art de campo: scripts RSPACIFICO del operador, ver §2-bis)
 **Serie:** 122 (núcleo) → 123 (motor de diff) → 124 (UI inmersiva) → 125 (scripts de paridad + backups) → 126 (paridad de datos)
 **Dependencias:** ninguna (abre la serie). Reusa el patrón de registro con keyring del Plan 91 (`services/server_registry.py`) y el sustrato de validación SELECT-only de `services/db_query.py`.
 **Ortogonal a:** Plan 116 (doctor conexiones DevOps), Plan 119 (rediseño dashboard DevOps), Plan 120 (Centro de Despliegues), Plan 121 (centinela de egreso).
@@ -60,6 +60,31 @@ Este plan (1/5) entrega el cimiento sin el cual nada del resto existe:
 - La revisión E2E DevOps y los planes 87–120 cubrieron pipelines, servidores y deploys;
   la BASE DE DATOS — donde vive la paridad real del producto RS — quedó sin cobertura.
   Este es el gap de mayor valor operativo que queda abierto.
+
+## 2-bis. Prior art operativo (obligatorio leer antes de implementar la serie)
+
+El operador ya corrió a mano este flujo completo el 2026-07-12 en el repo RSPACIFICO;
+esos scripts son la referencia de campo VALIDADA de la serie (leerlos antes de codear):
+
+- `N:\GIT\RS\RSPACIFICO\pipelines\scripts\Compare-DevTestDatabase.ps1` — snapshot dual
+  (DEV on-prem + TEST Azure SQL Managed Instance SIN conectividad entre sí → compara
+  snapshots en memoria, misma arquitectura de esta serie), estructura completa por
+  INFORMATION_SCHEMA/sys.* + datos de RCONTROLES/RMODULOS/RIDIOMA por PK real.
+- `N:\GIT\RS\RSPACIFICO\pipelines\scripts\Backup-TestTables.ps1` — backup aditivo
+  `SELECT * INTO dbo.<t>_BAK_<ts>` con verificación de COUNT(*) origen=backup y manifest.
+- `N:\GIT\RS\RSPACIFICO\pipelines\scripts\Invoke-DevTestParityReplay.ps1` — orquestador
+  del replay con paso 0 = backup (aborta TODO si un backup no verifica), gates read-only
+  antes de ALTERs riesgosos, e idempotencia por ítem.
+
+Doctrina extraída (se cablea en los planes 123/125/126, ya incorporada en sus v1.1):
+constraints/índices se matchean por FIRMA ESTRUCTURAL y no por nombre (los nombres
+autogenerados difieren entre BDs → falsos positivos); backups con verificación de counts
+embebida; INSERTs de datos idempotentes con guarda por fila.
+
+Contexto de ambientes reales (para el registro del operador, NO hardcodear en código):
+DEV `aisbddev02.cloud.ais-int.net` (credencial canónica en `trunk\Batch\XMLConfig.xml`
+del repo RSPACIFICO); TEST `sqlmi-rspacifbra-test...database.windows.net` (endpoint
+PRIVADO de Azure: un timeout casi siempre es VPN/VNet ausente, no credencial mala).
 
 ## 3. Principios y guardarraíles
 
@@ -246,7 +271,11 @@ def open_engine(alias: str, *, timeout_sec: int | None = None) -> "sqlalchemy.en
 def test_connection(alias: str) -> dict
     # abre engine, ejecuta _PROBE_SQL del dialecto, mide latencia:
     # ok → {"ok": True, "engine": env["engine"], "server_version": str(eng.dialect.server_version_info or ""), "latency_ms": int}
-    # error → {"ok": False, "error": <mensaje SIN password>, "install_hint": <si aplica>}
+    # error → {"ok": False, "error": <mensaje SIN password>, "install_hint": <si aplica>,
+    #          "likely_network": bool}
+    # likely_network (doctrina Compare-DevTestDatabase.ps1: LikelyNetworkIssue): True si el
+    # mensaje matchea re.search(r"timeout|network-related|could not be found|no such host|actively refused|unreachable", msg, re.I)
+    # → la UI muestra "Probable problema de red/VPN (el TEST real es un endpoint privado de Azure), no necesariamente credencial incorrecta."
     # Scrub: si str(exc) contiene el password, reemplazarlo por "***" antes de devolver.
 ```
 
@@ -263,6 +292,7 @@ def test_connection(alias: str) -> dict
 - `test_test_connection_sqlite_ok` — ambiente `test-sqlite` apuntando a un archivo sqlite tmp
   creado por el test: `ok==True`, `latency_ms >= 0`.
 - `test_error_no_filtra_password` — forzar excepción cuyo texto contiene el password → respuesta lo enmascara.
+- `test_likely_network_clasifica` — mensajes "Timeout expired" y "network-related" → `likely_network=True`; "Login failed" → `False`.
 
 **Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan122_dbcompare_engine.py -q`
 

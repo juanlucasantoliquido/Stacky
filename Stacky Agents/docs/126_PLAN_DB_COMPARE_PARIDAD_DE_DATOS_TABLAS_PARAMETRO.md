@@ -1,6 +1,6 @@
 # Plan 126 — Comparador de BD entre ambientes (serie 122–126, parte 5/5): paridad de DATOS de tablas de parámetros
 
-**Estado:** PROPUESTO (v1, 2026-07-12)
+**Estado:** PROPUESTO (v1.1, 2026-07-12 — integra prior art de campo: caso real DEV→TEST con RCONTROLES/RMODULOS/RIDIOMA e INSERTs idempotentes con guarda por fila; ver doc 122 §2-bis)
 **Serie:** 122 (núcleo) → 123 (motor de diff) → 124 (UI inmersiva) → 125 (scripts + backups) → **126 (paridad de datos)**
 **Dependencias:** Planes 122, 123 y 125 IMPLEMENTADOS (snapshots con PK por tabla, runs, bundle con manifest v1). Plan 124 recomendable (la UI de este plan vive en el drill-down y en la tab Scripts).
 **Ortogonal a:** Planes 116/119/120/121.
@@ -44,6 +44,10 @@ pisar o modificar"* — eso es DATOS, no solo DDL. Este plan cierra la serie agr
 - Con 122–125 el operador iguala ESTRUCTURA; el drift de comportamiento del producto RS
   vive en los DATOS de parámetros (doctrina conocida del ecosistema: catálogo de procesos,
   `RTABL`, `RIDIOMA`). Sin esto, "paridad de ambientes" queda a mitad de camino.
+- Caso real ya corrido a mano (2026-07-12, `Compare-DevTestDatabase.ps1` con
+  `-DataCompareTables RCONTROLES, RMODULOS, RIDIOMA` — ver doc 122 §2-bis): la comparación
+  fila-por-fila por PK real de esas 3 tablas de parámetros fue exactamente lo que destrabó
+  el replay DEV→TEST de RSPACIFICO. Este plan productiza ese flujo validado.
 - El pedido original menciona explícitamente el pisado de tablas: pisar = DML. El backup
   pareado de datos es la mitad de la promesa de la serie.
 
@@ -208,7 +212,12 @@ def run_data_diff(run_id: str, tables: list[dict]) -> None
 def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str) -> list[ScriptPiece]
 # por tabla con only_source/changed/only_target no vacíos:
 #   1 ScriptPiece INSERT  (action="data_insert",  destructive=False, modifies_table=True):
-#     por fila de only_source: "INSERT INTO <q> (<cols>) VALUES (<sql_literal(...)>);" (una línea por fila, orden PK)
+#     por fila de only_source, INSERT IDEMPOTENTE con guarda por fila (doctrina items 9/10 de
+#     Invoke-DevTestParityReplay.ps1, ver doc 122 §2-bis — reejecutar el script debe ser seguro):
+#     sqlserver: "IF NOT EXISTS (SELECT 1 FROM <q> WHERE <pk_col> = <lit>[ AND ...]) INSERT INTO <q> (<cols>) VALUES (<sql_literal(...)>);"
+#     oracle:    "INSERT INTO <q> (<cols>) SELECT <lits> FROM dual WHERE NOT EXISTS (SELECT 1 FROM <q> WHERE <pk_col> = <lit>[ AND ...]);"
+#     sqlite (tests): "INSERT INTO <q> (<cols>) SELECT <lits> WHERE NOT EXISTS (SELECT 1 FROM <q> WHERE <pk_col> = <lit>[ AND ...]);"
+#     (una pieza por fila, orden PK; UPDATE por PK y DELETE por PK ya son idempotentes por naturaleza)
 #   1 ScriptPiece UPDATE  (action="data_update",  destructive=True,  modifies_table=True):
 #     por fila changed: "UPDATE <q> SET <col> = <lit>[, ...] WHERE <pk_col> = <lit>[ AND ...];"
 #   1 ScriptPiece DELETE  (action="data_delete",  destructive=True,  modifies_table=True):
@@ -226,7 +235,8 @@ def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str)
 - README del bundle suma sección `Datos` con contadores por tabla.
 
 **Tests PRIMERO:** `tests/test_plan126_dbcompare_data_scripts.py`
-- `test_insert_update_delete_golden_sqlserver` / `..._oracle` (strings literales, filas ordenadas por PK),
+- `test_insert_update_delete_golden_sqlserver` / `..._oracle` (strings literales, filas ordenadas por PK; el golden del INSERT INCLUYE la guarda NOT EXISTS),
+- `test_insert_idempotente_reejecutable_sqlite` (e2e: aplicar el script de INSERT dos veces sobre la sqlite destino → mismo row count, sin error),
 - `test_delete_va_a_destructivo`,
 - `test_kpi3_backup_por_tabla_con_dml` (manifest: entries data_* → tabla tiene backup en 01_backups/),
 - `test_bytes_truncados_comenta_fila`,

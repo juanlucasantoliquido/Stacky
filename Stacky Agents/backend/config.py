@@ -87,6 +87,16 @@ class Config:
     LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen3:32b")
     LOCAL_LLM_TIMEOUT_SEC = int(os.getenv("LOCAL_LLM_TIMEOUT_SEC", "120"))
 
+    # Plan 127 — Reuso IA local: análisis de errores de ejecuciones + doctor local
+    # DevOps. Default ON por directiva explícita del operador (2026-07-12); espejo
+    # del default=True de las FlagSpec en services/harness_flags.py.
+    STACKY_EXEC_ERROR_ANALYSIS_ENABLED = os.getenv(
+        "STACKY_EXEC_ERROR_ANALYSIS_ENABLED", "true"
+    ).lower() in ("true", "1", "yes")
+    STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED = os.getenv(
+        "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED", "true"
+    ).lower() in ("true", "1", "yes")
+
     # Plan 117 — Insights locales de ejecuciones. Default OFF (el operador activa por UI).
     STACKY_LOCAL_INSIGHTS_ENABLED = os.getenv("STACKY_LOCAL_INSIGHTS_ENABLED", "false").lower() in (
         "1", "true", "yes",

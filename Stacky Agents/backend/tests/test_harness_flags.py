@@ -547,6 +547,10 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_CODEBASE_MEMORY_MCP_ENABLED",
     "STACKY_GITLAB_DEEP_LINKS_ENABLED",
     "STACKY_ADO_PREWARM_ENABLED",
+    # ── Activación operador 2026-07-12 — Plan 127: reuso IA local ON por default
+    # (directiva explícita "HACELO DEFAULT ON"; HITL on-demand, cero costo pasivo) ──
+    "STACKY_EXEC_ERROR_ANALYSIS_ENABLED",
+    "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED",
 }
 
 

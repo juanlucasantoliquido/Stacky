@@ -305,6 +305,13 @@ $HarnessTestFiles = @(
   "tests/test_flag_wiring.py"
   # Plan 86 - Flags para mortales: ayuda en lenguaje llano
   "tests/test_harness_flags_help.py"
+  # Plan 127 - Reuso IA local: analisis de errores + doctor local DevOps
+  "tests/test_plan127_flags.py"
+  "tests/test_plan127_diag_snapshot.py"
+  "tests/test_plan127_error_analysis_core.py"
+  "tests/test_plan127_error_analysis_api.py"
+  "tests/test_plan127_doctor_context.py"
+  "tests/test_plan127_devops_doctor_local.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

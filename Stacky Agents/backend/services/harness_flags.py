@@ -202,6 +202,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",  # Plan 107 — preview de árbol de ambientes
         "STACKY_DEVOPS_ENV_SANDBOX_ENABLED",  # Plan 107 — raíz sandbox de pruebas
         "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED",  # Plan 116 — doctor de conexiones
+        "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED",  # Plan 127 — doctor local DevOps (IA local)
         "STACKY_PR_REVIEWER_ENABLED",       # Plan 110 — revisor de PRs
         "STACKY_PR_REVIEW_HAIKU_MODEL",     # Plan 110 — modelo Haiku para la revisión
         "STACKY_PR_REVIEW_DIFF_MAX_CHARS",  # Plan 110 — tope del diff (privacidad, camino Haiku)
@@ -261,6 +262,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_LOCAL_INSIGHTS_ENABLED", "STACKY_LOCAL_INSIGHTS_SWEEP_SEC",  # Plan 117
         "STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE", "STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS",  # Plan 117
         "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",  # Plan 117
+        "STACKY_EXEC_ERROR_ANALYSIS_ENABLED",  # Plan 127 — análisis de errores con IA local
     ),
     "capacidades_optin": (
         # Activación operador 2026-07-10 — features que el operador invoca a demanda
@@ -2718,6 +2720,38 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Habilita narrar el digest de ejecuciones en lenguaje natural con el modelo local (botón en la card del digest).",
         group="global",
         requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+    ),
+    # ── Plan 127 — Reuso IA local: análisis de errores + doctor local DevOps ────
+    FlagSpec(
+        key="STACKY_EXEC_ERROR_ANALYSIS_ENABLED",
+        type="bool",
+        label="Análisis de errores con IA local",
+        description=(
+            "Plan 127 — Botón en el detalle de una ejecución fallida que pide al "
+            "modelo local (Plan 106) causa raíz y próximos pasos. Default ON "
+            "(directiva del operador 2026-07-12). Requiere el modelo local "
+            "habilitado (chequeo en runtime)."
+        ),
+        group="global",
+        env_only=False,
+        # SIN requires= estático hacia LOCAL_LLM_ENABLED: la dependencia se chequea
+        # en runtime vía _guard() (R4 prohíbe cadenas; precedente harness_flags.py:2684).
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED",
+        type="bool",
+        label="Doctor local DevOps (IA local)",
+        description=(
+            "Plan 127 — Alternativa gratuita y sin egreso al doctor de sección: "
+            "analiza pipeline/environments/publicaciones y fallos de CI con el "
+            "modelo local. Nada sale de tu máquina. Default ON (directiva del "
+            "operador 2026-07-12)."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        default=True,
     ),
 )
 

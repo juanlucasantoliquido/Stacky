@@ -187,9 +187,19 @@ class Config:
 
     # Claude Code CLI runtime
     CLAUDE_CODE_CLI_BIN = os.getenv("CLAUDE_CODE_CLI_BIN", "claude")
-    # Modelo por defecto FIJO para toda invocación del CLI (requisito operador):
-    # sonnet 4.6. Configurable vía .env; vacío = delegar al router (legacy).
-    CLAUDE_CODE_CLI_MODEL = os.getenv("CLAUDE_CODE_CLI_MODEL", "claude-sonnet-4-6")
+    # Modelo PRIMARIO fijo para toda invocación del CLI (requisito operador,
+    # actualizado): Sonnet 5. Configurable vía .env/Settings; vacío = delegar
+    # al router (legacy). Si el CLI rechaza este modelo al arrancar (versión
+    # vieja sin soporte, --model inválido, error de spawn, etc.),
+    # claude_code_cli_runner reintenta UNA vez con CLAUDE_CODE_CLI_MODEL_FALLBACK
+    # antes de darse por vencido (ver _spawn_claude_with_fallback).
+    CLAUDE_CODE_CLI_MODEL = os.getenv("CLAUDE_CODE_CLI_MODEL", "claude-sonnet-5")
+    # Modelo de FALLBACK: se usa solo si el intento con CLAUDE_CODE_CLI_MODEL
+    # falla casi de inmediato al spawnear. Antes sonnet-4-6 era el primario fijo;
+    # ahora es el respaldo del nuevo primario (sonnet-5).
+    CLAUDE_CODE_CLI_MODEL_FALLBACK = os.getenv(
+        "CLAUDE_CODE_CLI_MODEL_FALLBACK", "claude-sonnet-4-6"
+    )
     # Reasoning effort del CLI (`--effort`). Valores válidos: low|medium|high.
     # Default fijo: medium. Vacío o inválido = no se pasa el flag.
     CLAUDE_CODE_CLI_EFFORT = os.getenv("CLAUDE_CODE_CLI_EFFORT", "medium")
@@ -1036,6 +1046,11 @@ class Config:
     STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED: bool = os.getenv(
         "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
+
+    # Plan 119 — Rediseño minimalista del shell DevOps (default OFF, editable por UI).
+    STACKY_DEVOPS_UI_V2_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_UI_V2_ENABLED", "false"
+    ).lower() in ("1", "true", "yes", "on")
 
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").

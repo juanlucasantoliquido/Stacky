@@ -61,6 +61,7 @@ def _health_payload() -> dict:
         "env_sandbox_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", False)),  # Plan 107
         "pr_reviewer_enabled": bool(getattr(cfg, "STACKY_PR_REVIEWER_ENABLED", False)),  # Plan 110
         "connection_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", False)),  # Plan 116
+        "ui_v2_enabled": bool(getattr(cfg, "STACKY_DEVOPS_UI_V2_ENABLED", False)),  # Plan 119
     }
 
 

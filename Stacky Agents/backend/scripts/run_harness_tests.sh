@@ -207,6 +207,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan113_git_gate.py
   tests/test_plan113_apply.py
   tests/test_plan113_endpoints.py
+  tests/test_documenter_autonomy.py
   # — Plan 114 · Doctor de staleness doc↔código —
   tests/test_plan114_flag.py
   tests/test_plan114_staleness.py
@@ -229,6 +230,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan117_insights_sweep.py
   tests/test_plan117_insights_api.py
   tests/test_plan117_digest_narrative.py
+  # — Plan 119 · Rediseño minimalista del shell DevOps —
+  tests/test_plan119_devops_ui_v2_flag.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

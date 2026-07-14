@@ -356,6 +356,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan127_error_analysis_api.py
   tests/test_plan127_doctor_context.py
   tests/test_plan127_devops_doctor_local.py
+  tests/test_plan127_ci_explain_local.py
 )
 
 pass=0

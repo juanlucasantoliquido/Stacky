@@ -409,3 +409,91 @@ def doctor_diagnose_route():
     return jsonify({"provider": provider.name, "jobs": jobs,
                     "no_failures_found": len(failed) == 0,
                     "failed_jobs_total": len(failed)})   # honestidad del cap
+
+
+@bp.post("/doctor/explain-failure")
+def doctor_explain_failure_route():
+    """Plan 127 C2 — explica UN job fallido con el modelo LOCAL. El log NO se persiste."""
+    if not getattr(_config.config, "STACKY_DEVOPS_DOCTOR_ENABLED", False):
+        abort(404)
+    if not getattr(_config.config, "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED", False):
+        abort(404)
+
+    from api.local_llm_analysis import _guard
+
+    guard = _guard()
+    if guard:
+        return guard
+
+    body = request.get_json(silent=True) or {}
+    project = body.get("project")
+    pipeline_id = body.get("pipeline_id")
+    job_id = body.get("job_id")
+    if not project or not pipeline_id or not job_id:
+        return jsonify({"error": "project, pipeline_id y job_id son obligatorios"}), 400
+
+    from services.ci_logs_provider import get_ci_logs_provider
+    from services.tracker_provider import TrackerApiError, TrackerConfigError
+
+    try:
+        provider = get_ci_logs_provider(project)
+        log = provider.get_job_log(str(job_id))
+    except TrackerConfigError as e:            # fábrica: tracker/flag sin soporte
+        return jsonify({"error": str(e), "kind": "tracker_config"}), 400
+    except TrackerApiError as e:
+        return jsonify({"error": str(e), "kind": getattr(e, "kind", "")}), e.status
+    except Exception as e:
+        return jsonify({"error": str(e), "kind": "logs_unavailable"}), 502
+
+    from services.failure_doctor import classify_failure
+
+    diagnosis = classify_failure(log)
+
+    from services.local_insights import HITL_RULES, truncate_middle
+    from services.pr_review_sanitize import redact_secrets
+    import json as _json
+
+    system = "Sos un ingeniero DevOps senior experto en debugging de CI." + HITL_RULES
+    user = redact_secrets(
+        "== CLASIFICACIÓN DETERMINISTA ==\n" + _json.dumps(diagnosis, ensure_ascii=False)
+        + "\n\n== LOG (recortado) ==\n" + truncate_middle(log, 4000, 4000)
+        + "\n\nExplicá en markdown: ## Qué falló / ## Causa raíz más probable / ## Fix sugerido"
+    )
+
+    from api.local_llm_analysis import _create_execution, _ensure_internal_ticket, _finish_execution
+    from db import session_scope
+
+    with session_scope() as session:
+        ticket = _ensure_internal_ticket(session, project)
+        analyzer_id = _create_execution(
+            session, ticket.id, "local_llm_ci_explainer",
+            {"project": project, "pipeline_id": pipeline_id, "job_id": job_id, "log_chars": len(log)},
+        )
+
+    from copilot_bridge import invoke_local_llm  # import lazy (patrón del repo)
+
+    try:
+        response = invoke_local_llm(
+            agent_type="local_llm_ci_explainer",
+            system=system,
+            user=user,
+            on_log=lambda level, msg: None,
+            execution_id=analyzer_id,
+            model=body.get("model"),
+        )
+    except Exception as e:
+        _finish_execution(analyzer_id, status="error", error=str(e))
+        return jsonify({"ok": False, "error": str(e), "execution_id": analyzer_id}), 502
+
+    resolved_model = (
+        (response.metadata or {}).get("model") or body.get("model")
+        or _config.config.LOCAL_LLM_MODEL
+    )
+    _finish_execution(analyzer_id, status="completed", output=response.text[:10000])
+    return jsonify({
+        "ok": True,
+        "analysis": response.text,
+        "model": resolved_model,
+        "job_id": job_id,
+        "execution_id": analyzer_id,
+    })

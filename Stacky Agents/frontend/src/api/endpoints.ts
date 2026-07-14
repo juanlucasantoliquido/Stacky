@@ -3306,6 +3306,19 @@ export const DevOps = {
       no_failures_found: boolean;
       failed_jobs_total: number;
     }>("/api/devops/doctor/diagnose", { project, pipeline_id: pipelineId }),
+  /**
+   * POST /api/devops/doctor/explain-failure — Plan 127 C2. Explica UN job
+   * fallido con el modelo local (HITL). El log NO se persiste.
+   */
+  doctorExplainFailure: (body: { project: string; pipeline_id: string; job_id: string }) =>
+    api.post<{
+      ok: boolean;
+      analysis: string;
+      model: string;
+      job_id: string;
+      execution_id: number;
+      error?: string;
+    }>("/api/devops/doctor/explain-failure", body),
 };
 
 export interface DevOpsConversationItem {

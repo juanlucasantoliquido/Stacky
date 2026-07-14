@@ -10,6 +10,8 @@ import type {
   DbCompareHealth,
   SnapshotMeta,
   TestConnectionResult,
+  DbSnapshot,
+  CompareRun,
 } from "../components/dbcompare/dbcompareTypes";
 import type { Manifest } from "../components/dbcompare/scriptsLogic";
 import type {
@@ -3702,7 +3704,7 @@ export const DbCompare = {
       `/api/db-compare/environments/${encodeURIComponent(alias)}/snapshots`,
     ),
   getSnapshot: (snapshotId: string) =>
-    api.get<Record<string, unknown>>(`/api/db-compare/snapshots/${encodeURIComponent(snapshotId)}`),
+    api.get<DbSnapshot>(`/api/db-compare/snapshots/${encodeURIComponent(snapshotId)}`),
   // Plan 125 F5/F6 — bundle de scripts de paridad + backups pareados 1:1.
   // Stacky genera; JAMÁS ejecuta (ver doc 125 §3).
   generateScripts: (runId: string) =>
@@ -3735,4 +3737,15 @@ export const DbCompare = {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   },
+  // Plan 124 F1 — corridas comparativas (doc 123 §F3). NOTA de contrato verificada contra
+  // api/db_compare.py: POST /compare devuelve {ok, run} (202); GET /runs devuelve {ok, runs}
+  // (metadatos SIN "diff"); GET /runs/<id> devuelve el CompareRun DIRECTO, sin wrapper {ok,run}.
+  compare: (body: { source_alias: string; target_alias: string; mode?: "fresh" | "cached" }) =>
+    api.post<{ ok: boolean; run: CompareRun }>("/api/db-compare/compare", body),
+  listRuns: (limit?: number) =>
+    api.get<{ ok: boolean; runs: CompareRun[] }>(
+      `/api/db-compare/runs${limit != null ? `?limit=${limit}` : ""}`,
+    ),
+  getRun: (runId: string) => api.get<CompareRun>(`/api/db-compare/runs/${encodeURIComponent(runId)}`),
+  exportUrl: (runId: string) => `/api/db-compare/runs/${encodeURIComponent(runId)}/export.md`,
 };

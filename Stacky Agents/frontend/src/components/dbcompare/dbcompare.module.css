@@ -1,6 +1,32 @@
 /* Plan 122 F5 — estilos del núcleo del Comparador de BD. Usa las variables de
-   frontend/src/theme.css (sin paleta nueva hardcodeada; la escala de severidad
-   de diffs llega en el Plan 124). */
+   frontend/src/theme.css (sin paleta nueva hardcodeada para el núcleo).
+
+   Plan 124 [FIX C3 de la crítica v2] — agrega la escala de severidad/estado (§3.3 del plan
+   124) como variables --dbc-*, declaradas acá (F1) para que SummaryHero (F3), DiffTreemap
+   (F4) y FiltersBar (F5) tengan color desde su primer commit. Los estilos complementarios
+   de esos componentes (transiciones, pulso, stagger, overlay) se agregan más abajo (F2-F6). */
+
+:root {
+  --dbc-danger: #dc2626;
+  --dbc-warn: #d97706;
+  --dbc-info: #2563eb;
+  --dbc-added: #16a34a;
+  --dbc-removed: #dc2626;
+  --dbc-changed: #d97706;
+  --dbc-unchanged: #94a3b8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --dbc-danger: #f87171;
+    --dbc-warn: #fbbf24;
+    --dbc-info: #60a5fa;
+    --dbc-added: #4ade80;
+    --dbc-removed: #f87171;
+    --dbc-changed: #fbbf24;
+    --dbc-unchanged: #64748b;
+  }
+}
 
 .page {
   padding: 24px;
@@ -332,4 +358,318 @@
   font-size: 0.8rem;
   color: var(--text-primary);
   white-space: pre;
+}
+
+/* ---- Plan 124 F2-F6: wizard, progreso, hero, treemap, filtros, drill-down, historial ---- */
+
+.wizard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.wizardColumn h3 {
+  margin: 0 0 10px 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.wizardCard {
+  cursor: pointer;
+  transition: border-color 150ms ease, opacity 150ms ease;
+}
+
+.wizardCard[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.wizardCard[aria-pressed="true"] {
+  border-color: var(--accent, var(--dbc-info));
+}
+
+.modeRow {
+  display: flex;
+  gap: 16px;
+  margin: 12px 0;
+  color: var(--text-primary);
+}
+
+.launchRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.errorBanner {
+  background: var(--bg-elev);
+  border: 1px solid var(--dbc-danger);
+  color: var(--dbc-danger);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.stepper {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 16px 0;
+}
+
+.step {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-muted);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.stepPending {
+  opacity: 0.6;
+}
+
+.stepActive {
+  border-color: var(--dbc-info);
+  color: var(--text-primary);
+  animation: dbc-pulse 1.4s ease-in-out infinite;
+}
+
+.stepDone {
+  border-color: var(--dbc-added);
+  color: var(--text-primary);
+}
+
+@keyframes dbc-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0);
+  }
+}
+
+.staleCard {
+  background: var(--bg-elev);
+  border: 1px solid var(--dbc-warn);
+  color: var(--dbc-warn);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  align-items: center;
+  margin: 20px 0;
+}
+
+.gaugeArc {
+  transition: stroke-dashoffset 0.8s ease;
+}
+
+.gaugeScore {
+  font-size: 1.6rem;
+  font-weight: 600;
+  fill: var(--text-primary);
+}
+
+.deltaUp {
+  color: var(--dbc-added);
+}
+
+.deltaDown {
+  color: var(--dbc-removed);
+}
+
+.deltaFlat {
+  color: var(--text-faint);
+}
+
+.statTiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.statTile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-muted);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.statTile[aria-pressed="true"] {
+  border-color: var(--accent, var(--dbc-info));
+}
+
+.statDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.heroActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.filtersBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 16px 0;
+}
+
+.chip {
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.chip[aria-pressed="true"] {
+  color: var(--text-primary);
+  border-color: currentColor;
+}
+
+.treemapWrap svg {
+  width: 100%;
+  height: auto;
+}
+
+.treemapCell {
+  animation: dbc-fade-in 200ms ease both;
+}
+
+@keyframes dbc-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.treemapLegend {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.diffList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.diffRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.diffRow:hover {
+  background: var(--bg-elev);
+}
+
+.drilldownOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 50;
+}
+
+.drilldownPanel {
+  width: min(720px, 100%);
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25);
+  padding: 20px;
+  overflow-y: auto;
+  animation: dbc-slide-in 200ms ease;
+}
+
+@keyframes dbc-slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.sideBySideTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.sideBySideTable th,
+.sideBySideTable td {
+  border: 1px solid var(--border-muted);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.rowAdded {
+  background: color-mix(in srgb, var(--dbc-added) 12%, transparent);
+}
+
+.rowRemoved {
+  background: color-mix(in srgb, var(--dbc-removed) 12%, transparent);
+}
+
+.cellChanged {
+  background: color-mix(in srgb, var(--dbc-changed) 20%, transparent);
+}
+
+.runsTimeline {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
+}
+
+.runCard {
+  flex-shrink: 0;
+  min-width: 180px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-muted);
+  background: var(--bg-panel);
+  cursor: pointer;
+  transition: border-color 150ms ease;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+}
+
+.runCardActive {
+  border-color: var(--dbc-info);
 }

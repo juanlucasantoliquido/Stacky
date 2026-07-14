@@ -1,16 +1,66 @@
-// Plan 124 — Comparador de BD: tipos del explorador visual.
-//
-// PENDIENTE: este archivo es una interfaz AISLADA Y PROPIA de este plan (124), creada porque
-// el cimiento del Plan 122 (registro de ambientes) y del Plan 123 (motor de diff) NO están
-// mergeados en esta rama de trabajo (confirmado 2026-07-14: F0 del doc
-// `Stacky Agents/docs/124_PLAN_DB_COMPARE_SECCION_INMERSIVA_EXPLORADOR_VISUAL.md` dio AUSENTE
-// en los 3 chequeos). Cuando 122/123 se mergeen, reconciliar este archivo con
-// `frontend/src/components/dbcompare/dbcompareTypes.ts` real (probablemente reemplazando este
-// archivo por un import/re-export del real, o eliminándolo si los nombres ya coinciden 1:1).
-// Los campos de acá son un espejo LITERAL de los contratos congelados citados en los docs
-// 122 §F3 (snapshot) y 123 §F1/§F2 (diff/run).
+// Plan 122 F5 — tipos TS del contrato del núcleo del Comparador de BD (docs/122 §F1/§F2/§F3).
+// Plan 124 — ampliado con el contrato de diff/run (doc 123 §F1/§F2) y el detalle completo de
+// snapshot (doc 122 §F3, DbSnapshot) que 123/122 no exponen como tipos TS propios (123 es
+// backend-puro; 122 F5 solo tipaba SnapshotMeta liviano para el listado). Todos los campos de
+// acá fueron verificados 2026-07-14 contra el código real ya mergeado:
+// `services/dbcompare_diff.py`, `services/dbcompare_runs.py`, `services/dbcompare_snapshot.py`.
 
-// ---- Contrato de diff/run (doc 123 §F1/§F2) ----
+export interface DbEnvironment {
+  alias: string;
+  engine: "sqlserver" | "oracle" | "sqlite";
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  odbc_driver: string;
+  schema_filter: string[] | null;
+  notes: string;
+  created_at: string;
+  last_used_at: string | null;
+  has_password: boolean;
+  // [ADICIÓN ARQUITECTO] Plan 122 v2 — recencia de snapshot expuesta en GET /environments.
+  latest_snapshot_taken_at: string | null;
+  latest_snapshot_hash8: string | null;
+}
+
+export interface DriverInfo {
+  module: string;
+  available: boolean;
+  install_hint: string;
+}
+
+export interface DriverStatus {
+  sqlserver: DriverInfo;
+  oracle: DriverInfo;
+}
+
+export interface SnapshotMeta {
+  id: string;
+  taken_at: string;
+  duration_ms: number;
+  counts: { tables: number; views: number; sequences: number; columns: number };
+  content_hash: string;
+}
+
+export interface TestConnectionResult {
+  ok: boolean;
+  engine?: string;
+  server_version?: string;
+  latency_ms?: number;
+  error?: string;
+  install_hint?: string | null;
+  likely_network?: boolean;
+}
+
+export interface DbCompareHealth {
+  ok: boolean;
+  flag_enabled: boolean;
+  keyring_available: boolean;
+  drivers: DriverStatus;
+}
+
+// ---- Contrato de diff/run (doc 123 §F1/§F2, verificado contra services/dbcompare_diff.py y
+// services/dbcompare_runs.py) — Plan 124 F1 ----
 
 export type Severity = "info" | "warn" | "danger";
 export type DiffAction = "added" | "removed" | "changed";
@@ -76,21 +126,8 @@ export interface CompareRun {
   stale?: boolean;
 }
 
-// ---- Contrato de ambientes (doc 122 §F1/§F4), mínimo consumido por el wizard ----
-
-export interface DbEnvironment {
-  alias: string;
-  engine: string;
-  host: string;
-  port: number;
-  database: string;
-  username: string;
-  has_password: boolean;
-  latest_snapshot_taken_at: string | null;
-  latest_snapshot_hash8: string | null;
-}
-
-// ---- Contrato de snapshot (doc 122 §F3) — [FIX C2 en crítica v2 del plan 124] ----
+// ---- Detalle completo de snapshot (doc 122 §F3, GET /snapshots/<id>) — Plan 124 F1/F4/F5,
+// verificado 1:1 contra services/dbcompare_snapshot.py:_reflect_table/_reflect_view ----
 
 export interface ColumnInfo {
   name: string;
@@ -150,6 +187,8 @@ export interface SchemaSnapshot {
   sequences: string[];
 }
 
+/** Snapshot COMPLETO (con schemas/tablas/columnas) — distinto de `SnapshotMeta` (liviano, sin
+ * schemas, usado en el listado). Lo devuelve `GET /snapshots/<id>` y `POST .../snapshot`. */
 export interface DbSnapshot {
   version: number;
   id: string;

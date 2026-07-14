@@ -1,8 +1,8 @@
 # Plan 119 — Rediseño visual minimalista y profesional del dashboard DevOps
 
-> **Estado:** PROPUESTO v1 — 2026-07-10
+> **Estado:** CRITICADO v2 (APROBADO-CON-CAMBIOS) — 2026-07-14
 > **Autor:** StackyArchitectaUltraEficientCode
-> **Pipeline:** este documento pasó `proponer` (este estado). Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
+> **Pipeline:** `proponer` (v1, 2026-07-10) → `criticar-y-mejorar-plan` (v2, este documento, 2026-07-14) → sigue `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Serie:** pulido profesional del dashboard DevOps. COMPLEMENTA al plan 116 (que ya proponía
 > "pulido profesional del panel DevOps": facelift del `FlagGateBanner`, estado vacío en Servidores,
 > accesibilidad de la barra de sub-tabs). Este plan lleva ese pulido a su conclusión natural:
@@ -12,6 +12,38 @@
 > **Depende de:** nada pendiente. Usa sustrato YA implementado: plan 87 (shell DevOps + `/api/devops/health`),
 > plan 91 (registro de servidores + selector), flags del arnés (planes 33/63/82/86), y los tokens de
 > `theme.css`. La dependencia `lucide-react` **ya está en `frontend/package.json:15`** (no se agrega nada).
+>
+> **CHANGELOG v1 → v2 (crítica adversarial 2026-07-14; veredicto APROBADO-CON-CAMBIOS: 0 BLOQUEANTES,
+> 5 IMPORTANTES, 3 MENORES):**
+> - **C1 [IMPORTANTE]** F1 omitía `<ConnectionHealthStrip>` (Plan 116, YA mergeado, `dcfdac40`/`b32d39b8`)
+>   del shell v2 → al prender la flag hubiera desaparecido una feature ya shippeada. Fix: F1 preserva su
+>   render condicional (por `connection_doctor_enabled`, no por `uiV2`) en ambos paths.
+> - **C2 [IMPORTANTE]** F3 no instruía conservar el botón "⬇️ Descargar scripts" (WinRM, Plan 118, YA
+>   mergeado, `dcfdac40`) en la tabla v2 — solo aparecía enterrado en el Riesgo R7, no en los pasos de F3.
+>   Fix: instrucción explícita en F3.
+> - **C3 [IMPORTANTE]** F3 usaba `className="link"` / `className="btnPrimary"` como strings literales;
+>   verificado que `devops.module.css` NO tiene clase `.link` (solo `.btnPrimary`, que además colisiona de
+>   nombre con el `.btnPrimary` nuevo de `DevOpsPage.module.css`). Fix: import explícito de `shell`
+>   (`DevOpsPage.module.css`, creado en F0) y acceso tipado `shell.link` / `shell.btnPrimary`.
+> - **C5 [IMPORTANTE]** Todas las referencias a líneas exactas (`config.py`, `harness_flags.py`,
+>   `harness_flags_help.py`, `api/devops.py`, `test_harness_flags_requires.py`, `DevOpsPage.tsx`,
+>   `endpoints.ts`) habían quedado desactualizadas por los planes 116 y 118 (ya mergeados después de la v1
+>   de este plan). Re-ancladas contra el código real verificado 2026-07-14 (marcas `[re-anclado v2]`).
+> - **C8 [IMPORTANTE]** El diff ilustrativo de `harness_flags_help.py` usaba campos `why`/`default_hint` que
+>   NO existen en el dataclass real `PlainHelp` (`what`/`on_effect`/`off_effect`/`example`, los 4
+>   obligatorios) — hubiera roto el import si se copiaba literal. Fix: diff corregido con los campos reales.
+> - **C4 [MENOR]** `serversTable.ts` asumía un campo `latencyMs` inexistente en todo el contrato real
+>   (`testConnection` devuelve `{ ok, detail }`, sin latencia). Eliminado del helper y de sus tests.
+> - **C6 [MENOR]** F5 dejaba como paso condicional detectar tests preexistentes de `DevOpsPage`/
+>   `ServersSection`; confirmado que existen (`__tests__/DevOpsPage.test.ts`, `__tests__/ServersSection.test.ts`)
+>   → agregados explícitamente a la lista de F5.
+> - **C7 [MENOR]** Aclarado que la sección Servidores hoy es una lista `<ul>/<li>`, no un CSS grid de
+>   "cards" — terminología coloquial del plan, sin impacto en la implementación.
+> - **[ADICIÓN ARQUITECTO]** F5 suma `DevOpsShellV2Regression.test.ts` (mismo idioma fs+regex que
+>   `DevOpsPage.test.ts`, sin RTL/jsdom) que verifica por código — no por checklist visual manual — que
+>   `ConnectionHealthStrip` y `handleDownloadSetup` siguen presentes sin condicionar a `uiV2`. Convierte la
+>   KPI "Regresión 0" en un gate automático y reproducible, y blinda contra que una futura edición del shell
+>   repita C1/C2.
 
 ---
 
@@ -125,8 +157,12 @@ F1-F4 solo conecten presentación.
 
 **Archivos EXACTOS a editar/crear:**
 
-1. `backend/config.py` — agregar el default **efectivo** (OFF) tras el bloque del Plan 110 (después de la
-   línea 98). Diff ilustrativo:
+1. `backend/config.py` — agregar el default **efectivo** (OFF). **[re-anclado v2, C5]** El v1 decía "después
+   de la línea 98"; verificado 2026-07-14 el archivo avanzó — usar como ancla real el cierre del bloque del
+   Plan 116 (`# Plan 116 — Doctor de conexiones DevOps...`, `config.py:1045-1048`, el más cercano
+   temáticamente) e insertar el bloque nuevo inmediatamente después de su `).lower() in ("1", "true", "yes")`
+   de cierre. La posición exacta dentro de la clase `Config` es indiferente (no hay orden semántico); solo
+   importa que quede como atributo de la clase. Diff ilustrativo:
    ```python
    # ── Plan 119 — Rediseño minimalista del shell DevOps (default OFF) ──
    STACKY_DEVOPS_UI_V2_ENABLED = os.getenv("STACKY_DEVOPS_UI_V2_ENABLED", "false").lower() in (
@@ -135,15 +171,18 @@ F1-F4 solo conecten presentación.
    ```
 
 2. `backend/services/harness_flags.py` — dos ediciones:
-   - **(a)** agregar la key a la tupla de la categoría `"devops"` (que hoy va de la línea 184 a la 206),
-     inmediatamente después de `"STACKY_PR_REVIEW_TIMEOUT_SEC",` (línea 205), **antes** del `),` de cierre
-     (línea 206). Esto satisface `test_every_registry_flag_is_categorized`:
+   - **(a)** agregar la key a la tupla de la categoría `"devops"` (**[re-anclado v2, C5]** verificado
+     2026-07-14: hoy va de la línea 187 a la 210, no 184-206 — el v1 no vio el Plan 116 mergeado después),
+     inmediatamente después de `"STACKY_PR_REVIEW_TIMEOUT_SEC",` (línea 209), **antes** del `),` de cierre
+     (línea 210). Esto satisface `test_every_registry_flag_is_categorized`:
      ```python
          "STACKY_DEVOPS_UI_V2_ENABLED",  # Plan 119 — rediseño minimalista del shell DevOps
      ```
-   - **(b)** agregar una `FlagSpec` (junto a las FlagSpec DevOps; p. ej. tras el bloque del Plan 110 que
-     termina en la línea 2564). **SIN `default=`** (gotcha Plan 63) y con `requires` de profundidad 1 al
-     master del panel:
+   - **(b)** agregar una `FlagSpec` (junto a las FlagSpec DevOps; **[re-anclado v2, C5]** el ancla real hoy
+     es el cierre del ÚLTIMO FlagSpec del Plan 110 — `STACKY_PR_REVIEW_TIMEOUT_SEC`, que cierra en
+     `harness_flags.py:2673` — insertar el bloque nuevo ahí, inmediatamente antes del comentario
+     `# ── Plan 117 — Insights locales de ejecuciones ──` de la línea 2674). **SIN `default=`** (gotcha Plan
+     63) y con `requires` de profundidad 1 al master del panel:
      ```python
      # ── Plan 119 — Rediseño minimalista del shell DevOps ──────────────────────
      FlagSpec(
@@ -165,25 +204,34 @@ F1-F4 solo conecten presentación.
      ```
 
 3. `backend/services/harness_flags_help.py` — agregar una entrada `PlainHelp` para la key, replicando el
-   patrón de `"STACKY_PR_REVIEWER_ENABLED"` (línea 1166). Diff ilustrativo:
+   patrón de `"STACKY_PR_REVIEWER_ENABLED"` (**[re-anclado v2, C5]** línea 1197, no 1166). **[fix v2, C8]**
+   El dataclass real `PlainHelp` (`harness_flags_help.py:18-22`) exige EXACTAMENTE 4 campos —
+   `what`/`on_effect`/`off_effect`/`example`, los 4 sin default — NO `why`/`default_hint` (ese constructor no
+   existe y rompería el import si se copiaba literal). Diff correcto:
    ```python
    "STACKY_DEVOPS_UI_V2_ENABLED": PlainHelp(
-       what="Enciende el rediseño minimalista del panel DevOps (header, tabs, servidores).",
-       why="Alinea el panel DevOps con el resto del app (tokens theme.css). Solo apariencia.",
-       default_hint="OFF — con la flag apagada la UI es idéntica a la actual.",
+       what="Enciende el rediseño minimalista del panel DevOps (header, tabs, servidores en tabla).",
+       on_effect="Si la activás: el panel DevOps cambia de look — header con resumen de estado, tabs subrayadas, tabla de servidores en vez de lista. Cero cambios de comportamiento.",
+       off_effect="Si la apagás: el panel DevOps se ve exactamente igual que hoy.",
+       example="Como cambiar el tema visual de una app sin tocar ninguna función: mismo contenido, otro traje.",
    ),
    ```
-   > Usar los MISMOS nombres de campos de `PlainHelp` que la entrada vecina de la línea 1166 (copiar su
-   > forma exacta; si algún campo difiere, respetar el de esa entrada).
+   > Los 4 campos son OBLIGATORIOS (dataclass frozen sin defaults). Copiar la FORMA exacta de la entrada
+   > vecina `STACKY_PR_REVIEWER_ENABLED` (línea 1197) ante cualquier duda.
 
-4. `backend/api/devops.py` — en `_health_payload()`, agregar la key al dict, inmediatamente después de
-   `"pr_reviewer_enabled": …` (línea 62), antes del `}` de cierre (línea 63):
+4. `backend/api/devops.py` — en `_health_payload()`, agregar la key al dict. **[re-anclado v2, C5]**
+   Verificado 2026-07-14: `"pr_reviewer_enabled"` sigue en la línea 62, pero el Plan 116 (mergeado después
+   de la v1 de este plan) ya agregó `"connection_doctor_enabled"` en la línea 63; el `}` de cierre real hoy
+   es la línea 64. Insertar la key nueva en cualquier punto del dict (el orden no importa), p. ej.
+   inmediatamente después de la línea 63, antes del `}` de la línea 64:
    ```python
        "ui_v2_enabled": bool(getattr(cfg, "STACKY_DEVOPS_UI_V2_ENABLED", False)),  # Plan 119
    ```
 
 5. `backend/tests/test_harness_flags_requires.py` — en `_REQUIRES_MAP_FROZEN`, agregar la arista antes del
-   `}` de cierre (línea 176), replicando el patrón de la línea 171:
+   `}` de cierre. **[re-anclado v2, C5]** Verificado 2026-07-14: el `}` de cierre real hoy está en la línea
+   181 (no 176); el patrón hermano más fresco a replicar es la línea 160
+   (`"STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 116`):
    ```python
        "STACKY_DEVOPS_UI_V2_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 119
    ```
@@ -191,14 +239,16 @@ F1-F4 solo conecten presentación.
 6. **NO** agregar la key a `_CURATED_DEFAULTS_ON` (`backend/tests/test_harness_flags.py`, el set que termina
    en la línea 534): la flag es **OFF**. Tocarlo la promovería a ON.
 
-7. `frontend/src/pages/DevOpsPage.tsx` — en la interface `DevOpsHealth` (líneas 22-38), agregar el campo
-   aditivo opcional junto a `pr_reviewer_enabled?` (línea 36):
+7. `frontend/src/pages/DevOpsPage.tsx` — en la interface `DevOpsHealth`. **[re-anclado v2, C5]** Verificado
+   2026-07-14: la interface real va de la línea 23 a la 40 (no 22-38) y el Plan 116 ya agregó
+   `connection_doctor_enabled?` en la línea 38, inmediatamente después de `pr_reviewer_enabled?` (línea 37).
+   Agregar el campo aditivo opcional junto a esos dos, antes del index signature `[k: string]: ...` (línea 39):
    ```ts
      ui_v2_enabled?: boolean; // Plan 119 — shell minimalista
    ```
 
 8. `frontend/src/api/endpoints.ts` — en el tipo de retorno de `DevOps.health` (donde está `pr_reviewer_enabled?`,
-   línea 3158), agregar:
+   **[re-anclado v2, C5]** línea 3225, no 3158 — el archivo creció con planes posteriores), agregar:
    ```ts
      ui_v2_enabled?: boolean; // Plan 119
    ```
@@ -474,18 +524,25 @@ visual del rediseño; el picker deja de estar suelto a la derecha.
    > (`DevOpsPage.tsx:235`). No se cambia el origen de datos, solo el markup.
 
 2. `frontend/src/pages/DevOpsPage.tsx` — 3 ediciones quirúrgicas:
-   - **(a)** imports nuevos al tope:
+   - **(a)** imports nuevos al tope (el import de `ConnectionHealthStrip`, línea 20, YA existe — no tocar):
      ```ts
      import styles from './DevOpsPage.module.css';
      import { DevOpsHeaderV2 } from './DevOpsHeaderV2';
      ```
-   - **(b)** antes del `return` (después de la línea 195, junto a `handleTabClick`), calcular la flag:
+   - **(b)** antes del `return` (después de `handleTabClick`, línea 197), calcular la flag:
      ```ts
      const uiV2 = ctx.health.ui_v2_enabled === true;
      ```
-   - **(c)** en el `return` (líneas 209-248): (i) el `<div>` contenedor (línea 210) usa `.page` cuando `uiV2`;
-     (ii) el `<h2>` (línea 211) se conmuta por el header v2; (iii) el `<select>` standalone (líneas 235-247)
-     se rinde **solo** en v1 (`!uiV2`). Diff ilustrativo:
+   - **(c)** en el `return`. **[re-anclado v2, C5]** Verificado 2026-07-14: el bloque real hoy es
+     líneas 211-291 (no 209-248) porque el Plan 116 ya insertó ahí el render condicional de
+     `<ConnectionHealthStrip>` (líneas 215-218) entre el `<h2>` y la barra de tabs. **[fix v2, C1]** El diff
+     v1 de este plan NO incluía ese bloque y lo hubiera hecho desaparecer al prender `uiV2` (regresión
+     silenciosa de una feature ya shippeada del Plan 116). El diff correcto preserva
+     `<ConnectionHealthStrip>` **igual en ambos paths** (no depende de `uiV2`, solo de
+     `connection_doctor_enabled`, exactamente como hoy): (i) el `<div>` contenedor (línea 212) usa `.page`
+     cuando `uiV2`; (ii) el `<h2>` (línea 213) se conmuta por el header v2; (iii)
+     `<ConnectionHealthStrip>` (líneas 216-218) se preserva **sin condicionar a `uiV2`**; (iv) el `<select>`
+     standalone (líneas 246-257) se rinde **solo** en v1 (`!uiV2`). Diff ilustrativo:
      ```tsx
      return (
        <div
@@ -504,8 +561,13 @@ visual del rediseño; el picker deja de estar suelto a la derecha.
            <h2 style={{ marginTop: 0 }}>DevOps</h2>
          )}
 
+         {/* Plan 116 — tira de salud de conexiones. INTOCABLE: NO condicionar a uiV2 (fix C1). */}
+         {ctx.health.connection_doctor_enabled === true && (
+           <ConnectionHealthStrip onGotoSection={handleTabClick} />
+         )}
+
          {/* Barra de sub-tabs — legacy por ahora (F2 la conmuta). */}
-         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+         <div role="tablist" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
            {DEVOPS_SECTIONS.map((s) => ( /* …botones legacy sin cambios… */ ))}
            {/* selector legacy: SOLO en v1 (en v2 vive en el header) */}
            {!uiV2 && ctx.health.servers_enabled === true && (ctx.servers?.length ?? 0) >= 1 && (
@@ -513,13 +575,15 @@ visual del rediseño; el picker deja de estar suelto a la derecha.
            )}
          </div>
 
-         {/* OUTLET C10 + gate — INTOCABLE (líneas 250-276) */}
+         {/* OUTLET C10 + gate — INTOCABLE (líneas 261-288) */}
          {DEVOPS_SECTIONS.map((s) => { /* …sin cambios… */ })}
        </div>
      );
      ```
    > **Único cambio al path v1:** anteponer `!uiV2 &&` a la condición del `<select>` legacy (para que no se
    > duplique con el picker del header cuando `uiV2`). Con `uiV2` OFF esa condición es idéntica a hoy.
+   > `<ConnectionHealthStrip>` no es parte de ese "único cambio a v1": ya vive fuera de la barra de tabs
+   > desde el Plan 116 y no se toca en ninguno de los dos paths.
 
 **Tests PRIMERO (TDD):** la lógica testeable (`buildAwareness`) ya está cubierta por `devopsShell.test.ts`
 (F0). Para el componente NO se escriben tests de render (el frontend **no** tiene `@testing-library/react`
@@ -588,10 +652,11 @@ atenuación en las gateadas. **Valor:** paridad visual con el patrón de tabs de
    > **NO** renderizar `s.icon` (los emojis del registro): el operador rechazó emojis. El label va limpio.
    > **NO** poner `cursor:default` ni `disabled` en la tab gateada: debe seguir abriendo el banner (comportamiento
    > v1 intacto). El único `disabled` es cuando el panel entero está off (`flag_enabled !== true`), igual que hoy
-   > (`DevOpsPage.tsx:219`).
+   > (`DevOpsPage.tsx:229` **[re-anclado v2, C5]**, no 219).
 
 2. `frontend/src/pages/DevOpsPage.tsx` — conmutar la barra de tabs. La barra legacy (el `<div>` de las líneas
-   214-248) queda en el path `!uiV2`; el path `uiV2` usa `<DevOpsTabsV2>`. El selector legacy (ya guardado con
+   **[re-anclado v2, C5]** 221-257 hoy, no 214-248 — el `<ConnectionHealthStrip>` de F1 corrió estas líneas)
+   queda en el path `!uiV2`; el path `uiV2` usa `<DevOpsTabsV2>`. El selector legacy (ya guardado con
    `!uiV2 &&` en F1) queda dentro del `<div>` legacy. Diff ilustrativo:
    ```tsx
    import { DevOpsTabsV2 } from './DevOpsTabsV2';
@@ -605,7 +670,7 @@ atenuación en las gateadas. **Valor:** paridad visual con el patrón de tabs de
      </div>
    )}
    ```
-   > El outlet C10 + gate (líneas 250-276) permanece **intacto**: sigue mostrando `<FlagGateBanner/>` cuando la
+   > El outlet C10 + gate (líneas 261-288 **[re-anclado v2, C5]**, no 250-276) permanece **intacto**: sigue mostrando `<FlagGateBanner/>` cuando la
    > sección activa está gateada. La atenuación de la tab (F2) y el banner del outlet (existente) son consistentes.
 
 **Tests PRIMERO (TDD):** `classifyTab` ya está cubierto por `devopsShell.test.ts` (F0), que garantiza la lógica
@@ -627,35 +692,38 @@ legacy. **Trabajo del operador:** ninguno (opt-in, default off).
 ### F3 — ServersSection: grilla de cards → tabla minimalista (conmutado por flag)
 
 **Objetivo (1 frase).** En `ServersSection.tsx`, renderizar **solo cuando la flag está ON** una **tabla**
-minimalista en lugar de la grilla de cards, con íconos de línea (lucide), acciones que aparecen en hover/foco y
-el servidor activo marcado con texto en `--accent-hot`. **Valor:** idioma de consola de infraestructura,
-denso y legible. **Cero cambios de lógica** (mismo CRUD, mismo `testResults`, mismo RDP, password write-only).
+minimalista en lugar del listado actual (**[fix v2, C7]** el markup real hoy es una lista `<ul>/<li>`,
+`ServersSection.tsx:272-321` — no un CSS grid de "cards"; el plan usa "cards" como término coloquial), con
+íconos de línea (lucide), acciones que aparecen en hover/foco y el servidor activo marcado con texto en
+`--accent-hot`. **Valor:** idioma de consola de infraestructura, denso y legible. **Cero cambios de lógica**
+(mismo CRUD, mismo `testResults`, mismo RDP, password write-only, mismo botón de descarga de scripts WinRM).
 
 **Archivos EXACTOS a crear/editar:**
 
 1. `frontend/src/components/devops/serversTable.ts` — **crear** el mapeo PURO del resultado de conectividad a
-   la celda de Estado (testeable sin DOM):
+   la celda de Estado (testeable sin DOM). **[fix v2, C4]** Verificado 2026-07-14 contra el contrato real:
+   `testResults` en `ServersSection.tsx:43` es `Record<string, { ok: boolean; detail: string }>` y
+   `DevOpsServers.testConnection` (`endpoints.ts:3380-3381`) devuelve exactamente `{ ok: boolean; detail:
+   string }` — **no existe ningún campo de latencia** en el contrato, ni en el backend ni en el frontend. Se
+   elimina `latencyMs`/`latency` del helper (la v1 lo asumía sin evidencia):
    ```ts
    // Plan 119 — mapea el testResult existente de ServersSection a la celda "Estado".
    export type StateTone = 'ok' | 'warn' | 'none';
-   export interface StateCell { tone: StateTone; label: string; latency?: string; }
+   export interface StateCell { tone: StateTone; label: string; }
 
    // `result` es la MISMA forma que ServersSection ya maneja hoy en `testResults`
-   // (no se cambia su producción). Se leen: ok/success (bool) y detail/message + latency si existen.
-   export function mapTestResultToState(result: { ok?: boolean; detail?: string; latencyMs?: number } | undefined): StateCell {
+   // (Record<string, { ok: boolean; detail: string }>, ServersSection.tsx:43). No se cambia su producción.
+   export function mapTestResultToState(result: { ok?: boolean; detail?: string } | undefined): StateCell {
      if (!result) return { tone: 'none', label: 'sin probar' };
-     if (result.ok) {
-       return { tone: 'ok', label: 'Alcanzable', latency: result.latencyMs != null ? `${result.latencyMs} ms` : undefined };
-     }
+     if (result.ok) return { tone: 'ok', label: 'Alcanzable' };
      return { tone: 'warn', label: result.detail?.trim() || 'No alcanzable' };
    }
    ```
-   > **Ajuste de contrato:** usar los nombres de campo REALES del `testResults` que hoy existe en
-   > `ServersSection.tsx` (el que hoy pinta el `detail` crudo del test — ver plan 116, `ServersSection.tsx:284-286`).
-   > Si los campos difieren de `ok/detail/latencyMs`, adaptar SOLO las lecturas dentro de esta función (la firma
-   > pública y el `StateCell` no cambian). No cambiar cómo se produce `testResults`.
+   > La firma pública y el `StateCell` son el contrato definitivo (ya verificado contra el código real, no
+   > "si difieren"). No cambiar cómo se produce `testResults` en `ServersSection.tsx`.
 
-2. `frontend/src/components/devops/serversTable.test.ts` — **crear** los tests puros:
+2. `frontend/src/components/devops/serversTable.test.ts` — **crear** los tests puros. **[fix v2, C4]** sin
+   caso de latencia (el campo no existe en el contrato real):
    ```ts
    import { describe, it, expect } from 'vitest';
    import { mapTestResultToState } from './serversTable';
@@ -664,11 +732,14 @@ denso y legible. **Cero cambios de lógica** (mismo CRUD, mismo `testResults`, m
      it('undefined ⇒ sin probar (none)', () => {
        expect(mapTestResultToState(undefined)).toEqual({ tone: 'none', label: 'sin probar' });
      });
-     it('ok con latencia ⇒ Alcanzable + ms', () => {
-       expect(mapTestResultToState({ ok: true, latencyMs: 12 })).toEqual({ tone: 'ok', label: 'Alcanzable', latency: '12 ms' });
+     it('ok ⇒ Alcanzable', () => {
+       expect(mapTestResultToState({ ok: true, detail: 'WinRM 5985 abierto' })).toEqual({ tone: 'ok', label: 'Alcanzable' });
      });
      it('falla ⇒ warn con el detail', () => {
        expect(mapTestResultToState({ ok: false, detail: 'WinRM 5985 cerrado' })).toEqual({ tone: 'warn', label: 'WinRM 5985 cerrado' });
+     });
+     it('falla sin detail ⇒ warn con fallback "No alcanzable"', () => {
+       expect(mapTestResultToState({ ok: false })).toEqual({ tone: 'warn', label: 'No alcanzable' });
      });
    });
    ```
@@ -706,19 +777,32 @@ denso y legible. **Cero cambios de lógica** (mismo CRUD, mismo `testResults`, m
    Leer la flag desde el contexto de sección: `const uiV2 = ctx.health?.ui_v2_enabled === true;` (la sección
    recibe `ctx`; `ctx.health` ya trae `ui_v2_enabled` tras F0). Envolver:
    ```tsx
-   {uiV2 ? renderServersTable() : renderServersCards()/* markup actual, SIN cambios */}
+   {uiV2 ? renderServersTable() : renderServersCards()/* markup actual (líneas 164-325), SIN cambios */}
    ```
-   `renderServersTable()` (nuevo) usa `ServersTable.module.css` + lucide (`Search`, `Plus`, `Activity`,
-   `Monitor`, `Crosshair`, `Check`, `AlertTriangle`) + `mapTestResultToState`. Estructura ilustrativa:
+   **[fix v2, C2 — preservar el botón WinRM del Plan 118]** El bloque "Configurar WinRM en un servidor"
+   (`ServersSection.tsx:178-195`, handler `handleDownloadSetup`, ya mergeado por el commit `dcfdac40`) es
+   **independiente del listado/tabla** — vive ANTES del listado, en su propio panel. Ese bloque **NO se toca
+   ni se condiciona a `uiV2`**: se renderiza igual en ambos paths, arriba de `{uiV2 ? … : …}`. Si se integra
+   visualmente a la cabecera de la tabla v2 (opcional, no obligatorio), debe seguir llamando a
+   `handleDownloadSetup` sin cambios de lógica — solo puede cambiar su `className`.
+
+   `renderServersTable()` (nuevo) usa `ServersTable.module.css` + lucide (`Plus`, `Activity`, `Monitor`,
+   `Crosshair`, `Check`, `AlertTriangle`) + `mapTestResultToState`. **[fix v2, C3]** Verificado 2026-07-14:
+   `devops.module.css` **NO tiene clase `.link`** (solo `.btnPrimary`, línea 72, que además colisiona de
+   NOMBRE con el `.btnPrimary` nuevo de `DevOpsPage.module.css` creado en F0 — son dos clases CSS-module
+   distintas). La v1 usaba `className="link"` / `className="btnPrimary"` como strings literales sueltos, que
+   no resuelven a ningún estilo real. Corrección: importar `shell` desde `DevOpsPage.module.css` (el mismo
+   módulo de F0, que sí define `.link` y `.btnPrimary`) y usar acceso tipado `shell.link` / `shell.btnPrimary`
+   — nunca strings. Estructura ilustrativa corregida:
    ```tsx
-   import { Search, Plus, Activity, Monitor, Crosshair, Check, AlertTriangle } from 'lucide-react';
+   import { Plus, Activity, Monitor, Crosshair, Check, AlertTriangle } from 'lucide-react';
    import t from './ServersTable.module.css';
-   import s from './devops.module.css';  // reusar .btnPrimary/.link ya existentes si aplica
+   import shell from '../../pages/DevOpsPage.module.css';  // .link/.btnPrimary reales (creados en F0)
    import { mapTestResultToState } from './serversTable';
 
-   // cabecera de sección (reusa clases del shell si se importan, o devops.module.css)
-   // <button className="link"><Search size={14}/> Diagnosticar</button>
-   // <button className="btnPrimary"><Plus size={14}/> Nuevo servidor</button>  // ÚNICO botón sólido
+   // cabecera de sección (2 acentos como mucho: descargar scripts + nuevo servidor — ver reglas (c) abajo)
+   // <button className={shell.btnPrimary} onClick={() => void handleDownloadSetup()}>Descargar scripts WinRM</button>
+   // <button className={shell.btnPrimary}><Plus size={14}/> Nuevo servidor</button>
 
    <table className={t.tbl}>
      <thead>
@@ -756,11 +840,14 @@ denso y legible. **Cero cambios de lógica** (mismo CRUD, mismo `testResults`, m
    </table>
    ```
    > **Reglas duras de F3:** (a) NO cambiar handlers ni endpoints; reutilizar los existentes
-   > (`handleEdit`/`handleSubmit`/`handleRemovePassword`/`handleDelete`, el test de conectividad y su
-   > `testResults`, `rdpAvailable = ctx.health.rdp_available === true`). (b) El servidor activo se marca con el
-   > texto "activo" en `--accent-hot` (clase `.active`), **sin** barra ni dot de color. (c) Un **único** botón
-   > sólido con acento: "Nuevo servidor" (`.btnPrimary`). Todo lo demás es `.link` gris. (d) Password sigue
-   > write-only (Credential Manager); el markup no muestra contraseñas.
+   > (`handleEdit`/`handleSubmit`/`handleRemovePassword`/`handleDelete`/`handleDownloadSetup`, el test de
+   > conectividad y su `testResults`, `rdpAvailable = ctx.health.rdp_available === true`). (b) El servidor
+   > activo se marca con el texto "activo" en `--accent-hot` (clase `.active`), **sin** barra ni dot de
+   > color. (c) **[fix v2, C2]** Como mucho **dos** botones sólidos con acento en la cabecera de sección:
+   > "Descargar scripts WinRM" (`handleDownloadSetup`, preservado de Plan 118) y "Nuevo servidor" — ambos
+   > `shell.btnPrimary` (el v1 decía "un único botón sólido" pero su propio Riesgo R7 ya pedía conservar el
+   > botón de descarga junto a "Nuevo servidor"; esta v2 resuelve esa contradicción). Todo lo demás es
+   > `shell.link` gris. (d) Password sigue write-only (Credential Manager); el markup no muestra contraseñas.
 
 **Tests PRIMERO (TDD) + comando:**
 ```
@@ -831,9 +918,38 @@ sin romper ninguna suite existente. **Valor:** garantía de "regresión 0".
 
 **Acciones:**
 
-1. Correr las suites vitest existentes de DevOps + las nuevas puras, por archivo (desde `Stacky Agents/frontend`):
+0. **[ADICIÓN ARQUITECTO]** Crear `frontend/src/pages/__tests__/DevOpsShellV2Regression.test.ts` — mismo
+   idioma que `DevOpsPage.test.ts` (fs + regex sobre el código fuente, sin render/RTL). Convierte la KPI
+   "Regresión 0" en un gate automático y binario en vez de depender solo del checklist visual manual, y
+   blinda contra que una futura edición del shell repita C1/C2 (dropear `ConnectionHealthStrip` o el botón
+   de descarga WinRM al tocar el shell):
+   ```ts
+   import { describe, it, expect } from 'vitest';
+   import * as fs from 'fs';
+
+   describe('Plan 119 F5 — regresión del shell v2 (no debe depender de checklist manual)', () => {
+     it('ConnectionHealthStrip (Plan 116) se renderiza SIN condicionar a uiV2', () => {
+       const src = fs.readFileSync('N:/GIT/RS/STACKY/Stacky/Stacky Agents/frontend/src/pages/DevOpsPage.tsx', 'utf-8');
+       expect(src.includes('<ConnectionHealthStrip')).toBe(true);
+       // No debe haber un `uiV2 &&`/`uiV2 ?` envolviendo directamente el render de ConnectionHealthStrip.
+       const stripBlock = src.slice(src.indexOf('connection_doctor_enabled === true'), src.indexOf('<ConnectionHealthStrip') + 40);
+       expect(stripBlock.includes('uiV2')).toBe(false);
+     });
+
+     it('botón de descarga de scripts WinRM (Plan 118) sigue presente en ServersSection', () => {
+       const src = fs.readFileSync('N:/GIT/RS/STACKY/Stacky/Stacky Agents/frontend/src/components/devops/ServersSection.tsx', 'utf-8');
+       expect(src.includes('handleDownloadSetup')).toBe(true);
+     });
+   });
+   ```
+1. Correr las suites vitest existentes de DevOps + las nuevas puras, por archivo (desde `Stacky Agents/frontend`).
+   **[fix v2, C6]** Se agregan explícitamente `DevOpsPage.test.ts` y `ServersSection.test.ts` — verificado
+   2026-07-14 que existen (`frontend/src/pages/__tests__/`) — y el nuevo `DevOpsShellV2Regression.test.ts`:
    ```
    npx vitest run src/pages/devopsShell.test.ts
+   npx vitest run src/pages/__tests__/DevOpsPage.test.ts
+   npx vitest run src/pages/__tests__/ServersSection.test.ts
+   npx vitest run src/pages/__tests__/DevOpsShellV2Regression.test.ts
    npx vitest run src/components/devops/serversTable.test.ts
    npx vitest run src/components/devops/RemoteConsoleSection.test.tsx
    npx vitest run src/components/devops/PipelineBuilderSection.test.ts
@@ -842,9 +958,8 @@ sin romper ninguna suite existente. **Valor:** garantía de "regresión 0".
    npx vitest run src/components/devops/__tests__/PrReviewerSection.test.ts
    npx tsc --noEmit
    ```
-   > Antes de correr, hacer `npx vitest list` (o glob `src/**/DevOpsPage.test.*` y `src/**/ServersSection.test.*`)
-   > para detectar si existe algún test de `DevOpsPage`/`ServersSection` no listado arriba; si existe, correrlo y
-   > dejarlo verde.
+   > Sigue siendo buena práctica correr `npx vitest list` antes, por si algún plan intermedio agregó otro
+   > test de `DevOpsPage`/`ServersSection` no listado arriba.
 
 2. Correr los tests de flags backend (desde `Stacky Agents/backend`):
    ```

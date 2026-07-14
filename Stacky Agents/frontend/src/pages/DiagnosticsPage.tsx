@@ -12,6 +12,7 @@ import {
 import { LocalDiagnostics, type LocalDiagnosticCheck } from "../api/endpoints";
 import HarnessHealthCard from "../components/HarnessHealthCard";
 import OperationalHealthCard from "../components/OperationalHealthCard";
+import CodeIntegrityCard from "../components/CodeIntegrityCard";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import styles from "./DiagnosticsPage.module.css";
 
@@ -204,6 +205,9 @@ export default function DiagnosticsPage() {
 
       {/* Plan 46 F3 — Panel de Salud Operativa (triage pasivo) */}
       <OperationalHealthCard onOpenExecution={setDetailId} />
+
+      {/* Plan 130 — Verificador de integridad de código (on-demand) */}
+      <CodeIntegrityCard />
 
       {/* Drawer para detalle de ejecución (Plan 38 C2) */}
       <ExecutionDetailDrawer executionId={detailId} onClose={() => setDetailId(null)} />

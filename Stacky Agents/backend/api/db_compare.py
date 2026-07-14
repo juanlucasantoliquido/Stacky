@@ -8,9 +8,9 @@ POST .../password (write-only), JAMÁS sale en respuestas ni logs.
 from __future__ import annotations
 
 import config as _config
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
-from services import dbcompare_engine, dbcompare_registry, dbcompare_snapshot
+from services import dbcompare_engine, dbcompare_registry, dbcompare_runs, dbcompare_snapshot
 
 bp = Blueprint("db_compare", __name__, url_prefix="/db-compare")
 
@@ -154,3 +154,74 @@ def get_snapshot_route(snapshot_id):
     if snapshot is None:
         return jsonify({"ok": False, "error": f"snapshot '{snapshot_id}' no existe."}), 404
     return jsonify(snapshot)
+
+
+# --------------------------------------------------------------------------
+# Plan 123 F3 — corridas comparativas (motor de diff sobre los snapshots de arriba)
+# --------------------------------------------------------------------------
+
+@bp.post("/compare")
+def create_compare_run_route():
+    gate = _require_enabled()
+    if gate:
+        return gate
+    body = request.get_json(silent=True) or {}
+    source_alias = (body.get("source_alias") or "").strip()
+    target_alias = (body.get("target_alias") or "").strip()
+    mode = body.get("mode") or "fresh"
+    if not source_alias or not target_alias:
+        return jsonify({"ok": False, "error": "source_alias y target_alias son requeridos"}), 400
+    try:
+        run = dbcompare_runs.create_run(source_alias, target_alias, mode=mode)
+    except dbcompare_runs.DbCompareBusyError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except (dbcompare_runs.DbCompareRunError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, "run": run}), 202
+
+
+@bp.get("/runs")
+def list_runs_route():
+    gate = _require_enabled()
+    if gate:
+        return gate
+    raw_limit = request.args.get("limit")
+    limit = 50
+    if raw_limit is not None:
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "limit debe ser un entero"}), 400
+        if limit < 0:
+            return jsonify({"ok": False, "error": "limit no puede ser negativo"}), 400
+    return jsonify({"ok": True, "runs": dbcompare_runs.list_runs(limit=limit)})
+
+
+@bp.get("/runs/<run_id>")
+def get_run_route(run_id):
+    gate = _require_enabled()
+    if gate:
+        return gate
+    run = dbcompare_runs.get_run(run_id)
+    if run is None:
+        return jsonify({"ok": False, "error": f"corrida '{run_id}' no existe."}), 404
+    return jsonify(run)
+
+
+@bp.get("/runs/<run_id>/export.md")
+def export_run_markdown_route(run_id):
+    gate = _require_enabled()
+    if gate:
+        return gate
+    run = dbcompare_runs.get_run(run_id)
+    if run is None:
+        return jsonify({"ok": False, "error": f"corrida '{run_id}' no existe."}), 404
+    if run.get("status") != "done":
+        return jsonify({
+            "ok": False,
+            "error": f"la corrida no está 'done' (status={run.get('status')}).",
+        }), 409
+    md = dbcompare_runs.export_markdown(run)
+    response = current_app.response_class(md, mimetype="text/markdown; charset=utf-8")
+    response.headers["Content-Disposition"] = f'attachment; filename="{run_id}.md"'
+    return response

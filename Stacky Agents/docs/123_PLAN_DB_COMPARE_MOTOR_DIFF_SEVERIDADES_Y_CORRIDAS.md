@@ -1,9 +1,47 @@
 # Plan 123 — Comparador de BD entre ambientes (serie 122–126, parte 2/5): motor de diff, severidades y corridas comparativas
 
-**Estado:** PROPUESTO (v1.1, 2026-07-12 — fix por prior art de campo: identidad de constraints/índices por FIRMA ESTRUCTURAL, no por nombre; ver doc 122 §2-bis)
+**Estado:** CRITICADO — APROBADO-CON-CAMBIOS (v1.1 → v2, 2026-07-14, juez `StackyArchitectaUltraEficientCode`)
 **Serie:** 122 (núcleo) → **123 (motor de diff)** → 124 (UI inmersiva) → 125 (scripts de paridad + backups) → 126 (paridad de datos)
-**Dependencias:** Plan 122 IMPLEMENTADO (registro `services/dbcompare_registry.py`, engine `services/dbcompare_engine.py`, snapshot v1 `services/dbcompare_snapshot.py`, blueprint `api/db_compare.py`). Este plan NO arranca si el 122 no está verde.
+**Dependencias:** Plan 122 IMPLEMENTADO (registro `services/dbcompare_registry.py`, engine `services/dbcompare_engine.py`, snapshot v1 `services/dbcompare_snapshot.py`, blueprint `api/db_compare.py`). Este plan NO arranca si el 122 no está verde. **Ver §3-bis (nueva) para la realidad operativa cuando 122 y 123 se implementan en worktrees paralelos.**
 **Ortogonal a:** Planes 116/119/120/121.
+
+**Changelog v1.1 → v2 (crítica adversarial, hallazgos verificados contra el texto del propio plan):**
+- **C1 (IMPORTANTE)** F1: `_normalize_default` se describía con una frase auto-contradictoria
+  ("mientras... → sacar UNA capa") que un modelo menor puede leer como UN solo strip (no un
+  loop), lo cual FALLA el propio ejemplo citado (`((0))` vs `(0)` → sin diff). Fix: pseudocódigo
+  literal con `while` explícito.
+- **C2 (IMPORTANTE)** F2: el pseudocódigo de `create_run` nunca decía CUÁNDO se agrega el par a
+  `_ACTIVE_PAIRS` (solo se veía la liberación en el `finally` de `_execute_run`) — carrera real
+  entre dos `POST /compare` casi simultáneos del mismo par, y el test nombrado solo simula el
+  set ya poblado (no llamadas concurrentes reales), por lo que NO detecta la carrera. Fix:
+  registro atómico bajo `_ACTIVE_LOCK` en `create_run` antes de lanzar el thread + test nuevo
+  de concurrencia real.
+- **C3 (IMPORTANTE)** F3: la tabla de endpoints de `export.md` solo documentaba el 409 (run no
+  `done`), pero el test nombrado `test_export_md_headers_y_404_409` exige también un 404
+  (run inexistente) que el v1 nunca especificaba. Fix: fila explícita con ambos códigos.
+- **C4 (IMPORTANTE)** F4: la tabla `Acción` del export Markdown se dejaba como
+  `(added/removed/changed)` sin filas literales, mientras la tabla `Severidad` sí las tenía con
+  emoji — inconsistente con el propio criterio de "líneas EXACTAS" del test
+  `test_export_contiene_lineas_exactas`. Fix: filas literales `added|removed|changed`.
+- **C5 (IMPORTANTE)** F2: `_scrub` se invoca dentro del `except` de `_execute_run` sin garantía de
+  que no lance ella misma (p.ej. `get_credential` fallando porque el ambiente fue borrado a mitad
+  de la corrida) — si `_scrub` lanza, el run nunca llega a `status="error"` y queda `running` para
+  siempre (el mismo modo de fallo huérfano que el propio §5 de riesgos ya reconoce, pero
+  auto-infligido). Fix: `_scrub` best-effort, nunca lanza.
+- **C6 (MENOR)** F4: formato de línea para items `added`/`removed` (siempre `changes=[]`) no
+  tenía ejemplo explícito (solo `changed`). Fix: dos ejemplos agregados al bloque de formato.
+- **C7 (MENOR)** F3: `GET /runs?limit=` con valor no numérico no tenía comportamiento
+  especificado. Fix: nota de validación con clamp/400.
+- **[ADICIÓN ARQUITECTO]** nueva **§3-bis**: nota de integración explícita para cuando este plan
+  se implementa en un worktree ramificado de un punto de `main` donde el 122 solo está
+  CRITICADO en papel (no mergeado) — exactamente el escenario real de este pipeline de 10
+  worktrees paralelos (122-133). No cambia el producto; es guía de secuenciación de
+  implementación: F1 es 100% autónomo del 122 (cero imports), así que es siempre implementable;
+  F2 en adelante requiere verificar en el propio worktree — no asumir — que los símbolos del 122
+  existen, y detenerse con reporte preciso si no.
+- Todas las demás decisiones del v1.1 (identidad de constraints/índices por FIRMA ESTRUCTURAL,
+  contrato SchemaDiff v1, tabla de kinds/severidades, stale/lock/prune de runs) se re-verificaron
+  contra el propio texto y quedan sin cambio.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Toda afirmación sobre código existente
@@ -63,6 +101,26 @@ origen (la paridad lo DROPEARÁ del destino → destructivo).
 6. **Flags:** este plan NO crea flags nuevas; todo gatea con el master
    `STACKY_DB_COMPARE_ENABLED` (Plan 122 F0). Cero trabajo del operador.
 7. **Runtimes:** feature de panel; impacto por runtime N/A (idéntico con los 3).
+
+## 3-bis. [ADICIÓN ARQUITECTO] Nota de integración con Plan 122 en pipeline multi-worktree
+
+Este plan fue escrito citando `services/dbcompare_registry.py`, `dbcompare_engine.py`,
+`dbcompare_snapshot.py` y `api/db_compare.py` como YA IMPLEMENTADOS (Plan 122, HEAD
+`427f2df5`). En la práctica de este pipeline, los planes 119-133 se implementan en
+worktrees paralelos independientes ramificados desde puntos de `main` distintos entre sí
+— el 122 puede estar solo CRITICADO en papel (no mergeado) en el punto donde un worktree
+de este plan nació, con su implementación real viviendo en una rama separada aún sin
+mergear. Regla operativa (sin agregar trabajo al operador, sin romper paridad de runtime,
+sin autonomía nueva): **antes de escribir una sola línea de F2 en adelante**, quien
+implemente este plan debe verificar con `Glob`/`Grep` en su propio worktree que los 4
+archivos de arriba EXISTEN y exponen los símbolos exactos citados en `docs/122_PLAN_*.md`
+§4 (la versión vigente del contrato — no un HEAD hardcodeado). Si no existen:
+**F1 (núcleo puro de diff) es 100% implementable igual, porque no importa ningún módulo
+del 122** — implementarlo y DETENERSE ahí, reportando el bloqueo real en vez de fabricar
+stubs de los módulos del 122 (fabricar una copia propia garantiza conflicto de merge con
+la implementación real de 122 y viola "no inventar alcance"). Esto no es un cambio de
+comportamiento del producto: es una guía de secuenciación para el propio proceso de
+implementación de planes en paralelo.
 
 ## 4. Fases
 
@@ -160,10 +218,21 @@ for schema in sorted(union(source.schemas, target.schemas)):
   falsos positivos masivos. Los nombres de ambos lados van en `detail` (`name_source`,
   `name_target`) SOLO informativos para el drill-down.
 - `column_default_changed`: antes de comparar `default`, normalizar en ambos lados con
-  `_normalize_default(s)`: si `s` es None → None; strip; mientras empiece con `(` y
-  termine con `)` balanceados → sacar UNA capa; upper NO (defaults pueden ser strings
-  case-sensitive). SQL Server envuelve defaults en capas de paréntesis (`((0))` vs `(0)`)
-  y sin esto se generan diffs falsos.
+  `_normalize_default(s)`; upper NO (defaults pueden ser strings case-sensitive). SQL Server
+  envuelve defaults en capas de paréntesis (`((0))` vs `(0)`) y sin esto se generan diffs falsos.
+  **[FIX C1 — IMPORTANTE]** pseudocódigo literal, en BUCLE (no una sola pasada — una sola
+  pasada falla el propio ejemplo `((0))` vs `(0)`, ver test `test_default_normalizado_parentesis`):
+  ```python
+  def _normalize_default(s: str | None) -> str | None:
+      if s is None:
+          return None
+      s = s.strip()
+      while len(s) >= 2 and s[0] == "(" and s[-1] == ")" and _parens_balanced(s):
+          s = s[1:-1].strip()
+      return s
+  ```
+  (`_parens_balanced(s)` = el `(` en posición 0 cierra exactamente con el `)` en la última
+  posición, no antes — mismo criterio que "balanceados" ya usado en el resto del doc).
 
 **Tests PRIMERO:** `tests/test_plan123_dbcompare_diff.py` (fixtures: dicts snapshot v1 inline mínimos, SIN BD)
 - `test_identicos_score_100_sin_items`
@@ -204,12 +273,20 @@ _ACTIVE_LOCK = threading.Lock()
 
 def create_run(source_alias: str, target_alias: str, *, mode: str = "fresh") -> dict
     # mode ∈ {"fresh", "cached"}; valida ambientes existentes y MISMO engine (si no → DbCompareRunError)
-    # par activo → DbCompareBusyError
+    # [FIX C2 — IMPORTANTE] registro del par ATÓMICO bajo lock, ANTES de escribir el run o
+    # lanzar el thread (evita la carrera de dos POST /compare casi simultáneos para el mismo
+    # par, donde ambos pasarían el check "par activo" antes de que cualquiera se hubiera
+    # registrado si el registro ocurriera dentro del thread):
+    #   pair = frozenset({source_alias, target_alias})
+    #   with _ACTIVE_LOCK:
+    #       if pair in _ACTIVE_PAIRS:
+    #           raise DbCompareBusyError(f"ya hay una corrida activa para {source_alias} vs {target_alias}")
+    #       _ACTIVE_PAIRS.add(pair)
     # escribe run inicial {status:"running", phase:"queued"} y lanza threading.Thread(
-    #   target=_execute_run, args=(run_id, source_alias, target_alias, mode), daemon=True).start()
+    #   target=_execute_run, args=(run_id, source_alias, target_alias, mode, pair), daemon=True).start()
     # devuelve el run inicial.
 
-def _execute_run(run_id, source_alias, target_alias, mode) -> None
+def _execute_run(run_id, source_alias, target_alias, mode, pair) -> None
     # try:
     #   _update(run_id, phase="snapshot_source"); snap_s = _resolve_snapshot(source_alias, mode)
     #   _update(run_id, phase="snapshot_target"); snap_t = _resolve_snapshot(target_alias, mode)
@@ -217,7 +294,8 @@ def _execute_run(run_id, source_alias, target_alias, mode) -> None
     #   _update(run_id, status="done", phase="done", diff=diff, finished_at=utcnow, duration_ms=...)
     # except Exception as exc:
     #   _update(run_id, status="error", error=_scrub(str(exc)), finished_at=...)
-    # finally: liberar el par de _ACTIVE_PAIRS bajo _ACTIVE_LOCK
+    # finally:
+    #   with _ACTIVE_LOCK: _ACTIVE_PAIRS.discard(pair)   # SIEMPRE se libera, pase lo que pase arriba
 
 def _resolve_snapshot(alias, mode) -> dict
     # "fresh" → dbcompare_snapshot.take_snapshot(alias)
@@ -247,6 +325,14 @@ def prune_runs() -> int
   validados por regex del Plan 122 → filename-safe).
 - `_scrub(texto)`: por cada ambiente del par, si su password (via
   `dbcompare_registry.get_credential`) aparece en el texto → reemplazar por `"***"`.
+  **[FIX C5 — IMPORTANTE]** `_scrub` es SIEMPRE best-effort: envuelve la resolución de
+  password de cada alias en su propio `try/except Exception: continue` (si `get_credential`
+  falla — p.ej. el ambiente fue borrado a mitad de la corrida — igual debe devolver un string,
+  nunca lanzar). Si `_scrub` lanzara sin este guard, la línea `error=_scrub(str(exc))` dentro
+  del `except` de `_execute_run` fallaría y el run NUNCA llegaría a `status="error"`, quedando
+  `running` para siempre — exactamente el modo de fallo huérfano que la fila "Proceso muere
+  con run running" de §5 ya reconoce, pero esta vez originado por el propio código de
+  error-handling en vez de por la caída del proceso.
 - Escrituras atómicas: escribir a `<run_id>.json.tmp` + `os.replace`.
 
 **Tests PRIMERO:** `tests/test_plan123_dbcompare_runs.py`
@@ -256,7 +342,16 @@ def prune_runs() -> int
 - `test_run_cached_done_con_diff` — polling con `time.sleep(0.05)` máx 5s hasta `done`; summary coherente.
 - `test_run_fresh_sqlite_done` — ambientes sqlite reales (F2 del 122 soporta engine sqlite por alias `test-*`).
 - `test_par_activo_409` — simular par en `_ACTIVE_PAIRS` → `DbCompareBusyError` (y en ambos órdenes del par).
+- **[FIX C2]** `test_par_activo_race_real` — dos llamadas reales a `create_run` para el MISMO
+  par lanzadas casi simultáneamente desde 2 threads (`_resolve_snapshot` monkeypatcheado con
+  `time.sleep(0.2)` para ensanchar la ventana de carrera) → exactamente una de las dos
+  devuelve el run inicial y la otra lanza `DbCompareBusyError`; nunca las dos corridas activas
+  a la vez ni las dos rechazadas.
 - `test_error_scrubbed` — monkeypatch `take_snapshot` que lanza con el password en el mensaje → run error sin password.
+- **[FIX C5]** `test_scrub_defensivo_ante_credencial_rota` — monkeypatch `dbcompare_registry.get_credential`
+  para que lance `Exception` durante el scrub del mensaje de error → el run igual llega a
+  `status="error"` (con algún `error` no vacío, sin importar el redactado exacto) en vez de
+  quedar `running` para siempre.
 - `test_stale_marker` — run file sembrado con `started_at` viejo y `status=running` → `get_run` agrega `stale: true`.
 - `test_prune_runs`
 
@@ -277,9 +372,9 @@ agregan endpoints al MISMO blueprint, mismo helper `_require_enabled`).
 | Método y ruta | Comportamiento |
 |---|---|
 | `POST /compare` | body `{source_alias, target_alias, mode?: "fresh"\|"cached"}` → `create_run`; 202 `{ok, run: <metadatos>}`; `DbCompareBusyError` → 409; `DbCompareRunError`/ValueError → 400 |
-| `GET /runs` | `{ok, runs: list_runs(limit=?limit≤200 default 50)}` |
+| `GET /runs` | `{ok, runs: list_runs(limit=?limit≤200 default 50)}`. **[FIX C7 — MENOR]** `limit` no numérico o negativo → 400 `{ok:false, error}`; valor > 200 se clampea a 200 (no error) |
 | `GET /runs/<run_id>` | run completo (CON diff si done) / 404 |
-| `GET /runs/<run_id>/export.md` | 200 `text/markdown; charset=utf-8` + header `Content-Disposition: attachment; filename="<run_id>.md"`; 409 si el run no está `done` |
+| `GET /runs/<run_id>/export.md` | 200 `text/markdown; charset=utf-8` + header `Content-Disposition: attachment; filename="<run_id>.md"`; **[FIX C3 — IMPORTANTE]** 404 si `run_id` no existe; 409 si existe pero `status != "done"` |
 
 **Tests PRIMERO:** `tests/test_plan123_dbcompare_api.py`
 - `test_compare_202_y_polling_done` (sqlite cached, igual que F2)
@@ -320,20 +415,31 @@ def export_markdown(run: dict) -> str
 | 🔵 info | n |
 
 | Acción | Cantidad |
-(added/removed/changed)
+|---|---|
+| added | n |
+| removed | n |
+| changed | n |
 
 ## Diferencias (danger primero)
 ### 🔴 danger
 - `dbo.CLIENTES` (table, changed): column_type_changed [DIRECCION], column_removed [FAX]
+- `dbo.LEGACY` (table, removed)
 ### 🟠 warn
-- ...
+- `dbo.NUEVA` (table, added)
 ### 🔵 info
 - ...
 ```
 - Items dentro de cada severidad ordenados por `(object_type, schema, name)`.
 - Por item `changed`: lista de `kind [nombre-de-columna/índice si aplica]` separados por coma.
+- **[FIX C6 — MENOR]** Por item `added`/`removed` (siempre `changes=[]`): SOLO
+  `` `schema.name` (object_type, action) `` sin dos puntos ni lista de kinds (ver ejemplos
+  `dbo.LEGACY` y `dbo.NUEVA` arriba).
 - `<hash8>` = primeros 8 chars del `content_hash`.
 - Secciones de severidad sin items se omiten completas.
+- **[FIX C4 — IMPORTANTE]** La tabla `Acción` usa el mismo header-separator `|---|---|` que la
+  tabla `Severidad`, sin emoji, con las 3 filas literales `added`/`removed`/`changed` en ese
+  orden fijo (el v1 solo decía "(added/removed/changed)" sin filas literales — ambiguo para
+  un modelo menor que debe escribir asserts de líneas EXACTAS en `test_export_contiene_lineas_exactas`).
 
 **Tests PRIMERO:** `tests/test_plan123_dbcompare_export.py`
 - `test_export_contiene_lineas_exactas` (fixture run done → asserts de líneas literales:
@@ -393,8 +499,23 @@ cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan
 
 - [ ] `diff_snapshots` pura, determinista, con la tabla de kinds/severidades EXACTA de §F1.
 - [ ] KPI-1/2/3 demostrados por los tests nombrados.
+- [ ] **[FIX C1]** `_normalize_default` implementada como bucle `while` explícito (no una sola
+      pasada); `test_default_normalizado_parentesis` verde con `((0))` vs `(0)` sin diff.
 - [ ] Corridas threaded con lock por par, stale-marker, scrub de credenciales y prune.
+- [ ] **[FIX C2]** `create_run` registra el par en `_ACTIVE_PAIRS` de forma atómica bajo lock
+      ANTES de lanzar el thread; `test_par_activo_race_real` verde (sin doble-activo ni
+      doble-rechazo).
+- [ ] **[FIX C5]** `_scrub` nunca lanza (best-effort); un fallo al resolver la credencial NO
+      impide que el run llegue a `status="error"`; `test_scrub_defensivo_ante_credencial_rota` verde.
 - [ ] Endpoints `/compare`, `/runs`, `/runs/<id>`, `/runs/<id>/export.md` con gate del master y códigos 202/400/403/404/409 exactos.
-- [ ] Export Markdown determinista con el formato literal de §F4.
+- [ ] **[FIX C3]** `/runs/<id>/export.md` devuelve 404 si el run no existe y 409 si existe pero
+      no está `done` (ambos casos, no solo el 409).
+- [ ] Export Markdown determinista con el formato literal de §F4, incluida la tabla `Acción`
+      con filas literales **[FIX C4]** y el formato de ítems `added`/`removed` sin lista de kinds **[FIX C6]**.
 - [ ] 4 archivos de test del plan verdes con los comandos exactos; suites del 122 sin fallos nuevos.
 - [ ] Ningún endpoint nuevo ejecuta DDL/DML; los runs no contienen credenciales.
+- [ ] **[ADICIÓN ARQUITECTO §3-bis]** Antes de F2, se verificó en el propio worktree (no se
+      asumió) que `services/dbcompare_registry.py`, `dbcompare_engine.py`,
+      `dbcompare_snapshot.py` y `api/db_compare.py` existen con los símbolos del contrato
+      vigente de `docs/122_PLAN_*.md` §4; si no existen, F1 quedó implementado y el resto
+      reportado como bloqueado (sin stubs fabricados).

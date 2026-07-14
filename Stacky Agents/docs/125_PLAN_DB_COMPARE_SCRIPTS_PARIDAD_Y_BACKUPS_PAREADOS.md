@@ -1,14 +1,24 @@
 # Plan 125 — Comparador de BD entre ambientes (serie 122–126, parte 4/5): scripts de paridad + backups pareados 1:1
 
-**Estado:** PROPUESTO (v1.1, 2026-07-12 — integra prior art de campo Backup-TestTables.ps1 / Invoke-DevTestParityReplay.ps1: convención `_BAK_`, verificación de counts embebida, regla de aborto; ver doc 122 §2-bis)
+**Estado:** CRITICADO — APROBADO-CON-CAMBIOS (v1.1 → v2, 2026-07-14, juez `StackyArchitectaUltraEficientCode`) + IMPLEMENTADO-PARCIAL 2026-07-14 (rama `plan-125-dbcompare-scripts`): F0-F4 completas (88/88 tests) + F6 `scriptsLogic.ts` puro (9/9 vitest, tsc 0). **GAP documentado** (ver §9 DoD): F5 (API HTTP) y la parte de F3/F6 que integra con `api/db_compare.py`/`DbComparePage` NO implementadas — dependen de código de los Planes 122/123/124 que no existe en este checkout (worktree aislado, ver C1).
 **Serie:** 122 (núcleo) → 123 (motor de diff) → 124 (UI inmersiva) → **125 (scripts de paridad + backups)** → 126 (paridad de datos)
-**Dependencias:** Planes 122 y 123 IMPLEMENTADOS (SchemaDiff v1 y runs, contratos congelados en doc 123 §F1/§F2). El Plan 124 es recomendable pero NO bloqueante (la UI de este plan agrega una tab a `DbComparePage.tsx`; si el 124 no está, se monta igual sobre la página del 122).
+**Dependencias:** Planes 122 y 123 — **contrato CONGELADO EN PAPEL** (§F1/§F3 de 122, §F1/§F2 de 123), pero el CÓDIGO puede no estar mergeado a `main` todavía cuando se implemente este plan (desarrollo con múltiples worktrees en paralelo — ver C1). Este plan NO asume código de 122/123 presente: **F0 (nueva)** lo verifica en runtime, y F1/F2/F4 son puros y se testean con fixtures dict propias sin importar nada de 122/123. Solo F3 (wrapper por `run_id`), F5 (API) y F6 (montaje en `DbComparePage`) requieren integración real; si al implementar no existen los módulos de 122/123/124, esas fases se documentan como GAP explícito (ver F0) — no se inventa infraestructura ajena en su lugar. El Plan 124 es recomendable pero NO bloqueante.
 **Ortogonal a:** Planes 116/119/120/121.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Los templates SQL de este doc son LITERALES:
 > se implementan carácter a carácter (los tests golden lo verifican). Prohibido desviarse
 > de los nombres exactos.
+
+## Changelog v1.1 → v2 (crítica adversarial)
+
+- **[C1 – IMPORTANTE]** "Dependencias" afirmaba "122 y 123 IMPLEMENTADOS" sin matiz. Verificado empíricamente en el worktree de implementación real: CERO código de `dbcompare` existía (122 en rama hermana no mergeada; 123 seguía PROPUESTO v1.1, ni criticado). Fix: dependencia reformulada como "papel, no código" + **F0 nueva** (preflight que detecta qué módulos existen y gatea F3/F5/F6 sin bloquear F1/F2/F4).
+- **[C2 – IMPORTANTE]** Faltaba el símbolo que traduce el SchemaDiff v1 real de doc 123 (anidado `items[] → changes[]`, con `schema`/`name`/`object_type` SOLO en el item padre) al modelo plano que la tabla de F2 asume (`item: dict` con `kind` uniforme). Fix: nueva función `flatten_diff` en F2 con contrato exacto + tests golden. Si el contrato final de 123 difiere en el nombre de algún campo, ajustar SOLO `flatten_diff` (no rediseñar F2).
+- **[C3 – IMPORTANTE]** Celda de la tabla F2 para `unique_removed` se contradecía a sí misma ("no (unique_removed **sí**...)"). Fix: redactada sin ambigüedad.
+- **[C4 – IMPORTANTE]** `generate_parity_bundle` corría el assert de invariante KPI-1 "al final", permitiendo persistir archivos parciales si dispara a mitad de escritura — contradice la propia garantía ("nunca se persiste un bundle inválido"). Fix: construir todo en memoria, validar, y RECIÉN ENTONCES escribir vía `<run_id>.tmp/` + `os.replace` (mismo patrón atómico de doc 123 §F2).
+- **[C5 – MENOR]** F5 decía "mismo blueprint" sin nombrar el símbolo Flask exacto. Fix: nombre exacto + regla de no crear un blueprint paralelo si falta.
+- **[C6 – MENOR]** F7 exige "sin fallos nuevos" en `test_smoke.py` sin método de comparación. Fix: capturar baseline antes de tocar código, diff de nombres de test fallidos.
+- **[ADICIÓN ARQUITECTO]** F0 nueva: preflight de dependencias determinista y testeado que desbloquea implementar F1/F2/F4 de forma aislada (TDD real, sin BD, sin código de 122/123) y documenta como GAP explícito lo que F3/F5/F6 no puedan completar — sin bloquear todo el plan ni que un modelo menor tenga que adivinar qué hacer.
 
 ---
 
@@ -64,6 +74,53 @@ mismo patrón `prohibited_runtime_must_emit_sql` de `services/db_query.py:20-23`
 
 ## 4. Fases
 
+### F0 — [ADICIÓN ARQUITECTO] Preflight de dependencias: `services/dbcompare_deps_preflight.py`
+
+**Objetivo:** verificar en runtime, de forma determinista, qué módulos de 122/123/124 existen
+en ESTE checkout antes de tocar F3/F5/F6 — sin bloquear F1/F2/F4 (puros, no dependen de nada).
+
+**Archivo a crear:** `Stacky Agents/backend/services/dbcompare_deps_preflight.py`
+
+**Símbolos exactos:**
+```python
+REQUIRED_MODULES = {
+    "diff_engine": "services.dbcompare_diff",      # Plan 123 F1: diff_snapshots
+    "runs_store": "services.dbcompare_runs",        # Plan 123 F2: get_run/list_runs
+    "api_blueprint": "api.db_compare",              # Plan 122 F4 / 123 F3: blueprint Flask
+}
+
+def check_dependencies() -> dict
+# usa importlib.util.find_spec(module) is not None por cada entrada — SIN import real
+# (evita romper el arranque si el módulo está a medio escribir).
+# → {"diff_engine": bool, "runs_store": bool, "api_blueprint": bool, "all_present": bool}
+
+def require_or_gap(component: str) -> None
+# si check_dependencies()[component] es False: no lanza excepción — el CALLER (F3/F5) decide
+# qué hacer (ver regla abajo). Esta función solo documenta la intención; el chequeo real
+# lo hace cada fase con check_dependencies() al inicio de su implementación.
+```
+
+**Regla de uso (aplica a F3/F5/F6, NO a F1/F2/F4):**
+- Antes de implementar F3 (wrapper `generate_parity_bundle(run_id)`), F5 (API) o F6 (montaje
+  en `DbComparePage`), correr `check_dependencies()`. Si el componente requerido es `False`:
+  NO inventar un módulo placeholder ni un blueprint paralelo. Implementar y testear la parte
+  PURA de esa fase que no requiere el módulo ausente (ver notas puntuales en F3/F5/F6), dejar
+  el resto sin tocar, y reportarlo como GAP explícito en el resumen de la implementación
+  (qué falta, qué módulo/símbolo se esperaba, y que NO es un bug de este plan sino una
+  dependencia de otro plan en curso).
+- Esto es infraestructura de gating, no funcionalidad de negocio: no agrega flags, no requiere
+  configuración del operador, no tiene impacto de runtime (N/A, panel backend).
+
+**Tests PRIMERO:** `tests/test_plan125_dbcompare_preflight.py`
+- `test_check_dependencies_reporta_bool_por_componente` (monkeypatch `importlib.util.find_spec`
+  para simular presente/ausente por módulo, sin importar nada real),
+- `test_all_present_true_solo_si_los_tres_estan`,
+- `test_no_importa_el_modulo_real` (espía sobre `find_spec`; nunca se llama `importlib.import_module`).
+
+**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan125_dbcompare_preflight.py -q`
+
+**Criterio binario:** todos verdes. **Flag:** ninguna. **Runtimes:** N/A. **Operador:** ninguno.
+
 ### F1 — Helpers de identificadores y nombres de backup: `services/dbcompare_sqlnames.py`
 
 **Objetivo:** una sola fuente de verdad para quoting y naming, con truncado determinista.
@@ -111,9 +168,29 @@ def script_filename(seq: int, kind: str, schema: str, name: str) -> str
 
 ### F2 — Emitters de paridad y resguardo por dialecto: `services/dbcompare_scripts.py` (parte 1)
 
-**Objetivo:** por cada `DiffItem`/`change` del SchemaDiff v1, emitir el SQL de paridad y su resguardo, según esta tabla CERRADA.
+**Objetivo:** por cada pieza APLANADA del SchemaDiff v1, emitir el SQL de paridad y su resguardo, según esta tabla CERRADA.
 
 **Archivo a crear:** `Stacky Agents/backend/services/dbcompare_scripts.py`
+
+**[FIX C2 — IMPORTANTE] `flatten_diff`: traduce el SchemaDiff v1 real (doc 123 §F1, anidado
+`items[] → changes[]`, con `schema`/`name`/`object_type` SOLO en el item padre) al modelo
+plano `item: dict` con `kind` uniforme que asume la tabla de abajo. Sin esta función un
+implementador tendría que ADIVINAR cómo combinar item padre + change hijo — queda prohibido
+inferir, el contrato es este:**
+```python
+def flatten_diff(diff: dict) -> list[dict]
+# Recorre diff["items"] en orden. Por cada item:
+#   - si item["action"] in ("added", "removed"): 1 pieza
+#       {"kind": f'{item["object_type"]}_{item["action"]}',   # ej. "table_added", "view_removed"
+#        "object_type": item["object_type"], "schema": item["schema"], "name": item["name"],
+#        "detail": {}}
+#   - si item["action"] == "changed": por cada c en item["changes"] (en orden), 1 pieza
+#       {"kind": c["kind"], "object_type": item["object_type"], "schema": item["schema"],
+#        "name": item["name"], "detail": c["detail"]}
+# Determinista: mismo orden que diff["items"]/diff["items"][i]["changes"].
+# El "item: dict" que reciben emit_parity/emit_resguardo de acá en más ES una pieza aplanada
+# (tiene siempre kind/object_type/schema/name/detail), NUNCA un item ni un change crudos.
+```
 
 **Símbolos exactos (parte 1):**
 ```python
@@ -125,6 +202,7 @@ class ScriptPiece(TypedDict):
     modifies_table: bool   # True si toca una tabla existente en destino
 
 def emit_parity(item: dict, source_schema_obj: dict, target_schema_obj: dict, dialect: str, ts: str) -> list[ScriptPiece]
+# item = una pieza aplanada de flatten_diff (kind/object_type/schema/name/detail)
 def emit_resguardo(piece: ScriptPiece, source_schema_obj: dict, target_schema_obj: dict, dialect: str, ts: str) -> list[ScriptPiece]
 def render_create_table(schema: str, name: str, table: dict, dialect: str) -> str
 def render_column_def(col: dict, dialect: str) -> str
@@ -143,7 +221,8 @@ def render_column_def(col: dict, dialect: str) -> str
 | `column_default_changed` | bloque literal §abajo (drop default dinámico + `ADD CONSTRAINT DF_<t>_<c> DEFAULT <expr> FOR <c>`) | `ALTER TABLE <q> MODIFY (<c> DEFAULT <expr>);` | no / sí |
 | `pk_changed` | `ALTER TABLE <q> DROP CONSTRAINT <pk_dest>;` + `ALTER TABLE <q> ADD CONSTRAINT <pk_src_name_o_PK_tabla> PRIMARY KEY (<cols>);` | ídem | **sí** / sí |
 | `fk_added` / `unique_added` / `check_added` | `ALTER TABLE <q> ADD CONSTRAINT <n> FOREIGN KEY (<cols>) REFERENCES <q_ref> (<cols_ref>);` / `... UNIQUE (<cols>);` / `... CHECK (<sqltext>);` | ídem | no / sí |
-| `fk_removed` / `unique_removed` / `check_removed` | `ALTER TABLE <q> DROP CONSTRAINT <n>;` | ídem | no (unique_removed **sí** según tabla 123) / sí |
+| `fk_removed` / `check_removed` | `ALTER TABLE <q> DROP CONSTRAINT <n>;` | ídem | no / sí |
+| `unique_removed` | `ALTER TABLE <q> DROP CONSTRAINT <n>;` | ídem | **[FIX C3] sí** (toca datos indirectamente: pierde la garantía de unicidad; requiere backup de datos igual que `pk_changed`, ver reglas de resguardo abajo) / sí |
 | `fk_changed` / `check_changed` / `index_changed` | NO llegan del diff v1.1 (doc 123: los cambios de firma se reportan como `*_removed` + `*_added`, ya cubiertos arriba); si un diff futuro los emitiera: pieza DROP + pieza ADD/CREATE (dos ScriptPiece) | ídem | no / sí |
 | `index_added` | `CREATE [UNIQUE ]INDEX <n> ON <q> (<cols>);` | ídem | no / no |
 | `index_removed` | `DROP INDEX <n_q> ON <q>;` | `DROP INDEX <n_q>;` | no / sí |
@@ -207,21 +286,34 @@ ALTER TABLE <q> ADD CONSTRAINT [DF_<tabla>_<columna>] DEFAULT <expr> FOR [<colum
 ```
 (+ para `9xx_destructivo_*`: `-- ⚠ DESTRUCTIVO: revisá el backup pareado ANTES de ejecutar.`)
 
-**Tests PRIMERO:** `tests/test_plan125_dbcompare_emitters_sqlserver.py` y
-`tests/test_plan125_dbcompare_emitters_oracle.py`
+**Tests PRIMERO:** `tests/test_plan125_dbcompare_emitters_sqlserver.py`,
+`tests/test_plan125_dbcompare_emitters_oracle.py` y `tests/test_plan125_dbcompare_flatten.py`
+- `test_flatten_diff_added_removed_sintetiza_kind` (item `action="added"` sin `changes` → 1 pieza `kind=f"{object_type}_added"`),
+- `test_flatten_diff_changed_hereda_schema_name_del_item` (item `action="changed"` con 2 `changes` → 2 piezas, ambas con el `schema`/`name`/`object_type` del item padre),
+- `test_flatten_diff_orden_preservado`,
 - 1 test golden por kind de la tabla (string EXACTO, incluyendo el bloque default dinámico),
 - `test_column_added_notnull_sin_default_comenta`,
 - `test_view_sin_definicion_todo_comentado`,
 - `test_backup_dedupe_por_tabla`,
-- `test_backup_incluye_verificacion_counts` (golden: el THROW/RAISE_APPLICATION_ERROR está en el script, por dialecto).
+- `test_backup_incluye_verificacion_counts` (golden: el THROW/RAISE_APPLICATION_ERROR está en el script, por dialecto),
+- `test_unique_removed_es_destructive_true` (regresión del FIX C3).
 
-**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan125_dbcompare_emitters_sqlserver.py tests/test_plan125_dbcompare_emitters_oracle.py -q`
+**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan125_dbcompare_flatten.py tests/test_plan125_dbcompare_emitters_sqlserver.py tests/test_plan125_dbcompare_emitters_oracle.py -q`
 
 **Criterio binario:** golden tests verdes carácter a carácter (KPI-2).
 
 ### F3 — Bundle + manifest con emparejamiento: `services/dbcompare_scripts.py` (parte 2)
 
 **Objetivo:** materializar el bundle ordenado en disco con manifest que fija el pareo 1:1.
+
+**[NOTA C1 — gap conocido]** `generate_parity_bundle(run_id)` necesita cargar un run real vía
+`services.dbcompare_runs.get_run(run_id)` (Plan 123 F2). Correr `dbcompare_deps_preflight.check_dependencies()["runs_store"]`
+(F0) ANTES de implementar el wrapper: si es `False`, implementar y testear IGUAL la función
+interna pura `_materialize_bundle(diff: dict, run_meta: dict) -> dict` (todo lo de abajo:
+layout, numeración, manifest, invariante KPI-1, atomicidad) contra fixtures `diff` dict propias
+(sin importar `dbcompare_runs`), y dejar `generate_parity_bundle(run_id)` como wrapper delgado
+con `try: from services.dbcompare_runs import get_run except ImportError: raise DbCompareRunError(...)`
+— reportar esto como GAP en el resumen final, NO simular ni inventar un `dbcompare_runs` propio.
 
 **Símbolos exactos (parte 2):**
 ```python
@@ -265,9 +357,14 @@ def bundle_zip_bytes(run_id: str) -> bytes          # zipfile en BytesIO con TOD
   "counts": {"backups": 0, "parity": 0, "destructive": 0}
 }
 ```
-- **Invariante (KPI-1) implementada como assert final de `generate_parity_bundle`:**
-  toda entry con `destructive or modifies_table` tiene `backup_file or rollback_file`;
-  si no se cumple → excepción (nunca se persiste un bundle inválido).
+- **[FIX C4 — IMPORTANTE] Invariante (KPI-1) y escritura ATÓMICA:** construir el manifest
+  COMPLETO y el contenido de cada archivo .sql/README EN MEMORIA primero; recién con todo
+  armado, correr el assert: toda entry con `destructive or modifies_table` tiene
+  `backup_file or rollback_file`; si falla → `DbCompareRunError`, CERO bytes tocados en disco.
+  Si pasa: escribir todo bajo `<_BUNDLES_DIRNAME>/<run_id>.tmp/` y recién al final
+  `os.replace(tmp_dir, final_dir)` (mismo patrón atómico que `<run_id>.json.tmp` + `os.replace`
+  de doc 123 §F2 para los runs). Así "nunca se persiste un bundle inválido" es una garantía
+  real y no depende de dónde caiga el assert.
 - Regenerar un bundle existente → borra el directorio del run y lo reescribe (idempotente).
 - El `README.md` del bundle incluye SIEMPRE esta regla literal (doctrina del paso 0 de
   `Invoke-DevTestParityReplay.ps1`, ver doc 122 §2-bis):
@@ -309,7 +406,15 @@ def bundle_zip_bytes(run_id: str) -> bytes          # zipfile en BytesIO con TOD
 
 **Objetivo:** generar/consultar/descargar por HTTP con el gate del master.
 
-**Endpoints exactos (mismo blueprint, mismo `_require_enabled`):**
+**[NOTA C1 — gap conocido]** Correr `check_dependencies()["api_blueprint"]` (F0) antes de
+tocar esta fase. Si es `False`, `api/db_compare.py` (con su blueprint Flask, esperado como
+`db_compare_bp` por Plan 122 F4/123 F3) todavía no existe en este checkout: NO crear un
+blueprint paralelo ni un archivo `api/db_compare.py` propio (colisionaría al mergear 122).
+Implementar F5 completo QUEDA COMO GAP documentado en el resumen; los tests de F5 quedan
+sin correr (no hay blueprint donde registrar las rutas) y se reporta explícitamente.
+
+**[FIX C5 — MENOR] Endpoints exactos (mismo blueprint `db_compare_bp` de `api/db_compare.py`,
+mismo `_require_enabled` — NO crear un blueprint nuevo, agregar rutas al existente):**
 | Método y ruta | Comportamiento |
 |---|---|
 | `POST /runs/<run_id>/scripts` | `generate_parity_bundle`; 200 `{ok, manifest}`; run no done → 409; run inexistente → 404 |
@@ -328,6 +433,12 @@ def bundle_zip_bytes(run_id: str) -> bytes          # zipfile en BytesIO con TOD
 ### F6 — UI: tab "Scripts" pareada en la sección
 
 **Objetivo:** ver, copiar y descargar los pares backup↔paridad sin ambigüedad, con la advertencia HITL siempre visible.
+
+**[NOTA C1 — gap conocido]** `ScriptsPanel.tsx`/`SqlViewer.tsx` montan DENTRO de `DbComparePage`
+(Plan 122 F5 / 124). Si ese componente no existe todavía en este checkout, esas dos piezas
+quedan como GAP documentado (no se inventa una página contenedora). `scriptsLogic.ts` es PURO
+(no importa nada de `DbComparePage` ni de la API) y se implementa y testea SIEMPRE, exista o
+no el resto — es la parte de valor que no depende de 122/123/124.
 
 **Archivos a crear en `Stacky Agents/frontend/src/components/dbcompare/`:**
 - `scriptsLogic.ts` (puro):
@@ -362,13 +473,24 @@ export function pairingBadge(row: ScriptPairRow): "backup"|"rollback"|"backup+ro
 
 ### F7 — No-regresión y cierre
 
+**[FIX C6 — MENOR] Baseline antes de tocar código:** ANTES de la fase F1, correr
+`.venv\Scripts\python.exe -m pytest tests/test_smoke.py -q` una vez y guardar la lista de
+tests que fallan (si alguno) como baseline. Al cerrar F7, "sin fallos nuevos" significa: el
+conjunto de tests fallidos después es subconjunto del baseline (comparar NOMBRES de test, no
+conteo total — un test nuevo que falla por otra razón puede compensar uno que empieza a pasar
+y esconder una regresión real si solo se compara el número).
+
 **Comandos:**
 ```
-cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan125_dbcompare_sqlnames.py tests/test_plan125_dbcompare_emitters_sqlserver.py tests/test_plan125_dbcompare_emitters_oracle.py tests/test_plan125_dbcompare_bundle.py tests/test_plan125_dbcompare_toposort.py tests/test_plan125_dbcompare_scripts_api.py -q
+cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan125_dbcompare_preflight.py tests/test_plan125_dbcompare_sqlnames.py tests/test_plan125_dbcompare_flatten.py tests/test_plan125_dbcompare_emitters_sqlserver.py tests/test_plan125_dbcompare_emitters_oracle.py tests/test_plan125_dbcompare_bundle.py tests/test_plan125_dbcompare_toposort.py tests/test_plan125_dbcompare_scripts_api.py -q
 cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan122_dbcompare_api.py tests/test_plan123_dbcompare_api.py tests/test_smoke.py -q
 cd "Stacky Agents/frontend" && npx vitest run src/components/dbcompare/ && npx tsc --noEmit
 ```
-**Criterio binario:** suites 125 verdes; 122/123/smoke sin fallos nuevos; tsc 0.
+Si `test_plan122_dbcompare_api.py`/`test_plan123_dbcompare_api.py` no existen todavía en el
+checkout (ver F0/C1), se omiten del comando (no es un fallo, es ausencia de archivo) y se
+documenta en el resumen.
+
+**Criterio binario:** suites 125 presentes verdes; 122/123/smoke sin fallos NUEVOS respecto al baseline; tsc 0.
 
 ## 5. Riesgos y mitigaciones
 
@@ -400,20 +522,24 @@ cd "Stacky Agents/frontend" && npx vitest run src/components/dbcompare/ && npx t
 
 ## 8. Orden de implementación
 
+0. F0 preflight de dependencias (nueva, [ADICIÓN ARQUITECTO]).
 1. F1 sqlnames + tests golden.
-2. F2 emitters + tests golden por dialecto.
-3. F3 bundle + manifest + invariante.
+2. F2 `flatten_diff` + emitters + tests golden por dialecto.
+3. F3 bundle + manifest + invariante (atómico, FIX C4) — gap documentado si falta `dbcompare_runs`.
 4. F4 toposort (tests dedicados).
-5. F5 API.
-6. F6 UI tab Scripts.
-7. F7 no-regresión.
+5. F5 API — gap documentado si falta `api/db_compare.py`.
+6. F6 UI tab Scripts — `scriptsLogic.ts` siempre; `ScriptsPanel`/`SqlViewer` gap documentado si falta `DbComparePage`.
+7. F7 no-regresión (baseline, FIX C6).
 
 ## 9. Definición de Hecho (DoD)
 
-- [ ] Emitters literales por dialecto con golden tests (KPI-2), incluyendo casos comentados (view sin definición, NOT NULL sin default).
-- [ ] Invariante de pareo 1:1 implementada como assert + test (KPI-1): imposible persistir bundle inválido.
-- [ ] Orden: backups → paridad → destructivos; FK-safe demostrado (KPI-3); ciclos degradan con warning explícito.
-- [ ] Bundle en disco + manifest v1 + zip descargable; allowlist anti-traversal testeada.
-- [ ] Tab Scripts con pareo visible, banner HITL literal, copiar/descargar por archivo y zip.
-- [ ] 6 archivos de test backend + 1 vitest verdes (comandos exactos); 122/123/smoke sin fallos nuevos; tsc 0.
-- [ ] Cero endpoints que ejecuten SQL generado (grep de la review: ningún `execute` sobre contenido de bundle).
+- [x] F0 preflight determinista y testeado; no bloquea F1/F2/F4. (`services/dbcompare_deps_preflight.py`, 5/5 tests)
+- [x] `flatten_diff` con contrato exacto y tests golden (FIX C2): traduce SchemaDiff v1 anidado al modelo plano de F2 sin ambigüedad. (5/5 tests)
+- [x] Emitters literales por dialecto con golden tests (KPI-2), incluyendo casos comentados (view sin definición, NOT NULL sin default) y `unique_removed` destructive=true (FIX C3). (29 sqlserver + 26 oracle tests)
+- [x] Invariante de pareo 1:1 implementada como assert PRE-escritura + escritura atómica por `.tmp` + `os.replace` (KPI-1, FIX C4): imposible persistir bundle inválido O parcial. (`generate_parity_bundle_from_diff`, 8/8 tests incl. `test_invariante_invalida_no_deja_archivos_parciales`)
+- [x] Orden: backups → paridad → destructivos; FK-safe demostrado (KPI-3); ciclos degradan con warning explícito. (`order_table_pieces`, 6/6 tests)
+- [x] Bundle en disco + manifest v1 + zip descargable — IMPLEMENTADO como `generate_parity_bundle_from_diff` (pura, testeada con fixtures). **GAP:** el wrapper `generate_parity_bundle(run_id)` que resuelve un run real vía `services.dbcompare_runs`/`dbcompare_snapshot` (Plan 122/123) no está disponible en este checkout; queda como `DbCompareRunError` explícito, no simulado. Allowlist anti-traversal (F5, endpoint HTTP) **NO implementada** — depende de `api/db_compare.py` ausente.
+- [~] Tab Scripts: `scriptsLogic.ts` IMPLEMENTADO completo (puro, 9/9 vitest). **GAP:** `ScriptsPanel.tsx`/`SqlViewer.tsx` (montan dentro de `DbComparePage`, Plan 122/124) **NO implementados** — la página contenedora no existe en este checkout.
+- [x] Archivos de test backend de F0-F4 + 1 vitest verdes (comandos exactos); smoke sin fallos NUEVOS respecto a baseline (FIX C6, baseline=4 passed, post=4 passed); tsc 0. `test_plan122_dbcompare_api.py`/`test_plan123_dbcompare_api.py` confirmados AUSENTES (gap, no ejecutados).
+- [x] Cero endpoints que ejecuten SQL generado (grep de la review: ningún `execute`/`connect`/`create_engine` en `dbcompare_scripts.py`).
+- [x] Todo GAP por dependencia ausente queda LISTADO explícitamente: **F5 completo (API HTTP)** y **F3-wrapper/F6-UI de montaje** (`generate_parity_bundle(run_id)`, `ScriptsPanel.tsx`, `SqlViewer.tsx`) no implementados — requieren `api/db_compare.py` (Plan 122 F4) y `DbComparePage` (Plan 122/124), ausentes en este checkout. La parte PURA de cada fase (F0-F4 completas, F6 `scriptsLogic.ts`) está implementada, testeada y verde.

@@ -11,6 +11,7 @@ import type {
   SnapshotMeta,
   TestConnectionResult,
 } from "../components/dbcompare/dbcompareTypes";
+import type { DataCandidate } from "../components/dbcompare/dataDiffLogic";
 import type {
   ActiveProjectResponse,
   AgentDefinition,
@@ -3702,4 +3703,14 @@ export const DbCompare = {
     ),
   getSnapshot: (snapshotId: string) =>
     api.get<Record<string, unknown>>(`/api/db-compare/snapshots/${encodeURIComponent(snapshotId)}`),
+  // Plan 126 F5 — paridad de datos.
+  dataCandidates: (runId: string) =>
+    api.get<{ ok: boolean; candidates: DataCandidate[]; error?: string }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/data-candidates`,
+    ),
+  startDataDiff: (runId: string, tables: { schema: string; table: string }[]) =>
+    api.post<{ ok: boolean; error?: string }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/data-diff`,
+      { tables },
+    ),
 };

@@ -50,6 +50,9 @@ export interface TestConnectionResult {
 export interface DbCompareHealth {
   ok: boolean;
   flag_enabled: boolean;
+  // Plan 126 F4 [FIX C5] — la UI lee este campo para mostrar/ocultar el
+  // botón "Comparar datos…" sin llamar a un endpoint aparte.
+  data_diff_enabled: boolean;
   keyring_available: boolean;
   drivers: DriverStatus;
 }

@@ -20,7 +20,12 @@ sys.path.insert(0, str(ROOT))
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("LLM_BACKEND", "mock")
 
-from services.dbcompare_sqlvalues import SqlLiteralError, normalize_value, sql_literal  # noqa: E402
+from services.dbcompare_sqlvalues import (  # noqa: E402
+    SqlLiteralError,
+    normalize_value,
+    sql_literal,
+    sql_literal_from_normalized,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -143,3 +148,66 @@ def test_sql_literal_bytes_golden_por_dialecto_sin_truncar():
     assert sql_literal(b20, "sqlserver") == f"0x{hex_full}"
     assert sql_literal(b20, "oracle") == f"HEXTORAW('{hex_full}')"
     assert sql_literal(b20, "sqlite") == f"X'{hex_full}'"
+
+
+# ---------------------------------------------------------------------------
+# sql_literal_from_normalized — complemento de F1 (descubierto implementando F3):
+# el DataDiff (F2) solo trae valores YA NORMALIZADOS (strings); sql_literal
+# opera sobre valores Python crudos y NO puede reutilizarse tal cual sobre un
+# normalizado (todo str cae en la rama de texto citado, incluso para columnas
+# numéricas/fecha). Esta función usa el tipo de columna del snapshot para
+# decidir cómo renderizar el string normalizado.
+# ---------------------------------------------------------------------------
+
+
+def test_sql_literal_from_normalized_none():
+    assert sql_literal_from_normalized(None, "INT", "sqlserver") == "NULL"
+
+
+def test_sql_literal_from_normalized_numerico_sin_comillas():
+    assert sql_literal_from_normalized("2", "INTEGER", "sqlserver") == "2"
+    assert sql_literal_from_normalized("1.5", "REAL", "oracle") == "1.5"
+    assert sql_literal_from_normalized("1", "BIT", "sqlite") == "1"
+    assert sql_literal_from_normalized("3", "DECIMAL(10,2)", "sqlserver") == "3"
+
+
+def test_sql_literal_from_normalized_texto_citado():
+    assert sql_literal_from_normalized("O'Brien", "VARCHAR(50)", "sqlserver") == "'O''Brien'"
+
+
+def test_sql_literal_from_normalized_datetime_con_hora_golden_por_dialecto():
+    v = "2024-01-15 10:30:45.123456"
+    assert sql_literal_from_normalized(v, "DATETIME2", "sqlserver") == (
+        "CONVERT(DATETIME2, '2024-01-15T10:30:45.123456', 126)"
+    )
+    assert sql_literal_from_normalized(v, "TIMESTAMP", "oracle") == (
+        "TO_TIMESTAMP('2024-01-15 10:30:45.123456', 'YYYY-MM-DD HH24:MI:SS.FF6')"
+    )
+    assert sql_literal_from_normalized(v, "DATETIME", "sqlite") == "'2024-01-15 10:30:45'"
+
+
+def test_sql_literal_from_normalized_datetime_sin_microsegundos_completa_ceros():
+    v = "2024-01-15 00:00:00"
+    assert sql_literal_from_normalized(v, "DATETIME2", "sqlserver") == (
+        "CONVERT(DATETIME2, '2024-01-15T00:00:00.000000', 126)"
+    )
+
+
+def test_sql_literal_from_normalized_date_golden_por_dialecto():
+    v = "2024-01-15"
+    assert sql_literal_from_normalized(v, "DATE", "sqlserver") == "CONVERT(DATE, '2024-01-15', 23)"
+    assert sql_literal_from_normalized(v, "DATE", "oracle") == "TO_DATE('2024-01-15','YYYY-MM-DD')"
+    assert sql_literal_from_normalized(v, "DATE", "sqlite") == "'2024-01-15'"
+
+
+def test_sql_literal_from_normalized_bytes_golden_por_dialecto():
+    v = "0x0102FF"
+    assert sql_literal_from_normalized(v, "VARBINARY(50)", "sqlserver") == "0x0102FF"
+    assert sql_literal_from_normalized(v, "BLOB", "oracle") == "HEXTORAW('0102FF')"
+    assert sql_literal_from_normalized(v, "BLOB", "sqlite") == "X'0102FF'"
+
+
+def test_sql_literal_from_normalized_bytes_truncados_error_explicito():
+    v = "0x000102030405060708090A0B0C0D0E0F...(20 bytes)"
+    with pytest.raises(SqlLiteralError, match="truncad"):
+        sql_literal_from_normalized(v, "VARBINARY(MAX)", "sqlserver")

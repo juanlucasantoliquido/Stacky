@@ -187,12 +187,20 @@ def diff_table_data(
         if cells:
             changed.append({"pk": _pk_dict(k), "cells": cells})
 
+    # Addendum F2 (descubierto implementando F3): el tipo real de cada columna
+    # (del snapshot de origen) viaja con el DataDiff — sql_literal_from_normalized
+    # (F1) lo necesita para saber si un valor normalizado va sin comillas
+    # (numérico), envuelto en CONVERT/TO_TIMESTAMP (fecha) o citado (texto).
+    src_types = {c["name"]: c["type"] for c in src_table["columns"]}
+    column_types = {c: src_types[c] for c in columns}
+
     return {
         "version": 1,
         "schema": schema,
         "table": table,
         "pk_cols": pk_cols,
         "columns": columns,
+        "column_types": column_types,
         "columns_skipped": columns_skipped,
         "only_source": only_source,
         "only_target": only_target,

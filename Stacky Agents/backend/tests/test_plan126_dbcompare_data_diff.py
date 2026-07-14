@@ -163,6 +163,11 @@ def test_kpi1_exacto(two_envs):
     assert changed["cells"] == {"NOMBRE": {"source": "B", "target": "B-mod"}}
     assert result["truncated"] is False
     assert result["identical"] is False
+    # column_types (addendum F2, necesario para F3 emit_data_scripts: el DataDiff
+    # solo trae valores NORMALIZADOS/strings, sql_literal_from_normalized necesita
+    # el tipo real de columna del snapshot para renderizar el literal correcto).
+    assert result["column_types"]["ID"].startswith("INT")
+    assert set(result["column_types"]) == set(result["columns"])
 
 
 def test_truncated_con_cap(two_envs):

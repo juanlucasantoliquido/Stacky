@@ -1,11 +1,6 @@
 // Plan 124 — Comparador de BD: hook de polling de una corrida comparativa (doc 123 §F2/§F3).
-//
-// PENDIENTE: el fetch de acá apunta directo a la URL literal del endpoint (`GET
-// /api/db-compare/runs/<id>`, doc 123 §F3) en vez de pasar por `DbCompare.getRun` del
-// namespace de `frontend/src/api/endpoints.ts`, porque ese namespace no existe todavía en
-// esta rama (Plan 122 no mergeado — ver F0 del doc del plan). Cuando 122/123 se mergeen,
-// reemplazar el `fetch` inline por `DbCompare.getRun(runId)`.
 import { useEffect, useRef, useState } from "react";
+import { DbCompare } from "../../api/endpoints";
 import type { CompareRun } from "./dbcompareTypes";
 
 /** Un status de run es terminal cuando ya no tiene sentido seguir haciendo polling. */
@@ -28,6 +23,12 @@ export interface UseCompareRunResult {
   error: string | null;
 }
 
+/**
+ * NOTA de contrato (reconciliada 2026-07-14 contra api/db_compare.py tras el merge de
+ * 122/123): `GET /runs/<id>` devuelve el CompareRun DIRECTO (sin wrapper `{ok,run}`), y
+ * `DbCompare.getRun` (vía `api.get`) LANZA una excepción en 404/403/5xx en vez de devolver
+ * `{ok:false}` — por eso el polling atrapa la excepción y la expone como `error`.
+ */
 export function useCompareRun(runId: string | null): UseCompareRunResult {
   const [run, setRun] = useState<CompareRun | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,16 +47,11 @@ export function useCompareRun(runId: string | null): UseCompareRunResult {
 
     const poll = async (): Promise<void> => {
       try {
-        const res = await fetch(`/api/db-compare/runs/${encodeURIComponent(runId)}`);
-        const data = (await res.json()) as { ok: boolean; run?: CompareRun; error?: string };
+        const data = await DbCompare.getRun(runId);
         if (cancelled) return;
-        if (!data.ok || !data.run) {
-          setError(data.error ?? "No se pudo obtener la corrida.");
-          return;
-        }
-        setRun(data.run);
+        setRun(data);
         setError(null);
-        if (!isTerminal(data.run.status)) {
+        if (!isTerminal(data.status)) {
           const elapsed = Date.now() - startRef.current;
           timer = setTimeout(poll, nextPollDelayMs(elapsed));
         }

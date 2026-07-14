@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -367,3 +368,48 @@ def collect_unpushed_docs(root: Path | None) -> set[str] | None:
             line = line[1:-1]
         paths.add(line)
     return paths
+
+
+# ── F3 — Cache TTL + orquestación (consumido por api/plans_board.py) ───────
+_BOARD_TTL_SEC = 15
+_BOARD_CACHE: tuple[float, dict] | None = None
+
+
+def get_board_cached(refresh: bool = False) -> dict:
+    """Board completo con cache TTL de 15s. Nunca lanza (build_board ya es defensivo)."""
+    global _BOARD_CACHE
+    if not refresh and _BOARD_CACHE is not None:
+        ts, board = _BOARD_CACHE
+        if time.monotonic() - ts < _BOARD_TTL_SEC:
+            return dict(board)
+
+    root = repo_root()
+    unpushed = collect_unpushed_docs(root)
+    board = build_board(docs_dir_default(), unpushed)
+    board["ok"] = True
+    board["git_available"] = unpushed is not None
+    _BOARD_CACHE = (time.monotonic(), board)
+    return dict(board)
+
+
+def get_detail(number: int) -> dict | None:
+    """Sobre get_board_cached(): cards con ese number. [] -> None."""
+    board = get_board_cached()
+    matches = [c for c in board["plans"] if c["number"] == number]
+    if not matches:
+        return None
+    plan = matches[0]
+    duplicates = matches[1:]
+    docs_dir = docs_dir_default()
+    file_path = docs_dir / plan["filename"]
+    try:
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+        head_excerpt = "\n".join(content.splitlines()[:60])
+    except OSError:
+        head_excerpt = ""
+    return {
+        "ok": True,
+        "plan": plan,
+        "duplicates": duplicates,
+        "head_excerpt": head_excerpt,
+    }

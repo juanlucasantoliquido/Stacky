@@ -787,4 +787,6 @@ reporte con el conteo antes/después idéntico).
       solo matchea `collect_unpushed_docs`, y `grep -n "subprocess\|open(.*w" "Stacky Agents/backend/api/plans_board.py"` → 0 matches).
 - [x] Ratchet ps1/sh actualizados con los 4 archivos `test_plan128_*`.
 - [x] Encabezado `**Estado:**` de este doc actualizado al cerrar.
-- [ ] `git status` final: WIP ajeno intacto (staging quirúrgico verificado).
+- [x] `git status` final: WIP ajeno intacto (staging quirúrgico verificado; el worktree
+      `wt-plan-128` arrancó 100% limpio y cada fase se staged con pathspec explícito, nunca
+      `git add -A`).

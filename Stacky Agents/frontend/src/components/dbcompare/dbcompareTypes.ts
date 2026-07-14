@@ -1,3 +1,5 @@
+import type { DataDiff } from "./dataDiffLogic";
+
 // Plan 122 F5 — tipos TS del contrato del núcleo del Comparador de BD (docs/122 §F1/§F2/§F3).
 // Plan 124 — ampliado con el contrato de diff/run (doc 123 §F1/§F2) y el detalle completo de
 // snapshot (doc 122 §F3, DbSnapshot) que 123/122 no exponen como tipos TS propios (123 es
@@ -110,6 +112,16 @@ export interface SchemaDiff {
   summary: DiffSummary;
 }
 
+// Plan 126 F2 — services/dbcompare_data.py:run_data_diff/_execute_data_diff.
+export interface DataDiffRunState {
+  status: "running" | "done" | "error";
+  phase: string;
+  tables: Record<string, DataDiff | { error: string }>;
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+}
+
 export interface CompareRun {
   run_id: string;
   source_alias: string;
@@ -127,6 +139,8 @@ export interface CompareRun {
   diff: SchemaDiff | null;
   error: string | null;
   stale?: boolean;
+  // Plan 126 F2 — ausente hasta que se lanza POST .../data-diff; luego "running"|"done"|"error".
+  data_diff?: DataDiffRunState | null;
 }
 
 // ---- Detalle completo de snapshot (doc 122 §F3, GET /snapshots/<id>) — Plan 124 F1/F4/F5,

@@ -7,6 +7,9 @@ import {
   buildDataGridRows,
   dataCounters,
   candidateFilter,
+  candidateKey,
+  parseCandidateKey,
+  toggleTableSelection,
   type DataDiff,
   type DataCandidate,
 } from '../dataDiffLogic';
@@ -121,5 +124,44 @@ describe('candidateFilter', () => {
 
   it('sin coincidencias devuelve vacío', () => {
     expect(candidateFilter(candidates(), 'zzz')).toEqual([]);
+  });
+});
+
+describe('candidateKey / parseCandidateKey', () => {
+  it('es reversible', () => {
+    const key = candidateKey('dbo', 'RCONTROLES');
+    expect(parseCandidateKey(key)).toEqual({ schema: 'dbo', table: 'RCONTROLES' });
+  });
+
+  it('distingue schema.table de table.schema (no ambiguo)', () => {
+    const a = candidateKey('dbo', 'X');
+    const b = candidateKey('X', 'dbo');
+    expect(a).not.toBe(b);
+  });
+});
+
+describe('toggleTableSelection', () => {
+  it('agrega una key nueva si no está', () => {
+    const result = toggleTableSelection(new Set(), 'a', 20);
+    expect(result.has('a')).toBe(true);
+  });
+
+  it('quita una key ya presente', () => {
+    const result = toggleTableSelection(new Set(['a', 'b']), 'a', 20);
+    expect(result.has('a')).toBe(false);
+    expect(result.has('b')).toBe(true);
+  });
+
+  it('no agrega mas alla del cap', () => {
+    const full = new Set(Array.from({ length: 20 }, (_, i) => `t${i}`));
+    const result = toggleTableSelection(full, 'nueva', 20);
+    expect(result.has('nueva')).toBe(false);
+    expect(result.size).toBe(20);
+  });
+
+  it('no muta el set original', () => {
+    const original = new Set(['a']);
+    toggleTableSelection(original, 'b', 20);
+    expect(original.has('b')).toBe(false);
   });
 });

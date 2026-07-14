@@ -13,6 +13,7 @@ import { DiffTreemap } from "./DiffTreemap";
 import { DiffList } from "./DiffList";
 import { ObjectDrilldown } from "./ObjectDrilldown";
 import { RunsTimeline } from "./RunsTimeline";
+import { DataParitySection } from "./DataParitySection";
 import styles from "./dbcompare.module.css";
 
 type ViewState = "wizard" | "progress" | "results";
@@ -174,6 +175,7 @@ export function DbComparePage() {
           ) : (
             <DiffList items={filteredItems} onSelectItem={setSelectedItem} />
           )}
+          {health?.data_diff_enabled && <DataParitySection run={activeRun} onRunUpdate={setActiveRun} />}
         </>
       )}
 

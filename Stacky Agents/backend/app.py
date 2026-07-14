@@ -440,6 +440,35 @@ def create_app() -> Flask:
         ).start()
         logger.info("local insights daemon armed")
 
+        # ── Plan 121 — Centinela local de egreso (secretos/PII semántico) ────
+        # Mismo patrón que el sweep del plan 117: gates evaluados en cada
+        # iteración dentro de run_sweep_once() → hot-apply real. Reusa la
+        # misma cadencia (STACKY_LOCAL_INSIGHTS_SWEEP_SEC) — plan 121 no
+        # define una flag de intervalo propia (F0 solo agrega ENABLED,
+        # MAX_PER_CYCLE, LOOKBACK_DAYS, MAX_CHARS).
+        def _egress_sentinel_sweep_loop() -> None:
+            from services import egress_sentinel
+
+            while True:
+                try:
+                    processed = egress_sentinel.run_sweep_once()
+                    if processed:
+                        logger.info("egress sentinel sweep: %d ejecuciones auditadas", processed)
+                except Exception:
+                    logger.exception("egress sentinel sweep daemon falló")
+                try:
+                    interval = int(getattr(config, "STACKY_LOCAL_INSIGHTS_SWEEP_SEC", 180))
+                except (TypeError, ValueError):
+                    interval = 180
+                time.sleep(max(30, interval))
+
+        threading.Thread(
+            target=_egress_sentinel_sweep_loop,
+            name="stacky-egress-sentinel-daemon",
+            daemon=True,
+        ).start()
+        logger.info("egress sentinel daemon armed")
+
     # ── Plan 60 — Aprendizaje bidireccional de ediciones humanas en ADO ──────
     # STACKY_ADO_EDIT_LEARNING_ENABLED=false => apagado (default, byte-idéntico).
     _ado_edit_learning_on = os.environ.get(

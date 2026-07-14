@@ -365,12 +365,17 @@ def _dedup_blocks(
 # de recortar (comentarios viejos, similares) queda accesible vía MCP (F2.1).
 _BLOCK_PRIORITY: dict[str, int] = {
     "operator-corrections": 110,  # Plan 41 — correcciones del operador mandan sobre todo
+    "run-directive": 105,        # Plan 133 — directiva server-side, manda casi sobre todo
     "ado-epic-structured": 100,
+    "ado-blocker": 90,           # Plan 133 — bloqueante técnico detectado server-side
     "client-profile": 95,
     "rejection-lessons": 82,  # Plan 48 — restricción dura (rechazos previos del operador)
     "stacky-memory": 80,
     "modal_user_input": 78,
+    "process-catalog": 78,       # Plan 133 — el prompt lo declara lectura OBLIGATORIA
+    "process-discipline": 77,    # Plan 133 — decisión REUSE vs CREATE, no podable
     "operator_note": 76,
+    "acceptance-contract": 76,   # Plan 133 — se autodeclaraba high y era podable
     "acceptance-criteria": 74,   # Q0.1 — alta prioridad, nunca se poda
     "filesystem-artifacts-status": 70,
     "glossary-auto": 60,
@@ -387,7 +392,15 @@ _TRUNCATION_MARKER = (
 
 
 def _block_priority(block: dict) -> int:
-    return _BLOCK_PRIORITY.get(block.get("id") or "", _DEFAULT_PRIORITY)
+    mapped = _BLOCK_PRIORITY.get(block.get("id") or "")
+    if mapped is not None:
+        return mapped
+    # Plan 133 F6 — respeta el campo ad-hoc que algunos bloques ya se autodeclaran
+    # (p. ej. acceptance-contract, context_enrichment.py:~1420) pero que hasta
+    # ahora _block_priority ignoraba (solo miraba el id).
+    if str(block.get("priority") or "").lower() == "high":
+        return _HIGH_PRIORITY_THRESHOLD
+    return _DEFAULT_PRIORITY
 
 
 def _block_token_estimate(block: dict) -> int:

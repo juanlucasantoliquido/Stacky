@@ -193,3 +193,83 @@ def section_doctor_route(section_id: str):
         "runtime": runtime,
         "section": section_id,
     })
+
+
+@bp.post("/<section_id>/doctor/local")
+def section_doctor_local_route(section_id: str):
+    """Plan 127 C3 — doctor de sección con el modelo LOCAL (síncrono, HITL).
+    NO exige STACKY_DEVOPS_AGENT_ENABLED (no usa agent_runner) ni
+    STACKY_DEVOPS_SECTION_DOCTOR_ENABLED (camino independiente al cloud)."""
+    if not getattr(_config.config, "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED", False):
+        abort(404)
+
+    from api.local_llm_analysis import (
+        _create_execution,
+        _ensure_internal_ticket,
+        _finish_execution,
+        _guard,
+    )
+
+    guard = _guard()
+    if guard:
+        return guard
+
+    body = request.get_json(silent=True) or {}
+    project = body.get("project")
+    payload = body.get("payload")
+    if not project or not isinstance(payload, dict):
+        return jsonify({"error": "project y payload son obligatorios"}), 400
+
+    blocks = build_doctor_context_blocks(section_id, project, payload)
+    if blocks is None:
+        return jsonify({"error": "unknown_section", "section": section_id}), 404
+
+    from services.local_insights import HITL_RULES
+    from services.pr_review_sanitize import redact_secrets
+
+    system = (
+        "Sos un ingeniero DevOps senior. Analizá el contexto de la sección y "
+        "respondé en markdown con secciones 'Hallazgos' y 'Cambios sugeridos'." + HITL_RULES
+    )
+    user = redact_secrets("\n\n".join(b["content"] for b in blocks))
+
+    from db import session_scope
+
+    with session_scope() as session:
+        ticket = _ensure_internal_ticket(session, project)
+        analyzer_id = _create_execution(
+            session, ticket.id, "local_llm_devops_doctor",
+            {"section": section_id, "project": project},
+        )
+
+    from copilot_bridge import invoke_local_llm  # import lazy (patrón del repo)
+    import time
+
+    t0 = time.monotonic()
+    try:
+        response = invoke_local_llm(
+            agent_type="local_llm_devops_doctor",
+            system=system,
+            user=user,
+            on_log=lambda level, msg: None,
+            execution_id=analyzer_id,
+            model=body.get("model"),
+        )
+    except Exception as e:
+        _finish_execution(analyzer_id, status="error", error=str(e))
+        return jsonify({"ok": False, "error": str(e), "execution_id": analyzer_id}), 502
+
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    resolved_model = (
+        (response.metadata or {}).get("model") or body.get("model")
+        or _config.config.LOCAL_LLM_MODEL
+    )
+    _finish_execution(analyzer_id, status="completed", output=response.text[:10000])
+    return jsonify({
+        "ok": True,
+        "analysis": response.text,
+        "model": resolved_model,
+        "execution_id": analyzer_id,
+        "section": section_id,
+        "elapsed_ms": elapsed_ms,
+    })

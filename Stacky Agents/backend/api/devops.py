@@ -61,6 +61,10 @@ def _health_payload() -> dict:
         "env_sandbox_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", False)),  # Plan 107
         "pr_reviewer_enabled": bool(getattr(cfg, "STACKY_PR_REVIEWER_ENABLED", False)),  # Plan 110
         "connection_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", False)),  # Plan 116
+        "local_doctor_enabled": bool(
+            getattr(cfg, "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED", False)
+            and getattr(cfg, "LOCAL_LLM_ENABLED", False)
+        ),  # Plan 127 — CONJUNCIÓN: la UI solo ofrece el botón si el camino completo sirve
     }
 
 

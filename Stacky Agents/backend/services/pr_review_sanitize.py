@@ -15,6 +15,12 @@ _SECRET_PATTERNS = [
     re.compile(r"(?i)(password\s*[=:]\s*)\S+"),
     re.compile(r"(?i)(secret\s*[=:]\s*)\S+"),
     re.compile(r"(?i)(api[_-]?key\s*[=:]\s*)\S+"),
+    # Plan 127 — valores de secretos en JSON serializado ("KEY": "value"): la
+    # comilla que cierra el nombre de la key rompe los patrones de arriba
+    # (esperan password/secret/api_key SEGUIDO de = o : sin comilla en medio).
+    # Cubre keys como DB_PASSWORD, API_TOKEN, my_secret_key (case-insensitive,
+    # con prefijo/sufijo); group1 conserva "key":  y enmascara solo el valor.
+    re.compile(r'(?i)("[a-z0-9_]*(?:password|secret|token|api[_-]?key)[a-z0-9_]*"\s*:\s*)"[^"]*"'),
     # user:pass@host — group1 = prefijo "://user:" a CONSERVAR; la contraseña
     # (fuera del grupo, seguida de @ vía lookahead) se enmascara sin leak.
     re.compile(r"(://[^:@/\s]+:)[^@/\s]+(?=@)"),

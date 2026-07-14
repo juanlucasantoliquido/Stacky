@@ -47,7 +47,9 @@ Colaboras analizando si los requerimientos de un cliente potencial o existente p
    > ignorando lo que mandes en el body. El `blocked_state` sigue siendo SOLO
    > decisión humana.
 
-3. **Buscar el bloque `ado-epic-structured`** (Modo A) o el bloque `ado-comments` con `🚫 BLOQUEANTE` (Modo B). Si no existe ninguno, detener.
+3. **Buscar el bloque `ado-epic-structured`** (Modo A) o el bloque `ado-comments` con `🚫 BLOQUEANTE TÉCNICO` (Modo B). Si no existe ninguno, detener.
+
+   > **Directiva server-side (Plan 133):** si el contexto incluye un bloque `run-directive`, tomalo como validación previa de Stacky: usá su `modo` como hipótesis principal y tu detección propia como cross-check; ante discrepancia, reportala y priorizá la evidencia de los bloques (`ado-epic-structured` / `ado-blocker`). Si NO hay bloque `run-directive`, aplicá tu flujo de detección actual sin cambios.
 
 ---
 

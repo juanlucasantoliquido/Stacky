@@ -1076,5 +1076,10 @@ class Config:
         "STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH", ""
     )
 
+    # ── Plan 128 — Tablero de evolución de planes (default OFF, editable por UI) ──
+    STACKY_PLANS_BOARD_ENABLED: bool = os.getenv(
+        "STACKY_PLANS_BOARD_ENABLED", "false"
+    ).strip().lower() == "true"
+
 
 config = Config()

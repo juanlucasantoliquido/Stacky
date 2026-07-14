@@ -1224,6 +1224,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás: se corta antes la espera. De fábrica son 120 segundos.",
         example="Como el tiempo que esperás al teléfono antes de cortar y volver a intentar.",
     ),
+    "STACKY_PLANS_BOARD_ENABLED": PlainHelp(
+        what="Muestra un tablero de solo lectura con todos los planes NN_PLAN de docs/ y en qué paso del pipeline está cada uno (propuesto, criticado, implementado, supervisado), más si sus commits ya se pushearon.",
+        on_effect="Si la activás: aparece el tab 'Planes' con el tablero, el próximo número libre y una acción sugerida copiable por plan. No ejecuta nada por sí solo.",
+        off_effect="Si la apagás: el tab desaparece y /api/plans-board devuelve 404. Todo lo demás sigue exactamente igual.",
+        example="Como un tablero kanban de la evolución de Stacky, pero automático: lee los docs, el ledger de supervisión y git, y te dice qué sigue.",
+    ),
 }
 
 

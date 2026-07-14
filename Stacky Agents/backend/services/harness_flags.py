@@ -238,6 +238,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EXECUTION_TRACE_ENABLED", "STACKY_TRACE_PROMPT_TEXT_ENABLED",
         "STACKY_DIGEST_INTERVAL_HOURS", "STACKY_ADO_FAILURE_COMMENT_ENABLED",
         "STACKY_UNBLOCKER_COMPLETED_CAP",   # Plan 66 C4 v4.1
+        "STACKY_PLANS_BOARD_ENABLED",       # Plan 128 — tablero de evolución de planes
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -2718,6 +2719,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Habilita narrar el digest de ejecuciones en lenguaje natural con el modelo local (botón en la card del digest).",
         group="global",
         requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+    ),
+    # ── Plan 128 — Tablero de evolución de planes (solo lectura) ──────────────
+    FlagSpec(
+        key="STACKY_PLANS_BOARD_ENABLED",
+        type="bool",
+        label="Tablero de evolución de planes",
+        description=(
+            "Tab 'Planes' de solo lectura: estado del pipeline "
+            "proponer→criticar→implementar→supervisar por cada plan de docs/, "
+            "aprobación del supervisor, commits sin push y acción sugerida copiable."
+        ),
+        group="global",
+        # SIN default= (queda None: opt-in, no curada en _CURATED_DEFAULTS_ON).
+        # SIN requires= (no tiene master). SIN env_only= (queda UI-editable).
     ),
 )
 

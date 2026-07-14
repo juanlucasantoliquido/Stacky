@@ -474,3 +474,32 @@ class AdoTrackerProvider:
         self._client._request("PATCH", url, body={"status": "abandoned"})
         return {"ok": True, "id": str(mr_id), "state": "closed"}
     # ADO NO define approve_merge_request en v1 → capability False.
+
+    # ── Plan 131 — catálogo de épicas para el resolutor de incidencias ────────
+
+    _EPICS_WIQL = (
+        "SELECT [System.Id] FROM WorkItems "
+        "WHERE [System.TeamProject] = @project "
+        "AND [System.WorkItemType] = 'Epic' "
+        "ORDER BY [System.ChangedDate] DESC"
+    )
+
+    def fetch_epics(self, limit: int = 50) -> list[dict]:
+        """Plan 131 — catálogo de épicas vía WIQL dedicado (fetch_open_items es stub, :53-64).
+
+        Método extra-puerto (duck-typed, NO forma parte de PORT_METHODS —
+        precedente: mr_url/commit_url en gitlab_provider.py). Devuelve
+        [{"id": int, "title": str, "state": str}] ya normalizado, excluyendo
+        estados terminales. Nunca lanza distinto de lo que lance el cliente HTTP.
+        """
+        rows = self._client.fetch_open_work_items(wiql=self._EPICS_WIQL)
+        out: list[dict] = []
+        for r in rows:
+            f = r.get("fields") or {}
+            state = str(f.get("System.State") or "")
+            if state.strip().lower() in ("closed", "done", "removed"):
+                continue
+            out.append({"id": r.get("id"), "title": str(f.get("System.Title") or ""), "state": state})
+            if len(out) >= limit:
+                break
+        return out

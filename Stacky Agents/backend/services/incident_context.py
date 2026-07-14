@@ -137,3 +137,132 @@ def ensure_incident_agent_file() -> Path:
     # queda byte-idéntico al contenido en memoria (test de sincronía C10).
     dest.write_text(content, encoding="utf-8", newline="")
     return dest
+
+
+# ── F3 — Contexto: manifest de adjuntos + catálogo de épicas (§4.2) ───────────
+
+_INLINE_MAX_PER_FILE = 8_000
+_INLINE_MAX_TOTAL = 40_000
+
+_KIND_LABEL = {"image": "imagen", "text": "texto", "binary": "binario"}
+
+
+def _human_size(num_bytes: int) -> str:
+    kb = num_bytes / 1024
+    if kb < 1024:
+        return f"{kb:.1f} KB"
+    return f"{kb / 1024:.1f} MB"
+
+
+def build_attachments_manifest(incident: dict) -> str:
+    """Formato EXACTO §4.2. Rutas absolutas de todos los archivos; inline solo
+    de los `kind == "text"` (con `errors='replace'`), con cap por archivo
+    (_INLINE_MAX_PER_FILE) y cap total (_INLINE_MAX_TOTAL)."""
+    from services.incident_store import incidents_root
+
+    files = incident.get("files") or []
+    incident_dir = incidents_root() / incident.get("id", "")
+
+    lines: list[str] = [f"Archivos adjuntos ({len(files)}):"]
+    for f in files:
+        abs_path = incident_dir / f["stored_name"]
+        kind_label = _KIND_LABEL.get(f.get("kind", ""), f.get("kind", ""))
+        lines.append(
+            f"- {f['stored_name']} | {kind_label} | {_human_size(f['bytes'])} | "
+            f"sha256={f['sha256']} | ruta_absoluta={abs_path}"
+        )
+    lines.append(
+        "Si tu runtime puede leer imágenes del disco, abrí las rutas absolutas de las imágenes."
+    )
+    lines.append(
+        "Si NO puede, declaralo con [PENDIENTE: verificar captura <nombre>] donde corresponda."
+    )
+
+    text_files = [f for f in files if f.get("kind") == "text"]
+    if text_files:
+        lines.append("")
+        lines.append("--- Contenido de archivos de texto (inline, truncado) ---")
+        total_inline = 0
+        for f in text_files:
+            path = incident_dir / f["stored_name"]
+            try:
+                raw = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                raw = ""
+            remaining_budget = max(0, _INLINE_MAX_TOTAL - total_inline)
+            per_file_cap = min(_INLINE_MAX_PER_FILE, remaining_budget)
+            shown = raw[:per_file_cap]
+            total_inline += len(shown)
+            lines.append(f"### {f['stored_name']}")
+            lines.append(shown)
+            leftover = len(raw) - len(shown)
+            if leftover > 0:
+                lines.append(f"[TRUNCADO: quedaron {leftover} bytes sin mostrar]")
+
+    return "<attachments-manifest>\n" + "\n".join(lines) + "\n</attachments-manifest>"
+
+
+def fetch_epic_catalog(provider, limit: int = 50) -> list[dict]:
+    """Catálogo de épicas del tracker activo. TODO el cuerpo protegido por un
+    único try/except (C2+C6+C12): cualquier excepción → [] (degradación
+    declarada; el agente escribe 'EPICA: ninguna' y el operador puede
+    overridear en el preview)."""
+    try:
+        fetch_epics_fn = getattr(provider, "fetch_epics", None)
+        if callable(fetch_epics_fn):
+            # Camino PRINCIPAL en ADO — ya viene normalizado del adapter;
+            # fetch_open_items en ADO es un stub que devuelve [] siempre, así
+            # que si el provider expone fetch_epics NUNCA se cae al fallback.
+            return list(fetch_epics_fn(limit=limit) or [])
+
+        from services.tracker_provider import TrackerQuery
+
+        items = provider.fetch_open_items(TrackerQuery(state="open"))
+        out: list[dict] = []
+        for it in items:
+            fields = it.get("fields")
+            if fields:
+                is_epic = fields.get("System.WorkItemType") == "Epic"
+            else:
+                labels = it.get("labels") or []
+                # C6 — el label real que Stacky crea en GitLab es "type::epic"
+                # (gitlab_provider._type_label), por eso substring y no igualdad.
+                is_epic = any("epic" in str(lbl).lower() for lbl in labels)
+            if not is_epic:
+                continue
+            item_id = it.get("iid") or it.get("id")
+            title = it.get("title") or (it.get("fields") or {}).get("System.Title") or ""
+            state = it.get("state") or (it.get("fields") or {}).get("System.State") or ""
+            out.append({"id": item_id, "title": title, "state": state})
+            if len(out) >= limit:
+                break
+        return out
+    except Exception:  # noqa: BLE001 — degradación declarada, nunca 500
+        return []
+
+
+def build_epic_catalog_block(catalog: list[dict]) -> str:
+    """Formato EXACTO §4.2."""
+    lines = [
+        "<epic-catalog>",
+        "Épicas ABIERTAS del tracker (elegí a lo sumo UNA como relacionada):",
+    ]
+    if not catalog:
+        lines.append('(catálogo vacío → escribí exactamente "EPICA: ninguna")')
+    else:
+        for item in catalog:
+            lines.append(
+                f"- id={item.get('id')} | {item.get('title', '')} | estado={item.get('state', '')}"
+            )
+    lines.append("</epic-catalog>")
+    return "\n".join(lines)
+
+
+def build_incident_prompt(incident: dict, catalog: list[dict]) -> str:
+    """Concatena §4.2 en orden: header + texto verbatim + attachments-manifest
+    + epic-catalog."""
+    header = "INCIDENCIA REPORTADA POR EL OPERADOR\n====================================\n"
+    text = incident.get("text", "")
+    manifest = build_attachments_manifest(incident)
+    catalog_block = build_epic_catalog_block(catalog)
+    return f"{header}{text}\n\n{manifest}\n\n{catalog_block}"

@@ -1,9 +1,20 @@
 # Plan 122 — Comparador de BD entre ambientes (serie 122–126, parte 1/5): núcleo de ambientes, conexión read-only real y snapshot de esquema
 
-**Estado:** PROPUESTO (v1.1, 2026-07-12 — integra prior art de campo: scripts RSPACIFICO del operador, ver §2-bis)
+**Estado:** CRITICADO — APROBADO-CON-CAMBIOS (v1.1 → v2, 2026-07-14, juez `StackyArchitectaUltraEficientCode`)
 **Serie:** 122 (núcleo) → 123 (motor de diff) → 124 (UI inmersiva) → 125 (scripts de paridad + backups) → 126 (paridad de datos)
 **Dependencias:** ninguna (abre la serie). Reusa el patrón de registro con keyring del Plan 91 (`services/server_registry.py`) y el sustrato de validación SELECT-only de `services/db_query.py`.
 **Ortogonal a:** Plan 116 (doctor conexiones DevOps), Plan 119 (rediseño dashboard DevOps), Plan 120 (Centro de Despliegues), Plan 121 (centinela de egreso).
+
+**Changelog v1.1 → v2 (crítica adversarial, hallazgos verificados contra código real, no supuestos):**
+- **C1 (BLOQUEANTE)** F0: `requires="STACKY_DB_COMPARE_ENABLED"` en la flag de timeout rompe `test_requires_map_is_frozen` (`tests/test_harness_flags_requires.py:184-192`, igualdad EXACTA de diccionario) porque el plan nunca pedía registrar la arista nueva ahí, y ni el comando de test de F0 ni el de F6 corren ese archivo → regresión silenciosa. Fix: agregar la arista al mapa congelado + correr ese archivo en F0 y F6.
+- **C2 (BLOQUEANTE)** F3: el `id` de snapshot (`<alias>_<yyyymmddTHHMMSSZ>`, resolución de 1 segundo) colisiona cuando `test_prune_mantiene_max` crea 22 snapshots en un loop rápido (verificado: la reflection de un fixture de 2 tablas tarda milisegundos) — el test tal cual está especificado es irrealizable sin una regla de desambiguación no documentada. Fix: contador de colisión determinista por (alias, timestamp de segundo).
+- **C3 (BLOQUEANTE)** F5: el plan agrega `"dbcompare"` al union `Tab` (`App.tsx:30`) pero nunca instruye actualizar `TAB_PATHS: Record<Tab, string>` (`App.tsx:32-46`), que exige TODAS las keys del union — error de compilación TypeScript garantizado, contradice el propio criterio binario de F5 ("tsc --noEmit 0 errores"). Fix: entrada explícita en TAB_PATHS.
+- **C4 (IMPORTANTE)** F5: falta la línea de `import` de `DbComparePage` en `App.tsx` (el resto del patrón devops sí la cita, ver `App.tsx:14`); con "SIN inferir nada" como regla del propio doc, la ruta (`./components/dbcompare/DbComparePage`, no `./pages/...`) debe quedar literal.
+- **C5 (IMPORTANTE)** F3: `insp.get_sequence_names(schema=s)` se persiste sin ordenar explícitamente; a diferencia de FKs/índices/uniques/checks (que SÍ se ordenan por nombre), una lista de secuencias en orden no garantizado rompe la promesa de determinismo del `content_hash` (KPI-2) en motores con secuencias reales — Oracle/Ripley, el motor que este plan dice priorizar (§2-bis). El fixture sqlite del test no tiene secuencias, así que el test tal como está especificado NO detecta el bug. Fix: `sorted(...)` explícito + ampliar el fixture.
+- **C6 (MENOR)** F0: el pseudocódigo del idioma bool (`in ("1","true","yes","on")`) no coincide con el idioma real citado (`config.py:964`, que usa `== "true"`); el propio plan ya lo hedgeaba ("copiar el real"), pero se corrige el pseudocódigo para no dejar dos lecturas posibles a un modelo menor.
+- **[ADICIÓN ARQUITECTO]** F1/F4/F5: cada card de ambiente en el panel expone ahora `latest_snapshot_taken_at` / `latest_snapshot_hash8` (derivados de `dbcompare_snapshot.latest_snapshot(alias)`, ya persistido por F3) — el operador ve de un vistazo, en el propio tab del núcleo (sin esperar la UI del Plan 124), si un ambiente nunca fue snapshoteado o hace cuánto. Cero costo nuevo (dato ya existe), cero endpoints nuevos, mismo flag.
+- Verificado NO-hallazgo (para que quede constancia y nadie lo re-investigue): `create_engine(url, pool_pre_ping=True, pool_size=1, max_overflow=0, ...)` con dialecto `sqlite` NO lanza `TypeError` en SQLAlchemy 2.0.36 (comprobado empíricamente contra el venv real del repo) — sospecha descartada, no es un bug.
+- Todas las demás citas `archivo:línea` del v1.1 (requirements.txt, db_query.py, server_registry.py, harness_flags.py, config.py, api/__init__.py, devops_servers.py, App.tsx, endpoints.ts, ConnectionHealthStrip.test.tsx) fueron re-verificadas contra el working tree real y son EXACTAS — se mantienen sin cambio.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Toda afirmación sobre código existente
@@ -158,11 +169,21 @@ FlagSpec(
 4. En `config.py`, junto a los otros getters (idiomas de referencia: bool
    `config.py:964-965`, int `config.py:591-592`):
 ```python
-STACKY_DB_COMPARE_ENABLED: bool = os.getenv("STACKY_DB_COMPARE_ENABLED", "false")\
-    .strip().lower() in ("1", "true", "yes", "on")   # ← copiar el idioma EXACTO del bool de config.py:964
+STACKY_DB_COMPARE_ENABLED: bool = os.getenv(
+    "STACKY_DB_COMPARE_ENABLED", "false"
+).strip().lower() == "true"   # idioma EXACTO del bool de config.py:964-966 (NO usar "in (...)")
 STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC: int = int(os.getenv("STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC", "10"))
 ```
-   (Si el idioma bool real de `config.py:964` difiere del pseudocódigo, copiar el real.)
+5. **[FIX C1 — BLOQUEANTE, obligatorio]** En `Stacky Agents/backend/tests/test_harness_flags_requires.py`,
+   dentro del dict `_REQUIRES_MAP_FROZEN` (línea ~120-181), agregar la arista nueva junto a las
+   demás (orden alfabético no exigido, seguir el estilo de comentario `# Plan NNN`):
+```python
+    "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC": "STACKY_DB_COMPARE_ENABLED",  # Plan 122
+```
+   **Por qué es obligatorio:** `test_requires_map_is_frozen` (mismo archivo, línea ~184) hace
+   `actual == _REQUIRES_MAP_FROZEN` (igualdad EXACTA). Cualquier `FlagSpec` nueva con `requires=`
+   que no se registre acá rompe ese test. Ninguno de los comandos de F0/F6 lo corría en v1 — se
+   corrige abajo.
 
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan122_dbcompare_flags.py`
 - `test_master_flag_declared_default_off` — la spec existe, `type=="bool"`, y
@@ -171,10 +192,10 @@ STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC: int = int(os.getenv("STACKY_DB_COMPARE_CO
 - `test_category_comparador_bd_exists` — `"comparador_bd"` está en `FLAG_CATEGORIES` y el mapa
   categoría→keys contiene la key del timeout; el master está en `"capacidades_optin"`.
 
-**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan122_dbcompare_flags.py tests/test_harness_flags.py -q`
+**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan122_dbcompare_flags.py tests/test_harness_flags.py tests/test_harness_flags_requires.py -q`
 
-**Criterio binario:** ambos archivos de test en verde y `tests/test_harness_flags.py` (suite
-preexistente de flags) sin regresión.
+**Criterio binario:** los tres archivos de test en verde (incluido `test_requires_map_is_frozen`
+y `test_every_registry_flag_is_categorized`) sin regresión.
 
 **Flag:** las declaradas acá. **Runtimes:** N/A (panel). **Trabajo del operador:** ninguno (todo OFF).
 
@@ -330,15 +351,30 @@ def take_snapshot(alias: str, *, engine=None) -> dict
     #   check_constraints: insp.get_check_constraints → [{"name","sqltext": str}] ordenadas por name (try/except NotImplementedError → [])
     # views: insp.get_view_names(schema=s); por vista get_view_definition (try/except → None):
     #   {"definition": texto[: _VIEW_DEF_MAX_CHARS] | None, "definition_sha256": sha256(texto) | None, "error": str|None}
-    # sequences: insp.get_sequence_names(schema=s) dentro de try/except NotImplementedError → []
+    # sequences: sorted(insp.get_sequence_names(schema=s)) dentro de try/except NotImplementedError → []
+    #   [FIX C5 — IMPORTANTE] sorted() explícito, igual que FKs/índices/uniques/checks: sin esto
+    #   el content_hash NO es determinista en motores con secuencias reales (Oracle), porque a
+    #   diferencia de los dicts (que json.dumps(sort_keys=True) ordena solas), esto es una LISTA
+    #   plana y su orden de origen no está garantizado por el dialecto.
     # counts: {"tables": n, "views": n, "sequences": n, "columns": n_total}
     # content_hash = sha256(json.dumps(cuerpo_sin_metadatos, sort_keys=True, ensure_ascii=False))
     #   donde cuerpo_sin_metadatos EXCLUYE: id, taken_at, duration_ms (para que 2 tomas idénticas hasheen igual).
+    # id = _next_snapshot_id(alias, taken_at)   # [FIX C2] NUNCA construir el id inline con el f-string crudo.
     # persistir y devolver el dict completo.
+
+def _next_snapshot_id(alias: str, taken_at: datetime) -> str
+    # [FIX C2 — BLOQUEANTE] el timestamp base tiene resolución de 1 segundo
+    # (f"{alias}_{taken_at:%Y%m%dT%H%M%SZ}"); dos snapshots del MISMO alias tomados dentro
+    # del mismo segundo (créase o no a propósito: un loop de test, un doble click del
+    # operador) generan el MISMO id y se pisan en disco. Regla determinista:
+    #   base = f"{alias}_{taken_at:%Y%m%dT%H%M%SZ}"
+    #   si no existe archivo <base>.json bajo el dir del alias → devolver base
+    #   si existe → probar f"{base}_2", f"{base}_3", ... hasta encontrar uno libre
+    # (chequeo de existencia en disco, no en memoria: determinista incluso entre procesos).
 
 def list_snapshots(alias: str) -> list[dict]    # metadatos: id, taken_at, duration_ms, counts, content_hash (SIN schemas)
 def load_snapshot(snapshot_id: str) -> dict | None
-def latest_snapshot(alias: str) -> dict | None
+def latest_snapshot(alias: str) -> dict | None  # el de mayor taken_at; útil para [ADICIÓN ARQUITECTO] de F4/F5
 def prune_snapshots(alias: str) -> int          # borra los más viejos que excedan _MAX_SNAPSHOTS_PER_ALIAS; retorna borrados
 ```
 
@@ -346,7 +382,7 @@ def prune_snapshots(alias: str) -> int          # borra los más viejos que exce
 ```json
 {
   "version": 1,
-  "id": "<alias>_<yyyymmddTHHMMSSZ>",
+  "id": "<alias>_<yyyymmddTHHMMSSZ>[_2|_3|...si colisiona en el mismo segundo, ver _next_snapshot_id]",
   "alias": "...", "engine": "sqlserver|oracle|sqlite",
   "taken_at": "2026-07-12T14:00:00Z", "duration_ms": 1234,
   "schemas": {
@@ -371,8 +407,10 @@ def prune_snapshots(alias: str) -> int          # borra los más viejos que exce
 - `test_snapshot_estructura_v1` — keys exactas del contrato, counts correctos (2 tablas, 1 vista).
 - `test_snapshot_determinista` — dos tomas sobre la misma BD → mismo `content_hash`, distinto `id`.
 - `test_snapshot_detecta_cambio` — `ALTER TABLE padre ADD COLUMN extra TEXT` → `content_hash` distinto.
-- `test_prune_mantiene_max` — crear 22 snapshots → `prune` deja 20 (los más nuevos).
+- `test_snapshot_id_colision_mismo_segundo` **[FIX C2]** — dos llamadas a `_next_snapshot_id(alias, mismo_taken_at)` (mismo `datetime`, simulando dos tomas en el mismo segundo) → ids distintos (`<base>` y `<base>_2`); una tercera → `<base>_3`.
+- `test_prune_mantiene_max` — crear 22 snapshots (usando `_next_snapshot_id` para evitar colisión, no el f-string crudo) → `prune` deja 20 (los más nuevos).
 - `test_view_definition_error_no_rompe` — monkeypatch `get_view_definition` que lanza → vista con `error` y snapshot ok.
+- `test_sequences_ordenadas` **[FIX C5]** — fixture con `CREATE SEQUENCE` no aplica en sqlite: monkeypatchear `insp.get_sequence_names` para devolver `["z_seq", "a_seq", "m_seq"]` (orden NO alfabético) → el snapshot persiste `sequences: ["a_seq", "m_seq", "z_seq"]` y dos tomas con el mismo monkeypatch dan el mismo `content_hash`.
 
 **Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan122_dbcompare_snapshot.py -q`
 
@@ -408,7 +446,7 @@ Todos los endpoints EXCEPTO `/health` empiezan con `gate = _require_enabled();` 
 | Método y ruta (bajo `/api/db-compare`) | Comportamiento |
 |---|---|
 | `GET /health` | SIEMPRE 200: `{ok: true, flag_enabled: bool, keyring_available: bool, drivers: driver_status()}` (espejo de `/api/devops/health` que consume App.tsx:91-94) |
-| `GET /environments` | `{ok, environments: [_public...], keyring_available}` |
+| `GET /environments` | `{ok, environments: [_public_con_snapshot...], keyring_available}` — ver **[ADICIÓN ARQUITECTO]** abajo |
 | `POST /environments` | body `{alias, engine, host, port, database, username, odbc_driver?, schema_filter?, notes?}` → upsert; `ValueError` → 400 `{ok:false, error}` |
 | `DELETE /environments/<alias>` | 200 `{ok}` / 404 |
 | `POST /environments/<alias>/password` | body `{password}`; keyring no disponible → 503 con mensaje (patrón `api/devops_servers.py:35-40`) |
@@ -418,12 +456,28 @@ Todos los endpoints EXCEPTO `/health` empiezan con `gate = _require_enabled();` 
 | `GET /environments/<alias>/snapshots` | `list_snapshots` |
 | `GET /snapshots/<snapshot_id>` | `load_snapshot` completo / 404 |
 
+**[ADICIÓN ARQUITECTO] Recencia de snapshot en el listado de ambientes (cero costo, cero endpoint nuevo):**
+`GET /environments` deja de devolver solo `_public(env)`: por cada ambiente, el handler llama
+`dbcompare_snapshot.latest_snapshot(alias)` (ya existe en F3, dato ya persistido — no dispara
+ninguna conexión ni reflection nueva) y agrega al dict público:
+```python
+"latest_snapshot_taken_at": snap["taken_at"] if snap else None,
+"latest_snapshot_hash8": snap["content_hash"][:8] if snap else None,
+```
+Justificación: sin esto, el operador entra al tab del núcleo (este mismo plan, F5) y ve una
+lista de conexiones sin ninguna señal de si algo fue snapshoteado alguna vez o hace cuánto —
+tiene que esperar a la UI del Plan 124 para cualquier indicio. Con este campo, el propio panel
+de F5 ya es accionable ("nunca snapshoteado" / "hace 3 días"). No agrega flags, no agrega
+trabajo del operador, no reimplementa nada de los planes 123-126 (no compara, no diffea, solo
+expone metadatos que F3 ya escribe a disco).
+
 **Tests PRIMERO:** `tests/test_plan122_dbcompare_api.py` (Flask test client, patrón de los tests API existentes)
 - `test_flag_off_todos_403_salvo_health`
 - `test_health_reporta_drivers_y_flag`
 - `test_crud_ambiente_roundtrip` (flag ON vía monkeypatch de Config + fake_keyring)
 - `test_snapshot_endpoint_sqlite`
 - `test_password_endpoint_sin_keyring_503`
+- `test_environments_incluye_latest_snapshot` **[ADICIÓN ARQUITECTO]** — ambiente sin snapshot → ambas keys `None`; después de `POST .../snapshot` → `latest_snapshot_taken_at`/`latest_snapshot_hash8` no nulos y `hash8` de 8 chars.
 
 **Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan122_dbcompare_api.py -q`
 
@@ -436,17 +490,28 @@ Todos los endpoints EXCEPTO `/health` empiezan con `gate = _require_enabled();` 
 **Objetivo:** tab nueva gateada + panel de ambientes 100% operable desde la UI (alta, password, test, snapshot manual). La inmersión visual completa llega en Plan 124; acá la sección nace funcional y sobria.
 
 **Archivos:**
-- Editar `Stacky Agents/frontend/src/App.tsx` (5 puntos, espejo EXACTO del patrón devops):
+- Editar `Stacky Agents/frontend/src/App.tsx` (7 puntos — v2 agrega el 6 y el 7, espejo EXACTO del patrón devops):
   1. `App.tsx:30` — agregar `"dbcompare"` al union `Tab`.
   2. `App.tsx:62` — `const [dbCompareEnabled, setDbCompareEnabled] = useState(false);`
   3. `App.tsx:91-94` — nuevo fetch `/api/db-compare/health` → `setDbCompareEnabled(d.flag_enabled === true)` con `.catch(() => setDbCompareEnabled(false))`.
   4. `App.tsx:138` — guard: `else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("team");` (y agregar `dbCompareEnabled` al array de deps de `App.tsx:139`).
   5. `App.tsx:231-234 / :253` — botón de nav (label `Comparador BD`) renderizado solo si `dbCompareEnabled`, y `{tab === "dbcompare" && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}`.
+  6. **[FIX C3 — BLOQUEANTE]** `App.tsx:32-46` — agregar la entrada `dbcompare: "/dbcompare",` al objeto
+     `TAB_PATHS: Record<Tab, string>`. Sin esto el union `Tab` (punto 1) y `Record<Tab, string>` quedan
+     desalineados y `npx tsc --noEmit` FALLA de forma garantizada (`Record` exige TODAS las keys del
+     union) — contradice el propio criterio binario de esta fase.
+  7. **[FIX C4 — IMPORTANTE]** `App.tsx:14` (junto al import de `DevOpsPage`) — agregar
+     `import { DbComparePage } from "./components/dbcompare/DbComparePage"; // Plan 122` (ruta bajo
+     `components/dbcompare/`, NO `pages/` — `DbComparePage` no es un named default como `DevOpsPage`
+     pero SÍ es export nombrado igual que él).
 - Editar `Stacky Agents/frontend/src/api/endpoints.ts` — namespace nuevo `DbCompare` con
   funciones tipadas: `health, listEnvironments, upsertEnvironment, deleteEnvironment,
   setPassword, clearPassword, testConnection, takeSnapshot, listSnapshots` (espejar el
   estilo del namespace `DevOps` existente en ese archivo; los tests devops lo importan como
   `import { DevOps } from '../../api/endpoints'`, ver `ConnectionHealthStrip.test.tsx:14`).
+  El tipo de retorno de `listEnvironments` incluye los dos campos nuevos del
+  **[ADICIÓN ARQUITECTO]** de F4: `latest_snapshot_taken_at: string | null` y
+  `latest_snapshot_hash8: string | null` en `DbEnvironment` (`dbcompareTypes.ts`).
 - Crear `Stacky Agents/frontend/src/components/dbcompare/`:
   - `DbComparePage.tsx` — layout de la sección: header con título + badges de drivers
     (desde `/health`: driver faltante → card ámbar con `install_hint` copiable), y
@@ -456,6 +521,10 @@ Todos los endpoints EXCEPTO `/health` empiezan con `gate = _require_enabled();` 
     (muestra versión+latencia o error con hint), `Snapshot`, `Password`, `Eliminar` (confirm),
     y form de alta/edición (campos = contrato F1; texto fijo bajo username:
     "Usá una credencial de SOLO LECTURA: Stacky solo lee catálogo y datos, jamás escribe.").
+    **[ADICIÓN ARQUITECTO]** cada card agrega una línea de recencia derivada de
+    `latest_snapshot_taken_at`/`latest_snapshot_hash8`: "Sin snapshot aún" si es `null`, o
+    "Último snapshot: <fecha ISO cruda, sin formateo relativo — ese helper es del Plan 124>
+    (`<hash8>`)" si no.
   - `envForm.ts` — lógica pura testeable: `validateEnvironmentForm(values) -> {ok, errors: Record<campo,string>}`
     (alias regex `^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`, engine en lista, port 1-65535, host/database/username no vacíos)
     y `defaultPortFor(engine) -> 1433 | 1521`.
@@ -481,9 +550,13 @@ y typecheck: `cd "Stacky Agents/frontend" && npx tsc --noEmit`
 **Comandos (todos deben quedar como estaban o mejor):**
 ```
 cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan122_dbcompare_flags.py tests/test_plan122_dbcompare_registry.py tests/test_plan122_dbcompare_engine.py tests/test_plan122_dbcompare_snapshot.py tests/test_plan122_dbcompare_api.py -q
-cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_harness_flags.py tests/test_smoke.py -q
+cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_harness_flags.py tests/test_harness_flags_requires.py tests/test_smoke.py -q
 cd "Stacky Agents/frontend" && npx tsc --noEmit
+cd "Stacky Agents/frontend" && npx vitest run src/components/dbcompare/
 ```
+**[FIX C1]** `tests/test_harness_flags_requires.py` se agrega explícitamente acá (no estaba en
+v1): es donde vive `test_requires_map_is_frozen`, el único test que puede detectar el drift
+introducido por la `requires=` nueva de F0.
 **Criterio binario:** suites del plan 100% verdes; suites preexistentes sin fallos NUEVOS
 (las fallas preexistentes conocidas — p.ej. drift `harness_defaults.env` — se re-demuestran
 como preexistentes citando el mismo error antes y después).
@@ -538,11 +611,16 @@ como preexistentes citando el mismo error antes y después).
 ## 9. Definición de Hecho (DoD)
 
 - [ ] Las 2 flags existen, editables desde la UI de flags, default OFF/10; master en `capacidades_optin`, knob en `comparador_bd`.
+- [ ] **[FIX C1]** `_REQUIRES_MAP_FROZEN` (`tests/test_harness_flags_requires.py`) incluye la arista `STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC → STACKY_DB_COMPARE_ENABLED`; `test_requires_map_is_frozen` verde.
 - [ ] CRUD de ambientes con password SOLO en keyring; JSON sin secretos (test lo prueba).
 - [ ] `test_connection` funciona con sqlite en tests y reporta hint accionable si falta driver.
 - [ ] Snapshot v1 determinista persistido con prune; contrato congelado documentado.
+- [ ] **[FIX C2]** `_next_snapshot_id` desambigua colisiones dentro del mismo segundo; `test_snapshot_id_colision_mismo_segundo` y `test_prune_mantiene_max` (22 snapshots) verdes.
+- [ ] **[FIX C5]** `sequences` persiste ordenado (`sorted(...)`); `test_sequences_ordenadas` verde.
 - [ ] Endpoints activos solo con flag ON (health siempre); registrados en `api/__init__.py`.
-- [ ] Tab "Comparador BD" visible solo con flag ON; gestión de ambientes completa desde UI.
-- [ ] 5 archivos de test backend + 1 vitest verdes con los comandos exactos de cada fase.
-- [ ] `tsc --noEmit` 0 errores; suites preexistentes sin fallos nuevos.
+- [ ] **[ADICIÓN ARQUITECTO]** `GET /environments` expone `latest_snapshot_taken_at`/`latest_snapshot_hash8` por ambiente; `test_environments_incluye_latest_snapshot` verde.
+- [ ] Tab "Comparador BD" visible solo con flag ON; gestión de ambientes completa desde UI; card de ambiente muestra recencia de snapshot.
+- [ ] **[FIX C3]** `TAB_PATHS` incluye `dbcompare`; **[FIX C4]** `App.tsx` importa `DbComparePage` explícitamente.
+- [ ] 5 archivos de test backend + 2 vitest (`envForm` + los ya existentes de la suite `dbcompare/`) verdes con los comandos exactos de cada fase.
+- [ ] `tsc --noEmit` 0 errores; suites preexistentes (incluida `test_harness_flags_requires.py`) sin fallos nuevos.
 - [ ] Ningún endpoint ejecuta DDL/DML contra BDs registradas (revisión por grep: `execute(` solo con `_PROBE_SQL` y reflection).

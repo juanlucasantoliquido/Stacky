@@ -4,18 +4,22 @@ import type { DiffItem, DiffAction, Severity, ObjectType } from "./dbcompareType
 export interface DiffFilters {
   severities: Severity[];
   objectTypes: ObjectType[];
+  /** [Integración F3] filtro por acción (added/removed/changed) — los stat tiles de acción
+   * del hero también son clickeables como filtro, igual que los de severidad. */
+  actions: DiffAction[];
   text: string;
 }
 
-export const EMPTY_FILTERS: DiffFilters = { severities: [], objectTypes: [], text: "" };
+export const EMPTY_FILTERS: DiffFilters = { severities: [], objectTypes: [], actions: [], text: "" };
 
-/** severities/objectTypes vacíos no filtran; text hace includes case-insensitive sobre
+/** severities/objectTypes/actions vacíos no filtran; text hace includes case-insensitive sobre
  * `${schema}.${name}` y sobre los kinds de los changes del item. */
 export function filterDiffItems(items: DiffItem[], f: DiffFilters): DiffItem[] {
   const text = f.text.trim().toLowerCase();
   return items.filter((item) => {
     if (f.severities.length > 0 && !f.severities.includes(item.severity)) return false;
     if (f.objectTypes.length > 0 && !f.objectTypes.includes(item.object_type)) return false;
+    if (f.actions.length > 0 && !f.actions.includes(item.action)) return false;
     if (text) {
       const fullName = `${item.schema}.${item.name}`.toLowerCase();
       const kinds = item.changes.map((c) => c.kind).join(" ").toLowerCase();

@@ -66,4 +66,18 @@ describe("Plan 124 F5 — filterLogic (pure)", () => {
   it("countByState cuenta por acción", () => {
     expect(countByState(FIXTURE)).toEqual({ added: 1, removed: 0, changed: 2 });
   });
+
+  it("[integración F3] filtra por acción (stat tile de acción clickeado)", () => {
+    const out = filterDiffItems(FIXTURE, { ...EMPTY_FILTERS, actions: ["added"] });
+    expect(out).toEqual([PRODUCTOS]);
+  });
+
+  it("[integración F3] acciones vacías no filtran", () => {
+    expect(filterDiffItems(FIXTURE, { ...EMPTY_FILTERS, actions: [] })).toEqual(FIXTURE);
+  });
+
+  it("[integración F3] severidad + acción combinados", () => {
+    const out = filterDiffItems(FIXTURE, { ...EMPTY_FILTERS, severities: ["danger", "info"], actions: ["changed"] });
+    expect(out).toEqual([CLIENTES, V_CLIENTES]);
+  });
 });

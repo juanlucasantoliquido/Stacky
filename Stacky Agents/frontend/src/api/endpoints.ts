@@ -11,6 +11,7 @@ import type {
   SnapshotMeta,
   TestConnectionResult,
 } from "../components/dbcompare/dbcompareTypes";
+import type { Manifest } from "../components/dbcompare/scriptsLogic";
 import type {
   ActiveProjectResponse,
   AgentDefinition,
@@ -3702,4 +3703,36 @@ export const DbCompare = {
     ),
   getSnapshot: (snapshotId: string) =>
     api.get<Record<string, unknown>>(`/api/db-compare/snapshots/${encodeURIComponent(snapshotId)}`),
+  // Plan 125 F5/F6 — bundle de scripts de paridad + backups pareados 1:1.
+  // Stacky genera; JAMÁS ejecuta (ver doc 125 §3).
+  generateScripts: (runId: string) =>
+    api.post<{ ok: boolean; manifest?: Manifest; error?: string }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/scripts`,
+      {},
+    ),
+  getManifest: (runId: string) =>
+    api.get<{ ok: boolean; manifest?: Manifest; error?: string }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/scripts`,
+    ),
+  scriptFileUrl: (runId: string, path: string) =>
+    `${apiBase}/api/db-compare/runs/${encodeURIComponent(runId)}/scripts/file?path=${encodeURIComponent(path)}`,
+  scriptsZipUrl: (runId: string) => `${apiBase}/api/db-compare/runs/${encodeURIComponent(runId)}/scripts.zip`,
+  getScriptFileText: async (runId: string, path: string): Promise<string> => {
+    const response = await fetch(DbCompare.scriptFileUrl(runId, path));
+    if (!response.ok) throw new Error(`No se pudo leer el archivo: ${response.statusText}`);
+    return response.text();
+  },
+  downloadScriptsZip: async (runId: string) => {
+    const response = await fetch(DbCompare.scriptsZipUrl(runId));
+    if (!response.ok) throw new Error(`Descarga falló: ${response.statusText}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dbcompare_${runId}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 };

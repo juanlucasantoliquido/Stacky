@@ -164,3 +164,172 @@
   font-size: 0.8rem;
   margin: 10px 0;
 }
+
+/* Plan 125 F6 — tab/sección "Scripts" (bundle de paridad + backups pareados). */
+
+.scriptsSection {
+  margin-top: 24px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 16px;
+}
+
+.scriptsSection h2 {
+  margin-top: 0;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+}
+
+.runIdRow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.runIdRow input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+
+.scriptsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hitlBanner {
+  background: var(--bg-elev);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.scriptsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.scriptsTable th,
+.scriptsTable td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-muted);
+  color: var(--text-muted);
+}
+
+.scriptsTable th {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.scriptsRowActions {
+  display: flex;
+  gap: 6px;
+}
+
+.destructiveChip {
+  margin-left: 8px;
+  background: var(--danger);
+  color: var(--bg-panel);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.scriptsFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-faint);
+  font-size: 0.85rem;
+}
+
+/* SqlViewer — modal de solo lectura */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  width: min(1000px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.modalSingle,
+.modalSplit {
+  display: flex;
+  overflow: auto;
+}
+
+.modalSplit {
+  flex-direction: row;
+}
+
+.modalSingle {
+  flex-direction: column;
+}
+
+.modalPane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-muted);
+}
+
+.modalPane:last-child {
+  border-right: none;
+}
+
+.modalPaneHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--bg-elev);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.modalPaneActions {
+  display: flex;
+  gap: 6px;
+}
+
+.sqlPre {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  white-space: pre;
+}

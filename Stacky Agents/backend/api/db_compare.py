@@ -10,7 +10,7 @@ from __future__ import annotations
 import config as _config
 from flask import Blueprint, current_app, jsonify, request
 
-from services import dbcompare_engine, dbcompare_registry, dbcompare_runs, dbcompare_snapshot
+from services import dbcompare_engine, dbcompare_registry, dbcompare_runs, dbcompare_scripts, dbcompare_snapshot
 
 bp = Blueprint("db_compare", __name__, url_prefix="/db-compare")
 
@@ -224,4 +224,96 @@ def export_run_markdown_route(run_id):
     md = dbcompare_runs.export_markdown(run)
     response = current_app.response_class(md, mimetype="text/markdown; charset=utf-8")
     response.headers["Content-Disposition"] = f'attachment; filename="{run_id}.md"'
+    return response
+
+
+# --------------------------------------------------------------------------
+# Plan 125 F5 — bundle de scripts de paridad + backups pareados (mismo blueprint,
+# mismo _require_enabled; Stacky GENERA, jamás ejecuta — ver doc 125 §3).
+# --------------------------------------------------------------------------
+
+_SCRIPTS_RUN_ERRORS = (dbcompare_scripts.DbCompareRunError, dbcompare_runs.DbCompareRunError)
+
+
+@bp.post("/runs/<run_id>/scripts")
+def generate_scripts_route(run_id):
+    gate = _require_enabled()
+    if gate:
+        return gate
+    run = dbcompare_runs.get_run(run_id)
+    if run is None:
+        return jsonify({"ok": False, "error": f"corrida '{run_id}' no existe."}), 404
+    if run.get("status") != "done":
+        return jsonify({
+            "ok": False,
+            "error": f"la corrida no está 'done' (status={run.get('status')}).",
+        }), 409
+    try:
+        manifest = dbcompare_scripts.generate_parity_bundle(run_id)
+    except _SCRIPTS_RUN_ERRORS as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, "manifest": manifest})
+
+
+@bp.get("/runs/<run_id>/scripts")
+def get_scripts_manifest_route(run_id):
+    gate = _require_enabled()
+    if gate:
+        return gate
+    manifest = dbcompare_scripts.load_manifest(run_id)
+    if manifest is None:
+        return jsonify({
+            "ok": False,
+            "error": "todavía no se generaron scripts de paridad para esta corrida.",
+        }), 404
+    return jsonify({"ok": True, "manifest": manifest})
+
+
+def _scripts_allowlist(manifest: dict) -> set[str]:
+    allowed = {"README.md", "MANIFEST.json"}
+    for entry in manifest.get("entries", []):
+        allowed.add(entry["file"])
+        if entry.get("backup_file"):
+            allowed.add(entry["backup_file"])
+        if entry.get("rollback_file"):
+            allowed.add(entry["rollback_file"])
+    return allowed
+
+
+@bp.get("/runs/<run_id>/scripts/file")
+def get_scripts_file_route(run_id):
+    gate = _require_enabled()
+    if gate:
+        return gate
+    rel_path = request.args.get("path") or ""
+    if not rel_path or ".." in rel_path or rel_path.startswith("/") or rel_path.startswith("\\"):
+        return jsonify({"ok": False, "error": "path inválido."}), 400
+    manifest = dbcompare_scripts.load_manifest(run_id)
+    if manifest is None:
+        return jsonify({
+            "ok": False,
+            "error": "todavía no se generaron scripts de paridad para esta corrida.",
+        }), 404
+    if rel_path not in _scripts_allowlist(manifest):
+        return jsonify({"ok": False, "error": "archivo no encontrado en el manifest de esta corrida."}), 400
+    content = dbcompare_scripts.read_bundle_file(run_id, rel_path)
+    if content is None:
+        return jsonify({"ok": False, "error": "archivo no encontrado en disco."}), 404
+    return current_app.response_class(content, mimetype="text/plain; charset=utf-8")
+
+
+@bp.get("/runs/<run_id>/scripts.zip")
+def get_scripts_zip_route(run_id):
+    gate = _require_enabled()
+    if gate:
+        return gate
+    manifest = dbcompare_scripts.load_manifest(run_id)
+    if manifest is None:
+        return jsonify({
+            "ok": False,
+            "error": "todavía no se generaron scripts de paridad para esta corrida.",
+        }), 404
+    zip_bytes = dbcompare_scripts.bundle_zip_bytes(run_id)
+    response = current_app.response_class(zip_bytes, mimetype="application/zip")
+    response.headers["Content-Disposition"] = f'attachment; filename="dbcompare_{run_id}.zip"'
     return response

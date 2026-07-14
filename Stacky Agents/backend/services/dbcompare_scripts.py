@@ -768,31 +768,38 @@ def bundle_zip_bytes(run_id: str) -> bytes:
     return buf.getvalue()
 
 
+def read_bundle_file(run_id: str, rel_path: str) -> str | None:
+    """Lee el contenido de un archivo del bundle ya materializado. El CALLER
+    (API F5) es responsable de validar `rel_path` contra el allowlist del
+    manifest antes de llamar esto — esta función solo lee, no valida."""
+    path = _bundle_dir(run_id) / rel_path
+    if not path.exists() or not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
 def generate_parity_bundle(run_id: str) -> dict:
-    """Wrapper por run_id real. [NOTA C1 — gap conocido, ver doc 125 v2 F3]
-    Depende de services.dbcompare_runs (Plan 123 F2) para resolver el run y
-    de services.dbcompare_snapshot (Plan 122 F3) para los schema_obj — ninguno
-    de los dos existe todavia en este checkout. NO se simula ni se inventa
-    esa infraestructura ajena: se reporta el gap explicito. La parte PURA y
-    totalmente funcional/testeada es generate_parity_bundle_from_diff()."""
-    try:
-        from services import dbcompare_runs  # type: ignore
-    except ImportError as exc:
-        raise DbCompareRunError(
-            "services.dbcompare_runs (Plan 123 F2) no está disponible en este checkout; "
-            "generate_parity_bundle(run_id) no puede resolver el run real todavía. "
-            "Usar generate_parity_bundle_from_diff(diff, run_id, source_schema_obj, "
-            "target_schema_obj, dialect) con datos ya cargados, o esperar a que el "
-            "Plan 123 esté mergeado (GAP documentado, ver doc 125 v2 §F3/C1)."
-        ) from exc
-    run = dbcompare_runs.get_run(run_id)  # pragma: no cover - depende de codigo ajeno
+    """Wrapper por run_id real. Resuelve el run vía services.dbcompare_runs
+    (Plan 123 F2) y los snapshots de origen/destino vía services.dbcompare_snapshot
+    (Plan 122 F3) — ambos ahora disponibles (mergeados a main 2026-07-14, ver
+    doc 125 v2 §F3/C1, gap cerrado)."""
+    from services import dbcompare_runs, dbcompare_snapshot
+
+    run = dbcompare_runs.get_run(run_id)
     if run is None:
         raise DbCompareRunError(f"run no encontrado: {run_id}")
     if run.get("status") != "done":
         raise DbCompareRunError(f"run no está done (status={run.get('status')}): {run_id}")
-    raise DbCompareRunError(
-        "generate_parity_bundle(run_id) requiere además services.dbcompare_snapshot "
-        "(Plan 122 F3) para resolver los schema_obj de origen/destino; no disponible "
-        "en este checkout (GAP documentado, ver doc 125 v2 §F3/C1). Usar "
-        "generate_parity_bundle_from_diff(...) con snapshots ya cargados."
-    )
+    diff = run.get("diff")
+    if not diff:
+        raise DbCompareRunError(f"run '{run_id}' está done pero no tiene diff persistido")
+
+    source_schema_obj = dbcompare_snapshot.load_snapshot(run["source_snapshot_id"])
+    target_schema_obj = dbcompare_snapshot.load_snapshot(run["target_snapshot_id"])
+    if source_schema_obj is None or target_schema_obj is None:
+        raise DbCompareRunError(
+            f"no se encontraron los snapshots del run '{run_id}' en disco "
+            f"(source={run.get('source_snapshot_id')}, target={run.get('target_snapshot_id')})"
+        )
+
+    return generate_parity_bundle_from_diff(diff, run_id, source_schema_obj, target_schema_obj, diff["engine"])

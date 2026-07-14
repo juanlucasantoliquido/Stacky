@@ -18,8 +18,16 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import runtime_paths
-from services import incident_store
+from services import doc_indexer, incident_store
 from services.tracker_provider import TrackerApiError, TrackerItem
+
+
+@pytest.fixture(autouse=True)
+def _isolate_docs_root(tmp_path, monkeypatch):
+    """Aísla incident_docs.write_incident_doc (invocado por publish_incident)
+    para que NUNCA escriba fuera de tmp_path — sin este fixture, los tests de
+    publish escriben .md reales bajo Stacky Agents/docs/incidencias/ del repo."""
+    monkeypatch.setattr(doc_indexer, "STACKY_AGENTS_ROOT", tmp_path)
 
 OUTPUT_NARRATIVE = "Voy a analizar la incidencia y te cuento en un momento..."
 

@@ -174,6 +174,7 @@ def execute_plan(
     retain: int = 3,
     prev_version_id: str | None = None,
     source: dict | None = None,
+    operator: str = "",
 ) -> dict:
     """SÍNCRONO: recorre `plan` paso a paso, persistiendo progreso en el
     ledger tras cada paso. Cero falsos verdes: solo `success` si TODOS los
@@ -187,7 +188,7 @@ def execute_plan(
         "run_id": run_id, "app_id": app.get("id"), "target": target_key, "action": action,
         "version_id": version_id, "prev_version_id": prev_version_id,
         "status": "running", "steps": [], "source": source, "smoke": None,
-        "operator_confirmed": True, "started_at": started_at, "finished_at": None,
+        "operator_confirmed": True, "operator": operator, "started_at": started_at, "finished_at": None,
         "duration_ms": None, "error": None, "insight": None,
     }
     store.append_ledger(entry)
@@ -263,7 +264,7 @@ def _smoke_timeout_s() -> int:
     return int(getattr(_config.config, "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC", 30))
 
 
-def start_deploy_async(app: dict, target_keys: list[str], plans: dict[str, dict]) -> list[dict]:
+def start_deploy_async(app: dict, target_keys: list[str], plans: dict[str, dict], *, operator: str = "") -> list[dict]:
     """C5 v2: (1) adquiere UPFRONT el lock de CADA destino pedido — los
     ocupados NO se ejecutan; (2) con los libres, UN thread por ORDEN itera
     los destinos EN el orden recibido (olas), liberando cada lock en
@@ -291,7 +292,7 @@ def start_deploy_async(app: dict, target_keys: list[str], plans: dict[str, dict]
                         run_id, app, tk, ctx["plan"], transport,
                         version_id=ctx["version_id"], zip_local=ctx.get("zip_local"),
                         retain=ctx.get("retain", 3), prev_version_id=ctx.get("prev_version_id"),
-                        source=ctx.get("source"),
+                        source=ctx.get("source"), operator=operator,
                     )
                 finally:
                     store.release_run_lock(app_id, tk)
@@ -301,7 +302,7 @@ def start_deploy_async(app: dict, target_keys: list[str], plans: dict[str, dict]
     return results
 
 
-def start_rollback_async(app: dict, target_key: str, to_version: str) -> dict:
+def start_rollback_async(app: dict, target_key: str, to_version: str, *, operator: str = "") -> dict:
     app_id = app.get("id")
     run_id = store.acquire_run_lock(app_id, target_key)
     if run_id is None:
@@ -317,6 +318,7 @@ def start_rollback_async(app: dict, target_key: str, to_version: str) -> dict:
             execute_plan(
                 run_id, app, target_key, plan, transport,
                 version_id=to_version, action="rollback", prev_version_id=prev_version_id,
+                operator=operator,
             )
         finally:
             store.release_run_lock(app_id, target_key)

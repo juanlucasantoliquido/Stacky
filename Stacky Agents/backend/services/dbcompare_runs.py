@@ -243,3 +243,79 @@ def prune_runs() -> int:
             except OSError:
                 pass
     return removed
+
+
+# --------------------------------------------------------------------------
+# Export Markdown determinista (Plan 123 F4)
+# --------------------------------------------------------------------------
+
+_SEVERITY_EMOJI = (("danger", "🔴"), ("warn", "🟠"), ("info", "🔵"))
+
+
+def _change_label(change: dict) -> str:
+    detail = change.get("detail") or {}
+    name = detail.get("column")
+    if name is None:
+        name = detail.get("name_source") or detail.get("name_target")
+    if name:
+        return f"{change['kind']} [{name}]"
+    return change["kind"]
+
+
+def export_markdown(run: dict) -> str:
+    """Resumen detallado determinista (sin timestamps de generación) del run `done`,
+    pegable en un ticket/wiki. Formato literal congelado en el doc 123 §F4."""
+    diff = run["diff"]
+    summary = diff["summary"]
+    source = diff["source"]
+    target = diff["target"]
+    source_hash8 = (source.get("content_hash") or "")[:8]
+    target_hash8 = (target.get("content_hash") or "")[:8]
+
+    lines = [
+        f"# Comparación de BD: {run['source_alias']} → {run['target_alias']}",
+        "",
+        f"- **Motor:** {diff['engine']} | **Corrida:** {run['run_id']}",
+        (
+            f"- **Snapshots:** origen `{source.get('snapshot_id')}` (`{source_hash8}`) · "
+            f"destino `{target.get('snapshot_id')}` (`{target_hash8}`)"
+        ),
+        (
+            f"- **Parity score:** {summary['parity_score']}% "
+            f"({summary['objects_unchanged']}/{summary['objects_total']} objetos sin diferencias)"
+        ),
+        "",
+        "## Resumen",
+        "| Severidad | Cantidad |",
+        "|---|---|",
+        f"| 🔴 danger | {summary['by_severity']['danger']} |",
+        f"| 🟠 warn | {summary['by_severity']['warn']} |",
+        f"| 🔵 info | {summary['by_severity']['info']} |",
+        "",
+        "| Acción | Cantidad |",
+        "|---|---|",
+        f"| added | {summary['by_action']['added']} |",
+        f"| removed | {summary['by_action']['removed']} |",
+        f"| changed | {summary['by_action']['changed']} |",
+        "",
+        "## Diferencias (danger primero)",
+    ]
+
+    items = diff.get("items") or []
+    for severity, emoji in _SEVERITY_EMOJI:
+        bucket = sorted(
+            (it for it in items if it["severity"] == severity),
+            key=lambda it: (it["object_type"], it["schema"], it["name"]),
+        )
+        if not bucket:
+            continue
+        lines.append(f"### {emoji} {severity}")
+        for it in bucket:
+            fq_name = f"{it['schema']}.{it['name']}"
+            if it["action"] == "changed":
+                labels = ", ".join(_change_label(c) for c in it["changes"])
+                lines.append(f"- `{fq_name}` ({it['object_type']}, {it['action']}): {labels}")
+            else:
+                lines.append(f"- `{fq_name}` ({it['object_type']}, {it['action']})")
+
+    return "\n".join(lines) + "\n"

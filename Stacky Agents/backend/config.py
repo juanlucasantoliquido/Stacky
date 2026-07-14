@@ -107,6 +107,15 @@ class Config:
         os.getenv("STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC", "10")
     )
 
+    # ── Plan 126 — Comparador de BD entre ambientes (paridad de DATOS) ─────────
+    # Default OFF: opt-in doble del operador vía UI (flag hija del master 122).
+    STACKY_DB_COMPARE_DATA_DIFF_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_DATA_DIFF_ENABLED", "false"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_DATA_MAX_ROWS: int = int(
+        os.getenv("STACKY_DB_COMPARE_DATA_MAX_ROWS", "5000")
+    )
+
     # ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ──────────
     # DEFAULT ON (decisión explícita del operador 2026-07-09): el fallback del getenv es "true".
     STACKY_PR_REVIEWER_ENABLED = os.getenv("STACKY_PR_REVIEWER_ENABLED", "true").lower() in (

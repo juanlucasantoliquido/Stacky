@@ -156,3 +156,99 @@ def test_invariante_invalida_no_deja_archivos_parciales(tmp_path, monkeypatch):
 
     bundles_root = tmp_path / "db_compare" / "bundles"
     assert not bundles_root.exists() or list(bundles_root.iterdir()) == []
+
+
+# ---------------------------------------------------------------------------
+# generate_parity_bundle(run_id) — cierre del GAP documentado (NOTA C1, doc 125
+# v2 §F3): dependía de services.dbcompare_runs (Plan 123 F2) y
+# services.dbcompare_snapshot (Plan 122 F3), ninguno disponible cuando 125 se
+# implementó de forma aislada. Ahora que 122 y 123 están mergeados a main
+# (2026-07-14), el wrapper se completa con la MISMA forma que el propio
+# docstring ya describía: resolver el run real, resolver ambos snapshots, y
+# delegar en generate_parity_bundle_from_diff (que ya está probada arriba).
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fake_keyring(monkeypatch):
+    import services.dbcompare_registry as reg
+
+    store: dict = {}
+
+    class _FakeKeyring:
+        @staticmethod
+        def set_password(service, alias, password):
+            store[(service, alias)] = password
+
+        @staticmethod
+        def get_password(service, alias):
+            return store.get((service, alias))
+
+        @staticmethod
+        def delete_password(service, alias):
+            store.pop((service, alias), None)
+
+    monkeypatch.setattr(reg, "keyring", _FakeKeyring())
+    return store
+
+
+def _wait_done(runs_mod, run_id, timeout=5.0):
+    import time
+
+    deadline = time.monotonic() + timeout
+    final = runs_mod.get_run(run_id)
+    while time.monotonic() < deadline:
+        final = runs_mod.get_run(run_id)
+        if final and final["status"] in ("done", "error"):
+            return final
+        time.sleep(0.02)
+    return final
+
+
+def test_generate_parity_bundle_por_run_id_real(fake_keyring, tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, text
+
+    import services.dbcompare_registry as reg
+    import services.dbcompare_runs as runs
+    import services.dbcompare_snapshot as snap
+
+    monkeypatch.setattr(reg, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(snap, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(runs, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(scripts, "data_dir", lambda: tmp_path)
+
+    db_a = tmp_path / "a.db"
+    db_b = tmp_path / "b.db"
+    eng_a = create_engine(f"sqlite:///{db_a}")
+    with eng_a.connect() as c:
+        c.execute(text("CREATE TABLE padre (id INTEGER PRIMARY KEY, nombre TEXT NOT NULL)"))
+        c.commit()
+    eng_b = create_engine(f"sqlite:///{db_b}")
+    with eng_b.connect() as c:
+        c.execute(text("CREATE TABLE padre (id INTEGER PRIMARY KEY)"))
+        c.execute(text("CREATE TABLE nueva (id INTEGER PRIMARY KEY)"))
+        c.commit()
+
+    reg.upsert_environment("test-a", "sqlite", "localhost", 0, str(db_a), "user")
+    reg.upsert_environment("test-b", "sqlite", "localhost", 0, str(db_b), "user")
+    reg.set_password("test-a", "unused")
+    reg.set_password("test-b", "unused")
+
+    run = runs.create_run("test-a", "test-b", mode="fresh")
+    final = _wait_done(runs, run["run_id"])
+    assert final["status"] == "done"
+
+    manifest = scripts.generate_parity_bundle(run["run_id"])
+    assert manifest["run_id"] == run["run_id"]
+    assert manifest["engine"] == "sqlite"
+    assert scripts.load_manifest(run["run_id"]) is not None
+
+
+def test_generate_parity_bundle_run_inexistente_error_claro(tmp_path, monkeypatch):
+    import services.dbcompare_runs as runs
+
+    monkeypatch.setattr(runs, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(scripts, "data_dir", lambda: tmp_path)
+
+    with pytest.raises(scripts.DbCompareRunError, match="no encontrado"):
+        scripts.generate_parity_bundle("run_no_existe")

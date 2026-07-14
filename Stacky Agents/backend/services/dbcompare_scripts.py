@@ -17,6 +17,7 @@ from typing import TypedDict
 
 from runtime_paths import data_dir
 from services import dbcompare_sqlnames as sqlnames
+from services import dbcompare_sqlvalues as sqlvalues
 
 
 class DbCompareRunError(RuntimeError):
@@ -547,6 +548,112 @@ def collect_resguardos(
 
 
 # ---------------------------------------------------------------------------
+# Plan 126 F3 — emit_data_scripts: scripts DML de paridad de DATOS (INSERT
+# idempotente por guarda de fila, UPDATE y DELETE por PK). Los literales salen
+# de los valores YA NORMALIZADOS del DataDiff (Plan 126 F2) vía
+# sql_literal_from_normalized (Plan 126 F1) + column_types del propio DataDiff.
+# ---------------------------------------------------------------------------
+
+_BYTES_TRUNCATED_COMMENT = "-- BYTES TRUNCADOS: completar a mano"
+
+
+def _guard_conds(pk_cols: list[str], row: dict, column_types: dict, dialect: str) -> str:
+    return " AND ".join(
+        f"{sqlnames.quote_ident(c, dialect)} = "
+        f"{sqlvalues.sql_literal_from_normalized(row.get(c), column_types.get(c, ''), dialect)}"
+        for c in pk_cols
+    )
+
+
+def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str) -> list["ScriptPiece"]:
+    schema = data_diff["schema"]
+    name = data_diff["table"]
+    pk_cols = data_diff["pk_cols"]
+    columns = data_diff["columns"]
+    column_types = data_diff.get("column_types") or {}
+    q = sqlnames.qualified(schema, name, dialect)
+    cols_sql = ", ".join(sqlnames.quote_ident(c, dialect) for c in columns)
+
+    def _sort_key_row(row: dict) -> tuple:
+        return tuple(str(row.get(c)) for c in pk_cols)
+
+    def _sort_key_changed(row: dict) -> tuple:
+        return tuple(str(row["pk"].get(c)) for c in pk_cols)
+
+    pieces: list[ScriptPiece] = []
+
+    # -- INSERT (idempotente, con guarda NOT EXISTS por fila) --------------
+    only_source = sorted(data_diff.get("only_source") or [], key=_sort_key_row)
+    if only_source:
+        lines = []
+        for row in only_source:
+            try:
+                vals = [
+                    sqlvalues.sql_literal_from_normalized(row.get(c), column_types.get(c, ""), dialect)
+                    for c in columns
+                ]
+            except sqlvalues.SqlLiteralError:
+                lines.append(f"{_BYTES_TRUNCATED_COMMENT} -- fila PK={_sort_key_row(row)}")
+                continue
+            guard = _guard_conds(pk_cols, row, column_types, dialect)
+            values_sql = ", ".join(vals)
+            if dialect == "sqlserver":
+                lines.append(
+                    f"IF NOT EXISTS (SELECT 1 FROM {q} WHERE {guard}) "
+                    f"INSERT INTO {q} ({cols_sql}) VALUES ({values_sql});"
+                )
+            elif dialect == "oracle":
+                lines.append(
+                    f"INSERT INTO {q} ({cols_sql}) SELECT {values_sql} FROM dual "
+                    f"WHERE NOT EXISTS (SELECT 1 FROM {q} WHERE {guard});"
+                )
+            elif dialect == "sqlite":
+                lines.append(
+                    f"INSERT INTO {q} ({cols_sql}) SELECT {values_sql} "
+                    f"WHERE NOT EXISTS (SELECT 1 FROM {q} WHERE {guard});"
+                )
+            else:
+                raise DbCompareRunError(f"dialecto desconocido: {dialect!r}")
+        pieces.append({
+            "action": "data_insert", "object_type": "table", "schema": schema, "name": name,
+            "sql": "\n".join(lines), "destructive": False, "modifies_table": True,
+        })  # type: ignore[typeddict-item]
+
+    # -- UPDATE (por PK; ya idempotente por naturaleza) ---------------------
+    changed = sorted(data_diff.get("changed") or [], key=_sort_key_changed)
+    if changed:
+        lines = []
+        for row in changed:
+            pk = row["pk"]
+            try:
+                set_parts = [
+                    f"{sqlnames.quote_ident(col, dialect)} = "
+                    f"{sqlvalues.sql_literal_from_normalized(cell['target'], column_types.get(col, ''), dialect)}"
+                    for col, cell in row["cells"].items()
+                ]
+            except sqlvalues.SqlLiteralError:
+                lines.append(f"{_BYTES_TRUNCATED_COMMENT} -- fila PK={pk}")
+                continue
+            guard = _guard_conds(pk_cols, pk, column_types, dialect)
+            lines.append(f"UPDATE {q} SET {', '.join(set_parts)} WHERE {guard};")
+        pieces.append({
+            "action": "data_update", "object_type": "table", "schema": schema, "name": name,
+            "sql": "\n".join(lines), "destructive": True, "modifies_table": True,
+        })  # type: ignore[typeddict-item]
+
+    # -- DELETE (por PK; ya idempotente por naturaleza; va a 09_destructivo/) --
+    only_target = sorted(data_diff.get("only_target") or [], key=_sort_key_row)
+    if only_target:
+        lines = [f"DELETE FROM {q} WHERE {_guard_conds(pk_cols, row, column_types, dialect)};" for row in only_target]
+        pieces.append({
+            "action": "data_delete", "object_type": "table", "schema": schema, "name": name,
+            "sql": "\n".join(lines), "destructive": True, "modifies_table": True,
+        })  # type: ignore[typeddict-item]
+
+    return pieces
+
+
+# ---------------------------------------------------------------------------
 # F3: bundle + manifest con emparejamiento 1:1 (KPI-1)
 # ---------------------------------------------------------------------------
 
@@ -563,7 +670,8 @@ MANIFEST_VERSION = 1
 # kinds que emit_resguardo() efectivamente sabe resguardar (_DATA_BACKUP_KINDS |
 # _RECONSTRUCTIBLE_KINDS) — asi el invariante nunca puede violarse por construccion
 # y las piezas aditivas quedan con backup_file/rollback_file=null tal como pide el plan.
-_REQUIRES_RESGUARDO_KINDS = _DATA_BACKUP_KINDS | _RECONSTRUCTIBLE_KINDS
+_DATA_DML_KINDS = {"data_insert", "data_update", "data_delete"}  # Plan 126 F3
+_REQUIRES_RESGUARDO_KINDS = _DATA_BACKUP_KINDS | _RECONSTRUCTIBLE_KINDS | _DATA_DML_KINDS
 
 
 def _bundle_dir(run_id: str) -> Path:
@@ -622,12 +730,20 @@ def generate_parity_bundle_from_diff(
     target_schema_obj: dict,
     dialect: str,
     ts: str | None = None,
+    data_diff: dict | None = None,
 ) -> dict:
     """Version PURA (sin depender de services.dbcompare_runs, Plan 123 F2 —
     ver NOTA C1 en doc 125 v2 F3) de la materializacion del bundle: recibe el
     SchemaDiff v1 y ambos snapshots YA CARGADOS por el caller. Construye todo
     en memoria, valida el invariante KPI-1, y RECIEN ENTONCES escribe en
-    disco de forma atomica (FIX C4)."""
+    disco de forma atomica (FIX C4).
+
+    `data_diff` (Plan 126 F3, opcional — backward-compat con 125): el dict
+    `run["data_diff"]` de la corrida. Si `data_diff is None` o
+    `data_diff["status"] != "done"`, el bundle sale IDÉNTICO al de 125 (sin
+    `03_datos/`). Si está done, agrega los scripts DML de paridad de datos con
+    numeración 300+ (insert/update) y 9xx (delete), y backup pareado por tabla
+    (dedupeado con los backups del pase de esquema de arriba)."""
     if ts is None:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     source_alias = source_schema_obj.get("alias") or diff.get("source", {}).get("alias", "origen")
@@ -722,11 +838,66 @@ def generate_parity_bundle_from_diff(
             }
         )
 
-    # Invariante KPI-1: se valida ANTES de escribir nada a disco (FIX C4).
+    # -----------------------------------------------------------------
+    # Plan 126 F3 — 03_datos/: scripts DML de paridad de DATOS, si el run
+    # tiene un data_diff "done". MISMO invariante (KPI-3 = KPI-1 extendido):
+    # toda tabla con CUALQUIER pieza DML tiene su backup de datos pareado,
+    # reusando el backup del pase de esquema si la tabla ya tenía uno.
+    # -----------------------------------------------------------------
+    if data_diff and data_diff.get("status") == "done":
+        data_seq = 300
+        for table_key in sorted(data_diff.get("tables") or {}):
+            table_result = data_diff["tables"][table_key]
+            if "error" in table_result:
+                continue  # tabla con error en el diff de datos: no emite scripts
+            table_pieces = emit_data_scripts(table_result, dialect, ts, target_alias)
+            if not table_pieces:
+                continue
+            schema = table_result["schema"]
+            name = table_result["table"]
+
+            if (schema, name) not in backup_file_by_table:
+                seq = len(backup_seq_by_table) + 1
+                backup_seq_by_table[(schema, name)] = seq
+                backup_piece = _render_data_backup(schema, name, dialect, ts)
+                relpath = f"01_backups/{sqlnames.script_filename(seq, 'table_backup', schema, name)}"
+                files[relpath] = render_header(run_id, source_alias, target_alias, dialect) + "\n\n" + backup_piece["sql"] + "\n"
+                backup_file_by_table[(schema, name)] = relpath
+            backup_file = backup_file_by_table[(schema, name)]
+
+            for p in table_pieces:
+                if p["destructive"]:
+                    destructive_seq += 1
+                    seq, group_dir = destructive_seq, "09_destructivo"
+                else:
+                    data_seq += 1
+                    seq, group_dir = data_seq, "03_datos"
+                relpath = f"{group_dir}/{sqlnames.script_filename(seq, p['action'], schema, name)}"
+                header = (
+                    render_header(run_id, source_alias, target_alias, dialect, destructive=p["destructive"])
+                    + f"\n-- Fuente de valores: snapshot de datos {ts} — verificá vigencia antes de ejecutar."
+                )
+                files[relpath] = header + "\n\n" + p["sql"] + "\n"
+                entries.append(
+                    {
+                        "seq": seq,
+                        "file": relpath,
+                        "action": p["action"],
+                        "object_type": p["object_type"],
+                        "schema": schema,
+                        "name": name,
+                        "destructive": p["destructive"],
+                        "modifies_table": p["modifies_table"],
+                        "backup_file": backup_file,
+                        "rollback_file": None,
+                    }
+                )
+
+    # Invariante KPI-1/KPI-3: se valida ANTES de escribir nada a disco (FIX C4).
     for e in entries:
         if e["action"] in _REQUIRES_RESGUARDO_KINDS and not (e["backup_file"] or e["rollback_file"]):
             raise DbCompareRunError(
-                f"invariante de pareo violada (Plan 125 KPI-1): {e['schema']}.{e['name']} "
+                f"invariante de pareo violada (Plan 125 KPI-1 / Plan 126 KPI-3): {e['schema']}.{e['name']} "
                 f"({e['action']}) requiere backup_file o rollback_file y no tiene ninguno"
             )
 
@@ -779,10 +950,15 @@ def read_bundle_file(run_id: str, rel_path: str) -> str | None:
 
 
 def generate_parity_bundle(run_id: str) -> dict:
-    """Wrapper por run_id real. Resuelve el run vía services.dbcompare_runs
-    (Plan 123 F2) y los snapshots de origen/destino vía services.dbcompare_snapshot
-    (Plan 122 F3) — ambos ahora disponibles (mergeados a main 2026-07-14, ver
-    doc 125 v2 §F3/C1, gap cerrado)."""
+    """Wrapper por run_id real. [NOTA C1 del doc 125 v2 §F3 — CERRADA 2026-07-14]
+    Cuando 125 se implementó de forma aislada, ni services.dbcompare_runs
+    (Plan 123 F2) ni services.dbcompare_snapshot (Plan 122 F3) existían en ese
+    checkout; el gap quedó documentado en vez de fabricar esa infraestructura
+    ajena. Ahora que 122 y 123 están mergeados a main, se completa el wrapper
+    con la MISMA forma que el docstring original ya describía: resolver el run
+    real, resolver ambos snapshots por su id, y delegar en
+    generate_parity_bundle_from_diff() (pura, probada arriba). `data_diff`
+    (Plan 126 F3) se pasa cuando el run lo trae, para incluir DML de datos."""
     from services import dbcompare_runs, dbcompare_snapshot
 
     run = dbcompare_runs.get_run(run_id)
@@ -790,16 +966,16 @@ def generate_parity_bundle(run_id: str) -> dict:
         raise DbCompareRunError(f"run no encontrado: {run_id}")
     if run.get("status") != "done":
         raise DbCompareRunError(f"run no está done (status={run.get('status')}): {run_id}")
-    diff = run.get("diff")
-    if not diff:
-        raise DbCompareRunError(f"run '{run_id}' está done pero no tiene diff persistido")
 
-    source_schema_obj = dbcompare_snapshot.load_snapshot(run["source_snapshot_id"])
-    target_schema_obj = dbcompare_snapshot.load_snapshot(run["target_snapshot_id"])
-    if source_schema_obj is None or target_schema_obj is None:
+    source_snapshot = dbcompare_snapshot.load_snapshot(run.get("source_snapshot_id"))
+    target_snapshot = dbcompare_snapshot.load_snapshot(run.get("target_snapshot_id"))
+    if source_snapshot is None or target_snapshot is None:
         raise DbCompareRunError(
-            f"no se encontraron los snapshots del run '{run_id}' en disco "
-            f"(source={run.get('source_snapshot_id')}, target={run.get('target_snapshot_id')})"
+            f"faltan snapshots persistidos para el run {run_id} "
+            f"(source={run.get('source_snapshot_id')!r}, target={run.get('target_snapshot_id')!r})"
         )
 
-    return generate_parity_bundle_from_diff(diff, run_id, source_schema_obj, target_schema_obj, diff["engine"])
+    return generate_parity_bundle_from_diff(
+        run["diff"], run_id, source_snapshot, target_snapshot, run["engine"],
+        data_diff=run.get("data_diff"),
+    )

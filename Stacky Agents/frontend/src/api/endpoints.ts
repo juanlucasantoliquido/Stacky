@@ -14,6 +14,7 @@ import type {
   CompareRun,
 } from "../components/dbcompare/dbcompareTypes";
 import type { Manifest } from "../components/dbcompare/scriptsLogic";
+import type { DataCandidate } from "../components/dbcompare/dataDiffLogic";
 import type {
   ActiveProjectResponse,
   AgentDefinition,
@@ -3748,4 +3749,14 @@ export const DbCompare = {
     ),
   getRun: (runId: string) => api.get<CompareRun>(`/api/db-compare/runs/${encodeURIComponent(runId)}`),
   exportUrl: (runId: string) => `/api/db-compare/runs/${encodeURIComponent(runId)}/export.md`,
+  // Plan 126 F5 — paridad de datos.
+  dataCandidates: (runId: string) =>
+    api.get<{ ok: boolean; candidates: DataCandidate[]; error?: string }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/data-candidates`,
+    ),
+  startDataDiff: (runId: string, tables: { schema: string; table: string }[]) =>
+    api.post<{ ok: boolean; error?: string }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/data-diff`,
+      { tables },
+    ),
 };

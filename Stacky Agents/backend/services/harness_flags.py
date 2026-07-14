@@ -284,6 +284,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
+        "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",    # Plan 126
+        "STACKY_DB_COMPARE_DATA_MAX_ROWS",        # Plan 126
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -2748,6 +2750,29 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DB_COMPARE_ENABLED",
         min_value=1,
         max_value=120,
+    ),
+    # ── Plan 126 — Comparador de BD entre ambientes (paridad de DATOS) ────────
+    FlagSpec(
+        key="STACKY_DB_COMPARE_DATA_DIFF_ENABLED",
+        type="bool",
+        label="Comparador BD: paridad de datos",
+        description="Permite comparar DATOS de tablas de parámetros por PK y generar scripts DML + backups. OFF = solo esquema.",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_DATA_MAX_ROWS",
+        type="int",
+        label="Comparador BD: máx. filas por tabla (datos)",
+        description="Cap duro de filas leídas por tabla y por lado en el diff de datos; excedente = resultado truncado. Default 5000.",
+        group="global",
+        # NO default= acá: mismo gotcha que STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC
+        # (Plan 122) — default_is_known() trata cualquier spec.default no-None
+        # como "curado" y exige alta en _CURATED_DEFAULTS_ON, set reservado a
+        # promociones bool=True. El valor sugerido "5000" vive en config.py.
+        requires="STACKY_DB_COMPARE_ENABLED",
+        min_value=100,
+        max_value=200000,
     ),
 )
 

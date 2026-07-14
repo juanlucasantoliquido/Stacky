@@ -225,6 +225,7 @@ $HarnessTestFiles = @(
   # Plan 129 - Paleta global: busqueda profunda multi-fuente
   "tests/test_plan129_flag.py",
   "tests/test_plan129_global_search_service.py",
+  "tests/test_plan129_global_search_api.py",
   # Plan 61 - Gate determinista del flujo funcional (Task)
   "tests/test_task_gate_flags.py",
   "tests/test_task_gate.py",

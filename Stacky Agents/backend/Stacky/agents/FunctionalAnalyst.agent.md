@@ -5,6 +5,7 @@ version: "2.1.0"
 stacky_agent_type: functional
 stacky_completion_contract: v1
 stacky_requires_client_profile: true
+stacky_required_blocks: "ado-epic-structured|ado-blocker|run-directive, client-profile"
 stacky_human_gate_mode_a: false
 stacky_human_gate_mode_b: false
 ---

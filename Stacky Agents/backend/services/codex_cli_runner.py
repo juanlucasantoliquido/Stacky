@@ -333,6 +333,36 @@ def _run_in_background(
             project_ctx=project_ctx,
             log=log,
         )
+        # Plan 133 F5 — garantía pre-spawn de stacky_required_blocks: si el
+        # .agent.md declara bloques obligatorios y el enriquecimiento no los
+        # produjo, el run falla ANTES de spawnear el CLI (cero tokens).
+        try:
+            from services import agent_contract
+
+            agent_contract.enforce(
+                vscode_agent_filename=vscode_agent_filename, blocks=enriched_blocks
+            )
+        except agent_contract.AgentContractError as _ac_exc:
+            log("error", f"contrato de contexto incumplido: {_ac_exc}")
+            _mark_terminal(
+                execution_id,
+                status="error",
+                error=str(_ac_exc),
+                metadata={
+                    "context_contract_failure": {
+                        "agent": vscode_agent_filename, "detail": str(_ac_exc),
+                    }
+                },
+            )
+            if ticket_id is not None:
+                ticket_status.on_execution_end(
+                    ticket_id=ticket_id,
+                    execution_id=execution_id,
+                    final_status="error",
+                    agent_type=agent_type,
+                    error=str(_ac_exc),
+                )
+            return
         rich_message = context_enrichment.build_ticket_context_text(
             ado_id=t_ado_id,
             title=t_title,

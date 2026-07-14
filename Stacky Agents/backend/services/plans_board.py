@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -312,3 +313,57 @@ def build_board(
         "totals": totals,
         "plans": plans,
     }
+
+
+# ── F2 — Enriquecimiento git de solo lectura ────────────────────────────────
+_GIT_TIMEOUT_SEC = 5
+
+
+def repo_root() -> Path | None:
+    """services -> backend -> "Stacky Agents" -> raíz repo. None si no hay .git (deploy congelado)."""
+    root = Path(__file__).resolve().parents[3]
+    if not (root / ".git").exists():
+        return None
+    return root
+
+
+def docs_dir_default() -> Path:
+    """"Stacky Agents"/docs — services -> backend -> "Stacky Agents"/docs."""
+    return Path(__file__).resolve().parents[2] / "docs"
+
+
+def collect_unpushed_docs(root: Path | None) -> set[str] | None:
+    """UNA llamada git de solo lectura. None ante CUALQUIER problema (nunca rompe)."""
+    if root is None:
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "log",
+                "--name-only",
+                "--pretty=format:",
+                "origin/main..HEAD",
+                "--",
+                "Stacky Agents/docs",
+            ],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_GIT_TIMEOUT_SEC,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    paths: set[str] = set()
+    for raw_line in result.stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith('"') and line.endswith('"') and len(line) >= 2:
+            line = line[1:-1]
+        paths.add(line)
+    return paths

@@ -1,10 +1,39 @@
 # Plan 134 — Awareness total de runs: notificaciones accesibles y señales persistentes
 
-**Estado:** PROPUESTO v1 (2026-07-13)
+**Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (crítica adversarial 2026-07-14; v1 PROPUESTO 2026-07-13)
 **Origen:** auditoría UX multi-lente 2026-07-13, pedido del operador de mejorar UX sin romper nada.
 **Alcance:** frontend + 1 cambio backend aditivo (2 campos JSON opt-in en la serialización de ejecuciones). Cero migraciones, cero endpoints nuevos, cero stores nuevos.
 **Flag:** NINGUNA fase lleva flag de harness (decisión de diseño justificada en §3.1, por fase).
-**Ortogonal a:** Planes 132 (comparte `ActiveRunsPanel.tsx`), 135 (comparte `ActiveRunsPanel.tsx`, `App.tsx`) y 136 (comparte `App.tsx`, `SettingsPage.tsx`, `TopBar.tsx`) → **staging quirúrgico obligatorio** (`git add -- <paths>` explícitos, nunca `git add -A`) y ediciones ancladas por CONTENIDO, no por número de línea (ver §3.3). Los archivos NUEVOS de este plan no colisionan con nadie.
+**Ortogonal a:** Planes 132 (comparte `ActiveRunsPanel.tsx`), 135 (comparte `ActiveRunsPanel.tsx`, `App.tsx`) y 136 (comparte `App.tsx`, `SettingsPage.tsx`, `TopBar.tsx`) → **staging quirúrgico obligatorio** (`git add -- <paths>` explícitos, nunca `git add -A`) y ediciones ancladas por CONTENIDO, no por número de línea (ver §3.3, ahora con tabla de zonas por archivo). Los archivos NUEVOS de este plan no colisionan con nadie.
+
+## Changelog v1 → v2 (crítica adversarial 2026-07-14)
+
+- **C1 (IMPORTANTE, resuelto):** react-query PAUSA todos los `refetchInterval` con la
+  pestaña oculta (`refetchIntervalInBackground` default `false`; `main.tsx:8-10` no lo
+  overridea) → el plan v1 se congelaba exactamente cuando el operador apartaba la vista
+  (defecto heredado del notificador actual). Fix: `refetchIntervalInBackground: true`
+  SOLO en `useActiveRunsGlobal` (F0), costo declarado en §3.2, smoke F8 paso 3 ampliado
+  a pestaña minimizada.
+- **C2 (IMPORTANTE, resuelto):** §3.3 reescrita como CONTRATO: tabla de zonas por
+  archivo compartido con 132/135/136, contrato congelado de `useActiveRunsGlobal`
+  (devuelve el `UseQueryResult` completo — el plan 135 destructura sobre él), base de
+  implementación (main; 132 vive en rama `plan-132-consola-ejecuciones`) y orden de
+  aterrizaje 132→134→135→136.
+- **C3 (IMPORTANTE, resuelto):** v1 dejaba DOS emisores de notificación (SSE del dock +
+  notificador global) resolviendo el doble aviso por dedup — pero el SSE gana la
+  carrera con payload SIN proyecto/título y el dedup descartaba el aviso RICO. v2:
+  EMISOR ÚNICO — se retira la llamada de `useExecutionStream.ts` (verificado: su test
+  no la asserta); el dedup por execution_id queda como defensa en profundidad.
+- **C4 (MENOR, resuelto):** `useReviewInboxCount` con `enabled: activeProjectName != null`
+  — el badge ya no consulta con proyecto null durante el arranque.
+- **C5 (MENOR, resuelto):** citas de línea re-verificadas contra HEAD real
+  (`App.tsx:68/:171-176/:261`); recordatorio: SOLO el contenido citado es normativo.
+- **C6 (MENOR, resuelto):** decisión explícita de `staleTime` (se retira el
+  `staleTime: 0` del hook viejo; el compartido hereda el default global de 30 s).
+- **C7 (MENOR, resuelto):** conteos del DoD corregidos (14 archivos editados, no 8;
+  10 nuevos frontend contando tests, no 7).
+- **[ADICIÓN ARQUITECTO]:** botón "Enviar prueba" de notificación de escritorio en F6 —
+  valida el pipeline completo (permiso + render + click-para-volver) sin esperar un run.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Rutas, símbolos, claves y comandos son
@@ -65,7 +94,7 @@ el tab Revisión, y filas del panel de runs que dicen QUÉ está corriendo y DÓ
 - `executionNotifier.ts:107-112` — el único fallback default es el flash del título de
   4 s.
 - `frontend/src/hooks/useGlobalExecutionNotifier.ts:10-43` — el hook global (montado en
-  `App.tsx:64`) ya detecta fines de run cada 5 s. **La plomería está lista; falta el
+  `App.tsx:68`) ya detecta fines de run cada 5 s. **La plomería está lista; falta el
   interruptor.**
 
 **GAP 2 — El título de la pestaña no refleja actividad y el flash tiene un bug real
@@ -84,12 +113,12 @@ que lo deja pegado.**
   `frontend/index.html` → `<title>Stacky Agents</title>`.
 
 **GAP 3 — Runs en needs_review/error no dejan rastro navegable.**
-- `frontend/src/App.tsx:161-166` — el botón de nav `🧭 Revisión` no tiene badge ni
+- `frontend/src/App.tsx:171-176` — el botón de nav `🧭 Revisión` no tiene badge ni
   contador.
 - `frontend/src/pages/ReviewInboxPage.tsx:40-50` — la query de needs_review/error
   (`queryKey ["review-inbox", activeProjectName]`, `status: ["needs_review","error"]`,
   `limit: 200`, `days: 30`, `refetchInterval: 30000`) vive DENTRO de la página, que solo
-  se monta con el tab activo (`App.tsx:243`). Página cerrada = ciega.
+  se monta con el tab activo (`App.tsx:261`). Página cerrada = ciega.
 
 **GAP 4 — El indicador "Agente trabajando…" del TopBar está cableado a un campo
 muerto: nunca se enciende.**
@@ -120,7 +149,9 @@ con fines simultáneos se traga avisos.**
 - `executionNotifier.ts:85-91` — `MIN_GAP_MS=1500` es un gate global POR TIEMPO, no por
   execution_id: el segundo fin en <1.5 s se descarta para siempre. Además
   `hooks/useExecutionStream.ts:94` TAMBIÉN llama `notifyExecutionFinished` (dock
-  abierto): el fix debe deduplicar por execution_id, no solo ajustar el gap.
+  abierto) con payload SIN contexto de proyecto/ticket. Decisión v2 (C3): EMISOR
+  ÚNICO — esa llamada se RETIRA en F2 (el notificador global post-F2 cubre todo) y el
+  dedup por execution_id queda como defensa en profundidad.
 
 **GAP 6 — El panel de runs activos no dice proyecto ni título del ticket.**
 - `ActiveRunsPanel.tsx:134-137` — la fila muestra solo `#id`, `ticket {e.ticket_id}`,
@@ -184,20 +215,47 @@ Por lo tanto: **cero FlagSpec, cero cambios en `services/harness_flags.py`,
 | Título de pestaña | 0 | **0** (deriva de la query compartida) |
 | Badge Revisión | 0 | 1 req/60 s (y CERO extra con la página abierta: misma queryKey que la página) |
 | `Executions.byId` por fin de run | ya existe | igual (1 por run terminado) |
+| Polling con pestaña OCULTA/minimizada (C1) | **0** — react-query pausa TODOS los `refetchInterval` en background (`refetchIntervalInBackground` default `false`; sin override en `main.tsx:8-10`) ⇒ hoy NINGUNA notificación llega con la vista apartada | 36 req/min SOLO la query compartida (`refetchIntervalInBackground: true`, F0) — es el costo que hace real la promesa del plan |
 
-Neto: **−11 req/min** en reposo con runs activos. La lista de Revisión viaja con
-`include_output=False` (serialización de `api/executions.py:82`) y `limit: 200`.
+Neto: **−11 req/min** en reposo con runs activos y pestaña visible. En background el
+plan v1 directamente NO funcionaba (nada refetchea ⇒ ningún aviso hasta volver a mirar
+— defecto heredado del notificador actual, `useGlobalExecutionNotifier.ts:14-19`); v2
+lo declara y lo paga: SOLO la query compartida sigue viva con la pestaña oculta. El
+badge de Revisión NO refetchea en background (señal visual: se actualiza al volver).
+La lista de Revisión viaja con `include_output=False` (serialización de
+`api/executions.py:82`) y `limit: 200`.
 
-### 3.3 Convivencia con los planes hermanos (132/135/136)
+### 3.3 Convivencia con los planes hermanos (132/135/136) — contrato de zonas (C2)
+
+**Base de implementación (decisión cerrada):** este plan se implementa sobre `main`.
+El plan 132 ya está IMPLEMENTADO (F0-F2) en la rama `plan-132-consola-ejecuciones` —
+NO en `main`: los anclajes de contenido de F0/F7 (span `styles.meta`, texto del
+`window.confirm`) existen idénticos en ambas versiones del panel, así que este plan
+aterriza igual antes o después del merge de 132. **Orden recomendado de aterrizaje de
+la serie: 132 → 134 → 135 → 136.** Si al implementar una fase el texto ancla ya no
+existe LITERAL, buscar el contenido equivalente (otro plan lo movió) e insertar
+alrededor — NUNCA revertir lo del hermano.
 
 - Los archivos NUEVOS (`services/activeRuns.ts`, `services/notifierCore.ts`,
   `services/tabTitle.ts`, `services/reviewInbox.ts`, `hooks/useActiveRunsGlobal.ts`,
   `hooks/useReviewInboxCount.ts`, tests nuevos, `backend/tests/test_executions_ticket_context.py`)
   son propiedad exclusiva de este plan.
-- En archivos COMPARTIDOS (`ActiveRunsPanel.tsx`, `App.tsx`, `TopBar.tsx`,
-  `SettingsPage.tsx`): anclar cada edición por el CONTENIDO citado en la fase (el
-  número de línea puede haber corrido si otro plan tocó antes). Si el plan 132 ya
-  insertó su botón "Ver consola" en la fila del panel, F7 inserta ALREDEDOR sin tocarlo.
+- **Contrato congelado para el plan 135:** `useActiveRunsGlobal()` devuelve el
+  `UseQueryResult` COMPLETO de react-query, sin envolver ni proyectar (`data`, `error`,
+  `isError`, `dataUpdatedAt`, …). El plan 135 destructura error/staleness SOBRE este
+  hook (su zona declarada era el `useQuery` inline de `ActiveRunsPanel.tsx:63` que F0
+  reemplaza); la queryKey `["executions","active-global"]` y `services/activeRuns.ts`
+  quedan congelados para los hermanos.
+
+| Archivo compartido | Zona de ESTE plan (134) | Zonas de los hermanos (NO tocar) |
+|---|---|---|
+| `ActiveRunsPanel.tsx` | F0: reemplazo del `useQuery` inline + borrado de `fetchActiveRuns`/`REFRESH_MS`; F7: span `styles.meta` y texto del `window.confirm` DENTRO del `runs.map` | 132: botón "Ver consola" dentro del map + import lucide + hook del store; 135: destructure de la query y bloque de error DESPUÉS de `</ul>` |
+| `App.tsx` | F5: 2 imports + 2 líneas tras `useGlobalExecutionNotifier();` (hoy :68) + badge dentro del botón `🧭 Revisión` (hoy :171-176) | 135: efecto de health de tabs + ErrorBoundary alrededor de las páginas; 136: efecto keydown + refs |
+| `TopBar.tsx` | F4: lectura del conteo (:17-18) + texto del badge (:199) | 136 declaró explícito que NO toca `TopBar.tsx` (su GAP 5, opción A) |
+| `SettingsPage.tsx` | F6: tipo `SubTab` (:17) + botón y render del sub-tab + `NotificationsPanel` append AL FINAL del archivo | 136: SOLO el interior de `WebhooksPanel` (:171-277) + 1 import |
+| `useExecutionStream.ts` | F2 (C3): RETIRO de la llamada a `notifyExecutionFinished`, su import y el bloque de parseo que solo la alimentaba | 135/136 declararon prohibido tocar su lógica interna — compatible: esto es un retiro puntual del emisor, no lógica de stream |
+| `App.module.css` | F5: append `.navBadge` AL FINAL | hermanos también appendean al final: merge trivial de appends |
+
 - Staging: SIEMPRE `git add -- "<ruta1>" "<ruta2>"` con las rutas exactas de la fase
   (regla de la casa; el working tree tiene WIP ajeno).
 - NO tocar: manejo de errores/toasts/ErrorBoundary (plan 135), doble-submit/backdrop/
@@ -301,9 +359,23 @@ export function useActiveRunsGlobal() {
     queryKey: ACTIVE_RUNS_QUERY_KEY,
     queryFn: fetchActiveRuns,
     refetchInterval: ACTIVE_RUNS_REFRESH_MS,
+    // C1 (v2): sin esto react-query PAUSA el interval con la pestaña oculta
+    // (default refetchIntervalInBackground=false; main.tsx:8-10 no lo overridea)
+    // y el notificador (F2), el título (F3) y el TopBar (F4) se congelan justo
+    // cuando el operador aparta la vista. SOLO esta query paga el costo de
+    // seguir viva en background (§3.2).
+    refetchIntervalInBackground: true,
   });
 }
 ```
+
+**Contrato del hook (congelado, C2/C6):** devuelve el `UseQueryResult` COMPLETO de
+react-query tal cual (sin proyección): el plan 135 destructura `error`/`isError`/
+`dataUpdatedAt` sobre este mismo hook. `staleTime` NO se define a propósito: hereda el
+default global (30 s, `main.tsx:9`) — decisión explícita (C6): el `staleTime: 0` del
+notificador viejo (`useGlobalExecutionNotifier.ts:18`) se retira; con `refetchInterval`
+de 5 s y montaje permanente en `App`, la staleness es irrelevante y el default evita
+fetches extra al montar consumidores nuevos (TopBar F4).
 
 **Archivo a EDITAR:** `Stacky Agents/frontend/src/components/ActiveRunsPanel.tsx`
 (3 ediciones ancladas por contenido):
@@ -547,8 +619,9 @@ export function buildNotificationBody(row: {
 1. Agregar import: `import { shouldNotifyExecution } from "./notifierCore";`
 2. `interface FinishedPayload` (hoy líneas 79-83): agregar el campo
    ```ts
-     /** Plan 134 F2: dedup — el mismo run notificado por el stream del dock y por
-      *  el notificador global debe producir UN solo aviso. */
+     /** Plan 134 F2 (v2): dedup por run — defensa en profundidad contra dobles
+      *  montajes (StrictMode) y carreras. El emisor es ÚNICO: el notificador
+      *  global (C3); el SSE del dock ya no notifica. */
      execution_id?: number;
    ```
 3. Reemplazar el estado del gate (hoy líneas 85-86) por:
@@ -664,19 +737,23 @@ Notas de corrección incluidas en este rewrite (decididas, no opcionales):
 - `buildNotificationBody(row)` usa `project`/`ticket_title` de F1 si están (deploy
   nuevo) y degrada a `Ticket {id}` si no.
 
-**Archivo a EDITAR 3:** `Stacky Agents/frontend/src/hooks/useExecutionStream.ts` —
-reemplazar la llamada (hoy línea 94):
+**Archivo a EDITAR 3 (C3, v2 — emisor único):**
+`Stacky Agents/frontend/src/hooks/useExecutionStream.ts` — RETIRAR el emisor SSE.
+Razón: el notificador global post-F2 cubre todos los proyectos y estados con contexto
+rico (proyecto/título vía `byId`); mantener dos emisores hacía que el aviso POBRE del
+SSE (solo agent_type/status) ganara la carrera y el dedup descartara el aviso rico.
+Latencia resultante: ≤5 s (un ciclo del poll compartido) — aceptable para un aviso.
+3 eliminaciones exactas dentro de `onCompleted`:
 
-```ts
-      // ANTES
-      notifyExecutionFinished({ agent_type: agentType, status });
-      // DESPUÉS  (executionId es el parámetro del hook, non-null dentro del efecto)
-      notifyExecutionFinished({
-        agent_type: agentType,
-        status,
-        execution_id: executionId ?? undefined,
-      });
-```
+1. Eliminar la llamada (hoy línea 94): `notifyExecutionFinished({ agent_type: agentType, status });`
+2. Eliminar el bloque de parseo que SOLO alimentaba esa llamada (hoy líneas 83-93):
+   desde `let agentType = "agente";` hasta el `catch { // ignore }` inclusive.
+3. Eliminar el import (hoy línea 6):
+   `import { notifyExecutionFinished } from "../services/executionNotifier";`
+
+Verificado en HEAD: `useExecutionStream.test.tsx` NO asserta `notifyExecutionFinished`
+(grep = 0 hits) → cero fallout de tests; `tsconfig.json:10` tiene `noUnusedLocals: false`,
+pero el paso 2 elimina igual el código muerto.
 
 **Tests PRIMERO** — archivo NUEVO
 `Stacky Agents/frontend/src/services/__tests__/notifierCore.test.ts`, casos exactos:
@@ -700,7 +777,8 @@ reemplazar la llamada (hoy línea 94):
 - **Comando exacto:** `npx vitest run src/services/__tests__/notifierCore.test.ts`
   (desde `Stacky Agents/frontend`). Deben FALLAR antes (módulo inexistente) y PASAR después.
 - **Criterio de aceptación (binario):** 6/6 verdes + `npx tsc --noEmit` exit 0 +
-  `grep -c "executions-running-global" -r src` = 0 (la query vieja del notificador ya no existe).
+  `grep -c "executions-running-global" -r src` = 0 (la query vieja del notificador ya no existe) +
+  `grep -c "notifyExecutionFinished" src/hooks/useExecutionStream.ts` = 0 (emisor único, C3).
 - **Flag:** no aplica (§3.1 F2). Las notificaciones siguen opt-in OFF por default.
 - **Paridad runtimes:** la detección es por listas/`byId` de `/api/executions` y por el
   SSE del dock — idéntica para codex_cli / claude_code_cli / github_copilot.
@@ -925,6 +1003,11 @@ export function useReviewInboxCount(): number {
     queryKey: reviewInboxQueryKey(activeProjectName),
     queryFn: () => fetchReviewInbox(activeProjectName),
     refetchInterval: 60_000,
+    // C4 (v2): en el arranque activeProject aún es null; sin este guard la query
+    // dispara con project omitido y el backend cae al proyecto default
+    // (api/executions.py:56) → badge transitorio potencialmente equivocado.
+    // (La página conserva su comportamiento actual; el guard es SOLO del badge.)
+    enabled: activeProjectName != null,
   });
   return q.data?.length ?? 0;
 }
@@ -950,18 +1033,19 @@ La invalidación existente `qc.invalidateQueries({ queryKey: ["review-inbox", ac
 **Archivo a EDITAR 2:** `Stacky Agents/frontend/src/App.tsx` — 3 ediciones ancladas
 por contenido:
 
-1. Imports (junto al import de `useGlobalExecutionNotifier`, hoy línea 27):
+1. Imports (junto al import de `useGlobalExecutionNotifier` — anclar por contenido, el
+   número de línea NO es normativo):
    ```tsx
    import { useReviewInboxCount } from "./hooks/useReviewInboxCount";
    import { reviewBadgeLabel } from "./services/reviewInbox";
    ```
 2. Dentro de `App()`, inmediatamente después de `useGlobalExecutionNotifier();` (hoy
-   línea 64):
+   línea 68):
    ```tsx
      const reviewCount = useReviewInboxCount();
      const reviewBadge = reviewBadgeLabel(reviewCount);
    ```
-3. En el botón `🧭 Revisión` (hoy líneas 161-166), después del texto `🧭 Revisión`:
+3. En el botón `🧭 Revisión` (hoy líneas 171-176), después del texto `🧭 Revisión`:
    ```tsx
              🧭 Revisión
              {reviewBadge != null && (
@@ -1044,6 +1128,30 @@ export function setDesktopEnabled(enabled: boolean): void {
 export function playTestBeep(): void {
   playBeep();
 }
+
+/** [ADICIÓN ARQUITECTO] Plan 134 F6 v2: notificación de escritorio de PRUEBA —
+ *  valida el pipeline completo (permiso + render + click-para-volver) sin tener
+ *  que esperar el fin de un run real. */
+export function sendTestDesktopNotification(): void {
+  if (!isDesktopEnabled()) return;
+  try {
+    const n = new Notification("Stacky · notificación de prueba", {
+      body: "Así se verá el aviso de fin de run.",
+      silent: true,
+    });
+    n.onclick = () => {
+      try {
+        window.focus();
+        n.close();
+      } catch {
+        // ignore
+      }
+    };
+    window.setTimeout(() => n.close(), 6000);
+  } catch {
+    // ignore
+  }
+}
 ```
 
 **Archivo a EDITAR 2:** `Stacky Agents/frontend/src/pages/SettingsPage.tsx` —
@@ -1060,6 +1168,7 @@ export function playTestBeep(): void {
      isSoundEnabled,
      playTestBeep,
      requestDesktopPermission,
+     sendTestDesktopNotification,
      setDesktopEnabled,
      setSoundEnabled,
    } from "../services/executionNotifier";
@@ -1151,6 +1260,16 @@ function NotificationsPanel() {
         >
           {desktop ? "Desactivar" : "Activar"}
         </button>
+        {/* [ADICIÓN ARQUITECTO] v2: prueba end-to-end del aviso de escritorio. */}
+        {desktop && (
+          <button
+            className={styles.subTab}
+            onClick={() => sendTestDesktopNotification()}
+            title="Envía una notificación de prueba para validar permiso y visibilidad"
+          >
+            Enviar prueba
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1170,7 +1289,9 @@ click es el gesto que exige la política de autoplay del navegador).
 - **Criterio de aceptación (binario):** `npx tsc --noEmit` exit 0; en la app:
   activar "Sonido" deja `localStorage["stacky.notify.sound"] === "true"` (verificable
   en devtools) y suena el beep de prueba; activar "Escritorio" dispara el prompt del
-  navegador y con permiso concedido deja `localStorage["stacky.notify.desktop"] === "true"`.
+  navegador y con permiso concedido deja `localStorage["stacky.notify.desktop"] === "true"`;
+  con "Escritorio" activo, el botón "Enviar prueba" muestra una notificación real cuyo
+  click enfoca la pestaña ([ADICIÓN ARQUITECTO]).
 - **Flag:** no aplica (§3.1) — y los defaults actuales (ambos OFF) quedan intactos.
 - **Paridad runtimes:** los avisos que estos toggles habilitan se disparan por fin de
   run de cualquier runtime (F2).
@@ -1261,13 +1382,15 @@ funcionan y nada se degradó.
 
 1. Configuración → Notificaciones: activar "Sonido" → suena beep de prueba y
    `localStorage["stacky.notify.sound"]==="true"`. Activar "Escritorio" → prompt del
-   navegador; conceder → estado reflejado.
+   navegador; conceder → estado reflejado. Click en "Enviar prueba" → aparece la
+   notificación de prueba y su click vuelve a la pestaña ([ADICIÓN ARQUITECTO]).
 2. Lanzar un agente cualquiera (runtime `claude_code_cli` o `codex_cli`) → el título de
    la pestaña pasa a `(1▶) Stacky Agents` y el TopBar muestra "Agente trabajando…" con
    spinner y progressbar.
-3. Cambiar el foco a OTRA ventana y esperar el fin del run → notificación de
-   escritorio con proyecto/título del ticket + beep; click en la notificación →
-   Chrome/Edge enfoca la pestaña de Stacky.
+3. Cambiar el foco a OTRA ventana (y REPETIR con la pestaña de Stacky minimizada u
+   oculta tras una ventana maximizada — C1) y esperar el fin del run → notificación de
+   escritorio con proyecto/título del ticket + beep, con ≤5 s de retraso; click en la
+   notificación → Chrome/Edge enfoca la pestaña de Stacky.
 4. Al terminar el último run activo, el título queda `✅ Stacky Agents` (o `❌` si
    terminó en error) SIN revertirse solo; al hacer foco/click en la pestaña vuelve a
    `Stacky Agents`. Esperar 2 minutos: el título NO vuelve a flashear (bug del flash
@@ -1292,7 +1415,7 @@ funcionan y nada se degradó.
 | Señal | codex_cli | claude_code_cli | github_copilot (y mock) | Mecanismo común |
 |---|---|---|---|---|
 | Título de pestaña `(N▶)`/`✅`/`❌` | ✔ | ✔ | ✔ | query compartida `/api/executions` (F0) |
-| Notificación escritorio + beep | ✔ | ✔ | ✔ | notificador global + `byId` (F2); el SSE del dock también notifica y el dedup por execution_id evita el doble aviso |
+| Notificación escritorio + beep | ✔ | ✔ | ✔ | notificador global EMISOR ÚNICO + `byId` (F2/C3); el SSE del dock ya no notifica; dedup por execution_id como defensa |
 | TopBar "N agentes trabajando…" | ✔ | ✔ | ✔ | misma query compartida (F4) |
 | Badge Revisión | ✔ | ✔ | ✔ | `/api/executions?status=needs_review,error` (F5) |
 | Proyecto/título en panel y confirm | ✔ | ✔ | ✔ | campos de `Ticket` vía `to_dict` (F1/F7) |
@@ -1315,6 +1438,8 @@ runtime.
 | Query del badge de Revisión duplicando la de la página | Misma queryKey ⇒ una sola cache/request (F5); congelada por el test de forma de key. |
 | Backend viejo sin campos F1 (deploy desfasado) | El frontend degrada explícitamente al texto actual (`ticket {id}`) — F7 test 2 y `buildNotificationBody` con fallback. |
 | Falso "terminaron todos" si la query de runs entra en error de red | Guard `activeQ.data == null` en el notificador (F2): sin snapshot no se compara. |
+| Pestaña oculta/minimizada ⇒ react-query pausa el polling ⇒ señales congeladas (C1) | `refetchIntervalInBackground: true` SOLO en la query compartida (F0); costo declarado en §3.2; smoke F8 paso 3 se ejecuta también con la pestaña minimizada. |
+| Aviso ≤5 s más tardío que el SSE con el dock abierto (C3) | Aceptado y declarado: a cambio, el aviso SIEMPRE trae proyecto/título y no hay carrera entre emisores. |
 
 ## 8. Fuera de scope (prohibido en este plan)
 
@@ -1358,7 +1483,7 @@ runtime.
 
 1. **F0** — sustrato compartido (`activeRuns.ts` + `useActiveRunsGlobal` + migración del panel) — tests `activeRuns.test.ts` primero.
 2. **F1** — backend `project`/`ticket_title` + `joinedload` + types.ts + ratchet — tests pytest primero.
-3. **F2** — `notifierCore.ts` + dedup + alcance global del notificador — tests `notifierCore.test.ts` primero.
+3. **F2** — `notifierCore.ts` + dedup + alcance global del notificador + retiro del emisor SSE (C3) — tests `notifierCore.test.ts` primero.
 4. **F3** — `tabTitle.ts` + eliminación del flash + wiring en el hook global.
 5. **F4** — TopBar recableado.
 6. **F5** — badge Revisión (service + hook + página + App + CSS) — tests `reviewInbox.test.ts` primero.
@@ -1381,7 +1506,11 @@ Cada fase termina con `npx tsc --noEmit` en verde antes de pasar a la siguiente.
 - [ ] KPI-1..KPI-7 de §1 verificados (KPI-2 y KPI-4 incluyen sus greps binarios).
 - [ ] Grep-gates: `grep -rc "🤖 done" src` = 0; `document.title` solo en
       `services/tabTitle.ts`; `executions-running-global` = 0 hits;
-      `runningExecutionId` = 0 hits en `TopBar.tsx`.
+      `runningExecutionId` = 0 hits en `TopBar.tsx`; `notifyExecutionFinished` = 0
+      hits en `hooks/useExecutionStream.ts` (C3).
+- [ ] `useActiveRunsGlobal` define `refetchIntervalInBackground: true` (C1) y
+      `useReviewInboxCount` define `enabled: activeProjectName != null` (C4):
+      verificado en el diff.
 - [ ] Los defaults de notificaciones siguen OFF (claves localStorage ausentes = sin
       sonido, sin escritorio) — cero trabajo nuevo obligatorio para el operador.
 - [ ] Ningún intervalo de polling existente cambió (5 s panel, 30 s página Revisión,
@@ -1389,5 +1518,7 @@ Cada fase termina con `npx tsc --noEmit` en verde antes de pasar a la siguiente.
 - [ ] Ningún cambio en `harness_flags.py`, `config.py`, `harness_flags_help.py`,
       `HarnessFlagsPanel`, migraciones ni endpoints nuevos.
 - [ ] Smoke F8 (8 pasos) pasado, incluido el paso 8 de paridad `github_copilot`.
-- [ ] Diff limitado a los archivos listados en las fases (7 nuevos frontend + 1 nuevo
-      backend test + 8 editados); staging con pathspec explícito, sin arrastrar WIP ajeno.
+- [ ] Diff limitado a los archivos listados en las fases (C7: 10 nuevos frontend — 6
+      módulos + 4 archivos de test — más 1 test backend nuevo, y 14 editados: 10
+      frontend, `models.py`, `api/executions.py` y los 2 scripts de ratchet); staging
+      con pathspec explícito, sin arrastrar WIP ajeno.

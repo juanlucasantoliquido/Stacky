@@ -1,6 +1,6 @@
 # Plan 130 — Gate determinista de integridad de código pre-publicación (sintaxis + imports, sin IA)
 
-**Estado:** CRITICADO — APROBADO-CON-CAMBIOS (v2, 2026-07-14; v1 2026-07-13)
+**Estado:** IMPLEMENTADO — 2026-07-14 (F0..F5, rama `plan-130-gate-integridad`; v2, crítica 2026-07-14; v1 2026-07-13)
 
 **Changelog v1 → v2 (crítica adversarial, juez `StackyArchitectaUltraEficientCode`):**
 - **C1 (IMPORTANTE):** el snippet de `code_integrity_route()` en F2 declaraba

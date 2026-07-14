@@ -1,10 +1,46 @@
 # Plan 135 — Cero errores mudos en la UI: distinguir error de vacío, contener crashes y un canal único de feedback
 
-**Estado:** PROPUESTO v1 (2026-07-13)
+**Estado:** CRITICADO v2 — v1 RECHAZADO (2 BLOQUEANTES) y corregido in place; listo para implementar (crítica adversarial 2026-07-14; v1 PROPUESTO 2026-07-13)
 **Origen:** auditoría UX multi-lente 2026-07-13, pedido del operador de mejorar UX sin romper nada; precedente real: el 500 mudo del revisor de PRs (2026-07-11) que costó una sesión de debugging.
 **Alcance:** 100% frontend. Cero backend nuevo, cero endpoint nuevo, cero store nuevo, cero migración.
 **Flag:** NO lleva flag (decisión de diseño justificada en §3.1, por fase).
-**Ortogonal a:** Planes 132/134/136, que se escriben/implementan EN PARALELO y comparten archivos editados (§3.2 declara las zonas exactas de líneas para que no se pisen; staging quirúrgico obligatorio).
+**Ortogonal a:** Planes 132/134/136. La serie NO aterriza en paralelo: **orden congelado de aterrizaje 132 → 134 → 135 → 136** (contrato del plan 134 v2 §3.3), base = `main`. Este plan se implementa DESPUÉS de que 132 y 134 estén en la base de trabajo (§3.2 declara zonas por archivo y el contrato con el hook del 134; staging quirúrgico obligatorio).
+
+## Changelog v1 → v2 (crítica adversarial 2026-07-14)
+
+- **C1 (BLOQUEANTE, resuelto):** el reemplazo del efecto de health en F6 (v1) BORRABA el
+  probe de `/api/db-compare/health` (Plan 122, mergeado a main el 2026-07-14, DESPUÉS de
+  escrito el v1) → el tab Comparador BD quedaba invisible para siempre. F6 v2 cablea los
+  TRES tabs opcionales (migrador/devops/dbcompare) a `probeFlagHealth`; KPI-5, GAP 5 y
+  DoD actualizados.
+- **C2 (BLOQUEANTE, resuelto):** F3 anclaba el destructure en el `useQuery` inline de
+  `ActiveRunsPanel.tsx:63` — zona que el plan 134 v2 F0 REEMPLAZA por
+  `useActiveRunsGlobal()` (contrato congelado en 134 §3.3). Con el orden 132→134→135→136
+  esa ancla ya no existe al implementar. F3 v2 destructura SOBRE el hook del 134
+  (camino primario) con fallback documentado; el encabezado ya no dice "EN PARALELO".
+- **C3 (IMPORTANTE, resuelto):** §3.2 omitía que el plan 136 TAMBIÉN edita
+  `CodexConsoleDock.tsx` (1 import + bloque aditivo tras `:67`, cero JSX) — archivo que
+  F3 edita fuerte. Fila nueva en la tabla de zonas.
+- **C4 (IMPORTANTE, resuelto):** `TicketBoard.tsx` (F1) HOY carga WIP ajeno sin
+  commitear; el pathspec por archivo NO separa hunks dentro del MISMO archivo. Regla
+  nueva de pre-flight por fase en §3.2 (verificar `git status` del archivo antes de
+  editar; si trae WIP ajeno, STOP y avisar al operador).
+- **C5 (IMPORTANTE, resuelto):** el bloque de páginas de `App.tsx` ya son **14** tabs
+  (`:259-272`, incluye DbCompare), no 13 en `:241-253`. F4, GAP 3, KPI-3 y DoD
+  re-anclados.
+- **C6 (MENOR, resuelto):** todas las citas `:NN` de `App.tsx` re-verificadas contra
+  main post-merge 122-126 (efecto `:86-104`, expulsión `:141-149`); recordatorio global:
+  el TEXTO citado es normativo, el número de línea es orientativo.
+- **C7 (MENOR, resuelto):** el 134 v2 afirma que este plan declaró prohibido tocar
+  `useExecutionStream.ts` — v1 no lo decía. Ahora está explícito en §7.
+- **C8 (MENOR, resuelto):** redacciones condicionales ("si el plan 132 ya aterrizó")
+  reescritas en indicativo: con el orden congelado, 132 y 134 SIEMPRE están antes.
+- **[ADICIÓN ARQUITECTO 1]:** "Mudómetro" en F8 — gates grep binarios (0 ocurrencias de
+  cada patrón mudo corregido, por archivo, comandos exactos) que hacen verificable por
+  comando el título del plan.
+- **[ADICIÓN ARQUITECTO 2]:** el aviso de datos stale de F3 muestra la HORA del último
+  dato bueno usando `dataUpdatedAt` del `UseQueryResult` — consumo directo del contrato
+  congelado del 134, cero mecanismos nuevos.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Rutas, símbolos, copys y comandos son
@@ -24,9 +60,9 @@ Este plan convierte cada error mudo en una señal **visible, accionable y con re
 
 - **KPI-1 (error ≠ vacío):** con el backend devolviendo 500 en `/api/tickets/hierarchy` (o caído), el board en vista árbol muestra `LoadErrorState` con botón **Reintentar** y **NO** el copy "No hay tickets. Hacé clic en «Sincronizar ADO»". Verificación manual F1 paso a paso + criterio binario.
 - **KPI-2 (cancelar nunca falla en silencio):** con `Executions.cancel` rechazando, el panel de ejecuciones activas muestra inline "No se pudo cancelar #<id>: <msg>" con **Reintentar**, y el panel NO desaparece. Test F3 (written-ready) + verificación manual.
-- **KPI-3 (cero pantalla blanca):** un `throw` en el render de cualquiera de las 13 páginas muestra "Esta pestaña falló al renderizar" + mensaje + **Reintentar**, con TopBar/nav/HealthBanner/CodexConsoleDock/ActiveRunsPanel vivos; cambiar de tab recupera. Test F4 (written-ready) + verificación manual con throw inyectado temporal.
+- **KPI-3 (cero pantalla blanca):** un `throw` en el render de cualquiera de las 14 páginas muestra "Esta pestaña falló al renderizar" + mensaje + **Reintentar**, con TopBar/nav/HealthBanner/CodexConsoleDock/ActiveRunsPanel vivos; cambiar de tab recupera. Test F4 (written-ready) + verificación manual con throw inyectado temporal.
 - **KPI-4 (éxito nunca por el canal de error):** "Guardado. Requiere reiniciar…" deja de renderizarse en rojo como error: en `HarnessFlagsPanel` sale como Toast `warning` y en `FlagGateBanner` como aviso warning separado del canal de error. Tests puros F0 de `classifyFlagUpdateOutcome` (ejecutables hoy) + inspección binaria.
-- **KPI-5 (tabs no desaparecen por un parpadeo de red):** un fallo transitorio del health-check al arrancar NO oculta Migrador/DevOps si un retry (≤2, con backoff) llega a JSON válido con `flag_enabled=true`; y un JSON válido con `flag_enabled=false` los sigue ocultando (la desactivación real de la flag funciona igual). Tests puros F0 de `probeFlagHealth`/`nextEnabledState` (ejecutables hoy).
+- **KPI-5 (tabs no desaparecen por un parpadeo de red):** un fallo transitorio del health-check al arrancar NO oculta Migrador/DevOps/**Comparador BD** si un retry (≤2, con backoff) llega a JSON válido con `flag_enabled=true`; y un JSON válido con `flag_enabled=false` los sigue ocultando (la desactivación real de la flag funciona igual). Tests puros F0 de `probeFlagHealth`/`nextEnabledState` (ejecutables hoy).
 - **KPI-6 (gate global):** `npx tsc --noEmit` exit 0 y los 3 archivos de tests puros nuevos (F0) verdes **ejecutables hoy** con `npx vitest run <archivo>`.
 
 ## 2. Por qué ahora / gap que cierra (evidencia verificada en HEAD, 2026-07-13)
@@ -47,8 +83,8 @@ Los 6 gaps, con anclas re-verificadas archivo por archivo:
 - `frontend/src/components/CodexConsoleDock.tsx:179` — `void Executions.cancel(executionId).catch(() => {})` seguido de `setExecution(null)` en `:181`: cierra la consola aunque el cancel haya fallado (precedente real: sesiones CLI zombie de 1800s).
 - Precisión técnica verificada (corrige la hipótesis inicial de la auditoría): con react-query v5 (`package.json:13`, `@tanstack/react-query ^5.59.0`), un error de **refetch** NO borra `data` — se conserva el último resultado exitoso. O sea: el panel solo "desaparece" si la carga INICIAL falla; ante fallos posteriores muestra datos stale **sin ninguna señal**. Ambas cosas se resuelven en F3 sin `placeholderData` (que en v5 aplica a cambios de queryKey, no a errores).
 
-**GAP 3 — Cero ErrorBoundary a nivel página: un throw en render de cualquiera de los 13 tabs = pantalla blanca total:**
-- `frontend/src/main.tsx:12` — `render(<App/>)` sin boundary. `frontend/src/App.tsx:241-253` — las 13 páginas se montan crudas.
+**GAP 3 — Cero ErrorBoundary a nivel página: un throw en render de cualquiera de los 14 tabs = pantalla blanca total:**
+- `frontend/src/main.tsx:12` — `render(<App/>)` sin boundary. `frontend/src/App.tsx:259-272` — las 14 páginas (incluida `DbComparePage`, plan 122) se montan crudas.
 - `frontend/src/components/TicketGraphView.jsx:244` — `NodeErrorBoundary` existe (clase, `getDerivedStateFromError` + fallback con mensaje, `:244-282`) pero solo envuelve nodos del grafo: el patrón de la casa ya existe, se copia a nivel página.
 
 **GAP 4 — 3 toasts caseros duplicados y "Guardado OK" viajando por el canal visual de ERROR:**
@@ -57,8 +93,8 @@ Los 6 gaps, con anclas re-verificadas archivo por archivo:
 - `frontend/src/components/HarnessFlagsPanel.tsx:512` — `setApiError("Guardado. Requiere reiniciar el backend: …")`: un ÉXITO renderizado por el canal de error (`:682`, `styles.errorText`). `frontend/src/components/devops/FlagGateBanner.tsx:41-43` — mismo antipatrón; con `ok` + `restart_required_keys` dispara `onEnabled()` en `:36` Y muestra "error" a la vez.
 - Nota: en `EpicFromBriefModal.tsx` y otros hay WIP ajeno sin commitear — NO se tocan (fuera de las superficies listadas).
 
-**GAP 5 — Los tabs Migrador y DevOps desaparecen en silencio si su health-check falla UNA vez:**
-- `frontend/src/App.tsx:86-89` — `fetch('/api/migrator/health').then(r=>r.json())….catch(()=>setMigradorEnabled(false))`; `:91-94` — ídem DevOps. `:137-138` — `else if (tab==='migrador' && !migradorEnabled) selectTab('team')` / ídem devops: expulsión sin mensaje. `:82-95` — corre UNA vez (`[]` deps), sin retry: un backend que tarda en levantar o un parpadeo de red = tab invisible toda la sesión.
+**GAP 5 — Los tabs Migrador, DevOps y Comparador BD desaparecen en silencio si su health-check falla UNA vez:**
+- `frontend/src/App.tsx:90-93` — `fetch("/api/migrator/health").then(r=>r.json())….catch(()=>setMigradorEnabled(false))`; `:94-98` — ídem DevOps; `:99-103` — ídem Comparador BD (`/api/db-compare/health`, plan 122, mergeado a main 2026-07-14). `:146-148` — `else if (tab === "migrador" && !migradorEnabled) selectTab("team")` / ídem devops / ídem dbcompare: expulsión sin mensaje. `:86-104` — el efecto corre UNA vez (`[]` deps), sin retry: un backend que tarda en levantar o un parpadeo de red = tab invisible toda la sesión.
 
 **GAP 6 — Guardados que fallan en silencio: el operador cree que guardó y no guardó:**
 - `frontend/src/components/AgentConfigModal.tsx:88-90` — `catch { // ignore -- changes still applied locally }` (engañoso: al reabrir, el `useEffect` de `:43-51` recarga del server y los cambios desaparecen). Nota: el error de CARGA sí está manejado (`fetchError`, `:36` y `:46-49`) — el mudo es solo el de guardado.
@@ -83,19 +119,25 @@ Ninguna fase lleva flag `STACKY_*`. Cada fase cumple los tres criterios del prec
 
 Un flag acá agregaría trabajo al operador (activarlo) y superficie de test/config sin mitigar ningún riesgo real — violaría el principio 2. Caso a caso está declarado en la línea "Flag" de cada fase. El único cambio de COMPORTAMIENTO (no solo de render) es F6 (retry+sticky del health-check), y su fallback ante backend sano es byte-idéntico al actual (1 fetch, mismo veredicto), por lo que tampoco amerita flag.
 
-### 3.2 Ortogonalidad con planes 132/134/136 (staging quirúrgico obligatorio)
+### 3.2 Convivencia con planes 132/134/136 — orden congelado + zonas por archivo (staging quirúrgico obligatorio)
 
-Este plan comparte ARCHIVOS EDITADOS con planes hermanos paralelos. Las zonas de líneas están diseñadas para NO pisarse:
+**Orden de aterrizaje (congelado por el plan 134 v2 §3.3, NO renegociar acá): 132 → 134 → 135 → 136, base `main`.** Este plan se implementa con 132 (F0-F2, hoy en rama `plan-132-consola-ejecuciones`) y 134 YA aterrizados en la base de trabajo. Consecuencia normativa: donde el 134 movió código, este plan ancla sobre el estado POST-134 (el caso concreto está resuelto en F3: el `useQuery` inline de `ActiveRunsPanel.tsx:63-67` ya no existe — 134 F0 lo reemplazó por `useActiveRunsGlobal()`).
 
-| Archivo | Zona de ESTE plan (135) | Zona del plan hermano |
+**Contrato con el plan 134 (congelado en 134 §3.3/F0):** `useActiveRunsGlobal()` devuelve el `UseQueryResult` COMPLETO de react-query (`data`, `error`, `isError`, `dataUpdatedAt`, …) sin proyección. Este plan destructura error/staleness SOBRE ese hook (F3). La queryKey `["executions","active-global"]` y `services/activeRuns.ts` son propiedad del 134: PROHIBIDO tocarlos.
+
+Zonas por archivo compartido (los `:NN` son orientativos, el TEXTO citado es normativo):
+
+| Archivo | Zona de ESTE plan (135) | Zona del plan hermano (NO tocar) |
 |---|---|---|
-| `ActiveRunsPanel.tsx` | destructure de la query (`:63`), bloque nuevo DESPUÉS de `</ul>` (`:159`), 1 import | 132: botón "Ver consola" DENTRO del map (`:137-138`) + import lucide `:2` + hook tras `:49`; 134: rotulado de las filas |
-| `ActiveRunsPanel.module.css` | append de `.staleNotice`/`.cancelError*` al FINAL | 132: cambia grid `:116` + append `.consoleBtn` al final (merge trivial de dos appends) |
-| `ActiveRunsPanel.test.tsx` | tests nuevos AGREGADOS AL FINAL del `describe`; NO editar `beforeEach` ni tests existentes | 132: mock del store + 3 tests propios |
-| `App.tsx` | efecto `:82-95` (F6) + wrap del bloque `:241-253` (F4) + 2 imports | 134: notificaciones/título/badges (otras zonas); 136: guards de UI |
-| `EditProjectModal.tsx` | estado junto a `:57`, cuerpo de `saveWorkflow` `:118-126`, render junto a `:706-709`, append CSS | 136: higiene de cambio de proyecto / otros guards |
+| `ActiveRunsPanel.tsx` | destructure sobre `useActiveRunsGlobal()` (F3), bloque nuevo DESPUÉS de `</ul>` y ANTES del `</div>` de cierre, 1 import | 132: botón "Ver consola" DENTRO del map + import lucide + hook del store; 134: reemplazo del `useQuery` inline (F0) + rotulado de filas y texto del `window.confirm` DENTRO del map (F7) |
+| `ActiveRunsPanel.module.css` | append de `.staleNotice`/`.cancelError*` al FINAL | 132: cambia grid + append `.consoleBtn` al final (merge trivial de dos appends) |
+| `ActiveRunsPanel.test.tsx` | tests nuevos AGREGADOS AL FINAL del `describe`, después de los del 132 (que aterrizó antes); NO editar `beforeEach` ni tests existentes | 132: mock del store + 3 tests propios |
+| `App.tsx` | efecto de health (hoy `:86-104`, F6) + wrap del bloque de páginas (hoy `:259-272`, F4) + 2 imports | 134: 2 imports + 2 líneas tras `useGlobalExecutionNotifier();` + badge dentro del botón `🧭 Revisión`; 136: SOLO el efecto keydown (branch `isToggleNav`) + import react + 2 líneas de ref |
+| `CodexConsoleDock.tsx` | estado junto a `:55`, handler `handleClose` DESPUÉS de `handleScroll`, `onClick`/`disabled` del botón X, bloque de error tras `</header>` (F3) | 136: 1 import + 1 bloque aditivo (ref + efecto) inmediatamente después de `:67`, cero cambios en JSX/render (su §3.2) |
+| `CodexConsoleDock.module.css` | append de `.closeError` al FINAL (F3) | 136: sin cambios declarados en este css |
+| `EditProjectModal.tsx` | estado junto a `:57`, cuerpo de `saveWorkflow` `:118-126`, render junto a `:706-709`, append CSS | 136: SOLO la línea del backdrop (`:289`), `patch`/`patchDocsPath` (`:175-190`) y 1 estado nuevo tras `:43` (su §3.2) |
 
-Reglas duras para el implementador: (a) commitear con **pathspec explícito** (`git commit -- <archivos>`), NUNCA `git add -A` (working tree con WIP ajeno); (b) si al editar una zona el contenido no coincide porque un plan hermano ya aterrizó, re-anclar por el TEXTO citado (no por número de línea) y NO tocar las líneas del hermano; (c) los archivos NUEVOS de este plan no colisionan con nadie (nombres propios: `LoadErrorState`, `PageErrorBoundary`, `Toast`, `utils/loadError`, `utils/flagHealth`, `utils/flagUpdateOutcome`).
+Reglas duras para el implementador: (a) commitear con **pathspec explícito** (`git commit -- <archivos>`), NUNCA `git add -A` (working tree con WIP ajeno); (b) si al editar una zona el contenido no coincide con lo citado, re-anclar por el TEXTO citado (no por número de línea) y NO tocar las líneas del hermano — NUNCA revertir lo del hermano; (c) los archivos NUEVOS de este plan no colisionan con nadie (nombres propios: `LoadErrorState`, `PageErrorBoundary`, `Toast`, `utils/loadError`, `utils/flagHealth`, `utils/flagUpdateOutcome`); (d) **pre-flight por fase (C4):** ANTES de editar cada archivo listado, correr `git status -- "<ruta>"`; si el archivo YA figura modificado (WIP ajeno sin commitear — caso real HOY: `TicketBoard.tsx` trae el WIP del fix ticket-insight), STOP: avisar al operador y NO editar ni commitear ese archivo hasta que el WIP ajeno esté commiteado/publicado — el pathspec separa archivos, NO separa hunks dentro del mismo archivo.
 
 ### 3.3 Léxico de canales (decisión congelada — un canal por tipo de feedback)
 
@@ -601,7 +643,7 @@ Todas las ediciones importan lo que usan: `import LoadErrorState from "./LoadErr
 
 **Objetivo (1 frase):** que cancelar un run que falla lo diga y ofrezca reintentar, y que cerrar la consola de una sesión interactiva viva no desmonte la UI si el cancel falló (anti-zombie de 1800 s).
 
-**3.1 — Test primero (written-ready):** EDITAR `frontend/src/components/__tests__/ActiveRunsPanel.test.tsx` agregando AL FINAL del `describe("ActiveRunsPanel", ...)` (después del último test existente; NO tocar `beforeEach` ni mocks existentes — regla §3.2; si el plan 132 ya aterrizó sus tests, agregar después de los suyos) exactamente estos 2 tests:
+**3.1 — Test primero (written-ready):** EDITAR `frontend/src/components/__tests__/ActiveRunsPanel.test.tsx` agregando AL FINAL del `describe("ActiveRunsPanel", ...)` (después del último test existente; NO tocar `beforeEach` ni mocks existentes — regla §3.2; el plan 132 aterrizó ANTES por el orden congelado, así que sus tests ya están: agregar después de los suyos) exactamente estos 2 tests:
 
 ```tsx
   it("muestra un aviso inline cuando cancelar falla, sin ocultar el panel", async () => {
@@ -646,19 +688,23 @@ Todas las ediciones importan lo que usan: `import LoadErrorState from "./LoadErr
 ```tsx
 import { formatLoadErrorMessage } from "../utils/loadError";
 ```
-2. Query (`:63`) — destructurar el error de fetch:
+2. Query — destructurar error y timestamp SOBRE el hook compartido del plan 134 (contrato congelado, §3.2; el 134 F0 ya reemplazó el `useQuery` inline por este hook):
 ```tsx
-// ANTES
-  const { data } = useQuery({
+// ANTES (estado del archivo tras aterrizar 134 F0 — orden 132→134→135→136)
+  const { data } = useActiveRunsGlobal();
 // DESPUÉS
-  const { data, isError: fetchFailed } = useQuery({
+  const { data, isError: fetchFailed, dataUpdatedAt } = useActiveRunsGlobal();
 ```
+   Fallback SOLO si, por excepción justificada por el operador, el 134 aún no aterrizó: aplicar el mismo destructure sobre el `useQuery` inline original (`const { data } = useQuery({` → `const { data, isError: fetchFailed, dataUpdatedAt } = useQuery({`) — el `UseQueryResult` expone los mismos campos en ambos caminos.
    `cancelMutation` (`:69-77`) NO se toca: el estado de error se lee de la propia mutation (react-query v5 expone `isError`/`error`/`variables`/`reset`), sin `onError` nuevo.
 3. Render: inmediatamente DESPUÉS de `</ul>` (`:159`) y ANTES del `</div>` de cierre (`:160`), agregar:
 ```tsx
       {fetchFailed && (
         <div className={styles.staleNotice} role="status">
-          Sin conexión con el backend — mostrando el último estado conocido.
+          {/* [ADICIÓN ARQUITECTO 2] hora del último dato bueno, directo del
+              UseQueryResult del contrato 134 — cero mecanismos nuevos. */}
+          Sin conexión con el backend — mostrando el último estado conocido
+          {dataUpdatedAt > 0 ? ` (${new Date(dataUpdatedAt).toLocaleTimeString()})` : ""}.
         </div>
       )}
       {cancelMutation.isError && (
@@ -805,7 +851,7 @@ import { formatLoadErrorMessage } from "../utils/loadError";
 
 ### F4 — GAP 3: `PageErrorBoundary` — cero pantalla blanca
 
-**Objetivo (1 frase):** contener cualquier throw de render de las 13 páginas en un fallback con Reintentar, manteniendo vivos TopBar/nav/HealthBanner/CodexConsoleDock/ActiveRunsPanel.
+**Objetivo (1 frase):** contener cualquier throw de render de las 14 páginas en un fallback con Reintentar, manteniendo vivos TopBar/nav/HealthBanner/CodexConsoleDock/ActiveRunsPanel.
 
 **Archivo a CREAR 1 (test primero, written-ready):** `frontend/src/components/__tests__/PageErrorBoundary.test.tsx` — RTL con la NOTA DE ENTORNO literal. Tests (nombres exactos), usando un componente local `function Bomb(): never { throw new Error("boom de render"); }`:
 - `"renderiza el fallback con el mensaje cuando un hijo lanza"` — render `<PageErrorBoundary resetKey="a"><Bomb/></PageErrorBoundary>` → `getByRole("alert")` contiene `/Esta pestaña falló al renderizar/` y `/boom de render/`.
@@ -821,7 +867,7 @@ import styles from "./PageErrorBoundary.module.css";
 
 /**
  * Boundary a nivel PÁGINA (plan 135 F4). Patrón de la casa: copia de
- * NodeErrorBoundary (TicketGraphView.jsx:244) elevada a las 13 páginas de
+ * NodeErrorBoundary (TicketGraphView.jsx:244) elevada a las 14 páginas de
  * App.tsx. Un throw en el render de un tab ya no blanquea toda la app:
  * TopBar/nav/HealthBanner/CodexConsoleDock/ActiveRunsPanel siguen vivos.
  * Se resetea con el botón Reintentar o al cambiar de tab (resetKey).
@@ -918,15 +964,15 @@ export default class PageErrorBoundary extends React.Component<Props, State> {
 
 **Archivo a EDITAR:** `frontend/src/App.tsx` (2 ediciones):
 1. Import junto a los imports de componentes: `import PageErrorBoundary from "./components/PageErrorBoundary";`
-2. Envolver EXACTAMENTE el bloque de páginas (`:241-253`), sin tocar su interior (zona compartida §3.2 — el wrap agrega 1 línea antes y 1 después):
+2. Envolver EXACTAMENTE el bloque de páginas (hoy `:259-272` — ancla de contenido: desde la línea `{tab === "team"     && <TeamScreen />}` hasta la línea `{tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}` inclusive), sin tocar su interior (zona compartida §3.2 — el wrap agrega 1 línea antes y 1 después):
 ```tsx
       <PageErrorBoundary resetKey={tab}>
         {tab === "team"     && <TeamScreen />}
-        {/* … las 13 líneas existentes idénticas … */}
-        {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
+        {/* … las 14 líneas existentes idénticas … */}
+        {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
       </PageErrorBoundary>
 ```
-   `CommandPalette`, `ShortcutsCheatsheet`, `DailyStandupModal`, `OnboardingTour`, `CodexConsoleDock` y `ActiveRunsPanel` (`:255-274`) quedan FUERA del boundary (siguen vivos ante un crash de página).
+   `CommandPalette`, `ShortcutsCheatsheet`, `DailyStandupModal`, `OnboardingTour`, `CodexConsoleDock` y `ActiveRunsPanel` (el bloque que SIGUE al de páginas) quedan FUERA del boundary (siguen vivos ante un crash de página).
 
 **Casos borde congelados:** (a) cambiar de tab con el fallback visible → `resetKey` cambia → boundary se resetea y monta la página nueva; (b) si el error es determinista, Reintentar vuelve a mostrar el fallback (correcto: señal persistente, no loop — React no re-lanza infinito porque el throw ocurre solo al re-render solicitado); (c) errores de EVENTOS/promesas no pasan por boundaries de React — fuera de alcance declarado (los cubren F1-F3/F5-F7).
 
@@ -1071,13 +1117,13 @@ export default function Toast({
 
 ---
 
-### F6 — GAP 5: los tabs Migrador/DevOps no desaparecen por un parpadeo (usa F0)
+### F6 — GAP 5: los tabs Migrador/DevOps/Comparador BD no desaparecen por un parpadeo (usa F0)
 
-**Objetivo (1 frase):** que el veredicto de visibilidad de los tabs opcionales salga SOLO de una respuesta JSON válida, con ≤2 reintentos con backoff ante fallo de red, y sin des-habilitar por un fallo posterior.
+**Objetivo (1 frase):** que el veredicto de visibilidad de los TRES tabs opcionales (migrador, devops, dbcompare) salga SOLO de una respuesta JSON válida, con ≤2 reintentos con backoff ante fallo de red, y sin des-habilitar por un fallo posterior.
 
 **Archivo a EDITAR:** `frontend/src/App.tsx` (2 ediciones):
 1. Import: `import { probeFlagHealth, nextEnabledState } from "./utils/flagHealth";`
-2. Reemplazar el cuerpo del `useEffect` de `:82-95` EXACTAMENTE por:
+2. Reemplazar el cuerpo del `useEffect` de health (hoy `:86-104` — el que empieza con `initPreferences();` y contiene los TRES `fetch` de `/api/migrator/health`, `/api/devops/health` y `/api/db-compare/health`) EXACTAMENTE por (C1: los TRES probes — omitir el de db-compare sería borrar la visibilidad del tab del plan 122):
 ```tsx
   useEffect(() => {
     initPreferences();
@@ -1094,17 +1140,20 @@ export default function Toast({
     void probeFlagHealth("/api/devops/health").then((v) => {
       if (alive) setDevopsEnabled((prev) => nextEnabledState(prev, v));
     });
+    void probeFlagHealth("/api/db-compare/health").then((v) => {
+      if (alive) setDbCompareEnabled((prev) => nextEnabledState(prev, v));
+    });
     return () => {
       alive = false;
     };
   }, []);
 ```
-El efecto de expulsión de tab (`:132-139`) NO se toca: con el veredicto sticky ya no expulsa por fallos transitorios, y sigue expulsando cuando la flag está realmente OFF.
+El efecto de expulsión de tab (hoy `:141-149`, incluye el branch de `dbcompare`) NO se toca: con el veredicto sticky ya no expulsa por fallos transitorios, y sigue expulsando cuando la flag está realmente OFF.
 
-**Casos borde congelados:** (a) backend sano → 1 fetch por endpoint, mismo veredicto que hoy (comportamiento byte-equivalente); (b) backend tarda en levantar → hasta 3 intentos por endpoint (0 ms, 400 ms, 800 ms de espera previa) antes de rendirse; (c) `unknown` con estado inicial `false` → tab oculto (igual que hoy ante fallo), pero SIN falso `disabled` persistente si el operador recarga cuando el backend ya respondió; (d) este retry NO es una acción de negocio del operador (principio 3): es la misma carga de arranque, endurecida.
+**Casos borde congelados:** (a) backend sano → 1 fetch por endpoint (3 endpoints, igual que hoy), mismo veredicto que hoy (comportamiento byte-equivalente); (b) backend tarda en levantar → hasta 3 intentos por endpoint (0 ms, 400 ms, 800 ms de espera previa) antes de rendirse; (c) `unknown` con estado inicial `false` (los 3 estados arrancan `useState(false)`, `App.tsx:62-66`) → tab oculto (igual que hoy ante fallo), pero SIN falso `disabled` persistente si el operador recarga cuando el backend ya respondió; (d) este retry NO es una acción de negocio del operador (principio 3): es la misma carga de arranque, endurecida.
 
 - **Comandos exactos:** `npx tsc --noEmit`; `npx vitest run src/utils/__tests__/flagHealth.test.ts` (ya verde desde F0 — acá se re-corre como regresión).
-- **Criterio de aceptación (binario, = KPI-5):** (1) tests F0 verdes; (2) manual: con backend arriba y `STACKY_DEVOPS_AGENT_ENABLED=true`, cargar el frontend ANTES de que el backend termine de levantar (o simular primer fetch fallido con DevTools) → el tab DevOps aparece cuando el retry llega; (3) con la flag realmente OFF (JSON `flag_enabled:false`) el tab NO aparece.
+- **Criterio de aceptación (binario, = KPI-5):** (1) tests F0 verdes; (2) manual: con backend arriba y `STACKY_DEVOPS_AGENT_ENABLED=true`, cargar el frontend ANTES de que el backend termine de levantar (o simular primer fetch fallido con DevTools) → el tab DevOps aparece cuando el retry llega (mismo mecanismo para Migrador y Comparador BD); (3) con la flag realmente OFF (JSON `flag_enabled:false`) el tab NO aparece; (4) con backend sano el tab Comparador BD sigue apareciendo exactamente como hoy (guardia anti-C1).
 - **Flag:** no aplica (§3.1: corrección de robustez sin cambio de semántica ante backend sano). **Impacto por runtime:** ninguno (visibilidad de tabs, agnóstica). **Trabajo del operador: ninguno.**
 
 ---
@@ -1205,6 +1254,23 @@ El efecto de expulsión de tab (`:132-139`) NO se toca: con el veredicto sticky 
   4. `npx vitest run src/utils/__tests__/flagUpdateOutcome.test.ts` → verde.
   5. `npx vitest run src/components/__tests__/ActiveRunsPanel.test.tsx` → verde, o rojo SOLO por `Cannot find module '@testing-library/react'`/jsdom (gap preexistente documentado; cualquier otro error SÍ bloquea). Ídem para `LoadErrorState.test.tsx`, `PageErrorBoundary.test.tsx`, `Toast.test.tsx`.
   6. **No correr la suite vitest completa** (regla del repo: tests por archivo).
+- **[ADICIÓN ARQUITECTO 1] Mudómetro (binario, por comando):** cada patrón mudo corregido debe dar **0 hits** en su archivo. Comandos exactos (PowerShell 5.1, desde `Stacky Agents/frontend/`; cada uno debe devolver VACÍO):
+  ```powershell
+  Select-String -Path src/components/AgentLaunchModal.tsx  -Pattern ".catch(() => {})" -SimpleMatch
+  Select-String -Path src/components/CodexConsoleDock.tsx  -Pattern ".catch(() => {})" -SimpleMatch
+  Select-String -Path src/components/CommandPalette.tsx    -Pattern ".catch(() => setTickets([]))" -SimpleMatch
+  Select-String -Path src/components/devops/PrReviewerSection.tsx -Pattern ".catch(() => setActions([]))" -SimpleMatch
+  Select-String -Path src/components/ReplayPlayer.tsx      -Pattern ".catch(() => setEvents([]))" -SimpleMatch
+  Select-String -Path src/components/AgentConfigModal.tsx  -Pattern "changes still applied locally" -SimpleMatch
+  Select-String -Path src/components/EditProjectModal.tsx  -Pattern "catch { /* ignore */ }" -SimpleMatch
+  Select-String -Path src/components/HarnessFlagsPanel.tsx -Pattern "setApiError(``Guardado." -SimpleMatch
+  ```
+  (Verificado en HEAD 2026-07-14: cada uno de esos patrones aparece EXACTAMENTE 1 vez en su archivo — el gate no puede dar falso rojo por ocurrencias ajenas. Si un comando devuelve algo, la fase correspondiente quedó incompleta.)
+  Caso especial `ChatDrawer.tsx`: tiene TRES `.catch(() => {})` (`:157`, `:175`, `:399`) y este plan solo corrige el de la carga de tickets (`:175`) — gate POSITIVO en su lugar (debe devolver ≥1 línea):
+  ```powershell
+  Select-String -Path src/components/ChatDrawer.tsx -Pattern "setTicketsLoadError" -SimpleMatch
+  ```
+  Los otros dos catch de ChatDrawer quedan FUERA de alcance (declarado; no ampliar).
 - **Smoke manual de flujos FELICES (binario, 6 pasos):** con backend sano: (1) board carga y sincroniza igual; (2) Ctrl+K lista y navega igual; (3) lanzar un agente desde el modal y verlo en el panel/dock igual; (4) cancelar un run con backend sano funciona igual (confirm + desaparece); (5) guardar una flag sin restart no muestra nada nuevo; (6) guardar roles de agente y workflow funciona igual.
 - **Git (para el implementador):** commits por fase con **pathspec explícito** (`git commit -- <archivos de la fase>`); PROHIBIDO `git add -A`/`git add .` (working tree con WIP ajeno de planes hermanos).
 - **Trabajo del operador: ninguno.**
@@ -1227,7 +1293,8 @@ No hay fallback nuevo que implementar: ninguna fase bifurca por runtime.
 
 | Riesgo | Mitigación |
 |---|---|
-| Colisión de líneas con planes 132/134/136 en `ActiveRunsPanel.tsx`/`App.tsx`/`EditProjectModal.tsx` | §3.2: zonas de líneas disjuntas por diseño; re-anclar por TEXTO citado si un hermano aterrizó primero; commits con pathspec explícito |
+| Colisión de zonas con planes 132/134/136 en `ActiveRunsPanel.tsx`/`App.tsx`/`EditProjectModal.tsx`/`CodexConsoleDock.tsx` | §3.2: orden congelado 132→134→135→136 + zonas disjuntas por diseño + contrato `useActiveRunsGlobal` del 134; re-anclar por TEXTO citado; commits con pathspec explícito |
+| WIP ajeno sin commitear DENTRO de un archivo objetivo (caso real hoy: `TicketBoard.tsx`) — el pathspec no separa hunks del mismo archivo | §3.2 regla (d): pre-flight `git status -- "<ruta>"` antes de editar; si está modificado, STOP y avisar al operador (human-in-the-loop) |
 | `LoadErrorState` tapa datos stale útiles en el board | Predicado congelado `isError && data === undefined` (solo primera carga); ante refetch fallido con datos, el board sigue mostrando datos (F1, caso borde a) |
 | El guard de cierre del dock "traba" el cierre si el backend no responde | El botón queda deshabilitado solo durante el intento; al fallar muestra error + Reintentar y Minimizar sigue disponible; el statu quo era peor (run zombie invisible). Caso "run ya terminó" se auto-resuelve con el refetch de 5 s (F3, casos borde) |
 | Boundary oculta errores que antes "se veían" en consola | `componentDidCatch` sigue logueando a consola (patrón NodeErrorBoundary `:252-255`); el fallback ADEMÁS lo muestra al operador |
@@ -1238,7 +1305,7 @@ No hay fallback nuevo que implementar: ninguna fase bifurca por runtime.
 
 ## 7. Fuera de scope (prohibido en este plan)
 
-- **Plan 134:** notificaciones/título/badges de awareness de runs y rotulado de filas del `ActiveRunsPanel`.
+- **Plan 134:** notificaciones/título/badges de awareness de runs y rotulado de filas del `ActiveRunsPanel`. PROHIBIDO tocar `useExecutionStream.ts` (su lógica interna Y el retiro del emisor SSE son zona del 134 F2), `services/activeRuns.ts`, `hooks/useActiveRunsGlobal.ts` y la queryKey `["executions","active-global"]` (contrato §3.2).
 - **Plan 136:** doble-submit, guards de backdrop, orden atómico de adjuntos, `ConfirmButton` two-step, higiene de cambio de proyecto. El Toast compartido de F5 **NO** migra ningún `window.confirm`.
 - **Plan 132:** botón "Ver consola" en el panel.
 - Resolver el gap de entorno `@testing-library/react`/jsdom.
@@ -1276,10 +1343,11 @@ F3..F7 son independientes entre sí (solo F1/F2 dependen de F1, y F3/F6/F7 de F0
 - [ ] `LoadErrorState.tsx` + `.module.css` existen; el board distingue error de vacío (KPI-1 verificado manualmente con backend caído y recuperación con Reintentar sin F5).
 - [ ] Las 5 superficies de F2 muestran error visible con backend caído y son byte-idénticas con backend sano (checklist de 5 pasos pasado).
 - [ ] Cancelar con fallo muestra aviso inline + Reintentar en el panel; el dock no se desmonta si el cancel de una sesión interactiva viva falla (KPI-2).
-- [ ] `PageErrorBoundary` envuelve las 13 páginas en `App.tsx`; el throw de prueba muestra el fallback con el resto de la app viva y se revierte (KPI-3).
+- [ ] `PageErrorBoundary` envuelve las 14 páginas en `App.tsx`; el throw de prueba muestra el fallback con el resto de la app viva y se revierte (KPI-3).
 - [ ] `Toast.tsx`/`Toast.module.css` existen; los 3 toasts caseros adoptados; "Guardado. Requiere reiniciar…" sale como warning en las 2 superficies (KPI-4); el Toast local y su CSS fueron eliminados de `RecoverExecutionButton`.
-- [ ] Health-check de tabs con retry+sticky vía `probeFlagHealth`/`nextEnabledState`; flag realmente OFF sigue ocultando el tab (KPI-5).
+- [ ] Health-check de los TRES tabs opcionales (migrador/devops/**dbcompare**) con retry+sticky vía `probeFlagHealth`/`nextEnabledState`; flag realmente OFF sigue ocultando el tab; el tab Comparador BD sigue apareciendo con backend sano (KPI-5, anti-C1).
 - [ ] Los 2 guardados mudos (F7) muestran banner inline y conservan lo tipeado.
 - [ ] `npx tsc --noEmit` = 0 errores; tests RTL nuevos verdes o rojos SOLO por el gap preexistente (KPI-6).
+- [ ] Mudómetro F8 pasado: los 8 gates de 0-hits devuelven vacío y el gate positivo de `ChatDrawer.tsx` devuelve ≥1 ([ADICIÓN ARQUITECTO 1]).
 - [ ] Smoke de flujos felices F8 (6 pasos) pasado.
 - [ ] Diff limitado a los archivos listados en este plan; ningún cambio en backend, flags, endpoints ni en zonas de los planes 132/134/136; commits con pathspec explícito.

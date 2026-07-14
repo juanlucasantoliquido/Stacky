@@ -1,7 +1,19 @@
 # Plan 137 — Documentador v2: evidencia real de código, citas [V] verificadas, historial persistente y panel de revisión
 
-**Versión:** v1
-**Estado:** PROPUESTO (2026-07-14)
+**Versión:** v1 -> v2 (crítica adversarial aplicada)
+**Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-14)
+
+**CHANGELOG v1 -> v2:**
+- **C1 (IMPORTANTE):** el registro en `HARNESS_TEST_FILES` se reparte por fase (F0 registra solo `test_doc_evidence.py`; F3 registra `test_documenter_v2_pipeline.py`; F4 registra `test_plan137_endpoints.py`) — v1 registraba en F0 archivos que recién existían en F3/F4 y rompía el script de harness entre fases.
+- **C2 (IMPORTANTE):** F4 ahora persiste TAMBIÉN un snapshot inicial `state="running"` apenas se conoce la rama — v1 solo persistía el reporte terminal y un crash a mitad de run seguía dejando la rama huérfana invisible (el gap motivador §2.3 quedaba a medias).
+- **C3 (IMPORTANTE):** `extract_citations` gana allowlist de extensiones + exclusión de URLs, para que puertos/versiones (`x.com:8080`, `1.0.73:12`) no inflen `bad` y desacrediten el chip de citas.
+- **C4 (IMPORTANTE):** F6 ahora RENDERIZA el historial (`buildRunsView` + sección "Corridas anteriores") — v1 creaba `GET /documenter/runs` y su client sin ninguna superficie de UI (endpoint muerto).
+- **C5 (IMPORTANTE):** `build_module_evidence` usa `os.walk` con poda in-place de dirs excluidos en vez de `rglob("*")` — v1 enumeraba `node_modules`/`.git` completos antes de filtrar.
+- **C6 (MENOR):** corridas síncronas persisten con sufijo uuid (v1 colisionaba todas en `sync.json`).
+- **C7 (MENOR):** retención del historial: prune best-effort a los 100 archivos más nuevos.
+- **C8 (MENOR):** F0 test 2 reescrito literal (`from services.harness_flags import FLAG_REGISTRY`) — sin "mismo acceso que..." inferible.
+- **C9 (MENOR):** fixture obligatoria de snapshot/restore de `_run_registry` en los tests que lo siembran (anti test-order pollution).
+- **[ADICIÓN ARQUITECTO] A1:** `list_runs` agrega `citations_ok`/`citations_total` por corrida (sumados desde `files` del reporte persistido) y la UI los muestra en el historial — tendencia de calidad documental sin LLM nuevo ni trabajo del operador.
 **Origen:** revisión dirigida del subsistema Documentador (planes 109/113/114) pedida por el operador: mejoras de funcionalidad, eficiencia y UX/UI.
 **Flag master:** `STACKY_DOCS_DOCUMENTER_V2_ENABLED` (default **OFF**, activable desde la UI en el panel de flags del Arnés; `requires` el master del 113).
 **Convive con:** planes 134/135/136 (100% frontend, tocan `App.tsx`/`TicketBoard.tsx`/modales — CERO solapamiento de archivos con este plan, que toca `doc_documenter.py`, `api/docs.py` y los componentes `docs/` del Documentador). No re-propone nada de la serie Obsidian 109-115 (grafo 109/111, RAG 112, 1-click 113, staleness 114, TF-IDF 115): la EXTIENDE.
@@ -22,7 +34,7 @@ El Documentador 1-click (plan 113) funciona pero tiene un defecto estructural: *
 - **KPI-1 (evidencia real):** con la flag ON, el contexto de un modo RECONSTRUIR/COMPLETAR contiene el árbol de archivos del módulo y símbolos con número de línea reales. Verificación: test `test_module_context_v2_incluye_arbol_y_simbolos` (F1).
 - **KPI-2 (citas verificadas):** toda propuesta aplicada lleva `citations: {total, ok, bad}` calculado contra el filesystem real; una cita a archivo inexistente o línea fuera de rango cae en `bad`. Verificación: tests de `verify_citations` (F2).
 - **KPI-3 (cero invocaciones LLM vacías):** con la flag ON, un modo sin targets (NORMALIZAR sin notas, ACTUALIZAR sin stale, ENRIQUECER sin huérfanas) NO llama a `invoke_documenter`. Verificación: test `test_short_circuit_no_invoca_modos_sin_targets` (F3).
-- **KPI-4 (run sobrevive al restart):** con la flag ON, el reporte terminal de un run queda en disco y `GET /api/docs/documenter/status?run=<id>` lo devuelve aunque el proceso se haya reiniciado. Verificación: tests de persistencia (F4).
+- **KPI-4 (run sobrevive al restart):** con la flag ON, el run queda en disco en DOS momentos — snapshot inicial `state="running"` con la rama apenas creada (C2) y reporte terminal — y `GET /api/docs/documenter/status?run=<id>` lo devuelve aunque el proceso se haya reiniciado a mitad de corrida. Verificación: tests de persistencia (F4).
 - **KPI-5 (revisión sin salir de la UI):** el panel muestra por archivo escrito un preview del contenido y por archivo saltado la razón en castellano; el operador decide keep/discard viendo QUÉ se escribió. Verificación: tests puros de `documenterModel` (F6) + `tsc --noEmit` en 0.
 - **KPI-6 (flag OFF = byte-idéntico):** con `STACKY_DOCS_DOCUMENTER_V2_ENABLED=false` el pipeline se comporta EXACTAMENTE como hoy (mismo contexto, mismos modos, sin persistencia, respuesta de status sin campos nuevos con valor). Verificación: tests "flag OFF" de F1/F3/F4/F5.
 
@@ -84,7 +96,7 @@ npx tsc --noEmit
 - `Stacky Agents/backend/services/harness_flags.py` (tupla de categoría en `:143` y `FLAG_REGISTRY` después del `FlagSpec` de `STACKY_DOCS_DOCUMENTER_MAX_FILES`, hoy `:1590-1604`)
 - `Stacky Agents/backend/services/harness_flags_help.py` (junto a los `PlainHelp` del 113, hoy `:298-306`)
 - `Stacky Agents/backend/tests/test_harness_flags_requires.py` (mapa congelado, hoy `:158`)
-- `Stacky Agents/backend/scripts/run_harness_tests.sh` y `run_harness_tests.ps1` (agregar `tests/test_doc_evidence.py`, `tests/test_documenter_v2_pipeline.py`, `tests/test_plan137_endpoints.py` a `HARNESS_TEST_FILES`)
+- `Stacky Agents/backend/scripts/run_harness_tests.sh` y `run_harness_tests.ps1` (agregar SOLO `tests/test_doc_evidence.py` a `HARNESS_TEST_FILES`; **C1:** `tests/test_documenter_v2_pipeline.py` se registra en F3 y `tests/test_plan137_endpoints.py` en F4 — registrar un archivo que aún no existe rompe el script de harness entre fases)
 
 **Flags exactas (nombres literales):**
 
@@ -109,7 +121,15 @@ En `test_harness_flags_requires.py:158` (dict congelado de aristas) agregar exac
 
 **Tests PRIMERO** (en `tests/test_doc_evidence.py`, sección F0):
 1. `test_flags_v2_registradas_y_off_por_default`: importa `config.config`; asserts `config.STACKY_DOCS_DOCUMENTER_V2_ENABLED is False` y `config.STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS == 12000`.
-2. `test_flags_v2_en_flag_registry`: desde `services.harness_flags` obtener el registro (mismo acceso que usa `tests/test_harness_flags.py`) y assert que ambas keys existen, que la bool no tiene default curado en True y que ambas tienen `requires == "STACKY_DOCS_DOCUMENTER_ENABLED"`.
+2. `test_flags_v2_en_flag_registry` (**C8** — acceso LITERAL, sin inferir):
+```python
+from services.harness_flags import FLAG_REGISTRY
+def test_flags_v2_en_flag_registry():
+    for key in ("STACKY_DOCS_DOCUMENTER_V2_ENABLED", "STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS"):
+        assert key in FLAG_REGISTRY
+        assert FLAG_REGISTRY[key].requires == "STACKY_DOCS_DOCUMENTER_ENABLED"
+    assert getattr(FLAG_REGISTRY["STACKY_DOCS_DOCUMENTER_V2_ENABLED"], "default", None) is not True
+```
 3. `test_modulo_doc_evidence_importa`: `import services.doc_evidence` no lanza.
 
 **Comandos:**
@@ -150,10 +170,14 @@ def build_module_evidence(workspace_root: str, module: str, *,
     """Evidencia determinista de un módulo:
     - base = Path(workspace_root) / module  si module != "<repo>", si no workspace_root.
     - Si base no existe o no es dir → "" (el caller degrada al texto del 113).
-    - Archivos: sorted(base.rglob("*")) filtrando extensiones de _SYMBOL_PATTERNS + ".md",
-      EXCLUYENDO cualquier path que contenga "/node_modules/", "/.git/", "/__pycache__/",
-      "/.venv/", "/dist/", "/build/" (comparar sobre str(path).replace("\\\\", "/")).
-      Tope max_files (orden alfabético ⇒ determinista).
+    - Archivos (**C5** — poda ANTES de descender, nunca rglob sobre todo):
+        _EXCLUDED_DIRS = {"node_modules", ".git", "__pycache__", ".venv", "venv",
+                          "dist", "build", ".stacky-docs-proposed"}
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in _EXCLUDED_DIRS)
+            for fn in sorted(filenames): ...
+      filtrando extensiones de _SYMBOL_PATTERNS + ".md". Tope max_files: cortar el walk
+      apenas se alcanza (orden sorted en dirs y files ⇒ determinista).
     - Salida (texto plano):
         "ARBOL:\\n" + una línea por archivo (path relativo a workspace_root, POSIX)
         + "\\nSIMBOLOS:\\n" + extract_symbols(...) de cada archivo (paths relativos a
@@ -211,8 +235,15 @@ def _module_context_block(project_name: str, module: str) -> dict:
 ```python
 _CITATION_RE = re.compile(r"(?P<path>[\w][\w./\\-]*\.[A-Za-z0-9]{1,5}):(?P<line>\d{1,6})")
 
+# C3 — solo extensiones citables reales; sin esto, URLs/puertos/versiones
+# ("x.com:8080", "1.0.73:12") caen en `bad` y desacreditan el chip de citas.
+_CITABLE_EXTS: frozenset[str] = frozenset(_SYMBOL_PATTERNS) | frozenset(
+    {".md", ".json", ".yaml", ".yml", ".toml", ".css", ".html", ".sql", ".env", ".txt"})
+
 def extract_citations(text: str) -> list[tuple[str, int]]:
-    """Todos los pares (path_normalizado_posix, línea) que matchean _CITATION_RE en text.
+    """Todos los pares (path_normalizado_posix, línea) que matchean _CITATION_RE en text,
+    FILTRANDO (C3): (a) extensión (Path(path).suffix.lower()) fuera de _CITABLE_EXTS;
+    (b) matches precedidos inmediatamente por "://" o "//" (URLs).
     Deduplicados preservando orden. Nunca lanza."""
 
 def verify_citations(text: str, workspace_root: str) -> dict:
@@ -244,6 +275,7 @@ def _v2_enabled() -> bool:
 **Tests PRIMERO** (sección F2 de `tests/test_doc_evidence.py`):
 1. `test_extract_citations_basico`: `"ver a.py:10 y src/b.ts:3"` → `[("a.py", 10), ("src/b.ts", 3)]`.
 2. `test_extract_citations_dedup_y_backslash`: `"x\\y.py:5 x/y.py:5"` → una sola entrada `("x/y.py", 5)`.
+2b. `test_extract_citations_ignora_urls_y_versiones` (**C3**): `"ver http://x.com:8080 y versión 1.0.73:12 pero sí a.py:3"` → `[("a.py", 3)]`.
 3. `test_verify_citations_ok_y_bad`: con `tmp_path/a.py` de 12 líneas: `"a.py:10"` ok, `"a.py:99"` bad, `"nope.py:1"` bad; total 3, ok 1.
 4. `test_verify_citations_sin_root`: `verify_citations("a.py:1", "")["ok"] == 0`.
 5. `test_apply_proposals_anota_citations`: propuesta con `[V] a.py:1` y `workspace_root=tmp_path` (con `a.py` presente) ⇒ `result.files[0]["citations"]["ok"] == 1`.
@@ -260,7 +292,7 @@ def _v2_enabled() -> bool:
 **Objetivo:** no invocar al LLM cuando un modo no tiene nada que hacer; reportar los modos salteados.
 
 **Archivos a crear:** `Stacky Agents/backend/tests/test_documenter_v2_pipeline.py`.
-**Archivos a editar:** `services/doc_documenter.py` (nueva función módulo-level + loop de `run_documenter` `:662-668` + `_new_run_record` `:577-582` + dict `report` `:690-703`).
+**Archivos a editar:** `services/doc_documenter.py` (nueva función módulo-level + loop de `run_documenter` `:662-668` + `_new_run_record` `:577-582` + dict `report` `:690-703`); `scripts/run_harness_tests.sh` y `.ps1` (**C1:** agregar `tests/test_documenter_v2_pipeline.py` a `HARNESS_TEST_FILES` en ESTA fase, que es la que crea el archivo).
 
 **Símbolo exacto:**
 
@@ -318,7 +350,7 @@ Loop nuevo (reemplaza `:663-668`):
 
 **Objetivo:** el reporte terminal de cada run sobrevive al restart y hay historial consultable.
 
-**Archivos a editar:** `services/doc_documenter.py`, `api/docs.py`, `tests/test_documenter_v2_pipeline.py`; crear `tests/test_plan137_endpoints.py`.
+**Archivos a editar:** `services/doc_documenter.py`, `api/docs.py`, `tests/test_documenter_v2_pipeline.py`; crear `tests/test_plan137_endpoints.py`; `scripts/run_harness_tests.sh` y `.ps1` (**C1:** agregar `tests/test_plan137_endpoints.py` a `HARNESS_TEST_FILES` en ESTA fase).
 
 **Símbolos exactos en `doc_documenter.py`:**
 
@@ -329,15 +361,24 @@ def _runs_dir() -> Path:
 
 def _persist_run_report(run_id: str, report: dict) -> None:
     """Si _v2_enabled(): escribe json.dumps(report, ensure_ascii=False, default=str)
-    en _runs_dir()/<run_id>.json (encoding utf-8). Best-effort: except → logger.warning."""
+    en _runs_dir()/<run_id>.json (encoding utf-8). Es UPSERT: el snapshot inicial (C2)
+    y el reporte terminal escriben al MISMO archivo. Retención (C7): tras escribir,
+    si hay más de 100 .json en _runs_dir(), borrar los más viejos por mtime dejando 100
+    (best-effort, dentro del mismo try). Best-effort: except → logger.warning."""
 
 def list_runs(limit: int = 20) -> list[dict]:
     """Si no _v2_enabled(): []. Lee los .json de _runs_dir() ordenados por mtime desc,
     tope limit; devuelve [{"run_id": stem, "state", "modes", "branch", "written_count":
-    len(written), "skipped_count": len(skipped), "degraded", "mtime_iso"}]. Nunca lanza."""
+    len(written), "skipped_count": len(skipped), "degraded", "mtime_iso",
+    "citations_ok": suma de f["citations"]["ok"] sobre report.get("files", []),
+    "citations_total": suma de f["citations"]["total"]}]  # [ADICIÓN ARQUITECTO] A1:
+    # agregado de calidad por corrida — la UI muestra la tendencia sin LLM nuevo.
+    Nunca lanza (un .json corrupto se saltea con logger.warning)."""
 ```
 
-- En `run_documenter`, después de `_update_run(run_id, **report)` (`:704-705`): `_persist_run_report(run_id or "sync", report)`.
+- **Identidad de persistencia (C6):** al inicio de `run_documenter`, `persist_id = run_id or f"sync-{uuid.uuid4().hex[:8]}"` (el `uuid` ya está importado módulo-level) — las corridas síncronas NO colisionan entre sí.
+- **Snapshot inicial (C2):** inmediatamente después del `_update_run(run_id, branch=branch, degraded=degraded, worktree=worktree)` existente (`:659-660`): `_persist_run_report(persist_id, {"state": "running", "branch": branch, "degraded": degraded, "worktree": worktree, "target_root": target_root, "modes": [str(m.value) for m in plan.modes], "written": [], "skipped": []})`. Así, un crash/restart a mitad de run deja en disco la rama creada y el operador la ve en el historial en vez de descubrir una rama huérfana por consola (cierra de verdad el gap §2.3).
+- En `run_documenter`, después de `_update_run(run_id, **report)` (`:704-705`): `_persist_run_report(persist_id, report)` (upsert sobre el mismo archivo).
 - `get_run` (`:614-617`): si el registry no tiene el id **y** `_v2_enabled()`, intenta leer `_runs_dir()/<run_id>.json` y devolver el dict (except → None). El endpoint decide (`api/docs.py:342-370`) NO cambia: un run leído de disco tras restart tiene `state="completed"` y el operador puede decidir keep/discard igual porque `keep_doc_branch`/`discard_doc_branch` solo necesitan `target_root` y `branch`, que están en el reporte persistido.
 - **Endpoint nuevo** en `api/docs.py` (debajo de `documenter_status`):
 ```python
@@ -353,9 +394,13 @@ def documenter_runs():
 
 **Tests PRIMERO:**
 - En `tests/test_documenter_v2_pipeline.py`:
-  4. `test_persist_y_get_run_desde_disco`: monkeypatch flag ON y `runtime_paths.data_dir` → `tmp_path`; `_persist_run_report("abc123", {"state": "completed", "written": [], "skipped": [], "modes": [], "branch": None, "degraded": True})`; limpiar `_run_registry`; `get_run("abc123")["state"] == "completed"`.
+  4. `test_persist_y_get_run_desde_disco`: monkeypatch flag ON y `runtime_paths.data_dir` → `tmp_path`; `_persist_run_report("abc123", {"state": "completed", "written": [], "skipped": [], "modes": [], "branch": None, "degraded": True})`; `get_run("abc123")["state"] == "completed"`.
   5. `test_list_runs_ordena_y_limita`: escribir 3 reportes con mtimes distintos (usar `os.utime`); `list_runs(2)` devuelve 2, el más nuevo primero.
   6. `test_persistencia_flag_off_inerte`: flag OFF ⇒ `_persist_run_report` no crea archivo y `list_runs() == []`.
+  7. `test_persist_es_upsert` (**C2**): `_persist_run_report("r1", {"state": "running", ...})` seguido de `_persist_run_report("r1", {"state": "completed", ...})` ⇒ un solo archivo `r1.json` y `get_run("r1")["state"] == "completed"`.
+  8. `test_retencion_100` (**C7**): con 102 reportes escritos, tras un `_persist_run_report` más quedan exactamente 100 archivos (los más nuevos por mtime).
+  9. `test_list_runs_agrega_citas` (**A1**): reporte con `files=[{"citations": {"total": 3, "ok": 2, "bad": ["x"]}}, {"citations": {"total": 1, "ok": 1, "bad": []}}]` ⇒ la entrada de `list_runs()` tiene `citations_total == 4` y `citations_ok == 3`.
+  **Fixture obligatoria (C9):** todo test de este archivo que toque `_run_registry` usa una fixture que guarda `dict(_run_registry)` al entrar y lo restaura (`clear()` + `update()`) al salir — anti test-order pollution (gotcha de la casa, planes 87/91/116).
 - En `tests/test_plan137_endpoints.py` (calcar el patrón de `tests/test_plan113_endpoints.py:18` para fixture de app + flag):
   1. `test_runs_404_si_master_off`.
   2. `test_runs_lista_vacia_v2_off` (master ON, V2 OFF ⇒ `{"ok": True, "runs": []}`).
@@ -424,19 +469,32 @@ export interface DocumenterFileView {
 export function buildFilesView(status: DocumenterStatusResponse | null | undefined): DocumenterFileView[];
 export function buildSkippedView(status: DocumenterStatusResponse | null | undefined): { path: string; label: string }[];
 // skipped viene como [path, reason][] del backend (tuplas serializadas como arrays JSON)
+
+// C4 — el historial DEBE tener superficie de UI (en v1 el endpoint quedaba muerto):
+export interface DocumenterRunRow {
+  runId: string; state: string; branch: string; // branch ?? "(degradado)"
+  countsLabel: string;    // `${written_count} escritos · ${skipped_count} saltados`
+  citationsLabel: string; // A1: "" si citations_total falta o es 0; si no `citas ${ok}/${total}`
+  mtimeIso: string;
+}
+export function buildRunsView(runs: unknown): DocumenterRunRow[];
+// runs = respuesta de GET /documenter/runs (`{ok, runs: [...]}` o array directo);
+// entrada no-array/campos faltantes → [] / defaults "" (nunca lanza).
 ```
 
 - `Stacky Agents/frontend/src/components/docs/DocumenterResultPanel.tsx` — debajo del `diff_stat` actual (`:30-34`), render aditivo y condicional (si `buildFilesView(status).length === 0` y `buildSkippedView(status).length === 0`, el panel queda EXACTAMENTE como hoy):
   - Lista de archivos: `<details>` por archivo con `<summary>{f.path} · {f.action}{f.citationsLabel ? " · " + f.citationsLabel : ""}</summary>` y `<pre style={{ maxHeight: 240, overflow: "auto" }}>{f.preview}</pre>`; si `f.citationsBad.length > 0`, una línea `Citas no verificables: {f.citationsBad.join(", ")}` con `color: "#a00"`.
   - Lista de saltados: `<ul>` con `{s.path} — {s.label}`.
   - Modos salteados: línea `Modos sin trabajo: {modes_skipped.map(m => m.mode).join(", ")}` solo si el array viene no vacío.
+  - **Corridas anteriores (C4 + A1):** un `<details><summary>Corridas anteriores</summary>...` al pie del panel que, al abrirse por primera vez (onToggle, una sola vez), hace `Docs.documenterRuns()` y renderiza `buildRunsView(...)` como `<ul>` de `{runId} · {state} · {branch} · {countsLabel}{citationsLabel ? " · " + citationsLabel : ""}`. Si el fetch falla o devuelve vacío, el `<details>` muestra `Sin corridas registradas.` (nunca rompe el panel). Con V2 OFF el backend devuelve `runs: []` ⇒ mismo texto; cero fetch hasta que el operador abre el detalle (sin costo pasivo).
 - `Stacky Agents/frontend/src/docs/documenterModel.test.ts` — EXTENDER (ya existe) con la sección Plan 137.
 
 **Tests PRIMERO** (vitest puro, sin jsdom — gotcha §3.7):
 1. `formatSkipReason` mapea las 4 claves conocidas, el prefijo `write_error:` y una desconocida.
 2. `buildFilesView` con status `{ files: [{path, action, content_preview, citations:{total:3, ok:2, bad:["x.py:9"]}}] }` ⇒ `citationsLabel === "2/3 citas verificadas"` y `citationsBad` correcto; con `files` ausente ⇒ `[]`.
 3. `buildSkippedView` con `skipped: [["a.md", "missing_confidence_marks"]]` ⇒ label en castellano; con `skipped` ausente ⇒ `[]`.
-4. `summarizeDocumenterStatus` NO cambia de contrato: los tests existentes siguen en verde sin editar.
+4. `buildRunsView` (**C4/A1**): con `{ ok: true, runs: [{ run_id: "r1", state: "completed", branch: "stacky/doc-x", written_count: 2, skipped_count: 1, citations_ok: 3, citations_total: 4, mtime_iso: "..." }] }` ⇒ una fila con `countsLabel === "2 escritos · 1 saltados"` y `citationsLabel === "citas 3/4"`; con `null`, `{}` y `{ runs: "x" }` ⇒ `[]`.
+5. `summarizeDocumenterStatus` NO cambia de contrato: los tests existentes siguen en verde sin editar.
 
 **Comandos:**
 ```powershell
@@ -494,7 +552,8 @@ npx tsc --noEmit
 
 - [ ] Las 2 flags registradas (FlagSpec sin `default=`, categorizadas, `requires` al master 113, aristas en el mapa congelado, PlainHelp) y visibles/activables en la UI de flags del Arnés; default OFF.
 - [ ] Los 4 archivos de test (3 backend nuevos + `documenterModel.test.ts` extendido) en verde, corridos POR ARCHIVO con `backend\.venv\Scripts\python.exe -m pytest` y `npx vitest run` respectivamente, con output real leído (cero falsos verdes).
-- [ ] `tests/test_doc_evidence.py`, `tests/test_documenter_v2_pipeline.py` y `tests/test_plan137_endpoints.py` listados en `HARNESS_TEST_FILES` de `run_harness_tests.sh` **y** `run_harness_tests.ps1`.
+- [ ] `tests/test_doc_evidence.py`, `tests/test_documenter_v2_pipeline.py` y `tests/test_plan137_endpoints.py` listados en `HARNESS_TEST_FILES` de `run_harness_tests.sh` **y** `run_harness_tests.ps1` (cada uno registrado en la fase que lo crea — C1).
+- [ ] Historial visible: la sección "Corridas anteriores" del panel renderiza `buildRunsView` con label de citas por corrida (C4 + A1); ningún endpoint nuevo queda sin superficie de UI.
 - [ ] `npx tsc --noEmit` en 0 errores.
 - [ ] Suites preexistentes del subsistema en verde: `tests/test_plan113_endpoints.py`, `tests/test_documenter_autonomy.py`, `tests/test_harness_flags.py`, `tests/test_harness_flags_requires.py` (por archivo).
 - [ ] Con la flag OFF, `POST /documenter/run` + `GET /documenter/status` devuelven exactamente los campos de hoy más `files: []` y `modes_skipped: []` (verificado por test de F5).

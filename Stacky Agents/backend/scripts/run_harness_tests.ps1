@@ -305,6 +305,12 @@ $HarnessTestFiles = @(
   "tests/test_flag_wiring.py"
   # Plan 86 - Flags para mortales: ayuda en lenguaje llano
   "tests/test_harness_flags_help.py"
+  # Plan 121 - Centinela local de egreso (secretos/PII semantico)
+  "tests/test_plan121_egress_sentinel_flags.py"
+  "tests/test_plan121_secret_patterns.py"
+  "tests/test_plan121_sentinel_core.py"
+  "tests/test_plan121_sentinel_sweep.py"
+  "tests/test_plan121_sentinel_api.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

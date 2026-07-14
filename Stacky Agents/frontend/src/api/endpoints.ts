@@ -6,6 +6,12 @@ import type { DoctorJob } from "../devops/doctorModel";
 import type { DocGraphResponse } from "../docs/docGraphModel";
 export type { DocGraphResponse };
 import type {
+  DbEnvironment,
+  DbCompareHealth,
+  SnapshotMeta,
+  TestConnectionResult,
+} from "../components/dbcompare/dbcompareTypes";
+import type {
   ActiveProjectResponse,
   AgentDefinition,
   AgentExecution,
@@ -3642,4 +3648,58 @@ export const LocalLlmApi = {
       model: string;
       execution_id: number;
     }>("/api/llm/suggest-pipeline", body),
+};
+
+/** Plan 122 — núcleo del Comparador de BD entre ambientes (serie 122-126). */
+export const DbCompare = {
+  /** GET /api/db-compare/health — SIEMPRE 200, incluso con la flag OFF. */
+  health: () => api.get<DbCompareHealth>("/api/db-compare/health"),
+  listEnvironments: () =>
+    api.get<{ ok: boolean; environments: DbEnvironment[]; keyring_available: boolean }>(
+      "/api/db-compare/environments",
+    ),
+  upsertEnvironment: (body: {
+    alias: string;
+    engine: string;
+    host: string;
+    port: number;
+    database: string;
+    username: string;
+    odbc_driver?: string;
+    schema_filter?: string[] | null;
+    notes?: string;
+  }) =>
+    api.post<{ ok: boolean; environment?: DbEnvironment; error?: string }>(
+      "/api/db-compare/environments",
+      body,
+    ),
+  deleteEnvironment: (alias: string) =>
+    api.delete<{ ok: boolean; error?: string }>(
+      `/api/db-compare/environments/${encodeURIComponent(alias)}`,
+    ),
+  setPassword: (alias: string, password: string) =>
+    api.post<{ ok: boolean; error?: string }>(
+      `/api/db-compare/environments/${encodeURIComponent(alias)}/password`,
+      { password },
+    ),
+  clearPassword: (alias: string) =>
+    api.delete<{ ok: boolean }>(
+      `/api/db-compare/environments/${encodeURIComponent(alias)}/password`,
+    ),
+  testConnection: (alias: string) =>
+    api.post<TestConnectionResult>(
+      `/api/db-compare/environments/${encodeURIComponent(alias)}/test`,
+      {},
+    ),
+  takeSnapshot: (alias: string) =>
+    api.post<{ id: string; content_hash: string; counts: SnapshotMeta["counts"]; duration_ms: number }>(
+      `/api/db-compare/environments/${encodeURIComponent(alias)}/snapshot`,
+      {},
+    ),
+  listSnapshots: (alias: string) =>
+    api.get<{ ok: boolean; snapshots: SnapshotMeta[] }>(
+      `/api/db-compare/environments/${encodeURIComponent(alias)}/snapshots`,
+    ),
+  getSnapshot: (snapshotId: string) =>
+    api.get<Record<string, unknown>>(`/api/db-compare/snapshots/${encodeURIComponent(snapshotId)}`),
 };

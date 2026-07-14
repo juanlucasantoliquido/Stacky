@@ -103,6 +103,9 @@ FLAG_CATEGORIES: tuple[CategorySpec, ...] = (
     CategorySpec("capacidades_optin", "Capacidades opt-in",
         "Features que activás y usás a demanda (botón/tab/endpoint) y que NO disparan trabajo ni costo dentro de otro flujo: documentador, grafo/staleness de docs, retrieval híbrido, migrador ADO→GitLab, deep links GitLab, MCP externo, descomposición/portafolio de épicas, asesores read-only, prewarm de caché.",
         tier="simple", intent="Activar capacidades opcionales que usás cuando querés"),
+    CategorySpec("comparador_bd", "Comparador de BD entre ambientes",
+        "Serie 122-126 — comparación de esquema/datos entre ambientes, snapshots, scripts de paridad y backups.",
+        tier="simple", intent="Comparar bases entre ambientes y generar scripts de paridad"),
     CategorySpec("otros", "Otros / sin categorizar",
         "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza).",
         tier="advanced", intent="Flags sin categorizar (no debería haber ninguna)"),
@@ -277,6 +280,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CODEBASE_MEMORY_MCP_ENABLED",   # Plan 76 — MCP externo opt-in (estado + guía)
         "STACKY_GITLAB_DEEP_LINKS_ENABLED",     # Plan 75 — deep links GitLab clickeables
         "STACKY_ADO_PREWARM_ENABLED",           # I0.3 — prewarm caché ADO (inerte sin TTL>0)
+        "STACKY_DB_COMPARE_ENABLED",            # Plan 122 — comparador de BD entre ambientes (master, default OFF)
+    ),
+    "comparador_bd": (
+        "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -2718,6 +2725,29 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Habilita narrar el digest de ejecuciones en lenguaje natural con el modelo local (botón en la card del digest).",
         group="global",
         requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+    ),
+    # ── Plan 122 — Comparador de BD entre ambientes (serie 122-126, núcleo) ──
+    FlagSpec(
+        key="STACKY_DB_COMPARE_ENABLED",
+        type="bool",
+        label="Comparador de BD entre ambientes",
+        description="Master del comparador (serie 122-126): tab UI, registro de ambientes, snapshots y comparaciones. OFF = invisible.",
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",
+        type="int",
+        label="Comparador BD: timeout de conexión (seg)",
+        description="Timeout de login/TCP al abrir conexión read-only a un ambiente registrado.",
+        group="global",
+        # NO default= acá: default_is_known() trata CUALQUIER spec.default no-None
+        # (no solo bool) como "curado" y exige alta en _CURATED_DEFAULTS_ON
+        # (ratchet Plan 63, ver test_harness_flags.py:465) — ese set es exclusivamente
+        # para promociones bool a True; el valor real "10" ya vive en config.py y
+        # llega al operador vía read_current()["value"], no vía spec.default.
+        requires="STACKY_DB_COMPARE_ENABLED",
+        min_value=1,
+        max_value=120,
     ),
 )
 

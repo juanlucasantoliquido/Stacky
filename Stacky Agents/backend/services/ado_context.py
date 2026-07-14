@@ -228,6 +228,35 @@ def build_ado_context_blocks(
     try:
         raw_comments = client.fetch_comments(ado_id, top=30)
         if raw_comments:
+            # Plan 133 F3 — detectar el comentario bloqueante ANTES de armar
+            # ado-comments, para que ado-blocker quede ANTES en la lista (orden
+            # de presentación). CERO fetch extra: reusa raw_comments ya en scope.
+            try:
+                from config import config as _config
+
+                if getattr(_config, "STACKY_ADO_BLOCKER_BLOCK_ENABLED", False):
+                    from services.business_preflight import BLOCKER_MARKER  # lazy: evita ciclos
+
+                    with_marker = [
+                        c for c in raw_comments
+                        if BLOCKER_MARKER in _html_to_text(c.get("text") or "")
+                    ]
+                    if with_marker:
+                        blocker_comment = max(with_marker, key=lambda c: (c.get("date") or ""))
+                        blocks.append({
+                            "kind": "text",
+                            "id": "ado-blocker",
+                            "title": "🚫 Bloqueante técnico detectado (server-side)",
+                            "content": (
+                                f"Autor: {blocker_comment.get('author', '?')}\n"
+                                f"Fecha: {blocker_comment.get('date', '')}\n\n"
+                                f"{_html_to_text(blocker_comment.get('text') or '')}"
+                            ),
+                            "priority": "high",
+                        })
+            except Exception as e:  # noqa: BLE001 — best-effort, nunca bloquea el enrich
+                logger.warning("ado_context — detección de ado-blocker falló: %s", e)
+
             lines: list[str] = []
             for c in raw_comments:
                 text = _html_to_text(c.get("text") or "")

@@ -5,12 +5,13 @@
  * paginación y acceso al drawer de detalle (Plan 38 C2).
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Executions, type ExecutionHistoryItem } from "../api/endpoints";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import GroundingObservatoryCard from "../components/GroundingObservatoryCard";
 import { useWorkbench } from "../store/workbench";
+import { readQueryParam } from "../utils/queryParams";
 import styles from "./ExecutionHistoryPage.module.css";
 
 // ---------------------------------------------------------------------------
@@ -80,6 +81,15 @@ export default function ExecutionHistoryPage() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [detailId, setDetailId] = useState<number | null>(null);
   const activeProject = useWorkbench((s) => s.activeProject);
+
+  // Plan 129 — deep-link receptor: ?execution=<id> abre el drawer al montar.
+  useEffect(() => {
+    const raw = readQueryParam("execution");
+    if (!raw) return;
+    const id = Number(raw);
+    if (!Number.isFinite(id)) return;
+    setDetailId(id);
+  }, []);
 
   const historyQ = useQuery({
     queryKey: ["execution-history", filters, activeProject?.name],

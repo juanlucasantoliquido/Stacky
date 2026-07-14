@@ -12,6 +12,7 @@ import {
   type OptionalSection,
 } from "../services/uiSections";
 import { useUiSectionsStore } from "../store/uiSectionsStore";
+import { readQueryParam } from "../utils/queryParams";
 import styles from "./SettingsPage.module.css";
 
 type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "harness" | "playground";
@@ -96,6 +97,15 @@ function SectionsVisibilityPanel() {
 
 export default function SettingsPage() {
   const [sub, setSub] = useState<SubTab>("flow");
+  // Plan 129 — deep-link receptor: ?flag=<key> abre el sub-tab Arnes y resalta esa fila.
+  const [highlightFlagKey, setHighlightFlagKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const raw = readQueryParam("flag");
+    if (!raw) return;
+    setSub("harness");
+    setHighlightFlagKey(raw);
+  }, []);
 
   return (
     <div className={styles.root}>
@@ -150,7 +160,7 @@ export default function SettingsPage() {
         {sub === "client-profile" && <ClientProfileEditor />}
         {sub === "transfer" && <ConfigTransferPanel />}
         {sub === "webhooks" && <WebhooksPanel />}
-        {sub === "harness" && <HarnessFlagsPanel />}
+        {sub === "harness" && <HarnessFlagsPanel highlightKey={highlightFlagKey} />}
         {sub === "playground" && <LocalLlmPlaygroundPanel />}
       </div>
     </div>

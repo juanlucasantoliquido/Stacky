@@ -17,6 +17,7 @@ import { Docs } from "../api/endpoints";
 import type { DocNode, DocRoot, DocHeading } from "../api/endpoints";
 import { buildNameIndex, type DocGraphResponse } from "../docs/docGraphModel";
 import { useWorkbench } from "../store/workbench";
+import { readQueryParam } from "../utils/queryParams";
 import styles from "./DocsPage.module.css";
 
 function countDocFiles(nodes: DocNode[] = []): number {
@@ -80,6 +81,15 @@ export default function DocsPage() {
     setDocsView("reader");
     setPendingOpenPath(null);
   }, [projectName]);
+
+  // Plan 129 — deep-link receptor: ?path=<doc path> abre ese documento al
+  // montar. Reusa el mecanismo pendingOpenPath ya existente (Plan 111 C2):
+  // si el path no existe en el índice, el efecto de arriba ya lo ignora en
+  // silencio (línea 231-241 más abajo).
+  useEffect(() => {
+    const raw = readQueryParam("path");
+    if (raw) setPendingOpenPath(raw);
+  }, []);
 
   // -- Fuentes/carpeta docs del proyecto activo -------------------------------
   const {

@@ -611,3 +611,16 @@ def operational_health():
     )
     result["ok"] = True
     return jsonify(result)
+
+
+@bp.get("/code-integrity")
+def code_integrity_route():
+    """Plan 130 — gate determinista de sintaxis + imports (read-only, sin IA)."""
+    if not bool(getattr(_config.config, "STACKY_CODE_INTEGRITY_ENABLED", False)):
+        return jsonify({"ok": False, "error": "code_integrity_disabled",
+                        "message": "El verificador de integridad está deshabilitado (STACKY_CODE_INTEGRITY_ENABLED)."}), 404
+    from services import code_integrity as ci  # import lazy (patrón Plan 109)
+    try:
+        return jsonify(ci.run_checks())
+    except Exception as exc:
+        return jsonify({"ok": False, "error": type(exc).__name__}), 200

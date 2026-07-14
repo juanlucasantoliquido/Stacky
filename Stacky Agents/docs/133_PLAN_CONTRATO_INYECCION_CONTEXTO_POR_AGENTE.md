@@ -1,7 +1,20 @@
 # Plan 133 — Contrato de inyección de contexto por agente: preflight de prerequisitos, refresh just-in-time, directiva de modo server-side y garantía de bloques requeridos
 
-**Estado:** PROPUESTO v1 (2026-07-13)
+**Estado:** CRITICADO v2 (2026-07-13)
 **Origen:** incidente real ADO-331 (FunctionalAnalyst lanzado sobre una Task en "Doing" → run quemado por aborto de contrato del agente). Tema fijado por el operador.
+
+**v1 → v2 — CHANGELOG (crítica adversarial 2026-07-13, juez StackyArchitectaUltraEficientCode):**
+
+- **C1 IMPORTANTE (fix F2):** el frontend NO tiene "catch que muestra el body del error": `api.post` lanza un `Error` plano cuyo `message` embebe el texto crudo del body (`frontend/src/api/client.ts:76-78`), y `useAgentRun.ts` no tiene `catch`/`onError` (verificado, `useAgentRun.ts:1-53`). Además los 400 existentes del handler usan shape `{ok: False, error, message}` con `_json.dumps` + `make_response` (`api/agents.py:374-385`), no `jsonify`+`detail`. v2 congela el shape del 400 y la extracción frontend con helper `parseBusinessPreflightError` literal.
+- **C2 IMPORTANTE (fix F2 + F4):** cita del marcador corregida — `FunctionalAnalyst.agent.md:50` dice la forma CORTA `🚫 BLOQUEANTE`; el marcador completo `🚫 BLOQUEANTE TÉCNICO` vive en `:119` y `:294`, con semántica "el comentario MÁS RECIENTE debe contener el marcador" (no "el más reciente que lo contenga"). v1 aprobaba Modo B con un marcador viejo que el agente igual rechazaría. v2 alinea el predicado al contrato del agente y F4 unifica la línea `:50` al marcador completo.
+- **C3 IMPORTANTE (fix F3):** el bloque `ado-comments` NO se construye "dentro de `enrich` (:305)": se construye en `build_ado_context_blocks` (`ado_context.py:185`, fetch `:229`, bloque `:243`); `enrich` además hace skip por dedup (`:344`). v2 ancla el hook en `build_ado_context_blocks`, reusa `raw_comments` ya en scope (cero fetch extra) y busca el marcador sobre el texto post-`_html_to_text` (`:131`).
+- **C4 IMPORTANTE (fix F2 paso 4):** R3 prometía caché I3.2 para el fetch de comentarios pero F2 nunca lo instruía → doble fetch real F2+F4. v2 obliga a envolver el fetch con `ado_read_cache.get_or_fetch(("run_comments", ado_id), ...)`.
+- **C5 MENOR (fix F5):** guard literal `vscode_agent_filename` None/vacío → no-op en `enforce` (en `agent_runner.py:95` el parámetro es `str | None = None`; copilot puede correr sin agente VS Code).
+- **C6 MENOR (fix F2/F4):** `evaluate` distingue `reason="preflight_off"` (flag OFF) de fail-open de red, y F4 degrada el texto de la directiva cuando no hubo validación real (v1 mentía "Stacky YA validó").
+- **C7 MENOR (fix F1/F2):** el handler `/run` no "resuelve el ticket" antes (solo valida `ticket_id` truthy, `agents.py:413-416`) → los hooks se anclan DESPUÉS de los 400 existentes (`agent_type`/`ticket_id`/`custom`) y antes del dispatch.
+- **C8 MENOR (fix KPI-1):** "<2 segundos" no era binario ni garantizable con red de por medio → reformulado a "400 sin spawnear CLI".
+- **C9 (fix F7):** cerrada con evidencia la duda de paridad del gate G0.1: `check` corre en `agent_runner.py:103-139`, ANTES del dispatch por runtime (`:220+`) → común a los 3 runtimes. Se elimina el "verificar en la implementación".
+- **[ADICIÓN ARQUITECTO] (F2b):** trazabilidad de rechazos y frescura: el 400 y el bloque `run-directive` incluyen `snapshot_fresh` (resultado F1), y cada rechazo deja una línea de log estructurada `business_preflight_rejected` — diagnóstico de falsos positivos por datos stale sin infra nueva ni trabajo del operador.
 **Dependencias:** ninguna dura. Reusa: `services/run_preflight.py` (G0.1), `services/context_enrichment.py` (F2.4/I0.1/I2.1), `services/ado_sync.py` (`upsert_single_work_item`), `services/ado_read_cache.py` (I3.2), `services/ado_context.py`, registro de flags (`services/harness_flags.py` + `services/harness_flags_help.py` + `HarnessFlagsPanel`).
 **Ortogonal a:** Planes 129/130/131/132 (no comparte archivos nuevos; comparte archivos editados `api/agents.py`, `config.py`, `harness_flags.py` → staging quirúrgico obligatorio, ver §3.8).
 
@@ -39,7 +52,8 @@ verificado server-side**, en 4 garantías:
 
 - **KPI-1 (0 runs quemados por prerequisitos):** relanzar el caso ADO-331 (functional
   sobre Task "Doing" sin comentario bloqueante) devuelve **400** con detalle accionable
-  en <2 segundos, en vez de un run CLI abortado (~minutos y tokens). Test F2 caso 3.
+  SIN crear ejecución ni spawnear ningún CLI (cero tokens), en vez de un run CLI
+  abortado (~minutos y tokens). Test F2 caso 3 + caso 10 (endpoint). [C8]
 - **KPI-2 (0 decisiones sobre snapshot stale):** con el tracker accesible, el
   `work_item_type` y `ado_state` usados por preflight e inyección son los del tracker al
   momento del run (test F1 caso 2: el estado local viejo se pisa antes de decidir).
@@ -72,10 +86,14 @@ Run quemado, cero output útil. Causas raíz confirmadas en código:
    `POST /api/tickets/sync` (`services/ado_sync.py:102 sync_tickets`; `:235
    upsert_single_work_item`). NADIE re-sincroniza el ticket al momento del run → la
    decisión de inyección corre sobre snapshot stale.
-4. `ado_context.enrich` (`services/ado_context.py:305`) vuelca hasta 30 comentarios
-   crudos en `ado-comments`; la detección de `🚫 BLOQUEANTE TÉCNICO` vive SOLO en el
-   prompt del agente (`backend/Stacky/agents/FunctionalAnalyst.agent.md:50,118-119,294`).
-   El backend no marca nada.
+4. `build_ado_context_blocks` (`services/ado_context.py:185`; fetch de comentarios
+   `client.fetch_comments(ado_id, top=30)` en `:229`, bloque `ado-comments` en `:243`,
+   invocado por `enrich` `:305`) vuelca hasta 30 comentarios crudos en `ado-comments`;
+   la detección del marcador bloqueante vive SOLO en el prompt del agente. Precisión
+   verificada [C2]: `FunctionalAnalyst.agent.md:119` y `:294` usan el marcador completo
+   `🚫 BLOQUEANTE TÉCNICO` y exigen que esté **en el ÚLTIMO comentario**; la línea `:50`
+   usa la forma corta `🚫 BLOQUEANTE` (inconsistencia del prompt que F4 unifica). El
+   backend no marca nada.
 5. `_BLOCK_PRIORITY` (`services/context_enrichment.py:360-375`) NO incluye
    `process-catalog`, `process-discipline` ni `acceptance-contract` → caen al default 50
    (`_DEFAULT_PRIORITY`, `:376`) y son PODABLES por el budget F2.4
@@ -259,8 +277,11 @@ def refresh_ticket_snapshot(ticket_id: int) -> dict:
 en el Ticket local — no duplicar esa lógica, solo invocarla.
 
 **Hook (1 solo call site):** `Stacky Agents/backend/api/agents.py`, dentro del handler
-de `POST /api/agents/run` (`:339`), INMEDIATAMENTE después de resolver el ticket y ANTES
-de cualquier validación/lanzamiento:
+de `POST /api/agents/run` (`def run()`, `:339-340`), INMEDIATAMENTE DESPUÉS de los 400
+existentes de validación de payload (`unknown_runtime` `:367-385`,
+`missing_vscode_agent_filename` `:390-406`, `agent_type`/`ticket_id`/`custom`
+`:413-418`) y ANTES del dispatch del run [C7]. El handler NO carga el Ticket — no hace
+falta: `refresh_ticket_snapshot` lo carga por sí mismo.
 
 ```python
 from services.run_ticket_refresh import refresh_ticket_snapshot
@@ -301,7 +322,10 @@ snapshot local (tipo/estado), fail-open ante errores de red (comentarios)."""
 from __future__ import annotations
 from dataclasses import dataclass, field
 
-BLOCKER_MARKER = "🚫 BLOQUEANTE TÉCNICO"  # espejo de FunctionalAnalyst.agent.md:50
+BLOCKER_MARKER = "🚫 BLOQUEANTE TÉCNICO"  # espejo de FunctionalAnalyst.agent.md:119 y :294 [C2]
+# Nota encoding: el archivo .py es UTF-8 (default py3); el matching se hace sobre el
+# texto de comentario ya convertido con ado_context._html_to_text (:131), nunca sobre
+# el HTML crudo de ADO.
 
 @dataclass
 class BusinessPreflightResult:
@@ -323,8 +347,9 @@ def evaluate(*, ticket_id: int, agent_type: str) -> BusinessPreflightResult:
 `agent_type == "functional"`; el registro es un dict módulo-nivel
 `_PREDICATES: dict[str, callable]` para extender después sin tocar el core):**
 
-0. Flag `STACKY_BUSINESS_PREFLIGHT_ENABLED` OFF, o `agent_type not in _PREDICATES`, o
-   ticket inexistente, o `ado_id` None/negativo (sentinels -1..-8) → `ok=True`.
+0. Flag `STACKY_BUSINESS_PREFLIGHT_ENABLED` OFF → `ok=True, reason="preflight_off"`
+   [C6]; `agent_type not in _PREDICATES`, o ticket inexistente, o `ado_id`
+   None/negativo (sentinels -1..-8) → `ok=True, reason="not_applicable"`.
 1. Cargar snapshot local del Ticket (post-refresh F1): `work_item_type`, `ado_state`.
 2. Cargar client-profile con el MISMO loader que usa `_inject_client_profile_block`
    (`context_enrichment.py:110`; leer esa función y reusar su import — prohibido crear
@@ -334,12 +359,24 @@ def evaluate(*, ticket_id: int, agent_type: str) -> BusinessPreflightResult:
 3. **Modo A:** `work_item_type == "Epic"` Y (`input_states` vacía O `ado_state in
    input_states`) → `ok=True, mode="A", epic_ado_id=ticket.ado_id,
    validated_state=ado_state`.
-4. **Modo B:** si no aplica Modo A, buscar el marcador `BLOCKER_MARKER` en los
-   comentarios del work item: reusar el MISMO fetch de comentarios que usa
-   `ado_context.enrich` (`services/ado_context.py:305`; leer y reusar su helper de
-   comentarios, límite 30, más reciente primero). Si el comentario MÁS RECIENTE que
-   contiene el marcador existe → `ok=True, mode="B",
-   blocker={"author":..., "date":..., "excerpt": primeras 500 chars}`.
+4. **Modo B [C2][C4]:** si no aplica Modo A, fetch de comentarios con el MISMO client y
+   forma que `build_ado_context_blocks` (`services/ado_context.py:229`:
+   `client.fetch_comments(ado_id, top=30)`), envuelto OBLIGATORIAMENTE en el caché
+   I3.2 para que la re-evaluación de F4 no duplique la llamada:
+   ```python
+   comments = ado_read_cache.get_or_fetch(
+       ("run_comments", ado_id),
+       lambda: client.fetch_comments(ado_id, top=30),
+       ttl_sec=int(getattr(config, "STACKY_ADO_READ_CACHE_TTL_SEC", 0) or 0),
+   )
+   ```
+   Convertir cada comentario con `ado_context._html_to_text` (`:131`) antes de buscar.
+   **Semántica alineada al contrato del agente (`FunctionalAnalyst.agent.md:119,294`):
+   el marcador debe estar en el comentario MÁS RECIENTE** (el último por fecha). Si el
+   último comentario contiene `BLOCKER_MARKER` → `ok=True, mode="B",
+   blocker={"author":..., "date":..., "excerpt": primeras 500 chars del texto}`. Un
+   marcador solo en comentarios viejos NO habilita Modo B (el agente lo rechazaría
+   igual — v1 tenía esta divergencia).
    Además: si `profile["tracker_state_machine"]["functional"]` define la clave
    `blocked_states` (lista no vacía), exigir también `ado_state in blocked_states`;
    si la clave NO existe en el profile → no exigir estado (solo marcador).
@@ -347,60 +384,109 @@ def evaluate(*, ticket_id: int, agent_type: str) -> BusinessPreflightResult:
    `ok=True, mode=None, warnings=["comentarios inaccesibles: <exc> — el agente hará el
    cross-check"]` (NO bloquear por timeout).
 6. **Fail-closed determinista:** si no aplicó Modo A, los comentarios SÍ se leyeron y
-   ninguno tiene el marcador → `ok=False, check="functional_prereqs_unmet",
+   el último NO contiene el marcador → `ok=False, check="functional_prereqs_unmet",
    reason=` (texto EXACTO, con interpolación):
-   `"FunctionalAnalyst requiere: (Modo A) una Épica en estado {input_states}, o (Modo B) un work item con comentario '🚫 BLOQUEANTE TÉCNICO'. El ticket ADO-{ado_id} es {work_item_type} en estado '{ado_state}' y no tiene comentario bloqueante. Cambiá el estado/tipo del ticket o agregá el comentario bloqueante en ADO y relanzá."`
+   `"FunctionalAnalyst requiere: (Modo A) una Épica en estado {input_states}, o (Modo B) un work item cuyo ÚLTIMO comentario contenga '🚫 BLOQUEANTE TÉCNICO'. El ticket ADO-{ado_id} es {work_item_type} en estado '{ado_state}' y su último comentario no tiene el marcador. Cambiá el estado/tipo del ticket o agregá el comentario bloqueante en ADO y relanzá."`
 
-**Hook en el endpoint:** `Stacky Agents/backend/api/agents.py` handler de
-`POST /api/agents/run` (`:339`), después del refresh F1 y antes de crear la ejecución:
+**Hook en el endpoint [C1][C7]:** `Stacky Agents/backend/api/agents.py` handler de
+`POST /api/agents/run` (`:339`), después del refresh F1 (que a su vez va después de los
+400 de payload existentes) y antes del dispatch. Shape del 400 = el MISMO de los 400
+vecinos del handler (`unknown_runtime`, `agents.py:374-385`): `_json.dumps` +
+`make_response`, claves `ok/error/message`:
 
 ```python
 from services.business_preflight import evaluate as business_preflight
 _bp = business_preflight(ticket_id=ticket_id, agent_type=agent_type)
 if not _bp.ok:
-    return jsonify({
-        "error": "business_preflight_failed",
-        "check": _bp.check,
-        "detail": _bp.reason,
-        "agent_type": agent_type,
-        "ticket_id": ticket_id,
-    }), 400
+    logger.warning(
+        "business_preflight_rejected agent=%s ticket=%s check=%s snapshot_fresh=%s",
+        agent_type, ticket_id, _bp.check, _refresh.get("refreshed"),
+    )  # [ADICIÓN ARQUITECTO] F2b — línea de log estructurada, greppable
+    from flask import make_response
+    return make_response(
+        _json.dumps({
+            "ok": False,
+            "error": "business_preflight_failed",
+            "check": _bp.check,
+            "message": _bp.reason,
+            "agent_type": agent_type,
+            "ticket_id": ticket_id,
+            "snapshot_fresh": bool(_refresh.get("refreshed")),  # [ADICIÓN ARQUITECTO] F2b
+        }),
+        400,
+        {"Content-Type": "application/json"},
+    )
 ```
 
-(Adaptar `jsonify`/estilo de retorno al patrón EXACTO de los demás 400 del mismo
-handler — leerlo primero; no inventar otro shape de error.)
+**[ADICIÓN ARQUITECTO] F2b — trazabilidad de rechazos y frescura:** el campo
+`snapshot_fresh` (resultado F1) viaja en el 400 y en el bloque `run-directive` (F4).
+Diagnóstico inmediato de falsos positivos: si un rechazo llega con
+`snapshot_fresh=false`, el operador (y quien depure) sabe que la decisión se tomó sobre
+snapshot local posiblemente stale (tracker caído) sin abrir logs. Cero infra nueva,
+cero trabajo del operador.
 
-**Frontend (mostrar el 400, mínimo):** los lanzadores existentes ya muestran el error
-del launch en su catch (`frontend/src/hooks/useAgentRun.ts` y
-`frontend/src/components/AgentLaunchModal.tsx`). Cambio único y acotado: en el catch de
-CADA UNO de esos dos archivos, si el body del error tiene `error ===
-"business_preflight_failed"`, mostrar `detail` (el texto accionable) en lugar del
-mensaje genérico. Localizar el catch por grep de `run` + `catch` en esos 2 archivos;
-NO tocar ningún otro componente.
+**Frontend (mostrar el 400, mínimo) [C1]:** PREMISA REAL verificada: `api.post` lanza
+`Error` plano con `message = "{status} {statusText}: {bodyText}"`
+(`frontend/src/api/client.ts:76-78`) — NO hay body parseado, y
+`frontend/src/hooks/useAgentRun.ts` no tiene `catch`/`onError`. Cambio exacto:
+
+1. `frontend/src/services/agentLaunch.ts` — agregar y exportar el helper puro:
+   ```typescript
+   /** Plan 133 F2 — extrae el mensaje accionable de un 400 business_preflight_failed. */
+   export function parseBusinessPreflightError(err: unknown): string | null {
+     const msg = err instanceof Error ? err.message : String(err ?? "");
+     const brace = msg.indexOf("{");
+     if (brace < 0) return null;
+     try {
+       const body = JSON.parse(msg.slice(brace));
+       return body?.error === "business_preflight_failed" && typeof body.message === "string"
+         ? body.message
+         : null;
+     } catch {
+       return null;
+     }
+   }
+   ```
+2. `frontend/src/hooks/useAgentRun.ts` — agregar `onError` a la mutation existente
+   (`useAgentRun.ts:21-52`): si `parseBusinessPreflightError(err)` retorna texto,
+   mostrarlo con el mecanismo de notificación que YA use la app (localizar por grep de
+   `toast\|notify\|alert(` en `frontend/src/hooks/`; si no hay ninguno, `window.alert`
+   con el texto — mono-operador, aceptable y explícito).
+3. `frontend/src/components/AgentLaunchModal.tsx` — en su `catch` de lanzamiento
+   (`:252`), si el helper retorna texto, setear ese texto como `error.message` del
+   estado `BridgeError` existente (`kind: "unknown"`) en vez del mensaje genérico.
+
+NO tocar ningún otro componente. Test frontend NO requerido (helper puro cubierto por
+los tests backend del contrato; vitest opcional fuera de scope).
 
 **Tests primero:** `Stacky Agents/backend/tests/test_business_preflight.py`
-1. `test_flag_off_ok_true` (identidad).
-2. `test_agent_type_sin_predicados_ok_true` (`developer` → ok).
+1. `test_flag_off_ok_true` (identidad; `reason == "preflight_off"` [C6]).
+2. `test_agent_type_sin_predicados_ok_true` (`developer` → ok, `reason == "not_applicable"`).
 3. `test_task_doing_sin_bloqueante_rechaza` — **caso ADO-331**: Task, "Doing",
    comentarios sin marcador → `ok=False`, `check=="functional_prereqs_unmet"`, reason
    contiene `"ADO-"` y `"BLOQUEANTE TÉCNICO"`.
 4. `test_epic_en_input_state_modo_a` — Epic + estado en input_states → `mode=="A"`,
    `epic_ado_id` seteado.
 5. `test_epic_fuera_de_input_state_sin_bloqueante_rechaza`.
-6. `test_task_con_comentario_bloqueante_modo_b` — marcador presente → `mode=="B"`,
-   `blocker["excerpt"]` no vacío.
+6. `test_task_con_comentario_bloqueante_modo_b` — marcador en el ÚLTIMO comentario →
+   `mode=="B"`, `blocker["excerpt"]` no vacío.
+6b. `test_marcador_solo_en_comentario_viejo_rechaza` [C2] — 2 comentarios: el viejo con
+   marcador, el último sin → `ok=False` (alineado a `FunctionalAnalyst.agent.md:294`).
+6c. `test_fetch_comentarios_usa_cache_i32` [C4] — con TTL>0 monkeypatcheado, 2 llamadas
+   a `evaluate` → `fetch_comments` invocado 1 sola vez (mock con contador).
 7. `test_blocked_states_definidos_exige_estado` — profile con `blocked_states=["Blocked"]`
    y ticket en "Doing" con marcador → `ok=False`.
 8. `test_error_red_comentarios_fail_open` — fetch levanta → `ok=True`, warning presente.
 9. `test_sentinel_negativo_ok_true` (`ado_id=-6`).
 10. `test_endpoint_run_devuelve_400` — vía test client Flask sobre `/api/agents/run`
-    con mock de `evaluate` → status 400 y body con `error/check/detail` (patrón de test
-    de endpoint: copiar setup de un test existente de `api/agents.py`, p.ej. los de
-    run_brief).
+    con mock de `evaluate` → status 400 y body con `ok=False`, `error`, `check`,
+    `message` y `snapshot_fresh` [C1][F2b] (patrón de test de endpoint: copiar setup de
+    un test existente de `api/agents.py`, p.ej. los de run_brief). Assert adicional
+    KPI-1: NO se creó ninguna `AgentExecution` nueva.
 
 Registrar en `HARNESS_TEST_FILES`.
 
-**Criterio de aceptación:** `pytest tests\test_business_preflight.py -q` → 10 passed.
+**Criterio de aceptación:** `pytest tests\test_business_preflight.py -q` → 12 passed.
 **Runtimes:** paridad automática (endpoint común). Fallback: flag OFF → `/run`
 byte-idéntico. **Trabajo del operador: ninguno** (el 400 le AHORRA el run quemado y le
 dice qué tocar).
@@ -413,12 +499,16 @@ dice qué tocar).
 contexto de primera clase, en vez de esperar que el agente lo pesque entre 30
 comentarios crudos.
 
-**Archivo:** `Stacky Agents/backend/services/ado_context.py` — dentro de `enrich`
-(`:305`), después de construir el bloque `ado-comments`:
+**Archivo [C3]:** `Stacky Agents/backend/services/ado_context.py` — dentro de
+`build_ado_context_blocks` (`:185`), INMEDIATAMENTE después del append del bloque
+`ado-comments` (`:243`), donde `raw_comments` ya está en scope (CERO fetch extra; el
+skip por dedup de `enrich` `:344` sigue funcionando igual porque este bloque tiene otro
+`id`):
 
-- Si `config.STACKY_ADO_BLOCKER_BLOCK_ENABLED` es True Y algún comentario contiene
-  `business_preflight.BLOCKER_MARKER` (importar la constante — fuente única, prohibido
-  duplicar el string): agregar un bloque ADICIONAL:
+- Si `config.STACKY_ADO_BLOCKER_BLOCK_ENABLED` es True Y el texto post-`_html_to_text`
+  (`:131`) de algún comentario contiene `business_preflight.BLOCKER_MARKER` (importar
+  la constante — fuente única, prohibido duplicar el string; import lazy dentro de la
+  función para evitar ciclos): agregar un bloque ADICIONAL:
 
 ```python
 {
@@ -465,26 +555,48 @@ máxima prioridad, degradando el paso de auto-validación del agente a cross-che
    - Flag `STACKY_RUN_DIRECTIVE_ENABLED` OFF, o `agent_type != "functional"`, o
      ticket sin ado_id positivo → retorna `blocks` sin tocar.
    - Llama `business_preflight.evaluate(ticket_id=ticket_id, agent_type=agent_type)`
-     (F2; gracias al caché TTL de F1 y al fail-open, esta segunda evaluación es barata
-     y segura). Nota: si F2 rechazó, el run ni llegó acá; si `evaluate` da `ok=True`
-     con `mode=None` (fail-open de red o preflight OFF), el bloque lo dice.
-   - PREPEND del bloque (primero de la lista, patrón de `_inject_stacky_memory_block`):
+     (F2; los fetches van por el caché TTL I3.2 [C4] y son fail-open → esta segunda
+     evaluación es barata y segura). Nota: si F2 rechazó, el run ni llegó acá.
+   - PREPEND del bloque (primero de la lista, patrón de `_inject_stacky_memory_block`).
+     **Contenido condicional [C6]:** con `mode` en `{"A","B"}` el bloque afirma la
+     validación; con `mode=None` (fail-open de red, o `reason` en
+     `{"preflight_off","not_applicable"}`) el bloque NO miente "Stacky YA validó" —
+     declara `modo: indeterminado` y delega:
 
 ```python
+# mode in {"A","B"}:
 {
     "id": "run-directive",
     "title": "Directiva de ejecución (validada por Stacky server-side)",
     "content": (
-        "modo: A|B|indeterminado\n"
+        "modo: A|B\n"
         "razon: <BusinessPreflightResult.reason o 'prerequisitos validados'>\n"
         "epic_ado_id: <int o n/a>\n"
         "estado_validado: <validated_state o n/a>\n"
+        "snapshot_fresh: <true|false>  # F2b — resultado del refresh F1\n"
         "Instrucción: Stacky YA validó los prerequisitos de tu contrato. Tu paso de\n"
         "validación de modo es un CROSS-CHECK: si tu lectura contradice esta\n"
         "directiva, reportá la discrepancia en el output y continuá según TU contrato."
     ),
 }
+# mode is None:
+{
+    "id": "run-directive",
+    "title": "Directiva de ejecución (validación server-side no disponible)",
+    "content": (
+        "modo: indeterminado\n"
+        "razon: <reason: preflight_off | tracker inaccesible | ...>\n"
+        "snapshot_fresh: <true|false>\n"
+        "Instrucción: Stacky NO pudo validar los prerequisitos esta vez. Aplicá tu\n"
+        "flujo de detección de modo COMPLETO según tu contrato."
+    ),
+}
 ```
+
+   (Valor de `snapshot_fresh` — decisión cerrada: `_inject_run_directive` llama
+   `run_ticket_refresh.refresh_ticket_snapshot(ticket_id)["refreshed"]`. Con caché TTL
+   I3.2 activo es un hit de caché; con TTL 0 es una llamada liviana adicional,
+   fail-open — mismo contrato de F1. Prohibido inventar otra fuente.)
 
 2. `Stacky Agents/backend/Stacky/agents/FunctionalAnalyst.agent.md` — actualizar la
    sección de detección de modo (`:50` y `:118-119`): agregar (SIN borrar el flujo
@@ -493,8 +605,12 @@ máxima prioridad, degradando el paso de auto-validación del agente a cross-che
    propia como cross-check; ante discrepancia, reportala y priorizá la evidencia de los
    bloques (`ado-epic-structured` / `ado-blocker`). Si NO hay bloque `run-directive`,
    aplicá tu flujo de detección actual sin cambios."* (backward compatible: el agente
-   funciona igual sin el bloque). Recordatorio de rutas: el runtime lee
-   `backend/Stacky/agents/` — editar AHÍ (no DeployStackyAgents).
+   funciona igual sin el bloque). **Además [C2]:** en la MISMA edición, unificar la
+   línea `:50` reemplazando la forma corta `` `🚫 BLOQUEANTE` `` por el marcador
+   completo `` `🚫 BLOQUEANTE TÉCNICO` `` (hoy `:50` difiere de `:119`/`:294`; el
+   cambio deja el prompt consistente con el resto de su propio contrato y con
+   `BLOCKER_MARKER`). Recordatorio de rutas: el runtime lee `backend/Stacky/agents/`
+   — editar AHÍ (no DeployStackyAgents).
 
 **Tests primero:** `Stacky Agents/backend/tests/test_run_directive_block.py`
 1. `test_flag_off_identidad`.
@@ -503,7 +619,9 @@ máxima prioridad, degradando el paso de auto-validación del agente a cross-che
    índice 0 con `modo: A` y `epic_ado_id`.
 4. `test_modo_b_incluye_razon`.
 5. `test_fail_open_modo_indeterminado` — `evaluate` ok con mode None → content contiene
-   `indeterminado`.
+   `indeterminado` y NO contiene `"Stacky YA validó"` [C6]; título dice "no disponible".
+5b. `test_directiva_incluye_snapshot_fresh` [F2b] — mock de `refresh_ticket_snapshot`
+   → content contiene `snapshot_fresh: true` / `false` según el mock.
 6. `test_agent_md_consume_directiva` — el texto de
    `backend/Stacky/agents/FunctionalAnalyst.agent.md` contiene `run-directive` y
    `cross-check` (test de sincronía prompt↔contrato, patrón
@@ -511,7 +629,7 @@ máxima prioridad, degradando el paso de auto-validación del agente a cross-che
 
 Registrar en `HARNESS_TEST_FILES`.
 
-**Criterio de aceptación:** `pytest tests\test_run_directive_block.py -q` → 6 passed.
+**Criterio de aceptación:** `pytest tests\test_run_directive_block.py -q` → 7 passed.
 **Runtimes:** paridad automática (`enrich_blocks` común, causa 7). Fallback: flag OFF o
 bloque ausente → el agente usa su flujo actual (explícito en el .agent.md).
 **Trabajo del operador: ninguno.**
@@ -556,8 +674,10 @@ def resolve_agent_md_text(vscode_agent_filename: str) -> str | None:
     (claude_code_cli_runner.py:551-558): Path(config.VSCODE_PROMPTS_DIR)/filename,
     fallback services.stacky_agents.stacky_agents_dir(). No existe → None."""
 
-def enforce(*, vscode_agent_filename: str, blocks: list[dict]) -> None:
-    """Valida post-enrichment. Flag STACKY_REQUIRED_BLOCKS_ENABLED OFF, archivo
+def enforce(*, vscode_agent_filename: str | None, blocks: list[dict]) -> None:
+    """Valida post-enrichment. Flag STACKY_REQUIRED_BLOCKS_ENABLED OFF,
+    vscode_agent_filename None o vacío [C5] (github_copilot puede correr sin
+    agente VS Code: agent_runner.py:95 lo tipa str | None = None), archivo
     ausente, o required vacío → no-op. Si falta un grupo (ningún id del OR está
     en {b.get("id") for b in blocks}) → raise AgentContractError con mensaje:
     'El agente <filename> requiere el bloque <a|b> en el contexto y el
@@ -603,13 +723,15 @@ contrato no bloquea por un timeout, §3.3.) NO tocar otros `.agent.md` en este p
 5. `test_enforce_falta_grupo_levanta` — sin ninguno del primer grupo →
    `AgentContractError` cuyo mensaje contiene el nombre del grupo.
 6. `test_archivo_ausente_noop`.
+6b. `test_filename_none_o_vacio_noop` [C5] — `enforce(vscode_agent_filename=None, ...)`
+   y `""` → no levanta, no lee disco.
 7. `test_functional_agent_md_declara_contrato` — el frontmatter real de
    `backend/Stacky/agents/FunctionalAnalyst.agent.md` parsea a
    `[["ado-epic-structured","ado-blocker","run-directive"],["client-profile"]]`.
 
 Registrar en `HARNESS_TEST_FILES`.
 
-**Criterio de aceptación:** `pytest tests\test_agent_contract.py -q` → 7 passed.
+**Criterio de aceptación:** `pytest tests\test_agent_contract.py -q` → 8 passed.
 **Runtimes:** paridad por construcción (mismo helper en los 3 call sites; test 4/5 son
 del helper, agnósticos del runner). Fallback: flag OFF o clave ausente → cero cambio.
 **Trabajo del operador: ninguno.**
@@ -723,10 +845,10 @@ citando este plan (localizarlos: `grep -rl "STACKY_CONTEXT_DEDUP_ENABLED\|STACKY
 .venv\Scripts\python.exe -m pytest tests\test_context_contract_flags.py tests\test_harness_flags.py tests\test_harness_flags_help.py -q
 ```
 → 0 failed.
-**Runtimes:** dedup corre en `enrich_blocks` (paridad automática); el gate G0.1 corre en
-`agent_runner.py:106-134` (verificar en la implementación que ese camino es común a los
-3 runtimes; si algún runner CLI no pasa por ahí, documentarlo en el commit — NO
-extenderlo en este plan). **Trabajo del operador: ninguno.**
+**Runtimes:** dedup corre en `enrich_blocks` (paridad automática); el gate G0.1 corre
+en `agent_runner.py:103-139`, ANTES del dispatch por runtime (el branch codex/claude
+arranca en `agent_runner.py:220+`) → **común a los 3 runtimes, verificado en HEAD**
+[C9]. **Trabajo del operador: ninguno.**
 
 ---
 
@@ -736,7 +858,7 @@ extenderlo en este plan). **Trabajo del operador: ninguno.**
 |---|---|---|
 | R1 | El 400 de F2 bloquea un lanzamiento legítimo no contemplado (falso positivo). | Predicados SOLO para `functional` en v1; Modo B sin exigencia de estado salvo `blocked_states` explícito en el profile; fail-open total ante red; kill-switch `STACKY_BUSINESS_PREFLIGHT_ENABLED` en la UI. |
 | R2 | El refresh F1 agrega latencia al `/run`. | 1 llamada ADO cacheada por TTL I3.2; fail-open con timeout implícito del client; flag OFF = 0 ms. |
-| R3 | Doble evaluación de `evaluate` (F2 en `/run`, F4 en enrich) duplica fetch de comentarios. | El fetch va por el mismo caché TTL I3.2 cuando `STACKY_ADO_READ_CACHE_TTL_SEC > 0`; con TTL 0 son 2 llamadas livianas — aceptado y documentado. |
+| R3 | Doble evaluación de `evaluate` (F2 en `/run`, F4 en enrich) duplica fetch de comentarios. | [C4] El fetch de comentarios está OBLIGATORIAMENTE envuelto en `ado_read_cache.get_or_fetch(("run_comments", ado_id), ...)` (F2 paso 4, con test 6c); con TTL 0 son 2 llamadas livianas — aceptado y documentado. |
 | R4 | `AgentContractError` (F5) deja runs en `failed` por un gap de enriquecimiento transitorio. | La alternativa `run-directive` en el contrato del functional garantiza que F4 (que no depende de red para emitir el bloque) siempre satisface el grupo; `enforce` es no-op ante errores de parseo propios. |
 | R5 | F6 cambia qué se poda con budget/dedup activos y algún test legacy asertaba lo viejo. | Grep dirigido de tests de budget/dedup en F6 + actualización citando el plan; el cambio solo protege MÁS bloques, nunca poda más. |
 | R6 | Gate G0.1 ON (F7) bloquea en entornos sin ADO_PAT. | El fallo es pre-run, determinista y con mensaje exacto de qué setear; kill-switch en UI; es el comportamiento correcto (ese run iba a fallar después, más caro). |

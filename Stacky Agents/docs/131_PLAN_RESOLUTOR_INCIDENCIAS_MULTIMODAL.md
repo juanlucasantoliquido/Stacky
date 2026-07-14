@@ -1,7 +1,26 @@
 # Plan 131 — Resolutor de Incidencias multimodal: intake (fotos + archivos + texto) → agente unificado → Issue en ADO linkeado a su Épica → nodo con aristas en el grafo documental
 
-**Estado:** PROPUESTO (v1, 2026-07-13)
-**Dependencias:** ninguna dura. Reusa: pipeline brief→épica (Plan 38/41/42/45/52/55, `api/agents.py:564` + `api/tickets.py:6998`), puerto tracker-agnóstico (Plan 70, `services/tracker_provider.py`), grafo documental (Plan 109, `services/doc_graph.py` + `services/doc_indexer.py`), registro de flags del arnés (`services/harness_flags.py`), telemetría (`services/stacky_logger.py`).
+**Estado:** CRITICADO (v2, 2026-07-13) — RECHAZADO en v1 (C1/C2/C4 bloqueantes verificados en código); v2 corrige todos los hallazgos y queda lista para implementar
+
+**v1 → v2 — CHANGELOG (crítica adversarial 2026-07-13):**
+
+- **C1 BLOQUEANTE (fix §4.4 + F5.5):** `TrackerItem.fields={"System.Tags": ...}` hacía que `AdoClient.create_work_item` tomara la rama WS1 (`services/ado_client.py:600-628`) que **IGNORA los parámetros `title`/`description`** → el Issue nacía sin título en ADO (400 garantizado). v2 congela: `System.Title` y `System.Description` duplicados DENTRO de `fields` + test que lo asserta.
+- **C2 BLOQUEANTE (fix F3):** el catálogo de épicas vía `provider.fetch_open_items` devuelve `[]` **SIEMPRE** en ADO: `AdoTrackerProvider.fetch_open_items` es un stub (`services/ado_provider.py:53-64`; `AdoClient` NO tiene `list_work_items`, verificado por grep). v2 agrega `fetch_epics()` duck-typed en el adapter ADO con WIQL dedicado (precedente de método extra-puerto: `mr_url`/`commit_url`, `gitlab_provider.py:179-195`).
+- **C4 BLOQUEANTE (fix F4.5 + F5.4/F5.5b):** `create_epic_from_brief` NO usa el puerto tracker (publica ADO-directo vía `_publish_epic_to_ado`, `api/tickets.py:7031`) → "obtener provider con el mismo helper" apuntaba a un helper INEXISTENTE y "leer id+url como los lee create_epic_from_brief" a un dict que ese código nunca lee. v2 congela `get_tracker_provider(project)` (`services/tracker_provider.py:105`) y la extracción literal de id/url.
+- **C3 IMPORTANTE (fix F4.3):** `ado_id=-2` COLISIONA con el discriminador de identidad del agente DevOps Plan 90 (`api/devops_agent.py:108` y `:350`). v2 usa `ado_id=-8` (mapa de sentinels ocupados incluido).
+- **C5 IMPORTANTE (fix F0):** flag nueva sin entrada en `PLAIN_HELP` deja ROJO el centinela `tests/test_harness_flags_help.py` (exige cobertura 100% del registry). v2 agrega la entrada literal y suma esa suite a los criterios de F0 y F8.
+- **C6 IMPORTANTE (fix F3):** el label de épica que Stacky crea en GitLab es `type::epic` (`_type_label`, `gitlab_provider.py:43-44`), no `epic` → el filtro por igualdad nunca matcheaba. v2 filtra por substring.
+- **C7 IMPORTANTE (fix F5.5c):** quedaba indefinido qué responde publish si `create_item` falla por razón NO-parent (p.ej. `Bug` en proceso Basic de ADO, provider mal configurado, red caída). v2 congela: 502 `tracker_error` + incidente en `status="error"` re-publicable + test.
+- **C8 MENOR (fix F5):** `GET /incident-preview` mutaba estado incondicionalmente; ahora la transición es condicional (`analizando`→`analizada`) e idempotente.
+- **C9 MENOR (fix F1):** `app.py` NO define `MAX_CONTENT_LENGTH` (verificado) y el endpoint leía todo a RAM antes de validar → guard temprano por `Content-Length` (413) + lectura con cap por archivo.
+- **C10 MENOR (fix F2):** el bootstrap del `.agent.md` dependía de un archivo del repo que puede NO existir en deploy frozen (gotcha PyInstaller) → la plantilla vive como constante en `incident_context.py`; el `.md` commiteado es espejo (test de sincronía).
+- **C11 MENOR:** refs corregidas: el preview espejo es `epic_payload_preview` (`api/tickets.py:7061`, no `:6319`) con `_get_run_for_preview` (`:7055`); `confirm is not True` está en `:7020`; el modal en `TicketBoard.tsx:943-947`.
+- **C12 MENOR (fix F3):** normalización del catálogo especificada también para el shape ADO raw (title/state viven en `fields["System.*"]`, no top-level).
+- **C13 MENOR (fix F5.7):** dependencia invertida F5→F6 resuelta: import de `incident_docs` en try/except (módulo aún ausente ⇒ `doc_path=None`) → F5 queda verde sin F6.
+- **C14 IMPORTANTE (fix F4.10):** el run de incidente es one-shot (nadie responde por consola; el modal solo pollea hasta terminal). En `claude_code_cli`, un pool ticket cuyo `ado_id` NO esté en `_ONE_SHOT_ADO_IDS` (`services/claude_code_cli_runner.py:216`) deja el proceso vivo esperando input → run colgado hasta el timeout de 1800s (bug ya sufrido por el Documentador `-7`). v2: agregar `-8` al frozenset + test.
+- **[ADICIÓN ARQUITECTO] (F1b + F7):** reanudación de incidencias en curso: `GET /api/incidents` + `pickResumableIncident()` + banner "Retomar" al abrir el modal — cubre el riesgo zombie/cierre accidental SIN trabajo extra del operador.
+- **[ADICIÓN ARQUITECTO] (§4.5):** trazabilidad run↔doc: `execution_id` en el frontmatter del doc del incidente.
+**Dependencias:** ninguna dura. Reusa: pipeline brief→épica (Plan 38/41/42/45/52/55, `api/agents.py:564` + `api/tickets.py:6999`), puerto tracker-agnóstico (Plan 70, `services/tracker_provider.py`), grafo documental (Plan 109, `services/doc_graph.py` + `services/doc_indexer.py`), registro de flags del arnés (`services/harness_flags.py` + `services/harness_flags_help.py`), telemetría (`services/stacky_logger.py`).
 **Ortogonal a:** Plan 110 (revisor de PRs), Plan 129 (paleta global), Plan 130 (gate de integridad). No comparte archivos nuevos con ninguno; comparte archivos EDITADOS (`api/tickets.py`, `api/agents.py`, `endpoints.ts`, `config.py`, `harness_flags.py`, `App`-adyacentes) → ver guardarraíl §3.9 de staging quirúrgico.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
@@ -76,11 +95,19 @@ catálogo de épicas, client-profile y RAG existentes).
   y corren en pasadas separadas del pipeline de tickets. Para una incidencia, tres
   pasadas son latencia y costo sin valor: el desglose cabe en UNA pasada con un prompt
   unificado. No existe hoy ningún agente tipo `incident` en `backend/agents/__init__.py:12-26`.
-- El puerto tracker ya soporta TODO lo que la publicación necesita, sin tocarlo:
+- El puerto tracker soporta CASI todo lo que la publicación necesita:
   `TrackerItem.parent_id` (`services/tracker_provider.py:38`), attachments nativos en
   ADO (`services/ado_provider.py:128-133`) y en GitLab (uploads + markdown,
   `services/gitlab_provider.py:311-343`), y parent link GitLab con fallback a
   issue-links "relates" (`services/gitlab_provider.py:102-125` + `:271-272`).
+  **DOS excepciones verificadas en código (v2):** (a) `AdoTrackerProvider.fetch_open_items`
+  es un stub que devuelve `[]` siempre (`ado_provider.py:53-64` — `AdoClient` no tiene
+  `list_work_items`; lo real es `fetch_open_work_items(wiql=...)`, `ado_client.py:314`)
+  → el catálogo de épicas ADO necesita el método NUEVO `fetch_epics()` de F3;
+  (b) `AdoClient.create_work_item` con `fields` no-None toma la rama WS1
+  (`ado_client.py:600-628`) que IGNORA `title`/`description` posicionales → §4.4 congela
+  el workaround (title/description duplicados dentro de `fields`). Ninguna de las dos
+  toca el Protocol del puerto (`PORT_METHODS` intacto).
 - El grafo documental (Plan 109/111) indexa `STACKY_AGENTS_ROOT/docs/` recursivo
   (`services/doc_indexer.py:263-270`) y parsea wikilinks y referencias a código
   (`services/doc_graph.py:73-98`) con cache invalidable
@@ -272,18 +299,41 @@ Reglas de parsing (backend):
 | `GET /api/incidents/status` | ninguno (SIEMPRE 200) | — | `{enabled: bool, max_files: 10, max_file_mb: 10, allowed_extensions: [".png", ...]}` | — |
 | `POST /api/incidents` | flag OFF → 404 `{ok:false,error:"feature_disabled"}` | multipart: campo `text` + files repetidos en campo `files` | 201 `{ok:true, incident:{...intake.json}}` | 400 `{ok:false,error:"validation_error",message}` (texto vacío Y sin archivos; ext no permitida; límites) |
 | `GET /api/incidents/<id>` | flag OFF → 404 | — | `{ok:true, incident:{...}}` | 404 `{ok:false,error:"not_found"}` |
+| `GET /api/incidents` [ADICIÓN ARQUITECTO] | flag OFF → 404 | — | `{ok:true, incidents:[...resúmenes del ledger, orden created_at desc]}` | — |
 | `GET /api/incidents/<id>/files/<stored_name>` | flag OFF → 404 | — | el archivo (send_file) | 404 si no existe o si el path resuelto escapa de la carpeta del incidente (anti-traversal con `Path.resolve()` + `is_relative_to`) |
 | `POST /api/agents/run-incident` | flag OFF → 404 | `{incident_id, runtime?, project?, model?, effort?}` | `{execution_id, status:"running"}` | 400 `{ok:false,error:"incident_not_found"}`; 400 si `status` no es `capturada`/`analizada`/`error` |
 | `GET /api/tickets/incident-preview?execution_id=&incident_id=` | flag OFF → 404 | — | `{ok:true, title, html, related_epic:{epic_id,confidence,reason}, publishable:true}` | 200 `{ok:false, error:"incident_not_in_output", publishable:false}` si `_looks_like_incident` falla |
-| `POST /api/tickets/incidents/publish` | flag OFF → 404 | `{incident_id, execution_id, confirm:true, override_epic_id?: int\|null, work_item_type?: "Issue"\|"Bug"}` | 201 `{ok:true, tracker_id, url, epic_id, epic_link_mode:"parent"\|"comment"\|"none", doc_path, warnings:[...]}` | 400 si `confirm is not True` (comparación exacta, espejo `api/tickets.py:7005`); 409 `{ok:false,error:"already_published", tracker_id}` si el incidente ya tiene `tracker_id`; 422 `{ok:false,error:"incident_not_in_output"}` si el guard falla server-side |
+| `POST /api/tickets/incidents/publish` | flag OFF → 404 | `{incident_id, execution_id, confirm:true, override_epic_id?: int\|null, work_item_type?: "Issue"\|"Bug"}` | 201 `{ok:true, tracker_id, url, epic_id, epic_link_mode:"parent"\|"comment"\|"none", doc_path, warnings:[...]}` | 400 si `confirm is not True` (comparación exacta, espejo `api/tickets.py:7020`); 409 `{ok:false,error:"already_published", tracker_id}` si el incidente ya tiene `tracker_id`; 422 `{ok:false,error:"incident_not_in_output"}` si el guard falla server-side; **502 `{ok:false,error:"tracker_error",message}` si el tracker rechaza la creación por razón no-parent (C7, ver F5.5c)** |
 
 - `override_epic_id`: `null` explícito = "publicar SIN épica" (ignora la del agente);
   ausente = usar la del agente; entero = usar ese id.
 - `work_item_type` allowlist `("Issue","Bug")`, default `"Issue"` (Basic process de ADO:
   Epic > Issue; en proyectos Agile el operador puede elegir Bug). En GitLab ambos crean
   issue (el mapeo de tipo→label ya lo hace `gitlab_provider._type_label`).
-- Labels del item: `("incidencia",)` + `fields={"System.Tags": "incidencia; stacky-incident"}`
-  (ADO toma fields; GitLab toma labels — cada provider ignora lo que no le aplica).
+- **Contrato del `TrackerItem` de publish (C1, CONGELADO — copiar tal cual):**
+
+```python
+item = TrackerItem(
+    item_type=work_item_type,          # "Issue" | "Bug" (el adapter ADO mapea via _ADO_TYPE_MAP)
+    title=title,
+    description_html=html,
+    labels=("incidencia",),            # GitLab los usa; ADO los ignora
+    parent_id=str(epic_id) if epic_id is not None else None,
+    fields={
+        # OJO (verificado en HEAD): con fields no-None, AdoClient.create_work_item
+        # toma la rama WS1 (services/ado_client.py:600-628) que IGNORA los parámetros
+        # posicionales title/description → DEBEN duplicarse acá. GitLab ignora fields
+        # por completo (gitlab_provider.create_item no los lee).
+        "System.Title": title,
+        "System.Description": html,
+        "System.Tags": "incidencia; stacky-incident",
+    },
+)
+```
+
+  PROHIBIDO pasar `fields` sin `System.Title`/`System.Description`: en ADO crearía un
+  work item sin título (400 del API). El test F5 caso 6 asserta que el provider fake
+  recibió `fields["System.Title"] == title`.
 
 ### 4.5 Doc del incidente (plantilla LITERAL) y grafo
 
@@ -299,6 +349,7 @@ solo `[a-z0-9-]`, espacios→`-`, colapsar `-`, cap 60 chars.
 ---
 tipo: incidencia
 incident_id: inc_20260713_153000_a1b2c3
+execution_id: 1234        # [ADICIÓN ARQUITECTO] trazabilidad run↔doc (tomar de incident["execution_id"]; si None, omitir la línea)
 tracker_id: 341
 work_item_type: Issue
 epica: 267
@@ -376,6 +427,20 @@ FlagSpec(
 ```
 
 - NO tocar `_CURATED_DEFAULTS_ON` (default OFF). NO agregar a `harness_defaults.env`.
+- `Stacky Agents/backend/services/harness_flags_help.py` — **OBLIGATORIO (C5):** el
+  centinela `tests/test_harness_flags_help.py` exige que `PLAIN_HELP` cubra el 100% del
+  registry (líneas 33-40: registry−help = vacío). Agregar la entrada LITERAL (4 campos
+  `PlainHelp`: `what`/`on_effect`/`off_effect`/`example`, redacción sin jerga — leer la
+  denylist del test antes):
+
+```python
+"STACKY_INCIDENT_RESOLVER_ENABLED": PlainHelp(
+    what="Un botón en Tickets para reportar una incidencia con fotos, archivos y texto, y convertirla en un ticket listo para el desarrollador.",
+    on_effect="Si la activás: aparece el botón 'Resolver incidencia'; el agente arma el análisis completo y, tras tu revisión y confirmación, Stacky publica el ticket con sus adjuntos y lo enlaza a su épica.",
+    off_effect="Si la apagás: el botón desaparece y todo vuelve a como estaba; las incidencias se redactan a mano como siempre.",
+    example="Ves una pantalla rota: sacás la captura, la arrastrás al modal con dos líneas de contexto, y en dos clicks tenés el ticket armado, adjuntado y enlazado en el tracker.",
+),
+```
 - `Stacky Agents/backend/api/incidents.py` — NUEVO blueprint:
 
 ```python
@@ -409,10 +474,13 @@ def incidents_status():
 3. `test_status_responds_enabled_true_when_on` (monkeypatch config attr True).
 4. `test_flagspec_registered` — la key existe en el registro de
    `services.harness_flags` y su spec NO está en `_CURATED_DEFAULTS_ON`.
+5. `test_plain_help_entry` — `PLAIN_HELP["STACKY_INCIDENT_RESOLVER_ENABLED"]` existe y
+   sus 4 campos son no-vacíos (C5).
 
 **Comando:** `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; & ".venv\Scripts\python.exe" -m pytest tests\test_plan131_incident_flag.py -q`
-**Criterio binario:** 4/4 verdes + `tests\test_harness_flags.py` sigue verde
-(`... -m pytest tests\test_harness_flags.py -q`).
+**Criterio binario:** 5/5 verdes + `tests\test_harness_flags.py` Y
+`tests\test_harness_flags_help.py` siguen verdes
+(`... -m pytest tests\test_harness_flags.py tests\test_harness_flags_help.py -q`).
 **Flag:** `STACKY_INCIDENT_RESOLVER_ENABLED` default OFF.
 **Runtimes:** N/A (no toca runtimes). **Operador:** ninguno (opt-in, default off).
 
@@ -438,9 +506,18 @@ def incidents_status():
     `"too_many_files"`, `"total_too_big"`).
   - Escribe archivos + `intake.json` (§4.1) + entrada en ledger. `sha256` con `hashlib`.
 - `Stacky Agents/backend/api/incidents.py` — agregar a F0 las rutas `POST ""`,
-  `GET "/<incident_id>"`, `GET "/<incident_id>/files/<stored_name>"` según §4.4.
-  Multipart: `text = request.form.get("text", "")`,
-  `files = [(f.filename, f.read()) for f in request.files.getlist("files")]`.
+  `GET ""` (lista, [ADICIÓN ARQUITECTO]: devuelve `{ok:true, incidents: list_incidents()}`
+  ordenado por `created_at` desc), `GET "/<incident_id>"`,
+  `GET "/<incident_id>/files/<stored_name>"` según §4.4.
+  Multipart con guards tempranos (C9 — `app.py` NO define `MAX_CONTENT_LENGTH`,
+  verificado, así que el techo lo pone este endpoint):
+  1. ANTES de leer nada: `if request.content_length and request.content_length >
+     MAX_TOTAL_BYTES + 1_048_576: return jsonify({...error:"validation_error",
+     message:"total_too_big"}), 413` (1 MB de margen para el overhead multipart).
+  2. `text = request.form.get("text", "")`.
+  3. Lectura con cap por archivo: `data = f.read(MAX_FILE_BYTES + 1)` — si
+     `len(data) > MAX_FILE_BYTES` → 400 `validation_error` `"file_too_big:<name>"`
+     SIN leer el resto del stream. `files = [(f.filename, data), ...]`.
   `ValueError` del store → 400 `{ok:false, error:"validation_error", message:str(exc)}`.
   Serving: `send_file` SOLO tras verificar
   `resolved.is_relative_to(incidents_root() / incident_id)` (si no → 404).
@@ -463,6 +540,9 @@ def incidents_status():
 4. GET file → 200 con bytes exactos; GET con `stored_name` = `..%5C..%5Cintake.json`
    → 404 (anti-traversal).
 5. GET incident inexistente → 404 not_found.
+6. `GET /api/incidents` → 200 con los resúmenes del ledger (y 404 con flag OFF)
+   [ADICIÓN ARQUITECTO].
+7. POST con header `Content-Length` > 26 MB → 413 sin crear nada (C9).
 
 **Comando:** `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; & ".venv\Scripts\python.exe" -m pytest tests\test_plan131_incident_store.py tests\test_plan131_incident_api.py -q`
 **Criterio binario:** todos verdes.
@@ -522,12 +602,20 @@ class IncidentAgent(BaseAgent):
   (elegir a lo sumo UNA épica; catálogo vacío ⇒ `EPICA: ninguna`; NUNCA inventar ids),
   el contrato HTML de §4.3 copiado verbatim, y la regla anti-narración. Estructura
   espejo de `Developer.agent.md` (leerlo antes de escribir).
-- `Stacky Agents/backend/services/incident_context.py` — NUEVO, incluye
-  `ensure_incident_agent_file() -> Path`: si
-  `stacky_agents_dir() / "IncidentAnalyst.agent.md"` NO existe → copiar desde
-  `Path(__file__).resolve().parents[1] / "agents" / "IncidentAnalyst.agent.md"`;
-  si YA existe → NO tocar (el operador pudo editarlo). Importar `stacky_agents_dir`
-  desde donde lo importa `config.py:136`.
+- `Stacky Agents/backend/services/incident_context.py` — NUEVO, incluye:
+  - `_AGENT_TEMPLATE_MD: str` — constante module-level con el CONTENIDO COMPLETO del
+    `.agent.md` (fuente de verdad única; C10: en deploy frozen/PyInstaller el archivo
+    del repo puede NO existir, la constante viaja siempre dentro del bundle).
+  - `ensure_incident_agent_file() -> Path`: si
+    `stacky_agents_dir() / "IncidentAnalyst.agent.md"` YA existe → NO tocar (el
+    operador pudo editarlo). Si NO existe → intentar copiar desde
+    `Path(__file__).resolve().parents[1] / "agents" / "IncidentAnalyst.agent.md"`;
+    si ese archivo tampoco existe (frozen) → escribir `_AGENT_TEMPLATE_MD`.
+    Importar `stacky_agents_dir` del MISMO módulo del que lo importa `config.py:10`
+    (verificar con `grep stacky_agents_dir backend/runtime_paths.py` antes de escribir
+    el import).
+  - El archivo commiteado `backend/agents/IncidentAnalyst.agent.md` se escribe con el
+    MISMO contenido de `_AGENT_TEMPLATE_MD` (espejo; el test 5 fuerza la sincronía).
 
 **Tests PRIMERO** — `tests/test_plan131_incident_agent.py`:
 1. `agents.get("incident")` devuelve instancia con `type == "incident"` y
@@ -537,10 +625,15 @@ class IncidentAgent(BaseAgent):
    crea el archivo con el contenido del template.
 4. `ensure_incident_agent_file` con archivo preexistente editado → NO lo sobreescribe
    (contenido intacto byte a byte).
-5. El template commiteado contiene los 9 headings de §4.3 (leer el archivo real).
+5. Sincronía C10: el archivo commiteado `backend/agents/IncidentAnalyst.agent.md` es
+   byte-idéntico a `incident_context._AGENT_TEMPLATE_MD`, Y contiene los 9 headings
+   de §4.3.
+6. Fallback frozen (C10): con el archivo del repo inaccesible (monkeypatch de la ruta
+   template → tmp inexistente), `ensure_incident_agent_file` escribe
+   `_AGENT_TEMPLATE_MD` igual.
 
 **Comando:** `... -m pytest tests\test_plan131_incident_agent.py -q`
-**Criterio binario:** 5/5 verdes.
+**Criterio binario:** 6/6 verdes.
 **Flag:** el agente solo es alcanzable vía `run-incident` (F4, gateado); su presencia en
 el registry con flag OFF es inerte (igual que DebugAgent).
 **Runtimes:** el `.agent.md` lo consumen los runtimes CLI (patrón
@@ -553,20 +646,64 @@ el registry con flag OFF es inerte (igual que DebugAgent).
 **Valor:** el agente decide con datos reales (archivos + épicas del tracker), no a ciegas.
 
 **Archivos:**
+- `Stacky Agents/backend/services/ado_provider.py` — **NUEVO método duck-typed (C2;
+  NO tocar el Protocol del puerto ni `PORT_METHODS` — precedente de método
+  extra-puerto: `mr_url`/`commit_url` en `gitlab_provider.py:179-195`):**
+
+```python
+_EPICS_WIQL = (
+    "SELECT [System.Id] FROM WorkItems "
+    "WHERE [System.TeamProject] = @project "
+    "AND [System.WorkItemType] = 'Epic' "
+    "ORDER BY [System.ChangedDate] DESC"
+)
+
+def fetch_epics(self, limit: int = 50) -> list[dict]:
+    """Plan 131 — catálogo de épicas vía WIQL dedicado (fetch_open_items es stub, :53-64).
+
+    Devuelve [{"id": int, "title": str, "state": str}] ya normalizado, excluyendo
+    estados terminales. Nunca lanza distinto de lo que lance el cliente HTTP.
+    """
+    rows = self._client.fetch_open_work_items(wiql=_EPICS_WIQL)
+    out: list[dict] = []
+    for r in rows:
+        f = r.get("fields") or {}
+        state = str(f.get("System.State") or "")
+        if state.strip().lower() in ("closed", "done", "removed"):
+            continue
+        out.append({"id": r.get("id"), "title": str(f.get("System.Title") or ""), "state": state})
+        if len(out) >= limit:
+            break
+    return out
+```
+
+  (El shape de `rows` es el raw de ADO `_batch_get`, `ado_client.py:325-349`: dicts con
+  `id` top-level y `fields={"System.Title", "System.State", ...}` — C12.)
 - `Stacky Agents/backend/services/incident_context.py` — agregar:
   - `_INLINE_MAX_PER_FILE = 8_000`, `_INLINE_MAX_TOTAL = 40_000`.
   - `build_attachments_manifest(incident: dict) -> str` — formato EXACTO §4.2; lee los
     archivos `kind=="text"` con `errors="replace"`; imágenes/binarios solo metadata;
     rutas absolutas con `incidents_root() / incident["id"] / stored_name`.
-  - `fetch_epic_catalog(provider, limit: int = 50) -> list[dict]` — estrategia:
-    `items = provider.fetch_open_items(TrackerQuery(state="open"))`; filtrar
-    `it.get("fields", {}).get("System.WorkItemType") == "Epic"` cuando el dict tenga
-    `fields`; si ninguno tiene `fields` (GitLab), filtrar por
-    `"epic" in [l.lower() for l in it.get("labels", [])]`; si el resultado es vacío o
-    CUALQUIER excepción → devolver `[]` (degradación declarada: el agente dirá
-    `EPICA: ninguna` y el operador puede override en el preview). Normalizar a
-    `{"id": int|str, "title": str, "state": str}` con los keys que existan
-    (`id`/`iid`, `title`, `state`). Cap `limit`.
+  - `fetch_epic_catalog(provider, limit: int = 50) -> list[dict]` — estrategia EXACTA
+    (v2, C2+C6+C12; todo el cuerpo dentro de UN `try/except Exception: return []`):
+    1. `fe = getattr(provider, "fetch_epics", None)`; si `callable(fe)` →
+       `catalog = fe(limit=limit)`; si no-vacío → devolverlo (ya viene normalizado
+       del adapter ADO; camino PRINCIPAL en ADO — `provider.fetch_open_items` allí es
+       stub que devuelve `[]` siempre, `ado_provider.py:53-64`).
+    2. Fallback (GitLab y providers sin `fetch_epics`):
+       `items = provider.fetch_open_items(TrackerQuery(state="open"))`; filtrar en
+       este orden: (a) si el dict tiene `fields` →
+       `it["fields"].get("System.WorkItemType") == "Epic"`; (b) si no →
+       `any("epic" in str(l).lower() for l in it.get("labels", []))` (C6: el label
+       real que Stacky crea en GitLab es `type::epic` vía `_type_label`,
+       `gitlab_provider.py:43-44` — por eso substring, NO igualdad).
+    3. Normalizar cada item a `{"id": int|str, "title": str, "state": str}`:
+       `id = it.get("iid") or it.get("id")`;
+       `title = it.get("title") or (it.get("fields") or {}).get("System.Title") or ""`;
+       `state = it.get("state") or (it.get("fields") or {}).get("System.State") or ""`
+       (C12: en el shape ADO raw, title/state viven bajo `fields`). Cap `limit`.
+    4. Resultado vacío o CUALQUIER excepción → `[]` (degradación declarada: el agente
+       dirá `EPICA: ninguna` y el operador puede override en el preview).
   - `build_epic_catalog_block(catalog: list[dict]) -> str` — formato EXACTO §4.2.
   - `build_incident_prompt(incident: dict, catalog: list[dict]) -> str` — concatena
     §4.2 en orden.
@@ -577,14 +714,23 @@ providers fake, CERO red):
    y la instrucción de degradación de imágenes.
 2. log de 20k chars → truncado a 8k + línea `[TRUNCADO...]`; 6 archivos de texto de 8k
    → inline total ≤ 40k.
-3. `fetch_epic_catalog` con provider fake ADO-style (fields System.WorkItemType) →
-   filtra solo Epics; con provider fake que lanza → `[]`; con lista vacía → `[]`.
+3. `fetch_epic_catalog` con provider fake que EXPONE `fetch_epics` → usa ese camino y
+   NO llama `fetch_open_items` (espía); con provider fake SIN `fetch_epics` estilo
+   GitLab (`labels=["type::epic"]`) → lo incluye (C6 substring); con provider que
+   lanza → `[]`; con todo vacío → `[]`.
 4. `build_epic_catalog_block([])` → contiene `EPICA: ninguna`.
 5. `build_incident_prompt` → contiene el texto del operador verbatim + ambos bloques en
    orden.
+6. `AdoTrackerProvider.fetch_epics` (C2): con
+   `monkeypatch.setattr("services.ado_provider.build_ado_client", lambda project_name=None: FakeAdoClient())`
+   donde el fake devuelve rows raw ADO (`{"id": 267, "fields": {"System.Title": "X",
+   "System.State": "Doing", "System.WorkItemType": "Epic"}}` + uno en "Done") →
+   normaliza a `{"id","title","state"}`, excluye el "Done" y respeta `limit`.
 
 **Comando:** `... -m pytest tests\test_plan131_incident_context.py -q`
-**Criterio binario:** 5/5 verdes.
+**Criterio binario:** 6/6 verdes + `tests\test_plan70_tracker_item_adapter.py` y
+`tests\test_tracker_provider_conformance.py` siguen verdes (el método nuevo es aditivo;
+si alguna tenía fallas preexistentes, re-demostrarlas idénticas).
 **Flag:** módulo puro, solo invocado desde flujo gateado.
 **Runtimes:** el manifest ES el mecanismo de paridad multimodal (§3.4). **Operador:** ninguno.
 
@@ -603,22 +749,38 @@ consola, telemetría, selector adaptativo).
      `incident = incident_store.get_incident(incident_id)` → None ⇒ 400
      `incident_not_found`; `incident["status"]` no en
      `("capturada", "analizada", "error")` ⇒ 400 `invalid_status`.
-  3. Pool ticket: `ado_id=-2`, título `"Incident Pool Ticket"` (espejo del Brief Pool
-     `ado_id=-1`, `api/agents.py:568`).
+  3. Pool ticket: `ado_id=-8`, título `"Incident Pool Ticket"` (espejo del Brief Pool
+     `ado_id=-1`, `api/agents.py:568`, get-or-create en `:708-718`). **PROHIBIDO otro
+     sentinel (C3): el mapa de negativos OCUPADOS es** `-1` brief pool, `-2` agente
+     DevOps (discriminador de identidad, `api/devops_agent.py:108,350`), `-3` doctor
+     secciones, `-4` consola remota, `-5` análisis LLM local, `-6` PR review
+     (`api/pr_review.py:36`), `-7` documenter. `-8` verificado LIBRE en HEAD
+     (re-verificar con `grep -rn "= -8" backend --include=*.py` antes de implementar).
   4. `agent_type="incident"`; `vscode_agent_filename` auto = `"IncidentAnalyst.agent.md"`
      (espejo de `api/agents.py:570-571`), tras llamar
      `incident_context.ensure_incident_agent_file()`.
   5. El contenido que run_brief pasa como brief → acá
-     `build_incident_prompt(incident, fetch_epic_catalog(provider))` (obtener provider
-     con el MISMO helper que usa `create_epic_from_brief` — leerlo en
-     `api/tickets.py:6998+`; si el provider no está configurado → catálogo `[]`, NUNCA
-     500).
+     `build_incident_prompt(incident, catalog)`. **Provider (C4 — `create_epic_from_brief`
+     NO usa el puerto, publica ADO-directo vía `_publish_epic_to_ado`; NO hay helper que
+     espejar ahí):** obtenerlo con la fábrica real
+     `from services.tracker_provider import get_tracker_provider` →
+     `provider = get_tracker_provider(project_name)` (`services/tracker_provider.py:105`),
+     TODO dentro de try/except: cualquier excepción (TrackerConfigError, provider no
+     configurado, etc.) → `catalog = []`, NUNCA 500; si el provider se obtuvo →
+     `catalog = fetch_epic_catalog(provider)`.
   6. SIN validación de `work_item_type`, SIN preflight de intención, y SIN el bloque
      `_AUTOPUBLISH_RUNTIME` (`api/agents.py:595-608`): los 3 runtimes son válidos
      porque acá NADIE autopublica.
   7. `model`/`effort`/`runtime`/`project`: passthrough idéntico a run_brief.
   8. Al lanzar OK: `update_incident(incident_id, status="analizando", execution_id=<id>)`.
   9. Telemetría: `stacky_logger.info("incidents", "incident_analysis_started", ...)`.
+  10. **(C14)** `Stacky Agents/backend/services/claude_code_cli_runner.py` — cambiar
+      `_ONE_SHOT_ADO_IDS = frozenset({-1, -7})` (`:216`) a
+      `frozenset({-1, -7, -8})` con comentario
+      `# -8 = incident pool (Plan 131): análisis one-shot, nadie responde por consola`.
+      Sin esto, en `claude_code_cli` el proceso queda esperando input y el run cuelga
+      hasta el timeout (1800s) — mismo bug que tuvo el Documentador (`-7`, ver
+      comentario `:207-215`).
 
 **Tests PRIMERO** — `tests/test_plan131_run_incident.py` (monkeypatch del
 lanzador/run_agent interno con fake que captura kwargs, patrón de los tests existentes
@@ -632,9 +794,11 @@ de run-brief — buscar `run-brief` en `tests/` y espejar el que exista):
 5. runtime `codex_cli` y `github_copilot` → NO son rechazados (ausencia del guard
    autopublish).
 6. provider roto (fake que lanza al pedir catálogo) → 200 igual (catálogo vacío).
+7. (C14) `-8 in claude_code_cli_runner._ONE_SHOT_ADO_IDS` y `-1`/`-7` siguen adentro
+   (espejo de `tests/test_documenter_autonomy.py:37-41`).
 
 **Comando:** `... -m pytest tests\test_plan131_run_incident.py -q`
-**Criterio binario:** 6/6 verdes.
+**Criterio binario:** 7/7 verdes + `tests\test_documenter_autonomy.py` sigue verde.
 **Flag:** `STACKY_INCIDENT_RESOLVER_ENABLED`.
 **Runtimes:** los 3 lanzan; imágenes según §3.4. **Operador:** 1 click (Analizar).
 
@@ -649,37 +813,62 @@ de run-brief — buscar `run-brief` en `tests/` y espejar el que exista):
   - `_INCIDENT_REQUIRED_SECTIONS` + `def _looks_like_incident(html: str | None) -> bool`
     + `def _parse_related_epic(html: str) -> dict` (reglas EXACTAS §4.3).
   - `@bp.get("/incident-preview")` — query `execution_id` + `incident_id`; obtener el
-    output crudo de la ejecución EXACTAMENTE como lo hace `epic_preview` (leer el
-    endpoint existente `GET /epic-preview`, `api/tickets.py:6319` aprox, y reusar sus
-    helpers: `_extract_epic_html_raw` `api/tickets.py:5873` + la misma fuente de output);
-    aplicar `_looks_like_incident`; OK ⇒ `update_incident(status="analizada")` y
-    devolver §4.4.
+    output crudo de la ejecución EXACTAMENTE como lo hace `epic_payload_preview`
+    (endpoint `GET /epic-preview`, `api/tickets.py:7061` — C11): con `session_scope()`,
+    `run = _get_run_for_preview(execution_id, db=db)` (`api/tickets.py:7055`) →
+    `output = run.output`; reusar `_extract_epic_html_raw` (`api/tickets.py:5873`);
+    aplicar `_looks_like_incident`; OK ⇒ transición CONDICIONAL e idempotente (C8:
+    es un GET — SOLO `if incident["status"] == "analizando":
+    update_incident(incident_id, status="analizada")`; cualquier otro status se deja
+    intacto) y devolver §4.4.
   - `@bp.post("/incidents/publish")` — flujo EXACTO:
     1. Gate flag → 404. `confirm is not True` → 400. Incidente con `tracker_id` → 409.
     2. Re-extraer html + re-validar `_looks_like_incident` (server-side, nunca confiar
        en el front) → si falla, 422.
     3. Resolver épica: `override_epic_id` presente (incluido null) manda; si ausente,
        `_parse_related_epic(html)["epic_id"]`.
-    4. Provider del tracker activo (mismo helper que `create_epic_from_brief`).
-    5. `item = TrackerItem(item_type=work_item_type, title=<h1>, description_html=html,
-       labels=("incidencia",), parent_id=str(epic_id) if epic_id else None,
-       fields={"System.Tags": "incidencia; stacky-incident"})` →
+    4. Provider del tracker activo (C4): `from services.tracker_provider import
+       get_tracker_provider, TrackerItem, TrackerApiError, TrackerError` →
+       `provider = get_tracker_provider(project_name)`. Si ESTO lanza → 502
+       `tracker_error` (paso 5c). NO existe helper de provider en
+       `create_epic_from_brief` (publica ADO-directo vía `_publish_epic_to_ado`) —
+       NO intentar espejarlo.
+    5. Construir `item` EXACTAMENTE con el contrato congelado de §4.4 (C1:
+       `fields` DEBE incluir `System.Title` y `System.Description` duplicados —
+       la rama WS1 de `AdoClient.create_work_item` ignora los posicionales) →
        `created = provider.create_item(item)`; si lanza `TrackerApiError` Y había
        parent_id → reintentar UNA vez sin parent (`epic_link_mode="none"` provisional)
        y luego best-effort `provider.post_comment(str(epic_id), <html con link al issue
        nuevo>)` → si el comment sale, `epic_link_mode="comment"`; si el create con
        parent salió a la primera → `"parent"`; sin épica → `"none"`.
+    5b. Extracción de id/url del `created` (LITERAL — cubre ambos providers: ADO
+       devuelve el raw del work item con `id` top-level; GitLab devuelve
+       `_normalize_issue` con `id`/`iid`/`web_url`, `gitlab_provider.py:62-80`;
+       para GitLab el id operable en la API es el `iid`):
+       `tracker_id = str((created or {}).get("iid") or (created or {}).get("id") or "")`;
+       si `tracker_id == ""` → tratar como fallo del paso 5c.
+       `url = ""`; `try: url = provider.item_url(tracker_id) or "" except Exception: pass`;
+       si `url == ""` → `url = (created or {}).get("web_url") or (created or {}).get("url") or ""`.
+    5c. **Contrato de error terminal (C7):** si el create (o el retry sin parent)
+       falla — `TrackerApiError` no-parent (p.ej. `work_item_type="Bug"` en proceso
+       Basic de ADO, que no tiene Bug), `TrackerError`, `TrackerConfigError` o
+       cualquier excepción — entonces: `update_incident(incident_id, status="error",
+       error=str(exc))` SIN tracker_id (el incidente queda re-publicable), telemetría
+       `incident_publish_failed`, y response 502
+       `{ok:false, error:"tracker_error", message:str(exc)}`. PROHIBIDO escribir el
+       doc F6 o marcar `publicada` en este camino.
     6. Attachments: por CADA archivo del incidente, `att = provider.upload_attachment(
        str(ruta_absoluta), stored_name)` + `provider.link_attachment(str(tracker_id),
        att)` dentro de try/except POR ARCHIVO; fallo → append a `warnings`
        (`"attachment_failed:<name>"`), NUNCA abortar.
-    7. F6: `doc_path = incident_docs.write_incident_doc(incident, title, html, related)`
-       (best-effort, §4.5).
+    7. F6 (C13 — `incident_docs` se crea en la fase SIGUIENTE; este import va
+       protegido para que F5 quede verde sin F6):
+       `try: from services import incident_docs; doc_path =
+       incident_docs.write_incident_doc(incident, title, html, related)
+       except Exception: doc_path = None` (best-effort, §4.5).
     8. `update_incident(incident_id, status="publicada", tracker_id=..., tracker_url=...,
        epic_id=..., doc_path=...)` + telemetría `incident_published`.
     9. Response 201 §4.4.
-  - El id/url del item creado: leer los keys del dict devuelto por `create_item` tal
-    como los lee `create_epic_from_brief` del provider (id + url) — espejarlo.
 
 **Tests PRIMERO** — `tests/test_plan131_incident_preview_publish.py` (FakeProvider
 en-memoria que graba llamadas; CERO red):
@@ -691,7 +880,9 @@ en-memoria que graba llamadas; CERO red):
 4. preview feliz → title del h1 + related_epic parseada + status `analizada`.
 5. publish sin confirm → 400; con confirm string "true" → 400 (exactitud booleana).
 6. publish feliz con épica → FakeProvider recibió TrackerItem con parent_id="267",
-   labels incidencia, fields System.Tags; response `epic_link_mode=="parent"`.
+   labels incidencia, y `fields` conteniendo `System.Tags` **Y
+   `System.Title == title` Y `System.Description == html` (guard C1 de la rama WS1)**;
+   response `epic_link_mode=="parent"`.
 7. publish con FakeProvider que lanza TrackerApiError en create con parent → segundo
    create sin parent + post_comment a la épica → `epic_link_mode=="comment"`.
 8. `override_epic_id=null` → item sin parent, `epic_link_mode=="none"`.
@@ -699,9 +890,14 @@ en-memoria que graba llamadas; CERO red):
    `attachment_failed:...`, publish igual 201.
 10. re-publish del mismo incidente → 409 `already_published`.
 11. flag OFF → 404 en ambos endpoints.
+12. (C7) FakeProvider cuyo `create_item` lanza `TrackerApiError` SIEMPRE (con y sin
+    parent) → response 502 `tracker_error`, incidente en `status=="error"` con
+    `tracker_id is None` (re-publicable), y NO se escribió ningún doc.
+13. (C8) preview por GET dos veces seguidas → misma respuesta; un incidente ya
+    `publicada` NO retrocede a `analizada` por llamar al preview.
 
 **Comando:** `... -m pytest tests\test_plan131_incident_preview_publish.py -q`
-**Criterio binario:** 11/11 verdes.
+**Criterio binario:** 13/13 verdes.
 **Flag:** `STACKY_INCIDENT_RESOLVER_ENABLED`.
 **Runtimes:** publish es backend-puro → idéntico bajo los 3 (KPI-4).
 **Operador:** 1 click (Publicar) + override opcional de épica.
@@ -754,11 +950,19 @@ en-memoria que graba llamadas; CERO red):
   `status.allowed_extensions`/`max_files`/`max_file_mb`);
   `canAnalyze(text: string, files: unknown[]) -> boolean` (texto no vacío O ≥1 archivo);
   `summarizeRelatedEpic(preview: IncidentPreviewDTO) -> string` (ej.
-  `"Épica 267 — confianza 85% — <razón>"` o `"Sin épica relacionada"`).
+  `"Épica 267 — confianza 85% — <razón>"` o `"Sin épica relacionada"`);
+  **[ADICIÓN ARQUITECTO]** `pickResumableIncident(list: IncidentDTO[]) ->
+  IncidentDTO | null` — la MÁS RECIENTE (por `created_at`) con
+  `status ∈ ("analizando", "analizada")` y `execution_id` no-null y sin `tracker_id`;
+  si no hay, `null`.
 - `Stacky Agents/frontend/src/api/endpoints.ts` — agregar export `Incidents`:
-  `status()`, `create(text: string, files: File[])` (con `fetch` + `FormData` directo a
-  `/api/incidents` — el cliente `api.post` existente serializa JSON; usar la MISMA base
-  URL/headers que use el cliente actual, leer `frontend/src/api/client.ts` antes),
+  `status()`, `create(text: string, files: File[])` — LITERAL (verificado: el cliente
+  `api.post` de `client.ts:85-86` fija `Content-Type: application/json`, NO sirve para
+  multipart; `client.ts:65` exporta `apiBase`):
+  `import { apiBase } from "./client";` →
+  `fetch(`${apiBase}/api/incidents`, { method: "POST", body: formData })` SIN header
+  `Content-Type` (el browser pone el boundary) —
+  `list()` (GET `/api/incidents`, [ADICIÓN ARQUITECTO], con `api.get`),
   `get(id)`, `runAnalysis(payload: {incident_id, runtime?, model?, effort?, project?})`
   → POST `/api/agents/run-incident`, `preview(executionId, incidentId)`,
   `publish(payload: {incident_id, execution_id, confirm: true, override_epic_id?,
@@ -768,6 +972,13 @@ en-memoria que graba llamadas; CERO red):
   `POLL_INTERVAL_MS = 2500` / `POLL_TIMEOUT_MS = 5*60*1000`, selector de runtime
   `AgentRuntimeSelector`, selector modelo/effort para claude, botón Stop):
   - Steps: `"intake" | "running" | "preview" | "publishing" | "done" | "error"`.
+  - **[ADICIÓN ARQUITECTO] Reanudación:** al montar, `Incidents.list()` (best-effort,
+    error ⇒ ignorar) + `pickResumableIncident(...)`; si devuelve una incidencia, banner
+    no-modal arriba del intake: `"Tenés una incidencia en curso (<title || id>)"` con
+    botón `Retomar` → setea `incidentId`/`executionId` desde la incidencia y salta a
+    `running` (status `analizando`, re-engancha el polling existente) o directo a
+    `preview` (status `analizada`, llama `Incidents.preview`). Cubre cierre accidental
+    del modal y runs zombie sin trabajo extra del operador.
   - Intake: textarea (texto libre) + input file múltiple + drag&drop (`onDrop` en el
     contenedor) + thumbnails de imágenes (`URL.createObjectURL`) + lista de archivos
     con tamaño + validación `validateFiles` en vivo (errores en rojo, botón Analizar
@@ -792,6 +1003,8 @@ en-memoria que graba llamadas; CERO red):
 1. `validateFiles`: feliz; ext prohibida; >max_files; archivo >max_file_mb.
 2. `canAnalyze`: solo texto OK; solo archivos OK; nada → false.
 3. `summarizeRelatedEpic`: con épica, sin épica, sin confianza.
+4. `pickResumableIncident`: lista vacía → null; elige la más reciente `analizando`;
+   ignora `publicada`/con `tracker_id`/sin `execution_id` [ADICIÓN ARQUITECTO].
 
 **Comandos:**
 `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx vitest run src/incidents/incidentModel.test.ts`
@@ -807,8 +1020,9 @@ brief→épica). **Operador:** 2 clicks.
 **Comandos (todos deben quedar como estaban o verdes):**
 1. `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; & ".venv\Scripts\python.exe" -m pytest tests\test_plan131_incident_flag.py tests\test_plan131_incident_store.py tests\test_plan131_incident_api.py tests\test_plan131_incident_agent.py tests\test_plan131_incident_context.py tests\test_plan131_run_incident.py tests\test_plan131_incident_preview_publish.py tests\test_plan131_incident_docs.py -q`
 2. Suites vecinas de los archivos tocados (por archivo, regla de la casa):
-   `... -m pytest tests\test_harness_flags.py tests\test_plan70_tracker_item_adapter.py tests\test_epic_autopublish_backend.py -q`
-   (si alguna tenía fallas PREEXISTENTES, re-demostrarlas idénticas y declararlas).
+   `... -m pytest tests\test_harness_flags.py tests\test_harness_flags_help.py tests\test_plan70_tracker_item_adapter.py tests\test_tracker_provider_conformance.py tests\test_epic_autopublish_backend.py -q`
+   (incluye la suite de help por C5 y la de conformance por el método nuevo de F3;
+   si alguna tenía fallas PREEXISTENTES, re-demostrarlas idénticas y declararlas).
 3. `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx tsc --noEmit` → 0 errores.
 4. `git status` final: SOLO los archivos del plan staged; WIP ajeno intacto.
 
@@ -821,13 +1035,15 @@ brief→épica). **Operador:** 2 clicks.
 | Riesgo | Mitigación |
 |---|---|
 | El agente devuelve narración en vez del HTML (patrón conocido del BusinessAgent) | Guard `_looks_like_incident` en preview Y publish + regla anti-narración en el prompt + mensaje de reintento en el modal (espejo `EPIC_NOT_IN_OUTPUT_MSG`, `EpicFromBriefModal.tsx:81-84`) |
-| El agente inventa un id de épica que no existe | El catálogo inyectado es la ÚNICA fuente válida (prompt lo prohíbe); en publish, si ADO rechaza el parent → retry sin parent + comment fallback (`epic_link_mode`) — nunca falla la publicación |
+| El agente inventa un id de épica que no existe | El catálogo inyectado es la ÚNICA fuente válida (prompt lo prohíbe); en publish, si ADO rechaza el parent → retry sin parent + comment fallback (`epic_link_mode`) — la publicación nunca falla POR EL LINK; fallos no-parent → 502 `tracker_error` con incidente re-publicable (C7) |
+| ADO crea el work item sin título (rama WS1 de `create_work_item` ignora title/description con `fields` no-None) | Contrato §4.4 congelado: `System.Title`/`System.Description` duplicados dentro de `fields` + test F5.6 que lo asserta (C1) |
 | Runtime sin visión "alucina" el contenido de una imagen | Instrucción explícita de declarar `[PENDIENTE: verificar captura <nombre>]` + el operador VE el preview antes de publicar (HITL) |
 | Archivos maliciosos/gigantes | Allowlist §4.1 + límites duros + sanitización + anti-traversal en serving; sin zip/exe |
-| `fetch_open_items` del provider no trae épicas (WIQL acotado o GitLab free) | `fetch_epic_catalog` degrada a `[]` + override manual del operador en el preview |
+| Catálogo de épicas vacío (en ADO `fetch_open_items` es stub `[]` SIEMPRE — C2; GitLab free sin epics nativos) | Camino principal ADO = `fetch_epics()` WIQL dedicado (F3); GitLab = labels `type::epic` por substring (C6); si igual queda vacío → `[]` declarado + override manual del operador en el preview |
 | Doc del incidente rompe la publicación | Escritura best-effort: excepción → `doc_path:null` + warning; el Issue ya está creado |
 | Deploy frozen sin `docs/` | Fallback a `data_dir()/incident_docs` con warning "fuera del grafo" (declarado) |
 | WIP ajeno en `tickets.py`/`agents.py`/`endpoints.ts` | Guardarraíl §3.9: staging por hunk, prohibido stash/reset, `git status` final |
+| Run de incidente colgado 1800s en `claude_code_cli` (proceso esperando input que nunca llega) | C14: `-8` agregado a `_ONE_SHOT_ADO_IDS` (`claude_code_cli_runner.py:216`) + test F4.7 — precedente: bug real del Documenter `-7` |
 | Colisión de numeración con el loop paralelo | Guardarraíl §3.10: verificar unicidad de `131_*` antes de implementar |
 
 ## 7. Fuera de scope (deliberado)

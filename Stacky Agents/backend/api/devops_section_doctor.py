@@ -62,6 +62,48 @@ SECTION_DOCTORS: dict[str, dict[str, str]] = {
 }
 
 
+def build_doctor_context_blocks(section_id: str, project: str, payload: dict) -> list[dict] | None:
+    """Bloques de contexto del doctor de una sección. None si la sección no existe.
+    MUTA payload agregando yaml_ado/yaml_gitlab para pipeline (comportamiento actual).
+    Compartida por el doctor cloud (Plan 104) y el doctor local (Plan 127)."""
+    spec = SECTION_DOCTORS.get(section_id)
+    if spec is None:
+        return None
+
+    import json
+    # YAML SERVER-SIDE: el frontend NO tiene el YAML renderizado (vive en el estado
+    # local de PipelineYamlPreview.tsx, no se sube al padre). El backend lo renderiza
+    # desde el `spec` con el patron EXACTO de preview_route (api/pipeline_generator.py).
+    # Solo para la seccion pipeline y si el generador esta ON; degrada a null si el
+    # spec no valida.
+    if section_id == "pipeline" and isinstance(payload.get("spec"), dict) and getattr(
+        _config.config, "STACKY_PIPELINE_GENERATOR_ENABLED", False
+    ):
+        try:
+            from services.pipeline_spec import dict_to_spec
+            from services.pipeline_renderers import to_ado_yaml, to_gitlab_yaml
+            _spec_obj = dict_to_spec(payload["spec"])
+            payload["yaml_ado"] = to_ado_yaml(_spec_obj)
+            payload["yaml_gitlab"] = to_gitlab_yaml(_spec_obj)
+        except Exception:
+            payload.setdefault("yaml_ado", None)
+            payload.setdefault("yaml_gitlab", None)
+
+    # `kind` se OMITE del context_block: es seguro porque los consumidores usan
+    # `.get("kind", ...)` con default. El plan 90 SÍ setea kind="raw-conversation"
+    # (devops_agent.py) -- omitirlo no rompe, solo hereda el default.
+    return [{
+        "id": f"doctor-{section_id}",
+        "title": spec["title"],
+        "content": (
+            f"{spec['instruction']}\n\n"
+            f"== CONTEXTO DE LA SECCION ({section_id}) ==\n"
+            f"{json.dumps(payload, ensure_ascii=False, indent=2)}\n"
+        ),
+        "source": {"type": "devops_panel", "section": section_id},
+    }]
+
+
 @bp.post("/<section_id>/doctor")
 def section_doctor_route(section_id: str):
     """Invoca al doctor IA de la seccion. Flag STACKY_DEVOPS_SECTION_DOCTOR_ENABLED."""
@@ -86,38 +128,7 @@ def section_doctor_route(section_id: str):
     if runtime not in ("claude_code_cli", "codex_cli", "github_copilot"):
         return jsonify({"error": "runtime_no_soportado"}), 400
 
-    import json
-    # YAML SERVER-SIDE: el frontend NO tiene el YAML renderizado (vive en el estado
-    # local de PipelineYamlPreview.tsx, no se sube al padre). El backend lo renderiza
-    # desde el `spec` con el patron EXACTO de preview_route (api/pipeline_generator.py).
-    # Solo para la seccion pipeline y si el generador esta ON; degrada a null si el
-    # spec no valida.
-    if section_id == "pipeline" and isinstance(payload.get("spec"), dict) and getattr(
-        _config.config, "STACKY_PIPELINE_GENERATOR_ENABLED", False
-    ):
-        try:
-            from services.pipeline_spec import dict_to_spec
-            from services.pipeline_renderers import to_ado_yaml, to_gitlab_yaml
-            _spec_obj = dict_to_spec(payload["spec"])
-            payload["yaml_ado"] = to_ado_yaml(_spec_obj)
-            payload["yaml_gitlab"] = to_gitlab_yaml(_spec_obj)
-        except Exception:
-            payload.setdefault("yaml_ado", None)
-            payload.setdefault("yaml_gitlab", None)
-
-    # `kind` se OMITE del context_block: es seguro porque los consumidores usan
-    # `.get("kind", ...)` con default. El plan 90 SÍ setea kind="raw-conversation"
-    # (devops_agent.py) -- omitirlo no rompe, solo hereda el default.
-    context_blocks = [{
-        "id": f"doctor-{section_id}",
-        "title": spec["title"],
-        "content": (
-            f"{spec['instruction']}\n\n"
-            f"== CONTEXTO DE LA SECCION ({section_id}) ==\n"
-            f"{json.dumps(payload, ensure_ascii=False, indent=2)}\n"
-        ),
-        "source": {"type": "devops_panel", "section": section_id},
-    }]
+    context_blocks = build_doctor_context_blocks(section_id, project, payload)
 
     # run_agent exige ticket_id: int. Patron EXACTO del plan 90: crear un Ticket
     # ancla ANTES de invocar (devops_agent.py). Usamos ado_id=-3 para distinguir

@@ -6,9 +6,21 @@ BD. Stacky GENERA estos scripts; nunca los ejecuta (human-in-the-loop).
 """
 from __future__ import annotations
 
+import json
+import shutil
+import zipfile
+from datetime import datetime, timezone
+from io import BytesIO
+from os import replace as _os_replace
+from pathlib import Path
 from typing import TypedDict
 
+from runtime_paths import data_dir
 from services import dbcompare_sqlnames as sqlnames
+
+
+class DbCompareRunError(RuntimeError):
+    """Bundle invalido, run no encontrado/no done, o dependencia (Plan 122/123) ausente."""
 
 
 class ScriptPiece(TypedDict):
@@ -532,3 +544,255 @@ def collect_resguardos(
                 seen_tables.add(key)
             out.append(r)
     return out
+
+
+# ---------------------------------------------------------------------------
+# F3: bundle + manifest con emparejamiento 1:1 (KPI-1)
+# ---------------------------------------------------------------------------
+
+_BUNDLES_DIRNAME = "db_compare/bundles"  # data_dir()/db_compare/bundles/<run_id>/
+MANIFEST_VERSION = 1
+
+# Kinds que REQUIEREN resguardo pareado (backup de datos y/o rollback DDL).
+# Nota de diseño (hallazgo de implementacion, no cubierto por la critica v1->v2
+# escrita en el doc): el texto de KPI-1 dice "destructive=true O modifies_table=true",
+# pero piezas puramente aditivas (column_added, fk_added, unique_added, check_added)
+# tienen modifies_table=true en la tabla de F2 y a la vez "sin backup" por diseño
+# explicito de §F2 ("Piezas aditivas puras... sin backup, backup_file: null").
+# El invariante real y consistente es: requiere pareo exactamente el conjunto de
+# kinds que emit_resguardo() efectivamente sabe resguardar (_DATA_BACKUP_KINDS |
+# _RECONSTRUCTIBLE_KINDS) — asi el invariante nunca puede violarse por construccion
+# y las piezas aditivas quedan con backup_file/rollback_file=null tal como pide el plan.
+_REQUIRES_RESGUARDO_KINDS = _DATA_BACKUP_KINDS | _RECONSTRUCTIBLE_KINDS
+
+
+def _bundle_dir(run_id: str) -> Path:
+    return data_dir() / _BUNDLES_DIRNAME / run_id
+
+
+def _render_readme(manifest: dict, warnings: list[str]) -> str:
+    lines = [
+        f"# Bundle de paridad — {manifest['run_id']}",
+        "",
+        f"Origen: {manifest['source_alias']} · Destino: {manifest['target_alias']} · Motor: {manifest['engine']}",
+        "",
+        "🛑 Si CUALQUIER backup falla su verificación de counts: NO ejecutar NINGÚN "
+        "script de paridad ni destructivo. Primero resolver el backup.",
+        "",
+        "Orden: 1) 01_backups/ 2) 02_paridad/ 3) 09_destructivo/ (revisados).",
+        "",
+    ]
+    for w in warnings:
+        lines.append(w)
+        lines.append("")
+    lines.append("## Entradas")
+    lines.append("")
+    for e in manifest["entries"]:
+        lines.append(
+            f"- `{e['file']}` ({e['action']}) — backup: {e['backup_file'] or '—'} · "
+            f"rollback: {e['rollback_file'] or '—'}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _write_bundle_atomic(run_id: str, files: dict[str, str]) -> None:
+    """[FIX C4 de la critica v1->v2] Escribe TODO el bundle bajo <run_id>.tmp/
+    y recien al final hace os.replace() al directorio final. Si algo falla
+    antes de este punto (p.ej. la invariante KPI-1), CERO bytes se tocan en
+    disco: nunca se persiste un bundle parcial ni invalido."""
+    base = data_dir() / _BUNDLES_DIRNAME
+    final_dir = base / run_id
+    tmp_dir = base / f"{run_id}.tmp"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    for relpath, content in files.items():
+        dest = tmp_dir / relpath
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+    if final_dir.exists():
+        shutil.rmtree(final_dir)
+    _os_replace(str(tmp_dir), str(final_dir))
+
+
+def generate_parity_bundle_from_diff(
+    diff: dict,
+    run_id: str,
+    source_schema_obj: dict,
+    target_schema_obj: dict,
+    dialect: str,
+    ts: str | None = None,
+) -> dict:
+    """Version PURA (sin depender de services.dbcompare_runs, Plan 123 F2 —
+    ver NOTA C1 en doc 125 v2 F3) de la materializacion del bundle: recibe el
+    SchemaDiff v1 y ambos snapshots YA CARGADOS por el caller. Construye todo
+    en memoria, valida el invariante KPI-1, y RECIEN ENTONCES escribe en
+    disco de forma atomica (FIX C4)."""
+    if ts is None:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    source_alias = source_schema_obj.get("alias") or diff.get("source", {}).get("alias", "origen")
+    target_alias = target_schema_obj.get("alias") or diff.get("target", {}).get("alias", "destino")
+
+    flat_items = flatten_diff(diff)
+    item_groups = [(item, emit_parity(item, source_schema_obj, target_schema_obj, dialect, ts)) for item in flat_items]
+
+    create_groups = [g for g in item_groups if g[0]["kind"] == "table_added"]
+    drop_groups = [g for g in item_groups if g[0]["kind"] == "table_removed"]
+    other_groups = [g for g in item_groups if g[0]["kind"] not in ("table_added", "table_removed")]
+
+    warnings: list[str] = []
+    if create_groups:
+        reps = [pcs[0] for _, pcs in create_groups]
+        ordered_reps, _cycle, warn = order_table_pieces(reps, source_schema_obj, "create")
+        if warn:
+            warnings.append(warn)
+        by_key = {(pcs[0]["schema"], pcs[0]["name"]): (item, pcs) for item, pcs in create_groups}
+        create_groups = [by_key[(p["schema"], p["name"])] for p in ordered_reps]
+    if drop_groups:
+        reps = [pcs[0] for _, pcs in drop_groups]
+        ordered_reps, _cycle, warn = order_table_pieces(reps, target_schema_obj, "drop")
+        if warn:
+            warnings.append(warn)
+        by_key = {(pcs[0]["schema"], pcs[0]["name"]): (item, pcs) for item, pcs in drop_groups}
+        drop_groups = [by_key[(p["schema"], p["name"])] for p in ordered_reps]
+
+    parity_pieces: list[ScriptPiece] = [p for _, pcs in (create_groups + other_groups + drop_groups) for p in pcs]
+    per_piece_resguardos = [emit_resguardo(p, source_schema_obj, target_schema_obj, dialect, ts) for p in parity_pieces]
+
+    files: dict[str, str] = {}
+
+    # Pasada 1+2: backups de datos, dedupeados por tabla, numerados 001+ en el
+    # orden de la PRIMERA pieza que los necesita.
+    backup_seq_by_table: dict[tuple[str, str], int] = {}
+    for _p, resguardos in zip(parity_pieces, per_piece_resguardos):
+        for r in resguardos:
+            if r["action"] == "table_backup" and (r["schema"], r["name"]) not in backup_seq_by_table:
+                backup_seq_by_table[(r["schema"], r["name"])] = len(backup_seq_by_table) + 1
+
+    backup_file_by_table: dict[tuple[str, str], str] = {}
+    for (schema, name), seq in backup_seq_by_table.items():
+        backup_piece = _render_data_backup(schema, name, dialect, ts)
+        relpath = f"01_backups/{sqlnames.script_filename(seq, 'table_backup', schema, name)}"
+        files[relpath] = render_header(run_id, source_alias, target_alias, dialect) + "\n\n" + backup_piece["sql"] + "\n"
+        backup_file_by_table[(schema, name)] = relpath
+
+    # Pasada 3: rollbacks, uno por pieza que lo necesite, numerados a
+    # continuacion de los backups de datos.
+    rollback_seq = len(backup_seq_by_table)
+    rollback_file_by_index: dict[int, str] = {}
+    for i, (_p, resguardos) in enumerate(zip(parity_pieces, per_piece_resguardos)):
+        for r in resguardos:
+            if r["action"].startswith("rollback_"):
+                rollback_seq += 1
+                relpath = f"01_backups/{sqlnames.script_filename(rollback_seq, r['action'], r['schema'], r['name'])}"
+                files[relpath] = render_header(run_id, source_alias, target_alias, dialect) + "\n\n" + r["sql"] + "\n"
+                rollback_file_by_index[i] = relpath
+
+    # Pasada 4: paridad no destructiva (201+) y destructiva (901+), en el
+    # orden ya resuelto por FK para los grupos de tabla.
+    parity_seq = 200
+    destructive_seq = 900
+    entries: list[dict] = []
+    for i, p in enumerate(parity_pieces):
+        if p["destructive"]:
+            destructive_seq += 1
+            seq, group_dir = destructive_seq, "09_destructivo"
+        else:
+            parity_seq += 1
+            seq, group_dir = parity_seq, "02_paridad"
+        relpath = f"{group_dir}/{sqlnames.script_filename(seq, p['action'], p['schema'], p['name'])}"
+        header = render_header(run_id, source_alias, target_alias, dialect, destructive=p["destructive"])
+        files[relpath] = header + "\n\n" + p["sql"] + "\n"
+
+        backup_file = backup_file_by_table.get((p["schema"], p["name"])) if p["action"] in _DATA_BACKUP_KINDS else None
+        rollback_file = rollback_file_by_index.get(i)
+
+        entries.append(
+            {
+                "seq": seq,
+                "file": relpath,
+                "action": p["action"],
+                "object_type": p["object_type"],
+                "schema": p["schema"],
+                "name": p["name"],
+                "destructive": p["destructive"],
+                "modifies_table": p["modifies_table"],
+                "backup_file": backup_file,
+                "rollback_file": rollback_file,
+            }
+        )
+
+    # Invariante KPI-1: se valida ANTES de escribir nada a disco (FIX C4).
+    for e in entries:
+        if e["action"] in _REQUIRES_RESGUARDO_KINDS and not (e["backup_file"] or e["rollback_file"]):
+            raise DbCompareRunError(
+                f"invariante de pareo violada (Plan 125 KPI-1): {e['schema']}.{e['name']} "
+                f"({e['action']}) requiere backup_file o rollback_file y no tiene ninguno"
+            )
+
+    manifest = {
+        "version": MANIFEST_VERSION,
+        "run_id": run_id,
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "engine": dialect,
+        "source_alias": source_alias,
+        "target_alias": target_alias,
+        "entries": entries,
+        "counts": {
+            "backups": len(backup_file_by_table) + len(rollback_file_by_index),
+            "parity": sum(1 for e in entries if not e["destructive"]),
+            "destructive": sum(1 for e in entries if e["destructive"]),
+        },
+    }
+    files["MANIFEST.json"] = json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True)
+    files["README.md"] = _render_readme(manifest, warnings)
+
+    _write_bundle_atomic(run_id, files)
+    return manifest
+
+
+def load_manifest(run_id: str) -> dict | None:
+    path = _bundle_dir(run_id) / "MANIFEST.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def bundle_zip_bytes(run_id: str) -> bytes:
+    base = _bundle_dir(run_id)
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(base.rglob("*")):
+            if path.is_file():
+                zf.write(path, arcname=str(path.relative_to(base)).replace("\\", "/"))
+    return buf.getvalue()
+
+
+def generate_parity_bundle(run_id: str) -> dict:
+    """Wrapper por run_id real. [NOTA C1 — gap conocido, ver doc 125 v2 F3]
+    Depende de services.dbcompare_runs (Plan 123 F2) para resolver el run y
+    de services.dbcompare_snapshot (Plan 122 F3) para los schema_obj — ninguno
+    de los dos existe todavia en este checkout. NO se simula ni se inventa
+    esa infraestructura ajena: se reporta el gap explicito. La parte PURA y
+    totalmente funcional/testeada es generate_parity_bundle_from_diff()."""
+    try:
+        from services import dbcompare_runs  # type: ignore
+    except ImportError as exc:
+        raise DbCompareRunError(
+            "services.dbcompare_runs (Plan 123 F2) no está disponible en este checkout; "
+            "generate_parity_bundle(run_id) no puede resolver el run real todavía. "
+            "Usar generate_parity_bundle_from_diff(diff, run_id, source_schema_obj, "
+            "target_schema_obj, dialect) con datos ya cargados, o esperar a que el "
+            "Plan 123 esté mergeado (GAP documentado, ver doc 125 v2 §F3/C1)."
+        ) from exc
+    run = dbcompare_runs.get_run(run_id)  # pragma: no cover - depende de codigo ajeno
+    if run is None:
+        raise DbCompareRunError(f"run no encontrado: {run_id}")
+    if run.get("status") != "done":
+        raise DbCompareRunError(f"run no está done (status={run.get('status')}): {run_id}")
+    raise DbCompareRunError(
+        "generate_parity_bundle(run_id) requiere además services.dbcompare_snapshot "
+        "(Plan 122 F3) para resolver los schema_obj de origen/destino; no disponible "
+        "en este checkout (GAP documentado, ver doc 125 v2 §F3/C1). Usar "
+        "generate_parity_bundle_from_diff(...) con snapshots ya cargados."
+    )

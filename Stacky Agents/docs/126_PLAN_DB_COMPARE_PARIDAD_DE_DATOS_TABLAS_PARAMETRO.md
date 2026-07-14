@@ -1,9 +1,23 @@
 # Plan 126 — Comparador de BD entre ambientes (serie 122–126, parte 5/5): paridad de DATOS de tablas de parámetros
 
-**Estado:** PROPUESTO (v1.1, 2026-07-12 — integra prior art de campo: caso real DEV→TEST con RCONTROLES/RMODULOS/RIDIOMA e INSERTs idempotentes con guarda por fila; ver doc 122 §2-bis)
+**Estado:** CRITICADO (v2, 2026-07-14 — juez StackyArchitectaUltraEficientCode, veredicto APROBADO-CON-CAMBIOS; ver CHANGELOG v1.1→v2 debajo)
 **Serie:** 122 (núcleo) → 123 (motor de diff) → 124 (UI inmersiva) → 125 (scripts + backups) → **126 (paridad de datos)**
 **Dependencias:** Planes 122, 123 y 125 IMPLEMENTADOS (snapshots con PK por tabla, runs, bundle con manifest v1). Plan 124 recomendable (la UI de este plan vive en el drill-down y en la tab Scripts).
 **Ortogonal a:** Planes 116/119/120/121.
+
+## CHANGELOG v1.1 → v2 (crítica adversarial, 2026-07-14)
+
+Veredicto: **APROBADO-CON-CAMBIOS** (5 BLOQUEANTES + 2 IMPORTANTES + 1 MENOR, TODOS corregidos in place abajo; 0 hallazgos sin resolver). Fixes aplicados:
+
+- **[FIX C1 — BLOQUEANTE]** F0 no daba de alta las 2 aristas nuevas en `_REQUIRES_MAP_FROZEN` (`tests/test_harness_flags_requires.py`) ni corría ese archivo — `test_requires_map_is_frozen` habría fallado con "Extras" apenas se declararan las FlagSpec (mismo bug que plan 122 pre-fix). Corregido: paso explícito + archivo agregado al comando de F0 y F6.
+- **[FIX C2 — BLOQUEANTE]** `STACKY_DB_COMPARE_DATA_MAX_ROWS` con `default=5000` explícito en un `FlagSpec` `type="int"` colisiona con el ratchet `_CURATED_DEFAULTS_ON` (`default_is_known()` es type-agnostic: `spec.default is not None`). Un escaneo AST de `harness_flags.py` confirma CERO precedentes de flags int/float con `default=` explícito — el idioma real (`STACKY_CONTEXT_BUDGET_TOKENS`) es dejar `default=None` (implícito) y poner el valor sugerido SOLO en `description` + `os.getenv(..., "5000")` de `config.py`. Corregido: se retira `default=5000` del FlagSpec.
+- **[FIX C3 — BLOQUEANTE]** F2 `diff_table_data` era contradictorio: decía "columns desde el snapshot del ORIGEN" y en el mismo bullet "columnas = intersección origen∩destino" sin decir de dónde sale el snapshot del destino ni qué pasa si la tabla no existe en destino o el PK del origen no está en la intersección — ambigüedad que el propio plan promete evitar y que amenaza KPI-1 directamente (RCONTROLES/RMODULOS/RIDIOMA pueden diferir en columnas entre DEV/TEST). Corregido: algoritmo literal de 5 pasos.
+- **[FIX C4 — BLOQUEANTE]** F2 nunca especificaba cómo resolver `engines=None` en producción (a diferencia de `take_snapshot` del 122, que sí documenta el fallback a `dbcompare_engine.open_engine(alias)`). Corregido: línea explícita agregada.
+- **[FIX C5 — BLOQUEANTE]** F5 asumía que F4 suma `data_diff_enabled: bool` a `GET /health`, pero la tabla de endpoints de F4 nunca lo declaraba — implementado literalmente, el picker de F5 queda ciego. Corregido: quinta fila agregada a la tabla de F4 + test nombrado.
+- **[FIX C6 — IMPORTANTE]** F4 conflacía ">20 tablas" y "run no done" bajo la misma etiqueta "400/409" sin decir qué código corresponde a cada causa, y "run no done" no tenía test nombrado. Corregido: códigos explícitos + test agregado.
+- **[FIX C7 — IMPORTANTE]** F0 no decía cómo extender la tupla `"comparador_bd"` que crea el 122 (edición vs creación). Corregido: instrucción literal.
+- **[FIX C8 — MENOR]** F3 no repetía que los nombres de columna en `<cols>` deben pasar por `dbcompare_sqlnames.quote_ident` (se infería por continuidad con 125). Corregido: línea explícita.
+- **[ADICIÓN ARQUITECTO]** `GET /runs/<run_id>/data-candidates` ahora expone `row_count_source`/`row_count_target` (best-effort, `SELECT COUNT(*)` validado igual que cualquier otro SELECT del plan) para que el operador vea el TAMAÑO de cada tabla candidata ANTES de elegir cuáles diffear — ataca directo el riesgo #1 de la tabla de riesgos ("tabla de parámetros resulta enorme") sin agregar ningún paso manual (es un campo informativo más en un endpoint ya opt-in) y sin reinventar nada (reusa el mismo engine/validador de F2).
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Los templates SQL y las reglas de
@@ -87,23 +101,52 @@ FlagSpec(
     key="STACKY_DB_COMPARE_DATA_MAX_ROWS",
     type="int",
     label="Comparador BD: máx. filas por tabla (datos)",
-    description="Cap duro de filas leídas por tabla y por lado en el diff de datos; excedente = resultado truncado.",
+    description="Cap duro de filas leídas por tabla y por lado en el diff de datos; excedente = resultado truncado. Default 5000.",
     group="global",
-    default=5000,
     requires="STACKY_DB_COMPARE_ENABLED",
     min_value=100,
     max_value=200000,
 ),
 ```
+**[FIX C2 — BLOQUEANTE, obligatorio]** NO pasar `default=5000` (ni ningún numérico) al `FlagSpec`
+de `STACKY_DB_COMPARE_DATA_MAX_ROWS`. `default_is_known()` (`services/harness_flags.py:2752`) es
+`spec.default is not None` — type-agnostic, NO solo para bools. `_CURATED_DEFAULTS_ON`
+(`tests/test_harness_flags.py:465`) es, por su propio docstring, "la lista de defaults ON
+curados" para `spec.default=True`; un escaneo AST de `services/harness_flags.py` confirma CERO
+`FlagSpec` int/float con `default=` explícito en todo el archivo. El idioma real para sugerir un
+valor es dejar `default=None` (implícito, se omite el kwarg) y poner el número SOLO en
+`description` (arriba) y en el `os.getenv(..., "5000")` de `config.py` (abajo) — mismo patrón que
+`STACKY_CONTEXT_BUDGET_TOKENS` (`services/harness_flags.py:379-386`, "default 25000" solo en texto).
+Pasar `default=5000` rompería `test_default_known_only_for_curated` con un "Extra (no curada)".
+
 **Config (idiomas de `config.py:964` bool y `config.py:591` int):**
 `STACKY_DB_COMPARE_DATA_DIFF_ENABLED` default `"false"`, `STACKY_DB_COMPARE_DATA_MAX_ROWS` default `"5000"`.
 
-**Tests PRIMERO:** `tests/test_plan126_dbcompare_data_flags.py` — declaración, defaults,
-bounds, `requires` == master EXACTO (ambas), categoría.
+**[FIX C1 — BLOQUEANTE, obligatorio]** En `Stacky Agents/backend/tests/test_harness_flags_requires.py`,
+dentro de `_REQUIRES_MAP_FROZEN` (línea ~120-181), agregar las 2 aristas nuevas junto a las demás
+(estilo `# Plan NNN`):
+```python
+    "STACKY_DB_COMPARE_DATA_DIFF_ENABLED": "STACKY_DB_COMPARE_ENABLED",  # Plan 126
+    "STACKY_DB_COMPARE_DATA_MAX_ROWS": "STACKY_DB_COMPARE_ENABLED",  # Plan 126
+```
+**Por qué es obligatorio:** `test_requires_map_is_frozen` (mismo archivo) hace
+`actual == _REQUIRES_MAP_FROZEN` (igualdad EXACTA sobre TODAS las `FlagSpec` con `requires`
+no-nulo, de cualquier tipo). Sin esto, declarar las 2 `FlagSpec` de arriba rompe ese test
+inmediatamente (mismo bug que Plan 122 pre-fix).
 
-**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan126_dbcompare_data_flags.py tests/test_harness_flags.py -q`
+**[FIX C7 — IMPORTANTE]** En el mapa categoría→keys (`services/harness_flags.py:251`, el 122 crea
+`"comparador_bd": ("STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",)`): EXTENDER esa misma tupla existente
+agregando las 2 keys nuevas al final — `"comparador_bd": ("STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",
+"STACKY_DB_COMPARE_DATA_DIFF_ENABLED", "STACKY_DB_COMPARE_DATA_MAX_ROWS")` — NO crear una entrada
+nueva ni un dict separado.
 
-**Criterio binario:** verdes sin regresión de la suite de flags.
+**Tests PRIMERO:** `tests/test_plan126_dbcompare_data_flags.py` — declaración, defaults (NO
+`default_is_known` para el int; ver FIX C2), bounds, `requires` == master EXACTO (ambas), categoría.
+
+**Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan126_dbcompare_data_flags.py tests/test_harness_flags.py tests/test_harness_flags_requires.py -q`
+
+**Criterio binario:** verdes sin regresión de la suite de flags (incluye `test_requires_map_is_frozen`
+y `test_default_known_only_for_curated`).
 
 ### F1 — Literales SQL y normalización: `services/dbcompare_sqlvalues.py`
 
@@ -167,10 +210,25 @@ def fetch_rows(engine, sql: str) -> list[tuple]
 
 def diff_table_data(source_alias: str, target_alias: str, schema: str, table: str,
                     *, engines: tuple | None = None, max_rows: int | None = None) -> dict
-# engines inyectable para tests (par de Engine sqlite); max_rows default = Config.STACKY_DB_COMPARE_DATA_MAX_ROWS
-# 1) pk_cols y columns desde el ÚLTIMO snapshot del ORIGEN (dbcompare_snapshot.latest_snapshot);
-#    sin PK → DbCompareDataError("la tabla <t> no tiene PK; no comparable")
-#    (columnas = intersección origen∩destino por nombre; las no comunes se listan en "columns_skipped")
+# engines inyectable SOLO para tests (par de Engine sqlite: (source_engine, target_engine)).
+# [FIX C4] Si engines es None → resolver conexiones reales con
+#   dbcompare_engine.open_engine(source_alias) y dbcompare_engine.open_engine(target_alias)
+#   (mismo fallback que dbcompare_snapshot.take_snapshot, Plan 122 §F3).
+# max_rows default = Config.STACKY_DB_COMPARE_DATA_MAX_ROWS
+# [FIX C3] Algoritmo EXACTO de resolución de columnas (reemplaza la redacción ambigua v1):
+#   1) src_snap = dbcompare_snapshot.latest_snapshot(source_alias); sin snapshot →
+#      DbCompareDataError("sin snapshot de <source_alias>; tomá uno primero")
+#   2) tgt_snap = dbcompare_snapshot.latest_snapshot(target_alias); sin snapshot →
+#      DbCompareDataError("sin snapshot de <target_alias>; tomá uno primero")
+#   3) si <schema>.<table> no está en las tablas de src_snap → DbCompareDataError("la tabla
+#      <t> no existe en <source_alias>"); si no está en tgt_snap → DbCompareDataError("la
+#      tabla <t> no existe en <target_alias>; no comparable")
+#   4) pk_cols = PK de la tabla tal cual figura en src_snap (el PK del ORIGEN es la fuente de
+#      verdad); sin PK → DbCompareDataError("la tabla <t> no tiene PK; no comparable")
+#   5) columns = intersección por nombre entre las columnas de src_snap y tgt_snap (orden de
+#      src_snap); columns_skipped = unión menos intersección, ordenada alfabéticamente; si
+#      algún pk_col NO está en columns (el PK del origen no existe en destino) →
+#      DbCompareDataError("el PK de <t> (<pk_cols>) no existe completo en <target_alias>")
 # 2) leer ambos lados (fetch_rows) → dicts {pk_tuple: {col: normalize_value(v)}}
 # 3) DataDiff v1:
 #    {"version":1, "schema":..., "table":..., "pk_cols":[...], "columns":[...], "columns_skipped":[...],
@@ -193,6 +251,10 @@ def run_data_diff(run_id: str, tables: list[dict]) -> None
 - `test_kpi1_exacto` — only_source={3}, only_target={4}, changed={2: NOMBRE 'B'→'B-mod'}.
 - `test_truncated_con_cap` — max_rows=2 → truncated true.
 - `test_sin_pk_error_claro`.
+- `test_columnas_interseccion_origen_destino` **[FIX C3]** — destino con una columna extra que
+  origen no tiene → esa columna en `columns_skipped`, NUNCA en el SELECT del destino.
+- `test_tabla_no_existe_en_destino_error_claro` **[FIX C3]** — tabla presente en snapshot de
+  origen pero ausente en snapshot de destino → `DbCompareDataError` explícito, no crashea.
 - `test_kpi2_validador_siempre` — monkeypatch contador sobre `validate_select_only`; tras un diff, llamadas == SELECTs ejecutados.
 - `test_run_data_diff_thread_y_lock` — cached run + sqlite; polling hasta done; segundo lanzamiento simultáneo → error busy.
 - `test_build_select_golden_por_dialecto` (3 strings literales).
@@ -210,6 +272,9 @@ def run_data_diff(run_id: str, tables: list[dict]) -> None
 **Símbolos exactos (agregar):**
 ```python
 def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str) -> list[ScriptPiece]
+# [FIX C8] Todo identificador (nombre de tabla, schema, columna) en los templates SIEMPRE via
+# dbcompare_sqlnames.qualified/quote_ident (Plan 125 F1) — igual que build_select en F2. Los
+# VALORES (los <lit>) usan sql_literal (Plan 126 F1); nunca se concatenan strings crudos.
 # por tabla con only_source/changed/only_target no vacíos:
 #   1 ScriptPiece INSERT  (action="data_insert",  destructive=False, modifies_table=True):
 #     por fila de only_source, INSERT IDEMPOTENTE con guarda por fila (doctrina items 9/10 de
@@ -256,14 +321,27 @@ def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str)
 **Endpoints exactos:**
 | Método y ruta | Comportamiento |
 |---|---|
-| `GET /runs/<run_id>/data-candidates` | tablas comparables del run: desde el diff+snapshot origen, lista `{schema, table, has_pk, estimated_columns, comparable: bool, reason}`; ordenada, `comparable=false` si sin PK |
-| `POST /runs/<run_id>/data-diff` | body `{tables: [{schema, table}]}` → `run_data_diff`; 202 `{ok}`; >20 tablas o run no done → 400/409; busy → 409 |
+| `GET /runs/<run_id>/data-candidates` | tablas comparables del run: desde el diff+snapshot origen, lista `{schema, table, has_pk, estimated_columns, comparable: bool, reason, row_count_source, row_count_target}` (últimos 2 campos: `int \| null`, **[ADICIÓN ARQUITECTO]** ver abajo); ordenada, `comparable=false` si sin PK |
+| `POST /runs/<run_id>/data-diff` | body `{tables: [{schema, table}]}` → `run_data_diff`; 202 `{ok}`; **[FIX C6]** `len(tables) > 20` → **400**; run del schema-diff no `status=="done"` → **409** (`{"error":"run no está done"}`); ya hay un data-diff `running` para ese `run_id` (busy) → **409** (`{"error":"data-diff ya en curso"}`) |
 | `GET /runs/<run_id>` (existente) | ya devuelve `run["data_diff"]` cuando existe (sin cambios de código: el run file lo contiene) |
 | `POST /runs/<run_id>/scripts` (existente 125) | ahora incluye `03_datos/` si data_diff done (sin firma nueva) |
+| `GET /health` (existente, Plan 122) | **[FIX C5 — BLOQUEANTE]** suma el campo `data_diff_enabled: bool` = `Config.STACKY_DB_COMPARE_DATA_DIFF_ENABLED` al payload JSON existente (sin tocar los campos ya presentes) — F5 lo necesita para mostrar/ocultar el botón `Comparar datos…`; sin este campo el picker queda ciego aunque F4 esté implementado literalmente |
+
+**[ADICIÓN ARQUITECTO]** `row_count_source`/`row_count_target` en `data-candidates`: por cada tabla
+candidata, un `SELECT COUNT(*) FROM <qualified>` best-effort por lado (mismo `engine` que F2, MISMO
+`validate_select_only` — KPI-2 se extiende naturalmente), timeout/error → `null` (nunca rompe el
+endpoint). Objetivo: el operador ve el TAMAÑO real de cada tabla ANTES de tildarla en el picker de
+F5 — ataca directo el riesgo #1 de la tabla de riesgos ("tabla de parámetros resulta enorme") sin
+agregar ningún paso manual (campo informativo en un endpoint ya opt-in) y sin reinventar nada
+(reusa engine + validador de F2). Test nombrado: `test_candidates_incluye_row_counts_best_effort`
+(feliz) + `test_candidates_row_count_null_si_falla` (engine lanza excepción → `null`, no 500).
 
 **Tests PRIMERO:** `tests/test_plan126_dbcompare_data_api.py`
 - `test_flag_hija_off_403_aunque_master_on`, `test_candidates_lista_y_reason_sin_pk`,
-- `test_data_diff_202_polling_done_sqlite`, `test_mas_de_20_tablas_400`, `test_busy_409`.
+- `test_candidates_incluye_row_counts_best_effort`, `test_candidates_row_count_null_si_falla` **[ADICIÓN ARQUITECTO]**,
+- `test_data_diff_202_polling_done_sqlite`, `test_mas_de_20_tablas_400` **[FIX C6]**,
+- `test_run_no_done_409` **[FIX C6]**, `test_busy_409`,
+- `test_health_incluye_data_diff_enabled` **[FIX C5]**.
 
 **Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan126_dbcompare_data_api.py -q`
 
@@ -306,7 +384,7 @@ export function candidateFilter(cands: DataCandidate[], text: string): DataCandi
 **Comandos:**
 ```
 cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan126_dbcompare_data_flags.py tests/test_plan126_dbcompare_sqlvalues.py tests/test_plan126_dbcompare_data_diff.py tests/test_plan126_dbcompare_data_scripts.py tests/test_plan126_dbcompare_data_api.py -q
-cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan122_dbcompare_flags.py tests/test_plan122_dbcompare_registry.py tests/test_plan122_dbcompare_engine.py tests/test_plan122_dbcompare_snapshot.py tests/test_plan122_dbcompare_api.py tests/test_plan123_dbcompare_diff.py tests/test_plan123_dbcompare_runs.py tests/test_plan123_dbcompare_api.py tests/test_plan123_dbcompare_export.py tests/test_plan125_dbcompare_sqlnames.py tests/test_plan125_dbcompare_emitters_sqlserver.py tests/test_plan125_dbcompare_emitters_oracle.py tests/test_plan125_dbcompare_bundle.py tests/test_plan125_dbcompare_toposort.py tests/test_plan125_dbcompare_scripts_api.py tests/test_harness_flags.py tests/test_smoke.py -q
+cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan122_dbcompare_flags.py tests/test_plan122_dbcompare_registry.py tests/test_plan122_dbcompare_engine.py tests/test_plan122_dbcompare_snapshot.py tests/test_plan122_dbcompare_api.py tests/test_plan123_dbcompare_diff.py tests/test_plan123_dbcompare_runs.py tests/test_plan123_dbcompare_api.py tests/test_plan123_dbcompare_export.py tests/test_plan125_dbcompare_sqlnames.py tests/test_plan125_dbcompare_emitters_sqlserver.py tests/test_plan125_dbcompare_emitters_oracle.py tests/test_plan125_dbcompare_bundle.py tests/test_plan125_dbcompare_toposort.py tests/test_plan125_dbcompare_scripts_api.py tests/test_harness_flags.py tests/test_harness_flags_requires.py tests/test_smoke.py -q
 cd "Stacky Agents/frontend" && npx vitest run src/components/dbcompare/ && npx tsc --noEmit
 ```
 **Criterio binario:** TODA la serie verde en un solo pase; smoke y flags sin fallos nuevos; tsc 0.
@@ -350,9 +428,20 @@ cd "Stacky Agents/frontend" && npx vitest run src/components/dbcompare/ && npx t
 
 ## 9. Definición de Hecho (DoD)
 
-- [ ] Ambas flags nuevas UI default OFF con `requires` al MASTER (gotcha 104 respetado).
+- [ ] Ambas flags nuevas UI default OFF con `requires` al MASTER (gotcha 104 respetado) Y registradas
+      en `_REQUIRES_MAP_FROZEN` (`test_requires_map_is_frozen` verde) **[FIX C1]**.
+- [ ] `STACKY_DB_COMPARE_DATA_MAX_ROWS` SIN `default=` explícito en el `FlagSpec` (valor sugerido solo
+      en `description`/`config.py`); `test_default_known_only_for_curated` verde sin extras **[FIX C2]**.
 - [ ] KPI-1/2/3 demostrados por tests nombrados (correctitud sqlite, validador siempre, backup pareado).
+- [ ] `diff_table_data` resuelve columnas por intersección origen∩destino con ambos snapshots leídos
+      explícitamente y errores claros si falta snapshot/tabla/PK-común **[FIX C3]**; `engines=None`
+      resuelve por `dbcompare_engine.open_engine` **[FIX C4]**.
 - [ ] SELECTs con cap +1, orden por PK y templates golden por dialecto; ningún SQL sin validar llega al motor.
+- [ ] `GET /health` incluye `data_diff_enabled`; picker de F5 lo consume **[FIX C5]**.
+- [ ] `POST /runs/<run_id>/data-diff` distingue 400 (>20 tablas) de 409 (run no done / busy) con tests
+      nombrados para cada caso **[FIX C6]**.
 - [ ] Bundle extiende 03_datos/ sin romper el contrato 125 (test backward-compat).
 - [ ] Grid de datos con celdas resaltadas, truncated visible, picker con límite 20 y razones.
-- [ ] Serie COMPLETA verde con los comandos de F6; tsc 0; smoke sin fallos nuevos.
+- [ ] `data-candidates` expone `row_count_source`/`row_count_target` best-effort **[ADICIÓN ARQUITECTO]**.
+- [ ] Serie COMPLETA verde con los comandos de F6 (incluye `test_harness_flags_requires.py`); tsc 0;
+      smoke sin fallos nuevos.

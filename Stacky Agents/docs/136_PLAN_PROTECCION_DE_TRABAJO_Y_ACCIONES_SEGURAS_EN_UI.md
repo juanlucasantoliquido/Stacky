@@ -1,10 +1,45 @@
 # Plan 136 — Protección de trabajo y acciones seguras en la UI: ni pérdida de lo tipeado, ni acciones destructivas accidentales, ni estado stale peligroso
 
-**Estado:** PROPUESTO v1 (2026-07-13)
+**Versión:** v2 (crítica adversarial v1 → v2, 2026-07-14)
+**Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-14; propuesto v1 2026-07-13)
 **Origen:** auditoría UX multi-lente 2026-07-13, pedido del operador de mejorar UX sin romper nada.
 **Alcance:** 100% frontend. Cero backend nuevo, cero endpoint nuevo, cero flag de harness.
 **Flag:** NO lleva flag (decisión justificada en §3.1, precedente plan 132 §3.1).
-**Ortogonal a:** planes 132 (consola a demanda desde ActiveRunsPanel), 134 (awareness de runs) y 135 (cero errores mudos) — ver §3.2, staging quirúrgico obligatorio.
+**Convive con:** planes 132 (consola a demanda), 134 (awareness de runs) y 135 (cero errores
+mudos) — orden de aterrizaje CONGELADO por el 134 v2 §3.3 y ratificado por el 135 v2 §3.2:
+**132 → 134 → 135 → 136 (este plan aterriza ÚLTIMO)**. Ver §3.2: precondición F0-PRE +
+staging quirúrgico obligatorio.
+
+## Changelog v1 → v2 (crítica adversarial 2026-07-14)
+
+- **C1 (IMPORTANTE):** el v1 decía "se escribe EN PARALELO con 134 y 135" y se declaraba
+  solo "ortogonal", contradiciendo el orden de aterrizaje CONGELADO (134 v2 §3.3,
+  "NO renegociar" según 135 v2 §3.2). §3.2 reescrita: este plan se implementa ÚLTIMO,
+  sobre base con 132+134+135 ya aterrizados, con sentinelas binarias de verificación
+  (gate F0-PRE) y regla ":NN orientativo / TEXTO normativo" para las zonas que los
+  hermanos corren.
+- **C2 (IMPORTANTE):** faltaba la regla de pre-flight por fase del 135 v2 §3.2(d).
+  Adoptada calcada: `git status -- "<ruta>"` antes de editar CADA archivo; si tiene WIP
+  ajeno sin commitear → STOP y avisar al operador. Caso real HOY: `EpicFromBriefModal.tsx`
+  (target primario de F1/F2) y `TicketBoard.tsx` traen el WIP del fix ticket-insight.
+- **C3 (IMPORTANTE):** anclas renumeradas a HEAD real (b06c9a2e). El v1 citaba
+  `EpicFromBriefModal.tsx`/`TicketBoard.tsx` contra el working tree CON WIP ajeno
+  (+3/+6 líneas vs HEAD) y `App.tsx`/`endpoints.ts` con números previos al merge de la
+  serie 122-126 (hoy 14 tabs). El bug de F7 fue re-verificado y sigue real
+  (`App.tsx:131` usa `tab` del closure con deps `[]` en :137).
+- **C4 (MENOR):** `ACTIVE_RUN_STATUSES` duplicaba en silencio los 3 estados que el plan
+  134 F0 hardcodea en `fetchActiveRuns` (no exporta constante): se agrega test sentinela
+  (caso 25) + comentario cruzado en el código.
+- **C5 (MENOR):** el smoke F8 paso 4 creaba un webhook real sin limpiarlo: se agrega la
+  limpieza al final del paso.
+- **C6 (MENOR):** typo en F6 Edición 2 y cast innecesario `as Tab` en F7 (enmascaraba
+  errores de tipo futuros): corregidos.
+- **[ADICIÓN ARQUITECTO A1]:** gate F0-PRE mecanizado en §3.2 — comandos binarios
+  copy-pasteables que verifican (a) que 134/135 aterrizaron (sentinelas grep) y (b) que
+  cada archivo a editar está limpio de WIP ajeno, ANTES de tocar nada.
+- **[ADICIÓN ARQUITECTO A2]:** tests sentinela de contrato en F0 — caso 25 de uiGuards
+  (congela `ACTIVE_RUN_STATUSES` = estados que consulta el 134) y caso 8 de briefDraft
+  (congela la clave literal `stacky.epicBriefDraft.v1:`). Totales F0: 25 + 8 + 9 = 42.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Rutas, símbolos y comandos son LITERALES.
@@ -59,26 +94,31 @@ cero fricción en flujos felices) reusando patrones que ya existen en la casa.
 - **KPI-9 (no degradar):** `npx tsc --noEmit` = 0 errores; ningún flujo feliz gana
   clicks, diálogos nativos ni pasos nuevos.
 
-## 2. Por qué ahora / gaps verificados (evidencia en HEAD, re-verificada 2026-07-13)
+## 2. Por qué ahora / gaps verificados (evidencia en HEAD b06c9a2e, renumerada 2026-07-14)
 
-Todas las anclas siguientes fueron re-leídas en el checkout antes de citarse.
+Todas las anclas siguientes fueron re-verificadas contra HEAD (b06c9a2e) en la crítica v2.
+**Regla global (C3): los `:NN` son ORIENTATIVOS; el TEXTO/símbolo citado es NORMATIVO.**
+El working tree de hoy trae WIP ajeno sin commitear que corre `EpicFromBriefModal.tsx`
++3 líneas y `TicketBoard.tsx` +6 líneas respecto de HEAD (ver pre-flight §3.2); y los
+planes 134/135 (que aterrizan ANTES) corren las zonas compartidas. Ante cualquier
+discrepancia: anclar por el texto citado, nunca por el número.
 
 **GAP 1 — Doble-submit en brief→épica (el más caro: duplica épicas EN ADO).**
-- `frontend/src/components/EpicFromBriefModal.tsx:283-333` — `handleGenerate` hace
-  `await Agents.runBrief(...)` (:290) sin setear ningún estado busy antes; `setStep("running")`
-  recién en :322, DESPUÉS de resolver el await → mientras el POST está en vuelo,
+- `frontend/src/components/EpicFromBriefModal.tsx:280-330` — `handleGenerate` hace
+  `await Agents.runBrief(...)` (:287) sin setear ningún estado busy antes; `setStep("running")`
+  recién en :319, DESPUÉS de resolver el await → mientras el POST está en vuelo,
   `step === "brief"`.
-- `:425-426` — `canGenerate = brief.trim().length > 0 && step === "brief" && ...` → sigue
+- `:422-423` — `canGenerate = brief.trim().length > 0 && step === "brief" && ...` → sigue
   true con el POST en vuelo.
-- `:539-550` — el botón solo tiene `disabled={!canGenerate}` → doble click = dos POST =
+- `:536-547` — el botón solo tiene `disabled={!canGenerate}` → doble click = dos POST =
   dos runs.
-- `:336-372` — `handleApproveIntent` sí setea `setStep("running")` (:339) pero
-  `setShowPreflightModal(false)` recién en :361 tras el await → el modal de preflight
+- `:333-369` — `handleApproveIntent` sí setea `setStep("running")` (:336) pero
+  `setShowPreflightModal(false)` recién en :358 tras el await → el modal de preflight
   sigue abierto y clickeable durante el POST.
 - `frontend/src/components/IntentPreflightModal.tsx:158-164` — botón "Arrancar así" SIN
   `disabled`; `:165-173` — "Corregir y arrancar" solo se deshabilita por corrections
   vacío. `onApprove` async disparable N veces.
-- `EpicFromBriefModal.tsx:398-399` — comentario verificado: "Auto-publicación: al
+- `EpicFromBriefModal.tsx:395-396` — comentario verificado: "Auto-publicación: al
   terminar la run, la épica se crea en ADO directamente, sin paso de aprobación manual"
   (la excepción documentada al human-in-the-loop) → el duplicado LLEGA al tracker.
 - Contraste (el patrón ya existe en la casa): `frontend/src/components/AgentLaunchModal.tsx:407`
@@ -86,7 +126,7 @@ Todas las anclas siguientes fueron re-leídas en el checkout antes de citarse.
   `setLoading(true)` al entrar (:218-220) con `finally { setLoading(false) }` (:265-267).
 
 **GAP 2 — Ningún modal protege lo tipeado: el backdrop descarta todo sin aviso.**
-- `EpicFromBriefModal.tsx:421-423` — `handleBackdrop` → `onClose()` incondicional; `:526`
+- `EpicFromBriefModal.tsx:418-420` — `handleBackdrop` → `onClose()` incondicional; `:523`
   — placeholder "Pegá la transcripción, notas de reunión o brief del cliente…": input
   largo NO regenerable.
 - `AgentLaunchModal.tsx:271-273` — backdrop cierra sin guard (pierde `message` :68 y
@@ -106,8 +146,8 @@ Todas las anclas siguientes fueron re-leídas en el checkout antes de citarse.
 - `frontend/src/components/AgentHistoryPage.tsx:147-163` — `handleSave`: `await
   Tickets.deleteAttachments(...)` PRIMERO (:151), `uploadAttachment` después (:152); si
   el upload falla, solo `setError` (:153-155): no hay rollback, el original ya no existe.
-- `frontend/src/api/endpoints.ts:312-316` — `deleteAttachments` es `api.delete` contra
-  `/api/tickets/<id>/attachments`: borrado real en el tracker; `:317-318` —
+- `frontend/src/api/endpoints.ts:322-326` — `deleteAttachments` es `api.delete` contra
+  `/api/tickets/<id>/attachments`: borrado real en el tracker; `:327-328` —
   `uploadAttachment` es `api.post` al mismo path.
 - **Hallazgo verificado (honestidad del grounding):** en HEAD el backend solo expone el
   GET de listado (`backend/api/tickets.py:1032-1056`); las rutas POST/DELETE y el GET
@@ -166,7 +206,7 @@ Todas las anclas siguientes fueron re-leídas en el checkout antes de citarse.
   `codexConsoleExecutionId` del store; `:96` — `if (executionId == null) return null;`
   → tras rehidratar es null y el dock no existe, aunque el run siga corriendo.
 - `:62-67` — el dock YA consulta `Executions.byId(executionId)` con polling 5 s
-  (`endpoints.ts:1221` — `GET /api/executions/<id>`): mecanismo existente para validar
+  (`endpoints.ts:1231` — `GET /api/executions/<id>`): mecanismo existente para validar
   la restauración, cero endpoint nuevo.
 - **Ortogonalidad con plan 132 (declarada):** 132 agrega un botón manual "Ver consola"
   en ActiveRunsPanel (abrir A DEMANDA); esto restaura LO QUE YA ESTABA ABIERTO tras un
@@ -174,16 +214,17 @@ Todas las anclas siguientes fueron re-leídas en el checkout antes de citarse.
   vs. las de acá (workbench.ts, CodexConsoleDock.tsx).
 
 **GAP 7 — Ctrl+/ desincroniza URL de vista por closure stale.**
-- `frontend/src/App.tsx:112` — `isToggleNav`; `:119-124` — el branch usa `setTab`
-  funcional (:121) pero la :122 computa el path con la variable `tab` del closure del
-  `useEffect` registrado con deps `[]` (:128) → congelada en el valor de montaje.
-- `:55` — el tab inicial se deriva del pathname (`tabFromPath`): tras el desync, un F5
-  restaura el tab EQUIVOCADO. `:32-46` — el mapa se llama literalmente `TAB_PATHS`.
+- `frontend/src/App.tsx:121` — `isToggleNav`; `:128-133` — el branch usa `setTab`
+  funcional (:130) pero la :131 computa el path con la variable `tab` del closure del
+  `useEffect` registrado con deps `[]` (:137) → congelada en el valor de montaje.
+- `:57` — el tab inicial se deriva del pathname (`tabFromPath`): tras el desync, un F5
+  restaura el tab EQUIVOCADO. `:33-48` — el mapa se llama literalmente `TAB_PATHS`
+  (hoy 14 tabs, tras el merge de la serie 122-126).
 - **Verificación adicional que cambia el diseño del fix:** `frontend/src/main.tsx:13` —
   la app monta en `<React.StrictMode>`. En dev, StrictMode invoca DOS VECES los updaters
   de estado → PROHIBIDO poner `window.history.pushState` adentro del callback de
   `setTab` (duplicaría entradas de historial). El fix usa un ref espejo + reusa
-  `selectTab` (:66-72), que ya hace pushState con guard `pathname !== path`.
+  `selectTab` (:70-76), que ya hace pushState con guard `pathname !== path`.
 
 ## 3. Principios y guardarraíles (no negociables)
 
@@ -224,22 +265,54 @@ Un flag agregaría trabajo al operador (activarlo) y superficie de test/config s
 mitigar ningún riesgo real — violaría el principio 2. Aplica a las 9 fases; cada una
 lo repite en una línea.
 
-### 3.2 Ortogonalidad con los planes hermanos 134/135 (staging quirúrgico obligatorio)
+### 3.2 Convivencia con los planes hermanos 132/134/135 — orden congelado + gate F0-PRE (C1, C2)
 
-Este plan se escribe EN PARALELO con 134 (awareness de runs) y 135 (cero errores mudos).
-Archivos editados compartidos y cómo NO pisarse a nivel de líneas:
+**Orden de aterrizaje (CONGELADO por el 134 v2 §3.3, ratificado por el 135 v2 §3.2 —
+NO renegociar acá): 132 → 134 → 135 → 136, base `main`. Este plan aterriza ÚLTIMO** y
+se implementa con 132 (hoy en rama `plan-132-consola-ejecuciones`), 134 y 135 YA
+aterrizados en la base de trabajo. Consecuencia normativa: en los archivos compartidos,
+los `:NN` de este doc (tomados sobre HEAD b06c9a2e, PRE-134/135) van a estar corridos al
+implementar — **el TEXTO/símbolo citado es normativo; el `:NN` es orientativo** (regla
+idéntica al 135 v2 §3.2(b)).
+
+**[ADICIÓN ARQUITECTO A1] Gate F0-PRE (obligatorio, ANTES de editar nada; comandos
+binarios, PowerShell desde `Stacky Agents/frontend`):**
+
+1. Verificar que los hermanos aterrizaron (sentinelas de símbolos propios de 134/135):
+```powershell
+Select-String -Path "src/components/ActiveRunsPanel.tsx" -Pattern "useActiveRunsGlobal" -Quiet
+# → True = 134 F0 aterrizó. False = STOP: NO implementar este plan todavía.
+Get-ChildItem -Recurse -Filter "LoadErrorState*" src | Measure-Object | Select-Object -ExpandProperty Count
+# → >= 1 = 135 aterrizó. 0 = STOP: NO implementar este plan todavía.
+```
+2. Pre-flight por archivo (regla calcada del 135 v2 §3.2(d)), repetir EN CADA FASE para
+   cada archivo que la fase edite:
+```powershell
+git status --porcelain -- "src/<ruta-del-archivo>"
+# Salida VACÍA = OK, editar. CUALQUIER línea = WIP ajeno sin commitear:
+# STOP, avisar al operador y NO editar NI commitear ese archivo hasta que ese WIP
+# esté commiteado/publicado. El pathspec separa ARCHIVOS, no hunks del mismo archivo.
+```
+   Caso real conocido HOY (2026-07-14): `EpicFromBriefModal.tsx` (target primario de
+   F1/F2, corrido +3 vs HEAD) y `TicketBoard.tsx` (+6) traen el WIP ajeno del fix
+   ticket-insight sin commitear.
+
+Archivos editados compartidos y cómo NO pisarse (los `:NN` = HEAD b06c9a2e, orientativos):
 
 | Archivo | Compartido con | Zona que toca ESTE plan (única) |
 |---|---|---|
-| `App.tsx` | 134 y 135 | SOLO el efecto keydown (:103-128, branch `isToggleNav`), el import de react (:1) y 2 líneas de ref junto a :55. Nada más. |
-| `SettingsPage.tsx` | 134 | SOLO el componente `WebhooksPanel` (:171-277) + 1 import arriba. |
-| `TopBar.tsx` | 134 | **NO SE TOCA** (decisión GAP 5, opción A: la higiene vive en `workbench.ts` y el scoping en `PMCommandCenter.tsx`). |
-| `EditProjectModal.tsx` | 135 | SOLO la línea del backdrop (:289), `patch`/`patchDocsPath` (:175-190) y 1 estado nuevo tras :43. |
-| `CodexConsoleDock.tsx` | 135 | SOLO 1 import + 1 bloque aditivo (ref + efecto) inmediatamente después de :67. Cero cambios en JSX/render. |
+| `App.tsx` | 134 (F5) y 135 (F4/F6) | SOLO el efecto keydown (hoy :112-137, branch `isToggleNav`), el import de react (:1) y 2 líneas de ref junto a :57. Nada más. Coincide con la zona que 134 §3.3 y 135 §3.2 reservan para el 136 ("efecto keydown + refs"). |
+| `SettingsPage.tsx` | 134 (F6: `SubTab` + `NotificationsPanel` al final) | SOLO el interior del componente `WebhooksPanel` (hoy :171-277) + 1 import arriba. |
+| `TopBar.tsx` | 134 (F4) | **NO SE TOCA** (decisión GAP 5, opción A: la higiene vive en `workbench.ts` y el scoping en `PMCommandCenter.tsx`). Registrado así en 134 §3.3. |
+| `EditProjectModal.tsx` | 135 (F7: `saveWorkflow` + render + CSS) | SOLO la línea del backdrop (hoy :289), `patch`/`patchDocsPath` (hoy :175-190) y 1 estado nuevo tras :43. Registrado así en 135 §3.2. |
+| `CodexConsoleDock.tsx` | 135 (F3: edición fuerte — estado, `handleClose`, botón X, bloque de error) | SOLO 1 import + 1 bloque aditivo (ref + efecto) inmediatamente después del cierre de `executionQ` (hoy :67) y ANTES de `const sendInput = useMutation`. Cero cambios en JSX/render. Registrado LITERAL en 135 §3.2 ("136: 1 import + 1 bloque aditivo... después de :67"). |
 
 Reglas duras: (a) commits SOLO con pathspec explícito de los archivos de cada fase —
-PROHIBIDO `git add -A`/`git add .`; (b) si al implementar una zona listada arriba ya fue
-modificada por 134/135, integrar por edición mínima manual, nunca revert/checkout.
+PROHIBIDO `git add -A`/`git add .`; (b) si al implementar una zona listada arriba el
+contenido no coincide con lo citado, re-anclar por el TEXTO citado (otro plan lo movió)
+e integrar por edición mínima manual — NUNCA revert/checkout de lo del hermano;
+(c) el gate F0-PRE de arriba se corre completo antes de F0 y su paso 2 se repite en
+cada fase.
 
 ### 3.3 Estrategia de tests (fijada; patrón plan 132 §4)
 
@@ -337,7 +410,10 @@ export function nextConfirmState(
   return { state: "idle", fire: true };
 }
 
-/** Estados de ejecución considerados vivos (mismos que usa ActiveRunsPanel). */
+/** Estados de ejecución considerados vivos. CONTRATO CRUZADO (plan 134 F0):
+ *  son exactamente los 3 estados que consulta fetchActiveRuns en
+ *  services/activeRuns.ts (running/preparing/queued). Si el 134 cambia su set,
+ *  este debe cambiar igual — sentinela: caso 25 de uiGuards.test.ts. */
 export const ACTIVE_RUN_STATUSES = ["running", "preparing", "queued"] as const;
 
 /** F6: decisión de restauración de la consola tras un reload.
@@ -499,13 +575,21 @@ export function projectChangeReset(
   (17) "queued"/false → keep; (18) "completed"/false → clear; (19) "failed"/false →
   clear; (20) undefined/false → clear; (21) "running"/true (isError) → clear.
 - `toggleNavTab`: (22) "team" → "tickets"; (23) "tickets" → "team"; (24) "docs" → "team".
+- **[ADICIÓN ARQUITECTO A2]** sentinela de contrato con el plan 134: (25)
+  `expect([...ACTIVE_RUN_STATUSES].sort()).toEqual(["preparing", "queued", "running"])`
+  — congela el set; si el 134 amplía los estados de `fetchActiveRuns`, este test obliga
+  a actualizar ambos lados a la vez (NO importa `services/activeRuns.ts` para mantener
+  el test puro sin dependencias transitivas de endpoints).
 
 `briefDraft.test.ts` — usar un FakeStorage in-memory (`Map` envuelta en `StorageLike`)
 definido en el propio test. Casos: (1) write+read roundtrip; (2) claves distintas por
 proyecto (escribir en "A" no pisa "B"); (3) project null usa la clave `_global`; (4)
 write con string vacío o solo whitespace hace removeItem (read posterior → ""); (5)
 clear → read ""; (6) storage null → read devuelve "" y write/clear no lanzan; (7)
-storage cuyo setItem lanza → write no propaga la excepción.
+storage cuyo setItem lanza → write no propaga la excepción; **[ADICIÓN ARQUITECTO A2]**
+(8) contrato de clave CONGELADO: `briefDraftKey("X") === "stacky.epicBriefDraft.v1:X"`
+y `briefDraftKey(null) === "stacky.epicBriefDraft.v1:_global"` — literal, para que un
+refactor futuro no deje huérfanos los drafts ya escritos.
 
 `workbenchPure.test.ts` — casos: (1) migrate v2 `{agentRuntime:"codex_cli"}` → codex
 preservado + `codexConsoleExecutionId:null` + `codexConsoleMinimized:false`; (2) migrate
@@ -524,7 +608,7 @@ npx vitest run src/services/briefDraft.test.ts
 npx vitest run src/store/workbenchPure.test.ts
 ```
 - **Criterio de aceptación (binario):** los 3 archivos de test corren EN VERDE hoy
-  (24 + 7 + 9 = 40 casos mínimos) y `npx tsc --noEmit` = 0 errores.
+  (25 + 8 + 9 = 42 casos mínimos) y `npx tsc --noEmit` = 0 errores.
 - **Flag:** no aplica (§3.1). **Paridad runtimes:** módulos puros, sin contacto con
   runtimes. **Trabajo del operador: ninguno.**
 
@@ -541,15 +625,15 @@ segundo run (y por lo tanto una segunda épica auto-publicada en ADO).
 ```ts
 import { canGenerateEpic } from "../services/uiGuards";
 ```
-2. Agregar estado, inmediatamente después de `const [isCancelling, setIsCancelling] = useState(false);` (:106):
+2. Agregar estado, inmediatamente después de `const [isCancelling, setIsCancelling] = useState(false);` (:103):
 ```ts
   // Plan 136 F1 — true mientras el POST de runBrief está en vuelo (ambos caminos:
   // handleGenerate y handleApproveIntent). Bloquea el doble-submit que duplicaba
   // runs y épicas auto-publicadas en ADO.
   const [isLaunching, setIsLaunching] = useState(false);
 ```
-3. `handleGenerate` (:283): agregar guard + set + finally. Queda así (el cuerpo del
-   `try` actual :287-327 y el `catch` :328-332 NO cambian):
+3. `handleGenerate` (:280): agregar guard + set + finally. Queda así (el cuerpo del
+   `try` actual :284-324 y el `catch` :325-329 NO cambian):
 ```ts
   async function handleGenerate() {
     if (!brief.trim() || isLaunching) return;
@@ -565,11 +649,11 @@ import { canGenerateEpic } from "../services/uiGuards";
     }
   }
 ```
-4. `handleApproveIntent` (:336): mismo patrón exacto — guard
+4. `handleApproveIntent` (:333): mismo patrón exacto — guard
    `if (!brief.trim() || isLaunching) return;` + `setIsLaunching(true);` como primeras
    líneas, y `finally { setIsLaunching(false); }` cerrando el try/catch actual
-   (:341-371).
-5. `canGenerate` (:425-426): reemplazar por la función pura (misma semántica + launching):
+   (:338-368).
+5. `canGenerate` (:422-423): reemplazar por la función pura (misma semántica + launching):
 ```ts
   const canGenerate = canGenerateEpic({
     step,
@@ -578,13 +662,13 @@ import { canGenerateEpic } from "../services/uiGuards";
     claudeGateBlocked: agentRuntime === "claude_code_cli" && !claudeReady,
   });
 ```
-6. Botón (:539-550): `disabled={!canGenerate}` queda IGUAL (ya cubre isLaunching vía
+6. Botón (:536-547): `disabled={!canGenerate}` queda IGUAL (ya cubre isLaunching vía
    canGenerate). Cambiar SOLO el label:
 ```tsx
               {isLaunching ? "Lanzando…" : "▶ Generar épica con Agente de Negocio"}
 ```
-7. Render del preflight (:662-674): agregar la prop `busy={isLaunching}` al
-   `<IntentPreflightModal ...>` existente. Nada más cambia ahí.
+7. Render del preflight (:659-671; el componente abre en :660): agregar la prop
+   `busy={isLaunching}` al `<IntentPreflightModal ...>` existente. Nada más cambia ahí.
 
 **Archivo 2: `Stacky Agents/frontend/src/components/IntentPreflightModal.tsx`** (3 ediciones)
 
@@ -623,28 +707,28 @@ modal NO SE TOCAN: cierran siempre, exactamente como hoy (principio 3).
 **Edición 1 — `EpicFromBriefModal.tsx`** (mismo archivo que F1; zonas distintas):
 1. Import (sumar a la línea de F1): `import { canGenerateEpic, shouldCloseOnBackdrop } from "../services/uiGuards";`
    y nueva línea `import { clearBriefDraft, readBriefDraft, writeBriefDraft } from "../services/briefDraft";`
-2. Init del brief (:93) — ANTES: `const [brief, setBrief] = useState("");` / DESPUÉS:
+2. Init del brief (:90) — ANTES: `const [brief, setBrief] = useState("");` / DESPUÉS:
 ```ts
   // Plan 136 F2 — re-hidratar el borrador de la sesión (clave por proyecto).
   const [brief, setBrief] = useState<string>(() =>
     readBriefDraft(window.sessionStorage, activeProjectName)
   );
 ```
-   (`activeProjectName` ya está declarado ANTES, en :90 — el orden de hooks lo permite.)
-3. Write-through del borrador — agregar después del `useEffect(() => () => stopPolling(), []);` (:281):
+   (`activeProjectName` ya está declarado ANTES, en :87 — el orden de hooks lo permite.)
+3. Write-through del borrador — agregar después del `useEffect(() => () => stopPolling(), []);` (:278):
 ```ts
   // Plan 136 F2 — borrador write-through: cada tecla persiste; vacío ⇒ se borra la clave.
   useEffect(() => {
     writeBriefDraft(window.sessionStorage, activeProjectName, brief);
   }, [brief, activeProjectName]);
 ```
-4. Limpieza al publicar OK — en `publishEpic` (:400-419), inmediatamente después de
-   `setCreatedAdoId(res.ado_id);` (:411) agregar:
+4. Limpieza al publicar OK — en `publishEpic` (:397-416), inmediatamente después de
+   `setCreatedAdoId(res.ado_id);` (:408) agregar:
    `clearBriefDraft(window.sessionStorage, activeProjectName);`
    Momentos EXACTOS del ciclo de vida del draft: WRITE en cada cambio de `brief`;
    CLEAR solo al publicar OK; en cancelar/cerrar NO se limpia (eso ES la protección);
    la pestaña cerrada lo elimina sola (sessionStorage).
-5. `handleBackdrop` (:421-423) — reemplazar por:
+5. `handleBackdrop` (:418-420) — reemplazar por:
 ```ts
   function handleBackdrop(e: React.MouseEvent) {
     if (e.target !== e.currentTarget) return;
@@ -656,8 +740,9 @@ modal NO SE TOCAN: cierran siempre, exactamente como hoy (principio 3).
   }
 ```
    Nota: aunque el backdrop ignore el click, el brief queda además protegido por el
-   borrador (doble red). El modal se monta condicionalmente en `TicketBoard.tsx:944`,
-   así que al reabrir se re-ejecuta el initializer del paso 2 y re-hidrata.
+   borrador (doble red). El modal se monta condicionalmente en `TicketBoard.tsx:938`
+   (HEAD; el WIP ajeno de hoy lo corre a :944 — pre-flight §3.2), así que al reabrir
+   se re-ejecuta el initializer del paso 2 y re-hidrata.
 
 **Edición 2 — `AgentLaunchModal.tsx` (:271-273)** — reemplazar `handleBackdrop`:
 ```ts
@@ -1034,10 +1119,13 @@ mismo `setCodexConsoleExecution`/estado ya existente.
 **Edición 2 — `Stacky Agents/frontend/src/components/CodexConsoleDock.tsx`**
 (compartido con plan 135 — SOLO 1 import + 1 bloque aditivo; CERO cambios en JSX):
 1. Import: `import { restoreConsoleDecision } from "../services/uiGuards";` (y sumar
-   `useRef` al import de react si no está — verificado: SÍ está, :el archivo ya usa
-   `useRef` para `bodyRef`).
-2. Insertar inmediatamente DESPUÉS de la declaración de `executionQ` (:62-67) y ANTES de
-   `const sendInput = useMutation(...)` (:68):
+   `useRef` al import de react si no está — verificado: SÍ está (:1) y el archivo ya
+   usa `useRef` para `bodyRef` (:57)).
+2. Insertar inmediatamente DESPUÉS de la declaración de `executionQ` (hoy :62-67) y ANTES
+   de `const sendInput = useMutation(...)` (hoy :68). OJO: el 135 F3 hace edición fuerte
+   de este archivo ANTES que nosotros (orden §3.2) — los números van a correr; el ancla
+   normativa es el PAR de símbolos `executionQ`→`sendInput`, exactamente como quedó
+   registrado en el contrato del 135 v2 §3.2:
 ```ts
   // Plan 136 F6 — validación de la consola RESTAURADA tras un reload.
   // Determinismo del origen: en el PRIMER render tras montar (el dock se monta
@@ -1065,7 +1153,7 @@ mismo `setCodexConsoleExecution`/estado ya existente.
    Notas de corrección verificadas: (a) los hooks corren aunque el dock devuelva null
    después (:96 `if (executionId == null) return null;` está DESPUÉS de los hooks); (b)
    `executionQ` ya existe con `enabled: executionId != null` y usa `Executions.byId`
-   (`endpoints.ts:1221`, `GET /api/executions/<id>`) — cero endpoint/fetch nuevo; (c)
+   (`endpoints.ts:1231`, `GET /api/executions/<id>`) — cero endpoint/fetch nuevo; (c)
    error de red o 404 ⇒ `isError` ⇒ decisión "clear" (no se deja un dock zombie); (d)
    StrictMode (main.tsx:13) re-monta en dev: la re-validación es idempotente.
 
@@ -1101,7 +1189,7 @@ SOLO estas 3 zonas):
 
 1. Import (:1) — ANTES: `import { useEffect, useState } from "react";` / DESPUÉS:
    `import { useEffect, useRef, useState } from "react";`
-2. Ref espejo — inmediatamente después de la línea :55
+2. Ref espejo — inmediatamente después de la línea :57
    (`const [tab, setTab] = useState<Tab>(...)`):
 ```ts
   // Plan 136 F7 — espejo del tab para handlers registrados con deps [] (el
@@ -1109,7 +1197,7 @@ SOLO estas 3 zonas):
   const tabRef = useRef(tab);
   useEffect(() => { tabRef.current = tab; }, [tab]);
 ```
-3. Branch `isToggleNav` (:119-124) — reemplazar por:
+3. Branch `isToggleNav` (:128-133) — reemplazar por:
 ```ts
       } else if (isToggleNav) {
         ev.preventDefault();
@@ -1117,20 +1205,22 @@ SOLO estas 3 zonas):
         // hace pushState con guard de pathname. PROHIBIDO meter pushState dentro
         // del updater de setTab: la app monta en <React.StrictMode> (main.tsx:13)
         // y en dev los updaters se invocan DOS veces (duplicaría el historial).
-        selectTab(toggleNavTab(tabRef.current) as Tab);
+        selectTab(toggleNavTab(tabRef.current));
       }
 ```
+   (Sin cast `as Tab` — C6: `toggleNavTab` retorna `"team" | "tickets"`, subconjunto de
+   `Tab`; el cast enmascararía errores de tipo futuros.)
 4. Import de la función pura: `import { toggleNavTab } from "./services/uiGuards";`
 
 Justificación del desvío respecto del fix "pushState adentro del setTab funcional"
 considerado en la auditoría: es incorrecto bajo StrictMode (side effect en updater,
-verificado main.tsx:13); `selectTab` (:66-72) ya existe, no lee estado (solo `setTab`
-estable y la constante `TAB_PATHS` :32-46), así que capturarlo en el closure del efecto
+verificado main.tsx:13); `selectTab` (:70-76) ya existe, no lee estado (solo `setTab`
+estable y la constante `TAB_PATHS` :33-48), así que capturarlo en el closure del efecto
 deps [] es seguro; y su guard `window.location.pathname !== path` evita entradas de
-historial duplicadas. El mapa se llama literalmente `TAB_PATHS` (verificado :32).
+historial duplicadas. El mapa se llama literalmente `TAB_PATHS` (verificado :33).
 
-Comportamiento intacto verificado: popstate (:97-101) sigue re-derivando el tab; el
-fallback de tabs ocultos (:132-139) sigue usando `selectTab`; `tabFromPath` (:48-52)
+Comportamiento intacto verificado: popstate (:106-110) sigue re-derivando el tab; el
+fallback de tabs ocultos (:141-149) sigue usando `selectTab`; `tabFromPath` (:50-54)
 hace que un F5 posterior restaure el tab CORRECTO — que es el bug reportado.
 
 - **Tests:** F0 casos 22-24 (`toggleNavTab`, puros, verdes hoy).
@@ -1170,6 +1260,8 @@ protecciones funcionan y que ningún flujo feliz cambió.
 4. **[KPI-4]** Settings → Webhooks: click en "Desactivar" → el botón cambia a
    "⚠ Confirmar" y NO borra; esperar >4 s → vuelve a "Desactivar"; dos clicks seguidos
    → desactiva. Doble click en "Crear" con URL válida → se crea UN solo webhook.
+   Limpieza (C5): al terminar, desactivar el webhook de prueba creado (dos clicks —
+   ya con el two-step) para no dejar basura en la config del operador.
 5. **[KPI-6]** Seleccionar un ticket, abrir el tab PM, cambiar de proyecto en el TopBar
    → el ticket queda des-seleccionado (sin bloques) y el PM muestra datos del proyecto
    nuevo (o vacío), nunca los del anterior.
@@ -1202,7 +1294,8 @@ por el componente existente y esta fase no la toca.
 
 | Riesgo | Mitigación |
 |---|---|
-| Colisión de líneas con planes 134/135 en App.tsx / SettingsPage.tsx / EditProjectModal.tsx / CodexConsoleDock.tsx | Zonas disjuntas declaradas en §3.2; TopBar.tsx directamente NO se toca; commits con pathspec explícito por fase; si la zona ya cambió, integración por edición mínima manual (nunca revert). |
+| Colisión de líneas con planes 134/135 en App.tsx / SettingsPage.tsx / EditProjectModal.tsx / CodexConsoleDock.tsx | Zonas disjuntas declaradas en §3.2 y registradas en 134 §3.3 / 135 §3.2; este plan aterriza ÚLTIMO (orden congelado, gate F0-PRE paso 1); TopBar.tsx directamente NO se toca; commits con pathspec explícito por fase; re-anclaje por TEXTO (los :NN son orientativos); integración por edición mínima manual (nunca revert). |
+| Commitear WIP ajeno mezclado en un archivo editado (caso real hoy: `EpicFromBriefModal.tsx`, `TicketBoard.tsx` con el fix ticket-insight sin commitear) | Pre-flight por fase (gate F0-PRE paso 2, calcado del 135 v2 §3.2(d)): `git status --porcelain -- "<ruta>"` antes de editar; si hay WIP ajeno → STOP y avisar al operador. El pathspec separa archivos, NO hunks. |
 | `isLaunching` se queda trabado en true por una excepción | Imposible por construcción: `finally { setIsLaunching(false) }` en ambos handlers (F1, criterio binario del diff). |
 | El backdrop "muerto" confunde al operador | El gesto explícito (✕ / Cancelar) sigue funcionando SIEMPRE y es el camino visible; la regla solo ignora el gesto ambiguo. Sin diálogos nuevos (principio 5). |
 | Draft del brief con datos sensibles | El brief es contenido de negocio (no credenciales), va a `sessionStorage` (muere con la pestaña, no viaja a ningún lado) y se limpia al publicar OK. |
@@ -1212,7 +1305,7 @@ por el componente existente y esta fase no la toca.
 | StrictMode double-render re-valida la consola o duplica pushState | F6: validación idempotente (segunda pasada decide lo mismo); F7: PROHIBIDO pushState en updater + guard de pathname en `selectTab` (documentado en el código). |
 | `pm.*` scoping rompe invalidaciones existentes | Las invalidaciones usan prefijo y react-query hace partial matching: verificado que `["pm.risks"]` matchea `["pm.risks", proyecto, ...]`. Solo cambian 2 keys. |
 | AgentHistoryPage / FileManagerModal son huérfanos (¿trabajo muerto?) | Disclosed en §2: el blindaje es ~30 líneas, evita una pérdida de datos garantizada el día que se monten, y NO agrega rutas backend (fuera de scope). |
-| Tests de componente no ejecutables hoy | Gap preexistente documentado (§3.3); el gate ejecutable son los 3 archivos de tests puros (40 casos) + tsc + smoke F8. |
+| Tests de componente no ejecutables hoy | Gap preexistente documentado (§3.3); el gate ejecutable son los 3 archivos de tests puros (42 casos) + tsc + smoke F8. |
 
 ## 7. Fuera de scope (prohibido en este plan)
 
@@ -1249,6 +1342,8 @@ por el componente existente y esta fase no la toca.
 
 ## 9. Orden de implementación
 
+0. **F0-PRE** — gate de precondición (§3.2): sentinelas de aterrizaje de 134/135 +
+   pre-flight de WIP ajeno por archivo. Si algo da STOP, NO seguir.
 1. **F0** — módulos puros + 3 archivos de tests (verdes antes de seguir).
 2. **F1** — anti doble-submit (el gap más caro primero).
 3. **F2** — backdrops + draft del brief (depende de F1 en los 2 archivos compartidos).
@@ -1264,8 +1359,10 @@ mergearon cambios en un archivo compartido, integrar a mano la zona propia.
 
 ## 10. Definición de Hecho (DoD global)
 
+- [ ] F0-PRE corrido y en verde: sentinelas de 134/135 presentes y cero WIP ajeno en
+  los archivos editados (o STOP reportado al operador).
 - [ ] Los 6 archivos nuevos de F0 existen y `npx vitest run` de los 3 tests puros está
-  VERDE (40 casos mínimos).
+  VERDE (42 casos mínimos, incl. sentinelas A2: caso 25 uiGuards + caso 8 briefDraft).
 - [ ] KPI-1: guard `|| isLaunching` + `finally` en ambos handlers; `busy` cableado al
   preflight; smoke paso 1 con 1 solo POST.
 - [ ] KPI-2: los 6 backdrops (EpicFromBrief, AgentLaunch, EditProject, AgentConfig,

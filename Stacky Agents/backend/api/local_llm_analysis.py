@@ -425,3 +425,101 @@ def generate_insight_route(execution_id: int):
     if err == "insight_excluded":
         return jsonify(result), 409
     return jsonify(result), 502
+
+
+@bp.post("/egress-sentinel/scan")
+def egress_sentinel_scan_route():
+    """Plan 121 — Escaneo on-demand pre-flight: "escaneá esto ANTES de mandarlo".
+
+    Ruta: POST /api/llm/egress-sentinel/scan. Body JSON {"text": str, "kind": str?}.
+    404 si la flag está OFF | 400 sin texto | 502 si el modelo local falla.
+    NO persiste nada: el texto NO entra a la DB.
+    """
+    if not getattr(_config.config, "STACKY_EGRESS_SENTINEL_ENABLED", False):
+        return jsonify({"error": "egress_sentinel_disabled"}), 404
+    body = request.get_json(silent=True) or {}
+    text = body.get("text")
+    if not text or not str(text).strip():
+        return jsonify({"error": "text_required"}), 400
+    kind = body.get("kind") or "manual"
+
+    from services.egress_policies import detect_classes
+    from services.egress_sentinel import build_scan_prompt, parse_scan_response, truncate_middle
+
+    deterministic = detect_classes(text)
+    max_chars = getattr(_config.config, "STACKY_EGRESS_SENTINEL_MAX_CHARS", 24000)
+    truncado = truncate_middle(text, max_chars)
+    system, user = build_scan_prompt(truncado, kind=kind)
+
+    from copilot_bridge import invoke_local_llm  # import lazy (patrón del repo)
+
+    try:
+        response = invoke_local_llm(
+            agent_type="egress_sentinel",
+            system=system,
+            user=user,
+            on_log=lambda level, msg: None,
+            execution_id=None,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+    findings = parse_scan_response(response.text)
+    return jsonify({
+        "status": "findings" if findings else "clean",
+        "findings": findings,
+        "deterministic_classes": sorted(deterministic),
+    })
+
+
+@bp.get("/egress-sentinel/findings")
+def egress_sentinel_findings_route():
+    """Plan 121 — Últimos hallazgos del centinela de egreso (background + on-demand).
+
+    Ruta: GET /api/llm/egress-sentinel/findings?limit=20. 404 si la flag está OFF.
+    """
+    if not getattr(_config.config, "STACKY_EGRESS_SENTINEL_ENABLED", False):
+        return jsonify({"error": "egress_sentinel_disabled"}), 404
+
+    from services.egress_sentinel import METADATA_KEY
+
+    try:
+        limit = int(request.args.get("limit", 20))
+    except (TypeError, ValueError):
+        limit = 20
+    limit = max(1, min(limit, 100))
+
+    with session_scope() as session:
+        rows = (
+            session.query(AgentExecution)
+            .filter(AgentExecution.metadata_json.isnot(None))
+            .order_by(AgentExecution.started_at.desc())
+            .limit(limit * 5)
+            .all()
+        )
+        scanned_total = 0
+        flagged: list[dict] = []
+        for row in rows:
+            md = row.metadata_dict or {}
+            sentinel = md.get(METADATA_KEY)
+            if sentinel is None:
+                continue
+            scanned_total += 1
+            findings = sentinel.get("findings", [])
+            deterministic_classes = sentinel.get("deterministic_classes", [])
+            if not findings and not deterministic_classes:
+                continue
+            flagged.append({
+                "execution_id": row.id,
+                "started_at": row.started_at.isoformat() if row.started_at else None,
+                "agent_type": row.agent_type,
+                "status": row.status,
+                "findings": findings,
+                "deterministic_classes": deterministic_classes,
+            })
+
+    # [ADICIÓN ARQUITECTO v2] summary sobre el MISMO conjunto ya traído, sin query nuevo.
+    return jsonify({
+        "items": flagged[:limit],
+        "summary": {"scanned_total": scanned_total, "flagged_total": len(flagged)},
+    })

@@ -1,0 +1,30 @@
+/* Plan 124 — Comparador de BD: explorador visual.
+   [FIX C3 de la crítica v2] Las variables de la escala (§3.3 del plan) se declaran ACÁ, en F1,
+   para que F3 (ParityGauge), F4 (DiffTreemap) y F5 (FiltersBar) tengan color desde su primer
+   commit. F6 solo agrega los estilos complementarios (transiciones, pulso, stagger, overlay).
+
+   PENDIENTE: cuando el Plan 122 se mergee, reconciliar con el `dbcompare.module.css` real de
+   ese plan (que ya trae sus propios estilos de EnvironmentsPanel) — estas variables deberían
+   sobrevivir sin cambios, son aditivas. */
+
+:root {
+  --dbc-danger: #dc2626;
+  --dbc-warn: #d97706;
+  --dbc-info: #2563eb;
+  --dbc-added: #16a34a;
+  --dbc-removed: #dc2626;
+  --dbc-changed: #d97706;
+  --dbc-unchanged: #94a3b8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --dbc-danger: #f87171;
+    --dbc-warn: #fbbf24;
+    --dbc-info: #60a5fa;
+    --dbc-added: #4ade80;
+    --dbc-removed: #f87171;
+    --dbc-changed: #fbbf24;
+    --dbc-unchanged: #64748b;
+  }
+}

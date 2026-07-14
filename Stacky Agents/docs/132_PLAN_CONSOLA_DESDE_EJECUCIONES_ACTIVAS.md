@@ -1,9 +1,14 @@
 # Plan 132 — Abrir la consola en vivo desde el panel "Ejecuciones Activas"
 
-**Estado:** PROPUESTO v1 (2026-07-13)
+**Estado:** CRITICADO (v2, 2026-07-14) — APROBADO-CON-CAMBIOS (v1 sin bloqueantes; C1 IMPORTANTE corregido in place)
 **Origen:** pedido directo del operador (verbatim): *"en la parte de ejecuciones activas me permitas abrir la consola de la ejecución activa para ver cómo está"*.
 **Alcance:** 100% frontend. Cero backend nuevo, cero endpoint nuevo, cero store nuevo.
 **Flag:** NO lleva flag (decisión de diseño justificada en §3.1).
+
+**v1 → v2 — CHANGELOG (crítica adversarial 2026-07-14):**
+
+- **C1 IMPORTANTE (fix F0 Cambio 3 + F1 diff 4):** el botón v1 seteaba `aria-pressed={consoleExecutionId === e.id}` pero el `onClick` SOLO abría (`setCodexConsoleExecution(e.id, false)`), nunca cerraba. Resultado: clickear el botón de un run cuya consola YA está abierta es un no-op que desperdicia el click, y `aria-pressed=true` promete a lectores de pantalla una capacidad de toggle que el código no cumple (violación de semántica ARIA — WAI-ARIA define `aria-pressed` explícitamente para botones toggle). v2 corrige: `onClick` ahora es un toggle real — `setCodexConsoleExecution(consoleExecutionId === e.id ? null : e.id, false)`. **[ADICIÓN ARQUITECTO]**: esto además le da al operador una forma de cerrar la consola de un run desde la MISMA fila donde la abrió, sin tener que ir a buscar el botón ✕ del dock (que puede estar en otra esquina de la pantalla si el operador lo movió). Cero costo: mismo 1 click, mismo archivo, reusa `setCodexConsoleExecution(null)` que YA es parte del contrato del store (`id: number | null`). El `aria-label`/`title` se dejan EXACTAMENTE como en v1 (constantes, "Ver consola de la ejecución #N") — es el patrón ARIA correcto para toggle buttons (el nombre accesible no cambia, `aria-pressed` es lo único que comunica el estado), así que los tests 1 y 3 de F0 no cambian su query.
+- **C2 MENOR (verificación, sin cambio de código):** verifiqué empíricamente contra `Stacky Agents/frontend/package.json` de este worktree que `@testing-library/react` y `jsdom` NO figuran como devDependencies (grep directo, cero matches). Esto confirma que el gap de entorno citado en F0/F2 es ESTRUCTURAL y real, no un artefacto de un `node_modules` roto — un `npm ci` fresco (paso obligatorio del orquestador antes de implementar) **NO** lo va a resolver porque el paquete ni siquiera está declarado. Se deja explícito para que quien implemente no pierda tiempo reintentando vitest de componente esperando que un install limpio lo arregle.
 
 ---
 
@@ -21,7 +26,7 @@ Agregar, en el panel flotante global **ActiveRunsPanel** (visible en toda la app
 - `frontend/src/components/CodexConsoleDock.tsx` es la consola en vivo, YA montada globalmente en `App.tsx:269` (renderiza `null` si no hay ejecución seleccionada — línea 96 `if (executionId == null) return null;`). Lee `state.codexConsoleExecutionId` / `state.codexConsoleMinimized` del store `useWorkbench` y hace streaming con `useExecutionStream(executionId)`. El panel de logs (líneas 190-223) se renderiza para CUALQUIER runtime; el formulario de stdin solo se habilita si `isInteractiveRun` (runtimes `codex_cli` / `claude_code_cli`).
 - `frontend/src/store/workbench.ts:96-100` — la acción **ya existente** `setCodexConsoleExecution(id, minimized = false)` es el único y establecido mecanismo para abrir la consola de cualquier ejecución. Ya la usan `pages/TicketBoard.tsx:308,593`, `components/AgentLaunchModal.tsx:249`, `components/EpicFromBriefModal.tsx:325,364`, `components/devops/DevOpsAgentSection.tsx:75,86,95`, `components/devops/PipelineDoctorPanel.tsx:63`, `components/QaBrowserRunModal.tsx:71` y `hooks/useAgentRun.ts:48`.
 
-**Conclusión:** falta solamente un botón que llame `setCodexConsoleExecution(e.id, false)` desde cada fila del panel. **Reusar, no crear**: prohibido reimplementar `CodexConsoleDock`, `useExecutionStream`, el store o cualquier mecanismo de apertura nuevo.
+**Conclusión:** falta solamente un botón que llame `setCodexConsoleExecution(e.id, false)` (o `(null, false)` para cerrar — toggle, ver C1/v2) desde cada fila del panel. **Reusar, no crear**: prohibido reimplementar `CodexConsoleDock`, `useExecutionStream`, el store o cualquier mecanismo de apertura nuevo.
 
 ## 3. Principios y guardarraíles (no negociables)
 
@@ -77,7 +82,7 @@ vi.mock("../../store/workbench", () => ({
     workbenchMock.codexConsoleExecutionId = null;
 ```
 
-**Cambio 3 — tres tests nuevos.** Agregar dentro del `describe("ActiveRunsPanel", ...)`, después del test `"no cancela si el operador rechaza el diálogo de confirmación"` (línea 111), exactamente estos tres tests con estos nombres:
+**Cambio 3 — cuatro tests nuevos.** Agregar dentro del `describe("ActiveRunsPanel", ...)`, después del test `"no cancela si el operador rechaza el diálogo de confirmación"` (línea 111), exactamente estos cuatro tests con estos nombres:
 
 ```tsx
   it("abre la consola en vivo del run al clickear Ver consola", async () => {
@@ -117,17 +122,30 @@ vi.mock("../../store/workbench", () => ({
     });
     expect(btn.getAttribute("aria-pressed")).toBe("true");
   });
+
+  it("vuelve a clickear el botón de un run cuya consola ya está abierta y la cierra (toggle)", async () => {
+    workbenchMock.codexConsoleExecutionId = RUN.id;
+    mockRuns([RUN]);
+    wrap(<ActiveRunsPanel />);
+
+    await waitFor(() => expect(screen.getByText("#42")).toBeDefined());
+    fireEvent.click(
+      screen.getByRole("button", { name: /ver consola de la ejecución #42/i }),
+    );
+
+    expect(workbenchMock.setCodexConsoleExecution).toHaveBeenCalledWith(null, false);
+  });
 ```
 
 - **Comando exacto** (desde `Stacky Agents/frontend/`): `npx vitest run src/components/__tests__/ActiveRunsPanel.test.tsx`
-- **Criterio de aceptación (binario):** el archivo editado compila con `npx tsc --noEmit` (0 errores). NOTA: la ejecución vitest fallará hoy por el gap preexistente de `@testing-library/react`/jsdom (idéntico al resto del archivo); eso NO es un rojo introducido por este plan. Si el gap estuviera resuelto al momento de implementar, los 3 tests nuevos deben FALLAR antes de F1 (el botón no existe) y PASAR después de F1.
+- **Criterio de aceptación (binario):** el archivo editado compila con `npx tsc --noEmit` (0 errores). NOTA: la ejecución vitest fallará hoy por el gap preexistente de `@testing-library/react`/jsdom (idéntico al resto del archivo); eso NO es un rojo introducido por este plan — confirmado ESTRUCTURAL en la crítica v2 (`@testing-library/react`/`jsdom` no están en `package.json`, un `npm ci` fresco no lo arregla). Si el gap estuviera resuelto al momento de implementar, los 4 tests nuevos deben FALLAR antes de F1 (el botón no existe) y PASAR después de F1.
 - **Flag:** no aplica (§3.1). **Trabajo del operador: ninguno.**
 
 ---
 
 ### F1 — Implementación del botón "Ver consola"
 
-**Objetivo (1 frase):** agregar en cada `<li>` del panel un botón con ícono `Terminal` que llame `setCodexConsoleExecution(e.id, false)`, con indicador `aria-pressed` cuando la consola de ese run ya está abierta.
+**Objetivo (1 frase):** agregar en cada `<li>` del panel un botón toggle con ícono `Terminal` que abra (`setCodexConsoleExecution(e.id, false)`) o cierre (`setCodexConsoleExecution(null, false)`) la consola de ese run, con indicador `aria-pressed` cuando la consola de ese run ya está abierta.
 
 **Archivo 1 a editar:** `Stacky Agents/frontend/src/components/ActiveRunsPanel.tsx`
 
@@ -164,12 +182,17 @@ import { useWorkbench } from "../store/workbench";
                 title={`Ver consola en vivo de la ejecución #${e.id}`}
                 aria-label={`Ver consola de la ejecución #${e.id}`}
                 aria-pressed={consoleExecutionId === e.id}
-                onClick={() => setCodexConsoleExecution(e.id, false)}
+                onClick={() =>
+                  setCodexConsoleExecution(
+                    consoleExecutionId === e.id ? null : e.id,
+                    false,
+                  )
+                }
               >
                 <Terminal size={13} aria-hidden />
               </button>
 ```
-El segundo argumento `false` des-minimiza la consola si estaba minimizada (ver `workbench.ts:96-100`), que es exactamente el comportamiento deseado: 1 click = consola visible.
+**[ADICIÓN ARQUITECTO — toggle real, fix C1]:** si la consola de ESE run ya está abierta (`consoleExecutionId === e.id`), el click la CIERRA (`setCodexConsoleExecution(null, false)`); si no, la abre. Esto hace que `aria-pressed` sea semánticamente correcto (antes prometía toggle y no lo cumplía) y le da al operador una forma de cerrar la consola desde la misma fila, sin ir a buscar el botón ✕ del dock en otra esquina de la pantalla. `title`/`aria-label` quedan CONSTANTES a propósito (mismo texto abierto o cerrado) — es el patrón ARIA correcto para toggle buttons, `aria-pressed` es lo único que comunica el estado; así los tests 1 y 3 de F0 no necesitan cambiar su query por nombre accesible. Cuando SÍ abre (id != null), el segundo argumento `false` des-minimiza la consola si estaba minimizada (ver `workbench.ts:96-100`); cuando cierra (id == null) ese segundo argumento es ignorado por el store (`workbench.ts:99`: `id == null ? false : minimized`), así que pasar `false` es inocuo en ambos casos.
 
 **Archivo 2 a editar:** `Stacky Agents/frontend/src/components/ActiveRunsPanel.module.css`
 
@@ -207,7 +230,7 @@ El segundo argumento `false` des-minimiza la consola si estaba minimizada (ver `
 ```
 
 - **Prohibido en esta fase:** tocar `CodexConsoleDock.tsx`, `workbench.ts`, `useExecutionStream`, `App.tsx` o cualquier otro archivo.
-- **Comando exacto** (desde `Stacky Agents/frontend/`): `npx vitest run src/components/__tests__/ActiveRunsPanel.test.tsx` (si el gap de entorno está resuelto: 9/9 verdes — 6 existentes + 3 nuevos).
+- **Comando exacto** (desde `Stacky Agents/frontend/`): `npx vitest run src/components/__tests__/ActiveRunsPanel.test.tsx` (si el gap de entorno está resuelto: 10/10 verdes — 6 existentes + 4 nuevos).
 - **Criterio de aceptación (binario):** `npx tsc --noEmit` termina con exit code 0 y 0 errores; el diff toca EXACTAMENTE los 2 archivos listados (más el test de F0).
 - **Flag:** no aplica (§3.1). **Trabajo del operador: ninguno.**
 
@@ -277,15 +300,15 @@ No hay fallback nuevo que implementar: la paridad ya está resuelta por el compo
 
 ## 9. Orden de implementación
 
-1. **F0** — tests en `ActiveRunsPanel.test.tsx` (mock del store + 3 tests nuevos).
+1. **F0** — tests en `ActiveRunsPanel.test.tsx` (mock del store + 4 tests nuevos).
 2. **F1** — botón en `ActiveRunsPanel.tsx` + estilos en `ActiveRunsPanel.module.css`.
 3. **F2** — `tsc --noEmit` + vitest por archivo.
 4. **F3** — smoke manual de 5 pasos.
 
 ## 10. Definición de Hecho (DoD)
 
-- [ ] Los 3 tests nuevos existen en `ActiveRunsPanel.test.tsx` con los nombres exactos de F0 y compilan.
-- [ ] El botón "Ver consola" aparece en cada fila del panel, con `aria-label="Ver consola de la ejecución #<id>"`, y llama `setCodexConsoleExecution(e.id, false)`.
+- [ ] Los 4 tests nuevos existen en `ActiveRunsPanel.test.tsx` con los nombres exactos de F0 y compilan.
+- [ ] El botón "Ver consola" aparece en cada fila del panel, con `aria-label="Ver consola de la ejecución #<id>"` (constante), y es un toggle real: abre con `setCodexConsoleExecution(e.id, false)` y cierra con `setCodexConsoleExecution(null, false)` cuando ya está abierto.
 - [ ] `aria-pressed` refleja si la consola abierta es la de ese run, con estilo acento.
 - [ ] `npx tsc --noEmit` = 0 errores.
 - [ ] `npx vitest run src/components/__tests__/ActiveRunsPanel.test.tsx` verde, o rojo SOLO por el gap preexistente de RTL/jsdom.

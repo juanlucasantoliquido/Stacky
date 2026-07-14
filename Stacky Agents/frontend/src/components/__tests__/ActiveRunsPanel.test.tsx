@@ -33,6 +33,18 @@ vi.mock("../../api/endpoints", () => ({
   },
 }));
 
+// Mock del store de workbench: el panel solo usa setCodexConsoleExecution y
+// codexConsoleExecutionId. vi.hoisted permite mutar el estado por test.
+const workbenchMock = vi.hoisted(() => ({
+  setCodexConsoleExecution: vi.fn(),
+  codexConsoleExecutionId: null as number | null,
+}));
+
+vi.mock("../../store/workbench", () => ({
+  useWorkbench: (selector: (s: typeof workbenchMock) => unknown) =>
+    selector(workbenchMock),
+}));
+
 import { Executions } from "../../api/endpoints";
 
 const mockList = Executions.list as ReturnType<typeof vi.fn>;
@@ -75,6 +87,8 @@ describe("ActiveRunsPanel", () => {
     vi.clearAllMocks();
     localStorage.clear();
     mockCancel.mockResolvedValue({ ok: true, execution_id: RUN.id });
+    workbenchMock.setCodexConsoleExecution.mockClear();
+    workbenchMock.codexConsoleExecutionId = null;
   });
 
   afterEach(() => {
@@ -108,6 +122,57 @@ describe("ActiveRunsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
 
     expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it("abre la consola en vivo del run al clickear Ver consola", async () => {
+    mockRuns([RUN]);
+    wrap(<ActiveRunsPanel />);
+
+    await waitFor(() => expect(screen.getByText("#42")).toBeDefined());
+    fireEvent.click(
+      screen.getByRole("button", { name: /ver consola de la ejecución #42/i }),
+    );
+
+    expect(workbenchMock.setCodexConsoleExecution).toHaveBeenCalledWith(42, false);
+  });
+
+  it("abrir la consola no pide confirmación ni cancela el run", async () => {
+    mockRuns([RUN]);
+    const confirmSpy = vi.spyOn(window, "confirm");
+    wrap(<ActiveRunsPanel />);
+
+    await waitFor(() => expect(screen.getByText("#42")).toBeDefined());
+    fireEvent.click(
+      screen.getByRole("button", { name: /ver consola de la ejecución #42/i }),
+    );
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it("marca el botón como activo (aria-pressed) cuando la consola de ese run ya está abierta", async () => {
+    workbenchMock.codexConsoleExecutionId = RUN.id;
+    mockRuns([RUN]);
+    wrap(<ActiveRunsPanel />);
+
+    await waitFor(() => expect(screen.getByText("#42")).toBeDefined());
+    const btn = screen.getByRole("button", {
+      name: /ver consola de la ejecución #42/i,
+    });
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("vuelve a clickear el botón de un run cuya consola ya está abierta y la cierra (toggle)", async () => {
+    workbenchMock.codexConsoleExecutionId = RUN.id;
+    mockRuns([RUN]);
+    wrap(<ActiveRunsPanel />);
+
+    await waitFor(() => expect(screen.getByText("#42")).toBeDefined());
+    fireEvent.click(
+      screen.getByRole("button", { name: /ver consola de la ejecución #42/i }),
+    );
+
+    expect(workbenchMock.setCodexConsoleExecution).toHaveBeenCalledWith(null, false);
   });
 
   it("colapsa a un badge mínimo con el conteo y permite volver a expandir", async () => {

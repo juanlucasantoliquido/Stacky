@@ -3224,6 +3224,9 @@ export const DevOps = {
       env_sandbox_enabled?: boolean; // Plan 107
       pr_reviewer_enabled?: boolean; // Plan 110
       connection_doctor_enabled?: boolean; // Plan 116
+      deployments_enabled?: boolean; // Plan 120
+      deployments_execute_enabled?: boolean; // Plan 120
+      deployments_ai_enabled?: boolean; // Plan 120
     }>("/api/devops/health"),
   /** Plan 116 — último snapshot del doctor de conexiones (HITL; 404 si flag OFF). */
   connectionsHealth: () =>

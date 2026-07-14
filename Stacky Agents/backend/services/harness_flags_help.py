@@ -1194,6 +1194,36 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         example="Como pedirle a alguien que en vez de la planilla te cuente en dos frases cómo venimos.",
     ),
     # ── Plan 110 — Revisor de PRs ──────────────────────────────────────────
+    "STACKY_DEPLOYMENTS_ENABLED": PlainHelp(
+        what="Una sección 'Despliegues' que te deja llevar tu app a cada servidor (o a tu propia máquina) con pocos clicks, con historial y vuelta atrás inmediata.",
+        on_effect="Si la activás: aparece la sección Despliegues con una tarjeta por destino (tus servidores + Local) mostrando qué versión está activa.",
+        off_effect="Si la apagás: la sección no aparece; nada cambia en el resto de Stacky.",
+        example="Como el panel de despliegues de una plataforma tipo Vercel, pero corriendo en tus propios servidores Windows.",
+    ),
+    "STACKY_DEPLOYMENTS_EXECUTE_ENABLED": PlainHelp(
+        what="Permite que los botones Desplegar y Rollback ejecuten de verdad (no solo mostrar el plan).",
+        on_effect="Si la activás: confirmando en el modal, el deploy o rollback se ejecuta contra el destino elegido.",
+        off_effect="Si la apagás: podés ver el plan de cada deploy (qué pasos haría) pero no podés dispararlo.",
+        example="Es la diferencia entre ver la vista previa de una operación y darle 'Confirmar' de verdad.",
+    ),
+    "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED": PlainHelp(
+        what="Un botón para que el modelo de IA que corre en tu máquina (sin costo, sin salir a internet) te explique por qué falló un deploy.",
+        on_effect="Si la activás: en un deploy fallido aparece 'Diagnóstico IA' con una explicación y una sugerencia de arreglo.",
+        off_effect="Si la apagás: el botón no aparece; igual ves el paso que falló y el error crudo en el historial.",
+        example="Como preguntarle a un colega '¿por qué se cayó esto?' y que te lea el log por vos.",
+    ),
+    "STACKY_DEPLOYMENTS_RETAIN_RELEASES": PlainHelp(
+        what="Cuántas versiones anteriores de tu app se guardan en cada servidor para poder volver atrás sin recopiar nada.",
+        on_effect="Si subís el número: se conservan más versiones viejas (más espacio en disco, más opciones de rollback).",
+        off_effect="Si lo bajás: se conservan menos versiones (menos espacio, menos opciones de rollback). De fábrica son 3.",
+        example="Como guardar las últimas 3 copias de seguridad de un documento en vez de una sola.",
+    ),
+    "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC": PlainHelp(
+        what="Cuánto tiempo como máximo se espera la verificación automática (smoke check) después de activar una nueva versión.",
+        on_effect="Si subís el número: se espera más tiempo antes de marcar la verificación como fallida, útil si tu app tarda en levantar.",
+        off_effect="Si lo bajás: se corta antes la espera. De fábrica son 30 segundos.",
+        example="Como el tiempo que esperás a que una página cargue antes de decir que está caída.",
+    ),
     "STACKY_PR_REVIEWER_ENABLED": PlainHelp(
         what="Una sección para revisar los pedidos de cambios (PRs) de tu repositorio con ayuda de un asistente que solo mira y opina.",
         on_effect="Si la activás: aparece la sección 'Revisor de PRs' con la lista de PRs abiertas y botones para pedir una revisión.",

@@ -36,6 +36,9 @@ export interface DevOpsHealth {
   remote_target_enabled?: boolean; // Plan 108 — agente/ambientes anclados al servidor seleccionado
   pr_reviewer_enabled?: boolean; // Plan 110 — Revisor de PRs
   connection_doctor_enabled?: boolean; // Plan 116 — doctor de conexiones
+  deployments_enabled?: boolean; // Plan 120 — Centro de Despliegues
+  deployments_execute_enabled?: boolean; // Plan 120 — ejecutar deploy/rollback
+  deployments_ai_enabled?: boolean; // Plan 120 — diagnóstico IA de deploys fallidos
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 

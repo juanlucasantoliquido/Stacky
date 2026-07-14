@@ -229,6 +229,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan117_insights_sweep.py
   tests/test_plan117_insights_api.py
   tests/test_plan117_digest_narrative.py
+  # — Plan 120 · Centro de Despliegues (deploy multi-destino, rollback 1-click) —
+  tests/test_plan120_flags.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

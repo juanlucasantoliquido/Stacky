@@ -202,6 +202,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",  # Plan 107 — preview de árbol de ambientes
         "STACKY_DEVOPS_ENV_SANDBOX_ENABLED",  # Plan 107 — raíz sandbox de pruebas
         "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED",  # Plan 116 — doctor de conexiones
+        "STACKY_DEPLOYMENTS_ENABLED",  # Plan 120 — Centro de Despliegues (master)
+        "STACKY_DEPLOYMENTS_EXECUTE_ENABLED",  # Plan 120 — habilita ejecutar deploy/rollback
+        "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED",  # Plan 120 — diagnóstico IA local de fallas
+        "STACKY_DEPLOYMENTS_RETAIN_RELEASES",  # Plan 120 — releases retenidas por destino
+        "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC",  # Plan 120 — timeout del smoke post-deploy
         "STACKY_PR_REVIEWER_ENABLED",       # Plan 110 — revisor de PRs
         "STACKY_PR_REVIEW_HAIKU_MODEL",     # Plan 110 — modelo Haiku para la revisión
         "STACKY_PR_REVIEW_DIFF_MAX_CHARS",  # Plan 110 — tope del diff (privacidad, camino Haiku)
@@ -2440,6 +2445,78 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (R4 profundidad-1)
         # SIN default= (gotcha Plan 63): nace OFF; el default vive en config.py.
+    ),
+    # ── Plan 120 — Centro de Despliegues: deploy multi-destino, rollback 1-click ──
+    FlagSpec(
+        key="STACKY_DEPLOYMENTS_ENABLED",
+        type="bool",
+        label="Centro de Despliegues (Plan 120)",
+        description=(
+            "Plan 120 — Sección 'Despliegues' del panel DevOps: deploy multi-destino "
+            "(servidores registrados + Local) con releases inmutables, rollback 1-click, "
+            "verificación post-deploy y métricas DORA locales. Determinista, cero LLM en "
+            "el camino feliz. Con OFF el panel queda idéntico a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (R4 profundidad-1)
+        # SIN default= (gotcha Plan 63): nace OFF; el default vive en config.py.
+    ),
+    FlagSpec(
+        key="STACKY_DEPLOYMENTS_EXECUTE_ENABLED",
+        type="bool",
+        label="Ejecutar deploys y rollbacks (Plan 120)",
+        description=(
+            "Plan 120 — Habilita EJECUTAR deploy/rollback (no solo el dry-run /plan). "
+            "Con OFF, /execute y /rollback devuelven 403 aunque el master esté ON: "
+            "el operador puede ver el plan sin poder disparar acciones de escritura."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (R4 profundidad-1)
+    ),
+    FlagSpec(
+        key="STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED",
+        type="bool",
+        label="Diagnóstico IA de deploys fallidos (Plan 120)",
+        description=(
+            "Plan 120 — Botón de diagnóstico con el modelo LOCAL (Plan 106, costo cero) "
+            "sobre un deploy fallido: explica el paso que falló y sugiere remediación. "
+            "Requiere el modelo local alcanzable; si no lo está, el botón queda "
+            "deshabilitado con hint y el deploy sigue 100% funcional sin esto."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (R4 profundidad-1)
+    ),
+    FlagSpec(
+        key="STACKY_DEPLOYMENTS_RETAIN_RELEASES",
+        type="int",
+        label="Releases retenidas por destino",
+        description=(
+            "Plan 120 — Cuántas releases anteriores se conservan en `releases\\` de cada "
+            "destino (para poder hacer rollback sin volver a transferir). Las más viejas "
+            "se borran tras cada deploy exitoso. Default 3."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        min_value=1,
+        max_value=10,
+    ),
+    FlagSpec(
+        key="STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC",
+        type="int",
+        label="Timeout del smoke post-deploy (segundos)",
+        description=(
+            "Plan 120 — Tiempo máximo de espera de la verificación post-deploy (smoke "
+            "HTTP o comando PowerShell) antes de considerarla fallida. Default 30."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        min_value=5,
+        max_value=300,
     ),
     FlagSpec(
         key="STACKY_DEVOPS_REMOTE_TARGET_ENABLED",

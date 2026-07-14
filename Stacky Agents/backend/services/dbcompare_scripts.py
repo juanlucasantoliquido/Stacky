@@ -458,6 +458,64 @@ def emit_resguardo(piece: ScriptPiece, source_schema_obj: dict, target_schema_ob
     return out
 
 
+# ---------------------------------------------------------------------------
+# F4: order_table_pieces — orden seguro por FKs (Kahn) para creates/drops
+# ---------------------------------------------------------------------------
+
+
+def order_table_pieces(pieces: list[ScriptPiece], schema_obj: dict, mode: str) -> tuple[list[ScriptPiece], list[str], str | None]:
+    """Ordena piezas table_added ("create") o table_removed ("drop") por sus
+    FKs dentro del propio conjunto de `pieces` (FKs hacia tablas fuera del
+    conjunto se ignoran: esas tablas ya existen sin cambios). "create" ->
+    padres antes que hijos (FKs del snapshot ORIGEN); "drop" -> hijos antes
+    que padres (FKs del snapshot DESTINO). Empates por nombre ASC (Kahn).
+    Si hay un ciclo, el subconjunto ciclico cae a orden alfabetico y se
+    devuelve la linea de warning literal para el README del bundle.
+    """
+    nodes = [(p["schema"], p["name"]) for p in pieces]
+    node_set = set(nodes)
+    by_key = {(p["schema"], p["name"]): p for p in pieces}
+
+    indegree = {k: 0 for k in nodes}
+    adj: dict[tuple[str, str], list[tuple[str, str]]] = {k: [] for k in nodes}
+    for key in nodes:
+        schema, name = key
+        table = _get_table(schema_obj, schema, name)
+        for fk in table.get("foreign_keys", []):
+            ref_key = (fk.get("referred_schema"), fk.get("referred_table"))
+            if ref_key not in node_set or ref_key == key:
+                continue
+            before, after = (ref_key, key) if mode == "create" else (key, ref_key)
+            adj[before].append(after)
+            indegree[after] += 1
+
+    remaining = set(nodes)
+    ready = sorted(k for k in remaining if indegree[k] == 0)
+    ordered_keys: list[tuple[str, str]] = []
+    while ready:
+        ready.sort()
+        k = ready.pop(0)
+        if k not in remaining:
+            continue
+        ordered_keys.append(k)
+        remaining.discard(k)
+        for v in adj[k]:
+            indegree[v] -= 1
+            if indegree[v] == 0 and v in remaining:
+                ready.append(v)
+
+    cycle_keys = sorted(remaining)
+    ordered_keys.extend(cycle_keys)
+
+    warning = None
+    cycle_names = [f"{s}.{n}" for s, n in cycle_keys]
+    if cycle_names:
+        warning = f"⚠ Ciclo de FKs detectado entre: {', '.join(cycle_names)}; revisá el orden manualmente."
+
+    ordered_pieces = [by_key[k] for k in ordered_keys]
+    return ordered_pieces, cycle_names, warning
+
+
 def collect_resguardos(
     pieces: list[ScriptPiece], source_schema_obj: dict, target_schema_obj: dict, dialect: str, ts: str
 ) -> list[ScriptPiece]:

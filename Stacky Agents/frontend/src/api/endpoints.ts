@@ -3400,6 +3400,123 @@ export const DevOpsServers = {
   },
 };
 
+// Plan 120 — Centro de Despliegues
+export interface DeployTargetConfig {
+  install_path: string;
+  smoke: { kind: "http" | "ps" | "none"; url: string | null; command: string | null };
+  pre_switch: string | null;
+  post_switch: string | null;
+  protected: boolean;
+}
+
+export interface DeployApp {
+  id: string;
+  name?: string;
+  artifact: { kind: "folder" | "zip"; path: string };
+  targets: Record<string, DeployTargetConfig>;
+}
+
+export interface DeployLedgerEntry {
+  run_id: string;
+  app_id: string;
+  target: string;
+  action: "deploy" | "rollback";
+  version_id: string;
+  prev_version_id?: string | null;
+  status: "running" | "success" | "failed" | "failed_smoke";
+  effective_status?: string;
+  steps: { name: string; ok: boolean; ms: number; detail: string }[];
+  smoke?: { kind: string; ok: boolean; detail: string } | null;
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+  insight?: { tldr: string; probable_cause?: string | null; remediation?: string | null } | null;
+}
+
+export interface DeployOverviewTarget {
+  key: string;
+  label: string;
+  kind: "local" | "remote";
+  host: string | null;
+  configured: boolean;
+  protected: boolean;
+  last: DeployLedgerEntry | null;
+  locked: boolean;
+}
+
+export interface DeployDoraMetrics {
+  deploys_7d: number;
+  deploys_30d: number;
+  change_failure_rate_30d: number | null;
+  mttr_minutes_30d: number | null;
+  last_deploy_at: string | null;
+}
+
+export interface DeployOverviewApp {
+  id: string;
+  name: string;
+  artifact: { kind: string; path: string };
+  targets: DeployOverviewTarget[];
+  metrics: DeployDoraMetrics;
+}
+
+export interface DeployPlanStep {
+  name: string;
+  command: string | null;
+  read_only: boolean;
+  housekeeping: boolean;
+}
+
+export interface DeployPlanWarning {
+  kind: string;
+  detail: string;
+  winrm_kind?: string;
+  remediation?: { where: string; label: string; command: string | null }[];
+}
+
+/** Plan 120 — deploy multi-destino, rollback 1-click, verificacion post-deploy y DORA local. */
+export const DevOpsDeployments = {
+  overview: () => api.get<{ apps: DeployOverviewApp[] }>("/api/devops/deployments/overview"),
+  createApp: (app: DeployApp) => api.post<{ app: DeployApp }>("/api/devops/deployments/apps", app),
+  updateApp: (appId: string, app: DeployApp) =>
+    api.put<{ app: DeployApp }>(`/api/devops/deployments/apps/${encodeURIComponent(appId)}`, app),
+  deleteApp: (appId: string) =>
+    api.delete<{ ok: boolean }>(`/api/devops/deployments/apps/${encodeURIComponent(appId)}`),
+  plan: (appId: string, targets: string[]) =>
+    api.post<{ version_id: string; targets: ({ target: string; error: string } | { target: string; steps: DeployPlanStep[]; warnings: DeployPlanWarning[] })[] }>(
+      "/api/devops/deployments/plan",
+      { app_id: appId, targets },
+    ),
+  execute: (appId: string, targets: string[], confirm: boolean, confirmText?: string) =>
+    api.post<{ version_id: string; results: ({ target: string; run_id?: string; error?: string })[] }>(
+      "/api/devops/deployments/execute",
+      { app_id: appId, targets, confirm, ...(confirmText ? { confirm_text: confirmText } : {}) },
+    ),
+  rollback: (appId: string, target: string, toVersion: string, confirm: boolean, confirmText?: string) =>
+    api.post<{ target: string; run_id?: string; error?: string }>(
+      "/api/devops/deployments/rollback",
+      { app_id: appId, target, to_version: toVersion, confirm, ...(confirmText ? { confirm_text: confirmText } : {}) },
+    ),
+  run: (runId: string) =>
+    api.get<{ run: DeployLedgerEntry }>(`/api/devops/deployments/runs/${encodeURIComponent(runId)}`),
+  history: (appId: string, target?: string, limit = 50) =>
+    api.get<{ runs: DeployLedgerEntry[] }>(
+      `/api/devops/deployments/history?app_id=${encodeURIComponent(appId)}${target ? `&target=${encodeURIComponent(target)}` : ""}&limit=${limit}`,
+    ),
+  drift: (appId: string, target: string) =>
+    api.post<{ drift: "never" | "unknown" | "ok" | "drift"; desired_version: string | null; marker: object | null }>(
+      "/api/devops/deployments/drift",
+      { app_id: appId, target },
+    ),
+  metrics: (appId: string) =>
+    api.get<DeployDoraMetrics>(`/api/devops/deployments/metrics?app_id=${encodeURIComponent(appId)}`),
+  diagnose: (runId: string) =>
+    api.post<{ ok: boolean; insight?: { tldr: string }; error?: string }>(
+      "/api/devops/deployments/diagnose",
+      { run_id: runId },
+    ),
+};
+
 // Plan 105 — Consola remota por servidor
 export interface RemoteConsoleConversation {
   id: number;

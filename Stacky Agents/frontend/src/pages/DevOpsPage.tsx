@@ -49,6 +49,10 @@ export interface DevOpsSectionContext {
   // Plan 91 — aditivo/opcional: scoping por servidor para secciones que lo consuman
   selectedServer?: { alias: string; host: string } | null;
   servers?: ServerSummary[];
+  // Plan 120 F8 (C7 v2) — OPCIONAL/aditivo (mismo precedente que selectedServer,
+  // plan 91): navegar a otra sub-tab del shell. Ausente en shells que aún no lo
+  // propaguen (p.ej. plan 119) ⇒ el caller degrada sin romper.
+  setActiveSection?: (id: string) => void;
 }
 
 // Contrato de sección del registro (§3.12 C20)
@@ -79,6 +83,8 @@ import { VariablesSection } from '../components/devops/VariablesSection';
 import { RemoteConsoleSection } from '../components/devops/RemoteConsoleSection';
 // Importar PrReviewerSection (Plan 110 F7)
 import { PrReviewerSection } from '../components/devops/PrReviewerSection';
+// Importar DeploymentsSection (Plan 120 F7)
+import { DeploymentsSection } from '../components/devops/DeploymentsSection';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -154,6 +160,16 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateMessage: 'La sección Revisor de PRs necesita la flag STACKY_PR_REVIEWER_ENABLED (Configuración → Arnés, categoría DevOps).',
     render: (ctx) => <PrReviewerSection ctx={ctx} />,
   },
+  // Plan 120 — Centro de Despliegues (deploy multi-destino, rollback 1-click, DORA local)
+  {
+    id: 'despliegues',
+    label: 'Despliegues',
+    icon: '🚀',
+    healthKey: 'deployments_enabled',
+    gateFlagKey: 'STACKY_DEPLOYMENTS_ENABLED',
+    gateMessage: 'La sección Despliegues necesita la flag STACKY_DEPLOYMENTS_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <DeploymentsSection ctx={ctx} />,
+  },
 ];
 
 export const DevOpsPage: React.FC = () => {
@@ -186,17 +202,18 @@ export const DevOpsPage: React.FC = () => {
   // C8 — LITERAL: si el alias persistido ya no existe, es null (no crashear).
   const selected = (serversQuery.data?.servers ?? []).find((s) => s.alias === selectedAlias) ?? null;
 
+  // Al cambiar de sub-tab, marcar como montada (C10)
+  const handleTabClick = (id: string) => {
+    setActiveId(id);
+    setMountedIds((prev) => new Set([...prev, id]));
+  };
+
   const ctx: DevOpsSectionContext = {
     health: healthQuery.data ?? { flag_enabled: false, generator_enabled: false, trigger_enabled: false },
     refetchHealth: () => healthQuery.refetch(),
     selectedServer: selected ? { alias: selected.alias, host: selected.host } : null,
     servers: serversQuery.data?.servers ?? [],
-  };
-
-  // Al cambiar de sub-tab, marcar como montada (C10)
-  const handleTabClick = (id: string) => {
-    setActiveId(id);
-    setMountedIds((prev) => new Set([...prev, id]));
+    setActiveSection: handleTabClick, // Plan 120 F8 (C7 v2) — precedente selectedServer (plan 91)
   };
 
   if (healthQuery.isLoading) {

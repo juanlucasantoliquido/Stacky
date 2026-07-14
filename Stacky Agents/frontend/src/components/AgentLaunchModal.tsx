@@ -7,6 +7,7 @@ import {
   launchAgentWithRuntime,
   launchInProgressLabel,
   openConsoleIfCliRuntime,
+  parseBusinessPreflightError,
   runtimeDisplayLabel,
 } from "../services/agentLaunch";
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
@@ -250,7 +251,13 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
       }
       setTimeout(onClose, 1200);
     } catch (e) {
-      if (agentRuntime === "github_copilot") {
+      // Plan 133 F2 — el preflight de negocio server-side puede rechazar el
+      // lanzamiento con un 400 accionable; si vino ese shape, mostrarlo tal
+      // cual (ya es un mensaje pensado para el operador) en vez del genérico.
+      const businessPreflightMessage = parseBusinessPreflightError(e);
+      if (businessPreflightMessage) {
+        setError({ kind: "unknown", message: businessPreflightMessage, detail: String(e) });
+      } else if (agentRuntime === "github_copilot") {
         setError(mapBackendError(String(e)));
       } else {
         setError({

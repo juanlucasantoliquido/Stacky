@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { Agents } from "../api/endpoints";
-import { openConsoleIfCliRuntime } from "../services/agentLaunch";
+import { openConsoleIfCliRuntime, parseBusinessPreflightError } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
 import type { AgentType, ContextBlock } from "../types";
 
@@ -48,6 +48,17 @@ export function useAgentRun() {
         setCodexConsoleExecution(id, false)
       );
       qc.invalidateQueries({ queryKey: ["executions"] });
+    },
+    onError: (err) => {
+      // Plan 133 F2 — el preflight de negocio server-side (POST /run) puede
+      // rechazar el lanzamiento con un 400 accionable ANTES de gastar el run.
+      // Este hook no tenía manejo de error alguno; sin esto, el 400 quedaba
+      // mudo para el operador (mono-operador: window.alert es explícito y
+      // suficiente, no hay mecanismo de toast en frontend/src/hooks/).
+      const message = parseBusinessPreflightError(err);
+      if (message) {
+        window.alert(message);
+      }
     },
   });
 }

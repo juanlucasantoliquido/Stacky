@@ -222,6 +222,11 @@ $HarnessTestFiles = @(
   "tests/test_plan117_insights_sweep.py",
   "tests/test_plan117_insights_api.py",
   "tests/test_plan117_digest_narrative.py",
+  # Plan 128 - Tablero de evolucion de planes (solo lectura)
+  "tests/test_plan128_plans_board_flag.py",
+  "tests/test_plan128_plans_board_parser.py",
+  "tests/test_plan128_plans_board_git.py",
+  "tests/test_plan128_plans_board_endpoints.py",
   # Plan 61 - Gate determinista del flujo funcional (Task)
   "tests/test_task_gate_flags.py",
   "tests/test_task_gate.py",

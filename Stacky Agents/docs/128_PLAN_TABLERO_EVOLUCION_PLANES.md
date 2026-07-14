@@ -1,6 +1,6 @@
 # Plan 128 — Tablero de Evolución de Planes (pipeline proponer→criticar→implementar→supervisar, solo lectura)
 
-**Estado:** CRITICADO v2 (APROBADO-CON-CAMBIOS) — 2026-07-14 (renumerado de 127→128 el 2026-07-12: el número 127 colisionó con el plan ajeno "reuso IA local" `e922b78f` propuesto en paralelo por otra sesión. La colisión es EXACTAMENTE el bug que este plan elimina con `next_free_number`.)
+**Estado:** IMPLEMENTADO — 2026-07-14 (F0..F6 vía implementar-plan-stacky; ver crítica v2 CRITICADO/APROBADO-CON-CAMBIOS del mismo día. Renumerado de 127→128 el 2026-07-12: el número 127 colisionó con el plan ajeno "reuso IA local" `e922b78f` propuesto en paralelo por otra sesión. La colisión es EXACTAMENTE el bug que este plan elimina con `next_free_number`.)
 **Dependencias:** ninguna dura. Reusa el ledger de supervisión existente (`docs/_supervision/ledger.json`) y el patrón de tab gateado por flag de los Planes 74/87. NO depende de los planes 120-127.
 **Ortogonal a:** Planes 119/120/121/122-126/127 (no toca DevOps, ni despliegues, ni comparador de BD, ni la IA local).
 
@@ -772,19 +772,19 @@ reporte con el conteo antes/después idéntico).
 
 ## 10. Definición de Hecho (DoD)
 
-- [ ] `STACKY_PLANS_BOARD_ENABLED` declarada (bool, UI-editable, sin default explícito,
+- [x] `STACKY_PLANS_BOARD_ENABLED` declarada (bool, UI-editable, sin default explícito,
       categoría `observabilidad_notif`), en `config.py`, help y `harness_defaults.env`.
-- [ ] Los 4 archivos de test backend (`flag`, `parser`, `git`, `endpoints`) verdes con los
-      comandos EXACTOS de §5 (34 casos en total: 6+14+6+8).
-- [ ] `model.test.ts` verde (9 casos) y `npx tsc --noEmit` exit 0.
-- [ ] Con flag OFF: `/api/plans-board/list` y `/detail` → 404 `plans_board_disabled`;
+- [x] Los 4 archivos de test backend (`flag`, `parser`, `git`, `endpoints`) verdes con los
+      comandos EXACTOS de §5 (34 casos en total: 6+14+6+8 — 6/25/6/8 ejecuciones reales con parametrize).
+- [x] `model.test.ts` verde (9 casos, 10 ejecuciones con sub-asserts) y `npx tsc --noEmit` exit 0.
+- [x] Con flag OFF: `/api/plans-board/list` y `/detail` → 404 `plans_board_disabled`;
       `/health` → 200 `flag_enabled false` Y `next_free_number` numérico (v2, sin gate);
-      tab "Planes" ausente del nav; `test_harness_flags.py` sin regresión vs. la foto previa a F0.
-- [ ] Con flag ON sobre fixtures: estados, veredictos, drift, duplicados, `next_free_number`
-      y las 7 acciones de §4.3 EXACTOS (KPI-1/KPI-2).
-- [ ] El backend del feature no escribe NADA: único subprocess = el `git log` congelado de
-      F2 (verificable: `grep -n "subprocess" "Stacky Agents/backend/services/plans_board.py"`
-      muestra solo `collect_unpushed_docs`, y `grep -n "subprocess\|open(.*w" "Stacky Agents/backend/api/plans_board.py"` → 0 matches).
-- [ ] Ratchet ps1/sh actualizados con los 4 archivos `test_plan128_*`.
-- [ ] Encabezado `**Estado:**` de este doc actualizado al cerrar.
+      tab "Planes" ausente del nav; `test_harness_flags.py` sin regresión vs. la foto previa a F0 (53/53 ambas veces).
+- [x] Con flag ON sobre fixtures: estados, veredictos, drift, duplicados, `next_free_number`
+      y las 7 acciones de §4.3 EXACTOS (KPI-1/KPI-2) — cubierto por F1 (25 ejecuciones).
+- [x] El backend del feature no escribe NADA: único subprocess = el `git log` congelado de
+      F2 (verificado: `grep -n "subprocess" "Stacky Agents/backend/services/plans_board.py"`
+      solo matchea `collect_unpushed_docs`, y `grep -n "subprocess\|open(.*w" "Stacky Agents/backend/api/plans_board.py"` → 0 matches).
+- [x] Ratchet ps1/sh actualizados con los 4 archivos `test_plan128_*`.
+- [x] Encabezado `**Estado:**` de este doc actualizado al cerrar.
 - [ ] `git status` final: WIP ajeno intacto (staging quirúrgico verificado).

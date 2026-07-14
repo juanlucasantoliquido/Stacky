@@ -20,6 +20,11 @@ EXCLUDED_AGENT_TYPES = frozenset({
     "local_llm_playground",
     "pr_review_local",
     "local_insights",
+    # Plan 127 — anti-recursión: el sweep del 117 no debe anotar las ejecuciones
+    # del propio analizador/doctor local.
+    "local_llm_error_analyst",
+    "local_llm_devops_doctor",
+    "local_llm_ci_explainer",
 })
 
 # Estados que ganan insight. "cancelled" queda FUERA.

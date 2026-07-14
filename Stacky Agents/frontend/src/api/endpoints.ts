@@ -3642,4 +3642,11 @@ export const LocalLlmApi = {
       model: string;
       execution_id: number;
     }>("/api/llm/suggest-pipeline", body),
+  /** Plan 121 — escaneo on-demand pre-flight del centinela de egreso (HITL, no persiste). */
+  scanEgress: (body: { text: string; kind?: string }) =>
+    api.post<{
+      status: string;
+      findings: Array<{ data_class: string; severity: string; excerpt_masked: string; rationale: string }>;
+      deterministic_classes: string[];
+    }>("/api/llm/egress-sentinel/scan", body),
 };

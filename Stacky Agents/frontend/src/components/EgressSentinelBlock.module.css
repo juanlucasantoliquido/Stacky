@@ -1,0 +1,57 @@
+/* Plan 121 — bloque del centinela de egreso en el drawer de ejecución. Tokens de theme.css. */
+.block {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  background: var(--color-bg-elevated, #1e1e1e);
+}
+.title { margin: 0 0 6px; font-size: 0.95em; color: var(--color-text, #eee); }
+.cleanChip {
+  display: inline-block;
+  font-size: 0.8em;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid currentColor;
+  color: var(--color-success, #4caf50);
+}
+.alertChip {
+  display: inline-block;
+  font-size: 0.8em;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid currentColor;
+  color: var(--color-danger, #e53935);
+  margin-bottom: 6px;
+}
+.deterministic { font-size: 0.85em; color: var(--color-text-muted, #aaa); margin-bottom: 6px; }
+.findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.finding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+  padding: 6px;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 4px;
+}
+.severityBadge {
+  font-size: 0.75em;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  text-transform: uppercase;
+}
+.severityCritical { color: var(--color-danger, #e53935); }
+.severityWarning { color: var(--color-warn, #ffb300); }
+.severityInfo { color: var(--color-text-muted, #aaa); }
+.dataClass { color: var(--color-text, #ddd); font-weight: 600; }
+.excerpt {
+  background: var(--color-bg, #111);
+  color: var(--color-text-muted, #aaa);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.rationale { color: var(--color-text-muted, #999); }
+.disclaimer { margin-top: 8px; font-size: 0.75em; color: var(--color-text-muted, #888); }

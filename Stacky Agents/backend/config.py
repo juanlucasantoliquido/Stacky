@@ -98,6 +98,15 @@ class Config:
         "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # ── Plan 122 — Comparador de BD entre ambientes (núcleo, serie 122-126) ────
+    # Default OFF: opt-in del operador vía UI (categoría "capacidades_optin").
+    STACKY_DB_COMPARE_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_ENABLED", "false"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC: int = int(
+        os.getenv("STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC", "10")
+    )
+
     # ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ──────────
     # DEFAULT ON (decisión explícita del operador 2026-07-09): el fallback del getenv es "true".
     STACKY_PR_REVIEWER_ENABLED = os.getenv("STACKY_PR_REVIEWER_ENABLED", "true").lower() in (

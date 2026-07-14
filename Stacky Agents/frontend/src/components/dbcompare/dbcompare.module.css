@@ -1,0 +1,166 @@
+/* Plan 122 F5 — estilos del núcleo del Comparador de BD. Usa las variables de
+   frontend/src/theme.css (sin paleta nueva hardcodeada; la escala de severidad
+   de diffs llega en el Plan 124). */
+
+.page {
+  padding: 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.header h1 {
+  margin: 0 0 4px 0;
+  font-size: 1.4rem;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  color: var(--text-muted);
+  margin: 0 0 20px 0;
+}
+
+.driverWarning {
+  background: var(--bg-elev);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+}
+
+.driverWarningRow {
+  margin-bottom: 6px;
+}
+
+.driverWarningRow code {
+  background: var(--mono-bg);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+}
+
+.environmentsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-primary);
+}
+
+.badge {
+  font-size: 0.75rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--text-muted);
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.recency {
+  color: var(--text-faint);
+  font-size: 0.8rem;
+}
+
+.testOk {
+  color: var(--success);
+  font-size: 0.85rem;
+}
+
+.testFail {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.passwordRow {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.passwordRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.dangerButton {
+  color: var(--danger);
+}
+
+.emptyState {
+  color: var(--text-faint);
+  padding: 20px;
+  text-align: center;
+  grid-column: 1 / -1;
+}
+
+.form {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 16px;
+}
+
+.form h3 {
+  margin-top: 0;
+  color: var(--text-primary);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.formGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.fieldError {
+  color: var(--danger);
+  font-size: 0.75rem;
+}
+
+.readonlyNote {
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  margin: 10px 0;
+}

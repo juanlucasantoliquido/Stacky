@@ -56,6 +56,22 @@ export function buildAgentPrompt(project: string, jobs: DoctorJob[]): string {
  * inexistente, archivo no encontrado"). Si un job no matcheó nada, usa el
  * fallback honesto en vez de inventar un título.
  */
+/**
+ * Plan 127 — true si el health del panel habilita el doctor local (conjunción
+ * flag AND LOCAL_LLM_ENABLED calculada server-side, H5). null/undefined ⇒ false.
+ */
+export function canUseLocalDoctor(health: { local_doctor_enabled?: boolean } | null): boolean {
+  return health?.local_doctor_enabled === true;
+}
+
+/** Plan 127 — body del POST .../doctor/local (mismo contrato que el cloud menos runtime). */
+export function buildLocalDoctorBody(
+  project: string,
+  payload: object,
+): { project: string; payload: object } {
+  return { project, payload };
+}
+
 export function summaryLine(jobs: DoctorJob[]): string {
   if (jobs.length === 0) {
     return 'No se encontraron jobs fallidos.';

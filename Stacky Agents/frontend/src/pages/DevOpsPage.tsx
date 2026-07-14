@@ -36,6 +36,7 @@ export interface DevOpsHealth {
   remote_target_enabled?: boolean; // Plan 108 — agente/ambientes anclados al servidor seleccionado
   pr_reviewer_enabled?: boolean; // Plan 110 — Revisor de PRs
   connection_doctor_enabled?: boolean; // Plan 116 — doctor de conexiones
+  local_doctor_enabled?: boolean; // Plan 127 — doctor local DevOps (IA local)
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 

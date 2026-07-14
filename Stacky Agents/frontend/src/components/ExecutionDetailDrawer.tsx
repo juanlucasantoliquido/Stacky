@@ -4,6 +4,7 @@ import { X, Copy } from "lucide-react";
 import { Executions } from "../api/endpoints";
 import type { ExecutionLocalInsight } from "../api/endpoints";
 import ExecutionInsightBlock from "./ExecutionInsightBlock";
+import ExecutionErrorAnalysisBlock from "./ExecutionErrorAnalysisBlock";
 import ContractBadge from "./ContractBadge";
 import StructuredOutput from "./StructuredOutput";
 import styles from "./ExecutionDetailDrawer.module.css";
@@ -95,6 +96,14 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
             <ExecutionInsightBlock
               executionId={executionId}
               insight={(metadata.local_insight ?? null) as ExecutionLocalInsight | null}
+              onRegenerated={() => execQ.refetch()}
+            />
+
+            {/* Plan 127 C1 — análisis de error con IA local (forense, HITL) */}
+            <ExecutionErrorAnalysisBlock
+              executionId={executionId}
+              status={content.status}
+              metadata={metadata}
               onRegenerated={() => execQ.refetch()}
             />
 

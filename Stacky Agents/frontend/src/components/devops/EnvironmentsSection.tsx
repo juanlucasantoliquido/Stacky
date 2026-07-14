@@ -518,6 +518,7 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
               project={activeProject}
               buildPayload={() => ({ environments: settings })}
               gateMessage={doctorFlagOff ? 'El doctor de secciones está apagado (activá la flag en el panel Arnés).' : undefined}
+              localDoctorEnabled={ctx.health.local_doctor_enabled === true}
             />
           );
         })()}

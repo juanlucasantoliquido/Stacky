@@ -2,7 +2,7 @@
  * doctorModel.test.ts — Plan 96 F4. vitest, TS puro.
  */
 import { describe, expect, it } from 'vitest';
-import { buildAgentPrompt, summaryLine, type DoctorJob } from './doctorModel';
+import { buildAgentPrompt, canUseLocalDoctor, summaryLine, type DoctorJob } from './doctorModel';
 
 function makeJob(overrides: Partial<DoctorJob> = {}): DoctorJob {
   return {
@@ -72,5 +72,15 @@ describe('summaryLine', () => {
     expect(summary).toContain('2 jobs fallaron');
     expect(summary).toContain('comando inexistente');
     expect(summary).toContain('archivo no encontrado');
+  });
+});
+
+describe('canUseLocalDoctor', () => {
+  it('health_null_es_false', () => {
+    expect(canUseLocalDoctor(null)).toBe(false);
+  });
+
+  it('local_doctor_enabled_true_es_true', () => {
+    expect(canUseLocalDoctor({ local_doctor_enabled: true })).toBe(true);
   });
 });

@@ -3224,6 +3224,7 @@ export const DevOps = {
       env_sandbox_enabled?: boolean; // Plan 107
       pr_reviewer_enabled?: boolean; // Plan 110
       connection_doctor_enabled?: boolean; // Plan 116
+      local_doctor_enabled?: boolean; // Plan 127
     }>("/api/devops/health"),
   /** Plan 116 — último snapshot del doctor de conexiones (HITL; 404 si flag OFF). */
   connectionsHealth: () =>
@@ -3642,4 +3643,28 @@ export const LocalLlmApi = {
       model: string;
       execution_id: number;
     }>("/api/llm/suggest-pipeline", body),
+  /** Plan 127 C1 — análisis de errores de UNA ejecución con el modelo local (HITL). */
+  errorAnalysis: (executionId: number, body: { model?: string } = {}) =>
+    api.post<{
+      ok: boolean;
+      analysis: string;
+      model: string;
+      analyzer_execution_id: number;
+      elapsed_ms: number;
+      error?: string;
+    }>(`/api/llm/executions/${executionId}/error-analysis`, body),
+  /** Plan 127 C3 — doctor de sección con el modelo local (síncrono, HITL). */
+  sectionDoctorLocal: (
+    sectionId: string,
+    body: { project: string; payload: object; model?: string },
+  ) =>
+    api.post<{
+      ok: boolean;
+      analysis: string;
+      model: string;
+      execution_id: number;
+      section: string;
+      elapsed_ms: number;
+      error?: string;
+    }>(`/api/devops/sections/${encodeURIComponent(sectionId)}/doctor/local`, body),
 };

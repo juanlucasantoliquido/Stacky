@@ -277,6 +277,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CODEBASE_MEMORY_MCP_ENABLED",   # Plan 76 — MCP externo opt-in (estado + guía)
         "STACKY_GITLAB_DEEP_LINKS_ENABLED",     # Plan 75 — deep links GitLab clickeables
         "STACKY_ADO_PREWARM_ENABLED",           # I0.3 — prewarm caché ADO (inerte sin TTL>0)
+        "STACKY_INCIDENT_RESOLVER_ENABLED",     # Plan 131 — botón "Resolver incidencia" (default OFF)
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -2718,6 +2719,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Habilita narrar el digest de ejecuciones en lenguaje natural con el modelo local (botón en la card del digest).",
         group="global",
         requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_RESOLVER_ENABLED",
+        type="bool",
+        label="Resolutor de incidencias multimodal (Plan 131)",
+        description=(
+            "Plan 131 — Botón 'Resolver incidencia' en Tickets: el operador carga fotos, "
+            "archivos y texto libre; el agente unificado IncidentAnalyst (negocio + "
+            "funcional + técnico en una pasada) desglosa la incidencia dev-ready; Stacky "
+            "publica el Issue en el tracker linkeado a su épica, sube los archivos como "
+            "attachments y escribe el doc del incidente en el grafo documental. "
+            "Publicación siempre con preview y confirmación del operador. Default OFF."
+        ),
+        group="global",
+        env_only=False,
     ),
 )
 

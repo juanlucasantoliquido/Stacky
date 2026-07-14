@@ -261,6 +261,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_LOCAL_INSIGHTS_ENABLED", "STACKY_LOCAL_INSIGHTS_SWEEP_SEC",  # Plan 117
         "STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE", "STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS",  # Plan 117
         "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",  # Plan 117
+        "STACKY_EGRESS_SENTINEL_ENABLED", "STACKY_EGRESS_SENTINEL_MAX_PER_CYCLE",  # Plan 121
+        "STACKY_EGRESS_SENTINEL_LOOKBACK_DAYS", "STACKY_EGRESS_SENTINEL_MAX_CHARS",  # Plan 121
     ),
     "capacidades_optin": (
         # Activación operador 2026-07-10 — features que el operador invoca a demanda
@@ -2718,6 +2720,46 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Habilita narrar el digest de ejecuciones en lenguaje natural con el modelo local (botón en la card del digest).",
         group="global",
         requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+    ),
+    # ── Plan 121 — Centinela local de egreso ──────────────────────────────────
+    FlagSpec(
+        key="STACKY_EGRESS_SENTINEL_ENABLED",
+        type="bool",
+        label="Centinela de egreso (IA local)",
+        description="Centinela de egreso: auditoría semántica de secretos/PII con la IA local sobre los prompts salientes de las ejecuciones (advisory, nunca bloquea).",
+        group="global",
+        # SIN default= (no curada en _CURATED_DEFAULTS_ON; el default efectivo OFF vive en config.py — gotcha Plan 63/81).
+        # SIN requires= estático hacia LOCAL_LLM_ENABLED: la dependencia se chequea en runtime (R4 prohíbe cadenas), patrón plan 117.
+    ),
+    FlagSpec(
+        key="STACKY_EGRESS_SENTINEL_MAX_PER_CYCLE",
+        type="int",
+        label="Centinela de egreso: máximo por ciclo",
+        description="Tope de ejecuciones auditadas por ciclo del barrido del centinela de egreso.",
+        group="global",
+        requires="STACKY_EGRESS_SENTINEL_ENABLED",
+        min_value=1,
+        max_value=20,
+    ),
+    FlagSpec(
+        key="STACKY_EGRESS_SENTINEL_LOOKBACK_DAYS",
+        type="int",
+        label="Centinela de egreso: ventana (días)",
+        description="Solo se auditan ejecuciones iniciadas dentro de esta ventana hacia atrás.",
+        group="global",
+        requires="STACKY_EGRESS_SENTINEL_ENABLED",
+        min_value=1,
+        max_value=90,
+    ),
+    FlagSpec(
+        key="STACKY_EGRESS_SENTINEL_MAX_CHARS",
+        type="int",
+        label="Centinela de egreso: tope de caracteres",
+        description="Máximo de caracteres del texto que recibe la IA local por auditoría. 0 = sin límite.",
+        group="global",
+        requires="STACKY_EGRESS_SENTINEL_ENABLED",
+        min_value=0,
+        max_value=200000,
     ),
 )
 

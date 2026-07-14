@@ -1,6 +1,6 @@
 # Plan 125 — Comparador de BD entre ambientes (serie 122–126, parte 4/5): scripts de paridad + backups pareados 1:1
 
-**Estado:** CRITICADO — APROBADO-CON-CAMBIOS (v1.1 → v2, 2026-07-14, juez `StackyArchitectaUltraEficientCode`)
+**Estado:** CRITICADO — APROBADO-CON-CAMBIOS (v1.1 → v2, 2026-07-14, juez `StackyArchitectaUltraEficientCode`) + IMPLEMENTADO-PARCIAL 2026-07-14 (rama `plan-125-dbcompare-scripts`): F0-F4 completas (88/88 tests) + F6 `scriptsLogic.ts` puro (9/9 vitest, tsc 0). **GAP documentado** (ver §9 DoD): F5 (API HTTP) y la parte de F3/F6 que integra con `api/db_compare.py`/`DbComparePage` NO implementadas — dependen de código de los Planes 122/123/124 que no existe en este checkout (worktree aislado, ver C1).
 **Serie:** 122 (núcleo) → 123 (motor de diff) → 124 (UI inmersiva) → **125 (scripts de paridad + backups)** → 126 (paridad de datos)
 **Dependencias:** Planes 122 y 123 — **contrato CONGELADO EN PAPEL** (§F1/§F3 de 122, §F1/§F2 de 123), pero el CÓDIGO puede no estar mergeado a `main` todavía cuando se implemente este plan (desarrollo con múltiples worktrees en paralelo — ver C1). Este plan NO asume código de 122/123 presente: **F0 (nueva)** lo verifica en runtime, y F1/F2/F4 son puros y se testean con fixtures dict propias sin importar nada de 122/123. Solo F3 (wrapper por `run_id`), F5 (API) y F6 (montaje en `DbComparePage`) requieren integración real; si al implementar no existen los módulos de 122/123/124, esas fases se documentan como GAP explícito (ver F0) — no se inventa infraestructura ajena en su lugar. El Plan 124 es recomendable pero NO bloqueante.
 **Ortogonal a:** Planes 116/119/120/121.
@@ -533,13 +533,13 @@ documenta en el resumen.
 
 ## 9. Definición de Hecho (DoD)
 
-- [ ] F0 preflight determinista y testeado; no bloquea F1/F2/F4.
-- [ ] `flatten_diff` con contrato exacto y tests golden (FIX C2): traduce SchemaDiff v1 anidado al modelo plano de F2 sin ambigüedad.
-- [ ] Emitters literales por dialecto con golden tests (KPI-2), incluyendo casos comentados (view sin definición, NOT NULL sin default) y `unique_removed` destructive=true (FIX C3).
-- [ ] Invariante de pareo 1:1 implementada como assert PRE-escritura + escritura atómica por `.tmp` + `os.replace` (KPI-1, FIX C4): imposible persistir bundle inválido O parcial.
-- [ ] Orden: backups → paridad → destructivos; FK-safe demostrado (KPI-3); ciclos degradan con warning explícito.
-- [ ] Bundle en disco + manifest v1 + zip descargable; allowlist anti-traversal testeada. (Puede quedar como diseño+`_materialize_bundle` testeado con fixtures si `dbcompare_runs` no existe — documentar gap.)
-- [ ] Tab Scripts con pareo visible, banner HITL literal, copiar/descargar por archivo y zip. (`scriptsLogic.ts` siempre completo; UI de montaje puede quedar como gap documentado si falta `DbComparePage`.)
-- [ ] Archivos de test backend de F0-F4 + 1 vitest verdes (comandos exactos); 122/123/smoke sin fallos NUEVOS respecto a baseline (FIX C6); tsc 0.
-- [ ] Cero endpoints que ejecuten SQL generado (grep de la review: ningún `execute` sobre contenido de bundle).
-- [ ] Todo GAP por dependencia ausente (F3 wrapper / F5 / F6 UI) queda LISTADO explícitamente en el resumen final de la implementación — nunca simulado ni silenciado.
+- [x] F0 preflight determinista y testeado; no bloquea F1/F2/F4. (`services/dbcompare_deps_preflight.py`, 5/5 tests)
+- [x] `flatten_diff` con contrato exacto y tests golden (FIX C2): traduce SchemaDiff v1 anidado al modelo plano de F2 sin ambigüedad. (5/5 tests)
+- [x] Emitters literales por dialecto con golden tests (KPI-2), incluyendo casos comentados (view sin definición, NOT NULL sin default) y `unique_removed` destructive=true (FIX C3). (29 sqlserver + 26 oracle tests)
+- [x] Invariante de pareo 1:1 implementada como assert PRE-escritura + escritura atómica por `.tmp` + `os.replace` (KPI-1, FIX C4): imposible persistir bundle inválido O parcial. (`generate_parity_bundle_from_diff`, 8/8 tests incl. `test_invariante_invalida_no_deja_archivos_parciales`)
+- [x] Orden: backups → paridad → destructivos; FK-safe demostrado (KPI-3); ciclos degradan con warning explícito. (`order_table_pieces`, 6/6 tests)
+- [x] Bundle en disco + manifest v1 + zip descargable — IMPLEMENTADO como `generate_parity_bundle_from_diff` (pura, testeada con fixtures). **GAP:** el wrapper `generate_parity_bundle(run_id)` que resuelve un run real vía `services.dbcompare_runs`/`dbcompare_snapshot` (Plan 122/123) no está disponible en este checkout; queda como `DbCompareRunError` explícito, no simulado. Allowlist anti-traversal (F5, endpoint HTTP) **NO implementada** — depende de `api/db_compare.py` ausente.
+- [~] Tab Scripts: `scriptsLogic.ts` IMPLEMENTADO completo (puro, 9/9 vitest). **GAP:** `ScriptsPanel.tsx`/`SqlViewer.tsx` (montan dentro de `DbComparePage`, Plan 122/124) **NO implementados** — la página contenedora no existe en este checkout.
+- [x] Archivos de test backend de F0-F4 + 1 vitest verdes (comandos exactos); smoke sin fallos NUEVOS respecto a baseline (FIX C6, baseline=4 passed, post=4 passed); tsc 0. `test_plan122_dbcompare_api.py`/`test_plan123_dbcompare_api.py` confirmados AUSENTES (gap, no ejecutados).
+- [x] Cero endpoints que ejecuten SQL generado (grep de la review: ningún `execute`/`connect`/`create_engine` en `dbcompare_scripts.py`).
+- [x] Todo GAP por dependencia ausente queda LISTADO explícitamente: **F5 completo (API HTTP)** y **F3-wrapper/F6-UI de montaje** (`generate_parity_bundle(run_id)`, `ScriptsPanel.tsx`, `SqlViewer.tsx`) no implementados — requieren `api/db_compare.py` (Plan 122 F4) y `DbComparePage` (Plan 122/124), ausentes en este checkout. La parte PURA de cada fase (F0-F4 completas, F6 `scriptsLogic.ts`) está implementada, testeada y verde.

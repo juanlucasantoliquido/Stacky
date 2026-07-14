@@ -1,6 +1,6 @@
 # Plan 131 — Resolutor de Incidencias multimodal: intake (fotos + archivos + texto) → agente unificado → Issue en ADO linkeado a su Épica → nodo con aristas en el grafo documental
 
-**Estado:** CRITICADO (v2, 2026-07-13) — RECHAZADO en v1 (C1/C2/C4 bloqueantes verificados en código); v2 corrige todos los hallazgos y queda lista para implementar
+**Estado:** IMPLEMENTADO (2026-07-14) — F0..F8 completas en la rama `plan-131-resolutor-incidencias` (worktree aislado); ver `Stacky Agents/docs/_supervision/` o memoria `plan-131-status` para detalle de fases, tests y desviaciones declaradas (C14 adaptado a la implementación real de `claude_code_cli_runner.py`; bug real corregido en `api/tickets.py` — `config.config.X` vs `config.X`). Push pendiente (manual del operador).
 
 **v1 → v2 — CHANGELOG (crítica adversarial 2026-07-13):**
 

@@ -1,6 +1,6 @@
 # Plan 133 — Contrato de inyección de contexto por agente: preflight de prerequisitos, refresh just-in-time, directiva de modo server-side y garantía de bloques requeridos
 
-**Estado:** CRITICADO v2 (2026-07-13)
+**Estado:** IMPLEMENTADO (2026-07-14) — F0..F7 completas, 128 tests nuevos verdes (por archivo). Rama `plan-133-contrato-contexto`, 6 commits (F0..F6; F7 absorbido en F0). Push pendiente (manual del operador).
 **Origen:** incidente real ADO-331 (FunctionalAnalyst lanzado sobre una Task en "Doing" → run quemado por aborto de contrato del agente). Tema fijado por el operador.
 
 **v1 → v2 — CHANGELOG (crítica adversarial 2026-07-13, juez StackyArchitectaUltraEficientCode):**

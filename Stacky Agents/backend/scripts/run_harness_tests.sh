@@ -229,6 +229,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan117_insights_sweep.py
   tests/test_plan117_insights_api.py
   tests/test_plan117_digest_narrative.py
+  # — Plan 129 · Paleta global: búsqueda profunda multi-fuente —
+  tests/test_plan129_flag.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

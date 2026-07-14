@@ -261,6 +261,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_LOCAL_INSIGHTS_ENABLED", "STACKY_LOCAL_INSIGHTS_SWEEP_SEC",  # Plan 117
         "STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE", "STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS",  # Plan 117
         "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",  # Plan 117
+        "STACKY_PALETTE_DEEP_SEARCH_ENABLED",  # Plan 129 — búsqueda profunda multi-fuente (paleta)
     ),
     "capacidades_optin": (
         # Activación operador 2026-07-10 — features que el operador invoca a demanda
@@ -2718,6 +2719,15 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Habilita narrar el digest de ejecuciones en lenguaje natural con el modelo local (botón en la card del digest).",
         group="global",
         requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+    ),
+    # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente ──
+    FlagSpec(
+        key="STACKY_PALETTE_DEEP_SEARCH_ENABLED",
+        type="bool",
+        label="Búsqueda profunda en la paleta (Ctrl+K)",
+        description="Plan 129 — La paleta de comandos busca también ejecuciones, documentos, servidores DevOps y flags vía /api/search/global (local, sin IA). OFF = paleta actual sin cambios.",
+        group="global",
+        # SIN default= (no curada en _CURATED_DEFAULTS_ON; el default efectivo OFF vive en config.py — gotcha Plan 63/81).
     ),
 )
 

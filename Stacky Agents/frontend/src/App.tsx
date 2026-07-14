@@ -60,6 +60,8 @@ export default function App() {
   const [migradorEnabled, setMigradorEnabled] = useState(false);
   // Plan 87: tab DevOps visible solo si el flag está ON en el backend
   const [devopsEnabled, setDevopsEnabled] = useState(false);
+  // Plan 129: búsqueda profunda de la paleta (Ctrl+K) solo si el flag está ON en el backend
+  const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
 
   useGlobalExecutionNotifier();
 
@@ -92,6 +94,11 @@ export default function App() {
       .then((r) => r.json())
       .then((d: { flag_enabled?: boolean }) => setDevopsEnabled(d.flag_enabled === true))
       .catch(() => setDevopsEnabled(false));
+    // Plan 129: comprobar si la búsqueda profunda de la paleta está habilitada (flag backend)
+    fetch("/api/search/health")
+      .then((r) => r.json())
+      .then((d: { flag_enabled?: boolean }) => setDeepSearchEnabled(d.flag_enabled === true))
+      .catch(() => setDeepSearchEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -256,6 +263,7 @@ export default function App() {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         onNavigate={navigateTo}
+        deepSearchEnabled={deepSearchEnabled}
       />
       <ShortcutsCheatsheet
         open={cheatsheetOpen}

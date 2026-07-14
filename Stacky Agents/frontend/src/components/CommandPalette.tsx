@@ -1,50 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Agents, Packs, Projects, Tickets } from "../api/endpoints";
+import { Agents, GlobalSearchApi, Packs, Projects, Tickets } from "../api/endpoints";
+import type { RemoteGroup } from "./commandPaletteData";
+import { NAV_COMMANDS, fuzzyScore, mergeDeepResults } from "./commandPaletteData";
+import type { Command } from "./commandPaletteData";
 import styles from "./CommandPalette.module.css";
-
-type CommandKind = "ticket" | "agent" | "pack" | "project" | "nav";
-
-interface Command {
-  id: string;
-  kind: CommandKind;
-  icon: string;
-  label: string;
-  hint?: string;
-  run: () => void;
-}
 
 interface Props {
   open: boolean;
   onClose: () => void;
   onNavigate: (path: string) => void;
+  /** Plan 129 — ADICIÓN ARQUITECTO: leído una vez en App.tsx (mismo patrón que
+   *  migradorEnabled/devopsEnabled), no por apertura de paleta. */
+  deepSearchEnabled?: boolean;
 }
 
-function fuzzyScore(query: string, text: string): number {
-  if (!query) return 1;
-  const q = query.toLowerCase();
-  const t = text.toLowerCase();
-  if (t.includes(q)) return 100 - (t.indexOf(q));
-  // Cada caracter de q debe aparecer en orden en t
-  let qi = 0;
-  let lastIdx = -1;
-  let gaps = 0;
-  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) {
-      if (lastIdx >= 0) gaps += ti - lastIdx - 1;
-      lastIdx = ti;
-      qi++;
-    }
-  }
-  if (qi < q.length) return 0;
-  return Math.max(1, 50 - gaps);
-}
+const DEEP_SEARCH_DEBOUNCE_MS = 250;
+const DEEP_SEARCH_MIN_CHARS = 2;
 
-export default function CommandPalette({ open, onClose, onNavigate }: Props) {
+export default function CommandPalette({ open, onClose, onNavigate, deepSearchEnabled = false }: Props) {
   const [query, setQuery] = useState("");
   const [tickets, setTickets] = useState<{ id: number; ado_id: number; title: string }[]>([]);
   const [agents, setAgents] = useState<{ filename: string; name?: string }[]>([]);
   const [packs, setPacks] = useState<{ id: string; name: string }[]>([]);
   const [projects, setProjects] = useState<{ name: string }[]>([]);
+  const [remoteGroups, setRemoteGroups] = useState<RemoteGroup[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -80,51 +59,33 @@ export default function CommandPalette({ open, onClose, onNavigate }: Props) {
       .catch(() => setProjects([]));
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !deepSearchEnabled || query.trim().length < DEEP_SEARCH_MIN_CHARS) {
+      setRemoteGroups([]);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      GlobalSearchApi.query(query, 8, controller.signal)
+        .then((res) => setRemoteGroups(res.groups ?? []))
+        .catch(() => setRemoteGroups([]));
+    }, DEEP_SEARCH_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [open, deepSearchEnabled, query]);
+
   const allCommands: Command[] = useMemo(() => {
     const commands: Command[] = [];
     commands.push(
-      {
-        id: "nav-team",
-        kind: "nav",
-        icon: "⚡",
-        label: "Ir a Mi Equipo",
-        run: () => onNavigate("/"),
-      },
-      {
-        id: "nav-tickets",
-        kind: "nav",
-        icon: "📋",
-        label: "Ir a Tickets ADO",
-        run: () => onNavigate("/tickets"),
-      },
-      {
-        id: "nav-settings",
-        kind: "nav",
-        icon: "⚙️",
-        label: "Ir a Configuración",
-        run: () => onNavigate("/settings"),
-      },
-      {
-        id: "nav-diagnostics",
-        kind: "nav",
-        icon: "🩺",
-        label: "Ir a Diagnóstico",
-        run: () => onNavigate("/diagnostics"),
-      },
-      {
-        id: "nav-pm",
-        kind: "nav",
-        icon: "📊",
-        label: "Ir a PM",
-        run: () => onNavigate("/pm"),
-      },
-      {
-        id: "nav-logs",
-        kind: "nav",
-        icon: "🔍",
-        label: "Ir a System Logs",
-        run: () => onNavigate("/logs"),
-      },
+      ...NAV_COMMANDS.map((nc) => ({
+        id: nc.id,
+        kind: "nav" as const,
+        icon: nc.icon,
+        label: nc.label,
+        run: () => onNavigate(nc.path),
+      })),
     );
     for (const t of tickets) {
       commands.push({
@@ -170,13 +131,15 @@ export default function CommandPalette({ open, onClose, onNavigate }: Props) {
     if (!query.trim()) {
       return allCommands.slice(0, 25);
     }
-    return allCommands
+    const localMatches = allCommands
       .map((c) => ({ c, score: fuzzyScore(query, c.label) }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 40)
       .map((x) => x.c);
-  }, [allCommands, query]);
+    const localIds = new Set(localMatches.map((c) => c.id));
+    const deepMatches = mergeDeepResults(localIds, remoteGroups, onNavigate);
+    return [...localMatches, ...deepMatches].slice(0, 40);
+  }, [allCommands, query, remoteGroups, onNavigate]);
 
   useEffect(() => {
     setSelectedIdx(0);

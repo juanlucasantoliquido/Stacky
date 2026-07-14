@@ -40,13 +40,13 @@ logger = logging.getLogger("stacky.api.diag")
 bp = Blueprint("diag", __name__, url_prefix="/diag")
 
 
-@bp.get("/execution/<int:execution_id>")
-def diagnose_execution(execution_id: int):
-    """Snapshot diagnóstico completo de una ejecución."""
+def build_diagnosis_snapshot(execution_id: int) -> dict | None:
+    """Snapshot forense completo de una ejecución (dict listo para jsonify).
+    None si la ejecución no existe. Reusada por el Plan 127 (error-analysis)."""
     with session_scope() as session:
         exec_row = session.get(AgentExecution, execution_id)
         if exec_row is None:
-            return jsonify({"ok": False, "error": "execution_not_found", "execution_id": execution_id}), 404
+            return None
 
         ticket_row = (
             session.get(Ticket, exec_row.ticket_id) if exec_row.ticket_id else None
@@ -110,7 +110,7 @@ def diagnose_execution(execution_id: int):
         heartbeat=hb_status,
     )
 
-    return jsonify({
+    return {
         "ok": True,
         "execution": execution_payload,
         "ticket": ticket_payload,
@@ -124,7 +124,16 @@ def diagnose_execution(execution_id: int):
             "heartbeat_timeout_minutes": HEARTBEAT_TIMEOUT_MINUTES,
             "startup_grace_seconds": STARTUP_GRACE_SECONDS,
         },
-    })
+    }
+
+
+@bp.get("/execution/<int:execution_id>")
+def diagnose_execution(execution_id: int):
+    """Snapshot diagnóstico completo de una ejecución."""
+    snapshot = build_diagnosis_snapshot(execution_id)
+    if snapshot is None:
+        return jsonify({"ok": False, "error": "execution_not_found", "execution_id": execution_id}), 404
+    return jsonify(snapshot)
 
 
 @bp.post("/output-watcher/scan-now")

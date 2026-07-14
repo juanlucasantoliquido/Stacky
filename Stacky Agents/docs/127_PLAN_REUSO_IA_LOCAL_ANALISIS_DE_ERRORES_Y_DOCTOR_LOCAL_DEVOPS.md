@@ -1,6 +1,6 @@
 # Plan 127 — Reuso de la IA local: análisis de errores de ejecuciones y doctor local DevOps
 
-**Estado:** CRITICADO (v2, 2026-07-12)
+**Estado:** IMPLEMENTADO (F0..F7 completas, 2026-07-14, rama `plan-127-ia-local-doctor`, HEAD `d2bbf4d2`; ver §7 DoD)
 **Dependencias duras:** Plan 106 (`invoke_local_llm`, ya implementado, commit 344f3124), Plan 110 (`services/pr_review_sanitize.py`, ya implementado, commit bb4e8373)
 **Superficies que EXTIENDE (sin romper):** Plan 104 (doctor de sección DevOps), Plan 96 (doctor de pipelines), Plan 117 (insights locales — solo se agregan literales a su lista de exclusión)
 **Ortogonal a:** Plan 121 (centinela de egreso — ver §6), Plan 120 (Centro de Despliegues), serie 122-126 (DB compare)

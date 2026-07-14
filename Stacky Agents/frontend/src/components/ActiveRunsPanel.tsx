@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Move, X } from "lucide-react";
+import { Move, Terminal, X } from "lucide-react";
 
 import { Executions } from "../api/endpoints";
 import useLocalStorageState from "../hooks/useLocalStorageState";
+import { useWorkbench } from "../store/workbench";
 import type { AgentExecution } from "../types";
 import styles from "./ActiveRunsPanel.module.css";
 
@@ -47,6 +48,13 @@ async function fetchActiveRuns(): Promise<AgentExecution[]> {
 
 export default function ActiveRunsPanel() {
   const qc = useQueryClient();
+
+  // Abrir la consola en vivo de un run reusa el mecanismo único y ya existente
+  // del repo: setCodexConsoleExecution del store (mismo patrón que
+  // pages/TicketBoard.tsx:308). CodexConsoleDock ya está montado globalmente
+  // en App.tsx, así que con setear el id alcanza — no se crea nada nuevo.
+  const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
+  const consoleExecutionId = useWorkbench((s) => s.codexConsoleExecutionId);
 
   // Colapsado y posición persisten en localStorage (mismo patrón que el resto
   // de las preferencias de UI del proyecto — ver useLocalStorageState) para
@@ -135,6 +143,21 @@ export default function ActiveRunsPanel() {
               <span className={styles.meta}>
                 ticket {e.ticket_id} · {e.agent_type} · {e.status}
               </span>
+              <button
+                type="button"
+                className={styles.consoleBtn}
+                title={`Ver consola en vivo de la ejecución #${e.id}`}
+                aria-label={`Ver consola de la ejecución #${e.id}`}
+                aria-pressed={consoleExecutionId === e.id}
+                onClick={() =>
+                  setCodexConsoleExecution(
+                    consoleExecutionId === e.id ? null : e.id,
+                    false,
+                  )
+                }
+              >
+                <Terminal size={13} aria-hidden />
+              </button>
               <button
                 type="button"
                 className={styles.cancelBtn}

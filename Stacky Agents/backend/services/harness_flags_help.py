@@ -1224,6 +1224,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás: se corta antes la espera. De fábrica son 120 segundos.",
         example="Como el tiempo que esperás al teléfono antes de cortar y volver a intentar.",
     ),
+    "STACKY_CODE_INTEGRITY_ENABLED": PlainHelp(
+        what="Verifica en segundos que TODO el código Python del backend compile (sintaxis) y que sus imports internos existan, sin ejecutar nada y sin IA.",
+        on_effect="Si la activás: aparece la card 'Integridad del código' en Diagnóstico con el botón Verificar ahora, y el endpoint /api/diag/code-integrity responde. No corre solo: solo a demanda.",
+        off_effect="Si la apagás: la card desaparece y el endpoint devuelve 404. El gate de 'Preparar Publicación' NO depende de esta flag (su bypass es -SkipCodeIntegrity).",
+        example="Antes de publicar, el gate te dice 'api/devops_servers.py:223 — invalid syntax' en 2 segundos, en vez de un ModuleNotFoundError críptico tras minutos de build.",
+    ),
 }
 
 

@@ -277,6 +277,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CODEBASE_MEMORY_MCP_ENABLED",   # Plan 76 — MCP externo opt-in (estado + guía)
         "STACKY_GITLAB_DEEP_LINKS_ENABLED",     # Plan 75 — deep links GitLab clickeables
         "STACKY_ADO_PREWARM_ENABLED",           # I0.3 — prewarm caché ADO (inerte sin TTL>0)
+        "STACKY_CODE_INTEGRITY_ENABLED",        # Plan 130 — gate determinista sintaxis+imports (card Diagnóstico)
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -2718,6 +2719,18 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Habilita narrar el digest de ejecuciones en lenguaje natural con el modelo local (botón en la card del digest).",
         group="global",
         requires="STACKY_LOCAL_INSIGHTS_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_CODE_INTEGRITY_ENABLED",
+        type="bool",
+        label="Verificador de integridad de código",
+        description=(
+            "Gate determinista pre-publicación: sintaxis (ast.parse) e imports de "
+            "primera parte de todo el backend, en segundos, sin ejecutar código y sin IA. "
+            "Expone GET /api/diag/code-integrity y la card en Diagnóstico."
+        ),
+        group="global",
+        default=True,  # Default ON (activado 2026-07-13, decisión explícita del operador — patrón triple Plan 127 §3.6)
     ),
 )
 

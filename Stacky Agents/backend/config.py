@@ -931,6 +931,11 @@ class Config:
         "STACKY_DEVOPS_PANEL_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # ── Plan 130 — Verificador de integridad de código (default ON, decisión operador 2026-07-13, editable por UI) ──
+    STACKY_CODE_INTEGRITY_ENABLED: bool = os.getenv(
+        "STACKY_CODE_INTEGRITY_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # Plan 88 — Publicaciones parametrizables de procesos (seccion del panel
     # DevOps). Default ON (activado 2026-07-05, decisión explícita del operador).
     # Editable por UI (HarnessFlagsPanel, categoría "DevOps").

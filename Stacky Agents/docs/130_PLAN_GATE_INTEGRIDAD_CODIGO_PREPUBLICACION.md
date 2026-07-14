@@ -1,6 +1,36 @@
 # Plan 130 — Gate determinista de integridad de código pre-publicación (sintaxis + imports, sin IA)
 
-**Estado:** PROPUESTO (v1, 2026-07-13)
+**Estado:** CRITICADO — APROBADO-CON-CAMBIOS (v2, 2026-07-14; v1 2026-07-13)
+
+**Changelog v1 → v2 (crítica adversarial, juez `StackyArchitectaUltraEficientCode`):**
+- **C1 (IMPORTANTE):** el snippet de `code_integrity_route()` en F2 declaraba
+  `import config as _config_mod` (alias nuevo) contradiciendo su propia instrucción de
+  "reusar el import existente" — `api/diag.py:26` YA importa `config as _config` y lo usa
+  como `_config.config.X` en `api/diag.py:364`. Corregido: el snippet reusa `_config`
+  directamente, sin import local nuevo.
+- **C2 (IMPORTANTE):** F0 citaba `_CURATED_DEFAULTS_ON (:465)` como "AL FINAL" del set,
+  pero `:465` es la línea de APERTURA (`_CURATED_DEFAULTS_ON = {`); el cierre real
+  (`}`) está en `:550`, después de `"STACKY_ADO_PREWARM_ENABLED",`. Verificado por lectura
+  directa del archivo. Corregido con la línea real + ancla de búsqueda por contenido (no
+  por número de línea a ciegas).
+- **C3 (MENOR):** F0 citaba `config.py:940-941` para el patrón espejo
+  `STACKY_DEVOPS_PANEL_ENABLED` (con un typo de mayúsculas en la prosa,
+  "STACKY_DEVOps_PANEL_ENABLED"); la ubicación real verificada es `config.py:930-931`.
+  Corregido línea y casing.
+- **[ADICIÓN ARQUITECTO]** F5 ahora agrega un chequeo INFORMATIVO (no cambia exit code)
+  del CLI de integridad al INICIO de `run_harness_tests.ps1`/`.sh`, antes del loop de
+  pytest — reusa el CLI de F2 para señalar en segundos la causa raíz real cuando un
+  `SyntaxError` en un módulo compartido hace fallar la COLECCIÓN de decenas de archivos
+  del ratchet a la vez (mismo patrón "collect-submodules silencioso" del §2, aplicado al
+  loop de tests en vez de a PyInstaller). Costo cero, sin flag, sin tocar el contrato de
+  salida del ratchet.
+- Todas las citas de código restantes (`api/diag.py:40`, `DiagnosticsPage.tsx:13-14/206`,
+  `Prepare-Publication.ps1:11-23/20/40-80/346-376`, `build_release.ps1:703-719`,
+  `App.tsx:250`, `test_plan87_devops_endpoints.py:6-29`, `harness_flags.py:103/111`,
+  `test_harness_flags.py:465/510`, `harness_flags_help.py:268`, patrón `FlagSpec` con
+  `group="global"`/`env_only`/`requires`) fueron verificadas contra el código REAL en HEAD
+  de este worktree y son EXACTAS — sin cambios.
+
 **Dependencias:** ninguna dura. Reusa el pipeline de publicación existente (`deployment/Prepare-Publication.ps1`), el blueprint `diag` (`api/diag.py:40`) y la página Diagnóstico (siempre visible, sin gate de sección — `App.tsx:250`).
 **Ortogonal a:** Plan 102 (orquestador HITL de publicación: sus enganches `preflightSlot`/`beforeCommit` quedan como punto de integración FUTURO, declarado en §7), Plan 127-C3 (doctor DevOps con IA local: narrativo y por sección; esto es determinista, sin IA y pre-build), Planes 93/96 (semáforo/doctor de pipelines CI REMOTOS), Plan 129 (paleta global — no comparte archivos). NO toca `App.tsx`.
 
@@ -233,11 +263,13 @@ Salida humana (default): líneas `file:line — message` por hallazgo + resumen
    `_CATEGORY_KEYS["capacidades_optin"]` (dict en `harness_flags.py:111`, buscar la clave
    por nombre).
 2. `Stacky Agents/backend/tests/test_harness_flags.py` — agregar
-   `"STACKY_CODE_INTEGRITY_ENABLED",` AL FINAL del set `_CURATED_DEFAULTS_ON` (`:465`),
-   comentario `# Plan 130 — default ON (operador 2026-07-13)`.
+   `"STACKY_CODE_INTEGRITY_ENABLED",` AL FINAL del set `_CURATED_DEFAULTS_ON`, INMEDIATAMENTE
+   ANTES del `}` de cierre. El set ABRE en `:465` (`_CURATED_DEFAULTS_ON = {`) pero el
+   CIERRE real está en `:550`, justo después de `"STACKY_ADO_PREWARM_ENABLED",` — usar ESE
+   string como ancla de búsqueda (Edit por contenido), no el número de línea a ciegas.
+   Comentario `# Plan 130 — default ON (operador 2026-07-13)`.
 3. `Stacky Agents/backend/config.py` — patrón EXACTO default-ON (espejo de
-   `STACKY_DEVOps_PANEL_ENABLED` en `config.py:940-941` — respetar mayúsculas reales del
-   archivo):
+   `STACKY_DEVOPS_PANEL_ENABLED` en `config.py:930-931`):
    ```python
    # ── Plan 130 — Verificador de integridad de código (default ON, decisión operador 2026-07-13, editable por UI) ──
    STACKY_CODE_INTEGRITY_ENABLED: bool = os.getenv(
@@ -382,8 +414,7 @@ if __name__ == "__main__":
 @bp.get("/code-integrity")
 def code_integrity_route():
     """Plan 130 — gate determinista de sintaxis + imports (read-only, sin IA)."""
-    import config as _config_mod
-    if not bool(getattr(_config_mod.config, "STACKY_CODE_INTEGRITY_ENABLED", False)):
+    if not bool(getattr(_config.config, "STACKY_CODE_INTEGRITY_ENABLED", False)):
         return jsonify({"ok": False, "error": "code_integrity_disabled",
                         "message": "El verificador de integridad está deshabilitado (STACKY_CODE_INTEGRITY_ENABLED)."}), 404
     from services import code_integrity as ci  # import lazy (patrón Plan 109)
@@ -392,7 +423,10 @@ def code_integrity_route():
     except Exception as exc:
         return jsonify({"ok": False, "error": type(exc).__name__}), 200
 ```
-(Si `diag.py` ya importa `config` arriba, reusar ese import en vez de duplicarlo.)
+`diag.py:26` YA tiene `import config as _config` (usado como `_config.config.X` en
+`diag.py:364`, patrón Plan 106) — REUSAR ese alias tal cual, EXACTO como en el snippet de
+arriba. PROHIBIDO declarar un import local nuevo con otro alias dentro de la función
+(inconsistencia detectada en v1, corregida en v2).
 
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan130_code_integrity_endpoint_cli.py`
 (fixtures `app_flag_off`/`app_flag_on` COPIADAS de `tests/test_plan87_devops_endpoints.py:6-29`
@@ -556,9 +590,33 @@ una terminal.
 **Objetivo:** registrar los tests nuevos en el ratchet y dejar el plan auditable.
 
 **Archivos a editar:**
-1. `Stacky Agents/backend/scripts/run_harness_tests.ps1` y `.sh` — bloque nuevo con los
-   3 archivos `test_plan130_*.py` (un `pytest` por archivo, espejo de cualquier plan reciente).
+1. `Stacky Agents/backend/scripts/run_harness_tests.ps1` y `.sh` — DOS cambios:
+   a. Bloque nuevo dentro de `$HarnessTestFiles`/`HARNESS_TEST_FILES` con los 3 archivos
+      `test_plan130_*.py` (un `pytest` por archivo, espejo de cualquier plan reciente).
+   b. **[ADICIÓN ARQUITECTO]** Al INICIO del script, ANTES del `foreach ($f in
+      $HarnessTestFiles)` (`.ps1`) / `for f in "${HarnessTestFiles[@]}"` (`.sh`), imprimir
+      el resumen del CLI de integridad (F2) como chequeo INFORMATIVO previo — NO toca
+      `$pass`/`$fail`/`exit` del ratchet (cero riesgo de romper su contrato de salida):
+      ```powershell
+      Write-Host "== Plan 130: integridad de codigo (informativo) =="
+      & $python "scripts\check_code_integrity.py"
+      Write-Host ""
+      ```
+      `.sh` equivalente: `echo "== Plan 130: integridad de codigo (informativo) =="`,
+      `python3 scripts/check_code_integrity.py || true`, `echo`. Motivo: hoy, un
+      `SyntaxError` en UN módulo compartido (p.ej. `api/devops_servers.py`, el incidente
+      real del §2) hace que pytest falle la COLECCIÓN en decenas de archivos del ratchet a
+      la vez, con tracebacks que ocultan la causa raíz — el mismo patrón
+      "collect-submodules silencioso" pero en el loop de tests, no en PyInstaller. Este
+      chequeo de 1-3s, impreso ANTES del loop, señala `file:line` real en segundos.
+      Costo cero: reusa el CLI de F2, no requiere flag (el ratchet ya es una herramienta de
+      desarrollador invocada a mano/CI, no un endpoint del operador), no cambia semántica
+      de pass/fail existente.
 2. Este doc: actualizar `**Estado:**` a `IMPLEMENTADO — <fecha> (F0..F5 …)` al cerrar.
+
+**Verificación de la adición (binaria):**
+`grep -n "check_code_integrity.py" "Stacky Agents/backend/scripts/run_harness_tests.ps1" "Stacky Agents/backend/scripts/run_harness_tests.sh"`
+→ ambos ≥1 match (además de los 3 `test_plan130_*.py` ya exigidos).
 
 **Comandos de cierre (todos verdes, por archivo):**
 ```
@@ -668,6 +726,8 @@ cd "Stacky Agents/frontend" && npx tsc --noEmit
 - [ ] El servicio no ejecuta ni escribe: `grep -n "subprocess\|py_compile\|compileall\|importlib\|exec(\|eval(" "Stacky Agents/backend/services/code_integrity.py"` → 0 matches;
       test F1 caso 12 (sin `__pycache__`/`.pyc`) verde.
 - [ ] `App.tsx` SIN cambios (`git diff --name-only` no lo incluye).
-- [ ] Ratchet ps1/sh actualizados con los 3 `test_plan130_*`.
+- [ ] Ratchet ps1/sh actualizados con los 3 `test_plan130_*` Y con el chequeo informativo
+      `check_code_integrity.py` al inicio ([ADICIÓN ARQUITECTO] F5), sin alterar el
+      contrato de exit code del ratchet.
 - [ ] `**Estado:**` de este doc actualizado al cerrar.
 - [ ] `git status` final: WIP ajeno intacto (staging quirúrgico verificado).

@@ -349,6 +349,14 @@ HARNESS_TEST_FILES=(
   tests/test_flag_wiring.py
   # — Plan 86 — Flags para mortales: ayuda en lenguaje llano —
   tests/test_harness_flags_help.py
+  # — Plan 133 — Contrato de inyección de contexto por agente —
+  tests/test_context_contract_flags.py
+  tests/test_run_ticket_refresh.py
+  tests/test_business_preflight.py
+  tests/test_ado_blocker_block.py
+  tests/test_run_directive_block.py
+  tests/test_agent_contract.py
+  tests/test_block_priorities_contract.py
 )
 
 pass=0

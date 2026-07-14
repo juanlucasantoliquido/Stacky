@@ -1,13 +1,43 @@
 # Plan 121 — Centinela local de egreso: detección semántica de secretos y PII con la IA local
 
-**Estado:** PROPUESTO (v1, 2026-07-11)
-**Dependencias:** Plan 106 (modelo local Qwen/Ollama, `invoke_local_llm`), sustrato de egreso H3.3 (`services/egress_policies.py`), Plan 117 (patrón sweep + health-gate, NO se modifica)
+**Estado:** CRITICADO (v2, 2026-07-14) — APROBADO-CON-CAMBIOS en v1 (2 IMPORTANTES + 1 MENOR corregidos in place; sin bloqueantes); v2 lista para implementar.
+
+**v1 → v2 — CHANGELOG (crítica adversarial 2026-07-14):**
+
+- **C1 IMPORTANTE (fix F3, `pick_candidates`):** el candidate-pool NO excluía `agent_type`
+  en `local_insights.EXCLUDED_AGENT_TYPES` ni con prefijo `local_llm_%` (patrón C3 del
+  plan 117, `services/local_insights.py:249-250`). Esas ejecuciones (`local_llm_analyzer`,
+  `local_llm_pipeline_suggester`, `local_llm_playground`, `local_llm_ticket_insight`,
+  creadas por `api/local_llm_analysis.py:_create_execution`) llaman `invoke_local_llm`
+  directo al modelo LOCAL — **nunca egresan a un LLM cloud**. Auditarlas contradice la
+  definición propia del plan ("Egreso: ... hacia un LLM cloud", §7) y quema
+  `MAX_PER_CYCLE` en ruido. v2 reusa el filtro exacto de `local_insights.py:249-250`.
+- **C2 IMPORTANTE (fix F5.2):** la instrucción para `ExecutionDetailDrawer.tsx` tenía un
+  condicional sin resolver ("si el drawer no expone hoy el metadata crudo..."). Verificado
+  en código: `metadata` YA está expuesto (`ExecutionDetailDrawer.tsx:51`) y
+  `ExecutionInsightBlock` YA se renderiza ahí con `metadata.local_insight`
+  (`ExecutionDetailDrawer.tsx:95-97`). v2 elimina la ambigüedad: instrucción literal de
+  dónde insertar `<EgressSentinelBlock>` y con qué prop exacta.
+- **C3 MENOR (nota operativa):** las citas `archivo:línea` del plan son exactas contra el
+  HEAD commiteado de `main` (`33199577`), NO contra el working tree compartido actual, que
+  tiene WIP ajeno sin commitear en `copilot_bridge.py` (+177/-53) y
+  `api/local_llm_analysis.py` (+212) que desplaza esas líneas. v2 agrega esta advertencia
+  explícita para que la implementación se haga sobre un checkout/worktree limpio de `main`.
+- **[ADICIÓN ARQUITECTO] (F4, `GET /findings`):** la respuesta suma
+  `"summary": {"scanned_total": int, "flagged_total": int}` — dos `COUNT` baratos sobre el
+  mismo query base ya escrito en F4, sin endpoint nuevo, sin UI obligatoria nueva, cero
+  trabajo del operador. Le da al operador, de un vistazo, si el sweep está corriendo y
+  cuánto encontró sin abrir ejecuciones una por una.
+
+**Dependencias:** Plan 106 (modelo local Qwen/Ollama, `invoke_local_llm`), sustrato de egreso H3.3 (`services/egress_policies.py`), Plan 117 (patrón sweep + health-gate + `EXCLUDED_AGENT_TYPES`, NO se modifica)
 **Ortogonal a:** Plan 110 (revisor de PRs), Plan 117 (insights de resultado de ejecuciones), Plan 120 (Centro de Despliegues)
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Toda afirmación sobre código existente
-> cita `archivo:línea` verificada el 2026-07-11 sobre el working tree
-> (rama `codex/subida-cambios-pendientes`). Prohibido desviarse de los nombres exactos.
+> cita `archivo:línea` verificada el 2026-07-11 (v1) y re-verificada el 2026-07-14 (v2)
+> contra el HEAD commiteado de `main` (`33199577`). **Implementar sobre un checkout/worktree
+> limpio de `main`** — el working tree compartido puede tener WIP ajeno sin commitear que
+> desplaza líneas (C3 v2). Prohibido desviarse de los nombres exactos.
 
 ---
 
@@ -349,7 +379,18 @@ def pick_candidates(session, *, lookback_days: int, limit: int) -> list:
     """Query sobre AgentExecution: started_at >= utcnow - lookback_days, ordenadas por
     started_at DESC, filtrando en Python las que should_scan() rechaza, hasta `limit`.
     Patrón de local_insights.pick_candidates (local_insights.py:238) SIN el join a Ticket
-    (el centinela audita TODO egreso, incluso ejecuciones de tickets internos ado_id<0)."""
+    (el centinela audita TODO egreso, incluso ejecuciones de tickets internos ado_id<0).
+
+    [C1 fix v2] EXCLUIR del query (reuso EXACTO del patrón C3 de
+    local_insights.py:249-250, import `from services.local_insights import
+    EXCLUDED_AGENT_TYPES`):
+        .filter(~AgentExecution.agent_type.in_(sorted(EXCLUDED_AGENT_TYPES)))
+        .filter(~AgentExecution.agent_type.like("local_llm_%"))
+    Motivo: esas ejecuciones (`local_llm_analyzer`, `local_llm_pipeline_suggester`,
+    `local_llm_playground`, `local_llm_ticket_insight`, creadas por
+    `api/local_llm_analysis.py:_create_execution`) invocan `invoke_local_llm` DIRECTO al
+    modelo local — nunca egresaron a un LLM cloud. Auditarlas es ruido y gasta
+    `MAX_PER_CYCLE` en ejecuciones fuera de la definición de "egreso" (§7)."""
 
 def scan_execution(execution_id: int) -> dict:
     """1) Carga la ejecución; extrae texto de input_context (concatenar los bloques de
@@ -397,6 +438,10 @@ con `unittest.mock.patch` EN EL MÓDULO `services.egress_sentinel` — gotcha la
 - `test_scan_failure_does_not_mark_scanned` — mock que lanza RuntimeError → sin
   METADATA_KEY, el sweep devuelve 0 y no explota.
 - `test_pick_candidates_skips_already_scanned`.
+- `test_pick_candidates_excludes_local_llm_agent_types` — [C1 fix v2] una `AgentExecution`
+  con `agent_type="local_llm_playground"` (o cualquiera de
+  `local_insights.EXCLUDED_AGENT_TYPES`) dentro del lookback y sin `metadata_json` NO
+  aparece en `pick_candidates(...)` — nunca egresó a un LLM cloud.
 - `test_deterministic_classes_included` — un input con `password=abc123xyz` produce
   `deterministic_classes` conteniendo `"secrets"` (integración F1↔F3).
 
@@ -433,9 +478,16 @@ registrado en `api/__init__.py`; NO crear blueprint nuevo). Agregar 2 rutas:
    (filtrar en Python tras traer las últimas `limit*5` filas con `metadata_json IS NOT NULL`,
    simple y suficiente en mono-operador); devolver
    `200 {"items": [{"execution_id", "started_at" (isoformat), "agent_type",
-   "status", "findings", "deterministic_classes"}]}` solo de las que tienen
-   `status == "findings"` o `deterministic_classes` no vacío, cap `limit` (default 20,
-   max 100).
+   "status", "findings", "deterministic_classes"}], "summary": {"scanned_total": int,
+   "flagged_total": int}}` — `items` solo de las que tienen `status == "findings"` o
+   `deterministic_classes` no vacío, cap `limit` (default 20, max 100).
+   **[ADICIÓN ARQUITECTO] `summary`:** sobre el MISMO conjunto de filas ya traído para
+   `items` (antes de aplicar el cap de `limit`), `scanned_total` = cantidad total de filas
+   con `METADATA_KEY` en `metadata_json` (escaneadas, con o sin hallazgo); `flagged_total`
+   = cantidad de esas que cumplen el filtro de `items` (con hallazgo). Ningún query nuevo:
+   son dos `len()`/`sum()` en Python sobre la lista ya obtenida. Le da al operador
+   visibilidad de "el sweep está corriendo y encontró N cosas" sin abrir ejecuciones una
+   por una ni sumar un endpoint nuevo.
 
 **Tests (TDD) — crear `Stacky Agents/backend/tests/test_plan121_sentinel_api.py`**
 (patrón test client Flask de `tests/test_plan117_insights_api.py`; mockear
@@ -447,6 +499,8 @@ registrado en `api/__init__.py`; NO crear blueprint nuevo). Agregar 2 rutas:
 - `test_scan_502_when_local_llm_down` — mock lanza RuntimeError → 502.
 - `test_findings_lists_only_flagged_executions` — 2 ejecuciones (una clean, una con
   findings) → el GET devuelve solo la flaggeada.
+- `test_findings_summary_counts` — [ADICIÓN ARQUITECTO] 3 ejecuciones escaneadas (2 clean,
+  1 con findings) → `summary == {"scanned_total": 3, "flagged_total": 1}`.
 
 **Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan121_sentinel_api.py -q`
 
@@ -464,9 +518,12 @@ del plan 106).
 **Archivos:**
 
 1. **Crear** `Stacky Agents/frontend/src/components/EgressSentinelBlock.tsx` (+
-   `EgressSentinelBlock.module.css`): componente presentacional que recibe
-   `sentinel?: { status: string; findings: Array<{ data_class: string; severity: string;
-   excerpt_masked: string; rationale: string }>; deterministic_classes: string[] }`.
+   `EgressSentinelBlock.module.css`): componente presentacional. [C2 fix v2] Exportar el
+   tipo `export interface EgressSentinelData { status: string; findings: Array<{
+   data_class: string; severity: string; excerpt_masked: string; rationale: string }>;
+   deterministic_classes: string[] }` (mismo patrón de export que `ExecutionLocalInsight`
+   en `ExecutionInsightBlock.tsx`) y la prop del componente:
+   `sentinel?: EgressSentinelData | null`.
    - `undefined`/ausente → render `null` (cero ruido si la feature está OFF — KPI-6).
    - `status === "clean"` y `deterministic_classes` vacío → chip discreto "Egreso: limpio".
    - Con hallazgos → chip rojo/ámbar "Posible fuga en el prompt" + lista: severidad,
@@ -474,10 +531,21 @@ del plan 106).
      "Detectado por la IA local. El contenido nunca salió de esta máquina para este análisis."
    - Estilos: tokens de `theme.css` (nunca hex claro inline — gotcha contraste dark).
 2. **Editar** `Stacky Agents/frontend/src/components/ExecutionDetailDrawer.tsx`:
-   renderizar `<EgressSentinelBlock sentinel={metadata?.egress_sentinel} />` junto al
-   bloque de insights del plan 117 (mismo lugar donde ese drawer lee
-   `metadata`); si el drawer no expone hoy el metadata crudo, extraerlo igual que lo hace
-   para `ExecutionInsightBlock`.
+   [C2 fix v2 — literal, verificado en código] `metadata` YA está expuesto en
+   `ExecutionDetailDrawer.tsx:51` (`const metadata = (content?.metadata ?? {}) as
+   Record<string, unknown>;`) y `ExecutionInsightBlock` YA se renderiza con él en
+   `ExecutionDetailDrawer.tsx:95-97` (`insight={(metadata.local_insight ?? null) as
+   ExecutionLocalInsight | null}`). Insertar inmediatamente después de ese bloque
+   `ExecutionInsightBlock`:
+   ```tsx
+   <EgressSentinelBlock
+     sentinel={(metadata.egress_sentinel ?? null) as EgressSentinelData | null}
+   />
+   ```
+   con el import `import EgressSentinelBlock from "./EgressSentinelBlock";` y el tipo
+   `EgressSentinelData` exportado desde `EgressSentinelBlock.tsx` (mismo patrón de export
+   que `ExecutionLocalInsight` en `ExecutionInsightBlock.tsx`). No se toca ninguna otra
+   línea de `ExecutionDetailDrawer.tsx`.
 3. **Editar** `Stacky Agents/frontend/src/components/LocalLlmPlaygroundPanel.tsx`:
    agregar una sub-sección "Centinela de egreso" con: `<textarea>` + botón
    "Escanear antes de enviar" → `POST /api/llm/egress-sentinel/scan` → render del
@@ -601,8 +669,11 @@ con el output pegado y no contarlo como regresión).
       es puro y ningún hallazgo persiste sin enmascarar (KPI-3).
 - [ ] El sweep anota `metadata_json["egress_sentinel"]` en ejecuciones recientes con las
       flags ON y NO quema candidatos con el modelo caído (KPI-2, KPI-5).
+- [ ] `pick_candidates` EXCLUYE `agent_type` en `local_insights.EXCLUDED_AGENT_TYPES` y con
+      prefijo `local_llm_%` (C1 v2: esas ejecuciones nunca egresaron a un LLM cloud).
 - [ ] `POST /api/llm/egress-sentinel/scan` y `GET /api/llm/egress-sentinel/findings`
-      responden según F4 (404 con flag OFF) (KPI-4).
+      responden según F4 (404 con flag OFF) (KPI-4); `findings` incluye `summary`
+      (`scanned_total`, `flagged_total`) [ADICIÓN ARQUITECTO].
 - [ ] `EgressSentinelBlock` renderiza en el drawer y el playground tiene el pre-flight
       manual; vitest + `tsc --noEmit` verdes.
 - [ ] Los 5 archivos de test backend registrados en el ratchet (`.sh` y `.ps1`).

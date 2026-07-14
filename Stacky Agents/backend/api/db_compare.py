@@ -10,7 +10,15 @@ from __future__ import annotations
 import config as _config
 from flask import Blueprint, current_app, jsonify, request
 
-from services import dbcompare_engine, dbcompare_registry, dbcompare_runs, dbcompare_snapshot
+from services import (
+    dbcompare_data,
+    dbcompare_engine,
+    dbcompare_registry,
+    dbcompare_runs,
+    dbcompare_snapshot,
+)
+from services import dbcompare_sqlnames as _sqlnames
+from services.db_query import validate_select_only as _validate_select_only
 
 bp = Blueprint("db_compare", __name__, url_prefix="/db-compare")
 
@@ -18,6 +26,16 @@ bp = Blueprint("db_compare", __name__, url_prefix="/db-compare")
 def _require_enabled():
     if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
         return jsonify({"ok": False, "error": "Comparador de BD deshabilitado (STACKY_DB_COMPARE_ENABLED)."}), 403
+    return None
+
+
+def _require_data_enabled():
+    """[Plan 126 F4] Gate adicional para paridad de DATOS (hija, opt-in doble)."""
+    if not getattr(_config.config, "STACKY_DB_COMPARE_DATA_DIFF_ENABLED", False):
+        return jsonify({
+            "ok": False,
+            "error": "Paridad de datos deshabilitada (STACKY_DB_COMPARE_DATA_DIFF_ENABLED).",
+        }), 403
     return None
 
 
@@ -35,6 +53,9 @@ def health_route():
     return jsonify({
         "ok": True,
         "flag_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False)),
+        # [FIX C5, Plan 126] la UI (F5) lee este campo para mostrar/ocultar el
+        # botón "Comparar datos…" sin tener que llamar a un endpoint aparte.
+        "data_diff_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_DATA_DIFF_ENABLED", False)),
         "keyring_available": dbcompare_registry.keyring_available(),
         "drivers": dbcompare_engine.driver_status(),
     })
@@ -225,3 +246,102 @@ def export_run_markdown_route(run_id):
     response = current_app.response_class(md, mimetype="text/markdown; charset=utf-8")
     response.headers["Content-Disposition"] = f'attachment; filename="{run_id}.md"'
     return response
+
+
+# --------------------------------------------------------------------------
+# Plan 126 F4 — paridad de DATOS (gate doble: master + STACKY_DB_COMPARE_DATA_DIFF_ENABLED)
+# --------------------------------------------------------------------------
+
+
+def _best_effort_row_count(alias: str, schema: str, table: str, dialect: str) -> int | None:
+    """[ADICIÓN ARQUITECTO, crítica v2] COUNT(*) best-effort por lado; nunca
+    lanza — timeout/error de conexión/driver faltante -> None (no rompe el
+    endpoint). El SQL generado pasa por el MISMO validador que F2 (KPI-2)."""
+    try:
+        q = _sqlnames.qualified(schema, table, dialect)
+        sql = f"SELECT COUNT(*) FROM {q}"
+        if not _validate_select_only(sql).ok:
+            return None
+        engine = dbcompare_engine.open_engine(alias)
+    except Exception:  # noqa: BLE001 — best-effort: cualquier fallo -> None
+        return None
+    try:
+        from sqlalchemy import text as _sql_text
+
+        with engine.connect() as conn:
+            return conn.execute(_sql_text(sql)).scalar()
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        engine.dispose()
+
+
+@bp.get("/runs/<run_id>/data-candidates")
+def data_candidates_route(run_id):
+    gate = _require_enabled()
+    if gate:
+        return gate
+    gate = _require_data_enabled()
+    if gate:
+        return gate
+
+    run = dbcompare_runs.get_run(run_id)
+    if run is None:
+        return jsonify({"ok": False, "error": f"corrida '{run_id}' no existe."}), 404
+    if run.get("status") != "done":
+        return jsonify({"ok": False, "error": f"la corrida no está done (status={run.get('status')})."}), 409
+
+    dialect = run["engine"]
+    src_snap = dbcompare_snapshot.latest_snapshot(run["source_alias"])
+    candidates: list[dict] = []
+    if src_snap is not None:
+        for schema in sorted(src_snap.get("schemas", {})):
+            tables = src_snap["schemas"][schema].get("tables", {})
+            for tname in sorted(tables):
+                table = tables[tname]
+                pk_cols = table.get("primary_key", {}).get("columns") or []
+                comparable = bool(pk_cols)
+                candidates.append({
+                    "schema": schema,
+                    "table": tname,
+                    "has_pk": comparable,
+                    "estimated_columns": len(table.get("columns") or []),
+                    "comparable": comparable,
+                    "reason": "" if comparable else "la tabla no tiene PK en el snapshot de origen",
+                    "row_count_source": _best_effort_row_count(run["source_alias"], schema, tname, dialect),
+                    "row_count_target": _best_effort_row_count(run["target_alias"], schema, tname, dialect),
+                })
+    return jsonify({"ok": True, "candidates": candidates})
+
+
+@bp.post("/runs/<run_id>/data-diff")
+def start_data_diff_route(run_id):
+    gate = _require_enabled()
+    if gate:
+        return gate
+    gate = _require_data_enabled()
+    if gate:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    tables = body.get("tables") or []
+    if len(tables) > dbcompare_data._MAX_TABLES_PER_DATA_DIFF:
+        return jsonify({
+            "ok": False,
+            "error": f"máximo {dbcompare_data._MAX_TABLES_PER_DATA_DIFF} tablas por corrida (recibidas {len(tables)}).",
+        }), 400
+
+    run = dbcompare_runs.get_run(run_id)
+    if run is None:
+        return jsonify({"ok": False, "error": f"corrida '{run_id}' no existe."}), 404
+    if run.get("status") != "done":
+        return jsonify({"ok": False, "error": f"la corrida no está done (status={run.get('status')})."}), 409
+
+    try:
+        dbcompare_data.run_data_diff(run_id, tables)
+    except dbcompare_data.DbCompareDataError as exc:
+        # A esta altura ya se validó existencia/estado/tamaño arriba: lo único
+        # que puede fallar es el lock de "ya hay un diff de datos activo".
+        return jsonify({"ok": False, "error": str(exc)}), 409
+
+    return jsonify({"ok": True}), 202

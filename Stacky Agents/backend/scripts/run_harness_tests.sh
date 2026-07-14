@@ -234,6 +234,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan120_planner.py
   tests/test_plan120_remote_exec_deploy.py
   tests/test_plan120_store.py
+  tests/test_plan120_executor.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

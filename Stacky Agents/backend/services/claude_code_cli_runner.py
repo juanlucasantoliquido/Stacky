@@ -67,6 +67,13 @@ logger = logging.getLogger("stacky_agents.claude_code_cli")
 
 RUNTIME = "claude_code_cli"
 
+# R1.2 / Plan 131 C14 — pool tickets one-shot: nadie responde por consola así
+# que la sesión se cierra apenas llega el `result` terminal (si no, el proceso
+# queda esperando input hasta el timeout de 1800s — bug real ya sufrido con el
+# Documentador, ado_id=-7, cuando ese pool aún no estaba dado de alta acá).
+# -1 = Brief Pool (comportamiento preexistente). -8 = Incident Pool (Plan 131).
+_ONE_SHOT_ADO_IDS: frozenset[int] = frozenset({-1, -8})
+
 _PROCESSES: dict[int, subprocess.Popen[str]] = {}
 _PROCESSES_LOCK = threading.Lock()
 # Lock por ejecución para serializar escrituras al stdin del proceso (el operador
@@ -852,10 +859,11 @@ def _run_in_background(
         # R1.2 — ¿el agente emitió un `result` terminal exitoso? Si sí, el run
         # completó su trabajo aunque después la sesión quede ociosa.
         _result_ok_seen: list[bool] = [False]
-        # R1.2 — run de un solo turno (brief→épica usa el pool ticket ado_id=-1):
-        # no hay conversación in-page, así que cerramos stdin apenas llega el
-        # result terminal para salir limpio sin esperar al watchdog.
-        _one_shot = (t_ado_id == -1)
+        # R1.2 — run de un solo turno (pool tickets sintéticos: brief→épica
+        # ado_id=-1, resolutor de incidencias Plan 131 ado_id=-8): no hay
+        # conversación in-page, así que cerramos stdin apenas llega el result
+        # terminal para salir limpio sin esperar al watchdog.
+        _one_shot = (t_ado_id in _ONE_SHOT_ADO_IDS)
 
         def _on_stream_event(event: dict) -> None:
             nonlocal last_telemetry_emit

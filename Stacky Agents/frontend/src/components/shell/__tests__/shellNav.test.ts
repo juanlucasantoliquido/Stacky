@@ -11,14 +11,15 @@ import {
 const ALL_TABS = [
   "team", "tickets", "review", "unblocker", "pm", "logs", "settings",
   "docs", "memory", "diagnostics", "history", "migrador", "devops", "dbcompare",
+  "costcenter",
 ] as const;
 
 describe("shellNav — modelo de navegación", () => {
-  it("TAB_META cubre exactamente los 14 tabs", () => {
+  it("TAB_META cubre exactamente los 15 tabs", () => {
     expect(Object.keys(TAB_META).sort()).toEqual([...ALL_TABS].sort());
   });
 
-  it("cada tab aparece en exactamente un grupo (cobertura 14, sin duplicados)", () => {
+  it("cada tab aparece en exactamente un grupo (cobertura 15, sin duplicados)", () => {
     const flat = SHELL_NAV_GROUPS.flatMap((g) => g.tabs);
     expect(flat.slice().sort()).toEqual([...ALL_TABS].sort());
     expect(new Set(flat).size).toBe(flat.length);
@@ -41,6 +42,7 @@ describe("shellNav — modelo de navegación", () => {
     const v = computeVisibleTabs({
       sections: { pm: false, logs: false, docs: false, memory: false },
       migradorEnabled: false, devopsEnabled: false, dbCompareEnabled: false,
+      costCenterEnabled: false,
     });
     expect([...v].sort()).toEqual(
       ["diagnostics", "history", "review", "settings", "team", "tickets", "unblocker"].sort(),
@@ -51,6 +53,7 @@ describe("shellNav — modelo de navegación", () => {
     const v = computeVisibleTabs({
       sections: { pm: true, logs: true, docs: true, memory: true },
       migradorEnabled: true, devopsEnabled: true, dbCompareEnabled: true,
+      costCenterEnabled: true,
     });
     expect([...v].sort()).toEqual([...ALL_TABS].sort());
   });
@@ -59,6 +62,7 @@ describe("shellNav — modelo de navegación", () => {
     const v = computeVisibleTabs({
       sections: { pm: false, logs: false, docs: false, memory: false },
       migradorEnabled: false, devopsEnabled: false, dbCompareEnabled: false,
+      costCenterEnabled: false,
     });
     const groups = orderedVisibleGroups(v);
     // conocimiento (docs/memory) y plataforma (devops/migrador/dbcompare) quedan vacíos

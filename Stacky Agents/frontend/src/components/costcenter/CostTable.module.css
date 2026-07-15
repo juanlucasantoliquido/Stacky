@@ -1,0 +1,52 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.filterInput,
+.filterSelect {
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: var(--border-width) solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+}
+
+.exportBtn {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: var(--border-width) solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-weight: var(--weight-medium);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-width) solid var(--border-muted);
+  color: var(--text-primary);
+}
+
+.th {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-width) solid var(--border);
+  color: var(--text-muted);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}

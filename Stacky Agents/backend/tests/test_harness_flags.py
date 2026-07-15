@@ -626,6 +626,10 @@ _CURATED_DEFAULTS_ON = {
     # tomada al implementar (el plan proponía OFF citando la regla vieja; ninguna
     # de las 4 excepciones duras aplica).
     "STACKY_DOCS_DOCUMENTER_V2_ENABLED",
+    # Plan 142 — Centro de Costos + Codeburn: vista read-only (C1, v2 CRITICADO).
+    # STACKY_COST_CODEBURN_IMPORT_ENABLED (F7) NO entra acá: excepción dura #3
+    # (prerequisito externo no garantizado), default OFF a propósito.
+    "STACKY_COST_CENTER_ENABLED",
 }
 
 
@@ -893,3 +897,21 @@ def test_partition_semantics_simple_vs_advanced():
     # Sin pérdida
     assert sorted(simple_ids + rest_ids) == sorted(all_ids), \
         "La unión simple+rest != FLAG_CATEGORIES — se perdió una categoría"
+
+
+def test_cost_center_flag_registered_default_on():
+    """Plan 142 F3 — STACKY_COST_CENTER_ENABLED: registrada, categorizada, default ON curado."""
+    from services.harness_flags import FLAG_REGISTRY, categorize
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    assert "STACKY_COST_CENTER_ENABLED" in by_key
+    assert by_key["STACKY_COST_CENTER_ENABLED"].default is True
+    assert categorize("STACKY_COST_CENTER_ENABLED") == "observabilidad_notif"
+    assert "STACKY_COST_CENTER_ENABLED" in _CURATED_DEFAULTS_ON
+
+    # F7 (opcional) — flag de import externo, default OFF (excepción dura #3): NO curada.
+    assert "STACKY_COST_CODEBURN_IMPORT_ENABLED" in by_key
+    assert by_key["STACKY_COST_CODEBURN_IMPORT_ENABLED"].default is None
+    assert "STACKY_COST_CODEBURN_IMPORT_ENABLED" not in _CURATED_DEFAULTS_ON
+    assert categorize("STACKY_COST_CODEBURN_IMPORT_ENABLED") == "observabilidad_notif"
+    assert categorize("STACKY_COST_CODEBURN_IMPORT_PATH") == "observabilidad_notif"

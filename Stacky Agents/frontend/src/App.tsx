@@ -14,6 +14,7 @@ import ReviewInboxPage from "./pages/ReviewInboxPage";
 import MigratorPage from "./pages/MigratorPage"; // Plan 74
 import { DevOpsPage } from "./pages/DevOpsPage"; // Plan 87
 import { DbComparePage } from "./components/dbcompare/DbComparePage"; // Plan 122
+import CostCenterPage from "./pages/CostCenterPage"; // Plan 142
 import TopBar from "./components/TopBar";
 import HealthBanner from "./components/HealthBanner";
 import CommandPalette from "./components/CommandPalette";
@@ -38,7 +39,7 @@ import {
 } from "./components/shell/shellNav";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare";
+type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare" | "costcenter";
 
 const TAB_PATHS: Record<Tab, string> = {
   team: "/",
@@ -55,6 +56,7 @@ const TAB_PATHS: Record<Tab, string> = {
   migrador: "/migrador",
   devops: "/devops",
   dbcompare: "/dbcompare", // Plan 122 [FIX C3]
+  costcenter: "/costcenter", // Plan 142
 };
 
 function tabFromPath(pathname: string): Tab {
@@ -78,6 +80,9 @@ export default function App() {
   const [devopsEnabled, setDevopsEnabled] = useState(false);
   // Plan 122: tab Comparador BD visible solo si el flag está ON en el backend
   const [dbCompareEnabled, setDbCompareEnabled] = useState(false);
+  // Plan 142: tab Centro de Costos visible solo si el flag está ON en el backend
+  // (default ON, C1 — pero se prueba en vivo igual que migrador/devops/dbcompare).
+  const [costCenterEnabled, setCostCenterEnabled] = useState(false);
   // Plan 139: App Shell v2 (sidebar agrupada) — flag leída una sola vez al montar.
   const [shellV2Enabled, setShellV2Enabled] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
@@ -128,6 +133,9 @@ export default function App() {
     });
     void probeFlagHealth("/api/db-compare/health").then((v) => {
       if (alive) setDbCompareEnabled((prev) => nextEnabledState(prev, v));
+    });
+    void probeFlagHealth("/api/metrics/cost-center/health").then((v) => {
+      if (alive) setCostCenterEnabled((prev) => nextEnabledState(prev, v));
     });
     // Plan 139: lee la flag del shell v2 una sola vez al montar (recargar la
     // página para ver el efecto de un toggle; no hay re-montaje en caliente).
@@ -189,14 +197,15 @@ export default function App() {
     else if (tab === "migrador" && !migradorEnabled) selectTab("team");
     else if (tab === "devops" && !devopsEnabled) selectTab("team");
     else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("team");
-  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled]);
+    else if (tab === "costcenter" && !costCenterEnabled) selectTab("team");
+  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled]);
 
   const visibleTabs = computeVisibleTabs({
     sections: {
       pm: !!sections.pm, logs: !!sections.logs,
       docs: !!sections.docs, memory: !!sections.memory,
     },
-    migradorEnabled, devopsEnabled, dbCompareEnabled,
+    migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled,
   });
 
   // [Contrato §3.2 Plan 139 — Plan 134] Espejo del badge de la nav v1: MISMA
@@ -226,6 +235,7 @@ export default function App() {
       {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
       {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
       {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
+      {tab === "costcenter"  && costCenterEnabled && <CostCenterPage />} {/* Plan 142 */}
     </>
   );
 
@@ -357,6 +367,14 @@ export default function App() {
                 onClick={() => selectTab("dbcompare")}
               >
                 Comparador BD
+              </button>
+            )}
+            {costCenterEnabled && (
+              <button
+                className={`${styles.navTab} ${tab === "costcenter" ? styles.active : ""}`}
+                onClick={() => selectTab("costcenter")}
+              >
+                💰 Centro de Costos
               </button>
             )}
           </nav>

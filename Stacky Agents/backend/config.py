@@ -501,6 +501,20 @@ class Config:
         "STACKY_EXECUTION_HISTORY_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # ── Plan 142 — Centro de Costos + Codeburn ─────────────────────────────────
+    # C1 — vista read-only; default ON (ninguna de las 4 excepciones duras aplica).
+    STACKY_COST_CENTER_ENABLED: bool = os.getenv(
+        "STACKY_COST_CENTER_ENABLED", "true"
+    ).strip().lower() == "true"
+    # F7 (opcional) — reconciliación con export externo tipo ccusage/codeburn.
+    # Default OFF: excepción dura #3 (prerequisito no garantizado en instalación default).
+    STACKY_COST_CODEBURN_IMPORT_ENABLED: bool = os.getenv(
+        "STACKY_COST_CODEBURN_IMPORT_ENABLED", "false"
+    ).strip().lower() == "true"
+    STACKY_COST_CODEBURN_IMPORT_PATH: str = os.getenv(
+        "STACKY_COST_CODEBURN_IMPORT_PATH", ""
+    ).strip()
+
     # ── Plan 67 — Disciplina de procesos: reutilizar por default ──────────────
     # OFF por defecto: con OFF enrich_blocks es byte-idéntico al plan 64.
     STACKY_PROCESS_DISCIPLINE_ENABLED: bool = os.getenv(

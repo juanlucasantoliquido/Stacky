@@ -1,5 +1,13 @@
 import { api, apiBase, rawPost, type RawResponse, type GatewayErrorBody } from "./client";
 export type { RawResponse, GatewayErrorBody };
+import type {
+  CostBreakdownResponse,
+  CostBurnResponse,
+  CostFiltersParams,
+  CostReconciliationAuditResponse,
+  CostSummaryResponse,
+  BreakdownDimension,
+} from "../lib/costCenterTypes";
 import type { EnvironmentPlanResponse, EnvironmentApplyResponse } from "../devops/environmentModel";
 import type { PreflightCheck } from "../devops/preflightModel";
 import type { DoctorJob } from "../devops/doctorModel";
@@ -1356,6 +1364,49 @@ export const Metrics = {
     if (params?.agent_type) p.set("agent_type", params.agent_type);
     const qs = p.toString();
     return api.get<AgentComparisonResponse>(`/api/metrics/agent-comparison${qs ? `?${qs}` : ""}`);
+  },
+};
+
+// Plan 142 — Centro de Costos + Codeburn: cliente API de los 4 endpoints read-only
+// (gated por STACKY_COST_CENTER_ENABLED). Mismo patrón que `Metrics` arriba.
+function costFiltersToQuery(params?: CostFiltersParams): URLSearchParams {
+  const p = new URLSearchParams();
+  if (!params) return p;
+  if (params.from) p.set("from", params.from);
+  if (params.to) p.set("to", params.to);
+  if (params.days) p.set("days", String(params.days));
+  if (params.runtime) p.set("runtime", params.runtime);
+  if (params.model) p.set("model", params.model);
+  if (params.agent_type) p.set("agent_type", params.agent_type);
+  if (params.ticket_id) p.set("ticket_id", String(params.ticket_id));
+  if (params.project) p.set("project", params.project);
+  if (params.status) p.set("status", params.status);
+  if (params.cost_kind) p.set("cost_kind", params.cost_kind);
+  if (params.top_n) p.set("top_n", String(params.top_n));
+  return p;
+}
+
+export const CostCenter = {
+  summary: (params?: CostFiltersParams) => {
+    const qs = costFiltersToQuery(params).toString();
+    return api.get<CostSummaryResponse>(`/api/metrics/cost-summary${qs ? `?${qs}` : ""}`);
+  },
+  burn: (params?: CostFiltersParams & { bucket?: "hour" | "day" | "week" }) => {
+    const p = costFiltersToQuery(params);
+    if (params?.bucket) p.set("bucket", params.bucket);
+    const qs = p.toString();
+    return api.get<CostBurnResponse>(`/api/metrics/cost-burn${qs ? `?${qs}` : ""}`);
+  },
+  breakdown: (dimension: BreakdownDimension, params?: CostFiltersParams) => {
+    const p = costFiltersToQuery(params);
+    p.set("dimension", dimension);
+    return api.get<CostBreakdownResponse>(`/api/metrics/cost-breakdown?${p.toString()}`);
+  },
+  reconciliationAudit: (params?: CostFiltersParams) => {
+    const qs = costFiltersToQuery(params).toString();
+    return api.get<CostReconciliationAuditResponse>(
+      `/api/metrics/cost-reconciliation-audit${qs ? `?${qs}` : ""}`,
+    );
   },
 };
 

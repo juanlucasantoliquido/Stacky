@@ -21,8 +21,10 @@ from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func, text
 
+from config import config as _cfg
 from db import session_scope
 from models import AgentExecution, SystemLog, Ticket
+from services import cost_analytics as ca
 
 logger = logging.getLogger("stacky.metrics")
 
@@ -553,4 +555,168 @@ def caps_advisor():
         "days": days,
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "suggestions": suggestions,
+    })
+
+
+# ── Plan 142 — Centro de Costos + Codeburn ───────────────────────────────────
+# Read-only / aditivo. Gated por STACKY_COST_CENTER_ENABLED (default ON, C1).
+# No modifica ticket-costs/project-costs/_execution_costs (legacy intactos, R3).
+
+def _cost_center_enabled() -> bool:
+    return bool(getattr(_cfg, "STACKY_COST_CENTER_ENABLED", False))
+
+
+@bp.get("/cost-center/health")
+def cost_center_health():
+    """SIEMPRE 200 (la UI lo usa para decidir si muestra la tab, patrón /api/migrator/health
+    y /api/db-compare/health): F6 gatea la entrada de navegación con probeFlagHealth()."""
+    return jsonify({"ok": True, "flag_enabled": _cost_center_enabled()})
+
+
+def _parse_date(s: str | None):
+    """C4 — 'YYYY-MM-DD' -> datetime (medianoche UTC). Vacío/None -> None.
+    Malformada -> ValueError (el caller la convierte en 400)."""
+    if not s:
+        return None
+    return datetime.strptime(s.strip(), "%Y-%m-%d")
+
+
+def _parse_filters(args) -> ca.CostFilters:
+    # C4 — comportamiento EXACTO:
+    #   from/to: 'YYYY-MM-DD'. Si vienen y son válidas, ganan sobre days.
+    #   Si from/to es malformada -> el caller devuelve 400 {"ok":false,"error":"invalid_date"}.
+    #   days: int, default 30, clamp 1..365; se ignora si from Y to válidas vinieron.
+    #   statuses: csv -> tuple[str,...] (vacío si no viene). ticket_id: int o None (no-int -> None).
+    #   runtime/model/agent_type/project/cost_kind: str o None (str vacío -> None).
+    date_from = _parse_date(args.get("from"))   # puede lanzar ValueError
+    date_to = _parse_date(args.get("to"))       # puede lanzar ValueError
+    try:
+        days = int(args.get("days", 30))
+    except (TypeError, ValueError):
+        days = 30
+    days = max(1, min(days, 365))
+    try:
+        ticket_id = int(args.get("ticket_id")) if args.get("ticket_id") else None
+    except (TypeError, ValueError):
+        ticket_id = None
+    statuses = tuple(s for s in (args.get("status") or "").split(",") if s.strip())
+
+    def _s(k):
+        v = (args.get(k) or "").strip()
+        return v or None
+
+    return ca.CostFilters(date_from=date_from, date_to=date_to, days=days,
+                           runtime=_s("runtime"), model=_s("model"), agent_type=_s("agent_type"),
+                           ticket_id=ticket_id, project=_s("project"), statuses=statuses,
+                           cost_kind=_s("cost_kind"))
+
+
+def _filters_or_error(args):
+    """C4 — envuelve _parse_filters; fecha malformada -> tupla (None, resp_400)."""
+    try:
+        return _parse_filters(args), None
+    except ValueError:
+        return None, (jsonify({"ok": False, "error": "invalid_date"}), 400)
+
+
+@bp.get("/cost-summary")
+def cost_summary():
+    if not _cost_center_enabled():
+        return jsonify({"enabled": False}), 200
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    try:
+        top_n = max(1, min(int(request.args.get("top_n", 10)), 50))
+    except (TypeError, ValueError):
+        top_n = 10
+    records = ca.load_records(f)
+    payload = {
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "filters_echo": ca.filters_echo(f),
+        # R10 — cap de filas aplicado ANTES de los filtros de metadata (runtime/model/
+        # cost_kind viven en JSON, no en SQL); expone si la ventana fue acotada.
+        "capped": len(records) == ca._MAX_ROWS,
+        **ca.summarize(records, top_n=top_n),
+    }
+    # F7 (opcional, flag propia STACKY_COST_CODEBURN_IMPORT_ENABLED default OFF) —
+    # si hay export externo configurado, reconcilia; si no, la clave NO aparece (silencio).
+    external = ca.load_external_codeburn()
+    if external is not None:
+        payload["external_reconciliation"] = {
+            "external_total_usd": external["total_usd"],
+            "stacky_billable_usd": payload["billable_usd"],
+            "delta_usd": round(external["total_usd"] - payload["billable_usd"], 6),
+        }
+    return jsonify(payload)
+
+
+@bp.get("/cost-burn")
+def cost_burn():
+    if not _cost_center_enabled():
+        return jsonify({"enabled": False}), 200
+    bucket = (request.args.get("bucket") or "day").lower()
+    if bucket not in ("hour", "day", "week"):
+        return jsonify({"ok": False, "error": "invalid_bucket"}), 400
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    records = ca.load_records(f)
+    prev = ca.load_records(ca.previous_period(f))   # rango previo de igual longitud
+    return jsonify({
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        **ca.burn_with_comparison(records, prev, bucket=bucket),
+    })
+
+
+@bp.get("/cost-breakdown")
+def cost_breakdown():
+    if not _cost_center_enabled():
+        return jsonify({"enabled": False}), 200
+    dim = (request.args.get("dimension") or "").lower()
+    if dim not in ("runtime", "model", "agent_type", "ticket", "project", "day"):
+        return jsonify({"ok": False, "error": "invalid_dimension"}), 400
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    records = ca.load_records(f)
+    return jsonify({
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "dimension": dim, **ca.breakdown(records, dim),
+    })
+
+
+@bp.get("/cost-reconciliation-audit")
+def cost_reconciliation_audit():
+    """F8 (opcional) — read-only: cuantifica cuánto se equivoca hoy el cálculo legacy
+    (`_execution_costs`, sólo claude + trata cost_estimated bool como monto, R3) frente
+    al extractor canónico F0, sobre EXACTAMENTE las mismas ejecuciones. NO modifica
+    /ticket-costs ni /project-costs (siguen intactos)."""
+    if not _cost_center_enabled():
+        return jsonify({"enabled": False}), 200
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    records = ca.load_records(f)
+
+    canonical_billable = round(
+        sum(r.row.cost_usd or 0.0 for r in records if ca._billable(r.row.cost_kind)), 6)
+    codex_invisible = round(
+        sum(r.row.cost_usd or 0.0 for r in records
+            if (r.row.runtime == "codex_cli" and ca._billable(r.row.cost_kind))), 6)
+    # Legacy: espejo puro de _execution_costs sobre los MISMOS metadata_dict ya
+    # cargados por load_records (sin segunda query, sin mutar nada).
+    legacy_reported = round(sum(ca.legacy_cost_mirror(r.raw_metadata) for r in records), 6)
+
+    return jsonify({
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "canonical_billable_usd": canonical_billable,
+        "legacy_reported_usd": legacy_reported,
+        "delta_usd": round(canonical_billable - legacy_reported, 6),
+        "codex_invisible_usd": codex_invisible,
+        "runs_audited": len(records),
     })

@@ -245,6 +245,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EXECUTION_TRACE_ENABLED", "STACKY_TRACE_PROMPT_TEXT_ENABLED",
         "STACKY_DIGEST_INTERVAL_HOURS", "STACKY_ADO_FAILURE_COMMENT_ENABLED",
         "STACKY_UNBLOCKER_COMPLETED_CAP",   # Plan 66 C4 v4.1
+        "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
+        "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -1463,6 +1465,40 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="observability",
         default=True,  # Grupo A — endpoint de lectura; observabilidad sin costo de tokens.
+    ),
+    # ── Plan 142 — Centro de Costos + Codeburn ─────────────────────────────────
+    FlagSpec(
+        key="STACKY_COST_CENTER_ENABLED",
+        type="bool",
+        default=True,  # C1 — default ON (read-only; no aplica ninguna de las 4 excepciones duras)
+        label="Centro de Costos (KPIs + Codeburn)",
+        description=(
+            "Plan 142 — Vista read-only de costos USD/tokens multidimensionales y "
+            "burn temporal. Default ON; desactivable desde la UI."
+        ),
+        group="observabilidad",
+    ),
+    FlagSpec(
+        key="STACKY_COST_CODEBURN_IMPORT_ENABLED",
+        type="bool",
+        label="Centro de Costos: reconciliación con export externo (ccusage/codeburn)",
+        description=(
+            "Plan 142 F7 — Si ON, lee un JSONL externo opcional (ruta en "
+            "STACKY_COST_CODEBURN_IMPORT_PATH) y agrega 'external_reconciliation' a "
+            "/cost-summary. Sin shell-out, sin dependencia nueva. OFF por default: "
+            "excepción dura #3 — el archivo/ruta NO está garantizado en una instalación "
+            "default y sólo aplica si el operador YA usa esa herramienta externa."
+        ),
+        group="observabilidad",
+        pair="STACKY_COST_CODEBURN_IMPORT_PATH",
+    ),
+    FlagSpec(
+        key="STACKY_COST_CODEBURN_IMPORT_PATH",
+        type="str",
+        label="Centro de Costos: ruta del JSONL externo",
+        description="Plan 142 F7 — Ruta absoluta al export JSONL. Vacío = desactivado.",
+        group="observabilidad",
+        requires="STACKY_COST_CODEBURN_IMPORT_ENABLED",
     ),
     FlagSpec(
         key="STACKY_UNBLOCKER_COMPLETED_CAP",

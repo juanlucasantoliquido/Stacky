@@ -1,6 +1,9 @@
 # Plan 141 — Tema claro/oscuro/sistema y accesibilidad visual
 
-**Estado:** CRITICADO v2→v3 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15) — traza: v1 propuesto 2026-07-15 → v2 (juez 2026-07-15) → v3 (segundo pase adversarial 2026-07-15)
+**Estado:** IMPLEMENTADO F0-F5 (2026-07-15) — CIERRA la serie completa 138→139→140→141.
+Smoke manual (§11) pendiente del operador (sin dev server vivo en esta sesión). El gate WCAG
+de F3 fue verificado corriéndolo de verdad contra el theme.css real (no solo confiando en los
+ratios documentados en §6). Doc previo: CRITICADO v2→v3 · APROBADO-CON-CAMBIOS.
 **Autor:** StackyArchitectaUltraEficientCode
 **Depende de:** plan 138 **v2** (tokens semánticos + primitivas UI, incluye `--spinner-track`)
 IMPLEMENTADO. La serie pendiente 132→134→135→136 aterriza ANTES (orden congelado por plan 134

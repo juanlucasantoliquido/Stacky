@@ -4,6 +4,7 @@ import ConfigTransferPanel from "../components/ConfigTransferPanel";
 import ClientProfileEditor from "../components/ClientProfileEditor";
 import HarnessFlagsPanel from "../components/HarnessFlagsPanel";
 import LocalLlmPlaygroundPanel from "../components/LocalLlmPlaygroundPanel";
+import AppearanceSettings from "../components/AppearanceSettings";
 import ConfirmButton from "../components/ConfirmButton";
 import { Webhooks } from "../api/endpoints";
 import {
@@ -24,7 +25,7 @@ import {
 } from "../services/executionNotifier";
 import styles from "./SettingsPage.module.css";
 
-type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "notifications" | "harness" | "playground";
+type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "notifications" | "harness" | "playground" | "appearance";
 
 const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> = {
   pm:   { title: "📊 PM",          hint: "Tablero de Project Management y métricas de sprint." },
@@ -158,6 +159,12 @@ export default function SettingsPage() {
         >
           Playground IA
         </button>
+        <button
+          className={`${styles.subTab} ${sub === "appearance" ? styles.active : ""}`}
+          onClick={() => setSub("appearance")}
+        >
+          Apariencia
+        </button>
       </div>
 
       <div className={styles.content}>
@@ -169,6 +176,7 @@ export default function SettingsPage() {
         {sub === "notifications" && <NotificationsPanel />}
         {sub === "harness" && <HarnessFlagsPanel />}
         {sub === "playground" && <LocalLlmPlaygroundPanel />}
+        {sub === "appearance" && <AppearanceSettings />}
       </div>
     </div>
   );

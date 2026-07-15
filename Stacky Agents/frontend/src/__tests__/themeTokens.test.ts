@@ -120,10 +120,10 @@ describe("themeTokens (plan 138 F1)", () => {
     expect(broken, "Tokens legacy alterados: " + broken.map(([n]) => n).join(", ")).toEqual([]);
   });
 
-  it("theme-ready: color-scheme sale de la variable y aun NO hay data-theme (lo agrega el plan 141)", () => {
+  it("theme-ready: color-scheme sale de la variable y el plan 141 YA agrego data-theme", () => {
     expect(FLAT).toContain("color-scheme: var(--color-scheme)");
     expect(FLAT).toContain("THEME-READY");
-    // El plan 141 elimina esta asercion cuando implemente el tema claro:
-    expect(THEME.includes('[data-theme="light"]')).toBe(false);
+    // Plan 141 F2: el tema claro existe.
+    expect(THEME.includes('[data-theme="light"]')).toBe(true);
   });
 });

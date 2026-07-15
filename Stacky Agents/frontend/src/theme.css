@@ -139,6 +139,86 @@
   --color-scheme: dark;
 }
 
+/* ═══ Plan 141 — Tema claro (re-apunta SOLO tokens de color) ═══════════
+   Contraste WCAG AA verificado token a token (ver plan 141 § 6). Spacing,
+   tipografía, radios, motion y --border-width son INVARIANTES: NO se duplican.
+   --status-neutral-text NO se re-declara: es var(--text-muted) y auto-tema.
+   --text-on-solid (#ffffff) y --text-on-warn (#1c1810) son invariantes: los
+   solids claros se eligieron oscuros para que el texto siga siendo AA. */
+:root[data-theme="light"] {
+  /* Superficies (GitHub Light) */
+  --bg-base: #ffffff;
+  --bg-panel: #f6f8fa;
+  --bg-elev: #eaeef2;
+  --border: #d0d7de;
+  --border-muted: #eaeef2;
+  --mono-bg: #f6f8fa;
+
+  /* Texto */
+  --text-primary: #1f2328;
+  --text-muted: #57606a;
+  --text-faint: #6e7781;
+
+  /* Acento / estado legacy */
+  --accent: #0969da;
+  --accent-hot: #0550ae;
+  --success: #1a7f37;
+  --warn: #9a6700;
+  --danger: #cf222e;
+
+  /* Identidad de agentes */
+  --agent-business: #8250df;
+  --agent-functional: #bc4c00;
+  --agent-technical: #0969da;
+  --agent-developer: #1a7f37;
+  --agent-qa: #9a6700;
+  --agent-custom: #57606a;
+
+  /* Sombra legacy de tarjetas */
+  --card-shadow: 0 2px 12px rgba(140, 149, 159, 0.15);
+
+  /* Estados semánticos (grupo A) */
+  --status-success-text: #116329;
+  --status-success-soft-text: #166534;
+  --status-success-solid: #1a7f37;
+  --status-success-bg: rgba(34, 197, 94, 0.14);
+  --status-success-border: rgba(34, 197, 94, 0.35);
+  --status-warning-text: #7d4e00;
+  --status-warning-soft-text: #8a5a00;
+  --status-warning-muted-text: #7d4e00;
+  --status-warning-solid: #bf8700;
+  --status-warning-bg: rgba(245, 158, 11, 0.16);
+  --status-warning-border: rgba(245, 158, 11, 0.4);
+  --status-danger-text: #b31c28;
+  --status-danger-soft-text: #cf222e;
+  --status-danger-solid: #cf222e;
+  --status-danger-bg: rgba(239, 68, 68, 0.13);
+  --status-danger-border: rgba(239, 68, 68, 0.35);
+  --status-info-text: #0a58ca;
+  --status-info-solid: #0969da;
+  --status-info-hot: #0550ae;
+  --status-info-bg: rgba(59, 130, 246, 0.12);
+  --status-info-border: rgba(59, 130, 246, 0.4);
+  --status-neutral-bg: rgba(31, 35, 40, 0.06);
+  --status-neutral-border: rgba(31, 35, 40, 0.15);
+
+  /* Interacción / acento (grupo B) */
+  --accent-active: #0550ae;
+  --warn-hover: #7d5300;
+  --focus-ring: 0 0 0 3px rgba(9, 105, 218, 0.35);
+  /* Pista del spinner: oscura translúcida, legible sobre superficies claras (138 v2 C1). */
+  --spinner-track: rgba(31, 35, 40, 0.15);
+
+  /* Sombras (grupo F) */
+  --shadow-1: 0 1px 3px rgba(31, 35, 40, 0.12);
+  --shadow-2: 0 2px 12px rgba(31, 35, 40, 0.14);
+  --shadow-3: 0 8px 24px rgba(31, 35, 40, 0.18);
+  --shadow-overlay: 0 16px 48px rgba(31, 35, 40, 0.24);
+
+  /* color-scheme nativo (grupo H) */
+  --color-scheme: light;
+}
+
 /* ─── Reset ───────────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 
@@ -198,7 +278,7 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.25);
+  box-shadow: var(--focus-ring);
 }
 
 a {
@@ -230,3 +310,28 @@ a:hover {
 /* ─── Utilities ───────────────────────────────────────────────── */
 .muted { color: var(--text-muted); }
 .mono  { font-family: var(--font-mono); }
+
+/* ─── Accesibilidad visual (Plan 141 F5) ──────────────────────── */
+
+/* Foco visible por teclado en cualquier control interactivo. Baja especificidad
+   (:where = 0) para que los estilos de foco por componente puedan sobreescribirlo.
+   Usa el token --focus-ring del plan 138 (re-apuntado por tema en 141 F2). */
+:where(a, button, input, textarea, select, [tabindex], [role="button"], [role="tab"]):focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* Respeta la preferencia del SO de reducir movimiento. Neutraliza transiciones y
+   animaciones (incluidos los spinners infinitos, ej. RunButton.module.css) sin
+   redefinir los tokens --duration-*, que siguen siendo la fuente de verdad del
+   movimiento cuando NO se pide reducirlo. El !important gana incluso a estilos
+   inline (ej. el Spinner del plan 138). Patrón WCAG SC 2.2.2 / 2.3.3. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

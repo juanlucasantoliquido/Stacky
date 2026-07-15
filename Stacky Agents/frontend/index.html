@@ -4,6 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stacky Agents</title>
+    <script>
+      /* Plan 141 — anti-FOUC: fija data-theme Y color-scheme nativo antes del primer paint.
+         DEBE mantenerse en sync con src/services/theme.ts (resolveTheme) y con
+         applyEffectiveTheme (themeController.ts). Setear color-scheme de forma SÍNCRONA
+         evita el flash de fondo/scrollbars/controles nativos del UA en modo claro antes de
+         que theme.css aplique --color-scheme (sobre todo en dev: el CSS no es render-blocking). */
+      (function () {
+        try {
+          var raw = localStorage.getItem("stacky.ui.theme");
+          var choice = raw === "light" || raw === "system" ? raw : "dark";
+          var prefersDark =
+            !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var effective = choice === "system" ? (prefersDark ? "dark" : "light") : choice;
+          document.documentElement.setAttribute("data-theme", effective);
+          document.documentElement.style.colorScheme = effective; // [ADICIÓN ARQUITECTO v3]
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.style.colorScheme = "dark";
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/stacky-pixel.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -27,6 +27,15 @@ export function DocumenterResultPanel({ status, onDecide, deciding, decided }: P
         {s.writtenCount} archivo(s) escritos · {s.skippedCount} saltado(s)
         {s.degraded ? " · (modo carpeta-sombra: no es repo git, revisá a mano)" : ""}
       </p>
+      {s.errorMessage ? (
+        // Fix "no me hizo nada" (Tarea 1) — antes un run completado sin escribir
+        // nada era 100% silencioso (0 escritos, 0 saltados, ningún aviso). Ahora
+        // el motivo real (ejecución en error, o el modelo no siguió el formato
+        // <<<DOC ...>>>) queda visible acá.
+        <p style={{ margin: "4px 0", color: "#a00", fontWeight: 600 }}>
+          El Documentador no escribió nada: {s.errorMessage}
+        </p>
+      ) : null}
       {s.diffStat ? (
         <pre style={{ maxHeight: 160, overflow: "auto", background: "rgba(0,0,0,0.04)", padding: 8 }}>
           {s.diffStat}

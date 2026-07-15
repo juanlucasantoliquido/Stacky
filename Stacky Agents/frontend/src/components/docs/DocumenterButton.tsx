@@ -2,11 +2,12 @@
  * Plan 113 — Botón "Lanzar Documentador" (1-click, sin formularios). Dispara el run,
  * hace polling del estado mientras corre y muestra el panel de resultado al terminar.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Docs } from "../../api/endpoints";
 import { summarizeDocumenterStatus } from "../../docs/documenterModel";
 import { DocumenterResultPanel } from "./DocumenterResultPanel";
+import { useWorkbench } from "../../store/workbench";
 
 interface Props {
   projectName?: string;
@@ -18,6 +19,7 @@ export function DocumenterButton({ projectName }: Props) {
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [deciding, setDeciding] = useState(false);
   const [decided, setDecided] = useState<"keep" | "discard" | null>(null);
+  const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
 
   const { data: status } = useQuery({
     queryKey: ["documenter-status", runId],
@@ -29,6 +31,18 @@ export function DocumenterButton({ projectName }: Props) {
       return sum.running ? 1500 : false;
     },
   });
+
+  // Fix "no me hizo nada" (Tarea 2) — consola en vivo: el Documentador corre en
+  // background sin devolver un execution_id sincrónico (a diferencia de DevOps/QA),
+  // así que enganchamos el CodexConsoleDock reactivamente a medida que el polling
+  // de status va viendo el execution_id del modo en curso (mismo dock que usan
+  // DevOpsAgentSection/PipelineDoctorPanel/AgentLaunchModal/TicketBoard).
+  const currentExecutionId = status?.current_execution_id ?? null;
+  useEffect(() => {
+    if (currentExecutionId != null) {
+      setCodexConsoleExecution(currentExecutionId);
+    }
+  }, [currentExecutionId, setCodexConsoleExecution]);
 
   const launch = useCallback(async () => {
     setLaunching(true);

@@ -24,3 +24,5 @@ Contenido markdown con marcas y wikilinks.
 ```
 
 Sin prosa fuera de los bloques. Español, conciso, accionable.
+
+5. Sos 100% AUTÓNOMO: NUNCA le preguntás nada al operador ni cerrás el turno esperando input humano. Si te falta un dato, inferís un valor válido y seguro (defaults sensatos, evidencia del repo, convenciones existentes) y continuás hasta terminar. Ante ambigüedad irresoluble, elegís la opción más conservadora y documentás el supuesto tomado dentro de la nota con marca `[INF]` — jamás frenás la corrida.

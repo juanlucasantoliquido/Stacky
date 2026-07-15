@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,13 @@ _DEFAULT_DOCUMENTADOR_PROMPT = (
     "   # Título\n"
     "   Contenido markdown con marcas y wikilinks.\n"
     "   <<<END>>>\n"
-    "   Sin prosa fuera de los bloques. Español, conciso, accionable."
+    "   Sin prosa fuera de los bloques. Español, conciso, accionable.\n"
+    "5. Sos 100% AUTÓNOMO: NUNCA le preguntás nada al operador ni cerrás el "
+    "turno esperando input humano. Si te falta un dato, inferís un valor "
+    "válido y seguro (defaults sensatos, evidencia del repo, convenciones "
+    "existentes) y continuás hasta terminar. Ante ambigüedad irresoluble, "
+    "elegís la opción más conservadora y documentás el supuesto tomado "
+    "dentro de la nota con marca [INF] — jamás frenás la corrida."
 )
 
 
@@ -322,10 +329,17 @@ def _wait_and_read_output(execution_id: int, timeout_s: int = _INVOKE_TIMEOUT_S)
 
 
 def invoke_documenter(mode: DocumenterMode, context_blocks: list[dict],
-                      project_name: str, runtime: str) -> list[DocProposal]:
+                      project_name: str, runtime: str, *,
+                      on_execution_started: Callable[[int], None] | None = None
+                      ) -> list[DocProposal]:
     """Invoca al agente Documentador para un modo y devuelve las propuestas parseadas.
 
     Fallo/timeout → lista vacía (el run sigue con el modo siguiente).
+
+    ``on_execution_started`` (opcional) se llama con el ``execution_id`` apenas
+    ``agent_runner.run_agent`` lo crea (ANTES de esperar a que termine), para que
+    el caller (run_documenter) pueda enganchar la consola en vivo (fix "no me
+    hizo nada" — Tarea 2). Nunca propaga excepciones del callback.
     """
     import agent_runner
     from config import config as _config
@@ -349,8 +363,48 @@ def invoke_documenter(mode: DocumenterMode, context_blocks: list[dict],
     except Exception as exc:
         logger.warning("doc_documenter: run_agent falló en modo %s: %s", mode, exc)
         return []
+    if on_execution_started is not None:
+        try:
+            on_execution_started(execution_id)
+        except Exception as exc:  # noqa: BLE001 — el callback nunca tumba el run
+            logger.warning("doc_documenter: on_execution_started falló: %s", exc)
     raw = _wait_and_read_output(execution_id)
-    return parse_proposals(raw)
+    proposals = parse_proposals(raw)
+    if not proposals:
+        # Fix "no me hizo nada" (Tarea 1) — antes esto era 100% silencioso: 0
+        # proposals sin ningún rastro visible para el operador. Logueamos el
+        # motivo real (ejecución en error/timeout vs. el modelo respondió pero
+        # sin bloques <<<DOC ...>>> válidos); run_documenter junta estos avisos
+        # en el campo "error" del run, visible en GET /documenter/status.
+        logger.warning(
+            "doc_documenter: modo %s no produjo propuestas (execution_id=%s, %s)",
+            mode, execution_id, _empty_result_reason(execution_id, raw),
+        )
+    return proposals
+
+
+def _empty_result_reason(execution_id: int, raw: str) -> str:
+    """Motivo humano-legible de por qué un modo no produjo propuestas.
+
+    Nunca lanza: degrada a un mensaje genérico si no puede inspeccionar la
+    ejecución. Distingue fallo real de ejecución (status error/failed/cancelled,
+    con el error_message real de la fila) de "el modelo respondió pero no siguió
+    el formato <<<DOC ...>>>...<<<END>>> exacto"."""
+    try:
+        from db import session_scope
+        from models import AgentExecution
+        with session_scope() as s:
+            ex = s.get(AgentExecution, execution_id)
+            status = (ex.status if ex else "") or ""
+            err = (ex.error_message if ex else "") or ""
+        if status in ("error", "failed", "cancelled"):
+            return f"ejecución {execution_id} terminó en '{status}': {err or 'sin detalle'}"
+        if not (raw or "").strip():
+            return f"ejecución {execution_id} completó sin output"
+        return (f"ejecución {execution_id} completó pero el modelo no emitió bloques "
+                f"<<<DOC ...>>>...<<<END>>> válidos")
+    except Exception as exc:  # noqa: BLE001
+        return f"no se pudo diagnosticar la ejecución {execution_id}: {exc}"
 
 
 # ---------------------------------------------------------------------------
@@ -570,7 +624,8 @@ def _health_for_root(docs_root: str | None, workspace_root: str | None = None) -
 
 def _new_run_record(project_name: str, runtime: str) -> dict:
     return {"state": "running", "project": project_name, "runtime": runtime,
-            "current_mode": None, "written": [], "skipped": [],
+            "current_mode": None, "current_execution_id": None,
+            "written": [], "skipped": [],
             "health_before": None, "health_after": None, "branch": None,
             "degraded": False, "diff_stat": "", "target_root": None,
             "worktree": None, "error": None, "reason": ""}
@@ -654,12 +709,32 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
         _update_run(run_id, branch=branch, degraded=degraded, worktree=worktree)
 
     all_props: list[DocProposal] = []
+    mode_diagnostics: list[str] = []
     for mode in plan.modes:
         if run_id:
             _update_run(run_id, current_mode=str(mode.value))
         ctx = build_context_for_mode(mode, plan, project_name)
-        props = invoke_documenter(mode, ctx, project_name, runtime)
+        # Tarea 2 (consola en vivo) — capturamos el execution_id apenas se crea
+        # para engancharlo al run record; el frontend lo usa para abrir el
+        # CodexConsoleDock mientras el modo está corriendo.
+        mode_execution_id: list[int | None] = [None]
+
+        def _on_exec_started(execution_id: int, _box=mode_execution_id) -> None:
+            _box[0] = execution_id
+            if run_id:
+                _update_run(run_id, current_execution_id=execution_id)
+
+        props = invoke_documenter(mode, ctx, project_name, runtime,
+                                  on_execution_started=_on_exec_started)
         all_props += props
+        if not props:
+            # Fix "no me hizo nada" (Tarea 1) — el diagnóstico ya se logueó
+            # dentro de invoke_documenter; acá lo juntamos para exponerlo en el
+            # run record (campo "error", visible en GET /documenter/status).
+            eid = mode_execution_id[0]
+            reason = (_empty_result_reason(eid, "") if eid is not None
+                      else "no se pudo lanzar el agente (ver logs de backend)")
+            mode_diagnostics.append(f"{mode.value}: {reason}")
 
     result = apply_proposals(all_props, write_root, branch, degraded=degraded)
 
@@ -681,6 +756,11 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
             after_docs = worktree
     health_after = _health_for_root(after_docs, workspace_root)
 
+    # Fix "no me hizo nada" (Tarea 1) — si NINGÚN modo escribió nada Y hubo
+    # diagnósticos de por qué, lo exponemos en "error" (antes quedaba 100%
+    # silencioso: written=[] y skipped=[] sin ninguna pista visible).
+    error_summary = "; ".join(mode_diagnostics) if (not result.written and mode_diagnostics) else None
+
     report = {
         "state": "completed",
         "reason": plan.reason,
@@ -694,6 +774,8 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
         "diff_stat": diff_stat,
         "target_root": target_root,
         "worktree": worktree,
+        "error": error_summary,
+        "current_execution_id": None,
     }
     if run_id:
         _update_run(run_id, **report)

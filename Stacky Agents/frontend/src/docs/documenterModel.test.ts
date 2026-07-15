@@ -29,6 +29,29 @@ describe("summarizeDocumenterStatus", () => {
     expect(sum.writtenCount).toBe(2);
     expect(sum.skippedCount).toBe(1);
   });
+
+  it("summarizeDocumenterStatus_exposes_current_execution_id", () => {
+    // Fix "no me hizo nada" (Tarea 2) — necesario para enganchar la consola en vivo.
+    const running = summarizeDocumenterStatus({
+      ok: true, state: "running", current_execution_id: 123,
+    });
+    expect(running.currentExecutionId).toBe(123);
+
+    const noExec = summarizeDocumenterStatus({ ok: true, state: "running" });
+    expect(noExec.currentExecutionId).toBeNull();
+  });
+
+  it("summarizeDocumenterStatus_exposes_error_message", () => {
+    // Fix "no me hizo nada" (Tarea 1) — antes era 100% silencioso.
+    const failed = summarizeDocumenterStatus({
+      ok: true, state: "completed", written: [], skipped: [],
+      error: "ENRIQUECER: ejecución 42 terminó en 'error': config faltante",
+    });
+    expect(failed.errorMessage).toContain("config faltante");
+
+    const ok = summarizeDocumenterStatus({ ok: true, state: "completed" });
+    expect(ok.errorMessage).toBeNull();
+  });
 });
 
 describe("healthDelta", () => {

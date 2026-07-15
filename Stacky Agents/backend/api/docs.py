@@ -300,6 +300,11 @@ def documenter_status():
     return jsonify({
         "ok": True, "run_id": run_id,
         "state": rec.get("state"), "current_mode": rec.get("current_mode"),
+        # Tarea 2 (consola en vivo) — execution_id de la invocación en curso del
+        # modo actual, o None si no hay ninguna corriendo ahora mismo. El
+        # frontend lo usa para enganchar el CodexConsoleDock (mismo patrón que
+        # DevOps/QA/AgentLaunchModal).
+        "current_execution_id": rec.get("current_execution_id"),
         "written": rec.get("written"), "skipped": rec.get("skipped"),
         "health_before": rec.get("health_before"), "health_after": rec.get("health_after"),
         "branch": rec.get("branch"), "degraded": rec.get("degraded"),

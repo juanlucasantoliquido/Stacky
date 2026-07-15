@@ -14,6 +14,12 @@ export interface DocumenterSummary {
   skippedCount: number;
   branch: string | null;
   currentMode: string | null;
+  /** Fix "no me hizo nada" (Tarea 2) — execution_id en curso, para enganchar
+   *  la consola en vivo (CodexConsoleDock) mientras el run está corriendo. */
+  currentExecutionId: number | null;
+  /** Fix "no me hizo nada" (Tarea 1) — motivo visible cuando el run completó
+   *  sin escribir nada (antes 100% silencioso). */
+  errorMessage: string | null;
   diffStat: string;
   healthDelta: string;
 }
@@ -37,6 +43,8 @@ export function summarizeDocumenterStatus(
     skippedCount: status?.skipped?.length ?? 0,
     branch: status?.branch ?? null,
     currentMode: status?.current_mode ?? null,
+    currentExecutionId: status?.current_execution_id ?? null,
+    errorMessage: status?.error ?? null,
     diffStat: status?.diff_stat ?? "",
     healthDelta: healthDelta(status?.health_before ?? null, status?.health_after ?? null),
   };

@@ -50,24 +50,6 @@
   vertical-align: middle;
 }
 
-.badge {
-  display: inline-flex;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.error {
-  background: rgba(239, 68, 68, 0.16);
-  color: #fca5a5;
-}
-
-.review {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fde68a;
-}
-
 .actions {
   display: flex;
   gap: 6px;

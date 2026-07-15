@@ -111,37 +111,6 @@
   max-width: 200px;
 }
 
-/* Status badges */
-.statusBadge {
-  display: inline-block;
-  padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  background: var(--bg-badge, #e0e0e0);
-  color: var(--text, #333);
-}
-
-.statusCompleted {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.statusError {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.statusReview {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.statusRunning {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
 /* Paginación */
 .pagination {
   display: flex;

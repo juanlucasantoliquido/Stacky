@@ -10,6 +10,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Executions, type ExecutionHistoryItem } from "../api/endpoints";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import GroundingObservatoryCard from "../components/GroundingObservatoryCard";
+import EmptyState from "../components/EmptyState";
+import SkeletonList from "../components/SkeletonList";
+import { StatusChip } from "../components/ui";
+import { runStatusTone, runStatusLabel } from "../utils/runStatus";
+import { formatRelativeTime } from "../utils/formatRelativeTime";
 import { useWorkbench } from "../store/workbench";
 import styles from "./ExecutionHistoryPage.module.css";
 
@@ -30,20 +35,6 @@ function fmtDuration(ms: number | null): string {
 function fmtCost(cost: number | null): string {
   if (cost == null) return "—";
   return `$${cost.toFixed(4)}`;
-}
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
-}
-
-function statusClass(status: string): string {
-  if (status === "completed") return styles.statusCompleted;
-  if (status === "error") return styles.statusError;
-  if (status === "needs_review") return styles.statusReview;
-  if (status === "running") return styles.statusRunning;
-  return "";
 }
 
 // ---------------------------------------------------------------------------
@@ -176,9 +167,9 @@ export default function ExecutionHistoryPage() {
 
       {/* Tabla */}
       {isLoading ? (
-        <div className={styles.empty}>Cargando historial…</div>
-      ) : items.length === 0 ? (
-        <div className={styles.empty}>Sin ejecuciones</div>
+        <div className={styles.tableWrapper}><SkeletonList rows={8} rowHeight={28} ariaLabel="Cargando historial" /></div>
+      ) : (!historyQ.isError && items.length === 0) ? (   // C1: guard vacío-vs-error (§10.7)
+        <EmptyState variant="history" />
       ) : (
         <div className={styles.tableWrapper}>
           <table className={styles.table}>
@@ -204,15 +195,11 @@ export default function ExecutionHistoryPage() {
                   onClick={() => setDetailId(item.id)}
                   title="Click para ver detalle"
                 >
-                  <td className={styles.dateCell}>{fmtDate(item.started_at)}</td>
+                  <td className={styles.dateCell}>{formatRelativeTime(item.started_at)}</td>
                   <td>{item.agent_type}</td>
                   <td className={styles.mono}>{item.runtime ?? "—"}</td>
                   <td className={styles.mono}>{item.model ?? "—"}</td>
-                  <td>
-                    <span className={`${styles.statusBadge} ${statusClass(item.status)}`}>
-                      {item.status}
-                    </span>
-                  </td>
+                  <td><StatusChip tone={runStatusTone(item.status)} size="sm">{runStatusLabel(item.status)}</StatusChip></td>
                   <td className={styles.numCell}>{fmtDuration(item.duration_ms)}</td>
                   <td className={styles.numCell}>{fmtCost(item.cost_usd)}</td>
                   <td className={styles.mono}>

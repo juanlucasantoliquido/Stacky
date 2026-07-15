@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { Button } from "./ui";
 import styles from "./EmptyState.module.css";
 
 export type EmptyVariant =
@@ -7,6 +8,9 @@ export type EmptyVariant =
   | "tickets"
   | "agents"
   | "history"
+  | "review"
+  | "docs"
+  | "no_project"
   | "generic";
 
 interface Props {
@@ -53,6 +57,22 @@ const VARIANT_PRESETS: Record<EmptyVariant, {
     title: "Sin historial todavía",
     message: "Cuando corras agentes, el historial va a aparecer acá.",
   },
+  review: {
+    icon: "✅",
+    title: "Bandeja al día",
+    message: "No hay ejecuciones que requieran tu revisión. Cuando un agente termine con dudas o error, va a aparecer acá.",
+  },
+  docs: {
+    icon: "📚",
+    title: "Sin documentación indexada",
+    message: "Todavía no hay documentos para explorar. Indexá el proyecto para ver el grafo y buscar contenido.",
+    actionLabel: "Indexar ahora",
+  },
+  no_project: {
+    icon: "📂",
+    title: "Ningún proyecto activo",
+    message: "Seleccioná un proyecto desde la barra superior para ver su equipo.",
+  },
   generic: {
     icon: "✨",
     title: "Nada por acá",
@@ -81,10 +101,12 @@ export default function EmptyState({
       <h3 className={styles.title}>{finalTitle}</h3>
       <p className={styles.message}>{finalMessage}</p>
       {finalAction && onAction ? (
-        <button className={styles.action} onClick={onAction}>
-          ▶ {finalAction}
-        </button>
+        <Button variant="primary" size="md" onClick={onAction}>{finalAction}</Button>
       ) : null}
     </div>
   );
+}
+
+export function emptyStatePreset(variant: EmptyVariant) {
+  return VARIANT_PRESETS[variant];
 }

@@ -1,6 +1,10 @@
 # Plan 140 — Estados universales: skeletons de carga, vacíos accionables y jerarquía visual de datos
 
-**Estado:** CRITICADO v1→v2 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15) — v1 propuesto 2026-07-15
+**Estado:** IMPLEMENTADO F0-F9 (2026-07-15) — F8 (TicketBoard, acotada) NO fue omitida: el gate
+`git status` dio limpio y se implementó. Doc previo: CRITICADO v1→v2 · APROBADO-CON-CAMBIOS.
+Nota: `DocsPage.tsx` y `TicketBoard.tsx` ya tenían su propio manejo de error (dominio 135, plan
+135 ya aterrizado) precediendo el branch de vacío — el guard C1 quedó automáticamente satisfecho
+por esa estructura existente, sin necesitar agregar un `isError` explícito adicional ahí.
 **Autor:** StackyArchitectaUltraEficientCode (perfil normal)
 **Depende de:** Plan 138 (tokens semánticos + primitivas `ui/`) IMPLEMENTADO y mergeado; Plan 139 (siguiente en la serie) aterriza antes.
 **Se implementa DESPUÉS de:** 138 y 139.

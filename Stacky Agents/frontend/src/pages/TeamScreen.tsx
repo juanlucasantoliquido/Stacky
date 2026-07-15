@@ -9,6 +9,8 @@ import TeamManageDrawer from "../components/TeamManageDrawer";
 import EmployeeEditDrawer from "../components/EmployeeEditDrawer";
 import ResumeCard from "../components/ResumeCard";
 import SavingsCard from "../components/SavingsCard";
+import SharedEmptyState from "../components/EmptyState";
+import { Skeleton } from "../components/ui";
 import styles from "./TeamScreen.module.css";
 
 export default function TeamScreen() {
@@ -139,13 +141,13 @@ export default function TeamScreen() {
         {loading || teamLoading ? (
           <div className={styles.loadingGrid}>
             {[...Array(4)].map((_, i) => (
-              <div key={i} className={styles.skeletonCard} aria-hidden="true" />
+              <Skeleton key={i} height={120} radius="var(--radius-lg)" />
             ))}
           </div>
         ) : !activeProject ? (
-          <NoProjectState />
+          <SharedEmptyState variant="no_project" />
         ) : pinned.length === 0 ? (
-          <EmptyState onAdd={() => setManageOpen(true)} />
+          <SharedEmptyState variant="agents" actionLabel="Agregar agente" onAction={() => setManageOpen(true)} />
         ) : (
           <div className={styles.grid}>
             {pinned.map((filename) => {
@@ -190,29 +192,3 @@ export default function TeamScreen() {
   );
 }
 
-function NoProjectState() {
-  return (
-    <div className={styles.empty}>
-      <div className={styles.emptyIcon}>📂</div>
-      <h2 className={styles.emptyTitle}>Ningún proyecto activo</h2>
-      <p className={styles.emptyText}>
-        Seleccioná un proyecto desde la barra superior para ver su equipo.
-      </p>
-    </div>
-  );
-}
-
-function EmptyState({ onAdd }: { onAdd: () => void }) {
-  return (
-    <div className={styles.empty}>
-      <div className={styles.emptyIcon}>👥</div>
-      <h2 className={styles.emptyTitle}>Tu equipo está vacío</h2>
-      <p className={styles.emptyText}>
-        Agregá tu primer agente para empezar a asignar tickets desde aquí.
-      </p>
-      <button className={styles.emptyBtn} onClick={onAdd}>
-        + Agregar primer agente
-      </button>
-    </div>
-  );
-}

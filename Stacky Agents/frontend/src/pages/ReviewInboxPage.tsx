@@ -4,6 +4,11 @@ import { Executions, Agents } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
 import { fetchReviewInbox, reviewInboxQueryKey } from "../services/reviewInbox";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
+import EmptyState from "../components/EmptyState";
+import SkeletonList from "../components/SkeletonList";
+import { StatusChip } from "../components/ui";
+import { runStatusTone, runStatusLabel } from "../utils/runStatus";
+import { formatRelativeTime } from "../utils/formatRelativeTime";
 import styles from "./ReviewInboxPage.module.css";
 
 function summarizeCause(exec: { error_message?: string | null; metadata?: Record<string, unknown>; contract_result?: { passed?: boolean; failures?: Array<{ message?: string }> } | null }): string {
@@ -17,19 +22,6 @@ function summarizeCause(exec: { error_message?: string | null; metadata?: Record
   }
 
   return String(exec.error_message || "requiere revisión").split("\n")[0].slice(0, 160);
-}
-
-function timeAgo(iso?: string | null): string {
-  if (!iso) return "-";
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "ahora";
-  if (mins < 60) return `hace ${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `hace ${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  return `hace ${days}d`;
 }
 
 export default function ReviewInboxPage() {
@@ -90,9 +82,9 @@ export default function ReviewInboxPage() {
         <span className={styles.counter}>{sortedRows.length}</span>
       </div>
 
-      {executionsQ.isLoading && <div className={styles.empty}>Cargando ejecuciones…</div>}
-      {!executionsQ.isLoading && sortedRows.length === 0 && (
-        <div className={styles.empty}>No hay ejecuciones pendientes de revisión.</div>
+      {executionsQ.isLoading && <SkeletonList rows={6} rowHeight={28} ariaLabel="Cargando ejecuciones" />}
+      {!executionsQ.isLoading && !executionsQ.isError && sortedRows.length === 0 && (
+        <EmptyState variant="review" />
       )}
 
       {sortedRows.length > 0 && (
@@ -112,13 +104,9 @@ export default function ReviewInboxPage() {
               <tr key={row.id}>
                 <td>#{row.ticket_id}</td>
                 <td>{row.agent_type}</td>
-                <td>
-                  <span className={`${styles.badge} ${row.status === "error" ? styles.error : styles.review}`}>
-                    {row.status}
-                  </span>
-                </td>
+                <td><StatusChip tone={runStatusTone(row.status)} size="sm">{runStatusLabel(row.status)}</StatusChip></td>
                 <td title={row.error_message || undefined}>{summarizeCause(row)}</td>
-                <td>{timeAgo(row.completed_at || row.started_at)}</td>
+                <td>{formatRelativeTime(row.completed_at || row.started_at)}</td>
                 <td className={styles.actions}>
                   <button onClick={() => setDetailExecutionId(row.id)}>Ver detalle</button>
                   <button onClick={() => void relaunch(row.id)} disabled={busyExecutionId === row.id}>

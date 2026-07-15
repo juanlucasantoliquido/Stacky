@@ -14,6 +14,8 @@ import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import EpicFromBriefModal from "../components/EpicFromBriefModal";
 import TicketLocalInsightButton from "../components/TicketLocalInsightButton";
 import LoadErrorState from "../components/LoadErrorState";
+import EmptyState from "../components/EmptyState";
+import SkeletonList from "../components/SkeletonList";
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { getAgentType } from "../services/preferences";
@@ -1021,7 +1023,7 @@ export default function TicketBoard() {
         {/* Vista jerárquica */}
         {viewMode === "tree" && (
           <>
-            {isHierarchyLoading && <div className={styles.loading}>Cargando jerarquía…</div>}
+            {isHierarchyLoading && <SkeletonList rows={6} rowHeight={44} ariaLabel="Cargando tickets" />}
             {!isHierarchyLoading && hierarchyUnavailable && (
               <LoadErrorState
                 what="la jerarquía de tickets"
@@ -1029,10 +1031,14 @@ export default function TicketBoard() {
                 onRetry={() => { void refetchHierarchy(); }}
               />
             )}
+            {/* Guard C1 (§10.7): !hierarchyUnavailable ya excluye el caso de error (dominio 135) */}
             {!isHierarchyLoading && !hierarchyUnavailable && filteredEpics.length === 0 && filteredOrphans.length === 0 && (
-              <div className={styles.empty}>
-                No hay tickets. Hacé clic en «Sincronizar ADO».
-              </div>
+              <EmptyState
+                variant="tickets"
+                message="No hay tickets para este proyecto. Sincronizá con ADO para traerlos."
+                actionLabel="Sincronizar ADO"
+                onAction={triggerSync}
+              />
             )}
             <div className={styles.treeView}>
               {filteredEpics.map((epic) => (

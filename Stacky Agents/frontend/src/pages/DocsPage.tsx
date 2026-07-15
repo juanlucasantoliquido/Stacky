@@ -17,6 +17,9 @@ import { Docs } from "../api/endpoints";
 import type { DocNode, DocRoot, DocHeading } from "../api/endpoints";
 import { buildNameIndex, type DocGraphResponse } from "../docs/docGraphModel";
 import { useWorkbench } from "../store/workbench";
+import EmptyState from "../components/EmptyState";
+import SkeletonList from "../components/SkeletonList";
+import { formatRelativeTime } from "../utils/formatRelativeTime";
 import styles from "./DocsPage.module.css";
 
 function countDocFiles(nodes: DocNode[] = []): number {
@@ -261,8 +264,7 @@ export default function DocsPage() {
     return (
       <div className={styles.page}>
         <div className={styles.loadingState}>
-          <div className={styles.spinner} />
-          <p>Cargando documentación...</p>
+          <SkeletonList rows={6} rowHeight={20} ariaLabel="Cargando documentación" />
         </div>
       </div>
     );
@@ -328,9 +330,9 @@ export default function DocsPage() {
 
         <div className={styles.treeContainer}>
           {totalDocs === 0 ? (
-            <div className={styles.emptyState}>
-              {sourcesData?.note ?? "No se encontró documentación. Verificá la ruta configurada."}
-            </div>
+            // Guard C1 (§10.7): llegar acá ya implica !sourcesError && !indexError
+            // (el early-return de loadError, arriba, corta antes — dominio 135).
+            <EmptyState variant="docs" />
           ) : (
             <DocTree
               roots={roots}
@@ -344,7 +346,7 @@ export default function DocsPage() {
         <div className={styles.sideFooter}>
           {indexData?.indexed_at && (
             <span className={styles.indexedAt}>
-              Indexado: {new Date(indexData.indexed_at).toLocaleTimeString()}
+              Indexado: {formatRelativeTime(indexData.indexed_at)}
             </span>
           )}
           <span className={styles.docCount}>{totalDocs} doc{totalDocs !== 1 ? "s" : ""}</span>

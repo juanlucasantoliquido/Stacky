@@ -31,17 +31,3 @@
   color: var(--text-muted);
   line-height: 1.5;
 }
-
-.action {
-  margin-top: 12px;
-  background: var(--accent);
-  color: #fff;
-  border: 1px solid var(--accent);
-  padding: 8px 18px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.action:hover { background: var(--accent-hot); }

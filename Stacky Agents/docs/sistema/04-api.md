@@ -2,8 +2,8 @@
 
 ← [INDEX](INDEX.md) · hermanos: [02-arquitectura](02-arquitectura.md) · [05-agentes-runtimes](05-agentes-runtimes.md)
 
-Toda la API cuelga de `api_bp` con `url_prefix="/api"`. Los blueprints se registran en `backend/api/__init__.py`. [V: api/__init__.py:43-83]
-Health check: `GET /api/health` → `{"ok": true}`. [V: api/__init__.py:85-87]
+Toda la API cuelga de `api_bp` con `url_prefix="/api"`. Los blueprints se registran en `backend/api/__init__.py`. [V: api/__init__.py:3-112]
+Health check: `GET /api/health` → `{"ok": true}`. [V: api/__init__.py:115-117]
 
 ## Blueprints registrados (prefijo efectivo = `/api` + url_prefix del bp)
 | Blueprint | url_prefix | Archivo | Conf. |
@@ -39,6 +39,19 @@ Health check: `GET /api/health` → `{"ok": true}`. [V: api/__init__.py:85-87]
 
 > Nota: `phase4/5/6`, `projects`, `global_config`, `extras`, `client_profile`, `config_transfer`, `db_query`,
 > `ado_manager`, `adoption`, `harness_flags` usan `url_prefix=""`; sus rutas concretas no se enumeran acá. [NV]
+
+### Blueprints DevOps / DB-Compare / Docs / misceláneos (planes 72-127) [V: api/__init__.py:42-112]
+| Blueprint | url_prefix | Plan | Doc de detalle |
+|-----------|-----------|------|----------------|
+| `ci` | `/ci` | 72 | [12-devops](12-devops.md) |
+| `pipeline_generator` | `/pipeline-generator` | 73 | [12-devops](12-devops.md) |
+| `migrator` | `/migrator` | 74 | [12-devops](12-devops.md) |
+| `devops`, `devops_agent`, `devops_servers`, `devops_variables`, `devops_production`, `devops_section_doctor`, `devops_remote_console`, `devops_connections` | `/devops`, `/devops/agent`, `/devops/servers`, `/devops/variables`, `/devops/production`, `/devops/sections`, `/devops/console`, `/devops/connections` | 87-116 | [12-devops](12-devops.md) |
+| `db_compare` | `/db-compare` | 122-126 | [14-db-compare](14-db-compare.md) |
+| `docs`, `docs_rag` | `/docs`, `/docs-rag` | 109-115/137 | [13-docs-rag-grafo](13-docs-rag-grafo.md) |
+| `pr_review` | `/pr-review` | 110 | (revisor de PRs Haiku + modelo local) [V: __init__.py:55,111] |
+| `local_llm_analysis` | `/llm` | 106/127 | (modelo local Qwen/Ollama) [V: __init__.py:54,110] |
+| `codebase_memory_mcp` | `/codebase-memory-mcp` | 76 | (eval codebase-memory MCP) [V: __init__.py:53,109] |
 
 ## tickets (`/api/tickets`) — endpoints clave [V: tickets.py grep @bp]
 | Método · ruta | Función |

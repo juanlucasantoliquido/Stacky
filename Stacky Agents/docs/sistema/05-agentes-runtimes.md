@@ -49,9 +49,9 @@ la ejecución se marca **error real** — NUNCA cae a `github_copilot`. [V: agen
 > `github_copilot`, ya resuelto: default→`claude_code_cli` + migración v1→v2. [INF: MEMORY vscode-opens-on-launch-is-copilot-path]
 
 ## LLM router y cap de modelos (`services/llm_router.py`)
-- `clamp_model(model, allow_opus=False)` es la **única** función que decide qué está capado. [V: llm_router.py:35-54]
-  - Cap duro `CLAUDE_CAP_MODEL="claude-sonnet-4-6"`; tiers prohibidos `("opus","fable")` se mapean al cap. [V: llm_router.py:27-30]
-  - **Excepción**: con `allow_opus=True` y `model in _OPUS_ALLOWLIST={"claude-opus-4-8"}` se permite Opus. Lo usa SOLO el flujo brief→épica. fable y otros Opus siguen capados. [V: llm_router.py:31-53; agents.py:588-591]
+- `clamp_model(model, allow_opus=False)` es la **única** función que decide qué está capado. [V: llm_router.py:38-57]
+  - Cap duro `CLAUDE_CAP_MODEL="claude-sonnet-5"` (verificado 2026-07-15; antes `claude-sonnet-4-6`); tiers prohibidos `("opus","fable")` se mapean al cap. [V: llm_router.py:32-33]
+  - **Excepción**: con `allow_opus=True` y `model in _OPUS_ALLOWLIST={"claude-opus-4-8"}` se permite Opus. Lo usa SOLO el flujo brief→épica. fable y otros Opus siguen capados. [V: llm_router.py:35,51-53; agents.py:588-591]
 - `decide(...)` elige modelo por agente + complejidad + backend (anthropic/copilot/vscode_bridge/mock), aplicando `clamp_model` como última línea de defensa. [V: llm_router.py:183-297]
 - Defaults Claude por agente: business/functional/technical/developer = sonnet-4-6, qa = haiku-4-5. [V: llm_router.py:135-141]
 - `LLM_BACKEND` (config) gobierna el catálogo de modelos: `vscode_bridge` (default config), `copilot`, `mock`, anthropic. Si la auth de Copilot falla, la lista queda vacía → sin fallback (se levanta error). [V: llm_router.py:107-118,144-156; config.py:75]

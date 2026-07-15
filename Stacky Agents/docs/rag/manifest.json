@@ -1,0 +1,65 @@
+{
+  "corpus_name": "stacky-docs-sistema-rag",
+  "corpus_version": "1",
+  "generator": "rag-doc-architect (Modo B)",
+  "generated_on_branch": "plans-138-141-serie-ux-ui",
+  "source_root": "Stacky Agents/docs/sistema/",
+  "source_of_truth_note": "docs/sistema/*.md es la fuente inmutable. NO fue modificada. Cada chunk lleva source_span (line_start,line_end) que tila su archivo sin huecos: el texto es reconstruible 1:1 desde la fuente.",
+  "output_format": "JSONL (rag_corpus.jsonl), un chunk por línea. Sidecar de metadata rica; NO reemplaza el índice runtime docs_index (TF-IDF SQLite).",
+  "extension_rationale": "Se evita .md a propósito: doc_indexer._index_technical_docs() hace STACKY_AGENTS_ROOT/'docs' + rglob('*.md') (excludes: node_modules,.venv,__pycache__,.git,data,dist,build). Un .md bajo docs/rag/ sería escaneado por el DocTree 'stacky' y parseado por doc_graph. .jsonl/.json/.txt no.",
+  "runtime_alignment": {
+    "runtime_index": "services/docs_rag.py -> tabla SQLite docs_index (DocChunk: file_path, section_heading, chunk_text, term_freqs_json, doc_norm)",
+    "chunking_parity": "El chunking replica services/docs_rag._split_markdown_to_chunks: preámbulo (antes del primer '## ') = 1 chunk con section_heading='', y cada sección '## ' = 1 chunk hasta el próximo '## ' o EOF. Alineación 1:1 para join por (source_file, section_heading).",
+    "join_key": "(source_file, section_heading) o (source_file, section) — permite cruzar este sidecar con los hits del retriever TF-IDF runtime.",
+    "metadata_gap": "El schema runtime docs_index NO soporta metadata rica (confidence, links_out, graph_node_ids). Por eso este corpus es un SIDECAR paralelo; no rompe ni reemplaza el índice actual."
+  },
+  "totals": {
+    "source_files": 15,
+    "chunks": 94,
+    "chunks_with_graph_yaml": 1,
+    "chunks_redacted": 7,
+    "chunks_hand_edited": 0,
+    "chunks_potentially_stale": 0
+  },
+  "no_loss_check": {
+    "method": "Line-tiling: por cada archivo, los source_span de sus chunks cubren [1..EOF] de forma contigua (sin gaps ni overlaps). Prueba más fuerte que cobertura de caracteres: toda línea del fuente pertenece a exactamente un chunk. El texto se copió verbatim al campo text; el source_span es la referencia autoritativa de recuperación contra la fuente inmutable.",
+    "line_coverage_pct": 100.0,
+    "section_coverage_pct": 100.0,
+    "files_covered": "15/15 (INDEX + 01..14)",
+    "gaps": [],
+    "notes": "source_hash queda null en cada chunk: el cómputo SHA-256 requiere ejecución (no disponible en este entorno solo-Write). La idempotencia NO depende del hash: los límites de chunk son función determinista del fuente ('## ') y el texto es un slice de la fuente inmutable; regenerar produce IDs y contenido idénticos. Ver campo idempotency."
+  },
+  "idempotency": {
+    "chunk_id_rule": "<source_file>#c<NN> (NN = índice de sección 0-based, cero-pad 2). Determinista por archivo+orden de sección.",
+    "rerun_behavior": "Re-generar con el mismo fuente produce el MISMO set de chunk_id y el MISMO text (boundaries derivados de '## ' + slice inmutable). No duplica.",
+    "source_hash_todo": "Un regenerador con runtime debe fijar source_hash = sha256(text) por chunk; si el fuente no cambió, el chunk se regenera idéntico."
+  },
+  "files": [
+    {"source_file": "INDEX.md",                 "doc_type": "indice",            "chunks": 5,  "eof_line": 52,  "spans": [[1,8],[9,13],[14,31],[32,39],[40,52]]},
+    {"source_file": "01-overview.md",           "doc_type": "overview",          "chunks": 7,  "eof_line": 42,  "spans": [[1,4],[5,10],[11,16],[17,25],[26,32],[33,37],[38,42]]},
+    {"source_file": "02-arquitectura.md",       "doc_type": "arquitectura",      "chunks": 8,  "eof_line": 64,  "spans": [[1,4],[5,8],[9,39],[40,49],[50,52],[53,57],[58,62],[63,64]]},
+    {"source_file": "03-modelo-datos.md",       "doc_type": "modelo-datos",      "chunks": 4,  "eof_line": 53,  "spans": [[1,11],[12,45],[46,50],[51,53]]},
+    {"source_file": "04-api.md",                "doc_type": "api",               "chunks": 6,  "eof_line": 95,  "spans": [[1,7],[8,55],[56,80],[81,83],[84,93],[94,95]]},
+    {"source_file": "05-agentes-runtimes.md",   "doc_type": "agentes-runtimes",  "chunks": 7,  "eof_line": 62,  "spans": [[1,4],[5,18],[19,26],[27,33],[34,50],[51,59],[60,62]]},
+    {"source_file": "06-servicios-daemons.md",  "doc_type": "servicios-daemons", "chunks": 8,  "eof_line": 57,  "spans": [[1,7],[8,18],[19,27],[28,35],[36,39],[40,47],[48,53],[54,57]]},
+    {"source_file": "07-frontend.md",           "doc_type": "frontend",          "chunks": 7,  "eof_line": 38,  "spans": [[1,4],[5,10],[11,18],[19,24],[25,30],[31,34],[35,38]]},
+    {"source_file": "08-configuracion-flags.md","doc_type": "configuracion-flags","chunks": 10, "eof_line": 78,  "spans": [[1,8],[9,20],[21,23],[24,28],[29,46],[47,51],[52,66],[67,70],[71,75],[76,78]]},
+    {"source_file": "09-integraciones.md",      "doc_type": "integraciones",     "chunks": 6,  "eof_line": 46,  "spans": [[1,4],[5,23],[24,30],[31,36],[37,42],[43,46]]},
+    {"source_file": "10-grafo.md",              "doc_type": "grafo",             "chunks": 5,  "eof_line": 175, "spans": [[1,9],[10,35],[36,68],[69,102],[103,175]], "note": "chunk c04 [103,175] contiene el bloque YAML graph: ENTERO (contains_graph_yaml=true), no partido."},
+    {"source_file": "11-estado-planes.md",      "doc_type": "estado-planes",     "chunks": 3,  "eof_line": 67,  "spans": [[1,40],[41,47],[48,67]]},
+    {"source_file": "12-devops.md",             "doc_type": "devops",            "chunks": 6,  "eof_line": 47,  "spans": [[1,8],[9,26],[27,32],[33,39],[40,44],[45,47]]},
+    {"source_file": "13-docs-rag-grafo.md",     "doc_type": "docs-rag-grafo",    "chunks": 6,  "eof_line": 46,  "spans": [[1,8],[9,23],[24,30],[31,38],[39,43],[44,46]]},
+    {"source_file": "14-db-compare.md",         "doc_type": "db-compare",        "chunks": 6,  "eof_line": 41,  "spans": [[1,8],[9,21],[22,27],[28,31],[32,39],[40,41]]}
+  ],
+  "connectivity": {
+    "graph_cross_reference": "graph_node_ids (N1..N22) presentes en los 5 chunks de 10-grafo.md permiten cruzar el corpus RAG con el grafo de COMPONENTES (10-grafo §6.4 YAML). links_out captura los targets de links markdown a otros docs/sistema. siblings replica los hermanos del encabezado '← INDEX · hermanos: ...' en TODOS los chunks del doc.",
+    "graph_stale_status": "10-grafo §6.4 graph.generated_from = 'working tree (branch plans-138-141-serie-ux-ui)' == rama actual -> potentially_stale=false en todos los chunks del grafo."
+  },
+  "preserved_NV": [
+    "03-modelo-datos.md#c03: campos exactos de modelos en services/* [NV]",
+    "04-api.md#c01: rutas concretas de blueprints con url_prefix='' [NV]",
+    "05..08: per-agent defaults llm_router.py:135-141 documentados como texto, no como hecho exhaustivo",
+    "11-estado-planes.md: planes 47-71 y varios 77-143 marcados [NV] (no auditados plan-por-plan)",
+    "12-devops.md#c04: detalle endpoint-por-endpoint DevOps [NV]"
+  ]
+}

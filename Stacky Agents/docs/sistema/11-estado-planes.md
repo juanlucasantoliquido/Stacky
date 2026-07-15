@@ -1,10 +1,11 @@
-# 11 — Estado de los planes (docs/19_*..46_*)
+# 11 — Estado de los planes (docs/19_*..143_*)
 
-← [INDEX](INDEX.md) · hermanos: [08-configuracion-flags](08-configuracion-flags.md) · [05-agentes-runtimes](05-agentes-runtimes.md)
+← [INDEX](INDEX.md) · hermanos: [08-configuracion-flags](08-configuracion-flags.md) · [05-agentes-runtimes](05-agentes-runtimes.md) · [12-devops](12-devops.md) · [14-db-compare](14-db-compare.md)
 
 Resumen de 1-2 líneas por documento. "Estado" sale del propio header del doc [V], o se deduce de git/MEMORY [INF].
 NO copia el contenido de los planes — abrí `docs/<n>_*.md` para el detalle. Donde el header dice "propuesto"
 pero MEMORY/git indican que se implementó, se marca el conflicto.
+La numeración de planes hoy llega a 143 (`docs/NN_PLAN_*.md`); el detalle 19-46 va abajo y el addendum 47-143 al final.
 
 | Doc | Tema | Estado | Conf. |
 |-----|------|--------|-------|
@@ -43,3 +44,24 @@ pero MEMORY/git indican que se implementó, se marca el conflicto.
 - Cuando el header dice "propuesto" pero MEMORY/commits dicen "implementado/desplegado", **gana el código**;
   esos casos están marcados como conflicto arriba (23, 26, 36, 37, 38, 39). [V: regla R: código > doc legada]
 - Para el estado exacto y verificable de un plan, hay que auditar sus flags + tests, no solo el header. [NV: no se corrieron tests en esta reconstrucción]
+
+## Addendum: planes 47-143 (por evidencia en la rama `plans-138-141-serie-ux-ui`)
+"En código" = hay blueprint/servicio/flag presente en esta rama (no significa exhaustivamente probado).
+| Rango / plan | Tema | ¿En código en esta rama? | Conf. |
+|--------------|------|--------------------------|-------|
+| 47-71 | Serie larga (dedup, GitLab tracker, RAG catalog, MCP…) | No auditado plan-por-plan aquí | [NV] |
+| 72-116 | **Suite DevOps** (CI, pipelines, migrador, servidores, doctores, consola remota) | Sí: blueprints `devops*`/`ci`/`migrator`/`pipeline-generator` + servicios `gitlab_*`/`pipeline_*`/`migrator_*`/`remote_exec` | [V: api/__init__.py:42-111] → [12-devops](12-devops.md) |
+| 106/127 | Modelo local (Qwen/Ollama) + reuso IA local | Sí: blueprint `/api/llm` | [V: __init__.py:54,110] |
+| 109-115 | **Docs/RAG/grafo documental** | Sí: `doc_graph`, `docs_rag`, `rag_retriever`, endpoints `/api/docs/graph`, `/api/docs-rag` | [V: docs.py:210; config.py:511-539] → [13-docs-rag-grafo](13-docs-rag-grafo.md) |
+| 110 | Revisor de PRs (Haiku + modelo local) | Sí: blueprint `/api/pr-review` (`STACKY_PR_REVIEWER_ENABLED` true) | [V: __init__.py:55; config.py:121] |
+| 117 | Insights locales de ejecuciones | Flags presentes | [V: tests test_plan117_insights_flags.py en git status] |
+| 119 | Rediseño minimalista dashboard DevOps | En código (flag UI_V2) | [INF: MEMORY plan-119-status] |
+| 120 | Centro de Despliegues + rollback 1-click | **No** en esta rama (otra rama sin mergear) | [V: grep negativo deploy/rollback] |
+| 121 | Centinela egreso secretos/PII | Servicio `egress_policies`/`pii_masker` en runner | [V: agent_runner.py:22] |
+| 122-126 | **DB Compare** | Sí: blueprint `/api/db-compare` + `dbcompare_*` | [V: db_compare.py:24] → [14-db-compare](14-db-compare.md) |
+| 128 | Tablero Evolución de Planes | No confirmado en esta rama | [NV] |
+| 129/130/131 | Paleta global / Gate integridad código / Resolutor incidencias | **No** como blueprint/servicio en esta rama | [V: grep negativo code-integrity/IncidentAnalyst] |
+| 132 | Consola desde ejecuciones activas | Parcial: `CodexConsoleDock`/`ActiveRunsPanel` en SPA | [INF: App.tsx:23-24; ver 07-frontend] |
+| 133-137 | Contrato contexto / awareness / errores mudos / protección UI / Documentador v2 | Parcial/WIP (p.ej. `LoadErrorState.tsx`, `loadError.ts` sin commitear; endpoints documenter existen) | [V: git status untracked; docs.py:267-347] / [INF: MEMORY] |
+| 138-143 | Sistema de diseño v2 / App Shell / estados / tema / costos / motion | Solo docs de plan en esta rama; implementación pendiente | [V: git log docs(plan-138..141)] / [INF: MEMORY serie-ux-ui-138-141] |
+> Regla anti-alucinación: "No en esta rama" se afirma tras grep negativo real; los planes no auditados quedan [NV], no "no existe".

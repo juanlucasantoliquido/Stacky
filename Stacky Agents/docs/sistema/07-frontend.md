@@ -9,10 +9,11 @@
 - Scripts: `dev`=vite, `build`=`tsc --noEmit && vite build`, `preview`, `lint` (eslint). [V: package.json:5-11]
 
 ## Entrada y ruteo (`frontend/src/App.tsx`)
-- Tabs (estado local, no react-router): `team | tickets | review | unblocker | pm | logs | settings | docs | memory | diagnostics | history`. [V: App.tsx:28]
-- Mapa `TAB_PATHS` a rutas (`/`, `/tickets`, `/review`, `/unblocker`, `/pm`, `/logs`, `/settings`, `/docs`, `/memory`, `/diagnostics`, `/history`); el ruteo se hace con `history.pushState` + `popstate`, sin librería de routing. [V: App.tsx:30-83]
-- Páginas: TeamScreen, TicketBoard, ReviewInboxPage, UnblockerPage, PMCommandCenter, SystemLogsPage, SettingsPage, DocsPage, MemoryPage, DiagnosticsPage, ExecutionHistoryPage. [V: App.tsx:2-12,205-215]
+- Tabs (estado local, no react-router): `team | tickets | review | unblocker | pm | logs | settings | docs | memory | diagnostics | history | migrador | devops | dbcompare`. [V: App.tsx:33]
+- Mapa `TAB_PATHS` a rutas (`/`, `/tickets`, `/review`, `/unblocker`, `/pm`, `/logs`, `/settings`, `/docs`, `/memory`, `/diagnostics`, `/history`, `/migrador`, `/devops`, `/dbcompare`); el ruteo se hace con `history.pushState` + `popstate`, sin librería de routing. [V: App.tsx:35-56]
+- Páginas: TeamScreen, TicketBoard, ReviewInboxPage, UnblockerPage, PMCommandCenter, SystemLogsPage, SettingsPage, DocsPage, MemoryPage, DiagnosticsPage, ExecutionHistoryPage, MigratorPage, DevOpsPage, DbComparePage. [V: App.tsx:2-15,205-215]
 - Tabs opcionales (`pm`, `logs`, `docs`, `memory`) se muestran según `useUiSectionsStore` (config server-side de secciones UI). Si el tab activo se oculta → fallback a `team`. [V: App.tsx:54,114-119,153-190]
+- Tabs gated por flag de backend (health probe en boot): `migrador` (`/api/migrator/health`), `devops` (`/api/devops/health`), `dbcompare` (`/api/db-compare/health`); aparecen solo si `flag_enabled===true`. → ver [12-devops](12-devops.md), [14-db-compare](14-db-compare.md). [V: App.tsx:64-107]
 - Atajos de teclado: Ctrl/Cmd+K (command palette), `?` (cheatsheet), Ctrl/Cmd+/ (toggle team/tickets). [V: App.tsx:85-110]
 
 ## Componentes globales (siempre montados)

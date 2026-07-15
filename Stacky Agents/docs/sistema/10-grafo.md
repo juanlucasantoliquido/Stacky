@@ -1,9 +1,11 @@
 # 10 — Grafo del sistema
 
-← [INDEX](INDEX.md) · hermanos: [02-arquitectura](02-arquitectura.md) · [05-agentes-runtimes](05-agentes-runtimes.md)
+← [INDEX](INDEX.md) · hermanos: [02-arquitectura](02-arquitectura.md) · [05-agentes-runtimes](05-agentes-runtimes.md) · subsistemas: [12-devops](12-devops.md) · [13-docs-rag-grafo](13-docs-rag-grafo.md) · [14-db-compare](14-db-compare.md)
 
-Grafo del flujo central: operador → API → runner → runtimes → tracker, con los daemons de cierre.
+Grafo del flujo central: operador → API → runner → runtimes → tracker, con los daemons de cierre y los
+subsistemas conectados a la API (DevOps, DB Compare, Docs/RAG).
 R7: los nodos del Mermaid (6.3) coinciden con la tabla (6.1) y toda arista (6.2) referencia IDs existentes.
+Nota: este es un grafo de COMPONENTES; el grafo de LINKS entre notas `.md` es otro (endpoint `/api/docs/graph`, ver [13](13-docs-rag-grafo.md)).
 
 ## 6.1 Tabla de nodos
 | ID | Nodo | Tipo | Responsabilidad | Fuente de verdad | Criticidad | Conf. |
@@ -25,6 +27,11 @@ R7: los nodos del Mermaid (6.3) coinciden con la tabla (6.1) y toda arista (6.2)
 | N15 | Artifacts en FS | datos | Agentes/outputs, codex_runs/MANIFEST | runtime_paths.py | ALTA | V: runtime_paths.py:99-136 |
 | N16 | Webhooks salientes | evento | exec.completed / digest.ready | services/webhooks.py | BAJA | V: webhooks.py docstring |
 | N17 | Brief→Épica | workflow | run-brief → BusinessAgent → publica épica | api/agents.py, api/tickets.py | ALTA | V: agents.py:564-669 |
+| N18 | DevOps API/orquestación | servicio | Pipelines/servidores/migración/consola remota | api/devops*.py, services/remote_exec.py | ALTA | V: api/__init__.py:98-111 |
+| N19 | DB Compare | componente | Diff de esquema/datos entre ambientes | api/db_compare.py, services/dbcompare_* | MEDIA | V: db_compare.py:24 |
+| N20 | Docs & RAG | componente | Index/grafo/retrieval de `.md` | services/doc_indexer,doc_graph,docs_rag,rag_retriever | MEDIA | V: doc_graph.py:1-6 |
+| N21 | Servidores/CI remotos | actor_externo | GitLab CI + servidores WinRM | (externo) | MEDIA | V: remote_exec.py:1-4 |
+| N22 | BDs de ambientes (DEV/TEST) | actor_externo | Fuentes read-only comparadas | (externo) | MEDIA | V: db_compare.py:4-6 |
 
 ## 6.2 Tabla de aristas
 | Desde | Hacia | Relación | Condición | Datos/Contrato | Riesgo | Conf. |
@@ -34,6 +41,7 @@ R7: los nodos del Mermaid (6.3) coinciden con la tabla (6.1) y toda arista (6.2)
 | N3 | N4 | delega_a | POST /agents/run, /run-brief | RunContext+blocks | — | V: agents.py:339,638 |
 | N4 | N5 | llama_a | siempre | agent_type→agent | UnknownAgentError | V: agent_runner.py:98-100 |
 | N4 | N6 | requiere_permiso | runtime anthropic/copilot | clamp_model | cap §5.2 | V: llm_router.py:296 |
+| N6 | N7 | decide | modelo final | modelo capado | — | V: llm_router.py:38-57 |
 | N4 | N7 | enruta | runtime=github_copilot/ausente | system+user prompt | — | V: agent_runner.py:366 |
 | N4 | N8 | enruta | runtime=codex_cli | vscode_agent_filename | sin fallback→error | V: agent_runner.py:218-282 |
 | N4 | N9 | enruta | runtime=claude_code_cli | vscode_agent_filename | sin fallback→error | V: agent_runner.py:293-355 |
@@ -50,6 +58,13 @@ R7: los nodos del Mermaid (6.3) coinciden con la tabla (6.1) y toda arista (6.2)
 | N17 | N5 | delega_a | brief presente | agent_type=business | — | V: agents.py:638-650 |
 | N17 | N11 | produce | autopublish | Épica en ADO | doble post | V: tickets.py:5699 |
 | N10 | N16 | notifica | exec aprobada | evento JSON | — | V: webhooks.py docstring |
+| N3 | N18 | delega_a | /api/devops·ci·migrator | flags DevOps default ON | credencial servidor | V: api/__init__.py:98-111 |
+| N18 | N21 | llama_a | run remoto / GitLab API | credencial por env del hijo | secreto en logs | V: remote_exec.py:1-4 |
+| N18 | N11 | produce | plan 95: MR/PR paridad ADO | — | — | V: api/__init__.py:106 |
+| N3 | N19 | delega_a | /api/db-compare/* | gate STACKY_DB_COMPARE_ENABLED | 403 si OFF | V: db_compare.py:27-30 |
+| N19 | N22 | consume | SELECT read-only; password write-only | — | password en logs | V: db_compare.py:4-6 |
+| N3 | N20 | delega_a | /api/docs·docs-rag | — | — | V: docs.py:28; docs_rag.py:30 |
+| N20 | N15 | consume | lee `.md` de docs sources | — | path traversal | V: doc_graph.py:1-6 |
 
 ## 6.3 Grafo Mermaid
 ```mermaid
@@ -76,12 +91,19 @@ flowchart TD
   N17[Brief a Epica] --> N5
   N17 --> N11
   N10 --> N16[Webhooks salientes]
+  N3 --> N18[DevOps API]
+  N18 --> N21[Servidores/CI remotos]
+  N18 --> N11
+  N3 --> N19[DB Compare]
+  N19 --> N22[(BDs ambientes DEV/TEST)]
+  N3 --> N20[Docs y RAG]
+  N20 --> N15
 ```
 
 ## 6.4 Vista para agentes
 ```yaml
 graph:
-  generated_from: working tree (branch codex/subida-cambios-pendientes)
+  generated_from: working tree (branch plans-138-141-serie-ux-ui)
   nodes:
     - {id: N1, name: Operador, type: actor_externo, source_of_truth: n/a, criticality: ALTA, confidence: V}
     - {id: N2, name: SPA React, type: componente, source_of_truth: frontend/src/App.tsx, criticality: MEDIA, confidence: V}
@@ -100,6 +122,11 @@ graph:
     - {id: N15, name: artifacts FS, type: datos, source_of_truth: backend/runtime_paths.py, criticality: ALTA, confidence: V}
     - {id: N16, name: webhooks salientes, type: evento, source_of_truth: backend/services/webhooks.py, criticality: BAJA, confidence: V}
     - {id: N17, name: brief->epica, type: workflow, source_of_truth: backend/api/agents.py, criticality: ALTA, confidence: V}
+    - {id: N18, name: devops api/orquestacion, type: servicio, source_of_truth: backend/api/devops.py, criticality: ALTA, confidence: V}
+    - {id: N19, name: db compare, type: componente, source_of_truth: backend/api/db_compare.py, criticality: MEDIA, confidence: V}
+    - {id: N20, name: docs & rag, type: componente, source_of_truth: backend/services/doc_graph.py, criticality: MEDIA, confidence: V}
+    - {id: N21, name: servidores/CI remotos, type: actor_externo, source_of_truth: backend/services/remote_exec.py, criticality: MEDIA, confidence: V}
+    - {id: N22, name: BDs de ambientes DEV/TEST, type: actor_externo, source_of_truth: n/a, criticality: MEDIA, confidence: V}
   edges:
     - {from: N1, to: N2, rel: llama_a, condition: siempre, confidence: V}
     - {from: N2, to: N3, rel: llama_a, condition: siempre, confidence: V}
@@ -123,15 +150,26 @@ graph:
     - {from: N17, to: N5, rel: delega_a, condition: "brief presente", confidence: V}
     - {from: N17, to: N11, rel: produce, condition: "autopublish epica", confidence: V}
     - {from: N10, to: N16, rel: notifica, condition: "exec aprobada", confidence: V}
+    - {from: N3, to: N18, rel: delega_a, condition: "/api/devops|ci|migrator", confidence: V}
+    - {from: N18, to: N21, rel: llama_a, condition: "run remoto / gitlab api", confidence: V}
+    - {from: N18, to: N11, rel: produce, condition: "MR/PR paridad ADO (plan 95)", confidence: V}
+    - {from: N3, to: N19, rel: delega_a, condition: "/api/db-compare (gate STACKY_DB_COMPARE_ENABLED)", confidence: V}
+    - {from: N19, to: N22, rel: consume, condition: "SELECT read-only; password write-only", confidence: V}
+    - {from: N3, to: N20, rel: delega_a, condition: "/api/docs|docs-rag", confidence: V}
+    - {from: N20, to: N15, rel: consume, condition: "lee .md de docs sources", confidence: V}
   invariants:
     - "Runtime sin fallback: error de codex_cli/claude_code_cli es error real, nunca cae a github_copilot."
     - "Todo modelo Claude pasa por clamp_model; solo brief->epica con allow_opus permite claude-opus-4-8."
     - "Stacky/agents es la fuente canonica de los .agent.md; otras fuentes se ignoran con warning."
     - "Los runners CLI crean su propia fila; la original queda cancelled con replaced_by."
     - "El watcher no escanea si repo_root() devuelve el sentinel inexistente (sin proyecto activo en frozen)."
+    - "DB Compare: el password entra solo por POST .../password (write-only) y jamas sale en respuestas ni logs."
+    - "DevOps: remote_exec es el unico modulo que ejecuta comandos remotos; la credencial viaja solo por env del hijo y siempre audita."
   staleness_check:
     - "Cambio en agent_runner.py bloque runtime dispatch (lineas ~210-366) -> regenerar 10-grafo y 05."
     - "Cambio en llm_router.clamp_model / _OPUS_ALLOWLIST -> regenerar invariants."
     - "Nuevo daemon/watcher en app.py create_app() -> agregar nodo/arista."
     - "Nuevo runtime soportado en run_agent -> agregar nodo Nx + aristas."
+    - "Nuevo blueprint en api/__init__.py o subsistema en services/ -> agregar nodo Nx (revisar 12/13/14)."
+    - "generated_from != rama actual (git branch --show-current) -> el grafo puede estar viejo; regenerar."
 ```

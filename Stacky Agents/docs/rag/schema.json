@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stacky docs/sistema RAG chunk",
+  "description": "Un registro por línea en rag_corpus.jsonl. Sidecar de metadata rica para retrieval agéntico sobre docs/sistema, alineado 1:1 con el chunking del índice runtime services/docs_rag.py.",
+  "type": "object",
+  "required": ["id", "source_file", "source_span", "section", "heading_path", "text", "links_out", "siblings", "graph_node_ids", "confidence", "evidence"],
+  "properties": {
+    "id": {"type": "string", "description": "chunk_id estable: <source_file>#c<NN> (NN 0-based, sección; c00 = preámbulo)."},
+    "source_file": {"type": "string", "description": "Basename del archivo fuente (ej. 10-grafo.md)."},
+    "source_relpath": {"type": "string", "description": "Ruta relativa a la raíz del repo del sistema (docs/sistema/<file>)."},
+    "source_span": {"type": "object", "description": "Rango de líneas 1-based inclusive en el fuente inmutable. Referencia autoritativa de no-pérdida.", "properties": {"line_start": {"type": "integer"}, "line_end": {"type": "integer"}}},
+    "chunk_index": {"type": "integer", "description": "Índice 0-based de la sección dentro del archivo."},
+    "doc_title": {"type": "string", "description": "Título H1 del documento fuente."},
+    "doc_type": {"type": "string", "description": "Área temática (overview, arquitectura, api, grafo, devops, ...)."},
+    "section": {"type": "string", "description": "Título de la sección '## ' sin el prefijo. '__preamble__' para el chunk anterior al primer '## '."},
+    "section_heading": {"type": "string", "description": "Línea de encabezado cruda '## ...' (o '' para preámbulo). Coincide con DocChunk.section_heading del índice runtime -> join key."},
+    "heading_path": {"type": "array", "items": {"type": "string"}, "description": "[doc_title, section] para navegación jerárquica."},
+    "language": {"type": "string", "description": "Idioma del contenido (es)."},
+    "text": {"type": "string", "description": "Texto verbatim del chunk (encabezado + cuerpo hasta el próximo '## ' o EOF). Reconstruible desde source_span."},
+    "links_out": {"type": "array", "items": {"type": "string"}, "description": "Targets de links markdown [..](X.md) que salen del chunk hacia otros docs/sistema. Conectividad del grafo documental."},
+    "siblings": {"type": "array", "items": {"type": "string"}, "description": "Hermanos declarados en el encabezado '← INDEX · hermanos: ...'. Doc-level: replicado en todos los chunks del doc."},
+    "graph_node_ids": {"type": "array", "items": {"type": "string"}, "description": "IDs de nodos del grafo de componentes (N1..N22) mencionados en el chunk. Cruza corpus-RAG <-> grafo (10-grafo §6.4)."},
+    "confidence": {"type": ["string", "null"], "enum": ["V", "INF", "NV", null], "description": "Marca de confianza dominante del chunk, derivada de los marcadores inline [V]/[INF]/[NV]. null si el chunk no tiene marcadores."},
+    "confidence_counts": {"type": "object", "description": "Conteo de marcadores por tipo.", "properties": {"V": {"type": "integer"}, "INF": {"type": "integer"}, "NV": {"type": "integer"}}},
+    "evidence": {"type": "array", "items": {"type": "string"}, "description": "Extracción de conveniencia de las referencias [V:/INF:] (archivo:línea, doc, comando). El texto conserva TODOS los marcadores; evidence es autoritativo solo como índice."},
+    "contains_graph_yaml": {"type": "boolean", "description": "true en 10-grafo.md#c04: contiene el bloque YAML graph: entero, no partido."},
+    "potentially_stale": {"type": "boolean", "description": "true si generated_from del grafo != rama actual. false cuando coinciden."},
+    "stale_reason": {"type": "string", "description": "Explicación del estado stale (solo en chunks del grafo)."},
+    "redacted": {"type": "boolean", "description": "true si el chunk contiene <REDACTADO> (R5: el fuente ya redactó secretos; se preserva el placeholder, nunca el valor real)."},
+    "hand_edited": {"type": "boolean", "description": "Reservado: un regenerador NO debe pisar chunks con hand_edited=true."},
+    "source_hash": {"type": ["string", "null"], "description": "sha256(text) para idempotencia. null en esta corrida (sin runtime para hashear); a completar por el regenerador scriptado."}
+  }
+}

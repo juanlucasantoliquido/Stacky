@@ -45,7 +45,13 @@ El selector está en `_startup_sync()`: lee `issue_tracker.type` del proyecto ac
 - `pipeline_orchestrator.register_ticket_status_hook()` — avance de pipeline al finalizar ejecuciones (U2.1). [V: app.py:356-362]
 - `harness_profiles.apply_profile(profile)` — aplica perfil del arnés en boot (off/safe/full). [V: app.py:258-271]
 
+## Subsistemas con doc propia (familias de servicios)
+Estas familias de `backend/services/` tienen documento dedicado (no se repiten acá):
+- **DevOps** (`gitlab_*`, `pipeline_*`, `migrator_*`, `remote_exec`, `ado_pipeline_*`) → [12-devops](12-devops.md). [V: ls services]
+- **Docs/RAG/grafo** (`doc_indexer`, `doc_graph`, `docs_rag`, `rag_retriever`, `lexical_core`) → [13-docs-rag-grafo](13-docs-rag-grafo.md). [V: ls services]
+- **DB Compare** (`dbcompare_*`) → [14-db-compare](14-db-compare.md). [V: ls services]
+
 ## No cubierto (alcance)
-Los ~120 servicios restantes (memoria colaborativa, PM suite, evals, retrieval, contract validation, exec
+Los servicios restantes (memoria colaborativa, PM suite, evals, contract validation, exec
 verification, glossary, etc.) no se documentan módulo-a-módulo acá. Muchos se gobiernan por flags `STACKY_*`
 listados en [08-configuracion-flags](08-configuracion-flags.md). Detalle por servicio: [NV].

@@ -45,8 +45,9 @@ Toda la config vive en `backend/config.py` (clase `Config`, instancia `config`).
 [V: config.py:151-274]
 
 ## Modelos (cap duro) — interacción con llm_router
-`CLAUDE_CAP_MODEL="claude-sonnet-4-6"`, tiers prohibidos `(opus,fable)`, allowlist Opus `{claude-opus-4-8}` solo
-en brief→épica. No son env vars: son constantes en `llm_router.py`. [V: llm_router.py:27-33] Ver [05-agentes-runtimes](05-agentes-runtimes.md).
+`CLAUDE_CAP_MODEL="claude-sonnet-5"` (verificado 2026-07-15; antes `claude-sonnet-4-6`), tiers prohibidos
+`(opus,fable)`, allowlist Opus `{claude-opus-4-8}` solo en brief→épica. No son env vars: son constantes en
+`llm_router.py`. [V: llm_router.py:32-35] Ver [05-agentes-runtimes](05-agentes-runtimes.md).
 
 ## Familias de flags `STACKY_*` (por plan; default OFF salvo nota)
 - **Contexto/memoria**: `STACKY_CONTEXT_BUDGET_*`, `STACKY_CONTEXT_DEDUP_*`, `STACKY_CONTEXT_RERANK_ENABLED`, `STACKY_MEMORY_INJECTION_PROJECTS`, `STACKY_MEMORY_CAPS_JSON`, `STACKY_MEMORY_REVIEW_SWEEP_HOURS` (0), `STACKY_MEMORY_DIRECTIVE_MAX_CHARS` (4000), `STACKY_MEMORY_INJECT_SCOPES`, `STACKY_MEMORY_VALIDATOR_ADVANCED`, `STACKY_MEMORY_GIT_SYNC_ENABLED`. [V: config.py:232-281,473-478]

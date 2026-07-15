@@ -1,13 +1,41 @@
 # Plan 141 — Tema claro/oscuro/sistema y accesibilidad visual
 
-**Estado:** PROPUESTO v1 (2026-07-15 — serie UI/UX 138-141, aterriza ÚLTIMO)
+**Estado:** CRITICADO v1→v2 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15) — v1 propuesto 2026-07-15
 **Autor:** StackyArchitectaUltraEficientCode
-**Depende de:** plan 138 (tokens semánticos + primitivas UI) IMPLEMENTADO. La serie
-pendiente 132→134→135→136 aterriza ANTES (orden congelado por plan 134 v2 §3.3). Dentro de
-la serie de diseño: 138→139→140→**141**.
+**Depende de:** plan 138 **v2** (tokens semánticos + primitivas UI, incluye `--spinner-track`)
+IMPLEMENTADO. La serie pendiente 132→134→135→136 aterriza ANTES (orden congelado por plan 134
+v2 §3.3). Dentro de la serie de diseño: 138→139→140→**141**.
 **Runtimes:** 100 % capa de presentación (frontend). Cero backend. Idéntico en Codex CLI,
 Claude Code y GitHub Copilot Pro.
 **Flag de harness:** NINGUNA (justificación por fase en §3.1).
+
+---
+
+## § 0. Changelog de crítica v1 → v2 (juez adversarial, 2026-07-15)
+
+Veredicto: **APROBADO-CON-CAMBIOS** (0 bloqueantes; 1 IMPORTANTE; 1 MENOR). Plan excelente:
+el gate de contraste WCAG por test puro y el anti-FOUC síncrono son de primer nivel.
+
+- **C1 (IMPORTANTE) — resuelto in place [ADICIÓN ARQUITECTO].** El plan v1 sólo re-apuntaba
+  TOKENS de color, pero el 138 v1 dejaba costuras `rgba(...)` hardcodeadas en las primitivas
+  que NO se themean: en particular el `trackColor` del `Spinner` (`rgba(255,255,255,0.15)`)
+  quedaba **invisible sobre el fondo claro**. Se coordinó con el 138 v2 (nuevo token
+  `--spinner-track`) y este plan lo **re-apunta en el bloque claro** a `rgba(31, 35, 40, 0.15)`
+  (pista oscura translúcida legible sobre superficies claras). La lista `REQUIRED` pasa de
+  **52 → 53** tokens.
+- **[ADICIÓN ARQUITECTO] — gate anti-drift de color (F3).** Se agrega un `it` que congela el
+  invariante "TODO token con valor de color del `:root` base está re-apuntado en el bloque
+  claro, salvo los invariantes de texto-sobre-solid". Hoy eso era sólo prosa (§12); ahora es
+  MECÁNICO: si un plan futuro agrega un color dark-only, el test lo detecta y fuerza decisión
+  consciente. Cero costo, invisible, 3 runtimes N/A.
+- **C2 (MENOR) — documentado.** F5 (`:focus-visible` global + `prefers-reduced-motion`) es la
+  ÚNICA parte NO dormida/opt-in del plan: cambia el comportamiento para usuarios de teclado y
+  con reduced-motion desde el día 1 (aparece anillo de foco en `<button>` que hoy no tienen
+  ninguno). Es una MEJORA WCAG no-regresiva (invisible con mouse; solo afecta a quien pidió
+  reduced-motion en su SO), por eso NO lleva flag. Se refuerza el smoke §11 para verificar que
+  no haya doble-anillo ni recorte por `overflow`.
+
+Impacto en la serie: depende del 138 **v2** (token `--spinner-track`). 139/140 sin cambios.
 
 ---
 
@@ -586,6 +614,7 @@ const REQUIRED: Array<[string, string]> = [
   ["--accent-active", "#0550ae"],
   ["--warn-hover", "#7d5300"],
   ["--focus-ring", "0 0 0 3px rgba(9, 105, 218, 0.35)"],
+  ["--spinner-track", "rgba(31, 35, 40, 0.15)"],
   ["--shadow-1", "0 1px 3px rgba(31, 35, 40, 0.12)"],
   ["--shadow-2", "0 2px 12px rgba(31, 35, 40, 0.14)"],
   ["--shadow-3", "0 8px 24px rgba(31, 35, 40, 0.18)"],
@@ -609,10 +638,10 @@ describe("Plan 141 F2 — bloque claro completo y correcto", () => {
   it("existe el bloque :root[data-theme=\"light\"]", () => {
     expect(LIGHT.length).toBeGreaterThan(0);
   });
-  it("re-apunta los 52 tokens de color con valor exacto", () => {
+  it("re-apunta los 53 tokens de color con valor exacto", () => {
     const missing = REQUIRED.filter(([n, v]) => !LIGHT.includes(`${n}: ${v};`));
     expect(missing.map(([n]) => n)).toEqual([]);
-    expect(REQUIRED.length).toBe(52);
+    expect(REQUIRED.length).toBe(53);
   });
   it("NO duplica tokens invariantes al tema (spacing/tipografía/radio/motion/border-width)", () => {
     const leaked = FORBIDDEN.filter((n) => LIGHT.includes(`${n}:`));
@@ -699,6 +728,8 @@ de tokens que dejó el 138 F1, antes de la regla `/* ─── Reset ─── *
   --accent-active: #0550ae;
   --warn-hover: #7d5300;
   --focus-ring: 0 0 0 3px rgba(9, 105, 218, 0.35);
+  /* Pista del spinner: oscura translúcida, legible sobre superficies claras (138 v2 C1). */
+  --spinner-track: rgba(31, 35, 40, 0.15);
 
   /* Sombras (grupo F) */
   --shadow-1: 0 1px 3px rgba(31, 35, 40, 0.12);
@@ -872,6 +903,23 @@ describe("Plan 141 F3 — gate WCAG AA modo OSCURO (con excepciones frozen)", ()
       const [f, b] = key.split("|");
       expect(Math.abs(ratio(f, b, BASE) - expected)).toBeLessThan(0.1);
     }
+  });
+});
+
+// [ADICIÓN ARQUITECTO v2] — anti-drift de color base↔claro (gate mecánico del contrato §12).
+describe("Plan 141 F3 — anti-drift de color base ↔ tema claro", () => {
+  it("todo token con valor de color del :root base está re-apuntado en claro (salvo invariantes de texto-sobre-solid)", () => {
+    const isColor = (v: string) => /#[0-9a-fA-F]|rgba?\(/.test(v);
+    // Invariantes a propósito: texto que va SIEMPRE del mismo color sobre solids (§6).
+    // --status-neutral-text se auto-themea (var(--text-muted)) ⇒ isColor=false ⇒ excluido.
+    const INVARIANT = new Set(["--text-on-solid", "--text-on-warn"]);
+    const drift = Object.keys(BASE)
+      .filter((k) => isColor(BASE[k]) && !INVARIANT.has(k) && !(k in LIGHT))
+      .sort();
+    // Si `drift` NO está vacío: agregá cada token al bloque :root[data-theme="light"] de
+    // theme.css (y a REQUIRED de themeLightTokens.test.ts). Sólo va a INVARIANT si es texto
+    // invariante sobre un solid. Esto impide que un plan futuro introduzca un color dark-only.
+    expect(drift, `Tokens de color sin re-apuntar en claro: ${drift.join(", ")}`).toEqual([]);
   });
 });
 ```
@@ -1298,7 +1346,9 @@ Con el frontend corriendo (`npm run dev` en `Stacky Agents/frontend`):
 5. **Volver a Oscuro:** elegir "Oscuro" ⇒ app oscura aunque el SO esté en claro.
 6. **Foco por teclado:** con Tab, recorrer botones/inputs/tabs. Cada control muestra un anillo
    de foco visible (azul) en ambos temas. Con el mouse (click) NO aparece el anillo
-   (`:focus-visible`).
+   (`:focus-visible`). **Verificar además (C2):** NO hay doble anillo (regla global `:where`
+   + regla del componente) en tabs de DevOps/HarnessFlags (que ya tienen foco propio), y el
+   anillo NO queda recortado por `overflow:hidden` en tarjetas/drawers.
 7. **Reduced-motion:** activar "Reducir movimiento" en el SO. Lanzar un run (spinner de
    RunButton) ⇒ el spinner NO gira (queda estático); las transiciones de hover/tabs son
    instantáneas. Desactivar ⇒ vuelven las animaciones.
@@ -1317,5 +1367,5 @@ Con el frontend corriendo (`npm run dev` en `Stacky Agents/frontend`):
   `applyEffectiveTheme`, `initThemeController`).
 - Gate: `frontend/src/__tests__/themeContrast.test.ts` — 24 pares frozen + 3 excepciones dark.
   Todo token de color nuevo que sea foreground/background de UI debería sumarse al gate.
-- Paleta clara: bloque `:root[data-theme="light"]` en `theme.css` (52 tokens de color). Todo
+- Paleta clara: bloque `:root[data-theme="light"]` en `theme.css` (53 tokens de color). Todo
   token de color nuevo en el `:root` base DEBE re-apuntarse acá o justificarse como invariante.
